@@ -4,8 +4,12 @@ from lib2to3.pgen2 import token
 
 mintcsv = 'Mint.csv'
 traitmap = 'Traitmap.csv'
-ifps = 'ipfs://QmdvkbjDQr9bqzCMJFinKvxuPX57owMkZuoAhSf71uDoeK/'
-offset = 420
+ifps = 'ipfs://QmcezJp6pVvkefeThtRWpbu6U5ijWkdAxSwn772XF37FBj/'
+gameinfo = 'gameinfo.csv'
+with open(gameinfo,'r') as gameinfocsvfile:
+    csvreader = csv.reader(gameinfocsvfile)
+    info = next(csvreader)
+    offset = int(info[1])
 
 
 with open(mintcsv,'r') as mintcsvfile:
@@ -30,10 +34,6 @@ with open(mintcsv,'r') as mintcsvfile:
 
         #tokenName = 'Purge Game Season One # ' + tokenTraits[0]
         tokenId = int(tokenTraits[0])
-        if tokenId-offset < 1 :
-            tokenId = totalMints - (offset - tokenId)
-        else:
-            tokenId -= offset
         tokenName = 'Purge Game Season One # ' + str(tokenId)
         image = ifps + str(tokenId) + '.png'
         data = {

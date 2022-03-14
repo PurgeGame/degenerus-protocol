@@ -41,7 +41,7 @@ with open(mintcsv,'r') as mintcsvfile:
             traitimagefile[x] = "baseimages\\" + traitimagefile[x] + ".png"
         colorfound = 100
         while colorfound == 100:
-            rand = random.randrange(0,8)
+            rand = random.randrange(0,7)
             if (rand != colorNumber[0] and rand != colorNumber[1] and rand != colorNumber[2] and rand != colorNumber[3]):
                 colorfound = rand
         print(colorfound)
