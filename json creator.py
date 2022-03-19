@@ -1,66 +1,54 @@
-import json, csv
-from lib2to3.pgen2 import token
+import json, sqlite3
 
 
-mintcsv = 'Mint.csv'
-traitmap = 'Traitmap.csv'
 ifps = 'ipfs://QmcezJp6pVvkefeThtRWpbu6U5ijWkdAxSwn772XF37FBj/'
-gameinfo = 'gameinfo.csv'
-with open(gameinfo,'r') as gameinfocsvfile:
-    csvreader = csv.reader(gameinfocsvfile)
-    info = next(csvreader)
-    offset = int(info[1])
+conn = sqlite3.connect('PurgeGame.db')
+cur = conn.cursor()
+cur.execute("""
+    SELECT tokenId,trait1,trait2,trait3,trait4
+    FROM tokens
+    WHERE tokenId < 40000""")
+tokens = cur.fetchall()
+
+for row in tokens:
+    tokenTraits = []
+    tokenTraits.append(row[0])
+    for c in range(1,5):
+        cur.execute("""
+        SELECT color,shape
+        FROM traits
+        WHERE trait =?""",(row[c],))
+        trait = cur.fetchone()
+        trait = trait[0] + " " + trait[1]
+        tokenTraits.append(trait)
+
+    tokenId = int(tokenTraits[0])
+    tokenName = 'Purge Game Season One # ' + str(tokenId)
+    image = ifps + str(tokenId) + '.png'
+    data = {
+        'name': tokenName,
+        'description': 'Purge Game token',
+        'image' : image,
+        'attributes': [
+        {
+            'trait_type': 'Crypto', 'value': tokenTraits[1]
+        },
+        {
+            'trait_type': 'Letter', 'value': tokenTraits[2]
+        },
+        {
+            'trait_type': 'Symbol', 'value': tokenTraits[3]
+        },
+        {
+            'trait_type': 'Number', 'value': tokenTraits[4]
+        }
+        ]
+        }
+    json_string = json.dumps(data)
 
 
-with open(mintcsv,'r') as mintcsvfile:
-    
-    mintcsvreader = csv.reader(mintcsvfile)
-    totalMints = len(list(mintcsvreader))
-    mintcsvfile.seek(0)
-    for row in mintcsvreader:
-        tokenTraits = row
-        tokenTraitsString = []
-        for c in range(1,5):
 
-            with open(traitmap,'r') as traitmapcsvfile:
-                traitmapcsvreader = csv.reader(traitmapcsvfile)
-                traitStrings = next(traitmapcsvreader)
-
-                traitColor = traitStrings[int((int(tokenTraits[c]) - (c-1) * 64) / 8)]
-                for count in range(1,c+1):
-                    traitStrings = next(traitmapcsvreader)
-                traitAttribute = traitStrings[(int(tokenTraits[c]) - (c-1) * 64) % 8]
-                tokenTraitsString.append(traitColor +" " + traitAttribute)
-
-        #tokenName = 'Purge Game Season One # ' + tokenTraits[0]
-        tokenId = int(tokenTraits[0])
-        tokenName = 'Purge Game Season One # ' + str(tokenId)
-        image = ifps + str(tokenId) + '.png'
-        data = {
-            'name': tokenName,
-            'description': 'Purge Game token',
-            'image' : image,
-            'attributes': [
-            {
-                'trait_type': 'Crypto', 'value' : tokenTraitsString[0]
-            },
-            {
-                'trait_type': 'Letter', 'value': tokenTraitsString[1]
-            },
-            {
-                'trait_type': 'Symbol', 'value': tokenTraitsString[2]
-            },
-            {
-                'trait_type': 'Number', 'value': tokenTraitsString[3]
-            }
-            ]
-         }
-        json_string = json.dumps(data)
-        
-
-
-        outputfile = "json\\"+str(tokenId)
-        print (outputfile)
-        with open(outputfile, "w") as outfile:
-            outfile.write(json_string)
-            #print(data)
+    outputfile = "json\\"+str(tokenId)
+    print (outputfile)
+    with open(outputfile, "w") as outfile:
+        outfile.write(json_string)
