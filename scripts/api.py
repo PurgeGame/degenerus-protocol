@@ -13,7 +13,8 @@ async def alltraits():
     cur = conn.cursor()
     cur.execute("""
     SELECT *
-    FROM traits""")
+    FROM traits
+    WHERE trait < 256""")
     traitinfo = cur.fetchall()
     conn.close
     traitdata = {}

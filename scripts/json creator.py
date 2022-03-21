@@ -1,7 +1,7 @@
 import json, sqlite3
 
 
-ifps = 'ipfs://QmNsTmdsA5JH9ACJKMnREdA8NYvs1mZAWfcMS2N8BS1w7A/'
+ifps = 'ipfs://QmWmHfsiCjqkBVhFVp3VdZcSb3ikYTegaMBnEE7Sapcqfh/'
 conn = sqlite3.connect('PurgeGame.db')
 cur = conn.cursor()
 cur.execute("""
@@ -13,7 +13,7 @@ cur.execute("""
     SELECT MAX(tokenId)
     FROM tokens
     WHERE tokenId < 40000""")
-tokensMinted = cur.fetchone()
+tokensMinted = cur.fetchone()[0]
 
 
 for row in tokens:
@@ -55,7 +55,7 @@ for row in tokens:
     with open(outputfile, "w") as outfile:
         outfile.write(json_string)
 
-for c in range(1,500):
+for c in range(1,501):
     tokenId = tokensMinted+c
     tokenName = 'Purge Game Bomb Token # ' + str(tokenId)
     image = ifps + 'bomb.png'
