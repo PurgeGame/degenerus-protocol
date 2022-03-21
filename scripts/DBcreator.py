@@ -74,6 +74,7 @@ with open(traitmap,'r') as traitmapcsvfile:
                 traitimage = 'https://purge.game/img/traits/' + color + "_" + shape +'.png'
                 traitimage = traitimage.lower()
                 cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:image,:discordrole)",{'trait':trait,'color':color,'shape':shape,'remaining':0,'total':0,'image': traitimage,'discordrole':0})
+    cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:image,:discordrole)",{'trait':256,'color':'Bomb','shape':'Token','remaining':0,'total':0,'image': 'https://purge.game/img/tokens/bomb.png','discordrole':0})
     conn.commit()
     
 @client.event

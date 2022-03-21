@@ -39,14 +39,14 @@ async def updateroles(userid):
     cur = conn.cursor()
     cur.execute("""
         SELECT address
-        FROM addresses
+        FROM discord
         WHERE discord = ?""",(userid,))
     address = cur.fetchone()
 
     cur.execute("""
         SELECT trait1,trait2,trait3,trait4
         FROM tokens
-        WHERE holderaddress = ?""",(address[0],))
+        WHERE holderaddress = ? AND trait1 != 256""",(address[0],))
     traits = cur.fetchall()
     print (traits)
     traitarray = []
