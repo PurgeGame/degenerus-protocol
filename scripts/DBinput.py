@@ -4,8 +4,8 @@ from web3 import Web3
 import asyncio
 import os
 
-address = '0x6055d67660B7749De625021BA0DEc8d7d2B96B8f'
-offset = 420
+address = '0x5947adC763360C0C47975F00ccb4719Db089e686'
+offset = 20
 
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
 ETHERSCAN_API_ONE = os.environ.get("ETHERSCAN_API_ONE")
@@ -209,14 +209,15 @@ def removetraits(_tokenId,conn):
             cur.execute(
                 """UPDATE tokens SET trait3purge = ?
                 WHERE tokenId = ?""",(traitremaining,_tokenId))
-        elif _trait <=256:
+        elif _trait <256:
             cur.execute(
                 """UPDATE tokens SET trait4purge = ?
                 WHERE tokenId = ?""",(traitremaining,_tokenId))
-        traitremaining -= 1
-        cur.execute(
-            """UPDATE traits SET remaining = ?
-            WHERE trait = ?""",(traitremaining,_trait))
+        if _trait != 256 or c == 1:
+            traitremaining -= 1
+            cur.execute(
+                """UPDATE traits SET remaining = ?
+                WHERE trait = ?""",(traitremaining,_trait))
     conn.commit()
     conn.close
 
@@ -238,7 +239,7 @@ def transfer():
     filter = transfer[1]
     transfer = transfer[0]
     end = 0
-    x=0
+    x=60
     while 1:
         if len(transfer) > 0:
             conn = sqlite3.connect('PurgeGame.db')
@@ -261,11 +262,13 @@ def transfer():
                 SELECT * 
                 FROM tokens 
                 WHERE tokenId = ?""",(tokenId,))
-                bomb = cur.fetchone()
-                if bomb != None:
+                token = cur.fetchone()
+                if token == None:
+                    print("bomb")
                     cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
                     {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
-                    cur.execute("UPDATE traits SET total +=1, remaining +=1 WHERE trait = 256")
+                    cur.execute("UPDATE traits SET total =total + 1, remaining = remaining +1 WHERE trait = 256")
+                    conn.commit()
                 if transfer[c]['args']['to'] == '0x0000000000000000000000000000000000000000':
                     block = transfer[c]['blockNumber']
 
@@ -278,6 +281,7 @@ def transfer():
                     cur.execute(
                         """UPDATE tokens SET holderaddress = ?
                         WHERE tokenId = ?""",(transfer[c]['args']['to'],tokenId))
+            fromblock = transfer[c]['blockNumber'] +1
             c+=1
         conn.commit()
         conn.close
@@ -288,7 +292,7 @@ def transfer():
             else:
                 x=0
         x+=1
-        transfer = getTransfer(1, filter,fromblock)[0]
+        transfer = getTransfer(0, filter,fromblock)[0]
 
 
 def referral():
@@ -332,10 +336,10 @@ def referral():
                 x=0
         x+=1
         referral = getReferrals(1, filter,fromblock)[0]
-referral()
-# importmint()
-# importmap()
-# countTraits()
-# mapPurge()
+#referral()
+importmint()
+importmap()
+countTraits()
+mapPurge()
 
-# transfer()
+transfer()

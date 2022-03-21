@@ -54,6 +54,9 @@ for row in tokens:
     traitimageone = traitimagefour.convert("RGBA")
     Image.Image.paste(background,traitimagefour, (348,348),traitimagefour)
     background.save(tokenIdfilename)
-            
 
-           
+bomb = Image.open('baseimages\\bomb.png')
+bomb = bomb.convert("RGBA")
+background = Image.open("baseimages\\background" + colorfound + ".png")
+Image.Image.paste(background,bomb, (0,0),bomb)
+background.save('finished\\bomb.png')
