@@ -264,7 +264,6 @@ def transfer():
                 WHERE tokenId = ?""",(tokenId,))
                 token = cur.fetchone()
                 if token == None:
-                    print("bomb")
                     cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
                     {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
                     cur.execute("UPDATE traits SET total =total + 1, remaining = remaining +1 WHERE trait = 256")
@@ -273,10 +272,11 @@ def transfer():
                     block = transfer[c]['blockNumber']
 
                     purgeTime = purgetime(block)
-                    cur.execute(
-                        """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0
-                        WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],tokenId))
-                    removetraits(transfer[c]['args']['tokenId'],conn)
+                    if token[8] ==0:
+                        cur.execute(
+                            """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0
+                            WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],tokenId))
+                        removetraits(transfer[c]['args']['tokenId'],conn)
                 else:
                     cur.execute(
                         """UPDATE tokens SET holderaddress = ?
