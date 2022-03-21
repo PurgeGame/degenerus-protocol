@@ -209,7 +209,7 @@ def removetraits(_tokenId,conn):
             cur.execute(
                 """UPDATE tokens SET trait3purge = ?
                 WHERE tokenId = ?""",(traitremaining,_tokenId))
-        elif _trait <256:
+        elif _trait <=256:
             cur.execute(
                 """UPDATE tokens SET trait4purge = ?
                 WHERE tokenId = ?""",(traitremaining,_tokenId))
@@ -256,18 +256,28 @@ def transfer():
                     end = 0
                 c=0
             else:
+                tokenId = transfer[c]['args']['tokenId']
+                cur.execute("""
+                SELECT * 
+                FROM tokens 
+                WHERE tokenId = ?""",(tokenId,))
+                bomb = cur.fetchone()
+                if bomb != None:
+                    cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
+                    {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
+                    cur.execute("UPDATE traits SET total +=1, remaining +=1 WHERE trait = 256")
                 if transfer[c]['args']['to'] == '0x0000000000000000000000000000000000000000':
                     block = transfer[c]['blockNumber']
 
                     purgeTime = purgetime(block)
                     cur.execute(
                         """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0
-                        WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],transfer[c]['args']['tokenId']))
+                        WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],tokenId))
                     removetraits(transfer[c]['args']['tokenId'],conn)
                 else:
                     cur.execute(
                         """UPDATE tokens SET holderaddress = ?
-                        WHERE tokenId = ?""",(transfer[c]['args']['to'],transfer[c]['args']['tokenId']))
+                        WHERE tokenId = ?""",(transfer[c]['args']['to'],tokenId))
             c+=1
         conn.commit()
         conn.close
