@@ -4,8 +4,8 @@ from web3 import Web3
 import asyncio
 import os
 
-address = '0xe5b6C45653cc6a09ff80D831063c1B20D3BD9942'
-offset = 5
+address = '0x6055d67660B7749De625021BA0DEc8d7d2B96B8f'
+offset = 420
 
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
 ETHERSCAN_API_ONE = os.environ.get("ETHERSCAN_API_ONE")
@@ -71,7 +71,6 @@ def getReferrals(new, filter,fromblock):
     return(ref, filter)
 
 def importmint():
-    print(1)
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
     mints = getMints(0)
@@ -184,8 +183,7 @@ def countTraits():
     conn.commit()
     conn.close 
 
-def removetraits(_tokenId):
-    conn = sqlite3.connect('PurgeGame.db')
+def removetraits(_tokenId,conn):
     cur = conn.cursor()
     cur.execute("""
         SELECT *
@@ -231,30 +229,31 @@ def mapPurge():
         WHERE holderaddress = 0""")
     maps = cur.fetchall()
     for row in maps:
-        removetraits(row[0])
+        removetraits(row[0], conn)
     conn.close
 
 def transfer():
-    conn = sqlite3.connect('PurgeGame.db')
-    cur = conn.cursor()
     fromblock = 0
     transfer = getTransfer(0,0,fromblock)
     filter = transfer[1]
     transfer = transfer[0]
+    end = 0
     x=0
     while 1:
         if len(transfer) > 0:
             conn = sqlite3.connect('PurgeGame.db')
             cur = conn.cursor()
-        if len(transfer) > 9500:
-            end = transfer[9500]['blockNumber']
+        if len(transfer) > 9000:
+            end = transfer[9000]['blockNumber']
         c=0
         while c< len(transfer):
-            if transfer[c]['blockNumber']-1 == end:
-                fromblock = end-1
-                transfer = getTransfer(0,0,fromblock)
-                if len(transfer) > 9500:
-                    end = transfer[9500]['blockNumber']
+            if transfer[c]['blockNumber'] == end:
+                fromblock = end
+                transfer = getTransfer(0,0,fromblock)[0]
+                if len(transfer) > 9000:
+                    end = transfer[9000]['blockNumber']
+                else:
+                    end = 0
                 c=0
             else:
                 if transfer[c]['args']['to'] == '0x0000000000000000000000000000000000000000':
@@ -264,7 +263,7 @@ def transfer():
                     cur.execute(
                         """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0
                         WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],transfer[c]['args']['tokenId']))
-                    removetraits(transfer[c]['args']['tokenId'])
+                    removetraits(transfer[c]['args']['tokenId'],conn)
                 else:
                     cur.execute(
                         """UPDATE tokens SET holderaddress = ?
@@ -323,9 +322,10 @@ def referral():
                 x=0
         x+=1
         referral = getReferrals(1, filter,fromblock)[0]
-
+referral()
 # importmint()
 # importmap()
 # countTraits()
 # mapPurge()
-referral()
+
+# transfer()
