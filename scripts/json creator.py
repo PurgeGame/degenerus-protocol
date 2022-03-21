@@ -9,6 +9,12 @@ cur.execute("""
     FROM tokens
     WHERE tokenId < 40000""")
 tokens = cur.fetchall()
+cur.execute("""
+    SELECT MAX(tokenId)
+    FROM tokens
+    WHERE tokenId < 40000""")
+tokensMinted = cur.fetchone()
+
 
 for row in tokens:
     tokenTraits = []
@@ -45,10 +51,25 @@ for row in tokens:
         ]
         }
     json_string = json.dumps(data)
-
-
-
     outputfile = "json\\"+str(tokenId)
-    print (outputfile)
+    with open(outputfile, "w") as outfile:
+        outfile.write(json_string)
+
+for c in range(1,500):
+    tokenId = tokensMinted+c
+    tokenName = 'Purge Game Bomb Token # ' + str(tokenId)
+    image = ifps + 'bomb.png'
+    data = {
+        'name': tokenName,
+        'description': 'Purge Game Bomb Token',
+        'image' : image,
+        'attributes': [
+        {
+            'trait_type': 'Bomb', 'value': 'Bomb'
+        }
+        ]
+    }
+    json_string = json.dumps(data)
+    outputfile = "json\\"+str(tokenId)
     with open(outputfile, "w") as outfile:
         outfile.write(json_string)
