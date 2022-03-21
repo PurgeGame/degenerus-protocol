@@ -12,7 +12,10 @@ for row in tokens:
     tokenId = row[0]
     traitimagefile = []
     color = []
-    tokenIdfilename = "finished\\" +str(tokenId) + '.png'
+    if tokenId >40000:
+        tokenIdfilename="MAPImages\\" + str(tokenId) + '.png'
+    else:
+        tokenIdfilename = "finished\\" +str(tokenId) + '.png'
     for c in range(1,5):
         cur.execute("""
         SELECT color,shape
@@ -26,11 +29,10 @@ for row in tokens:
         traitimagefile.append("baseimages\\" + trait + ".png")
 
     colors = ['Brown','Orange','Pink','Red','Green','Purple','Blue']
-    for x in colors:
-        for c in color:
-            if colors == color:
-                colors.remove(color)
-                continue
+    for c in color:
+        for x in colors:
+            if c == x and x in colors:
+                colors.remove(c)
     colorfound = random.choice(colors)
 
     background = Image.open("baseimages\\background" + colorfound + ".png")
