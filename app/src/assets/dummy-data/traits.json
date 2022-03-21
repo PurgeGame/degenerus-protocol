@@ -1,0 +1,1538 @@
+{
+  "trait-001": {
+    "shape": "a",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-002": {
+    "shape": "a",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-003": {
+    "shape": "a",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-004": {
+    "shape": "a",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-005": {
+    "shape": "a",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-006": {
+    "shape": "a",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-007": {
+    "shape": "a",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-008": {
+    "shape": "a",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-009": {
+    "shape": "degen",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-010": {
+    "shape": "degen",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-011": {
+    "shape": "degen",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-012": {
+    "shape": "degen",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-013": {
+    "shape": "degen",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-014": {
+    "shape": "degen",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-015": {
+    "shape": "degen",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-016": {
+    "shape": "degen",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-017": {
+    "shape": "e",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-018": {
+    "shape": "e",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-019": {
+    "shape": "e",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-020": {
+    "shape": "e",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-021": {
+    "shape": "e",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-022": {
+    "shape": "e",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-023": {
+    "shape": "e",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-024": {
+    "shape": "e",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-025": {
+    "shape": "g",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-026": {
+    "shape": "g",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-027": {
+    "shape": "g",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-028": {
+    "shape": "g",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-029": {
+    "shape": "g",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-030": {
+    "shape": "g",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-031": {
+    "shape": "g",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-032": {
+    "shape": "g",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-033": {
+    "shape": "m",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-034": {
+    "shape": "m",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-035": {
+    "shape": "m",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-036": {
+    "shape": "m",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-037": {
+    "shape": "m",
+    "color": "orange",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-038": {
+    "shape": "m",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-039": {
+    "shape": "m",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-040": {
+    "shape": "m",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-041": {
+    "shape": "p",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-042": {
+    "shape": "p",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-043": {
+    "shape": "p",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-044": {
+    "shape": "p",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-045": {
+    "shape": "p",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-046": {
+    "shape": "p",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-047": {
+    "shape": "p",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-048": {
+    "shape": "p",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-049": {
+    "shape": "r",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-050": {
+    "shape": "r",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-051": {
+    "shape": "r",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-052": {
+    "shape": "r",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-053": {
+    "shape": "r",
+    "color": "orange",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-054": {
+    "shape": "r",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-055": {
+    "shape": "r",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-056": {
+    "shape": "r",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-057": {
+    "shape": "u",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-058": {
+    "shape": "u",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-059": {
+    "shape": "u",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-060": {
+    "shape": "u",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-061": {
+    "shape": "u",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-062": {
+    "shape": "u",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-063": {
+    "shape": "u",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-064": {
+    "shape": "u",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-065": {
+    "shape": "1",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-066": {
+    "shape": "1",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-067": {
+    "shape": "1",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-068": {
+    "shape": "1",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-069": {
+    "shape": "1",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-070": {
+    "shape": "1",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-071": {
+    "shape": "1",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-072": {
+    "shape": "1",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-073": {
+    "shape": "2",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-074": {
+    "shape": "2",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-075": {
+    "shape": "2",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-076": {
+    "shape": "2",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-077": {
+    "shape": "2",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-078": {
+    "shape": "2",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-079": {
+    "shape": "2",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-080": {
+    "shape": "2",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-081": {
+    "shape": "3",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-082": {
+    "shape": "3",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-083": {
+    "shape": "3",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-084": {
+    "shape": "3",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-085": {
+    "shape": "3",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-086": {
+    "shape": "3",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-087": {
+    "shape": "3",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-088": {
+    "shape": "3",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-089": {
+    "shape": "4",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-090": {
+    "shape": "4",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-091": {
+    "shape": "4",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-092": {
+    "shape": "4",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-093": {
+    "shape": "4",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-094": {
+    "shape": "4",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-095": {
+    "shape": "4",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-096": {
+    "shape": "4",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-097": {
+    "shape": "5",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-098": {
+    "shape": "5",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-099": {
+    "shape": "5",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-100": {
+    "shape": "5",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-101": {
+    "shape": "5",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-102": {
+    "shape": "5",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-103": {
+    "shape": "5",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-104": {
+    "shape": "5",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-105": {
+    "shape": "6",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-106": {
+    "shape": "6",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-107": {
+    "shape": "6",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-108": {
+    "shape": "6",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-109": {
+    "shape": "6",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-110": {
+    "shape": "6",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-111": {
+    "shape": "6",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-112": {
+    "shape": "6",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-113": {
+    "shape": "7",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-114": {
+    "shape": "7",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-115": {
+    "shape": "7",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-116": {
+    "shape": "7",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-117": {
+    "shape": "7",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-118": {
+    "shape": "7",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-119": {
+    "shape": "7",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-120": {
+    "shape": "7",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-121": {
+    "shape": "8",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-122": {
+    "shape": "8",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-123": {
+    "shape": "8",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-124": {
+    "shape": "8",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-125": {
+    "shape": "8",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-126": {
+    "shape": "8",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-127": {
+    "shape": "8",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-128": {
+    "shape": "8",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-129": {
+    "shape": "bitcoin",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-130": {
+    "shape": "bitcoin",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-131": {
+    "shape": "bitcoin",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-132": {
+    "shape": "bitcoin",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-133": {
+    "shape": "bitcoin",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-134": {
+    "shape": "bitcoin",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-135": {
+    "shape": "bitcoin",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-136": {
+    "shape": "bitcoin",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-137": {
+    "shape": "cardano",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-138": {
+    "shape": "cardano",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-139": {
+    "shape": "cardano",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-140": {
+    "shape": "cardano",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-141": {
+    "shape": "cardano",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-142": {
+    "shape": "cardano",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-143": {
+    "shape": "cardano",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-144": {
+    "shape": "cardano",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-145": {
+    "shape": "dogecoin",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-146": {
+    "shape": "dogecoin",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-147": {
+    "shape": "dogecoin",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-148": {
+    "shape": "dogecoin",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-149": {
+    "shape": "dogecoin",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-150": {
+    "shape": "dogecoin",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-151": {
+    "shape": "dogecoin",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-152": {
+    "shape": "dogecoin",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-153": {
+    "shape": "ethereum",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-154": {
+    "shape": "ethereum",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-155": {
+    "shape": "ethereum",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-156": {
+    "shape": "ethereum",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-157": {
+    "shape": "ethereum",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-158": {
+    "shape": "ethereum",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-159": {
+    "shape": "ethereum",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-160": {
+    "shape": "ethereum",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-161": {
+    "shape": "litecoin",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-162": {
+    "shape": "litecoin",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-163": {
+    "shape": "litecoin",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-164": {
+    "shape": "litecoin",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-165": {
+    "shape": "litecoin",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-166": {
+    "shape": "litecoin",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-167": {
+    "shape": "litecoin",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-168": {
+    "shape": "litecoin",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-169": {
+    "shape": "monero",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-170": {
+    "shape": "monero",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-171": {
+    "shape": "monero",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-172": {
+    "shape": "monero",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-173": {
+    "shape": "monero",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-174": {
+    "shape": "monero",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-175": {
+    "shape": "monero",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-176": {
+    "shape": "monero",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-177": {
+    "shape": "solana",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-178": {
+    "shape": "solana",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-179": {
+    "shape": "solana",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-180": {
+    "shape": "solana",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-181": {
+    "shape": "solana",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-182": {
+    "shape": "solana",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-183": {
+    "shape": "solana",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-184": {
+    "shape": "solana",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-185": {
+    "shape": "tether",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-186": {
+    "shape": "tether",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-187": {
+    "shape": "tether",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-188": {
+    "shape": "tether",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-189": {
+    "shape": "tether",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-190": {
+    "shape": "tether",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-191": {
+    "shape": "tether",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-192": {
+    "shape": "tether",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-193": {
+    "shape": "club",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-194": {
+    "shape": "club",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-195": {
+    "shape": "club",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-196": {
+    "shape": "club",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-197": {
+    "shape": "club",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-198": {
+    "shape": "club",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-199": {
+    "shape": "club",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-200": {
+    "shape": "club",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-201": {
+    "shape": "spade",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-202": {
+    "shape": "spade",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-203": {
+    "shape": "spade",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-204": {
+    "shape": "spade",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-205": {
+    "shape": "spade",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-206": {
+    "shape": "spade",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-207": {
+    "shape": "spade",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-208": {
+    "shape": "spade",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-209": {
+    "shape": "heart",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-210": {
+    "shape": "heart",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-211": {
+    "shape": "heart",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-212": {
+    "shape": "heart",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-213": {
+    "shape": "heart",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-214": {
+    "shape": "heart",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-215": {
+    "shape": "heart",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-216": {
+    "shape": "heart",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-217": {
+    "shape": "diamond",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-218": {
+    "shape": "diamond",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-219": {
+    "shape": "diamond",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-220": {
+    "shape": "diamond",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-221": {
+    "shape": "diamond",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-222": {
+    "shape": "diamond",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-223": {
+    "shape": "diamond",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-224": {
+    "shape": "diamond",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-225": {
+    "shape": "cherries",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-226": {
+    "shape": "cherries",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-227": {
+    "shape": "cherries",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-228": {
+    "shape": "cherries",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-229": {
+    "shape": "cherries",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-230": {
+    "shape": "cherries",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-231": {
+    "shape": "cherries",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-232": {
+    "shape": "cherries",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-233": {
+    "shape": "cashsack",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-234": {
+    "shape": "cashsack",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-235": {
+    "shape": "cashsack",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-236": {
+    "shape": "cashsack",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-237": {
+    "shape": "cashsack",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-238": {
+    "shape": "cashsack",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-239": {
+    "shape": "cashsack",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-240": {
+    "shape": "cashsack",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  },
+  "trait-241": {
+    "shape": "chip",
+    "color": "blue",
+    "total": 12,
+    "remaining": 5
+  },
+  "trait-242": {
+    "shape": "chip",
+    "color": "brown",
+    "total": 4,
+    "remaining": 2
+  },
+  "trait-243": {
+    "shape": "chip",
+    "color": "gold",
+    "total": 16,
+    "remaining": 6
+  },
+  "trait-244": {
+    "shape": "chip",
+    "color": "green",
+    "total": 20,
+    "remaining": 2
+  },
+  "trait-245": {
+    "shape": "chip",
+    "color": "orange",
+    "total": 4,
+    "remaining": 3
+  },
+  "trait-246": {
+    "shape": "chip",
+    "color": "pink",
+    "total": 45,
+    "remaining": 24
+  },
+  "trait-247": {
+    "shape": "chip",
+    "color": "purple",
+    "total": 12,
+    "remaining": 21
+  },
+  "trait-248": {
+    "shape": "chip",
+    "color": "red",
+    "total": 32,
+    "remaining": 2
+  },
+  "trait-249": {
+    "shape": "horseshoe",
+    "color": "blue",
+    "total": 6,
+    "remaining": 3
+  },
+  "trait-250": {
+    "shape": "horseshoe",
+    "color": "brown",
+    "total": 18,
+    "remaining": 7
+  },
+  "trait-251": {
+    "shape": "horseshoe",
+    "color": "gold",
+    "total": 9,
+    "remaining": 7
+  },
+  "trait-252": {
+    "shape": "horseshoe",
+    "color": "green",
+    "total": 5,
+    "remaining": 2
+  },
+  "trait-253": {
+    "shape": "horseshoe",
+    "color": "orange",
+    "total": 44,
+    "remaining": 22
+  },
+  "trait-254": {
+    "shape": "horseshoe",
+    "color": "pink",
+    "total": 33,
+    "remaining": 21
+  },
+  "trait-255": {
+    "shape": "horseshoe",
+    "color": "purple",
+    "total": 18,
+    "remaining": 24
+  },
+  "trait-256": {
+    "shape": "horseshoe",
+    "color": "red",
+    "total": 26,
+    "remaining": 8
+  }
+}
