@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
-import "@openzeppelin/contracts@4.5.0/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts@4.5.0/access/Ownable.sol";
-import "hardhat/console.sol";
+import "./ERC721A.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+//import "hardhat/console.sol";
 
 /// @custom:security-contact purgegamenft@gmail.com
 interface PurgedCoinInterface 
@@ -13,7 +13,7 @@ interface PurgedCoinInterface
     function balanceOf(address account) external view returns (uint256);
 }
 
-contract PurgeGameAlphaTest is ERC721, Ownable
+contract PurgeGameAlphaTest is ERC721A, Ownable
 {
     
     bool paidJackpot;
@@ -25,9 +25,9 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     uint16 offset;
     uint16 bombNumber = 65001;
     uint24 nuke = 999999;
-    uint16 public totalMinted;
     uint16 index;
     uint16 MAPtokens;
+    uint16 public totalMinted;
     
     uint32 revealTime;
 
@@ -46,7 +46,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     uint256 public cost = .0001 ether; 
     uint256 public PrizePool = 0 ether;
 
-    constructor() ERC721("Purge Game Alpha Test #2", "PURGEGAMEa2") {}
+    constructor() ERC721A("Purge Game Alpha Test #2", "PURGEGAMEa2") {}
     
 
 // Links user addresses to a uint24 to save gas when recording game data and will be referenced in future seasons.
@@ -112,12 +112,11 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     {
         for (uint16 i = 1; i <= _number; i++) 
         {
-            uint16 tokenId = totalMinted + i;
-            _mint(msg.sender, tokenId);
+            uint16 tokenId = uint16(_currentIndex + i);
             setTraits(tokenId);
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
-        totalMinted += _number;
+        _safeMint(msg.sender,_number);
     }
 
 // Creates a payout ticket for a token without actally minting that token to save gas.
@@ -198,7 +197,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
         {
             _tokenId = _tokenIds[i];
             require(ownerOf(_tokenId) == msg.sender, "You do not own that token");
-            require(_tokenId < 65001, "You cannot purge bombs");
+            require(_tokenId <= totalMinted, "You cannot purge bombs");
             _burn(_tokenId);
             _tokenId = realTraitsFromTokenId(_tokenId);
             purgeWrite(_tokenId, addressIndex[msg.sender]);
@@ -230,6 +229,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     function removeTraitRemaining(uint8 trait) private 
     {
         traitRemaining[trait] -=1;
+        
         if (traitRemaining[trait] == 0)
         {
             if (gameOver == false)
@@ -289,7 +289,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
         if (bombNumber == 50001) {require(block.timestamp > revealTime + 1209600);}
         else {require(block.timestamp > revealTime + 86400);}
         */
-        _mint(indexAddress[getRandomPurge(entropy)],bombNumber);
+        _safeMint(indexAddress[getRandomPurge(entropy)],1);
         bombNumber +=1;
         revealTime = uint32(block.timestamp);
     }
@@ -299,8 +299,8 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     function nukeToken(uint16 bombTokenId, uint16 targetTokenId) external
     {
         
-        require(bombTokenId > 65000);
-        require(targetTokenId <= 39420);
+        require(bombTokenId > totalMinted);
+        require(targetTokenId <= totalMinted);
         require(ownerOf(bombTokenId) == msg.sender);
         _burn(bombTokenId);
         initAddress(ownerOf(targetTokenId));
@@ -323,8 +323,8 @@ contract PurgeGameAlphaTest is ERC721, Ownable
 
     function RequireHundredMax(uint16 _number) view private
     {
-        require(_number <= 100, "Maximum of 100 mints allowed per transaction");
-        require(totalMinted + _number < 39421, "Max 39420 tokens");
+        require(_number <= 500, "Maximum of 500 mints allowed per transaction");
+        require(_currentIndex + _number < 39421, "Max 39420 tokens");
     }
 
     function RequireCorrectFunds(uint16 _number) view private
@@ -384,17 +384,19 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     function setCoinMintStatus(bool _status) external onlyOwner
     {
         coinMintStatus = _status;
+        if (_status == false) totalMinted = uint16(_currentIndex-1);
     }
 
     function setPublicSaleStatus(bool _status) external onlyOwner 
     {
         publicSaleStatus = _status;
+        if (_status == false ) totalMinted = uint16(_currentIndex-1);
     }
 
     function reveal(bool _REVEAL, string calldata updatedURI) external onlyOwner 
     {
         require(REVEAL == false);
-        require (paidJackpot == true)
+        require (paidJackpot == true);
         require(address(this).balance >= PrizePool);
         REVEAL = _REVEAL;
         baseTokenURI = updatedURI;
@@ -419,31 +421,34 @@ contract PurgeGameAlphaTest is ERC721, Ownable
         _to.transfer(address(this).balance - PrizePool);    
     }
 
- // totalSupply includes purged tokens.   
-    function totalSupply() public view returns(uint16)
+ // totalSupply includes purged tokens before reveal.  
+
+    function totalSupply() external view returns(uint256)
     {
-        return(totalMinted + MAPtokens);
+        if(REVEAL == false)return(_currentIndex-1 + MAPtokens);
+        return _currentIndex-_burnCounter-1;
     }
+
 
     receive () external payable  { }
 
     function tokenURI(uint256 tokenId)
         public
         view
-        override(ERC721)
+        override(ERC721A)
         returns (string memory)
     {
             return string(abi.encodePacked(baseTokenURI, uint2str(tokenId)));
     }
 
-
+/*
     function _beforeTokenTransfer(address from, address to, uint256 tokenId)
         internal
-        override(ERC721)
+        //override(ERC721A)
     {
         super._beforeTokenTransfer(from, to, tokenId);
     }
-
+*/
     function uint2str(uint _i) private pure returns (string memory _uintAsString) 
     {
         if (_i == 0) 
@@ -472,7 +477,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
 
     // The following functions are overrides required by Solidity.
 
-    function _burn(uint256 tokenId) internal override(ERC721) 
+    function _burn(uint256 tokenId) internal override(ERC721A) 
     {
         super._burn(tokenId);
     }
@@ -480,10 +485,12 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721)
+        override(ERC721A)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
     }
-    
+    function _startTokenId() internal view virtual override(ERC721A) returns (uint256) {
+        return 1;
+    }
 }
