@@ -18,7 +18,7 @@ contract Purged is ERC20, ERC20Burnable, Ownable
          _;
     }
 
-    function setPurgeGameAddress(uint8 season, address _purgeGameContract) public onlyOwner
+    function setPurgeGameAddress(address _purgeGameContract, uint8 season) public onlyOwner
     {
        PurgeGameContract[season] = _purgeGameContract;
     }
@@ -33,7 +33,8 @@ contract Purged is ERC20, ERC20Burnable, Ownable
         _burn(yourAddress,_amount);
     }
 
-    function airdrop(address to, uint256 amount) public onlyOwner {
+    function airdrop(address to, uint256 amount) public onlyOwner 
+    {
         _mint(to, amount);
     }
 
