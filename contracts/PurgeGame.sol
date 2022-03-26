@@ -166,9 +166,9 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
         }
     }
 
-    function rarity(uint16 _tokenId) private pure returns(uint24)
+    function rarity(uint16 _tokenId) private view returns(uint24)
     {
-        uint64 randomHash = uint64(uint(keccak256(abi.encodePacked(_tokenId))));
+        uint64 randomHash = uint64(uint(keccak256(abi.encodePacked(_tokenId,block.timestamp))));
         uint24 result = getTrait(uint16(randomHash));
         result += getTrait(uint16(randomHash >> 11)) << 6;
         result += getTrait(uint16(randomHash >> 22)) << 12;
@@ -263,33 +263,33 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
     }
 
 // Pays the MAP Jackpot to a random Mint and Purger.
-    function payMapJackpot(uint32 entropy) external onlyOwner
+    function payMapJackpot() external onlyOwner
     {
         require(paidJackpot == false);
         require(publicSaleStatus == false);
-        address payable winnerAddress = payable(indexAddress[getRandomPurge(entropy)]);
+        address payable winnerAddress = payable(indexAddress[getRandomPurge()]);
         PrizePool -= MAPtokens * cost / 20;
         paidJackpot = true;
         winnerAddress.transfer(MAPtokens * cost / 20); 
     }
 
 // Picks a random address from all addresses which have purged, weighted by number of purges.
-    function getRandomPurge(uint32 entropy) private view returns(uint24)
+    function getRandomPurge() private view returns(uint24)
     {
-        uint8 randomHash = uint8(uint(keccak256(abi.encodePacked(entropy))));
-        uint16 randomHashTwo = uint16(uint(keccak256(abi.encodePacked(randomHash))));
-        randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[randomHash].length);
-        return(traitPurgeAddress[randomHash][randomHashTwo]);
+        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool, block.timestamp))));
+        uint16 randomHashTwo = uint16(random >> 8);
+        randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[uint8(random)].length);
+        return(traitPurgeAddress[uint8(random)][randomHashTwo]);
     }
 
 // Airdrops a bomb token to a random address which has purged a token at some point
-    function bombAirdrop(uint32 entropy) external onlyOwner
+    function bombAirdrop() external onlyOwner
     {
         /*
         if (bombNumber == 50001) {require(block.timestamp > revealTime + 1209600);}
         else {require(block.timestamp > revealTime + 86400);}
         */
-        _safeMint(indexAddress[getRandomPurge(entropy)],1);
+        _safeMint(indexAddress[getRandomPurge()],1);
         bombNumber +=1;
         revealTime = uint32(block.timestamp);
     }
