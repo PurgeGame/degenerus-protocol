@@ -11,6 +11,7 @@ contract Purged is ERC20, ERC20Burnable, Ownable
     constructor() ERC20("Purged Coin", "PURGED") {}
 
     address[2] PurgeGameContract;
+    uint256 bank = 100000 ether
     
     modifier onlyPurgeGameContract()
     {
