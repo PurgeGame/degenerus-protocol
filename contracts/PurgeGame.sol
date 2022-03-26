@@ -103,7 +103,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
         require(REVEAL == false);
         RequireHundredMax(_number);
         RequireCoinFunds(_number);
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 10000);
+        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
         _mintToken(_number);
         addToPrizePool(_number);
     }
@@ -125,13 +125,13 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
         RequireCorrectFunds(_number);
         codeMintAndPurge(_number);
         if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender) {payReferrer(_number, referrer);}
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _number * cost * 1000);
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _number * cost * 100);
     }
 
     function coinMintAndPurge(uint16 _number) external 
     {
         RequireCoinFunds(_number);
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 9000);
+        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 900);
         codeMintAndPurge(_number);
     }
 
@@ -203,7 +203,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
             purgeWrite(_tokenId, addressIndex[msg.sender]);
             purgeTraits(_tokenId);     
         }        
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _tokenIds.length * cost * 1000);
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _tokenIds.length * cost * 100);
     }
 
 // Records the purger's ID for each trait purged. This record will be used to deliver payouts when the game is over.
@@ -309,7 +309,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
         targetTokenId = realTraitsFromTokenId(targetTokenId);
         purgeWrite(targetTokenId, nuke);
         purgeTraits(targetTokenId);
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 1000);
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
         nuke = 999999;
     }
 
@@ -334,7 +334,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
 
     function RequireCoinFunds(uint16 _number) view private
     {
-        require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= _number * cost * 10000, "Not enough $PURGED");
+        require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= _number * cost * 1000, "Not enough $PURGED");
     }
 
 // Minting adds half of the mint cost to the prize pool.
@@ -347,7 +347,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
 // Pays $PURGED to referrers when their referrals mint tokens.
     function payReferrer(uint16 _number, string calldata referrer) private
     {
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[referralCode[referrer]], _number * cost * 500);
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[referralCode[referrer]], _number * cost * 50);
         emit Referred(referrer, indexAddress[referralCode[referrer]], _number, msg.sender);
     }
 
