@@ -29,10 +29,7 @@ for row in tokens:
         traitimagefile.append("baseimages\\" + trait + ".png")
 
     colors = ['Brown','Orange','Pink','Red','Green','Purple','Blue']
-    for c in color:
-        for x in colors:
-            if c == x and x in colors:
-                colors.remove(c)
+    colors = list(set(colors)-set(color))
     colorfound = random.choice(colors)
 
     background = Image.open("baseimages\\background" + colorfound + ".png")

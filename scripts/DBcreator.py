@@ -98,7 +98,7 @@ async def on_ready():
             traitstring = "Common " + traitstring[2]
         else:
             traitstring = traitstring[1] + " " + traitstring[2]
-        for x in range(1,242):
+        for x in range(1,243):
             rolename = str(roles[x])
             if rolename == traitstring:
                 cur.execute(
