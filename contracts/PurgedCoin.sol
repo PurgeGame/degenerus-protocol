@@ -11,7 +11,7 @@ contract Purged is ERC20, ERC20Burnable, Ownable
     constructor() ERC20("Purged Coin", "PURGED") {}
 
     address[2] PurgeGameContract;
-    uint256 bank = 1000000 ether;
+    uint256 public bank = 1000000 ether;
     uint32 starttime = 1648337132;
     
     modifier onlyPurgeGameContract()
@@ -35,16 +35,17 @@ contract Purged is ERC20, ERC20Burnable, Ownable
         _burn(yourAddress,_amount);
     }
 
-    function airdrop(address to, uint256 amount) external onlyOwner 
+    function airdrop(address to, uint256 _amount) external onlyOwner 
     {
-        require(amount < bank);
+        uint256 amount = _amount * 1 ether;
+        require(amount <= bank);
         _mint(to, amount);
         bank -= amount;
     }
 
     function addToBank() external onlyOwner
     {
-        bank += (block.timestamp - starttime) / 24192;
+        bank += (block.timestamp - starttime) * 1000 ether / 24192;
         starttime = uint32(block.timestamp);
     }
 
@@ -56,4 +57,3 @@ contract Purged is ERC20, ERC20Burnable, Ownable
     }
 
 }
-
