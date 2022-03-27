@@ -31,7 +31,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
     
     uint32 revealTime;
 
-    address private purgedCoinContract = 0x7b27289344aaf7EC973C0c60EA6EF9765d407C2F;
+    address private purgedCoinContract = 0xfBFD4411914A2c6caBEd2Ba18A7DBe8DD9A26496;
     
     uint16[256] public traitRemaining;
 
