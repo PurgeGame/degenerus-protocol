@@ -1,6 +1,5 @@
-from fileinput import close
 import discord
-import sqlite3,csv
+import sqlite3
 import os,time
 
 intents = discord.Intents.default()
@@ -95,4 +94,4 @@ async def updateroles(userid):
 
 
 token = os.environ.get("DISCORD_BOT_SECRET")
-client.run('OTQ4NDM4NDgzNzEyNzYxODk3.Yh70Kw.P7TgaudSRqUTXXJPdcta8hz6gVs')
+client.run(token)
