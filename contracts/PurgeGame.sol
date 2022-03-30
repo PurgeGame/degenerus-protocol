@@ -21,6 +21,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     bool public publicSaleStatus;
     bool public REVEAL;
     bool public gameOver;
+    bool private purging;
 
     uint16 offset;
     uint16 bombNumber = 65001;
@@ -113,7 +114,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         for (uint16 i = 1; i <= _number; i++) 
         {
             uint16 tokenId = totalMinted + i;
-            _mint(msg.sender, tokenId);
+            _safeMint(msg.sender, tokenId);
             setTraits(tokenId);
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
@@ -194,6 +195,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(REVEAL, "No purging before reveal");
         initAddress(msg.sender);
         uint16 _tokenId;
+        purging = 1;
         for(uint16 i = 0; i < _tokenIds.length; i++) 
         {
             _tokenId = _tokenIds[i];
@@ -203,7 +205,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
             _tokenId = realTraitsFromTokenId(_tokenId);
             purgeWrite(_tokenId, addressIndex[msg.sender]);
             purgeTraits(_tokenId);     
-        }        
+        }      
+        purging = 0;  
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _tokenIds.length * cost * 100);
     }
 
@@ -440,14 +443,18 @@ contract PurgeGameBetaTest is ERC721, Ownable
             return string(abi.encodePacked(baseTokenURI, uint2str(tokenId)));
     }
 
-/*
+
     function _beforeTokenTransfer(address from, address to, uint256 tokenId)
         internal
-        //override(ERC721)
+        override(ERC721)
     {
+        if (to == address(0))
+        {
+            require(purging == 1, 'use purge function');
+        }
         super._beforeTokenTransfer(from, to, tokenId);
     }
-*/
+
     function uint2str(uint _i) private pure returns (string memory _uintAsString) 
     {
         if (_i == 0) 
