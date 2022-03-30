@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
-import "./ERC721A.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 //import "hardhat/console.sol";
 
@@ -13,7 +13,7 @@ interface PurgedCoinInterface
     function balanceOf(address account) external view returns (uint256);
 }
 
-contract PurgeGameAlphaTest is ERC721A, Ownable
+contract PurgeGameAlphaTest is ERC721, Ownable
 {
     
     bool paidJackpot;
@@ -46,7 +46,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
     uint256 public cost = .0001 ether; 
     uint256 public PrizePool = 0 ether;
 
-    constructor() ERC721A("Purge Game Alpha Test #2", "PURGEGAMEa2") {}
+    constructor() ERC721("Purge Game Alpha Test #2", "PURGEGAMEa2") {}
     
 
 // Links user addresses to a uint24 to save gas when recording game data and will be referenced in future seasons.
@@ -168,7 +168,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
 
     function rarity(uint16 _tokenId) private view returns(uint24)
     {
-        uint64 randomHash = uint64(uint(keccak256(abi.encodePacked(_tokenId,block.timestamp))));
+        uint64 randomHash = uint64(uint(keccak256(abi.encodePacked(_tokenId,PrizePool))));
         uint24 result = getTrait(uint16(randomHash));
         result += getTrait(uint16(randomHash >> 11)) << 6;
         result += getTrait(uint16(randomHash >> 22)) << 12;
@@ -276,7 +276,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
 // Picks a random address from all addresses which have purged, weighted by number of purges.
     function getRandomPurge() private view returns(uint24)
     {
-        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool, block.timestamp))));
+        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,_burnCounter))));
         uint16 randomHashTwo = uint16(random >> 8);
         randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[uint8(random)].length);
         return(traitPurgeAddress[uint8(random)][randomHashTwo]);
@@ -435,7 +435,7 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
     function tokenURI(uint256 tokenId)
         public
         view
-        override(ERC721A)
+        override(ERC721)
         returns (string memory)
     {
             return string(abi.encodePacked(baseTokenURI, uint2str(tokenId)));
@@ -485,12 +485,9 @@ contract PurgeGameAlphaTest is ERC721A, Ownable
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721A)
+        override(ERC721)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
-    }
-    function _startTokenId() internal view virtual override(ERC721A) returns (uint256) {
-        return 1;
     }
 }

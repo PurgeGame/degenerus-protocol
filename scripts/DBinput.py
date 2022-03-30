@@ -4,8 +4,8 @@ from web3 import Web3
 import asyncio
 import os
 
-address = '0x5947adC763360C0C47975F00ccb4719Db089e686'
-offset = 20
+address = '0x70A12AF3A5378C5F4Be478Edb41dA6c8949f0222'
+offset = 420
 
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
 ETHERSCAN_API_ONE = os.environ.get("ETHERSCAN_API_ONE")
@@ -308,15 +308,15 @@ def referral():
         if len(referral) > 0:
             conn = sqlite3.connect('PurgeGame.db')
             cur = conn.cursor()
-        if len(referral) > 9500:
-            end = referral[9500]['blockNumber']
+        if len(referral) > 9000:
+            end = referral[9000]['blockNumber']
         c= 0
         while c < len(referral):
             if referral[c]['blockNumber']-1 == end:
-                fromblock = end-1
-                referral = getReferrals(0,0,fromblock)
-                if len(referral) > 9500:
-                    end = referral[9500]['blockNumber']
+                fromblock = end +1
+                referral = getReferrals(1,filter,fromblock)[0]
+                if len(referral) > 9000:
+                    end = referral[9000]['blockNumber']
                 c=0
             else:
                 referrer = referral[c]['args']['referrer']
@@ -325,6 +325,7 @@ def referral():
                 number = referral[c]['args']['number']
                 cur.execute("INSERT INTO referrals VALUES(:address,:referralcode,:referee,:number)",
                     {'address':referrer,'referralcode':referralCode,'referee':referee,'number':number})
+                fromblock = referral[c]['blockNumber'] +1
             c+=1
         conn.commit() 
         conn.close
