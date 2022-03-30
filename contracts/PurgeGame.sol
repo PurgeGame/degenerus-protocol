@@ -13,7 +13,7 @@ interface PurgedCoinInterface
     function balanceOf(address account) external view returns (uint256);
 }
 
-contract PurgeGameAlphaTest is ERC721, Ownable
+contract PurgeGameBetaTest is ERC721, Ownable
 {
     
     bool paidJackpot;
@@ -46,7 +46,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     uint256 public cost = .0001 ether; 
     uint256 public PrizePool = 0 ether;
 
-    constructor() ERC721("Purge Game Alpha Test #2", "PURGEGAMEa2") {}
+    constructor() ERC721("Purge Game Beta Test", "PURGEGAMEBETA") {}
     
 
 // Links user addresses to a uint24 to save gas when recording game data and will be referenced in future seasons.
@@ -112,11 +112,12 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     {
         for (uint16 i = 1; i <= _number; i++) 
         {
-            uint16 tokenId = uint16(_currentIndex + i);
+            uint16 tokenId = totalMinted + i;
+            _mint(msg.sender, tokenId);
             setTraits(tokenId);
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
-        _safeMint(msg.sender,_number);
+        totalMinted += _number;
     }
 
 // Creates a payout ticket for a token without actally minting that token to save gas.
@@ -276,7 +277,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
 // Picks a random address from all addresses which have purged, weighted by number of purges.
     function getRandomPurge() private view returns(uint24)
     {
-        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,totalSupply()))));
+        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,block.timestamp))));
         uint16 randomHashTwo = uint16(random >> 8);
         randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[uint8(random)].length);
         return(traitPurgeAddress[uint8(random)][randomHashTwo]);
@@ -324,7 +325,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     function RequireHundredMax(uint16 _number) view private
     {
         require(_number <= 500, "Maximum of 500 mints allowed per transaction");
-        require(_currentIndex + _number < 39421, "Max 39420 tokens");
+        require(totalMinted + _number < 39421, "Max 39420 tokens");
     }
 
     function RequireCorrectFunds(uint16 _number) view private
@@ -384,13 +385,11 @@ contract PurgeGameAlphaTest is ERC721, Ownable
     function setCoinMintStatus(bool _status) external onlyOwner
     {
         coinMintStatus = _status;
-        if (_status == false) totalMinted = uint16(_currentIndex-1);
     }
 
     function setPublicSaleStatus(bool _status) external onlyOwner 
     {
         publicSaleStatus = _status;
-        if (_status == false ) totalMinted = uint16(_currentIndex-1);
     }
 
     function reveal(bool _REVEAL, string calldata updatedURI) external onlyOwner 
@@ -421,13 +420,13 @@ contract PurgeGameAlphaTest is ERC721, Ownable
         _to.transfer(address(this).balance - PrizePool);    
     }
 
- // totalSupply includes purged tokens before reveal.  
+    //totalSupply includes purged tokens before reveal.  
 
-    // function totalSupply() external view returns(uint256)
-    // {
-    //     if(REVEAL == false)return(_currentIndex-1 + MAPtokens);
-    //     return _currentIndex-_burnCounter-1;
-    // }
+     function totalSupply() external view returns(uint256)
+    {
+        if(REVEAL == false)return(totalMinted + MAPtokens);
+        return totalMinted;
+    }
 
 
     receive () external payable  { }
