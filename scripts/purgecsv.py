@@ -1,6 +1,6 @@
 import sqlite3,csv
 
-address = '0x7C94325Ad8dc46067F15918883933596aC31801F'
+address = '0x89a86be0EfFe52682222212d74913b497eecd506'
 purge = 'purge.csv'
 
 conn = sqlite3.connect('PurgeGame.db')
@@ -8,7 +8,7 @@ cur = conn.cursor()
 cur.execute("""
     SELECT tokenId
     FROM tokens
-    WHERE holderaddress =? and trait4 = ?""",(address,246))
+    WHERE holderaddress =? and trait3 = ?""",(address,137))
 tokens = cur.fetchall()
 savestuff = []
 for row in tokens:

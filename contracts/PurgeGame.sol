@@ -195,7 +195,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(REVEAL, "No purging before reveal");
         initAddress(msg.sender);
         uint16 _tokenId;
-        purging = 1;
+        purging = true;
         for(uint16 i = 0; i < _tokenIds.length; i++) 
         {
             _tokenId = _tokenIds[i];
@@ -206,7 +206,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
             purgeWrite(_tokenId, addressIndex[msg.sender]);
             purgeTraits(_tokenId);     
         }      
-        purging = 0;  
+        purging = false;  
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _tokenIds.length * cost * 100);
     }
 
@@ -399,6 +399,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require(REVEAL == false);
         require (paidJackpot == true);
+        require(offset != 0);
         require(address(this).balance >= PrizePool);
         REVEAL = _REVEAL;
         baseTokenURI = updatedURI;
@@ -450,7 +451,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         if (to == address(0))
         {
-            require(purging == 1, 'use purge function');
+            require(purging == true, 'use purge function');
         }
         super._beforeTokenTransfer(from, to, tokenId);
     }
