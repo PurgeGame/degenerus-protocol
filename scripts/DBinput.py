@@ -339,10 +339,10 @@ def referral():
                 x=0
         x+=1
         referral = getReferrals(1, filter,fromblock)[0]
-#referral()
-importmint()
-importmap()
-countTraits()
-mapPurge()
-print('done')
-transfer()
+referral()
+# importmint()
+# importmap()
+# countTraits()
+# mapPurge()
+# print('done')
+# transfer()
