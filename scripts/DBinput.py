@@ -4,7 +4,7 @@ from web3 import Web3
 import asyncio
 import os
 
-address = '0x70A12AF3A5378C5F4Be478Edb41dA6c8949f0222'
+address = '0x5A6048562559760D9C1116C8ff7A821D7907A163'
 offset = 420
 
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
@@ -67,7 +67,8 @@ def getReferrals(new, filter,fromblock):
         filter = Referred.createFilter(fromBlock = fromblock)
         ref = filter.get_all_entries()
     else:
-        ref = filter.get_new_entries()
+        filter = Referred.createFilter(fromBlock = fromblock)
+        ref = filter.get_all_entries()
     return(ref, filter)
 
 def importmint():
@@ -93,6 +94,7 @@ def importmint():
             tokenTraitThree = ((tokenTraits & 0x3f000) >> 12) + 128
             tokenTraitFour = ((tokenTraits & 0xfc0000) >> 18) + 192
             tokenId = mints[c]['args']['tokenId']
+
             if tokenId-offset < 1 :
                 realtokenId = totalMints - (offset - tokenId)
             else:
@@ -342,5 +344,5 @@ importmint()
 importmap()
 countTraits()
 mapPurge()
-
+print('done')
 transfer()
