@@ -276,7 +276,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
 // Picks a random address from all addresses which have purged, weighted by number of purges.
     function getRandomPurge() private view returns(uint24)
     {
-        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,_burnCounter))));
+        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,totalSupply()))));
         uint16 randomHashTwo = uint16(random >> 8);
         randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[uint8(random)].length);
         return(traitPurgeAddress[uint8(random)][randomHashTwo]);
@@ -423,11 +423,11 @@ contract PurgeGameAlphaTest is ERC721, Ownable
 
  // totalSupply includes purged tokens before reveal.  
 
-    function totalSupply() external view returns(uint256)
-    {
-        if(REVEAL == false)return(_currentIndex-1 + MAPtokens);
-        return _currentIndex-_burnCounter-1;
-    }
+    // function totalSupply() external view returns(uint256)
+    // {
+    //     if(REVEAL == false)return(_currentIndex-1 + MAPtokens);
+    //     return _currentIndex-_burnCounter-1;
+    // }
 
 
     receive () external payable  { }
@@ -444,7 +444,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
 /*
     function _beforeTokenTransfer(address from, address to, uint256 tokenId)
         internal
-        //override(ERC721A)
+        //override(ERC721)
     {
         super._beforeTokenTransfer(from, to, tokenId);
     }
@@ -477,7 +477,7 @@ contract PurgeGameAlphaTest is ERC721, Ownable
 
     // The following functions are overrides required by Solidity.
 
-    function _burn(uint256 tokenId) internal override(ERC721A) 
+    function _burn(uint256 tokenId) internal override(ERC721) 
     {
         super._burn(tokenId);
     }
