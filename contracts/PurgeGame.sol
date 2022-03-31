@@ -280,7 +280,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Picks a random address from all addresses which have purged, weighted by number of purges.
     function getRandomPurge() private view returns(uint24)
     {
-        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,block.timestamp))));
+        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,block.number))));
         uint16 randomHashTwo = uint16(random >> 8);
         randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[uint8(random)].length);
         return(traitPurgeAddress[uint8(random)][randomHashTwo]);
@@ -306,6 +306,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(bombTokenId > totalMinted);
         require(targetTokenId <= totalMinted);
         require(ownerOf(bombTokenId) == msg.sender);
+        purging = true;
         _burn(bombTokenId);
         initAddress(ownerOf(targetTokenId));
         nuke = addressIndex[ownerOf(targetTokenId)];
@@ -313,6 +314,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         targetTokenId = realTraitsFromTokenId(targetTokenId);
         purgeWrite(targetTokenId, nuke);
         purgeTraits(targetTokenId);
+        purging = false;
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
         nuke = 999999;
     }
