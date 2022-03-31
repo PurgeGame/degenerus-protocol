@@ -119,7 +119,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
         totalMinted += _number;
-        _balances[to] += number;
+        _balances[msg.sender] += number;
     }
 
 // Creates a payout ticket for a token without actally minting that token to save gas.
