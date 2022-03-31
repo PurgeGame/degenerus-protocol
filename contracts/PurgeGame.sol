@@ -119,7 +119,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
         totalMinted += _number;
-        _balances[msg.sender] += number;
     }
 
 // Creates a payout ticket for a token without actally minting that token to save gas.
@@ -499,20 +498,5 @@ contract PurgeGameBetaTest is ERC721, Ownable
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
-    }
-
-        function _mint(address to, uint256 tokenId) internal override(ERC721) 
-    {
-        require(to != address(0), "ERC721: mint to the zero address");
-        require(!_exists(tokenId), "ERC721: token already minted");
-
-        _beforeTokenTransfer(address(0), to, tokenId);
-
-        _balances[to] += 1;
-        _owners[tokenId] = to;
-
-        emit Transfer(address(0), to, tokenId);
-
-        _afterTokenTransfer(address(0), to, tokenId);
     }
 }
