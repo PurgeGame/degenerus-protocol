@@ -1,7 +1,7 @@
 import json, sqlite3
 
 
-ifps = 'ipfs://Qmf3fNL6MMzeTWCbnHg6hfKnFmE7QHUJYdMu2vXMqMgV2E/'
+ifps = 'ipfs://QmZh6X53suad3spBQRXaHQcso3M4RGqrtaoVCHBibsVJrE/'
 conn = sqlite3.connect('PurgeGame.db')
 cur = conn.cursor()
 cur.execute("""

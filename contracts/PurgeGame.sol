@@ -170,7 +170,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     function rarity(uint16 _tokenId) private view returns(uint24)
     {
-        uint64 randomHash = uint64(uint(keccak256(abi.encodePacked(_tokenId,msg.sender))));
+        uint64 randomHash = uint64(uint(keccak256(abi.encodePacked(_tokenId))));
         uint24 result = getTrait(uint16(randomHash));
         result += getTrait(uint16(randomHash >> 11)) << 6;
         result += getTrait(uint16(randomHash >> 22)) << 12;
@@ -330,7 +330,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     function RequireHundredMax(uint16 _number) view private
     {
-        require(_number <= 500, "Maximum of 500 mints allowed per transaction");
+        require(_number <= 400, "Maximum of 400 mints allowed per transaction");
         require(totalMinted + _number < 39421, "Max 39420 tokens");
     }
 
@@ -354,7 +354,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Pays $PURGED to referrers when their referrals mint tokens.
     function payReferrer(uint16 _number, string calldata referrer) private
     {
-        
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[referralCode[referrer]], _number * cost * 50);
         emit Referred(referrer, indexAddress[referralCode[referrer]], _number, msg.sender);
     }
