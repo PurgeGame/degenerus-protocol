@@ -24,7 +24,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     bool private purging;
 
     uint16 offset;
-    uint16 bombNumber = 65001;
+    uint16 bombNumber;
     uint24 nuke = 999999;
     uint16 index;
     uint16 MAPtokens;
@@ -40,7 +40,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     mapping(uint8 => uint24[]) traitPurgeAddress;
     mapping(uint24 => address) indexAddress;
     mapping(address => uint24) addressIndex;
-    mapping(string => uint24) public referralCode;
+    mapping(string => uint24) referralCode;
 
 
     string public baseTokenURI = "https://ipfs.io/ipfs/QmbHSRcYNUC6xvAE9qjjxpSnZiebC6sidhKvGBhxM2A6Lt/";
@@ -75,6 +75,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function createReferralCode(string calldata _referralCode) external 
     {
         require(bytes(_referralCode).length != 0, "Input your desired code");
+        require(bytes(_referralCode).length <= 40, "Too long");
         require(referralCode[_referralCode] == 0, "Referral code is taken");
         initAddress(msg.sender);
         referralCode[_referralCode] = addressIndex[msg.sender];
@@ -92,7 +93,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         RequireSale(_number);
         RequireHundredMax(_number);
         _mintToken(_number);
-        if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender) {payReferrer(_number, referrer);}
+        payReferrer(_number, referrer);
         addToPrizePool(_number);
     }
 
@@ -111,9 +112,10 @@ contract PurgeGameBetaTest is ERC721, Ownable
     
     function _mintToken(uint16 _number) private
     {
-        for (uint16 i = 1; i <= _number; i++) 
+        uint16 tokenId = totalMinted;
+        for (uint16 i = 0; i < _number; i++) 
         {
-            uint16 tokenId = totalMinted + i;
+            tokenId++;
             _safeMint(msg.sender, tokenId);
             setTraits(tokenId);
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
@@ -126,7 +128,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         RequireCorrectFunds(_number);
         codeMintAndPurge(_number);
-        if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender) {payReferrer(_number, referrer);}
+        payReferrer(_number, referrer);
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _number * cost * 100);
     }
 
@@ -143,8 +145,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(MAPtokens + _number < 24421, "24420 max Mint and Purges");
         initAddress(msg.sender);
         addToPrizePool(_number);
-        uint16 mapTokenNumber = 40001;
-        mapTokenNumber += MAPtokens;
+        uint16 mapTokenNumber = 40001 + MAPtokens;
         for(uint16 i= 0; i < _number; i++)
         {
             setTraits(mapTokenNumber); 
@@ -233,7 +234,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function removeTraitRemaining(uint8 trait) private 
     {
         traitRemaining[trait] -=1;
-        
         if (traitRemaining[trait] == 0)
         {
             if (gameOver == false)
@@ -253,17 +253,18 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require(PrizePool > 0);
         uint16 totalPurges = uint16(traitPurgeAddress[trait].length - 1);
-        uint256 paidMAPJackpot = MAPtokens * cost / 20;
-
-        payable(winner).transfer((PrizePool - paidMAPJackpot) / 10);
-
-        uint256 normalPayout = (PrizePool - ((PrizePool - paidMAPJackpot) / 10)) / totalPurges;
-        
-         for (uint16 i = 0; i < totalPurges; i++)
-         { 
-             payable(indexAddress[traitPurgeAddress[trait][i]]).transfer(normalPayout);
-         }
-         PrizePool = 0;
+        if (totalPurges == 0) payable(winner).transfer(PrizePool);
+        else
+        {
+            uint256 paidMAPJackpot = MAPtokens * cost / 20;
+            payable(winner).transfer((PrizePool - paidMAPJackpot) / 10);
+            uint256 normalPayout = (PrizePool - ((PrizePool - paidMAPJackpot) / 10)) / totalPurges;
+            for (uint16 i = 0; i < totalPurges; i++)
+            { 
+                payable(indexAddress[traitPurgeAddress[trait][i]]).transfer(normalPayout);
+            }
+        }
+        PrizePool = 0;
     }
 
 // Pays the MAP Jackpot to a random Mint and Purger.
@@ -289,8 +290,9 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Airdrops a bomb token to a random address which has purged a token at some point
     function bombAirdrop() external onlyOwner
     {
+        require(REVEAL);
         /*
-        if (bombNumber == 50001) {require(block.timestamp > revealTime + 1209600);}
+        if (bombNumber == totalMinted + 1) {require(block.timestamp > revealTime + 1209600);}
         else {require(block.timestamp > revealTime + 86400);}
         */
         _safeMint(indexAddress[getRandomPurge()],1);
@@ -311,10 +313,10 @@ contract PurgeGameBetaTest is ERC721, Ownable
         initAddress(ownerOf(targetTokenId));
         nuke = addressIndex[ownerOf(targetTokenId)];
         _burn(targetTokenId);
+        purging = false;
         targetTokenId = realTraitsFromTokenId(targetTokenId);
         purgeWrite(targetTokenId, nuke);
         purgeTraits(targetTokenId);
-        purging = false;
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
         nuke = 999999;
     }
@@ -353,8 +355,11 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Pays $PURGED to referrers when their referrals mint tokens.
     function payReferrer(uint16 _number, string calldata referrer) private
     {
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[referralCode[referrer]], _number * cost * 50);
-        emit Referred(referrer, indexAddress[referralCode[referrer]], _number, msg.sender);
+        if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender)
+        {
+            PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[referralCode[referrer]], _number * cost * 50);
+            emit Referred(referrer, indexAddress[referralCode[referrer]], _number, msg.sender);
+        }
     }
 
 // Anti-hack funtion. The traits generated by minting will not correspond to the token minted.
@@ -384,16 +389,19 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Owner game-running functions.
     function setCost(uint _newCost) external onlyOwner 
     {
+        require(REVEAL == false);
         cost = _newCost;
     }
 
     function setCoinMintStatus(bool _status) external onlyOwner
     {
+        require(REVEAL == false);
         coinMintStatus = _status;
     }
 
     function setPublicSaleStatus(bool _status) external onlyOwner 
     {
+        require(REVEAL == false);
         publicSaleStatus = _status;
     }
 
@@ -405,6 +413,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(address(this).balance >= PrizePool);
         REVEAL = _REVEAL;
         baseTokenURI = updatedURI;
+        bombNumber = totalMinted + 1;
         revealTime = uint32(block.timestamp);
     }
 
@@ -430,7 +439,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
      function totalSupply() external view returns(uint256)
     {
-        if(REVEAL == false)return(totalMinted + MAPtokens);
+        if(REVEAL == false) return(totalMinted + MAPtokens);
         return totalMinted;
     }
 
