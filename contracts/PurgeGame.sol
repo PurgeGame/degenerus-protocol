@@ -147,25 +147,26 @@ contract PurgeGameBetaTest is ERC721, Ownable
         uint16 mapTokenNumber = 40001 + MAPtokens;
         for(uint16 i= 0; i < _number; i++)
         {
-            setTraits(mapTokenNumber); 
-            purgeWrite(mapTokenNumber, addressIndex[msg.sender]);
-            emit MintAndPurge(mapTokenNumber, tokenTraits[mapTokenNumber], msg.sender);
+            uint24 traits = setTraits(mapTokenNumber); 
+            purgeWrite(traits);
+            emit MintAndPurge(mapTokenNumber, traits, msg.sender);
             mapTokenNumber++;
         }
         MAPtokens += _number;   
     }
 
 // Generates token traits and adds the trait info to storage if minting an actual token.
-    function setTraits(uint16 _tokenId) private
+    function setTraits(uint16 _tokenId) private returns(uint24)
     {
-        tokenTraits[_tokenId] = rarity(_tokenId);
         if (_tokenId < 39500)
         {
+            tokenTraits[_tokenId] = rarity(_tokenId);
             for(uint8 c = 0; c < 4; c++)
             {
                 traitRemaining[uint8((tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c * 64))] +=1;
             }   
         }
+        return rarity(_tokenId);
     }
 
     function rarity(uint16 _tokenId) private view returns(uint24)
@@ -216,6 +217,14 @@ contract PurgeGameBetaTest is ERC721, Ownable
         for(uint8 c = 0; c < 4; c++)
         {
             traitPurgeAddress[uint8(tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c * 64)].push(sender);
+        }
+    }
+
+    function mapWrite(uint24 traits) private
+    {
+        for(uint8 c = 0; c < 4; c++)
+        {
+            traitPurgeAddress[uint8(traits >> (c * 6) & 0x3f) + (c * 64)].push(addressIndex[msg.sender]);
         }
     }
 
@@ -404,9 +413,11 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function reveal(bool _REVEAL, string calldata updatedURI) external onlyOwner 
     {
         require(REVEAL == false);
-        require (paidJackpot == true);
+        require(paidJackpot == true);
         require(offset != 0);
         require(address(this).balance >= PrizePool);
+        require(publicSaleStatus == false);
+        require(coinMintStatus == false);
         REVEAL = _REVEAL;
         baseTokenURI = updatedURI;
         bombNumber = totalMinted + 1;
