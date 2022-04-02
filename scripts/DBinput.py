@@ -1,11 +1,10 @@
 import sqlite3,urllib.request
 import json, time
 from web3 import Web3
-import asyncio
 import os
 
-address = '0xDb4D2f84b5c126bC5b55065570f199C44ffaBa17'
-offset = 420
+address = '0x6453CE416AF0bF1F3bDb3A3241Bc5F269BFA7f2c'
+offset = 69
 
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
 ETHERSCAN_API_ONE = os.environ.get("ETHERSCAN_API_ONE")
@@ -340,9 +339,9 @@ def referral():
         x+=1
         referral = getReferrals(1, filter,fromblock)[0]
 # referral()
-# importmint()
-# importmap()
-# countTraits()
-# mapPurge()
-# print('done')
+importmint()
+importmap()
+countTraits()
+mapPurge()
+print('done')
 transfer()
