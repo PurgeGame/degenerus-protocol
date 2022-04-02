@@ -8,7 +8,7 @@ cur = conn.cursor()
 cur.execute("""
     SELECT tokenId
     FROM tokens
-    WHERE holderaddress =? and trait4 = ?""",(address,253))
+    WHERE holderaddress =? and trait1 = ?""",(address,63))
 tokens = cur.fetchall()
 savestuff = []
 for row in tokens:
