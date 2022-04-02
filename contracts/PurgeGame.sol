@@ -101,7 +101,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function coinMint(uint16 _number) external
     {
         require(coinMintStatus == true, "Coin mints not yet available");
-        //RequireSale(_number);
         require(REVEAL == false);
         RequireHundredMax(_number);
         RequireCoinFunds(_number);
