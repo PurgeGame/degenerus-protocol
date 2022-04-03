@@ -148,7 +148,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         for(uint16 i= 0; i < _number; i++)
         {
             uint24 traits = setTraits(mapTokenNumber); 
-            purgeWrite(traits);
+            mapWrite(traits);
             emit MintAndPurge(mapTokenNumber, traits, msg.sender);
             mapTokenNumber++;
         }
@@ -169,7 +169,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         return rarity(_tokenId);
     }
 
-    function rarity(uint16 _tokenId) private view returns(uint24)
+    function rarity(uint16 _tokenId) private pure returns(uint24)
     {
         uint64 randomHash = uint64(uint(keccak256(abi.encodePacked(_tokenId))));
         uint24 result = getTrait(uint16(randomHash));
