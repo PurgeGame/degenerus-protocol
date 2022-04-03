@@ -148,7 +148,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         for(uint16 i= 0; i < _number; i++)
         {
             uint24 traits = setTraits(mapTokenNumber); 
-            purgeWrite(traits,msg.sender);
+            purgeWrite(traits,addressIndex[msg.sender]);
             emit MintAndPurge(mapTokenNumber, traits, msg.sender);
             mapTokenNumber++;
         }
@@ -224,7 +224,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         for(uint8 c = 0; c < 4; c++)
         {
-            traitPurgeAddress[uint8(traits >> (c * 6) & 0x3f) + (c * 64)].push(addressIndex[sender]);
+            traitPurgeAddress[uint8(traits >> (c * 6) & 0x3f) + (c * 64)].push(sender);
         }
     }
 
