@@ -4,7 +4,7 @@ from web3 import Web3
 import os
 
 
-offset = 420
+offset = 1
 
 address = os.environ.get("ADDRESS")
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
