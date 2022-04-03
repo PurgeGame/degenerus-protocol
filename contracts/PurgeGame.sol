@@ -148,7 +148,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         for(uint16 i= 0; i < _number; i++)
         {
             uint24 traits = setTraits(mapTokenNumber); 
-            mapWrite(traits);
+            purgeWrite(traits,msg.sender);
             emit MintAndPurge(mapTokenNumber, traits, msg.sender);
             mapTokenNumber++;
         }
@@ -204,7 +204,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
             require(_tokenId <= totalMinted, "You cannot purge bombs");
             _burn(_tokenId);
             _tokenId = realTraitsFromTokenId(_tokenId);
-            purgeWrite(_tokenId, addressIndex[msg.sender]);
+            purgeWrite(tokenTraits[_tokenId], addressIndex[msg.sender]);
             purgeTraits(_tokenId);     
         }      
         purging = false;  
@@ -212,19 +212,19 @@ contract PurgeGameBetaTest is ERC721, Ownable
     }
 
 // Records the purger's ID for each trait purged. This record will be used to deliver payouts when the game is over.
-    function purgeWrite(uint16 _tokenId, uint24 sender) private
-    {
-        for(uint8 c = 0; c < 4; c++)
-        {
-            traitPurgeAddress[uint8(tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c * 64)].push(sender);
-        }
-    }
+    // function purgeWrite(uint16 _tokenId, uint24 sender) private
+    // {
+    //     for(uint8 c = 0; c < 4; c++)
+    //     {
+    //         traitPurgeAddress[uint8(tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c * 64)].push(sender);
+    //     }
+    // }
 
-    function mapWrite(uint24 traits) private
+    function purgeWrite(uint24 traits, uint24 sender) private
     {
         for(uint8 c = 0; c < 4; c++)
         {
-            traitPurgeAddress[uint8(traits >> (c * 6) & 0x3f) + (c * 64)].push(addressIndex[msg.sender]);
+            traitPurgeAddress[uint8(traits >> (c * 6) & 0x3f) + (c * 64)].push(addressIndex[sender]);
         }
     }
 
@@ -323,7 +323,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         _burn(targetTokenId);
         purging = false;
         targetTokenId = realTraitsFromTokenId(targetTokenId);
-        purgeWrite(targetTokenId, nuke);
+        purgeWrite(tokenTraits[targetTokenId], nuke);
         purgeTraits(targetTokenId);
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
         nuke = 999999;
