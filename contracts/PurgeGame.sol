@@ -23,8 +23,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
     bool public gameOver;
     bool private purging;
 
-    uint16 offset;
-    uint16 bombNumber;
+    uint16 private offset;
+    uint16 bombNumber = 64501;
     uint24 nuke = 999999;
     uint16 index;
     uint16 MAPtokens;
@@ -115,7 +115,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         for (uint16 i = 0; i < _number; i++) 
         {
             tokenId++;
-            _mint(msg.sender, tokenId);
+            _safeMint(msg.sender, tokenId);
             setTraits(tokenId);
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
@@ -202,7 +202,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         {
             _tokenId = _tokenIds[i];
             require(ownerOf(_tokenId) == msg.sender, "You do not own that token");
-            require(_tokenId <= totalMinted, "You cannot purge bombs");
+            require(_tokenId <= 64500, "You cannot purge bombs");
             _burn(_tokenId);
             _tokenId = realTraitsFromTokenId(_tokenId);
             purgeWrite(tokenTraits[_tokenId], addressIndex[msg.sender]);
@@ -301,10 +301,12 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require(REVEAL);
         /*
-        if (bombNumber == totalMinted + 1) {require(block.timestamp > revealTime + 1209600);}
+        if (bombNumber == 64501) {require(block.timestamp > revealTime + 1209600);}
         else {require(block.timestamp > revealTime + 86400);}
         */
-        _safeMint(indexAddress[getRandomPurge()],bombNumber);
+        address recipient = indexAddress[getRandomPurge()];
+        _safeMint(recipient,bombNumber);
+        _balances[recipient] += 1;
         bombNumber +=1;
         revealTime = uint32(block.timestamp);
     }
@@ -314,7 +316,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function nukeToken(uint16 bombTokenId, uint16 targetTokenId) external
     {
         
-        require(bombTokenId > totalMinted);
+        require(bombTokenId > 64501);
         require(targetTokenId <= totalMinted);
         require(ownerOf(bombTokenId) == msg.sender);
         purging = true;
@@ -421,7 +423,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(coinMintStatus == false);
         REVEAL = _REVEAL;
         baseTokenURI = updatedURI;
-        bombNumber = totalMinted + 1;
         revealTime = uint32(block.timestamp);
     }
 
