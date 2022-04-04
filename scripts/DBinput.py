@@ -296,6 +296,27 @@ def transfer():
         x+=1
         transfer = getTransfer(0, filter,fromblock)[0]
 
+def prizepool():
+    eth = 1000000000000000000
+    prizepool = contract.caller.PrizePool() / eth
+    cost = contract.caller.cost() / eth
+    print(prizepool,cost)
+    conn = sqlite3.connect('PurgeGame.db')
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT COUNT(tokenId)
+        FROM tokens
+        WHERE tokenId >40000 AND tokenId < 64421
+        """)
+    mapTokens = int(cur.fetchone()[0])
+    mapJackpot = mapTokens * cost / 20
+    remaining = prizepool - mapJackpot
+    grandPrize = prizepool / 10 - mapJackpot
+    print(mapTokens,mapJackpot,remaining,grandPrize)
+    cur.execute("INSERT INTO prizepool VALUES(:total, :grandprize, :mapjackpot, :remaining)",
+    {'total':prizepool,'grandprize':grandPrize,'mapjackpot':mapJackpot,'remaining':remaining})
+    conn.commit()
+    conn.close
 
 def referral():
     fromblock = 0
@@ -344,5 +365,6 @@ importmint()
 importmap()
 countTraits()
 mapPurge()
+prizepool()
 print('done')
 transfer()

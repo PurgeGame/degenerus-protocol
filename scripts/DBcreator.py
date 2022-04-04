@@ -12,6 +12,7 @@ cur.execute('DROP TABLE IF EXISTS tokens')
 cur.execute('DROP TABLE IF EXISTS traits')
 cur.execute('DROP TABLE IF EXISTS discord')
 cur.execute('DROP TABLE IF EXISTS referrals')
+cur.execute('DROP TABLE IF EXISTS prizepool')
 
 
 
@@ -59,6 +60,13 @@ cur.execute("""CREATE TABLE referrals (
     referralcode TEXT,
     referee TEXT,
     number INTEGER
+    )""")
+
+cur.execute("""CREATE TABLE prizepool (
+    total REAL,
+    grandprize REAL,
+    mapjackpot REAL,
+    remaining REAL
     )""")
 
 with open(traitmap,'r') as traitmapcsvfile:
