@@ -56,7 +56,7 @@ for row in tokens:
         outfile.write(json_string)
 
 for c in range(1,501):
-    tokenId = tokensMinted+c
+    tokenId = 64500+c
     tokenName = 'Purge Game Bomb Token # ' + str(tokenId)
     image = ifps + 'bomb.png'
     data = {
