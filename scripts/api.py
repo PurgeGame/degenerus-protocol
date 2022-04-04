@@ -1,13 +1,24 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
-import json
 from pydantic import BaseModel
+
 app = FastAPI()
+origins = [
+    "http://localhost:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 class Item(BaseModel):
     discord:int
     address:str
 
-@app.get("/alltraits/")
+@app.get("/alltraits")
 async def alltraits():
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
