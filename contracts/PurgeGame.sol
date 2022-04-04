@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "./ERC721PURGE.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 //import "hardhat/console.sol";
 
@@ -119,6 +119,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
             setTraits(tokenId);
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
+        _balances[msg.sender] +=_number;
         totalMinted += _number;
     }
 
@@ -169,9 +170,9 @@ contract PurgeGameBetaTest is ERC721, Ownable
         return rarity(_tokenId);
     }
 
-    function rarity(uint16 _tokenId) private pure returns(uint24)
+    function rarity(uint16 _tokenId) private view returns(uint24)
     {
-        uint64 randomHash = uint64(uint(keccak256(abi.encodePacked(_tokenId))));
+        uint64 randomHash = uint64(uint(keccak256(abi.encodePacked(_tokenId,block.number))));
         uint24 result = getTrait(uint16(randomHash));
         result += getTrait(uint16(randomHash >> 11)) << 6;
         result += getTrait(uint16(randomHash >> 22)) << 12;
