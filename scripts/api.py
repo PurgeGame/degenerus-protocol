@@ -45,7 +45,16 @@ async def alltraits():
         traitdata[traitId]["image"] = image
     return traitdata
 
-
+@app.get("/prizepool")
+async def prizepool():
+    conn = sqlite3.connect('PurgeGame.db')
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT *
+    FROM prizepool
+    """)
+    prizes = cur.fetchone()
+    return{'total': prizes[0], 'grandprize': prizes[1], 'mapjackpot': prizes[2], 'remaining': prizes[3]}
 
 @app.get("/tokens/{tokenId}")
 async def tokens(tokenId: int):
