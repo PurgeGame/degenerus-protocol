@@ -306,7 +306,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         else {require(block.timestamp > revealTime + 86400);}
         */
         address recipient = indexAddress[getRandomPurge()];
-        _safeMint(recipient,bombNumber);
+        _mint(recipient,bombNumber);
         _balances[recipient] += 1;
         bombNumber +=1;
         revealTime = uint32(block.timestamp);
