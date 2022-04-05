@@ -317,7 +317,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function nukeToken(uint16 bombTokenId, uint16 targetTokenId) external
     {
         
-        require(bombTokenId > 64501);
+        require(bombTokenId > 64500);
         require(targetTokenId <= totalMinted);
         require(ownerOf(bombTokenId) == msg.sender);
         purging = true;
