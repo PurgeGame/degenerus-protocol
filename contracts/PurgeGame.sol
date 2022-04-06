@@ -163,7 +163,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
             tokenTraits[_tokenId] = rarity(_tokenId);
             for(uint8 c = 0; c < 4; c++)
             {
-                traitRemaining[uint8((tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c * 64))] +=1;
+                traitRemaining[uint8((tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c << 6))] +=1;
             }
             return(0); 
         }
@@ -225,7 +225,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         for(uint8 c = 0; c < 4; c++)
         {
-            traitPurgeAddress[uint8(traits >> (c * 6) & 0x3f) + (c * 64)].push(sender);
+            traitPurgeAddress[uint8(traits >> (c * 6) & 0x3f) + (c << 6)].push(sender);
         }
     }
 
@@ -234,7 +234,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         for(uint8 c = 0; c < 4; c++)
         {
-            removeTraitRemaining(uint8((tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c * 64)));
+            removeTraitRemaining(uint8((tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c << 6)));
         }
     }
 
