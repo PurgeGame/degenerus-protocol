@@ -2,8 +2,7 @@
 pragma solidity ^0.8.2;
 
 import "./ERC721PURGE.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-//import "hardhat/console.sol";
+import "./Ownable.sol";
 
 /// @custom:security-contact purgegamenft@gmail.com
 interface PurgedCoinInterface 
