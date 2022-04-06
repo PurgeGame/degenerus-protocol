@@ -30,3 +30,4 @@ for c in range(0,256):
     con = contract.caller.traitRemaining(c)
     if db[c][0] != con:
         print(c,db[c][0],con)
+print('done')
