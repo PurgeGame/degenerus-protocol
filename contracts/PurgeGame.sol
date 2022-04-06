@@ -383,7 +383,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         {
             if (_tokenId < 40001)
             {
-                if (_tokenId + offset < totalMinted) return(_tokenId + offset);
+                if (_tokenId + offset <= totalMinted) return(_tokenId + offset);
                 else return(_tokenId + offset - totalMinted);
             }
         }
