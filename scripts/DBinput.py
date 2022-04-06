@@ -54,7 +54,7 @@ def getTransferNew(fromblock, filter):
         filter = Transfer.createFilter(fromBlock = fromblock)
         Transfers = filter.get_all_entries()
     else:
-        Transfers += filter.get_new_entries()
+        Transfers = filter.get_new_entries()
     return(Transfers, filter)
 
 def getMAP():
