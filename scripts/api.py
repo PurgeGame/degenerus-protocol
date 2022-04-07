@@ -18,8 +18,17 @@ class Item(BaseModel):
     discord:int
     address:str
 
-@app.get("/alltraits")
-async def alltraits():
+@app.get("/everything/{address}")
+async def everything(address: str):
+    everything = {}
+    everything[0] = await alltraits(address)
+    everything[1] = await tokenOwner(address)
+    everything[3] = await tokenPurger(address)
+    everything[2] = await prizepool()
+    return everything
+
+@app.get("/alltraits/{address}")
+async def alltraits(address : str):
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
     cur.execute("""
@@ -27,7 +36,7 @@ async def alltraits():
     FROM traits
     WHERE trait < 256""")
     traitinfo = cur.fetchall()
-    conn.close
+    
     traitdata = {}
     for row in traitinfo:
         traitId = row[0]
@@ -36,6 +45,32 @@ async def alltraits():
         total = row[3]
         traitremaining = row[4]
         image = row[5]
+        if traitId < 64:
+            cur.execute("""
+            SELECT COUNT (tokenId)
+            FROM tokens
+            WHERE trait1 =? AND purgeaddress = ?""",(traitId,address))
+        elif traitId < 128:
+            cur.execute("""
+            SELECT COUNT (tokenId)
+            FROM tokens
+            WHERE trait2 =? AND purgeaddress = ?""",(traitId,address))
+        elif traitId < 192:
+            cur.execute("""
+            SELECT COUNT (tokenId)
+            FROM tokens
+            WHERE trait3 =? AND purgeaddress = ?""",(traitId,address))
+        elif traitId < 256:
+            cur.execute("""
+            SELECT COUNT (tokenId)
+            FROM tokens
+            WHERE trait4 =? AND purgeaddress = ?""",(traitId,address))     
+        purgedByAddress = cur.fetchone()[0] 
+        cur.execute("""
+        SELECT total 
+        FROM prizepool""")
+        prizepool = cur.fetchone()[0]
+        conn.close
         traitdata[traitId] = {}
         traitdata[traitId]['traitId'] = traitId
         traitdata[traitId]['color'] = color
@@ -43,6 +78,8 @@ async def alltraits():
         traitdata[traitId]["total"] = total
         traitdata[traitId]["remaining"] = traitremaining
         traitdata[traitId]["image"] = image
+        traitdata[traitId]['purgedByAddress'] = purgedByAddress
+        traitdata[traitId]['normalpayout'] = round(9 * purgedByAddress * prizepool / (total  * 10),4)
     return traitdata
 
 @app.get("/prizepool")
@@ -84,13 +121,51 @@ async def tokens(tokenId: int):
     return{'traitnumbers': traitNumber, 'traitnames': traitName,'holderaddress':holderaddress,'purgeaddress':purgeaddress,'purgetime': purgetime,'image':image, }
 
 @app.get("/tokenOwner/{address}")
-async def tokens(address: str):
+async def tokenOwner(address: str):
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
     cur.execute("""
     SELECT *
     FROM tokens
-    WHERE holderaddress = ? or purgeaddress = ?""",(address,address))
+    WHERE holderaddress = ?""",(address,))
+    tokeninfo = cur.fetchall()
+    tokendata = {}
+    for row in tokeninfo:
+        traitNumber = []
+        for c in range(1,5):
+            traitNumber.append(row[c])
+        traitName = []
+        for c in range(0,4):
+            cur.execute("""
+            SELECT color, shape
+            FROM traits
+            WHERE trait = ?""",(traitNumber[c],))
+            trait = cur.fetchone()
+            traitName.append(trait[0] + ' ' + trait[1])
+        conn.close
+        holderaddress = row[5]
+        purgeaddress = row[6]
+        purgetime = row[7]
+        image = row[12]
+        tokenId = row[0]
+        tokendata[tokenId] = {}
+        tokendata[tokenId]['tokenId'] = tokenId
+        tokendata[tokenId]['traitnumbers'] = traitNumber
+        tokendata[tokenId]['traitnames'] = traitName
+        tokendata[tokenId]['holderaddress'] = holderaddress
+        tokendata[tokenId]['purgeaddress'] = purgeaddress
+        tokendata[tokenId]['purgetime'] = purgetime
+        tokendata[tokenId]['image'] = image        
+    return tokendata
+
+@app.get("/tokenPurger/{address}")
+async def tokenPurger(address: str):
+    conn = sqlite3.connect('PurgeGame.db')
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT *
+    FROM tokens
+    WHERE purgeaddress = ?""",(address,))
     tokeninfo = cur.fetchall()
     tokendata = {}
     for row in tokeninfo:
