@@ -23,8 +23,8 @@ async def everything(address: str):
     everything = {}
     everything[0] = await alltraits(address)
     everything[1] = await tokenOwner(address)
-    everything[3] = await tokenPurger(address)
-    everything[2] = await prizepool()
+    everything[2] = await tokenPurger(address)
+    everything[3] = await prizepool()
     return everything
 
 @app.get("/alltraits/{address}")
@@ -79,7 +79,7 @@ async def alltraits(address : str):
         traitdata[traitId]["remaining"] = traitremaining
         traitdata[traitId]["image"] = image
         traitdata[traitId]['purgedByAddress'] = purgedByAddress
-        traitdata[traitId]['normalpayout'] = round(9 * purgedByAddress * prizepool / (total  * 10),4)
+        traitdata[traitId]['prize'] = round(9 * purgedByAddress * prizepool / (total  * 10),4)
     return traitdata
 
 @app.get("/prizepool")
