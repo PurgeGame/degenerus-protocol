@@ -143,7 +143,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         RequireSale(_number);
         require(MAPtokens + _number < 24421, "24420 max Mint and Purges");
         initAddress(msg.sender);
-        addToPrizePool(_number);
         uint16 mapTokenNumber = 40001 + MAPtokens;
         for(uint16 i= 0; i < _number; i++)
         {
@@ -152,6 +151,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
             emit MintAndPurge(mapTokenNumber + i, traits, msg.sender);
             
         }
+        addToPrizePool(_number);
         MAPtokens += _number;   
     }
 
@@ -213,14 +213,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
     }
 
 // Records the purger's ID for each trait purged. This record will be used to deliver payouts when the game is over.
-    // function purgeWrite(uint16 _tokenId, uint24 sender) private
-    // {
-    //     for(uint8 c = 0; c < 4; c++)
-    //     {
-    //         traitPurgeAddress[uint8(tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c * 64)].push(sender);
-    //     }
-    // }
-
     function purgeWrite(uint24 traits, uint24 sender) private
     {
         for(uint8 c = 0; c < 4; c++)
@@ -253,7 +245,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
                 
             }
         }
-
     }
 
 // Pays the exterminator 10% of the prize pool minus the MAP Jackpot.
