@@ -97,7 +97,7 @@ contract PurgeGameBetaTest is ERC721, Ownable, AddressIndex
             setTraits(tokenId);
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
-        _balances[msg.sender] +=_number;
+        _balances[addressIndex[msg.sender]] +=_number;
         totalMinted += _number;
     }
 
@@ -425,7 +425,7 @@ contract PurgeGameBetaTest is ERC721, Ownable, AddressIndex
 
     receive () external payable  { }
 
-    function tokenURI(uint256 tokenId)
+    function tokenURI(uint16 tokenId)
         public
         view
         override(ERC721)
@@ -435,13 +435,17 @@ contract PurgeGameBetaTest is ERC721, Ownable, AddressIndex
     }
 
 
-    function _beforeTokenTransfer(address from, address to, uint256 tokenId)
+    function _beforeTokenTransfer(address from, address to, uint16 tokenId)
         internal
         override(ERC721)
     {
         if (to == address(0))
         {
             require(purging == true, 'use purge function');
+        }
+        else
+        {
+            initAddress(to);
         }
         super._beforeTokenTransfer(from, to, tokenId);
     }
