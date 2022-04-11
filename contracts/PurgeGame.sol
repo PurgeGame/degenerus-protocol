@@ -18,13 +18,14 @@ contract PurgeGameBetaTest is ERC721, Ownable
     bool paidJackpot;
     bool public coinMintStatus;
     bool public publicSaleStatus;
+    bool public whitelistSaleStatus;
     bool public REVEAL;
     bool public gameOver;
     bool private purging;
 
     uint16 private offset;
     uint16 bombNumber = 64501;
-    uint24 nuke = 999999;
+    uint24 nuke = 9999999;
     uint16 index;
     uint16 MAPtokens;
     uint16 public totalMinted;
@@ -240,7 +241,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
             if (gameOver == false)
             {
                 gameOver = true;
-                if (nuke != 999999) {payout(trait,indexAddress[nuke]);}
+                if (nuke != 9999999) {payout(trait,indexAddress[nuke]);}
                 else {payout(trait, msg.sender);}   
                 
             }
@@ -320,15 +321,17 @@ contract PurgeGameBetaTest is ERC721, Ownable
         purgeWrite(tokenTraits[targetTokenId], nuke);
         purgeTraits(targetTokenId);
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
-        nuke = 999999;
+        nuke = 9999999;
     }
 
 // Requirements for different mint types
     function RequireSale(uint16 _number) view private
     {
-        require(publicSaleStatus == true, "Not yet");
+        if (whitelistSaleStatus == true) require (addressIndex[msg.sender] < 4000 && addressIndex[msg.sender] > 0);
+        else require(publicSaleStatus == true, "Not yet");
         require(REVEAL == false);
         require(_number > 0, "You are trying to mint 0");
+        
     }
 
     function RequireHundredMax(uint16 _number) view private
@@ -402,6 +405,12 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require(REVEAL == false);
         publicSaleStatus = _status;
+    }
+
+    function setWhitelistSaleStatus(bool _status) external onlyOwner
+    {
+        require(REVEAL == false);
+        whitelistSaleStatus = _status;
     }
 
     function reveal(bool _REVEAL, string calldata updatedURI) external onlyOwner 
