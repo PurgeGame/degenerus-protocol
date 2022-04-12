@@ -23,8 +23,8 @@ cur.execute("""CREATE TABLE traits (
     shape TEXT,
     total INTEGER,
     remaining INTEGER,
-    image TEXT,
     floor REAL,
+    image TEXT,
     discordrole INTEGER,
     PRIMARY KEY(trait)
     )""")
@@ -84,8 +84,8 @@ with open(traitmap,'r') as traitmapcsvfile:
                 trait = count * 64 + c * 8 + x
                 traitimage = 'https://purge.game/img/traits/' + color + "_" + shape +'.png'
                 traitimage = traitimage.lower()
-                cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:image,:floor,:discordrole)",{'trait':trait,'color':color,'shape':shape,'remaining':0,'total':0,'image': traitimage,'floor': null, 'discordrole':0})
-    cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:image,:floor,:discordrole)",{'trait':256,'color':'Bomb','shape':'Token','remaining':0,'total':0,'image': 'https://purge.game/img/tokens/bomb.png','floor':null,'discordrole':0})
+                cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:discordrole)",{'trait':trait,'color':color,'shape':shape,'remaining':0,'total':0,'floor': null,'image': traitimage, 'discordrole':0})
+    cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:discordrole)",{'trait':256,'color':'Bomb','shape':'Token','remaining':0,'total':0,'floor':null,'image': 'https://purge.game/img/tokens/bomb.png','discordrole':0})
     conn.commit()
     
 @client.event
