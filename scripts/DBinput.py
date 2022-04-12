@@ -284,8 +284,8 @@ def transfer():
                 purgeTime = purgetime(block)
                 if token[8] ==0:
                     cur.execute(
-                        """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0
-                        WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],tokenId))
+                        """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0, price = ?
+                        WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],null,tokenId))
                     removetraits(transfer[c]['args']['tokenId'],conn)
             else:
                 cur.execute(

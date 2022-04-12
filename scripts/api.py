@@ -44,8 +44,8 @@ async def alltraits(address : str):
         shape = row[2]
         total = row[3]
         traitremaining = row[4]
-        image = row[5]
-        floor = row[6]
+        image = row[6]
+        floor = row[5]
         if traitId < 64:
             cur.execute("""
             SELECT COUNT (tokenId)
