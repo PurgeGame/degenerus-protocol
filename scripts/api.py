@@ -45,6 +45,7 @@ async def alltraits(address : str):
         total = row[3]
         traitremaining = row[4]
         image = row[5]
+        floor = row[6]
         if traitId < 64:
             cur.execute("""
             SELECT COUNT (tokenId)
@@ -80,6 +81,7 @@ async def alltraits(address : str):
         traitdata[traitId]["image"] = image
         traitdata[traitId]['purgedByAddress'] = purgedByAddress
         traitdata[traitId]['prize'] = round(9 * purgedByAddress * prizepool / (total  * 10),4)
+        traitdata[traitId]['floor'] = floor
     return traitdata
 
 @app.get("/prizepool")
@@ -113,10 +115,10 @@ async def tokens(tokenId: int):
         WHERE trait = ?""",(traitNumber[c],))
         trait = cur.fetchone()
         traitName.append(trait[0] + ' ' + trait[1])
-    holderaddress = tokeninfo[5]
-    purgeaddress = tokeninfo[6]
-    purgetime = tokeninfo[7]
-    image = tokeninfo[11]
+    holderaddress = tokeninfo[6]
+    purgeaddress = tokeninfo[7]
+    purgetime = tokeninfo[8]
+    image = tokeninfo[12]
     conn.close
     return{'traitnumbers': traitNumber, 'traitnames': traitName,'holderaddress':holderaddress,'purgeaddress':purgeaddress,'purgetime': purgetime,'image':image, }
 
