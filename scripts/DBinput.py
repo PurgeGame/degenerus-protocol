@@ -12,7 +12,7 @@ ETHERSCAN_API_ONE = os.environ.get("ETHERSCAN_API_ONE")
 
 alchemy_url = 'https://eth-rinkeby.alchemyapi.io/v2/'+ALCHEMY_API
 web3 = Web3(Web3.HTTPProvider(alchemy_url))
-
+null = None
 
 ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
 with urllib.request.urlopen(ESAPI) as url:
@@ -134,8 +134,8 @@ def importmint():
             realtokenId = tokenId - offset
         holder = mints[c]['args']['from']
         tokenData = [str(realtokenId),tokenTraitOne,tokenTraitTwo,tokenTraitThree,tokenTraitFour]
-        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
-        {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),
+        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
+        {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),'price': null,
         'holderaddress':holder,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/' + tokenData[0] +'.png'})
         c+=1
     conn.commit()
@@ -157,8 +157,8 @@ def importmap():
         block = MintAndPurges[c]['blockNumber']
         purgeTime = purgetime(block)
         tokenData = [str(tokenId),tokenTraitOne,tokenTraitTwo,tokenTraitThree,tokenTraitFour,purgeAddress,purgeTime]
-        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
-        {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),
+        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
+        {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),'price': null,
         'holderaddress':0,'purgeaddress':tokenData[5],'purgetime':int(tokenData[6]),'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/' + tokenData[0] +'.png'})
         c+=1
     conn.commit()
