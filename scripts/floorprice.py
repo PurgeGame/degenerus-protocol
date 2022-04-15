@@ -47,8 +47,6 @@ while c < len(tokens)-1:
     for x in range(c,c+29):
         if tokens[x][0] not in tokensFound:
             tokensNotFound.append(tokens[x][0])
-    print(tokensNotFound)
-
     for x in tokensNotFound:
         cur.execute("""
         UPDATE tokens SET price = NULL
