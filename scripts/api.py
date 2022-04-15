@@ -118,7 +118,7 @@ async def tokens(tokenId: int):
     holderaddress = tokeninfo[6]
     purgeaddress = tokeninfo[7]
     purgetime = tokeninfo[8]
-    image = tokeninfo[12]
+    image = tokeninfo[13]
     conn.close
     return{'traitnumbers': traitNumber, 'traitnames': traitName,'holderaddress':holderaddress,'purgeaddress':purgeaddress,'purgetime': purgetime,'image':image, }
 
@@ -145,15 +145,17 @@ async def tokenOwner(address: str):
             trait = cur.fetchone()
             traitName.append(trait[0] + ' ' + trait[1])
         conn.close
-        holderaddress = row[5]
-        purgeaddress = row[6]
-        purgetime = row[7]
-        image = row[12]
+        price = row[5]
+        holderaddress = row[6]
+        purgeaddress = row[7]
+        purgetime = row[8]
+        image = row[13]
         tokenId = row[0]
         tokendata[tokenId] = {}
         tokendata[tokenId]['tokenId'] = tokenId
         tokendata[tokenId]['traitnumbers'] = traitNumber
         tokendata[tokenId]['traitnames'] = traitName
+        tokendata[tokenId]['price'] = price
         tokendata[tokenId]['holderaddress'] = holderaddress
         tokendata[tokenId]['purgeaddress'] = purgeaddress
         tokendata[tokenId]['purgetime'] = purgetime
@@ -183,15 +185,17 @@ async def tokenPurger(address: str):
             trait = cur.fetchone()
             traitName.append(trait[0] + ' ' + trait[1])
         conn.close
-        holderaddress = row[5]
-        purgeaddress = row[6]
-        purgetime = row[7]
-        image = row[12]
+        price = row[5]
+        holderaddress = row[6]
+        purgeaddress = row[7]
+        purgetime = row[8]
+        image = row[13]
         tokenId = row[0]
         tokendata[tokenId] = {}
         tokendata[tokenId]['tokenId'] = tokenId
         tokendata[tokenId]['traitnumbers'] = traitNumber
         tokendata[tokenId]['traitnames'] = traitName
+        tokendata[tokenId]['price'] = price
         tokendata[tokenId]['holderaddress'] = holderaddress
         tokendata[tokenId]['purgeaddress'] = purgeaddress
         tokendata[tokenId]['purgetime'] = purgetime

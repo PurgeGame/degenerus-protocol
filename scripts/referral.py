@@ -51,6 +51,7 @@ def getReferralsAll():
 def getReferralsNew(fromblock, filter):
     Transfer = contract.events.Referred()
     if filter == 0:
+        if fromblock > web3.eth.block_number: time.sleep(120)
         filter = Transfer.createFilter(fromBlock = fromblock)
         referrals = filter.get_all_entries()
     else:
