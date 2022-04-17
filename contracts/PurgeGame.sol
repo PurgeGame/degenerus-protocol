@@ -213,7 +213,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         }      
         purging = false;  
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _tokenIds.length * cost * 100);
-        if (gameOver == 1) gameEndTime = block.timestamp;
+        if (gameOver == true) gameEndTime = uint32(block.timestamp);
     }
 
 // Records the purger's ID for each trait purged. This record will be used to deliver payouts when the game is over.
@@ -475,7 +475,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         override(ERC721)
     {
         if (to == address(0)) require(purging == true, 'use purge function');
-        if (gameOver == 1) require(block.timestamp > gameEndTime + 86400, 'transfers disabled for 24h after game over');
+        if (gameOver == true) require(block.timestamp > gameEndTime + 86400, 'transfers disabled for 24h after game over');
         super._beforeTokenTransfer(from, to, tokenId);
     }
 
