@@ -31,6 +31,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     uint16 public totalMinted;
     
     uint32 revealTime;
+    uint32 gameEndTime;
 
     address private purgedCoinContract = 0xfBFD4411914A2c6caBEd2Ba18A7DBe8DD9A26496;
     
@@ -90,7 +91,9 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function mint(uint16 _number, string calldata referrer) external payable 
      {
         RequireCorrectFunds(_number);
-        RequireSale(_number);
+        if (whitelistSaleStatus == true) require (addressIndex[msg.sender] <= 3000 && addressIndex[msg.sender] > 0);
+        else require(publicSaleStatus == true);
+        require(_number > 0, "You are trying to mint 0");
         RequireHundredMax(_number);
         _mintToken(_number);
         if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender) payReferrer(_number, referrer);
@@ -101,7 +104,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function coinMint(uint16 _number) external
     {
         require(coinMintStatus == true, "Coin mints not yet available");
-        require(REVEAL == false);
         RequireHundredMax(_number);
         RequireCoinFunds(_number);
         PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
@@ -141,7 +143,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     function codeMintAndPurge(uint16 _number) private
     {
-        RequireSale(_number);
+        require (whitelistSaleStatus == true || publicSaleStatus == true || coinMintStatus == true);
+        require(_number > 0, "You are trying to mint 0");
         require(MAPtokens + _number < 24421, "24420 max Mint and Purges");
         initAddress(msg.sender);
         uint16 mapTokenNumber = 40001 + MAPtokens;
@@ -192,8 +195,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
 // Burns tokens and creates payout tickets for each trait purged, then prints $PURGED.
     function purge(uint16[] calldata _tokenIds) external  
-    {
-        
+    { 
         require(gameOver == false, "Game Over");
         require(REVEAL, "No purging before reveal");
         initAddress(msg.sender);
@@ -211,6 +213,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         }      
         purging = false;  
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _tokenIds.length * cost * 100);
+        if (gameOver == 1) gameEndTime = block.timestamp;
     }
 
 // Records the purger's ID for each trait purged. This record will be used to deliver payouts when the game is over.
@@ -273,6 +276,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require(paidJackpot == false);
         require(publicSaleStatus == false);
+        require(whitelistSaleStatus == false);
+        require(coinMintStatus == false);
         address payable winnerAddress = payable(indexAddress[getRandomPurge()]);
         PrizePool -= MAPtokens * cost / 20;
         paidJackpot = true;
@@ -325,14 +330,13 @@ contract PurgeGameBetaTest is ERC721, Ownable
     }
 
 // Requirements for different mint types
-    function RequireSale(uint16 _number) view private
-    {
-        if (whitelistSaleStatus == true) require (addressIndex[msg.sender] < 4000 && addressIndex[msg.sender] > 0);
-        else require(publicSaleStatus == true, "Not yet");
-        require(REVEAL == false);
-        require(_number > 0, "You are trying to mint 0");
+    // function RequireSale(uint16 _number) view private
+    // {
+    //     if (whitelistSaleStatus == true) require (addressIndex[msg.sender] < 3000 && addressIndex[msg.sender] > 0);
+    //     else require(publicSaleStatus == true, "Not yet");
+    //     require(_number > 0, "You are trying to mint 0");
         
-    }
+    // }
 
     function RequireHundredMax(uint16 _number) view private
     {
@@ -420,6 +424,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(offset != 0);
         require(address(this).balance >= PrizePool);
         require(publicSaleStatus == false);
+        require(whitelistSaleStatus == false);
         require(coinMintStatus == false);
         REVEAL = _REVEAL;
         baseTokenURI = updatedURI;
@@ -469,10 +474,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
         internal
         override(ERC721)
     {
-        if (to == address(0))
-        {
-            require(purging == true, 'use purge function');
-        }
+        if (to == address(0)) require(purging == true, 'use purge function');
+        if (gameOver == 1) require(block.timestamp > gameEndTime + 86400, 'transfers disabled for 24h after game over');
         super._beforeTokenTransfer(from, to, tokenId);
     }
 
