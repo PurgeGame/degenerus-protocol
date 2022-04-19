@@ -1,4 +1,3 @@
-from json.tool import main
 import sqlite3,csv
 import discord
 import os
@@ -14,6 +13,7 @@ cur.execute('DROP TABLE IF EXISTS traits')
 cur.execute('DROP TABLE IF EXISTS discord')
 cur.execute('DROP TABLE IF EXISTS referrals')
 cur.execute('DROP TABLE IF EXISTS prizepool')
+cur.execute('DROP TABLE IF EXISTS leaderboard')
 
 
 
@@ -55,6 +55,7 @@ cur.execute("""CREATE TABLE tokens (
 cur.execute("""CREATE TABLE discord (
     address TEXT,
     discord TEXT,
+    username TEXT,
     PRIMARY KEY(address)
     )""")
 
@@ -70,6 +71,12 @@ cur.execute("""CREATE TABLE prizepool (
     grandprize REAL,
     mapjackpot REAL,
     remaining REAL
+    )""")
+
+cur.execute("""CREATE TABLE leaderboard (
+    address TEXT,
+    total INTEGER,
+    PRIMARY KEY(address)
     )""")
 
 with open(traitmap,'r') as traitmapcsvfile:
