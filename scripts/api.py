@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import sqlite3
 from pydantic import BaseModel
+import sqlite3
 
 app = FastAPI()
 origins = [
@@ -17,14 +17,19 @@ app.add_middleware(
 class Item(BaseModel):
     discord:int
     address:str
+    username:str
 
 @app.get("/everything/{address}")
 async def everything(address: str):
     everything = {}
-    everything[0] = await alltraits(address)
-    everything[1] = await tokenOwner(address)
-    everything[2] = await tokenPurger(address)
-    everything[3] = await prizepool()
+    traits = alltraits(address)
+    everything[0] = await traits
+    owner = tokenOwner(address)
+    everything[1] = await owner
+    purger = tokenPurger(address)
+    everything[2] = await purger
+    prize = prizepool()
+    everything[3] = await prize
     return everything
 
 @app.get("/alltraits/{address}")
@@ -202,44 +207,81 @@ async def tokenPurger(address: str):
         tokendata[tokenId]['image'] = image        
     return tokendata
 
+@app.get("/leaderboard")
+async def leaderboard():
+    conn = sqlite3.connect('PurgeGame.db')
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT DISTINCT address
+    FROM referrals""")
+    allReferrers = cur.fetchall()
+    print(allReferrers)
+    for row in allReferrers:
+        cur.execute("""
+        SELECT SUM(number)
+        FROM referrals
+        WHERE address = ?""",(row[0],))
+        total = cur.fetchone()
+        cur.execute("INSERT INTO leaderboard VALUES(:address,:total)",{'address':row[0],'total':total[0]})
+    cur.execute("""
+    SELECT address
+    from leaderboard
+    ORDER BY total DESC""")
+    leaders = cur.fetchall()
+    for c in range(0,len(leaders)):
+        cur.execute("""
+        SELECT username
+        FROM discord
+        WHERE address = ?""",(leaders[c][0],))
+        x = cur.fetchone()
+        if x == None:
+            leaders[c] = leaders[c][0]
+        else: leaders[c] = x[0]
+    conn.close
+    return{'leaders':leaders}
+    
+
+
 
 @app.get("/referrals/{address}")
 async def referrals(address:str):
+    lb = leaderboard()
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
     cur.execute("""
     SELECT SUM(number)
     FROM referrals
     WHERE address = ?""",(address,))
-    totalreferrals = cur.fetchone()
+    totalreferrals = cur.fetchone()[0]
     cur.execute("""
     SELECT DISTINCT referralcode
     FROM referrals
     WHERE address = ?""",(address,))
     codes = cur.fetchall()
-    codeinfo = []
+    codeinfo = {}
     for row in codes:
         cur.execute("""
         SELECT SUM(number)
         FROM referrals
         WHERE referralcode = ?""",(row[0],))
         codesum  = cur.fetchone()[0]
-        codeinfo.append([row[0], codesum])
+        codeinfo[row[0]] = codesum
     cur.execute("""
     SELECT DISTINCT referee
     FROM referrals
     WHERE address = ?""",(address,))
     referee = cur.fetchall()
-    refereeinfo = []
+    refereeinfo = {}
     for row in referee:
         cur.execute("""
         SELECT SUM(number)
         FROM referrals
-        WHERE referee = ?""",(row[0],))
+        WHERE referee = ? AND address = ?""",(row[0],address))
         refereesum  = cur.fetchone()[0]
-        refereeinfo.append([row[0], refereesum])
+        refereeinfo[row[0]] = refereesum
     conn.close
-    return{'totalreferrals':totalreferrals, 'codes':codeinfo, 'referrals':refereeinfo}
+    leaders = await lb
+    return{'totalreferrals':totalreferrals, 'codes':codeinfo, 'referrals':refereeinfo,'leaders':leaders}
 
 @app.post("/discord/")
 async def tokens(item: Item):
@@ -248,6 +290,7 @@ async def tokens(item: Item):
     cur.execute("""
     INSERT OR REPLACE discord
     SET address = ?
-    SET discord = ?"""),(item.address,item.discord)
+    SET discord = ?
+    SET username = ?"""),(item.address,item.discord,item.username)
     conn.commit
     conn.close
