@@ -91,8 +91,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function mint(uint16 _number, string calldata referrer) external payable 
      {
         RequireCorrectFunds(_number);
-        if (whitelistSaleStatus == true) require (addressIndex[msg.sender] <= 3000 && addressIndex[msg.sender] > 0);
-        else require(publicSaleStatus == true);
+        if (whitelistSaleStatus == true && publicSaleStatus == false) require (addressIndex[msg.sender] <= 3000 && addressIndex[msg.sender] > 0, "You are not whitelisted");
+        else require(publicSaleStatus == true, 'Public sale inactive');
         require(_number > 0, "You are trying to mint 0");
         RequireHundredMax(_number);
         _mintToken(_number);
@@ -103,7 +103,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Mint with $PURGED.
     function coinMint(uint16 _number) external
     {
-        require(coinMintStatus == true, "Coin mints not yet available");
+        require(coinMintStatus == true, "Coin mints not currently available");
         RequireHundredMax(_number);
         RequireCoinFunds(_number);
         PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
@@ -143,7 +143,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     function codeMintAndPurge(uint16 _number) private
     {
-        require (whitelistSaleStatus == true || publicSaleStatus == true || coinMintStatus == true);
+        require (whitelistSaleStatus == true || publicSaleStatus == true || coinMintStatus == true, 'Mint inactive');
         require(_number > 0, "You are trying to mint 0");
         require(MAPtokens + _number < 34421, "34420 max Mint and Purges");
         initAddress(msg.sender);
@@ -255,7 +255,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Then pays each player who purged a token with the winning trait an equal amount for each token purged.
     function payout(uint8 trait, address winner) private
     {
-        require(PrizePool > 0);
         uint16 totalPurges = uint16(traitPurgeAddress[trait].length - 1);
         if (totalPurges == 0) payable(winner).transfer(PrizePool);
         else
@@ -314,9 +313,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function nukeToken(uint16 bombTokenId, uint16 targetTokenId) external
     {
         
-        require(bombTokenId > 64500);
-        require(targetTokenId <= totalMinted);
-        require(ownerOf(bombTokenId) == msg.sender);
+        require(bombTokenId > 64500, 'that is not a bomb');
+        require(ownerOf(bombTokenId) == msg.sender, 'you do not own that bomb');
         purging = true;
         _burn(bombTokenId);
         initAddress(ownerOf(targetTokenId));
@@ -342,17 +340,19 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function RequireHundredMax(uint16 _number) view private
     {
         require(_number <= 400, "Maximum of 400 mints allowed per transaction");
-        require(totalMinted + _number < 29421, "Max 29420 tokens");
+        require(totalMinted + _number < 29421, "Max 29420 tokens reached");
     }
 
     function RequireCorrectFunds(uint16 _number) view private
     {
         require(msg.value == _number * cost, "Incorrect funds supplied");
+        require(tx.origin == msg.sender, 'Caller not user');
     }
 
     function RequireCoinFunds(uint16 _number) view private
     {
         require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= _number * cost * 1000, "Not enough $PURGED");
+        require(tx.origin == msg.sender, 'Caller not user');
     }
 
 // Minting adds half of the mint cost to the prize pool.
@@ -475,8 +475,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
         internal
         override(ERC721)
     {
-        if (to == address(0)) require(purging == true, 'use purge function');
-        if (gameOver == true) require(block.timestamp > gameEndTime + 86400, 'transfers disabled for 24h after game over');
+        if (to == address(0)) require(purging == true, 'Use purge function');
+        if (gameOver == true) require(block.timestamp > gameEndTime + 86400, 'Transfers disabled for 24h after game over');
         super._beforeTokenTransfer(from, to, tokenId);
     }
 
