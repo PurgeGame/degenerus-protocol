@@ -4,7 +4,7 @@ from web3 import Web3
 import os
 
 
-offset = 100
+offset = 420
 
 address = os.environ.get("ADDRESS")
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
@@ -120,6 +120,12 @@ def importmint():
     cur = conn.cursor()
     mints = getMints()
     totalMints = contract.caller.totalMinted()
+    cur.execute("""
+        SELECT COUNT(tokenId)
+        FROM tokens
+        WHERE tokenId > 64500 """)
+    bombcount = cur.fetchone()[0]
+    totalMints-= bombcount
     c=0
     while c < len(mints):
         tokenTraits = mints[c]['args']['tokenTraits']
@@ -128,15 +134,16 @@ def importmint():
         tokenTraitThree = ((tokenTraits & 0x3f000) >> 12) + 128
         tokenTraitFour = ((tokenTraits & 0xfc0000) >> 18) + 192
         tokenId = mints[c]['args']['tokenId']
-        if tokenId-offset < 1 :
-            realtokenId = totalMints - (offset - tokenId)
-        else:
-            realtokenId = tokenId - offset
-        holder = mints[c]['args']['from']
-        tokenData = [str(realtokenId),tokenTraitOne,tokenTraitTwo,tokenTraitThree,tokenTraitFour]
-        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
-        {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),'price': null,
-        'holderaddress':holder,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/' + tokenData[0] +'.png'})
+        if tokenId < 64501:
+            if tokenId-offset < 1 :
+                realtokenId = totalMints - (offset - tokenId)
+            else:
+                realtokenId = tokenId - offset
+            holder = mints[c]['args']['from']
+            tokenData = [str(realtokenId),tokenTraitOne,tokenTraitTwo,tokenTraitThree,tokenTraitFour]
+            cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
+            {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),'price': null,
+            'holderaddress':holder,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/' + tokenData[0] +'.png'})
         c+=1
     conn.commit()
     conn.close
@@ -204,6 +211,14 @@ def countTraits():
         cur.execute(
             """UPDATE traits SET total = ?, remaining = ?
             WHERE trait = ?""",(traitcount[0],traitcount[0],c))
+    cur.execute("""
+        SELECT COUNT(trait1)
+        FROM tokens
+        WHERE trait1 = 256""")
+    traitcount = cur.fetchone()
+    cur.execute(
+        """UPDATE traits SET total = ?, remaining = ?
+        WHERE trait = ?""",(traitcount[0],traitcount[0],256))
     conn.commit()
     conn.close 
 
@@ -274,8 +289,8 @@ def transfer():
             WHERE tokenId = ?""",(tokenId,))
             token = cur.fetchone()
             if token == None:
-                cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
-                {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
+                cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
+                {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'price':null,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
                 cur.execute("UPDATE traits SET total =total + 1, remaining = remaining +1 WHERE trait = 256")
                 conn.commit()
             if transfer[c]['args']['to'] == '0x0000000000000000000000000000000000000000':
@@ -316,7 +331,7 @@ def prizepool():
     cur.execute("""
         SELECT COUNT(tokenId)
         FROM tokens
-        WHERE tokenId >40000 AND tokenId < 64421
+        WHERE tokenId >30000 AND tokenId < 64421
         """)
     mapTokens = int(cur.fetchone()[0])
     mapJackpot = mapTokens * cost / 20

@@ -12,7 +12,7 @@ for row in tokens:
     tokenId = row[0]
     traitimagefile = []
     color = []
-    if tokenId >40000:
+    if tokenId >30000:
         tokenIdfilename="MAPImages\\" + str(tokenId) + '.png'
     else:
         tokenIdfilename = "finished\\" +str(tokenId) + '.png'
@@ -51,10 +51,13 @@ for row in tokens:
     traitimageone = traitimagefour.convert("RGBA")
     Image.Image.paste(background,traitimagefour, (348,348),traitimagefour)
     background.save(tokenIdfilename)
+    smaller = background.resize((320,320))
+    smaller.save("smalltokens\\" +str(tokenId) + '.png')
 
 bomb = Image.open('baseimages\\bomb.png')
 bomb = bomb.convert("RGBA")
 background = Image.open("baseimages\\background" + colorfound + ".png")
 Image.Image.paste(background,bomb, (0,0),bomb)
 background.save('finished\\bomb.png')
+background.save('smalltokens\\bomb.png')
 print('done')

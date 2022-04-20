@@ -145,9 +145,9 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require (whitelistSaleStatus == true || publicSaleStatus == true || coinMintStatus == true);
         require(_number > 0, "You are trying to mint 0");
-        require(MAPtokens + _number < 24421, "24420 max Mint and Purges");
+        require(MAPtokens + _number < 34421, "34420 max Mint and Purges");
         initAddress(msg.sender);
-        uint16 mapTokenNumber = 40001 + MAPtokens;
+        uint16 mapTokenNumber = 30001 + MAPtokens;
         for(uint16 i= 0; i < _number; i++)
         {
             uint24 traits = setTraits(mapTokenNumber + i); 
@@ -162,7 +162,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Generates token traits and adds the trait info to storage if minting an actual token.
     function setTraits(uint16 _tokenId) private returns(uint24)
     {
-        if (_tokenId < 39500)
+        if (_tokenId < 29500)
         {
             tokenTraits[_tokenId] = rarity(_tokenId);
             for(uint8 c = 0; c < 4; c++)
@@ -297,6 +297,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function bombAirdrop() external onlyOwner
     {
         require(REVEAL);
+        require(gameOver == false);
         /*
         if (bombNumber == 64501) {require(block.timestamp > revealTime + 1209600);}
         else {require(block.timestamp > revealTime + 86400);}
@@ -341,7 +342,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function RequireHundredMax(uint16 _number) view private
     {
         require(_number <= 400, "Maximum of 400 mints allowed per transaction");
-        require(totalMinted + _number < 39421, "Max 39420 tokens");
+        require(totalMinted + _number < 29421, "Max 29420 tokens");
     }
 
     function RequireCorrectFunds(uint16 _number) view private
@@ -379,7 +380,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         if (offset != 0)
         {
-            if (_tokenId < 40001)
+            if (_tokenId < 30001)
             {
                 if (_tokenId + offset <= totalMinted) return(_tokenId + offset);
                 else return(_tokenId + offset - totalMinted);
