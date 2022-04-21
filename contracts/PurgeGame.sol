@@ -82,7 +82,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         referralCode[_referralCode] = addressIndex[msg.sender];
     }
 
-    function returnReferralCode(string calldata _referralCode) external view returns(uint24)
+    function returnReferralCode(string calldata _referralCode) external view returns(address)
     {
         return(indexAddress[referralCode[_referralCode]]);
     }
