@@ -84,7 +84,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     function returnReferralCode(string calldata _referralCode) external view returns(uint24)
     {
-        return(referralCode[_referralCode]);
+        return(indexAddress[referralCode[_referralCode]]);
     }
 
 // Mint function.
@@ -93,7 +93,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         RequireCorrectFunds(_number);
         if (whitelistSaleStatus == true && publicSaleStatus == false) require (addressIndex[msg.sender] <= 3000 && addressIndex[msg.sender] > 0, "You are not whitelisted");
         else require(publicSaleStatus == true, 'Public sale inactive');
-        require(_number > 0, "You are trying to mint 0");
+        require(totalMinted + _number < 29421, "Max 29420 tokens reached");
         RequireHundredMax(_number);
         _mintToken(_number);
         if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender) payReferrer(_number, referrer);
@@ -104,6 +104,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function coinMint(uint16 _number) external
     {
         require(coinMintStatus == true, "Coin mints not currently available");
+        require(totalMinted + _number < 29421, "Max 29420 tokens reached");
         RequireHundredMax(_number);
         RequireCoinFunds(_number);
         PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
@@ -121,7 +122,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
             setTraits(tokenId);
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
-        _balances[msg.sender] +=_number;
+        _balances[msg.sender] += _number;
         totalMinted += _number;
     }
 
@@ -139,12 +140,13 @@ contract PurgeGameBetaTest is ERC721, Ownable
         RequireCoinFunds(_number);
         PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 900);
         codeMintAndPurge(_number);
+
     }
 
     function codeMintAndPurge(uint16 _number) private
     {
         require (whitelistSaleStatus == true || publicSaleStatus == true || coinMintStatus == true, 'Mint inactive');
-        require(_number > 0, "You are trying to mint 0");
+        RequireHundredMax(_number);
         require(MAPtokens + _number < 34421, "34420 max Mint and Purges");
         initAddress(msg.sender);
         uint16 mapTokenNumber = 30001 + MAPtokens;
@@ -153,7 +155,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
             uint24 traits = setTraits(mapTokenNumber + i); 
             purgeWrite(traits,addressIndex[msg.sender]);
             emit MintAndPurge(mapTokenNumber + i, traits, msg.sender);
-            
         }
         addToPrizePool(_number);
         MAPtokens += _number;   
@@ -286,7 +287,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Picks a random address from all addresses which have purged, weighted by number of purges.
     function getRandomPurge() private view returns(uint24)
     {
-        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,block.number))));
+        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,block.timestamp >> 5))));
         uint16 randomHashTwo = uint16(random >> 8);
         randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[uint8(random)].length);
         return(traitPurgeAddress[uint8(random)][randomHashTwo]);
@@ -329,30 +330,22 @@ contract PurgeGameBetaTest is ERC721, Ownable
     }
 
 // Requirements for different mint types
-    // function RequireSale(uint16 _number) view private
-    // {
-    //     if (whitelistSaleStatus == true) require (addressIndex[msg.sender] < 3000 && addressIndex[msg.sender] > 0);
-    //     else require(publicSaleStatus == true, "Not yet");
-    //     require(_number > 0, "You are trying to mint 0");
-        
-    // }
 
     function RequireHundredMax(uint16 _number) view private
     {
         require(_number <= 400, "Maximum of 400 mints allowed per transaction");
-        require(totalMinted + _number < 29421, "Max 29420 tokens reached");
+        require(_number > 0, "You are trying to mint 0");
+        require(tx.origin == msg.sender, 'Caller not user');
     }
 
     function RequireCorrectFunds(uint16 _number) view private
     {
         require(msg.value == _number * cost, "Incorrect funds supplied");
-        require(tx.origin == msg.sender, 'Caller not user');
     }
 
     function RequireCoinFunds(uint16 _number) view private
     {
         require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= _number * cost * 1000, "Not enough $PURGED");
-        require(tx.origin == msg.sender, 'Caller not user');
     }
 
 // Minting adds half of the mint cost to the prize pool.
