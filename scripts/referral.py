@@ -13,10 +13,13 @@ alchemy_url = 'https://eth-rinkeby.alchemyapi.io/v2/'+ALCHEMY_API
 web3 = Web3(Web3.HTTPProvider(alchemy_url))
 
 
-ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
-with urllib.request.urlopen(ESAPI) as url:
-    data = url.read().decode()
-    contractabi = json.loads(data)['result']
+# ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
+# with urllib.request.urlopen(ESAPI) as url:
+#     data = url.read().decode()
+#     contractabi = json.loads(data)['result']
+
+with open('abi.txt') as f:
+    contractabi = f.read()
 address = Web3.toChecksumAddress(address)
 contract = web3.eth.contract(address= address, abi=contractabi)
 creation = contract.events.OwnershipTransferred()
@@ -64,6 +67,7 @@ def referral():
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
     x = 15
+    fromblock = startblock
     while 1:
         if len(referral) > 0:
             conn = sqlite3.connect('PurgeGame.db')

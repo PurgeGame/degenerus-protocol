@@ -14,10 +14,16 @@ alchemy_url = 'https://eth-rinkeby.alchemyapi.io/v2/'+ALCHEMY_API
 web3 = Web3(Web3.HTTPProvider(alchemy_url))
 null = None
 
-ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
-with urllib.request.urlopen(ESAPI) as url:
-    data = url.read().decode()
-    contractabi = json.loads(data)['result']
+# ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
+# with urllib.request.urlopen(ESAPI) as url:
+#     data = url.read().decode()
+#     contractabi = json.loads(data)['result']
+# print(contractabi)
+# with open('abi.txt', 'w') as f:
+#     f.write(contractabi)
+
+with open('abi.txt') as f:
+    contractabi = f.read()
 
 address = Web3.toChecksumAddress(address)
 contract = web3.eth.contract(address= address, abi=contractabi)
@@ -376,10 +382,10 @@ def referral():
         filter = referral[1]
         referral = referral[0]
 # referral()
-importmint()
-importmap()
-countTraits()
-mapPurge()
-prizepool()
-print('done')
-transfer()
+# importmint()
+# importmap()
+# countTraits()
+# mapPurge()
+# prizepool()
+# print('done')
+# transfer()
