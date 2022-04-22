@@ -33,7 +33,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     uint32 revealTime;
     uint32 gameEndTime;
 
-    address private purgedCoinContract = 0xfBFD4411914A2c6caBEd2Ba18A7DBe8DD9A26496;
+    address private purgedCoinContract = 0x668A7988eFf43673A0aBAE5A2CBfE3097Ab84234;
     
     uint16[256] public traitRemaining;
 
