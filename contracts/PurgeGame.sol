@@ -82,7 +82,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         referralCode[_referralCode] = addressIndex[msg.sender];
     }
 
-    function returnReferralCode(string calldata _referralCode) external view returns(address)
+    function returnReferralCodeOwner(string calldata _referralCode) external view returns(address)
     {
         return(indexAddress[referralCode[_referralCode]]);
     }
@@ -140,7 +140,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         RequireCoinFunds(_number);
         PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 900);
         codeMintAndPurge(_number);
-
     }
 
     function codeMintAndPurge(uint16 _number) private
@@ -197,6 +196,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Burns tokens and creates payout tickets for each trait purged, then prints $PURGED.
     function purge(uint16[] calldata _tokenIds) external  
     { 
+        require(tx.origin == msg.sender, 'Caller not user');
         require(gameOver == false, "Game Over");
         require(REVEAL, "No purging before reveal");
         initAddress(msg.sender);
@@ -245,7 +245,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
             if (gameOver == false)
             {
                 gameOver = true;
-                if (nuke != 9999999) {payout(trait,indexAddress[nuke]);}
+                // if (nuke != 9999999) {payout(trait,indexAddress[nuke]);}
+                if (nuke != 9999999) require(0,"cannot nuke the last token of a trait");
                 else {payout(trait, msg.sender);}   
                 
             }
@@ -313,19 +314,19 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Prizes for the purge go to the owner of the bombed token
     function nukeToken(uint16 bombTokenId, uint16 targetTokenId) external
     {
-        
         require(bombTokenId > 64500, 'that is not a bomb');
+        require(targetTokenId < 64500,'cannot bomb bombs');
         require(ownerOf(bombTokenId) == msg.sender, 'you do not own that bomb');
         purging = true;
         _burn(bombTokenId);
-        initAddress(ownerOf(targetTokenId));
-        nuke = addressIndex[ownerOf(targetTokenId)];
+        //initAddress(ownerOf(targetTokenId));
+        //nuke = addressIndex[ownerOf(targetTokenId)];
         _burn(targetTokenId);
         purging = false;
         targetTokenId = realTraitsFromTokenId(targetTokenId);
-        purgeWrite(tokenTraits[targetTokenId], nuke);
+        //purgeWrite(tokenTraits[targetTokenId], nuke);
         purgeTraits(targetTokenId);
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
+        //PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
         nuke = 9999999;
     }
 
