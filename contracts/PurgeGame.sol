@@ -247,7 +247,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
             {
                 gameOver = true;
                 // if (nuke != 9999999) {payout(trait,indexAddress[nuke]);}
-                payout(trait, msg.sender);  
+                payout(trait);  
                 
             }
         }
@@ -255,15 +255,16 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
 // Pays the exterminator 10% of the prize pool minus the MAP Jackpot.
 // Then pays each player who purged a token with the winning trait an equal amount for each token purged.
-    function payout(uint8 trait, address winner) private
+    function payout(uint8 trait) private
     {
         uint16 totalPurges = uint16(traitPurgeAddress[trait].length - 1);
-        if (totalPurges == 0) payable(winner).transfer(PrizePool);
+        if (totalPurges == 0) payable(msg.sender).transfer(PrizePool);
         else
         {
             uint256 paidMAPJackpot = MAPtokens * cost / 20;
-            payable(winner).transfer((PrizePool - paidMAPJackpot) / 10);
-            uint256 normalPayout = (PrizePool - ((PrizePool - paidMAPJackpot) / 10)) / totalPurges;
+            uint256 grandPrize = (PrizePool - paidMAPJackpot) / 10;
+            payable(msg.sender).transfer(grandPrize);
+            uint256 normalPayout = (PrizePool - grandPrize) / totalPurges;
             for (uint16 i = 0; i < totalPurges; i++)
             { 
                 payable(indexAddress[traitPurgeAddress[trait][i]]).transfer(normalPayout);
