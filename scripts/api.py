@@ -208,7 +208,7 @@ async def tokenPurger(address: str):
     return tokendata
 
 @app.get("/leaderboard")
-async def leaderboard():
+async def leaderboard(youraddress = 0):
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
     cur.execute("""
@@ -234,7 +234,9 @@ async def leaderboard():
         FROM discord
         WHERE address = ?""",(leaders[c][0],))
         x = cur.fetchone()
-        if x == None:
+        print(leaders[c], youraddress)
+        if leaders[c][0] == youraddress: leaders[c] = '** YOU **'
+        elif x == None:
             leaders[c] = leaders[c][0]
         else: leaders[c] = x[0]
     conn.close
@@ -245,7 +247,7 @@ async def leaderboard():
 
 @app.get("/referrals/{address}")
 async def referrals(address:str):
-    lb = leaderboard()
+    lb = leaderboard(address)
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
     cur.execute("""
