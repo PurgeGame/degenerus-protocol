@@ -319,6 +319,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(ownerOf(bombTokenId) == msg.sender, 'you do not own that bomb');
         purging = true;
         _burn(bombTokenId);
+        nuke = 9999990;
         //initAddress(ownerOf(targetTokenId));
         //nuke = addressIndex[ownerOf(targetTokenId)];
         _burn(targetTokenId);
