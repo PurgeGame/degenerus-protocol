@@ -22,10 +22,10 @@ contract PurgeGameBetaTest is ERC721, Ownable
     bool public REVEAL;
     bool public gameOver;
     bool private purging;
+    bool private nuke;
 
     uint16 private offset;
     uint16 bombNumber = 64501;
-    uint24 nuke = 9999999;
     uint16 index;
     uint16 MAPtokens;
     uint16 public totalMinted;
@@ -241,13 +241,13 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         traitRemaining[trait] -=1;
         if (traitRemaining[trait] == 0)
-        {
+        {   
+            if (nuke == 1) require(false,"cannot nuke the last token of a trait");
             if (gameOver == false)
             {
                 gameOver = true;
                 // if (nuke != 9999999) {payout(trait,indexAddress[nuke]);}
-                if (nuke != 9999999) require(0,"cannot nuke the last token of a trait");
-                else {payout(trait, msg.sender);}   
+                payout(trait, msg.sender);  
                 
             }
         }
@@ -319,16 +319,16 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(ownerOf(bombTokenId) == msg.sender, 'you do not own that bomb');
         purging = true;
         _burn(bombTokenId);
-        nuke = 9999990;
         //initAddress(ownerOf(targetTokenId));
         //nuke = addressIndex[ownerOf(targetTokenId)];
         _burn(targetTokenId);
         purging = false;
         targetTokenId = realTraitsFromTokenId(targetTokenId);
         //purgeWrite(tokenTraits[targetTokenId], nuke);
+        nuke = 1;
         purgeTraits(targetTokenId);
         //PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
-        nuke = 9999999;
+        nuke = 0;
     }
 
 // Requirements for different mint types
