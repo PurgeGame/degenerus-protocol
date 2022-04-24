@@ -13,17 +13,38 @@ async def on_ready():
 
 @client.event
 async def on_ready():
+    c=10
     while 1:
         conn = sqlite3.connect('PurgeGame.db')
         cur = conn.cursor()
         cur.execute("""
-            SELECT discord
+            SELECT id
             FROM discord
-            WHERE discord > 0""")
+            WHERE id > 0""")
         discordid = cur.fetchall()
         conn.close
         for row in discordid:
             await updateroles(row[0])
+        if c == 10:
+            await updateIDs()
+            c=0
+        c+=1
+
+async def updateIDs():
+    conn = sqlite3.connect('PurgeGame.db')
+    cur = conn.cursor()
+    for guild in client.guilds:
+        if guild.name == GUILD:
+            myguild = guild
+            break
+
+    async for member in myguild.fetch_members(limit=None):
+        print(member.id,member.name,member.discriminator)
+        cur.execute("""
+            UPDATE discord SET id =?
+            WHERE username = ? AND discriminator = ?""",(member.id,member.name,member.discriminator))
+    conn.commit()
+    conn.close()
 
     
 
@@ -39,7 +60,7 @@ async def updateroles(userid):
         cur.execute("""
             SELECT address
             FROM discord
-            WHERE discord = ?""",(userid,))
+            WHERE id = ?""",(userid,))
         address = cur.fetchone()
 
         cur.execute("""
