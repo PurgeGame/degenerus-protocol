@@ -324,6 +324,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         //nuke = addressIndex[ownerOf(targetTokenId)];
         _burn(targetTokenId);
         purging = false;
+        emit TokenBombed(targetTokenId);
         targetTokenId = realTraitsFromTokenId(targetTokenId);
         //purgeWrite(tokenTraits[targetTokenId], nuke);
         nuke = 1;
@@ -385,6 +386,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         return(_tokenId);
     }
 
+    event TokenBombed(uint16 tokenId);
     event MintAndPurge(uint16 tokenId, uint24 tokenTraits, address from);
     event TokenMinted(uint16 tokenId, uint24 tokenTraits, address from);
     event Referred(string referralCode, address referrer, uint16 number, address from);
