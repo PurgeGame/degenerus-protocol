@@ -54,8 +54,9 @@ cur.execute("""CREATE TABLE tokens (
 
 cur.execute("""CREATE TABLE discord (
     address TEXT,
-    discord TEXT,
+    id TEXT,
     username TEXT,
+    discriminator INTEGER,
     PRIMARY KEY(address)
     )""")
 
