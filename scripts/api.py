@@ -215,7 +215,6 @@ async def leaderboard(youraddress = 0):
     SELECT DISTINCT address
     FROM referrals""")
     allReferrers = cur.fetchall()
-    print(allReferrers)
     for row in allReferrers:
         cur.execute("""
         SELECT SUM(number)
@@ -234,11 +233,13 @@ async def leaderboard(youraddress = 0):
         FROM discord
         WHERE address = ?""",(leaders[c][0],))
         x = cur.fetchone()
-        print(leaders[c], youraddress)
         if leaders[c][0] == youraddress: leaders[c] = '** YOU **'
         elif x == None:
-            leaders[c] = leaders[c][0]
+            leaders[c] = leaders[c][0][0:6] + "..." + leaders[c][0][-5:-1]
         else: leaders[c] = x[0]
+    if len(leaders) < 10:
+        for c in range(len(leaders)+1,11):
+            leaders.append('0x' + str(c))
     conn.close
     return{'leaders':leaders}
     
@@ -283,6 +284,7 @@ async def referrals(address:str):
         refereeinfo[row[0]] = refereesum
     conn.close
     leaders = await lb
+    leaders = leaders['leaders']
     return{'totalreferrals':totalreferrals, 'codes':codeinfo, 'referrals':refereeinfo,'leaders':leaders}
 
 @app.post("/discord/")
