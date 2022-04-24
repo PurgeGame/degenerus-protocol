@@ -88,6 +88,14 @@ def getMints():
         fromblock = toblock+1
     return(mints)
 
+def getBombs():
+    TokenBombed = contract.events.TokenBombed()
+    filter = TokenBombed.createFilter(fromBlock = startblock)
+    return(filter.get_all_entries(), filter)
+
+def getBombsNew(filter):
+    return(filter.get_new_entries())
+
 def getReferralsAll():
     Referred = contract.events.Referred()
     conn = sqlite3.connect('PurgeGame.db')
@@ -99,8 +107,8 @@ def getReferralsAll():
     referee TEXT,
     number INTEGER
     )""")
-    conn.commit
-    conn.close
+    conn.commit()
+    conn.close()
     currentblock = web3.eth.block_number
     fromblock = startblock
     referrals = []
@@ -152,7 +160,7 @@ def importmint():
             'holderaddress':holder,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/' + tokenData[0] +'.png'})
         c+=1
     conn.commit()
-    conn.close
+    conn.close()
 
 def importmap():
     conn = sqlite3.connect('PurgeGame.db')
@@ -175,7 +183,7 @@ def importmap():
         'holderaddress':0,'purgeaddress':tokenData[5],'purgetime':int(tokenData[6]),'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/' + tokenData[0] +'.png'})
         c+=1
     conn.commit()
-    conn.close  
+    conn.close()
 
 
 def countTraits():
@@ -226,7 +234,7 @@ def countTraits():
         """UPDATE traits SET total = ?, remaining = ?
         WHERE trait = ?""",(traitcount[0],traitcount[0],256))
     conn.commit()
-    conn.close 
+    conn.close()
 
 def removetraits(_tokenId,conn):
     cur = conn.cursor()
@@ -263,8 +271,48 @@ def removetraits(_tokenId,conn):
             cur.execute(
                 """UPDATE traits SET remaining = ?
                 WHERE trait = ?""",(traitremaining,_trait))
-    conn.commit()
-    conn.close
+
+def bombTrait(_tokenId,conn):
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT *
+        FROM tokens
+        WHERE tokenId = ?""",(_tokenId,))
+    tokeninfo = cur.fetchone()
+    for c in range (1,5):
+        _trait = tokeninfo[c]
+        cur.execute("""
+            SELECT total 
+            FROM traits 
+            WHERE trait = ?""",(_trait,))
+        traittotal = cur.fetchone()[0]
+        if _trait <64:
+            cur.execute("""
+                UPDATE tokens SET trait1purge = 0
+                WHERE tokenId = ?""",(_tokenId,))
+        elif _trait <128:
+            cur.execute("""
+                UPDATE tokens SET trait2purge = 0
+                WHERE tokenId = ?""",(_tokenId,))
+        elif _trait <192:
+            cur.execute("""
+                UPDATE tokens SET trait3purge = 0
+                WHERE tokenId = ?""",(_tokenId,))
+        elif _trait <256:
+            cur.execute(
+                """UPDATE tokens SET trait4purge = 0
+                WHERE tokenId = ?""",(_tokenId,))
+        if _trait != 256 or c == 1:
+            traittotal = traittotal-1
+            cur.execute(
+                """UPDATE traits SET total = ?
+                WHERE trait = ?""",(traittotal,_trait))
+    cur.execute(
+        """UPDATE tokens SET purgeaddress = 'BOMBED'
+        WHERE tokenId = ?""",(_tokenId,))
+    cur.execute(
+        """UPDATE tokens SET purgeaddress = 'BOMBED'
+        WHERE tokenId = ?""",(_tokenId,))
 
 def mapPurge():
     conn = sqlite3.connect('PurgeGame.db')
@@ -276,10 +324,12 @@ def mapPurge():
     maps = cur.fetchall()
     for row in maps:
         removetraits(row[0], conn)
-    conn.close
+    conn.commit()
+    conn.close()
 
 def transfer():
     transfer = getTransferAll()
+    bombs = 0
     filter = 0
     x=60
     while 1:
@@ -298,7 +348,6 @@ def transfer():
                 cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
                 {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'price':null,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
                 cur.execute("UPDATE traits SET total =total + 1, remaining = remaining +1 WHERE trait = 256")
-                conn.commit()
             if transfer[c]['args']['to'] == '0x0000000000000000000000000000000000000000':
                 block = transfer[c]['blockNumber']
 
@@ -308,16 +357,42 @@ def transfer():
                         """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0, price = ?
                         WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],null,tokenId))
                     removetraits(transfer[c]['args']['tokenId'],conn)
+                elif token[8] =='BOMBED':
+                    cur.execute(
+                        """UPDATE tokens SET purgetime = ?, holderaddress = 0, price = ?
+                        WHERE tokenId = ?""",(purgeTime,null,tokenId))
+                    removetraits(transfer[c]['args']['tokenId'],conn)
             else:
                 cur.execute(
                     """UPDATE tokens SET holderaddress = ?
                     WHERE tokenId = ?""",(transfer[c]['args']['to'],tokenId))
             fromblock = transfer[c]['blockNumber'] +1
             c+=1
+        if bombs == 1:
+            bombfilter = getBombsNew()
+            if len(bombfilter > 0):
+                while c< len(transfer):
+                    tokenId = bombfilter[c]['args']['tokenId']
+                    bombTrait(tokenId, conn)
         conn.commit()
-        conn.close
+        conn.close()
         time.sleep(30)
         if x == 60:
+            if web3.eth.block_number > startblock + 83200 and bombs == 0:
+                bombs = 1
+                bombfilter = getBombs()
+                bombedTokens=bombfilter[1]
+                bombfilter=bombfilter[0]
+                if len(bombfilter > 0):
+                    conn = sqlite3.connect('PurgeGame.db')
+                    cur = conn.cursor()
+                    while c< len(transfer):
+                        tokenId = bombfilter[c]['args']['tokenId']
+                        bombTrait(tokenId, conn)
+                    conn.commit()
+                    conn.close()
+
+
             if contract.caller.gameOver() == True:
                 break
             else:
@@ -347,7 +422,7 @@ def prizepool():
     cur.execute("INSERT INTO prizepool VALUES(:total, :grandprize, :mapjackpot, :remaining)",
     {'total':prizepool,'grandprize':grandPrize,'mapjackpot':mapJackpot,'remaining':remaining})
     conn.commit()
-    conn.close
+    conn.close()
 
 def referral():
     filter = 0
@@ -370,7 +445,7 @@ def referral():
             fromblock = referral[c]['blockNumber'] +1
             c+=1
         conn.commit() 
-        conn.close
+        conn.close()
         time.sleep(30)
         if x == 15:
             if contract.caller.REVEAL() == True:
