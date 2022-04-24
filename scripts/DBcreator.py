@@ -56,7 +56,7 @@ cur.execute("""CREATE TABLE discord (
     address TEXT,
     id TEXT,
     username TEXT,
-    discriminator INTEGER,
+    discriminator TEXT,
     PRIMARY KEY(address)
     )""")
 

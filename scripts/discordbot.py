@@ -22,6 +22,7 @@ async def on_ready():
             FROM discord
             WHERE id > 0""")
         discordid = cur.fetchall()
+
         conn.close
         for row in discordid:
             await updateroles(row[0])
@@ -37,9 +38,9 @@ async def updateIDs():
         if guild.name == GUILD:
             myguild = guild
             break
-
+    print('updating')
     async for member in myguild.fetch_members(limit=None):
-        print(member.id,member.name,member.discriminator)
+
         cur.execute("""
             UPDATE discord SET id =?
             WHERE username = ? AND discriminator = ?""",(member.id,member.name,member.discriminator))
@@ -54,6 +55,7 @@ async def updateroles(userid):
             myguild = guild
             break
     member = myguild.get_member(int(userid))
+
     if member != None:
         conn = sqlite3.connect('PurgeGame.db')
         cur = conn.cursor()
@@ -62,7 +64,7 @@ async def updateroles(userid):
             FROM discord
             WHERE id = ?""",(userid,))
         address = cur.fetchone()
-
+        print(address[0])
         cur.execute("""
             SELECT trait1,trait2,trait3,trait4
             FROM tokens

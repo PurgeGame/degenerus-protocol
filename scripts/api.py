@@ -15,7 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 class Item(BaseModel):
-    discord:int
+    discriminator:str
     address:str
     username:str
 
@@ -76,7 +76,7 @@ async def alltraits(address : str):
         SELECT total 
         FROM prizepool""")
         prizepool = cur.fetchone()[0]
-        conn.close
+        conn.close()
         traitdata[traitId] = {}
         traitdata[traitId]['traitId'] = traitId
         traitdata[traitId]['color'] = color
@@ -124,7 +124,7 @@ async def tokens(tokenId: int):
     purgeaddress = tokeninfo[7]
     purgetime = tokeninfo[8]
     image = tokeninfo[13]
-    conn.close
+    conn.close()
     return{'traitnumbers': traitNumber, 'traitnames': traitName,'holderaddress':holderaddress,'purgeaddress':purgeaddress,'purgetime': purgetime,'image':image, }
 
 @app.get("/tokenOwner/{address}")
@@ -149,7 +149,7 @@ async def tokenOwner(address: str):
             WHERE trait = ?""",(traitNumber[c],))
             trait = cur.fetchone()
             traitName.append(trait[0] + ' ' + trait[1])
-        conn.close
+        conn.close()
         price = row[5]
         holderaddress = row[6]
         purgeaddress = row[7]
@@ -189,7 +189,7 @@ async def tokenPurger(address: str):
             WHERE trait = ?""",(traitNumber[c],))
             trait = cur.fetchone()
             traitName.append(trait[0] + ' ' + trait[1])
-        conn.close
+        conn.close()
         price = row[5]
         holderaddress = row[6]
         purgeaddress = row[7]
@@ -240,7 +240,7 @@ async def leaderboard(youraddress = 0):
     if len(leaders) < 10:
         for c in range(len(leaders)+1,11):
             leaders.append('0x' + str(c))
-    conn.close
+    conn.close()
     return{'leaders':leaders}
     
 
@@ -282,19 +282,17 @@ async def referrals(address:str):
         WHERE referee = ? AND address = ?""",(row[0],address))
         refereesum  = cur.fetchone()[0]
         refereeinfo[row[0]] = refereesum
-    conn.close
+    conn.close()
     leaders = await lb
     leaders = leaders['leaders']
     return{'totalreferrals':totalreferrals, 'codes':codeinfo, 'referrals':refereeinfo,'leaders':leaders}
 
 @app.post("/discord/")
-async def tokens(item: Item):
+async def discord(item: Item):
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
-    cur.execute("""
-    INSERT OR REPLACE discord
-    SET address = ?
-    SET discord = ?
-    SET username = ?"""),(item.address,item.discord,item.username)
-    conn.commit
-    conn.close
+    cur.execute("INSERT OR REPLACE INTO discord VALUES(:address, :id, :username, :discriminator)",
+    {'address':item.address,'id':0,'username':item.username,'discriminator':item.discriminator})
+    conn.commit()
+    conn.close()
+
