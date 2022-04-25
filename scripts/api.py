@@ -1,3 +1,4 @@
+from asyncio.windows_events import NULL
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -30,7 +31,22 @@ async def everything(address: str):
     everything[2] = await purger
     prize = prizepool()
     everything[3] = await prize
+    status = discordstatus(address)
+    everything[4] = await status
     return everything
+
+@app.get("/discordstatus/{address}")
+async def discordstatus(address: str):
+    conn = sqlite3.connect('PurgeGame.db')
+    cur = conn.cursor()
+    cur.execute("""
+    SELECT username
+    FROM discord
+    WHERE address = ?
+    """,(address,))
+    status = cur.fetchone()
+    if status != None: return{'status':1}
+    else: return {'status':0}
 
 @app.get("/alltraits/{address}")
 async def alltraits(address : str):
@@ -76,7 +92,6 @@ async def alltraits(address : str):
         SELECT total 
         FROM prizepool""")
         prizepool = cur.fetchone()[0]
-        conn.close()
         traitdata[traitId] = {}
         traitdata[traitId]['traitId'] = traitId
         traitdata[traitId]['color'] = color
@@ -87,6 +102,7 @@ async def alltraits(address : str):
         traitdata[traitId]['purgedByAddress'] = purgedByAddress
         traitdata[traitId]['prize'] = round(9 * purgedByAddress * prizepool / (total  * 10),4)
         traitdata[traitId]['floor'] = floor
+    conn.close()
     return traitdata
 
 @app.get("/prizepool")
@@ -149,7 +165,6 @@ async def tokenOwner(address: str):
             WHERE trait = ?""",(traitNumber[c],))
             trait = cur.fetchone()
             traitName.append(trait[0] + ' ' + trait[1])
-        conn.close()
         price = row[5]
         holderaddress = row[6]
         purgeaddress = row[7]
@@ -164,7 +179,8 @@ async def tokenOwner(address: str):
         tokendata[tokenId]['holderaddress'] = holderaddress
         tokendata[tokenId]['purgeaddress'] = purgeaddress
         tokendata[tokenId]['purgetime'] = purgetime
-        tokendata[tokenId]['image'] = image        
+        tokendata[tokenId]['image'] = image   
+    conn.close()     
     return tokendata
 
 @app.get("/tokenPurger/{address}")
@@ -189,7 +205,6 @@ async def tokenPurger(address: str):
             WHERE trait = ?""",(traitNumber[c],))
             trait = cur.fetchone()
             traitName.append(trait[0] + ' ' + trait[1])
-        conn.close()
         price = row[5]
         holderaddress = row[6]
         purgeaddress = row[7]
@@ -204,7 +219,8 @@ async def tokenPurger(address: str):
         tokendata[tokenId]['holderaddress'] = holderaddress
         tokendata[tokenId]['purgeaddress'] = purgeaddress
         tokendata[tokenId]['purgetime'] = purgetime
-        tokendata[tokenId]['image'] = image        
+        tokendata[tokenId]['image'] = image     
+    conn.close()   
     return tokendata
 
 @app.get("/leaderboard")
