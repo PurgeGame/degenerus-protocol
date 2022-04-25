@@ -45,8 +45,8 @@ async def discordstatus(address: str):
     WHERE address = ?
     """,(address,))
     status = cur.fetchone()
-    if status != None: return{'status':1}
-    else: return {'status':0}
+    if status != None: return{1}
+    else: return {0}
 
 @app.get("/alltraits/{address}")
 async def alltraits(address : str):
