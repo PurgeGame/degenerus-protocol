@@ -78,6 +78,7 @@ async def alltraits(address : str):
         traitremaining = row[4]
         image = row[6]
         floor = row[5]
+        winningtrait = row[7]
         if traitId < 64:
             cur.execute("""
             SELECT COUNT (tokenId)
@@ -113,6 +114,7 @@ async def alltraits(address : str):
         traitdata[traitId]['purgedByAddress'] = purgedByAddress
         traitdata[traitId]['prize'] = round(9 * purgedByAddress * prizepool / (total  * 10),4)
         traitdata[traitId]['floor'] = floor
+        traitdata[traitId]['winningtrait'] = winningtrait
     conn.close()
     return traitdata
 
@@ -238,17 +240,6 @@ async def tokenPurger(address: str):
 async def leaderboard(youraddress = 0):
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
-    cur.execute("""
-    SELECT DISTINCT address
-    FROM referrals""")
-    allReferrers = cur.fetchall()
-    for row in allReferrers:
-        cur.execute("""
-        SELECT SUM(number)
-        FROM referrals
-        WHERE address = ?""",(row[0],))
-        total = cur.fetchone()
-        cur.execute("INSERT INTO leaderboard VALUES(:address,:total)",{'address':row[0],'total':total[0]})
     cur.execute("""
     SELECT address
     from leaderboard

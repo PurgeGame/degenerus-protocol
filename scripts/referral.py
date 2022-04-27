@@ -84,6 +84,19 @@ def referral():
             fromblock = referral[c]['blockNumber'] +1
             print(referrer, number)
             c+=1
+        conn.commit()
+        if len(referral) > 0:
+            cur.execute("""
+                SELECT DISTINCT address
+                FROM referrals""")
+            allReferrers = cur.fetchall()
+            for row in allReferrers:
+                cur.execute("""
+                SELECT SUM(number)
+                FROM referrals
+                WHERE address = ?""",(row[0],))
+                total = cur.fetchone()
+                cur.execute("INSERT INTO leaderboard VALUES(:address,:total)",{'address':row[0],'total':total[0]})
         conn.commit() 
         conn.close
         time.sleep(30)
