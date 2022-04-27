@@ -44,7 +44,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     mapping(string => uint24) referralCode;
 
 
-    string public baseTokenURI = "https://ipfs.io/ipfs/QmbHSRcYNUC6xvAE9qjjxpSnZiebC6sidhKvGBhxM2A6Lt/";
+    string public baseTokenURI = "https://ipfs.io/ipfs/QmfJmYavZAJTSrj8EkCFLP6dsTAD2nnUzHJBqAbm7osyz7/";
     uint256 public cost = .0001 ether; 
     uint256 public PrizePool = 0 ether;
 
