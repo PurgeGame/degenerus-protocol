@@ -1,5 +1,7 @@
 import requests
 import os, time, json, sqlite3
+from dotenv import load_dotenv
+load_dotenv()
 
 OS_API = os.environ.get("OS_API")
 address = os.environ.get("ADDRESS")

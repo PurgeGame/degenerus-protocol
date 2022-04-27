@@ -1,6 +1,8 @@
 import sqlite3,csv
 import discord
 import os
+from dotenv import load_dotenv
+load_dotenv()
 token = os.environ.get("DISCORD_BOT_SECRET")
 client = discord.Client()
 traitmap = 'traitmap.csv'
@@ -25,6 +27,7 @@ cur.execute("""CREATE TABLE traits (
     remaining INTEGER,
     floor REAL,
     image TEXT,
+    winningtrait INTEGER,
     discordrole INTEGER,
     PRIMARY KEY(trait)
     )""")
@@ -92,8 +95,8 @@ with open(traitmap,'r') as traitmapcsvfile:
                 trait = count * 64 + c * 8 + x
                 traitimage = 'https://purge.game/img/traits/' + color + "_" + shape +'.png'
                 traitimage = traitimage.lower()
-                cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:discordrole)",{'trait':trait,'color':color,'shape':shape,'remaining':0,'total':0,'floor': null,'image': traitimage, 'discordrole':0})
-    cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:discordrole)",{'trait':256,'color':'Bomb','shape':'Token','remaining':0,'total':0,'floor':null,'image': 'https://purge.game/img/tokens/bomb.png','discordrole':0})
+                cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:winningtrait,:discordrole)",{'trait':trait,'color':color,'shape':shape,'remaining':0,'total':0,'floor': null,'image': traitimage,'winningtrait':0, 'discordrole':0})
+    cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:winningtrait,:discordrole)",{'trait':256,'color':'Bomb','shape':'Token','remaining':0,'total':0,'floor':null,'image': 'https://purge.game/img/tokens/bomb.png','winningtrait':0,'discordrole':0})
     conn.commit()
     
 @client.event

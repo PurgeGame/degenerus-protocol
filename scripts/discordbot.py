@@ -1,6 +1,8 @@
 import discord
 import sqlite3
 import os,time
+from dotenv import load_dotenv
+load_dotenv()
 
 intents = discord.Intents.default()
 intents.members =True
@@ -38,7 +40,7 @@ async def updateIDs():
         if guild.name == GUILD:
             myguild = guild
             break
-    print('updating')
+
     async for member in myguild.fetch_members(limit=None):
 
         cur.execute("""
@@ -64,7 +66,6 @@ async def updateroles(userid):
             FROM discord
             WHERE id = ?""",(userid,))
         address = cur.fetchone()
-        print(address[0])
         cur.execute("""
             SELECT trait1,trait2,trait3,trait4
             FROM tokens

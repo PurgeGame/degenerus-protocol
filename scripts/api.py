@@ -1,11 +1,21 @@
-from asyncio.windows_events import NULL
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import sqlite3
-
+import sqlite3, os
+from web3 import Web3
+from eth_account.messages import defunct_hash_message
+from dotenv import load_dotenv
+load_dotenv()
+address = os.environ.get("ADDRESS")
+ALCHEMY_API = os.environ.get("ALCHEMY_API")
+alchemy_url = 'https://eth-rinkeby.alchemyapi.io/v2/'+ALCHEMY_API
+web3 = Web3(Web3.HTTPProvider(alchemy_url))
 app = FastAPI()
+
 origins = [
+    "https://purge.game",
+    "http://purge.game",
     "http://localhost:3000",
 ]
 app.add_middleware(
@@ -19,6 +29,7 @@ class Item(BaseModel):
     discriminator:str
     address:str
     username:str
+    signature:str
 
 @app.get("/everything/{address}")
 async def everything(address: str):
@@ -305,10 +316,14 @@ async def referrals(address:str):
 
 @app.post("/discord/")
 async def discord(item: Item):
-    conn = sqlite3.connect('PurgeGame.db')
-    cur = conn.cursor()
-    cur.execute("INSERT OR REPLACE INTO discord VALUES(:address, :id, :username, :discriminator)",
-    {'address':item.address,'id':0,'username':item.username,'discriminator':item.discriminator})
-    conn.commit()
-    conn.close()
+    original_message = '"Sign to verify address ownership"'
+    message_hash = defunct_hash_message(text=original_message)
+    signer = web3.eth.account.recoverHash(message_hash, signature = item.signature)
+    if signer == item.address:
+        conn = sqlite3.connect('PurgeGame.db')
+        cur = conn.cursor()
+        cur.execute("INSERT OR REPLACE INTO discord VALUES(:address, :id, :username, :discriminator)",
+        {'address':item.address,'id':0,'username':item.username,'discriminator':item.discriminator})
+        conn.commit()
+        conn.close()
 
