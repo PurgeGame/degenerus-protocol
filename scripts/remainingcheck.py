@@ -2,7 +2,8 @@ import sqlite3,urllib.request
 import json, time
 from web3 import Web3
 import os
-
+from dotenv import load_dotenv
+load_dotenv()
 
 address = os.environ.get("ADDRESS")
 ALCHEMY_API = os.environ.get("ALCHEMY_API")

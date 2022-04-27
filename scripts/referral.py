@@ -2,7 +2,8 @@ import sqlite3,urllib.request
 import json, time
 from web3 import Web3
 import os
-
+from dotenv import load_dotenv
+load_dotenv()
 address = os.environ.get("ADDRESS")
 
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
@@ -81,6 +82,7 @@ def referral():
             cur.execute("INSERT INTO referrals VALUES(:address,:referralcode,:referee,:number)",
                 {'address':referrer,'referralcode':referralCode,'referee':referee,'number':number})
             fromblock = referral[c]['blockNumber'] +1
+            print(referrer, number)
             c+=1
         conn.commit() 
         conn.close
