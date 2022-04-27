@@ -96,7 +96,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(totalMinted + _number < 29421, "Max 29420 tokens reached");
         RequireHundredMax(_number);
         _mintToken(_number);
-        if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender) payReferrer(_number, referrer);
+        if (referralCode[referrer] != 0) payReferrer(_number, referrer);
         addToPrizePool(_number);
     }
 
@@ -131,7 +131,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         RequireCorrectFunds(_number);
         codeMintAndPurge(_number);
-        if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender) payReferrer(_number, referrer);
+        if (referralCode[referrer] != 0) payReferrer(_number, referrer);
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _number * cost * 100);
     }
 
@@ -242,7 +242,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         traitRemaining[trait] -=1;
         if (traitRemaining[trait] == 0)
         {   
-            if (nuke == 1) require(false,"cannot nuke the last token of a trait");
+            if (nuke == true) require(false,"cannot nuke the last token of a trait");
             if (gameOver == false)
             {
                 gameOver = true;
@@ -327,10 +327,10 @@ contract PurgeGameBetaTest is ERC721, Ownable
         emit TokenBombed(targetTokenId);
         targetTokenId = realTraitsFromTokenId(targetTokenId);
         //purgeWrite(tokenTraits[targetTokenId], nuke);
-        nuke = 1;
+        nuke = true;
         purgeTraits(targetTokenId);
         //PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
-        nuke = 0;
+        nuke = false;
     }
 
 // Requirements for different mint types
