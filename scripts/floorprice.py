@@ -17,6 +17,7 @@ tokens = cur.fetchall()
 
 
 
+
 c = 0
 while c < len(tokens)-1:
     if c+28 >= len(tokens):
@@ -44,6 +45,7 @@ while c < len(tokens)-1:
             UPDATE tokens SET price = ?
             WHERE tokenId = ?""",(price,tokenId))
             tokensFound.append(tokenId)
+        conn.commit()
         time.sleep(1)
     tokensNotFound = []
     for x in range(c,c+29):
@@ -53,8 +55,9 @@ while c < len(tokens)-1:
         cur.execute("""
         UPDATE tokens SET price = NULL
         WHERE tokenId = ?""",(x,))
+    conn.commit()
     c+=29
-
+cur = conn.cursor()
 for traitId in range(0,256):
     if traitId < 64:
         cur.execute("""

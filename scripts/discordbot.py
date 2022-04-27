@@ -25,7 +25,7 @@ async def on_ready():
             WHERE id > 0""")
         discordid = cur.fetchall()
 
-        conn.close
+        conn.close()
         for row in discordid:
             await updateroles(row[0])
         if c == 10:
@@ -42,11 +42,17 @@ async def updateIDs():
             break
 
     async for member in myguild.fetch_members(limit=None):
-
         cur.execute("""
-            UPDATE discord SET id =?
-            WHERE username = ? AND discriminator = ?""",(member.id,member.name,member.discriminator))
-    conn.commit()
+        SELECT username,discriminator,id
+        FROM discord
+        WHERE username = ? and discriminator = ?""",(member.name,member.discriminator))
+        _member = cur.fetchone()
+        if _member != None:
+            if int(_member[2]) != int(member.id):
+                cur.execute("""
+                    UPDATE discord SET id =?
+                    WHERE username = ? AND discriminator = ?""",(member.id,member.name,member.discriminator))
+                conn.commit()
     conn.close()
 
     
@@ -110,8 +116,8 @@ async def updateroles(userid):
         for c in range(0,len(addroles)):
             print("adding " + str(addroles[c].name+" to " + member.name))
             await member.add_roles(addroles[c])
-        conn.commit
-        conn.close
+        conn.commit()
+        conn.close()
         time.sleep(1)
 
 
