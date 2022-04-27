@@ -28,7 +28,7 @@ for row in tokens:
         trait = trait.replace(" ", "_")
         traitimagefile.append("baseimages\\" + trait + ".png")
 
-    colors = ['Brown','Orange','Pink','Red','Green','Purple','Blue']
+    colors = ['brown','orange','pink','red','green','purple','blue']
     colors = list(set(colors)-set(color))
     colorfound = random.choice(colors)
 
