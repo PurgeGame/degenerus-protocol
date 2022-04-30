@@ -15,83 +15,83 @@ async def on_ready():
 
 @client.event
 async def on_ready():
-    c=10
     while 1:
-        conn = sqlite3.connect('PurgeGame.db')
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id
-            FROM discord
-            WHERE id > 0""")
-        discordid = cur.fetchall()
+        await updateroles()
+        # conn = sqlite3.connect('PurgeGame.db')
+        # cur = conn.cursor()
+        # cur.execute("""
+        #     SELECT id
+        #     FROM discord
+        #     WHERE id > 0""")
+        # discordid = cur.fetchall()
 
-        conn.close()
-        for row in discordid:
-            await updateroles(row[0])
-        if c == 10:
-            await updateIDs()
-            c=0
-        c+=1
+        # conn.close()
+        # for row in discordid:
+        #     await updateroles(row[0])
+        # if c == 10:
+        #     await updateIDs()
+        #     c=0
+        # c+=1
 
-async def updateIDs():
-    conn = sqlite3.connect('PurgeGame.db')
-    cur = conn.cursor()
+# async def updateIDs():
+#     conn = sqlite3.connect('PurgeGame.db')
+#     cur = conn.cursor()
+#     for guild in client.guilds:
+#         if guild.name == GUILD:
+#             myguild = guild
+#             break
+
+#     async for member in myguild.fetch_members(limit=None):
+#         cur.execute("""
+#         SELECT username,discriminator,id
+#         FROM discord
+#         WHERE username = ? and discriminator = ?""",(member.name,member.discriminator))
+#         _member = cur.fetchone()
+#         if _member != None:
+#             if int(_member[2]) != int(member.id):
+#                 cur.execute("""
+#                     UPDATE discord SET id =?
+#                     WHERE username = ? AND discriminator = ?""",(member.id,member.name,member.discriminator))
+#                 conn.commit()
+#     conn.close()
+
+    
+
+async def updateroles():
     for guild in client.guilds:
         if guild.name == GUILD:
             myguild = guild
             break
 
     async for member in myguild.fetch_members(limit=None):
-        cur.execute("""
-        SELECT username,discriminator,id
-        FROM discord
-        WHERE username = ? and discriminator = ?""",(member.name,member.discriminator))
-        _member = cur.fetchone()
-        if _member != None:
-            if int(_member[2]) != int(member.id):
-                cur.execute("""
-                    UPDATE discord SET id =?
-                    WHERE username = ? AND discriminator = ?""",(member.id,member.name,member.discriminator))
-                conn.commit()
-    conn.close()
-
-    
-
-async def updateroles(userid):
-    for guild in client.guilds:
-        if guild.name == GUILD:
-            myguild = guild
-            break
-    member = myguild.get_member(int(userid))
-
-    if member != None:
         conn = sqlite3.connect('PurgeGame.db')
         cur = conn.cursor()
         cur.execute("""
             SELECT address
             FROM discord
-            WHERE id = ?""",(userid,))
-        address = cur.fetchone()
-        cur.execute("""
-            SELECT trait1,trait2,trait3,trait4
-            FROM tokens
-            WHERE holderaddress = ? AND trait1 != 256""",(address[0],))
-        traits = cur.fetchall()
+            WHERE username = ? AND discriminator = ?""",(member.name,member.discriminator))
+        address = cur.fetchall()
         traitarray = []
         newroles = []
-        for row in traits:
-            traitrow = row
-            for c in range (0,4):
-                traitarray.append(traitrow[c])
-        for c in range(0,len(traitarray)):
+        for row in address:
             cur.execute("""
-                SELECT discordrole
-                FROM traits
-                WHERE trait = ?""",(traitarray[c],))
-            roleid = cur.fetchone()
-            role = myguild.get_role(roleid[0])
-            if role not in newroles:
-                newroles.append(role) 
+                SELECT trait1,trait2,trait3,trait4
+                FROM tokens
+                WHERE holderaddress = ? AND trait1 != 256""",(row[0],))
+            traits = cur.fetchall()
+            for row in traits:
+                traitrow = row
+                for c in range (0,4):
+                    traitarray.append(traitrow[c])
+            for c in range(0,len(traitarray)):
+                cur.execute("""
+                    SELECT discordrole
+                    FROM traits
+                    WHERE trait = ?""",(traitarray[c],))
+                roleid = cur.fetchone()
+                role = myguild.get_role(roleid[0])
+                if role not in newroles:
+                    newroles.append(role) 
         currentroles = member.roles
         addroles = []
         removeroles = []
@@ -108,7 +108,7 @@ async def updateroles(userid):
                 if currentroles[c] == newroles[x]:
                     match = 1
             if match == 0:
-                if currentroles[c].position <242 and currentroles[c].position != 0:
+                if currentroles[c].position <242 and currentroles[c].position > 1:
                     removeroles.append(currentroles[c]) 
         for c in range(0,len(removeroles)):
             print("removing " + str(removeroles[c].name +" from " + member.name))
