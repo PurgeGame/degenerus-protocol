@@ -199,6 +199,7 @@ def transfer():
                         WHERE tokenId = ?""",(transfer[c]['args']['to'],tokenId))
                 fromblock = transfer[c]['blockNumber'] +1
                 c+=1
+            conn.commit()
             if bombs == 1:
                 bombedTokens = getBombsNew(bombfilter)
                 if len(bombedTokens) > 0:
