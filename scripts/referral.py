@@ -96,7 +96,7 @@ def referral():
                 FROM referrals
                 WHERE address = ?""",(row[0],))
                 total = cur.fetchone()
-                cur.execute("INSERT INTO leaderboard VALUES(:address,:total)",{'address':row[0],'total':total[0]})
+                cur.execute("INSERT OR REPLACE INTO leaderboard VALUES(:address,:total)",{'address':row[0],'total':total[0]})
         conn.commit() 
         conn.close
         time.sleep(30)
