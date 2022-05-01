@@ -26,10 +26,11 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     uint16 private offset;
     uint16 bombNumber = 64501;
-    uint16 index;
     uint16 MAPtokens;
     uint16 public totalMinted;
     
+    uint24 index;
+
     uint32 revealTime;
     uint32 gameEndTime;
 
