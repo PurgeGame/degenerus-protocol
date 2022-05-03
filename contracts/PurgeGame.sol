@@ -83,9 +83,9 @@ contract PurgeGameBetaTest is ERC721, Ownable
         referralCode[_referralCode] = addressIndex[msg.sender];
     }
 
-    function returnReferralCodeOwner(string calldata _referralCode) external view returns(address)
+    function returnReferralCodeOwner(string calldata _referralCode) external view returns(uint24)
     {
-        return(indexAddress[referralCode[_referralCode]]);
+        return(referralCode[_referralCode]);
     }
 
 // Mint function.
@@ -247,7 +247,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
             if (gameOver == false)
             {
                 gameOver = true;
-                // if (nuke != 9999999) {payout(trait,indexAddress[nuke]);}
                 payout(trait);  
                 
             }
@@ -259,18 +258,15 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function payout(uint8 trait) private
     {
         uint16 totalPurges = uint16(traitPurgeAddress[trait].length - 1);
-        if (totalPurges == 0) payable(msg.sender).transfer(PrizePool);
-        else
-        {
-            uint256 paidMAPJackpot = MAPtokens * cost / 20;
-            uint256 grandPrize = (PrizePool - paidMAPJackpot) / 10;
-            payable(msg.sender).transfer(grandPrize);
-            uint256 normalPayout = (PrizePool - grandPrize) / totalPurges;
-            for (uint16 i = 0; i < totalPurges; i++)
-            { 
-                payable(indexAddress[traitPurgeAddress[trait][i]]).transfer(normalPayout);
-            }
-        }
+        if (totalPurges == 0) totalPurges = 1;
+        uint256 paidMAPJackpot = MAPtokens * cost / 20;
+        uint256 grandPrize = (PrizePool - paidMAPJackpot) / 10;
+        payable(msg.sender).transfer(grandPrize);
+        uint256 normalPayout = (PrizePool - grandPrize) / totalPurges;
+        for (uint16 i = 0; i < totalPurges; i++)
+        { 
+            payable(indexAddress[traitPurgeAddress[trait][i]]).transfer(normalPayout);
+        } 
         PrizePool = 0;
     }
 
@@ -301,7 +297,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require(REVEAL);
         require(gameOver == false);
-        /*
+        /*  THIS WILL BE IN THE REAL CONTRACT
         if (bombNumber == 64501) {require(block.timestamp > revealTime + 1209600);}
         else {require(block.timestamp > revealTime + 86400);}
         */
@@ -321,16 +317,12 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(ownerOf(bombTokenId) == msg.sender, 'you do not own that bomb');
         purging = true;
         _burn(bombTokenId);
-        //initAddress(ownerOf(targetTokenId));
-        //nuke = addressIndex[ownerOf(targetTokenId)];
         _burn(targetTokenId);
         purging = false;
         emit TokenBombed(targetTokenId);
         targetTokenId = realTraitsFromTokenId(targetTokenId);
-        //purgeWrite(tokenTraits[targetTokenId], nuke);
         nuke = true;
         purgeTraits(targetTokenId);
-        //PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[nuke], cost * 100);
         nuke = false;
     }
 
