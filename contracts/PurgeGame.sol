@@ -96,6 +96,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         else require(publicSaleStatus == true, 'Public sale inactive');
         require(totalMinted + _number < 29421, "Max 29420 tokens reached");
         RequireHundredMax(_number);
+        noContract();
         _mintToken(_number);
         if (referralCode[referrer] != 0) payReferrer(_number, referrer);
         addToPrizePool(_number);
@@ -107,6 +108,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(coinMintStatus == true, "Coin mints not currently available");
         require(totalMinted + _number < 29421, "Max 29420 tokens reached");
         RequireHundredMax(_number);
+        noContract();
         RequireCoinFunds(_number);
         PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
         _mintToken(_number);
@@ -147,6 +149,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require (whitelistSaleStatus == true || publicSaleStatus == true || coinMintStatus == true, 'Mint inactive');
         RequireHundredMax(_number);
+        noContract();
         require(MAPtokens + _number < 34421, "34420 max Mint and Purges");
         initAddress(msg.sender);
         uint16 mapTokenNumber = 30001 + MAPtokens;
@@ -197,7 +200,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Burns tokens and creates payout tickets for each trait purged, then prints $PURGED.
     function purge(uint16[] calldata _tokenIds) external  
     { 
-        require(tx.origin == msg.sender, 'Caller not user');
+        noContract();
         require(gameOver == false, "Game Over");
         require(REVEAL, "No purging before reveal");
         initAddress(msg.sender);
@@ -332,7 +335,11 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require(_number <= 400, "Maximum of 400 mints allowed per transaction");
         require(_number > 0, "You are trying to mint 0");
-        require(tx.origin == msg.sender, 'Caller not user');
+    }
+
+    function noContract() view private
+    {
+        require(tx.origin == msg.sender, 'no hax plz');
     }
 
     function RequireCorrectFunds(uint16 _number) view private
