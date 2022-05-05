@@ -99,7 +99,28 @@ async def alltraits(address : str):
             SELECT COUNT (tokenId)
             FROM tokens
             WHERE trait4 =? AND purgeaddress = ?""",(traitId,address))     
-        purgedByAddress = cur.fetchone()[0] 
+        purgedByAddress = cur.fetchone()[0]
+        if traitId < 64:
+            cur.execute("""
+            SELECT COUNT (tokenId)
+            FROM tokens
+            WHERE trait1 =? AND holderaddress = ?""",(traitId,address))
+        elif traitId < 128:
+            cur.execute("""
+            SELECT COUNT (tokenId)
+            FROM tokens
+            WHERE trait2 =? AND holderaddress = ?""",(traitId,address))
+        elif traitId < 192:
+            cur.execute("""
+            SELECT COUNT (tokenId)
+            FROM tokens
+            WHERE trait3 =? AND holderaddress = ?""",(traitId,address))
+        elif traitId < 256:
+            cur.execute("""
+            SELECT COUNT (tokenId)
+            FROM tokens
+            WHERE trait4 =? AND holderaddress = ?""",(traitId,address))     
+        heldByAddress = cur.fetchone()[0]  
         cur.execute("""
         SELECT total 
         FROM prizepool""")
@@ -112,6 +133,7 @@ async def alltraits(address : str):
         traitdata[traitId]["remaining"] = traitremaining
         traitdata[traitId]["image"] = image
         traitdata[traitId]['purgedByAddress'] = purgedByAddress
+        traitdata[traitId]['heldByAddress'] = heldByAddress
         traitdata[traitId]['prize'] = round(9 * purgedByAddress * prizepool / (total  * 10),4)
         traitdata[traitId]['floor'] = floor
         traitdata[traitId]['winningtrait'] = winningtrait
