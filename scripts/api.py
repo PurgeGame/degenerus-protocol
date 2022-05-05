@@ -140,6 +140,34 @@ async def alltraits(address : str):
     conn.close()
     return traitdata
 
+@app.get("/winner/{address}/{winningtrait}")
+async def winner(address : str, winningtrait : int):
+    conn = sqlite3.connect('PurgeGame.db')
+    cur = conn.cursor()
+    if winningtrait < 64:
+        cur.execute("""
+        SELECT COUNT (tokenId)
+        FROM tokens
+        WHERE trait1 =? AND purgeaddress = ? AND trait1purge = 1""",(winningtrait,address))
+    elif winningtrait < 128:
+        cur.execute("""
+        SELECT COUNT (tokenId)
+        FROM tokens
+        WHERE trait2 =? AND purgeaddress = ? AND trait2purge = 1""",(winningtrait,address))
+    elif winningtrait < 192:
+        cur.execute("""
+        SELECT COUNT (tokenId)
+        FROM tokens
+        WHERE trait3 =? AND purgeaddress = ? AND trait3purge = 1""",(winningtrait,address))
+    elif winningtrait < 256:
+        cur.execute("""
+        SELECT COUNT (tokenId)
+        FROM tokens
+        WHERE trait4 =? AND purgeaddress = ? AND trait3purge = 1""",(winningtrait,address))     
+    winner = cur.fetchone()[0]  
+    return winner
+
+
 @app.get("/prizepool")
 async def prizepool():
     conn = sqlite3.connect('PurgeGame.db')
