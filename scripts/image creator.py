@@ -28,9 +28,9 @@ for row in tokens:
         trait = trait.replace(" ", "_")
         traitimagefile.append("baseimages\\" + trait + ".png")
 
-    colors = ['brown','orange','pink','red','green','purple','blue']
+    colors = ['Brown','Orange','Pink','Red','Green','Purple','Blue']
     colors = list(set(colors)-set(color))
-    colorfound = random.choice(colors)
+    colorfound = random.choice(colors).lower()
 
     background = Image.open("baseimages\\background" + colorfound + ".png")
     background = background.convert("RGBA")
