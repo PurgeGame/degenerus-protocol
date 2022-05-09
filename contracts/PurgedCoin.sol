@@ -34,12 +34,17 @@ contract Purged is ERC20, Ownable
         _burn(yourAddress,_amount);
     }
 
-    function airdrop(address to, uint256 _amount) external onlyOwner 
+    function airdrop(address[] calldata to, uint256[] calldata _amount) external onlyOwner 
     {
-        uint256 amount = _amount * 1 ether;
-        require(amount <= bank);
-        _mint(to, amount);
-        bank -= amount;
+        require (to.length == _amount.length);
+        for (uint16 c = 0; c < to.length;c++)
+        {
+            uint256 amount = _amount[c] * 1 ether;
+            require(amount <= bank);
+            _mint(to[c], amount);
+            bank -= amount;
+        }
+
     }
 
     function addToBank() external onlyOwner
