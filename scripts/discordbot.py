@@ -9,14 +9,16 @@ intents.members =True
 client = discord.Client(intents=intents)
 
 GUILD = "Purge Game"
-@client.event
-async def on_ready():
-    print('We have logged in as {0.user}'.format(client))
 
 @client.event
 async def on_ready():
+    for guild in client.guilds:
+        if guild.name == GUILD:
+            myguild = guild
+            break
     while 1:
-        await updateroles()
+
+        await updateroles(myguild)
         # conn = sqlite3.connect('PurgeGame.db')
         # cur = conn.cursor()
         # cur.execute("""
@@ -57,11 +59,8 @@ async def on_ready():
 
     
 
-async def updateroles():
-    for guild in client.guilds:
-        if guild.name == GUILD:
-            myguild = guild
-            break
+async def updateroles(myguild):
+
 
     async for member in myguild.fetch_members(limit=None):
         conn = sqlite3.connect('PurgeGame.db')
