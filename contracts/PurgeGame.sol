@@ -15,7 +15,7 @@ interface PurgedCoinInterface
 contract PurgeGameBetaTest is ERC721, Ownable
 {
     
-    bool paidJackpot;
+    bool private paidJackpot;
     bool public coinMintStatus;
     bool public publicSaleStatus;
     bool public whitelistSaleStatus;
@@ -25,14 +25,14 @@ contract PurgeGameBetaTest is ERC721, Ownable
     bool private nuke;
 
     uint16 private offset;
-    uint16 bombNumber = 64501;
-    uint16 MAPtokens;
+    uint16 private bombNumber = 64501;
+    uint16 public MAPtokens;
     uint16 public totalMinted;
     
-    uint24 index;
+    uint24 public index;
 
-    uint32 revealTime;
-    uint32 gameEndTime;
+    uint32 public revealTime;
+    uint32 public gameEndTime;
 
     address private purgedCoinContract = 0x668A7988eFf43673A0aBAE5A2CBfE3097Ab84234;
     
@@ -79,6 +79,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(bytes(_referralCode).length != 0, "Input your desired code");
         require(bytes(_referralCode).length <= 40, "Too long");
         require(referralCode[_referralCode] == 0, "Referral code is taken");
+        noContract();
         initAddress(msg.sender);
         referralCode[_referralCode] = addressIndex[msg.sender];
     }
@@ -94,7 +95,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         RequireCorrectFunds(_number);
         if (whitelistSaleStatus == true && publicSaleStatus == false) require (addressIndex[msg.sender] <= 3000 && addressIndex[msg.sender] > 0, "You are not whitelisted");
         else require(publicSaleStatus == true, 'Public sale inactive');
-        require(totalMinted + _number < 29421, "Max 29420 tokens reached");
+        require(totalMinted + _number < 29421, "Max tokens reached");
         RequireHundredMax(_number);
         noContract();
         _mintToken(_number);
@@ -106,7 +107,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function coinMint(uint16 _number) external
     {
         require(coinMintStatus == true, "Coin mints not currently available");
-        require(totalMinted + _number < 29421, "Max 29420 tokens reached");
+        require(totalMinted + _number < 29421, "Max tokens reached");
         RequireHundredMax(_number);
         noContract();
         RequireCoinFunds(_number);
@@ -264,13 +265,14 @@ contract PurgeGameBetaTest is ERC721, Ownable
         if (totalPurges == 0) totalPurges = 1;
         uint256 paidMAPJackpot = MAPtokens * cost / 20;
         uint256 grandPrize = (PrizePool - paidMAPJackpot) / 10;
-        payable(msg.sender).transfer(grandPrize);
         uint256 normalPayout = (PrizePool - grandPrize) / totalPurges;
+        PrizePool = 0;
+        payable(msg.sender).transfer(grandPrize);
         for (uint16 i = 0; i < totalPurges; i++)
         { 
             payable(indexAddress[traitPurgeAddress[trait][i]]).transfer(normalPayout);
         } 
-        PrizePool = 0;
+
     }
 
 // Pays the MAP Jackpot to a random Mint and Purger.
@@ -331,10 +333,15 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
 // Requirements for different mint types
 
-    function RequireHundredMax(uint16 _number) view private
+    function RequireHundredMax(uint16 _number) pure private
     {
-        require(_number <= 400, "Maximum of 400 mints allowed per transaction");
-        require(_number > 0, "You are trying to mint 0");
+        require(_number <= 400, "Maximum of 400 mints allowed per tx");
+        require(_number > 0);
+    }
+    
+    function onlyBeforeReveal() view private
+    {
+        require(REVEAL == false);
     }
 
     function noContract() view private
@@ -394,31 +401,31 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Owner game-running functions.
     function setCost(uint _newCost) external onlyOwner 
     {
-        require(REVEAL == false);
+        onlyBeforeReveal();
         cost = _newCost;
     }
 
     function setCoinMintStatus(bool _status) external onlyOwner
     {
-        require(REVEAL == false);
+        onlyBeforeReveal();
         coinMintStatus = _status;
     }
 
     function setPublicSaleStatus(bool _status) external onlyOwner 
     {
-        require(REVEAL == false);
+        onlyBeforeReveal();
         publicSaleStatus = _status;
     }
 
     function setWhitelistSaleStatus(bool _status) external onlyOwner
     {
-        require(REVEAL == false);
+        onlyBeforeReveal();
         whitelistSaleStatus = _status;
     }
 
     function reveal(bool _REVEAL, string calldata updatedURI) external onlyOwner 
     {
-        require(REVEAL == false);
+        onlyBeforeReveal();
         require(paidJackpot == true);
         require(offset != 0);
         require(address(this).balance >= PrizePool);
