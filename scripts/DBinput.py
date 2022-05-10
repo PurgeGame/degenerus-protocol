@@ -12,10 +12,12 @@ offset = 420
 address = os.environ.get("ADDRESS")
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
 
+
 alchemy_url = 'https://eth-rinkeby.alchemyapi.io/v2/'+ALCHEMY_API
 web3 = Web3(Web3.HTTPProvider(alchemy_url))
 null = None
 
+# ETHERSCAN_API_ONE = os.environ.get("ETHERSCAN_API_ONE")
 # ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
 # with urllib.request.urlopen(ESAPI) as url:
 #     data = url.read().decode()

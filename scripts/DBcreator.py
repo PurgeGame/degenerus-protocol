@@ -93,7 +93,7 @@ with open(traitmap,'r') as traitmapcsvfile:
             for x in range(0,8):
                 shape = traitShape[x]
                 trait = count * 64 + c * 8 + x
-                traitimage = 'https://purge.game/img/traits/' + color + "_" + shape +'.png'
+                traitimage = 'https://purge.game/img/' + color + "_" + shape +'.png'
                 traitimage = traitimage.lower()
                 cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:winningtrait,:discordrole)",{'trait':trait,'color':color,'shape':shape,'remaining':0,'total':0,'floor': null,'image': traitimage,'winningtrait':0, 'discordrole':0})
     cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:winningtrait,:discordrole)",{'trait':256,'color':'Bomb','shape':'Token','remaining':0,'total':0,'floor':null,'image': 'https://purge.game/img/tokens/bomb.png','winningtrait':0,'discordrole':0})
