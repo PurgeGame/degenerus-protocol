@@ -34,7 +34,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     uint32 public revealTime;
     uint32 public gameEndTime;
 
-    address private purgedCoinContract = 0x668A7988eFf43673A0aBAE5A2CBfE3097Ab84234;
+    address private purgedCoinContract = 0x3b7e01469d545B187ef526f04A506B7D6F001a74;
     
     uint16[256] public traitRemaining;
 
@@ -43,7 +43,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     mapping(uint24 => address) indexAddress;
     mapping(address => uint24) addressIndex;
     mapping(string => uint24) referralCode;
-    mapping(uint24 => uint256) public claimablePayout;
+    mapping(uint24 => uint256) claimablePayout;
 
 
     string public baseTokenURI = "ipfs://QmdxAQbPoqom3EuNoBZGSonjvv5afWDyo8YFaNoscNLcTV/";
@@ -277,10 +277,15 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function claimPayout() external
     {
         require(claimablePayout[addressIndex[msg.sender]] > 0);
-        winnings = claimablePayout[addressIndex[msg.sender]];
+        uint256 winnings = claimablePayout[addressIndex[msg.sender]];
         claimablePayout[addressIndex[msg.sender]] = 0;
         PrizePool -= winnings;
         payable(msg.sender).transfer(winnings);
+    }
+
+    function checkYourPayout(address yourAddress) view external returns(uint256)
+    {
+        return (claimablePayout[addressIndex[yourAddress]] * 1 ether);
     }
 
 // Pays the MAP Jackpot to a random Mint and Purger.
