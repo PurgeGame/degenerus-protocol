@@ -134,7 +134,7 @@ async def alltraits(address : str):
         traitdata[traitId]["image"] = image
         traitdata[traitId]['purgedByAddress'] = purgedByAddress
         traitdata[traitId]['heldByAddress'] = heldByAddress
-        traitdata[traitId]['prize'] = round(9 * purgedByAddress * prizepool / (total  * 10),4)
+        traitdata[traitId]['prize'] = round( (9 / 10) * (purgedByAddress / (total-1)) * prizepool,4)
         traitdata[traitId]['floor'] = floor
         traitdata[traitId]['winningtrait'] = winningtrait
     conn.close()
@@ -303,7 +303,7 @@ async def leaderboard(youraddress = 0):
         x = cur.fetchone()
         if leaders[c][0] == youraddress: leaders[c] = '** YOU **'
         elif x == None:
-            leaders[c] = leaders[c][0][0:6] + "..." + leaders[c][0][-5:-1]
+            leaders[c] = leaders[c][0][0:6] + "..." + leaders[c][0][-5:]
         else: leaders[c] = x[0]
     if len(leaders) < 10:
         for c in range(len(leaders)+1,11):
