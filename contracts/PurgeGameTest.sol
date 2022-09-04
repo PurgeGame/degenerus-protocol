@@ -115,7 +115,15 @@ contract PurgeGameBetaTest is ERC721, Ownable
         RequireHundredMax(_number);
         noContract();
         RequireCoinFunds(_number);
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
+        if (claimablePurged[addressIndex[msg.sender]] > _number * cost * 1000)
+        {
+             claimablePurged[addressIndex[msg.sender]] -= _number * cost * 1000;
+        }
+        else
+        {
+            PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000 - claimablePurged[addressIndex[msg.sender]]);
+            claimablePurged[addressIndex[msg.sender]] = 0;
+        }
         _mintToken(_number);
         addToPrizePool(_number);
     }
@@ -146,7 +154,15 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function coinMintAndPurge(uint16 _number) external 
     {
         RequireCoinFunds(_number);
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 900);
+        if (claimablePurged[addressIndex[msg.sender]] > _number * cost * 900)
+        {
+             claimablePurged[addressIndex[msg.sender]] -= _number * cost * 900;
+        }
+        else
+        {
+            PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 900 - claimablePurged[addressIndex[msg.sender]]);
+            claimablePurged[addressIndex[msg.sender]] = 0;
+        }
         codeMintAndPurge(_number);
     }
 
@@ -395,7 +411,10 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     function RequireCoinFunds(uint16 _number) view private
     {
-        require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= _number * cost * 1000, "Not enough $PURGED");
+        if (claimablePurged[addressIndex[msg.sender]] < _number)
+        {
+            require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) + claimablePurged[indexAddress[msg.sender]] >= _number * cost * 1000, "Not enough $PURGED");
+        }
     }
 
 // Minting adds half of the mint cost to the prize pool.
