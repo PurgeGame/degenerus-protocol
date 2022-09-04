@@ -58,6 +58,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Links user addresses to a uint24 to save gas when recording game data and will be referenced in future seasons.
     function initAddress(address sender) public
     {
+        require(gameOver == 0);
         if (addressIndex[sender] == 0)
         {
             index +=1;
@@ -276,7 +277,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         } 
     }
 
-    function claimPayout() external
+/*     function claimEth() public
     {
         require(claimableEth[addressIndex[msg.sender]] > 0);
         uint256 winnings = claimableEth[addressIndex[msg.sender]];
@@ -285,9 +286,30 @@ contract PurgeGameBetaTest is ERC721, Ownable
         payable(msg.sender).transfer(winnings);
     }
 
-    function checkYourPayout(address yourAddress) view external returns(uint256)
+    function claimPurged() public
     {
-        return (claimableEth[addressIndex[yourAddress]] * 1 ether);
+        require(claimablePurged[addressIndex[msg.sender]] > 0);
+        uint256 bonus = claimablePurged[addressIndex[msg.sender]];
+        claimablePurged[addressIndex[msg.sender]] = 0;
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, bonus);
+    } */
+
+    function claimAll() external
+    {
+        require(claimableEth[addressIndex[msg.sender]] > 0 || claimablePurged[addressIndex[msg.sender]] > 0, "Nothing to claim");
+        if(claimableEth[addressIndex[msg.sender]] > 0)
+        {
+            uint256 winnings = claimableEth[addressIndex[msg.sender]];
+            claimableEth[addressIndex[msg.sender]] = 0;
+            PrizePool -= winnings;
+            payable(msg.sender).transfer(winnings);
+        }
+        if(claimablePurged[addressIndex[msg.sender]] > 0)
+        {
+            uint256 bonus = claimablePurged[addressIndex[msg.sender]];
+            claimablePurged[addressIndex[msg.sender]] = 0;
+            PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, bonus);
+        }
     }
 
 // Pays the MAP Jackpot to a random Mint and Purger.
@@ -386,7 +408,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Pays $PURGED to referrers when their referrals mint tokens.
     function payReferrer(uint16 _number, string calldata referrer) private
     {
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[referralCode[referrer]], _number * cost * 50);
+        claimablePurged[referralCode[referrer]] += _number * cost * 50;
         emit Referred(referrer, indexAddress[referralCode[referrer]], _number, msg.sender);
     }
 
