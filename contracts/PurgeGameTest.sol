@@ -310,7 +310,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, bonus);
     } */
 
-    function claimAll() external
+    function claim() external
     {
         require(claimableEth[addressIndex[msg.sender]] > 0 || claimablePurged[addressIndex[msg.sender]] > 0, "Nothing to claim");
         if(claimableEth[addressIndex[msg.sender]] > 0)
@@ -335,10 +335,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(publicSaleStatus == false);
         require(whitelistSaleStatus == false);
         require(coinMintStatus == false);
-        address payable winnerAddress = payable(indexAddress[getRandomPurge()]);
-        PrizePool -= MAPtokens * cost / 20;
         paidJackpot = true;
-        winnerAddress.transfer(MAPtokens * cost / 20); 
+        claimableEth[getRandomPurge()] += (MAPtokens * cost / 20); 
     }
 
 // Picks a random address from all addresses which have purged, weighted by number of purges.
