@@ -15,7 +15,7 @@ interface PurgedCoinInterface
 contract PurgeGameBetaTest is ERC721, Ownable
 {
     
-    bool private paidJackpot;
+    
     bool public coinMintStatus;
     bool public publicSaleStatus;
     bool public whitelistSaleStatus;
@@ -39,7 +39,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     
     uint16[256] public traitRemaining;
 
-    mapping(uint16 => uint24) tokenTraits;
+    mapping(uint16 => uint24) public tokenTraits;
     mapping(uint8 => uint24[]) traitPurgeAddress;
     mapping(uint24 => address) indexAddress;
     mapping(address => uint24) addressIndex;
@@ -51,6 +51,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     string public baseTokenURI = "ipfs://QmdxAQbPoqom3EuNoBZGSonjvv5afWDyo8YFaNoscNLcTV/";
     uint256 public cost = .0001 ether; 
     uint256 public PrizePool = 0 ether;
+    uint256 public paidJackpot;
 
     constructor() ERC721("Purge Game Beta Test", "PURGEGAMEBETA") {}
     
@@ -58,7 +59,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Links user addresses to a uint24 to save gas when recording game data and will be referenced in future seasons.
     function initAddress(address sender) public
     {
-        require(gameOver == 0);
+        require(gameOver == false);
         if (addressIndex[sender] == 0)
         {
             index +=1;
@@ -328,15 +329,22 @@ contract PurgeGameBetaTest is ERC721, Ownable
         }
     }
 
+    function totalPurgedCoin(address sender) external view returns(uint256)
+    {
+        return (claimablePurged[addressIndex[sender]] + PurgedCoinInterface(purgedCoinContract).balanceOf(sender));
+    }
+
 // Pays the MAP Jackpot to a random Mint and Purger.
     function payMapJackpot() external onlyOwner
     {
-        require(paidJackpot == false);
+        require(paidJackpot == 0);
         require(publicSaleStatus == false);
         require(whitelistSaleStatus == false);
         require(coinMintStatus == false);
-        paidJackpot = true;
-        claimableEth[getRandomPurge()] += (MAPtokens * cost / 20); 
+        paidJackpot = (MAPtokens * cost / 20);
+        winner = getRandomPurge();
+        claimableEth[winner] += paidJackpot; 
+        emit Jackpot(indexAddress[winner], paidJackpot);
     }
 
 // Picks a random address from all addresses which have purged, weighted by number of purges.
@@ -453,6 +461,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     event MintAndPurge(uint16 tokenId, uint24 tokenTraits, address from);
     event TokenMinted(uint16 tokenId, uint24 tokenTraits, address from);
     event Referred(string referralCode, address referrer, uint16 number, address from);
+    event Jackpot(address winner, uint256 amount);
 
 // Owner game-running functions.
     function setCost(uint _newCost) external onlyOwner 
@@ -482,7 +491,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function reveal(bool _REVEAL, string calldata updatedURI) external onlyOwner 
     {
         onlyBeforeReveal();
-        require(paidJackpot == true);
+        require(paidJackpot > 0);
         require(offset != 0);
         require(address(this).balance >= PrizePool);
         require(publicSaleStatus == false);
