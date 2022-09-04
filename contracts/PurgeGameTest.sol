@@ -22,7 +22,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     bool public REVEAL;
     bool public gameOver;
     bool private purging;
-    bool private nuke;
+    
 
     uint16 private offset;
     uint16 private bombNumber = 64501;
@@ -30,6 +30,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     uint16 public totalMinted;
     
     uint24 public index;
+    uint24 private nuke;
 
     uint32 public revealTime;
     uint32 public gameEndTime;
@@ -43,7 +44,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
     mapping(uint24 => address) indexAddress;
     mapping(address => uint24) addressIndex;
     mapping(string => uint24) referralCode;
-    mapping(uint24 => uint256) claimablePayout;
+    mapping(uint24 => uint256) public claimableEth;
+    mapping(uint24 => uint256) public claimablePurged;
 
 
     string public baseTokenURI = "ipfs://QmdxAQbPoqom3EuNoBZGSonjvv5afWDyo8YFaNoscNLcTV/";
@@ -248,7 +250,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         traitRemaining[trait] -=1;
         if (traitRemaining[trait] == 0)
         {   
-            if (nuke == true) require(false,"cannot nuke the last token of a trait");
+            if (nuke != 9999999) require(false,"cannot nuke the last token of a trait");
             if (gameOver == false)
             {
                 gameOver = true;
@@ -267,25 +269,25 @@ contract PurgeGameBetaTest is ERC721, Ownable
         uint256 paidMAPJackpot = MAPtokens * cost / 20;
         uint256 grandPrize = (PrizePool - paidMAPJackpot) / 10;
         uint256 normalPayout = (PrizePool - grandPrize) / totalPurges;
-        claimablePayout[addressIndex[msg.sender]] += grandPrize;
+        claimableEth[addressIndex[msg.sender]] += grandPrize;
         for (uint16 i = 0; i < totalPurges; i++)
         { 
-            claimablePayout[traitPurgeAddress[trait][i]] += normalPayout;
+            claimableEth[traitPurgeAddress[trait][i]] += normalPayout;
         } 
     }
 
     function claimPayout() external
     {
-        require(claimablePayout[addressIndex[msg.sender]] > 0);
-        uint256 winnings = claimablePayout[addressIndex[msg.sender]];
-        claimablePayout[addressIndex[msg.sender]] = 0;
+        require(claimableEth[addressIndex[msg.sender]] > 0);
+        uint256 winnings = claimableEth[addressIndex[msg.sender]];
+        claimableEth[addressIndex[msg.sender]] = 0;
         PrizePool -= winnings;
         payable(msg.sender).transfer(winnings);
     }
 
     function checkYourPayout(address yourAddress) view external returns(uint256)
     {
-        return (claimablePayout[addressIndex[yourAddress]] * 1 ether);
+        return (claimableEth[addressIndex[yourAddress]] * 1 ether);
     }
 
 // Pays the MAP Jackpot to a random Mint and Purger.
@@ -335,13 +337,15 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(ownerOf(bombTokenId) == msg.sender, 'you do not own that bomb');
         purging = true;
         _burn(bombTokenId);
+        initAddress(ownerOf(targetTokenId));
+        nuke = addressIndex[ownerOf(targetTokenId)];
         _burn(targetTokenId);
         purging = false;
         emit TokenBombed(targetTokenId);
         targetTokenId = realTraitsFromTokenId(targetTokenId);
-        nuke = true;
+        purgeWrite(tokenTraits[targetTokenId], nuke);
         purgeTraits(targetTokenId);
-        nuke = false;
+        nuke = 9999999;
     }
 
 // Requirements for different mint types
