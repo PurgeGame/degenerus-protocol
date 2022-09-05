@@ -169,35 +169,36 @@ def transfer():
             c=0
             while c< len(transfer):
                 tokenId = transfer[c]['args']['tokenId']
-                cur.execute("""
-                SELECT * 
-                FROM tokens 
-                WHERE tokenId = ?""",(tokenId,))
-                token = cur.fetchone()
-                if token == None:
-                    cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
-                    {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'price':null,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
-                    cur.execute("UPDATE traits SET total =total + 1, remaining = remaining +1 WHERE trait = 256")
-                if transfer[c]['args']['to'] == '0x0000000000000000000000000000000000000000':
-                    block = transfer[c]['blockNumber']
+                if tokenId > 0:
+                    cur.execute("""
+                    SELECT * 
+                    FROM tokens 
+                    WHERE tokenId = ?""",(tokenId,))
+                    token = cur.fetchone()
+                    if token == None:
+                        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
+                        {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'price':null,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
+                        cur.execute("UPDATE traits SET total =total + 1, remaining = remaining +1 WHERE trait = 256")
+                    if transfer[c]['args']['to'] == '0x0000000000000000000000000000000000000000':
+                        block = transfer[c]['blockNumber']
 
-                    purgeTime = purgetime(block)
-                    if token[8] ==0:
-                        removetraits(transfer[c]['args']['tokenId'],conn)
-                    if token[8] =='BOMBED':
+                        purgeTime = purgetime(block)
+                        if token[8] ==0:
+                            removetraits(transfer[c]['args']['tokenId'],conn)
+                        if token[8] =='BOMBED':
+                            cur.execute(
+                                """UPDATE tokens SET purgetime = ?, holderaddress = 0, price = ?
+                                WHERE tokenId = ?""",(purgeTime,null,tokenId))
+                            removetraits(transfer[c]['args']['tokenId'],conn)
+                        else:                         
+                            cur.execute(
+                                """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0, price = ?
+                                WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],null,tokenId))
+                    else:
                         cur.execute(
-                            """UPDATE tokens SET purgetime = ?, holderaddress = 0, price = ?
-                            WHERE tokenId = ?""",(purgeTime,null,tokenId))
-                        removetraits(transfer[c]['args']['tokenId'],conn)
-                    else:                         
-                        cur.execute(
-                            """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0, price = ?
-                            WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],null,tokenId))
-                else:
-                    cur.execute(
-                        """UPDATE tokens SET holderaddress = ?
-                        WHERE tokenId = ?""",(transfer[c]['args']['to'],tokenId))
-                fromblock = transfer[c]['blockNumber'] +1
+                            """UPDATE tokens SET holderaddress = ?
+                            WHERE tokenId = ?""",(transfer[c]['args']['to'],tokenId))
+                    fromblock = transfer[c]['blockNumber'] +1
                 c+=1
             conn.commit()
             if bombs == 1:
@@ -216,6 +217,7 @@ def transfer():
         time.sleep(30)
         if x == 60:
             if web3.eth.block_number > startblock and bombs == 0: #+ 83200 for real game
+                print('here')
                 bombs = 1
                 bomb = getBombs()
                 
