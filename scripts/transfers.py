@@ -53,14 +53,6 @@ def getTransferNew(fromblock, filter):
         Transfers = filter.get_new_entries()
     return(Transfers, filter)
 
-def getBombs():
-    TokenBombed = contract.events.TokenBombed()
-    filter = TokenBombed.createFilter(fromBlock = startblock)
-    return(filter.get_all_entries(), filter)
-
-def getBombsNew(filter):
-    return(filter.get_new_entries())
-
 def removetraits(_tokenId,conn):
     cur = conn.cursor()
     cur.execute("""
@@ -106,57 +98,6 @@ def removetraits(_tokenId,conn):
                     """UPDATE traits SET winningtrait = 1
                     WHERE trait = ?""",(_trait,))
 
-#There's a minor bug here with traitxpurge if a token with the same trait gets bombed in the same block as a purge
-def bombTrait(_tokenId,conn):
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT *
-        FROM tokens
-        WHERE tokenId = ?""",(_tokenId,))
-    tokeninfo = cur.fetchone()
-    for c in range (1,5):
-        _trait = tokeninfo[c]
-        cur.execute("""
-            SELECT total 
-            FROM traits 
-            WHERE trait = ?""",(_trait,))
-        traittotal = cur.fetchone()[0]
-        if _trait <64:
-            cur.execute("""
-                UPDATE tokens SET trait1purge = 0
-                WHERE tokenId = ?""",(_tokenId,))
-            cur.execute("""
-                UPDATE tokens SET trait1purge = trait1purge - 1
-                WHERE trait1 = ? AND trait1purge > 0""",(_trait,))  
-        elif _trait <128:
-            cur.execute("""
-                UPDATE tokens SET trait2purge = 0
-                WHERE tokenId = ?""",(_tokenId,))
-            cur.execute("""
-                UPDATE tokens SET trait2purge = trait2purge - 1
-                WHERE trait2 = ? AND trait2purge > 0""",(_trait,)) 
-        elif _trait <192:
-            cur.execute("""
-                UPDATE tokens SET trait3purge = 0
-                WHERE tokenId = ?""",(_tokenId,))
-            cur.execute("""
-                UPDATE tokens SET trait3purge = trait3purge - 1
-                WHERE trait3 = ? AND trait3purge > 0""",(_trait,)) 
-        elif _trait <256:
-            cur.execute(
-                """UPDATE tokens SET trait4purge = 0
-                WHERE tokenId = ?""",(_tokenId,))
-            cur.execute("""
-                UPDATE tokens SET trait4purge = trait4purge - 1
-                WHERE trait4 = ? AND trait4purge > 0""",(_trait,)) 
-        traittotal = traittotal-1
-        cur.execute(
-            """UPDATE traits SET total = ?
-            WHERE trait = ?""",(traittotal,_trait))
-    cur.execute(
-        """UPDATE tokens SET purgeaddress = 'BOMBED'
-        WHERE tokenId = ?""",(_tokenId,))
-
 def transfer():
     transfer = getTransferAll()
     bombs = 0
@@ -184,13 +125,7 @@ def transfer():
 
                         purgeTime = purgetime(block)
                         if token[8] ==0:
-                            removetraits(transfer[c]['args']['tokenId'],conn)
-                        if token[8] =='BOMBED':
-                            cur.execute(
-                                """UPDATE tokens SET purgetime = ?, holderaddress = 0, price = ?
-                                WHERE tokenId = ?""",(purgeTime,null,tokenId))
-                            removetraits(transfer[c]['args']['tokenId'],conn)
-                        else:                         
+                            removetraits(transfer[c]['args']['tokenId'],conn)                       
                             cur.execute(
                                 """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0, price = ?
                                 WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],null,tokenId))
@@ -201,45 +136,9 @@ def transfer():
                     fromblock = transfer[c]['blockNumber'] +1
                 c+=1
             conn.commit()
-            if bombs == 1:
-                bombedTokens = getBombsNew(bombfilter)
-                if len(bombedTokens) > 0:
-                    while c< len(bombedTokens):
-                        tokenId = bombedTokens[c]['args']['tokenId']
-                        cur.execute("""
-                            SELECT purgeaddress
-                            FROM tokens
-                            WHERE tokenId = ?""",(tokenId,))
-                        if cur.fetchone()[0] != "BOMBED":
-                            bombTrait(tokenId, conn)
-            conn.commit()
             conn.close()
         time.sleep(30)
         if x == 60:
-            if web3.eth.block_number > startblock and bombs == 0: #+ 83200 for real game
-                print('here')
-                bombs = 1
-                bomb = getBombs()
-                
-                bombedTokens=bomb[0]
-                bombfilter=bomb[1]
-                if len(bombedTokens) > 0:
-                    conn = sqlite3.connect('PurgeGame.db')
-                    cur = conn.cursor()
-                    c=0
-                    while c< len(bombedTokens):
-                        tokenId = bombedTokens[c]['args']['tokenId']
-                        cur.execute("""
-                            SELECT purgeaddress
-                            FROM tokens
-                            WHERE tokenId = ?""",(tokenId,))
-                        if cur.fetchone()[0] != "BOMBED":
-                            bombTrait(tokenId, conn)
-                        c+=1
-                    conn.commit()
-                    conn.close()
-
-
             if contract.caller.gameOver() == True:
                 break
             else:
