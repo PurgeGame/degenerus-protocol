@@ -34,7 +34,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     uint32 public revealTime;
     uint32 public gameEndTime;
 
-    address private purgedCoinContract = 0x668A7988eFf43673A0aBAE5A2CBfE3097Ab84234;
+    address private purgedCoinContract = 0x3b7e01469d545B187ef526f04A506B7D6F001a74;
     
     uint16[256] public traitRemaining;
 
@@ -294,6 +294,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,block.timestamp >> 5))));
         uint16 randomHashTwo = uint16(random >> 8);
         randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[uint8(random)].length);
+        emit RandomPurge(uint8(random), randomHashTwo);
         return(traitPurgeAddress[uint8(random)][randomHashTwo]);
     }
 
@@ -397,6 +398,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     event MintAndPurge(uint16 tokenId, uint24 tokenTraits, address from);
     event TokenMinted(uint16 tokenId, uint24 tokenTraits, address from);
     event Referred(string referralCode, address referrer, uint16 number, address from);
+    event RandomPurge(uint8 random, uint24 randomHashTwo);
 
 // Owner game-running functions.
     function setCost(uint _newCost) external onlyOwner 
