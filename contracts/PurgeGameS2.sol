@@ -14,33 +14,34 @@ interface PurgedCoinInterface
 
 interface SeasonOneInterface
 {
-    function initAddress(address sender) public;
     function returnAddressIndex(address _address) external view returns(uint24);
-    function returnIndexAddress(uint24 _index) external view returns(address);
+    function returnIndex() external returns(uint24);
     function returnReferralCodeOwner(string calldata _referralCode) external view returns(uint24);
 }
 
 contract PurgeGameSeasonTwo is ERC721, Ownable
 {
     
-    bool private paidJackpot;
+    
     bool public coinMintStatus;
     bool public publicSaleStatus;
     bool public whitelistSaleStatus;
     bool public REVEAL;
     bool public gameOver;
     bool private purging;
-    bool private nuke;
+    
 
     uint16 private offset;
     uint16 private bombNumber = 64501;
     uint16 public MAPtokens;
     uint16 public totalMinted;
     
-    uint24 public index;
+    uint24 private index = SeasonOneInterface(seasonOneAddress).returnIndex();
+    uint24 private nuke;
 
     uint32 public revealTime;
     uint32 public gameEndTime;
+    uint32 public payoutTimer;
 
     address private purgedCoinContract = 0x3b7e01469d545B187ef526f04A506B7D6F001a74;
     address private seasonOneAddress = 0x3b7e01469d545B187ef526f04A506B7D6F001a74;
@@ -49,46 +50,76 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
 
     mapping(uint16 => uint24) tokenTraits;
     mapping(uint8 => uint24[]) traitPurgeAddress;
+    mapping(uint24 => address) indexAddress;
+    mapping(address => uint24) addressIndex;
+    mapping(string => uint24) referralCode;
+    mapping(uint24 => uint256) public claimableEth;
+    mapping(uint24 => uint256) public claimablePurged;
+
 
     string public baseTokenURI = "ipfs://QmdxAQbPoqom3EuNoBZGSonjvv5afWDyo8YFaNoscNLcTV/";
     uint256 public cost = .0001 ether; 
-    uint256 public PrizePool = 0 ether;
+    uint256 public PrizePool;
+    uint256 public paidJackpot;
+    uint256 public startingPrizePool;
 
-    constructor() ERC721("Purge Game Season Two", "PURGEGAME2") {}
+
+    constructor() ERC721("Purge Game Season Two", "PURGEGAMES2") {}
     
 
 // Links user addresses to a uint24 to save gas when recording game data and will be referenced in future seasons.
-    function initAddress() public
+    function initAddress(address sender) public
     {
-        SeasonOneInterface(seasonOneAddress).initAddress(msg.sender);
+        if (addressIndex[sender] == 0)
+        {
+            uint24 seasonOneIndex = SeasonOneInterface(seasonOneAddress).returnAddressIndex(sender);
+            if (seasonOneIndex == 0)
+            {
+                require(gameOver == false);
+                index +=1;
+                addressIndex[sender] = index;
+                indexAddress[index] = sender;
+            }
+            else
+            {
+                addressIndex[sender] = seasonOneIndex;
+                indexAddress[seasonOneIndex] = sender;
+            }
+        }
     }
 
-    function addressIndex(address _address) internal view returns(uint24)
+    function returnAddressIndex(address _address) external view returns(uint24)
     {
-        return(SeasonOneInterface(seasonOneAddress).returnAddressIndex[_address]);
+        return(addressIndex[_address]);
+    }
+    
+// Allows users to create a referral code string that will pay them $PURGED when their referrals mint tokens.
+    function createReferralCode(string calldata _referralCode) external 
+    {
+        require(bytes(_referralCode).length != 0, "Input your desired code");
+        require(bytes(_referralCode).length <= 40, "Too long");
+        initAddress(msg.sender);
+        uint24 seasonOneReferralCode = SeasonOneInterface(seasonOneAddress).returnReferralCodeOwner(_referralCode);
+        require(referralCode[_referralCode] == 0 && (seasonOneReferralCode == 0 || seasonOneReferralCode == addressIndex[msg.sender]), "Referral code is taken");
+        referralCode[_referralCode] = addressIndex[msg.sender];
     }
 
-    function indexAddress(uint24 _index) internal view returns(address)
+    function returnReferralCodeOwner(string calldata _referralCode) external view returns(uint24)
     {
-        return(SeasonOneInterface(seasonOneAddress).returnIndexAddress[_index]);
-    }
-
-    function referralCode(string calldata _referralCode) internal view returns(uint24)
-    {
-        return(SeasonOneInterface(seasonOneAddress).returnReferralCodeOwner[_referralCode]);
+        return(referralCode[_referralCode]);
     }
 
 // Mint function.
     function mint(uint16 _number, string calldata referrer) external payable 
      {
         RequireCorrectFunds(_number);
-        if (whitelistSaleStatus == true && publicSaleStatus == false) require (addressIndex(msg.sender) <= 3000 && addressIndex(msg.sender) > 0, "You are not whitelisted");
+        if (whitelistSaleStatus == true && publicSaleStatus == false) require (addressIndex[msg.sender] <= 3000 && addressIndex[msg.sender] > 0, "You are not whitelisted");
         else require(publicSaleStatus == true, 'Public sale inactive');
         require(totalMinted + _number < 29421, "Max tokens reached");
         RequireHundredMax(_number);
         noContract();
         _mintToken(_number);
-        if (referralCode(referrer) != 0) payReferrer(_number, referrer);
+        if (referralCode[referrer] != 0) payReferrer(_number, referrer);
         addToPrizePool(_number);
     }
 
@@ -100,7 +131,15 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
         RequireHundredMax(_number);
         noContract();
         RequireCoinFunds(_number);
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
+        if (claimablePurged[addressIndex[msg.sender]] >= _number * cost * 1000)
+        {
+             claimablePurged[addressIndex[msg.sender]] -= _number * cost * 1000;
+        }
+        else
+        {
+            PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000 - claimablePurged[addressIndex[msg.sender]]);
+            claimablePurged[addressIndex[msg.sender]] = 0;
+        }
         _mintToken(_number);
         addToPrizePool(_number);
     }
@@ -124,14 +163,22 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
     {
         RequireCorrectFunds(_number);
         codeMintAndPurge(_number);
-        if (referralCode(referrer) != 0) payReferrer(_number, referrer);
+        if (referralCode[referrer] != 0) payReferrer(_number, referrer);
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _number * cost * 100);
     }
 
     function coinMintAndPurge(uint16 _number) external 
     {
         RequireCoinFunds(_number);
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 900);
+        if (claimablePurged[addressIndex[msg.sender]] > _number * cost * 900)
+        {
+             claimablePurged[addressIndex[msg.sender]] -= _number * cost * 900;
+        }
+        else
+        {
+            PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 900 - claimablePurged[addressIndex[msg.sender]]);
+            claimablePurged[addressIndex[msg.sender]] = 0;
+        }
         codeMintAndPurge(_number);
     }
 
@@ -141,12 +188,12 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
         RequireHundredMax(_number);
         noContract();
         require(MAPtokens + _number < 34421, "34420 max Mint and Purges");
-        initAddress();
+        initAddress(msg.sender);
         uint16 mapTokenNumber = 30001 + MAPtokens;
         for(uint16 i= 0; i < _number; i++)
         {
             uint24 traits = setTraits(mapTokenNumber + i); 
-            purgeWrite(traits,addressIndex(msg.sender));
+            purgeWrite(traits,addressIndex[msg.sender]);
             emit MintAndPurge(mapTokenNumber + i, traits, msg.sender);
         }
         addToPrizePool(_number);
@@ -190,10 +237,9 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
 // Burns tokens and creates payout tickets for each trait purged, then prints $PURGED.
     function purge(uint16[] calldata _tokenIds) external  
     { 
-        noContract();
         require(gameOver == false, "Game Over");
         require(REVEAL, "No purging before reveal");
-        initAddress();
+        initAddress(msg.sender);
         uint16 _tokenId;
         purging = true;
         for(uint16 i = 0; i < _tokenIds.length; i++) 
@@ -203,8 +249,9 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
             require(_tokenId <= 64500, "You cannot purge bombs");
             _burn(_tokenId);
             _tokenId = realTraitsFromTokenId(_tokenId);
-            purgeWrite(tokenTraits[_tokenId], addressIndex(msg.sender));
-            purgeTraits(_tokenId);     
+            purgeWrite(tokenTraits[_tokenId], addressIndex[msg.sender]);
+            purgeTraits(_tokenId);
+            tokenTraits[_tokenId] = 0;
         }      
         purging = false;  
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _tokenIds.length * cost * 100);
@@ -236,7 +283,7 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
         traitRemaining[trait] -=1;
         if (traitRemaining[trait] == 0)
         {   
-            if (nuke == true) require(false,"cannot nuke the last token of a trait");
+            if (nuke != 9999999) require(false,"cannot nuke the last token of a trait");
             if (gameOver == false)
             {
                 gameOver = true;
@@ -252,40 +299,94 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
     {
         uint16 totalPurges = uint16(traitPurgeAddress[trait].length - 1);
         if (totalPurges == 0) totalPurges = 1;
-        uint256 paidMAPJackpot = MAPtokens * cost / 20;
-        uint256 grandPrize = (PrizePool - paidMAPJackpot) / 10;
+        uint256 grandPrize = PrizePool * totalMinted / (totalMinted + MAPtokens) / 10;
         uint256 normalPayout = (PrizePool - grandPrize) / totalPurges;
-        PrizePool = 0;
-        payable(msg.sender).transfer(grandPrize);
+        claimableEth[addressIndex[msg.sender]] += grandPrize;
         for (uint16 i = 0; i < totalPurges; i++)
         { 
-            payable(indexAddress(traitPurgeAddress[trait][i])).transfer(normalPayout);
+            claimableEth[traitPurgeAddress[trait][i]] += normalPayout;
         } 
+    }
 
+/*     function claimEth() public
+    {
+        require(claimableEth[addressIndex[msg.sender]] > 0);
+        uint256 winnings = claimableEth[addressIndex[msg.sender]];
+        claimableEth[addressIndex[msg.sender]] = 0;
+        PrizePool -= winnings;
+        payable(msg.sender).transfer(winnings);
+    }
+
+    function claimPurged() public
+    {
+        require(claimablePurged[addressIndex[msg.sender]] > 0);
+        uint256 bonus = claimablePurged[addressIndex[msg.sender]];
+        claimablePurged[addressIndex[msg.sender]] = 0;
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, bonus);
+    } */
+
+// Pays three random purged tokens .33% of the starting prize pool
+    function payRandomPurge() external onlyOwner
+    {
+        require(gg == 0);
+        if (payoutTimer == 0) require(block.timestamp > revealTime + 82800);
+        else require(block.timestamp > payoutTimer + 82800);
+        uint24[3] winner;
+        PrizePool -= startingPrizePool / 300;
+        for (uint8 i = 0; i < 3; i++)
+        {
+            winner[i] = getRandomPurge(i);
+            claimableEth[winner[i]] += startingPrizePool / 300;
+        }
+        payoutTimer = block.timestamp;
+    }
+
+    function claim() external
+    {
+        require(claimableEth[addressIndex[msg.sender]] > 0 || claimablePurged[addressIndex[msg.sender]] > 0, "Nothing to claim");
+        if(claimableEth[addressIndex[msg.sender]] > 0)
+        {
+            uint256 winnings = claimableEth[addressIndex[msg.sender]];
+            claimableEth[addressIndex[msg.sender]] = 0;
+            PrizePool -= winnings;
+            payable(msg.sender).transfer(winnings);
+            emit ClaimEth(winnings, msg.sender);
+        }
+        if(claimablePurged[addressIndex[msg.sender]] > 0)
+        {
+            uint256 bonus = claimablePurged[addressIndex[msg.sender]];
+            claimablePurged[addressIndex[msg.sender]] = 0;
+            PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, bonus);
+        }
+    }
+
+    function totalPurgedCoin(address sender) external view returns(uint256)
+    {
+        return (claimablePurged[addressIndex[sender]] + PurgedCoinInterface(purgedCoinContract).balanceOf(sender));
     }
 
 // Pays the MAP Jackpot to a random Mint and Purger.
     function payMapJackpot() external onlyOwner
     {
-        require(paidJackpot == false);
+        require(paidJackpot == 0);
         require(publicSaleStatus == false);
         require(whitelistSaleStatus == false);
         require(coinMintStatus == false);
-        address payable winnerAddress = payable(indexAddress(getRandomPurge()));
-        PrizePool -= MAPtokens * cost / 20;
-        paidJackpot = true;
-        winnerAddress.transfer(MAPtokens * cost / 20); 
+        paidJackpot = (MAPtokens * cost / 20);
+        uint24 winner = getRandomPurge(1);
+        claimableEth[winner] += paidJackpot; 
+        emit Jackpot(indexAddress[winner], paidJackpot);
     }
 
 // Picks a random address from all addresses which have purged, weighted by number of purges.
-    function getRandomPurge() private view returns(uint24)
+    function getRandomPurge(uint8 num) private view returns(uint24)
     {
-        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,block.timestamp >> 5))));
+        uint24 random = uint24(uint(keccak256(abi.encodePacked(num,PrizePool,block.timestamp >> 5))));
         uint16 randomHashTwo = uint16(random >> 8);
         randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[uint8(random)].length);
+        emit RandomPurge(uint8(random), randomHashTwo);
         return(traitPurgeAddress[uint8(random)][randomHashTwo]);
     }
-
 // Airdrops a bomb token to a random address which has purged a token at some point
     function bombAirdrop() external onlyOwner
     {
@@ -295,7 +396,7 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
         if (bombNumber == 64501) {require(block.timestamp > revealTime + 1209600);}
         else {require(block.timestamp > revealTime + 86400);}
         */
-        address recipient = indexAddress(getRandomPurge());
+        address recipient = indexAddress[getRandomPurge(1)];
         _mint(recipient,bombNumber);
         _balances[recipient] += 1;
         bombNumber +=1;
@@ -311,13 +412,16 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
         require(ownerOf(bombTokenId) == msg.sender, 'you do not own that bomb');
         purging = true;
         _burn(bombTokenId);
+        initAddress(ownerOf(targetTokenId));
+        nuke = addressIndex[ownerOf(targetTokenId)];
         _burn(targetTokenId);
         purging = false;
         emit TokenBombed(targetTokenId);
         targetTokenId = realTraitsFromTokenId(targetTokenId);
-        nuke = true;
+        purgeWrite(tokenTraits[targetTokenId], nuke);
         purgeTraits(targetTokenId);
-        nuke = false;
+        tokenTraits[targetTokenId] = 0;
+        nuke = 9999999;
     }
 
 // Requirements for different mint types
@@ -345,7 +449,10 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
 
     function RequireCoinFunds(uint16 _number) view private
     {
-        require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= _number * cost * 1000, "Not enough $PURGED");
+        if (claimablePurged[addressIndex[msg.sender]] < _number)
+        {
+            require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) + claimablePurged[addressIndex[msg.sender]] >= _number * cost * 1000, "Not enough $PURGED");
+        }
     }
 
 // Minting adds half of the mint cost to the prize pool.
@@ -358,8 +465,8 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
 // Pays $PURGED to referrers when their referrals mint tokens.
     function payReferrer(uint16 _number, string calldata referrer) private
     {
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress(referralCode(referrer)), _number * cost * 50);
-        emit Referred(referrer, indexAddress(referralCode(referrer)), _number, msg.sender);
+        claimablePurged[referralCode[referrer]] += _number * cost * 50;
+        emit Referred(referrer, indexAddress[referralCode[referrer]], _number, msg.sender);
     }
 
 // Anti-hack funtion. The traits generated by minting will not correspond to the token minted.
@@ -386,6 +493,9 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
     event MintAndPurge(uint16 tokenId, uint24 tokenTraits, address from);
     event TokenMinted(uint16 tokenId, uint24 tokenTraits, address from);
     event Referred(string referralCode, address referrer, uint16 number, address from);
+    event Jackpot(address winner, uint256 amount);
+    event ClaimEth(uint256 amount, address claimer);
+    event RandomPurge(uint8 random, uint24 randomHashTwo);
 
 // Owner game-running functions.
     function setCost(uint _newCost) external onlyOwner 
@@ -415,7 +525,7 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
     function reveal(bool _REVEAL, string calldata updatedURI) external onlyOwner 
     {
         onlyBeforeReveal();
-        require(paidJackpot == true);
+        require(paidJackpot > 0);
         require(offset != 0);
         require(address(this).balance >= PrizePool);
         require(publicSaleStatus == false);
@@ -424,6 +534,7 @@ contract PurgeGameSeasonTwo is ERC721, Ownable
         REVEAL = _REVEAL;
         baseTokenURI = updatedURI;
         revealTime = uint32(block.timestamp);
+        startingPrizePool = PrizePool;
     }
 
     function setTokenUri(string calldata updatedURI) external onlyOwner
