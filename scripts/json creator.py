@@ -1,18 +1,18 @@
 import json, sqlite3
 
 
-ifps = 'ipfs://QmNvzUEtxqWn7PnV88PgVQwPPsK7kx9oQq1wKjKWPuv3Eg/'
+ifps = 'ipfs://QmUm7esbwi1MKAeB7qcYkSWTC7p5wWCyZTTFCUNGRMhbcH/'
 conn = sqlite3.connect('PurgeGame.db')
 cur = conn.cursor()
 cur.execute("""
     SELECT tokenId,trait1,trait2,trait3,trait4
     FROM tokens
-    WHERE tokenId < 40000""")
+    WHERE tokenId < 30000""")
 tokens = cur.fetchall()
 cur.execute("""
     SELECT MAX(tokenId)
     FROM tokens
-    WHERE tokenId < 40000""")
+    WHERE tokenId < 30000""")
 tokensMinted = cur.fetchone()[0]
 
 
