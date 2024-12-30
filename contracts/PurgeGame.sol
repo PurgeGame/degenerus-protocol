@@ -105,7 +105,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         RequireCoinFunds(_number);
         PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
         _mintToken(_number);
-        addToPrizePool(_number);
     }
     
     function _mintToken(uint16 _number) private
@@ -127,6 +126,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         RequireCorrectFunds(_number);
         codeMintAndPurge(_number);
+        addToPrizePool(_number);
         if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender) payReferrer(_number, referrer);
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _number * cost * 100);
     }
@@ -142,8 +142,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         RequireSale(_number);
         require(MAPtokens + _number < 24421, "24420 max Mint and Purges");
-        initAddress(msg.sender);
-        addToPrizePool(_number);
+        initAddress(msg.sender);   
         uint16 mapTokenNumber = 40001 + MAPtokens;
         for(uint16 i= 0; i < _number; i++)
         {
@@ -213,14 +212,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
     }
 
 // Records the purger's ID for each trait purged. This record will be used to deliver payouts when the game is over.
-    // function purgeWrite(uint16 _tokenId, uint24 sender) private
-    // {
-    //     for(uint8 c = 0; c < 4; c++)
-    //     {
-    //         traitPurgeAddress[uint8(tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c * 64)].push(sender);
-    //     }
-    // }
-
     function purgeWrite(uint24 traits, uint24 sender) private
     {
         for(uint8 c = 0; c < 4; c++)
@@ -253,7 +244,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
                 
             }
         }
-
     }
 
 // Pays the exterminator 10% of the prize pool minus the MAP Jackpot.
@@ -360,7 +350,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // This ether is locked into the contract and can only be released by winning the game.
     function addToPrizePool(uint16 _number) private
     {
-        PrizePool += cost * _number / 2;
+        PrizePool += cost * _number;
     }
 
 // Pays $PURGED to referrers when their referrals mint tokens.
