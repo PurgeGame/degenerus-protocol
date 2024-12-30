@@ -1,27 +1,39 @@
 import sqlite3,urllib.request
 import json, time
 from web3 import Web3
+
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 
 offset = 420
 
 address = os.environ.get("ADDRESS")
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
-ETHERSCAN_API_ONE = os.environ.get("ETHERSCAN_API_ONE")
+
 
 alchemy_url = 'https://eth-rinkeby.alchemyapi.io/v2/'+ALCHEMY_API
 web3 = Web3(Web3.HTTPProvider(alchemy_url))
+null = None
 
+# ETHERSCAN_API_ONE = os.environ.get("ETHERSCAN_API_ONE")
+# ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
+# with urllib.request.urlopen(ESAPI) as url:
+#     data = url.read().decode()
+#     contractabi = json.loads(data)['result']
+# print(contractabi)
+# with open('abi.txt', 'w') as f:
+#     f.write(contractabi)
 
-ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
-with urllib.request.urlopen(ESAPI) as url:
-    data = url.read().decode()
-    contractabi = json.loads(data)['result']
+with open('abi.txt') as f:
+    contractabi = f.read()
+
 address = Web3.toChecksumAddress(address)
 contract = web3.eth.contract(address= address, abi=contractabi)
 creation = contract.events.OwnershipTransferred()
 creFilter = creation.createFilter(fromBlock = 0)
+
 cre = creFilter.get_all_entries()
 startblock = cre[0]['blockNumber']
 
@@ -34,28 +46,6 @@ def purgetime(block):
     # purgeTime = purgeTime['timestamp']
     purgeTime = int(time.time())
     return (purgeTime)
-
-def getTransferAll():
-    Transfer = contract.events.Transfer()
-    Transfers = []
-    currentblock = web3.eth.block_number
-    fromblock = startblock
-    while fromblock <= currentblock:
-        toblock = min(fromblock + 1999, currentblock)
-        filter = Transfer.createFilter(fromBlock = fromblock, toBlock = toblock)
-        Transfers += filter.get_all_entries()
-        fromblock = toblock+1
-        print(len(Transfers))
-    return (Transfers)
-
-def getTransferNew(fromblock, filter):
-    Transfer = contract.events.Transfer()
-    if filter == 0:
-        filter = Transfer.createFilter(fromBlock = fromblock)
-        Transfers = filter.get_all_entries()
-    else:
-        Transfers = filter.get_new_entries()
-    return(Transfers, filter)
 
 def getMAP():
     MintAndPurge = contract.events.MintAndPurge()
@@ -81,32 +71,17 @@ def getMints():
         fromblock = toblock+1
     return(mints)
 
-def getReferrals(new, filter,fromblock):
-    Referred = contract.events.Referred()
-    if new == 0:
-        conn = sqlite3.connect('PurgeGame.db')
-        cur = conn.cursor()
-        cur.execute('DROP TABLE IF EXISTS referrals')
-        cur.execute("""CREATE TABLE referrals (
-        address TEXT,
-        referralcode TEXT,
-        referee TEXT,
-        number INTEGER
-        )""")
-        conn.commit
-        conn.close
-        filter = Referred.createFilter(fromBlock = fromblock)
-        ref = filter.get_all_entries()
-    else:
-        filter = Referred.createFilter(fromBlock = fromblock)
-        ref = filter.get_all_entries()
-    return(ref, filter)
-
 def importmint():
     conn = sqlite3.connect('PurgeGame.db')
     cur = conn.cursor()
     mints = getMints()
     totalMints = contract.caller.totalMinted()
+    cur.execute("""
+        SELECT COUNT(tokenId)
+        FROM tokens
+        WHERE tokenId > 64500 """)
+    bombcount = cur.fetchone()[0]
+    totalMints-= bombcount
     c=0
     while c < len(mints):
         tokenTraits = mints[c]['args']['tokenTraits']
@@ -115,18 +90,19 @@ def importmint():
         tokenTraitThree = ((tokenTraits & 0x3f000) >> 12) + 128
         tokenTraitFour = ((tokenTraits & 0xfc0000) >> 18) + 192
         tokenId = mints[c]['args']['tokenId']
-        if tokenId-offset < 1 :
-            realtokenId = totalMints - (offset - tokenId)
-        else:
-            realtokenId = tokenId - offset
-        holder = mints[c]['args']['from']
-        tokenData = [str(realtokenId),tokenTraitOne,tokenTraitTwo,tokenTraitThree,tokenTraitFour]
-        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
-        {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),
-        'holderaddress':holder,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/' + tokenData[0] +'.png'})
+        if tokenId < 64501:
+            if tokenId-offset < 1 :
+                realtokenId = totalMints - (offset - tokenId)
+            else:
+                realtokenId = tokenId - offset
+            holder = mints[c]['args']['from'] #This is bugged but it doesn't really matter
+            tokenData = [str(realtokenId),tokenTraitOne,tokenTraitTwo,tokenTraitThree,tokenTraitFour]
+            cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
+            {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),'price': null,
+            'holderaddress':holder,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/' + tokenData[0] +'.png'})
         c+=1
     conn.commit()
-    conn.close
+    conn.close()
 
 def importmap():
     conn = sqlite3.connect('PurgeGame.db')
@@ -144,12 +120,12 @@ def importmap():
         block = MintAndPurges[c]['blockNumber']
         purgeTime = purgetime(block)
         tokenData = [str(tokenId),tokenTraitOne,tokenTraitTwo,tokenTraitThree,tokenTraitFour,purgeAddress,purgeTime]
-        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
-        {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),
+        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
+        {'tokenId':int(tokenData[0]), 'trait1':int(tokenData[1]), 'trait2':int(tokenData[2]),'trait3':int(tokenData[3]),'trait4': int(tokenData[4]),'price': null,
         'holderaddress':0,'purgeaddress':tokenData[5],'purgetime':int(tokenData[6]),'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/' + tokenData[0] +'.png'})
         c+=1
     conn.commit()
-    conn.close  
+    conn.close()
 
 
 def countTraits():
@@ -191,8 +167,16 @@ def countTraits():
         cur.execute(
             """UPDATE traits SET total = ?, remaining = ?
             WHERE trait = ?""",(traitcount[0],traitcount[0],c))
+    cur.execute("""
+        SELECT COUNT(trait1)
+        FROM tokens
+        WHERE trait1 = 256""")
+    traitcount = cur.fetchone()
+    cur.execute(
+        """UPDATE traits SET total = ?, remaining = ?
+        WHERE trait = ?""",(traitcount[0],traitcount[0],256))
     conn.commit()
-    conn.close 
+    conn.close()
 
 def removetraits(_tokenId,conn):
     cur = conn.cursor()
@@ -229,8 +213,7 @@ def removetraits(_tokenId,conn):
             cur.execute(
                 """UPDATE traits SET remaining = ?
                 WHERE trait = ?""",(traitremaining,_trait))
-    conn.commit()
-    conn.close
+
 
 def mapPurge():
     conn = sqlite3.connect('PurgeGame.db')
@@ -242,56 +225,9 @@ def mapPurge():
     maps = cur.fetchall()
     for row in maps:
         removetraits(row[0], conn)
-    conn.close
+    conn.commit()
+    conn.close()
 
-def transfer():
-    transfer = getTransferAll()
-    filter = 0
-    x=60
-    while 1:
-        if len(transfer) > 0:
-            conn = sqlite3.connect('PurgeGame.db')
-            cur = conn.cursor()
-        c=0
-        while c< len(transfer):
-            tokenId = transfer[c]['args']['tokenId']
-            cur.execute("""
-            SELECT * 
-            FROM tokens 
-            WHERE tokenId = ?""",(tokenId,))
-            token = cur.fetchone()
-            if token == None:
-                cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
-                {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
-                cur.execute("UPDATE traits SET total =total + 1, remaining = remaining +1 WHERE trait = 256")
-                conn.commit()
-            if transfer[c]['args']['to'] == '0x0000000000000000000000000000000000000000':
-                block = transfer[c]['blockNumber']
-
-                purgeTime = purgetime(block)
-                if token[8] ==0:
-                    cur.execute(
-                        """UPDATE tokens SET purgetime = ?, purgeaddress = ?, holderaddress = 0
-                        WHERE tokenId = ?""",(purgeTime,transfer[c]['args']['from'],tokenId))
-                    removetraits(transfer[c]['args']['tokenId'],conn)
-            else:
-                cur.execute(
-                    """UPDATE tokens SET holderaddress = ?
-                    WHERE tokenId = ?""",(transfer[c]['args']['to'],tokenId))
-            fromblock = transfer[c]['blockNumber'] +1
-            c+=1
-        conn.commit()
-        conn.close
-        time.sleep(30)
-        if x == 60:
-            if contract.caller.gameOver() == True:
-                break
-            else:
-                x=0
-        x+=1
-        transfer = getTransferNew(fromblock, filter)
-        filter = transfer[1]
-        transfer = transfer[0]
 
 def prizepool():
     eth = 1000000000000000000
@@ -303,7 +239,7 @@ def prizepool():
     cur.execute("""
         SELECT COUNT(tokenId)
         FROM tokens
-        WHERE tokenId >40000 AND tokenId < 64421
+        WHERE tokenId >30000 AND tokenId < 64421
         """)
     mapTokens = int(cur.fetchone()[0])
     mapJackpot = mapTokens * cost / 20
@@ -313,55 +249,11 @@ def prizepool():
     cur.execute("INSERT INTO prizepool VALUES(:total, :grandprize, :mapjackpot, :remaining)",
     {'total':prizepool,'grandprize':grandPrize,'mapjackpot':mapJackpot,'remaining':remaining})
     conn.commit()
-    conn.close
+    conn.close()
 
-def referral():
-    fromblock = 0
-    referral = getReferrals(0,0,fromblock)
-    conn = sqlite3.connect('PurgeGame.db')
-    cur = conn.cursor()
-    filter = referral[1]
-    referral = referral[0]
-    end =0
-    x = 0
-    while 1:
-        if len(referral) > 0:
-            conn = sqlite3.connect('PurgeGame.db')
-            cur = conn.cursor()
-        if len(referral) > 9000:
-            end = referral[9000]['blockNumber']
-        c= 0
-        while c < len(referral):
-            if referral[c]['blockNumber']-1 == end:
-                fromblock = end +1
-                referral = getReferrals(1,filter,fromblock)[0]
-                if len(referral) > 9000:
-                    end = referral[9000]['blockNumber']
-                c=0
-            else:
-                referrer = referral[c]['args']['referrer']
-                referralCode = referral[c]['args']['referralCode']
-                referee = referral[c]['args']['from']
-                number = referral[c]['args']['number']
-                cur.execute("INSERT INTO referrals VALUES(:address,:referralcode,:referee,:number)",
-                    {'address':referrer,'referralcode':referralCode,'referee':referee,'number':number})
-                fromblock = referral[c]['blockNumber'] +1
-            c+=1
-        conn.commit() 
-        conn.close
-        time.sleep(120)
-        if x == 15:
-            if contract.caller.REVEAL() == True:
-                break
-            else:
-                x=0
-        x+=1
-        referral = getReferrals(1, filter,fromblock)[0]
-# referral()
 importmint()
 importmap()
 countTraits()
 mapPurge()
 prizepool()
 print('done')
-transfer()

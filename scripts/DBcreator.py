@@ -1,10 +1,12 @@
-from json.tool import main
 import sqlite3,csv
 import discord
 import os
+from dotenv import load_dotenv
+load_dotenv()
 token = os.environ.get("DISCORD_BOT_SECRET")
 client = discord.Client()
 traitmap = 'traitmap.csv'
+null = None
 conn = sqlite3.connect('PurgeGame.db')
 cur = conn.cursor()
 
@@ -13,6 +15,7 @@ cur.execute('DROP TABLE IF EXISTS traits')
 cur.execute('DROP TABLE IF EXISTS discord')
 cur.execute('DROP TABLE IF EXISTS referrals')
 cur.execute('DROP TABLE IF EXISTS prizepool')
+cur.execute('DROP TABLE IF EXISTS leaderboard')
 
 
 
@@ -22,7 +25,9 @@ cur.execute("""CREATE TABLE traits (
     shape TEXT,
     total INTEGER,
     remaining INTEGER,
+    floor REAL,
     image TEXT,
+    winningtrait INTEGER,
     discordrole INTEGER,
     PRIMARY KEY(trait)
     )""")
@@ -33,6 +38,7 @@ cur.execute("""CREATE TABLE tokens (
     trait2 INTEGER,
     trait3 INTEGER,
     trait4 INTEGER,
+    price REAL,
     holderaddress TEXT,
     purgeaddress TEXT,
     purgetime INTEGER,
@@ -51,7 +57,9 @@ cur.execute("""CREATE TABLE tokens (
 
 cur.execute("""CREATE TABLE discord (
     address TEXT,
-    discord TEXT,
+    id TEXT,
+    username TEXT,
+    discriminator TEXT,
     PRIMARY KEY(address)
     )""")
 
@@ -69,6 +77,12 @@ cur.execute("""CREATE TABLE prizepool (
     remaining REAL
     )""")
 
+cur.execute("""CREATE TABLE leaderboard (
+    address TEXT,
+    total INTEGER,
+    PRIMARY KEY(address)
+    )""")
+
 with open(traitmap,'r') as traitmapcsvfile:
     traitmapcsvreader = csv.reader(traitmapcsvfile)
     traitColor = next(traitmapcsvreader)
@@ -79,10 +93,10 @@ with open(traitmap,'r') as traitmapcsvfile:
             for x in range(0,8):
                 shape = traitShape[x]
                 trait = count * 64 + c * 8 + x
-                traitimage = 'https://purge.game/img/traits/' + color + "_" + shape +'.png'
+                traitimage = 'https://purge.game/img/' + color + "_" + shape +'.png'
                 traitimage = traitimage.lower()
-                cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:image,:discordrole)",{'trait':trait,'color':color,'shape':shape,'remaining':0,'total':0,'image': traitimage,'discordrole':0})
-    cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:image,:discordrole)",{'trait':256,'color':'Bomb','shape':'Token','remaining':0,'total':0,'image': 'https://purge.game/img/tokens/bomb.png','discordrole':0})
+                cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:winningtrait,:discordrole)",{'trait':trait,'color':color,'shape':shape,'remaining':0,'total':0,'floor': null,'image': traitimage,'winningtrait':0, 'discordrole':0})
+    cur.execute("INSERT INTO traits VALUES(:trait,:color,:shape,:remaining,:total,:floor,:image,:winningtrait,:discordrole)",{'trait':256,'color':'Bomb','shape':'Token','remaining':0,'total':0,'floor':null,'image': 'https://purge.game/img/tokens/bomb.png','winningtrait':0,'discordrole':0})
     conn.commit()
     
 @client.event

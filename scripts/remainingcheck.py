@@ -2,7 +2,8 @@ import sqlite3,urllib.request
 import json, time
 from web3 import Web3
 import os
-
+from dotenv import load_dotenv
+load_dotenv()
 
 address = os.environ.get("ADDRESS")
 ALCHEMY_API = os.environ.get("ALCHEMY_API")
@@ -12,10 +13,13 @@ alchemy_url = 'https://eth-rinkeby.alchemyapi.io/v2/'+ALCHEMY_API
 web3 = Web3(Web3.HTTPProvider(alchemy_url))
 
 
-ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
-with urllib.request.urlopen(ESAPI) as url:
-    data = url.read().decode()
-    contractabi = json.loads(data)['result']
+# ESAPI = 'https://api-rinkeby.etherscan.io/api?module=contract&action=getabi&address=' + address + '&apikey=' + ETHERSCAN_API_ONE
+# with urllib.request.urlopen(ESAPI) as url:
+#     data = url.read().decode()
+#     contractabi = json.loads(data)['result']
+
+with open('abi.txt') as f:
+    contractabi = f.read()
 address = Web3.toChecksumAddress(address)
 contract = web3.eth.contract(address= address, abi=contractabi)
 
