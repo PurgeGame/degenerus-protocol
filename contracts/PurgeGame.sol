@@ -22,10 +22,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
     bool public REVEAL;
     bool public gameOver;
     bool private purging;
-    bool private nuke;
 
     uint16 private offset;
-    uint16 private bombNumber = 64501;
     uint16 public MAPtokens;
     uint16 public totalMinted;
     
@@ -134,12 +132,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         RequireCorrectFunds(_number);
         codeMintAndPurge(_number);
-<<<<<<< HEAD
-        addToPrizePool(_number);
-        if (referralCode[referrer] != 0 && indexAddress[referralCode[referrer]] != msg.sender) payReferrer(_number, referrer);
-=======
         if (referralCode[referrer] != 0) payReferrer(_number, referrer);
->>>>>>> 993f17cd4b3290f4a9248ccfd0dbec80c65e6d45
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _number * cost * 100);
     }
 
@@ -152,19 +145,12 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     function codeMintAndPurge(uint16 _number) private
     {
-<<<<<<< HEAD
-        RequireSale(_number);
-        require(MAPtokens + _number < 24421, "24420 max Mint and Purges");
-        initAddress(msg.sender);   
-        uint16 mapTokenNumber = 40001 + MAPtokens;
-=======
         require (whitelistSaleStatus == true || publicSaleStatus == true || coinMintStatus == true, 'Mint inactive');
         RequireHundredMax(_number);
         noContract();
         require(MAPtokens + _number < 34421, "34420 max Mint and Purges");
         initAddress(msg.sender);
         uint16 mapTokenNumber = 30001 + MAPtokens;
->>>>>>> 993f17cd4b3290f4a9248ccfd0dbec80c65e6d45
         for(uint16 i= 0; i < _number; i++)
         {
             uint24 traits = setTraits(mapTokenNumber + i); 
@@ -258,7 +244,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         traitRemaining[trait] -=1;
         if (traitRemaining[trait] == 0)
         {   
-            if (nuke == true) require(false,"cannot nuke the last token of a trait");
             if (gameOver == false)
             {
                 gameOver = true;
@@ -309,39 +294,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         return(traitPurgeAddress[uint8(random)][randomHashTwo]);
     }
 
-// Airdrops a bomb token to a random address which has purged a token at some point
-    function bombAirdrop() external onlyOwner
-    {
-        require(REVEAL);
-        require(gameOver == false);
-        /*  THIS WILL BE IN THE REAL CONTRACT
-        if (bombNumber == 64501) {require(block.timestamp > revealTime + 1209600);}
-        else {require(block.timestamp > revealTime + 86400);}
-        */
-        address recipient = indexAddress[getRandomPurge()];
-        _mint(recipient,bombNumber);
-        _balances[recipient] += 1;
-        bombNumber +=1;
-        revealTime = uint32(block.timestamp);
-    }
-
-// Using the bomb allows the holder to purge any one remaining token
-// Prizes for the purge go to the owner of the bombed token
-    function nukeToken(uint16 bombTokenId, uint16 targetTokenId) external
-    {
-        require(bombTokenId > 64500, 'that is not a bomb');
-        require(targetTokenId < 64500,'cannot bomb bombs');
-        require(ownerOf(bombTokenId) == msg.sender, 'you do not own that bomb');
-        purging = true;
-        _burn(bombTokenId);
-        _burn(targetTokenId);
-        purging = false;
-        emit TokenBombed(targetTokenId);
-        targetTokenId = realTraitsFromTokenId(targetTokenId);
-        nuke = true;
-        purgeTraits(targetTokenId);
-        nuke = false;
-    }
 
 // Requirements for different mint types
 
@@ -405,7 +357,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         return(_tokenId);
     }
 
-    event TokenBombed(uint16 tokenId);
+
     event MintAndPurge(uint16 tokenId, uint24 tokenTraits, address from);
     event TokenMinted(uint16 tokenId, uint24 tokenTraits, address from);
     event Referred(string referralCode, address referrer, uint16 number, address from);
