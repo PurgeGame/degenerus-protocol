@@ -116,10 +116,6 @@ def transfer():
                     FROM tokens 
                     WHERE tokenId = ?""",(tokenId,))
                     token = cur.fetchone()
-                    if token == None:
-                        cur.execute ("INSERT INTO tokens VALUES (:tokenId,:trait1,:trait2,:trait3,:trait4,:price,:holderaddress,:purgeaddress, :purgetime, :trait1purge,:trait2purge,:trait3purge,:trait4purge,:image)", 
-                        {'tokenId':tokenId, 'trait1':256, 'trait2':256,'trait3':256,'trait4': 256,'price':null,'holderaddress':0,'purgeaddress':0,'purgetime':0,'trait1purge':0,'trait2purge':0,'trait3purge':0,'trait4purge':0,'image':'https://purge.game/img/tokens/bomb.png'})
-                        cur.execute("UPDATE traits SET total =total + 1, remaining = remaining +1 WHERE trait = 256")
                     if transfer[c]['args']['to'] == '0x0000000000000000000000000000000000000000':
                         block = transfer[c]['blockNumber']
 
@@ -137,12 +133,13 @@ def transfer():
                 c+=1
             conn.commit()
             conn.close()
-        time.sleep(30)
+
         if x == 60:
             if contract.caller.gameOver() == True:
                 break
             else:
                 x=0
+        time.sleep(30)
         x+=1
         transfer = getTransferNew(fromblock, filter)
         filter = transfer[1]
