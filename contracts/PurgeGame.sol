@@ -16,9 +16,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 {
     
     bool private paidJackpot;
-    bool public coinMintStatus;
     bool public publicSaleStatus;
-    bool public whitelistSaleStatus;
     bool public REVEAL;
     bool public gameOver;
     bool private purging;
@@ -77,7 +75,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(bytes(_referralCode).length != 0, "Input your desired code");
         require(bytes(_referralCode).length <= 40, "Too long");
         require(referralCode[_referralCode] == 0, "Referral code is taken");
-        noContract();
         initAddress(msg.sender);
         referralCode[_referralCode] = addressIndex[msg.sender];
     }
@@ -91,11 +88,9 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function mint(uint16 _number, string calldata referrer) external payable 
      {
         RequireCorrectFunds(_number);
-        if (whitelistSaleStatus == true && publicSaleStatus == false) require (addressIndex[msg.sender] <= 3000 && addressIndex[msg.sender] > 0, "You are not whitelisted");
-        else require(publicSaleStatus == true, 'Public sale inactive');
+        require(publicSaleStatus == true, 'Public sale inactive');
         require(totalMinted + _number < 29421, "Max tokens reached");
         RequireHundredMax(_number);
-        noContract();
         _mintToken(_number);
         if (referralCode[referrer] != 0) payReferrer(_number, referrer);
         addToPrizePool(_number);
@@ -104,10 +99,9 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Mint with $PURGED.
     function coinMint(uint16 _number) external
     {
-        require(coinMintStatus == true, "Coin mints not currently available");
+        require(publicSaleStatus == true, 'Public sale inactive');
         require(totalMinted + _number < 29421, "Max tokens reached");
         RequireHundredMax(_number);
-        noContract();
         RequireCoinFunds(_number);
         PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
         _mintToken(_number);
@@ -145,9 +139,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     function codeMintAndPurge(uint16 _number) private
     {
-        require (whitelistSaleStatus == true || publicSaleStatus == true || coinMintStatus == true, 'Mint inactive');
+        require (publicSaleStatus == true, 'Mint inactive');
         RequireHundredMax(_number);
-        noContract();
         require(MAPtokens + _number < 34421, "34420 max Mint and Purges");
         initAddress(msg.sender);
         uint16 mapTokenNumber = 30001 + MAPtokens;
@@ -198,7 +191,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Burns tokens and creates payout tickets for each trait purged, then prints $PURGED.
     function purge(uint16[] calldata _tokenIds) external  
     { 
-        noContract();
         require(gameOver == false, "Game Over");
         require(REVEAL, "No purging before reveal");
         initAddress(msg.sender);
@@ -208,7 +200,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         {
             _tokenId = _tokenIds[i];
             require(ownerOf(_tokenId) == msg.sender, "You do not own that token");
-            require(_tokenId <= 64500, "You cannot purge bombs");
             _burn(_tokenId);
             _tokenId = realTraitsFromTokenId(_tokenId);
             purgeWrite(tokenTraits[_tokenId], addressIndex[msg.sender]);
@@ -276,8 +267,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require(paidJackpot == false);
         require(publicSaleStatus == false);
-        require(whitelistSaleStatus == false);
-        require(coinMintStatus == false);
         address payable winnerAddress = payable(indexAddress[getRandomPurge()]);
         PrizePool -= MAPtokens * cost / 20;
         paidJackpot = true;
@@ -306,11 +295,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
     function onlyBeforeReveal() view private
     {
         require(REVEAL == false);
-    }
-
-    function noContract() view private
-    {
-        require(tx.origin == msg.sender, 'no hax plz');
     }
 
     function RequireCorrectFunds(uint16 _number) view private
@@ -370,11 +354,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         cost = _newCost;
     }
 
-    function setCoinMintStatus(bool _status) external onlyOwner
-    {
-        onlyBeforeReveal();
-        coinMintStatus = _status;
-    }
 
     function setPublicSaleStatus(bool _status) external onlyOwner 
     {
@@ -382,11 +361,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         publicSaleStatus = _status;
     }
 
-    function setWhitelistSaleStatus(bool _status) external onlyOwner
-    {
-        onlyBeforeReveal();
-        whitelistSaleStatus = _status;
-    }
 
     function reveal(bool _REVEAL, string calldata updatedURI) external onlyOwner 
     {
@@ -395,8 +369,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(offset != 0);
         require(address(this).balance >= PrizePool);
         require(publicSaleStatus == false);
-        require(whitelistSaleStatus == false);
-        require(coinMintStatus == false);
         REVEAL = _REVEAL;
         baseTokenURI = updatedURI;
         revealTime = uint32(block.timestamp);
