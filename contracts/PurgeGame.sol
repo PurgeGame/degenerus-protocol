@@ -33,6 +33,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     address private purgedCoinContract = 0x3b7e01469d545B187ef526f04A506B7D6F001a74;
     
     uint16[256] public traitRemaining;
+    uint16[80] public dailyPurgeCount;
 
     mapping(uint16 => uint24) tokenTraits;
     mapping(uint8 => uint24[]) traitPurgeAddress;
@@ -210,15 +211,21 @@ contract PurgeGameBetaTest is ERC721, Ownable
         if (gameOver == true) gameEndTime = uint32(block.timestamp);
     }
 
-// Records the purger's ID for each trait purged. This record will be used to deliver payouts when the game is over.
-    function purgeWrite(uint24 traits, uint24 sender) private
-    {
-        for(uint8 c = 0; c < 4; c++)
-        {
-            traitPurgeAddress[uint8(traits >> (c * 6) & 0x3f) + (c << 6)].push(sender);
+    function purgeWrite(uint24 traits, uint24 sender) private {
+        uint8[4] memory traitIndices;
+        traitIndices[0] = uint8(traits & 0x3f);
+        traitIndices[1] = uint8((traits >> 6) & 0x3f);
+        traitIndices[2] = uint8((traits >> 12) & 0x3f);
+        traitIndices[3] = uint8((traits >> 18) & 0x3f);
+
+        dailyPurgeCount[traitIndices[0] % 8] += 1;
+        dailyPurgeCount[traitIndices[1] / 8 + 8] += 1;
+        dailyPurgeCount[traitIndices[1] + 16] += 1;
+
+        for (uint8 c = 0; c < 4; c++) {
+            traitPurgeAddress[traitIndices[c] + 64 * c].push(sender);
         }
     }
-
 // Records the removal of a token's traits from the game.
     function purgeTraits(uint16 _tokenId) private
     {
