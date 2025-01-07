@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
-import "./ERC721PURGE.sol";
-import "./Ownable.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @custom:security-contact purgegamenft@gmail.com
 interface PurgedCoinInterface 
@@ -10,6 +10,13 @@ interface PurgedCoinInterface
     function mintFromPurge(address yourAddress, uint256 _amount) external;
     function burnToMint(address yourAddress, uint256 _amount) external;
     function balanceOf(address account) external view returns (uint256);
+}
+
+interface IERC20 {
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+    function allowance(address owner, address spender) external view returns (uint256);
 }
 
 contract PurgeGameBetaTest is ERC721, Ownable
@@ -20,6 +27,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     bool public REVEAL;
     bool public gameOver;
     bool private purging;
+    uint8 private dailyJackpotCounter;
 
     uint16 private offset;
     uint16 public MAPtokens;
@@ -29,8 +37,10 @@ contract PurgeGameBetaTest is ERC721, Ownable
 
     uint32 public revealTime;
     uint32 public gameEndTime;
+    uint32 public dailyJackpotTime;
 
     address private purgedCoinContract = 0x3b7e01469d545B187ef526f04A506B7D6F001a74;
+    address public usdcTokenAddress = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     
     uint16[256] public traitRemaining;
     uint16[80] public dailyPurgeCount;
@@ -40,11 +50,13 @@ contract PurgeGameBetaTest is ERC721, Ownable
     mapping(uint24 => address) indexAddress;
     mapping(address => uint24) addressIndex;
     mapping(string => uint24) referralCode;
-
+    mapping(uint24 => uint32) claimableWinnings;
 
     string public baseTokenURI = "ipfs://QmdxAQbPoqom3EuNoBZGSonjvv5afWDyo8YFaNoscNLcTV/";
-    uint256 public cost = .0001 ether; 
-    uint256 public PrizePool = 0 ether;
+   
+    uint256 public cost = 100; 
+    uint256 public PrizePool = 0;
+    uint256 public startingPrizePool = 0;
 
     constructor() ERC721("Purge Game Beta Test", "PURGEGAMEBETA") {}
     
@@ -86,16 +98,17 @@ contract PurgeGameBetaTest is ERC721, Ownable
     }
 
 // Mint function.
-    function mint(uint16 _number, string calldata referrer) external payable 
-     {
-        RequireCorrectFunds(_number);
-        require(publicSaleStatus == true, 'Public sale inactive');
-        require(totalMinted + _number < 29421, "Max tokens reached");
-        RequireHundredMax(_number);
-        _mintToken(_number);
-        if (referralCode[referrer] != 0) payReferrer(_number, referrer);
-        addToPrizePool(_number);
-    }
+
+        function mint(uint16 _number, string calldata referrer) external 
+        {
+            require(publicSaleStatus == true, 'Public sale inactive');
+            require(totalMinted + _number < 29421, "Max tokens reached");
+            RequireHundredMax(_number);
+            usdcRecieve(_number);
+            _mintToken(_number);
+            if (referralCode[referrer] != 0) payReferrer(_number, referrer);
+            addToPrizePool(_number);
+        }
 
 // Mint with $PURGED.
     function coinMint(uint16 _number) external
@@ -104,7 +117,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(totalMinted + _number < 29421, "Max tokens reached");
         RequireHundredMax(_number);
         RequireCoinFunds(_number);
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 1000);
+        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost);
         _mintToken(_number);
     }
     
@@ -118,23 +131,22 @@ contract PurgeGameBetaTest is ERC721, Ownable
             setTraits(tokenId);
             emit TokenMinted(tokenId, tokenTraits[tokenId], msg.sender);
         }
-        _balances[msg.sender] += _number;
         totalMinted += _number;
     }
 
 // Creates a payout ticket for a token without actally minting that token to save gas.
-    function mintAndPurge(uint16 _number, string calldata referrer) external payable 
+    function mintAndPurge(uint16 _number, string calldata referrer) external  
     {
-        RequireCorrectFunds(_number);
+        usdcRecieve(_number);
         codeMintAndPurge(_number);
         if (referralCode[referrer] != 0) payReferrer(_number, referrer);
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _number * cost * 100);
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _number * cost);
     }
 
     function coinMintAndPurge(uint16 _number) external 
     {
         RequireCoinFunds(_number);
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 900);
+        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 9 / 10);
         codeMintAndPurge(_number);
     }
 
@@ -153,6 +165,13 @@ contract PurgeGameBetaTest is ERC721, Ownable
         }
         addToPrizePool(_number);
         MAPtokens += _number;   
+    }
+
+    function usdcRecieve(uint16 _number)
+    {
+        uint256 totalCost = _number * cost * 1000000;
+        RequireCorrectFunds(_number, totalCost);
+        IERC20(usdcTokenAddress).transferFrom(msg.sender, address(this), totalCost);
     }
 
 // Generates token traits and adds the trait info to storage if minting an actual token.
@@ -207,8 +226,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
             purgeTraits(_tokenId);     
         }      
         purging = false;  
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _tokenIds.length * cost * 100);
-        if (gameOver == true) gameEndTime = uint32(block.timestamp);
+
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(msg.sender, _tokenIds.length * cost / 10);
     }
 
     function purgeWrite(uint24 traits, uint24 sender) private {
@@ -245,8 +264,8 @@ contract PurgeGameBetaTest is ERC721, Ownable
             if (gameOver == false)
             {
                 gameOver = true;
+                gameEndTime = uint32(block.timestamp);
                 payout(trait);  
-                
             }
         }
     }
@@ -257,14 +276,13 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         uint16 totalPurges = uint16(traitPurgeAddress[trait].length - 1);
         if (totalPurges == 0) totalPurges = 1;
-        uint256 paidMAPJackpot = MAPtokens * cost / 20;
-        uint256 grandPrize = (PrizePool - paidMAPJackpot) / 10;
+        uint256 grandPrize = PrizePool / 10;
         uint256 normalPayout = (PrizePool - grandPrize) / totalPurges;
         PrizePool = 0;
-        payable(msg.sender).transfer(grandPrize);
+        claimableWinnings[addressIndex[msg.sender]] += grandPrize;
         for (uint16 i = 0; i < totalPurges; i++)
         { 
-            payable(indexAddress[traitPurgeAddress[trait][i]]).transfer(normalPayout);
+            claimableWinnings[traitPurgeAddress[trait][i]] += normalPayout;
         } 
 
     }
@@ -274,28 +292,93 @@ contract PurgeGameBetaTest is ERC721, Ownable
     {
         require(paidJackpot == false);
         require(publicSaleStatus == false);
-        address payable winnerAddress = payable(indexAddress[getRandomPurge()]);
-        PrizePool -= MAPtokens * cost / 20;
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(Owner(), PrizePool / 4);
+        startingPrizePool = PrizePool * 9 / 10;
+        PrizePool -= PrizePool / 10;
         paidJackpot = true;
-        winnerAddress.transfer(MAPtokens * cost / 20); 
+        claimableWinnings[randTraitTicket(getWinningTrait(5))] += startingPrizePool / 9;
     }
 
+    function payDailyJackpot() external onlyOwner {
+        require(dailyJackpotTime != 0);
+        require(block.timestamp >= dailyJackpotTime + 23 hours);
+        require(gameOver == false);
+        uint256 payout = startingPrizePool / 160;
+        PrizePool -= startingPrizePool / 40;
+        // Update claimable winnings for each winner
+        for (uint8 i = 1; i <= 4; i++) {
+            claimableWinnings[randTraitTicket(getWinningTrait(i))] += payout;
+        }
+        dailyJackpotCounter += 1;
+        if (dailyJackpotCounter == 40) {
+            gameOver = true;
+            gameEndTime = uint32(block.timestamp);
+            PrizePool = 0;
+        }
+    }
+
+    function getWinningTrait(uint8 quadrant) private view returns (uint8) {
+        uint16 maxCount;
+        uint8 winner;
+        uint8 start;
+        uint8 end;
+        uint8 randomNum;
+        if (quadrant < 4)
+        {
+            if (quadrant == 1) 
+            {
+                start = 0;
+                end = 8;
+            } else if (quadrant == 2) 
+            {
+                start = 8;
+                end = 16;
+            } else if (quadrant == 3) 
+            {
+                start = 16;
+                end = 80;
+            }
+            {
+                maxCount = dailyPurgeCount[start];
+                winner = start;
+                for (uint8 i = start + 1; i < end; i++) {
+                    if (dailyPurgeCount[i] > maxCount) {
+                        maxCount = dailyPurgeCount[i];
+                        winner = i;
+                    }
+                }
+            }
+            if (quadrant == 1) 
+            {
+                randomNum = uint8(uint256(keccak256(abi.encodePacked(block.timestamp, block.difficulty))) % 8);
+                return randomNum * 8 + winner;
+            } else if (quadrant == 2) 
+            {
+                randomNum = uint8(uint256(keccak256(abi.encodePacked(block.timestamp, block.difficulty))) % 8);
+                return winner * 8 + randomNum + 64;
+            } else if (quadrant == 3) 
+            {
+                randomNum = uint8(uint256(keccak256(abi.encodePacked(block.timestamp, block.difficulty))) % 64);
+                return randomNum + 192;
+            } 
+        } else
+        {
+            randomNum = uint8(uint256(keccak256(abi.encodePacked(block.timestamp, block.difficulty))) % 256);
+            return randomNum;
+        }
+    }
 // Picks a random address from all addresses which have purged, weighted by number of purges.
-    function getRandomPurge() private view returns(uint24)
-    {
-        uint24 random = uint24(uint(keccak256(abi.encodePacked(PrizePool,block.timestamp >> 5))));
-        uint16 randomHashTwo = uint16(random >> 8);
-        randomHashTwo = randomHashTwo % uint16(traitPurgeAddress[uint8(random)].length);
-        emit RandomPurge(uint8(random), randomHashTwo);
-        return(traitPurgeAddress[uint8(random)][randomHashTwo]);
+    function randTraitTicket(uint16 trait) private view returns (uint24) {
+        uint256 random = uint256(keccak256(abi.encodePacked(dailyPurgeCount[uint256(keccak256(abi.encodePacked(block.timestamp, block.difficulty))) % 256]))) % traitPurgeAddress[trait].length; 
+        emit RandomPurge(trait, random, traitPurgeAddress[trait][random]);
+        return traitPurgeAddress[trait][random];
     }
-
 
 // Requirements for different mint types
 
     function RequireHundredMax(uint16 _number) pure private
     {
-        require(_number <= 400, "Maximum of 400 mints allowed per tx");
+        require(_number <= 100, "Maximum of 100 mints allowed per tx");
         require(_number > 0);
     }
     
@@ -304,14 +387,19 @@ contract PurgeGameBetaTest is ERC721, Ownable
         require(REVEAL == false);
     }
 
-    function RequireCorrectFunds(uint16 _number) view private
+    function RequireCorrectFunds(uint16 _number, uint256 totalCost) view private
     {
-        require(msg.value == _number * cost, "Incorrect funds supplied");
+        // Check user's USDC balance
+        require(IERC20(usdcTokenAddress).balanceOf(msg.sender) >= totalCost, "Insufficient USDC balance");
+
+        // Check allowance
+        require(IERC20(usdcTokenAddress).allowance(msg.sender, address(this)) >= totalCost, "USDC allowance too low");
+
     }
 
     function RequireCoinFunds(uint16 _number) view private
     {
-        require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= _number * cost * 1000, "Not enough $PURGED");
+        require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= _number * cost, "Not enough $PURGED");
     }
 
 // Minting adds half of the mint cost to the prize pool.
@@ -324,7 +412,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
 // Pays $PURGED to referrers when their referrals mint tokens.
     function payReferrer(uint16 _number, string calldata referrer) private
     {
-        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[referralCode[referrer]], _number * cost * 50);
+        PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[referralCode[referrer]], _number * cost / 20);
         emit Referred(referrer, indexAddress[referralCode[referrer]], _number, msg.sender);
     }
 
@@ -352,7 +440,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
     event MintAndPurge(uint16 tokenId, uint24 tokenTraits, address from);
     event TokenMinted(uint16 tokenId, uint24 tokenTraits, address from);
     event Referred(string referralCode, address referrer, uint16 number, address from);
-    event RandomPurge(uint8 random, uint24 randomHashTwo);
+    event RandomPurge(uint16 trait, uint24 random, uint24 player);
 
 // Owner game-running functions.
     function setCost(uint _newCost) external onlyOwner 
@@ -374,11 +462,11 @@ contract PurgeGameBetaTest is ERC721, Ownable
         onlyBeforeReveal();
         require(paidJackpot == true);
         require(offset != 0);
-        require(address(this).balance >= PrizePool);
         require(publicSaleStatus == false);
         REVEAL = _REVEAL;
         baseTokenURI = updatedURI;
         revealTime = uint32(block.timestamp);
+        dailyJackpotTime = revealTime;
     }
 
     function setTokenUri(string calldata updatedURI) external onlyOwner
@@ -391,14 +479,6 @@ contract PurgeGameBetaTest is ERC721, Ownable
         purgedCoinContract = _purgedCoinContract;
     }
 
-// The only way for funds to leave the contract other than payout and payMapJackpot. 
-// This is only able to withdraw funds in excess of the prizepool.
-    function withdrawMyFunds(address payable _to) external onlyOwner 
-    {
-        require(address(this).balance > PrizePool, "No funds to withdraw");
-        _to.transfer(address(this).balance - PrizePool);    
-    }
-
     //totalSupply includes purged tokens before reveal.  
 
      function totalSupply() external view returns(uint256)
@@ -408,7 +488,16 @@ contract PurgeGameBetaTest is ERC721, Ownable
     }
 
 
-    receive () external payable  { }
+    receive() external payable {require(false, "No ETH allowed");}   
+
+    function claimWinnings() external 
+    {
+        player = indexAddress[msg.sender];
+        require (claimableWinnings[player] > 0, "No winnings to claim");
+        uint256 winnings = claimableWinnings[player] * 1000000;
+        claimableWinnings[player] = 0;
+        require(IERC20(usdcTokenAddress).transfer(msg.sender, winnings), "USDC transfer failed");
+    }
 
     function tokenURI(uint256 tokenId)
         public
