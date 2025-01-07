@@ -169,7 +169,7 @@ contract PurgeGameBetaTest is ERC721, Ownable
         MAPtokens += _number;   
     }
 
-    function usdcRecieve(uint16 _number)
+    function usdcRecieve(uint16 _number) private
     {
         uint256 totalCost = _number * cost * 1000000;
         RequireCorrectFunds(_number, totalCost);

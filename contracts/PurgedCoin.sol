@@ -9,16 +9,23 @@ contract Purged is ERC20, Ownable
 {
     constructor() ERC20("Purged Coin", "PURGED") {}
 
-    address[2] PurgeGameContract;
-    uint256 public bank = 1000000 ether;
-    uint32 starttime = 1648337132;
+    address[10] PurgeGameContract;
+    uint256 public bank = 400000000;
     
-    modifier onlyPurgeGameContract()
+    modifier onlyPurgeGameContract() 
     {
-        require(PurgeGameContract[0] == msg.sender || PurgeGameContract[1] == msg.sender, "Only Purge Game contract can call this function");
-         _;
+        bool isAuthorized = false;
+        for (uint8 i = 0; i < 10; i++) 
+        {
+            if (PurgeGameContract[i] == msg.sender) 
+            {
+                isAuthorized = true;
+                break;
+            }
+        }
+        require(isAuthorized, "Only Purge Game contract can call this function");
+        _;
     }
-
     function setPurgeGameAddress(address _purgeGameContract, uint8 season) external onlyOwner
     {
        PurgeGameContract[season] = _purgeGameContract;
@@ -39,18 +46,11 @@ contract Purged is ERC20, Ownable
         require (to.length == _amount.length);
         for (uint16 c = 0; c < to.length;c++)
         {
-            uint256 amount = _amount[c] * 1 ether;
+            uint256 amount = _amount[c] * 1000;
             require(amount <= bank);
-            _mint(to[c], amount);
             bank -= amount;
+            _mint(to[c], amount);
         }
-
-    }
-
-    function addToBank() external onlyOwner
-    {
-        bank += (block.timestamp - starttime) * 1000 ether / 24192;
-        starttime = uint32(block.timestamp);
     }
 
     function _beforeTokenTransfer(address from, address to, uint256 amount)
@@ -59,5 +59,8 @@ contract Purged is ERC20, Ownable
     {
         super._beforeTokenTransfer(from, to, amount);
     }
-
+    // Override the decimals function to set the number of decimals
+    function decimals() public view virtual override returns (uint8) {
+        return 3;
+    }
 }
