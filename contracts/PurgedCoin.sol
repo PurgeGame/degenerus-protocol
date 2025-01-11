@@ -5,7 +5,7 @@ pragma solidity ^0.8.2;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Purged is ERC20, Ownable
+abstract contract Purged is ERC20, Ownable
 {
     constructor() ERC20("Purged Coin", "PURGED") {}
 
@@ -53,12 +53,7 @@ contract Purged is ERC20, Ownable
         }
     }
 
-    function _beforeTokenTransfer(address from, address to, uint256 amount)
-        internal
-        override(ERC20)
-    {
-        super._beforeTokenTransfer(from, to, amount);
-    }
+    // Removed _beforeTokenTransfer function override as it is not needed
     // Override the decimals function to set the number of decimals
     function decimals() public view virtual override returns (uint8) {
         return 3;
