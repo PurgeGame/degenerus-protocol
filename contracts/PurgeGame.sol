@@ -36,7 +36,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
     uint24 public index;
 
     uint32 private offset;
-    uint32 public MAPtokens;
+    uint32 private MAPtokens;
     uint32 public totalMinted;
     uint32 public startingPrizePool;
     uint32 public PrizePool;
@@ -52,7 +52,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
 
     uint32[256] public traitRemaining;
     uint32[80] public dailyPurgeCount;
-    uint24[256] public totalCoinBurn;
+    uint32[256] public totalCoinBurn;
 
     mapping(address => bool) trustedAddresses;
     mapping(uint32 => uint24) tokenTraits;
@@ -61,7 +61,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
     mapping(address => uint24) addressIndex;
     mapping(string => uint24) referralCode;
     mapping(uint24 => uint32) claimableWinnings;
-    mapping(uint24 => uint24) playerLuckbox;
+    mapping(uint24 => uint32) playerLuckbox;
 
     string public baseTokenURI = "ipfs://QmdxAQbPoqom3EuNoBZGSonjvv5afWDyo8YFaNoscNLcTV/";
    
@@ -411,7 +411,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         uint256 randomNum = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao,"1")));
         uint8[12] memory traitIndices;
         uint8[4] memory winningTrait;
-        uint24 max;
+        uint32 max;
 
         for (uint8 i = 0; i < 12; i++) 
         {
