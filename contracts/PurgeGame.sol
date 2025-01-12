@@ -295,7 +295,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         traitIndices[1] = uint8((traits >> 6) & 0x3f);
         traitIndices[2] = uint8((traits >> 12) & 0x3f);
         traitIndices[3] = uint8((traits >> 18) & 0x3f);
-        if (!REVEAL){
+        if (REVEAL){
             dailyPurgeCount[traitIndices[0] % 8] += 1;
             dailyPurgeCount[traitIndices[1] / 8 + 8] += 1;
             dailyPurgeCount[traitIndices[2] + 16] += 1;
@@ -348,7 +348,6 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         { 
             addClaimableUSDC(traitPurgeTicket[trait][i], normalPayout);
         } 
-
     }
 
     function addClaimableUSDC(uint24 player, uint32 amount) internal
@@ -378,19 +377,23 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         uint32 jackpot = startingPrizePool / 100;
         PrizePool -= startingPrizePool / 25;
         uint8[4] memory winningTraits = getWinningTraits();
+        uint24[5] memory winners;
         // Update claimable winnings for each winner
         for (uint8 i = 0; i < 4; i++) {
             if (i == 0){
+                winners = randTraitTicket(winningTraits[i],5);
                 for (uint8 j = 0; j < 5; j++){
-                    addClaimableUSDC(randTraitTicket(winningTraits[i],5)[j], jackpot/5);                  
+                    addClaimableUSDC(winners[j], jackpot/5);                  
                 }
             } else if (i == 1){
+                winners = randTraitTicket(winningTraits[i],3);
                 for (uint8 j = 0; j < 3; j++){
-                    addClaimableUSDC(randTraitTicket(winningTraits[i],3)[j], jackpot/3);
+                    addClaimableUSDC(winners[j], jackpot/3);
                 }
             } else if (i == 2){
+                winners = randTraitTicket(winningTraits[i],2);
                 for (uint8 j = 0; j < 2; j++){
-                    addClaimableUSDC(randTraitTicket(winningTraits[i],2)[j], jackpot/2);
+                    addClaimableUSDC(winners[j], jackpot/2);
                 }
             } else if (i == 3){
                 addClaimableUSDC(randTraitTicket(winningTraits[i],1)[0], jackpot);
@@ -412,7 +415,6 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         uint8[12] memory traitIndices;
         uint8[4] memory winningTrait;
         uint32 max;
-
         for (uint8 i = 0; i < 12; i++) 
         {
             traitIndices[i] = uint8(randomNum >> i * 6 & 0x3f);
@@ -432,9 +434,19 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         }
         for (uint8 i = 0; i < 4; i++) 
         {
-            address winner = indexAddress[randTraitTicket(winningTrait[i],1)[0]];
-            PurgedCoinInterface(purgedCoinContract).mintFromPurge(winner, dailyCoinJackpot);
-            emit CoinPaid(winner, dailyCoinJackpot, true);
+            uint24[5] memory winners = randTraitTicket(winningTrait[i], 5);
+            uint32 highestLuckboxValue = 0;
+            address luckbox;
+            for (uint8 j = 0; j < 5; j++) {
+                uint24 winner = winners[j];
+                uint32 luckboxValue = playerLuckbox[winner];
+                if (luckboxValue >= highestLuckboxValue) {
+                    highestLuckboxValue = luckboxValue;
+                    luckbox = indexAddress[winner];
+                }
+            }
+            PurgedCoinInterface(purgedCoinContract).mintFromPurge(luckbox, dailyCoinJackpot);
+            emit CoinPaid(luckbox, dailyCoinJackpot, true);
         }
     }
 
@@ -485,7 +497,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
 // Picks a random address from all addresses which have purged, weighted by number of purges.
     function randTraitTicket(uint8 trait, uint8 amount) private returns (uint24[5] memory) {
         uint24[5] memory selectedTickets;
-        uint256 randomNum = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao,"3"))); 
+        uint256 randomNum = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao,trait))); 
         for (uint8 i = 0; i < amount; i++) {
             uint32 rand = uint32(randomNum << i * 32);
             uint32 randomIndex = uint32(rand % traitPurgeTicket[trait].length);
