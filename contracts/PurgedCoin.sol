@@ -41,6 +41,13 @@ abstract contract Purged is ERC20, Ownable
         _burn(yourAddress,_amount);
     }
 
+    function donation(uint256 _amount) external 
+    {
+        require(_amount <= balanceOf(msg.sender));
+        _burn(msg.sender, _amount);
+        bank += _amount;
+    }
+
     function airdrop(address[] calldata to, uint256[] calldata _amount) external onlyOwner 
     {
         require (to.length == _amount.length);
