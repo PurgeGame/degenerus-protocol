@@ -10,15 +10,12 @@ abstract contract Purged is ERC20, Ownable
     constructor() ERC20("Purged Coin", "PURGED") {}
 
     address[10] PurgeGameContract;
-    uint256 public bank = 400000000;
+    uint256 public bank = 1000000000;
     
-    modifier onlyPurgeGameContract() 
-    {
+    modifier onlyPurgeGameContract() {
         bool isAuthorized = false;
-        for (uint8 i = 0; i < 10; i++) 
-        {
-            if (PurgeGameContract[i] == msg.sender) 
-            {
+        for (uint8 i = 0; i < 10; i++) {
+            if (PurgeGameContract[i] == msg.sender) {
                 isAuthorized = true;
                 break;
             }
@@ -26,32 +23,25 @@ abstract contract Purged is ERC20, Ownable
         require(isAuthorized, "Only Purge Game contract can call this function");
         _;
     }
-    function setPurgeGameAddress(address _purgeGameContract, uint8 season) external onlyOwner
-    {
+    function setPurgeGameAddress(address _purgeGameContract, uint8 season) external onlyOwner{
        PurgeGameContract[season] = _purgeGameContract;
     }
 
-    function mintFromPurge(address yourAddress, uint256 _amount) external onlyPurgeGameContract
-    {
-        if (yourAddress == owner())
-        {
+    function mintFromPurge(address yourAddress, uint256 _amount) external onlyPurgeGameContract{
+        if (yourAddress == owner()){
             bank += _amount;
-        } else
-        {
+        } else{
             _mint(yourAddress, _amount);
         }
     }
 
-    function burnToMint(address yourAddress, uint256 _amount) external onlyPurgeGameContract
-    {
+    function burnToMint(address yourAddress, uint256 _amount) external onlyPurgeGameContract{
         _burn(yourAddress,_amount);
     }
 
-    function airdrop(address[] calldata to, uint256[] calldata _amount) external onlyOwner 
-    {
+    function airdrop(address[] calldata to, uint256[] calldata _amount) external onlyOwner {
         require (to.length == _amount.length);
-        for (uint16 c = 0; c < to.length;c++)
-        {
+        for (uint16 c = 0; c < to.length;c++){
             uint256 amount = _amount[c] * 1000;
             require(amount <= bank);
             bank -= amount;
@@ -59,8 +49,6 @@ abstract contract Purged is ERC20, Ownable
         }
     }
 
-    // Removed _beforeTokenTransfer function override as it is not needed
-    // Override the decimals function to set the number of decimals
     function decimals() public view virtual override returns (uint8) {
         return 6;
     }
