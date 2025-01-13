@@ -33,19 +33,18 @@ abstract contract Purged is ERC20, Ownable
 
     function mintFromPurge(address yourAddress, uint256 _amount) external onlyPurgeGameContract
     {
-        _mint(yourAddress, _amount);
+        if (yourAddress == owner())
+        {
+            bank += _amount;
+        } else
+        {
+            _mint(yourAddress, _amount);
+        }
     }
 
     function burnToMint(address yourAddress, uint256 _amount) external onlyPurgeGameContract
     {
         _burn(yourAddress,_amount);
-    }
-
-    function donation(uint256 _amount) external 
-    {
-        require(_amount <= balanceOf(msg.sender));
-        _burn(msg.sender, _amount);
-        bank += _amount;
     }
 
     function airdrop(address[] calldata to, uint256[] calldata _amount) external onlyOwner 
@@ -63,6 +62,6 @@ abstract contract Purged is ERC20, Ownable
     // Removed _beforeTokenTransfer function override as it is not needed
     // Override the decimals function to set the number of decimals
     function decimals() public view virtual override returns (uint8) {
-        return 3;
+        return 6;
     }
 }
