@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @custom:security-contact purgegamenft@gmail.com
+
 interface PurgedCoinInterface 
 {
     function mintFromPurge(address yourAddress, uint256 _amount) external;
@@ -13,14 +15,8 @@ interface PurgedCoinInterface
     function balanceOf(address account) external view returns (uint256);
 }
 
-interface IERC20 {
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function balanceOf(address account) external view returns (uint256);
-    function allowance(address owner, address spender) external view returns (uint256);
-}
 
-abstract contract PurgeGameBetaTest is ERC721, Ownable 
+contract PurgeGameBetaTest is ERC721, Ownable 
 {
     using Strings for uint256;
 
@@ -59,23 +55,24 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
     uint256[256] public totalCoinBurn;
 
     mapping(address => bool) private trustedAddresses;
-    mapping(uint32 => uint24) private tokenTraits;
+    mapping(uint32 => uint24) public tokenTraits;
     mapping(uint8 => uint24[]) private traitPurgeTicket;
     mapping(uint24 => address) private indexAddress;
     mapping(address => uint24) private addressIndex;
     mapping(string => uint24) private referralCode;
-    mapping(uint24 => uint256) private claimableWinnings;
-    mapping(uint24 => uint256) private playerLuckbox;
+    mapping(uint24 => uint256) public claimableWinnings;
+    mapping(uint24 => uint256) public playerLuckbox;
 
     string public baseTokenURI = "ipfs://QmdxAQbPoqom3EuNoBZGSonjvv5afWDyo8YFaNoscNLcTV/";
    
-    constructor() ERC721("Purge Game Beta Test", "PURGEGAMEBETA") {}
+    constructor() ERC721("Purge Game Beta Test", "PURGEGAMEBETA") Ownable(msg.sender){}
+
 
     modifier onlyTrusted() {
         if (msg.sender != owner()) {
             require(trustedAddresses[msg.sender], "Caller is not a trusted address");
-            _;
         }
+        _;
     }
     
 // Links user addresses to a uint24 to save gas when recording game data and will be referenced in future seasons.
@@ -99,7 +96,6 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
     function createReferralCode(string calldata _referralCode) external {
         bytes memory referralCodeBytes = bytes(_referralCode);
         uint256 referralCodeLength = referralCodeBytes.length;
-
         require(
             referralCodeLength != 0 && referralCodeLength <= 40,
             "Invalid referral code length"
@@ -159,7 +155,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
 
     function coinMintAndPurge(uint32 _number) external {
         require (PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= _number * cost * million, "Not enough $PURGED");
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * 900000);
+        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, _number * cost * million * 9 / 10);
         codeMintAndPurge(_number);
     }
 
@@ -177,13 +173,13 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
     }
 
     function miniPurge() external {
-        usdcRecieve(cost * 250000);
+        usdcRecieve(cost * million / 4);
         codeMiniPurge();
     }
 
     function coinMiniPurge() external{
         require(PurgedCoinInterface(purgedCoinContract).balanceOf(msg.sender) >= cost * million / 4, "Not enough $PURGED");
-        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, cost * 250000);
+        PurgedCoinInterface(purgedCoinContract).burnToMint(msg.sender, cost * million / 4);
         codeMiniPurge();
     }
 
@@ -207,7 +203,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         if (_tokenId < 10000000){
             tokenTraits[_tokenId] = rarity(_tokenId);
             for(uint8 c = 0; c < 4; c++){
-                traitRemaining[uint8((tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c << 6))] +=1;
+                traitRemaining[uint8((tokenTraits[_tokenId] >> (c * 6) & 0x3f) + (c << 6))] += 1;
             }
             return(tokenTraits[_tokenId]); 
         }
@@ -224,7 +220,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
     }
 
     function getTrait(uint16 _input) private pure returns (uint8) {
-        _input &= 0x7ff; // Use bitwise AND to limit _input to 11 bits
+        _input &= 0x7ff; 
         if (_input < 840) {
             return uint8(_input / 35);
         } else if (_input < 1352) {
@@ -319,12 +315,12 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         coinJackpot();
     }
 
-// Pays the exterminator 25% of the prize pool.
+// Pays the exterminator 20% of the prize pool.
 // Then pays each player who purged a token with the winning trait an equal amount for each token purged.
     function payout(uint8 trait) private{
         uint32 totalPurges = uint32(traitPurgeTicket[trait].length - 1);
         if (totalPurges == 0) totalPurges = 1;
-        uint256 grandPrize = PrizePool / 4;
+        uint256 grandPrize = PrizePool / 5;
         uint256 normalPayout = (PrizePool - grandPrize) / totalPurges;
         PrizePool = 0;
         startingPrizePool = 0;
@@ -344,12 +340,39 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
     function payMapJackpot() external onlyTrusted{
         require(paidJackpot == false);
         require(publicSaleStatus == false);
-        startingPrizePool = PrizePool * 9 / 10;
-        PrizePool -= PrizePool / 10;
+        startingPrizePool = PrizePool * 85 / 100;   
         paidJackpot = true;
         PurgedCoinInterface(purgedCoinContract).mintFromPurge(owner(), PrizePool / 4);
-        uint8 randomTrait = uint8(uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao))) & 0xFF);
-        addClaimableUSDC(randTraitTicket(randomTrait, 1)[0], startingPrizePool / 9);
+        uint8[9] memory trait;
+        uint256 random = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao)));
+
+        // First trait is completely random
+        trait[0] = uint8(random & 0xFF);
+
+        // Next four traits fall within specific quadrants
+        for (uint8 c = 1; c < 8; c+=2) {
+            trait[c] = uint8((random >> (c * 6)) & 0x3F) + (c - 1) * 64;
+            trait[c + 1] = trait [c];
+        }
+        // Define the number of winners for each trait
+        uint8[9] memory numbers = [1, 1, 8, 1, 8, 1, 5, 1, 20];
+        // Define the prize for each winner - (x *.1% of prize pool / number of winners)
+        uint8[9] memory prizes = [100, 5, 5, 4, 6, 3, 7, 10, 10];
+
+        // Distribute prizes to winners
+        for (uint8 i = 0; i < 9; i++) {
+            uint24[] memory winners = randTraitTicket(trait[i], numbers[i]);
+            for (uint8 j = 0; j < numbers[i]; j++) {
+                uint256 prize = PrizePool * prizes[i] / 1000 / numbers[i];
+                addClaimableUSDC(winners[j], prize);
+            }
+        }
+
+        // Mint coins for the consolation prize
+        for (uint32 c = 0; c < traitPurgeTicket[trait[0]].length; c++) {
+            PurgedCoinInterface(purgedCoinContract).mintFromPurge(indexAddress[traitPurgeTicket[trait[0]][c]], 100 * million);
+        }
+        PrizePool = PrizePool * 85 / 100;
     }
 
     function payDailyJackpot() external onlyTrusted {
@@ -361,20 +384,13 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         PrizePool -= startingPrizePool / 25;
         uint8[4] memory winningTraits = getWinningTraits();
         uint24[] memory winners;
-        // Update claimable winnings for each winner
-        winners = randTraitTicket(winningTraits[0],10);
-        for (uint8 j = 0; j < 10; j++){
-            addClaimableUSDC(winners[j], jackpot/10);                  
+        uint8[4] memory numbers = [20, 10, 4, 1];
+        for (uint8 i = 0; i < 4; i++) {
+            winners = randTraitTicket(winningTraits[i], numbers[i]);
+            for (uint8 j = 0; j < numbers[i]; j++) {
+                addClaimableUSDC(winners[j], jackpot / numbers[i]);
+            }
         }
-        winners = randTraitTicket(winningTraits[1],5);
-        for (uint8 j = 0; j < 5; j++){
-            addClaimableUSDC(winners[j], jackpot/5);
-        }
-        winners = randTraitTicket(winningTraits[2],4);
-        for (uint8 j = 0; j < 4; j++){
-            addClaimableUSDC(winners[j], jackpot/4);
-        }
-        addClaimableUSDC(randTraitTicket(winningTraits[3],1)[0], jackpot);
         dailyJackpotCounter += 1;
         if (dailyJackpotCounter == 25) {
             endGame();
@@ -387,7 +403,6 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         if (dailyCoinBurn < 1600000000){
             dailyCoinBurn = 1600000000;
         }
-        
         uint256 dailyCoinJackpot = dailyCoinBurn * 3 / 20;
         dailyCoinBurn = 0;
         uint256 randomNum = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao,"1")));
@@ -471,7 +486,7 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         winningTraits[3] = uint8((randomNum >> 32) & 0x3F);
         return winningTraits;
     }
-// Picks a random address from all addresses which have purged, weighted by number of purges.
+
     function randTraitTicket(uint8 trait, uint8 amount) private returns (uint24[] memory) {
         uint24[] memory selectedTickets;
         uint256 randomNum = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao,trait))); 
@@ -540,12 +555,12 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
     }
 
 
-    function reveal(bool _REVEAL, string calldata updatedURI) external onlyTrusted {
+    function reveal(string calldata updatedURI) external onlyTrusted {
         require(REVEAL == false);
         require(paidJackpot == true);
         require(offset != 0);
         require(publicSaleStatus == false);
-        REVEAL = _REVEAL;
+        REVEAL = true;
         baseTokenURI = updatedURI;
         revealTime = uint32(block.timestamp);
         dailyJackpotTime = revealTime;
@@ -585,21 +600,20 @@ abstract contract PurgeGameBetaTest is ERC721, Ownable
         require(IERC20(usdcTokenAddress).transfer(msg.sender, winnings), "USDC transfer failed");
     }
 
-    function tokenURI(uint256 tokenId)
+ /*    function tokenURI(uint256 tokenId)
         public
         view
         override
         returns (string memory)
     {
         return string(abi.encodePacked(baseTokenURI, tokenId.toString()));
-    }
+    } */
 
     function _update(address to, uint256 tokenId, address auth) internal virtual override returns (address) {
-        if (to == address(0)) {
-            require(purging == true, "Use purge function");
-        }
         if (gameOver == true) {
             require(block.timestamp > gameEndTime + 24 hours, "Transfers disabled for 24h after game over");
+        }else if (to == address(0)) {
+            require(purging == true, "Use purge function");
         }
         return super._update(to, tokenId, auth);
     }
