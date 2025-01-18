@@ -1,44 +1,90 @@
 
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-
-contract Purged is ERC20, Ownable
-{
-    constructor() ERC20("Purged Coin", "PURGED") Ownable(msg.sender){}
-
-    address[10] PurgeGameContract;
+contract Purged is ERC20 {
+    
     uint8 public percentOfDollar = 100;
+    address private _owner;
+    address private constant usdcTokenAddress = 0xe4C7fBB0a626ed208021ccabA6Be1566905E2dFc;
+    
     uint256 public presaleAmount = 0;
     uint256 constant private million = 1000000;
     uint256 public bank = million * million;
     uint256 public totalPresaleSold = 0;
-    address public usdcTokenAddress = 0xe4C7fBB0a626ed208021ccabA6Be1566905E2dFc;
+    
+    mapping(address => bool) private contractAddresses;
     mapping(address => uint256) public presalePurchases;
+    mapping(string => address) private referralCode;
+    mapping(address => uint256) public playerLuckbox;
 
+    constructor() ERC20("Purged Coin", "PURGED") {
+        _owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == _owner, "Caller is not the owner");
+        _;
+    }
     
     modifier onlyPurgeGameContract() {
-        bool isAuthorized = false;
-        for (uint8 i = 0; i < 10; i++) {
-            if (PurgeGameContract[i] == msg.sender) {
-                isAuthorized = true;
-                break;
-            }
-        }
-        require(isAuthorized, "Only Purge Game contract can call this function");
+        require(contractAddresses[msg.sender], "Caller is not a Purge Game contract");
         _;
     }
 
-    function setPurgeGameAddress(address _purgeGameContract, uint8 season) external onlyOwner{
-       PurgeGameContract[season] = _purgeGameContract;
+    // Links user addresses to a uint24 to save gas when recording game data and will be referenced in future seasons.
+
+    function getPlayerLuckbox(address player) external view returns(uint256){
+        return(playerLuckbox[player]);
+    }
+
+    function addToPlayerLuckbox(address player, uint256 amount) external onlyPurgeGameContract{
+        playerLuckbox[player] += amount;
+    }
+
+    function getTopLuckbox(address[] memory players) external view returns (address) {
+        uint256 highestLuckboxValue = 0;
+        address topLuckbox;
+        for (uint8 i = 0; i < players.length; i++) {
+            address player = players[i];
+            uint256 luckboxValue = playerLuckbox[player];
+            if (luckboxValue > highestLuckboxValue) {
+                highestLuckboxValue = luckboxValue;
+                topLuckbox = player;
+            }
+        }
+        return topLuckbox;
+    }
+    
+// Allows users to create a referral code string that will pay them $PURGED when their referrals mint tokens.
+    function createReferralCode(string calldata _referralCode) external {
+        bytes memory referralCodeBytes = bytes(_referralCode);
+        uint256 referralCodeLength = referralCodeBytes.length;
+        require(
+            referralCodeLength != 0 && referralCodeLength <= 40,
+            "Invalid referral code length"
+        );
+        require(referralCode[_referralCode] == address(0), "Referral code is taken");
+        referralCode[_referralCode] = msg.sender;
+    }
+
+    function getReferralCodeOwner(string calldata _referralCode) external view returns(address){
+        return(referralCode[_referralCode]);
+    }
+
+    function addContractAddress(address _purgeGameContract) external onlyOwner{
+       contractAddresses[_purgeGameContract] = true;
+    }
+
+    function removeContractAddress(address _purgeGameContract) external onlyOwner{
+       contractAddresses[_purgeGameContract] = false;
     }
 
     function mintFromPurge(address yourAddress, uint256 _amount) external onlyPurgeGameContract{
-        if (yourAddress == owner()){
+        if (yourAddress == _owner){
             bank += _amount;
         } else{
             _mint(yourAddress, _amount);
@@ -60,8 +106,8 @@ contract Purged is ERC20, Ownable
     }
 
     function presale(uint256 amount) external {
+        require(amount > 5, "Amount must be greater than 5 coins");
         amount *= million;
-        require(amount > 0, "Amount must be greater than zero");
         uint256 totalCost = amount * percentOfDollar / 100;
         require(totalPresaleSold + amount <= presaleAmount, "Exceeds maximum presale amount");
         require(amount <= bank, "Not enough coins in the bank");
@@ -81,7 +127,7 @@ contract Purged is ERC20, Ownable
 
     function withdrawUSDC() external onlyOwner {
         IERC20 usdc = IERC20(usdcTokenAddress);
-        require(usdc.transfer(owner(), usdc.balanceOf(address(this))), "USDC transfer failed");
+        require(usdc.transfer(_owner, usdc.balanceOf(address(this))), "USDC transfer failed");
     }
 
     function decimals() public view virtual override returns (uint8) {
