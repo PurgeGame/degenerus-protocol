@@ -15,6 +15,9 @@ contract Purged is ERC20 {
     uint256 constant private million = 1000000;
     uint256 public bank = million * million;
     uint256 public totalPresaleSold = 0;
+    uint256 public dailyCoinBurn;
+
+    uint256[256] private totalCoinBurn;
     
     mapping(address => bool) private contractAddresses;
     mapping(address => uint256) public presalePurchases;
@@ -35,7 +38,23 @@ contract Purged is ERC20 {
         _;
     }
 
-    // Links user addresses to a uint24 to save gas when recording game data and will be referenced in future seasons.
+    function resetDailyCoinBurn() external onlyPurgeGameContract{
+        dailyCoinBurn = 0;
+    }
+
+    function resetSeasonCoinBurn() external onlyPurgeGameContract{
+        for (uint8 i = 0; i < 256; i++) {
+            totalCoinBurn[i] = 0;
+        }
+    }
+
+    function getSeasonCoinBurn(uint8[] calldata traits) external view returns (uint256[] memory) {
+        uint256[] memory burnCounts = new uint256[](traits.length);
+        for (uint8 i = 0; i < traits.length; i++) {
+            burnCounts[i] = totalCoinBurn[traits[i]];
+        }
+        return burnCounts;
+    }
 
     function getPlayerLuckbox(address player) external view returns(uint256){
         return(playerLuckbox[player]);
@@ -45,7 +64,16 @@ contract Purged is ERC20 {
         playerLuckbox[player] += amount;
     }
 
-    function getTopLuckbox(address[] memory players) external view returns (address) {
+    function payTopLuckbox(address[] memory winners, uint256 dailyCoinJackpot) external onlyPurgeGameContract{
+        address topLuckbox = getTopLuckbox(winners);
+        if (topLuckbox != address(0)) {
+            _mint(topLuckbox, dailyCoinJackpot);
+        } else {
+            emit LuckboxFail(winners);
+        }
+    }
+
+    function getTopLuckbox(address[] memory players) public view returns (address) {
         uint256 highestLuckboxValue = 0;
         address topLuckbox;
         for (uint8 i = 0; i < players.length; i++) {
@@ -55,6 +83,9 @@ contract Purged is ERC20 {
                 highestLuckboxValue = luckboxValue;
                 topLuckbox = player;
             }
+        }
+        if(playerLuckbox[topLuckbox] == 0){
+            topLuckbox = address(0);
         }
         return topLuckbox;
     }
@@ -75,6 +106,17 @@ contract Purged is ERC20 {
         return(referralCode[_referralCode]);
     }
 
+    function payReferrer(uint256 amount, string calldata _referralCode, address sender) external onlyPurgeGameContract{
+        address shill;
+        shill = referralCode[_referralCode];
+        if (shill == address(0)) {
+            bank += amount;
+        } else{
+            _mint(shill, amount);
+            emit Referred(_referralCode, shill, amount, sender);
+        }
+    }
+
     function addContractAddress(address _purgeGameContract) external onlyOwner{
        contractAddresses[_purgeGameContract] = true;
     }
@@ -83,7 +125,7 @@ contract Purged is ERC20 {
        contractAddresses[_purgeGameContract] = false;
     }
 
-    function mintFromPurge(address yourAddress, uint256 _amount) external onlyPurgeGameContract{
+    function mintInGame(address yourAddress, uint256 _amount) external onlyPurgeGameContract{
         if (yourAddress == _owner){
             bank += _amount;
         } else{
@@ -91,8 +133,18 @@ contract Purged is ERC20 {
         }
     }
 
-    function burnToMint(address yourAddress, uint256 _amount) external onlyPurgeGameContract{
+    function burnInGame(address yourAddress, uint256 _amount) external onlyPurgeGameContract{
         _burn(yourAddress,_amount);
+    }
+
+    function luckyCoinBurn(uint256 amount, uint8 trait) external {
+        require(amount > 5 * million && amount <= balanceOf(msg.sender), "Invalid amount");
+        require(trait >= 0 && trait <= 255, "trait ID must be between 0 and 255");
+        _burn(msg.sender, amount);
+        totalCoinBurn[trait] += amount;
+        dailyCoinBurn += amount;
+        playerLuckbox[msg.sender] += amount;
+        emit CoinBurned(msg.sender, trait, amount);
     }
 
     function airdrop(address[] calldata to, uint256[] calldata _amount) external onlyOwner {
@@ -133,4 +185,8 @@ contract Purged is ERC20 {
     function decimals() public view virtual override returns (uint8) {
         return 6;
     }
+    event CoinBurned(address from, uint32 tokenId, uint256 amount);
+    event Referred(string referralCode, address shill, uint256 amount, address from);
+    event LuckboxFail(address[] players);
+    
 }
