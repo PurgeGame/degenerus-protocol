@@ -50,7 +50,8 @@ contract Purged is ERC20 {
 
     function getSeasonCoinBurn(uint8[] calldata traits) external view returns (uint256[] memory) {
         uint256[] memory burnCounts = new uint256[](traits.length);
-        for (uint8 i = 0; i < traits.length; i++) {
+        uint256 numberOfTraits = traits.length;
+        for (uint8 i = 0; i < numberOfTraits; i++) {
             burnCounts[i] = totalCoinBurn[traits[i]];
         }
         return burnCounts;
@@ -60,7 +61,7 @@ contract Purged is ERC20 {
         return(playerLuckbox[player]);
     }
 
-    function addToPlayerLuckbox(address player, uint256 amount) external onlyPurgeGameContract{
+    function addToLuckbox(address player, uint256 amount) external onlyPurgeGameContract{
         playerLuckbox[player] += amount;
     }
 
@@ -76,7 +77,8 @@ contract Purged is ERC20 {
     function getTopLuckbox(address[] memory players) public view returns (address) {
         uint256 highestLuckboxValue = 0;
         address topLuckbox;
-        for (uint8 i = 0; i < players.length; i++) {
+        uint256 numberOfPlayers = players.length;
+        for (uint8 i = 0; i < numberOfPlayers; i++) {
             address player = players[i];
             uint256 luckboxValue = playerLuckbox[player];
             if (luckboxValue > highestLuckboxValue) {
@@ -148,8 +150,9 @@ contract Purged is ERC20 {
     }
 
     function airdrop(address[] calldata to, uint256[] calldata _amount) external onlyOwner {
-        require (to.length == _amount.length);
-        for (uint16 c = 0; c < to.length;c++){
+        uint256 numberOfRecipients = to.length;
+        require (numberOfRecipients == _amount.length);    
+        for (uint16 c = 0; c < numberOfRecipients;c++){
             uint256 amount = _amount[c];
             require(amount <= bank);
             bank -= amount;
