@@ -18,12 +18,14 @@ pragma solidity ^0.8.26;
 |  1. Exterminator  - Awarded for eliminating the final trait at level end                              |
 |  2. BAF           - "Burn and Flip" trophy for strategic coinflip wins                                |
 |  3. Affiliate     - Awarded to top affiliate performers per level                                     |
+|  4. Deity         - Awarded for purchasing a Deity pass                                               |
 |                                                                                                       |
 |  +--------------------------------------------------------------------------------------------------+ |
 |  |                              TROPHY DATA BIT LAYOUT (uint256)                                   |  |
 |  |                                                                                                 |  |
 |  |   +-----------------------------------------------------------------------------------------+   |  |
 |  |   |  Bit 229        | TROPHY_FLAG_INVERT    | Visual inversion flag                         |   |  |
+|  |   |  Bit 205        | DEITY_TROPHY_FLAG     | Identifies Deity trophy type                  |   |  |
 |  |   |  Bit 203        | BAF_TROPHY_FLAG       | Identifies BAF trophy type                    |   |  |
 |  |   |  Bit 201        | AFFILIATE_TROPHY_FLAG | Identifies Affiliate trophy type              |   |  |
 |  |   |  Bits 152-167   | trait (uint16)        | Exterminator trait (low 8) or sentinel value  |   |  |
@@ -44,6 +46,8 @@ pragma solidity ^0.8.26;
 |  |        +-------------------------► mintBaf() ---------------► _mint() ----► Transfer event      |  |
 |  |        |                                   |                                                    |  |
 |  |        +-------------------------► mintAffiliate() ---------► _mint() ----► Transfer event      |  |
+|  |        |                                   |                                                    |  |
+|  |        +-------------------------► mintDeity() -------------► _mint() ----► Transfer event      |  |
 |  |                                                                                                 |  |
 |  |   Note: All mints are gated by onlyGame. GAME is compile-time constant.                         |  |
 |  +--------------------------------------------------------------------------------------------------+ |
@@ -79,6 +83,8 @@ contract DegenerusTrophies is IDegenerusTrophies {
     error ZeroAddress();
     /// @dev All transfer operations are permanently disabled (soulbound)
     error TransfersDisabled();
+    /// @dev Not enough deity trophies to burn for the owner.
+    error InsufficientDeityTrophies();
 
     // ---------------------------------------------------------------------
     // ENUMS
@@ -87,7 +93,8 @@ contract DegenerusTrophies is IDegenerusTrophies {
     enum TrophyKind {
         Exterminator, // Awarded for eliminating the final trait
         Baf, // "Burn and Flip" strategic coinflip winner
-        Affiliate // Top affiliate performer for a level
+        Affiliate, // Top affiliate performer for a level
+        Deity // Awarded for purchasing a Deity pass
     }
 
     // ---------------------------------------------------------------------
@@ -102,7 +109,7 @@ contract DegenerusTrophies is IDegenerusTrophies {
     /// @notice Emitted when a new trophy is minted
     /// @param tokenId The newly minted token ID
     /// @param to The recipient address
-    /// @param kind The trophy category (Exterminator, Baf, or Affiliate)
+    /// @param kind The trophy category (Exterminator, Baf, Affiliate, or Deity)
     /// @param level The ContractAddresses.GAME level when the trophy was earned
     /// @param trait The trait ID for Exterminator trophies (0 for others)
     event TrophyMinted(uint256 indexed tokenId, address indexed to, TrophyKind kind, uint24 level, uint8 trait);
@@ -116,6 +123,7 @@ contract DegenerusTrophies is IDegenerusTrophies {
     //   Bits 152-167: trait (uint16; low 8 bits for exterminator)
     //   Bit 201:      AFFILIATE_TROPHY_FLAG
     //   Bit 203:      BAF_TROPHY_FLAG
+    //   Bit 205:      DEITY_TROPHY_FLAG
     //   Bit 229:      TROPHY_FLAG_INVERT
 
     /// @dev Flag indicating visual inversion for ContractAddresses.TROPHY_RENDERER_ROUTER (bit 229)
@@ -124,12 +132,16 @@ contract DegenerusTrophies is IDegenerusTrophies {
     uint256 private constant AFFILIATE_TROPHY_FLAG = uint256(1) << 201;
     /// @dev Flag identifying BAF trophy type (bit 203)
     uint256 private constant BAF_TROPHY_FLAG = uint256(1) << 203;
+    /// @dev Flag identifying Deity trophy type (bit 205)
+    uint256 private constant DEITY_TROPHY_FLAG = uint256(1) << 205;
     /// @dev Sentinel value in trait field indicating Affiliate trophy
     uint256 private constant AFFILIATE_TRAIT_SENTINEL = 0xFFFE;
     /// @dev Sentinel value in trait field indicating BAF trophy
     uint256 private constant BAF_TRAIT_SENTINEL = 0xFFFA;
     /// @dev Bitmask to extract the low 96-bit score/winnings field
     uint256 private constant LOW_96_MASK = (uint256(1) << 96) - 1;
+    /// @dev Fixed Deity trophy cost amount (25 ETH).
+    uint96 private constant DEITY_TROPHY_COST = 25 ether;
 
     // ---------------------------------------------------------------------
     // CONSTANTS & WIRING
@@ -148,6 +160,10 @@ contract DegenerusTrophies is IDegenerusTrophies {
     mapping(address => uint256) private _balances;
     /// @dev Mapping from token ID to packed trophy data (see bit layout above)
     mapping(uint256 => uint256) private _trophyData;
+    /// @dev Mapping from token ID to DGNRS reward amount (18 decimals)
+    mapping(uint256 => uint96) private _trophyDgnrs;
+    /// @dev Per-owner stack of deity trophy token IDs (for refunds).
+    mapping(address => uint256[]) private _deityTrophies;
 
     // ---------------------------------------------------------------------
     // MODIFIERS
@@ -173,7 +189,8 @@ contract DegenerusTrophies is IDegenerusTrophies {
         uint24 level,
         uint8 trait,
         bool invertFlag,
-        uint96 exterminationWinnings
+        uint96 exterminationWinnings,
+        uint96 dgnrsReward
     ) external override onlyGame returns (uint256 tokenId) {
         tokenId = _mint(to);
         uint256 data = uint256(exterminationWinnings) | (uint256(trait) << 152) | (uint256(level) << 128);
@@ -181,6 +198,7 @@ contract DegenerusTrophies is IDegenerusTrophies {
             data |= TROPHY_FLAG_INVERT;
         }
         _trophyData[tokenId] = data;
+        _trophyDgnrs[tokenId] = dgnrsReward;
         emit TrophyMinted(tokenId, to, TrophyKind.Exterminator, level, trait);
     }
 
@@ -188,10 +206,15 @@ contract DegenerusTrophies is IDegenerusTrophies {
     /// @param to Recipient address (will own the soulbound trophy)
     /// @param level Game level when the BAF was achieved
     /// @return tokenId The newly minted token ID
-    function mintBaf(address to, uint24 level) external override onlyGame returns (uint256 tokenId) {
+    function mintBaf(
+        address to,
+        uint24 level,
+        uint96 dgnrsReward
+    ) external override onlyGame returns (uint256 tokenId) {
         tokenId = _mint(to);
         uint256 data = (BAF_TRAIT_SENTINEL << 152) | (uint256(level) << 128) | BAF_TROPHY_FLAG;
         _trophyData[tokenId] = data;
+        _trophyDgnrs[tokenId] = dgnrsReward;
         emit TrophyMinted(tokenId, to, TrophyKind.Baf, level, 0);
     }
 
@@ -203,7 +226,8 @@ contract DegenerusTrophies is IDegenerusTrophies {
     function mintAffiliate(
         address to,
         uint24 level,
-        uint96 score
+        uint96 score,
+        uint96 dgnrsReward
     ) external override onlyGame returns (uint256 tokenId) {
         tokenId = _mint(to);
         // Pack score into bits 0-95, level into bits 128-151, trait sentinel into bits 152+, flag at bit 201
@@ -212,7 +236,62 @@ contract DegenerusTrophies is IDegenerusTrophies {
             (AFFILIATE_TRAIT_SENTINEL << 152) |
             AFFILIATE_TROPHY_FLAG;
         _trophyData[tokenId] = data;
+        _trophyDgnrs[tokenId] = dgnrsReward;
         emit TrophyMinted(tokenId, to, TrophyKind.Affiliate, level, 0);
+    }
+
+    /// @notice Mint a Deity trophy for purchasing a Deity pass
+    /// @param to Recipient address (will own the soulbound trophy)
+    /// @param level Game level when the pass was purchased
+    /// @return tokenId The newly minted token ID
+    function mintDeity(
+        address to,
+        uint24 level,
+        uint96 dgnrsReward
+    ) external override onlyGame returns (uint256 tokenId) {
+        tokenId = _mint(to);
+        uint256 data = uint256(DEITY_TROPHY_COST) |
+            (uint256(level) << 128) |
+            DEITY_TROPHY_FLAG;
+        _trophyData[tokenId] = data;
+        _trophyDgnrs[tokenId] = dgnrsReward;
+        _deityTrophies[to].push(tokenId);
+        emit TrophyMinted(tokenId, to, TrophyKind.Deity, level, 0);
+    }
+
+    /// @notice Burn a number of deity trophies for a player (refund handling).
+    /// @param owner Trophy owner to burn from.
+    /// @param count Number of deity trophies to burn.
+    /// @return burned Number of trophies burned.
+    function burnDeityTrophies(
+        address owner,
+        uint256 count
+    ) external override onlyGame returns (uint256 burned) {
+        if (owner == address(0)) revert ZeroAddress();
+        if (count == 0) return 0;
+
+        uint256[] storage list = _deityTrophies[owner];
+        uint256 len = list.length;
+        if (len < count) revert InsufficientDeityTrophies();
+
+        for (uint256 i; i < count; ) {
+            uint256 tokenId = list[len - 1];
+            list.pop();
+            _burn(owner, tokenId);
+            unchecked {
+                --len;
+                ++i;
+            }
+        }
+        return count;
+    }
+
+    /// @notice Get the DGNRS reward amount for a trophy.
+    /// @param tokenId The token ID to query.
+    /// @return dgnrsReward DGNRS reward amount (18 decimals).
+    function trophyDgnrs(uint256 tokenId) external view returns (uint96 dgnrsReward) {
+        if (_owners[tokenId] == address(0)) revert InvalidToken();
+        return _trophyDgnrs[tokenId];
     }
 
     /// @dev Internal mint logic - creates token and updates balances
@@ -231,6 +310,17 @@ contract DegenerusTrophies is IDegenerusTrophies {
         emit Transfer(address(0), to, tokenId);
     }
 
+    function _burn(address owner, uint256 tokenId) private {
+        if (_owners[tokenId] != owner) revert InvalidToken();
+        delete _owners[tokenId];
+        delete _trophyData[tokenId];
+        delete _trophyDgnrs[tokenId];
+        unchecked {
+            --_balances[owner];
+        }
+        emit Transfer(owner, address(0), tokenId);
+    }
+
     // ---------------------------------------------------------------------
     // ERC721 METADATA
     // ---------------------------------------------------------------------
@@ -241,7 +331,7 @@ contract DegenerusTrophies is IDegenerusTrophies {
     }
 
     /// @notice Collection symbol for ERC721 metadata
-    /// @return The collection symbol "PGTROPHY"
+    /// @return The collection symbol "DGTROPHY"
     function symbol() external pure returns (string memory) {
         return "DGTROPHY";
     }

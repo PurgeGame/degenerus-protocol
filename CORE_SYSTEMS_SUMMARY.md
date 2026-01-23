@@ -40,6 +40,10 @@ The loop continues.
 - **Carryover jackpots** reward next-level tickets early
 - **MAPs** cost 1/4 of a gamepiece and give one trait ticket + level jackpot entry
 - Some jackpot rewards are paid as MAP tickets; the MAP cost is routed into `nextPrizePool`
+- Loot boxes offer randomized rewards:
+  - 60% chance MAP tickets or gamepiece (116.67% value, 1/6 sub-chance for gamepiece if budget allows)
+  - 20% small BURNIE consolation (5%)
+  - 20% large BURNIE jackpot (195%)
 
 ---
 
@@ -53,18 +57,12 @@ The loop continues.
 
 ---
 
-## Bonds
-
-- Some money goes into bonds that pay out at future levels
-- Bonds use a two-lane system: one lane wins, one loses (high variance)
-- This rewards people who keep the game progressing
-
 ---
 
 ## Fairness & Safety
 
 - Randomness comes from Chainlink VRF (auditable on-chain)
-- If the game is inactive for a long time, it shuts down and funds flow to bonds
+- If the game is inactive for a long time, it shuts down and sweeps ETH/stETH to the vault
 - No admin can withdraw the prize pools
 
 ---
@@ -73,4 +71,4 @@ The loop continues.
 
 1. Buy gamepieces or MAPs
 2. Burn gamepieces to get tickets and try to end the level
-3. Jackpots and bond payouts are high variance: big wins possible, nothing guaranteed
+3. Jackpots are high variance: big wins possible, nothing guaranteed

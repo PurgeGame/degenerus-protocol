@@ -112,7 +112,7 @@ contract DegenerusGame is DegenerusGameStorage {
     /*+======================================================================+
       |                              ERRORS                                  |
       +======================================================================+
-      |  Custom errors for gas-efficient reverts. Each error maps to a       |
+      |  Custom errors for gas-efficient reverts. Each error tickets to a       |
       |  specific failure condition in the game flow.                        |
       +======================================================================+*/
 
@@ -234,7 +234,7 @@ contract DegenerusGame is DegenerusGameStorage {
 
     /// @notice The gamepieces gamepiece contract (ERC721).
     /// @dev Trusted for mint/burn/metadata operations.
-    IDegenerusGamepieces internal constant nft = IDegenerusGamepieces(ContractAddresses.GAMEPIECES);
+    IDegenerusGamepieces internal constant gamepieces = IDegenerusGamepieces(ContractAddresses.GAMEPIECES);
 
     /// @notice Lido stETH token contract.
     /// @dev Used for staking ETH and managing yield.
@@ -298,8 +298,8 @@ contract DegenerusGame is DegenerusGameStorage {
     /// @dev Maximum ContractAddresses.JACKPOTS per level before forced advancement.
     uint8 private constant JACKPOT_LEVEL_CAP = 10;
 
-    /// @dev MAP jackpot type: no MAP jackpot pending.
-    uint8 private constant MAP_JACKPOT_NONE = 0;
+    /// @dev ticket jackpot type: no ticket jackpot pending.
+    uint8 private constant TICKET_JACKPOT_NONE = 0;
 
     /// @dev Sentinel value for "no trait exterminated" (outside valid 0-255 range).
     uint16 private constant TRAIT_ID_TIMEOUT = 420;
@@ -315,7 +315,7 @@ contract DegenerusGame is DegenerusGameStorage {
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
 
     /// @dev Max players processed per future-mint activation batch.
-    uint32 private constant FUTURE_MINT_PLAYER_BATCH_SIZE = 96;
+    uint32 private constant FUTURE_TICKET_PLAYER_BATCH_SIZE = 96;
 
     /// @dev Loot box minimum purchase amount (0.01 ETH).
     ///      Allows flexible amounts so players can spend exact claimable balances.
@@ -330,7 +330,7 @@ contract DegenerusGame is DegenerusGameStorage {
 
     /// @dev Loot box per-roll payouts (same for both modes, presale applies 2x multiplier to BURNIE).
     ///      Normal mode:
-    ///      - Tickets/Gamepieces: 60% × 116.67% = 70% (1/6 chance gamepiece if budget >= 4 MAP price)
+    ///      - Tickets/Gamepieces: 60% × 116.67% = 70% (1/6 chance gamepiece if budget >= 4 ticket price)
     ///      - Small BURNIE: 20% × 5% = 1%
     ///      - Large BURNIE: 20% × 195% = 39%
     ///      - Total EV: 110%
@@ -340,7 +340,7 @@ contract DegenerusGame is DegenerusGameStorage {
     ///      - Large BURNIE: 20% × 195% × 2 = 78%
     ///      - Total EV: 150%
     ///
-    ///      Note: If ticket budget < 1 MAP price, fallback converts to BURNIE at 80% value (20% penalty).
+    ///      Note: If ticket budget < 1 ticket price, fallback converts to BURNIE at 80% value (20% penalty).
     uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 11667; // 116.67%
     uint16 private constant LOOTBOX_SMALL_BURNIE_ROLL_BPS = 500; // 5%
     uint16 private constant LOOTBOX_LARGE_BURNIE_ROLL_BPS = 19500; // 195%
@@ -786,7 +786,7 @@ contract DegenerusGame is DegenerusGameStorage {
       +======================================================================+*/
 
     /// @notice Record a mint, funded by ETH or claimable winnings.
-    /// @dev Access: nft contract only.
+    /// @dev Access: gamepieces contract only.
     ///      Payment modes:
     ///      - DirectEth: msg.value must exactly equal costWei
     ///      - Claimable: deduct from claimableWinnings (msg.value must be 0)
@@ -833,10 +833,10 @@ contract DegenerusGame is DegenerusGameStorage {
         uint256 poolWei
     ) external {
         if (msg.sender != ContractAddresses.ADMIN && msg.sender != address(this)) revert E();
-        _queueFutureRewardMints(player, targetLevel, quantity, poolWei);
+        _queueFutureRewardTickets(player, targetLevel, quantity, poolWei);
     }
 
-    function _queueFutureRewardMints(
+    function _queueFutureRewardTickets(
         address player,
         uint24 targetLevel,
         uint32 quantity,
@@ -908,19 +908,19 @@ contract DegenerusGame is DegenerusGameStorage {
         levelJackpotPaid = false;
     }
 
-    /// @notice Purchase any combination of gamepieces, MAPs, and loot boxes with ETH or claimable.
+    /// @notice Purchase any combination of gamepieces, tickets, and loot boxes with ETH or claimable.
     /// @dev Main entry point for all ETH/claimable purchases. For BURNIE purchases, use DegenerusGamepieces.purchase().
     ///      Spending all claimable winnings earns a 10% bonus across the combined purchase.
     ///      Adds affiliate support for loot box purchases.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param gamepieceQuantity Number of gamepieces to purchase (0 to skip).
-    /// @param mapQuantity Number of MAP tickets to purchase (0 to skip).
+    /// @param ticketQuantity Number of tickets to purchase (0 to skip).
     /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     function purchase(
         uint256 gamepieceQuantity,
-        uint256 mapQuantity,
+        uint256 ticketQuantity,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind
@@ -937,19 +937,19 @@ contract DegenerusGame is DegenerusGameStorage {
 
         // Calculate total cost
         uint256 gamepieceCost = 0;
-        uint256 mapCost = 0;
+        uint256 ticketCost = 0;
 
         if (gamepieceQuantity > 0) {
             if (gamepieceQuantity > type(uint32).max) revert E();
             gamepieceCost = priceWei * gamepieceQuantity;
         }
 
-        if (mapQuantity > 0) {
-            if (mapQuantity > type(uint32).max) revert E();
-            mapCost = (priceWei * mapQuantity) / 4; // MAPs cost 1/4 of gamepiece price
+        if (ticketQuantity > 0) {
+            if (ticketQuantity > type(uint32).max) revert E();
+            ticketCost = (priceWei * ticketQuantity) / 4; // tickets cost 1/4 of gamepiece price
         }
 
-        uint256 totalCost = gamepieceCost + mapCost + lootBoxAmount;
+        uint256 totalCost = gamepieceCost + ticketCost + lootBoxAmount;
         if (totalCost == 0) revert E(); // Must purchase something
 
         // Track initial claimable balance for full-spend bonus detection
@@ -957,7 +957,7 @@ contract DegenerusGame is DegenerusGameStorage {
 
         // Calculate how much ETH to allocate to each purchase type
         uint256 ethForGamepieces = 0;
-        uint256 ethForMaps = 0;
+        uint256 ethForTickets = 0;
 
         // Loot boxes always paid with ETH, deduct from total first
         uint256 remainingEth = msg.value;
@@ -966,10 +966,10 @@ contract DegenerusGame is DegenerusGameStorage {
             remainingEth -= lootBoxAmount;
         }
 
-        // Allocate remaining ETH to gamepieces and MAPs proportionally
-        if (remainingEth > 0 && (gamepieceCost + mapCost) > 0) {
-            ethForGamepieces = (remainingEth * gamepieceCost) / (gamepieceCost + mapCost);
-            ethForMaps = remainingEth - ethForGamepieces;
+        // Allocate remaining ETH to gamepieces and tickets proportionally
+        if (remainingEth > 0 && (gamepieceCost + ticketCost) > 0) {
+            ethForGamepieces = (remainingEth * gamepieceCost) / (gamepieceCost + ticketCost);
+            ethForTickets = remainingEth - ethForGamepieces;
         }
 
         // Execute gamepiece purchases if requested
@@ -988,14 +988,14 @@ contract DegenerusGame is DegenerusGameStorage {
             if (!success) revert E();
         }
 
-        // Execute MAP purchases if requested
-        if (mapCost > 0 && mapQuantity > 0) {
+        // Execute ticket purchases if requested
+        if (ticketCost > 0 && ticketQuantity > 0) {
             // Build PurchaseParams struct and call
-            (bool success, ) = ContractAddresses.GAMEPIECES.call{value: ethForMaps}(
+            (bool success, ) = ContractAddresses.GAMEPIECES.call{value: ethForTickets}(
                 abi.encodeWithSignature(
                     "purchase((uint256,uint8,uint8,bool,bytes32))",
-                    mapQuantity,
-                    uint8(1), // PurchaseKind.Map
+                    ticketQuantity,
+                    uint8(1), // PurchaseKind.Ticket
                     uint8(payKind),
                     false, // payInCoin
                     affiliateCode
@@ -1144,7 +1144,7 @@ contract DegenerusGame is DegenerusGameStorage {
         uint256 futureShare = (amount * futureBps) / 10_000;
         if (futureShare != 0) {
             lootboxReservePool -= futureShare;
-            _queueFutureRewardMints(address(0), targetLevel, 0, futureShare);
+            _queueFutureRewardTickets(address(0), targetLevel, 0, futureShare);
         }
 
         uint256 amountFirst = amount;
@@ -1315,7 +1315,7 @@ contract DegenerusGame is DegenerusGameStorage {
     ///      2. Apply daily gate (must have minted today unless cap != 0)
     ///      3. Process dormant cleanup if in setup state
     ///      4. Gate on RNG readiness (request new VRF if needed)
-    ///      5. Process map mint batches
+    ///      5. Process ticket batches
     ///      6. Execute state-specific logic (setup/purchase/degenerus)
     ///      7. Credit caller with BURNIE reward (if cap == 0)
     ///
@@ -1394,7 +1394,7 @@ contract DegenerusGame is DegenerusGameStorage {
             // Allow dormant cleanup bounty even before the daily gate unlocks. If no work is done,
             // we continue to normal gating and will revert via rngAndTimeGate when not time yet.
             if (_gameState == GAME_STATE_SETUP) {
-                bool dormantWorked = nft.processDormant(cap);
+                bool dormantWorked = gamepieces.processDormant(cap);
                 if (dormantWorked) {
                     break; // Work done - exit this tick
                 }
@@ -1408,16 +1408,16 @@ contract DegenerusGame is DegenerusGameStorage {
             }
 
             // === FUTURE MINT ACTIVATION (State 2 only) ===
-            // Process queued future mints before other purchase-phase work.
+            // Process queued future ticket rewards before other purchase-phase work.
             if (_gameState == GAME_STATE_PURCHASE) {
-                (bool futureWorked, bool futureFinished) = _processFutureMintBatch(cap, lvl);
+                (bool futureWorked, bool futureFinished) = _processFutureTicketBatch(cap, lvl);
                 if (futureWorked || !futureFinished) break;
             }
 
-            // === MAP BATCH PROCESSING ===
-            // Always run a map batch upfront; it no-ops when nothing is queued.
+            // === ticket BATCH PROCESSING ===
+            // Always run a ticket batch upfront; it no-ops when nothing is queued.
             // Single batch per call prevents gas exhaustion.
-            (bool batchWorked, bool batchesFinished) = _runProcessMapBatch(cap);
+            (bool batchWorked, bool batchesFinished) = _runProcessTicketBatchLegacy(cap);
             if (batchWorked || !batchesFinished) break;
 
             // +================================================================+
@@ -1458,8 +1458,8 @@ contract DegenerusGame is DegenerusGameStorage {
             // |  • Transition to State 3 when all processing complete          |
             // +================================================================+
             if (_gameState == GAME_STATE_PURCHASE) {
-                if (mapJackpotType != MAP_JACKPOT_NONE) {
-                    payMapJackpot(lvl, rngWord);
+                if (ticketJackpotType != TICKET_JACKPOT_NONE) {
+                    payTicketJackpot(lvl, rngWord);
                     _unlockRng(day);
                     break;
                 }
@@ -1472,8 +1472,8 @@ contract DegenerusGame is DegenerusGameStorage {
                         lastPurchaseDay = true;
                         lastPurchaseDayFlipTotal = 0;
                     }
-                    if (mapJackpotType != MAP_JACKPOT_NONE) {
-                        break; // MAP jackpot queued, will process next tick
+                    if (ticketJackpotType != TICKET_JACKPOT_NONE) {
+                        break; // ticket jackpot queued, will process next tick
                     }
                     _unlockRng(day);
                     break;
@@ -1494,16 +1494,16 @@ contract DegenerusGame is DegenerusGameStorage {
                     levelJackpotPaid = true;
 
                     // Reset airdrop processing state
-                    airdropMapsProcessedCount = 0;
-                    if (airdropIndex >= pendingMapMints.length) {
+                    airdropTicketsProcessedCount = 0;
+                    if (airdropIndex >= pendingTicketMints.length) {
                         airdropIndex = 0;
-                        delete pendingMapMints;
+                        delete pendingTicketMints;
                     }
                     break;
                 }
 
                 // --- Process pending gamepiece mints ---
-                (uint32 purchaseCountPre, uint32 purchaseCountPhase) = nft.purchaseCounts();
+                (uint32 purchaseCountPre, uint32 purchaseCountPhase) = gamepieces.purchaseCounts();
                 uint256 purchaseCountTotal = uint256(purchaseCountPre) + uint256(purchaseCountPhase);
                 if (purchaseCountTotal > type(uint32).max) revert E();
                 uint32 purchaseCountRaw = uint32(purchaseCountTotal);
@@ -1512,7 +1512,7 @@ contract DegenerusGame is DegenerusGameStorage {
                 }
                 if (!traitCountsSeedQueued) {
                     uint32 multiplier_ = airdropMultiplier;
-                    if (!nft.processPendingMints(cap, multiplier_, rngWord)) {
+                    if (!gamepieces.processPendingMints(cap, multiplier_, rngWord)) {
                         break; // More mints to process
                     }
                     if (purchaseCountRaw != 0) {
@@ -1525,7 +1525,7 @@ contract DegenerusGame is DegenerusGameStorage {
                 if (traitCountsSeedQueued) {
                     uint32 targetCount = _purchaseTargetCountFromRawModule(purchaseCountPre, purchaseCountPhase);
                     if (traitRebuildCursor < targetCount) {
-                        uint256 baseTokenId = nft.currentBaseTokenId();
+                        uint256 baseTokenId = gamepieces.currentBaseTokenId();
                         _rebuildTraitCountsModule(cap, targetCount, baseTokenId);
                         break; // More trait counts to rebuild
                     }
@@ -1553,8 +1553,8 @@ contract DegenerusGame is DegenerusGameStorage {
             // |  • Transition to State 1 on level end                          |
             // +================================================================+
             if (_gameState == GAME_STATE_BURN) {
-                if (mapJackpotType != MAP_JACKPOT_NONE) {
-                    payMapJackpot(lvl, rngWord);
+                if (ticketJackpotType != TICKET_JACKPOT_NONE) {
+                    payTicketJackpot(lvl, rngWord);
                     // Check timeout on-the-fly (jackpotCounter was incremented before pending was set)
                     if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
                         _endLevel(TRAIT_ID_TIMEOUT);
@@ -1566,8 +1566,8 @@ contract DegenerusGame is DegenerusGameStorage {
 
                 payDailyJackpot(true, lvl, rngWord);
                 _payFutureTicketJackpot(lvl, rngWord); // Award future ticket holders
-                if (mapJackpotType != MAP_JACKPOT_NONE) {
-                    break; // MAP jackpot queued, will process next tick
+                if (ticketJackpotType != TICKET_JACKPOT_NONE) {
+                    break; // ticket jackpot queued, will process next tick
                 }
                 // Check for timeout end (10 ContractAddresses.JACKPOTS paid without extermination)
                 if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
@@ -1589,28 +1589,28 @@ contract DegenerusGame is DegenerusGameStorage {
     }
 
     /*+======================================================================+
-      |                       MAP MINT QUEUEING                              |
+      |                       ticket MINT QUEUEING                              |
       +======================================================================+
-      |  Maps are queued for batch processing rather than minted immediately.|
+      |  Tickets are queued for batch processing rather than minted immediately.|
       |  This prevents gas exhaustion from large purchases.                  |
       +======================================================================+*/
 
-    /// @notice Queue map mints owed after gamepiece-side processing.
-    /// @dev Access: nft contract only.
-    ///      Maps are processed in batches during advanceGame to prevent DoS.
-    ///      If player already has maps owed, they're not re-added to pendingMapMints array.
-    /// @param buyer Player to credit maps to.
-    /// @param quantity Number of map entries to queue (1+).
-    function enqueueMap(address buyer, uint32 quantity) external {
+    /// @notice Queue ticket awards owed after gamepiece-side processing.
+    /// @dev Access: gamepieces contract only.
+    ///      Tickets are processed in batches during advanceGame to prevent DoS.
+    ///      If player already has tickets owed, they're not re-added to pendingTicketMints array.
+    /// @param buyer Player to credit tickets to.
+    /// @param quantity Number of ticket entries to queue (1+).
+    function enqueueTickets(address buyer, uint32 quantity) external {
         if (msg.sender != ContractAddresses.GAMEPIECES) revert E();
 
-        // Only add to pending array if player doesn't already have maps queued
-        if (playerMapMintsOwed[buyer] == 0) {
-            pendingMapMints.push(buyer);
+        // Only add to pending array if player doesn't already have tickets queued
+        if (playerTicketMintsOwed[buyer] == 0) {
+            pendingTicketMints.push(buyer);
         }
 
         unchecked {
-            playerMapMintsOwed[buyer] += quantity;
+            playerTicketMintsOwed[buyer] += quantity;
         }
     }
 
@@ -1660,7 +1660,7 @@ contract DegenerusGame is DegenerusGameStorage {
         uint256 count = tokenIds.length;
         if (count == 0 || count > 75) revert InvalidQuantity();
         address caller = msg.sender;
-        nft.burnFromGame(caller, tokenIds);
+        gamepieces.burnFromGame(caller, tokenIds);
         coin.notifyQuestBurn(caller, uint32(count));
 
         uint24 lvl = level;
@@ -1862,7 +1862,7 @@ contract DegenerusGame is DegenerusGameStorage {
             price = 0.25 ether;
         }
 
-        nft.advanceBase(); // let gamepiece pull its own nextTokenId to avoid redundant calls here
+        gamepieces.advanceBase(); // let gamepiece pull its own nextTokenId to avoid redundant calls here
     }
 
     /*+================================================================================================================+
@@ -2221,12 +2221,12 @@ contract DegenerusGame is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Pay the queued MAP jackpot (daily or purchase) via jackpot module delegatecall.
+    /// @dev Pay the queued ticket jackpot (daily or purchase) via jackpot module delegatecall.
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
-    function payMapJackpot(uint24 lvl, uint256 randWord) internal {
+    function payTicketJackpot(uint24 lvl, uint256 randWord) internal {
         (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameJackpotModule.payMapJackpot.selector, lvl, randWord)
+            abi.encodeWithSelector(IDegenerusGameJackpotModule.payTicketJackpot.selector, lvl, randWord)
         );
         if (!ok) _revertDelegate(data);
     }
@@ -2360,9 +2360,9 @@ contract DegenerusGame is DegenerusGameStorage {
     ///      Returns existing word if available, or requests new one.
     /// @param day Current day index.
     /// @param lvl Current level.
-    /// @param isMapJackpotDay True if this is the last purchase day.
+    /// @param isTicketJackpotDay True if this is the last purchase day.
     /// @return word VRF random word (returns 1 as sentinel if request just made).
-    function rngAndTimeGate(uint48 day, uint24 lvl, bool isMapJackpotDay) internal returns (uint256 word) {
+    function rngAndTimeGate(uint48 day, uint24 lvl, bool isTicketJackpotDay) internal returns (uint256 word) {
         if (day == dailyIdx) revert NotTimeYet();
 
         uint256 currentWord = rngFulfilled ? rngWordCurrent : 0;
@@ -2370,27 +2370,27 @@ contract DegenerusGame is DegenerusGameStorage {
         if (currentWord == 0 && rngLockedFlag && rngRequestTime != 0) {
             uint48 elapsed = uint48(block.timestamp) - rngRequestTime;
             if (elapsed >= 18 hours) {
-                _requestRng(gameState, isMapJackpotDay, lvl);
+                _requestRng(gameState, isTicketJackpotDay, lvl);
                 return 1;
             }
         }
 
         if (currentWord == 0) {
             if (rngLockedFlag) revert RngNotReady();
-            _requestRng(gameState, isMapJackpotDay, lvl);
+            _requestRng(gameState, isTicketJackpotDay, lvl);
             return 1;
         }
 
         if (!rngLockedFlag) {
             // Stale entropy from previous cycle; request a fresh word.
-            _requestRng(gameState, isMapJackpotDay, lvl);
+            _requestRng(gameState, isTicketJackpotDay, lvl);
             return 1;
         }
 
         // Record the word once per day; using a zero sentinel since VRF returning 0 is effectively impossible.
         if (rngWordByDay[day] == 0) {
             rngWordByDay[day] = currentWord;
-            bool bonusFlip = isMapJackpotDay || lootboxPresaleActive;
+            bool bonusFlip = isTicketJackpotDay || lootboxPresaleActive;
             // Always run coinflip payouts once game has started (lvl always >= 1)
             coin.processCoinflipPayouts(lvl, bonusFlip, currentWord, day);
         }
@@ -2401,14 +2401,14 @@ contract DegenerusGame is DegenerusGameStorage {
     ///      After 3-day timeout, uses earliest historical VRF word as fallback (more secure
     ///      than blockhash since it's already verified on-chain and cannot be manipulated).
     /// @return word RNG word, 1 if request sent, or 0 if waiting on fallback.
-    function _gameOverEntropy(uint48 day, uint24 lvl, bool isMapJackpotDay) private returns (uint256 word) {
+    function _gameOverEntropy(uint48 day, uint24 lvl, bool isTicketJackpotDay) private returns (uint256 word) {
         if (rngWordByDay[day] != 0) return rngWordByDay[day];
 
         uint256 currentWord = rngFulfilled ? rngWordCurrent : 0;
         if (currentWord != 0 && rngLockedFlag) {
             rngWordByDay[day] = currentWord;
             if (lvl != 0) {
-                coin.processCoinflipPayouts(lvl, isMapJackpotDay, currentWord, day);
+                coin.processCoinflipPayouts(lvl, isTicketJackpotDay, currentWord, day);
             }
             return currentWord;
         }
@@ -2421,7 +2421,7 @@ contract DegenerusGame is DegenerusGameStorage {
                     uint256 fallbackWord = _getHistoricalRngFallback(day);
                     rngWordByDay[day] = fallbackWord;
                     if (lvl != 0) {
-                        coin.processCoinflipPayouts(lvl, isMapJackpotDay, fallbackWord, day);
+                        coin.processCoinflipPayouts(lvl, isTicketJackpotDay, fallbackWord, day);
                     }
                     return fallbackWord;
                 }
@@ -2429,7 +2429,7 @@ contract DegenerusGame is DegenerusGameStorage {
             return 0;
         }
 
-        if (_tryRequestRng(gameState, isMapJackpotDay, lvl)) {
+        if (_tryRequestRng(gameState, isTicketJackpotDay, lvl)) {
             return 1;
         }
 
@@ -2493,7 +2493,7 @@ contract DegenerusGame is DegenerusGameStorage {
     /// @param lvl Current level.
     /// @return worked True if any queued entries were processed.
     /// @return finished True if all queued entries for this level are processed.
-    function _processFutureMintBatch(
+    function _processFutureTicketBatch(
         uint32 playersToProcess,
         uint24 lvl
     ) private returns (bool worked, bool finished) {
@@ -2526,7 +2526,7 @@ contract DegenerusGame is DegenerusGameStorage {
             return (false, true);
         }
 
-        uint32 batch = playersToProcess == 0 ? FUTURE_MINT_PLAYER_BATCH_SIZE : playersToProcess;
+        uint32 batch = playersToProcess == 0 ? FUTURE_TICKET_PLAYER_BATCH_SIZE : playersToProcess;
         uint256 end = idx + batch;
         if (end > total) {
             end = total;
@@ -2537,7 +2537,7 @@ contract DegenerusGame is DegenerusGameStorage {
             uint32 owed = futureMintsOwed[lvl][player];
             if (owed != 0) {
                 futureMintsOwed[lvl][player] = 0;
-                nft.queueRewardMints(player, owed);
+                gamepieces.queueRewardMints(player, owed);
             }
             unchecked {
                 ++idx;
@@ -2635,7 +2635,7 @@ contract DegenerusGame is DegenerusGameStorage {
 
         // Both modes: 60% tickets/gamepieces (0-11), 20% small BURNIE (12-15), 20% large BURNIE (16-19) using d20 roll
         // Target level is rolled by caller (current level + 0-5)
-        // Within ticket outcome: 1/6 chance for gamepiece (if budget >= 4× MAP price), else tickets
+        // Within ticket outcome: 1/6 chance for gamepiece (if budget >= 4× ticket price), else tickets
         uint256 rollMax = 20;
         uint256 ticketThreshold = 12; // rolls 0-11 = tickets
         uint256 largeBurnieThreshold = 16; // rolls 16-19 = large BURNIE
@@ -2657,7 +2657,7 @@ contract DegenerusGame is DegenerusGameStorage {
                 burnieOut = (burnieValue * 80) / 100; // 20% penalty for insufficient budget
                 applyPresaleMultiplier = false;
             } else {
-                // Check if budget allows for a gamepiece (4 MAP tickets = 1 gamepiece)
+                // Check if budget allows for a gamepiece (4 tickets = 1 gamepiece)
                 uint256 gamepiecePrice = price * 4;
                 bool canAffordGamepiece = ticketBudget >= gamepiecePrice;
 
@@ -2676,7 +2676,7 @@ contract DegenerusGame is DegenerusGameStorage {
                         burnieOut = 4 * PRICE_COIN_UNIT;
                     } else {
                         // Future level: queue gamepiece mint
-                        _queueFutureRewardMints(player, targetLevel, 4, 0);
+                        _queueFutureRewardTickets(player, targetLevel, 4, 0);
                         ticketsOut = 4;
                     }
                     applyPresaleMultiplier = false;
@@ -2689,7 +2689,7 @@ contract DegenerusGame is DegenerusGameStorage {
                     if (targetLevel <= level) {
                         burnieOut = uint256(tickets) * PRICE_COIN_UNIT;
                     } else {
-                        _queueFutureRewardMints(player, targetLevel, tickets, 0);
+                        _queueFutureRewardTickets(player, targetLevel, tickets, 0);
                         ticketsOut = tickets;
                     }
                     applyPresaleMultiplier = false;
@@ -2709,41 +2709,41 @@ contract DegenerusGame is DegenerusGameStorage {
     }
 
     /*+======================================================================+
-      |                    MAP / gamepiece AIRDROP BATCHING                        |
+      |                    ticket / gamepiece AIRDROP BATCHING                        |
       +======================================================================+
-      |  Map mints are processed in batches to prevent gas exhaustion.       |
+      |  Ticket mints are processed in batches to prevent gas exhaustion.       |
       |  Large purchases are queued and processed across multiple txs.       |
       +======================================================================+*/
 
-    /// @dev Process a batch of map mints via jackpot module delegatecall.
+    /// @dev Process a batch of ticket awards via jackpot module delegatecall.
     /// @param writesBudget Count of SSTORE writes allowed (0 = use default).
     ///                     Hard-clamped to stay within gas limits.
-    /// @return finished True if all pending map mints have been processed.
-    function _processMapBatch(uint32 writesBudget) internal returns (bool finished) {
+    /// @return finished True if all pending ticket awards have been processed.
+    function _processTicketBatchLegacy(uint32 writesBudget) internal returns (bool finished) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameJackpotModule.processMapBatch.selector, writesBudget)
+            abi.encodeWithSelector(IDegenerusGameJackpotModule.processTicketBatchLegacy.selector, writesBudget)
         );
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
         return abi.decode(data, (bool));
     }
 
-    /// @dev Helper to run one map batch and detect whether any progress was made.
-    /// @return worked True if airdropIndex or airdropMapsProcessedCount changed.
-    /// @return finished True if all pending map mints have been fully processed.
-    function _runProcessMapBatch(uint32 writesBudget) private returns (bool worked, bool finished) {
+    /// @dev Helper to run one ticket batch and detect whether any progress was made.
+    /// @return worked True if airdropIndex or airdropTicketsProcessedCount changed.
+    /// @return finished True if all pending ticket awards have been fully processed.
+    function _runProcessTicketBatchLegacy(uint32 writesBudget) private returns (bool worked, bool finished) {
         uint32 prevIdx = airdropIndex;
-        uint32 prevProcessed = airdropMapsProcessedCount;
-        finished = _processMapBatch(writesBudget);
-        worked = (airdropIndex != prevIdx) || (airdropMapsProcessedCount != prevProcessed);
+        uint32 prevProcessed = airdropTicketsProcessedCount;
+        finished = _processTicketBatchLegacy(writesBudget);
+        worked = (airdropIndex != prevIdx) || (airdropTicketsProcessedCount != prevProcessed);
     }
 
     /// @dev Request new VRF random word from Chainlink.
     ///      Sets RNG lock to prevent manipulation during pending window.
     /// @param gameState_ Current game state.
-    /// @param isMapJackpotDay True if this is the last purchase day.
+    /// @param isTicketJackpotDay True if this is the last purchase day.
     /// @param lvl Current level.
-    function _requestRng(uint8 gameState_, bool isMapJackpotDay, uint24 lvl) private {
+    function _requestRng(uint8 gameState_, bool isTicketJackpotDay, uint24 lvl) private {
         // Hard revert if Chainlink request fails; this intentionally halts game progress until VRF funding/config is fixed.
         uint256 id = vrfCoordinator.requestRandomWords(
             VRFRandomWordsRequest({
@@ -2755,10 +2755,10 @@ contract DegenerusGame is DegenerusGameStorage {
                 extraArgs: hex"" // Empty for LINK payment (default)
             })
         );
-        _finalizeRngRequest(gameState_, isMapJackpotDay, lvl, id);
+        _finalizeRngRequest(gameState_, isTicketJackpotDay, lvl, id);
     }
 
-    function _tryRequestRng(uint8 gameState_, bool isMapJackpotDay, uint24 lvl) private returns (bool requested) {
+    function _tryRequestRng(uint8 gameState_, bool isTicketJackpotDay, uint24 lvl) private returns (bool requested) {
         if (address(vrfCoordinator) == address(0) || vrfKeyHash == bytes32(0) || vrfSubscriptionId == 0) {
             return false;
         }
@@ -2775,12 +2775,12 @@ contract DegenerusGame is DegenerusGameStorage {
                 })
             )
         returns (uint256 id) {
-            _finalizeRngRequest(gameState_, isMapJackpotDay, lvl, id);
+            _finalizeRngRequest(gameState_, isTicketJackpotDay, lvl, id);
             requested = true;
         } catch {}
     }
 
-    function _finalizeRngRequest(uint8 gameState_, bool isMapJackpotDay, uint24 lvl, uint256 requestId) private {
+    function _finalizeRngRequest(uint8 gameState_, bool isTicketJackpotDay, uint24 lvl, uint256 requestId) private {
         vrfRequestId = requestId;
         rngFulfilled = false;
         rngWordCurrent = 0;
@@ -2788,7 +2788,7 @@ contract DegenerusGame is DegenerusGameStorage {
         rngRequestTime = uint48(block.timestamp);
 
         bool decClose = (((lvl % 100 != 0 && (lvl % 100 != 99) && gameState_ == GAME_STATE_SETUP) ||
-            (lvl % 100 == 0 && isMapJackpotDay)) && decWindowOpen);
+            (lvl % 100 == 0 && isTicketJackpotDay)) && decWindowOpen);
         if (decClose) decWindowOpen = false;
     }
 
@@ -3135,13 +3135,13 @@ contract DegenerusGame is DegenerusGameStorage {
         nextOffset = uint32(end);
     }
 
-    /// @notice Get pending mints and maps owed to a player.
+    /// @notice Get pending gamepiece mints and tickets owed to a player.
     /// @param player The player address.
     /// @return mints Number of gamepiece mints owed.
-    /// @return maps Number of map entries owed.
-    function getPlayerPurchases(address player) external view returns (uint32 mints, uint32 maps) {
-        mints = nft.tokensOwed(player);
-        maps = playerMapMintsOwed[player];
+    /// @return tickets Number of ticket entries owed.
+    function getPlayerPurchases(address player) external view returns (uint32 mints, uint32 tickets) {
+        mints = gamepieces.tokensOwed(player);
+        tickets = playerTicketMintsOwed[player];
     }
 
     /*+======================================================================+

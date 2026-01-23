@@ -294,13 +294,13 @@ contract IconColorRegistry {
         ) revert InvalidTrophyOuterPercentage();
 
         // Process each token
-        IERC721Lite nftRef = IERC721Lite(tokenContract);
+        IERC721Lite tokenRef = IERC721Lite(tokenContract);
         uint256 count = tokenIds.length;
         for (uint256 i; i < count; ) {
             uint256 tokenId = tokenIds[i];
 
             // Verify user owns this token
-            if (nftRef.ownerOf(tokenId) != user) revert NotRenderer();
+            if (tokenRef.ownerOf(tokenId) != user) revert NotRenderer();
 
             // Apply color overrides
             Colors storage c = _custom[tokenContract][tokenId];

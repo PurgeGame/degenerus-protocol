@@ -10,8 +10,6 @@ abstract contract RendererRouterBase {
     error NotAdmin();
 
     uint256 private constant PRIMARY_GAS = 1_000_000;
-    uint256 private constant MIN_FALLBACK_GAS = 200_000;
-
     address public primary;
 
     event PrimaryRendererUpdated(address indexed previous, address indexed next);
@@ -42,7 +40,7 @@ abstract contract RendererRouterBase {
     ) internal view returns (string memory) {
         (bool ok, string memory uri) = _callPrimary(tokenId, data, extras);
         if (ok) return uri;
-        (ok, uri) = _callRenderer(fallbackRenderer(), tokenId, data, extras, gasleft());
+        (ok, uri) = _callRenderer(fallbackRenderer(), tokenId, data, extras, PRIMARY_GAS);
         if (ok) return uri;
         return "";
     }
@@ -54,7 +52,6 @@ abstract contract RendererRouterBase {
     ) private view returns (bool ok, string memory uri) {
         address target = primary;
         if (target == address(0)) return (false, "");
-        if (PRIMARY_GAS + MIN_FALLBACK_GAS > gasleft()) return (false, "");
         return _callRenderer(target, tokenId, data, extras, PRIMARY_GAS);
     }
 

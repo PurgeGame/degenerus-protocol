@@ -142,7 +142,7 @@ library RendererLibrary {
         return
             string(
                 abi.encodePacked(
-                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 120 120">',
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">',
                     '<defs><filter id="inv" color-interpolation-filters="sRGB">',
                     '<feColorMatrix type="matrix" values="',
                     "-1 0 0 0 1 ",

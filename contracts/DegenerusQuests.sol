@@ -36,9 +36,9 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  *
  * Progress Versioning
  * -----------------------------------------------------------------------------
- * Each quest has a monotonic `version` field. When a quest mutates mid-day
- * (e.g., burn quest converts to mint when burning is disabled), the version
- * bumps and stale player progress is automatically reset via `_questSyncProgress`.
+ * Each quest has a monotonic `version` field. When a quest is seeded for a new day,
+ * the version bumps and stale player progress is automatically reset via
+ * `_questSyncProgress`.
  *
  * Streak & Tier System
  * -----------------------------------------------------------------------------
@@ -54,6 +54,8 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @dev Thrown when caller is not the authorized ContractAddresses.COIN contract.
     error OnlyCoin();
+    /// @dev Thrown when caller is not the authorized ContractAddresses.GAME contract.
+    error OnlyGame();
 
     // =========================================================================
     //                              CONSTANTS
@@ -148,7 +150,6 @@ contract DegenerusQuests is IDegenerusQuests {
      *
      * Version Semantics:
      * - Increments when quest is first seeded each day
-     * - Increments again if quest type converts mid-day (burn → mint)
      * - Player progress is invalidated when version mismatches
      */
     struct DailyQuest {
@@ -211,6 +212,9 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Per-player quest state including progress and streak.
     mapping(address => PlayerQuestState) private questPlayerState;
 
+    /// @dev Quest streak shields (stackable, consumed on missed days).
+    mapping(address => uint16) private questStreakShieldCount;
+
     // -------------------------------------------------------------------------
     // Packed Target Tables
     // -------------------------------------------------------------------------
@@ -242,6 +246,12 @@ contract DegenerusQuests is IDegenerusQuests {
     modifier onlyCoinOrGame() {
         address sender = msg.sender;
         if (sender != ContractAddresses.COIN && sender != ContractAddresses.GAME) revert OnlyCoin();
+        _;
+    }
+
+    /// @dev Restricts access to the authorized ContractAddresses.GAME contract only.
+    modifier onlyGame() {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         _;
     }
 
@@ -287,29 +297,37 @@ contract DegenerusQuests is IDegenerusQuests {
         return _rollDailyQuest(day, entropy, forceMintEth, forceBurn);
     }
 
-    /**
-     * @notice Normalize active quests when burning becomes disallowed mid-day.
-     * @dev Called when game transitions out of burn state (e.g., extermination).
-     *      Converts any active BURN quests to MINT_ETH or AFFILIATE, bumping
-     *      version to invalidate stale player progress.
-     *
-     * Conversion Logic:
-     * - If the OTHER slot is MINT_ETH → convert to AFFILIATE
-     * - Otherwise → convert to MINT_ETH
-     * This ensures the two slots never have duplicate types.
-     */
-    function normalizeActiveBurnQuests() external onlyCoinOrGame {
-        DailyQuest[QUEST_SLOT_COUNT] storage quests = activeQuests;
-        bool burnAllowed = _canRollBurnQuest();
-        if (burnAllowed) return;
-        for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
-            DailyQuest storage quest = quests[slot];
-            if (quest.questType == QUEST_TYPE_BURN) {
-                _convertBurnQuest(quests, slot);
-            }
-            unchecked {
-                ++slot;
-            }
+    /// @notice Award quest streak shields to a player (stackable).
+    /// @dev Access: game contract only.
+    ///      Each shield can cover one missed quest day and is consumed on use.
+    function awardQuestStreakShield(address player, uint16 amount) external onlyGame {
+        if (player == address(0) || amount == 0) return;
+        uint16 current = questStreakShieldCount[player];
+        uint16 updated = current + amount;
+        if (updated < current) {
+            questStreakShieldCount[player] = type(uint16).max;
+        } else {
+            questStreakShieldCount[player] = updated;
+        }
+    }
+
+    /// @notice Award quest streak bonus to a player.
+    /// @dev Access: game contract only. Does not alter per-day completion snapshots.
+    function awardQuestStreakBonus(address player, uint16 amount, uint48 currentDay) external onlyGame {
+        if (player == address(0) || amount == 0 || currentDay == 0) return;
+
+        PlayerQuestState storage state = questPlayerState[player];
+        _questSyncState(state, player, currentDay);
+
+        uint32 prevStreak = state.streak;
+        uint32 updated = prevStreak + uint32(amount);
+        if (updated < prevStreak) {
+            updated = type(uint32).max;
+        }
+        state.streak = updated;
+
+        if (state.lastActiveDay < currentDay) {
+            state.lastActiveDay = uint32(currentDay);
         }
     }
 
@@ -399,7 +417,7 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, false, quests[0].questType, state.streak, false, false);
         }
 
-        _questSyncState(state, currentDay);
+        _questSyncState(state, player, currentDay);
         uint8 tier = _questTier(state.baseStreak);
 
         MintAggregate memory agg;
@@ -473,7 +491,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (player == address(0) || flipCredit == 0 || currentDay == 0) {
             return (0, false, quests[0].questType, state.streak, false, false);
         }
-        _questSyncState(state, currentDay);
+        _questSyncState(state, player, currentDay);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_FLIP);
         if (slotIndex == type(uint8).max) {
@@ -512,7 +530,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (player == address(0) || burnAmount == 0 || currentDay == 0) {
             return (0, false, quests[0].questType, state.streak, false, false);
         }
-        _questSyncState(state, currentDay);
+        _questSyncState(state, player, currentDay);
         uint8 tier = _questTier(state.baseStreak);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_DECIMATOR);
@@ -547,7 +565,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (player == address(0) || amount == 0 || currentDay == 0) {
             return (0, false, quests[0].questType, state.streak, false, false);
         }
-        _questSyncState(state, currentDay);
+        _questSyncState(state, player, currentDay);
         uint8 tier = _questTier(state.baseStreak);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_AFFILIATE);
@@ -584,7 +602,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (player == address(0) || quantity == 0 || currentDay == 0) {
             return (0, false, quests[0].questType, state.streak, false, false);
         }
-        _questSyncState(state, currentDay);
+        _questSyncState(state, player, currentDay);
         uint8 tier = _questTier(state.baseStreak);
 
         bool matched;
@@ -633,7 +651,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (player == address(0) || amountWei == 0 || currentDay == 0) {
             return (0, false, quests[0].questType, state.streak, false, false);
         }
-        _questSyncState(state, currentDay);
+        _questSyncState(state, player, currentDay);
         uint8 tier = _questTier(state.baseStreak);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
@@ -661,8 +679,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Uses tier 0 (streak = 0) for baseline requirements. Frontends should use
      *      `getPlayerQuestView` for player-specific tier-adjusted requirements.
      *
-     * Note: Burn quests are downgraded to MINT_ETH/AFFILIATE in the returned view
-     * when the game is not in burn state, matching the UI behavior.
+     * Note: Quest types are returned exactly as stored for the current day.
      */
     function getActiveQuests() external view override returns (QuestInfo[2] memory quests) {
         DailyQuest[QUEST_SLOT_COUNT] memory local = _materializeActiveQuestsForView();
@@ -677,31 +694,9 @@ contract DegenerusQuests is IDegenerusQuests {
         }
     }
 
-    /**
-     * @dev Returns active quests, downgrading burn slots in-memory when burning is not allowed.
-     *
-     * This is a VIEW-ONLY transformation. The storage `activeQuests` is never modified here.
-     * The actual storage-level conversion happens via `normalizeActiveBurnQuests()` when
-     * the game state changes.
-     *
-     * Downgrade Logic:
-     * - If slot has BURN quest but burning is disabled → convert to MINT_ETH
-     * - Unless other slot already has MINT_ETH → then convert to AFFILIATE
-     */
+    /// @dev Returns active quests as stored (no in-memory conversions).
     function _materializeActiveQuestsForView() private view returns (DailyQuest[QUEST_SLOT_COUNT] memory local) {
         local = activeQuests;
-        bool burnAllowed = _canRollBurnQuest();
-        if (burnAllowed) return local;
-        for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
-            if (local[slot].questType == QUEST_TYPE_BURN) {
-                uint8 otherSlot = slot == 0 ? uint8(1) : uint8(0);
-                bool otherMintEth = local[otherSlot].questType == QUEST_TYPE_MINT_ETH;
-                local[slot].questType = otherMintEth ? QUEST_TYPE_AFFILIATE : QUEST_TYPE_MINT_ETH;
-            }
-            unchecked {
-                ++slot;
-            }
-        }
     }
 
     /**
@@ -751,10 +746,15 @@ contract DegenerusQuests is IDegenerusQuests {
         uint48 currentDay = _currentQuestDay(local);
         PlayerQuestState memory state = questPlayerState[player];
 
-        // Preview streak decay: if player missed a day, show 0 streak
+        // Preview streak decay: if player missed days beyond available shields, show 0 streak
         uint32 effectiveStreak = state.streak;
-        if (state.lastCompletedDay != 0 && currentDay > uint48(state.lastCompletedDay + 1)) {
-            effectiveStreak = 0;
+        uint32 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
+        if (anchorDay != 0 && currentDay > uint48(anchorDay + 1)) {
+            uint32 missedDays = uint32(currentDay - uint48(anchorDay) - 1);
+            uint16 shields = questStreakShieldCount[player];
+            if (missedDays > uint32(shields)) {
+                effectiveStreak = 0;
+            }
         }
         // Use synced baseStreak if already active today, otherwise preview effective streak
         uint32 effectiveBaseStreak = (state.lastSyncDay == currentDay) ? state.baseStreak : effectiveStreak;
@@ -850,27 +850,8 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     // -------------------------------------------------------------------------
-    // Quest Conversion & Lookup
+    // Quest Lookup
     // -------------------------------------------------------------------------
-
-    /**
-     * @dev Downgrades burn quests to ETH mint (or affiliate) when burning is paused.
-     * @param quests Storage reference to active quests array.
-     * @param slot The slot index to convert.
-     *
-     * Critical: This function bumps the quest version to invalidate any existing
-     * player progress. Without this, a player could accumulate burn progress,
-     * then claim it against the converted mint/affiliate quest.
-     */
-    function _convertBurnQuest(DailyQuest[QUEST_SLOT_COUNT] storage quests, uint8 slot) private {
-        DailyQuest storage quest = quests[slot];
-        uint8 otherSlot = slot == 0 ? uint8(1) : uint8(0);
-        DailyQuest storage other = quests[otherSlot];
-        // Avoid duplicate quest types
-        bool otherMintEth = other.questType == QUEST_TYPE_MINT_ETH;
-        quest.questType = otherMintEth ? QUEST_TYPE_AFFILIATE : QUEST_TYPE_MINT_ETH;
-        quest.version = _nextQuestVersion(); // Invalidates stale progress
-    }
 
     /**
      * @dev Returns the active quest of a given type for the current day, if present.
@@ -968,9 +949,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Increments and returns the quest version counter.
      * @return newVersion The new version number.
      *
-     * Used to invalidate stale progress when:
-     * - A new quest is seeded for the day
-     * - A quest type converts mid-day (burn → mint)
+     * Used to invalidate stale progress when a new quest is seeded for the day.
      */
     function _nextQuestVersion() private returns (uint32 newVersion) {
         newVersion = questVersionCounter++;
@@ -1015,21 +994,32 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @dev Resets per-day bookkeeping and streak if a day was missed.
      * @param state Storage reference to player's quest state.
+     * @param player Player address for streak shield lookup.
      * @param currentDay The current quest day.
      *
      * Streak Reset Logic:
      * - Uses lastActiveDay if set (any slot completion), else lastCompletedDay
-     * - If gap > 1 day, streak resets to 0 (missed day penalty)
+     * - If gap > 1 day, streak resets unless shields cover every missed day
      * - On new day, resets completionMask and snapshots baseStreak
      *
      * baseStreak Snapshot:
      * - Captures streak at start of day for consistent tier calculation
      * - Prevents tier from changing mid-action if streak increments
      */
-    function _questSyncState(PlayerQuestState storage state, uint48 currentDay) private {
+    function _questSyncState(PlayerQuestState storage state, address player, uint48 currentDay) private {
         uint32 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
         if (anchorDay != 0 && currentDay > uint48(anchorDay + 1)) {
-            state.streak = 0; // Full miss (no quest completion) for at least one day
+            uint32 missedDays = uint32(currentDay - uint48(anchorDay) - 1);
+            uint16 shields = questStreakShieldCount[player];
+            if (shields != 0) {
+                uint32 used = missedDays > uint32(shields) ? uint32(shields) : missedDays;
+                questStreakShieldCount[player] = shields - uint16(used);
+                if (missedDays > uint32(shields)) {
+                    state.streak = 0; // Missed more days than shields available
+                }
+            } else {
+                state.streak = 0; // Full miss (no quest completion) for at least one day
+            }
         }
         if (state.lastSyncDay != currentDay) {
             state.lastSyncDay = uint32(currentDay);
@@ -1047,7 +1037,6 @@ contract DegenerusQuests is IDegenerusQuests {
      *
      * This is the key anti-exploit mechanism:
      * - Progress from a previous day cannot be applied to today's quest
-     * - Progress from before a quest conversion cannot be applied after
      */
     function _questSyncProgress(
         PlayerQuestState storage state,
@@ -1502,7 +1491,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param quest The quest being completed.
      * @param currentDay Current quest day for pair checks.
      * @param tier Player tier (from baseStreak) for target checks.
-     * @param _priceWei Price in wei (unused by current quest types).
+     * @param priceWei Price in wei (unused by current quest types).
      *
      * This function enables "combo completion" where completing one quest
      * can automatically complete the other if its progress already meets target.
@@ -1600,8 +1589,11 @@ contract DegenerusQuests is IDegenerusQuests {
         DailyQuest memory quest,
         uint8 slot,
         uint8 tier,
-        uint256 _priceWei
+        uint256 priceWei
     ) private view returns (bool) {
+        if (priceWei != 0) {
+            // Reserved for future quest types.
+        }
         if (!_questProgressValid(state, quest, slot, quest.day)) return false;
         uint256 progress = state.progress[slot];
 

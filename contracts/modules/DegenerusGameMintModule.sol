@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IDegenerusGamepieces} from "../interfaces/IDegenerusGamepieces.sol";
-import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 
 /**
  * @title DegenerusGameMintModule
@@ -23,27 +22,32 @@ import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
  * - `purchaseTargetCountFromRaw`: Scale raw purchase count by airdrop multiplier
  * - `rebuildTraitCounts`: Reconstruct traitRemaining[] for new levels
  *
- * ## Bit Packing Layout (mintPacked_)
+ * ## Activity Score System
  *
- * All per-player mint history is packed into a single uint256:
+ * Player engagement is tracked through multiple loyalty metrics:
+ * - **Level Count**: Total levels minted (lifetime participation)
+ * - **Level Streak**: Consecutive level purchases
+ * - **Quest Streak**: Daily quest completion streak (tracked in DegenerusQuests)
+ * - **Affiliate Points**: Referral program bonus points (tracked in DegenerusAffiliate)
+ * - **Whale Bundle**: Active bundle type (10-lvl or 100-lvl)
+ *
+ * ### Mint Data Bit Packing Layout (mintPacked_):
  *
  * ```
- * Bits 0-23:    lastLevel     - Last level with ETH mint
- * Bits 24-47:   levelCount    - Total levels minted (lifetime)
- * Bits 48-71:   levelStreak   - Consecutive levels minted
- * Bits 72-103:  lastMintDay   - Day index of last mint
- * Bits 104-127: unitsLevel    - Level index for levelUnits tracking
- * Bits 128-227: (reserved)    - Future use
- * Bits 228-243: levelUnits    - Units minted this level (1 gamepiece = 4 units)
- * Bit 244:      bonusPaid     - Whether 400-unit bonus was paid this level
+ * Bits 0-23:    lastLevel          - Last level with ETH mint
+ * Bits 24-47:   levelCount         - Total levels minted (lifetime) [Activity Score]
+ * Bits 48-71:   levelStreak        - Consecutive levels minted [Activity Score]
+ * Bits 72-103:  lastMintDay        - Day index of last mint
+ * Bits 104-127: unitsLevel         - Level index for levelUnits tracking
+ * Bits 128-151: frozenUntilLevel   - Whale bundle: freeze stats until this level (0 = not frozen)
+ * Bits 152-153: whaleBundleType    - Active bundle type (0=none, 1=10-lvl, 3=100-lvl) [Activity Score]
+ * Bits 154-227: (reserved)         - Future use
+ * Bits 228-243: levelUnits         - Units minted this level (1 gamepiece = 4 units)
+ * Bit 244:      (deprecated)       - Previously used for bonus tracking
  * ```
  *
- * ## BURNIE Reward Structure
- *
- * | Reward Type    | Trigger                        | Amount                |
- * |----------------|--------------------------------|-----------------------|
- * | 400-unit bonus | First mint ≥400 units in level | 2,500 BURNIE          |
- * | Streak bonus   | Every 5th level (5,10,15...)   | 500-2K BURNIE (+250)  |
+ * Note: Quest Streak and Affiliate Points are tracked separately in their respective contracts
+ * (DegenerusQuests.questPlayerState and DegenerusAffiliate.affiliateBonusPointsBest).
  *
  * ## Trait Generation
  *
@@ -62,13 +66,23 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     /// @notice VRF word not ready for loot box reveal.
     error RngNotReady();
 
+    struct LootboxRollState {
+        uint256 burniePresale;
+        uint256 burnieNoMultiplier;
+        uint32 futureTickets;
+        bool megaJackpotHit;
+        bool lazyPassAwarded;
+        bool tokenRewarded;
+        uint256 entropy;
+    }
+
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
 
     IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
-    IDegenerusGamepieces internal constant nft = IDegenerusGamepieces(ContractAddresses.GAMEPIECES);
-    IDegenerusAffiliate internal constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
+    IDegenerusGamepieces internal constant gamepieces =
+        IDegenerusGamepieces(ContractAddresses.GAMEPIECES);
 
     // -------------------------------------------------------------------------
     // Constants
@@ -83,27 +97,147 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     /// @notice Reduced batch size for level 1 (smaller initial supply).
     uint32 private constant TRAIT_REBUILD_TOKENS_LEVEL1 = 1800;
 
-    /// @dev Max players processed per future-mint activation batch.
-    uint32 private constant FUTURE_MINT_PLAYER_BATCH_SIZE = 96;
+    /// @dev Max players processed per future-ticket activation batch.
+    uint32 private constant FUTURE_TICKET_PLAYER_BATCH_SIZE = 96;
+    uint32 private constant FUTURE_TICKET_WORK_CAP = 3000; // Max tickets processed per batch
+    uint32 private constant WRITES_BUDGET_SAFE = 780; // Safe write budget for gas control
+    uint32 private constant WRITES_BUDGET_MIN = 8; // Minimum writes to ensure progress
+    uint64 private constant TICKET_LCG_MULT = 6364136223846793005; // LCG multiplier for trait generation
 
-    /// @dev Loot box minimum purchase amount (0.01 ETH).
-    uint256 private constant LOOTBOX_MIN = 0.01 ether;
+    /// @dev Loot box minimum purchase amount (0.01 ETH / COST_DIVISOR for testnet).
+    uint256 private constant LOOTBOX_MIN = 0.01 ether / ContractAddresses.COST_DIVISOR;
+    /// @dev Max loot box ETH per level that can receive bonus multiplier (scaled for testnet).
+    uint256 private constant LOOTBOX_MULTIPLIER_CAP = 5 ether / ContractAddresses.COST_DIVISOR;
+    /// @dev Loot box auto-open lookback window in days.
+    uint48 private constant LOOTBOX_DECAY_DAYS = 7;
 
-    /// @dev Loot box per-roll payouts (basis points).
-    uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 11667; // 116.67%
-    uint16 private constant LOOTBOX_SMALL_BURNIE_ROLL_BPS = 500; // 5%
-    uint16 private constant LOOTBOX_LARGE_BURNIE_ROLL_BPS = 19500; // 195%
+    /// @dev Loot box per-roll payouts (basis points) - balanced for size-independent EV.
+    ///      Distribution: 55% tickets (100% EV), 10% DGNRS, 10% WWXRP (joke prize), 25% large BURNIE.
+    ///      Plus 0.2% mega jackpot (25 ETH in tickets).
+    ///      Tickets give 100% EV when rolled, BURNIE scaled to maintain ~78% total EV.
+    uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 12_720; // 127.2% (gives 100% after 0.786 multiplier)
+    /// @dev Ticket variance (5-tier), expected ~0.786x.
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS = 100; // 1%
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS = 400; // 4%
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS = 2000; // 20%
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_CHANCE_BPS = 4500; // 45%
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_CHANCE_BPS = 3000; // 30%
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_BPS = 46_000; // 4.6x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_BPS = 23_000; // 2.3x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_BPS = 11_000; // 1.1x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_BPS = 6_510; // 0.651x
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_BPS = 4_500; // 0.45x
+    /// @dev DGNRS payout: variable % of remaining lootbox pool (10% chance), scaled by ETH amount.
+    ///      Distribution: 79.5% small, 15% medium, 5% large, 0.5% mega.
+    uint16 private constant LOOTBOX_DGNRS_POOL_SMALL_PPM = 10; // 0.001% of pool per 1 ETH (79.5% of hits)
+    uint16 private constant LOOTBOX_DGNRS_POOL_MEDIUM_PPM = 390; // 0.039% of pool per 1 ETH (15% of hits)
+    uint16 private constant LOOTBOX_DGNRS_POOL_LARGE_PPM = 800; // 0.08% of pool per 1 ETH (5% of hits)
+    uint16 private constant LOOTBOX_DGNRS_POOL_MEGA_PPM = 8000; // 0.8% of pool per 1 ETH (0.5% of hits)
+    uint256 private constant LOOTBOX_DGNRS_MEGA_CAP = 5 ether / ContractAddresses.COST_DIVISOR;
+    /// @dev WWXRP payout: 0.1 WWXRP flat prize (valued at 0 for EV)
+    uint256 private constant LOOTBOX_WWXRP_PRIZE = 0.1 ether; // 0.1 WWXRP (18 decimals)
+    /// @dev Coinflip boon: 2% chance per ETH to award next-flip bonus
+    uint16 private constant LOOTBOX_BOON_CHANCE_PER_ETH_BPS = 200; // 2% per ETH
+    uint16 private constant LOOTBOX_BOON_BONUS_BPS = 500; // 5% bonus to coinflip stake
+    uint256 private constant LOOTBOX_BOON_MAX_BONUS = 5000 ether; // Max 5,000 BURNIE bonus (5% tier)
+    uint16 private constant LOOTBOX_COINFLIP_10_CHANCE_PER_ETH_BPS = 50; // 0.5% per ETH for 10% boost
+    uint16 private constant LOOTBOX_COINFLIP_10_BONUS_BPS = 1000; // 10% bonus to coinflip stake
+    uint16 private constant LOOTBOX_COINFLIP_25_CHANCE_PER_ETH_BPS = 10; // 0.1% per ETH for 25% boost
+    uint16 private constant LOOTBOX_COINFLIP_25_BONUS_BPS = 2500; // 25% bonus to coinflip stake
+    uint48 private constant LOOTBOX_BOON_EXPIRY_SECONDS = 172800; // 2 days (48 hours)
+    uint48 private constant PURCHASE_BOOST_EXPIRY_SECONDS = 345600; // 4 days (96 hours)
+    /// @dev Burn boon: 1% chance per ETH to award gamepiece burn bonus
+    uint16 private constant LOOTBOX_BURN_BOON_CHANCE_PER_ETH_BPS = 100; // 1% per ETH
+    uint256 private constant LOOTBOX_BURN_BOON_BONUS = 100 ether; // 100 BURNIE bonus on burn
+    /// @dev Lootbox boost boons: enhance next lootbox value
+    uint16 private constant LOOTBOX_BOOST_5_CHANCE_PER_ETH_BPS = 200; // 2% per ETH for 5% boost
+    uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500; // 5% boost to lootbox value
+    uint16 private constant LOOTBOX_BOOST_15_CHANCE_PER_ETH_BPS = 50; // 0.5% per ETH for 15% boost
+    uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500; // 15% boost to lootbox value
+    /// @dev Purchase boost boons: boost next gamepiece/ticket purchase (5%/15%/25%).
+    uint16 private constant LOOTBOX_PURCHASE_BOOST_5_CHANCE_PER_ETH_BPS = 200; // 2% per ETH for 5% boost
+    uint16 private constant LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS = 500; // 5% boost to purchase quantity
+    uint16 private constant LOOTBOX_PURCHASE_BOOST_15_CHANCE_PER_ETH_BPS = 50; // 0.5% per ETH for 15% boost
+    uint16 private constant LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS = 1500; // 15% boost to purchase quantity
+    uint16 private constant LOOTBOX_PURCHASE_BOOST_25_CHANCE_PER_ETH_BPS = 10; // 0.1% per ETH for 25% boost
+    uint16 private constant LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS = 2500; // 25% boost to purchase quantity
+    uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether / ContractAddresses.COST_DIVISOR; // Max 10 ETH lootbox for boost calc
+    uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800; // 2 days (48 hours)
+    /// @dev Whale boon: 1% chance per ETH to allow discounted 100-level bundle at any level (4 day expiry)
+    uint16 private constant LOOTBOX_WHALE_BOON_CHANCE_PER_ETH_BPS = 100; // 1% per ETH
+    /// @dev Decimator burn boost boons: boost next decimator burn (10%/25%/50%).
+    uint16 private constant LOOTBOX_DECIMATOR_10_CHANCE_PER_ETH_BPS = 50; // 0.5% per ETH for 10% boost
+    uint16 private constant LOOTBOX_DECIMATOR_10_BONUS_BPS = 1000; // 10% boost to decimator burn
+    uint16 private constant LOOTBOX_DECIMATOR_25_CHANCE_PER_ETH_BPS = 10; // 0.1% per ETH for 25% boost
+    uint16 private constant LOOTBOX_DECIMATOR_25_BONUS_BPS = 2500; // 25% boost to decimator burn
+    uint16 private constant LOOTBOX_DECIMATOR_50_CHANCE_PER_ETH_BPS = 3; // 0.025% per ETH (rounded)
+    uint16 private constant LOOTBOX_DECIMATOR_50_BONUS_BPS = 5000; // 50% boost to decimator burn
+    /// @dev Activity streak boons: add +10/+25/+50 to mint streak, mint count, and quest streak.
+    uint16 private constant LOOTBOX_ACTIVITY_BOON_10_CHANCE_PER_ETH_BPS = 100; // 1% per ETH
+    uint16 private constant LOOTBOX_ACTIVITY_BOON_25_CHANCE_PER_ETH_BPS = 30; // 0.3% per ETH
+    uint16 private constant LOOTBOX_ACTIVITY_BOON_50_CHANCE_PER_ETH_BPS = 10; // 0.1% per ETH
+    uint24 private constant LOOTBOX_ACTIVITY_BOON_10_BONUS = 10;
+    uint24 private constant LOOTBOX_ACTIVITY_BOON_25_BONUS = 25;
+    uint24 private constant LOOTBOX_ACTIVITY_BOON_50_BONUS = 50;
+    /// @dev DGNRS valuation: 1.5x backing, minimum 10000 ETH / supply
+    uint256 private constant DGNRS_VALUE_MULTIPLIER_BPS = 15_000; // 1.5x
+    uint256 private constant DGNRS_MIN_BACKING_ETH = 10_000 ether;
+    /// @dev Whale pass DGNRS pool distribution (ppm of remaining pool).
+    uint32 private constant DGNRS_WHALE_REWARD_PPM_SCALE = 1_000_000;
+    uint32 private constant DGNRS_WHALE_MINTER_PPM = 9_000; // 0.9%
+    uint32 private constant DGNRS_WHALE_AFFILIATE_PPM = 800; // 0.08%
+    uint32 private constant DGNRS_WHALE_UPLINE_PPM = 150; // 0.015%
+    uint32 private constant DGNRS_WHALE_UPLINE2_PPM = 50; // 0.005%
+    /// @dev Large BURNIE variance: scaled to maintain ~79% total EV with 60% ticket contribution.
+    uint32 private constant LOOTBOX_LARGE_BURNIE_MAX_BPS = 31_458; // 314.58% (5% of large rolls)
+    uint16 private constant LOOTBOX_LARGE_BURNIE_LOW_BPS = 7_216; // 72.16% (18/20 outcomes)
+    uint16 private constant LOOTBOX_LARGE_BURNIE_MID_BPS = 8_755; // 87.55% (1/20 outcomes)
+    /// @dev Whale pass jackpot: 2 tickets per level for 100 levels + stats boost.
+    ///      Chance uses a fixed price to target 5% EV contribution.
+    uint8 private constant LOOTBOX_WHALE_PASS_LEVELS = 100;
+    uint16 private constant LOOTBOX_WHALE_PASS_EV_BPS = 500; // 5% target EV
+    /// @dev Fixed whale pass price used for jackpot EV calculations.
+    uint256 private constant LOOTBOX_WHALE_PASS_PRICE = 3.4 ether / ContractAddresses.COST_DIVISOR;
+    /// @dev Lazy pass lootbox jackpot EV (10-level pass).
+    uint16 private constant LOOTBOX_LAZY_PASS_EV_BPS = 200; // 2% target EV
 
-    /// @dev Loot box amount split threshold (two rolls when exceeded).
-    uint256 private constant LOOTBOX_SPLIT_THRESHOLD = 1 ether;
+    /// @dev BURNIE scaling targets (size-independent EV, amounts up to 10 ETH).
+    ///      Bonus mapping: 0% -> 60% EV, 50% -> 100% EV, 110% -> 110% EV, 265% -> 128% EV.
+    ///      Activity Score can exceed 265% with whale/trophy bonuses; lootbox rewards damp bonus above 110%
+    ///      and the curve continues linearly beyond 265% on the damped value.
+    ///      Quest streak now 1% per quest (max 100%), mint streak 1% per level (max 25%).
+    ///      Curve reaches break-even at 50% Activity Score and continues beyond 128% EV past 265%.
+    ///      Presale mode: 150% base + whale bonus (160% or 190%), BURNIE scaled (no whale 1.8x, whale 2.5x/3.0x).
+    uint16 private constant LOOTBOX_BURNIE_BASE_SCALE_BPS = 8_500; // 0.85x (0% bonus = 60% EV)
+    uint16 private constant LOOTBOX_BURNIE_FACTOR_50_BPS = 14_160; // 1.416x at 50% bonus (100% EV)
+    uint16 private constant LOOTBOX_BURNIE_FACTOR_110_BPS = 15_580; // 1.558x at 110% bonus (110% EV)
+    uint16 private constant LOOTBOX_BURNIE_FACTOR_265_BPS = 18_130; // 1.813x at 265% bonus (128% EV max)
+    uint16 private constant LOOTBOX_BONUS_50_BPS = 5_000;
+    uint16 private constant LOOTBOX_BONUS_110_BPS = 11_000;
+    uint16 private constant LOOTBOX_BONUS_265_BPS = 26_500;
+    /// @dev Damp the bonus above 110% for lootbox rewards (85% of the excess).
+    uint16 private constant LOOTBOX_BONUS_EXCESS_DAMP_BPS = 8_500;
+    /// @dev Presale lootbox bonus: Fixed 150% base + whale bundle bonus (10% or 40%).
+    ///      No whale: 150% bonus → 1.8x presale multiplier.
+    ///      10-lvl whale: 160% → 2.5x multiplier, 100-lvl whale: 190% → 3.0x multiplier.
+    uint16 private constant LOOTBOX_BONUS_PRESALE_BPS = 15_000; // 150% base bonus
+    uint16 private constant LOOTBOX_PRESALE_NO_WHALE_MULTIPLIER_BPS = 18_000; // 1.8x
+    uint16 private constant LOOTBOX_PRESALE_WHALE_10_MULTIPLIER_BPS = 25_000; // 2.5x
+    uint16 private constant LOOTBOX_PRESALE_WHALE_100_MULTIPLIER_BPS = 30_000; // 3.0x
+    /// @dev Share of bonus applied to future tickets (keeps total EV near previous curve).
+    uint16 private constant LOOTBOX_TICKET_BONUS_SHARE_BPS = 3_000;
+
+    /// @dev Loot box amount split threshold (two rolls when exceeded, scaled for testnet).
+    uint256 private constant LOOTBOX_SPLIT_THRESHOLD = 0.5 ether / ContractAddresses.COST_DIVISOR;
 
     /// @dev Loot box pool split (basis points of total ETH).
     uint16 private constant LOOTBOX_SPLIT_FUTURE_BPS = 6000;
     uint16 private constant LOOTBOX_SPLIT_NEXT_BPS = 2000;
 
     /// @dev Loot box presale pool split (basis points of total ETH).
+    ///      10% future, 30% next, 30% vault, 30% reward (remainder)
     uint16 private constant LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 1000;
-    uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 1000;
+    uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 3000;
     uint16 private constant LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 3000;
 
     // -------------------------------------------------------------------------
@@ -130,6 +264,117 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint32 currentTickets,
         uint256 burnie,
         uint256 bonusBurnie
+    );
+    event LootBoxDecayed(
+        address indexed player,
+        uint48 indexed day,
+        uint256 originalAmount,
+        uint256 decayedAmount
+    );
+
+    event LootBoxWhalePassJackpot(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint24 targetLevel,
+        uint32 tickets,
+        uint24 statsBoost,
+        uint24 frozenUntilLevel
+    );
+    event LootBoxLazyPassAwarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint24 passLevel,
+        bool activatedNow
+    );
+
+    event LazyPassActivated(address indexed player, uint24 passLevel);
+
+    event LootBoxDgnrsReward(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint256 dgnrsAmount,
+        uint256 dgnrsValue
+    );
+
+    event LootBoxWwxrpReward(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint256 wwxrpAmount
+    );
+
+    event LootBoxBoonAwarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint256 boonAmount
+    );
+
+    event LootBoxBurnBoonAwarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint256 bonusAmount
+    );
+
+    event LootBoxBoost5Awarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint16 boostBps
+    );
+
+    event LootBoxBoost15Awarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint16 boostBps
+    );
+
+    event LootBoxGamepieceBoostAwarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint16 boostBps
+    );
+
+    event LootBoxTicketBoostAwarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint16 boostBps
+    );
+
+    event LootBoxDecimatorBoostAwarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint16 boostBps
+    );
+
+    event LootBoxWhaleBoonAwarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint48 expiryDay
+    );
+
+    event LootBoxActivityBoonAwarded(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint24 bonusLevels
+    );
+
+    event LootBoxBoostConsumed(
+        address indexed player,
+        uint48 indexed day,
+        uint256 originalAmount,
+        uint256 boostedAmount,
+        uint16 boostBps
     );
 
     // -------------------------------------------------------------------------
@@ -166,37 +411,38 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     /// @notice Bit shift for bonus-paid flag (1 bit at position 244).
     uint256 private constant ETH_LEVEL_BONUS_SHIFT = 244;
 
+    /// @notice Bit shift for frozen-until-level (24 bits at position 128).
+    ///         Used for whale bundle presales: freezes streak/count updates until specified level.
+    uint256 private constant ETH_FROZEN_UNTIL_LEVEL_SHIFT = 128;
+
+    /// @notice Bit shift for whale bundle type (2 bits at position 152).
+    ///         Tracks active bundle: 0=none, 1=10-level, 3=100-level.
+    uint256 private constant ETH_WHALE_BUNDLE_TYPE_SHIFT = 152;
+
     // -------------------------------------------------------------------------
     // Mint Data Recording
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Record mint metadata and compute BURNIE rewards for ETH mints.
+     * @notice Record mint metadata and update Activity Score metrics.
      * @dev Called via delegatecall from DegenerusGame during recordMint().
-     *      Updates the packed mint history and calculates bonus rewards.
+     *      Updates the player's Activity Score metrics for tracking engagement.
      *
      * @param player Address of the player making the purchase.
      * @param lvl Current game level.
-     * @param mintUnits Units purchased (1 gamepiece = 4 units, 1 MAP = 1 unit).
-     * @return coinReward BURNIE amount to credit as coinflip stake.
+     * @param mintUnits Units purchased (1 gamepiece = 4 units, 1 ticket = 1 unit).
+     * @return coinReward BURNIE amount to credit as coinflip stake (currently 0).
      *
-     * ## Reward Calculation
+     * ## Activity Score State Updates
      *
-     * 1. **400-unit bonus**: 2,500 BURNIE when first reaching 400 units in a level
-     * 2. **Streak bonus**: Every 5th consecutive level (5, 10, 15...)
-     *    - Formula: min(500 + ((streak/5 - 1) × 250), 2000)
-     *    - Level 5: 500, Level 10: 750, Level 15: 1000, ..., Level 35+: 2000 (capped)
-     *
-     * ## State Updates
-     *
-     * - `mintPacked_[player]` updated with new level, counts, streak, day
+     * - `mintPacked_[player]` updated with level count, streak, whale bonuses, milestones
      * - Only writes to storage if data actually changed
      *
      * ## Level Transition Logic
      *
-     * - Same level: Just update units and check bonus
+     * - Same level: Just update units
      * - New level with <4 units: Only track units, don't count as "minted"
-     * - New level with ≥4 units: Update streak, total, and award rewards
+     * - New level with ≥4 units: Update streak and total
      * - Century boundary (level 100, 200...): Total continues to accumulate
      */
     function recordMintData(
@@ -221,14 +467,11 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         bool sameUnitsLevel = unitsLevel == lvl;
 
         // ---------------------------------------------------------------------
-        // Handle level units and bonus
+        // Handle level units
         // ---------------------------------------------------------------------
 
         // Get previous level units (reset on level change)
         uint256 levelUnitsBefore = sameUnitsLevel ? ((prevData >> ETH_LEVEL_UNITS_SHIFT) & MINT_MASK_16) : 0;
-
-        // Check if 400-unit bonus already paid this level
-        bool bonusPaid = sameUnitsLevel && (((prevData >> ETH_LEVEL_BONUS_SHIFT) & 1) == 1);
 
         // Calculate new level units (capped at 16-bit max)
         uint256 levelUnitsAfter = levelUnitsBefore + uint256(mintUnits);
@@ -236,22 +479,14 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             levelUnitsAfter = MINT_MASK_16;
         }
 
-        // Award 400-unit bonus if threshold crossed for first time
-        bool awardBonus = (!bonusPaid) && levelUnitsAfter >= 400;
-        if (awardBonus) {
-            coinReward += (PRICE_COIN_UNIT * 5) / 2; // 2,500 BURNIE
-            bonusPaid = true;
-        }
-
         // ---------------------------------------------------------------------
         // Early exit: New level with <4 units (not counted as "minted")
         // ---------------------------------------------------------------------
 
         if (!sameLevel && levelUnitsAfter < 4) {
-            // Just update units and bonus flag, don't update level/streak/total
+            // Just update units, don't update level/streak/total
             data = _setPacked(prevData, ETH_LEVEL_UNITS_SHIFT, MINT_MASK_16, levelUnitsAfter);
             data = _setPacked(data, ETH_LEVEL_UNITS_LEVEL_SHIFT, MINT_MASK_24, lvl);
-            data = _setPacked(data, ETH_LEVEL_BONUS_SHIFT, 1, bonusPaid ? 1 : 0);
             if (data != prevData) {
                 mintPacked_[player] = data;
             }
@@ -272,7 +507,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         if (sameLevel) {
             data = _setPacked(data, ETH_LEVEL_UNITS_SHIFT, MINT_MASK_16, levelUnitsAfter);
             data = _setPacked(data, ETH_LEVEL_UNITS_LEVEL_SHIFT, MINT_MASK_24, lvl);
-            data = _setPacked(data, ETH_LEVEL_BONUS_SHIFT, 1, bonusPaid ? 1 : 0);
             if (data != prevData) {
                 mintPacked_[player] = data;
             }
@@ -283,24 +517,40 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         // New level with ≥4 units: Full state update
         // ---------------------------------------------------------------------
 
-        // Update total (lifetime count)
-        if (total < type(uint24).max) {
-            unchecked {
-                total = uint24(total + 1);
-            }
+        // Check for whale bundle frozen state
+        uint24 frozenUntilLevel = uint24((prevData >> ETH_FROZEN_UNTIL_LEVEL_SHIFT) & MINT_MASK_24);
+        bool isFrozen = frozenUntilLevel > 0 && lvl < frozenUntilLevel;
+
+        // If frozen, skip updating total and streak (they're pre-set)
+        // If we've reached the frozen level, clear the flag and resume normal tracking
+        if (frozenUntilLevel > 0 && lvl >= frozenUntilLevel) {
+            // Clear frozen flag and whale bundle type - resume normal tracking from here
+            data = _setPacked(data, ETH_FROZEN_UNTIL_LEVEL_SHIFT, MINT_MASK_24, 0);
+            data = _setPacked(data, ETH_WHALE_BUNDLE_TYPE_SHIFT, 3, 0); // Clear bundle type
+            frozenUntilLevel = 0;
+            isFrozen = false;
         }
 
-        // Update streak (consecutive levels) or reset
-        if (prevLevel != 0 && prevLevel + 1 == lvl) {
-            // Consecutive level - increment streak
-            if (streak < type(uint24).max) {
+        if (!isFrozen) {
+            // Update total (lifetime count)
+            if (total < type(uint24).max) {
                 unchecked {
-                    streak = uint24(streak + 1);
+                    total = uint24(total + 1);
                 }
             }
-        } else {
-            // Gap or first mint - reset streak
-            streak = 1;
+
+            // Update streak (consecutive levels) or reset
+            if (prevLevel != 0 && prevLevel + 1 == lvl) {
+                // Consecutive level - increment streak
+                if (streak < type(uint24).max) {
+                    unchecked {
+                        streak = uint24(streak + 1);
+                    }
+                }
+            } else {
+                // Gap or first mint - reset streak
+                streak = 1;
+            }
         }
 
         // Pack all updated fields
@@ -309,23 +559,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         data = _setPacked(data, ETH_LEVEL_STREAK_SHIFT, MINT_MASK_24, streak);
         data = _setPacked(data, ETH_LEVEL_UNITS_SHIFT, MINT_MASK_16, levelUnitsAfter);
         data = _setPacked(data, ETH_LEVEL_UNITS_LEVEL_SHIFT, MINT_MASK_24, lvl);
-        data = _setPacked(data, ETH_LEVEL_BONUS_SHIFT, 1, bonusPaid ? 1 : 0);
-
-        // ---------------------------------------------------------------------
-        // Streak bonus (every 5th consecutive level)
-        // ---------------------------------------------------------------------
-
-        if (streak >= 5 && (streak % 5 == 0)) {
-            // Formula: min(500 + ((streak/5 - 1) × 250), 2000)
-            uint256 streakTier = uint256(streak) / 5;
-            uint256 streakBonus = 500 + ((streakTier - 1) * 250);
-            if (streakBonus > 2000) {
-                streakBonus = 2000;
-            }
-            unchecked {
-                coinReward += streakBonus * 1 ether;
-            }
-        }
+        // Frozen flag is already set in data if it was modified above
 
         // ---------------------------------------------------------------------
         // Commit to storage (only if changed)
@@ -545,131 +779,223 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     // Future Reward Queueing
     // -------------------------------------------------------------------------
 
-    function queueFutureRewardMints(
-        address player,
-        uint24 targetLevel,
-        uint32 quantity,
-        uint256 poolWei
-    ) external {
-        if (msg.sender != ContractAddresses.ADMIN && msg.sender != address(this)) revert E();
-        _queueFutureRewardMints(player, targetLevel, quantity, poolWei);
-    }
-
-    function _queueFutureRewardMints(
-        address player,
-        uint24 targetLevel,
-        uint32 quantity,
-        uint256 poolWei
-    ) private {
-        if (targetLevel <= level) revert E();
-        if (quantity != 0 && player == address(0)) revert E();
-
-        if (poolWei != 0) {
-            futurePrizePool[targetLevel] += poolWei;
-            futurePrizePoolTotal += poolWei;
-        }
-
-        if (quantity == 0) return;
-
-        uint32 owed = futureMintsOwed[targetLevel][player];
-        if (owed == 0) {
-            futureMintQueue[targetLevel].push(player);
-        }
-        futureMintsOwed[targetLevel][player] = owed + quantity;
-    }
+    
 
     // -------------------------------------------------------------------------
-    // Future Mint Activation
+    // Future Ticket Activation
     // -------------------------------------------------------------------------
 
-    function processFutureMintBatch(
-        uint32 playersToProcess,
+    function processFutureTicketBatch(
+        uint32 writesBudget,
         uint24 lvl
     ) external returns (bool worked, bool finished) {
-        uint256 reserved = futurePrizePool[lvl];
-        if (reserved != 0) {
-            nextPrizePool += reserved;
-            futurePrizePool[lvl] = 0;
-            futurePrizePoolTotal -= reserved;
-        }
-
-        address[] storage queue = futureMintQueue[lvl];
+        address[] storage queue = ticketQueue[lvl];
         uint256 total = queue.length;
         if (total > type(uint32).max) revert E();
         if (total == 0) {
-            futureMintCursor = 0;
-            futureMintLevel = 0;
+            ticketCursor = 0;
+            ticketLevel = 0;
             return (false, true);
         }
 
-        if (futureMintLevel != lvl) {
-            futureMintLevel = lvl;
-            futureMintCursor = 0;
+        if (ticketLevel != lvl) {
+            ticketLevel = lvl;
+            ticketCursor = 0;
         }
 
-        uint256 idx = futureMintCursor;
+        uint256 idx = ticketCursor;
         if (idx >= total) {
-            delete futureMintQueue[lvl];
-            futureMintCursor = 0;
-            futureMintLevel = 0;
+            delete ticketQueue[lvl];
+            ticketCursor = 0;
+            ticketLevel = 0;
             return (false, true);
         }
 
-        uint32 batch = playersToProcess == 0 ? FUTURE_MINT_PLAYER_BATCH_SIZE : playersToProcess;
-        uint256 end = idx + batch;
-        if (end > total) {
-            end = total;
+        // Set up write budget with cold storage scaling on first batch
+        if (writesBudget == 0) {
+            writesBudget = WRITES_BUDGET_SAFE;
+        } else if (writesBudget < WRITES_BUDGET_MIN) {
+            writesBudget = WRITES_BUDGET_MIN;
         }
 
-        while (idx < end) {
+        if (idx == 0) {
+            writesBudget -= (writesBudget * 35) / 100; // 65% scaling for cold storage
+        }
+
+        uint32 used;
+        uint32 processed; // Track within-player progress
+
+        while (idx < total && used < writesBudget) {
             address player = queue[idx];
-            uint32 owed = futureMintsOwed[lvl][player];
-            if (owed != 0) {
-                futureMintsOwed[lvl][player] = 0;
-                nft.queueRewardMints(player, owed);
+            uint32 owed = ticketsOwed[lvl][player];
+            uint8 remainder = ticketsOwedFrac[lvl][player];
+            if (owed == 0) {
+                if (remainder == 0) {
+                    unchecked { ++idx; }
+                    processed = 0;
+                    continue;
+                }
+                uint256 roll = uint256(keccak256(abi.encode(rngWordCurrent, lvl, player, remainder)));
+                ticketsOwedFrac[lvl][player] = 0;
+                if ((roll % TICKET_SCALE) >= remainder) {
+                    unchecked { ++idx; }
+                    processed = 0;
+                    continue;
+                }
+                owed = 1;
+                ticketsOwed[lvl][player] = 1;
+                remainder = 0;
             }
+            if (owed == 0) {
+                unchecked { ++idx; }
+                processed = 0;
+                continue;
+            }
+
+            uint32 room = writesBudget - used;
+            uint32 baseOv = (processed == 0 && owed <= 2) ? 4 : 2;
+            if (room <= baseOv) break;
+            room -= baseOv;
+
+            uint32 maxT = (room <= 256) ? (room / 2) : (room - 256);
+            uint32 take = owed > maxT ? maxT : owed;
+            if (take == 0) break;
+
+            uint256 baseKey = (uint256(lvl) << 224) | (idx << 192) | (uint256(uint160(player)) << 32);
+            _raritySymbolBatch(player, baseKey, processed, take, rngWordCurrent);
+
+            // Calculate actual write cost
+            uint32 writesThis = (take <= 256) ? (take * 2) : (take + 256);
+            writesThis += baseOv;
+            if (take == owed) writesThis += 1;
+
+            uint32 remainingOwed;
             unchecked {
-                ++idx;
+                remainingOwed = owed - take;
+            }
+            if (remainingOwed == 0 && remainder != 0) {
+                uint256 roll = uint256(keccak256(abi.encode(rngWordCurrent, lvl, player, owed, remainder)));
+                ticketsOwedFrac[lvl][player] = 0;
+                if ((roll % TICKET_SCALE) < remainder && owed < type(uint32).max) {
+                    remainingOwed = 1;
+                }
+            }
+            ticketsOwed[lvl][player] = remainingOwed;
+            unchecked {
+                processed += take;
+                used += writesThis;
+            }
+
+            if (remainingOwed == 0) {
+                unchecked { ++idx; }
+                processed = 0;
             }
         }
 
-        worked = end != futureMintCursor;
-        futureMintCursor = uint32(idx);
-        finished = idx >= total;
+        worked = (used > 0);
+        ticketCursor = uint32(idx);
+        finished = (idx >= total);
         if (finished) {
-            delete futureMintQueue[lvl];
-            futureMintCursor = 0;
-            futureMintLevel = 0;
+            delete ticketQueue[lvl];
+            ticketCursor = 0;
+            ticketLevel = 0;
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Future Ticket Jackpot
-    // -------------------------------------------------------------------------
+    /// @dev Generates trait tickets in batch for a player's ticket awards using LCG-based PRNG.
+    ///      Uses inline assembly for gas-efficient bulk storage writes.
+    /// @param player Address receiving the trait tickets.
+    /// @param baseKey Encoded key containing level, index, and player address.
+    /// @param startIndex Starting position within this player's owed tickets.
+    /// @param count Number of ticket entries to process this batch.
+    /// @param entropyWord VRF entropy for trait generation.
+    function _raritySymbolBatch(
+        address player,
+        uint256 baseKey,
+        uint32 startIndex,
+        uint32 count,
+        uint256 entropyWord
+    ) private {
+        // Memory arrays to track which traits were generated and how many times.
+        uint32[256] memory counts;
+        uint8[256] memory touchedTraits;
+        uint16 touchedLen;
 
-    function payFutureTicketJackpot(uint24 lvl, uint256 randWord) external {
-        uint256 entropy = randWord;
+        uint32 endIndex;
+        unchecked {
+            endIndex = startIndex + count;
+        }
+        uint32 i = startIndex;
 
-        for (uint256 offset = 2; offset <= 5; offset++) {
-            uint24 targetLevel = lvl + uint24(offset);
-            address[] storage players = futureMintQueue[targetLevel];
-            uint256 playerCount = players.length;
+        // Generate traits in groups of 16, using LCG for deterministic randomness.
+        while (i < endIndex) {
+            uint32 groupIdx = i >> 4; // Group index (per 16 symbols)
 
-            if (playerCount == 0) continue;
+            uint256 seed;
+            unchecked {
+                seed = (baseKey + groupIdx) ^ entropyWord;
+            }
+            uint64 s = uint64(seed) | 1; // Ensure odd for full LCG period
+            uint8 offset = uint8(i & 15);
+            unchecked {
+                s = s * (TICKET_LCG_MULT + uint64(offset)) + uint64(offset);
+            }
 
-            uint256 winnersFromLevel = playerCount < 5 ? playerCount : 5;
+            for (uint8 j = offset; j < 16 && i < endIndex; ) {
+                unchecked {
+                    s = s * TICKET_LCG_MULT + 1; // LCG step
 
-            for (uint256 i; i < winnersFromLevel; i++) {
-                entropy = _entropyStep(entropy);
-                uint256 idx = entropy % playerCount;
-                address winner = players[idx];
+                    // Generate trait using weighted distribution, add quadrant offset.
+                    uint8 traitId = DegenerusTraitUtils.traitFromWord(s) + (uint8(i & 3) << 6);
 
-                if (futureMintsOwed[targetLevel][winner] > 0) {
-                    coin.creditFlip(winner, 500 ether);
+                    // Track first occurrence of each trait for batch writing.
+                    if (counts[traitId]++ == 0) {
+                        touchedTraits[touchedLen++] = traitId;
+                    }
+                    ++i;
+                    ++j;
                 }
+            }
+        }
 
-                players[idx] = players[playerCount - 1];
-                playerCount--;
+        // Extract level from baseKey for storage slot calculation.
+        uint24 lvl = uint24(baseKey >> 224);
+
+        // Calculate the storage slot for this level's trait arrays.
+        uint256 levelSlot;
+        assembly ("memory-safe") {
+            mstore(0x00, lvl)
+            mstore(0x20, traitBurnTicket.slot)
+            levelSlot := keccak256(0x00, 0x40)
+        }
+
+        // Batch-write trait tickets to storage using assembly for gas efficiency.
+        for (uint16 u; u < touchedLen; ) {
+            uint8 traitId = touchedTraits[u];
+            uint32 occurrences = counts[traitId];
+
+            assembly ("memory-safe") {
+                // Get array length slot and current length.
+                let elem := add(levelSlot, traitId)
+                let len := sload(elem)
+                let newLen := add(len, occurrences)
+                sstore(elem, newLen)
+
+                // Calculate data slot and write player address `occurrences` times.
+                mstore(0x00, elem)
+                let data := keccak256(0x00, 0x20)
+                let dst := add(data, len)
+                for {
+                    let k := 0
+                } lt(k, occurrences) {
+                    k := add(k, 1)
+                } {
+                    sstore(dst, player)
+                    dst := add(dst, 1)
+                }
+            }
+            unchecked {
+                ++u;
             }
         }
     }
@@ -678,411 +1004,69 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     // Purchases and Loot Boxes
     // -------------------------------------------------------------------------
 
-    function purchase(
-        uint256 gamepieceQuantity,
-        uint256 mapQuantity,
-        uint256 lootBoxAmount,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind
-    ) external payable {
-        if (rngLockedFlag) revert RngNotReady();
+    
 
-        address buyer = msg.sender;
-        uint24 currentLevel = level;
-        uint8 currentState = gameState;
-        uint256 priceWei = price;
+    
 
-        if (lootBoxAmount != 0 && lootBoxAmount < LOOTBOX_MIN) revert E();
+    
 
-        uint256 gamepieceCost = 0;
-        uint256 mapCost = 0;
+    
 
-        if (gamepieceQuantity > 0) {
-            if (gamepieceQuantity > type(uint32).max) revert E();
-            gamepieceCost = priceWei * gamepieceQuantity;
-        }
+    /// @notice Resolve a lootbox directly (decimator claims) using provided RNG.
+    /// @dev Access: ContractAddresses.JACKPOTS contract only. Presale is always false.
+    ///      Does not touch lootbox purchase storage; uses current day for event tagging.
+    /// @param player Player to receive lootbox rewards.
+    /// @param amount Lootbox ETH amount to resolve.
+    /// @param rngWord VRF random word from decimator jackpot resolution.
+    
 
-        if (mapQuantity > 0) {
-            if (mapQuantity > type(uint32).max) revert E();
-            mapCost = (priceWei * mapQuantity) / 4;
-        }
+    
 
-        uint256 totalCost = gamepieceCost + mapCost + lootBoxAmount;
-        if (totalCost == 0) revert E();
+    
 
-        uint256 initialClaimable = claimableWinnings[buyer];
+    
 
-        uint256 ethForGamepieces = 0;
-        uint256 ethForMaps = 0;
+    
 
-        uint256 remainingEth = msg.value;
-        if (remainingEth < lootBoxAmount) revert E();
-        unchecked {
-            remainingEth -= lootBoxAmount;
-        }
+    
 
-        if (remainingEth > 0 && (gamepieceCost + mapCost) > 0) {
-            ethForGamepieces = (remainingEth * gamepieceCost) / (gamepieceCost + mapCost);
-            ethForMaps = remainingEth - ethForGamepieces;
-        }
+    
 
-        if (gamepieceCost > 0 && gamepieceQuantity > 0) {
-            (bool success, ) = ContractAddresses.GAMEPIECES.call{value: ethForGamepieces}(
-                abi.encodeWithSignature(
-                    "purchase((uint256,uint8,uint8,bool,bytes32))",
-                    gamepieceQuantity,
-                    uint8(0),
-                    uint8(payKind),
-                    false,
-                    affiliateCode
-                )
-            );
-            if (!success) revert E();
-        }
+    
 
-        if (mapCost > 0 && mapQuantity > 0) {
-            (bool success, ) = ContractAddresses.GAMEPIECES.call{value: ethForMaps}(
-                abi.encodeWithSignature(
-                    "purchase((uint256,uint8,uint8,bool,bytes32))",
-                    mapQuantity,
-                    uint8(1),
-                    uint8(payKind),
-                    false,
-                    affiliateCode
-                )
-            );
-            if (!success) revert E();
-        }
+    
 
-        if (lootBoxAmount > 0) {
-            uint48 day = _currentDayIndex();
-            bool presale = lootboxPresaleActive;
+    
 
-            _recordLootboxMintDay(buyer, uint32(day));
+    
 
-            uint256 existing = lootboxEth[day][buyer];
-            if (existing != 0 && lootboxPresale[day][buyer] != presale) revert E();
+    
 
-            if (existing == 0) {
-                if (presale) {
-                    lootboxPresale[day][buyer] = true;
-                }
-            }
-            lootboxEth[day][buyer] = existing + lootBoxAmount;
+    
 
-            uint256 futureBps = presale ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS : LOOTBOX_SPLIT_FUTURE_BPS;
-            uint256 nextBps = presale ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS : LOOTBOX_SPLIT_NEXT_BPS;
-            uint256 vaultBps = presale ? LOOTBOX_PRESALE_SPLIT_VAULT_BPS : 0;
+    
 
-            uint256 futureShare = (lootBoxAmount * futureBps) / 10_000;
-            uint256 nextShare = (lootBoxAmount * nextBps) / 10_000;
-            uint256 vaultShare = (lootBoxAmount * vaultBps) / 10_000;
-            uint256 rewardShare;
-            unchecked {
-                rewardShare = lootBoxAmount - futureShare - nextShare - vaultShare;
-            }
+    
 
-            if (futureShare != 0) {
-                lootboxReservePool += futureShare;
-            }
-            if (nextShare != 0) {
-                nextPrizePool += nextShare;
-            }
-            if (vaultShare != 0) {
-                (bool ok, ) = payable(ContractAddresses.VAULT).call{value: vaultShare}("");
-                if (!ok) revert E();
-            }
-            if (rewardShare != 0) {
-                rewardPool += rewardShare;
-            }
+    
 
-            if (affiliateCode != bytes32(0)) {
-                uint256 affiliateAmount = _calculateLootboxAffiliateAmount(
-                    currentLevel,
-                    currentState,
-                    lootBoxAmount,
-                    priceWei
-                );
-                affiliate.payAffiliate(affiliateAmount, affiliateCode, buyer, currentLevel);
-            }
+    
 
-            emit LootBoxPurchased(buyer, day, lootBoxAmount, presale, futureShare, nextShare, vaultShare, rewardShare);
+    
 
-            coin.notifyQuestLootBox(buyer, lootBoxAmount);
-        }
+    
 
-        uint256 finalClaimable = claimableWinnings[buyer];
-        uint256 totalClaimableUsed = initialClaimable > finalClaimable ? initialClaimable - finalClaimable : 0;
-        bool spentAllClaimable = (finalClaimable <= 1 && totalClaimableUsed > 0);
+    
 
-        if (spentAllClaimable && totalClaimableUsed >= priceWei * 3) {
-            uint256 bonusAmount = (totalClaimableUsed * PRICE_COIN_UNIT * 10) / (priceWei * 100);
-            if (bonusAmount > 0) {
-                coin.creditFlip(buyer, bonusAmount);
-            }
-        }
-    }
+    
 
-    function openLootBox(uint48 day) external {
-        uint256 amount = lootboxEth[day][msg.sender];
-        if (amount == 0) revert E();
+    
 
-        uint48 rngDay = day + 1;
-        uint256 rngWord = rngWordByDay[rngDay];
-        if (rngWord == 0) revert RngNotReady();
+    
 
-        lootboxEth[day][msg.sender] = 0;
-        bool presale = lootboxPresale[day][msg.sender];
-        if (presale) {
-            lootboxPresale[day][msg.sender] = false;
-        }
+    
 
-        uint256 entropy = uint256(keccak256(abi.encode(rngWord, msg.sender, day, amount)));
-
-        uint24 currentLevel = level;
-        uint256 levelOffset = entropy % 6;
-        uint24 targetLevel = currentLevel + uint24(levelOffset);
-
-        uint256 targetPrice = _priceForLevel(targetLevel);
-        if (targetPrice == 0) revert E();
-
-        uint256 futureBps = presale ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS : LOOTBOX_SPLIT_FUTURE_BPS;
-        uint256 futureShare = (amount * futureBps) / 10_000;
-        if (futureShare != 0) {
-            lootboxReservePool -= futureShare;
-            _queueFutureRewardMints(address(0), targetLevel, 0, futureShare);
-        }
-
-        uint256 amountFirst = amount;
-        uint256 amountSecond = 0;
-        if (amount > LOOTBOX_SPLIT_THRESHOLD) {
-            amountFirst = amount / 2;
-            amountSecond = amount - amountFirst;
-        }
-
-        uint256 burniePresale;
-        uint256 burnieNoMultiplier;
-        uint32 futureTickets;
-        (uint256 burnieOut, uint32 ticketsOut, uint256 nextEntropy, bool applyMultiplier) =
-            _resolveLootboxRoll(msg.sender, amountFirst, targetLevel, targetPrice, entropy);
-        if (burnieOut != 0) {
-            if (applyMultiplier) {
-                burniePresale += burnieOut;
-            } else {
-                burnieNoMultiplier += burnieOut;
-            }
-        }
-        if (ticketsOut != 0) {
-            uint256 totalTickets = uint256(futureTickets) + ticketsOut;
-            if (totalTickets > type(uint32).max) revert E();
-            futureTickets = uint32(totalTickets);
-        }
-        entropy = nextEntropy;
-
-        if (amountSecond != 0) {
-            (burnieOut, ticketsOut, nextEntropy, applyMultiplier) =
-                _resolveLootboxRoll(msg.sender, amountSecond, targetLevel, targetPrice, entropy);
-            if (burnieOut != 0) {
-                if (applyMultiplier) {
-                    burniePresale += burnieOut;
-                } else {
-                    burnieNoMultiplier += burnieOut;
-                }
-            }
-            if (ticketsOut != 0) {
-                uint256 totalTickets = uint256(futureTickets) + ticketsOut;
-                if (totalTickets > type(uint32).max) revert E();
-                futureTickets = uint32(totalTickets);
-            }
-            entropy = nextEntropy;
-        }
-
-        uint256 burnieAmount = burnieNoMultiplier;
-        if (presale && burniePresale != 0) {
-            burnieAmount += burniePresale * 2;
-        } else {
-            burnieAmount += burniePresale;
-        }
-
-        if (burnieAmount != 0) {
-            coin.creditFlip(msg.sender, burnieAmount);
-        }
-
-        emit LootBoxOpened(msg.sender, day, amount, targetLevel, futureTickets, 0, burnieAmount, 0);
-    }
-
-    function _recordLootboxMintDay(address player, uint32 day) private {
-        uint256 prevData = mintPacked_[player];
-        uint32 prevDay = uint32((prevData >> ETH_DAY_SHIFT) & MINT_MASK_32);
-        if (prevDay == day) {
-            return;
-        }
-        uint256 clearedDay = prevData & ~(MINT_MASK_32 << ETH_DAY_SHIFT);
-        mintPacked_[player] = clearedDay | (uint256(day) << ETH_DAY_SHIFT);
-    }
-
-    function _currentDayIndex() private view returns (uint48) {
-        uint48 deployDayBoundary = uint48((deployTime - JACKPOT_RESET_TIME) / 1 days);
-        uint48 currentDayBoundary = uint48((block.timestamp - JACKPOT_RESET_TIME) / 1 days);
-        return currentDayBoundary - deployDayBoundary + 1;
-    }
-
-    function _calculateLootboxAffiliateAmount(
-        uint24 lvl,
-        uint8 gameState_,
-        uint256 lootBoxAmount,
-        uint256 priceWei
-    ) private pure returns (uint256) {
-        uint256 gamepieceEquivalent = lootBoxAmount / priceWei;
-        if (gamepieceEquivalent == 0) return 0;
-
-        uint256 baseAmount;
-        if (lvl > 40) {
-            uint256 pct = gameState_ != 3 ? 30 : 5;
-            baseAmount = (PRICE_COIN_UNIT * pct) / 100;
-        } else {
-            baseAmount = PRICE_COIN_UNIT / 10;
-            if (lvl <= 3 || gameState_ != 3) {
-                baseAmount = (baseAmount * 250) / 100;
-            }
-        }
-
-        return (baseAmount * gamepieceEquivalent) / 2;
-    }
-
-    function _lootboxTicketCount(
-        uint256 budgetWei,
-        uint256 priceWei,
-        uint256 entropy
-    ) private pure returns (uint32 count, uint256 nextEntropy) {
-        if (budgetWei == 0 || priceWei == 0) {
-            return (0, entropy);
-        }
-
-        nextEntropy = _entropyStep(entropy);
-        uint256 multiplierRoll = nextEntropy % 10;
-        uint256 adjustedBudget;
-        if (multiplierRoll < 2) {
-            adjustedBudget = (budgetWei * 3);
-        } else {
-            adjustedBudget = (budgetWei * 6) / 10;
-        }
-
-        uint256 base = adjustedBudget / priceWei;
-        uint256 remainder = adjustedBudget - (base * priceWei);
-        if (remainder != 0) {
-            nextEntropy = _entropyStep(nextEntropy);
-            if (nextEntropy % priceWei < remainder) {
-                unchecked {
-                    ++base;
-                }
-            }
-        }
-
-        if (base > type(uint32).max) revert E();
-        count = uint32(base);
-    }
-
-    function _resolveLootboxRoll(
-        address player,
-        uint256 amount,
-        uint24 targetLevel,
-        uint256 targetPrice,
-        uint256 entropy
-    ) private returns (uint256 burnieOut, uint32 ticketsOut, uint256 nextEntropy, bool applyPresaleMultiplier) {
-        nextEntropy = entropy;
-        if (amount == 0) return (0, 0, nextEntropy, false);
-
-        nextEntropy = _entropyStep(nextEntropy);
-
-        uint256 rollMax = 20;
-        uint256 ticketThreshold = 12;
-        uint256 largeBurnieThreshold = 16;
-        uint16 ticketBps = LOOTBOX_TICKET_ROLL_BPS;
-        uint16 smallBurnieBps = LOOTBOX_SMALL_BURNIE_ROLL_BPS;
-        uint16 largeBurnieBps = LOOTBOX_LARGE_BURNIE_ROLL_BPS;
-
-        uint256 roll = nextEntropy % rollMax;
-
-        if (roll < ticketThreshold) {
-            uint256 price = targetPrice;
-
-            uint256 ticketBudget = (amount * ticketBps) / 10_000;
-
-            if (ticketBudget < price) {
-                uint256 burnieValue = (ticketBudget * PRICE_COIN_UNIT) / targetPrice;
-                burnieOut = (burnieValue * 80) / 100;
-                applyPresaleMultiplier = false;
-            } else {
-                uint256 gamepiecePrice = price * 4;
-                bool canAffordGamepiece = ticketBudget >= gamepiecePrice;
-
-                bool awardGamepiece = false;
-                if (canAffordGamepiece) {
-                    nextEntropy = _entropyStep(nextEntropy);
-                    uint256 gamepieceRoll = nextEntropy % 6;
-                    awardGamepiece = (gamepieceRoll == 0);
-                }
-
-                if (awardGamepiece) {
-                    if (targetLevel <= level) {
-                        burnieOut = 4 * PRICE_COIN_UNIT;
-                    } else {
-                        _queueFutureRewardMints(player, targetLevel, 4, 0);
-                        ticketsOut = 4;
-                    }
-                    applyPresaleMultiplier = false;
-                } else {
-                    (uint32 tickets, uint256 entropyAfter) = _lootboxTicketCount(ticketBudget, price, nextEntropy);
-                    nextEntropy = entropyAfter;
-                    if (tickets == 0) return (0, 0, nextEntropy, false);
-
-                    if (targetLevel <= level) {
-                        burnieOut = uint256(tickets) * PRICE_COIN_UNIT;
-                    } else {
-                        _queueFutureRewardMints(player, targetLevel, tickets, 0);
-                        ticketsOut = tickets;
-                    }
-                    applyPresaleMultiplier = false;
-                }
-            }
-        } else if (roll < largeBurnieThreshold) {
-            uint256 burnieBudget = (amount * smallBurnieBps) / 10_000;
-            burnieOut = (burnieBudget * PRICE_COIN_UNIT) / targetPrice;
-            applyPresaleMultiplier = true;
-        } else {
-            uint256 burnieBudget = (amount * largeBurnieBps) / 10_000;
-            burnieOut = (burnieBudget * PRICE_COIN_UNIT) / targetPrice;
-            applyPresaleMultiplier = true;
-        }
-    }
-
-    function _priceForLevel(uint24 targetLevel) private pure returns (uint256) {
-        if (targetLevel == 0) return 0;
-        if (targetLevel < 10) {
-            return 0.025 ether / ContractAddresses.COST_DIVISOR;
-        }
-        uint24 offset = targetLevel % 100;
-        if (offset == 0 || offset < 10) {
-            return 0.25 ether;
-        }
-        if (offset < 30) {
-            return 0.05 ether;
-        }
-        if (offset < 80) {
-            return 0.1 ether;
-        }
-        return 0.15 ether;
-    }
-
-    function _entropyStep(uint256 state) private pure returns (uint256) {
-        unchecked {
-            state ^= state << 7;
-            state ^= state >> 9;
-            state ^= state << 8;
-        }
-        return state;
-    }
+    
 
     // -------------------------------------------------------------------------
     // Internal Helpers
@@ -1098,9 +1082,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint48 day = dailyIdx;
         if (day == 0) {
             // Calculate from timestamp if not yet set
-            uint48 deployDayBoundary = uint48((deployTime - JACKPOT_RESET_TIME) / 1 days);
             uint48 currentDayBoundary = uint48((block.timestamp - JACKPOT_RESET_TIME) / 1 days);
-            day = currentDayBoundary - deployDayBoundary + 1;
+            day = currentDayBoundary - ContractAddresses.DEPLOY_DAY_BOUNDARY + 1;
         }
         return uint32(day);
     }

@@ -15,7 +15,7 @@ Technical reference for the Degenerus quest mechanics.
 - Quest state lives in `DegenerusQuests` (standalone contract, not delegatecall)
 - Coin-gated: only `BurnieCoin` can call the `handle*` entry points
 - `normalizeActiveBurnQuests` can be called by `BurnieCoin` or `DegenerusGame`
-- `BurnieCoin` forwards gameplay events (mints, flips, burns, bonds, affiliates) to the quest contract
+- `BurnieCoin` forwards gameplay events (mints, flips, burns, affiliates) to the quest contract
 - Quest rewards are applied as BURNIE coinflip credit
 - Daily quests rolled during jackpot processing using VRF entropy
 
@@ -31,7 +31,6 @@ Technical reference for the Degenerus quest mechanics.
 | AFFILIATE | 3 | BURNIE base units (18 decimals) |
 | BURN | 4 | Whole NFT units |
 | DECIMATOR | 5 | BURNIE base units (18 decimals) |
-| BOND | 6 | Wei |
 
 For MAPs: 4 MAP mints = 1 quest unit.
 
@@ -62,7 +61,6 @@ For MAPs: 4 MAP mints = 1 quest unit.
 | MINT_ETH | 5 | Always |
 | MINT_BURNIE | 10 | Only if `lastPurchaseDay` |
 | BURN | 2 | Only if `gameState == 3` |
-| BOND | 2 | Always |
 | AFFILIATE | 1 | Always |
 | DECIMATOR | 4 | Only if window allowed |
 | FLIP | 0 | Never primary |
@@ -80,7 +78,6 @@ For MAPs: 4 MAP mints = 1 quest unit.
 - **Burn**: Only when `gameState == 3`
 - **Decimator**: When `decWindowOpenFlag` and level meets criteria
 - **Mint Burnie**: Only when `lastPurchaseDay` is true
-- **Bond**: Quest can roll any day; progress only advances when bond purchases are open (level-dependent)
 
 ---
 
@@ -98,7 +95,6 @@ For MAPs: 4 MAP mints = 1 quest unit.
 | Flip | Linear between min and tier-specific max |
 | Decimator | 2x the flip target |
 | Affiliate | Linear between min and tier-specific max |
-| Bond | 0.5x to 1.0x mintPrice (by tier) |
 
 ---
 
@@ -146,7 +142,7 @@ tier = min(streak / 10, 2)
 
 Rewards are added to coinflip credit:
 - `depositCoinflip`: added to stake
-- `notifyQuestMint/Bond/Burn`: credited as flip stake
+- `notifyQuestMint/Burn`: credited as flip stake
 - `decimatorBurn`: increases base amount for weighting
 
 Event: `QuestCompleted(player, type, streak, reward, hardMode, completedBoth)`
@@ -172,7 +168,6 @@ When extermination ends (`gameState` leaves 3):
 | `handleMint` | Coin | Gamepieces purchases |
 | `handleFlip` | Coin | `depositCoinflip` |
 | `handleDecimator` | Coin | `decimatorBurn` |
-| `handleBondPurchase` | Coin | Bonds |
 | `handleAffiliate` | Coin | Affiliate payouts |
 | `handleBurn` | Coin | Game `burnTokens` |
 
@@ -186,4 +181,4 @@ When extermination ends (`gameState` leaves 3):
 | `playerQuestStates()` | Raw streak + progress + completion flags |
 | `getPlayerQuestView()` | Player-specific with tier-adjusted requirements |
 
-`requirements.tokenAmount` is BURNIE base units for token quests, wei for bond quests.
+`requirements.tokenAmount` is BURNIE base units for token quests, wei for ETH quests.

@@ -54,6 +54,7 @@ pragma solidity ^0.8.26;
 |  |   bits [30-31]: Q3 quadrant tag (3)                                                             |  |
 |  |   bits [32-55]: Level (uint24)                                                                  |  |
 |  |   bits [56-71]: Last exterminated trait (0..255 valid, 420 = none)                              |  |
+|  |   bits [72]:    Extermination open flag (1 = no extermination yet this level)                   |  |
 |  +--------------------------------------------------------------------------------------------------+ |
 |                                                                                                       |
 |  +--------------------------------------------------------------------------------------------------+ |
@@ -89,6 +90,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import "./interfaces/IconRendererTypes.sol";
 import {RendererLibrary} from "./libraries/RendererLibrary.sol";
 import {ColorResolver} from "./libraries/ColorResolver.sol";
+import {ITrophySvgAssets} from "./TrophySvgAssets.sol";
+import {IIconRendererRegular32Assets} from "./IconRendererRegular32Assets.sol";
 
 // -----------------------------------------------------------------------------
 // EXTERNAL INTERFACE
@@ -124,7 +127,13 @@ contract IconRendererRegular32 is ColorResolver {
     IDegenerusGameStartRemaining internal constant game = IDegenerusGameStartRemaining(ContractAddresses.GAME);
 
     /// @dev Gamepiece ERC721 contract
-    IERC721Lite internal constant nft = IERC721Lite(ContractAddresses.GAMEPIECES);
+    IERC721Lite internal constant gamepieces = IERC721Lite(ContractAddresses.GAMEPIECES);
+
+    /// @dev Trophy SVG assets (BAF coinflip symbol).
+    ITrophySvgAssets internal constant trophyAssets =
+        ITrophySvgAssets(ContractAddresses.TROPHY_SVG_ASSETS);
+    IIconRendererRegular32Assets internal constant regularAssets =
+        IIconRendererRegular32Assets(ContractAddresses.RENDERER_REGULAR_ASSETS);
 
     // ---------------------------------------------------------------------
     // User defaults
@@ -147,7 +156,7 @@ contract IconRendererRegular32 is ColorResolver {
 
     /// @notice Batch set the same per‑token color overrides for many tokenIds.
     /// @dev
-    /// - Caller must own each tokenId in `nft`.
+    /// - Caller must own each tokenId in `gamepieces`.
     /// - No explicit batch size limit; bounded by gas.
     /// - Pass "" for a channel to clear it on each token.
     function setCustomColorsForMany(
@@ -177,8 +186,22 @@ contract IconRendererRegular32 is ColorResolver {
     // Layout tuning (1e6 fixed‑point).
     uint32 private constant SYM_FIT_BASE_1e6 = 750_000;
     uint32 private constant GLOBAL_BADGE_BOOST_1e6 = 1_010_000;
-    // Hair variant for the orange King icon (Cards quadrant).
-    string private constant ORANGE_KING_ICON = "<g id='ico' transform='translate(-24 -42) scale(1.25)'><g transform='translate(111.6 0) scale(0.57369)'><path d='M463.5 705L280.5 705L181 429.5L175.5 425L170 430.5L170 703.5L0 703.5L0.5 0L170 0.5L170 321.5L183.5 321.5L282 0L468 0L315.5 370L468 705Z' transform='translate(20.42 210) scale(0.87)'/><g transform='translate(-120 30) scale(1.1 0.62)'><g transform='scale(0.853333)'><defs><clipPath id='king-hair-clip'><path d='M 539 89 C 530.2 83 509.8 79.7 504 84 C 498.2 88.3 510.5 107.7 504 115 C 497.5 122.3 498 135.2 465 128 C 432 120.8 347.7 73.3 298 63 C 248.3 52.7 152.8 50.2 124 60 C 95.2 69.8 53.8 95.8 41 121 C 28.2 146.2 27.3 219.7 38 240 C 48.7 260.3 68.5 255.2 77 270 C 85.5 284.8 55.7 333.8 66 367 C 76.3 400.2 120.5 434.2 129 459 C 137.5 483.8 129.8 519.2 122 532 C 114.2 544.8 74.2 563.8 78 573 C 81.8 582.2 168.3 587.2 185 577 C 201.7 566.8 221.5 525.3 227 501 C 232.5 476.7 223.5 415 228 391 C 232.5 367 246.3 343.3 264 329 C 281.7 314.7 330.7 301.8 366 300 C 401.3 298.2 470 312.5 500 300 C 530 287.5 561.5 258.2 571 231 C 580.5 203.8 575.2 143.8 571 125 C 566.8 106.2 547.8 95 539 89 Z'/></clipPath></defs><path d='M 539 89 C 530.2 83 509.8 79.7 504 84 C 498.2 88.3 510.5 107.7 504 115 C 497.5 122.3 498 135.2 465 128 C 432 120.8 347.7 73.3 298 63 C 248.3 52.7 152.8 50.2 124 60 C 95.2 69.8 53.8 95.8 41 121 C 28.2 146.2 27.3 219.7 38 240 C 48.7 260.3 68.5 255.2 77 270 C 85.5 284.8 55.7 333.8 66 367 C 76.3 400.2 120.5 434.2 129 459 C 137.5 483.8 129.8 519.2 122 532 C 114.2 544.8 74.2 563.8 78 573 C 81.8 582.2 168.3 587.2 185 577 C 201.7 566.8 221.5 525.3 227 501 C 232.5 476.7 223.5 415 228 391 C 232.5 367 246.3 343.3 264 329 C 281.7 314.7 330.7 301.8 366 300 C 401.3 298.2 470 312.5 500 300 C 530 287.5 561.5 258.2 571 231 C 580.5 203.8 575.2 143.8 571 125 C 566.8 106.2 547.8 95 539 89 Z' fill='#FAD807' stroke='none'/><g clip-path='url(#king-hair-clip)' fill='none' stroke='#000' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'><path d='M 150 135 C 230 85 370 70 520 105'/><path d='M 140 185 C 235 135 380 120 505 150'/><path d='M 145 245 C 250 210 385 205 475 225'/><path d='M 150 300 C 175 355 170 420 140 475'/></g><path d='M 539 89 C 530.2 83 509.8 79.7 504 84 C 498.2 88.3 510.5 107.7 504 115 C 497.5 122.3 498 135.2 465 128 C 432 120.8 347.7 73.3 298 63 C 248.3 52.7 152.8 50.2 124 60 C 95.2 69.8 53.8 95.8 41 121 C 28.2 146.2 27.3 219.7 38 240 C 48.7 260.3 68.5 255.2 77 270 C 85.5 284.8 55.7 333.8 66 367 C 76.3 400.2 120.5 434.2 129 459 C 137.5 483.8 129.8 519.2 122 532 C 114.2 544.8 74.2 563.8 78 573 C 81.8 582.2 168.3 587.2 185 577 C 201.7 566.8 221.5 525.3 227 501 C 232.5 476.7 223.5 415 228 391 C 232.5 367 246.3 343.3 264 329 C 281.7 314.7 330.7 301.8 366 300 C 401.3 298.2 470 312.5 500 300 C 530 287.5 561.5 258.2 571 231 C 580.5 203.8 575.2 143.8 571 125 C 566.8 106.2 547.8 95 539 89 Z' fill='none' stroke='#000' stroke-width='12' stroke-linejoin='round' stroke-linecap='round'/></g></g></g></g>";
+    uint32 private constant ETH_CENTER_SCALE_1e6 = 36_300;
+    uint16 private constant BAF_FLIP_VB = 130;
+    uint32 private constant BURNIE_BAF_SCALE_1e6 = 153_000;
+    int256 private constant BURNIE_BAF_SHIFT_X_1e6 = 500_000;
+    uint32 private constant ETH_FLAME_SCALE_1e6 = 110_000;
+    int16 private constant ETH_FLAME_X_OFFSET = 4;
+    int16 private constant ETH_FLAME_Y_SIDE = 5;
+    int16 private constant ETH_FLAME_Y_MID = 8;
+    uint16 private constant DGNRS_ICON_VB = 300;
+    uint32 private constant DGNRS_ICON_SCALE_1e6 = 56_000;
+    uint8 private constant ETH_SYMBOL_INDEX = 6; // Q0 index for Ethereum
+    uint8 private constant ETH_PERK_ODDS = 100;
+    uint8 private constant ETH_PERK_REMAINDER = 0;
+    uint8 private constant BURNIE_PERK_REMAINDER = 1;
+    uint8 private constant DGNRS_PERK_REMAINDER = 2;
+    uint256 private constant ETH_PERK_SALT = 0x455448;
 
     // Quadrant offsets.
     int16 private constant CX_LEFT = -25;
@@ -197,7 +220,8 @@ contract IconRendererRegular32 is ColorResolver {
     /// @notice Render metadata + image for a Degenerus token.
     /// @param tokenId   gamepiece id.
     /// @param data      Packed game data:
-    ///                  - Regular: bits [63:48] last exterminated trait (0..255 or 420 sentinel),
+    ///                  - Regular: bits [72] exOpen flag (1 = no extermination yet),
+    ///                             bits [63:48] last exterminated trait (0..255 or 420 sentinel),
     ///                             bits [47:24] level, bits [23:00] packed traits.
     /// @param remaining Live remaining counts for this token’s four traits (regular only).
     function tokenURI(
@@ -212,13 +236,27 @@ contract IconRendererRegular32 is ColorResolver {
 
         uint24 lvl = uint24((data >> 32) & 0xFFFFFF);
         uint16 lastEx = uint16((data >> 56) & 0xFFFF); // 0..255 valid; 420 = sentinel “none”
+        bool exOpen = ((data >> 72) & 1) != 0;
         uint32 traits = uint32(data);
 
         (uint8[4] memory col, uint8[4] memory sym) = _decodeTraits(traits);
-        string memory img2 = _svgFull(tokenId, traits, col, sym, remaining, lastEx, lvl);
+        string memory img2 = _svgFull(tokenId, traits, col, sym, remaining, lastEx, lvl, exOpen);
         string memory desc2 = _descFromRem(col, sym, remaining);
 
         string memory levelStr = (lvl == 0) ? "TBD" : uint256(lvl).toString();
+        bool isEthSpecial = exOpen && _isEthPerkToken(tokenId);
+        bool isBurnieSpecial = !isEthSpecial && exOpen && _isBurniePerkToken(tokenId);
+        bool isDgnrsSpecial =
+            !isEthSpecial && !isBurnieSpecial && exOpen && _isDgnrsPerkToken(tokenId);
+        string memory specialAttr;
+        if (isEthSpecial) {
+            specialAttr = ',{"trait_type":"Special","value":"Ethereum"}';
+        } else if (isBurnieSpecial) {
+            specialAttr = ',{"trait_type":"Special","value":"Coinflip"}';
+        } else if (isDgnrsSpecial) {
+            specialAttr = ',{"trait_type":"Special","value":"DGNRS"}';
+        }
+
         string memory attrs = string(
             abi.encodePacked(
                 '[{"trait_type":"',
@@ -239,7 +277,9 @@ contract IconRendererRegular32 is ColorResolver {
                 _label(3, col[3], sym[3]),
                 '"},{"trait_type":"Level","value":"',
                 levelStr,
-                '"}]'
+                '"}',
+                specialAttr,
+                "]"
             )
         );
 
@@ -297,7 +337,8 @@ contract IconRendererRegular32 is ColorResolver {
         uint8[4] memory sym,
         uint32[4] calldata remaining,
         uint16 lastEx,
-        uint24 level
+        uint24 level,
+        bool exOpen
     ) private view returns (string memory out) {
         // Resolve palette (owner/custom overrides cascade inside `_resolveColor`)
         string memory borderColor0 = _borderColor(tokenId, traitsPacked, col, level);
@@ -309,7 +350,27 @@ contract IconRendererRegular32 is ColorResolver {
         // Frame + guides
         out = RendererLibrary.svgHeader(borderColor, squareFill);
         string memory diamondPath = icons.diamond();
-        out = string.concat(out, _guides(borderColor, diamondFill, flameFill, diamondPath));
+        bool useEthCenter = exOpen && _isEthPerkToken(tokenId);
+        bool useBurnieCenter = !useEthCenter && exOpen && _isBurniePerkToken(tokenId);
+        bool useDgnrsCenter =
+            !useEthCenter && !useBurnieCenter && exOpen && _isDgnrsPerkToken(tokenId);
+        string memory ethPath;
+        if (useEthCenter) {
+            ethPath = icons.data(ETH_SYMBOL_INDEX);
+        }
+        out = string.concat(
+            out,
+            _guides(
+                borderColor,
+                diamondFill,
+                flameFill,
+                diamondPath,
+                useEthCenter,
+                useBurnieCenter,
+                useDgnrsCenter,
+                ethPath
+            )
+        );
 
         // Quadrant remap (visual layout): BL←Q2, BR←Q3, TL←Q0, TR←Q1
         out = string.concat(out, _svgQuad(0, 2, col[2], sym[2], remaining[2], lastEx, level)); // BL
@@ -376,8 +437,12 @@ contract IconRendererRegular32 is ColorResolver {
         // Symbol path selection (32 icons total: quadId*8 + symbolIndex)
         uint256 iconIndex = quadId * 8 + symbolIndex;
         string memory iconPath = icons.data(iconIndex);
-        if (quadId == 2 && symbolIndex == 1 && colorIndex == 5) {
-            iconPath = ORANGE_KING_ICON;
+        if (quadId == 2 && symbolIndex == 1) {
+            if (colorIndex == 5) {
+                iconPath = regularAssets.orangeKingIcon();
+            } else {
+                iconPath = regularAssets.kingGoldIcon(_paletteColor(7, level));
+            }
         }
         // Fit symbol into inner ring, scaled in 1e6 "micro‑units"
         uint32 fit1e6 = _symbolFit1e6(quadId, symbolIndex);
@@ -479,8 +544,23 @@ contract IconRendererRegular32 is ColorResolver {
         string memory borderColor,
         string memory diamondFill,
         string memory flameColor,
-        string memory diamondPath
+        string memory diamondPath,
+        bool useEthCenter,
+        bool useBurnieCenter,
+        bool useDgnrsCenter,
+        string memory ethPath
     ) private pure returns (string memory) {
+        string memory center = useEthCenter
+            ? _ethFlameDiamond(flameColor, diamondPath, ethPath)
+            : (
+                useBurnieCenter
+                    ? _burnieBafSymbol()
+                    : (
+                        useDgnrsCenter
+                            ? _dgnrsSymbol(flameColor)
+                            : _flameDiamond(flameColor, diamondPath)
+                    )
+            );
         return
             string(
                 abi.encodePacked(
@@ -495,7 +575,7 @@ contract IconRendererRegular32 is ColorResolver {
                     '" stroke="',
                     borderColor,
                     '" stroke-width="1"/>',
-                    _flameDiamond(flameColor, diamondPath)
+                    center
                 )
             );
     }
@@ -517,6 +597,109 @@ contract IconRendererRegular32 is ColorResolver {
                     "</g></g>"
                 )
             );
+    }
+
+    function _ethFlameDiamond(
+        string memory /*flameFill*/,
+        string memory diamondPath,
+        string memory ethPath
+    ) private pure returns (string memory) {
+        uint32 scale1e6 = ETH_CENTER_SCALE_1e6;
+        int256 txMicro = -(int256(uint256(RendererLibrary.ICON_VB)) * int256(uint256(scale1e6))) / 2;
+        int256 tyMicro = txMicro;
+        return
+            string(
+                abi.encodePacked(
+                    '<defs><clipPath id="ethc"><circle cx="0" cy="0" r="27"/></clipPath></defs>',
+                    '<g transform="',
+                    RendererLibrary.mat6(scale1e6, txMicro, tyMicro),
+                    '"><g style="vector-effect:non-scaling-stroke">',
+                    ethPath,
+                    "</g></g>",
+                    _ethFlame(diamondPath, -ETH_FLAME_X_OFFSET, ETH_FLAME_Y_SIDE),
+                    _ethFlame(diamondPath, 0, ETH_FLAME_Y_MID),
+                    _ethFlame(diamondPath, ETH_FLAME_X_OFFSET, ETH_FLAME_Y_SIDE)
+                )
+            );
+    }
+
+    function _burnieBafSymbol() private pure returns (string memory) {
+        uint32 scale1e6 = BURNIE_BAF_SCALE_1e6;
+        int256 center = (int256(uint256(BAF_FLIP_VB)) * int256(uint256(scale1e6))) / 2;
+        int256 offsetX = -center + BURNIE_BAF_SHIFT_X_1e6;
+        int256 offsetY = -center;
+        return
+            string(
+                abi.encodePacked(
+                    '<g transform="',
+                    RendererLibrary.mat6(scale1e6, offsetX, offsetY),
+                    '">',
+                    trophyAssets.bafFlipSymbol(),
+                    "</g>"
+                )
+            );
+    }
+
+    function _dgnrsSymbol(string memory fillColor) private pure returns (string memory) {
+        uint32 scale1e6 = DGNRS_ICON_SCALE_1e6;
+        int256 center = (int256(uint256(DGNRS_ICON_VB)) * int256(uint256(scale1e6))) / 2;
+        int256 offsetX = -center;
+        int256 offsetY = -center;
+        return
+            string(
+                abi.encodePacked(
+                    '<g transform="',
+                    RendererLibrary.mat6(scale1e6, offsetX, offsetY),
+                    '"><path fill="',
+                    fillColor,
+                    '" d="M252.472,129.074c-35.063,1.018-81.701,5.444-133.099,14.293c-51.4,8.846-62.426-5.467-67.398-21.439c-5.63-18.084,0.212-27.206,0.212-27.206c33.263-5.405,36.17-26.597,35.337-38.658c-3.323,4.165-8.413,6.899-12.634,7.058c-3.024,0.11-12.306-9.346-27.274,5.832c0.834-8.314-3.143-13.805-13.254-16.631C23.987,49.41,16.032,63.42,0.223,49.414c-3.326,44.068,31.594,45.308,31.594,45.308c-14.225,78.259,45.009,118.089,46.028,122.857c1.021,4.759-15.999,9.523-12.938,14.298c3.065,4.76,23.83,3.746,36.088,1.354c59.566,15.655,72.466,18.708,143.647,17.031c57.279-1.369,56.638-51.767,54.944-69.499C296.259,145.907,287.535,128.051,252.472,129.074z"/><ellipse cx="234" cy="132" rx="8" ry="5" fill="#fff"/></g>'
+                )
+            );
+    }
+
+    function _ethFlame(
+        string memory diamondPath,
+        int16 cx,
+        int16 cy
+    ) private pure returns (string memory) {
+        uint32 scale1e6 = ETH_FLAME_SCALE_1e6;
+        int256 txMicro = int256(int32(cx)) * 1_000_000;
+        int256 tyMicro = int256(int32(cy)) * 1_000_000;
+        return
+            string(
+                abi.encodePacked(
+                    '<g transform="',
+                    RendererLibrary.mat6(scale1e6, txMicro, tyMicro),
+                    '"><g clip-path="url(#ethc)">',
+                    '<path fill="#ff3300" stroke="none" transform="matrix(0.13 0 0 0.13 -56 -41)" d="',
+                    diamondPath,
+                    '"/></g></g>'
+                )
+            );
+    }
+
+    function _isEthPerkToken(uint256 tokenId) private pure returns (bool) {
+        if (tokenId == 0) return false;
+        return
+            uint256(keccak256(abi.encodePacked(tokenId, ETH_PERK_SALT))) %
+                ETH_PERK_ODDS ==
+            ETH_PERK_REMAINDER;
+    }
+
+    function _isBurniePerkToken(uint256 tokenId) private pure returns (bool) {
+        if (tokenId == 0) return false;
+        return
+            uint256(keccak256(abi.encodePacked(tokenId, ETH_PERK_SALT))) %
+                ETH_PERK_ODDS ==
+            BURNIE_PERK_REMAINDER;
+    }
+
+    function _isDgnrsPerkToken(uint256 tokenId) private pure returns (bool) {
+        if (tokenId == 0) return false;
+        return
+            uint256(keccak256(abi.encodePacked(tokenId, ETH_PERK_SALT))) %
+                ETH_PERK_ODDS ==
+            DGNRS_PERK_REMAINDER;
     }
 
 
@@ -672,6 +855,9 @@ contract IconRendererRegular32 is ColorResolver {
     function _paletteColorRGB(uint8 idx, uint24 level) private pure returns (uint24) {
         uint24 cycle = level % 10;
         uint24 base = RendererLibrary.paletteColorRGB(idx);
+        if (idx == 5) {
+            return base;
+        }
         uint8 r = uint8(base >> 16);
         uint8 g = uint8(base >> 8);
         uint8 b = uint8(base);

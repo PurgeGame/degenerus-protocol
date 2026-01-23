@@ -13,23 +13,23 @@ abstract contract ColorResolver {
     IDegenerusAffiliate private constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
 
     /// @notice Resolve color with full cascade: token → owner → referrer → upline → default
-    /// @param nftContract The gamepiece contract address
+    /// @param tokenContract The ERC721 contract address
     /// @param tokenId The token ID
     /// @param channel Color channel (0=outline, 1=flame, 2=diamond, 3=square)
     /// @param defColor Fallback color if no overrides found
     /// @return The resolved color hex string
     function _resolveColor(
-        address nftContract,
+        address tokenContract,
         uint256 tokenId,
         uint8 channel,
         string memory defColor
     ) internal view returns (string memory) {
         // Per-token override
-        string memory s = registry.tokenColor(nftContract, tokenId, channel);
+        string memory s = registry.tokenColor(tokenContract, tokenId, channel);
         if (bytes(s).length != 0) return s;
 
         // Owner default (will revert if token doesn't exist, which is fine for gamepieces)
-        address owner_ = IERC721Lite(nftContract).ownerOf(tokenId);
+        address owner_ = IERC721Lite(tokenContract).ownerOf(tokenId);
         s = registry.addressColor(owner_, channel);
         if (bytes(s).length != 0) return s;
 
@@ -50,24 +50,24 @@ abstract contract ColorResolver {
     }
 
     /// @notice Resolve color with try/catch on ownerOf (for trophies that may be burned)
-    /// @param nftContract The gamepiece contract address
+    /// @param tokenContract The ERC721 contract address
     /// @param tokenId The token ID
     /// @param channel Color channel (0=outline, 1=flame, 2=diamond, 3=square)
     /// @param defColor Fallback color if no overrides found
     /// @return The resolved color hex string
     function _resolveColorSafe(
-        address nftContract,
+        address tokenContract,
         uint256 tokenId,
         uint8 channel,
         string memory defColor
     ) internal view returns (string memory) {
         // Per-token override
-        string memory s = registry.tokenColor(nftContract, tokenId, channel);
+        string memory s = registry.tokenColor(tokenContract, tokenId, channel);
         if (bytes(s).length != 0) return s;
 
         // Owner default (with try/catch for burned tokens)
         address owner_;
-        try IERC721Lite(nftContract).ownerOf(tokenId) returns (address o) {
+        try IERC721Lite(tokenContract).ownerOf(tokenId) returns (address o) {
             owner_ = o;
         } catch {
             owner_ = address(0);

@@ -32,6 +32,18 @@ Degenerus is a high-variance, on-chain NFT game designed for risk-seeking player
 
 Prices increase through 100-level cycles, then reset.
 
+### Purchases
+
+**Main Entry Point: `DegenerusGame.purchase()`**
+
+All ETH/claimable purchases go through one unified function:
+- **Gamepieces + MAPs + Loot Boxes**: Buy any combination in one transaction
+- **Claimable Rebuy Bonus**: Spending all claimable winnings earns a 10% bonus (minimum 3 gamepiece-equivalents)
+- **Affiliate Support**: All purchase types earn affiliate rewards (loot boxes at 50% rate)
+- **Payment Modes**: Supports ETH, claimable winnings, or combined payment
+
+**BURNIE Purchases**: Use `DegenerusGamepieces.purchase()` for buying with BURNIE tokens
+
 ---
 
 ## BURNIE Token
@@ -68,8 +80,8 @@ BURNIE is **not minted on purchase**:
 ETH In                          On-Chain Buckets              Payouts
 ─────────────────────────────────────────────────────────────────────
 Gamepiece/MAP buys (ETH)   →    Prize pools + jackpots   →   Winners
-Bond deposits              →    Bond backing (bondPool)  →   Maturities
-                           →    Reward pool              →   Special jackpots
+Loot box purchases         →    Future/next/reward pools →   MAP tickets/BURNIE
+Direct ETH inflows         →    Reward pool              →   Special jackpots
                            →    Vault transfers          →   Share holders
 ```
 
@@ -101,37 +113,58 @@ Note: jackpot payouts can convert a portion of ETH into MAP tickets; the MAP cos
 
 ---
 
-## Bonds
-
-Time-locked payouts that incentivize game progression.
-
-### Structure
-
-- **Maturities**: Every 10 levels (levels ending in 0)
-- **Sale window**: First 5 levels of each 10-level cycle
-
-### External Deposit Split
-
-| Destination | Percent |
-|-------------|---------|
-| Bond backing (bondPool) | 20% |
-| Reward pool | 10% |
-| Untracked yield | 30% |
-| Vault share | 40% |
-
-### Maturity Payout
-
-1. Position assigned to one of two lanes (deterministic)
-2. One lane wins, other eliminated (high variance)
-3. Winning lane splits: pro-rata share + draw prizes
-
-### Game Over
+## Game Over
 
 If inactive for ~1 year (or ~2.5 years if never started):
-1. Drain to bonds
-2. Resolve maturities oldest-first
-3. 1-year claim window
-4. Sweep remainder to vault
+1. Game enters GAMEOVER
+2. Contract sweeps all ETH + stETH into the vault
+
+---
+
+## Loot Boxes
+
+Daily purchase opportunity with randomized rewards.
+
+### Mechanics
+
+- Purchase any amount (minimum 0.01 ETH) - flexible to use exact claimable balances
+- One loot box per day per player (can add to existing)
+- Two modes: Normal and Presale
+
+### Normal Mode (60% tickets/gamepieces, 40% BURNIE)
+
+- **ETH Split**: 60% future levels, 20% next prize pool, 20% reward pool
+- **Rewards**: d20 roll determines payout type
+  - 60% probability (rolls 0-11): MAP tickets OR gamepiece for future levels (116.67% of ETH value)
+    - Within this outcome: 1/6 chance for gamepiece (if budget allows), 5/6 chance for tickets
+  - 20% probability (rolls 12-15): Small BURNIE consolation (5% of ETH value)
+  - 20% probability (rolls 16-19): Large BURNIE jackpot (195% of ETH value)
+  - **Total EV: 110%** (70% + 1% + 39%)
+
+### Presale Mode (60% tickets/gamepieces, 40% BURNIE with 2× multiplier)
+
+- **ETH Split**: 10% future levels, 10% next prize pool, 30% vault, 50% reward pool
+- **Rewards**: Same d20 roll mechanic with 2× BURNIE multiplier
+  - 60% probability: MAP tickets OR gamepiece for future levels (116.67% of ETH value)
+    - Within this outcome: 1/6 chance for gamepiece (if budget allows), 5/6 chance for tickets
+  - 20% probability: Small BURNIE consolation (10% of ETH value, 2× multiplier)
+  - 20% probability: Large BURNIE jackpot (390% of ETH value, 2× multiplier)
+  - **Total EV: 150%** (70% + 2% + 78%)
+- **Bonus**: Presale purchases get extra coinflip multipliers
+
+### Opening
+
+- Requires VRF random word (after daily reset)
+- Large purchases (>1 ETH) split into two independent rolls
+- **Target Level**: Randomly rolled at opening time (current level + 0-5)
+  - Box value scales with level price at opening, not purchase
+  - Encourages strategic timing for maximum reward value
+- **Tickets**: All tickets/gamepieces awarded for the rolled target level
+  - Ticket quantity calculated using the rolled level's price
+  - If budget < 1 MAP ticket: Fallback converts to BURNIE at 80% value (20% penalty)
+- **Gamepiece**: Awarded for target level (only if budget >= 4× MAP price)
+  - ~10% overall chance (60% ticket outcome × 1/6)
+  - Replaces ~4 MAP tickets with 1 full gamepiece
 
 ---
 
@@ -146,6 +179,24 @@ Built-in marketing: the protocol rewards people who bring new participants.
 - Rewards delivered as **flip credit** (coinflip stake)
 - System can auto-buy MAPs for affiliates during purchase phase
 
+### Affiliate Rewards by Payment Method
+
+**ETH Purchases:**
+- Early levels (≤3) or purchase phase: 0.25 BURNIE per gamepiece-equivalent
+- Mid levels (4-40) burn phase: 0.1 BURNIE per gamepiece-equivalent
+- Late levels (>40): 0.05-0.30 BURNIE depending on phase
+
+**Claimable Purchases:**
+- Flat rate: 0.05 BURNIE per gamepiece-equivalent (1/20th of a mint)
+- Lower rate incentivizes fresh ETH while still rewarding volume
+
+**Combined Purchases:**
+- Pro-rated between ETH and claimable rates based on payment split
+
+**Loot Box Purchases:**
+- 50% of normal gamepiece affiliate rate
+- Calculated as lootBoxAmount ÷ price × base rate × 0.5
+
 ### Why It's Effective
 
 - Earnings tied to volume driven, not single jackpot wins
@@ -156,18 +207,17 @@ Built-in marketing: the protocol rewards people who bring new participants.
 
 ## Vault
 
-Long-term reserve with four share classes:
+Long-term reserve with three share classes:
 
 | Share | Claims |
 |-------|--------|
 | DGVB | BURNIE |
-| DGVD | DGNRS |
 | DGVE | ETH/stETH |
-| DGVA | 20% share of ETH/stETH + BURNIE + DGNRS |
+| DGVA | 20% share of ETH/stETH + BURNIE |
 
-Receives: vault share of bond deposits, DGNRS escrow, bond surplus, final sweep.
+Receives: vault share of game inflows and final sweep.
 
-Note: DGVA claims 20% of combined ETH+stETH deposits and 20% of BURNIE/DGNRS allowances; stETH rebase yield accrues to DGVE only.
+Note: DGVA claims 20% of combined ETH+stETH deposits and 20% of BURNIE allowances; stETH rebase yield accrues to DGVE only.
 
 ---
 
@@ -191,7 +241,7 @@ Non-custodial gamepiece trading. Fees (listing + trade %) are burned as BURNIE.
 |--------|-----------|
 | VRF subscription upkeep | Withdraw game pots |
 | Emergency VRF recovery (3-day stall) | Redirect player winnings |
-| Some bond/staking toggles | Change gameplay rules |
+| One-time wiring (`wireAll`) | Change gameplay rules |
 
 ---
 
@@ -201,7 +251,6 @@ Non-custodial gamepiece trading. Fees (listing + trade %) are burned as BURNIE.
 |-------|-------|------|
 | Gamepiece Buyer | Exterminate for prize + Trophy | Worthless if not burned |
 | Coinflip Player | Win daily flip | ~50% total loss |
-| Bondholder | Game reaches maturity | Lane elimination |
 | Affiliate | Active referrals | Revenue depends on network |
 | MAP Buyer | Win level jackpot | Sunk cost, variance |
 | Vault Holder | Long-term accumulation | Illiquid, game-dependent |

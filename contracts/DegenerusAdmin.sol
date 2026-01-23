@@ -102,6 +102,14 @@ interface IDegenerusGameAdmin {
     /// @param amount Amount of ETH to stake.
     function adminStakeEthForStEth(uint256 amount) external;
 
+    /// @notice Update the orange-king tribute address.
+    /// @param newAddress Tribute recipient (zero disables).
+    function setTributeAddress(address newAddress) external;
+
+    /// @notice Update lootbox RNG request threshold (wei).
+    /// @param newThreshold New threshold in wei.
+    function setLootboxRngThreshold(uint256 newThreshold) external;
+
 }
 
 /// @dev LINK token interface (ERC-677 with transferAndCall).
@@ -234,6 +242,12 @@ contract DegenerusAdmin {
     /// @param player Address receiving the credit.
     /// @param amount BURNIE amount credited.
     event LinkCreditRecorded(address indexed player, uint256 amount);
+
+    /// @notice Emitted when LINK is forwarded from this contract to the active subscription.
+    /// @param coordinator Coordinator that received the LINK.
+    /// @param subId Subscription ID funded.
+    /// @param amount LINK amount forwarded.
+    event LinkRescued(address indexed coordinator, uint256 indexed subId, uint256 amount);
 
     /// @notice Emitted when LINK/ETH price feed is updated.
     /// @param feed New feed address (zero disables oracle).
@@ -372,14 +386,12 @@ contract DegenerusAdmin {
     /// @dev Allows owner to provide ETH liquidity in exchange for stETH yield.
     ///
     ///      SECURITY NOTES:
-    ///      - msg.value must exactly equal amount parameter.
+    ///      - msg.value must be non-zero.
     ///      - stETH sent to msg.sender (owner), not arbitrary address.
     ///      - Game contract validates the swap internally.
-    ///
-    /// @param amount Amount of ETH to swap.
-    function swapGameEthForStEth(uint256 amount) external payable onlyOwner {
-        if (amount == 0 || msg.value != amount) revert InvalidAmount();
-        gameAdmin.adminSwapEthForStEth{value: msg.value}(msg.sender, amount);
+    function swapGameEthForStEth() external payable onlyOwner {
+        if (msg.value == 0) revert InvalidAmount();
+        gameAdmin.adminSwapEthForStEth{value: msg.value}(msg.sender, msg.value);
     }
 
     /// @notice Stake GAME-held ETH into stETH via Lido.
@@ -387,6 +399,17 @@ contract DegenerusAdmin {
     /// @param amount Amount of ETH to stake.
     function stakeGameEthToStEth(uint256 amount) external onlyOwner {
         gameAdmin.adminStakeEthForStEth(amount);
+    }
+
+    /// @notice Update the orange-king tribute address on the GAME.
+    /// @param newAddress Tribute recipient (zero disables).
+    function setTributeAddress(address newAddress) external onlyOwner {
+        gameAdmin.setTributeAddress(newAddress);
+    }
+
+    /// @notice Update lootbox RNG request threshold (wei).
+    function setLootboxRngThreshold(uint256 newThreshold) external onlyOwner {
+        gameAdmin.setLootboxRngThreshold(newThreshold);
     }
 
     // =========================================================================
@@ -457,11 +480,29 @@ contract DegenerusAdmin {
         emit EmergencyRecovered(newCoordinator, newSubId, funded);
     }
 
+    /// @notice Forward any LINK held by this contract to the active VRF subscription.
+    /// @dev Admin-only retry path for failed funding attempts or direct transfers.
+    function rescueStuckLink() external onlyOwner {
+        uint256 subId = subscriptionId;
+        if (subId == 0) revert NoSubscription();
+        uint256 bal = linkToken.balanceOf(address(this));
+        if (bal == 0) return;
+        address coord = coordinator;
+
+        try linkToken.transferAndCall(coord, bal, abi.encode(subId)) returns (bool ok) {
+            if (!ok) revert LinkTransferFailed();
+        } catch {
+            revert LinkTransferFailed();
+        }
+
+        emit LinkRescued(coord, subId, bal);
+    }
+
     /// @notice Cancel VRF subscription and sweep LINK after GAME-over.
     /// @dev Final cleanup function. No VRF stall required — only GAME-over flag.
     ///
     ///      SECURITY NOTES:
-    ///      - Requires gameOverEntropyAttempted() to be true.
+    ///      - Requires gameState() to be GAME_STATE_GAMEOVER (86).
     ///      - LINK refunded to specified target address.
     ///      - Sets subscriptionId to 0 to prevent re-use.
     ///
@@ -524,19 +565,27 @@ contract DegenerusAdmin {
         if (subId == 0) revert NoSubscription();
         address coord = coordinator;
 
+        // Calculate reward using tiered multiplier BEFORE forwarding LINK.
+        (uint96 bal, , , , ) = IVRFCoordinatorV2_5Owner(coord).getSubscription(subId);
+        uint256 mult = _linkRewardMultiplier(uint256(bal));
+
         // Forward LINK to VRF subscription.
         try linkToken.transferAndCall(coord, amount, abi.encode(subId)) returns (bool ok) {
             if (!ok) revert InvalidAmount();
         } catch {
             revert InvalidAmount();
         }
-        // Calculate reward using tiered multiplier.
-        (uint96 bal, , , , ) = IVRFCoordinatorV2_5Owner(coord).getSubscription(subId);
-        uint256 mult = _linkRewardMultiplier(uint256(bal));
-        if (mult == 0) return; // No reward if subscription is fully funded.
 
-        // Convert LINK amount to ETH-equivalent.
-        uint256 ethEquivalent = _linkAmountToEth(amount);
+        // No reward if subscription is fully funded.
+        if (mult == 0) return;
+
+        // Convert LINK amount to ETH-equivalent. Use try/catch to prevent oracle failures from blocking donations.
+        uint256 ethEquivalent;
+        try this._linkAmountToEth(amount) returns (uint256 eth) {
+            ethEquivalent = eth;
+        } catch {
+            return; // Oracle failed, LINK forwarded but no reward.
+        }
         if (ethEquivalent == 0) return; // Disable rewards if oracle unavailable.
 
         // Calculate BURNIE credit.
@@ -560,7 +609,8 @@ contract DegenerusAdmin {
     /// - Returns 0 on missing feed, zero amount, or invalid price.
     /// - Assumes feed returns 18 decimal price (Chainlink LINK/ETH standard).
     /// - Rejects stale rounds (answeredInRound < roundId), future timestamps, and stale updates.
-    function _linkAmountToEth(uint256 amount) private view returns (uint256 ethAmount) {
+    /// - Exposed as external to allow try/catch in onTokenTransfer.
+    function _linkAmountToEth(uint256 amount) external view returns (uint256 ethAmount) {
         address feed = linkEthPriceFeed;
         if (feed == address(0) || amount == 0) return 0;
 
@@ -570,10 +620,7 @@ contract DegenerusAdmin {
         if (updatedAt > block.timestamp) return 0;
         if (block.timestamp - updatedAt > LINK_ETH_MAX_STALE) return 0;
 
-        uint256 priceWei = uint256(answer);
-        if (priceWei == 0) return 0;
-
-        ethAmount = (amount * priceWei) / 1 ether;
+        ethAmount = (amount * uint256(answer)) / 1 ether;
     }
 
     /// @dev Calculate reward multiplier based on subscription LINK balance.
@@ -589,12 +636,17 @@ contract DegenerusAdmin {
         if (subBal <= 200 ether) {
             // Linear from 3x at 0 LINK down to 1x at 200 LINK.
             uint256 delta = (subBal * 2e18) / 200 ether;
-            return 3e18 - delta;
+            unchecked {
+                return 3e18 - delta; // delta <= 2e18, cannot underflow
+            }
         }
         // Between 200 and 1000 LINK: decay from 1x to 0x.
         uint256 excess = subBal - 200 ether;
         uint256 delta2 = (excess * 1e18) / 800 ether;
-        return delta2 >= 1e18 ? 0 : 1e18 - delta2;
+        if (delta2 >= 1e18) return 0;
+        unchecked {
+            return 1e18 - delta2; // delta2 < 1e18, cannot underflow
+        }
     }
 
     /// @dev Check if a price feed is healthy (fresh and valid).

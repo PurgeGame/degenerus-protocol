@@ -9,3 +9,18 @@ tsconfig.json
 gamepieces_samples
 .prettierrc
 out
+
+# local logs and run outputs
+*.log
+*.log.*
+*.out
+*.err
+*.bak
+compile-output.txt
+deployment-*.txt
+presale-*.txt
+sepolia-*.txt
+simulation-*.txt
+realistic-simulation-*.txt
+*-report.json
+simulation-state.json

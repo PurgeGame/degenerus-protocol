@@ -49,12 +49,16 @@ pragma solidity ^0.8.26;
 |  |   +- Gold ring color (palette index 7)                                                          |  |
 |  |   +- 6-second SMIL animation loop                                                               |  |
 |  |                                                                                                  | |
+|  |   DEITY TROPHY                                                                                   | |
+|  |   +- Shows DGNRS burning ETH logo in center                                                     |  |
+|  |   +- Silver ring color (palette index 6)                                                        |  |
+|  |                                                                                                  | |
 |  +--------------------------------------------------------------------------------------------------+ |
 |                                                                                                       |
 |  +--------------------------------------------------------------------------------------------------+ |
-|  |                              SVG STRUCTURE (120x120 viewBox centered at 0,0)                     | |
+|  |                              SVG STRUCTURE (102x102 viewBox centered at 0,0)                     | |
 |  |                                                                                                  | |
-|  |   <svg viewBox="-60 -60 120 120">                                                               |  |
+|  |   <svg viewBox="-51 -51 102 102">                                                               |  |
 |  |     <defs>                                                                                       | |
 |  |       <filter id="inv"> --- Color inversion filter for highlighting                             |  |
 |  |     </defs>                                                                                      | |
@@ -67,7 +71,7 @@ pragma solidity ^0.8.26;
 |  |     <g clip-path="..."> --- Symbol clipped to inner circle                                      |  |
 |  |       <path> --- The actual icon/symbol                                                         |  |
 |  |     </g>                                                                                         | |
-|  |     <g> --- Corner glyphs (exterminator only)                                                   |  |
+|  |     <g> --- Corner glyphs (exterminator + deity)                                                |  |
 |  |   </svg>                                                                                         | |
 |  +--------------------------------------------------------------------------------------------------+ |
 |                                                                                                       |
@@ -94,6 +98,7 @@ interface IIconRendererTrophy32Svg {
         uint16 exterminatedTrait;  // Trait ID (0-255) or sentinel (0xFFFE/0xFFFA)
         bool isAffiliate;          // True if affiliate trophy type
         bool isBaf;                // True if BAF trophy type
+        bool isDeity;              // True if Deity trophy type
         uint24 lvl;                // Game level when trophy was earned
         bool invertFlag;           // Visual inversion flag from game
     }
@@ -110,7 +115,7 @@ interface IIconRendererTrophy32Svg {
 
 /// @title IconRendererTrophy32Svg
 /// @notice SVG generation engine for Degenerus trophy tokens
-/// @dev Generates SVG images based on trophy type (Exterminator, Affiliate, BAF)
+/// @dev Generates SVG images based on trophy type (Exterminator, Affiliate, BAF, Deity)
 contract IconRendererTrophy32Svg is IIconRendererTrophy32Svg, ColorResolver {
     using Strings for uint256;
 
@@ -124,8 +129,8 @@ contract IconRendererTrophy32Svg is IIconRendererTrophy32Svg, ColorResolver {
     /// @dev Trophy SVG assets (BAF animation)
     ITrophySvgAssets internal constant assets = ITrophySvgAssets(ContractAddresses.TROPHY_SVG_ASSETS);
 
-    /// @dev Trophy gamepiece contract
-    IERC721Lite internal constant nft = IERC721Lite(ContractAddresses.TROPHIES);
+    /// @dev Trophy ERC721 contract
+    IERC721Lite internal constant trophies = IERC721Lite(ContractAddresses.TROPHIES);
 
     // ---------------------------------------------------------------------
     // CONSTANTS
@@ -135,7 +140,20 @@ contract IconRendererTrophy32Svg is IIconRendererTrophy32Svg, ColorResolver {
     uint16 private constant BAF_TRAIT_SENTINEL = 0xFFFA;
     uint16 private constant BAF_FLIP_VB = 130;
     uint32 private constant INNER_SQUARE_SIDE = 88;
-    string private constant MAP_CORNER_TRANSFORM = "matrix(0.51 0 0 0.51 -6.12 -6.12)";
+    uint16 private constant DGNRS_ICON_VB = 300;
+    uint32 private constant DGNRS_TROPHY_SCALE_1e6 = 180_000;
+    uint8 private constant ETH_SYMBOL_INDEX = 6;
+    uint32 private constant ETH_CENTER_FIT_1e6 = 650_000;
+    int256 private constant ETH_ICON_CENTER_X_1e6 = 196_868_210;
+    int256 private constant ETH_ICON_CENTER_Y_1e6 = 256_076_369;
+    int256 private constant ETH_ICON_SHIFT_X_1e6 = -4_058_800;
+    int256 private constant ETH_ICON_SHIFT_Y_1e6 = 0;
+    uint32 private constant ETH_FLAME_SCALE_1e6 = 233_000;
+    int16 private constant ETH_FLAME_X_OFFSET = 7;
+    int16 private constant ETH_FLAME_Y_SIDE = 9;
+    int16 private constant ETH_FLAME_Y_MID = 14;
+    uint8 private constant DEITY_TROPHY_COLOR_IDX = 6;
+    string private constant BASE_CORNER_TRANSFORM = "matrix(0.51 0 0 0.51 -6.12 -6.12)";
     string private constant FLAME_CORNER_TRANSFORM = "matrix(0.02810 0 0 0.02810 -12.03 -9.082)";
     uint32 private constant TOP_AFFILIATE_FIT_1e6 = (760_000 * 936) / 1_000;
     int256 private constant VIEWBOX_HEIGHT_1E6 = 120 * 1_000_000;
@@ -147,21 +165,31 @@ contract IconRendererTrophy32Svg is IIconRendererTrophy32Svg, ColorResolver {
         uint16 exterminatedTrait = params.exterminatedTrait;
         bool isAffiliate = params.isAffiliate;
         bool isBaf = params.isBaf;
+        bool isDeity = params.isDeity;
         uint24 lvl = params.lvl;
 
         uint32 innerSide = INNER_SQUARE_SIDE;
-        bool isExtermination = !isAffiliate && !isBaf;
+        bool isExtermination = !isAffiliate && !isBaf && !isDeity;
 
         bool isTopAffiliate = isAffiliate && exterminatedTrait == 0xFFFE;
         bool isBafAward = isBaf && exterminatedTrait == BAF_TRAIT_SENTINEL;
         uint8 six = uint8(exterminatedTrait) & 0x3F;
-        uint8 dataQ = uint8(exterminatedTrait) >> 6;
-        if (isBafAward) {
-            dataQ = 3;
-            six = 0x38; // quadrant 3, color idx 7, symbol 0
+        uint8 dataQ;
+        uint8 colIdx;
+        uint8 symIdx;
+        if (isDeity) {
+            dataQ = 0;
+            colIdx = DEITY_TROPHY_COLOR_IDX;
+            symIdx = 0;
+        } else {
+            dataQ = uint8(exterminatedTrait) >> 6;
+            if (isBafAward) {
+                dataQ = 3;
+                six = 0x38; // quadrant 3, color idx 7, symbol 0
+            }
+            colIdx = isTopAffiliate ? 4 : (six >> 3);
+            symIdx = isTopAffiliate ? 0 : (six & 0x07);
         }
-        uint8 colIdx = isTopAffiliate ? 4 : (six >> 3);
-        uint8 symIdx = isTopAffiliate ? 0 : (six & 0x07);
 
         string memory ringOuterColor;
         {
@@ -196,49 +224,55 @@ contract IconRendererTrophy32Svg is IIconRendererTrophy32Svg, ColorResolver {
             return _composeSvg(RendererLibrary.svgHeader(border, _resolveColorSafe(ContractAddresses.TROPHIES, tokenId, 3, "#d9d9d9")), anim, isExtermination);
         }
 
-        string memory iconPath;
-        uint16 w;
-        uint16 h;
-        uint256 iconIndex = isTopAffiliate ? 32 : (uint256(dataQ) * 8 + uint256(symIdx));
-        iconPath = icons.data(iconIndex);
-        w = RendererLibrary.ICON_VB;
-        h = RendererLibrary.ICON_VB;
-        uint16 m = w > h ? w : h;
-        if (m == 0) m = 1;
-
-        uint32 fitSym1e6 = _symbolFitScale(isTopAffiliate, dataQ, symIdx);
-        uint32 sSym1e6 = uint32((uint256(2) * rIn2 * fitSym1e6) / m);
-
-        (int256 txm, int256 tyn) = _symbolTranslate(w, h, sSym1e6, isTopAffiliate);
-
-        // Crypto quadrant symbols (dataQ == 0) should render with their native path colors,
-        // not the ring color. Others stay tinted to the ring.
         string memory symbolGroup;
-        if (dataQ == 0 && !isTopAffiliate) {
-            symbolGroup = string(
-                abi.encodePacked(
-                    "<g transform='",
-                    RendererLibrary.mat6(sSym1e6, txm, tyn),
-                    "'><g style='vector-effect:non-scaling-stroke'>",
-                    iconPath,
-                    "</g></g>"
-                )
-            );
+        if (isDeity) {
+            string memory ethPath = icons.data(ETH_SYMBOL_INDEX);
+            string memory flamePath = icons.diamond();
+            symbolGroup = _ethTrophySymbol(flamePath, ethPath, rIn2);
         } else {
-            bool solidFill = (!isTopAffiliate && dataQ == 0 && (symIdx == 1 || symIdx == 5));
-            symbolGroup = string(
-                abi.encodePacked(
-                    "<g transform='",
-                    RendererLibrary.mat6(sSym1e6, txm, tyn),
-                    "'><g fill='",
-                    ringOuterColor,
-                    "' stroke='",
-                    solidFill ? "none" : ringOuterColor,
-                    "' style='vector-effect:non-scaling-stroke'>",
-                    iconPath,
-                    "</g></g>"
-                )
-            );
+            string memory iconPath;
+            uint16 w;
+            uint16 h;
+            uint256 iconIndex = isTopAffiliate ? 32 : (uint256(dataQ) * 8 + uint256(symIdx));
+            iconPath = icons.data(iconIndex);
+            w = RendererLibrary.ICON_VB;
+            h = RendererLibrary.ICON_VB;
+            uint16 m = w > h ? w : h;
+            if (m == 0) m = 1;
+
+            uint32 fitSym1e6 = _symbolFitScale(isTopAffiliate, dataQ, symIdx);
+            uint32 sSym1e6 = uint32((uint256(2) * rIn2 * fitSym1e6) / m);
+
+            (int256 txm, int256 tyn) = _symbolTranslate(w, h, sSym1e6, isTopAffiliate);
+
+            // Crypto quadrant symbols (dataQ == 0) should render with their native path colors,
+            // not the ring color. Others stay tinted to the ring.
+            if (dataQ == 0 && !isTopAffiliate) {
+                symbolGroup = string(
+                    abi.encodePacked(
+                        "<g transform='",
+                        RendererLibrary.mat6(sSym1e6, txm, tyn),
+                        "'><g style='vector-effect:non-scaling-stroke'>",
+                        iconPath,
+                        "</g></g>"
+                    )
+                );
+            } else {
+                bool solidFill = (!isTopAffiliate && dataQ == 0 && (symIdx == 1 || symIdx == 5));
+                symbolGroup = string(
+                    abi.encodePacked(
+                        "<g transform='",
+                        RendererLibrary.mat6(sSym1e6, txm, tyn),
+                        "'><g fill='",
+                        ringOuterColor,
+                        "' stroke='",
+                        solidFill ? "none" : ringOuterColor,
+                        "' style='vector-effect:non-scaling-stroke'>",
+                        iconPath,
+                        "</g></g>"
+                    )
+                );
+            }
         }
 
         string memory ringsAndSymbol = string(
@@ -258,7 +292,15 @@ contract IconRendererTrophy32Svg is IIconRendererTrophy32Svg, ColorResolver {
             ringsAndSymbol = string(abi.encodePacked('<g filter="url(#inv)">', ringsAndSymbol, "</g>"));
         }
 
-        return _composeSvg(RendererLibrary.svgHeader(border, _resolveColorSafe(ContractAddresses.TROPHIES, tokenId, 3, "#d9d9d9")), ringsAndSymbol, isExtermination);
+        bool includeCorners = isExtermination || isDeity;
+        return _composeSvg(
+            RendererLibrary.svgHeader(
+                border,
+                _resolveColorSafe(ContractAddresses.TROPHIES, tokenId, 3, "#d9d9d9")
+            ),
+            ringsAndSymbol,
+            includeCorners
+        );
     }
 
 
@@ -279,9 +321,82 @@ contract IconRendererTrophy32Svg is IIconRendererTrophy32Svg, ColorResolver {
         bool includeCorners
     ) private pure returns (string memory) {
         string memory corners = includeCorners
-            ? string(abi.encodePacked(_cornerGlyph(MAP_CORNER_TRANSFORM), _cornerGlyph(FLAME_CORNER_TRANSFORM)))
+            ? string(abi.encodePacked(_cornerGlyph(BASE_CORNER_TRANSFORM), _cornerGlyph(FLAME_CORNER_TRANSFORM)))
             : "";
         return string(abi.encodePacked(head, inner, corners, RendererLibrary.svgFooter()));
+    }
+
+    function _dgnrsTrophySymbol(
+        string memory fillColor
+    ) private pure returns (string memory) {
+        uint32 scale1e6 = DGNRS_TROPHY_SCALE_1e6;
+        int256 center = (int256(uint256(DGNRS_ICON_VB)) * int256(uint256(scale1e6))) / 2;
+        int256 offsetX = -center;
+        int256 offsetY = -center;
+        return
+            string(
+                abi.encodePacked(
+                    "<g transform='",
+                    RendererLibrary.mat6(scale1e6, offsetX, offsetY),
+                    "'><path fill='",
+                    fillColor,
+                    "' d='M252.472,129.074c-35.063,1.018-81.701,5.444-133.099,14.293c-51.4,8.846-62.426-5.467-67.398-21.439c-5.63-18.084,0.212-27.206,0.212-27.206c33.263-5.405,36.17-26.597,35.337-38.658c-3.323,4.165-8.413,6.899-12.634,7.058c-3.024,0.11-12.306-9.346-27.274,5.832c0.834-8.314-3.143-13.805-13.254-16.631C23.987,49.41,16.032,63.42,0.223,49.414c-3.326,44.068,31.594,45.308,31.594,45.308c-14.225,78.259,45.009,118.089,46.028,122.857c1.021,4.759-15.999,9.523-12.938,14.298c3.065,4.76,23.83,3.746,36.088,1.354c59.566,15.655,72.466,18.708,143.647,17.031c57.279-1.369,56.638-51.767,54.944-69.499C296.259,145.907,287.535,128.051,252.472,129.074z'/><ellipse cx='234' cy='132' rx='8' ry='5' fill='#fff'/></g>"
+                )
+            );
+    }
+
+    function _ethTrophySymbol(
+        string memory flamePath,
+        string memory ethPath,
+        uint32 rIn2
+    ) private pure returns (string memory) {
+        uint32 scale1e6 = _scaleFromInner(rIn2, ETH_CENTER_FIT_1e6);
+        int256 txMicro = -(ETH_ICON_CENTER_X_1e6 * int256(uint256(scale1e6))) / 1_000_000 + ETH_ICON_SHIFT_X_1e6;
+        int256 tyMicro = -(ETH_ICON_CENTER_Y_1e6 * int256(uint256(scale1e6))) / 1_000_000 + ETH_ICON_SHIFT_Y_1e6;
+        return
+            string(
+                abi.encodePacked(
+                    '<defs><clipPath id="ethc2"><circle cx="0" cy="0" r="',
+                    uint256(rIn2).toString(),
+                    '"/></clipPath></defs>',
+                    '<g transform="',
+                    RendererLibrary.mat6(scale1e6, txMicro, tyMicro),
+                    '"><g style="vector-effect:non-scaling-stroke">',
+                    ethPath,
+                    "</g></g>",
+                    _ethFlame(flamePath, -ETH_FLAME_X_OFFSET, ETH_FLAME_Y_SIDE),
+                    _ethFlame(flamePath, 0, ETH_FLAME_Y_MID),
+                    _ethFlame(flamePath, ETH_FLAME_X_OFFSET, ETH_FLAME_Y_SIDE)
+                )
+            );
+    }
+
+    function _ethFlame(
+        string memory flamePath,
+        int16 cx,
+        int16 cy
+    ) private pure returns (string memory) {
+        uint32 scale1e6 = ETH_FLAME_SCALE_1e6;
+        int256 txMicro = int256(int32(cx)) * 1_000_000;
+        int256 tyMicro = int256(int32(cy)) * 1_000_000;
+        return
+            string(
+                abi.encodePacked(
+                    '<g transform="',
+                    RendererLibrary.mat6(scale1e6, txMicro, tyMicro),
+                    '"><g clip-path="url(#ethc2)">',
+                    '<path fill="#ff3300" stroke="none" transform="matrix(0.13 0 0 0.13 -56 -41)" d="',
+                    flamePath,
+                    '"/></g></g>'
+                )
+            );
+    }
+
+    function _scaleFromInner(
+        uint32 rIn2,
+        uint32 fit1e6
+    ) private pure returns (uint32) {
+        return uint32((uint256(2) * rIn2 * fit1e6) / RendererLibrary.ICON_VB);
     }
 
 
@@ -293,7 +408,7 @@ contract IconRendererTrophy32Svg is IIconRendererTrophy32Svg, ColorResolver {
     function _paletteColorRGB(uint8 idx, uint24 level) private pure returns (uint24) {
         uint24 rgb = RendererLibrary.paletteColorRGB(idx & 0x07);
         int16 delta = RendererLibrary.variantBias(idx & 0x07);
-        if (idx == 7 || level == 0) {
+        if ((idx & 0x07) == 5 || idx == 7 || level == 0) {
             return rgb;
         }
         uint8 levelGroup = uint8(((level - 1) % 24) / 8);
