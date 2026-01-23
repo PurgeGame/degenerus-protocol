@@ -8,10 +8,7 @@ const DEPLOY_ORDER = [
   "TROPHY_SVG_ASSETS",
   "GAME_MINT_MODULE",
   "GAME_JACKPOT_MODULE",
-  "GAME_BOND_MODULE",
   "GAME_ENDGAME_MODULE",
-  "DGNRS",
-  "BONDS",
   "COIN",
   "VAULT",
   "AFFILIATE",
@@ -214,29 +211,11 @@ async function main() {
       await deployWithCheck(factory, expected[name], name);
       continue;
     }
-    if (name === "GAME_BOND_MODULE") {
-      const factory = await ethers.getContractFactory(
-        "contracts/modules/DegenerusGameBondModule.sol:DegenerusGameBondModule",
-        deployer
-      );
-      await deployWithCheck(factory, expected[name], name);
-      continue;
-    }
     if (name === "GAME_ENDGAME_MODULE") {
       const factory = await ethers.getContractFactory(
         "contracts/modules/DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule",
         deployer
       );
-      await deployWithCheck(factory, expected[name], name);
-      continue;
-    }
-    if (name === "DGNRS") {
-      const factory = await ethers.getContractFactory("contracts/DegenerusBonds.sol:BondToken", deployer);
-      await deployWithCheck(factory, expected[name], name); // No constructor args - all constants
-      continue;
-    }
-    if (name === "BONDS") {
-      const factory = await ethers.getContractFactory("contracts/DegenerusBonds.sol:DegenerusBonds", deployer);
       await deployWithCheck(factory, expected[name], name);
       continue;
     }

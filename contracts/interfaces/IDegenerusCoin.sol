@@ -4,16 +4,9 @@ pragma solidity ^0.8.26;
 import {IDegenerusCoinModule} from "./DegenerusGameModuleInterfaces.sol";
 
 interface IDegenerusCoin is IDegenerusCoinModule {
+    function creditCoin(address player, uint256 amount) external;
+
     function burnCoin(address target, uint256 amount) external;
-
-    function processCoinflipPayouts(
-        uint24 level,
-        bool bonusFlip,
-        uint256 rngWord,
-        uint48 epoch
-    ) external returns (bool);
-
-    function normalizeActiveBurnQuests() external;
 
     function notifyQuestMint(address player, uint32 quantity, bool paidWithEth) external;
 
@@ -22,4 +15,6 @@ interface IDegenerusCoin is IDegenerusCoinModule {
     function notifyQuestLootBox(address player, uint256 amountWei) external;
 
     function setDeployTime(uint48 timestamp) external;
+
+    function turboFlipPendingBurnieAmount() external view returns (uint256);
 }

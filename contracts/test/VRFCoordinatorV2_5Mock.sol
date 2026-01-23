@@ -57,6 +57,7 @@ contract VRFCoordinatorV2_5Mock {
         uint16 requestConfirmations;
         uint32 callbackGasLimit;
         uint32 numWords;
+        bytes extraArgs;
     }
 
     constructor(uint96, uint96, int256) {
@@ -121,7 +122,7 @@ contract VRFCoordinatorV2_5Mock {
             req.requestConfirmations,
             req.callbackGasLimit,
             req.numWords,
-            "", // extraArgs (empty)
+            req.extraArgs,
             msg.sender
         );
 
@@ -142,12 +143,10 @@ contract VRFCoordinatorV2_5Mock {
         emit RandomWordsFulfilled(requestId, randomWords[0], request.subId, 0, success);
     }
 
-    function cancelSubscription(uint256 subId, address to) external {
+    function cancelSubscription(uint256 subId, address /*to*/) external {
         if (!s_subscriptions[subId].exists) revert InvalidSubscription();
-        Subscription storage sub = s_subscriptions[subId];
 
         // Transfer balance to recipient (simplified - real coordinator would send LINK)
-        uint96 balance = sub.balance;
         delete s_subscriptions[subId];
 
         // In a real implementation, this would transfer LINK tokens

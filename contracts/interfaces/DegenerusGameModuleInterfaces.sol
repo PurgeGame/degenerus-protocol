@@ -6,4 +6,5 @@ interface IDegenerusCoinModule {
     function creditFlipBatch(address[3] calldata players, uint256[3] calldata amounts) external;
     function rollDailyQuest(uint48 day, uint256 entropy) external;
     function rollDailyQuestWithOverrides(uint48 day, uint256 entropy, bool forceMintEth, bool forceBurn) external;
+    function vaultEscrow(uint256 amount) external;
 }

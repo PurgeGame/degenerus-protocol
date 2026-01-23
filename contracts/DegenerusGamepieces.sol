@@ -43,12 +43,12 @@ pragma solidity ^0.8.26;
   |  |  • Pay in ETH or BURNIE                                                 | |
   |  |  • Record in _tokensOwed queue                                          | |
   |  |  • Mint later via processPendingMints() after RNG                       | |
-  |  |  • In State 3: also enqueue maps for jackpot tickets                    | |
+  |  |  • In State 3: also enqueue tickets for jackpot draws                   | |
   |  |                                                                         | |
-  |  |  Map Purchase (PurchaseKind.Map):                                       | |
+  |  |  Ticket Purchase (PurchaseKind.Ticket):                                | |
   |  |  • Pay in ETH or BURNIE (25% of player price)                           | |
-  |  |  • Enqueue maps directly (4:1 scaled quantity)                          | |
-  |  |  • No actual gamepiece minted; maps = jackpot tickets                         | |
+  |  |  • Enqueue tickets directly (4:1 scaled quantity)                       | |
+  |  |  • No actual gamepiece minted; tickets = jackpot entries                | |
   |  +-------------------------------------------------------------------------+ |
   |                                                                              |
   |  +-------------------------------------------------------------------------+ |
@@ -105,7 +105,7 @@ pragma solidity ^0.8.26;
   |  • admin:           None (addresses fixed at deploy)                         |
   |                                                                              |
   |  EXTERNAL INTERFACES (called by this contract):                              |
-  |  • IDegenerusGame:  purchaseInfo, recordMint, enqueueMap, etc.               |
+  |  • IDegenerusGame:  purchaseInfo, recordMint, enqueueTickets, etc.         |
   |  • IDegenerusCoin:  burnCoin, creditFlip, notifyQuestMint                    |
   |  • IDegenerusAffiliate: payAffiliate for referral rewards                    |
   |  • ITokenRenderer:  tokenURI for metadata                                    |
@@ -122,11 +122,11 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 // Enums & External Interfaces
 // ===========================================================================
 
-/// @notice Purchase type for token/map acquisition.
-/// @dev Player = gamepiece mint, Map = jackpot ticket (no gamepiece minted).
+/// @notice Purchase type for token/ticket acquisition.
+/// @dev Player = gamepiece mint, Ticket = jackpot entry (no gamepiece minted).
 enum PurchaseKind {
     Player,
-    Map
+    Ticket
 }
 
 /// @notice Standard ERC721 receiver interface for safe transfers.
@@ -152,8 +152,8 @@ interface ITokenRenderer {
 /// @notice Parameters for purchase() function.
 /// @dev Bundles all purchase options into single struct for gas efficiency.
 struct PurchaseParams {
-    uint256 quantity;        // Number of tokens/maps to purchase
-    PurchaseKind kind;       // Player (gamepiece) or Map (jackpot ticket)
+    uint256 quantity;        // Number of tokens/tickets to purchase (tickets use 2 decimals, scaled by 100)
+    PurchaseKind kind;       // Player (gamepiece) or Ticket (jackpot entry)
     MintPaymentKind payKind; // DirectEth, Claimable, or Combined
     bool payInCoin;          // True = pay in BURNIE, False = pay in ETH
     bytes32 affiliateCode;   // Affiliate/referral code (ETH purchases only)
@@ -280,8 +280,8 @@ contract DegenerusGamepieces {
         uint256 bonusCoinCredit
     );
 
-    /// @notice Emitted when map entries are purchased.
-    event MapPurchase(
+    /// @notice Emitted when ticket entries are purchased (quantity scaled by 100).
+    event TicketPurchase(
         address indexed buyer,
         uint32 quantity,
         bool payInCoin,
@@ -505,16 +505,15 @@ contract DegenerusGamepieces {
 
     /// @dev BURNIE token unit (18 decimals = 1e18, scaled by 1000 = 1e21).
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    /// @dev Scale for fractional ticket purchases (2 decimals).
+    uint256 private constant TICKET_SCALE = 100;
 
-    /// @dev Flat affiliate reward for claimable ETH purchases (5% of price unit).
-    uint256 private constant AFFILIATE_CLAIMABLE_REWARD = PRICE_COIN_UNIT / 20;
-
-    /// @dev Level-100 bonus cap: 100 mints worth, counted in map units (4 per mint).
+    /// @dev Level-100 bonus cap: 100 mints worth, counted in ticket units (4 per mint).
     uint32 private constant LEVEL_100_BONUS_UNIT_SCALE = 4;
     uint32 private constant LEVEL_100_BONUS_CAP_UNITS = 100 * LEVEL_100_BONUS_UNIT_SCALE;
     uint256 private constant LEVEL_100_BONUS_LEVEL_SHIFT = 32;
 
-    /// @dev Max tokens to emit burn events for in processDormant batch.
+    /// @dev Max tokens to retire per processDormant batch.
     uint32 private constant DORMANT_EMIT_BATCH = 3500;
 
     /// @dev Fee to place an offer (10 BURNIE, burned).
@@ -677,21 +676,28 @@ contract DegenerusGamepieces {
         uint8 t3 = uint8(traitsPacked >> 24);
 
         uint8[4] memory traitIds = [t0, t1, t2, t3];
-        (uint16 lastExterminated, uint24 currentLevel, uint32[4] memory remaining) = game.getTraitRemainingQuad(
-            traitIds
-        );
-        uint256 metaPacked = (uint256(lastExterminated) << 56) | (uint256(currentLevel) << 32) | uint256(traitsPacked);
+        (
+            uint16 lastExterminated,
+            uint24 currentLevel,
+            uint32[4] memory remaining,
+            bool exOpen
+        ) = game.getTraitRemainingQuadExt(traitIds);
+        uint256 metaPacked =
+            (uint256(exOpen ? 1 : 0) << 72) |
+            (uint256(lastExterminated) << 56) |
+            (uint256(currentLevel) << 32) |
+            uint256(traitsPacked);
         return regularRenderer.tokenURI(tokenId, metaPacked, remaining);
     }
 
     /*+======================================================================+
       |                      PURCHASE ENTRYPOINTS                            |
       +======================================================================+
-      |  Main entry points for purchasing tokens and maps.                   |
+      |  Main entry points for purchasing tokens and tickets.                |
       |                                                                      |
       |  Purchase Types:                                                     |
-      |  • Player (PurchaseKind.Player): Queue gamepiece mints                     |
-      |  • Map (PurchaseKind.Map): Queue jackpot tickets                     |
+      |  • Player (PurchaseKind.Player): Queue gamepiece mints                |
+      |  • Ticket (PurchaseKind.Ticket): Queue jackpot tickets                |
       |                                                                      |
       |  Payment Methods:                                                    |
       |  • ETH (payInCoin=false): Pay with ETH, optional affiliate code      |
@@ -705,8 +711,8 @@ contract DegenerusGamepieces {
       |  • Quantity validated (0 < qty <= uint32.max)                        |
       +======================================================================+*/
 
-    /// @notice Purchase tokens or maps.
-    /// @dev Main entry point for all purchases. Routes to _purchase or _mintAndBurn.
+    /// @notice Purchase tokens or tickets.
+    /// @dev Main entry point for all purchases. Routes to _purchase or _purchaseTickets.
     ///      SECURITY: Blocked when RNG is locked.
     /// @param params Purchase parameters (quantity, kind, payKind, payInCoin, affiliateCode).
     function purchase(PurchaseParams calldata params) external payable {
@@ -714,15 +720,15 @@ contract DegenerusGamepieces {
     }
 
     /// @dev Route purchase to appropriate handler based on PurchaseKind.
-    /// @param buyer Address to receive tokens/maps.
+    /// @param buyer Address to receive tokens/tickets.
     /// @param payer Address paying for purchase.
     /// @param params Purchase parameters.
     function _routePurchase(address buyer, address payer, PurchaseParams memory params) private {
         bytes32 affiliateCode = params.payInCoin ? bytes32(0) : params.affiliateCode;
         if (params.kind == PurchaseKind.Player) {
             _purchase(buyer, payer, params.quantity, params.payInCoin, affiliateCode, params.payKind);
-        } else if (params.kind == PurchaseKind.Map) {
-            _mintAndBurn(buyer, payer, params.quantity, params.payInCoin, affiliateCode, params.payKind);
+        } else if (params.kind == PurchaseKind.Ticket) {
+            _purchaseTickets(buyer, payer, params.quantity, params.payInCoin, affiliateCode, params.payKind);
         } else {
             revert InvalidPurchaseKind();
         }
@@ -757,13 +763,29 @@ contract DegenerusGamepieces {
         }
         uint256 mintQuantity = quantity;
         if (!payInCoin && (targetLevel % 100) == 0) {
-            uint256 multBps = g.playerBonusMultiplier(payer);
+            uint256 multBps = g.playerActivityScore(payer);
             mintQuantity = _applyLevel100BonusCap(payer, targetLevel, quantity, multBps, false);
             if (mintQuantity > type(uint32).max) revert InvalidQuantity();
+        }
+
+        // Check and consume gamepiece boost boon (5%/15%/25%, max 10 ETH purchase, 4 day expiry)
+        if (!payInCoin) {
+            uint16 boostBps = g.consumeGamepieceBoost(payer);
+            if (boostBps > 0) {
+                // Cap boost calculation at 10 ETH worth of purchases
+                uint256 maxPurchaseForBoost = 10 ether / ContractAddresses.COST_DIVISOR;
+                uint256 purchaseValue = priceWei * quantity;
+                uint256 cappedValue = purchaseValue > maxPurchaseForBoost ? maxPurchaseForBoost : purchaseValue;
+                uint256 cappedQuantity = cappedValue / priceWei;
+                uint256 boost = (cappedQuantity * boostBps) / 10_000;
+                mintQuantity += boost;
+                if (mintQuantity > type(uint32).max) mintQuantity = type(uint32).max;
+            }
         }
         uint32 mintQty32 = uint32(mintQuantity);
         uint256 bonus;
         uint256 costAmount;
+        uint256 claimableUsed; // Track actual claimable usage for event emission
 
         if (payInCoin) {
             if (msg.value != 0) revert PaymentValueMismatch();
@@ -774,8 +796,7 @@ contract DegenerusGamepieces {
             costAmount = coinCost;
         } else {
             uint256 priceCostWei = priceWei * quantity;
-            uint256 expectedWei = priceCostWei + _initiationFee(g, targetLevel, payer, priceWei);
-            uint256 claimableUsed;
+            uint256 expectedWei = priceCostWei;
             uint256 newClaimableBal;
             (bonus, claimableUsed, newClaimableBal) = _processEthPurchase(
                 g,
@@ -819,7 +840,11 @@ contract DegenerusGamepieces {
         }
 
         if (!payInCoin && state == 3) {
-            g.enqueueMap(buyer, mintQty32);
+            uint256 scaledTickets = uint256(mintQty32) * TICKET_SCALE;
+            uint32 scaledTickets32 = scaledTickets > type(uint32).max
+                ? type(uint32).max
+                : uint32(scaledTickets);
+            g.enqueueTickets(buyer, scaledTickets32, 0);
         }
         bool isPrePurchase = state != 2;
         _recordPurchase(buyer, mintQty32, isPrePurchase);
@@ -828,13 +853,13 @@ contract DegenerusGamepieces {
             buyer,
             uint32(quantity),
             payInCoin,
-            payKind != MintPaymentKind.DirectEth,
+            claimableUsed != 0,
             costAmount,
             bonus
         );
     }
 
-    function _mintAndBurn(
+    function _purchaseTickets(
         address buyer,
         address payer,
         uint256 quantity,
@@ -842,7 +867,7 @@ contract DegenerusGamepieces {
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) private {
-        // Map purchase flow: mints 4:1 scaled quantity and immediately queues them for burn draws.
+        // Ticket purchase flow: supports fractional tickets (2 decimals) and queues for burn draws.
         IDegenerusGame g = game;
         uint24 lvl;
         uint8 state;
@@ -856,48 +881,65 @@ contract DegenerusGamepieces {
         if (payInCoin && !lastPurchaseDay) revert NotTimeYet();
         uint256 coinCost;
         unchecked {
-            coinCost = quantity * (PRICE_COIN_UNIT / 4);
+            coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
         }
-        uint256 mapRebate;
-        unchecked {
-            mapRebate = (quantity / 4) * (PRICE_COIN_UNIT / 10);
-        }
-        uint256 mapBonus;
-        uint256 mintQuantity = quantity;
+        uint256 ticketRebate = coinCost / 10;
+        uint256 ticketBonus;
+        uint256 ticketQuantityAdjusted = quantity;
         if (!payInCoin && (lvl % 100) == 0) {
-            uint256 multBps = g.playerBonusMultiplier(payer);
-            mintQuantity = _applyLevel100BonusCap(payer, lvl, quantity, multBps, true);
-            if (mintQuantity > type(uint32).max) revert InvalidQuantity();
+            uint256 multBps = g.playerActivityScore(payer);
+            uint256 quantityWhole = quantity / TICKET_SCALE;
+            uint256 quantityRemainder = quantity % TICKET_SCALE;
+            uint256 adjustedWhole = _applyLevel100BonusCap(payer, lvl, quantityWhole, multBps, true);
+            uint256 adjustedScaled = adjustedWhole * TICKET_SCALE + quantityRemainder;
+            if (adjustedScaled > type(uint32).max) revert InvalidQuantity();
+            ticketQuantityAdjusted = adjustedScaled;
         }
-        uint32 mintQty32 = uint32(mintQuantity);
+
+        // Check and consume ticket boost boon (5%/15%/25%, max 10 ETH purchase, 4 day expiry)
+        if (!payInCoin) {
+            uint16 boostBps = g.consumeTicketBoost(payer);
+            if (boostBps > 0) {
+                // Cap boost calculation at 10 ETH worth of purchases (tickets are 1/4 price)
+                uint256 maxPurchaseForBoost = 10 ether / ContractAddresses.COST_DIVISOR;
+                uint256 purchaseValue = (priceWei * quantity) / (4 * TICKET_SCALE); // Tickets are 1/4 price
+                uint256 cappedValue = purchaseValue > maxPurchaseForBoost ? maxPurchaseForBoost : purchaseValue;
+                uint256 cappedQuantity = (cappedValue * 4 * TICKET_SCALE) / priceWei;
+                uint256 boost = (cappedQuantity * boostBps) / 10_000;
+                ticketQuantityAdjusted += boost;
+                if (ticketQuantityAdjusted > type(uint32).max) ticketQuantityAdjusted = type(uint32).max;
+            }
+        }
+        uint32 ticketQtyScaled32 = uint32(ticketQuantityAdjusted);
+        uint32 ticketQtyWhole32 = uint32(ticketQuantityAdjusted / TICKET_SCALE);
         uint256 bonus;
         uint256 costAmount;
+        uint256 claimableUsed; // Track actual claimable usage for event emission
 
         if (payInCoin) {
             if (msg.value != 0) revert PaymentValueMismatch();
             _coinReceive(payer, coinCost, lvl, 0);
             if (lastPurchaseDay && g.ethMintLevelCount(payer) != 0) {
-                uint32 questQuantity = uint32(mintQuantity / 4);
+                uint32 questQuantity = uint32(ticketQuantityAdjusted / (4 * TICKET_SCALE));
                 if (questQuantity != 0) {
                     coin.notifyQuestMint(payer, questQuantity, false);
                 }
             }
-            // Affiliate coin-triggered mints should not earn rebates/bonuses.
-            bonus = payKind == MintPaymentKind.Claimable ? 0 : mapRebate;
+            // Affiliate coin-triggered purchases should not earn rebates/bonuses.
+            bonus = payKind == MintPaymentKind.Claimable ? 0 : ticketRebate;
             costAmount = coinCost;
         } else {
             unchecked {
-                mapBonus = (quantity / 40) * PRICE_COIN_UNIT;
+                ticketBonus = (quantity * PRICE_COIN_UNIT) / (40 * TICKET_SCALE);
             }
-            uint256 priceCostWei = (priceWei * quantity) / 4;
-            uint256 expectedWei = priceCostWei + _initiationFee(g, lvl, payer, priceWei);
-            uint256 claimableUsed;
+            uint256 priceCostWei = (priceWei * quantity) / (4 * TICKET_SCALE);
+            uint256 expectedWei = priceCostWei;
             uint256 newClaimableBal;
             (bonus, claimableUsed, newClaimableBal) = _processEthPurchase(
                 g,
                 payer,
                 buyer,
-                mintQty32,
+                ticketQtyWhole32,
                 affiliateCode,
                 lvl,
                 state,
@@ -912,11 +954,11 @@ contract DegenerusGamepieces {
             }
             if (claimableUsed != 0) {
                 // Combine base + full-spend bonus if player spent all claimable (sentinel only)
-                uint256 bonusBase = mapRebate;
+                uint256 bonusBase = ticketRebate;
                 bool spentAll = newClaimableBal <= 1;
                 if (spentAll && claimableUsed >= priceWei * CLAIMABLE_FULL_SPEND_MIN_TOKENS) {
                     unchecked {
-                        bonusBase += mapRebate;
+                        bonusBase += ticketRebate;
                     }
                 }
                 uint256 claimableForBonus = claimableUsed > priceCostWei ? priceCostWei : claimableUsed;
@@ -932,20 +974,20 @@ contract DegenerusGamepieces {
         uint256 rebateMint = bonus;
         if (!payInCoin) {
             unchecked {
-                rebateMint += mapRebate + mapBonus;
+                rebateMint += ticketRebate + ticketBonus;
             }
         }
         if (rebateMint != 0) {
             coin.creditFlip(buyer, rebateMint);
         }
 
-        g.enqueueMap(buyer, mintQty32);
+        g.enqueueTickets(buyer, ticketQtyScaled32, 0);
 
-        emit MapPurchase(
+        emit TicketPurchase(
             buyer,
             uint32(quantity),
             payInCoin,
-            payKind != MintPaymentKind.DirectEth,
+            claimableUsed != 0,
             costAmount,
             rebateMint
         );
@@ -955,11 +997,11 @@ contract DegenerusGamepieces {
         IDegenerusGame g,
         address payer,
         address buyer,
-        uint32 mintQuantity,
+        uint32 unitQuantity,
         bytes32 affiliateCode,
         uint24 lvl,
-        uint8 gameState,
-        bool mapPurchase,
+        uint8 /*gameState*/,
+        bool ticketPurchase,
         MintPaymentKind payKind,
         uint256 costWei
     ) private returns (uint256 bonusMint, uint256 claimableUsed, uint256 newClaimableBal) {
@@ -982,62 +1024,57 @@ contract DegenerusGamepieces {
             revert InvalidPaymentKind();
         }
 
-        // Quest progress tracks full-price equivalents (4 map mints = 1 unit).
-        uint32 mintedQuantity = mapPurchase ? (mintQuantity >> 2) : mintQuantity;
-        uint32 mintUnits;
-        if (mapPurchase) {
-            mintUnits = mintQuantity; // 1 MAP = 1 unit
+        // Quest progress tracks full-price equivalents (4 ticket purchases = 1 unit).
+        uint32 questUnits = ticketPurchase ? (unitQuantity >> 2) : unitQuantity;
+        uint32 purchaseUnits;
+        if (ticketPurchase) {
+            purchaseUnits = unitQuantity; // 1 ticket = 1 unit
         } else {
-            if (mintQuantity > type(uint32).max / 4) revert InvalidQuantity();
-            mintUnits = mintQuantity << 2; // 1 gamepiece = 4 units
+            if (unitQuantity > type(uint32).max / 4) revert InvalidQuantity();
+            purchaseUnits = unitQuantity << 2; // 1 gamepiece = 4 units
         }
 
         uint256 streakBonus;
-        (streakBonus, newClaimableBal) = g.recordMint{value: valueToSend}(payer, lvl, costWei, mintUnits, payKind);
+        (streakBonus, newClaimableBal) = g.recordMint{value: valueToSend}(payer, lvl, costWei, purchaseUnits, payKind);
 
-        if (mintedQuantity != 0) {
-            coin.notifyQuestMint(payer, mintedQuantity, true);
+        if (questUnits != 0) {
+            coin.notifyQuestMint(payer, questUnits, true);
         }
 
-        // Flat affiliate payout baseline with claimable-specific rate.
-        uint256 rakebackMint = affiliate.payAffiliate(
-            _affiliateAmount(lvl, gameState, payKind, claimableUsed, costWei),
-            affiliateCode,
-            buyer,
-            lvl
-        );
+        // Flat affiliate payout baseline with fresh/recycled split.
+        uint256 rakebackMint;
+        if (payKind == MintPaymentKind.Combined && claimableUsed != 0 && costWei > claimableUsed) {
+            // Combined payment: handle fresh and recycled portions separately
+            uint256 freshEthAmount = costWei - claimableUsed;
+            uint256 rakebackFresh = affiliate.payAffiliate(
+                freshEthAmount,
+                affiliateCode,
+                buyer,
+                lvl,
+                true // fresh ETH
+            );
+            uint256 rakebackRecycled = affiliate.payAffiliate(
+                claimableUsed,
+                affiliateCode,
+                buyer,
+                lvl,
+                false // recycled ETH
+            );
+            rakebackMint = rakebackFresh + rakebackRecycled;
+        } else {
+            // DirectEth or Claimable: single call
+            bool isFreshEth = payKind == MintPaymentKind.DirectEth;
+            rakebackMint = affiliate.payAffiliate(
+                costWei,
+                affiliateCode,
+                buyer,
+                lvl,
+                isFreshEth
+            );
+        }
         unchecked {
             bonusMint = rakebackMint + streakBonus;
         }
-    }
-
-    function _affiliateAmount(
-        uint24 lvl,
-        uint8 gameState,
-        MintPaymentKind payKind,
-        uint256 claimableUsed,
-        uint256 costWei
-    ) private pure returns (uint256 amount) {
-        if (payKind == MintPaymentKind.Claimable) {
-            return AFFILIATE_CLAIMABLE_REWARD;
-        }
-        if (lvl > 40) {
-            uint256 pct = gameState != 3 ? 30 : 5;
-            amount = (PRICE_COIN_UNIT * pct) / 100;
-        } else {
-            amount = PRICE_COIN_UNIT / 10; // 0.1 priceCoin
-            if (lvl <= 3 || gameState != 3) {
-                amount = (amount * 250) / 100; // +150% => 0.25 priceCoin
-            }
-        }
-
-        if (payKind == MintPaymentKind.Combined && claimableUsed != 0 && costWei != 0) {
-            uint256 ethUsed = costWei - claimableUsed;
-            amount =
-                _proRate(amount, ethUsed, costWei) +
-                _proRate(AFFILIATE_CLAIMABLE_REWARD, claimableUsed, costWei);
-        }
-        return amount;
     }
 
     function _applyLevel100BonusCap(
@@ -1045,12 +1082,12 @@ contract DegenerusGamepieces {
         uint24 lvl,
         uint256 quantity,
         uint256 multBps,
-        bool mapPurchase
+        bool ticketPurchase
     ) private returns (uint256 mintQuantity) {
         // Level-100 (x00) bonus applies only to the first 100 mint-equivalents of ETH/claimable purchases.
         uint256 units;
         unchecked {
-            units = mapPurchase ? quantity : quantity * LEVEL_100_BONUS_UNIT_SCALE;
+            units = ticketPurchase ? quantity : quantity * LEVEL_100_BONUS_UNIT_SCALE;
         }
 
         uint256 packed = _level100BonusPacked[payer];
@@ -1072,30 +1109,21 @@ contract DegenerusGamepieces {
             }
         }
 
-        uint256 effectiveBps = multBps < BPS_DENOMINATOR ? BPS_DENOMINATOR : multBps;
+        uint256 effectiveBps = multBps < BPS_DENOMINATOR
+            ? BPS_DENOMINATOR
+            : BPS_DENOMINATOR + ((multBps - BPS_DENOMINATOR) / 2);
         uint256 mintedUnits;
         unchecked {
             mintedUnits = (eligibleUnits * effectiveBps) / BPS_DENOMINATOR + ineligibleUnits;
         }
 
-        if (mapPurchase) return mintedUnits;
+        if (ticketPurchase) return mintedUnits;
         return mintedUnits / LEVEL_100_BONUS_UNIT_SCALE;
     }
 
     function _proRate(uint256 amount, uint256 numerator, uint256 denominator) private pure returns (uint256) {
         if (amount == 0 || numerator == 0 || denominator == 0) return 0;
         return (amount * numerator) / denominator;
-    }
-
-    function _initiationFee(
-        IDegenerusGame g,
-        uint24 lvl,
-        address player,
-        uint256 priceWei
-    ) private view returns (uint256) {
-        if (lvl <= 3 || priceWei == 0) return 0;
-        if (g.ethMintLevelCount(player) != 0) return 0;
-        return priceWei / 5;
     }
 
     function _coinReceive(address payer, uint256 amount, uint24 lvl, uint256 discount) private {
@@ -1114,16 +1142,31 @@ contract DegenerusGamepieces {
             _pendingMintQueue.push(buyer);
         }
 
-        unchecked {
-            _tokensOwed[buyer] = owed + quantity;
-            if (isPrePurchase) {
-                _tokensOwedPre[buyer] += quantity;
-                _purchaseCountPre += quantity;
-            } else {
-                _purchaseCountPhase += quantity;
-            }
-            _purchaseCount += quantity;
+        uint256 newOwed = uint256(owed) + quantity;
+        if (newOwed > type(uint32).max) revert InvalidQuantity();
+        _tokensOwed[buyer] = uint32(newOwed);
+
+        if (isPrePurchase) {
+            uint32 owedPre = _tokensOwedPre[buyer];
+            uint256 newOwedPre = uint256(owedPre) + quantity;
+            if (newOwedPre > type(uint32).max) revert InvalidQuantity();
+            _tokensOwedPre[buyer] = uint32(newOwedPre);
+
+            uint32 countPre = _purchaseCountPre;
+            uint256 newCountPre = uint256(countPre) + quantity;
+            if (newCountPre > type(uint32).max) revert InvalidQuantity();
+            _purchaseCountPre = uint32(newCountPre);
+        } else {
+            uint32 countPhase = _purchaseCountPhase;
+            uint256 newCountPhase = uint256(countPhase) + quantity;
+            if (newCountPhase > type(uint32).max) revert InvalidQuantity();
+            _purchaseCountPhase = uint32(newCountPhase);
         }
+
+        uint32 countTotal = _purchaseCount;
+        uint256 newCountTotal = uint256(countTotal) + quantity;
+        if (newCountTotal > type(uint32).max) revert InvalidQuantity();
+        _purchaseCount = uint32(newCountTotal);
     }
 
     /// @notice Queue reward mints without applying purchase bonuses.
@@ -1131,6 +1174,22 @@ contract DegenerusGamepieces {
         if (quantity == 0) return;
         bool isPrePurchase = game.gameState() != 2;
         _recordPurchase(buyer, quantity, isPrePurchase);
+    }
+
+    /// @notice Queue reward mints for multiple players in a single call (gas optimization).
+    /// @dev Used when activating future tickets to avoid per-player external call overhead.
+    function queueRewardMintsBatch(address[] calldata buyers, uint32[] calldata quantities) external onlyGame {
+        uint256 len = buyers.length;
+        if (len != quantities.length) revert();
+
+        bool isPrePurchase = game.gameState() != 2;
+
+        for (uint256 i = 0; i < len; ) {
+            if (quantities[i] != 0) {
+                _recordPurchase(buyers[i], quantities[i], isPrePurchase);
+            }
+            unchecked { ++i; }
+        }
     }
 
     /// @notice Batch-mint queued purchases, respecting an airdrop cap and optional multiplier for reward mints.
@@ -1296,6 +1355,7 @@ contract DegenerusGamepieces {
 
     function isApprovedForAll(address owner, address operator) public view returns (bool) {
         if (operator == address(game)) return true;
+        if (game.isOperatorApproved(owner, operator)) return true;
         return _operatorApprovals[owner][operator];
     }
 
@@ -1339,6 +1399,7 @@ contract DegenerusGamepieces {
 
     /// @notice Transfer; clears per-token approvals.
     function transferFrom(address from, address to, uint256 tokenId) public {
+        if (tokenId == SPECIAL_TOKEN_ID) revert InvalidToken();
         uint256 prevOwnershipPacked = _packedOwnershipOf(tokenId);
 
         if (address(uint160(prevOwnershipPacked)) != from) revert TransferFromIncorrectOwner();
@@ -1584,18 +1645,40 @@ contract DegenerusGamepieces {
       +======================================================================+*/
 
     /// @notice Place an on-chain ask (listing) for a token.
-    /// @dev Burns ASK_FEE (10 BURNIE). Caller must own the token.
+    /// @dev Burns ASK_FEE (10 BURNIE). Caller must own the token unless listing
+    ///      for another player with approval-for-all.
     ///      Listing is cleared on any transfer of the token.
+    /// @param seller Token owner to list for (address(0) = msg.sender).
     /// @param tokenId Token ID to list.
     /// @param price Listing price in BURNIE.
     /// @param expiry Expiration timestamp.
-    function placeAsk(uint256 tokenId, uint256 price, uint40 expiry) external {
+    function placeAsk(
+        address seller,
+        uint256 tokenId,
+        uint256 price,
+        uint40 expiry
+    ) external {
+        if (seller == address(0)) {
+            seller = msg.sender;
+        } else if (seller != msg.sender && !isApprovedForAll(seller, msg.sender)) {
+            revert Unauthorized();
+        }
+        _placeAsk(seller, msg.sender, tokenId, price, expiry);
+    }
+
+    function _placeAsk(
+        address seller,
+        address payer,
+        uint256 tokenId,
+        uint256 price,
+        uint40 expiry
+    ) private {
         _requireMarketplaceToken(tokenId);
         if (price == 0) revert PriceZero();
         if (expiry < block.timestamp) revert Expired();
-        address seller = msg.sender;
         if (address(uint160(_packedOwnershipOf(tokenId))) != seller) revert Unauthorized();
-        coin.burnCoin(seller, ASK_FEE);
+        if (coin.balanceOf(payer) < ASK_FEE) revert InsufficientBalance();
+        coin.burnCoin(payer, ASK_FEE);
         asks[tokenId] = Ask({seller: seller, expiry: expiry, price: price});
         emit AskPlaced(seller, tokenId, price, expiry);
     }
@@ -1635,7 +1718,7 @@ contract DegenerusGamepieces {
         _requireMarketplaceToken(tokenId);
         if (amount == 0) revert PriceZero();
         if (expiry < block.timestamp) revert Expired();
-        if (coin.balanceOf(msg.sender) < amount) revert InsufficientBalance();
+        if (coin.balanceOf(msg.sender) < amount + OFFER_FEE) revert InsufficientBalance();
 
         coin.burnCoin(msg.sender, OFFER_FEE);
         offers[tokenId][msg.sender] = Offer({amount: amount, expiry: expiry});
@@ -1692,7 +1775,8 @@ contract DegenerusGamepieces {
             }
         }
     }
-    /// @notice Retire all tokens below `newBaseTokenId` (except token 0) at level transition.
+    /// @notice Begin retiring tokens for the next level transition.
+    /// @dev Base token ID advances as processDormant runs so burns and state change stay aligned.
     function advanceBase() external onlyGame {
         uint256 startTokenId = _baseTokenId;
         uint256 endTokenId = _currentIndex;
@@ -1706,8 +1790,6 @@ contract DegenerusGamepieces {
             _dormantPacked = 0;
         }
 
-        _baseTokenId = endTokenId;
-        _burnCounter = endTokenId - 1;
         unchecked {
             ++_balanceEpoch;
         }
@@ -1785,10 +1867,9 @@ contract DegenerusGamepieces {
         _packedAddressData[owner] = currentPackedData;
     }
 
-    /// @notice Emits burn Transfer events for the most-recently-retired level range to help indexers catch up.
-    /// @dev Intentionally out-of-spec (events without state changes); advances an internal cursor so callers can
-    ///      process the range over multiple transactions.
-    function processDormant(uint32 limit) external returns (bool worked) {
+    /// @notice Emits burn Transfer events while advancing the base token ID for retired ranges.
+    /// @dev Advances the internal cursor so callers can process the range over multiple transactions.
+    function processDormant(uint32 limit) external onlyGame returns (bool worked) {
         uint256 cursor = _dormantCursor;
         uint256 endTokenId = _dormantEnd;
         if (cursor == 0 || cursor >= endTokenId) {
@@ -1829,15 +1910,26 @@ contract DegenerusGamepieces {
             }
         }
 
+        if (cursor == startCursor) {
+            return false;
+        }
+
         _dormantCursor = cursor;
         _dormantPacked = lastPacked;
+        if (cursor > _baseTokenId) {
+            _baseTokenId = cursor;
+            uint256 newBurnCounter = cursor - 1;
+            if (newBurnCounter > _burnCounter) {
+                _burnCounter = newBurnCounter;
+            }
+        }
         if (cursor >= endTokenId) {
             _dormantCursor = 0;
             _dormantEnd = 0;
             _dormantPacked = 0;
         }
 
-        return cursor != startCursor;
+        return true;
     }
 
     // ---------------------------------------------------------------------

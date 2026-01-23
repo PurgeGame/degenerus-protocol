@@ -9,10 +9,7 @@ const DEPLOY_ORDER = [
   "TROPHY_SVG_ASSETS",
   "GAME_MINT_MODULE",
   "GAME_JACKPOT_MODULE",
-  "GAME_BOND_MODULE",
   "GAME_ENDGAME_MODULE",
-  "DGNRS",
-  "BONDS",
   "COIN",
   "VAULT",
   "AFFILIATE",
@@ -80,21 +77,11 @@ async function deployAll(ethers, deployer, expected) {
         "contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule",
         deployer
       );
-    } else if (name === "GAME_BOND_MODULE") {
-      factory = await ethers.getContractFactory(
-        "contracts/modules/DegenerusGameBondModule.sol:DegenerusGameBondModule",
-        deployer
-      );
     } else if (name === "GAME_ENDGAME_MODULE") {
       factory = await ethers.getContractFactory(
         "contracts/modules/DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule",
         deployer
       );
-    } else if (name === "DGNRS") {
-      factory = await ethers.getContractFactory("contracts/DegenerusBonds.sol:BondToken", deployer);
-      // No constructor args - all constants
-    } else if (name === "BONDS") {
-      factory = await ethers.getContractFactory("contracts/DegenerusBonds.sol:DegenerusBonds", deployer);
     } else if (name === "VAULT") {
       factory = await ethers.getContractFactory("contracts/DegenerusVault.sol:DegenerusVault", deployer);
     } else if (name === "COIN") {
@@ -179,7 +166,5 @@ describe("ContractAddresses wiring", function () {
     expect(await trophyRouter.primary()).to.equal(ZERO_ADDRESS);
     expect(await trophyRouter.fallbackRenderer()).to.equal(expected.RENDERER_TROPHY);
 
-    const bonds = deployed.BONDS;
-    expect(await bonds.dgnrsToken()).to.equal(expected.DGNRS);
   });
 });

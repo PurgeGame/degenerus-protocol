@@ -22,7 +22,7 @@ pragma solidity ^0.8.26;
 |  |          ▼                                                                                       | |
 |  |   IconRendererTrophy32.tokenURI(tokenId, data, extras)  ◄--- THIS CONTRACT                      |  |
 |  |          |                                                                                       | |
-|  |          +-► Parse trophy type (Exterminator/Affiliate/BAF)                                     |  |
+|  |          +-► Parse trophy type (Exterminator/Affiliate/BAF/Deity)                               |  |
 |  |          +-► Build description string                                                            | |
 |  |          +-► Build attributes JSON array                                                         | |
 |  |          +-► Call svgRenderer.trophySvg() for image                                             |  |
@@ -41,6 +41,7 @@ pragma solidity ^0.8.26;
 |  |   bits [152-167]: Exterminated trait (uint16) or sentinel                                       |  |
 |  |   bit 201:        AFFILIATE_TROPHY_FLAG                                                         |  |
 |  |   bit 203:        BAF_TROPHY_FLAG                                                               |  |
+|  |   bit 205:        DEITY_TROPHY_FLAG                                                             |  |
 |  |   bit 229:        TROPHY_FLAG_INVERT (visual inversion)                                         |  |
 |  |                                                                                                  | |
 |  |   Sentinel Values:                                                                               | |
@@ -73,6 +74,10 @@ import "./interfaces/IconRendererTypes.sol";
 import {IIconRendererTrophy32Svg} from "./IconRendererTrophy32Svg.sol";
 import {RendererLibrary} from "./libraries/RendererLibrary.sol";
 
+interface ITrophyDgnrs {
+    function trophyDgnrs(uint256 tokenId) external view returns (uint96);
+}
+
 /// @title IconRendererTrophy32
 /// @notice ERC721 metadata renderer for Degenerus trophy tokens
 /// @dev Generates JSON metadata with base64-encoded SVG images for trophy gamepieces
@@ -88,6 +93,9 @@ contract IconRendererTrophy32 {
 
     /// @dev Flag identifying BAF trophy type (bit 203 in packed data)
     uint256 private constant BAF_TROPHY_FLAG = uint256(1) << 203;
+
+    /// @dev Flag identifying Deity trophy type (bit 205 in packed data)
+    uint256 private constant DEITY_TROPHY_FLAG = uint256(1) << 205;
 
     /// @dev Flag for visual inversion effect (bit 229 in packed data)
     uint256 private constant TROPHY_FLAG_INVERT = uint256(1) << 229;
@@ -109,8 +117,9 @@ contract IconRendererTrophy32 {
     IIconRendererTrophy32Svg internal constant svgRenderer =
         IIconRendererTrophy32Svg(ContractAddresses.RENDERER_TROPHY_SVG);
 
-    /// @dev Trophy gamepiece contract
-    IERC721Lite internal constant nft = IERC721Lite(ContractAddresses.TROPHIES);
+    /// @dev Trophy ERC721 contract
+    IERC721Lite internal constant trophies = IERC721Lite(ContractAddresses.TROPHIES);
+    ITrophyDgnrs internal constant trophyExtras = ITrophyDgnrs(ContractAddresses.TROPHIES);
 
     function setMyColors(
         string calldata outlineHex,
@@ -163,7 +172,7 @@ contract IconRendererTrophy32 {
     ) external view returns (string memory) {
         // `data` carries the packed trophy word emitted by the game:
         // bits [167:152]=exterminated trait (0..255 or sentinel 0xFFFE/0xFFFA), [151:128]=level,
-        // [203:201]=trophy type flags, [229]=invert flag.
+        // [205:201]=trophy type flags, [229]=invert flag.
         // `extras` carries affiliate score or exterminator winnings in extras[0..2] when relevant.
         return _tokenURI(tokenId, data, extras);
     }
@@ -179,13 +188,16 @@ contract IconRendererTrophy32 {
         uint16 exTr = _readExterminatedTrait(data);
         bool isAffiliate = (data & AFFILIATE_TROPHY_FLAG) != 0;
         bool isBaf = (data & BAF_TROPHY_FLAG) != 0;
-        bool isExtermination = !isAffiliate && !isBaf;
+        bool isDeity = (data & DEITY_TROPHY_FLAG) != 0;
+        bool isExtermination = !isAffiliate && !isBaf && !isDeity;
         uint96 extraValue =
             uint96(extras[0]) |
             (uint96(extras[1]) << 32) |
             (uint96(extras[2]) << 64);
         uint96 affiliateScore = isAffiliate ? extraValue : 0;
         uint96 exterminationWinnings = isExtermination ? extraValue : 0;
+        uint96 deityCost = isDeity ? extraValue : 0;
+        uint96 dgnrsReward = trophyExtras.trophyDgnrs(tokenId);
         bool invertFlag = (data & TROPHY_FLAG_INVERT) != 0;
 
         string memory lvlStr = (lvl == 0) ? "TBD" : uint256(lvl).toString();
@@ -194,6 +206,8 @@ contract IconRendererTrophy32 {
             trophyType = "Affiliate";
         } else if (isBaf) {
             trophyType = "BAF";
+        } else if (isDeity) {
+            trophyType = "Deity";
         } else {
             trophyType = "Exterminator";
         }
@@ -203,6 +217,7 @@ contract IconRendererTrophy32 {
             lvlStr,
             isAffiliate,
             isBaf,
+            isDeity,
             affiliateScore
         );
 
@@ -226,6 +241,9 @@ contract IconRendererTrophy32 {
             affiliateScore,
             isExtermination,
             exterminationWinnings,
+            isDeity,
+            deityCost,
+            dgnrsReward,
             includeTraitAttr,
             traitType,
             traitValue
@@ -235,11 +253,12 @@ contract IconRendererTrophy32 {
             exterminatedTrait: exTr,
             isAffiliate: isAffiliate,
             isBaf: isBaf,
+            isDeity: isDeity,
             lvl: lvl,
             invertFlag: invertFlag
         });
         string memory img = svgRenderer.trophySvg(svgParams);
-        return _pack(img, lvl, desc, trophyType, attrs);
+        return _pack(img, tokenId, lvl, desc, trophyType, attrs, isDeity);
     }
 
     // ---------------------------------------------------------------------
@@ -285,13 +304,17 @@ contract IconRendererTrophy32 {
 
     function _pack(
         string memory svg,
+        uint256 tokenId,
         uint256 level,
         string memory desc,
         string memory trophyType,
-        string memory attrs
+        string memory attrs,
+        bool isDeity
     ) private pure returns (string memory) {
         string memory lvlStr = (level == 0) ? "TBD" : level.toString();
-        string memory nm = string.concat("Degenerus Level ", lvlStr, " ", trophyType, " Trophy");
+        string memory nm = isDeity
+            ? string.concat("Degenerus Deity Trophy #", tokenId.toString())
+            : string.concat("Degenerus Level ", lvlStr, " ", trophyType, " Trophy");
 
         string memory imgData = string.concat(
             "data:image/svg+xml;base64,",
@@ -311,9 +334,12 @@ contract IconRendererTrophy32 {
         string memory lvlStr,
         bool isAffiliate,
         bool isBaf,
+        bool isDeity,
         uint96 affiliateScore
     ) private pure returns (string memory desc) {
-        if (isAffiliate && exTr == 0xFFFE) {
+        if (isDeity) {
+            desc = "Awarded for being a rich degenerate genius.";
+        } else if (isAffiliate && exTr == 0xFFFE) {
             desc = string.concat(
                 "Awarded to the top affiliate for level ",
                 lvlStr
@@ -347,6 +373,9 @@ contract IconRendererTrophy32 {
         uint96 affiliateScore,
         bool isExtermination,
         uint96 exterminationWinnings,
+        bool isDeity,
+        uint96 deityCost,
+        uint96 dgnrsReward,
         bool includeTraitAttr,
         string memory traitType,
         string memory traitValue
@@ -360,7 +389,16 @@ contract IconRendererTrophy32 {
                 '"}'
             )
         );
-        if (isAffiliate && affiliateScore != 0) {
+        if (isDeity) {
+            attrs = string(
+                abi.encodePacked(
+                    attrs,
+                    ',{"trait_type":"Cost","value":"',
+                    _formatEthAmount(deityCost),
+                    '"}'
+                )
+            );
+        } else if (isAffiliate && affiliateScore != 0) {
             attrs = string(
                 abi.encodePacked(
                     attrs,
@@ -376,6 +414,16 @@ contract IconRendererTrophy32 {
                     attrs,
                     ',{"trait_type":"Extermination Winnings","value":"',
                     _formatEthAmount(exterminationWinnings),
+                    '"}'
+                )
+            );
+        }
+        if (dgnrsReward != 0) {
+            attrs = string(
+                abi.encodePacked(
+                    attrs,
+                    ',{"trait_type":"DGNRS Reward","value":"',
+                    _formatDgnrsAmount(dgnrsReward),
                     '"}'
                 )
             );
@@ -414,6 +462,20 @@ contract IconRendererTrophy32 {
         uint256 whole = scaled / 10;
         uint8 frac = uint8(scaled - (whole * 10));
         return string(abi.encodePacked(whole.toString(), ".", bytes1(uint8(48 + frac)), " ETH"));
+    }
+
+    function _formatDgnrsAmount(uint256 amount) private pure returns (string memory) {
+        uint256 whole = amount / 1 ether;
+        uint256 frac = (amount % 1 ether) / 1e12;
+        bytes memory fracStr = new bytes(6);
+        fracStr[0] = bytes1(uint8(48 + (frac / 100000) % 10));
+        fracStr[1] = bytes1(uint8(48 + (frac / 10000) % 10));
+        fracStr[2] = bytes1(uint8(48 + (frac / 1000) % 10));
+        fracStr[3] = bytes1(uint8(48 + (frac / 100) % 10));
+        fracStr[4] = bytes1(uint8(48 + (frac / 10) % 10));
+        fracStr[5] = bytes1(uint8(48 + (frac % 10)));
+
+        return string.concat(whole.toString(), ".", string(fracStr), " DGNRS");
     }
 
 }

@@ -29,8 +29,6 @@ interface IDegenerusQuests {
         external
         returns (bool rolled, uint8[2] memory questTypes, bool highDifficulty);
 
-    function normalizeActiveBurnQuests() external;
-
     function handleMint(address player, uint32 quantity, bool paidWithEth)
         external
         returns (uint256 reward, bool hardMode, uint8 questType, uint32 streak, bool completed, bool completedBoth);
@@ -54,6 +52,9 @@ interface IDegenerusQuests {
     function handleLootBox(address player, uint256 amountWei)
         external
         returns (uint256 reward, bool hardMode, uint8 questType, uint32 streak, bool completed, bool completedBoth);
+
+    function awardQuestStreakShield(address player, uint16 amount) external;
+    function awardQuestStreakBonus(address player, uint16 amount, uint48 currentDay) external;
 
     function getActiveQuests() external view returns (QuestInfo[2] memory quests);
 

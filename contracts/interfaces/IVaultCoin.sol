@@ -17,4 +17,15 @@ interface IVaultCoin {
     /// @notice View the vault's remaining mint allowance.
     /// @return Remaining amount available for vault minting.
     function vaultMintAllowance() external view returns (uint256);
+
+    /// @notice Get token balance for an address.
+    /// @param account Address to query.
+    /// @return Balance of BURNIE.
+    function balanceOf(address account) external view returns (uint256);
+
+    /// @notice Transfer BURNIE to a recipient.
+    /// @param to Recipient address.
+    /// @param amount Amount to transfer.
+    /// @return success True on success.
+    function transfer(address to, uint256 amount) external returns (bool);
 }

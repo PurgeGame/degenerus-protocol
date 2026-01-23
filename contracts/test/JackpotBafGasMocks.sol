@@ -8,7 +8,6 @@ contract MockBafCoinJackpotView {
     }
 
     mapping(address => uint256) private lastDayAmount;
-    mapping(uint24 => PlayerScore) private topByLevel;
     PlayerScore private topLastDay;
 
     function setCoinflipAmountLastDay(address player, uint256 amount) external {
@@ -24,21 +23,12 @@ contract MockBafCoinJackpotView {
         }
     }
 
-    function setCoinflipTop(uint24 lvl, address player, uint96 score) external {
-        topByLevel[lvl] = PlayerScore(player, score);
-    }
-
     function setCoinflipTopLastDay(address player, uint96 score) external {
         topLastDay = PlayerScore(player, score);
     }
 
     function coinflipAmountLastDay(address player) external view returns (uint256) {
         return lastDayAmount[player];
-    }
-
-    function coinflipTop(uint24 lvl) external view returns (address player, uint96 score) {
-        PlayerScore memory entry = topByLevel[lvl];
-        return (entry.player, entry.score);
     }
 
     function coinflipTopLastDay() external view returns (address player, uint96 score) {
@@ -67,7 +57,7 @@ contract MockBafAffiliateJackpotView {
 contract MockBafGameJackpotView {
     uint24 public level;
 
-    mapping(address => uint256) private bonusMultiplier;
+    mapping(address => uint256) private activityScore;
     mapping(address => uint24) private streakCount;
     mapping(uint24 => address) private exterminatorByLevel;
     mapping(uint24 => mapping(uint8 => address[])) private traitBurnTicket;
@@ -76,13 +66,13 @@ contract MockBafGameJackpotView {
         level = lvl;
     }
 
-    function setPlayerBonusMultiplier(address player, uint256 mult) external {
-        bonusMultiplier[player] = mult;
+    function setPlayerActivityScore(address player, uint256 mult) external {
+        activityScore[player] = mult;
     }
 
-    function setPlayerBonusMultiplierBatch(address[] calldata players, uint256 mult) external {
+    function setPlayerActivityScoreBatch(address[] calldata players, uint256 mult) external {
         for (uint256 i; i < players.length; ) {
-            bonusMultiplier[players[i]] = mult;
+            activityScore[players[i]] = mult;
             unchecked {
                 ++i;
             }
@@ -126,8 +116,8 @@ contract MockBafGameJackpotView {
         }
     }
 
-    function playerBonusMultiplier(address player) external view returns (uint256) {
-        return bonusMultiplier[player];
+    function playerActivityScore(address player) external view returns (uint256) {
+        return activityScore[player];
     }
 
     function ethMintStreakCount(address player) external view returns (uint24) {

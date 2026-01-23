@@ -1,43 +1,39 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IDegenerusGameJackpotModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {IDegenerusTrophies} from "../interfaces/IDegenerusTrophies.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
-import {IDegenerusGamepieces} from "../interfaces/IDegenerusGamepieces.sol";
+import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 /**
  * @title DegenerusGameEndgameModule
  * @author Burnie Degenerus
- * @notice Delegate-called module handling level settlement after extermination or timeout.
+ * @notice Delegate-called module handling endgame reward jackpots and exterminator payouts.
  *
  * @dev This module is called via `delegatecall` from DegenerusGame during state 1 (setup),
  *      meaning all storage reads/writes operate on the game contract's storage.
  *
  * ## When Called
  *
- * After a level ends (via extermination or timeout), the game transitions to state 1
- * and calls `finalizeEndgame()` to settle payouts before starting the next level.
+ * After a level ends (timeout only), the game transitions to state 1 and calls
+ * `finalizeEndgame()` to settle reward jackpots before starting the next level.
+ * Exterminator payouts are handled during burn via `payExterminatorOnJackpot()`.
  *
  * ## Settlement Flow
  *
  * ```
+ * payExterminatorOnJackpot()
+ *     +- Mint exterminator trophy (winnings packed)
+ *     +- Pay exterminator (20-40% of prize pool ETH + 2% of remaining exterminator pool)
+ *
  * finalizeEndgame()
- *     |
- *     +- IF extermination occurred (not timeout):
- *     |   +- Mint exterminator trophy (winnings packed)
- *     |   +- Pay exterminator (20-40% of prize pool)
- *     |   +- Pay extermination jackpot (trait ticket holders)
- *     |   +- Pay purchase rewards (20% → gamepiece/MAP rewards for winners)
- *     |
- *     +- IF previous level > 0:
- *         +- Mint affiliate trophy for top affiliate
- *         +- Run reward jackpots:
- *             +- BAF (every 10 levels): 10-25% of rewardPool
- *             +- Decimator (levels 15,25,35...85): 15% of rewardPool
+ *     +- Mint affiliate trophy for top affiliate (+ 1% of remaining affiliate pool)
+ *     +- Run reward jackpots:
+ *         +- BAF (every 10 levels): 10-25% of future pool
+ *         +- Decimator (levels 5,15,25...85): 10% of future pool
  * ```
  *
  * ## Exterminator Share Calculation
@@ -53,19 +49,69 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     /// @notice Emitted when ETH is credited to a player's claimable balance.
-    /// @param player Original winner address.
-    /// @param recipient Address credited (same as player).
+    /// @param player Winner address credited.
     /// @param amount ETH amount credited.
-    event PlayerCredited(address indexed player, address indexed recipient, uint256 amount);
+    event PlayerCredited(
+        address indexed player,
+        uint256 amount
+    );
+
+    /// @notice Emitted when auto-rebuy converts winnings to tickets.
+    /// @param player Player who had auto-rebuy enabled.
+    /// @param ethAmount ETH amount converted.
+    /// @param ticketsAwarded Number of tickets awarded (includes auto-rebuy bonus).
+    /// @param targetLevel Level for which tickets were awarded.
+    event AutoRebuyExecuted(
+        address indexed player,
+        uint256 ethAmount,
+        uint32 ticketsAwarded,
+        uint24 targetLevel
+    );
+
+    /// @notice Emitted when DGNRS is rewarded to the exterminator.
+    /// @param exterminator Address of the exterminator.
+    /// @param level Level that was exterminated.
+    /// @param dgnrsAmount Amount of DGNRS paid from the exterminator pool.
+    event ExterminatorDgnrsReward(
+        address indexed exterminator,
+        uint24 indexed level,
+        uint256 dgnrsAmount
+    );
+
+    /// @notice Emitted when DGNRS is rewarded to the top affiliate.
+    /// @param affiliate Address of the top affiliate.
+    /// @param level Level for which they were top affiliate.
+    /// @param dgnrsAmount Amount of DGNRS paid from the affiliate pool.
+    event AffiliateDgnrsReward(
+        address indexed affiliate,
+        uint24 indexed level,
+        uint256 dgnrsAmount
+    );
+
+    /// @notice Emitted when whale pass rewards are claimed.
+    /// @param player Player receiving tickets.
+    /// @param caller Address that initiated the claim.
+    /// @param halfPasses Half-pass count used for ticket awards.
+    /// @param startLevel Level where ticket awards begin.
+    event WhalePassClaimed(
+        address indexed player,
+        address indexed caller,
+        uint256 halfPasses,
+        uint24 startLevel
+    );
 
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
 
-    IDegenerusAffiliate internal constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
-    IDegenerusGamepieces internal constant gamepieces = IDegenerusGamepieces(ContractAddresses.GAMEPIECES);
-    IDegenerusJackpots internal constant jackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
-    IDegenerusTrophies internal constant trophies = IDegenerusTrophies(ContractAddresses.TROPHIES);
+    IDegenerusAffiliate internal constant affiliate =
+        IDegenerusAffiliate(ContractAddresses.AFFILIATE);
+    IDegenerusJackpots internal constant jackpots =
+        IDegenerusJackpots(ContractAddresses.JACKPOTS);
+    IDegenerusTrophies internal constant trophies =
+        IDegenerusTrophies(ContractAddresses.TROPHIES);
+    IDegenerusStonk internal constant dgnrs =
+        IDegenerusStonk(ContractAddresses.DGNRS);
 
     // -------------------------------------------------------------------------
     // Constants
@@ -74,132 +120,94 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
     /// @notice Sentinel value indicating level ended via timeout, not extermination.
     uint16 private constant TRAIT_ID_TIMEOUT = 420;
 
-    /// @notice Bit offset separating top winners from scatter winners in the special winner mask.
-    uint8 private constant BAF_MASK_OFFSET = 128;
+    /// @notice DGNRS reward for exterminator: 2% of remaining exterminator pool.
+    uint16 private constant EXTERMINATOR_POOL_REWARD_BPS = 200;
 
-    /// @notice Basis points of non-exterminator pool for purchase rewards (20%).
-    uint16 private constant EXTERMINATION_PURCHASE_BPS = 2000;
-
-    /// @notice Maximum winners for extermination purchase rewards.
-    uint8 private constant EXTERMINATION_PURCHASE_WINNERS = 20;
+    /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
+    uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;
 
     // -------------------------------------------------------------------------
     // Main Entry Point
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Settle a completed level by paying exterminator, jackpots, and rewards.
-     * @dev Called via delegatecall from DegenerusGame during state 1.
-     *
-     * @param lvl Current level index (1-based) - this is the NEW level after advancement.
-     * @param rngWord VRF entropy for jackpot selection and randomization.
-     *
-     * ## State Changes
-     *
-     * - `currentPrizePool` → 0 (after extermination settlement)
-     * - `claimablePool` += all ETH payouts
-     * - `nextPrizePool` += purchase reward pool (funds next level)
-     * - `rewardPool` -= BAF/Decimator jackpot spends
-     * - `airdropIndex` → 0 (reset for next level)
-     *
-     * ## Extermination vs Timeout
-     *
-     * - Extermination: `lastExterminatedTrait != 420` - full settlement with payouts
-     * - Timeout: `lastExterminatedTrait == 420` - skip exterminator/jackpot payouts
+     * @notice Pay the exterminator on the first jackpot after extermination.
+     * @dev Called via delegatecall from DegenerusGame during burn phase.
+     *      Mints trophy, pays claimable ETH, and transfers DGNRS reward.
+     * @param lvl Current level index (1-based).
+     * @param rngWord VRF entropy for share calculation.
      */
-    function finalizeEndgame(uint24 lvl, uint256 rngWord) external {
-        uint256 claimableDelta;
-        uint24 prevLevel = lvl - 1; // The level that just ended
-        bool hasPrevLevel = prevLevel != 0;
+    function payExterminatorOnJackpot(uint24 lvl, uint256 rngWord) external {
+        if (exterminationPaidThisLevel) return;
 
-        // ---------------------------------------------------------------------
-        // Extermination Settlement (if not timeout)
-        // ---------------------------------------------------------------------
+        uint16 traitRaw = currentExterminatedTrait;
+        if (traitRaw == TRAIT_ID_TIMEOUT) return;
 
-        uint16 traitRaw = lastExterminatedTrait;
-        if (traitRaw != TRAIT_ID_TIMEOUT) {
-            uint8 traitId = uint8(traitRaw);
+        address ex = levelExterminators[lvl];
+        if (ex == address(0)) return;
 
-            // Get exterminator address (guaranteed set when traitRaw != TRAIT_ID_TIMEOUT)
-            address ex = levelExterminators[prevLevel];
-
-            // Calculate exterminator's share (20-40% of prize pool)
-            uint256 poolValue = currentPrizePool;
-            uint16 exShareBps = _exterminatorShareBps(prevLevel, rngWord);
-            uint256 exterminatorShare = (poolValue * exShareBps) / 10_000;
-
-            uint96 exterminatorWinnings =
-                exterminatorShare > type(uint96).max ? type(uint96).max : uint96(exterminatorShare);
-
-            trophies.mintExterminator(
-                ex,
-                prevLevel,
-                traitId,
-                exterminationInvertFlag,
-                exterminatorWinnings
-            );
-
-            // Pay exterminator (claimable ETH)
-            claimableDelta += _payExterminatorShare(ex, exterminatorShare);
-
-            // Remaining pool goes to jackpots and purchase rewards
-            uint256 jackpotPool = poolValue > exterminatorShare ? poolValue - exterminatorShare : 0;
-            if (jackpotPool != 0) {
-                // Split: 20% to purchase rewards, 80% to extermination jackpot
-                uint256 purchasePool = (jackpotPool * EXTERMINATION_PURCHASE_BPS) / 10_000;
-                uint256 exterminationPool = jackpotPool - purchasePool;
-
-                // Round purchase pool to MAP-price multiple; remainder to trait jackpot
-                uint256 mapPrice = uint256(price) / 4;
-                if (mapPrice != 0 && purchasePool != 0) {
-                    uint256 rounded = (purchasePool / mapPrice) * mapPrice;
-                    uint256 refund = purchasePool - rounded;
-                    purchasePool = rounded;
-                    exterminationPool += refund;
-                }
-
-                // Pay extermination jackpot (trait-only ticket holders)
-                (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameJackpotModule.payExterminationJackpot.selector,
-                        prevLevel,
-                        traitId,
-                        rngWord,
-                        exterminationPool
-                    )
-                );
-                if (!ok) _revertDelegate(data);
-
-                // Run purchase rewards (gamepiece/MAP distribution to winners)
-                if (purchasePool != 0) {
-                    _runExterminationPurchaseRewards(prevLevel, traitId, rngWord, purchasePool);
-                }
-            }
-
-            // Clear prize pool and reset airdrop cursor
-            currentPrizePool = 0;
-            airdropIndex = 0;
+        uint256 poolValue = currentPrizePool;
+        uint16 exShareBps = _exterminatorShareBps(lvl, rngWord);
+        uint256 totalShare = (poolValue * exShareBps) / 10_000;
+        uint256 rewardPenalty;
+        uint256 exterminatorShare = totalShare;
+        if (exterminationInvertFlag && totalShare != 0) {
+            rewardPenalty = totalShare / 2;
+            exterminatorShare = totalShare - rewardPenalty;
+            futurePrizePool += rewardPenalty;
         }
 
-        // ---------------------------------------------------------------------
-        // Reward Jackpots (BAF, Decimator) and Affiliate Trophy
-        // ---------------------------------------------------------------------
-
-        if (hasPrevLevel) {
-            // Mint trophy for top affiliate of the completed level
-            _maybeMintAffiliateTop(prevLevel);
-
-            // Run BAF (every 10 levels) and Decimator (mid-decile) jackpots
-            claimableDelta += _runRewardJackpots(prevLevel, rngWord);
-        }
-
-        // ---------------------------------------------------------------------
-        // Commit claimable pool update
-        // ---------------------------------------------------------------------
-
+        (uint256 claimableDelta, uint96 dgnrsPaid) = _payExterminatorShare(
+            ex,
+            exterminatorShare,
+            lvl,
+            rngWord
+        );
+        uint96 exterminatorWinnings = uint96(exterminatorShare);
+        trophies.mintExterminator(
+            ex,
+            lvl,
+            uint8(traitRaw),
+            exterminationInvertFlag,
+            exterminatorWinnings,
+            dgnrsPaid
+        );
         if (claimableDelta != 0) {
             claimablePool += claimableDelta;
         }
+        if (totalShare != 0) {
+            currentPrizePool -= totalShare;
+        }
+        exterminationPaidThisLevel = true;
+    }
+
+    /**
+     * @notice Settle a completed level by running reward jackpots.
+     * @dev Called via delegatecall from DegenerusGame during state 1.
+     *      Exterminator payouts are handled during burn via payExterminatorOnJackpot().
+     *
+     * @param lvl Current level index (1-based) - this is the NEW level after advancement.
+     * @param rngWord VRF entropy for jackpot selection and randomization.
+     */
+    function finalizeEndgame(uint24 lvl, uint256 rngWord) external {
+        uint24 prevLevel = lvl - 1; // The level that just ended
+        if (prevLevel == 0) {
+            return;
+        }
+
+        _topAffiliateReward(prevLevel);
+        uint256 claimableDelta = _runRewardJackpots(prevLevel, rngWord);
+        if (claimableDelta != 0) {
+            claimablePool += claimableDelta;
+        }
+    }
+
+    /// @notice Mint trophy and DGNRS reward for the top affiliate of a level.
+    /// @dev Callable during the level jackpot; guarded by a per-level paid flag.
+    /// @param lvl The level to reward.
+    function rewardTopAffiliate(uint24 lvl) external {
+        if (lvl == 0) return;
+        _topAffiliateReward(lvl);
     }
 
     // -------------------------------------------------------------------------
@@ -218,17 +226,20 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
      *
      * | Level         | Pool Source    | Pool Size       |
      * |---------------|----------------|-----------------|
-     * | 10, 20, 30... | rewardPool     | 10%             |
-     * | 50            | rewardPool     | 25%             |
+     * | 10, 20, 30... | future pool    | 10%             |
+     * | 50            | future pool    | 25%             |
      * | 100           | bafHundredPool | reserved amount |
      *
      * ## Decimator Trigger Schedule
      *
-     * Fires at: 15, 25, 35, 45, 55, 65, 75, 85 (NOT 95)
-     * Pool: 15% of rewardPool
+     * Fires at: 5, 15, 25, 35, 45, 55, 65, 75, 85 (NOT 95)
+     * Pool: 10% of future pool
      */
-    function _runRewardJackpots(uint24 prevLevel, uint256 rngWord) private returns (uint256 claimableDelta) {
-        uint256 rewardPoolLocal = rewardPool;
+    function _runRewardJackpots(
+        uint24 prevLevel,
+        uint256 rngWord
+    ) private returns (uint256 claimableDelta) {
+        uint256 futurePoolLocal = futurePrizePool;
         uint24 prevMod10 = prevLevel % 10;
         uint24 prevMod100 = prevLevel % 100;
 
@@ -246,21 +257,36 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
                 bafHundredPool = 0;
                 reservedBaf = true;
             } else {
-                // Regular BAF: 10% of rewardPool (25% at level 50)
-                bafPoolWei = (rewardPoolLocal * (prevLevel == 50 ? 25 : 10)) / 100;
+                // Regular BAF: 10% of future pool (25% at level 50)
+                bafPoolWei =
+                    (futurePoolLocal * (prevLevel == 50 ? 25 : 10)) /
+                    100;
             }
 
-            (uint256 netSpend, uint256 claimed) = _rewardJackpot(0, bafPoolWei, prevLevel, rngWord);
+            (
+                uint256 netSpend,
+                uint256 claimed,
+                uint256 lootboxToFuture
+            ) = _rewardJackpot(
+                0,
+                bafPoolWei,
+                prevLevel,
+                rngWord
+            );
             claimableDelta += claimed;
 
             if (reservedBaf) {
                 // Reserved pool was already removed; only return refund
                 uint256 refund = bafPoolWei - netSpend;
                 if (refund != 0) {
-                    rewardPoolLocal += refund;
+                    futurePoolLocal += refund;
                 }
             } else {
-                rewardPoolLocal -= netSpend;
+                futurePoolLocal -= netSpend;
+            }
+
+            if (lootboxToFuture != 0) {
+                futurePoolLocal += lootboxToFuture;
             }
         }
 
@@ -270,28 +296,54 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
 
         if (prevMod10 == 5 && prevMod100 != 95) {
             // Fire decimator midway through each decile (5, 15, 25... not 95)
-            uint256 decPoolWei = (rewardPoolLocal * 15) / 100;
+            uint256 decPoolWei = (futurePoolLocal * 10) / 100;
             if (decPoolWei != 0) {
-                (uint256 spend, uint256 claimed) = _rewardJackpot(1, decPoolWei, prevLevel, rngWord);
-                rewardPoolLocal -= spend;
+                (
+                    uint256 spend,
+                    uint256 claimed,
+                    uint256 lootboxToFuture
+                ) = _rewardJackpot(
+                    1,
+                    decPoolWei,
+                    prevLevel,
+                    rngWord
+                );
+                futurePoolLocal -= spend;
+                if (lootboxToFuture != 0) {
+                    futurePoolLocal += lootboxToFuture;
+                }
                 claimableDelta += claimed;
             }
         }
 
-        // Commit rewardPool update
-        rewardPool = rewardPoolLocal;
+        // Commit future pool update
+        futurePrizePool = futurePoolLocal;
         return claimableDelta;
     }
 
     /**
-     * @notice Mint trophy for the top affiliate of a completed level.
+     * @notice Mint trophy and DGNRS reward for the top affiliate of a completed level.
      * @param prevLevel The level that just completed.
      */
-    function _maybeMintAffiliateTop(uint24 prevLevel) private {
+    function _topAffiliateReward(uint24 prevLevel) private {
+        if (affiliateTopRewardPaid[prevLevel]) return;
         (address top, uint96 score) = affiliate.affiliateTop(prevLevel);
         if (top == address(0)) return;
 
-        trophies.mintAffiliate(top, prevLevel, score);
+        uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate);
+        uint96 dgnrsPaid;
+        uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) / 10_000;
+        if (dgnrsReward != 0) {
+            uint256 paid = dgnrs.transferFromPool(IDegenerusStonk.Pool.Affiliate, top, dgnrsReward);
+            if (paid != 0) {
+                dgnrsPaid = paid > type(uint96).max ? type(uint96).max : uint96(paid);
+                emit AffiliateDgnrsReward(top, prevLevel, paid);
+            }
+        }
+
+        // Mint affiliate trophy
+        trophies.mintAffiliate(top, prevLevel, score, dgnrsPaid);
+        affiliateTopRewardPaid[prevLevel] = true;
     }
 
     // -------------------------------------------------------------------------
@@ -299,228 +351,136 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Pay the exterminator their share as claimable ETH.
+     * @notice Pay the exterminator their share as claimable ETH and transfer DGNRS reward.
      * @param ex Exterminator address.
      * @param exterminatorShare Total ETH share.
+     * @param level Level that was exterminated.
      * @return claimableDelta ETH credited to claimable balance.
+     * @return dgnrsPaid DGNRS paid to the exterminator.
      */
-    function _payExterminatorShare(address ex, uint256 exterminatorShare) private returns (uint256 claimableDelta) {
-        if (exterminatorShare == 0) return 0;
-        _addClaimableEth(ex, exterminatorShare);
-        return exterminatorShare;
+    function _payExterminatorShare(
+        address ex,
+        uint256 exterminatorShare,
+        uint24 level,
+        uint256 entropy
+    ) private returns (uint256 claimableDelta, uint96 dgnrsPaid) {
+        // Pay claimable ETH
+        claimableDelta = _addClaimableEth(ex, exterminatorShare, entropy);
+
+        uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Exterminator);
+        uint256 dgnrsReward = (poolBalance * EXTERMINATOR_POOL_REWARD_BPS) / 10_000;
+        if (dgnrsReward != 0) {
+            uint256 paid = dgnrs.transferFromPool(IDegenerusStonk.Pool.Exterminator, ex, dgnrsReward);
+            if (paid != 0) {
+                dgnrsPaid = paid > type(uint96).max ? type(uint96).max : uint96(paid);
+                emit ExterminatorDgnrsReward(ex, level, paid);
+            }
+        }
+
+        return (claimableDelta, dgnrsPaid);
     }
 
     /**
      * @notice Credit ETH to a player's claimable balance.
+     * @dev If auto-rebuy is enabled, converts the remainder to tickets with auto-rebuy
+     *      bonus instead of crediting claimable balance. Complete keep-multiples
+     *      remain claimable, and fractional dust rolls into a chance for +1 ticket.
+     *
      * @param beneficiary Address to credit.
      * @param weiAmount ETH amount to credit.
+     * @param entropy RNG seed for fractional ticket roll.
+     * @return claimableDelta Amount to add to claimablePool for this credit.
      */
-    function _addClaimableEth(address beneficiary, uint256 weiAmount) private {
+    function _addClaimableEth(
+        address beneficiary,
+        uint256 weiAmount,
+        uint256 entropy
+    ) private returns (uint256 claimableDelta) {
+        if (weiAmount == 0) return 0;
+
+        // Auto-rebuy: convert winnings to tickets if enabled
+        if (autoRebuyEnabled[beneficiary]) {
+            // Reserve full keep-multiples for claim; rebuy remainder.
+            uint256 keepMultiple = autoRebuyKeepMultiple[beneficiary];
+            uint256 reserved;
+            uint256 rebuyAmount = weiAmount;
+            if (keepMultiple != 0) {
+                reserved = (weiAmount / keepMultiple) * keepMultiple;
+                rebuyAmount = weiAmount - reserved;
+            }
+
+            uint24 targetLevel = (gameState == GAME_STATE_BURN)
+                ? level + 1
+                : level;
+            uint256 ticketPrice = _priceForLevel(targetLevel) / 4;
+            if (ticketPrice == 0) {
+                ticketPrice = 0.00625 ether / ContractAddresses.COST_DIVISOR;
+            }
+
+            // Calculate base tickets from ETH
+            uint256 baseTickets = rebuyAmount / ticketPrice;
+            uint256 ethSpent = baseTickets * ticketPrice;
+            uint256 dustRemainder = rebuyAmount - ethSpent;
+
+            // Roll fractional remainder into a chance for +1 base ticket.
+            if (dustRemainder != 0) {
+                uint256 rollSeed = _entropyStep(
+                    entropy ^
+                        uint256(uint160(beneficiary)) ^
+                        rebuyAmount ^
+                        ticketPrice
+                );
+                if ((rollSeed % ticketPrice) < dustRemainder) {
+                    ++baseTickets;
+                    ethSpent = rebuyAmount;
+                    dustRemainder = 0;
+                }
+            }
+
+            if (baseTickets == 0) {
+                unchecked {
+                    claimableWinnings[beneficiary] += weiAmount;
+                }
+                emit PlayerCredited(beneficiary, weiAmount);
+                return weiAmount;
+            }
+
+            // Apply auto-rebuy bonus (30% default, 45% in afKing mode)
+            uint256 bonusBps = afKingMode[beneficiary] ? 14500 : 13000;
+            uint256 bonusTickets = (baseTickets * bonusBps) / 10000;
+            uint32 ticketCount = bonusTickets > type(uint32).max
+                ? type(uint32).max
+                : uint32(bonusTickets);
+
+            // Fund next level's prize pool
+            nextPrizePool += ethSpent;
+
+            // Award tickets for target level
+            _queueTickets(beneficiary, targetLevel, ticketCount);
+
+            uint256 totalRemainder = reserved + dustRemainder;
+            if (totalRemainder != 0) {
+                unchecked {
+                    claimableWinnings[beneficiary] += totalRemainder;
+                    claimablePool += totalRemainder;
+                }
+            }
+
+            emit AutoRebuyExecuted(
+                beneficiary,
+                rebuyAmount,
+                ticketCount,
+                targetLevel
+            );
+            return 0;
+        }
+
+        // Normal claimable balance credit (no auto-rebuy or insufficient amount)
         unchecked {
-            // Safe: would require ~10^77 wei to overflow
             claimableWinnings[beneficiary] += weiAmount;
         }
-        emit PlayerCredited(beneficiary, beneficiary, weiAmount);
-    }
-
-    // -------------------------------------------------------------------------
-    // Extermination Purchase Rewards
-    // -------------------------------------------------------------------------
-
-    /**
-     * @notice Distribute gamepiece/MAP purchase rewards to extermination jackpot winners.
-     * @dev 20% of non-exterminator prize pool is converted to gamepiece/MAP rewards
-     *      and distributed to up to 20 random trait ticket holders.
-     *
-     * @param prevLevel The level that just completed.
-     * @param traitId The exterminated trait ID.
-     * @param rngWord VRF entropy for winner selection.
-     * @param poolWei ETH amount to convert to rewards.
-     *
-     * ## Winner Selection
-     *
-     * - Up to 20 winners selected from trait burn ticket holders
-     * - Selection uses xorshift PRNG seeded from VRF
-     *
-     * ## Reward Distribution
-     *
-     * Winners are categorized by ticket type:
-     * - Burn-phase tickets (idx >= burnStart): receive full gamepieces (4 MAPs = 1 gamepiece)
-     * - MAP tickets (idx < burnStart): receive MAPs
-     *
-     * Leftover units (< 4 MAPs worth) go to MAP winners.
-     *
-     * ## Pool Handling
-     *
-     * The `poolWei` is added to `nextPrizePool`, effectively funding the next
-     * level's prize pool while distributing gamepiece/MAP ownership to winners.
-     */
-    function _runExterminationPurchaseRewards(
-        uint24 prevLevel,
-        uint8 traitId,
-        uint256 rngWord,
-        uint256 poolWei
-    ) private {
-        if (poolWei == 0) return;
-
-        // Add to next level's prize pool (rewards are gamepiece/MAPs, not ETH)
-        nextPrizePool += poolWei;
-
-        // Get trait ticket holders
-        address[] storage holders = traitBurnTicket[prevLevel][traitId];
-        uint256 len = holders.length;
-        if (len == 0) return;
-
-        // Calculate pricing
-        uint256 tokenPrice = uint256(price);
-        if (tokenPrice == 0) return;
-        uint256 mapPrice = tokenPrice / 4;
-        if (mapPrice == 0) return;
-
-        // Determine burn-phase ticket boundary
-        // burnStart = where burn-phase tickets begin in the holders array
-        uint256 startRemaining = uint256(traitStartRemaining[traitId]);
-        uint256 remaining = uint256(traitRemaining[traitId]);
-        uint256 burnCount = startRemaining > remaining ? startRemaining - remaining : 0;
-        if (burnCount > len) burnCount = len;
-        uint256 burnStart = len - burnCount;
-
-        // Calculate available units and winner count
-        uint256 totalUnits = poolWei / mapPrice;
-        uint256 maxWinners = totalUnits;
-        if (maxWinners > EXTERMINATION_PURCHASE_WINNERS) maxWinners = EXTERMINATION_PURCHASE_WINNERS;
-        if (maxWinners > len) maxWinners = len;
-        if (maxWinners == 0) return;
-
-        // ---------------------------------------------------------------------
-        // Select winners and categorize by ticket type
-        // ---------------------------------------------------------------------
-
-        address[] memory winners = new address[](maxWinners);
-        uint256[] memory burnIdx = new uint256[](maxWinners);  // Indices of burn-ticket winners
-        uint256[] memory mapIdx = new uint256[](maxWinners);   // Indices of MAP-ticket winners
-        uint256 burnWinners;
-        uint256 mapWinners;
-        uint256 totalBurnUnits;
-        uint256 totalMapUnits;
-        uint256 unitsLeft = totalUnits;
-
-        // Seed PRNG from VRF with level/trait context
-        uint256 entropy = uint256(keccak256(abi.encode(rngWord, prevLevel, traitId, totalUnits)));
-
-        for (uint256 i; i < maxWinners; ) {
-            entropy = _entropyStep(entropy);
-
-            // Select random ticket holder
-            uint256 remainingWinners = maxWinners - i;
-            uint256 idx = entropy % len;
-            address winner = holders[idx];
-            if (winner == address(0)) {
-                winner = holders[0]; // Fallback for zero-address edge case
-            }
-
-            // Calculate unit allocation for this winner
-            uint256 baseUnits = unitsLeft / remainingWinners;
-            uint256 extraUnits = unitsLeft % remainingWinners;
-            uint256 unitBudget = baseUnits;
-            if (extraUnits != 0 && (entropy % remainingWinners) < extraUnits) {
-                unchecked {
-                    ++unitBudget;
-                }
-            }
-            unitsLeft -= unitBudget;
-
-            // Store winner and categorize by ticket type
-            winners[i] = winner;
-            if (idx >= burnStart) {
-                // Burn-phase ticket holder -> gets gamepieces
-                burnIdx[burnWinners++] = i;
-                totalBurnUnits += unitBudget;
-            } else {
-                // MAP ticket holder -> gets MAPs
-                mapIdx[mapWinners++] = i;
-                totalMapUnits += unitBudget;
-            }
-
-            unchecked {
-                ++i;
-            }
-        }
-
-        // ---------------------------------------------------------------------
-        // Convert burn units to gamepieces (4 MAP units = 1 gamepiece)
-        // ---------------------------------------------------------------------
-
-        uint256 leftoverUnits = totalBurnUnits % 4;
-        uint256 totalTokenQty = totalBurnUnits / 4;
-        totalMapUnits += leftoverUnits; // Remainder goes to MAP pool
-
-        if (burnWinners != 0 && totalTokenQty != 0) {
-            // Distribute gamepieces among burn-ticket winners
-            uint256 baseTokens = totalTokenQty / burnWinners;
-            uint256 extraTokens = totalTokenQty % burnWinners;
-            entropy = _entropyStep(entropy);
-            uint256 offset = entropy % burnWinners; // Random starting point
-
-            for (uint256 i; i < burnWinners; ) {
-                uint256 idx = burnIdx[(i + offset) % burnWinners];
-                uint256 qty = baseTokens + (i < extraTokens ? 1 : 0);
-
-                // Cap at uint32 max (queue function parameter limit)
-                if (qty > type(uint32).max) {
-                    qty = type(uint32).max;
-                }
-                if (qty != 0) {
-                    gamepieces.queueRewardMints(winners[idx], uint32(qty));
-                }
-
-                unchecked {
-                    ++i;
-                }
-            }
-        }
-
-        // ---------------------------------------------------------------------
-        // Distribute MAPs to MAP-ticket winners (or all if no MAP winners)
-        // ---------------------------------------------------------------------
-
-        if (totalMapUnits != 0) {
-            if (mapWinners == 0) {
-                // No MAP-ticket winners - distribute to all winners
-                uint256 baseMaps = totalMapUnits / maxWinners;
-                uint256 extraMaps = totalMapUnits % maxWinners;
-                entropy = _entropyStep(entropy);
-                uint256 offset = entropy % maxWinners;
-
-                for (uint256 i; i < maxWinners; ) {
-                    uint256 idx = (i + offset) % maxWinners;
-                    uint256 qty = baseMaps + (i < extraMaps ? 1 : 0);
-                    if (qty != 0) {
-                        _queueRewardMaps(winners[idx], uint32(qty));
-                    }
-                    unchecked {
-                        ++i;
-                    }
-                }
-            } else {
-                // Distribute to MAP-ticket winners only
-                uint256 baseMaps = totalMapUnits / mapWinners;
-                uint256 extraMaps = totalMapUnits % mapWinners;
-                entropy = _entropyStep(entropy);
-                uint256 offset = entropy % mapWinners;
-
-                for (uint256 i; i < mapWinners; ) {
-                    uint256 idx = mapIdx[(i + offset) % mapWinners];
-                    uint256 qty = baseMaps + (i < extraMaps ? 1 : 0);
-                    if (qty != 0) {
-                        _queueRewardMaps(winners[idx], uint32(qty));
-                    }
-                    unchecked {
-                        ++i;
-                    }
-                }
-            }
-        }
+        emit PlayerCredited(beneficiary, weiAmount);
+        return weiAmount;
     }
 
     /**
@@ -538,26 +498,6 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
         return state;
     }
 
-    /**
-     * @notice Queue MAP rewards for a player.
-     * @dev Adds to pending MAP mints queue, processed during advanceGame.
-     * @param buyer Address to receive MAPs.
-     * @param quantity Number of MAPs to queue.
-     */
-    function _queueRewardMaps(address buyer, uint32 quantity) private {
-        if (quantity == 0) return;
-
-        uint32 owed = playerMapMintsOwed[buyer];
-        if (owed == 0) {
-            // First MAP owed - add to pending queue
-            pendingMapMints.push(buyer);
-        }
-
-        unchecked {
-            // Note: could overflow if same player wins massive quantities repeatedly
-            playerMapMintsOwed[buyer] = owed + quantity;
-        }
-    }
 
     // -------------------------------------------------------------------------
     // Reward Jackpot Dispatch
@@ -569,26 +509,38 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
      * @param poolWei ETH amount for the jackpot.
      * @param lvl Level tied to the jackpot.
      * @param rngWord VRF entropy for jackpot resolution.
-     * @return netSpend Amount of rewardPool consumed (poolWei minus refund).
+     * @return netSpend Amount of future pool consumed (poolWei minus refund).
      * @return claimableDelta ETH credited to claimable balances.
+     * @return lootboxToFuture Lootbox ETH recycled back into future pool.
      */
     function _rewardJackpot(
         uint8 kind,
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
-    ) private returns (uint256 netSpend, uint256 claimableDelta) {
+    )
+        private
+        returns (
+            uint256 netSpend,
+            uint256 claimableDelta,
+            uint256 lootboxToFuture
+        )
+    {
         if (kind == 0) {
             return _runBafJackpot(poolWei, lvl, rngWord);
         }
         if (kind == 1) {
             // Decimator: jackpots contract handles distribution
-            uint256 returnWei = jackpots.runDecimatorJackpot(poolWei, lvl, rngWord);
+            uint256 returnWei = jackpots.runDecimatorJackpot(
+                poolWei,
+                lvl,
+                rngWord
+            );
             // Decimator pool is reserved in claimablePool; per-player credits happen on claim
             uint256 spend = poolWei - returnWei;
-            return (spend, spend);
+            return (spend, spend, 0);
         }
-        return (0, 0);
+        return (0, 0, 0);
     }
 
     // -------------------------------------------------------------------------
@@ -597,32 +549,28 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
 
     /**
      * @notice Execute BAF (Big-Ass Flip) jackpot distribution.
-     * @dev Complex payout logic with MAP purchases.
+     * @dev All winners receive 50% ETH / 50% lootbox-style rewards.
      *
      * @param poolWei Total ETH for BAF distribution.
      * @param lvl Level triggering the BAF.
      * @param rngWord VRF entropy for winner selection.
-     * @return netSpend Amount consumed from rewardPool.
+     * @return netSpend Amount consumed from future pool.
      * @return claimableDelta ETH credited to claimable balances.
+     * @return lootboxToFuture Lootbox ETH recycled into future pool.
      *
-     * ## Winner Categories (via winnerMask)
+     * ## Payout Split (All Winners)
      *
-     * | Category                   | Special Handling                |
-     * |----------------------------|--------------------------------|
-     * | Top winners (low bits)     | Direct ETH                      |
-     * | Scatter winners (high bits)| 50% → MAPs first, rest → ETH    |
-     * | Regular winners            | Direct ETH                      |
+     * | Portion | Reward Type                              |
+     * |---------|------------------------------------------|
+     * | 50%     | Claimable ETH (immediate)                |
+     * | 50%     | Lootbox future tickets (claimWhalePass)  |
      *
-     * ## Scatter Winner Flow
+     * ## Lootbox Flow (Tiered by Amount)
      *
-     * ```
-     * Scatter Amount
-     *     |
-     *     +- Up to 50% of total scatter → MAPs
-     *     |   +- Added to nextPrizePool
-     *     |
-     *     +- Remainder → claimable ETH
-     * ```
+     * **All payouts:**
+     * - Large lootbox payouts defer via `claimWhalePass` for gas safety
+     *
+     * All lootbox ETH added to futurePrizePool.
      *
      * ## Trophy
      *
@@ -632,113 +580,314 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
-    ) private returns (uint256 netSpend, uint256 claimableDelta) {
+    )
+        private
+        returns (
+            uint256 netSpend,
+            uint256 claimableDelta,
+            uint256 lootboxToFuture
+        )
+    {
         // Get winners and payout info from jackpots contract
         (
             address[] memory winnersArr,
             uint256[] memory amountsArr,
-            uint256 winnerMask,
+            ,
             uint256 refund
         ) = jackpots.runBafJackpot(poolWei, lvl, rngWord);
 
-        // Parse winnerMask: high bits = scatter winners (used for MAP routing)
-        uint256 scatterMask = winnerMask >> BAF_MASK_OFFSET;
+        uint256 lootboxTotal;
 
-        uint256 mapPrice = uint256(price) / 4;
+        // ---------------------------------------------------------------------
+        // Process each winner with gas-optimized payout structure
+        // Large winners (≥5% of pool): 50% ETH, 50% lootbox (balanced)
+        // Small winners (<5% of pool): alternate 100% ETH or 100% lootbox (gas-efficient)
+        // ---------------------------------------------------------------------
 
-        // Calculate total scatter amount for MAP budget (50% of scatter → MAPs)
-        uint256 scatterTotal;
+        uint256 largeWinnerThreshold = poolWei / 20; // 5% of total BAF pool
+
         for (uint256 i; i < winnersArr.length; ) {
-            if ((scatterMask & (uint256(1) << i)) != 0) {
-                scatterTotal += amountsArr[i];
+            uint256 amount = amountsArr[i];
+
+            // Large winners: keep 50/50 split for balanced payout
+            if (amount >= largeWinnerThreshold) {
+                uint256 ethPortion = amount / 2;
+                uint256 lootboxPortion = amount - ethPortion;
+
+                // Credit ETH half to claimable balance
+                claimableDelta += _addClaimableEth(
+                    winnersArr[i],
+                    ethPortion,
+                    rngWord
+                );
+
+                // Lootbox half: small amounts awarded immediately, large deferred
+                if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
+                    // Small lootbox: award immediately (2 rolls, probabilistic targeting)
+                    rngWord = _awardJackpotTickets(
+                        winnersArr[i],
+                        lootboxPortion,
+                        lvl,
+                        rngWord
+                    );
+                } else {
+                    // Large lootbox: defer to claim (whale pass equivalent)
+                    // Calculate half-passes with VRF remainder roll for security
+                    // Half-pass = 100 levels × 1 ticket = 100 tickets @ 1.75 ETH
+                    uint256 HALF_WHALE_PASS_PRICE = 1.75 ether /
+                        ContractAddresses.COST_DIVISOR;
+                    uint256 fullHalfPasses = lootboxPortion / HALF_WHALE_PASS_PRICE;
+                    uint256 remainder = lootboxPortion -
+                        (fullHalfPasses * HALF_WHALE_PASS_PRICE);
+
+                    // Probabilistic roll for +1 half pass using VRF RNG
+                    if (remainder > 0) {
+                        rngWord = _entropyStep(rngWord);
+                        uint256 chanceBps = (remainder * 10000) /
+                            HALF_WHALE_PASS_PRICE;
+                        uint256 roll = rngWord % 10000;
+                        if (roll < chanceBps) {
+                            unchecked {
+                                ++fullHalfPasses;
+                            }
+                        }
+                    }
+
+                    // Store half-pass count (safe: ETH supply limits prevent overflow)
+                    whalePassClaims[winnersArr[i]] += fullHalfPasses;
+                }
+                lootboxTotal += lootboxPortion;
             }
+            // Small winners: alternate between 100% ETH and 100% lootbox for gas efficiency
+            else if (i % 2 == 0) {
+                // Even index: 100% ETH (immediate liquidity)
+                claimableDelta += _addClaimableEth(
+                    winnersArr[i],
+                    amount,
+                    rngWord
+                );
+            } else {
+                // Odd index: 100% lootbox (upside exposure)
+                rngWord = _awardJackpotTickets(winnersArr[i], amount, lvl, rngWord);
+                lootboxTotal += amount;
+            }
+
             unchecked {
                 ++i;
             }
         }
-        uint256 mapTarget = scatterTotal / 2; // 50% of scatter can go to MAPs
-        uint256 mapSpent;
-        uint256 mapPrizeDelta;
 
         // ---------------------------------------------------------------------
-        // Process each winner
+        // Move lootbox funds to pools (20% next, 80% future)
         // ---------------------------------------------------------------------
 
-        for (uint256 i; i < winnersArr.length; ) {
-            uint256 amount = amountsArr[i];
-            uint256 ethPortion = amount;
-
-            bool scatterSpecial = (scatterMask & (uint256(1) << i)) != 0;
-
-            if (scatterSpecial) {
-                // -------------------------------------------------------------
-                // Scatter winner: MAPs first, remainder as claimable ETH
-                // -------------------------------------------------------------
-
-                if (mapPrice != 0 && mapSpent < mapTarget) {
-                    uint256 qty = amount / mapPrice;
-                    if (qty != 0) {
-                        if (qty > type(uint32).max) qty = type(uint32).max;
-                        uint256 mapCost = qty * mapPrice;
-
-                        // Queue MAPs and add to next level's prize pool
-                        _queueRewardMaps(winnersArr[i], uint32(qty));
-                        mapPrizeDelta += mapCost;
-
-                        uint256 remainder = amount - mapCost;
-                        ethPortion = remainder;
-                        mapSpent += mapCost;
-                    } else {
-                        // Amount too small for MAPs - all as claimable ETH
-                        ethPortion = amount;
-                    }
-                } else {
-                    // MAP budget exhausted - all as claimable ETH
-                    ethPortion = amount;
-                }
+        if (lootboxTotal != 0) {
+            uint256 toNext = lootboxTotal / 5;
+            if (toNext != 0) {
+                nextPrizePool += toNext;
             }
-            // Else: regular winner - full amount as claimable ETH
-
-            if (ethPortion != 0) {
-                _addClaimableEth(winnersArr[i], ethPortion);
-                claimableDelta += ethPortion;
-            }
-
-            unchecked {
-                ++i;
-            }
+            lootboxToFuture = lootboxTotal - toNext;
         }
 
         // ---------------------------------------------------------------------
         // Mint BAF trophy for first winner
         // ---------------------------------------------------------------------
 
-        if (mapPrizeDelta != 0) {
-            nextPrizePool += mapPrizeDelta;
-        }
-
         if (winnersArr.length != 0) {
-            try trophies.mintBaf(winnersArr[0], lvl) {} catch {}
+            try trophies.mintBaf(winnersArr[0], lvl, 0) {} catch {}
         }
 
         netSpend = poolWei - refund;
-        return (netSpend, claimableDelta);
+        return (netSpend, claimableDelta, lootboxToFuture);
+    }
+
+    /**
+     * @notice Unified jackpot ticket award function for all jackpots.
+     * @dev Awards tickets using two-tier system:
+     *      Small (0.5-5 ETH): Split in half, 2 probabilistic rolls
+     *      Large (> 5 ETH): Whale pass equivalent (100-ticket chunks)
+     *      Uses actual game ticket pricing for target levels.
+     *
+     * @param winner Address to receive rewards.
+     * @param amount ETH amount for ticket conversion.
+     * @param minTargetLevel Minimum target level for tickets.
+     * @param entropy RNG state.
+     * @return Updated entropy state.
+     */
+    function _awardJackpotTickets(
+        address winner,
+        uint256 amount,
+        uint24 minTargetLevel,
+        uint256 entropy
+    ) private returns (uint256) {
+        // Large amounts (> 5 ETH): defer to whale pass claim system
+        if (amount > LOOTBOX_CLAIM_THRESHOLD) {
+            // Calculate half-passes with VRF remainder roll for security
+            // Half-pass = 100 levels × 1 ticket = 100 tickets @ 1.75 ETH
+            uint256 HALF_WHALE_PASS_PRICE = 1.75 ether / ContractAddresses.COST_DIVISOR;
+            uint256 fullHalfPasses = amount / HALF_WHALE_PASS_PRICE;
+            uint256 remainder = amount - (fullHalfPasses * HALF_WHALE_PASS_PRICE);
+
+            // Probabilistic roll for +1 half pass using VRF RNG
+            if (remainder > 0) {
+                entropy = _entropyStep(entropy);
+                uint256 chanceBps = (remainder * 10000) / HALF_WHALE_PASS_PRICE;
+                uint256 roll = entropy % 10000;
+                if (roll < chanceBps) {
+                    unchecked { ++fullHalfPasses; }
+                }
+            }
+
+            // Store half-pass count (safe: ETH supply limits prevent overflow)
+            whalePassClaims[winner] += fullHalfPasses;
+            return entropy;
+        }
+
+        // Very small amounts (≤ 0.5 ETH): single roll
+        if (amount <= 0.5 ether) {
+            return _jackpotTicketRoll(winner, amount, minTargetLevel, entropy);
+        }
+
+        // Medium amounts (0.5-5 ETH): split in half, 2 rolls
+        uint256 halfAmount = amount / 2;
+
+        // First roll
+        entropy = _jackpotTicketRoll(
+            winner,
+            halfAmount,
+            minTargetLevel,
+            entropy
+        );
+
+        // Second roll (with remainder if amount was odd)
+        uint256 secondAmount = amount - halfAmount;
+        entropy = _jackpotTicketRoll(
+            winner,
+            secondAmount,
+            minTargetLevel,
+            entropy
+        );
+
+        return entropy;
+    }
+
+    /**
+     * @notice Resolve a single jackpot ticket roll into ticket awards.
+     * @dev Selects target level based on probability, then awards tickets.
+     *      Uses actual game pricing for the selected target level.
+     * @param winner Address to receive tickets.
+     * @param amount ETH amount for this roll.
+     * @param minTargetLevel Minimum target level (usually current level during SETUP phase).
+     * @param entropy RNG state.
+     * @return Updated entropy state.
+     */
+    function _jackpotTicketRoll(
+        address winner,
+        uint256 amount,
+        uint24 minTargetLevel,
+        uint256 entropy
+    ) private returns (uint256) {
+        entropy = _entropyStep(entropy);
+
+        // Roll for outcome (0-99 for percentage-based probabilities)
+        uint256 roll = entropy % 100;
+        uint24 targetLevel;
+
+        if (roll < 30) {
+            // 30% chance: minimum level ticket
+            targetLevel = minTargetLevel;
+        } else if (roll < 95) {
+            // 65% chance: +1 to +4 levels ahead
+            uint256 offset = 1 + ((entropy / 100) % 4); // 1-4 inclusive
+            targetLevel = minTargetLevel + uint24(offset);
+        } else {
+            // 5% chance: +5 to +50 levels ahead (rare)
+            uint256 offset = 5 + ((entropy / 100) % 46); // 5-50 inclusive
+            targetLevel = minTargetLevel + uint24(offset);
+        }
+
+        // Calculate tickets for target level
+        uint256 targetPrice = _priceForLevel(targetLevel);
+
+        uint256 fullTickets = amount / targetPrice;
+        uint256 remainder = amount - (fullTickets * targetPrice);
+
+        _queueLootboxTickets(
+            winner,
+            targetLevel,
+            fullTickets,
+            remainder,
+            targetPrice,
+            entropy
+        );
+
+        return entropy;
+    }
+
+    /**
+     * @notice Claim deferred whale pass rewards for the caller.
+     * @dev Unified claim function for all large lootbox rewards (>5 ETH).
+     *      Awards deterministic tickets based on pre-calculated half-pass count.
+     *      Tickets start at current level + 1 to avoid giving tickets for an already-active level.
+     */
+    /**
+     * @notice Claim deferred whale pass rewards for a player.
+     * @param player Player address to claim for.
+     */
+    function claimWhalePass(address player) external {
+        _claimWhalePass(player);
+    }
+
+    function _claimWhalePass(address winner) private {
+        uint256 halfPasses = whalePassClaims[winner];
+        if (halfPasses == 0) return;
+
+        // Clear before awarding to avoid double-claiming
+        whalePassClaims[winner] = 0;
+
+        // Award tickets for 100 levels, with N tickets per level (where N = half-passes)
+        // Start level depends on game state:
+        // - BURN phase (state 3): tickets won't be processed this level, start at level+1
+        // - Otherwise: tickets can be processed this level, start at current level
+        // Example: 3 half-passes = 3 tickets/level × 100 levels = 300 tickets
+        // Safe: halfPasses fits in uint32 (ETH supply limits prevent overflow)
+        uint24 startLevel = (gameState == GAME_STATE_BURN) ? level + 1 : level;
+
+        emit WhalePassClaimed(winner, msg.sender, halfPasses, startLevel);
+        _queueTicketRange(winner, startLevel, 100, uint32(halfPasses));
+    }
+
+    /**
+     * @notice Get actual individual ticket price for a target level.
+     * @dev Matches the real game pricing formula from DegenerusGame._priceForLevel().
+     *      Pricing changes at specific points in each 100-level cycle.
+     *
+     * @param targetLevel Level to query.
+     * @return Price in wei per individual ticket at that level.
+     */
+    function _priceForLevel(uint24 targetLevel) private pure returns (uint256) {
+        // First 10 levels (0-9) start at lower price
+        if (targetLevel < 10)
+            return 0.025 ether / ContractAddresses.COST_DIVISOR;
+
+        uint256 cycleOffset = targetLevel % 100;
+
+        // Price changes at specific points in the 100-level cycle
+        if (cycleOffset == 0) {
+            return 0.25 ether / ContractAddresses.COST_DIVISOR; // Levels 100, 200, 300...
+        } else if (cycleOffset >= 80) {
+            return 0.125 ether / ContractAddresses.COST_DIVISOR; // Levels 80-99, 180-199...
+        } else if (cycleOffset >= 40) {
+            return 0.1 ether / ContractAddresses.COST_DIVISOR; // Levels 40-79, 140-179...
+        } else {
+            // Levels 10-39, 101-139... = 0.05 ether
+            return 0.05 ether / ContractAddresses.COST_DIVISOR;
+        }
     }
 
     // -------------------------------------------------------------------------
     // Utility Functions
     // -------------------------------------------------------------------------
-
-    /**
-     * @notice Propagate revert data from a failed delegatecall.
-     * @param reason Revert data from the failed call.
-     */
-    function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert();
-        assembly ("memory-safe") {
-            revert(add(32, reason), mload(reason))
-        }
-    }
 
     /**
      * @notice Calculate exterminator share in basis points.
@@ -748,14 +897,19 @@ contract DegenerusGameEndgameModule is DegenerusGameStorage {
      * @param rngWord VRF entropy for randomization.
      * @return Exterminator share in basis points (2000-4000).
      */
-    function _exterminatorShareBps(uint24 prevLevel, uint256 rngWord) private pure returns (uint16) {
+    function _exterminatorShareBps(
+        uint24 prevLevel,
+        uint256 rngWord
+    ) private pure returns (uint16) {
         // Big-ex levels: fixed 40% (levels 14, 24, 34... but not 4)
         if (prevLevel % 10 == 4 && prevLevel != 4) {
             return 4000;
         }
 
         // Random 20-40% in 1% steps
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, prevLevel, "ex_share")));
+        uint256 seed = uint256(
+            keccak256(abi.encode(rngWord, prevLevel, "ex_share"))
+        );
         uint256 roll = seed % 21; // 0-20 inclusive
         return uint16(2000 + roll * 100); // 20-40%
     }

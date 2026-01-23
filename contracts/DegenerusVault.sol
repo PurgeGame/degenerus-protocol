@@ -2,8 +2,67 @@
 pragma solidity ^0.8.26;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
+import {IDegenerusGame, MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
+
+enum PurchaseKind {
+    Player,
+    Ticket
+}
+
+struct PurchaseParams {
+    uint256 quantity;
+    PurchaseKind kind;
+    MintPaymentKind payKind;
+    bool payInCoin;
+    bytes32 affiliateCode;
+}
+
+interface IDegenerusGamePlayerActions {
+    function advanceGame(uint32 cap) external;
+    function purchase(
+        address buyer,
+        uint256 gamepieceQuantity,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind
+    ) external payable;
+    function openLootBox(address player, uint48 lootboxIndex) external;
+    function burnTokens(address player, uint256[] calldata tokenIds) external;
+    function claimWinnings(address player) external;
+    function claimWinningsStethFirst() external;
+    function claimWhalePass(address player) external;
+    function setAutoRebuy(address player, bool enabled) external;
+    function setAutoRebuyKeepMultiple(address player, uint256 keepMultiple) external;
+    function setAfKingMode(
+        address player,
+        bool enabled,
+        uint256 ethKeepMultiple,
+        uint256 coinKeepMultiple
+    ) external;
+    function setOperatorApproval(address operator, bool approved) external;
+    function claimableWinningsOf(address player) external view returns (uint256);
+}
+
+interface IDegenerusGamepiecesPlayerActions {
+    function purchase(PurchaseParams calldata params) external payable;
+}
+
+interface IDegenerusCoinPlayerActions {
+    function depositCoinflip(address player, uint256 amount) external;
+    function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
+    function claimCoinflipsKeepMultiple(address player, uint256 multiples) external returns (uint256 claimed);
+    function previewClaimCoinflips(address player) external view returns (uint256 mintable);
+    function decimatorBurn(address player, uint256 amount) external;
+    function setCoinflipAutoRebuy(address player, bool enabled, uint256 keepMultiple) external;
+    function setCoinflipAutoRebuyKeepMultiple(address player, uint256 keepMultiple) external;
+}
+
+interface IDegenerusJackpotsPlayerActions {
+    function claimDecimatorJackpot(uint24 lvl) external;
+}
 
 /*
 +========================================================================================================+
@@ -54,7 +113,7 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 |  |                                                                                                   | |
 |  |   Formula: claimAmount = (reserveBalance * sharesBurned) / totalShareSupply                       | |
 |  |                                                                                                   | |
-|  |   REFILL MECHANISM: If user burns ALL shares, 1B new shares are minted to them.                   | |
+|  |   REFILL MECHANISM: If user burns ALL shares, 1T new shares are minted to them.                   | |
 |  |   This prevents division-by-zero and keeps the share token alive.                                 | |
 |  +---------------------------------------------------------------------------------------------------+ |
 |                                                                                                        |
@@ -104,8 +163,8 @@ contract DegenerusVaultShare {
     string public symbol;
     /// @notice Token decimals (always 18)
     uint8 public constant decimals = 18;
-    /// @notice Initial share supply (1 billion tokens)
-    uint256 public constant INITIAL_SUPPLY = 1_000_000_000 * 1e18;
+    /// @notice Initial share supply (1 trillion tokens)
+    uint256 public constant INITIAL_SUPPLY = 1_000_000_000_000 * 1e18;
 
     /// @notice Total supply of shares
     uint256 public totalSupply;
@@ -130,7 +189,6 @@ contract DegenerusVaultShare {
     /// @param name_ Token name
     /// @param symbol_ Token symbol
     constructor(string memory name_, string memory symbol_) {
-        if (ContractAddresses.CREATOR == address(0) || ContractAddresses.VAULT == address(0)) revert ZeroAddress();
         name = name_;
         symbol = symbol_;
         totalSupply = INITIAL_SUPPLY;
@@ -236,10 +294,14 @@ contract DegenerusVault {
     // ---------------------------------------------------------------------
     /// @dev Caller is not authorized (not ContractAddresses.GAME contract)
     error Unauthorized();
+    /// @dev Caller does not control enough DGVE to manage vault gameplay.
+    error NotVaultOwner();
     /// @dev Insufficient balance, allowance, or reserve for operation
     error Insufficient();
     /// @dev ETH or token transfer failed
     error TransferFailed();
+    /// @dev Caller is not approved to act for the player.
+    error NotApproved();
 
     // ---------------------------------------------------------------------
     // EVENTS
@@ -270,6 +332,10 @@ contract DegenerusVault {
         uint256 stEthOut,
         uint256 coinOut
     );
+    /// @notice Emitted when DGNRS shares are minted as a reward
+    /// @param to Recipient of the reward
+    /// @param amount Amount of DGNRS shares minted
+    event DgnrsReward(address indexed to, uint256 amount);
 
     // ---------------------------------------------------------------------
     // CONSTANTS
@@ -281,7 +347,7 @@ contract DegenerusVault {
     /// @notice Vault metadata decimals
     uint8 public constant decimals = 18;
     /// @dev Supply minted when all shares are burned (keeps token alive)
-    uint256 private constant REFILL_SUPPLY = 1_000_000_000 * 1e18;
+    uint256 private constant REFILL_SUPPLY = 1_000_000_000_000 * 1e18;
     /// @dev DGVA share of deposits: 20% (amount / 5)
     uint256 private constant DGVA_SPLIT_DIVISOR = 5;
 
@@ -292,12 +358,26 @@ contract DegenerusVault {
     DegenerusVaultShare private immutable coinShare;
     /// @notice Share token for ETH+stETH claims (symbol: DGVE)
     DegenerusVaultShare private immutable ethShare;
-    /// @notice Share token for 20% multi-asset claims (symbol: DGVA)
+    /// @notice Share token for 20% multi-asset claims (symbol: DGNRS)
     DegenerusVaultShare private immutable allShare;
 
     // ---------------------------------------------------------------------
     // WIRING (Constants)
     // ---------------------------------------------------------------------
+    /// @dev Game contract for operator approvals
+    IDegenerusGame internal constant game = IDegenerusGame(ContractAddresses.GAME);
+    /// @dev Game contract for player actions
+    IDegenerusGamePlayerActions internal constant gamePlayer =
+        IDegenerusGamePlayerActions(ContractAddresses.GAME);
+    /// @dev Gamepieces contract for player actions
+    IDegenerusGamepiecesPlayerActions internal constant gamepiecesPlayer =
+        IDegenerusGamepiecesPlayerActions(ContractAddresses.GAMEPIECES);
+    /// @dev Coin contract for player actions
+    IDegenerusCoinPlayerActions internal constant coinPlayer =
+        IDegenerusCoinPlayerActions(ContractAddresses.COIN);
+    /// @dev Jackpots contract for player claims
+    IDegenerusJackpotsPlayerActions internal constant jackpotsPlayer =
+        IDegenerusJackpotsPlayerActions(ContractAddresses.JACKPOTS);
     /// @dev BURNIE token address (implements IVaultCoin)
     IVaultCoin internal constant coinToken = IVaultCoin(ContractAddresses.COIN);
     /// @dev stETH token address (Lido)
@@ -312,6 +392,7 @@ contract DegenerusVault {
     /// @dev Tracked total BURNIE allowance (for split accounting)
     uint256 private coinTracked;
 
+
     // ---------------------------------------------------------------------
     // MODIFIERS
     // ---------------------------------------------------------------------
@@ -321,16 +402,33 @@ contract DegenerusVault {
         _;
     }
 
+    modifier onlyVaultOwner() {
+        if (!_isVaultOwner(msg.sender)) revert NotVaultOwner();
+        _;
+    }
+
+    function _requireApproved(address player) private view {
+        if (msg.sender != player && !game.isOperatorApproved(player, msg.sender)) {
+            revert NotApproved();
+        }
+    }
+
+    function _isVaultOwner(address account) private view returns (bool) {
+        uint256 supply = ethShare.totalSupply();
+        uint256 balance = ethShare.balanceOf(account);
+        return balance * 10 > supply * 3;
+    }
+
     // ---------------------------------------------------------------------
     // CONSTRUCTOR
     // ---------------------------------------------------------------------
     /// @notice Deploy the vault with all required addresses.
     /// @dev Deploys the share tokens using precomputed addresses from ContractAddresses.
     constructor() {
-        // Deploy share class tokens - creator receives initial 1B supply of each
+        // Deploy share class tokens - creator receives initial 1T supply of each
         coinShare = new DegenerusVaultShare("Degenerus Vault Burnie", "DGVB");
         ethShare = new DegenerusVaultShare("Degenerus Vault Eth", "DGVE");
-        allShare = new DegenerusVaultShare("Degenerus Vault All", "DGVA");
+        allShare = new DegenerusVaultShare("Degenerus Stonk", "DGNRS");
 
         uint256 coinAllowance = coinToken.vaultMintAllowance();
         coinTracked = coinAllowance;
@@ -374,17 +472,143 @@ contract DegenerusVault {
     }
 
     // ---------------------------------------------------------------------
+    // DGNRS REWARD MINTING (Game-Only)
+    // ---------------------------------------------------------------------
+
+    /// @notice Mint DGNRS shares as a reward to a recipient
+    /// @dev Game contract only. Allows rewarding players with vault shares.
+    ///      DGNRS shares represent claims on 20% of vault's ETH+stETH and BURNIE reserves.
+    /// @param to Recipient address
+    /// @param amount Amount of DGNRS shares to mint (18 decimals)
+    function mintDgnrsReward(address to, uint256 amount) external onlyGame {
+        if (amount == 0) return;
+        allShare.vaultMint(to, amount);
+        emit DgnrsReward(to, amount);
+    }
+
+    // ---------------------------------------------------------------------
+    // GAMEPLAY (Vault Owner)
+    // ---------------------------------------------------------------------
+
+    function gameAdvance(uint32 cap) external onlyVaultOwner {
+        gamePlayer.advanceGame(cap);
+    }
+
+    function gamePurchase(
+        uint256 gamepieceQuantity,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 ethValue
+    ) external payable onlyVaultOwner {
+        uint256 totalValue = _combinedValue(ethValue);
+        gamePlayer.purchase{value: totalValue}(
+            address(this),
+            gamepieceQuantity,
+            ticketQuantity,
+            lootBoxAmount,
+            affiliateCode,
+            payKind
+        );
+    }
+
+    function gameOpenLootBox(uint48 lootboxIndex) external onlyVaultOwner {
+        gamePlayer.openLootBox(address(this), lootboxIndex);
+    }
+
+    function gameBurnTokens(uint256[] calldata tokenIds) external onlyVaultOwner {
+        gamePlayer.burnTokens(address(this), tokenIds);
+    }
+
+    function gameClaimWinnings() external onlyVaultOwner {
+        gamePlayer.claimWinningsStethFirst();
+    }
+
+    function gameClaimWhalePass() external onlyVaultOwner {
+        gamePlayer.claimWhalePass(address(this));
+    }
+
+    function gameSetAutoRebuy(bool enabled) external onlyVaultOwner {
+        gamePlayer.setAutoRebuy(address(this), enabled);
+    }
+
+    function gameSetAutoRebuyKeepMultiple(uint256 keepMultiple) external onlyVaultOwner {
+        gamePlayer.setAutoRebuyKeepMultiple(address(this), keepMultiple);
+    }
+
+    function gameSetAfKingMode(
+        bool enabled,
+        uint256 ethKeepMultiple,
+        uint256 coinKeepMultiple
+    ) external onlyVaultOwner {
+        gamePlayer.setAfKingMode(address(this), enabled, ethKeepMultiple, coinKeepMultiple);
+    }
+
+    function gameSetOperatorApproval(address operator, bool approved) external onlyVaultOwner {
+        gamePlayer.setOperatorApproval(operator, approved);
+    }
+
+    function gamepiecesPurchase(
+        PurchaseParams calldata params,
+        uint256 ethValue
+    ) external payable onlyVaultOwner {
+        uint256 totalValue = _combinedValue(ethValue);
+        gamepiecesPlayer.purchase{value: totalValue}(params);
+    }
+
+    function coinDepositCoinflip(uint256 amount) external onlyVaultOwner {
+        coinPlayer.depositCoinflip(address(this), amount);
+    }
+
+    function coinClaimCoinflips(uint256 amount) external onlyVaultOwner returns (uint256 claimed) {
+        return coinPlayer.claimCoinflips(address(this), amount);
+    }
+
+    function coinClaimCoinflipsKeepMultiple(
+        uint256 multiples
+    ) external onlyVaultOwner returns (uint256 claimed) {
+        return coinPlayer.claimCoinflipsKeepMultiple(address(this), multiples);
+    }
+
+    function coinDecimatorBurn(uint256 amount) external onlyVaultOwner {
+        coinPlayer.decimatorBurn(address(this), amount);
+    }
+
+    function coinSetAutoRebuy(bool enabled, uint256 keepMultiple) external onlyVaultOwner {
+        coinPlayer.setCoinflipAutoRebuy(address(this), enabled, keepMultiple);
+    }
+
+    function coinSetAutoRebuyKeepMultiple(uint256 keepMultiple) external onlyVaultOwner {
+        coinPlayer.setCoinflipAutoRebuyKeepMultiple(address(this), keepMultiple);
+    }
+
+    function jackpotsClaimDecimator(uint24 lvl) external onlyVaultOwner {
+        jackpotsPlayer.claimDecimatorJackpot(lvl);
+    }
+
+    // ---------------------------------------------------------------------
     // CLAIMS (Burn Shares to Redeem Assets)
     // ---------------------------------------------------------------------
 
     /// @notice Burn DGVB (coinShare) tokens to redeem proportional BURNIE
     /// @dev Formula: coinOut = (DGVB reserve * sharesBurned) / totalSupply
-    ///      If burning entire supply, caller receives new 1B shares (refill mechanism).
+    ///      If burning entire supply, caller receives new 1T shares (refill mechanism).
+    /// @param player Player address to burn for (address(0) = msg.sender).
     /// @param amount Amount of DGVB shares to burn
-    /// @return coinOut Amount of BURNIE minted to caller
-    function burnCoin(uint256 amount) external returns (uint256 coinOut) {
+    /// @return coinOut Amount of BURNIE minted to player
+    function burnCoin(address player, uint256 amount) external returns (uint256 coinOut) {
+        if (player == address(0)) {
+            player = msg.sender;
+        } else if (player != msg.sender) {
+            _requireApproved(player);
+        }
+        return _burnCoinFor(player, amount);
+    }
+
+    function _burnCoinFor(address player, uint256 amount) private returns (uint256 coinOut) {
         DegenerusVaultShare share = coinShare;
-        uint256 bal = share.balanceOf(msg.sender);
+        uint256 bal = share.balanceOf(player);
         if (amount == 0 || amount > bal) revert Insufficient();
 
         _syncCoinReserves();
@@ -392,39 +616,93 @@ contract DegenerusVault {
         uint256 coinBal = coinTracked;
         if (coinBal < dgvaCoinReserve) revert Insufficient();
         coinBal -= dgvaCoinReserve;
+        uint256 vaultBal = coinToken.balanceOf(address(this));
+        uint256 claimable = coinPlayer.previewClaimCoinflips(address(this));
+        if (vaultBal != 0 || claimable != 0) {
+            coinBal += vaultBal + claimable;
+        }
         coinOut = (coinBal * amount) / supplyBefore; // Floor division - dust remains
 
         // CEI: State changes before external calls
-        share.vaultBurn(msg.sender, amount);
+        share.vaultBurn(player, amount);
         if (supplyBefore == amount) {
-            // Refill: burning entire supply grants new 1B shares to prevent division-by-zero
-            share.vaultMint(msg.sender, REFILL_SUPPLY);
-        }
-        if (coinOut != 0) {
-            coinTracked -= coinOut;
+            // Refill: burning entire supply grants new 1T shares to prevent division-by-zero
+            share.vaultMint(player, REFILL_SUPPLY);
         }
 
-        emit Claim(msg.sender, amount, 0, 0, coinOut);
-        if (coinOut != 0) coinToken.vaultMintTo(msg.sender, coinOut);
+        emit Claim(player, amount, 0, 0, coinOut);
+        if (coinOut != 0) {
+            uint256 remaining = coinOut;
+            if (vaultBal != 0) {
+                uint256 payBal = remaining <= vaultBal ? remaining : vaultBal;
+                if (payBal != 0) {
+                    remaining -= payBal;
+                    if (!coinToken.transfer(player, payBal)) revert TransferFailed();
+                }
+            }
+
+            if (remaining != 0 && claimable != 0) {
+                uint256 claimed = coinPlayer.claimCoinflips(address(this), remaining);
+                if (claimed != 0) {
+                    remaining -= claimed;
+                    if (!coinToken.transfer(player, claimed)) revert TransferFailed();
+                }
+            }
+
+            if (remaining != 0) {
+                coinTracked -= remaining;
+                coinToken.vaultMintTo(player, remaining);
+            }
+        }
     }
 
     /// @notice Burn DGVE (ethShare) tokens to redeem proportional ETH and stETH
     /// @dev ETH is preferred over stETH (uses ETH first, then stETH for remainder).
     ///      Formula: claimValue = (combinedReserve) * sharesBurned / totalSupply
-    ///      If burning entire supply, caller receives new 1B shares (refill mechanism).
+    ///      If burning entire supply, caller receives new 1T shares (refill mechanism).
+    /// @param player Player address to burn for (address(0) = msg.sender).
     /// @param amount Amount of DGVE shares to burn
-    /// @return ethOut Amount of ETH sent to caller
-    /// @return stEthOut Amount of stETH sent to caller
-    function burnEth(uint256 amount) external returns (uint256 ethOut, uint256 stEthOut) {
+    /// @return ethOut Amount of ETH sent to player
+    /// @return stEthOut Amount of stETH sent to player
+    function burnEth(
+        address player,
+        uint256 amount
+    ) external returns (uint256 ethOut, uint256 stEthOut) {
+        if (player == address(0)) {
+            player = msg.sender;
+        } else if (player != msg.sender) {
+            _requireApproved(player);
+        }
+        return _burnEthFor(player, amount);
+    }
+
+    function _burnEthFor(
+        address player,
+        uint256 amount
+    ) private returns (uint256 ethOut, uint256 stEthOut) {
         DegenerusVaultShare share = ethShare;
-        uint256 bal = share.balanceOf(msg.sender);
+        uint256 bal = share.balanceOf(player);
         if (amount == 0 || amount > bal) revert Insufficient();
 
         (uint256 ethBal, uint256 stBal, uint256 combined) = _syncEthReserves();
+        uint256 claimable = gamePlayer.claimableWinningsOf(address(this));
+        if (claimable <= 1) {
+            claimable = 0;
+        } else {
+            unchecked {
+                claimable -= 1;
+            }
+        }
         uint256 supplyBefore = share.totalSupply();
         uint256 dgvaReserve = dgvaEthReserve;
-        uint256 reserve = combined - dgvaReserve;
+        uint256 reserve = combined + claimable - dgvaReserve;
         uint256 claimValue = (reserve * amount) / supplyBefore; // Floor division
+
+        if (claimValue > ethBal + stBal && claimable != 0) {
+            gamePlayer.claimWinnings(address(this));
+            ethBal = address(this).balance;
+            stBal = _stethBalance();
+        }
 
         // ETH-first payout strategy (saves gas vs stETH transfer)
         if (claimValue <= ethBal) {
@@ -436,29 +714,45 @@ contract DegenerusVault {
         }
 
         // CEI: State changes before external calls (ETH send has callback risk)
-        share.vaultBurn(msg.sender, amount);
+        share.vaultBurn(player, amount);
         if (supplyBefore == amount) {
-            share.vaultMint(msg.sender, REFILL_SUPPLY);
+            share.vaultMint(player, REFILL_SUPPLY);
         }
 
-        emit Claim(msg.sender, amount, ethOut, stEthOut, 0);
+        emit Claim(player, amount, ethOut, stEthOut, 0);
 
         // External calls last (ETH balance already reduced atomically with send)
-        if (ethOut != 0) _payEth(msg.sender, ethOut);
-        if (stEthOut != 0) _paySteth(msg.sender, stEthOut);
+        if (ethOut != 0) _payEth(player, ethOut);
+        if (stEthOut != 0) _paySteth(player, stEthOut);
     }
 
     /// @notice Burn DGVA (allShare) tokens to redeem proportional ETH/stETH and BURNIE
     /// @dev ETH/stETH claims are limited to DGVA's combined reserve (20% of deposits).
     ///      Formula per asset: out = (reserve * sharesBurned) / totalSupply
-    ///      If burning entire supply, caller receives new 1B shares (refill mechanism).
+    ///      If burning entire supply, caller receives new 1T shares (refill mechanism).
+    /// @param player Player address to burn for (address(0) = msg.sender).
     /// @param amount Amount of DGVA shares to burn
-    /// @return ethOut Amount of ETH sent to caller
-    /// @return stEthOut Amount of stETH sent to caller
-    /// @return coinOut Amount of BURNIE minted to caller
-    function burnAll(uint256 amount) external returns (uint256 ethOut, uint256 stEthOut, uint256 coinOut) {
+    /// @return ethOut Amount of ETH sent to player
+    /// @return stEthOut Amount of stETH sent to player
+    /// @return coinOut Amount of BURNIE minted to player
+    function burnAll(
+        address player,
+        uint256 amount
+    ) external returns (uint256 ethOut, uint256 stEthOut, uint256 coinOut) {
+        if (player == address(0)) {
+            player = msg.sender;
+        } else if (player != msg.sender) {
+            _requireApproved(player);
+        }
+        return _burnAllFor(player, amount);
+    }
+
+    function _burnAllFor(
+        address player,
+        uint256 amount
+    ) private returns (uint256 ethOut, uint256 stEthOut, uint256 coinOut) {
         DegenerusVaultShare share = allShare;
-        uint256 bal = share.balanceOf(msg.sender);
+        uint256 bal = share.balanceOf(player);
         if (amount == 0 || amount > bal) revert Insufficient();
 
         (uint256 ethBal, uint256 stBal, ) = _syncEthReserves();
@@ -480,9 +774,9 @@ contract DegenerusVault {
         }
 
         // CEI: State changes before external calls
-        share.vaultBurn(msg.sender, amount);
+        share.vaultBurn(player, amount);
         if (supplyBefore == amount) {
-            share.vaultMint(msg.sender, REFILL_SUPPLY);
+            share.vaultMint(player, REFILL_SUPPLY);
         }
         if (claimValue != 0) {
             dgvaEthReserve = ethReserve - claimValue;
@@ -492,11 +786,11 @@ contract DegenerusVault {
             coinTracked -= coinOut;
         }
 
-        emit ClaimAll(msg.sender, amount, ethOut, stEthOut, coinOut);
+        emit ClaimAll(player, amount, ethOut, stEthOut, coinOut);
 
-        if (ethOut != 0) _payEth(msg.sender, ethOut);
-        if (stEthOut != 0) _paySteth(msg.sender, stEthOut);
-        if (coinOut != 0) coinToken.vaultMintTo(msg.sender, coinOut);
+        if (ethOut != 0) _payEth(player, ethOut);
+        if (stEthOut != 0) _paySteth(player, stEthOut);
+        if (coinOut != 0) coinToken.vaultMintTo(player, coinOut);
     }
 
     // ---------------------------------------------------------------------
@@ -597,8 +891,35 @@ contract DegenerusVault {
     }
 
     // ---------------------------------------------------------------------
+    // DGNRS INFO (Public Views)
+    // ---------------------------------------------------------------------
+
+    /// @notice Get the total supply of DGNRS shares
+    /// @return Total supply of DGNRS (allShare) tokens
+    function allShareSupply() external view returns (uint256) {
+        return allShare.totalSupply();
+    }
+
+    /// @notice Get ETH+stETH reserve backing DGNRS claims
+    /// @return ETH reserve for DGNRS (20% of deposits)
+    function dgnrsEthReserve() external view returns (uint256) {
+        return dgvaEthReserve;
+    }
+
+    /// @notice Get BURNIE reserve backing DGNRS claims
+    /// @return BURNIE reserve for DGNRS (20% of virtual deposits)
+    function dgnrsCoinReserve() external view returns (uint256) {
+        return dgvaCoinReserve;
+    }
+
+    // ---------------------------------------------------------------------
     // INTERNAL HELPERS
     // ---------------------------------------------------------------------
+    /// @dev Combine msg.value with an additional vault-funded amount.
+    function _combinedValue(uint256 extraValue) private view returns (uint256 totalValue) {
+        totalValue = msg.value + extraValue;
+        if (totalValue > address(this).balance) revert Insufficient();
+    }
 
     /// @dev Clamp DGVA's ETH+stETH reserve to actual balance; returns balances to avoid re-reading
     function _syncEthReserves() private returns (uint256 ethBal, uint256 stBal, uint256 combined) {
@@ -640,6 +961,11 @@ contract DegenerusVault {
             dgvaReserve = allowance;
         }
         mainReserve = allowance - dgvaReserve;
+        uint256 vaultBal = coinToken.balanceOf(address(this));
+        uint256 claimable = coinPlayer.previewClaimCoinflips(address(this));
+        if (vaultBal != 0 || claimable != 0) {
+            mainReserve += vaultBal + claimable;
+        }
     }
 
     /// @dev View helper for ETH+stETH reserves (stETH rebase yield goes to DGVE)
@@ -651,7 +977,15 @@ contract DegenerusVault {
         if (dgvaReserve > combined) {
             dgvaReserve = combined;
         }
-        mainReserve = combined - dgvaReserve;
+        uint256 claimable = gamePlayer.claimableWinningsOf(address(this));
+        if (claimable > 1) {
+            unchecked {
+                claimable -= 1;
+            }
+        } else {
+            claimable = 0;
+        }
+        mainReserve = combined - dgvaReserve + claimable;
     }
 
     /// @dev Get this contract's stETH balance

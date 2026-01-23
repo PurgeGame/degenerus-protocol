@@ -1,0 +1,162 @@
+{
+  "BurnieCoin.sol": {
+    "hash": "9ad613aa44ee04410b7f1077884d90e1c6d51f7ef779369ed66e9d6a0b7b4aea",
+    "audited": "2026-01-21T01:02:16.112348"
+  },
+  "ContractAddresses.sol": {
+    "hash": "d18a174087c2f4abaaf70ead0e36b83aad31e2151ed4d2ada06cc2a24694a3a9",
+    "audited": "2026-01-21T01:02:33.129607"
+  },
+  "DegenerusAdmin.sol": {
+    "hash": "4b6bb7973046c8bdfbaa0df1b394d68bfcd6a953065c3fb31945efae29fb0dde",
+    "audited": "2026-01-21T01:03:11.221867"
+  },
+  "DegenerusAffiliate.sol": {
+    "hash": "876d3e94c07920088f71fedb8aad642f8596208964f6f24a295c0e7ab752b444",
+    "audited": "2026-01-21T01:03:39.774146"
+  },
+  "DegenerusGame.sol": {
+    "hash": "31a2341a02a817e1883670b2a52144b14ccc5b50c0b03d2f5f37493063273095",
+    "audited": "2026-01-21T01:07:06.006143"
+  },
+  "DegenerusGamepieces.sol": {
+    "hash": "f704cf7adcfdafa30c5315a2f57d2447cd4963e492a00142dcdfad7bf77c59fd",
+    "audited": "2026-01-21T01:09:25.783822"
+  },
+  "DegenerusJackpots.sol": {
+    "hash": "d72a8c5b2d039ceda7b0e2bcae91f1e33d0cf970d2d09763ba2b94fb13a46af6",
+    "audited": "2026-01-21T01:11:28.785498"
+  },
+  "DegenerusLazyPass.sol": {
+    "hash": "e0c4f6ab77eceef4c60b9917cf453972a3fdf9197db2f76da1cc85ea33eb72b0",
+    "audited": "2026-01-21T01:12:43.611825"
+  },
+  "DegenerusQuests.sol": {
+    "hash": "797704ad555166962e6d89eaa994a4d948039b5044a8f82e1d7a9953fd87d875",
+    "audited": "2026-01-21T01:13:17.014600"
+  },
+  "DegenerusStonk.sol": {
+    "hash": "5faaca03ccdd7fe6eb8165fa186caaf14d4fefacce439668ec2217f99b8d3ee5",
+    "audited": "2026-01-21T01:16:49.988763"
+  },
+  "DegenerusTraitUtils.sol": {
+    "hash": "6c9a02b65cc1cc6fa809c6b211ae6af45e84e84df1837ef4700ed5278fd393e7",
+    "audited": "2026-01-21T01:17:13.706121"
+  },
+  "DegenerusTrophies.sol": {
+    "hash": "73e6210765b1c44c505c42f65e740e8ceb14b2b306834ed35b81eacd31ce7baf",
+    "audited": "2026-01-21T01:17:40.369412"
+  },
+  "DegenerusVault.sol": {
+    "hash": "495eff3ae98a7d750e22e454f2cd241b25d2354ab7ba6f23ce14ca918a8b530b",
+    "audited": "2026-01-21T01:18:30.658524"
+  },
+  "GamepieceRendererRouter.sol": {
+    "hash": "7ba3ff5b18a35ccc6877def0103d23d1708d5a1f768774d4e2cb3ec7e9d4922d",
+    "audited": "2026-01-21T01:18:50.413274"
+  },
+  "GenericRendererRouter.sol": {
+    "hash": "d25bfd36f78aeace0b4ac801b40d54c8a46d79f072f444bddf9b761c9e00ee44",
+    "audited": "2026-01-21T01:19:03.393122"
+  },
+  "IconColorRegistry.sol": {
+    "hash": "700ec30a7121909395b88ed6b35fd96264f81c573a915fa86fbbf35c14bd81b8",
+    "audited": "2026-01-21T01:19:29.916918"
+  },
+  "IconRendererRegular32.sol": {
+    "hash": "ef70aca46966e236421286ee4ddafcf3a68d599b3406e0dd414435b8b1c0d5dc",
+    "audited": "2026-01-21T01:20:20.130575"
+  },
+  "IconRendererRegular32Assets.sol": {
+    "hash": "2659078cfc237bae31fa2267a580b9d2adbf85dd6a28ee812fbfce749787a678",
+    "audited": "2026-01-21T01:20:33.799317"
+  },
+  "IconRendererTrophy32.sol": {
+    "hash": "b7e341be9df8f36246fd4c176e232a8490cfdf18eaf2d261a3b71c3170bdf4dc",
+    "audited": "2026-01-21T01:20:52.906534"
+  },
+  "IconRendererTrophy32Svg.sol": {
+    "hash": "5b3c73a88df6cc3c1c934c49d2ab869a2faa68797fb8fa3eb45224b10e2cf0b5",
+    "audited": "2026-01-21T01:21:17.363262"
+  },
+  "Icons32Data.sol": {
+    "hash": "f6e2d5aa1d35e7a5e0e4d89f9fb3887fa63a4424a4ca6a5f74ca4f7e01de8040",
+    "audited": "2026-01-21T01:21:44.748460"
+  },
+  "RendererRouterBase.sol": {
+    "hash": "db1ce52b388711fef8920dd62ad308cc5c5a7cdae58c8e52d57f0ba3ba64eab5",
+    "audited": "2026-01-21T01:22:03.968710"
+  },
+  "TrophyRendererRouter.sol": {
+    "hash": "7fef1c32163b15cf515a9fbc633fd8ae1921bab5535a1d5164f542b37d3445b9",
+    "audited": "2026-01-21T01:22:28.409810"
+  },
+  "TrophySvgAssets.sol": {
+    "hash": "b92e28a130944ef92973dd7dff09d073a92f2a66f3935022fe4ae86ea9dac300",
+    "audited": "2026-01-21T01:22:43.354730"
+  },
+  "WrappedWrappedXRP.sol": {
+    "hash": "1ee1455914ca75ae84a07060acdfecf13bb0dfc25f56c7bd63975f93525323a0",
+    "audited": "2026-01-21T01:23:09.598088"
+  },
+  "helpers/AfKingHelper.sol": {
+    "hash": "2ebb4638fbaa3da3ba7e988772e389de8e6a82f96ed04c4712afc87bf01cf69b",
+    "audited": "2026-01-21T01:23:39.506304"
+  },
+  "helpers/AfKingIntegration.sol": {
+    "hash": "36e249d1c7b770830859ef6c1d7699c4e7391fe821d924283d532e16a913772f",
+    "audited": "2026-01-21T01:24:24.812005"
+  },
+  "helpers/DegenerusGamePlayerFull.sol": {
+    "hash": "dabfc3214fe91beaffdb3356f6993d98fb3f8ed4edac22fb5ec3857f924d57db",
+    "audited": "2026-01-21T01:24:50.892088"
+  },
+  "helpers/DegenerusGamePlayerTemplate.sol": {
+    "hash": "ca9cc660d3c2cf42f993d29800c1ca73ab508420ddf5d48b7f7485a0a0d85686",
+    "audited": "2026-01-21T01:25:09.659632"
+  },
+  "libraries/ColorResolver.sol": {
+    "hash": "e12da593e92831c6f5e55bf9c6e2276f3e1afd7284ed04bbbb6f8ca8c4964965",
+    "audited": "2026-01-21T01:25:34.265645"
+  },
+  "libraries/RendererLibrary.sol": {
+    "hash": "98b78e71cd50ad10d257e927e663391239b9c9cc84852344952e0ce25d6eacf8",
+    "audited": "2026-01-21T01:25:46.756530"
+  },
+  "modules/DegenerusGameAdvanceModule.sol": {
+    "hash": "9cc16e3ec3ce5a5d490cadc5f92f49d34be3b0aa089ef75cbb7e03cc34687848",
+    "audited": "2026-01-21T01:29:14.912899"
+  },
+  "modules/DegenerusGameDecimatorModule.sol": {
+    "hash": "6fdb31e23e8fe24bdb2872937babcc9c7cf1d7735dd992b80f872ab2b5da2c6c",
+    "audited": "2026-01-21T01:31:11.333934"
+  },
+  "modules/DegenerusGameEndgameModule.sol": {
+    "hash": "9170fcd9b587c69643d0555d3eef7a553e531dda1fb7daab88c11ae865a5de7a",
+    "audited": "2026-01-21T01:34:42.994486"
+  },
+  "modules/DegenerusGameGameOverModule.sol": {
+    "hash": "26bec0dc1dd9ef3a79b3610d03a049208ced9f3fe4557f038a4b8737dc817628",
+    "audited": "2026-01-21T01:40:10.513194"
+  },
+  "modules/DegenerusGameJackpotModule.sol": {
+    "hash": "101a2f7a7bda693d507113fff4b190f3224d65a0f6feb53eea5c946196d58727",
+    "audited": "2026-01-21T01:41:34.000477"
+  },
+  "modules/DegenerusGameLootboxModule.sol": {
+    "hash": "f1637cc4548f67fa22127babb7fec3d9d52f283ab42335d1933abec291b947f3",
+    "audited": "2026-01-21T01:46:31.721164"
+  },
+  "modules/DegenerusGameMintModule.sol": {
+    "hash": "3b118f7881d3d9db980cbb6682df283f72f00055a97e0fa3712b28e8b75a0e83",
+    "audited": "2026-01-21T01:47:50.177035"
+  },
+  "modules/DegenerusGameWhaleModule.sol": {
+    "hash": "6b718d7dc3c149ab5e1a11661a5c3f0bae086757ec5b816f4544c7f6df3fdf93",
+    "audited": "2026-01-21T01:50:04.765734"
+  },
+  "storage/DegenerusGameStorage.sol": {
+    "hash": "11e8bd9400889ceca1416129bad4f04867730a850437e264d440078291ea560b",
+    "audited": "2026-01-21T01:51:35.069941"
+  }
+}

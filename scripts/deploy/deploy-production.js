@@ -31,10 +31,7 @@ const DEPLOY_ORDER = [
   "TROPHY_SVG_ASSETS",
   "GAME_MINT_MODULE",
   "GAME_JACKPOT_MODULE",
-  "GAME_BOND_MODULE",
   "GAME_ENDGAME_MODULE",
-  "DGNRS",
-  "BONDS",
   "COIN",
   "VAULT",
   "AFFILIATE",
@@ -66,18 +63,8 @@ const CONTRACT_METADATA = {
   GAME_JACKPOT_MODULE: {
     path: "contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule"
   },
-  GAME_BOND_MODULE: {
-    path: "contracts/modules/DegenerusGameBondModule.sol:DegenerusGameBondModule"
-  },
   GAME_ENDGAME_MODULE: {
     path: "contracts/modules/DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule"
-  },
-  DGNRS: {
-    path: "contracts/DegenerusBonds.sol:BondToken"
-    // No constructor args - all constants
-  },
-  BONDS: {
-    path: "contracts/DegenerusBonds.sol:DegenerusBonds"
   },
   COIN: {
     path: "contracts/BurnieCoin.sol:BurnieCoin"
@@ -362,16 +349,6 @@ async function postDeploymentValidation(ethers, deployed, constants) {
   console.log(`✅ All ${DEPLOY_ORDER.length} contracts have bytecode`);
 
   // 2. Verify cross-contract references
-  const bonds = deployed.BONDS;
-  const dgnrsFromBonds = await bonds.dgnrsToken();
-  if (dgnrsFromBonds.toLowerCase() !== constants.DGNRS.toLowerCase()) {
-    throw new DeploymentError(
-      `Bonds.dgnrsToken() mismatch!\n  Expected: ${constants.DGNRS}\n  Got: ${dgnrsFromBonds}`,
-      "CROSS_REF_MISMATCH"
-    );
-  }
-  console.log(`✅ Bonds → DGNRS reference correct`);
-
   const gamepieceRouter = deployed.GAMEPIECE_RENDERER_ROUTER;
   const fallbackGp = await gamepieceRouter.fallbackRenderer();
   if (fallbackGp.toLowerCase() !== constants.RENDERER_REGULAR.toLowerCase()) {

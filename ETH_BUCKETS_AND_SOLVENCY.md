@@ -12,21 +12,9 @@ The game tracks ETH liabilities in distinct buckets. Their sum represents total 
 
 | Bucket | Purpose | Backing |
 |--------|---------|---------|
-| `claimablePool` | Aggregate player winnings (jackpots, bonds, affiliates) | 1:1 ETH/stETH |
+| `claimablePool` | Aggregate player winnings (jackpots, affiliates) | 1:1 ETH/stETH |
 
 Only increases via internal transfer from other pools or explicit deposit.
-
-### Bond Liabilities
-
-| Bucket | Purpose | Backing |
-|--------|---------|---------|
-| `bondPool` | Reserved for bond positions | Principal only |
-
-Credits come from:
-- External deposits: `bondDeposit(trackPool=true)`
-- Game-originated buys: add `amount / 2`
-
-Yield on this ETH is **not** added here (falls through as untracked surplus).
 
 ### Gameplay Rewards
 
@@ -35,6 +23,9 @@ Yield on this ETH is **not** added here (falls through as untracked surplus).
 | `currentPrizePool` | Active level's exterminator/jackpot pot |
 | `nextPrizePool` | Accumulating pot for next level |
 | `rewardPool` | General fund for daily jackpots, BAF, side-prizes |
+| `futurePrizePool[level]` | Reserved for specific future levels |
+| `futurePrizePoolTotal` | Aggregate of all future level reserves |
+| `lootboxReservePool` | Pending allocation for unopened loot boxes (allocated at opening time) |
 
 Funded by ETH inflows and internal transfers. When jackpots pay MAP rewards, the MAP cost is moved into
 `nextPrizePool`, recycling value into future prize pools. RewardPool save % adjusts +/- 2% based on
@@ -58,7 +49,9 @@ Carved from `rewardPool` when needed.
 ```
 Total Assets >= Total Liabilities
 
-(ETH Balance + stETH Balance) >= (claimable + bond + prize + reward + special pools)
+(ETH Balance + stETH Balance) >= (claimablePool + currentPrizePool + nextPrizePool
+                                   + rewardPool + futurePrizePoolTotal + lootboxReservePool
+                                   + decimatorHundredPool + bafHundredPool)
 ```
 
 ### Mechanism 1: Inflow Matching
@@ -67,19 +60,21 @@ Every bucket increase is coupled with an ETH inflow:
 
 | Action | Effect |
 |--------|--------|
-| Mints | `nextPrizePool` increases by ETH paid (or claimable decreases by same amount) |
-| Bond deposits | `bondPool` increases only with `trackPool=true` or game-originated `amount/2` |
-| Jackpot allocations | Created by subtracting from other valid pools |
+| Gamepiece/MAP purchases (ETH) | `nextPrizePool` increases by ETH paid |
+| Gamepiece/MAP purchases (claimable) | `claimablePool` decreases, `nextPrizePool` increases by same amount |
+| Loot box purchases | ETH split between `lootboxReservePool`, `nextPrizePool`, `rewardPool`, and vault (presale) |
+| Loot box opening | `lootboxReservePool` → `futurePrizePool[rolledLevel]` based on rolled target level |
+| Jackpot allocations | Created by subtracting from `currentPrizePool` or `rewardPool` |
 | Jackpot MAP rewards | `nextPrizePool` increases by the MAP cost taken from prize/reward pools |
+| Level transition | `nextPrizePool` → `currentPrizePool` and `futurePrizePool[level]` → `nextPrizePool` |
 
 ### Mechanism 2: Untracked Surplus (Yield)
 
 The solvency buffer:
 
 1. ETH staked in Lido earns yield (stETH balance grows)
-2. Bond yield-share portion calls `bondDeposit(trackPool=false)`
-3. **Result**: Assets increase, liabilities stay the same
-4. This surplus silently backs all pools
+2. **Result**: Assets increase, liabilities stay the same
+3. This surplus silently backs all pools
 
 When `claimablePool` pays out, it draws from `address(this).balance` which includes this surplus.
 

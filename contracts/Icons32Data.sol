@@ -135,7 +135,7 @@ contract Icons32Data {
     /// @dev Only callable by owner before finalization
     /// @param startIndex Starting index in _paths array (0-32)
     /// @param paths Array of path strings to set
-    function setPaths(uint256 startIndex, string[] memory paths) external {
+    function setPaths(uint256 startIndex, string[] calldata paths) external {
         if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
         if (_finalized) revert AlreadyFinalized();
         if (paths.length > 10) revert MaxBatch();
