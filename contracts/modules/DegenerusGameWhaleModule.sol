@@ -2,18 +2,18 @@
 pragma solidity ^0.8.26;
 
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
+import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
+import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {IDegenerusTrophies} from "../interfaces/IDegenerusTrophies.sol";
-import {IDegenerusLazyPass} from "../interfaces/IDegenerusLazyPass.sol";
-import {IVRFCoordinator, VRFRandomWordsRequest} from "../interfaces/IVRFCoordinator.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /**
  * @title DegenerusGameWhaleModule
  * @author Burnie Degenerus
- * @notice Delegate-called module handling whale bundle purchases.
- *
+ * @notice Delegate-called module handling whale bundle, lazy pass, and deity pass purchases.
  * @dev This module is called via delegatecall from DegenerusGame, meaning all storage
  *      reads/writes operate on the game contract's storage.
  */
@@ -22,13 +22,19 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     // Errors
     // -------------------------------------------------------------------------
 
-    /// @notice Generic revert for invalid values.
+    /// @notice Reverts on invalid input, unauthorized access, or failed validation.
     error E();
 
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
 
+    /// @notice Emitted when a lootbox boost boon is consumed during a purchase.
+    /// @param player The address whose boost was consumed.
+    /// @param day The day index when the boost was consumed.
+    /// @param originalAmount The base lootbox amount before boost.
+    /// @param boostedAmount The lootbox amount after applying the boost.
+    /// @param boostBps The boost percentage in basis points that was applied.
     event LootBoxBoostConsumed(
         address indexed player,
         uint48 indexed day,
@@ -36,6 +42,11 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         uint256 boostedAmount,
         uint16 boostBps
     );
+
+    /// @notice Emitted when a player is assigned a new lootbox index for the day.
+    /// @param buyer The address receiving the lootbox assignment.
+    /// @param index The lootbox RNG index assigned.
+    /// @param day The day index of the assignment.
     event LootBoxIndexAssigned(
         address indexed buyer,
         uint48 indexed index,
@@ -46,96 +57,129 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
 
+    /// @dev Affiliate contract for referral tracking.
     IDegenerusAffiliate internal constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
+
+    /// @dev DGNRS token contract for pool rewards.
     IDegenerusStonk internal constant dgnrs = IDegenerusStonk(ContractAddresses.DGNRS);
-    IDegenerusTrophies internal constant trophies =
-        IDegenerusTrophies(ContractAddresses.TROPHIES);
-    IDegenerusLazyPass internal constant lazyPass =
-        IDegenerusLazyPass(ContractAddresses.LAZY_PASS);
+
 
     // -------------------------------------------------------------------------
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @notice Time offset for day calculation (matches game's jackpot reset time).
-    uint48 private constant JACKPOT_RESET_TIME = 82620;
-    /// @dev Sentinel value for levelStartTime indicating "not started".
-    uint48 private constant LEVEL_START_SENTINEL = type(uint48).max;
+    /// @dev 5% boost to lootbox value in basis points.
+    uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500;
 
-    /// @dev Lootbox boost boons: enhance next lootbox value.
-    uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500; // 5% boost to lootbox value
-    uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500; // 15% boost to lootbox value
-    uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether / ContractAddresses.COST_DIVISOR; // Max 10 ETH lootbox
-    uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800; // 2 days (48 hours)
-    uint32 private constant LOOTBOX_VRF_CALLBACK_GAS_LIMIT = 200_000;
-    uint16 private constant LOOTBOX_VRF_REQUEST_CONFIRMATIONS = 10;
+    /// @dev 15% boost to lootbox value in basis points.
+    uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;
 
-    /// @dev DGNRS pool distribution (ppm of remaining pool).
+    /// @dev 25% boost to lootbox value in basis points.
+    uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
+
+    /// @dev Maximum lootbox value eligible for boost (10 ETH).
+    uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
+
+    /// @dev Lootbox boost expiry duration (48 hours).
+    uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800;
+
+    /// @dev PPM scale for DGNRS pool calculations (1,000,000 = 100%).
     uint32 private constant DGNRS_WHALE_REWARD_PPM_SCALE = 1_000_000;
-    uint32 private constant DGNRS_WHALE_MINTER_PPM = 10_000; // 1%
-    uint32 private constant DGNRS_AFFILIATE_DIRECT_WHALE_PPM = 1_000; // 0.1%
-    uint32 private constant DGNRS_AFFILIATE_UPLINE_WHALE_PPM = 200; // 0.02%
-    uint32 private constant DGNRS_AFFILIATE_DIRECT_DEITY_PPM = 5_000; // 0.5%
-    uint32 private constant DGNRS_AFFILIATE_UPLINE_DEITY_PPM = 1_000; // 0.1%
-    uint16 private constant DEITY_WHALE_POOL_BPS = 500; // 5%
 
-    /// @dev Fixed whale pass price used for jackpot EV calculations.
-    uint256 private constant LOOTBOX_WHALE_PASS_PRICE = 3.4 ether / ContractAddresses.COST_DIVISOR;
+    /// @dev Whale bundle minter reward: 1% of whale pool.
+    uint32 private constant DGNRS_WHALE_MINTER_PPM = 10_000;
 
-    /// @dev Deity pass price and bundled perks.
-    uint256 private constant DEITY_PASS_PRICE = 25 ether / ContractAddresses.COST_DIVISOR;
-    uint256 private constant DEITY_PASS_LOOTBOX = 5 ether / ContractAddresses.COST_DIVISOR;
-    uint16 private constant DEITY_PASS_10LEVEL_CREDITS = 20;
-    uint24 private constant DEITY_PASS_TICKET_LEVELS = 100;
-    uint32 private constant DEITY_PASS_TICKETS_PER_LEVEL = 4;
-    uint32 private constant DEITY_PASS_EARLY_TICKETS = 160;
+    /// @dev Direct affiliate reward for whale bundle: 0.1% of affiliate pool.
+    uint32 private constant DGNRS_AFFILIATE_DIRECT_WHALE_PPM = 1_000;
 
-    /// @notice Mask for 24-bit fields.
-    uint256 private constant MINT_MASK_24 = (uint256(1) << 24) - 1;
+    /// @dev Upline affiliate reward for whale bundle: 0.02% of affiliate pool.
+    uint32 private constant DGNRS_AFFILIATE_UPLINE_WHALE_PPM = 200;
 
-    /// @notice Mask for 32-bit fields.
-    uint256 private constant MINT_MASK_32 = (uint256(1) << 32) - 1;
+    /// @dev Direct affiliate reward for deity pass: 0.5% of affiliate pool.
+    uint32 private constant DGNRS_AFFILIATE_DIRECT_DEITY_PPM = 5_000;
 
-    /// @notice Bit shift for last minted level (24 bits at position 0).
-    uint256 private constant ETH_LAST_LEVEL_SHIFT = 0;
+    /// @dev Upline affiliate reward for deity pass: 0.1% of affiliate pool.
+    uint32 private constant DGNRS_AFFILIATE_UPLINE_DEITY_PPM = 1_000;
 
-    /// @notice Bit shift for level count (24 bits at position 24).
-    uint256 private constant ETH_LEVEL_COUNT_SHIFT = 24;
+    /// @dev Deity pass buyer reward: 5% of whale pool.
+    uint16 private constant DEITY_WHALE_POOL_BPS = 500;
 
-    /// @notice Bit shift for consecutive level streak (24 bits at position 48).
-    uint256 private constant ETH_LEVEL_STREAK_SHIFT = 48;
+    /// @dev Lazy pass: number of levels covered.
+    uint24 private constant LAZY_PASS_LEVELS = 10;
 
-    /// @notice Bit shift for last mint day (32 bits at position 72).
-    uint256 private constant ETH_DAY_SHIFT = 72;
+    /// @dev Lazy pass: tickets per level (4 tickets = 1 level).
+    uint32 private constant LAZY_PASS_TICKETS_PER_LEVEL = 4;
 
-    /// @notice Bit shift for frozen-until-level (24 bits at position 128).
-    uint256 private constant ETH_FROZEN_UNTIL_LEVEL_SHIFT = 128;
+    /// @dev Lazy pass: share of purchase value awarded as lootbox during presale (20%).
+    uint16 private constant LAZY_PASS_LOOTBOX_PRESALE_BPS = 2000;
 
-    /// @notice Bit shift for whale bundle type (2 bits at position 152).
-    uint256 private constant ETH_WHALE_BUNDLE_TYPE_SHIFT = 152;
+    /// @dev Lazy pass: share of purchase value awarded as lootbox after presale (10%).
+    uint16 private constant LAZY_PASS_LOOTBOX_POST_BPS = 1000;
+
+    /// @dev Lazy pass: default discount for legacy boons without stored tier (10%).
+    uint16 private constant LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS = 1000;
+
+    /// @dev Lazy pass: split to future pool (matches standard purchase split).
+    uint16 private constant LAZY_PASS_TO_FUTURE_BPS = 1000;
+
+    /// @dev Whale bundle early price (levels 0-3).
+    uint256 private constant WHALE_BUNDLE_EARLY_PRICE = 2.4 ether;
+
+    /// @dev Whale bundle standard price (x49/x99 levels).
+    uint256 private constant WHALE_BUNDLE_STANDARD_PRICE = 4 ether;
+
+    /// @dev Whale bundle bonus tickets per level for levels up to 10.
+    uint32 private constant WHALE_BONUS_TICKETS_PER_LEVEL = 40;
+
+    /// @dev Whale bundle standard tickets per level for levels 11+.
+    uint32 private constant WHALE_STANDARD_TICKETS_PER_LEVEL = 2;
+
+    /// @dev Last level eligible for whale bundle bonus tickets.
+    uint24 private constant WHALE_BONUS_END_LEVEL = 10;
+
+    /// @dev Whale bundle lootbox share during presale (20%).
+    uint16 private constant WHALE_LOOTBOX_PRESALE_BPS = 2000;
+
+    /// @dev Whale bundle lootbox share after presale (10%).
+    uint16 private constant WHALE_LOOTBOX_POST_BPS = 1000;
+
+    /// @dev Deity pass lootbox share during presale (20%).
+    uint16 private constant DEITY_LOOTBOX_PRESALE_BPS = 2000;
+
+    /// @dev Deity pass lootbox share after presale (10%).
+    uint16 private constant DEITY_LOOTBOX_POST_BPS = 1000;
+
+    /// @dev Deity pass base price (24 ETH, unscaled). Actual price = 24 + T(n) where T(n) = n*(n+1)/2, n = passes sold so far.
+    uint256 private constant DEITY_PASS_BASE = 24 ether;
+
+    /// @dev BURNIE transfer cost for deity pass trade (5 ETH worth).
+    uint256 private constant DEITY_TRANSFER_ETH_COST = 5 ether;
+
+    /// @dev Deity pass boon expiry (4 days in seconds, matches lootbox PURCHASE_BOOST_EXPIRY_SECONDS).
+    uint48 private constant DEITY_PASS_BOON_EXPIRY_SECONDS = 345600;
 
     // -------------------------------------------------------------------------
     // Purchases
     // -------------------------------------------------------------------------
 
     /**
-     * @notice Purchase whale bundle: boosts Activity Score to 100 levels and awards 200 tickets + 0.5 ETH lootbox.
-     * @dev Available when the effective bundle level is %50 == 1 (levels 1, 51, 101, 151...)
-     *      or when a valid whale boon is active (one-time override).
-     *      Effective level is current level in setup/purchase, or current level + 1 in burn,
-     *      so the window opens during the previous level's burn and closes at purchase end.
-     *      Can be purchased multiple times (each purchase resets the frozen window).
-     *      Activity Score boost: Sets levelCount and streak to 100, frozen until (bundle level + 99).
-     *      Queues 2 tickets for each of levels [bundle level, bundle level+99] (200 tickets total).
-     *      Includes 0.5 ETH lootbox for all purchases.
-     *      Price: 3 ETH at level 1, 3.5 ETH at other levels (scaled by COST_DIVISOR on testnet).
+     * @notice Purchase a 100-level whale bundle.
+     * @dev Available at levels 0-3, x49/x99, or any level with a valid whale boon. Tickets always start at x1.
+     *      - Boosts levelCount by delta between current freeze and new freeze (max 100, no double dipping).
+     *      - Queues 40 × quantity bonus tickets/lvl for levels passLevel-10, 2 × quantity standard tickets/lvl for the rest.
+     *      - Lootbox: 20% of price (presale), 10% (post-presale).
+     *      - Distributes DGNRS rewards to buyer and affiliates.
+     *
+     *      Price: 2.4 ETH at levels 0-3, 4 ETH at x49/x99, 10/25/50% off standard with boon.
      *
      *      Fund distribution:
-     *      - Level 1: 50% next pool, 25% reward pool, 25% future pool
-     *      - Other levels: 50% future pool, 45% reward pool, 5% next pool
-     *
-     *      Example at level 1: 2 tickets each for levels 1-100, stats=100, frozen until 100, 0.5 ETH lootbox.
-     *      Example at level 51: 2 tickets each for levels 51-150, stats=100, frozen until 150, 0.5 ETH lootbox.
+     *      - Pre-game (level 0): 50% next pool, 50% future pool
+     *      - Post-game (level > 0): 5% next pool, 95% future pool
+     * @param buyer The address receiving the bundle.
+     * @param quantity Number of bundles to purchase (1-100).
+     * @custom:reverts E When not at level 0-3 or x49/x99 and no valid boon exists.
+     * @custom:reverts E When quantity is 0 or exceeds 100.
+     * @custom:reverts E When msg.value does not match required price.
      */
     function purchaseWhaleBundle(address buyer, uint256 quantity) external payable {
         _purchaseWhaleBundle(buyer, quantity);
@@ -145,85 +189,88 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         address buyer,
         uint256 quantity
     ) private {
-        uint24 currentLevel = level;
-        uint24 passLevel = currentLevel;
+        uint24 passLevel = level + 1;
 
-        // Check if purchase is allowed: standard level or valid whale boon
-        bool isStandardLevel = (passLevel % 50 == 1);
+        if (quantity == 0 || quantity > 100) revert E();
+
+        // Check for valid whale boon (allows purchase at any level with 10/25/50% off)
         bool hasValidBoon = false;
         uint48 boonDay = whaleBoonDay[buyer];
-
-        if (!isStandardLevel) {
-            // Not a standard level - check for boon
-            if (boonDay == 0) revert E(); // No boon
+        if (boonDay != 0) {
             uint48 currentDay = _currentMintDay();
-            if (currentDay > boonDay + 4) revert E(); // Boon expired (4 days)
-            hasValidBoon = true;
+            hasValidBoon = currentDay <= boonDay + 4;
         }
 
-        if (quantity == 0 || quantity > 100) revert E(); // Reasonable limits
+        // Without a boon, only levels 0-3 or x49/x99 are allowed
+        if (!hasValidBoon) {
+            bool isStandardLevel = (passLevel <= 4 || passLevel % 50 == 0);
+            if (!isStandardLevel) revert E();
+        }
 
         uint256 prevData = mintPacked_[buyer];
 
-        // Check if player is already frozen from a previous whale bundle
-        uint24 frozenUntilLevel = uint24((prevData >> ETH_FROZEN_UNTIL_LEVEL_SHIFT) & MINT_MASK_24);
-        if (frozenUntilLevel > 0 && currentLevel < frozenUntilLevel) {
-            revert E(); // Cannot buy whale bundle while frozen from previous bundle
+        // Unpack current values
+        uint24 frozenUntilLevel = uint24((prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24);
+        uint24 levelCount = uint24((prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24);
+
+        // Bundle covers 100 levels
+        // Tickets always start at x1 (next 50-level boundary + 1)
+        uint24 ticketStartLevel = passLevel <= 4 ? 1 : uint24(((passLevel + 1) / 50) * 50 + 1);
+
+        // Calculate freeze extension and stat boost (delta-based, no double dipping)
+        uint24 targetFrozenLevel = ticketStartLevel + 99;
+        uint24 newFrozenLevel = frozenUntilLevel > targetFrozenLevel
+            ? frozenUntilLevel
+            : targetFrozenLevel;
+        uint24 deltaFreeze = newFrozenLevel > frozenUntilLevel
+            ? (newFrozenLevel - frozenUntilLevel)
+            : 0;
+        uint24 levelsToAdd = 100;
+        if (levelsToAdd > deltaFreeze) {
+            levelsToAdd = deltaFreeze;
         }
 
-        // Unpack current values
-        uint24 lastLevel = uint24((prevData >> ETH_LAST_LEVEL_SHIFT) & MINT_MASK_24);
-        uint24 levelCount = uint24((prevData >> ETH_LEVEL_COUNT_SHIFT) & MINT_MASK_24);
-        uint24 streak = uint24((prevData >> ETH_LEVEL_STREAK_SHIFT) & MINT_MASK_24);
-
-        // Bundle covers 100 levels, quantity increases tickets per level
-        uint24 ticketStartLevel = passLevel;
-        uint24 newFrozenLevel = passLevel + 99;
-        uint32 ticketsPerLevel = uint32(2 * quantity);
-
-        // Price calculation
+        // Price: boon applies 10/25/50% off standard price at any level,
+        //        otherwise 2.4 ETH at levels 0-3, 4 ETH at x49/x99
         uint256 unitPrice;
         if (hasValidBoon) {
-            // Boon price: 10% off standard whale pass price
-            unitPrice = (LOOTBOX_WHALE_PASS_PRICE * 9000) / 10_000;
-            delete whaleBoonDay[buyer]; // Clear boon (one-time use)
-        } else if (passLevel == 1) {
-            unitPrice = 3 ether / ContractAddresses.COST_DIVISOR;
+            uint16 discountBps = whaleBoonDiscountBps[buyer];
+            if (discountBps == 0) discountBps = 1000; // Default 10% for legacy boons
+            unitPrice = (WHALE_BUNDLE_STANDARD_PRICE * (10_000 - discountBps)) / 10_000;
+            delete whaleBoonDay[buyer];
+            delete whaleBoonDiscountBps[buyer];
+        } else if (passLevel <= 4) {
+            unitPrice = WHALE_BUNDLE_EARLY_PRICE;
         } else {
-            unitPrice = LOOTBOX_WHALE_PASS_PRICE;
+            unitPrice = WHALE_BUNDLE_STANDARD_PRICE;
         }
         uint256 totalPrice = unitPrice * quantity;
 
         if (msg.value != totalPrice) revert E();
-        _awardEarlybirdDgnrs(buyer, totalPrice);
-
-        // Add 100 to levelCount and streak (quantity doesn't affect stats, only tickets)
-        bool alreadyMintedAtCurrentLevel = (lastLevel == passLevel);
-        uint24 levelsToAdd = alreadyMintedAtCurrentLevel ? 99 : 100;
+        _awardEarlybirdDgnrs(buyer, totalPrice, passLevel);
 
         uint24 newLevelCount = levelCount + levelsToAdd;
-        uint24 newStreak = streak + levelsToAdd;
 
         // Update mint data
         uint256 data = prevData;
-        data = _setPacked(data, ETH_LEVEL_COUNT_SHIFT, MINT_MASK_24, newLevelCount);
-        data = _setPacked(data, ETH_LEVEL_STREAK_SHIFT, MINT_MASK_24, newStreak);
-        data = _setPacked(data, ETH_FROZEN_UNTIL_LEVEL_SHIFT, MINT_MASK_24, newFrozenLevel);
-        data = _setPacked(data, ETH_WHALE_BUNDLE_TYPE_SHIFT, 3, 3); // 3 = 100-level bundle (always set)
-        data = _setPacked(data, ETH_LAST_LEVEL_SHIFT, MINT_MASK_24, newFrozenLevel);
+        data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_COUNT_SHIFT, BitPackingLib.MASK_24, newLevelCount);
+        data = BitPackingLib.setPacked(data, BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT, BitPackingLib.MASK_24, newFrozenLevel);
+        data = BitPackingLib.setPacked(data, BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT, 3, 3); // 3 = 100-level bundle
+        data = BitPackingLib.setPacked(data, BitPackingLib.LAST_LEVEL_SHIFT, BitPackingLib.MASK_24, newFrozenLevel);
 
         // Update mint day
         uint32 day = _currentMintDay();
-        data = _setMintDay(data, day, ETH_DAY_SHIFT, MINT_MASK_32);
+        data = _setMintDay(data, day, BitPackingLib.DAY_SHIFT, BitPackingLib.MASK_32);
 
         mintPacked_[buyer] = data;
 
-        uint24 lazyPassLevel = _lazyPassStartLevel(passLevel);
-        lazyPass.mintPasses(buyer, quantity, lazyPassLevel);
-
-        // Queue (4 * quantity) tickets for each of the 100 levels
+        // Queue tickets: 40/lvl for bonus levels (passLevel to 10), 2/lvl for the rest
+        uint32 bonusTickets = uint32(WHALE_BONUS_TICKETS_PER_LEVEL * quantity);
+        uint32 standardTickets = uint32(WHALE_STANDARD_TICKETS_PER_LEVEL * quantity);
         for (uint24 i = 0; i < 100; ) {
-            _queueTickets(buyer, ticketStartLevel + i, ticketsPerLevel);
+            uint24 lvl = ticketStartLevel + i;
+            bool isBonus = (lvl >= passLevel && lvl <= WHALE_BONUS_END_LEVEL);
+            _queueTickets(buyer, lvl, isBonus ? bonusTickets : standardTickets);
             unchecked { ++i; }
         }
 
@@ -242,277 +289,206 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             unchecked { ++i; }
         }
 
-        // Split payment based on level
-        uint256 futureShare;
+        // Split payment: pre-game 50/50, post-game 5/95
         uint256 nextShare;
-        uint256 rewardShare;
 
-        if (passLevel == 1) {
-            // Level 1: 50% next, 25% reward, 25% future
+        if (level == 0) {
             nextShare = (totalPrice * 5000) / 10_000;
-            rewardShare = (totalPrice * 2500) / 10_000;
-            futureShare = totalPrice - nextShare - rewardShare;
         } else {
-            // Other levels: 50% future, 45% reward, 5% next
-            futureShare = (totalPrice * 5000) / 10_000;
-            rewardShare = (totalPrice * 4500) / 10_000;
-            nextShare = totalPrice - futureShare - rewardShare;
+            nextShare = (totalPrice * 500) / 10_000;
         }
 
-        futurePrizePool += futureShare;
+        futurePrizePool += totalPrice - nextShare;
         nextPrizePool += nextShare;
-        futurePrizePool += rewardShare;
 
-        // Lootbox: 0.5 ETH at all levels
-        uint256 lootboxAmount = 0.5 ether / ContractAddresses.COST_DIVISOR;
-        lootboxAmount = lootboxAmount * quantity;
-        uint48 dayIndex = _currentDayIndex();
-        uint48 index = lootboxRngIndex;
-        bool presale = lootboxPresaleActive;
-
-        _recordLootboxMintDay(buyer, uint32(dayIndex));
-
-        uint256 packed = lootboxEth[index][buyer];
-        uint256 existingAmount = packed & ((1 << 232) - 1);
-        uint48 storedDay = lootboxDay[index][buyer];
-
-        if (existingAmount == 0) {
-            lootboxDay[index][buyer] = dayIndex;
-            lootboxIndexQueue[buyer].push(index);
-            emit LootBoxIndexAssigned(buyer, index, dayIndex);
-            if (presale) {
-                lootboxPresale[index][buyer] = true;
-            }
-        } else {
-            if (storedDay != dayIndex) revert E();
-            if (lootboxPresale[index][buyer] != presale) revert E();
-        }
-
-        // Pack: [232 bits: amount] [24 bits: purchase level]
-        uint256 boostedAmount = _applyLootboxBoostOnPurchase(
-            buyer,
-            dayIndex,
-            lootboxAmount
-        );
-        uint256 existingBase = lootboxEthBase[index][buyer];
-        if (existingAmount != 0 && existingBase == 0) {
-            existingBase = existingAmount;
-        }
-        lootboxEthBase[index][buyer] = existingBase + lootboxAmount;
-
-        uint24 purchaseLevel = passLevel;
-        uint256 newAmount = existingAmount + boostedAmount;
-        lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
-        lootboxEthTotal += lootboxAmount;
-        _maybeRequestLootboxRng(lootboxAmount);
+        // Lootbox: 20% of price during presale, 10% after
+        uint16 whaleLootboxBps = lootboxPresaleActive ? WHALE_LOOTBOX_PRESALE_BPS : WHALE_LOOTBOX_POST_BPS;
+        uint256 lootboxAmount = (totalPrice * whaleLootboxBps) / 10_000;
+        _recordLootboxEntry(buyer, lootboxAmount, passLevel, data);
     }
 
-    function purchaseWhaleBundle10(address buyer, uint256 quantity) external payable {
-        _purchaseWhaleBundle10(buyer, quantity);
+    /**
+     * @notice Purchase a 10-level lazy pass (direct in-game activation).
+     * @dev Available at levels 0-3 or x9 (9, 19, 29...), or with a valid lazy pass boon.
+     *      Can renew when <7 levels remain on current pass freeze.
+     *      - Grants 4 tickets per level for the next 10 levels (starting at current level + 1).
+     *      - Applies the standard 10-level stat boost via _activate10LevelPass.
+     *      - Price equals sum of per-level ticket prices across the 10-level window.
+     *      - Awards a lootbox equal to 20% (presale) or 10% (post-presale) of pass value.
+     *      - Boon purchases apply a 10/15/25% discount and always include a 10% lootbox.
+     * @param buyer The address receiving the pass.
+     * @custom:reverts E When level is not 0-3 or x9 and no boon, pass has 7+ levels remaining, or msg.value is incorrect.
+     */
+    function purchaseLazyPass(address buyer) external payable {
+        _purchaseLazyPass(buyer);
     }
 
-    function _purchaseWhaleBundle10(
-        address buyer,
-        uint256 quantity
-    ) private {
+    function _purchaseLazyPass(address buyer) private {
         uint24 currentLevel = level;
-        uint24 passLevel = currentLevel;
-        if (gameState == GAME_STATE_BURN) {
-            unchecked {
-                passLevel = currentLevel + 1;
+        bool hasValidBoon = false;
+        uint16 boonDiscountBps = lazyPassBoonDiscountBps[buyer];
+        uint48 boonDay = lazyPassBoonDay[buyer];
+        if (boonDay != 0) {
+            uint48 currentDay = _simulatedDayIndex();
+            if (currentDay <= boonDay + 4) {
+                hasValidBoon = true;
+            } else {
+                lazyPassBoonDay[buyer] = 0;
+                lazyPassBoonDiscountBps[buyer] = 0;
             }
+        } else if (boonDiscountBps != 0) {
+            lazyPassBoonDiscountBps[buyer] = 0;
         }
+        if (currentLevel > 3 && currentLevel % 10 != 9 && !hasValidBoon) revert E();
 
-        // Check if purchase is allowed at this level (every x1 level)
-        if (passLevel % 10 != 1) revert E();
-
-        if (quantity == 0 || quantity > 100) revert E();
-
+        // Cap 1: disallow if player has deity pass or active frozen pass
+        if (deityPassCount[buyer] != 0) revert E();
         uint256 prevData = mintPacked_[buyer];
+        uint24 frozenUntilLevel = uint24(
+            (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+        // Allow if <7 levels remain on freeze (early renewal window)
+        if (frozenUntilLevel > currentLevel + 7) revert E();
 
-        // Check if player is already frozen from a previous whale bundle
-        uint24 frozenUntilLevel = uint24((prevData >> ETH_FROZEN_UNTIL_LEVEL_SHIFT) & MINT_MASK_24);
-        if (frozenUntilLevel > 0 && currentLevel < frozenUntilLevel) {
-            revert E(); // Cannot buy whale bundle while frozen from previous bundle
-        }
+        uint24 startLevel = currentLevel == 0 ? 1 : currentLevel + 1;
+        uint256 baseCost = _lazyPassCost(startLevel);
+        if (baseCost == 0) revert E();
 
-        // Unpack current values
-        uint24 lastLevel = uint24((prevData >> ETH_LAST_LEVEL_SHIFT) & MINT_MASK_24);
-        uint24 levelCount = uint24((prevData >> ETH_LEVEL_COUNT_SHIFT) & MINT_MASK_24);
-        uint24 streak = uint24((prevData >> ETH_LEVEL_STREAK_SHIFT) & MINT_MASK_24);
-
-        // Bundle covers 10 levels, quantity increases tickets per level
-        uint24 ticketStartLevel = passLevel;
-        uint24 newFrozenLevel = passLevel + 9;
-        uint32 ticketsPerLevel = uint32(4 * quantity);
-
-        // Unit price and lootbox based on level
-        uint256 unitPrice;
-        uint256 unitLootbox;
-        uint24 levelMod100 = passLevel % 100;
-
-        if (passLevel == 1) {
-            unitPrice = 0.25 ether / ContractAddresses.COST_DIVISOR;
-            unitLootbox = 0.04 ether / ContractAddresses.COST_DIVISOR;
-        } else if (levelMod100 == 91) {  // 91, 191, 291, etc.
-            unitPrice = 1.30 ether / ContractAddresses.COST_DIVISOR;
-            unitLootbox = 0.06 ether / ContractAddresses.COST_DIVISOR;
-        } else if (levelMod100 == 81) {  // 81, 181, 281, etc.
-            unitPrice = 1.20 ether / ContractAddresses.COST_DIVISOR;
-            unitLootbox = 0.06 ether / ContractAddresses.COST_DIVISOR;
-        } else if (levelMod100 == 71) {  // 71, 171, 271, etc.
-            unitPrice = 1.10 ether / ContractAddresses.COST_DIVISOR;
-            unitLootbox = 0.16 ether / ContractAddresses.COST_DIVISOR;
-        } else if (levelMod100 >= 41) {  // 41, 51, 61, 141, 151, 161, etc.
-            unitPrice = 1.05 ether / ContractAddresses.COST_DIVISOR;
-            unitLootbox = 0.13 ether / ContractAddresses.COST_DIVISOR;
-        } else if (levelMod100 == 31) {  // 31, 131, 231, etc.
-            unitPrice = 0.60 ether / ContractAddresses.COST_DIVISOR;
-            unitLootbox = 0.10 ether / ContractAddresses.COST_DIVISOR;
-        } else if (levelMod100 >= 11) {  // 11, 21, 111, 121, etc.
-            unitPrice = 0.55 ether / ContractAddresses.COST_DIVISOR;
-            unitLootbox = 0.09 ether / ContractAddresses.COST_DIVISOR;
-        } else {  // 101, 201, 301, etc.
-            unitPrice = 0.50 ether / ContractAddresses.COST_DIVISOR;
-            unitLootbox = 0.04 ether / ContractAddresses.COST_DIVISOR;
-        }
-
-        uint256 totalPrice = unitPrice * quantity;
-        uint256 totalLootbox = unitLootbox * quantity;
-
-        if (msg.value != totalPrice) revert E();
-        _awardEarlybirdDgnrs(buyer, totalPrice);
-
-        // Add 10 to levelCount and streak (quantity doesn't affect stats, only tickets)
-        bool alreadyMintedAtCurrentLevel = (lastLevel == passLevel);
-        uint24 levelsToAdd = alreadyMintedAtCurrentLevel ? 9 : 10;
-
-        uint24 newLevelCount = levelCount + levelsToAdd;
-        uint24 newStreak = streak + levelsToAdd;
-
-        // Update mint data
-        uint256 data = prevData;
-        data = _setPacked(data, ETH_LEVEL_COUNT_SHIFT, MINT_MASK_24, newLevelCount);
-        data = _setPacked(data, ETH_LEVEL_STREAK_SHIFT, MINT_MASK_24, newStreak);
-        data = _setPacked(data, ETH_FROZEN_UNTIL_LEVEL_SHIFT, MINT_MASK_24, newFrozenLevel);
-
-        // Only update bundle type if new type is >= current type (prevent downgrades)
-        uint8 currentBundleType = uint8((prevData >> ETH_WHALE_BUNDLE_TYPE_SHIFT) & 3);
-        if (1 >= currentBundleType) {
-            data = _setPacked(data, ETH_WHALE_BUNDLE_TYPE_SHIFT, 3, 1); // 1 = 10-level bundle
-        }
-
-        data = _setPacked(data, ETH_LAST_LEVEL_SHIFT, MINT_MASK_24, newFrozenLevel);
-
-        uint32 day = _currentMintDay();
-        data = _setMintDay(data, day, ETH_DAY_SHIFT, MINT_MASK_32);
-
-        mintPacked_[buyer] = data;
-
-        // Queue (4 * quantity) tickets for each of the 10 levels
-        for (uint24 i = 0; i < 10; ) {
-            _queueTickets(buyer, ticketStartLevel + i, ticketsPerLevel);
-            unchecked { ++i; }
-        }
-
-        // Split payment based on level
-        uint256 futureShare;
-        uint256 nextShare;
-        uint256 rewardShare;
-
-        if (passLevel == 1) {
-            // Level 1: 50% next, 25% reward, 25% future
-            nextShare = (totalPrice * 5000) / 10_000;
-            rewardShare = (totalPrice * 2500) / 10_000;
-            futureShare = totalPrice - nextShare - rewardShare;
-        } else {
-            // Other levels: 50% future, 45% reward, 5% next
-            futureShare = (totalPrice * 5000) / 10_000;
-            rewardShare = (totalPrice * 4500) / 10_000;
-            nextShare = totalPrice - futureShare - rewardShare;
-        }
-
-        futurePrizePool += futureShare;
-        nextPrizePool += nextShare;
-        futurePrizePool += rewardShare;
-
-        // Add lootbox
-        uint48 dayIndex = _currentDayIndex();
-        uint48 index = lootboxRngIndex;
-        bool presale = lootboxPresaleActive;
-
-        _recordLootboxMintDay(buyer, uint32(dayIndex));
-
-        uint256 packed = lootboxEth[index][buyer];
-        uint256 existingAmount = packed & ((1 << 232) - 1);
-        uint48 storedDay = lootboxDay[index][buyer];
-
-        if (existingAmount == 0) {
-            lootboxDay[index][buyer] = dayIndex;
-            lootboxIndexQueue[buyer].push(index);
-            emit LootBoxIndexAssigned(buyer, index, dayIndex);
-            if (presale) {
-                lootboxPresale[index][buyer] = true;
+        // Levels 0-2: flat 0.24 ETH, balance converted to bonus tickets at startLevel
+        uint256 totalPrice;
+        uint32 bonusTickets;
+        if (currentLevel <= 2 && !hasValidBoon) {
+            totalPrice = 0.24 ether;
+            uint256 balance = totalPrice - baseCost;
+            if (balance != 0) {
+                uint256 ticketPrice = PriceLookupLib.priceForLevel(startLevel);
+                bonusTickets = uint32((balance * 4) / ticketPrice);
             }
         } else {
-            if (storedDay != dayIndex) revert E();
-            if (lootboxPresale[index][buyer] != presale) revert E();
+            totalPrice = baseCost;
+            if (hasValidBoon) {
+                if (boonDiscountBps == 0) {
+                    boonDiscountBps = LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS;
+                }
+                totalPrice =
+                    (totalPrice * (10_000 - boonDiscountBps)) /
+                    10_000;
+                lazyPassBoonDay[buyer] = 0;
+                lazyPassBoonDiscountBps[buyer] = 0;
+            }
         }
-
-        uint256 boostedAmount = _applyLootboxBoostOnPurchase(
-            buyer,
-            dayIndex,
-            totalLootbox
-        );
-        uint256 existingBase = lootboxEthBase[index][buyer];
-        if (existingAmount != 0 && existingBase == 0) {
-            existingBase = existingAmount;
-        }
-        lootboxEthBase[index][buyer] = existingBase + totalLootbox;
-
-        uint24 purchaseLevel = passLevel;
-        uint256 newAmount = existingAmount + boostedAmount;
-        lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
-        lootboxEthTotal += totalLootbox;
-        _maybeRequestLootboxRng(totalLootbox);
-    }
-
-    function purchaseDeityPass(address buyer, uint256 quantity) external payable {
-        _purchaseDeityPass(buyer, quantity);
-    }
-
-    function _purchaseDeityPass(
-        address buyer,
-        uint256 quantity
-    ) private {
-        uint24 passLevel = level;
-
-        if (passLevel != 1) revert E();
-        if (!lootboxPresaleActive) revert E();
-
-        if (quantity == 0 || quantity > 100) revert E();
-
-        uint256 totalPrice = DEITY_PASS_PRICE * quantity;
         if (msg.value != totalPrice) revert E();
-        _awardEarlybirdDgnrs(buyer, totalPrice);
 
-        uint16 prevPassCount = deityPassCount[buyer];
-        deityPassCount[buyer] = prevPassCount + uint16(quantity);
-        if (prevPassCount == 0) {
-            deityPassOwners.push(buyer);
+        _awardEarlybirdDgnrs(buyer, totalPrice, startLevel);
+
+        _activate10LevelPass(
+            buyer,
+            startLevel,
+            LAZY_PASS_TICKETS_PER_LEVEL
+        );
+
+        // Queue bonus tickets from flat-price overpayment at early levels
+        if (bonusTickets != 0) {
+            _queueTickets(buyer, startLevel, bonusTickets);
         }
 
-        uint256 creditIncrease = quantity * DEITY_PASS_10LEVEL_CREDITS;
-        uint24 lazyPassLevel = _lazyPassStartLevel(passLevel);
-        lazyPass.mintPasses(buyer, creditIncrease, lazyPassLevel);
+        // Split payment like standard purchases (future + next)
+        uint256 futureShare = (totalPrice * LAZY_PASS_TO_FUTURE_BPS) / 10_000;
+        if (futureShare != 0) {
+            futurePrizePool += futureShare;
+        }
+        uint256 nextShare;
+        unchecked {
+            nextShare = totalPrice - futureShare;
+        }
+        if (nextShare != 0) {
+            nextPrizePool += nextShare;
+        }
 
-        uint32 ticketsPerLevel = uint32(quantity) * DEITY_PASS_TICKETS_PER_LEVEL;
-        _queueTicketRange(buyer, passLevel, DEITY_PASS_TICKET_LEVELS, ticketsPerLevel);
+        // Award lootbox as a percentage of pass value (presale 20%, post 10%)
+        uint16 lootboxBps = hasValidBoon
+            ? LAZY_PASS_LOOTBOX_POST_BPS
+            : (lootboxPresaleActive
+                ? LAZY_PASS_LOOTBOX_PRESALE_BPS
+                : LAZY_PASS_LOOTBOX_POST_BPS);
+        uint256 lootboxAmount = (totalPrice * lootboxBps) / 10_000;
+        if (lootboxAmount == 0) return;
 
-        uint32 earlyTickets = uint32(quantity) * DEITY_PASS_EARLY_TICKETS;
-        _queueTickets(buyer, 1, earlyTickets);
-        _queueTickets(buyer, 2, earlyTickets);
+        _recordLootboxEntry(buyer, lootboxAmount, currentLevel + 1, mintPacked_[buyer]);
+    }
 
+    /**
+     * @notice Purchase a deity pass for a specific symbol.
+     * @dev Available at any time. One per player, max 24 total (one per non-dice symbol).
+     *      Buyer chooses from available symbols (0-23). Virtual trait-targeted jackpot
+     *      entries are computed at resolution time — no explicit ticket queuing needed.
+     *
+     *      Price: 24 + T(n) ETH where n = passes sold so far, T(n) = n*(n+1)/2.
+     *      First pass costs 24 ETH, last (24th) costs 300 ETH.
+     *
+     *      Fund distribution:
+     *      - Pre-game (level 0): 50% next pool, 50% future pool
+     *      - Post-game (level > 0): 5% next pool, 95% future pool
+     * @param buyer The address receiving the pass.
+     * @param symbolId Symbol to claim (0-23: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23).
+     * @custom:reverts E When 24 deity passes have already been issued.
+     * @custom:reverts E When buyer already owns a deity pass.
+     * @custom:reverts E When symbolId is out of range or already taken.
+     * @custom:reverts E When msg.value does not match current deity pass price.
+     */
+    function purchaseDeityPass(address buyer, uint8 symbolId) external payable {
+        _purchaseDeityPass(buyer, symbolId);
+    }
+
+    function _purchaseDeityPass(address buyer, uint8 symbolId) private {
+        if (symbolId >= 32) revert E();
+        if (deityBySymbol[symbolId] != address(0)) revert E();
+        if (deityPassCount[buyer] != 0) revert E();
+
+        uint256 k = deityPassOwners.length;
+        uint256 basePrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
+
+        // Apply discount boon if active (tier 1=10%, 2=25%, 3=50%)
+        uint256 totalPrice = basePrice;
+        uint8 boonTier = deityPassBoonTier[buyer];
+        if (boonTier != 0) {
+            uint48 boonTs = deityPassBoonTimestamp[buyer];
+            // Check expiry: 4 days for lootbox-rolled, 1 day for deity-granted
+            bool expired;
+            uint48 deityDay = deityDeityPassBoonDay[buyer];
+            if (deityDay != 0) {
+                expired = _simulatedDayIndex() > deityDay;
+            } else {
+                expired = boonTs > 0 && block.timestamp > uint256(boonTs) + DEITY_PASS_BOON_EXPIRY_SECONDS;
+            }
+            if (!expired) {
+                uint16 discountBps = boonTier == 3 ? uint16(5000) : (boonTier == 2 ? uint16(2500) : uint16(1000));
+                totalPrice = (basePrice * (10_000 - discountBps)) / 10_000;
+            }
+            // Consume boon regardless of expiry
+            deityPassBoonTier[buyer] = 0;
+            deityPassBoonTimestamp[buyer] = 0;
+            deityDeityPassBoonDay[buyer] = 0;
+        }
+        if (msg.value != totalPrice) revert E();
+
+        uint24 passLevel = level + 1;
+
+        // Issue the pass with symbol
+        deityPassPaidTotal[buyer] += totalPrice;
+        _awardEarlybirdDgnrs(buyer, totalPrice, passLevel);
+
+        deityPassCount[buyer] = 1;
+        deityPassPurchasedCount[buyer] += 1;
+        deityPassOwners.push(buyer);
+        deityPassSymbol[buyer] = symbolId;
+        deityBySymbol[symbolId] = buyer;
+
+        // Mint ERC721 token (tokenId = symbolId)
+        IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(buyer, symbolId);
+
+        // DGNRS rewards
         address affiliateAddr = affiliate.getReferrer(buyer);
         address upline = address(0);
         address upline2 = address(0);
@@ -522,185 +498,111 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
                 upline2 = affiliate.getReferrer(upline);
             }
         }
-        if (affiliateAddr != address(0) && affiliateAddr != buyer) {
-            _grantWhaleBundleStats(affiliateAddr, passLevel, ticketsPerLevel);
-        }
-        for (uint256 i; i < quantity; ) {
-            uint96 dgnrsPaid = _rewardDeityPassDgnrs(
-                buyer,
-                affiliateAddr,
-                upline,
-                upline2
-            );
-            trophies.mintDeity(buyer, passLevel, dgnrsPaid);
-            unchecked {
-                ++i;
-            }
+        _rewardDeityPassDgnrs(buyer, affiliateAddr, upline, upline2);
+
+        // Queue whale-equivalent tickets: 40/lvl bonus (1-10), 2/lvl standard (11-100)
+        uint24 ticketStartLevel = passLevel <= 4 ? 1 : uint24(((passLevel + 1) / 50) * 50 + 1);
+        for (uint24 i = 0; i < 100; ) {
+            uint24 lvl = ticketStartLevel + i;
+            bool isBonus = (lvl >= passLevel && lvl <= WHALE_BONUS_END_LEVEL);
+            _queueTickets(buyer, lvl, isBonus ? WHALE_BONUS_TICKETS_PER_LEVEL : WHALE_STANDARD_TICKETS_PER_LEVEL);
+            unchecked { ++i; }
         }
 
-        if (levelStartTime == LEVEL_START_SENTINEL) {
+        // Refundable if game hasn't started
+        if (level == 0 && !gameOver) {
             deityPassRefundable[buyer] += totalPrice;
         }
-        // Level 1 distribution: 50% next, 25% reward, 25% future (reward tracked in futurePrizePool).
-        uint256 nextShare = (totalPrice * 5000) / 10_000;
-        uint256 rewardShare = (totalPrice * 2500) / 10_000;
-        uint256 futureShare;
-        unchecked {
-            futureShare = totalPrice - nextShare - rewardShare;
+
+        // Fund distribution: pre-game 50/50, post-game 5/95
+        uint256 nextShare;
+        if (level == 0) {
+            nextShare = (totalPrice * 5000) / 10_000;
+        } else {
+            nextShare = (totalPrice * 500) / 10_000;
         }
         nextPrizePool += nextShare;
-        futurePrizePool += rewardShare;
-        futurePrizePool += futureShare;
+        futurePrizePool += totalPrice - nextShare;
 
-        uint256 lootboxAmount = DEITY_PASS_LOOTBOX * quantity;
-        uint48 dayIndex = _currentDayIndex();
-        uint48 index = lootboxRngIndex;
-        bool presale = lootboxPresaleActive;
+        // Lootbox: 20% presale, 10% post
+        uint16 deityLootboxBps = lootboxPresaleActive ? DEITY_LOOTBOX_PRESALE_BPS : DEITY_LOOTBOX_POST_BPS;
+        uint256 lootboxAmount = (totalPrice * deityLootboxBps) / 10_000;
+        if (lootboxAmount != 0) {
+            _recordLootboxEntry(buyer, lootboxAmount, passLevel, mintPacked_[buyer]);
+        }
+    }
 
-        _recordLootboxMintDay(buyer, uint32(dayIndex));
+    /**
+     * @notice Handle deity pass transfer callback from the ERC721 contract.
+     * @dev Called via delegatecall from game's onDeityPassTransfer (triggered by ERC721 transfer).
+     *      Burns 5 ETH worth of BURNIE from sender. Nukes sender's mint stats and quest streak.
+     * @param from The current deity pass holder.
+     * @param to The address receiving the pass.
+     */
+    function handleDeityPassTransfer(address from, address to) external {
+        _handleDeityPassTransfer(from, to);
+    }
 
-        uint256 packed = lootboxEth[index][buyer];
-        uint256 existingAmount = packed & ((1 << 232) - 1);
-        uint48 storedDay = lootboxDay[index][buyer];
+    function _handleDeityPassTransfer(address from, address to) private {
+        if (level == 0) revert E();
+        if (deityPassCount[from] == 0) revert E();
+        if (deityPassCount[to] != 0) revert E();
 
-        if (existingAmount == 0) {
-            lootboxDay[index][buyer] = dayIndex;
-            lootboxIndexQueue[buyer].push(index);
-            emit LootBoxIndexAssigned(buyer, index, dayIndex);
-            if (presale) {
-                lootboxPresale[index][buyer] = true;
+        // Burn 5 ETH worth of BURNIE from sender
+        uint256 burnAmount = (DEITY_TRANSFER_ETH_COST * PRICE_COIN_UNIT) / price;
+        IDegenerusCoin(ContractAddresses.COIN).burnCoin(from, burnAmount);
+
+        // Move pass ownership
+        uint8 symbolId = deityPassSymbol[from];
+        deityBySymbol[symbolId] = to;
+        deityPassSymbol[to] = symbolId;
+        delete deityPassSymbol[from];
+
+        deityPassCount[to] = 1;
+        deityPassCount[from] = 0;
+
+        deityPassPurchasedCount[to] = deityPassPurchasedCount[from];
+        deityPassPurchasedCount[from] = 0;
+        deityPassPaidTotal[to] = deityPassPaidTotal[from];
+        deityPassPaidTotal[from] = 0;
+
+        // Replace sender in owners array
+        uint256 len = deityPassOwners.length;
+        for (uint256 i; i < len; ) {
+            if (deityPassOwners[i] == from) {
+                deityPassOwners[i] = to;
+                break;
             }
-        } else {
-            if (storedDay != dayIndex) revert E();
-            if (lootboxPresale[index][buyer] != presale) revert E();
+            unchecked { ++i; }
         }
 
-        uint256 boostedAmount = _applyLootboxBoostOnPurchase(
-            buyer,
-            dayIndex,
-            lootboxAmount
-        );
-        uint256 existingBase = lootboxEthBase[index][buyer];
-        if (existingAmount != 0 && existingBase == 0) {
-            existingBase = existingAmount;
-        }
-        lootboxEthBase[index][buyer] = existingBase + lootboxAmount;
+        // Zero refundable (transfer forfeits refund rights)
+        deityPassRefundable[from] = 0;
 
-        uint24 purchaseLevel = passLevel;
-        uint256 newAmount = existingAmount + boostedAmount;
-        lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
-        lootboxEthTotal += lootboxAmount;
-        _maybeRequestLootboxRng(lootboxAmount);
-    }
-
-    function redeemWhaleBundle10Pass(address buyer, uint256 quantity) external {
-        _redeemWhaleBundle10Pass(buyer, quantity);
-    }
-
-    function _redeemWhaleBundle10Pass(
-        address buyer,
-        uint256 quantity
-    ) private {
-        uint24 currentLevel = level;
-        uint24 passLevel = currentLevel;
-
-        if (passLevel % 10 != 1) revert E();
-
-        if (quantity == 0 || quantity > 100) revert E();
-
-        uint256 prevData = mintPacked_[buyer];
-
-        uint24 frozenUntilLevel = uint24((prevData >> ETH_FROZEN_UNTIL_LEVEL_SHIFT) & MINT_MASK_24);
-        if (frozenUntilLevel > 0 && currentLevel < frozenUntilLevel) {
-            revert E();
-        }
-
-        uint24 lastLevel = uint24((prevData >> ETH_LAST_LEVEL_SHIFT) & MINT_MASK_24);
-        uint24 levelCount = uint24((prevData >> ETH_LEVEL_COUNT_SHIFT) & MINT_MASK_24);
-        uint24 streak = uint24((prevData >> ETH_LEVEL_STREAK_SHIFT) & MINT_MASK_24);
-
-        uint24 ticketStartLevel = passLevel;
-        uint24 newFrozenLevel = passLevel + 9;
-        uint32 ticketsPerLevel = uint32(4 * quantity);
-
-        bool alreadyMintedAtCurrentLevel = (lastLevel == passLevel);
-        uint24 levelsToAdd = alreadyMintedAtCurrentLevel ? 9 : 10;
-
-        uint24 newLevelCount = levelCount + levelsToAdd;
-        uint24 newStreak = streak + levelsToAdd;
-
-        uint256 data = prevData;
-        data = _setPacked(data, ETH_LEVEL_COUNT_SHIFT, MINT_MASK_24, newLevelCount);
-        data = _setPacked(data, ETH_LEVEL_STREAK_SHIFT, MINT_MASK_24, newStreak);
-        data = _setPacked(data, ETH_FROZEN_UNTIL_LEVEL_SHIFT, MINT_MASK_24, newFrozenLevel);
-
-        uint8 currentBundleType = uint8((prevData >> ETH_WHALE_BUNDLE_TYPE_SHIFT) & 3);
-        if (1 >= currentBundleType) {
-            data = _setPacked(data, ETH_WHALE_BUNDLE_TYPE_SHIFT, 3, 1);
-        }
-
-        data = _setPacked(data, ETH_LAST_LEVEL_SHIFT, MINT_MASK_24, newFrozenLevel);
-
-        uint32 day = _currentMintDay();
-        data = _setMintDay(data, day, ETH_DAY_SHIFT, MINT_MASK_32);
-
-        mintPacked_[buyer] = data;
-
-        _queueTicketRange(buyer, ticketStartLevel, 10, ticketsPerLevel);
+        // Nuke sender stats
+        _nukePassHolderStats(from);
     }
 
     // -------------------------------------------------------------------------
     // Internal Helpers
     // -------------------------------------------------------------------------
 
-    function _lazyPassStartLevel(uint24 effectiveLevel) private pure returns (uint24) {
-        if (effectiveLevel == 0) return 1;
-        uint24 offset = uint24((effectiveLevel - 1) % 10);
-        return effectiveLevel - offset;
-    }
-
-    function _grantWhaleBundleStats(
-        address player,
-        uint24 passLevel,
-        uint32 ticketsPerLevel
-    ) private {
-        uint256 prevData = mintPacked_[player];
-
-        uint24 frozenUntilLevel = uint24((prevData >> ETH_FROZEN_UNTIL_LEVEL_SHIFT) & MINT_MASK_24);
-        uint24 lastLevel = uint24((prevData >> ETH_LAST_LEVEL_SHIFT) & MINT_MASK_24);
-        uint24 levelCount = uint24((prevData >> ETH_LEVEL_COUNT_SHIFT) & MINT_MASK_24);
-        uint24 streak = uint24((prevData >> ETH_LEVEL_STREAK_SHIFT) & MINT_MASK_24);
-
-        uint24 newFrozenLevel = passLevel + (DEITY_PASS_TICKET_LEVELS - 1);
-        if (frozenUntilLevel > newFrozenLevel) {
-            newFrozenLevel = frozenUntilLevel;
+    /// @dev Compute the total ETH cost of a 10-level lazy pass starting at startLevel.
+    ///      Cost equals the sum of per-level ticket prices (4 tickets per level).
+    function _lazyPassCost(uint24 startLevel) private pure returns (uint256 total) {
+        for (uint24 i = 0; i < LAZY_PASS_LEVELS; ) {
+            total += PriceLookupLib.priceForLevel(startLevel + i);
+            unchecked {
+                ++i;
+            }
         }
-
-        bool alreadyMintedAtCurrentLevel = (lastLevel == passLevel);
-        uint24 levelsToAdd = alreadyMintedAtCurrentLevel
-            ? (DEITY_PASS_TICKET_LEVELS - 1)
-            : DEITY_PASS_TICKET_LEVELS;
-
-        uint24 newLevelCount = levelCount + levelsToAdd;
-        uint24 newStreak = streak + levelsToAdd;
-        uint24 lastLevelTarget = newFrozenLevel > lastLevel
-            ? newFrozenLevel
-            : lastLevel;
-
-        uint256 data = prevData;
-        data = _setPacked(data, ETH_LEVEL_COUNT_SHIFT, MINT_MASK_24, newLevelCount);
-        data = _setPacked(data, ETH_LEVEL_STREAK_SHIFT, MINT_MASK_24, newStreak);
-        data = _setPacked(data, ETH_FROZEN_UNTIL_LEVEL_SHIFT, MINT_MASK_24, newFrozenLevel);
-        data = _setPacked(data, ETH_WHALE_BUNDLE_TYPE_SHIFT, 3, 3);
-        data = _setPacked(data, ETH_LAST_LEVEL_SHIFT, MINT_MASK_24, lastLevelTarget);
-
-        uint32 day = _currentMintDay();
-        data = _setMintDay(data, day, ETH_DAY_SHIFT, MINT_MASK_32);
-
-        mintPacked_[player] = data;
-        _queueTicketRange(player, passLevel, DEITY_PASS_TICKET_LEVELS, ticketsPerLevel);
     }
 
+    /// @dev Distribute DGNRS rewards for whale bundle purchase to buyer and affiliates.
+    /// @param buyer The bundle purchaser receiving minter reward.
+    /// @param affiliateAddr Direct referrer (receives 0.1% of affiliate pool).
+    /// @param upline Second-level referrer (receives 0.02% of affiliate pool).
+    /// @param upline2 Third-level referrer (receives 0.01% of affiliate pool).
     function _rewardWhaleBundleDgnrs(
         address buyer,
         address affiliateAddr,
@@ -755,6 +657,12 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         }
     }
 
+    /// @dev Distribute DGNRS rewards for deity pass purchase to buyer and affiliates.
+    /// @param buyer The pass purchaser receiving 5% of whale pool.
+    /// @param affiliateAddr Direct referrer (receives 0.5% of affiliate pool).
+    /// @param upline Second-level referrer (receives 0.1% of affiliate pool).
+    /// @param upline2 Third-level referrer (receives 0.05% of affiliate pool).
+    /// @return buyerDgnrs The amount of DGNRS transferred to the buyer.
     function _rewardDeityPassDgnrs(
         address buyer,
         address affiliateAddr,
@@ -812,55 +720,62 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         return buyerDgnrs;
     }
 
-    function _maybeRequestLootboxRng(uint256 lootboxAmount) private {
-        uint256 threshold = lootboxRngThreshold;
-        if (threshold == 0) {
-            threshold = 1 ether / ContractAddresses.COST_DIVISOR;
-        }
-
-        uint256 pending = lootboxRngPendingEth + lootboxAmount;
-        if (pending < threshold) {
-            lootboxRngPendingEth = pending;
-            return;
-        }
-
+    function _recordLootboxEntry(
+        address buyer,
+        uint256 lootboxAmount,
+        uint24 purchaseLevel,
+        uint256 cachedPacked
+    ) private {
+        uint48 dayIndex = _simulatedDayIndex();
         uint48 index = lootboxRngIndex;
-        if (_tryRequestLootboxRng(index)) {
-            lootboxRngPendingEth = pending - threshold;
-            lootboxRngIndex = index + 1;
+
+        _recordLootboxMintDay(buyer, uint32(dayIndex), cachedPacked);
+
+        uint256 packed = lootboxEth[index][buyer];
+        uint256 existingAmount = packed & ((1 << 232) - 1);
+        uint48 storedDay = lootboxDay[index][buyer];
+
+        if (existingAmount == 0) {
+            lootboxDay[index][buyer] = dayIndex;
+            lootboxBaseLevelPacked[index][buyer] = uint24(level + 2);
+            lootboxEvScorePacked[index][buyer] =
+                uint16(IDegenerusGame(address(this)).playerActivityScore(buyer) + 1);
+            lootboxIndexQueue[buyer].push(index);
+            emit LootBoxIndexAssigned(buyer, index, dayIndex);
         } else {
-            lootboxRngPendingEth = pending;
-        }
-    }
-
-    function _tryRequestLootboxRng(uint48 index) private returns (bool requested) {
-        if (index == 0) return false;
-        if (lootboxRngWordByIndex[index] != 0) return false;
-        if (
-            address(vrfCoordinator) == address(0) ||
-            vrfKeyHash == bytes32(0) ||
-            vrfSubscriptionId == 0
-        ) {
-            return false;
+            if (storedDay != dayIndex) revert E();
         }
 
-        try
-            vrfCoordinator.requestRandomWords(
-                VRFRandomWordsRequest({
-                    keyHash: vrfKeyHash,
-                    subId: vrfSubscriptionId,
-                    requestConfirmations: LOOTBOX_VRF_REQUEST_CONFIRMATIONS,
-                    callbackGasLimit: LOOTBOX_VRF_CALLBACK_GAS_LIMIT,
-                    numWords: 1,
-                    extraArgs: hex""
-                })
-            )
-        returns (uint256 requestId) {
-            lootboxRngRequestIndexById[requestId] = index;
-            requested = true;
-        } catch {}
+        uint256 boostedAmount = _applyLootboxBoostOnPurchase(
+            buyer,
+            dayIndex,
+            lootboxAmount
+        );
+        uint256 existingBase = lootboxEthBase[index][buyer];
+        if (existingAmount != 0 && existingBase == 0) {
+            existingBase = existingAmount;
+        }
+        lootboxEthBase[index][buyer] = existingBase + lootboxAmount;
+
+        uint256 newAmount = existingAmount + boostedAmount;
+        lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
+        lootboxEthTotal += lootboxAmount;
+        _maybeRequestLootboxRng(lootboxAmount);
     }
 
+    /// @dev Accumulate lootbox ETH for pending RNG request.
+    /// @param lootboxAmount The lootbox amount to add to pending total.
+    function _maybeRequestLootboxRng(uint256 lootboxAmount) private {
+        lootboxRngPendingEth += lootboxAmount;
+    }
+
+    /// @dev Apply any active lootbox boost boon to the purchase amount.
+    ///      Checks boosts in order: 25% > 15% > 5%. Consumes the first valid boost found.
+    ///      Boost is capped at LOOTBOX_BOOST_MAX_VALUE (10 ETH) and expires after 48 hours.
+    /// @param player The player whose boost to check and consume.
+    /// @param day The current day index for event emission.
+    /// @param amount The base lootbox amount before boost.
+    /// @return boostedAmount The lootbox amount after applying any boost.
     function _applyLootboxBoostOnPurchase(
         address player,
         uint48 day,
@@ -869,35 +784,54 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         boostedAmount = amount;
         uint16 consumedBoostBps = 0;
 
-        // Check 15% boost first (rarer, better boost)
-        bool has15Boost = lootboxBoon15Active[player];
-        uint48 boost15Timestamp = lootboxBoon15Timestamp[player];
-        if (has15Boost && block.timestamp > uint256(boost15Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
-            has15Boost = false;
-            lootboxBoon15Active[player] = false;
-        }
-        if (has15Boost) {
-            // Apply 15% boost (capped at 10 ETH lootbox value)
-            uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
-            uint256 boost = (cappedAmount * LOOTBOX_BOOST_15_BONUS_BPS) / 10_000;
-            boostedAmount += boost;
-            consumedBoostBps = LOOTBOX_BOOST_15_BONUS_BPS;
-            lootboxBoon15Active[player] = false;
-        } else {
-            // Check 5% boost if no 15% boost
-            bool has5Boost = lootboxBoon5Active[player];
-            uint48 boost5Timestamp = lootboxBoon5Timestamp[player];
-            if (has5Boost && block.timestamp > uint256(boost5Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
-                has5Boost = false;
-                lootboxBoon5Active[player] = false;
+        // Check 25% boost first (rarest, best boost)
+        bool has25Boost = lootboxBoon25Active[player];
+        if (has25Boost) {
+            uint48 boost25Timestamp = lootboxBoon25Timestamp[player];
+            if (block.timestamp > uint256(boost25Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                has25Boost = false;
+                lootboxBoon25Active[player] = false;
             }
-            if (has5Boost) {
-                // Apply 5% boost (capped at 10 ETH lootbox value)
+        }
+        if (has25Boost) {
+            uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
+            uint256 boost = (cappedAmount * LOOTBOX_BOOST_25_BONUS_BPS) / 10_000;
+            boostedAmount += boost;
+            consumedBoostBps = LOOTBOX_BOOST_25_BONUS_BPS;
+            lootboxBoon25Active[player] = false;
+        } else {
+            // Check 15% boost next
+            bool has15Boost = lootboxBoon15Active[player];
+            if (has15Boost) {
+                uint48 boost15Timestamp = lootboxBoon15Timestamp[player];
+                if (block.timestamp > uint256(boost15Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                    has15Boost = false;
+                    lootboxBoon15Active[player] = false;
+                }
+            }
+            if (has15Boost) {
                 uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
-                uint256 boost = (cappedAmount * LOOTBOX_BOOST_5_BONUS_BPS) / 10_000;
+                uint256 boost = (cappedAmount * LOOTBOX_BOOST_15_BONUS_BPS) / 10_000;
                 boostedAmount += boost;
-                consumedBoostBps = LOOTBOX_BOOST_5_BONUS_BPS;
-                lootboxBoon5Active[player] = false;
+                consumedBoostBps = LOOTBOX_BOOST_15_BONUS_BPS;
+                lootboxBoon15Active[player] = false;
+            } else {
+                // Check 5% boost last
+                bool has5Boost = lootboxBoon5Active[player];
+                if (has5Boost) {
+                    uint48 boost5Timestamp = lootboxBoon5Timestamp[player];
+                    if (block.timestamp > uint256(boost5Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                        has5Boost = false;
+                        lootboxBoon5Active[player] = false;
+                    }
+                }
+                if (has5Boost) {
+                    uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
+                    uint256 boost = (cappedAmount * LOOTBOX_BOOST_5_BONUS_BPS) / 10_000;
+                    boostedAmount += boost;
+                    consumedBoostBps = LOOTBOX_BOOST_5_BONUS_BPS;
+                    lootboxBoon5Active[player] = false;
+                }
             }
         }
 
@@ -906,63 +840,41 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         }
     }
 
-    function _recordLootboxMintDay(address player, uint32 day) private {
-        uint256 prevData = mintPacked_[player];
-        uint32 prevDay = uint32((prevData >> ETH_DAY_SHIFT) & MINT_MASK_32);
+    /// @dev Record the mint day in player's packed data for lootbox tracking.
+    /// @param player The player address.
+    /// @param day The current day index.
+    /// @param cachedPacked The caller's cached mintPacked_ value to avoid a redundant SLOAD.
+    function _recordLootboxMintDay(address player, uint32 day, uint256 cachedPacked) private {
+        uint32 prevDay = uint32((cachedPacked >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32);
         if (prevDay == day) {
             return;
         }
-        uint256 clearedDay = prevData & ~(MINT_MASK_32 << ETH_DAY_SHIFT);
-        mintPacked_[player] = clearedDay | (uint256(day) << ETH_DAY_SHIFT);
+        uint256 clearedDay = cachedPacked & ~(BitPackingLib.MASK_32 << BitPackingLib.DAY_SHIFT);
+        mintPacked_[player] = clearedDay | (uint256(day) << BitPackingLib.DAY_SHIFT);
     }
 
-    function _currentDayIndex() private view returns (uint48) {
-        uint48 currentDayBoundary = uint48((block.timestamp - JACKPOT_RESET_TIME) / 1 days);
-        return currentDayBoundary - ContractAddresses.DEPLOY_DAY_BOUNDARY + 1;
-    }
+    /// @dev Zero mint stats and quest streak for a player (penalty for deity pass transfer).
+    function _nukePassHolderStats(address player) private {
+        uint256 data = mintPacked_[player];
+        // Zero: LEVEL_COUNT, LEVEL_STREAK, LAST_LEVEL, MINT_STREAK_LAST_COMPLETED
+        data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_COUNT_SHIFT, BitPackingLib.MASK_24, 0);
+        data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_STREAK_SHIFT, BitPackingLib.MASK_24, 0);
+        data = BitPackingLib.setPacked(data, BitPackingLib.LAST_LEVEL_SHIFT, BitPackingLib.MASK_24, 0);
+        // MINT_STREAK_LAST_COMPLETED is at shift 160 (from MintStreakUtils)
+        data = BitPackingLib.setPacked(data, 160, BitPackingLib.MASK_24, 0);
+        mintPacked_[player] = data;
 
-    /**
-     * @notice Get current day index for mint tracking.
-     * @dev Returns day index relative to deploy time (day 1 = deploy day).
-     *      Days reset at JACKPOT_RESET_TIME (22:57 UTC), not midnight.
-     * @return Day index (1-indexed from deploy day).
-     */
-    function _currentMintDay() private view returns (uint32) {
-        uint48 day = dailyIdx;
-        if (day == 0) {
-            // Calculate from timestamp if not yet set
-            uint48 currentDayBoundary = uint48((block.timestamp - JACKPOT_RESET_TIME) / 1 days);
-            day = currentDayBoundary - ContractAddresses.DEPLOY_DAY_BOUNDARY + 1;
-        }
-        return uint32(day);
+        // Reset quest streak via external call to quests contract
+        IDegenerusQuestsReset(ContractAddresses.QUESTS).resetQuestStreak(player);
     }
+}
 
-    /**
-     * @notice Update day field in packed data (only if changed).
-     * @param data Current packed data.
-     * @param day New day value.
-     * @param dayShift Bit position of day field.
-     * @param dayMask Mask for day field.
-     * @return Updated packed data.
-     */
-    function _setMintDay(uint256 data, uint32 day, uint256 dayShift, uint256 dayMask) private pure returns (uint256) {
-        uint32 prevDay = uint32((data >> dayShift) & dayMask);
-        if (prevDay == day) {
-            return data; // No change needed
-        }
-        uint256 clearedDay = data & ~(dayMask << dayShift);
-        return clearedDay | (uint256(day) << dayShift);
-    }
+/// @dev Minimal interface for quest streak reset (called via delegatecall context as GAME).
+interface IDegenerusQuestsReset {
+    function resetQuestStreak(address player) external;
+}
 
-    /**
-     * @notice Set a field in packed data.
-     * @param data Current packed data.
-     * @param shift Bit position of field.
-     * @param mask Mask for field width.
-     * @param value New value for field.
-     * @return Updated packed data.
-     */
-    function _setPacked(uint256 data, uint256 shift, uint256 mask, uint256 value) private pure returns (uint256) {
-        return (data & ~(mask << shift)) | ((value & mask) << shift);
-    }
+/// @dev Minimal interface for minting deity pass ERC721 tokens.
+interface IDegenerusDeityPassMint {
+    function mint(address to, uint256 tokenId) external;
 }

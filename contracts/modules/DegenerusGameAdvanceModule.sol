@@ -1,21 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IDegenerusGamepieces} from "../interfaces/IDegenerusGamepieces.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
-import {IBurnieLootbox} from "../interfaces/IBurnieLootbox.sol";
-import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
-import {IDegenerusLazyPass} from "../interfaces/IDegenerusLazyPass.sol";
 import {
     IDegenerusGameEndgameModule,
     IDegenerusGameGameOverModule,
     IDegenerusGameJackpotModule,
-    IDegenerusGameMintModule
+    IDegenerusGameMintModule,
+    IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
-import {IVRFCoordinator, VRFRandomWordsRequest} from "../interfaces/IVRFCoordinator.sol";
+import {
+    IVRFCoordinator,
+    VRFRandomWordsRequest
+} from "../interfaces/IVRFCoordinator.sol";
+import {IStETH} from "../interfaces/IStETH.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {GameTimeLib} from "../libraries/GameTimeLib.sol";
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.
 contract DegenerusGameAdvanceModule is DegenerusGameStorage {
@@ -34,529 +37,255 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                              EVENTS                                  |
       +======================================================================+*/
 
-    error NotApproved();
+    event Advance(uint8 stage, uint24 lvl);
 
-    event Advance(uint8 gameState);
-    event ReverseFlip(address indexed caller, uint256 totalQueued, uint256 cost);
-    event VrfCoordinatorUpdated(address indexed previous, address indexed current);
-    event LootBoxPresaleStatus(bool active);
+    // Advance stage constants
+    uint8 private constant STAGE_GAMEOVER = 0;
+    uint8 private constant STAGE_RNG_REQUESTED = 1;
+    uint8 private constant STAGE_TRANSITION_WORKING = 2;
+    uint8 private constant STAGE_TRANSITION_DONE = 3;
+    uint8 private constant STAGE_TICKETS_WORKING = 5;
+    uint8 private constant STAGE_PURCHASE_DAILY = 6;
+    uint8 private constant STAGE_FUTURE_TICKETS_WORKING = 7;
+    uint8 private constant STAGE_LEVEL_JACKPOT_LOOTBOX = 8;
+    uint8 private constant STAGE_LEVEL_JACKPOT_ETH = 9;
+    uint8 private constant STAGE_ENTERED_JACKPOT = 13;
+    uint8 private constant STAGE_JACKPOT_ETH_RESUME = 15;
+    uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 16;
+    uint8 private constant STAGE_JACKPOT_COIN_TICKETS = 17;
+    uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 18;
+    event ReverseFlip(
+        address indexed caller,
+        uint256 totalQueued,
+        uint256 cost
+    );
+    event DailyRngApplied(
+        uint48 day,
+        uint256 rawWord,
+        uint256 nudges,
+        uint256 finalWord
+    );
+    event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId);
+    event VrfCoordinatorUpdated(
+        address indexed previous,
+        address indexed current
+    );
 
     /*+=======================================================================+
       |                   PRECOMPUTED ADDRESSES (CONSTANT)                    |
       +=======================================================================+*/
 
-    IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
-    IBurnieCoinflip internal constant coinflip = IBurnieCoinflip(ContractAddresses.COINFLIP);
-    IBurnieLootbox internal constant lootbox = IBurnieLootbox(ContractAddresses.LOOTBOX);
-    IDegenerusGamepieces internal constant gamepieces =
-        IDegenerusGamepieces(ContractAddresses.GAMEPIECES);
-    IDegenerusJackpots internal constant jackpots =
-        IDegenerusJackpots(ContractAddresses.JACKPOTS);
-    IDegenerusLazyPass internal constant lazyPass =
-        IDegenerusLazyPass(ContractAddresses.LAZY_PASS);
-
+    IDegenerusCoin internal constant coin =
+        IDegenerusCoin(ContractAddresses.COIN);
+    IBurnieCoinflip internal constant coinflip =
+        IBurnieCoinflip(ContractAddresses.COINFLIP);
+    IStETH internal constant steth =
+        IStETH(ContractAddresses.STETH_TOKEN);
     /*+======================================================================+
       |                           CONSTANTS                                  |
       +======================================================================+*/
 
-    uint256 private constant DEPLOY_IDLE_TIMEOUT = (365 days * 5) / 2;
     uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 912;
-    uint48 private constant LEVEL_START_SENTINEL = type(uint48).max;
-    uint48 private constant JACKPOT_RESET_TIME = 82620;
     uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 3 days;
-    uint8 private constant JACKPOT_LEVEL_CAP = 10;
-    uint8 private constant TICKET_JACKPOT_NONE = 0;
+    uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint16 private constant TRAIT_ID_TIMEOUT = 420;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 200_000;
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
+    uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 3;
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
-    uint24 private constant DEITY_PASS_TICKET_LEVELS = 100;
-    uint32 private constant DEITY_PASS_TICKETS_PER_LEVEL = 4;
+    uint256 private constant BURNIE_RNG_TRIGGER = 40_000 ether;
+    uint32 private constant VAULT_PERPETUAL_TICKETS = 16;
     uint8 private constant ETH_PERK_ODDS = 100;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 2000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 300;
     uint16 private constant NEXT_TO_FUTURE_BPS_WEEK_STEP = 100;
     uint16 private constant NEXT_TO_FUTURE_BPS_X9_BONUS = 200;
-    bytes32 private constant NEXT_SKIM_VARIANCE_TAG =
-        keccak256("next-skim-variance");
     uint16 private constant NEXT_SKIM_VARIANCE_BPS = 1000;
     uint16 private constant NEXT_SKIM_VARIANCE_MIN_BPS = 1000;
+    uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
 
-    /// @dev Minimum lootbox pending ETH to allow manual RNG roll (ETH lootboxes)
-    uint256 private constant MANUAL_RNG_MIN_LOOTBOX_ETH = 1 ether / ContractAddresses.COST_DIVISOR;
-    /// @dev Minimum combined pending BURNIE to allow manual RNG roll (BURNIE lootboxes + turboflips)
-    uint256 private constant MANUAL_RNG_MIN_BURNIE_PENDING = 100_000 ether;
-    /// @dev Work bounty for ticket processing (500 BURNIE flip credit)
-    uint256 private constant TICKET_WORK_BOUNTY = PRICE_COIN_UNIT >> 1;
+    /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH).
+    uint256 private constant LOOTBOX_PRESALE_ETH_CAP = 200 ether;
 
-    /*+======================================================================+
-      |                    MINT PACKED BIT LAYOUT                            |
-      +======================================================================+*/
+    /// @dev BURNIE bounty for eligible advanceGame calls (500 BURNIE flip credit).
+    uint256 private constant ADVANCE_BOUNTY = PRICE_COIN_UNIT >> 1;
 
-    uint256 private constant MINT_MASK_24 = (uint256(1) << 24) - 1;
-    uint256 private constant MINT_MASK_32 = (uint256(1) << 32) - 1;
-    uint256 private constant ETH_DAY_SHIFT = 72;
-    uint256 private constant ETH_FROZEN_UNTIL_LEVEL_SHIFT = 128;
-
-    ///      3. Process dormant cleanup if in setup state
-    ///      4. Gate on RNG readiness (request new VRF if needed)
-    ///      5. Process ticket batches
-    ///      6. Execute state-specific logic:
-    ///         - SETUP: Run endgame settlement and queue prep before advancing to PURCHASE
-    ///         - PURCHASE/BURN: Process phase-specific logic
-    ///      7. Credit caller with BURNIE reward (if cap == 0)
-    ///
-    ///      SECURITY:
-    ///      - Liveness guards prevent abandoned game lockup
-    ///      - Daily gate prevents non-participants from advancing
-    ///      - RNG gating ensures fairness (no manipulation during VRF window)
-    ///      - Batched processing prevents DoS from large queues
-    ///
-    /// @param cap Gas budget override for batched operations.
-    ///            0 = standard flow with BURNIE reward.
-    ///            >0 = emergency unstuck mode (no BURNIE reward).
+    /// @notice Advance game state. Called daily to process jackpots, mints, and phase transitions.
+    /// @param cap Write budget for batched ops. 0 = normal (with bounty), >0 = emergency mode.
     function advanceGame(uint32 cap) external {
         address caller = msg.sender;
         uint48 ts = uint48(block.timestamp);
-        // Day index is relative to deploy time (day 1 = deploy day).
-        uint48 day = _currentDayIndex();
-        IDegenerusCoin coinContract = coin;
-        uint48 lst = levelStartTime;
-        bool gameOver;
-        uint8 _gameState = gameState;
+        uint48 day = _simulatedDayIndexAt(ts);
+        bool inJackpot = jackpotPhaseFlag;
         uint24 lvl = level;
-
-        // === GAMEOVER CHECK ===
-        if (_gameState == GAME_STATE_GAMEOVER) {
-            // Check for final sweep (1 month after gameover)
-            (bool ok, bytes memory data) = ContractAddresses
-                .GAME_GAMEOVER_MODULE
-                .delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameGameOverModule.handleFinalSweep.selector
-                    )
-                );
-            if (!ok) _revertDelegate(data);
-            return;
-        }
-
-        // === LIVENESS GUARDS ===
-        // Prevent permanent lockup if game is abandoned
+        bool lastPurchase = (!inJackpot) && lastPurchaseDay;
+        // Level already incremented at RNG request when lastPurchase=true
+        uint24 purchaseLevel = (lastPurchase && rngLockedFlag) ? lvl : lvl + 1;
         if (
-            lvl == 1 &&
-            lst == LEVEL_START_SENTINEL &&
-            day > DEPLOY_IDLE_TIMEOUT_DAYS
+            _handleGameOverPath(
+                ts,
+                day,
+                levelStartTime,
+                lvl,
+                lastPurchase,
+                dailyIdx
+            )
         ) {
-            // Deployed but never started for 2.5 years - game abandoned
-            gameOver = true;
-        } else if (
-            lst != LEVEL_START_SENTINEL &&
-            ts - 365 days > lst &&
-            _gameState != GAME_STATE_GAMEOVER
-        ) {
-            // Game inactive for 365 days - trigger game over
-            gameOver = true;
-        }
-        if (gameOver) {
-            if (rngWordByDay[dailyIdx] == 0) {
-                bool lastPurchaseFlag = (_gameState == GAME_STATE_PURCHASE) &&
-                    lastPurchaseDay;
-                uint256 rngWord = _gameOverEntropy(day, lvl, lastPurchaseFlag);
-                if (rngWord == 1 || rngWord == 0) return;
-                _unlockRng(day);
-            }
-            // Sweep all funds to the vault for final distribution
-            (bool ok, bytes memory data) = ContractAddresses
-                .GAME_GAMEOVER_MODULE
-                .delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameGameOverModule
-                            .handleGameOverDrain
-                            .selector,
-                        dailyIdx
-                    )
-                );
-            if (!ok) _revertDelegate(data);
+            emit Advance(STAGE_GAMEOVER, lvl);
             return;
         }
 
-        bool lastPurchase = (_gameState == GAME_STATE_PURCHASE) &&
-            lastPurchaseDay;
+        _enforceDailyMintGate(caller, purchaseLevel, cap, dailyIdx);
 
-        // === MANUAL LOOTBOX RNG ===
-        // Allow manual RNG roll if there's >1 ETH of pending lootbox OR >100k BURNIE pending
-        // (BURNIE = lootboxes + turboflips combined)
-        // Bypasses daily gate when threshold met - the reward is getting RNG to gamble on
-        uint256 burniePending = lootbox.lootboxRngPendingBurnieAmount() + coin.turboFlipPendingBurnieAmount();
-        bool ethThresholdMet = lootboxRngPendingEth >= MANUAL_RNG_MIN_LOOTBOX_ETH;
-        bool burnieThresholdMet = burniePending >= MANUAL_RNG_MIN_BURNIE_PENDING;
+        if (day == dailyIdx) revert NotTimeYet();
 
-        if (ethThresholdMet || burnieThresholdMet) {
-            // Check if we can skip daily gate for this manual roll
-            if (day == dailyIdx) {
-                // Same day - request manual lootbox RNG without crossing daily boundary
-                // Tickets will be processed AFTER RNG arrives (for RNG integrity)
-                bool requested = _tryRequestLootboxRng();
-                if (requested) {
-                    return; // Exit early - manual RNG requested (reward is getting RNG)
-                }
-            }
-        }
-
-        // Single-iteration do-while pattern allows structured breaks for early exit
+        uint8 stage;
         do {
-            // === DAILY GATE ===
-            // Standard flow requires caller to have minted today (prevents gaming by non-participants)
-            // Skip for CREATOR address to allow maintenance advances
-            if (cap == 0 && caller != ContractAddresses.CREATOR) {
-                uint32 gateIdx = uint32(dailyIdx);
-                if (gateIdx != 0) {
-                    uint256 mintData = mintPacked_[caller];
-                    uint32 lastEthDay = uint32(
-                        (mintData >> ETH_DAY_SHIFT) & MINT_MASK_32
-                    );
-                    // Allow mints from current day or previous day
-                    if (lastEthDay + 1 < gateIdx) {
-                        uint24 frozenUntilLevel = uint24(
-                            (mintData >> ETH_FROZEN_UNTIL_LEVEL_SHIFT) &
-                                MINT_MASK_24
-                        );
-                        bool hasLazyPass = frozenUntilLevel > lvl ||
-                            deityPassCount[caller] != 0;
-                        if (!hasLazyPass) revert MustMintToday();
-                    }
+            // RNG: use existing word or request new one
+            uint256 rngWord = rngGate(ts, day, purchaseLevel, lastPurchase);
+            if (rngWord == 1) {
+                stage = STAGE_RNG_REQUESTED;
+                break;
+            }
+
+            // Phase transition housekeeping + near-future tickets
+            if (phaseTransitionActive) {
+                if (!_processPhaseTransition(cap, purchaseLevel)) {
+                    stage = STAGE_TRANSITION_WORKING;
+                    break;
+                }
+                phaseTransitionActive = false;
+                _unlockRng(day);
+                jackpotPhaseFlag = false;
+                stage = STAGE_TRANSITION_DONE;
+                break;
+            }
+
+            // On final jackpot day, process near-future ticket queues (+2..+5)
+            // before the early-bird draw to include fresh lootbox-driven tickets.
+            if (
+                inJackpot &&
+                jackpotCounter == JACKPOT_LEVEL_CAP - 1 &&
+                !dailyJackpotCoinTicketsPending &&
+                dailyEthPoolBudget == 0 &&
+                dailyEthPhase == 0 &&
+                dailyEthBucketCursor == 0 &&
+                dailyEthWinnerCursor == 0
+            ) {
+                if (!_prepareFinalDayFutureTickets(cap, lvl)) {
+                    stage = STAGE_FUTURE_TICKETS_WORKING;
+                    break;
                 }
             }
 
-            // Release a portion of the future prize pool once per level.
-            _drawDownFuturePrizePool(lvl);
-
-            // === RNG GATING ===
-            // Either use existing VRF word or request new one. Returns 1 if request just made.
-            uint256 rngWord = rngAndTimeGate(day, lvl, lastPurchase, caller, cap);
-            if (rngWord == 1) {
-                break; // VRF requested - must wait for fulfillment
-            }
-
-            // === DEITY PASS REFRESH ===
-            // Queue perma-pass tickets in batches before any ticket processing.
-            (bool refreshWorked, bool refreshFinished) = _runDeityPassRefreshBatch(
-                cap
-            );
-            if (refreshWorked || !refreshFinished) break;
-
-            // === LAZY PASS AUTO-ACTIVATION ===
-            // Activate lazy passes at the first ticket level before processing current tickets.
-            if (
-                _gameState == GAME_STATE_PURCHASE &&
-                lastPurchaseDay &&
-                !levelJackpotPaid &&
-                (lvl % 10 == 1)
-            ) {
-                (bool lazyWorked, bool lazyFinished) = lazyPass
-                    .processAutoActivation(cap, lvl);
-                if (lazyWorked || !lazyFinished) break;
-            }
-
-            // === CURRENT LEVEL TICKET PROCESSING ===
-            // Process tickets for current level in batches (prevents gas exhaustion).
-            // Future level tickets are processed at burn phase start.
+            // Process current level tickets
             (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(
                 cap,
-                lvl
+                purchaseLevel
             );
-            if (ticketWorked || !ticketsFinished) break;
+            if (ticketWorked || !ticketsFinished) {
+                stage = STAGE_TICKETS_WORKING;
+                break;
+            }
 
-            // +================================================================+
-            // |                    STATE 1: SETUP                              |
-            // |  Endgame settlement phase after level completion.              |
-            // |  • Open decimator window at specific level positions           |
-            // |  • Run endgame module for reward jackpots (BAF/Decimator)     |
-            // |  • Exterminator payout handled during burn phase, not here    |
-            // |  • Transitions to PURCHASE after settlement and queue prep    |
-            // +================================================================+
-            if (_gameState == GAME_STATE_SETUP) {
-                // Decimator window opens at levels ending in 5 (except 95)
-                // Note: Level 99 window opens during State 2 for the level 100 special
-                if (lvl % 10 == 5 && lvl % 100 != 95) {
+            // === PURCHASE PHASE ===
+            if (!inJackpot) {
+                // Pre-target: daily jackpots while building prize pool
+                if (!lastPurchaseDay) {
+                    payDailyJackpot(false, purchaseLevel, rngWord, cap);
+                    _payDailyCoinJackpot(purchaseLevel, rngWord);
+                    if (nextPrizePool >= levelPrizePool[purchaseLevel - 1]) {
+                        lastPurchaseDay = true;
+                    }
+                    _unlockRng(day);
+                    stage = STAGE_PURCHASE_DAILY;
+                    break;
+                }
+
+                // Activate next-level tickets before jackpot phase
+                {
+                    uint24 nextLevel = purchaseLevel + 1;
+                    (
+                        bool futureWorked,
+                        bool futureFinished,
+
+                    ) = _processFutureTicketBatch(cap, nextLevel);
+                    if (futureWorked || !futureFinished) {
+                        stage = STAGE_FUTURE_TICKETS_WORKING;
+                        break;
+                    }
+                }
+
+                // Consolidate prize pools (no separate level jackpot split)
+                if (!levelJackpotPaid) {
+                    levelPrizePool[purchaseLevel] = nextPrizePool;
+                    _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);
+                    _consolidatePrizePools(purchaseLevel, rngWord);
+                    levelJackpotPaid = true;
+                }
+
+                if (lootboxPresaleActive && (lvl >= 3 || lootboxPresaleMintEth >= LOOTBOX_PRESALE_ETH_CAP)) lootboxPresaleActive = false;
+
+                // Transition to jackpot phase
+                earlyBurnPercent = 0;
+                jackpotPhaseFlag = true;
+
+                // Open decimator window: levels x4 (not x94) or x99
+                uint24 mod100 = lvl % 100;
+                if ((lvl % 10 == 4 && mod100 != 94) || mod100 == 99) {
                     decWindowOpen = true;
                 }
 
-                // Run endgame settlement (reward jackpots/affiliate trophy).
-                // Exterminator payouts are handled during the burn phase.
-                _runEndgameModule(lvl, rngWord);
-
-                // Process near-future ticket queues (next 4 levels) before starting new level
-                // Uses same gas-conscious batch processing as normal ticket activation
-                // Processes multiple levels in one call if each completes quickly
-                // Start cursor at 1 if not yet started
-                if (nearFutureLevelCursor == 0) {
-                    nearFutureLevelCursor = 1;
-                }
-
-                // Process levels until we hit one that's not finished or complete all 4
-                // This allows multiple small queues to be processed in one call
-                while (nearFutureLevelCursor <= 4) {
-                    uint24 targetLevel = lvl + nearFutureLevelCursor;
-                    (, bool finished) = _processFutureTicketBatch(cap, targetLevel);
-
-                    // If this level isn't finished, stay in State 1 for next advanceGame call
-                    // (we're in the middle of processing this level's queue)
-                    if (!finished) {
-                        break;
-                    }
-
-                    // This level is complete - move to next level
-                    // (continue processing, allowing multiple levels per call if queues are small)
-                    unchecked {
-                        ++nearFutureLevelCursor;
-                    }
-                }
-
-                // If not all 4 levels processed, stay in State 1
-                if (nearFutureLevelCursor <= 4) {
-                    break;
-                }
-
-                // All 4 near-future levels processed - reset cursor and transition to State 2
-                nearFutureLevelCursor = 0;
-                bool firstLevelStart = (levelStartTime == LEVEL_START_SENTINEL);
-                gameState = GAME_STATE_PURCHASE;
-                levelStartTime = uint48(block.timestamp);
-                purchaseTargetReachedTime = 0;
-                lastPurchaseDay = false;
-                levelJackpotPaid = false;
-                levelJackpotLootboxPaid = false;
-                if (firstLevelStart) {
-                    _releaseDeityPassEscrow();
-                }
-                break;
-            }
-
-            // +================================================================+
-            // |                    STATE 2: PURCHASE / AIRDROP                 |
-            // |  Mint phase where players purchase gamepieces and receive airdrops.  |
-            // |  • Pay daily jackpot until prize pool target is met            |
-            // |  • Pay level jackpot once target is met                        |
-            // |  • Process pending mint batches                                |
-            // |  • Rebuild trait counts for new level                          |
-            // |  • Transition to State 3 when all processing complete          |
-            // +================================================================+
-            if (_gameState == GAME_STATE_PURCHASE) {
-                if (ticketJackpotType != TICKET_JACKPOT_NONE) {
-                    payTicketJackpot(lvl, rngWord);
-                    _unlockRng(day);
-                    break;
-                }
-                // --- Pre-target: daily ContractAddresses.JACKPOTS while building up prize pool ---
-                if (!lastPurchaseDay) {
-                    payDailyJackpot(false, lvl, rngWord);
-                    _payDailyCoinJackpot(lvl, rngWord); // Award BURNIE to ticket holders
-                    // Check if prize pool target is now met
-                    if (nextPrizePool >= lastPrizePool) {
-                        lastPurchaseDay = true;
-                        lastPurchaseDayFlipTotal = 0;
-                        purchaseTargetReachedTime = uint48(block.timestamp);
-                        // Time-based split: route a portion of nextPrizePool into future reserve.
-                        _applyTimeBasedFutureTake(purchaseTargetReachedTime, lvl, rngWord);
-                    }
-                    if (ticketJackpotType != TICKET_JACKPOT_NONE) {
-                        break; // ticket jackpot queued, will process next tick
-                    }
-                    _unlockRng(day);
-                    break;
-                }
-
-                // --- Target met: pay level jackpot ---
-                if (!levelJackpotPaid) {
-                    // Level 100 multiples get special decimator/BAF jackpot
-                    if (lvl % 100 == 0) {
-                        if (!_runDecimatorHundredJackpot(lvl, rngWord)) {
-                            break; // Keep working this jackpot slice before moving on
-                        }
-                    }
-
-                    // === PROCESS NEXT LEVEL TICKETS (from lootboxes) ===
-                    // Activate lootbox tickets for next level before level jackpot.
-                    // This makes them eligible for early-bird jackpots and ensures
-                    // they're ready at burn phase start.
-                    uint24 nextLevel = lvl + 1;
-                    (
-                        bool futureWorked,
-                        bool futureFinished
-                    ) = _processFutureTicketBatch(cap, nextLevel);
-                    if (futureWorked || !futureFinished) break;
-
-                    // === PHASE 1: EARLY BIRD + LEVEL LOOTBOX JACKPOT ===
-                    // Combined into one transaction to stay under 15M gas (11-14M total).
-                    if (!levelJackpotLootboxPaid) {
-                        // Reward lootbox ticket holders with loot boxes from 3% reward + 3% future pool.
-                        _payEarlyBirdLootboxJackpot(nextLevel, rngWord);
-
-                        // Calculate and pay level jackpot lootbox distribution
-                        uint256 levelJackpotWei = _calcPrizePoolForLevelJackpot(
-                            lvl,
-                            rngWord
-                        );
-                        _payLevelJackpotLootbox(lvl, rngWord, levelJackpotWei);
-                        levelJackpotLootboxPaid = true;
-                        break;
-                    }
-
-                    // === PHASE 2: LEVEL ETH JACKPOT ===
-                    // Separate transaction for ETH distribution (6-10M gas).
-                    _payLevelJackpotEth(lvl, rngWord);
-                    _rewardTopAffiliate(lvl);
-                    {
-                        (
-                            uint32 purchaseCountPreJackpot,
-                            uint32 purchaseCountPhaseJackpot
-                        ) = gamepieces.purchaseCounts();
-                        uint256 purchaseCountTotalJackpot =
-                            uint256(purchaseCountPreJackpot) +
-                            uint256(purchaseCountPhaseJackpot);
-                        if (purchaseCountTotalJackpot > type(uint32).max)
-                            revert E();
-                        uint32 purchaseCountRawJackpot = uint32(
-                            purchaseCountTotalJackpot
-                        );
-                        if (purchaseCountRawJackpot == 0) {
-                            perkExpectedCount = 0;
-                        } else {
-                            uint32 expected = purchaseCountRawJackpot /
-                                ETH_PERK_ODDS;
-                            if (expected == 0) expected = 1;
-                            if (expected > type(uint16).max) {
-                                perkExpectedCount = type(uint16).max;
-                            } else {
-                                perkExpectedCount = uint16(expected);
-                            }
-                        }
-                    }
-                    levelJackpotPaid = true;
-                    break;
-                }
-
-                // --- Process pending gamepiece mints ---
-                (uint32 purchaseCountPre, uint32 purchaseCountPhase) = gamepieces
-                    .purchaseCounts();
-                uint256 purchaseCountTotal = uint256(purchaseCountPre) +
-                    uint256(purchaseCountPhase);
-                if (purchaseCountTotal > type(uint32).max) revert E();
-                uint32 purchaseCountRaw = uint32(purchaseCountTotal);
-                if (airdropMultiplier == 0) {
-                    airdropMultiplier = _calculateAirdropMultiplierModule(
-                        purchaseCountPre,
-                        purchaseCountPhase,
-                        lvl
-                    );
-                }
-                if (!traitCountsSeedQueued) {
-                    uint32 multiplier_ = airdropMultiplier;
-                    if (!gamepieces.processPendingMints(cap, multiplier_, rngWord)) {
-                        break; // More mints to process
-                    }
-                    if (purchaseCountRaw != 0) {
-                        traitCountsSeedQueued = true;
-                        traitRebuildCursor = 0;
-                        break; // Defer trait rebuild to next advanceGame call.
-                    }
-                }
-
-                // --- Rebuild trait counts for new level ---
-                if (traitCountsSeedQueued) {
-                    uint32 targetCount = _purchaseTargetCountFromRawModule(
-                        purchaseCountPre,
-                        purchaseCountPhase
-                    );
-                    if (traitRebuildCursor < targetCount) {
-                        uint256 baseTokenId = gamepieces.currentBaseTokenId();
-                        _rebuildTraitCountsModule(
-                            cap,
-                            targetCount,
-                            baseTokenId
-                        );
-                        break; // More trait counts to rebuild
-                    }
-                    _seedTraitCounts(); // Copy traitRemaining to traitStartRemaining
-                    traitCountsSeedQueued = false;
-                }
-
-                // --- Auto-end presale when purchase phase ends ---
-                if (lootboxPresaleActive) {
-                    lootboxPresaleActive = false;
-                    emit LootBoxPresaleStatus(false);
-                }
-
-                // --- Transition to State 3 (DEGENERUS) ---
-                traitRebuildCursor = 0;
-                airdropMultiplier = 0;
-                earlyBurnPercent = 0;
-                gameState = GAME_STATE_BURN;
                 levelJackpotPaid = false;
                 levelJackpotLootboxPaid = false;
                 lastPurchaseDay = false;
-                if (lvl % 100 == 99) decWindowOpen = true;
-                _unlockRng(day); // Open RNG after level jackpot is finalized
+                levelStartTime = ts;
+                _drawDownFuturePrizePool(lvl);
+                // Do not unlock here: allows day-1 jackpot processing to run on
+                // the same day as the transition day.
+                stage = STAGE_ENTERED_JACKPOT;
                 break;
             }
 
-            // +================================================================+
-            // |                    STATE 3: DEGENERUS (BURN)                   |
-            // |  Active burn phase where players burn gamepieces for jackpot tickets.|
-            // |  • Next level tickets already activated at end of purchase phase|
-            // |  • Pay daily jackpot each day                                  |
-            // |  • Level ends after jackpot cap (10 days)                      |
-            // |  • Extermination marks a winner but does not end the level     |
-            // |  • Transition to State 1 on level end                          |
-            // +================================================================+
-            if (_gameState == GAME_STATE_BURN) {
-                // === FUTURE MINT ACTIVATION (if needed) ===
-                // Future mints for next level are already processed at end of purchase phase.
-                // This is a safety check in case there are any remaining tickets.
-                // Normally this will be a no-op (queue already empty).
-                uint24 nextLevel = lvl + 1;
-                (
-                    bool futureWorked,
-                    bool futureFinished
-                ) = _processFutureTicketBatch(cap, nextLevel);
-                if (futureWorked || !futureFinished) break;
+            // === JACKPOT PHASE ===
 
-                _payExterminatorOnJackpot(lvl, rngWord);
+            // Resume split ETH distribution (Phase 0 mid-bucket OR Phase 1 carryover)
+            // Must match payDailyJackpot's isResuming condition to avoid
+            // emitting STAGE_JACKPOT_DAILY_STARTED on what is actually a resume.
+            if (
+                dailyEthBucketCursor != 0 ||
+                dailyEthPhase != 0 ||
+                dailyEthPoolBudget != 0 ||
+                dailyEthWinnerCursor != 0
+            ) {
+                payDailyJackpot(true, lastDailyJackpotLevel, rngWord, cap);
+                stage = STAGE_JACKPOT_ETH_RESUME;
+                break;
+            }
 
-                if (ticketJackpotType != TICKET_JACKPOT_NONE) {
-                    payTicketJackpot(lvl, rngWord);
-                    // Check timeout on-the-fly (jackpotCounter was incremented before pending was set)
-                    if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
-                        _endLevel();
-                        break;
-                    }
-                    _unlockRng(day);
-                    break;
-                }
-
-                payDailyJackpot(true, lvl, rngWord);
-                _payDailyCoinJackpot(lvl, rngWord); // Award BURNIE to ticket holders
-                if (ticketJackpotType != TICKET_JACKPOT_NONE) {
-                    break; // ticket jackpot queued, will process next tick
-                }
-                // Check for timeout end (10 ContractAddresses.JACKPOTS paid)
+            // Complete coin+ticket distribution
+            if (dailyJackpotCoinTicketsPending) {
+                payDailyJackpotCoinAndTickets(rngWord);
                 if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
-                    _endLevel(); // Force level end
+                    _awardFinalDayDgnrsReward(lvl, rngWord);
+                    _rewardTopAffiliate(lvl);
+                    _runRewardJackpots(lvl, rngWord);
+                    _endPhase();
+                    stage = STAGE_JACKPOT_PHASE_ENDED;
                     break;
                 }
                 _unlockRng(day);
+                stage = STAGE_JACKPOT_COIN_TICKETS;
                 break;
             }
+
+            // Fresh daily jackpot
+            payDailyJackpot(true, lvl, rngWord, cap);
+            stage = STAGE_JACKPOT_DAILY_STARTED;
         } while (false);
 
-        // Emit state change event for indexers
-        emit Advance(gameState);
-
-        // Credit caller with BURNIE reward for advancing (skip emergency cap mode)
-        if (cap == 0) {
-            coinContract.creditFlip(caller, PRICE_COIN_UNIT >> 1);
-        }
+        emit Advance(stage, lvl);
+        if (cap == 0) coin.creditFlip(caller, ADVANCE_BOUNTY);
     }
 
     /*+========================================================================================+
@@ -577,17 +306,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ) external {
         if (msg.sender != ContractAddresses.ADMIN) revert E();
 
-        // Idempotent once wired: allow only no-op repeats with identical config.
-        if (vrfSubscriptionId != 0) {
-            if (subId != vrfSubscriptionId) revert E();
-            if (coordinator_ != address(vrfCoordinator)) revert E();
-            if (keyHash_ != vrfKeyHash) revert E();
-            return;
-        }
-
-        if (coordinator_ == address(0) || keyHash_ == bytes32(0) || subId == 0)
-            revert E();
-
         address current = address(vrfCoordinator);
         vrfCoordinator = IVRFCoordinator(coordinator_);
         vrfSubscriptionId = subId;
@@ -595,180 +313,71 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         emit VrfCoordinatorUpdated(current, coordinator_);
     }
 
-    function _requireApproved(address player) private view {
-        if (msg.sender != player && !operatorApprovals[player][msg.sender]) {
-            revert NotApproved();
+    /*+======================================================================+
+      |                    GAMEOVER / LIVENESS GUARDS                        |
+      +======================================================================+*/
+
+    /// @dev Handles gameover state and liveness guard checks.
+    ///      Returns true if advanceGame should exit early.
+    function _handleGameOverPath(
+        uint48 ts,
+        uint48 day,
+        uint48 lst,
+        uint24 lvl,
+        bool lastPurchase,
+        uint48 _dailyIdx
+    ) private returns (bool shouldReturn) {
+        // Liveness guard: prevent permanent lockup if game is abandoned
+        bool livenessTriggered = (lvl == 0 &&
+            ts - lst > uint256(DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days) ||
+            (lvl != 0 && ts - 365 days > lst);
+
+        if (!livenessTriggered) return false;
+
+        bool ok;
+        bytes memory data;
+
+        if (gameOver) {
+            // Post-gameover: check for final sweep (1 month after gameover)
+            (ok, data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameGameOverModule.handleFinalSweep.selector
+                )
+            );
+            if (!ok) _revertDelegate(data);
+            return true;
         }
+
+        // Pre-gameover: acquire RNG and drain to gameover state
+        if (rngWordByDay[_dailyIdx] == 0) {
+            uint256 rngWord = _gameOverEntropy(ts, day, lvl, lastPurchase);
+            if (rngWord == 1 || rngWord == 0) return true;
+            _unlockRng(day);
+        }
+
+        (ok, data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameGameOverModule.handleGameOverDrain.selector,
+                _dailyIdx
+            )
+        );
+        if (!ok) _revertDelegate(data);
+        return true;
     }
 
     /*+======================================================================+
       |                           LEVEL END                                 |
       +======================================================================+*/
-    function _endLevel() private {
-        uint24 levelSnapshot = level;
-        uint24 completedLevel = levelSnapshot;
-        uint256 prizePoolSnapshot = lastPrizePool;
-        gameState = GAME_STATE_SETUP;
-        lastPurchaseDayFlipTotalPrev = lastPurchaseDayFlipTotal;
-        lastPurchaseDayFlipTotal = 0;
-
-        uint16 exTrait = currentExterminatedTrait;
-        if (exTrait < 256) {
-            lastExterminatedTrait = exTrait;
-        } else {
-            lastExterminatedTrait = TRAIT_ID_TIMEOUT;
-            _setExterminatorForLevel(levelSnapshot, address(0));
-        }
-
-        currentExterminatedTrait = TRAIT_ID_TIMEOUT;
-        exterminationPaidThisLevel = false;
+    function _endPhase() private {
+        uint24 lvl = level;
+        phaseTransitionActive = true;
+        // Extermination mechanics removed in no-NFT variant.
+        lastExterminatedTrait = TRAIT_ID_TIMEOUT;
         exterminationInvertFlag = false;
-
-        uint256 leftover = currentPrizePool;
-        if (leftover != 0) {
-            nextPrizePool += leftover;
-            currentPrizePool = 0;
+        if (lvl % 100 == 0) {
+            levelPrizePool[lvl] = futurePrizePool;
         }
-
-        affiliateDgnrsPrizePool[levelSnapshot] = prizePoolSnapshot;
-
-        if (levelSnapshot % 100 == 0) {
-            lastPrizePool = futurePrizePool;
-            price = 0.05 ether;
-        }
-
-        unchecked {
-            levelSnapshot++;
-            level++;
-        }
-
-        _scheduleDeityPassRefresh(completedLevel);
-
-        if (levelSnapshot % 100 == 0) {
-            whalePassClaims[ContractAddresses.DGNRS] += 1;
-        }
-
-        perkExpectedCount = 0;
-
-        traitRebuildCursor = 0;
-        uint8 jackpotCounterSnapshot = jackpotCounter;
-        lastLevelJackpotCount = jackpotCounterSnapshot;
         jackpotCounter = 0;
-        // Reset daily burn counters so the next level's ContractAddresses.JACKPOTS start fresh.
-        if (jackpotCounterSnapshot < JACKPOT_LEVEL_CAP) {
-            _clearDailyBurnCount();
-        }
-
-        uint256 cycleOffset = levelSnapshot % 100; // position within the 100-level schedule (0 == 100)
-
-        if (cycleOffset == 10) {
-            price = 0.05 ether;
-        } else if (cycleOffset == 40) {
-            price = 0.1 ether;
-        } else if (cycleOffset == 80) {
-            price = 0.125 ether;
-        } else if (cycleOffset == 0) {
-            price = 0.25 ether;
-        }
-
-        gamepieces.advanceBase(); // prepare dormant cleanup; base advances during batches
-    }
-
-    function _scheduleDeityPassRefresh(uint24 completedLevel) private {
-        if (deityPassOwners.length == 0) {
-            return;
-        }
-
-        if (deityPassRefreshStartLevel != 0) {
-            return;
-        }
-
-        unchecked {
-            deityPassRefreshStartLevel = completedLevel + DEITY_PASS_TICKET_LEVELS;
-        }
-        deityPassRefreshOwnerCursor = 0;
-    }
-
-    function _releaseDeityPassEscrow() private {
-        uint256 escrow = deityPassEscrow;
-        if (escrow == 0) return;
-
-        deityPassEscrow = 0;
-        // Level 1 distribution: 50% next, 25% reward, 25% future (reward tracked in futurePrizePool).
-        uint256 nextShare = (escrow * 5000) / 10_000;
-        uint256 rewardShare = (escrow * 2500) / 10_000;
-        uint256 futureShare;
-        unchecked {
-            futureShare = escrow - nextShare - rewardShare;
-        }
-
-        nextPrizePool += nextShare;
-        futurePrizePool += rewardShare;
-        futurePrizePool += futureShare;
-    }
-
-    function _runDeityPassRefreshBatch(
-        uint32 ownerCap
-    ) private returns (bool worked, bool finished) {
-        uint24 targetLevel = deityPassRefreshStartLevel;
-        if (targetLevel == 0) {
-            return (false, true);
-        }
-
-        uint256 ownerCount = deityPassOwners.length;
-        if (ownerCount == 0) {
-            deityPassRefreshStartLevel = 0;
-            deityPassRefreshOwnerCursor = 0;
-            return (false, true);
-        }
-
-        uint32 cursor = deityPassRefreshOwnerCursor;
-        if (cursor >= ownerCount) {
-            deityPassRefreshStartLevel = 0;
-            deityPassRefreshOwnerCursor = 0;
-            return (false, true);
-        }
-
-        uint32 batch;
-        if (ownerCap == 0) {
-            uint256 remaining = ownerCount - cursor;
-            batch = remaining > type(uint32).max
-                ? type(uint32).max
-                : uint32(remaining);
-        } else {
-            batch = ownerCap;
-        }
-        if (batch == 0) {
-            batch = 1;
-        }
-
-        uint256 end = uint256(cursor) + uint256(batch);
-        if (end > ownerCount) {
-            end = ownerCount;
-        }
-
-        for (uint256 i = cursor; i < end; ) {
-            address owner = deityPassOwners[i];
-            uint16 passCount = deityPassCount[owner];
-            if (passCount != 0) {
-                uint32 ticketsPerLevel = uint32(passCount) *
-                    DEITY_PASS_TICKETS_PER_LEVEL;
-                _queueTickets(owner, targetLevel, ticketsPerLevel);
-            }
-            unchecked {
-                ++i;
-            }
-        }
-
-        worked = end > cursor;
-        if (end >= ownerCount) {
-            deityPassRefreshStartLevel = 0;
-            deityPassRefreshOwnerCursor = 0;
-            finished = true;
-        } else {
-            deityPassRefreshOwnerCursor = uint32(end);
-            finished = false;
-        }
     }
 
     /*+================================================================================================================+
@@ -788,24 +397,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |  context, with access to all storage. Modules are constant.                                                    |
       +================================================================================================================+*/
 
-    /// @dev Delegatecall into the endgame module to resolve settlement paths.
-    ///      Handles: payouts, wipes, endgame distribution, and ContractAddresses.JACKPOTS.
-    /// @param lvl Current level snapshot.
-    /// @param rngWord VRF random word for RNG-dependent operations.
-    function _runEndgameModule(uint24 lvl, uint256 rngWord) internal {
-        // Endgame settlement logic lives in DegenerusGameEndgameModule (delegatecall keeps state on this contract).
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ENDGAME_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameEndgameModule.finalizeEndgame.selector,
-                    lvl,
-                    rngWord
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
     /// @dev Reward the top affiliate for a level during the level jackpot.
     function _rewardTopAffiliate(uint24 lvl) private {
         (bool ok, bytes memory data) = ContractAddresses
@@ -819,20 +410,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Pay exterminator on the first jackpot after extermination.
-    ///      Delegates to endgame module for payout/trophy logic.
-    function _payExterminatorOnJackpot(uint24 lvl, uint256 rngWord) private {
-        if (
-            currentExterminatedTrait == TRAIT_ID_TIMEOUT ||
-            exterminationPaidThisLevel
-        ) {
-            return;
-        }
+    /// @dev Resolve BAF/Decimator jackpots during the level jackpot RNG period.
+    function _runRewardJackpots(uint24 lvl, uint256 rngWord) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ENDGAME_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameEndgameModule.payExterminatorOnJackpot.selector,
+                    IDegenerusGameEndgameModule.runRewardJackpots.selector,
                     lvl,
                     rngWord
                 )
@@ -850,175 +434,37 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Calculate airdrop multiplier via mint module delegatecall.
-    ///      Multiplier determines bonus gamepieces in airdrops.
-    /// @param prePurchaseCount Raw count before purchase phase (eligible for multiplier).
-    /// @param purchasePhaseCount Raw count during purchase phase (not multiplied).
-    /// @param lvl Current level.
-    /// @return Multiplier value for airdrop calculations.
-    function _calculateAirdropMultiplierModule(
-        uint32 prePurchaseCount,
-        uint32 purchasePhaseCount,
-        uint24 lvl
-    ) private returns (uint32) {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule
-                        .calculateAirdropMultiplier
-                        .selector,
-                    prePurchaseCount,
-                    purchasePhaseCount,
-                    lvl
-                )
-            );
-        if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
-        return abi.decode(data, (uint32));
-    }
-
-    /// @dev Convert raw purchase count to target count via mint module.
-    /// @param prePurchaseCount Raw count before purchase phase (eligible for multiplier).
-    /// @param purchasePhaseCount Raw count during purchase phase (not multiplied).
-    /// @return Target count for trait rebuild operations.
-    function _purchaseTargetCountFromRawModule(
-        uint32 prePurchaseCount,
-        uint32 purchasePhaseCount
-    ) private returns (uint32) {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule
-                        .purchaseTargetCountFromRaw
-                        .selector,
-                    prePurchaseCount,
-                    purchasePhaseCount
-                )
-            );
-        if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
-        return abi.decode(data, (uint32));
-    }
-
-    /// @dev Rebuild trait counts via mint module delegatecall.
-    ///      Processes tokens in batches to avoid gas exhaustion.
-    /// @param tokenBudget Maximum tokens to process this call.
-    /// @param target Total tokens to process.
-    /// @param baseTokenId Starting token ID for this level.
-    function _rebuildTraitCountsModule(
-        uint32 tokenBudget,
-        uint32 target,
-        uint256 baseTokenId
-    ) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule.rebuildTraitCounts.selector,
-                    tokenBudget,
-                    target,
-                    baseTokenId
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    function _runDecimatorHundredJackpot(
-        uint24 lvl,
-        uint256 rngWord
-    ) internal returns (bool finished) {
-        // Decimator/BAF ContractAddresses.JACKPOTS are promotional side-games; odds/payouts live in the ContractAddresses.JACKPOTS module.
-        if (!decimatorHundredReady) {
-            uint256 basePool = futurePrizePool;
-            uint256 decPool = (basePool * 30) / 100;
-            uint256 bafPool = (basePool * 10) / 100;
-            decimatorHundredPool = decPool;
-            bafHundredPool = bafPool;
-            futurePrizePool -= decPool + bafPool;
-            decimatorHundredReady = true;
-        }
-
-        uint256 pool = decimatorHundredPool;
-
-        uint256 returnWei = jackpots.runDecimatorJackpot(pool, lvl, rngWord);
-        uint256 netSpend = pool - returnWei;
-        if (netSpend != 0) {
-            // Reserve the full decimator pool in `claimablePool` immediately; player credits occur on claim.
-            claimablePool += netSpend;
-        }
-
-        if (returnWei != 0) {
-            futurePrizePool += returnWei;
-        }
-        decimatorHundredPool = 0;
-        decimatorHundredReady = false;
-        return true;
-    }
-
-    /// @dev Pay level jackpot lootbox distribution (phase 1) via jackpot module delegatecall.
-    ///      Combined with early bird jackpot to stay under 15M gas.
-    /// @param lvl Current level.
-    /// @param rngWord VRF random word.
-    /// @param effectiveWei Total prize pool amount.
-    function _payLevelJackpotLootbox(
-        uint24 lvl,
-        uint256 rngWord,
-        uint256 effectiveWei
-    ) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.payLevelJackpotLootbox.selector,
-                    lvl,
-                    rngWord,
-                    effectiveWei
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @dev Pay level jackpot ETH distribution (phase 2) via jackpot module delegatecall.
-    /// @param lvl Current level.
-    /// @param rngWord VRF random word.
-    function _payLevelJackpotEth(uint24 lvl, uint256 rngWord) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.payLevelJackpotEth.selector,
-                    lvl,
-                    rngWord
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @dev Calculate prize pool for level jackpot via jackpot module delegatecall.
-    ///      Factors in stETH balance and other pool considerations.
-    /// @param lvl Current level.
-    /// @param rngWord VRF random word.
-    /// @return effectiveWei The prize pool amount available for jackpot.
-    function _calcPrizePoolForLevelJackpot(
-        uint24 lvl,
-        uint256 rngWord
-    ) internal returns (uint256 effectiveWei) {
+    /// @dev Consolidate prize pools via jackpot module delegatecall.
+    ///      Merges next→current, rebalances future/current, credits coinflip, distributes yield.
+    function _consolidatePrizePools(uint24 lvl, uint256 rngWord) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameJackpotModule
-                        .calcPrizePoolForLevelJackpot
+                        .consolidatePrizePools
                         .selector,
                     lvl,
                     rngWord
                 )
             );
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
-        return abi.decode(data, (uint256));
+    }
+
+    /// @dev Award DGNRS reward to the solo bucket winner after final daily jackpot.
+    function _awardFinalDayDgnrsReward(uint24 lvl, uint256 rngWord) private {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_JACKPOT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameJackpotModule
+                        .awardFinalDayDgnrsReward
+                        .selector,
+                    lvl,
+                    rngWord
+                )
+            );
+        if (!ok) _revertDelegate(data);
     }
 
     /// @dev Pay daily jackpot via jackpot module delegatecall.
@@ -1029,7 +475,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function payDailyJackpot(
         bool isDaily,
         uint24 lvl,
-        uint256 randWord
+        uint256 randWord,
+        uint32 cap
     ) internal {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
@@ -1038,6 +485,25 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     IDegenerusGameJackpotModule.payDailyJackpot.selector,
                     isDaily,
                     lvl,
+                    randWord,
+                    cap
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev Pay Phase 2 coin+ticket jackpot via jackpot module delegatecall.
+    ///      Called when dailyJackpotCoinTicketsPending is true to complete the split
+    ///      daily jackpot (gas optimization to stay under 15M block limit).
+    /// @param randWord VRF random word for winner selection.
+    function payDailyJackpotCoinAndTickets(uint256 randWord) internal {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_JACKPOT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameJackpotModule
+                        .payDailyJackpotCoinAndTickets
+                        .selector,
                     randWord
                 )
             );
@@ -1046,7 +512,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Pay daily BURNIE jackpot via jackpot module delegatecall.
     ///      Called each day during States 2 and 3 in its own transaction.
-    ///      Awards 0.5% of lastPrizePool in BURNIE to current and future ticket holders.
+    ///      Awards 0.5% of prize pool target in BURNIE to current and future ticket holders.
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
     function _payDailyCoinJackpot(uint24 lvl, uint256 randWord) private {
@@ -1055,22 +521,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameJackpotModule.payDailyCoinJackpot.selector,
-                    lvl,
-                    randWord
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @dev Pay the queued ticket jackpot (daily or purchase) via jackpot module delegatecall.
-    /// @param lvl Current level.
-    /// @param randWord VRF random word for winner selection.
-    function payTicketJackpot(uint24 lvl, uint256 randWord) internal {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.payTicketJackpot.selector,
                     lvl,
                     randWord
                 )
@@ -1098,73 +548,143 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    function rngAndTimeGate(
-        uint48 day,
-        uint24 lvl,
-        bool isTicketJackpotDay,
+    /// @dev Enforce "must mint today" gate for advanceGame callers.
+    ///      Skipped for CREATOR and when cap > 0 (emergency/maintenance).
+    function _enforceDailyMintGate(
         address caller,
-        uint32 cap
-    ) internal returns (uint256 word) {
-        if (day == dailyIdx) revert NotTimeYet();
+        uint24 lvl,
+        uint32 cap,
+        uint48 dailyIdx_
+    ) private view {
+        if (cap != 0 || caller == ContractAddresses.CREATOR) return;
+        uint32 gateIdx = uint32(dailyIdx_);
+        if (gateIdx == 0) return;
 
-        uint256 currentWord = rngFulfilled ? rngWordCurrent : 0;
-
-        if (currentWord == 0 && rngLockedFlag && rngRequestTime != 0) {
-            uint48 elapsed = uint48(block.timestamp) - rngRequestTime;
-            if (elapsed >= 18 hours) {
-                _requestRng(gameState, isTicketJackpotDay, lvl);
-                return 1;
-            }
+        uint256 mintData = mintPacked_[caller];
+        uint32 lastEthDay = uint32(
+            (mintData >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
+        );
+        // Allow mints from current day or previous day
+        if (lastEthDay + 1 < gateIdx) {
+            uint24 frozenUntilLevel = uint24(
+                (mintData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                    BitPackingLib.MASK_24
+            );
+            bool hasLazyPass = frozenUntilLevel > lvl ||
+                deityPassCount[caller] != 0;
+            if (!hasLazyPass) revert MustMintToday();
         }
-
-        if (currentWord == 0) {
-            if (rngLockedFlag) revert RngNotReady();
-            // Request RNG; tickets will be processed AFTER RNG arrives (for RNG integrity)
-            _requestRng(gameState, isTicketJackpotDay, lvl);
-            return 1;
-        }
-
-        if (!rngLockedFlag) {
-            // Stale entropy from previous cycle; request a fresh word.
-            // Tickets will be processed AFTER RNG arrives (for RNG integrity)
-            _requestRng(gameState, isTicketJackpotDay, lvl);
-            return 1;
-        }
-
-        // Record the word once per day; using a zero sentinel since VRF returning 0 is effectively impossible.
-        if (rngWordByDay[day] == 0) {
-            rngWordByDay[day] = currentWord;
-
-            // === PROCESS COINFLIPS FIRST (cheap, can happen immediately) ===
-            bool bonusFlip = isTicketJackpotDay || lootboxPresaleActive;
-            coinflip.processCoinflipPayouts(bonusFlip, currentWord, day);
-            coinflip.recordAfKingRng(currentWord, bonusFlip); // afKing gets bonus on special days
-            _finalizeLootboxRngFromDaily(currentWord);
-
-            // === PROCESS ALL TICKETS BEFORE JACKPOTS ===
-            // Tickets need RNG word, so process them after coinflips (before jackpots)
-            // This awards 500 BURNIE work bounty to caller
-            bool allFinished = _processAllTicketsBeforeUnlock(caller, lvl, cap);
-            if (!allFinished) {
-                // Not all tickets processed yet - must continue next call
-                // Note: RNG word is already recorded, so next call will skip this block
-                return currentWord;
-            }
-        }
-        return currentWord;
     }
 
-    function _finalizeLootboxRngFromDaily(uint256 rngWord) private {
-        if (lootboxRngPendingEth == 0) return;
-        uint48 index = lootboxRngIndex;
-        if (lootboxRngWordByIndex[index] == 0) {
-            lootboxRngWordByIndex[index] = rngWord;
-            // Resolve lootbox RNG via standalone contract
-            lootbox.resolveLootboxRng(rngWord, index);
-            // Note: recordAfKingRng already called for this RNG word in rngAndTimeGate
+    /// @notice Request lootbox RNG when activity threshold is met.
+    /// @dev Standalone function for mid-day lootbox RNG requests.
+    ///      Cannot be called while daily RNG is locked (jackpot resolution).
+    ///      VRF callback handles finalization directly - no advanceGame needed.
+    function requestLootboxRng() external {
+        uint48 nowTs = uint48(block.timestamp);
+        uint48 currentDay = _simulatedDayIndexAt(nowTs);
+
+        // Block in the 15-minute pre-reset window to avoid competing with daily jackpot RNG flow.
+        if (_simulatedDayIndexAt(nowTs + 15 minutes) > currentDay) revert E();
+        // Block until today's daily RNG has been consumed and recorded.
+        if (rngWordByDay[currentDay] == 0) revert E();
+
+        if (rngLockedFlag) revert E();
+        if (rngRequestTime != 0) revert E();
+
+        // LINK balance check
+        (uint96 linkBal, , , , ) = vrfCoordinator.getSubscription(vrfSubscriptionId);
+        if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert E();
+
+        // Threshold check
+        uint256 pendingEth = lootboxRngPendingEth;
+        uint256 pendingBurnie = lootboxRngPendingBurnie;
+        if (pendingEth == 0 && pendingBurnie == 0) revert E();
+        if (pendingBurnie < BURNIE_RNG_TRIGGER) {
+            uint256 totalEthEquivalent = pendingEth;
+            if (pendingBurnie != 0) {
+                uint256 priceWei = price;
+                if (priceWei != 0) {
+                    totalEthEquivalent +=
+                        (pendingBurnie * priceWei) /
+                        PRICE_COIN_UNIT;
+                }
+            }
+            uint256 threshold = lootboxRngThreshold;
+            if (threshold != 0 && totalEthEquivalent < threshold) revert E();
         }
-        lootboxRngIndex = index + 1;
-        lootboxRngPendingEth = 0;
+
+        // VRF request (reverts on failure)
+        uint256 id = vrfCoordinator.requestRandomWords(
+            VRFRandomWordsRequest({
+                keyHash: vrfKeyHash,
+                subId: vrfSubscriptionId,
+                requestConfirmations: VRF_MIDDAY_CONFIRMATIONS,
+                callbackGasLimit: VRF_CALLBACK_GAS_LIMIT,
+                numWords: 1,
+                extraArgs: hex""
+            })
+        );
+
+        _reserveLootboxRngIndex(id);
+        vrfRequestId = id;
+        rngWordCurrent = 0;
+        rngRequestTime = uint48(block.timestamp);
+    }
+
+    function rngGate(
+        uint48 ts,
+        uint48 day,
+        uint24 lvl,
+        bool isTicketJackpotDay
+    ) internal returns (uint256 word) {
+        // Already recorded for today
+        if (rngWordByDay[day] != 0) return rngWordByDay[day];
+
+        uint256 currentWord = rngWordCurrent;
+
+        // Have a fresh VRF word ready
+        if (currentWord != 0 && rngRequestTime != 0) {
+            // Compute which day the RNG request was made on
+            uint48 requestDay = _simulatedDayIndexAt(rngRequestTime);
+
+            // If request was from a previous day, it's stale for daily operations
+            if (requestDay < day) {
+                // Use for lootboxes only, then request fresh daily RNG
+                _finalizeLootboxRng(currentWord);
+                rngWordCurrent = 0;
+                _requestRng(isTicketJackpotDay, lvl);
+                return 1;
+            }
+
+            // Normal daily RNG processing (request from current day)
+            currentWord = _applyDailyRng(day, currentWord);
+            bool bonusFlip = isTicketJackpotDay || level == 0;
+            coinflip.processCoinflipPayouts(bonusFlip, currentWord, day);
+            _finalizeLootboxRng(currentWord);
+            return currentWord;
+        }
+
+        // Waiting for VRF - check for timeout retry
+        if (rngRequestTime != 0) {
+            uint48 elapsed = ts - rngRequestTime;
+            if (elapsed >= 18 hours) {
+                _requestRng(isTicketJackpotDay, lvl);
+                return 1;
+            }
+            revert RngNotReady();
+        }
+
+        // Need fresh RNG
+        _requestRng(isTicketJackpotDay, lvl);
+        return 1;
+    }
+
+    function _finalizeLootboxRng(uint256 rngWord) private {
+        uint48 index = lootboxRngRequestIndexById[vrfRequestId];
+        if (index == 0) return;
+        lootboxRngWordByIndex[index] = rngWord;
+        emit LootboxRngApplied(index, rngWord, vrfRequestId);
     }
 
     /// @dev Game-over RNG gate with fallback for stalled VRF.
@@ -1172,57 +692,59 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      than blockhash since it's already verified on-chain and cannot be manipulated).
     /// @return word RNG word, 1 if request sent, or 0 if waiting on fallback.
     function _gameOverEntropy(
+        uint48 ts,
         uint48 day,
         uint24 lvl,
         bool isTicketJackpotDay
     ) private returns (uint256 word) {
         if (rngWordByDay[day] != 0) return rngWordByDay[day];
 
-        uint256 currentWord = rngFulfilled ? rngWordCurrent : 0;
-        if (currentWord != 0 && rngLockedFlag) {
-            rngWordByDay[day] = currentWord;
+        uint256 currentWord = rngWordCurrent;
+        if (currentWord != 0 && rngRequestTime != 0) {
+            currentWord = _applyDailyRng(day, currentWord);
             if (lvl != 0) {
-                coinflip.processCoinflipPayouts(isTicketJackpotDay, currentWord, day);
+                coinflip.processCoinflipPayouts(
+                    isTicketJackpotDay,
+                    currentWord,
+                    day
+                );
             }
-            coinflip.recordAfKingRng(currentWord, isTicketJackpotDay); // afKing gets bonus on special days
-            _finalizeLootboxRngFromDaily(currentWord);
+            _finalizeLootboxRng(currentWord);
             return currentWord;
         }
 
-        if (rngLockedFlag) {
-            if (rngRequestTime != 0) {
-                uint48 elapsed = uint48(block.timestamp) - rngRequestTime;
-                if (elapsed >= GAMEOVER_RNG_FALLBACK_DELAY) {
-                    // Use earliest historical VRF word as fallback (more secure than blockhash)
-                    uint256 fallbackWord = _getHistoricalRngFallback(day);
-                    rngWordByDay[day] = fallbackWord;
-                    if (lvl != 0) {
-                        coinflip.processCoinflipPayouts(isTicketJackpotDay, fallbackWord, day);
-                    }
-                    coinflip.recordAfKingRng(fallbackWord, isTicketJackpotDay); // afKing gets bonus on special days
-                    _finalizeLootboxRngFromDaily(fallbackWord);
-                    return fallbackWord;
+        if (rngRequestTime != 0) {
+            uint48 elapsed = ts - rngRequestTime;
+            if (elapsed >= GAMEOVER_RNG_FALLBACK_DELAY) {
+                // Use earliest historical VRF word as fallback (more secure than blockhash)
+                uint256 fallbackWord = _getHistoricalRngFallback(day);
+                fallbackWord = _applyDailyRng(day, fallbackWord);
+                if (lvl != 0) {
+                    coinflip.processCoinflipPayouts(
+                        isTicketJackpotDay,
+                        fallbackWord,
+                        day
+                    );
                 }
+                _finalizeLootboxRng(fallbackWord);
+                return fallbackWord;
             }
             return 0;
         }
 
-        if (_tryRequestRng(gameState, isTicketJackpotDay, lvl)) {
+        if (_tryRequestRng(isTicketJackpotDay, lvl)) {
             return 1;
         }
 
-        // VRF request failed; lock RNG and start fallback timer.
-        rngLockedFlag = true;
-        rngFulfilled = false;
+        // VRF request failed; start fallback timer (rngRequestTime != 0 acts as lock).
         rngWordCurrent = 0;
-        rngRequestTime = uint48(block.timestamp);
+        rngRequestTime = ts;
         return 0;
     }
 
     /// @dev Get historical VRF word as fallback for gameover RNG.
     ///      Searches backwards from current day to find earliest available RNG word (max 30 tries).
-    ///      If no historical words exist, uses firstEverRngWord as ultimate fallback.
-    ///      Reverts if VRF never worked at all (game would be unplayable anyway).
+    ///      Reverts if no historical words exist (VRF never worked).
     /// @param currentDay Current day index.
     /// @return word Historical RNG word or VRF-derived fallback.
     function _getHistoricalRngFallback(
@@ -1242,10 +764,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
 
-        // No historical words found - use first VRF word ever received as ultimate fallback
-        if (firstEverRngWord == 0) revert E(); // VRF must work at some point
-        return
-            uint256(keccak256(abi.encodePacked(firstEverRngWord, currentDay)));
+        // No historical words found - VRF never worked, game is in catastrophic state
+        revert E();
     }
 
     /*+======================================================================+
@@ -1255,127 +775,102 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |  Normal levels draw 20%, x00 levels skip the draw.                   |
       +======================================================================+*/
 
-    function _nextToFutureBps(uint48 elapsed) private pure returns (uint16) {
+    function _nextToFutureBps(
+        uint48 elapsed,
+        uint24 lvl
+    ) private pure returns (uint16) {
+        uint256 lvlBonus = (uint256(lvl % 100) / 10) * 100; // +1% per 10 levels within cycle
+        uint256 bps;
         if (elapsed <= 1 days) {
-            return NEXT_TO_FUTURE_BPS_FAST;
-        }
-        if (elapsed <= 14 days) {
-            uint256 span = 13 days;
+            bps = NEXT_TO_FUTURE_BPS_FAST + lvlBonus;
+        } else if (elapsed <= 14 days) {
             uint256 elapsedAfterDay = elapsed - 1 days;
-            uint256 delta = NEXT_TO_FUTURE_BPS_FAST - NEXT_TO_FUTURE_BPS_MIN; // 20% -> 3%
-            return uint16(
-                NEXT_TO_FUTURE_BPS_FAST - (delta * elapsedAfterDay) / span
-            );
-        }
-        if (elapsed <= 28 days) {
-            uint256 span = 14 days;
+            uint256 delta = NEXT_TO_FUTURE_BPS_FAST - NEXT_TO_FUTURE_BPS_MIN;
+            bps = NEXT_TO_FUTURE_BPS_FAST - (delta * elapsedAfterDay) / 13 days;
+        } else if (elapsed <= 28 days) {
             uint256 elapsedAfterMin = elapsed - 14 days;
-            uint256 delta = NEXT_TO_FUTURE_BPS_FAST - NEXT_TO_FUTURE_BPS_MIN; // 3% -> 20%
-            return uint16(
-                NEXT_TO_FUTURE_BPS_MIN + (delta * elapsedAfterMin) / span
-            );
+            uint256 delta = NEXT_TO_FUTURE_BPS_FAST +
+                lvlBonus -
+                NEXT_TO_FUTURE_BPS_MIN;
+            bps = NEXT_TO_FUTURE_BPS_MIN + (delta * elapsedAfterMin) / 14 days;
+        } else {
+            bps =
+                NEXT_TO_FUTURE_BPS_FAST +
+                lvlBonus +
+                ((elapsed - 28 days) / 1 weeks) *
+                NEXT_TO_FUTURE_BPS_WEEK_STEP;
         }
-        uint256 weeksAfter = (elapsed - 28 days) / 1 weeks;
-        uint256 bps = uint256(NEXT_TO_FUTURE_BPS_FAST) +
-            (weeksAfter * NEXT_TO_FUTURE_BPS_WEEK_STEP);
-        if (bps > 10_000) bps = 10_000;
-        return uint16(bps);
+        return uint16(bps > 10_000 ? 10_000 : bps);
     }
 
-    function _nextSkimVarianceDelta(
-        uint256 baseTakeAbs,
-        uint256 nextPoolBefore,
-        uint256 rngWord,
-        uint256 maxDelta
-    ) private pure returns (int256) {
-        if (baseTakeAbs == 0 || maxDelta == 0) return 0;
-        uint256 variance = (baseTakeAbs * NEXT_SKIM_VARIANCE_BPS) / 10_000;
-        uint256 minVariance = (nextPoolBefore * NEXT_SKIM_VARIANCE_MIN_BPS) / 10_000;
-        if (variance < minVariance) variance = minVariance;
-        if (variance == 0) return 0;
-        if (variance > maxDelta) variance = maxDelta;
+    function _applyTimeBasedFutureTake(
+        uint48 reachedAt,
+        uint24 lvl,
+        uint256 rngWord
+    ) private {
+        uint48 start = levelStartTime + 11 days;
+        if (reachedAt < start) reachedAt = start;
 
-        uint256 seed = uint256(keccak256(abi.encodePacked(rngWord, NEXT_SKIM_VARIANCE_TAG)));
-        uint256 span = variance * 2 + 1;
-        return int256(seed % span) - int256(variance);
-    }
+        uint256 bps = _nextToFutureBps(reachedAt - start, lvl);
+        if (lvl % 10 == 9) bps += NEXT_TO_FUTURE_BPS_X9_BONUS;
 
-    function _nextRatioAdjustBps(uint256 futurePool, uint256 nextPool) private pure returns (int256) {
-        if (nextPool == 0) return 0;
-        uint256 ratioBps = (futurePool * 10_000) / nextPool; // 1.0x = 10000 bps
-        int256 adjust = (int256(ratioBps) * 100) / 10_000 - 200; // 1% per 1x, offset -2%
-        if (adjust > 200) return 200;
-        if (adjust < -200) return -200;
-        return adjust;
-    }
-
-    function _nextGrowthAdjustBps(uint256 nextPool, uint256 lastPool) private pure returns (int256) {
-        if (lastPool == 0) return 0;
-        if (nextPool <= lastPool) return -200; // Equal or down: favor future
-        uint256 excess = nextPool - lastPool;
-        uint256 excessBps = (excess * 10_000) / lastPool;
-        if (excessBps >= 2000) return 200; // >=20% increase
-        return -200 + int256(excessBps / 5); // linear to +2% at 20%
-    }
-
-    function _applyTimeBasedFutureTake(uint48 reachedAt, uint24 lvl, uint256 rngWord) private {
-        uint48 start = levelStartTime;
-        if (start == LEVEL_START_SENTINEL || reachedAt <= start) return;
-        uint48 elapsed = reachedAt - start;
-        uint16 bps = _nextToFutureBps(elapsed);
-        if (lvl % 10 == 9) {
-            uint256 bumped = uint256(bps) + NEXT_TO_FUTURE_BPS_X9_BONUS;
-            bps = uint16(bumped > 10_000 ? 10_000 : bumped);
-        }
         uint256 nextPoolBefore = nextPrizePool;
-        if (nextPoolBefore == 0) return;
-
         uint256 futurePoolBefore = futurePrizePool;
-        int256 ratioAdjustBps = _nextRatioAdjustBps(futurePoolBefore, nextPoolBefore);
-        int256 growthAdjustBps = _nextGrowthAdjustBps(nextPoolBefore, lastPrizePool);
-        int256 adjustedBps = int256(uint256(bps)) - ratioAdjustBps - growthAdjustBps;
-        int256 baseTake = (int256(uint256(nextPoolBefore)) * adjustedBps) / 10_000;
+        uint256 lastPool = levelPrizePool[lvl - 1];
 
-        if (baseTake > 0) {
-            uint256 take = uint256(baseTake);
-            if (take > nextPoolBefore) take = nextPoolBefore;
-            if (take != 0) {
-                nextPrizePool -= take;
-                futurePrizePool += take;
-            }
-            baseTake = int256(take);
-        } else if (baseTake < 0) {
-            uint256 take = uint256(-baseTake);
-            if (take > futurePoolBefore) take = futurePoolBefore;
-            if (take != 0) {
-                futurePrizePool -= take;
-                nextPrizePool += take;
-            }
-            baseTake = -int256(take);
+        // Ratio adjust: ±2% based on future/next ratio (baseline 2:1)
+        uint256 ratioPct = (futurePoolBefore * 100) / nextPoolBefore;
+        if (ratioPct < 200) {
+            bps += 200 - ratioPct;
+        } else {
+            uint256 penalty = ratioPct - 200;
+            bps = penalty >= bps ? 0 : bps - (penalty > 200 ? 200 : penalty);
         }
 
-        uint256 baseTakeAbs = baseTake >= 0 ? uint256(baseTake) : uint256(-baseTake);
-        uint256 maxDelta = nextPrizePool < futurePrizePool ? nextPrizePool : futurePrizePool;
-        int256 delta = _nextSkimVarianceDelta(baseTakeAbs, nextPoolBefore, rngWord, maxDelta);
-        if (delta > 0) {
-            uint256 extra = uint256(delta);
-            if (extra != 0) {
-                nextPrizePool -= extra;
-                futurePrizePool += extra;
-            }
-        } else if (delta < 0) {
-            uint256 extra = uint256(-delta);
-            if (extra != 0) {
-                futurePrizePool -= extra;
-                nextPrizePool += extra;
+        // Growth adjust: ±2% based on pool growth vs last level
+        if (lastPool != 0) {
+            if (nextPoolBefore <= lastPool) {
+                bps += 200;
+            } else {
+                uint256 excessBps = ((nextPoolBefore - lastPool) * 10_000) /
+                    lastPool;
+                if (excessBps >= 2000) {
+                    bps = bps >= 200 ? bps - 200 : 0;
+                } else if (excessBps <= 1000) {
+                    bps += 200 - (excessBps / 5);
+                } else {
+                    uint256 penalty = (excessBps - 1000) / 5;
+                    bps = penalty >= bps ? 0 : bps - penalty;
+                }
             }
         }
+
+        if (bps > 10_000) bps = 10_000;
+        uint256 take = (nextPoolBefore * bps) / 10_000;
+
+        // Variance: ±X% random adjustment
+        if (take != 0) {
+            uint256 variance = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000;
+            uint256 minVariance = (nextPoolBefore *
+                NEXT_SKIM_VARIANCE_MIN_BPS) / 10_000;
+            if (variance < minVariance) variance = minVariance;
+            if (variance != 0) {
+                if (variance > take) variance = take;
+                uint256 roll = rngWord % (variance * 2 + 1);
+                if (roll >= variance) {
+                    take += roll - variance;
+                    if (take > nextPoolBefore) take = nextPoolBefore;
+                } else if (variance - roll < take) {
+                    take -= variance - roll;
+                }
+            }
+        }
+
+        nextPrizePool -= take;
+        futurePrizePool += take;
     }
 
     function _drawDownFuturePrizePool(uint24 lvl) private {
-        if (futurePoolLastLevel == lvl) return;
-        futurePoolLastLevel = lvl;
-
         uint256 reserved;
         if ((lvl % 100) == 0) {
             reserved = 0; // Skip extra future->next move on x00 levels
@@ -1393,20 +888,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                    FUTURE TICKET ACTIVATION                         |
       +======================================================================+
       |  Future ticket rewards are staged per level and activated at the     |
-      |  start of the PREVIOUS level's burn phase (making them eligible      |
+      |  start of the PREVIOUS level's jackpot phase (making them eligible    |
       |  for daily jackpots and early burn rewards).                         |
       +======================================================================+*/
 
     /// @dev Process a batch of future ticket rewards for the specified level.
-    ///      Called during burn phase of level N-1 to activate tickets for level N.
+    ///      Called during jackpot phase of level N-1 to activate tickets for level N.
     /// @param playersToProcess Max players to process this call (0 = default batch size).
     /// @param lvl Target level to activate (typically current level + 1).
     /// @return worked True if any queued entries were processed.
     /// @return finished True if all queued entries for this level are processed.
+    /// @return writesUsed Number of SSTORE operations used in this batch.
     function _processFutureTicketBatch(
         uint32 playersToProcess,
         uint24 lvl
-    ) private returns (bool worked, bool finished) {
+    ) private returns (bool worked, bool finished, uint32 writesUsed) {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_MINT_MODULE
             .delegatecall(
@@ -1418,11 +914,50 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
-        return abi.decode(data, (bool, bool));
+        return abi.decode(data, (bool, bool, uint32));
+    }
+
+    /// @dev Before the final jackpot-day draw, process ticket queues for levels
+    ///      lvl+2..lvl+5 (near-future lootbox levels). Uses existing ticket cursor
+    ///      state so work can resume across multiple advanceGame calls.
+    /// @param cap Gas budget override for batched operations.
+    /// @param lvl Current jackpot level.
+    /// @return finished True when all target future levels are fully processed.
+    function _prepareFinalDayFutureTickets(
+        uint32 cap,
+        uint24 lvl
+    ) private returns (bool finished) {
+        uint24 startLevel = lvl + 2;
+        uint24 endLevel = lvl + 5;
+        uint24 resumeLevel = ticketLevel;
+
+        // Continue an in-flight future level first to preserve progress.
+        if (resumeLevel >= startLevel && resumeLevel <= endLevel) {
+            (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
+                cap,
+                resumeLevel
+            );
+            if (worked || !levelFinished) return false;
+        }
+
+        // Then probe remaining target levels in order.
+        for (uint24 target = startLevel; target <= endLevel; ) {
+            if (target != resumeLevel) {
+                (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
+                    cap,
+                    target
+                );
+                if (worked || !levelFinished) return false;
+            }
+            unchecked {
+                ++target;
+            }
+        }
+        return true;
     }
 
     /*+======================================================================+
-      |                    TICKET / gamepiece AIRDROP BATCHING                     |
+      |                    TICKET / TOKEN AIRDROP BATCHING                         |
       +======================================================================+
       |  Ticket entries are processed in batches to prevent gas exhaustion.  |
       |  Large purchases are queued and processed across multiple txs.       |
@@ -1430,12 +965,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Process a batch of current level tickets via jackpot module delegatecall.
     /// @param writesBudget Count of SSTORE writes allowed (0 = use default).
-    /// @param lvl Current level whose tickets should be processed.
-    /// @return finished True if all tickets for this level have been processed.
-    function _processTicketBatch(
+    /// @dev Run one ticket batch and detect whether any progress was made.
+    /// @param writesBudget Gas budget for this batch.
+    /// @param lvl Current level.
+    /// @return worked True if any tickets were processed.
+    /// @return finished True if all tickets for this level have been fully processed.
+    function _runProcessTicketBatch(
         uint32 writesBudget,
         uint24 lvl
-    ) internal returns (bool finished) {
+    ) private returns (bool worked, bool finished) {
+        uint32 prevCursor = ticketCursor;
+        uint24 prevLevel = ticketLevel;
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
             .delegatecall(
@@ -1447,34 +987,49 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
-        return abi.decode(data, (bool));
+        finished = abi.decode(data, (bool));
+        worked = (ticketCursor != prevCursor) || (ticketLevel != prevLevel);
     }
 
-    /// @dev Helper to run one ticket batch and detect whether any progress was made.
-    /// @param writesBudget Gas budget for this batch.
-    /// @param lvl Current level.
-    /// @return worked True if any tickets were processed.
-    /// @return finished True if all tickets for this level have been fully processed.
-    function _runProcessTicketBatch(
-        uint32 writesBudget,
-        uint24 lvl
-    ) private returns (bool worked, bool finished) {
-        uint32 prevCursor = ticketCursor;
-        uint24 prevLevel = ticketLevel;
-        finished = _processTicketBatch(writesBudget, lvl);
-        worked = (ticketCursor != prevCursor) || (ticketLevel != prevLevel);
+    /// @dev Process jackpot→purchase transition housekeeping (vault perpetual tickets + auto-stake).
+    ///      Deity pass holders get virtual trait-targeted tickets at jackpot resolution time
+    ///      (zero gas cost here). Vault addresses (DGNRS, VAULT) get generic queued tickets.
+    /// @param cap Gas budget override for batched operations.
+    /// @param purchaseLevel Current purchase level (level + 1).
+    /// @return finished True if all transition work completed this call.
+    function _processPhaseTransition(
+        uint32 cap,
+        uint24 purchaseLevel
+    ) private returns (bool finished) {
+        // Vault perpetual tickets: 16 generic tickets per level for DGNRS and VAULT
+        uint24 targetLevel = purchaseLevel + 99;
+        _queueTickets(ContractAddresses.DGNRS, targetLevel, VAULT_PERPETUAL_TICKETS);
+        _queueTickets(ContractAddresses.VAULT, targetLevel, VAULT_PERPETUAL_TICKETS);
+
+        // Auto-stake all non-claimable ETH into stETH for yield generation.
+        // Non-blocking: if stETH contract fails, game continues normally.
+        _autoStakeExcessEth();
+
+        cap;
+        return true;
+    }
+
+    /// @dev Stake all ETH above claimablePool into stETH via Lido.
+    ///      Uses try/catch so stETH is never a hard dependency — game
+    ///      continues even if Lido is paused or the call reverts.
+    function _autoStakeExcessEth() private {
+        uint256 ethBal = address(this).balance;
+        uint256 reserve = claimablePool;
+        if (ethBal <= reserve) return;
+        uint256 stakeable = ethBal - reserve;
+        try steth.submit{value: stakeable}(address(0)) returns (uint256) {} catch {}
     }
 
     /// @dev Request new VRF random word from Chainlink.
     ///      Sets RNG lock to prevent manipulation during pending window.
-    /// @param gameState_ Current game state.
     /// @param isTicketJackpotDay True if this is the last purchase day.
     /// @param lvl Current level.
-    function _requestRng(
-        uint8 gameState_,
-        bool isTicketJackpotDay,
-        uint24 lvl
-    ) private {
+    function _requestRng(bool isTicketJackpotDay, uint24 lvl) private {
         // Hard revert if Chainlink request fails; this intentionally halts game progress until VRF funding/config is fixed.
         uint256 id = vrfCoordinator.requestRandomWords(
             VRFRandomWordsRequest({
@@ -1486,11 +1041,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 extraArgs: hex"" // Empty for LINK payment (default)
             })
         );
-        _finalizeRngRequest(gameState_, isTicketJackpotDay, lvl, id);
+        _finalizeRngRequest(isTicketJackpotDay, lvl, id);
     }
 
     function _tryRequestRng(
-        uint8 gameState_,
         bool isTicketJackpotDay,
         uint24 lvl
     ) private returns (bool requested) {
@@ -1514,28 +1068,78 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 })
             )
         returns (uint256 id) {
-            _finalizeRngRequest(gameState_, isTicketJackpotDay, lvl, id);
+            _finalizeRngRequest(isTicketJackpotDay, lvl, id);
             requested = true;
         } catch {}
     }
 
     function _finalizeRngRequest(
-        uint8 gameState_,
         bool isTicketJackpotDay,
         uint24 lvl,
         uint256 requestId
     ) private {
-        vrfRequestId = requestId;
-        rngFulfilled = false;
-        rngWordCurrent = 0;
-        rngLockedFlag = true;
-        rngRequestTime = uint48(block.timestamp);
+        uint256 prevRequestId = vrfRequestId;
+        bool isRetry = prevRequestId != 0 &&
+            rngRequestTime != 0 &&
+            rngWordCurrent == 0;
+        if (isRetry) {
+            // Retry: discard the previous VRF request and remap its reserved lootbox index.
+            uint48 reservedIndex = lootboxRngRequestIndexById[prevRequestId];
+            if (reservedIndex != 0) {
+                delete lootboxRngRequestIndexById[prevRequestId];
+                lootboxRngRequestIndexById[requestId] = reservedIndex;
+            } else {
+                // Do not advance or clear pending on retry.
+                lootboxRngRequestIndexById[requestId] = lootboxRngIndex;
+            }
+        } else {
+            // Fresh request: reserve the next lootbox RNG index so new purchases
+            // are always assigned to the NEXT RNG.
+            _reserveLootboxRngIndex(requestId);
+        }
 
-        bool decClose = (((lvl % 100 != 0 &&
-            (lvl % 100 != 99) &&
-            gameState_ == GAME_STATE_SETUP) ||
-            (lvl % 100 == 0 && isTicketJackpotDay)) && decWindowOpen);
+        vrfRequestId = requestId;
+        rngWordCurrent = 0;
+        rngRequestTime = uint48(block.timestamp);
+        rngLockedFlag = true;
+
+        // Close decimator window when RNG requested during lastPurchaseDay at resolution levels (5, 15...85, 100, 105...185, 200, etc.)
+        bool decClose = decWindowOpen &&
+            isTicketJackpotDay &&
+            ((lvl % 10 == 5 && lvl % 100 != 95) || lvl % 100 == 0);
         if (decClose) decWindowOpen = false;
+
+        // Increment level at RNG request time when lastPurchaseDay = true.
+        // lvl is already purchaseLevel (= level + 1), so set directly.
+        // Only on fresh request - retry would double-increment.
+        if (isTicketJackpotDay && !isRetry) {
+            level = lvl;
+
+            // Set price for the new level based on intro tiers then 100-level cycle
+            if (lvl == 5) {
+                price = uint128(0.02 ether);
+            } else if (lvl == 10) {
+                price = uint128(0.04 ether);
+            } else if (lvl == 30) {
+                price = uint128(0.08 ether);
+            } else if (lvl == 60) {
+                price = uint128(0.12 ether);
+            } else if (lvl == 100) {
+                price = uint128(0.24 ether);
+            } else if (lvl > 100) {
+                uint24 cycleOffset = lvl % 100;
+                if (cycleOffset == 1) {
+                    price = uint128(0.04 ether);
+                } else if (cycleOffset == 30) {
+                    price = uint128(0.08 ether);
+                } else if (cycleOffset == 60) {
+                    price = uint128(0.12 ether);
+                } else if (cycleOffset == 0) {
+                    price = uint128(0.24 ether);
+                }
+            }
+
+        }
     }
 
     /// @notice Emergency VRF coordinator rotation after 3-day stall.
@@ -1551,77 +1155,20 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bytes32 newKeyHash
     ) external {
         if (msg.sender != ContractAddresses.ADMIN) revert E();
-        if (!_threeDayRngGap(_currentDayIndex())) revert VrfUpdateNotReady();
-        _setVrfConfig(
-            newCoordinator,
-            newSubId,
-            newKeyHash,
-            address(vrfCoordinator)
-        );
-    }
+        if (!_threeDayRngGap(_simulatedDayIndex()))
+            revert VrfUpdateNotReady();
 
-    /// @dev Set new VRF configuration and reset RNG state.
-    ///      Clears any pending request and unlocks RNG usage.
-    /// @param newCoordinator New VRF coordinator address.
-    /// @param newSubId New subscription ID.
-    /// @param newKeyHash New key hash.
-    /// @param current Previous coordinator address (for event).
-    function _setVrfConfig(
-        address newCoordinator,
-        uint256 newSubId,
-        bytes32 newKeyHash,
-        address current
-    ) private {
-        if (
-            newCoordinator == address(0) ||
-            newKeyHash == bytes32(0) ||
-            newSubId == 0
-        ) revert E();
-
+        address current = address(vrfCoordinator);
         vrfCoordinator = IVRFCoordinator(newCoordinator);
         vrfSubscriptionId = newSubId;
         vrfKeyHash = newKeyHash;
 
         // Reset RNG state to allow immediate advancement
         rngLockedFlag = false;
-        rngFulfilled = true;
         vrfRequestId = 0;
         rngRequestTime = 0;
         rngWordCurrent = 0;
         emit VrfCoordinatorUpdated(current, newCoordinator);
-    }
-
-    /// @dev Process all pending tickets (current level + near-future) before unlocking RNG.
-    ///      Must complete ALL ticket processing for RNG integrity (tickets use RNG word).
-    ///      Credits caller with 500 BURNIE work bounty if work was done.
-    /// @param caller Address to credit with work bounty.
-    /// @param lvl Current level.
-    /// @param cap Emergency cap override (0 = normal mode, >0 = skip bounty).
-    /// @return allFinished True if all tickets are fully processed and RNG can be unlocked.
-    function _processAllTicketsBeforeUnlock(
-        address caller,
-        uint24 lvl,
-        uint32 cap
-    ) private returns (bool allFinished) {
-        bool anyWorkDone = false;
-
-        // Process current level tickets (batch size: 0 = use default work counter)
-        (bool currentWorked, bool currentFinished) = _runProcessTicketBatch(0, lvl);
-        if (currentWorked) anyWorkDone = true;
-        if (!currentFinished) return false; // Must finish current level tickets
-
-        // Process near-future tickets (next level) - batch size 0 uses default
-        uint24 nextLevel = lvl + 1;
-        (bool futureWorked, bool futureFinished) = _processFutureTicketBatch(0, nextLevel);
-        if (futureWorked) anyWorkDone = true;
-        if (!futureFinished) return false; // Must finish future tickets
-
-        // All tickets processed - credit work bounty to caller (skip in emergency cap mode)
-        if (anyWorkDone && cap == 0) {
-            coin.creditFlip(caller, TICKET_WORK_BOUNTY);
-        }
-
-        return true; // All processing complete, RNG can be unlocked
     }
 
     /// @dev Unlock RNG after processing is complete for the day.
@@ -1630,6 +1177,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _unlockRng(uint48 day) private {
         dailyIdx = day;
         rngLockedFlag = false;
+        rngWordCurrent = 0;
         vrfRequestId = 0;
         rngRequestTime = 0;
     }
@@ -1639,68 +1187,31 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Only available while RNG is unlocked (before VRF request is in-flight).
     ///      MECHANISM: Adds 1 to the VRF word for each nudge, changing outcomes.
     ///      SECURITY: Players cannot predict the base word, only influence it.
-    /// @param player Player address paying for the nudge (address(0) = msg.sender).
-    function reverseFlip(address player) external {
-        if (player == address(0)) {
-            player = msg.sender;
-        } else if (player != msg.sender) {
-            _requireApproved(player);
-        }
-        _reverseFlip(player);
-    }
-
-    function _reverseFlip(address player) private {
+    function reverseFlip() external {
         if (rngLockedFlag) revert RngLocked();
         uint256 reversals = totalFlipReversals;
         uint256 cost = _currentNudgeCost(reversals);
-        coin.burnCoin(player, cost);
+        coin.burnCoin(msg.sender, cost);
         uint256 newCount = reversals + 1;
         totalFlipReversals = newCount;
-        emit ReverseFlip(player, newCount, cost);
+        emit ReverseFlip(msg.sender, newCount, cost);
     }
 
-    /// @dev Try to request a lootbox-specific RNG word.
-    ///      Returns true if request was successful, false otherwise.
-    function _tryRequestLootboxRng() private returns (bool) {
-        if (lootboxRngPendingEth == 0) return false;
-
+    /// @dev Reserve the next lootbox RNG index for a VRF request.
+    ///      Advances the index immediately so new purchases target the NEXT RNG.
+    function _reserveLootboxRngIndex(uint256 requestId) private {
         uint48 index = lootboxRngIndex;
-        if (lootboxRngWordByIndex[index] != 0) {
-            // Already have RNG for this index
-            return false;
-        }
-
-        if (
-            address(vrfCoordinator) == address(0) ||
-            vrfKeyHash == bytes32(0) ||
-            vrfSubscriptionId == 0
-        ) {
-            return false;
-        }
-
-        try
-            vrfCoordinator.requestRandomWords(
-                VRFRandomWordsRequest({
-                    keyHash: vrfKeyHash,
-                    subId: vrfSubscriptionId,
-                    requestConfirmations: VRF_REQUEST_CONFIRMATIONS,
-                    callbackGasLimit: VRF_CALLBACK_GAS_LIMIT,
-                    numWords: 1,
-                    extraArgs: hex""
-                })
-            )
-        returns (uint256 id) {
-            // Mark this request as lootbox RNG (not daily)
-            lootboxRngRequestIndexById[id] = index;
-            return true;
-        } catch {
-            return false;
-        }
+        lootboxRngRequestIndexById[requestId] = index;
+        lootboxRngIndex = index + 1;
+        // Reset pending counters so new purchases accrue toward the next RNG
+        lootboxRngPendingEth = 0;
+        lootboxRngPendingBurnie = 0;
     }
 
     /// @notice Chainlink VRF callback for random word fulfillment.
     /// @dev Access: VRF coordinator only.
-    ///      Applies any queued nudges before storing the word.
+    ///      Daily RNG: stores word for advanceGame processing (nudges applied there).
+    ///      Mid-day RNG: directly finalizes lootbox RNG, no advanceGame needed.
     ///      SECURITY: Validates requestId and coordinator address.
     /// @param requestId The request ID to match.
     /// @param randomWords Array containing the random word (length 1).
@@ -1709,33 +1220,40 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256[] calldata randomWords
     ) external {
         if (msg.sender != address(vrfCoordinator)) revert E();
-        uint256 word = randomWords[0];
-        if (requestId == vrfRequestId && !rngFulfilled) {
-            // Apply any queued nudges (reverseFlip)
-            uint256 rngNudge = totalFlipReversals;
-            if (rngNudge != 0) {
-                unchecked {
-                    word += rngNudge;
-                }
-                totalFlipReversals = 0;
-            }
-            if (word == 0) word = 1;
-            rngFulfilled = true;
-            rngWordCurrent = word;
-            // Save the first VRF word ever received as ultimate fallback for gameover
-            if (firstEverRngWord == 0) {
-                firstEverRngWord = word;
-            }
-            return;
-        }
+        if (requestId != vrfRequestId || rngWordCurrent != 0) return;
 
-        uint48 lootboxIndex = lootboxRngRequestIndexById[requestId];
-        if (lootboxIndex == 0) return;
+        uint256 word = randomWords[0];
         if (word == 0) word = 1;
-        // Resolve lootbox RNG via standalone contract
-        lootbox.resolveLootboxRng(word, lootboxIndex);
-        // Note: RNG already stored in lootboxRngWordByIndex, afKing can read from there
-        delete lootboxRngRequestIndexById[requestId];
+
+        if (rngLockedFlag) {
+            // Daily RNG: store for advanceGame processing (nudges applied there)
+            rngWordCurrent = word;
+        } else {
+            // Mid-day RNG: directly finalize lootbox and clear state
+            uint48 index = lootboxRngRequestIndexById[requestId];
+            lootboxRngWordByIndex[index] = word;
+            emit LootboxRngApplied(index, word, requestId);
+            vrfRequestId = 0;
+            rngRequestTime = 0;
+        }
+    }
+
+    /// @dev Apply daily RNG nudges, record the word, and emit the finalized word.
+    function _applyDailyRng(
+        uint48 day,
+        uint256 rawWord
+    ) private returns (uint256 finalWord) {
+        uint256 nudges = totalFlipReversals;
+        finalWord = rawWord;
+        if (nudges != 0) {
+            unchecked {
+                finalWord += nudges;
+            }
+            totalFlipReversals = 0;
+        }
+        rngWordCurrent = finalWord;
+        rngWordByDay[day] = finalWord;
+        emit DailyRngApplied(day, rawWord, nudges, finalWord);
     }
 
     /// @dev Calculate nudge cost with compounding.
@@ -1755,50 +1273,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
     }
-    function _clearDailyBurnCount() private {
-        // 80 uint32 values packed into 10 consecutive storage slots.
-        assembly ("memory-safe") {
-            let slot := dailyBurnCount.slot
-            let end := add(slot, 10)
-            for {
-                let s := slot
-            } lt(s, end) {
-                s := add(s, 1)
-            } {
-                sstore(s, 0)
-            }
-        }
-    }
-
-    function _seedTraitCounts() private {
-        uint32[256] storage remaining = traitRemaining;
-        uint32[256] storage startRemaining = traitStartRemaining;
-
-        for (uint16 t; t < 256; ) {
-            uint32 value = remaining[t];
-            startRemaining[t] = value;
-            unchecked {
-                ++t;
-            }
-        }
-    }
-
-    function _setExterminatorForLevel(uint24 lvl, address ex) private {
-        if (lvl == 0) return;
-        levelExterminators[lvl] = ex;
-    }
-
-    function _currentDayIndex() private view returns (uint48) {
-        // Calculate day boundaries with JACKPOT_RESET_TIME offset
-        uint48 currentDayBoundary = uint48(
-            (block.timestamp - JACKPOT_RESET_TIME) / 1 days
-        );
-        return currentDayBoundary - ContractAddresses.DEPLOY_DAY_BOUNDARY + 1;
-    }
 
     function _threeDayRngGap(uint48 day) private view returns (bool) {
         if (rngWordByDay[day] != 0) return false;
-        if (day == 0 || rngWordByDay[day - 1] != 0) return false;
+        if (rngWordByDay[day - 1] != 0) return false;
         if (day < 2 || rngWordByDay[day - 2] != 0) return false;
         return true;
     }

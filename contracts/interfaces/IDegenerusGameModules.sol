@@ -1,186 +1,436 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IDegenerusCoinModule} from "./DegenerusGameModuleInterfaces.sol";
 import {MintPaymentKind} from "./IDegenerusGame.sol";
 
+/// @title IDegenerusGameAdvanceModule
+/// @notice Interface for the game advancement module handling VRF and game progression
 interface IDegenerusGameAdvanceModule {
+    /// @notice Advances the game state by processing pending operations
+    /// @param cap Maximum number of operations to process in this call
     function advanceGame(uint32 cap) external;
 
+    /// @notice Requests mid-day lootbox RNG when threshold conditions are met.
+    function requestLootboxRng() external;
+
+    /// @notice Configures the Chainlink VRF coordinator and subscription
+    /// @param coordinator_ Address of the VRF coordinator contract
+    /// @param subId Chainlink VRF subscription ID
+    /// @param keyHash_ Key hash for the VRF request
     function wireVrf(
         address coordinator_,
         uint256 subId,
         bytes32 keyHash_
     ) external;
 
+    /// @notice Updates VRF coordinator, subscription, and key hash configuration
+    /// @param newCoordinator New VRF coordinator address
+    /// @param newSubId New subscription ID
+    /// @param newKeyHash New key hash for VRF requests
     function updateVrfCoordinatorAndSub(
         address newCoordinator,
         uint256 newSubId,
         bytes32 newKeyHash
     ) external;
 
-    function reverseFlip(address player) external;
+    /// @notice Reverses a pending coinflip for caller
+    function reverseFlip() external;
 
+    /// @notice VRF callback function to receive random words
+    /// @dev Called by the VRF coordinator to fulfill randomness requests
+    /// @param requestId The ID of the VRF request being fulfilled
+    /// @param randomWords Array of random words returned by VRF
     function rawFulfillRandomWords(
         uint256 requestId,
         uint256[] calldata randomWords
     ) external;
 }
 
+/// @title IDegenerusGameEndgameModule
+/// @notice Interface for handling endgame finalization and rewards
 interface IDegenerusGameEndgameModule {
-    function finalizeEndgame(uint24 lvl, uint256 rngWord) external;
-    function payExterminatorOnJackpot(uint24 lvl, uint256 rngWord) external;
+    /// @notice Finalizes the endgame state for a given level
+    /// @param lvl The level being finalized
+    /// @param rngWord Random word for deterministic reward distribution
+
+    /// @notice Distributes reward jackpots at endgame
+    /// @param lvl The level for jackpot distribution
+    /// @param rngWord Random word for winner selection
+    function runRewardJackpots(uint24 lvl, uint256 rngWord) external;
+
+    /// @notice Rewards the top affiliate for a given level
+    /// @param lvl The level to reward the top affiliate for
     function rewardTopAffiliate(uint24 lvl) external;
+
+    /// @notice Allows a player to claim their whale pass
+    /// @param player Address of the player claiming the pass
     function claimWhalePass(address player) external;
 }
 
+/// @title IDegenerusGameGameOverModule
+/// @notice Interface for handling game over state and final fund distribution
 interface IDegenerusGameGameOverModule {
+    /// @notice Handles draining funds during game over state
+    /// @param day The day identifier for the drain operation
     function handleGameOverDrain(uint48 day) external;
+
+    /// @notice Performs the final sweep of remaining funds after game over
     function handleFinalSweep() external;
 }
 
+/// @title IDegenerusGameJackpotModule
+/// @notice Interface for managing various jackpot distributions
 interface IDegenerusGameJackpotModule {
+    /// @notice Pays out the daily jackpot to winners
+    /// @param isDaily Whether this is a daily jackpot (vs other type)
+    /// @param lvl The current game level
+    /// @param randWord Random word for winner selection
+    /// @param cap Emergency unit cap for daily jackpot chunking (0 = default)
     function payDailyJackpot(
         bool isDaily,
         uint24 lvl,
-        uint256 randWord
-    ) external;
-
-    function payTicketJackpot(
-        uint24 lvl,
-        uint256 randWord
-    ) external;
-
-    function payExterminationJackpot(
-        uint24 lvl,
-        uint8 traitId,
         uint256 randWord,
-        uint256 ethPool
-    ) external returns (uint256 paidEth);
-
-    function payPurchaseRewardLootbox(
-        uint24 lvl,
-        uint8 traitId,
-        uint256 randWord,
-        uint256 lootboxBudget
-    ) external returns (address[] memory winners, uint256[] memory ethAmounts);
-
-    function payLevelJackpotLootbox(
-        uint24 lvl,
-        uint256 rngWord,
-        uint256 effectiveWei
+        uint32 cap
     ) external;
 
-    function payLevelJackpotEth(
+    /// @notice Pays daily jackpot rewards in coin and tickets
+    /// @param randWord Random word for distribution
+    function payDailyJackpotCoinAndTickets(uint256 randWord) external;
+
+    /// @notice Consolidate prize pools for the jackpot phase.
+    /// @param lvl The level to consolidate for
+    /// @param rngWord Random word for rebalancing calculations
+    function consolidatePrizePools(
         uint24 lvl,
         uint256 rngWord
     ) external;
 
-    function calcPrizePoolForLevelJackpot(
+    /// @notice Award DGNRS reward to the solo bucket winner on the final daily jackpot.
+    /// @param lvl Current level
+    /// @param rngWord Random word for winner selection
+    function awardFinalDayDgnrsReward(
         uint24 lvl,
         uint256 rngWord
-    ) external returns (uint256 effectiveWei);
+    ) external;
 
-    function processTicketBatchLegacy(uint32 writesBudget) external returns (bool finished);
-
+    /// @notice Processes a batch of ticket entries for a specific level
+    /// @param writesBudget Maximum number of storage writes allowed
+    /// @param lvl The level to process tickets for
+    /// @return finished True if all tickets have been processed
     function processTicketBatch(uint32 writesBudget, uint24 lvl) external returns (bool finished);
 
+    /// @notice Pays early bird lootbox jackpot rewards
+    /// @param lvl The current game level
+    /// @param rngWord Random word for winner selection
     function payEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) external;
 
+    /// @notice Pays daily coin jackpot rewards
+    /// @param lvl The current game level
+    /// @param randWord Random word for winner selection
     function payDailyCoinJackpot(uint24 lvl, uint256 randWord) external;
 }
 
+/// @title IDegenerusGameDecimatorModule
+/// @notice Interface for decimator jackpot claim credits
 interface IDegenerusGameDecimatorModule {
+    /// @notice Credits decimator jackpot claims to multiple accounts
+    /// @param accounts Array of account addresses to credit
+    /// @param amounts Array of amounts to credit to each account
+    /// @param rngWord Random word for distribution logic
     function creditDecJackpotClaimBatch(
         address[] calldata accounts,
         uint256[] calldata amounts,
         uint256 rngWord
     ) external;
 
-    function burnTokens(
-        address player,
-        uint256[] calldata tokenIds
+    /// @notice Credits a decimator jackpot claim to a single account
+    /// @param account Address to credit the claim to
+    /// @param amount Amount to credit
+    /// @param rngWord Random word for distribution logic
+    function creditDecJackpotClaim(
+        address account,
+        uint256 amount,
+        uint256 rngWord
     ) external;
+
+    /// @notice Record a Decimator burn for jackpot eligibility.
+    /// @param player Address of the player.
+    /// @param lvl Current game level.
+    /// @param bucket Player's chosen denominator (2-12).
+    /// @param baseAmount Burn amount before multiplier.
+    /// @param multBps Multiplier in basis points (10000 = 1x).
+    /// @return bucketUsed The bucket actually used (may differ from requested if not an improvement).
+    function recordDecBurn(
+        address player,
+        uint24 lvl,
+        uint8 bucket,
+        uint256 baseAmount,
+        uint256 multBps
+    ) external returns (uint8 bucketUsed);
+
+    /// @notice Snapshot Decimator jackpot winners for deferred claims.
+    /// @param poolWei Total ETH prize pool for this level.
+    /// @param lvl Level number being resolved.
+    /// @param rngWord VRF-derived randomness seed.
+    /// @return returnAmountWei Amount to return (non-zero if no winners or already snapshotted).
+    function runDecimatorJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 returnAmountWei);
+
+    /// @notice Consume Decimator claim on behalf of player.
+    /// @param player Address to claim for.
+    /// @param lvl Level to claim from.
+    /// @return amountWei Pro-rata payout amount.
+    function consumeDecClaim(address player, uint24 lvl) external returns (uint256 amountWei);
+
+    /// @notice Claim Decimator jackpot for caller.
+    /// @param lvl Level to claim from (must be the last decimator).
+    function claimDecimatorJackpot(uint24 lvl) external;
+
+    /// @notice Check if player can claim Decimator jackpot for a level.
+    /// @param player Address to check.
+    /// @param lvl Level to check (must be the last decimator).
+    /// @return amountWei Claimable amount (0 if not winner, already claimed, or expired).
+    /// @return winner True if player is a winner for this level.
+    function decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner);
 }
 
+/// @title IDegenerusGameWhaleModule
+/// @notice Interface for whale-tier purchases and premium passes
 interface IDegenerusGameWhaleModule {
+    /// @notice Purchases a whale bundle for the buyer
+    /// @param buyer Address receiving the bundle
+    /// @param quantity Number of bundles to purchase
     function purchaseWhaleBundle(address buyer, uint256 quantity) external payable;
 
-    function purchaseWhaleBundle10(address buyer, uint256 quantity) external payable;
+    /// @notice Purchases a 10-level lazy pass for the buyer
+    /// @param buyer Address receiving the pass
+    function purchaseLazyPass(address buyer) external payable;
 
-    function purchaseDeityPass(address buyer, uint256 quantity) external payable;
+    /// @notice Purchases a deity pass for a specific symbol
+    /// @param buyer Address receiving the deity pass
+    /// @param symbolId Symbol index (0-31) to bind the pass to
+    function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
 
-    function redeemWhaleBundle10Pass(address buyer, uint256 quantity) external;
+    /// @notice Handles deity pass transfer logic (called via delegatecall from game callback)
+    /// @param from Address transferring the pass
+    /// @param to Address receiving the pass
+    function handleDeityPassTransfer(address from, address to) external;
 }
 
+/// @title IDegenerusGameMintModule
+/// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
+    /// @notice Records mint data and calculates coin rewards
+    /// @param player Address of the minting player
+    /// @param lvl Current game level
+    /// @param mintUnits Number of units being minted
+    /// @return coinReward Amount of coin rewarded for the mint
     function recordMintData(
         address player,
         uint24 lvl,
         uint32 mintUnits
     ) external payable returns (uint256 coinReward);
 
+    /// @notice Processes a ticket and lootbox purchase
+    /// @param buyer Address of the buyer
+    /// @param ticketQuantity Number of tickets to purchase
+    /// @param lootBoxAmount Amount of lootboxes to purchase
+    /// @param affiliateCode Affiliate code for referral tracking
+    /// @param payKind Payment method used for the purchase
     function purchase(
         address buyer,
-        uint256 gamepieceQuantity,
         uint256 ticketQuantity,
         uint256 lootBoxAmount,
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) external payable;
 
+    /// @notice Processes a BURNIE purchase of tickets and optional lootboxes
+    /// @param buyer Address of the buyer
+    /// @param ticketQuantity Number of tickets to purchase
+    /// @param lootBoxBurnieAmount Amount of BURNIE to burn for lootboxes
+    function purchaseCoin(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxBurnieAmount
+    ) external;
+
+    /// @notice Purchases Burnie-specific lootboxes
+    /// @param buyer Address of the buyer
+    /// @param burnieAmount Amount of Burnie lootboxes to purchase
+    function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external;
+
+    /// @notice Opens a lootbox for a player
+    /// @param player Address of the lootbox owner
+    /// @param lootboxIndex Index of the lootbox to open
     function openLootBox(address player, uint48 lootboxIndex) external;
 
+    /// @notice Resolves a lootbox directly with provided randomness
+    /// @param player Address of the lootbox owner
+    /// @param amount Amount associated with the lootbox
+    /// @param rngWord Random word for lootbox resolution
     function resolveLootboxDirect(
         address player,
         uint256 amount,
         uint256 rngWord
     ) external;
 
+    /// @notice Processes a batch of future ticket claims
+    /// @param playersToProcess Maximum number of players to process
+    /// @param lvl The level to process tickets for
+    /// @return worked Whether any processing was done
+    /// @return finished Whether all pending tickets are processed
+    /// @return writesUsed Number of storage writes used
     function processFutureTicketBatch(
         uint32 playersToProcess,
         uint24 lvl
-    ) external returns (bool worked, bool finished);
+    ) external returns (bool worked, bool finished, uint32 writesUsed);
 
-    function calculateAirdropMultiplier(
-        uint32 prePurchaseCount,
-        uint32 purchasePhaseCount,
-        uint24 lvl
-    ) external pure returns (uint32);
-
-    function purchaseTargetCountFromRaw(
-        uint32 prePurchaseCount,
-        uint32 purchasePhaseCount
-    ) external view returns (uint32);
-
-    function rebuildTraitCounts(
-        uint32 tokenBudget,
-        uint32 target,
-        uint256 baseTokenId
-    ) external returns (bool finished);
 }
 
+/// @title IDegenerusGameLootboxModule
+/// @notice Interface for opening lootboxes and managing boons
 interface IDegenerusGameLootboxModule {
-    function purchase(
-        address buyer,
-        uint256 gamepieceQuantity,
-        uint256 ticketQuantity,
-        uint256 lootBoxAmount,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind
-    ) external payable;
-
-    function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external;
-    function rollLootboxRng(address player) external;
-}
-
-interface IDegenerusGameLootboxOpenModule {
+    /// @notice Opens a standard lootbox for a player
+    /// @param player Address of the lootbox owner
+    /// @param lootboxIndex Index of the lootbox to open
     function openLootBox(address player, uint48 lootboxIndex) external;
+
+    /// @notice Opens a Burnie lootbox for a player
+    /// @param player Address of the lootbox owner
+    /// @param lootboxIndex Index of the Burnie lootbox to open
     function openBurnieLootBox(address player, uint48 lootboxIndex) external;
 
+    /// @notice Resolves a lootbox directly with provided randomness
+    /// @param player Address of the lootbox owner
+    /// @param amount Amount associated with the lootbox
+    /// @param rngWord Random word for lootbox resolution
     function resolveLootboxDirect(
         address player,
         uint256 amount,
         uint256 rngWord
+    ) external;
+
+    /// @notice Returns deity boon slot information
+    /// @param deity Address of the deity
+    /// @return slots Array of 3 boon slot types
+    /// @return usedMask Bitmask of which slots have been used
+    /// @return day The day these slots were generated for
+    function deityBoonSlots(address deity)
+        external
+        view
+        returns (uint8[3] memory slots, uint8 usedMask, uint48 day);
+
+    /// @notice Issues a deity boon from a deity to a recipient
+    /// @param deity Address of the deity issuing the boon
+    /// @param recipient Address receiving the boon
+    /// @param slot Slot index of the boon to issue
+    function issueDeityBoon(address deity, address recipient, uint8 slot) external;
+}
+
+/// @title IDegenerusGameBoonModule
+/// @notice Interface for boon consumption and lootbox view functions
+interface IDegenerusGameBoonModule {
+    /// @notice Consumes a player's coinflip boon and returns its value
+    /// @param player Address of the player
+    /// @return boonBps Boon value in basis points
+    function consumeCoinflipBoon(address player) external returns (uint16 boonBps);
+
+    /// @notice Consumes a player's purchase boost boon
+    /// @param player Address of the player
+    /// @return boostBps Boost value in basis points
+    function consumePurchaseBoost(address player) external returns (uint16 boostBps);
+
+    /// @notice Consumes a player's decimator boost boon
+    /// @param player Address of the player
+    /// @return boostBps Boost value in basis points
+    function consumeDecimatorBoost(address player) external returns (uint16 boostBps);
+
+    /// @notice Checks if a player has a whale boon available
+    /// @param player Address of the player
+    /// @return True if the player has a whale boon
+    function hasWhaleBoon(address player) external view returns (bool);
+
+    /// @notice Consumes a player's whale boon
+    /// @param player Address of the player
+    function consumeWhaleBoon(address player) external;
+
+    /// @notice Returns the lootbox amount for a player at a given index
+    /// @param player Address of the player
+    /// @param index Lootbox index
+    /// @return Amount associated with the lootbox
+    function lootboxAmountFor(address player, uint48 index) external view returns (uint256);
+
+    /// @notice Returns the Burnie lootbox amount for a player at a given index
+    /// @param player Address of the player
+    /// @param index Burnie lootbox index
+    /// @return Amount associated with the Burnie lootbox
+    function burnieLootboxAmountFor(address player, uint48 index) external view returns (uint256);
+
+    /// @notice Returns the current lootbox index
+    /// @return Current lootbox index
+    function currentLootboxIndex() external view returns (uint48);
+
+    /// @notice Returns the RNG word for a specific lootbox index
+    /// @param index Lootbox index
+    /// @return RNG word used for that lootbox
+    function lootboxRngWordForIndex(uint48 index) external view returns (uint256);
+
+    /// @notice Returns the pending Burnie amount awaiting RNG resolution
+    /// @return Amount of Burnie lootbox value pending resolution
+    function lootboxRngPendingBurnieAmount() external view returns (uint256);
+
+    /// @notice Clear all expired boons for a player
+    /// @param player Address of the player
+    /// @return hasAnyBoon True if any active boon remains
+    function checkAndClearExpiredBoon(address player) external returns (bool hasAnyBoon);
+
+    /// @notice Consume a pending activity boon and apply to player stats
+    /// @param player Address of the player
+    function consumeActivityBoon(address player) external;
+}
+
+/// @title IDegenerusGameDegeneretteModule
+/// @notice Interface for Degenerette betting mechanics (full-ticket only)
+interface IDegenerusGameDegeneretteModule {
+    /// @notice Places Full Ticket bets (4 traits, match-based payouts)
+    /// @param player The player address (use zero address for msg.sender)
+    /// @param currency Currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP)
+    /// @param amountPerTicket Bet amount per ticket
+    /// @param ticketCount Number of spins (1..10). Each spin resolves independently.
+    /// @param customTicket Custom packed traits
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
+    function placeFullTicketBets(
+        address player,
+        uint8 currency,
+        uint128 amountPerTicket,
+        uint8 ticketCount,
+        uint32 customTicket,
+        uint8 heroQuadrant
+    ) external payable;
+
+    /// @notice Places a Full Ticket Degenerette bet using pending affiliate Degenerette credit.
+    /// @param player The player address (use zero address for msg.sender)
+    /// @param amountPerTicket Bet amount per ticket (BURNIE units)
+    /// @param ticketCount Number of spins (1..10). Each spin resolves independently.
+    /// @param customTicket Custom packed traits
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
+    function placeFullTicketBetsFromAffiliateCredit(
+        address player,
+        uint128 amountPerTicket,
+        uint8 ticketCount,
+        uint32 customTicket,
+        uint8 heroQuadrant
+    ) external;
+
+    /// @notice Resolves one or more pending bets for a player
+    /// @param player The player address (use zero address for msg.sender)
+    /// @param betIds Array of bet IDs to resolve
+    function resolveBets(
+        address player,
+        uint64[] calldata betIds
     ) external;
 }
