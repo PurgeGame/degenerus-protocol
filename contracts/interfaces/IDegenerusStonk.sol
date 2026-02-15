@@ -2,11 +2,12 @@
 pragma solidity ^0.8.26;
 
 /// @title IDegenerusStonk
-/// @notice Interface for DGNRS token contract
+/// @notice Interface for the DGNRS token contract
+/// @dev DGNRS is backed by ETH, stETH, and BURNIE reserves with pool-based distribution
 interface IDegenerusStonk {
-    /// @notice DGNRS reward pools (pre-minted supply buckets).
+    /// @notice DGNRS reward pools (pre-minted supply buckets)
+    /// @dev Each pool has a dedicated balance for specific distribution purposes
     enum Pool {
-        Exterminator,
         Whale,
         Affiliate,
         Lootbox,
@@ -14,80 +15,95 @@ interface IDegenerusStonk {
         Earlybird
     }
 
-    /// @notice Escrow virtual BURNIE mint allowance
-    /// @dev Called by COIN contract when it escrows virtual BURNIE to DGNRS
-    /// @param amount Amount of BURNIE mint allowance
-    function vaultEscrow(uint256 amount) external;
-
     /// @notice Deposit stETH to DGNRS reserves
-    /// @dev Called by game contract to deposit 20% of stETH to DGNRS
+    /// @dev Called by the game contract to deposit stETH backing
     /// @param amount Amount of stETH to deposit
     function depositSteth(uint256 amount) external;
 
-    /// @notice Return remaining balance for a pool.
-    /// @param pool Pool identifier.
-    /// @return Remaining pool balance.
+    /// @notice Get the remaining balance for a specific pool
+    /// @param pool Pool identifier to query
+    /// @return Remaining token balance in the pool
     function poolBalance(Pool pool) external view returns (uint256);
 
-    /// @notice Transfer DGNRS from a pool to a recipient (game only).
-    /// @param pool Pool identifier.
-    /// @param to Recipient address.
-    /// @param amount Amount of DGNRS to transfer.
-    /// @return transferred Amount actually transferred.
+    /// @notice Transfer DGNRS from a pool to a recipient
+    /// @dev Restricted to authorized game contracts only
+    /// @param pool Pool identifier to transfer from
+    /// @param to Recipient address
+    /// @param amount Amount of DGNRS to transfer
+    /// @return transferred Amount actually transferred (may be less if pool has insufficient balance)
     function transferFromPool(Pool pool, address to, uint256 amount) external returns (uint256 transferred);
 
-    /// @notice Approve a spender to transfer DGNRS.
-    /// @param spender Spender address.
-    /// @param amount Allowance amount.
-    /// @return success True on success.
+    /// @notice Transfer DGNRS between two reward pools
+    /// @dev Restricted to authorized game contracts only
+    /// @param from Pool to transfer from
+    /// @param to Pool to transfer to
+    /// @param amount Amount of DGNRS to transfer
+    /// @return transferred Amount actually transferred (may be less if source pool has insufficient balance)
+    function transferBetweenPools(Pool from, Pool to, uint256 amount) external returns (uint256 transferred);
+
+    /// @notice Mint DGNRS tokens for game payouts
+    /// @dev Restricted to authorized game contracts only
+    /// @param to Recipient address
+    /// @param amount Amount of DGNRS to mint
+    function mintForGame(address to, uint256 amount) external;
+
+    /// @notice Burn DGNRS tokens for game bets
+    /// @dev Restricted to authorized game contracts only
+    /// @param from Address to burn tokens from
+    /// @param amount Amount of DGNRS to burn
+    function burnForGame(address from, uint256 amount) external;
+
+    /// @notice Approve a spender to transfer DGNRS on behalf of the caller
+    /// @param spender Address to approve as spender
+    /// @param amount Allowance amount to grant
+    /// @return success True if approval succeeded
     function approve(address spender, uint256 amount) external returns (bool);
 
-    /// @notice Get token balance for an address
-    /// @param account Address to query
-    /// @return Balance of DGNRS
+    /// @notice Get the DGNRS token balance for an address
+    /// @param account Address to query balance for
+    /// @return Token balance of the account
     function balanceOf(address account) external view returns (uint256);
 
-    /// @notice Transfer DGNRS to a recipient
+    /// @notice Transfer DGNRS tokens to a recipient
     /// @param to Recipient address
-    /// @param amount Amount to transfer
-    /// @return success True on success
+    /// @param amount Amount of DGNRS to transfer
+    /// @return success True if transfer succeeded
     function transfer(address to, uint256 amount) external returns (bool);
 
-    /// @notice Transfer DGNRS from a sender (requires allowance).
-    /// @param from Sender address.
-    /// @param to Recipient address.
-    /// @param amount Amount to transfer.
-    /// @return success True on success.
+    /// @notice Transfer DGNRS from a sender using allowance
+    /// @dev Requires sufficient allowance from the sender to the caller
+    /// @param from Sender address
+    /// @param to Recipient address
+    /// @param amount Amount of DGNRS to transfer
+    /// @return success True if transfer succeeded
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
 
-    /// @notice Get total supply of DGNRS
-    /// @return Total supply
+    /// @notice Get the total supply of DGNRS tokens
+    /// @return Total number of DGNRS tokens in circulation
     function totalSupply() external view returns (uint256);
 
-    /// @notice Get ETH reserve backing DGNRS
-    /// @return ETH reserve
+    /// @notice Get the ETH reserve backing DGNRS
+    /// @return Amount of ETH in reserves
     function ethReserve() external view returns (uint256);
 
-    /// @notice Get stETH reserve backing DGNRS
-    /// @return stETH reserve
+    /// @notice Get the stETH reserve backing DGNRS
+    /// @return Amount of stETH in reserves
     function stethReserve() external view returns (uint256);
 
-    /// @notice Get BURNIE reserve backing DGNRS (vaultMintAllowance)
-    /// @return BURNIE reserve
+    /// @notice Get the BURNIE reserve backing DGNRS
+    /// @dev Includes claimable coinflip backing
+    /// @return Amount of BURNIE in reserves
     function burnieReserve() external view returns (uint256);
 
-    /// @notice Get virtual BURNIE mint allowance
-    /// @return Mint allowance
-    function vaultMintAllowance() external view returns (uint256);
-
-    /// @notice Get total backing (ETH + stETH + BURNIE)
-    /// @return Total backing
+    /// @notice Get the total backing value (ETH + stETH + claimable ETH + BURNIE backing)
+    /// @return Combined value of all reserves and claimables
     function totalBacking() external view returns (uint256);
 
-    /// @notice Preview burn output
-    /// @param amount Amount to burn
-    /// @return ethOut ETH output
-    /// @return stethOut stETH output
-    /// @return burnieOut BURNIE output
+    /// @notice Preview the output amounts from burning DGNRS tokens
+    /// @dev Returns proportional amounts based on current reserves
+    /// @param amount Amount of DGNRS to simulate burning
+    /// @return ethOut Amount of ETH that would be returned
+    /// @return stethOut Amount of stETH that would be returned
+    /// @return burnieOut Amount of BURNIE that would be minted
     function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
 }

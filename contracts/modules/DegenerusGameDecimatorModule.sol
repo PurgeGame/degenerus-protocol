@@ -1,42 +1,30 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
-import {IDegenerusGamepieces} from "../interfaces/IDegenerusGamepieces.sol";
-import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
-import {IBurnieLootbox} from "../interfaces/IBurnieLootbox.sol";
-import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {
+    IDegenerusGameLootboxModule
+} from "../interfaces/IDegenerusGameModules.sol";
+import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 /**
  * @title DegenerusGameDecimatorModule
  * @author Burnie Degenerus
- * @notice Delegate-called module handling decimator claim credits and lootbox payouts.
- *
+ * @notice Delegate-called module handling decimator jackpot tracking, resolution, and claim credits.
  * @dev This module is called via delegatecall from DegenerusGame, meaning all
  *      storage reads/writes operate on the game contract's storage.
  */
-contract DegenerusGameDecimatorModule is DegenerusGameStorage {
+contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
 
-    /// @notice Emitted when ETH is credited to a player's claimable balance.
-    /// @param player The original beneficiary (may be same as recipient).
-    /// @param recipient The address receiving the credit.
-    /// @param amount The wei amount credited.
-    event PlayerCredited(
-        address indexed player,
-        address indexed recipient,
-        uint256 amount
-    );
-
     /// @notice Emitted when auto-rebuy converts winnings to tickets.
     /// @param player Player whose winnings were converted.
     /// @param targetLevel Level for which tickets were purchased.
-    /// @param ticketsAwarded Number of tickets credited.
+    /// @param ticketsAwarded Number of tickets credited (including bonus).
     /// @param ethSpent Amount of ETH spent on tickets.
-    /// @param remainder Amount returned to claimableWinnings.
+    /// @param remainder Amount returned to claimableWinnings (reserved + dust).
     event AutoRebuyProcessed(
         address indexed player,
         uint24 targetLevel,
@@ -45,101 +33,90 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint256 remainder
     );
 
-    /// @notice Emitted when a player burns tokens for jackpot tickets.
-    /// @param player The player who burned the tokens.
-    /// @param tokenIds Array of token IDs that were burned.
-    event Degenerus(address indexed player, uint256[] tokenIds);
+    /// @notice Emitted when a player's Decimator burn is recorded.
+    /// @param player Address of the player.
+    /// @param lvl Current game level.
+    /// @param bucket The denominator bucket used (2-12).
+    /// @param subBucket The deterministic subbucket assigned (0 to bucket-1).
+    /// @param effectiveAmount Burn amount after multiplier (capped).
+    /// @param newTotalBurn Player's new total burn for this level.
+    event DecBurnRecorded(
+        address indexed player,
+        uint24 indexed lvl,
+        uint8 bucket,
+        uint8 subBucket,
+        uint256 effectiveAmount,
+        uint256 newTotalBurn
+    );
 
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
 
-    /// @notice Generic revert for invalid values.
+    /// @notice Generic revert for invalid parameters or unauthorized access.
     error E();
-    error InvalidQuantity();
-    error NotTimeYet();
-    error RngNotReady();
-    error NotApproved();
+
+    /// @notice Caller is not the authorized coin contract.
+    error OnlyCoin();
+
+    /// @notice Caller is not the authorized game contract.
+    error OnlyGame();
+
+    /// @notice Claim attempted for an inactive decimator round.
+    error DecClaimInactive();
+
+    /// @notice Claim attempted after already claiming this level.
+    error DecAlreadyClaimed();
+
+    /// @notice Claim attempted but player is not a winning subbucket.
+    error DecNotWinner();
 
     // -------------------------------------------------------------------------
-    // Precomputed Addresses
+    // Internal Helpers
     // -------------------------------------------------------------------------
 
-    IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
-    IDegenerusGamepieces internal constant gamepieces =
-        IDegenerusGamepieces(ContractAddresses.GAMEPIECES);
-    IDegenerusStonk internal constant dgnrs =
-        IDegenerusStonk(ContractAddresses.DGNRS);
-    IBurnieLootbox internal constant lootbox =
-        IBurnieLootbox(ContractAddresses.LOOTBOX);
+    /// @dev Bubbles up revert reason from delegatecall failure.
+    /// @param reason The revert data from the failed delegatecall.
+    function _revertDelegate(bytes memory reason) private pure {
+        if (reason.length == 0) revert E();
+        assembly ("memory-safe") {
+            revert(add(32, reason), mload(reason))
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @dev Auto-rebuy bonus in basis points.
+    /// @dev Auto-rebuy bonus in basis points (130% = 1.3x tickets).
     uint16 private constant AUTO_REBUY_BONUS_BPS = 13_000;
 
-    /// @dev afKing auto-rebuy bonus in basis points.
+    /// @dev afKing mode auto-rebuy bonus in basis points (145% = 1.45x tickets).
     uint16 private constant AFKING_AUTO_REBUY_BONUS_BPS = 14_500;
 
-    uint16 private constant ETH_PERK_TOTAL_BPS = 500;
-    uint16 private constant ETH_PERK_BONUS_BPS = 12_500;
-    uint16 private constant BURNIE_PERK_TOTAL_BPS = 500;
-    uint16 private constant DGNRS_PERK_TOTAL_BPS = 500;
-    uint16 private constant DGNRS_PERK_AQUARIUS_BONUS_BPS = 12_500;
-    uint16 private constant BURNIE_PERK_SYMBOL_BONUS_BPS = 12_500;
+    /// @dev Basis points denominator (10000 = 100%).
+    uint16 private constant BPS_DENOMINATOR = 10_000;
 
-    uint8 private constant AQUARIUS_SYMBOL_INDEX = 7;
-    uint8 private constant ORANGE_KING_COLOR = 5;
-    uint8 private constant ORANGE_KING_SYMBOL = 1;
-    uint256 private constant ORANGE_KING_TRIBUTE = 25 ether;
+    /// @dev Multiplier cap for Decimator burns (200 mints worth).
+    uint256 private constant DECIMATOR_MULTIPLIER_CAP = 200 * PRICE_COIN_UNIT;
 
-    uint8 private constant ETH_PERK_ODDS = 100;
-    uint8 private constant ETH_PERK_REMAINDER = 0;
-    uint8 private constant BURNIE_PERK_REMAINDER = 1;
-    uint8 private constant DGNRS_PERK_REMAINDER = 2;
-    uint256 private constant ETH_PERK_SALT = 0x455448;
-
-    uint8 private constant ETH_SYMBOL_INDEX = 6;
-    uint8 private constant WWXRP_SYMBOL_INDEX = 0;
-
-    uint16 private constant TRAIT_ID_TIMEOUT = 420;
-
-    uint256 private constant MINT_MASK_24 = (uint256(1) << 24) - 1;
-    uint256 private constant ETH_FROZEN_UNTIL_LEVEL_SHIFT = 128;
-
-    struct BurnVars {
-        uint24 lvl;
-        uint8 mod10;
-        uint32 endLevelFlag;
-        uint16 prevExterminated;
-        uint16 ethPerkExpected;
-        uint16 newExterminated;
-        uint16 orangeKingCount;
-        uint256 currentPrizePool;
-        uint256 burniePool;
-        uint256 dgnrsPool;
-        uint256 bonusTenths;
-        address tribute;
-        bool exOpen;
-        bool ethPerkActive;
-        bool dgnrsPerkActive;
-        bool hasLazyPass;
-    }
+    /// @dev Maximum denominator for Decimator buckets (2-12 inclusive).
+    uint8 private constant DECIMATOR_MAX_DENOM = 12;
 
     // -------------------------------------------------------------------------
     // External Entry Points (delegatecall targets)
     // -------------------------------------------------------------------------
 
-    /// @notice Batch variant: credit multiple decimator claims (ETH-only during gameover).
-    /// @dev Access: ContractAddresses.JACKPOTS contract only.
-    ///      Gas-optimized for multiple credits in single transaction.
-    ///      Each claim splits 50/50 by default; during GAMEOVER credits 100% ETH.
+    /// @notice Credits decimator jackpot claims to multiple accounts in a batch.
+    /// @dev Access: Only callable by ContractAddresses.JACKPOTS contract.
+    ///      During GAMEOVER state, credits 100% as ETH.
+    ///      During normal play, splits 50/50 between ETH and lootbox tickets.
     ///      Uses VRF randomness from jackpot resolution for lootbox derivation.
     /// @param accounts Array of player addresses to credit.
     /// @param amounts Array of corresponding wei amounts (total before split).
     /// @param rngWord VRF random word from jackpot resolution.
+    /// @custom:reverts E When caller is not JACKPOTS contract.
+    /// @custom:reverts E When accounts and amounts arrays have different lengths.
     function creditDecJackpotClaimBatch(
         address[] calldata accounts,
         uint256[] calldata amounts,
@@ -149,7 +126,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint256 len = accounts.length;
         if (len != amounts.length) revert E();
 
-        if (gameState == GAME_STATE_GAMEOVER) {
+        if (gameOver) {
             for (uint256 i; i < len; ) {
                 uint256 amt = amounts[i];
                 address account = accounts[i];
@@ -169,19 +146,15 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             uint256 amt = amounts[i];
             address account = accounts[i];
             if (amt != 0 && account != address(0)) {
-                // Split 50/50: half ETH, half lootbox tickets
-                uint256 ethPortion = amt / 2;
-                uint256 lootboxPortion = amt - ethPortion;
-
-                // Credit ETH half
-                if (ethPortion != 0) {
-                    _addClaimableEth(account, ethPortion, rngWord);
-                }
-
-                // Award lootbox half as future tickets (using VRF randomness)
+                uint256 lootboxPortion = _creditDecJackpotClaimCore(
+                    account,
+                    amt,
+                    rngWord
+                );
                 if (lootboxPortion != 0) {
-                    _awardDecimatorLootbox(account, lootboxPortion, rngWord);
-                    totalLootbox += lootboxPortion;
+                    unchecked {
+                        totalLootbox += lootboxPortion;
+                    }
                 }
             }
             unchecked {
@@ -195,634 +168,558 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Gamepiece Burning
-    // -------------------------------------------------------------------------
+    /// @notice Credits a single decimator jackpot claim to an account.
+    /// @dev Access: Only callable by ContractAddresses.JACKPOTS contract.
+    ///      During GAMEOVER state, credits 100% as ETH.
+    ///      During normal play, splits 50/50 between ETH and lootbox tickets.
+    ///      Uses VRF randomness from jackpot resolution for lootbox derivation.
+    /// @param account Player address to credit.
+    /// @param amount Wei amount to credit (total before split).
+    /// @param rngWord VRF random word from jackpot resolution.
+    /// @custom:reverts E When caller is not JACKPOTS contract.
+    function creditDecJackpotClaim(
+        address account,
+        uint256 amount,
+        uint256 rngWord
+    ) external {
+        if (msg.sender != ContractAddresses.JACKPOTS) revert E();
+        if (amount == 0 || account == address(0)) return;
 
-    /// @notice Burn gamepieces for jackpot tickets, potentially triggering extermination.
-    /// @param player Player address that owns the tokens (address(0) = msg.sender).
-    /// @param tokenIds Array of token IDs to burn (1-75 tokens).
-    function burnTokens(address player, uint256[] calldata tokenIds) external {
-        if (player == address(0)) {
-            player = msg.sender;
-        } else if (player != msg.sender) {
-            _requireApproved(player);
-        }
-        _burnTokensFor(player, tokenIds);
-    }
-
-    // -------------------------------------------------------------------------
-    // Internal Helpers
-    // -------------------------------------------------------------------------
-
-    function _requireApproved(address player) private view {
-        if (msg.sender != player && !operatorApprovals[player][msg.sender]) {
-            revert NotApproved();
-        }
-    }
-
-    function _burnTokensFor(address caller, uint256[] calldata tokenIds) private {
-        if (rngLockedFlag) revert RngNotReady();
-        if (gameState != 3) revert NotTimeYet();
-        uint256 count = tokenIds.length;
-        if (count == 0 || count > 75) revert InvalidQuantity();
-        gamepieces.burnFromGame(caller, tokenIds);
-        coin.notifyQuestBurn(caller, uint32(count));
-
-        BurnVars memory vars;
-        vars.lvl = level;
-        vars.mod10 = uint8(vars.lvl % 10);
-        vars.endLevelFlag = vars.mod10 == 7 ? 1 : 0;
-        vars.prevExterminated = lastExterminatedTrait;
-        vars.exOpen = currentExterminatedTrait == TRAIT_ID_TIMEOUT;
-        vars.currentPrizePool = currentPrizePool;
-        vars.ethPerkExpected = _ethPerkExpectedCount(vars.lvl);
-        vars.ethPerkActive = vars.ethPerkExpected != 0;
-        if (vars.ethPerkActive && ethPerkLevel != vars.lvl) {
-            ethPerkLevel = vars.lvl;
-            ethPerkBurnCount = 0;
-        }
-        if (vars.ethPerkActive) {
-            uint256 priceWei = price;
-            uint256 lastPool = lastPrizePool;
-            if (priceWei != 0 && lastPool != 0) {
-                vars.burniePool = (lastPool * PRICE_COIN_UNIT) / priceWei;
-            }
-            if (vars.burniePool != 0 && burniePerkLevel != vars.lvl) {
-                burniePerkLevel = vars.lvl;
-                burniePerkBurnCount = 0;
-            }
-        }
-        vars.dgnrsPerkActive = vars.ethPerkExpected != 0;
-        if (vars.dgnrsPerkActive) {
-            vars.dgnrsPool = dgnrs.poolBalance(IDegenerusStonk.Pool.Reward);
-            if (vars.dgnrsPool == 0) {
-                vars.dgnrsPerkActive = false;
-            } else if (dgnrsPerkLevel != vars.lvl) {
-                dgnrsPerkLevel = vars.lvl;
-                dgnrsPerkBurnCount = 0;
-            }
-        }
-
-        vars.hasLazyPass =
-            uint24(
-                (mintPacked_[caller] >> ETH_FROZEN_UNTIL_LEVEL_SHIFT) &
-                    MINT_MASK_24
-            ) > vars.lvl;
-
-        vars.tribute = tributeAddress;
-        vars.newExterminated = TRAIT_ID_TIMEOUT;
-
-        address[][256] storage tickets = traitBurnTicket[vars.lvl];
-
-        for (uint256 i; i < count; ) {
-            uint256 tokenId = tokenIds[i];
-            uint32 traitPack = _traitsForToken(tokenId);
-            uint8 trait0 = uint8(traitPack);
-            bool topLeftEthereum = (trait0 & 0x07) == ETH_SYMBOL_INDEX;
-            bool topLeftWwxrp = (trait0 & 0x07) == WWXRP_SYMBOL_INDEX;
-            bool ethPerkEligible =
-                vars.exOpen &&
-                vars.ethPerkActive &&
-                _isEthPerkToken(tokenId);
-            if (ethPerkEligible) {
-                uint256 burnIndex = uint256(ethPerkBurnCount) + 1;
-                ethPerkBurnCount = uint16(burnIndex);
-                uint256 payout = _ethPerkPayout(
-                    vars.currentPrizePool,
-                    burnIndex,
-                    vars.ethPerkExpected,
-                    topLeftEthereum
-                );
-                if (payout != 0) {
-                    if (payout > vars.currentPrizePool) {
-                        payout = vars.currentPrizePool;
-                    }
-                    vars.currentPrizePool -= payout;
-                    uint256 entropy = uint256(
-                        keccak256(
-                            abi.encodePacked(
-                                tokenId,
-                                vars.lvl,
-                                caller,
-                                burnIndex
-                            )
-                        )
-                    );
-                    _creditEthPerk(caller, payout, entropy);
-                }
-            }
-            bool burniePerkEligible =
-                !ethPerkEligible &&
-                vars.exOpen &&
-                vars.burniePool != 0 &&
-                _isBurniePerkToken(tokenId);
-            if (burniePerkEligible) {
-                uint256 burnIndex = uint256(burniePerkBurnCount) + 1;
-                burniePerkBurnCount = uint16(burnIndex);
-                uint256 payout = _burniePerkPayout(
-                    vars.burniePool,
-                    burnIndex,
-                    vars.ethPerkExpected
-                );
-                if (payout != 0 && (topLeftEthereum || topLeftWwxrp)) {
-                    payout = (payout * BURNIE_PERK_SYMBOL_BONUS_BPS) / 10_000;
-                }
-                if (payout != 0) {
-                    coin.creditFlip(caller, payout);
-                }
-            }
-            bool dgnrsPerkEligible =
-                !ethPerkEligible &&
-                !burniePerkEligible &&
-                vars.exOpen &&
-                vars.dgnrsPerkActive &&
-                vars.hasLazyPass &&
-                _isDgnrsPerkToken(tokenId);
-            if (dgnrsPerkEligible) {
-                uint256 burnIndex = uint256(dgnrsPerkBurnCount) + 1;
-                dgnrsPerkBurnCount = uint16(burnIndex);
-                bool isAquarius =
-                    (uint8(traitPack >> 8) & 0x07) == AQUARIUS_SYMBOL_INDEX;
-                uint256 payout = _dgnrsPerkPayout(
-                    vars.dgnrsPool,
-                    burnIndex,
-                    vars.ethPerkExpected
-                );
-                if (isAquarius && payout != 0) {
-                    payout = (payout * DGNRS_PERK_AQUARIUS_BONUS_BPS) / 10_000;
-                }
-                if (payout != 0) {
-                    uint256 paid = dgnrs.transferFromPool(
-                        IDegenerusStonk.Pool.Reward,
-                        caller,
-                        payout
-                    );
-                    if (paid != 0) {
-                        vars.dgnrsPool -= paid;
-                    }
-                }
-            }
-
-            uint8 trait1 = uint8(traitPack >> 8);
-            uint8 trait2 = uint8(traitPack >> 16);
-            uint8 trait3 = uint8(traitPack >> 24);
-
-            if (vars.tribute != address(0)) {
-                uint8 cardTrait = trait2 - 128;
-                if (
-                    (cardTrait >> 3) == ORANGE_KING_COLOR &&
-                    (cardTrait & 0x07) == ORANGE_KING_SYMBOL
-                ) {
-                    unchecked {
-                        vars.orangeKingCount += 1;
-                    }
-                }
-            }
-
-            uint8 color0 = trait0 >> 3;
-            uint8 color1 = (trait1 & 0x3F) >> 3;
-            uint8 color2 = (trait2 & 0x3F) >> 3;
-            uint8 color3 = (trait3 & 0x3F) >> 3;
-            if (color0 == color1 && color0 == color2 && color0 == color3) {
-                unchecked {
-                    vars.bonusTenths += 49;
-                }
-            }
-
-            bool tokenHasPrevExterminated =
-                vars.prevExterminated != TRAIT_ID_TIMEOUT &&
-                (uint16(trait0) == vars.prevExterminated ||
-                    uint16(trait1) == vars.prevExterminated ||
-                    uint16(trait2) == vars.prevExterminated ||
-                    uint16(trait3) == vars.prevExterminated);
-
-            if (
-                (tokenHasPrevExterminated && vars.lvl != 90) ||
-                (vars.lvl == 90 && !tokenHasPrevExterminated)
-            ) {
-                unchecked {
-                    vars.bonusTenths += 4;
-                }
-            }
-
-            if (_consumeTrait(trait0, vars.endLevelFlag, vars.exOpen)) {
-                if (vars.newExterminated == TRAIT_ID_TIMEOUT) {
-                    vars.newExterminated = trait0;
-                }
-                vars.exOpen = false;
-            }
-            if (_consumeTrait(trait1, vars.endLevelFlag, vars.exOpen)) {
-                if (vars.newExterminated == TRAIT_ID_TIMEOUT) {
-                    vars.newExterminated = trait1;
-                }
-                vars.exOpen = false;
-            }
-            if (_consumeTrait(trait2, vars.endLevelFlag, vars.exOpen)) {
-                if (vars.newExterminated == TRAIT_ID_TIMEOUT) {
-                    vars.newExterminated = trait2;
-                }
-                vars.exOpen = false;
-            }
-            if (_consumeTrait(trait3, vars.endLevelFlag, vars.exOpen)) {
-                if (vars.newExterminated == TRAIT_ID_TIMEOUT) {
-                    vars.newExterminated = trait3;
-                }
-                vars.exOpen = false;
-            }
-            unchecked {
-                dailyBurnCount[trait0 & 0x07] += 1;
-                dailyBurnCount[((trait1 - 64) >> 3) + 8] += 1;
-                dailyBurnCount[trait2 - 128 + 16] += 1;
-                ++i;
-            }
-
-            tickets[trait0].push(caller);
-            tickets[trait1].push(caller);
-            tickets[trait2].push(caller);
-            tickets[trait3].push(caller);
-        }
-
-        if (vars.currentPrizePool != currentPrizePool) {
-            currentPrizePool = vars.currentPrizePool;
-        }
-
-        uint256 tributeAmount;
-        if (vars.tribute != address(0) && vars.orangeKingCount != 0) {
-            tributeAmount = uint256(vars.orangeKingCount) * ORANGE_KING_TRIBUTE;
-        }
-
-        if (vars.mod10 == 2) count <<= 1;
-        _creditBurnFlip(
-            caller,
-            count,
-            vars.bonusTenths,
-            vars.tribute,
-            tributeAmount
-        );
-        emit Degenerus(caller, tokenIds);
-
-        if (vars.newExterminated != TRAIT_ID_TIMEOUT) {
-            _recordExtermination(uint8(vars.newExterminated), caller, vars.lvl);
-        }
-    }
-
-    function _recordExtermination(
-        uint8 exTrait,
-        address exterminator,
-        uint24 levelSnapshot
-    ) private {
-        if (currentExterminatedTrait != TRAIT_ID_TIMEOUT) return;
-
-        currentExterminatedTrait = exTrait;
-        exterminationPaidThisLevel = false;
-        _setExterminatorForLevel(levelSnapshot, exterminator);
-
-        uint16 prevTrait = lastExterminatedTrait;
-        bool repeatTrait = prevTrait == uint16(exTrait);
-        exterminationInvertFlag = repeatTrait;
-    }
-
-    function _creditBurnFlip(
-        address caller,
-        uint256 count,
-        uint256 bonusTenths,
-        address tribute,
-        uint256 tributeAmount
-    ) private {
-        uint256 priceUnit = PRICE_COIN_UNIT / 10;
-        uint256 flipCredit;
-        unchecked {
-            flipCredit = (count + bonusTenths) * priceUnit;
-        }
-
-        if (tributeAmount != 0 && tribute != address(0)) {
-            if (tributeAmount > flipCredit) {
-                tributeAmount = flipCredit;
-            }
-            flipCredit -= tributeAmount;
-            if (tributeAmount != 0) {
-                coin.creditCoin(tribute, tributeAmount);
-            }
-        }
-
-        if (flipCredit != 0) {
-            coin.creditFlip(caller, flipCredit);
-        }
-    }
-
-    function _isEthPerkToken(uint256 tokenId) private pure returns (bool) {
-        if (tokenId == 0) return false;
-        return
-            uint256(keccak256(abi.encodePacked(tokenId, ETH_PERK_SALT))) %
-                ETH_PERK_ODDS ==
-            ETH_PERK_REMAINDER;
-    }
-
-    function _isBurniePerkToken(uint256 tokenId) private pure returns (bool) {
-        if (tokenId == 0) return false;
-        return
-            uint256(keccak256(abi.encodePacked(tokenId, ETH_PERK_SALT))) %
-                ETH_PERK_ODDS ==
-            BURNIE_PERK_REMAINDER;
-    }
-
-    function _isDgnrsPerkToken(uint256 tokenId) private pure returns (bool) {
-        if (tokenId == 0) return false;
-        return
-            uint256(keccak256(abi.encodePacked(tokenId, ETH_PERK_SALT))) %
-                ETH_PERK_ODDS ==
-            DGNRS_PERK_REMAINDER;
-    }
-
-    function _ethPerkExpectedCount(uint24 /*lvl*/) private view returns (uint16) {
-        return perkExpectedCount;
-    }
-
-    function _ethPerkPayout(
-        uint256 rewardPoolLocal,
-        uint256 burnIndex,
-        uint256 expectedCount,
-        bool bonusEligible
-    ) private pure returns (uint256) {
-        uint256 weight = _pow3(burnIndex);
-        uint256 total = _sumPow3(expectedCount);
-        uint256 base = (rewardPoolLocal * ETH_PERK_TOTAL_BPS * weight) /
-            (total * 10_000);
-        if (!bonusEligible) return base;
-        return (base * ETH_PERK_BONUS_BPS) / 10_000;
-    }
-
-    function _burniePerkPayout(
-        uint256 burniePool,
-        uint256 burnIndex,
-        uint256 expectedCount
-    ) private pure returns (uint256) {
-        uint256 weight = _pow3(burnIndex);
-        uint256 total = _sumPow3(expectedCount);
-        return (burniePool * BURNIE_PERK_TOTAL_BPS * weight) / (total * 10_000);
-    }
-
-    function _dgnrsPerkPayout(
-        uint256 dgnrsPool,
-        uint256 burnIndex,
-        uint256 expectedCount
-    ) private pure returns (uint256) {
-        uint256 weight = _pow3(burnIndex);
-        uint256 total = _sumPow3(expectedCount);
-        return (dgnrsPool * DGNRS_PERK_TOTAL_BPS * weight) / (total * 10_000);
-    }
-
-    function _pow3(uint256 x) private pure returns (uint256) {
-        return x * x * x;
-    }
-
-    function _sumPow3(uint256 n) private pure returns (uint256) {
-        uint256 n1 = n + 1;
-        uint256 sum = (n * n1) / 2;
-        return sum * sum;
-    }
-
-    function _creditEthPerk(
-        address beneficiary,
-        uint256 weiAmount,
-        uint256 entropy
-    ) private {
-        if (weiAmount == 0) return;
-
-        if (autoRebuyEnabled[beneficiary]) {
-            uint256 keepMultiple = autoRebuyKeepMultiple[beneficiary];
-            uint256 reserved;
-            uint256 rebuyAmount = weiAmount;
-            if (keepMultiple != 0) {
-                reserved = (weiAmount / keepMultiple) * keepMultiple;
-                rebuyAmount = weiAmount - reserved;
-            }
-
-            uint24 targetLevel = (gameState == GAME_STATE_BURN) ? level + 1 : level;
-            uint256 ticketPrice = _priceForLevel(targetLevel) / 4;
-            if (ticketPrice == 0) ticketPrice = 0.00625 ether;
-
-            uint256 baseTickets = rebuyAmount / ticketPrice;
-            uint256 ethSpent = baseTickets * ticketPrice;
-            uint256 dustRemainder = rebuyAmount - ethSpent;
-
-            if (dustRemainder != 0) {
-                uint256 rollSeed = _entropyStep(
-                    entropy ^
-                        uint256(uint160(beneficiary)) ^
-                        rebuyAmount ^
-                        ticketPrice
-                );
-                if ((rollSeed % ticketPrice) < dustRemainder) {
-                    ++baseTickets;
-                    ethSpent = rebuyAmount;
-                    dustRemainder = 0;
-                }
-            }
-
-            if (baseTickets == 0) {
-                unchecked {
-                    claimableWinnings[beneficiary] += weiAmount;
-                }
-                claimablePool += weiAmount;
-                emit PlayerCredited(beneficiary, beneficiary, weiAmount);
-                return;
-            }
-
-            uint256 bonusBps = afKingMode[beneficiary]
-                ? AFKING_AUTO_REBUY_BONUS_BPS
-                : AUTO_REBUY_BONUS_BPS;
-            uint256 bonusTickets = (baseTickets * bonusBps) / 10_000;
-            uint32 ticketCount = bonusTickets > type(uint32).max
-                ? type(uint32).max
-                : uint32(bonusTickets);
-
-            nextPrizePool += ethSpent;
-            _queueTickets(beneficiary, targetLevel, ticketCount);
-
-            uint256 totalRemainder = reserved + dustRemainder;
-            if (totalRemainder != 0) {
-                unchecked {
-                    claimableWinnings[beneficiary] += totalRemainder;
-                    claimablePool += totalRemainder;
-                }
-            }
-
-            emit AutoRebuyProcessed(
-                beneficiary,
-                targetLevel,
-                ticketCount,
-                ethSpent,
-                totalRemainder
-            );
+        if (gameOver) {
+            _addClaimableEth(account, amount, rngWord);
             return;
         }
 
-        unchecked {
-            claimableWinnings[beneficiary] += weiAmount;
-        }
-        claimablePool += weiAmount;
-        emit PlayerCredited(beneficiary, beneficiary, weiAmount);
-    }
-
-    function _traitWeight(uint32 rnd) private pure returns (uint8) {
-        unchecked {
-            uint32 scaled = uint32((uint64(rnd) * 75) >> 32);
-            if (scaled < 10) return 0;
-            if (scaled < 20) return 1;
-            if (scaled < 30) return 2;
-            if (scaled < 40) return 3;
-            if (scaled < 49) return 4;
-            if (scaled < 58) return 5;
-            if (scaled < 67) return 6;
-            return 7;
+        uint256 lootboxPortion = _creditDecJackpotClaimCore(
+            account,
+            amount,
+            rngWord
+        );
+        if (lootboxPortion != 0) {
+            futurePrizePool += lootboxPortion;
         }
     }
 
-    function _deriveTrait(uint64 rnd) private pure returns (uint8) {
-        uint8 category = _traitWeight(uint32(rnd));
-        uint8 sub = _traitWeight(uint32(rnd >> 32));
-        return (category << 3) | sub;
-    }
+    // -------------------------------------------------------------------------
+    // Decimator Burn Tracking
+    // -------------------------------------------------------------------------
 
-    function _traitsForToken(
-        uint256 tokenId
-    ) private pure returns (uint32 packed) {
-        uint256 rand = uint256(keccak256(abi.encodePacked(tokenId)));
-        uint8 trait0 = _deriveTrait(uint64(rand));
-        uint8 trait1 = _deriveTrait(uint64(rand >> 64)) | 64;
-        uint8 trait2 = _deriveTrait(uint64(rand >> 128)) | 128;
-        uint8 trait3 = _deriveTrait(uint64(rand >> 192)) | 192;
-        packed =
-            uint32(trait0) |
-            (uint32(trait1) << 8) |
-            (uint32(trait2) << 16) |
-            (uint32(trait3) << 24);
-    }
+    /// @notice Record a Decimator burn for jackpot eligibility.
+    /// @dev Called by coin contract on every Decimator burn.
+    ///      First burn sets player's bucket (denominator) choice.
+    ///      Subbucket is deterministically assigned from hash(player, lvl, bucket).
+    ///      Subsequent burns accumulate in that bucket unless a strictly better
+    ///      bucket (lower denominator) is provided. On improvement, previous burn
+    ///      is removed from old aggregate, player burn resets, and entry migrates.
+    ///      Burn amount capped at uint192.max with saturation.
+    /// @param player Address of the player.
+    /// @param lvl Current game level.
+    /// @param bucket Player's chosen denominator (2-12).
+    /// @param baseAmount Burn amount before multiplier.
+    /// @param multBps Player bonus multiplier in basis points (10000 = 1x).
+    /// @return bucketUsed The bucket actually used (may differ from requested if not an improvement).
+    /// @custom:access Restricted to coin contract.
+    function recordDecBurn(
+        address player,
+        uint24 lvl,
+        uint8 bucket,
+        uint256 baseAmount,
+        uint256 multBps
+    ) external returns (uint8 bucketUsed) {
+        if (msg.sender != ContractAddresses.COIN) revert OnlyCoin();
 
-    function _consumeTrait(
-        uint8 traitId,
-        uint32 endLevel,
-        bool checkExtermination
-    ) private returns (bool reachedZero) {
-        uint32 stored = traitRemaining[traitId];
-        if (stored == 0) return false;
+        DecEntry storage e = decBurn[lvl][player];
+        DecEntry memory m = e;
+        uint192 prevBurn = m.burn;
 
-        unchecked {
-            stored -= 1;
+        // First burn this level: set bucket and deterministic subbucket.
+        if (m.bucket == 0) {
+            m.bucket = bucket;
+            m.subBucket = _decSubbucketFor(player, lvl, bucket);
+        } else if (bucket != 0 && bucket < m.bucket) {
+            // Better bucket selected: migrate burn to new subbucket.
+            _decRemoveSubbucket(lvl, m.bucket, m.subBucket, prevBurn);
+            m.bucket = bucket;
+            m.subBucket = _decSubbucketFor(player, lvl, bucket);
+            // Seed new subbucket with carried-over burn.
+            if (prevBurn != 0) {
+                _decUpdateSubbucket(lvl, m.bucket, m.subBucket, prevBurn);
+            }
         }
-        traitRemaining[traitId] = stored;
-        if (!checkExtermination) return false;
-        return stored == endLevel;
+
+        bucketUsed = m.bucket;
+
+        uint256 effectiveAmount = _decEffectiveAmount(
+            uint256(prevBurn),
+            baseAmount,
+            multBps
+        );
+
+        // Accumulate burn with uint192 saturation
+        uint256 updated = uint256(prevBurn) + effectiveAmount;
+        if (updated > type(uint192).max) updated = type(uint192).max;
+        uint192 newBurn = uint192(updated);
+        e.burn = newBurn;
+        e.bucket = m.bucket;
+        e.subBucket = m.subBucket;
+
+        // Update subbucket aggregate if burn increased
+        uint192 delta = newBurn - prevBurn;
+        if (delta != 0) {
+            _decUpdateSubbucket(lvl, bucketUsed, m.subBucket, delta);
+            emit DecBurnRecorded(
+                player,
+                lvl,
+                bucketUsed,
+                m.subBucket,
+                delta,
+                newBurn
+            );
+        }
+
+        return bucketUsed;
     }
 
-    function _setExterminatorForLevel(uint24 lvl, address ex) private {
-        if (lvl == 0) return;
-        levelExterminators[lvl] = ex;
+    /*+======================================================================+
+      |                    DECIMATOR JACKPOT RESOLUTION                      |
+      +======================================================================+
+      |  Snapshots winning subbuckets for deferred claim distribution.       |
+      +======================================================================+*/
+
+    /// @notice Snapshot Decimator jackpot winners for deferred claims.
+    /// @dev Selects winning subbucket per denominator and snapshots totals.
+    ///      Actual distribution happens via claim functions.
+    ///      Returns poolWei if level already snapshotted or no qualifying burns.
+    /// @param poolWei Total ETH prize pool for this level.
+    /// @param lvl Level number being resolved.
+    /// @param rngWord VRF-derived randomness seed.
+    /// @return returnAmountWei Amount to return (non-zero if no winners or already snapshotted).
+    /// @custom:access Restricted to game contract.
+    function runDecimatorJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 returnAmountWei) {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+
+        // Prevent double-snapshotting: return pool if this level already active
+        if (lastDecClaimRound.lvl == lvl) {
+            return poolWei;
+        }
+
+        uint256 totalBurn;
+        uint64 packedOffsets;
+
+        // Select winning subbucket for each denominator (2-12)
+        uint256 decSeed = rngWord;
+        for (uint8 denom = 2; denom <= DECIMATOR_MAX_DENOM; ) {
+            // Deterministically select winning subbucket from VRF
+            uint8 winningSub = _decWinningSubbucket(decSeed, denom);
+            packedOffsets = _packDecWinningSubbucket(
+                packedOffsets,
+                denom,
+                winningSub
+            );
+
+            // Accumulate burn total from winning subbucket
+            uint256 subTotal = decBucketBurnTotal[lvl][denom][winningSub];
+            if (subTotal != 0) {
+                totalBurn += subTotal;
+            }
+
+            unchecked {
+                ++denom;
+            }
+        }
+
+        // No qualifying burns: return full pool
+        if (totalBurn == 0) {
+            return poolWei;
+        }
+
+        // Safety: If totalBurn exceeds uint232, return pool (economically impossible but defensive)
+        if (totalBurn > type(uint232).max) {
+            return poolWei;
+        }
+
+        // Store packed winning subbuckets for claim validation
+        decBucketOffsetPacked[lvl] = packedOffsets;
+
+        // Snapshot last claim round (overwrites previous - old claims expire)
+        lastDecClaimRound.lvl = lvl;
+        lastDecClaimRound.poolWei = poolWei;
+        lastDecClaimRound.totalBurn = uint232(totalBurn);
+        lastDecClaimRound.rngWord = rngWord;
+
+        return 0; // All funds held for claims
     }
 
-    /// @dev Credit ETH winnings to a player's claimable balance.
-    ///      Uses unchecked math as overflow is practically impossible.
-    ///      Emits PlayerCredited for off-chain tracking.
+    /*+======================================================================+
+      |                      DECIMATOR CLAIM FUNCTIONS                       |
+      +======================================================================+*/
+
+    /// @dev Internal claim validation and marking.
+    ///      Validates eligibility and marks as claimed if successful.
+    /// @param player Address claiming the jackpot.
+    /// @param lvl Level to claim from.
+    /// @return amountWei Pro-rata payout amount.
+    /// @custom:reverts DecClaimInactive When lvl is not the current active decimator round.
+    /// @custom:reverts DecAlreadyClaimed When player has already claimed for this level.
+    /// @custom:reverts DecNotWinner When player's subbucket did not win.
+    function _consumeDecClaim(
+        address player,
+        uint24 lvl
+    ) internal returns (uint256 amountWei) {
+        // Only allow claims for the last decimator (claims expire when next decimator runs)
+        if (lastDecClaimRound.lvl != lvl) revert DecClaimInactive();
+
+        DecEntry storage e = decBurn[lvl][player];
+        if (e.claimed != 0) revert DecAlreadyClaimed();
+
+        // Calculate pro-rata share if player's subbucket won
+        uint64 packedOffsets = decBucketOffsetPacked[lvl];
+        uint256 totalBurn = uint256(lastDecClaimRound.totalBurn);
+        amountWei = _decClaimableFromEntry(
+            lastDecClaimRound.poolWei,
+            totalBurn,
+            e,
+            packedOffsets
+        );
+        if (amountWei == 0) revert DecNotWinner();
+
+        // Mark as claimed to prevent double-claiming
+        e.claimed = 1;
+    }
+
+    /// @notice Consume Decimator claim on behalf of player.
+    /// @dev Used for game-initiated claims.
+    /// @param player Address to claim for.
+    /// @param lvl Level to claim from.
+    /// @return amountWei Pro-rata payout amount.
+    /// @custom:access Restricted to game contract.
+    function consumeDecClaim(
+        address player,
+        uint24 lvl
+    ) external returns (uint256 amountWei) {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        return _consumeDecClaim(player, lvl);
+    }
+
+    /// @notice Claim Decimator jackpot for caller.
+    /// @dev Public function for players to claim their own jackpot.
+    ///      Credits payout to player's claimable balance.
+    ///      Claims expire when next decimator runs.
+    /// @param lvl Level to claim from (must be the last decimator).
+    /// @custom:reverts DecClaimInactive When lvl is not the current active decimator round.
+    /// @custom:reverts DecAlreadyClaimed When caller has already claimed for this level.
+    /// @custom:reverts DecNotWinner When caller's subbucket did not win.
+    function claimDecimatorJackpot(uint24 lvl) external {
+        uint256 amountWei = _consumeDecClaim(msg.sender, lvl);
+
+        if (gameOver) {
+            _addClaimableEth(msg.sender, amountWei, lastDecClaimRound.rngWord);
+            return;
+        }
+
+        uint256 lootboxPortion = _creditDecJackpotClaimCore(
+            msg.sender,
+            amountWei,
+            lastDecClaimRound.rngWord
+        );
+        if (lootboxPortion != 0) {
+            futurePrizePool += lootboxPortion;
+        }
+    }
+
+    /// @notice Check if player can claim Decimator jackpot for a level.
+    /// @dev View function for UI to show claimable amounts.
+    ///      Only returns non-zero for the last decimator (claims expire when next one runs).
+    /// @param player Address to check.
+    /// @param lvl Level to check (must be the last decimator).
+    /// @return amountWei Claimable amount (0 if not winner, already claimed, or expired).
+    /// @return winner True if player is a winner for this level.
+    function decClaimable(
+        address player,
+        uint24 lvl
+    ) external view returns (uint256 amountWei, bool winner) {
+        // Only show claimable for the last decimator
+        if (lastDecClaimRound.lvl != lvl) {
+            return (0, false);
+        }
+        return _decClaimable(lastDecClaimRound, player, lvl);
+    }
+
+    /// @dev Processes auto-rebuy if enabled, converting ETH winnings to tickets.
+    /// @param beneficiary The player to process.
+    /// @param weiAmount The ETH amount to potentially convert.
+    /// @param entropy RNG seed for level selection.
+    /// @return handled True if auto-rebuy processed the funds.
+    function _processAutoRebuy(
+        address beneficiary,
+        uint256 weiAmount,
+        uint256 entropy
+    ) private returns (bool handled) {
+        AutoRebuyState memory state = autoRebuyState[beneficiary];
+        if (!state.autoRebuyEnabled) return false;
+        if (decimatorAutoRebuyDisabled[beneficiary]) return false;
+
+        AutoRebuyCalc memory calc = _calcAutoRebuy(
+            beneficiary,
+            weiAmount,
+            entropy,
+            state,
+            level,
+            AUTO_REBUY_BONUS_BPS,
+            AFKING_AUTO_REBUY_BONUS_BPS
+        );
+        if (!calc.hasTickets) {
+            _creditClaimable(beneficiary, weiAmount);
+            return true;
+        }
+
+        if (calc.toFuture) {
+            futurePrizePool += calc.ethSpent;
+        } else {
+            nextPrizePool += calc.ethSpent;
+        }
+        _queueTickets(beneficiary, calc.targetLevel, calc.ticketCount);
+
+        if (calc.reserved != 0) {
+            _creditClaimable(beneficiary, calc.reserved);
+        }
+
+        // Decimator pool was pre-reserved in claimablePool; deduct ticket conversion.
+        claimablePool -= calc.ethSpent;
+
+        emit AutoRebuyProcessed(
+            beneficiary,
+            calc.targetLevel,
+            calc.ticketCount,
+            calc.ethSpent,
+            calc.reserved
+        );
+        return true;
+    }
+
+    /// @dev Credits ETH winnings to a player's claimable balance.
     /// @param beneficiary Player to credit.
     /// @param weiAmount Amount in wei to add.
-    /// @param entropy RNG seed for fractional ticket roll.
+    /// @param entropy RNG seed for auto-rebuy level selection.
     function _addClaimableEth(
         address beneficiary,
         uint256 weiAmount,
         uint256 entropy
     ) private {
-        claimablePool += weiAmount;
-        if (autoRebuyEnabled[beneficiary]) {
-            uint256 keepMultiple = autoRebuyKeepMultiple[beneficiary];
-            uint256 reserved;
-            uint256 rebuyAmount = weiAmount;
-            if (keepMultiple != 0) {
-                reserved = (weiAmount / keepMultiple) * keepMultiple;
-                rebuyAmount = weiAmount - reserved;
-            }
-
-            uint24 targetLevel = (gameState == GAME_STATE_BURN)
-                ? level + 1
-                : level;
-            uint256 ticketPrice = _priceForLevel(targetLevel) / 4;
-
-            uint256 baseTickets = rebuyAmount / ticketPrice;
-            uint256 ethSpent = baseTickets * ticketPrice;
-            uint256 dustRemainder = rebuyAmount - ethSpent;
-
-            // Roll fractional remainder into a chance for +1 base ticket.
-            if (dustRemainder != 0) {
-                uint256 rollSeed = _entropyStep(
-                    entropy ^
-                        uint256(uint160(beneficiary)) ^
-                        rebuyAmount ^
-                        ticketPrice
-                );
-                if ((rollSeed % ticketPrice) < dustRemainder) {
-                    ++baseTickets;
-                    ethSpent = rebuyAmount;
-                    dustRemainder = 0;
-                }
-            }
-
-            if (baseTickets == 0) {
-                unchecked {
-                    claimableWinnings[beneficiary] += weiAmount;
-                }
-                emit PlayerCredited(beneficiary, beneficiary, weiAmount);
-                return;
-            }
-
-            uint256 bonusBps = afKingMode[beneficiary]
-                ? AFKING_AUTO_REBUY_BONUS_BPS
-                : AUTO_REBUY_BONUS_BPS;
-            uint256 bonusTickets = (baseTickets * bonusBps) / 10000;
-            uint32 ticketCount = bonusTickets > type(uint32).max
-                ? type(uint32).max
-                : uint32(bonusTickets);
-
-            nextPrizePool += ethSpent;
-            _queueTickets(beneficiary, targetLevel, ticketCount);
-
-            uint256 totalRemainder = reserved + dustRemainder;
-            if (totalRemainder != 0) {
-                unchecked {
-                    claimableWinnings[beneficiary] += totalRemainder;
-                }
-            }
-
-            uint256 claimableInflow = weiAmount;
-            if (claimableInflow > totalRemainder) {
-                claimablePool -= (claimableInflow - totalRemainder);
-            } else if (totalRemainder > claimableInflow) {
-                claimablePool += (totalRemainder - claimableInflow);
-            }
-
-            emit AutoRebuyProcessed(
-                beneficiary,
-                targetLevel,
-                ticketCount,
-                ethSpent,
-                totalRemainder
-            );
+        if (weiAmount == 0) return;
+        if (_processAutoRebuy(beneficiary, weiAmount, entropy)) {
             return;
         }
-
-        unchecked {
-            claimableWinnings[beneficiary] += weiAmount;
-        }
-        emit PlayerCredited(beneficiary, beneficiary, weiAmount);
+        _creditClaimable(beneficiary, weiAmount);
     }
 
-    /// @dev Award decimator lootbox rewards to a claimer.
-    ///      Uses current level for ticket pricing (not old jackpot level).
-    ///      Routes large amounts to deferred claim (gas safety).
-    ///      Derives player-specific entropy from VRF randomness.
+    // -------------------------------------------------------------------------
+    // Decimator Helpers
+    // -------------------------------------------------------------------------
+
+    /// @dev Credits decimator claim in normal (non-gameover) mode.
+    ///      Callers must ensure amount != 0 and account != address(0).
+    /// @return lootboxPortion Amount routed to lootbox tickets.
+    function _creditDecJackpotClaimCore(
+        address account,
+        uint256 amount,
+        uint256 rngWord
+    ) private returns (uint256 lootboxPortion) {
+        // Split 50/50: half ETH, half lootbox tickets
+        uint256 ethPortion = amount >> 1;
+        lootboxPortion = amount - ethPortion;
+
+        _addClaimableEth(account, ethPortion, rngWord);
+
+        // Lootbox portion is no longer claimable ETH; remove from reserved pool.
+        claimablePool -= lootboxPortion;
+        _awardDecimatorLootbox(account, lootboxPortion, rngWord);
+    }
+
+    /// @dev Apply multiplier until the cap is reached; extra amount is counted at 1x.
+    /// @param prevBurn Previous accumulated burn amount.
+    /// @param baseAmount New burn amount before multiplier.
+    /// @param multBps Multiplier in basis points.
+    /// @return effectiveAmount The effective burn amount after applying capped multiplier.
+    function _decEffectiveAmount(
+        uint256 prevBurn,
+        uint256 baseAmount,
+        uint256 multBps
+    ) private pure returns (uint256 effectiveAmount) {
+        if (baseAmount == 0) return 0;
+        if (
+            multBps <= BPS_DENOMINATOR || prevBurn >= DECIMATOR_MULTIPLIER_CAP
+        ) {
+            return baseAmount;
+        }
+
+        uint256 remaining = DECIMATOR_MULTIPLIER_CAP - prevBurn;
+        uint256 fullEffective = (baseAmount * multBps) / BPS_DENOMINATOR;
+        if (fullEffective <= remaining) return fullEffective;
+
+        uint256 maxMultBase = (remaining * BPS_DENOMINATOR) / multBps;
+        if (maxMultBase > baseAmount) maxMultBase = baseAmount;
+        uint256 multiplied = (maxMultBase * multBps) / BPS_DENOMINATOR;
+        effectiveAmount = multiplied + (baseAmount - maxMultBase);
+    }
+
+    /// @dev Deterministically select winning subbucket for a denominator.
+    /// @param entropy VRF-derived randomness.
+    /// @param denom Denominator (2-12).
+    /// @return Winning subbucket index (0 to denom-1).
+    function _decWinningSubbucket(
+        uint256 entropy,
+        uint8 denom
+    ) private pure returns (uint8) {
+        if (denom == 0) return 0;
+        return
+            uint8(uint256(keccak256(abi.encodePacked(entropy, denom))) % denom);
+    }
+
+    /// @dev Pack a winning subbucket into the packed uint64.
+    ///      Layout: 4 bits per denom, starting at denom 2.
+    /// @param packed Current packed value.
+    /// @param denom Denominator to pack (2-12).
+    /// @param sub Winning subbucket for this denom.
+    /// @return Updated packed value.
+    function _packDecWinningSubbucket(
+        uint64 packed,
+        uint8 denom,
+        uint8 sub
+    ) private pure returns (uint64) {
+        uint8 shift = (denom - 2) << 2; // 4 bits per denom
+        uint64 mask = uint64(0xF) << shift;
+        return (packed & ~mask) | ((uint64(sub) & 0xF) << shift);
+    }
+
+    /// @dev Unpack a winning subbucket from the packed uint64.
+    /// @param packed Packed winning subbuckets.
+    /// @param denom Denominator to unpack (2-12).
+    /// @return Winning subbucket for this denom.
+    function _unpackDecWinningSubbucket(
+        uint64 packed,
+        uint8 denom
+    ) private pure returns (uint8) {
+        if (denom < 2) return 0;
+        uint8 shift = (denom - 2) << 2;
+        return uint8((packed >> shift) & 0xF);
+    }
+
+    /// @dev Calculate pro-rata claimable amount for a player's DecEntry.
+    /// @param poolWei Total pool available for claims.
+    /// @param totalBurn Total qualifying burn (denominator for pro-rata).
+    /// @param e Player's DecEntry storage reference.
+    /// @param packedOffsets Packed winning subbuckets.
+    /// @return amountWei Player's pro-rata share (0 if not winner).
+    function _decClaimableFromEntry(
+        uint256 poolWei,
+        uint256 totalBurn,
+        DecEntry storage e,
+        uint64 packedOffsets
+    ) private view returns (uint256 amountWei) {
+        if (totalBurn == 0) return 0;
+
+        uint8 denom = e.bucket;
+        uint8 sub = e.subBucket;
+        uint192 entryBurn = e.burn;
+
+        // No participation or zero burn
+        if (denom == 0 || entryBurn == 0) return 0;
+
+        // Check if player's subbucket matches winning subbucket
+        uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, denom);
+        if (sub != winningSub) return 0;
+
+        // Pro-rata share: (pool × playerBurn) / totalBurn
+        amountWei = (poolWei * uint256(entryBurn)) / totalBurn;
+    }
+
+    /// @dev Internal view helper for decClaimable.
+    /// @param round LastDecClaimRound storage reference.
+    /// @param player Address to check.
+    /// @param lvl Level number.
+    /// @return amountWei Claimable amount.
+    /// @return winner True if player is a winner.
+    function _decClaimable(
+        LastDecClaimRound storage round,
+        address player,
+        uint24 lvl
+    ) internal view returns (uint256 amountWei, bool winner) {
+        uint256 totalBurn = uint256(round.totalBurn);
+        if (totalBurn == 0) return (0, false);
+
+        DecEntry storage e = decBurn[lvl][player];
+        if (e.claimed != 0) return (0, false);
+
+        uint64 packedOffsets = decBucketOffsetPacked[lvl];
+        amountWei = _decClaimableFromEntry(
+            round.poolWei,
+            totalBurn,
+            e,
+            packedOffsets
+        );
+        winner = amountWei != 0;
+    }
+
+    /// @dev Update aggregated burn totals for a subbucket.
+    /// @param lvl Level number.
+    /// @param denom Denominator (bucket).
+    /// @param sub Subbucket index.
+    /// @param delta Burn amount to add.
+    function _decUpdateSubbucket(
+        uint24 lvl,
+        uint8 denom,
+        uint8 sub,
+        uint192 delta
+    ) internal {
+        if (delta == 0 || denom == 0) return;
+        decBucketBurnTotal[lvl][denom][sub] += uint256(delta);
+    }
+
+    /// @dev Remove aggregated burn totals for a subbucket.
+    /// @param lvl Level number.
+    /// @param denom Denominator (bucket).
+    /// @param sub Subbucket index.
+    /// @param delta Burn amount to remove.
+    function _decRemoveSubbucket(
+        uint24 lvl,
+        uint8 denom,
+        uint8 sub,
+        uint192 delta
+    ) internal {
+        if (delta == 0 || denom == 0) return;
+        uint256 slotTotal = decBucketBurnTotal[lvl][denom][sub];
+        if (slotTotal < uint256(delta)) revert E();
+        decBucketBurnTotal[lvl][denom][sub] = slotTotal - uint256(delta);
+    }
+
+    /// @dev Deterministically assign subbucket for a player.
+    ///      Hash of (player, lvl, bucket) ensures consistent assignment.
+    /// @param player Address.
+    /// @param lvl Level number.
+    /// @param bucket Denominator.
+    /// @return Subbucket index (0 to bucket-1).
+    function _decSubbucketFor(
+        address player,
+        uint24 lvl,
+        uint8 bucket
+    ) private pure returns (uint8) {
+        if (bucket == 0) return 0;
+        return
+            uint8(
+                uint256(keccak256(abi.encodePacked(player, lvl, bucket))) %
+                    bucket
+            );
+    }
+
+    /// @dev Awards decimator lootbox rewards to a claimer.
     /// @param winner Address to receive tickets.
-    /// @param amount Lootbox portion of decimator claim.
-    /// @param rngWord VRF random word from jackpot resolution.
+    /// @param amount Lootbox portion of decimator claim in wei.
+    /// @param rngWord VRF random word for lootbox resolution.
     function _awardDecimatorLootbox(
         address winner,
         uint256 amount,
@@ -830,76 +727,23 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     ) private {
         if (winner == address(0) || amount == 0) return;
         if (amount > LOOTBOX_CLAIM_THRESHOLD) {
-            _queueWhalePassClaim(winner, amount, rngWord);
+            _queueWhalePassClaimCore(winner, amount);
             return;
         }
-        lootbox.resolveLootboxDirect(winner, amount, rngWord);
-    }
-
-    /// @dev Queue deferred whale pass claims for large lootbox amounts.
-    ///      Calculates half-passes from ETH amount with RNG remainder roll.
-    /// @param winner Address to receive whale pass claim.
-    /// @param amount ETH amount to convert to half whale passes.
-    /// @param entropy RNG word for remainder roll.
-    function _queueWhalePassClaim(
-        address winner,
-        uint256 amount,
-        uint256 entropy
-    ) private {
-        if (winner == address(0) || amount == 0) return;
-
-        uint256 HALF_WHALE_PASS_PRICE = 1.75 ether /
-            ContractAddresses.COST_DIVISOR;
-        uint256 fullHalfPasses = amount / HALF_WHALE_PASS_PRICE;
-        uint256 remainder = amount - (fullHalfPasses * HALF_WHALE_PASS_PRICE);
-
-        // Probabilistic roll for +1 half pass using RNG
-        if (remainder > 0) {
-            entropy = uint256(
-                keccak256(abi.encodePacked(entropy, winner, amount))
+        // Resolve lootbox via delegatecall to open module
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_LOOTBOX_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameLootboxModule
+                        .resolveLootboxDirect
+                        .selector,
+                    winner,
+                    amount,
+                    rngWord
+                )
             );
-            uint256 chanceBps = (remainder * 10000) / HALF_WHALE_PASS_PRICE;
-            uint256 roll = entropy % 10000;
-            if (roll < chanceBps) {
-                unchecked {
-                    ++fullHalfPasses;
-                }
-            }
-        }
-
-        whalePassClaims[winner] += fullHalfPasses;
+        if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Get price for a specific level (used for ticket calculations).
-    ///      Matches the 100-level price cycle: x00=0.25, x01-x39=0.05, x40-x79=0.1, x80-x99=0.125
-    /// @param targetLevel Level to query.
-    /// @return Price in wei.
-    function _priceForLevel(uint24 targetLevel) private pure returns (uint256) {
-        // First 10 levels (0-9) start at lower price
-        if (targetLevel < 10) return 0.025 ether;
-
-        uint256 cycleOffset = targetLevel % 100;
-
-        // Price changes at specific points in the 100-level cycle
-        if (cycleOffset == 0) {
-            return 0.25 ether; // Levels 100, 200, 300...
-        } else if (cycleOffset >= 80) {
-            return 0.125 ether; // Levels 80-99, 180-199...
-        } else if (cycleOffset >= 40) {
-            return 0.1 ether; // Levels 40-79, 140-179...
-        } else {
-            // Levels 10-39, 101-139... = 0.05 ether
-            return 0.05 ether;
-        }
-    }
-
-    /// @dev XOR-shift PRNG step for deterministic entropy derivation.
-    function _entropyStep(uint256 state) private pure returns (uint256) {
-        unchecked {
-            state ^= state << 7;
-            state ^= state >> 9;
-            state ^= state << 8;
-        }
-        return state;
-    }
 }

@@ -1,323 +1,104 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
-import {IDegenerusGamepieces} from "../interfaces/IDegenerusGamepieces.sol";
-import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusGameJackpotModule} from "../interfaces/IDegenerusGameModules.sol";
-import {IDegenerusLazyPass} from "../interfaces/IDegenerusLazyPass.sol";
-import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
+import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
-import {IVRFCoordinator, VRFRandomWordsRequest} from "../interfaces/IVRFCoordinator.sol";
+import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
+import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 
+/// @notice Interface for minting WWXRP prize tokens
 interface IWrappedWrappedXRP {
+    /// @notice Mint prize tokens to a recipient
+    /// @param to The address to receive the prize
+    /// @param amount The amount of tokens to mint
     function mintPrize(address to, uint256 amount) external;
-}
-
-interface IDegenerusAdminLink {
-    function _linkAmountToEth(uint256 amount) external view returns (uint256);
 }
 
 /**
  * @title DegenerusGameLootboxModule
  * @author Burnie Degenerus
- * @notice Delegate-called module handling mint history, airdrop math, and trait rebuilding.
+ * @notice Delegatecall module for lootbox opening, boon consumption, and deity boon system.
  *
  * @dev This module is called via `delegatecall` from DegenerusGame, meaning all storage
  *      reads/writes operate on the game contract's storage.
  *
  * ## Functions
  *
- * - `recordMintData`: Track per-player mint history and calculate BURNIE rewards
- * - `calculateAirdropMultiplier`: Compute bonus multiplier for low-participation levels
- * - `purchaseTargetCountFromRaw`: Scale raw purchase count by airdrop multiplier
- * - `rebuildTraitCounts`: Reconstruct traitRemaining[] for new levels
- *
- * ## Activity Score System
- *
- * Player engagement is tracked through multiple loyalty metrics:
- * - **Level Count**: Total levels minted (lifetime participation)
- * - **Level Streak**: Consecutive level purchases
- * - **Quest Streak**: Daily quest completion streak (tracked in DegenerusQuests)
- * - **Affiliate Points**: Referral program bonus points (tracked in DegenerusAffiliate)
- * - **Whale Bundle**: Active bundle type (10-lvl or 100-lvl)
- *
- * ### Mint Data Bit Packing Layout (mintPacked_):
- *
- * ```
- * Bits 0-23:    lastLevel          - Last level with ETH mint
- * Bits 24-47:   levelCount         - Total levels minted (lifetime) [Activity Score]
- * Bits 48-71:   levelStreak        - Consecutive levels minted [Activity Score]
- * Bits 72-103:  lastMintDay        - Day index of last mint
- * Bits 104-127: unitsLevel         - Level index for levelUnits tracking
- * Bits 128-151: frozenUntilLevel   - Whale bundle: freeze stats until this level (0 = not frozen)
- * Bits 152-153: whaleBundleType    - Active bundle type (0=none, 1=10-lvl, 3=100-lvl) [Activity Score]
- * Bits 154-227: (reserved)         - Future use
- * Bits 228-243: levelUnits         - Units minted this level (1 gamepiece = 4 units)
- * Bit 244:      (deprecated)       - Previously used for bonus tracking
- * ```
- *
- * Note: Quest Streak and Affiliate Points are tracked separately in their respective contracts
- * (DegenerusQuests.questPlayerState and DegenerusAffiliate.affiliateBonusPointsBest).
- *
- * ## Trait Generation
- *
- * Traits are deterministically derived from tokenId via keccak256:
- * - Each token has 4 traits (one per quadrant: 0-63, 64-127, 128-191, 192-255)
- * - Uses 8×8 weighted grid for non-uniform distribution
- * - Higher-numbered sub-traits within each category are slightly rarer
+ * - Lootbox opening (openLootBox, openBurnieLootBox, resolveLootboxDirect, resolveLootboxRng)
+ * - Deity boon system (deityBoonSlots, issueDeityBoon)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
-    // -------------------------------------------------------------------------
+    // =========================================================================
     // Errors
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
-    /// @notice Generic revert for overflow conditions.
+    /// @notice Generic error for invalid operations or parameters
     error E();
-    /// @notice VRF word not ready for loot box reveal.
+
+    /// @notice RNG word has not been set for the requested lootbox index
     error RngNotReady();
-    /// @notice LINK/ETH price unavailable for lootbox RNG roll cost.
-    error LinkPriceUnavailable();
-    /// @notice LINK balance too low to allow manual lootbox RNG roll.
-    error LinkBalanceTooLow();
-    /// @notice LINK balance check unavailable (VRF not wired or coordinator call failed).
-    error LinkBalanceUnavailable();
 
-    struct LootboxRollState {
-        uint256 burniePresale;
-        uint256 burnieNoMultiplier;
-        uint32 futureTickets;
-        bool megaJackpotHit;
-        bool lazyPassAwarded;
-        bool tokenRewarded;
-        uint256 entropy;
-    }
+    /// @notice Operations are blocked during RNG lock (jackpot resolution in progress)
+    error RngLocked();
 
-    // -------------------------------------------------------------------------
-    // External Contract References (compile-time constants)
-    // -------------------------------------------------------------------------
-
-    IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
-    IDegenerusGamepieces internal constant gamepieces = IDegenerusGamepieces(ContractAddresses.GAMEPIECES);
-    IDegenerusAffiliate internal constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
-    IDegenerusLazyPass internal constant lazyPass = IDegenerusLazyPass(ContractAddresses.LAZY_PASS);
-    IDegenerusQuests internal constant quests = IDegenerusQuests(ContractAddresses.QUESTS);
-    IDegenerusStonk internal constant dgnrs = IDegenerusStonk(ContractAddresses.DGNRS);
-    IWrappedWrappedXRP internal constant wwxrp = IWrappedWrappedXRP(ContractAddresses.WWXRP);
-    IDegenerusAdminLink internal constant admin = IDegenerusAdminLink(ContractAddresses.ADMIN);
-
-    // -------------------------------------------------------------------------
-    // Constants
-    // -------------------------------------------------------------------------
-
-    /// @notice Time offset for day calculation (matches game's jackpot reset time).
-    uint48 private constant JACKPOT_RESET_TIME = 82620;
-
-    uint32 private constant LOOTBOX_AUTOOPEN_MAX = 7; // Max lootboxes to auto-open per call
-    uint32 private constant LOOTBOX_VRF_CALLBACK_GAS_LIMIT = 200_000;
-    uint16 private constant LOOTBOX_VRF_REQUEST_CONFIRMATIONS = 10;
-    /// @dev LINK amount used to price manual lootbox RNG rolls (1 LINK default).
-    uint256 private constant LOOTBOX_RNG_LINK_COST = 1 ether;
-
-    /// @dev Loot box minimum purchase amount (0.01 ETH / COST_DIVISOR for testnet).
-    uint256 private constant LOOTBOX_MIN = 0.01 ether / ContractAddresses.COST_DIVISOR;
-    /// @dev Max loot box ETH per level that can receive bonus multiplier (scaled for testnet).
-    uint256 private constant LOOTBOX_MULTIPLIER_CAP = 5 ether / ContractAddresses.COST_DIVISOR;
-    /// @dev BURNIE loot box minimum purchase amount (scaled for testnet).
-    uint256 private constant BURNIE_LOOTBOX_MIN = 1000 ether;
-    /// @dev BURNIE loot box ticket budget share (low EV by design).
-    uint16 private constant BURNIE_LOOTBOX_TICKET_BPS = 6000;
-    /// @dev BURNIE loot box BURNIE return share (low EV by design).
-    uint16 private constant BURNIE_LOOTBOX_BURNIE_BPS = 1000;
-
-    /// @dev Loot box per-roll payouts (basis points) - balanced for size-independent EV.
-    ///      Distribution: 55% tickets (100% EV), 10% DGNRS, 10% WWXRP (joke prize), 25% large BURNIE.
-    ///      Plus 0.2% mega jackpot (25 ETH in tickets).
-    ///      Tickets give 100% EV when rolled, BURNIE scaled to maintain ~78% total EV.
-    uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 12_720; // 127.2% (gives 100% after 0.786 multiplier)
-    /// @dev Ticket variance (5-tier), expected ~0.786x.
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS = 100; // 1%
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS = 400; // 4%
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS = 2000; // 20%
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_CHANCE_BPS = 4500; // 45%
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_CHANCE_BPS = 3000; // 30%
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_BPS = 46_000; // 4.6x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_BPS = 23_000; // 2.3x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_BPS = 11_000; // 1.1x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_BPS = 6_510; // 0.651x
-    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_BPS = 4_500; // 0.45x
-    /// @dev DGNRS payout: variable % of remaining lootbox pool (10% chance), scaled by ETH amount.
-    ///      Distribution: 79.5% small, 15% medium, 5% large, 0.5% mega.
-    uint16 private constant LOOTBOX_DGNRS_POOL_SMALL_PPM = 10; // 0.001% of pool per 1 ETH (79.5% of hits)
-    uint16 private constant LOOTBOX_DGNRS_POOL_MEDIUM_PPM = 390; // 0.039% of pool per 1 ETH (15% of hits)
-    uint16 private constant LOOTBOX_DGNRS_POOL_LARGE_PPM = 800; // 0.08% of pool per 1 ETH (5% of hits)
-    uint16 private constant LOOTBOX_DGNRS_POOL_MEGA_PPM = 8000; // 0.8% of pool per 1 ETH (0.5% of hits)
-    uint256 private constant LOOTBOX_DGNRS_MEGA_CAP = 5 ether / ContractAddresses.COST_DIVISOR;
-    /// @dev WWXRP payout: 0.1 WWXRP flat prize (valued at 0 for EV)
-    uint256 private constant LOOTBOX_WWXRP_PRIZE = 0.1 ether; // 0.1 WWXRP (18 decimals)
-    /// @dev Coinflip boon: 2% chance per ETH to award next-flip bonus
-    uint16 private constant LOOTBOX_BOON_CHANCE_PER_ETH_BPS = 200; // 2% per ETH
-    uint16 private constant LOOTBOX_BOON_BONUS_BPS = 500; // 5% bonus to coinflip stake
-    uint256 private constant LOOTBOX_BOON_MAX_BONUS = 5000 ether; // Max 5,000 BURNIE bonus (5% tier)
-    uint16 private constant LOOTBOX_COINFLIP_10_CHANCE_PER_ETH_BPS = 50; // 0.5% per ETH for 10% boost
-    uint16 private constant LOOTBOX_COINFLIP_10_BONUS_BPS = 1000; // 10% bonus to coinflip stake
-    uint16 private constant LOOTBOX_COINFLIP_25_CHANCE_PER_ETH_BPS = 10; // 0.1% per ETH for 25% boost
-    uint16 private constant LOOTBOX_COINFLIP_25_BONUS_BPS = 2500; // 25% bonus to coinflip stake
-    uint48 private constant LOOTBOX_BOON_EXPIRY_SECONDS = 172800; // 2 days (48 hours)
-    uint48 private constant PURCHASE_BOOST_EXPIRY_SECONDS = 345600; // 4 days (96 hours)
-    /// @dev Burn boon: 1% chance per ETH to award gamepiece burn bonus
-    uint16 private constant LOOTBOX_BURN_BOON_CHANCE_PER_ETH_BPS = 100; // 1% per ETH
-    uint256 private constant LOOTBOX_BURN_BOON_BONUS = 100 ether; // 100 BURNIE bonus on burn
-    /// @dev Lootbox boost boons: enhance next lootbox value
-    uint16 private constant LOOTBOX_BOOST_5_CHANCE_PER_ETH_BPS = 200; // 2% per ETH for 5% boost
-    uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500; // 5% boost to lootbox value
-    uint16 private constant LOOTBOX_BOOST_15_CHANCE_PER_ETH_BPS = 50; // 0.5% per ETH for 15% boost
-    uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500; // 15% boost to lootbox value
-    /// @dev Purchase boost boons: boost next gamepiece/ticket purchase (5%/15%/25%).
-    uint16 private constant LOOTBOX_PURCHASE_BOOST_5_CHANCE_PER_ETH_BPS = 200; // 2% per ETH for 5% boost
-    uint16 private constant LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS = 500; // 5% boost to purchase quantity
-    uint16 private constant LOOTBOX_PURCHASE_BOOST_15_CHANCE_PER_ETH_BPS = 50; // 0.5% per ETH for 15% boost
-    uint16 private constant LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS = 1500; // 15% boost to purchase quantity
-    uint16 private constant LOOTBOX_PURCHASE_BOOST_25_CHANCE_PER_ETH_BPS = 10; // 0.1% per ETH for 25% boost
-    uint16 private constant LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS = 2500; // 25% boost to purchase quantity
-    uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether / ContractAddresses.COST_DIVISOR; // Max 10 ETH lootbox for boost calc
-    uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800; // 2 days (48 hours)
-    /// @dev Whale boon: 1% chance per ETH to allow discounted 100-level bundle at any level (4 day expiry)
-    uint16 private constant LOOTBOX_WHALE_BOON_CHANCE_PER_ETH_BPS = 100; // 1% per ETH
-    /// @dev Decimator burn boost boons: boost next decimator burn (10%/25%/50%).
-    uint16 private constant LOOTBOX_DECIMATOR_10_CHANCE_PER_ETH_BPS = 50; // 0.5% per ETH for 10% boost
-    uint16 private constant LOOTBOX_DECIMATOR_10_BONUS_BPS = 1000; // 10% boost to decimator burn
-    uint16 private constant LOOTBOX_DECIMATOR_25_CHANCE_PER_ETH_BPS = 10; // 0.1% per ETH for 25% boost
-    uint16 private constant LOOTBOX_DECIMATOR_25_BONUS_BPS = 2500; // 25% boost to decimator burn
-    uint16 private constant LOOTBOX_DECIMATOR_50_CHANCE_PER_ETH_BPS = 3; // 0.025% per ETH (rounded)
-    uint16 private constant LOOTBOX_DECIMATOR_50_BONUS_BPS = 5000; // 50% boost to decimator burn
-    /// @dev Activity streak boons: add +10/+25/+50 to mint streak, mint count, and quest streak.
-    uint16 private constant LOOTBOX_ACTIVITY_BOON_10_CHANCE_PER_ETH_BPS = 100; // 1% per ETH
-    uint16 private constant LOOTBOX_ACTIVITY_BOON_25_CHANCE_PER_ETH_BPS = 30; // 0.3% per ETH
-    uint16 private constant LOOTBOX_ACTIVITY_BOON_50_CHANCE_PER_ETH_BPS = 10; // 0.1% per ETH
-    uint24 private constant LOOTBOX_ACTIVITY_BOON_10_BONUS = 10;
-    uint24 private constant LOOTBOX_ACTIVITY_BOON_25_BONUS = 25;
-    uint24 private constant LOOTBOX_ACTIVITY_BOON_50_BONUS = 50;
-    /// @dev DGNRS valuation: 1.5x backing, minimum 10000 ETH / supply
-    uint256 private constant DGNRS_VALUE_MULTIPLIER_BPS = 15_000; // 1.5x
-    uint256 private constant DGNRS_MIN_BACKING_ETH = 10_000 ether;
-    /// @dev Whale pass DGNRS pool distribution (ppm of remaining pool).
-    uint32 private constant DGNRS_WHALE_REWARD_PPM_SCALE = 1_000_000;
-    uint32 private constant DGNRS_WHALE_MINTER_PPM = 9_000; // 0.9%
-    uint32 private constant DGNRS_WHALE_AFFILIATE_PPM = 800; // 0.08%
-    uint32 private constant DGNRS_WHALE_UPLINE_PPM = 150; // 0.015%
-    uint32 private constant DGNRS_WHALE_UPLINE2_PPM = 50; // 0.005%
-    /// @dev Large BURNIE variance: scaled to maintain ~79% total EV with 60% ticket contribution.
-    uint32 private constant LOOTBOX_LARGE_BURNIE_MAX_BPS = 31_458; // 314.58% (5% of large rolls)
-    uint16 private constant LOOTBOX_LARGE_BURNIE_LOW_BPS = 7_216; // 72.16% (18/20 outcomes)
-    uint16 private constant LOOTBOX_LARGE_BURNIE_MID_BPS = 8_755; // 87.55% (1/20 outcomes)
-    /// @dev Whale pass jackpot: 2 tickets per level for 100 levels + stats boost.
-    ///      Chance uses a fixed price to target 5% EV contribution.
-    uint8 private constant LOOTBOX_WHALE_PASS_LEVELS = 100;
-    uint16 private constant LOOTBOX_WHALE_PASS_EV_BPS = 500; // 5% target EV
-    /// @dev Fixed whale pass price used for jackpot EV calculations.
-    uint256 private constant LOOTBOX_WHALE_PASS_PRICE = 3.4 ether / ContractAddresses.COST_DIVISOR;
-    /// @dev Lazy pass lootbox jackpot EV (10-level pass).
-    uint16 private constant LOOTBOX_LAZY_PASS_EV_BPS = 200; // 2% target EV
-
-    /// @dev BURNIE scaling targets (size-independent EV, amounts up to 10 ETH).
-    ///      Bonus mapping: 0% -> 60% EV, 50% -> 100% EV, 110% -> 110% EV, 265% -> 128% EV.
-    ///      Activity Score can exceed 265% with whale/trophy bonuses; lootbox rewards damp bonus above 110%
-    ///      and the curve continues linearly beyond 265% on the damped value.
-    ///      Quest streak now 1% per quest (max 100%), mint streak 1% per level (max 25%).
-    ///      Curve reaches break-even at 50% Activity Score and continues beyond 128% EV past 265%.
-    ///      Presale mode: 150% base + whale bonus (160% or 190%), BURNIE scaled (no whale 1.8x, whale 2.5x/3.0x).
-    uint16 private constant LOOTBOX_BURNIE_BASE_SCALE_BPS = 8_500; // 0.85x (0% bonus = 60% EV)
-    uint16 private constant LOOTBOX_BURNIE_FACTOR_50_BPS = 14_160; // 1.416x at 50% bonus (100% EV)
-    uint16 private constant LOOTBOX_BURNIE_FACTOR_110_BPS = 15_580; // 1.558x at 110% bonus (110% EV)
-    uint16 private constant LOOTBOX_BURNIE_FACTOR_265_BPS = 18_130; // 1.813x at 265% bonus (128% EV max)
-    uint16 private constant LOOTBOX_BONUS_50_BPS = 5_000;
-    uint16 private constant LOOTBOX_BONUS_110_BPS = 11_000;
-    uint16 private constant LOOTBOX_BONUS_265_BPS = 26_500;
-    /// @dev Damp the bonus above 110% for lootbox rewards (85% of the excess).
-    uint16 private constant LOOTBOX_BONUS_EXCESS_DAMP_BPS = 8_500;
-    /// @dev Presale lootbox bonus: Fixed 150% base + whale bundle bonus (10% or 40%).
-    ///      No whale: 150% bonus → 1.8x presale multiplier.
-    ///      10-lvl whale: 160% → 2.5x multiplier, 100-lvl whale: 190% → 3.0x multiplier.
-    uint16 private constant LOOTBOX_BONUS_PRESALE_BPS = 15_000; // 150% base bonus
-    uint16 private constant LOOTBOX_PRESALE_NO_WHALE_MULTIPLIER_BPS = 18_000; // 1.8x
-    uint16 private constant LOOTBOX_PRESALE_WHALE_10_MULTIPLIER_BPS = 25_000; // 2.5x
-    uint16 private constant LOOTBOX_PRESALE_WHALE_100_MULTIPLIER_BPS = 30_000; // 3.0x
-    /// @dev Share of bonus applied to future tickets (keeps total EV near previous curve).
-    uint16 private constant LOOTBOX_TICKET_BONUS_SHARE_BPS = 3_000;
-
-    /// @dev Loot box amount split threshold (two rolls when exceeded, scaled for testnet).
-    uint256 private constant LOOTBOX_SPLIT_THRESHOLD = 0.5 ether / ContractAddresses.COST_DIVISOR;
-
-    /// @dev Loot box pool split (basis points of total ETH).
-    uint16 private constant LOOTBOX_SPLIT_FUTURE_BPS = 6000;
-    uint16 private constant LOOTBOX_SPLIT_NEXT_BPS = 2000;
-
-    /// @dev Loot box presale pool split (basis points of total ETH).
-    ///      10% future, 30% next, 30% vault, 30% reward (remainder)
-    uint16 private constant LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 1000;
-    uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 3000;
-    uint16 private constant LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 3000;
-
-    // -------------------------------------------------------------------------
+    // =========================================================================
     // Events
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
-    event LootBoxBuy(
-        address indexed buyer,
-        uint48 indexed day,
-        uint256 amount,
-        bool presale,
-        uint256 futureShare,
-        uint256 nextPrizeShare,
-        uint256 vaultShare,
-        uint256 rewardShare
-    );
-    event LootBoxIdx(
-        address indexed buyer,
-        uint48 indexed index,
-        uint48 indexed day
-    );
-    event LootboxRngRolled(
-        address indexed player,
-        uint48 indexed index,
-        uint256 burnieCost
-    );
-    event BurnieLootBuy(
-        address indexed buyer,
-        uint48 indexed index,
-        uint256 burnieAmount
-    );
+    /// @notice Emitted when ETH is credited to a player's claimable balance.
+    /// @param player Winner address credited.
+    /// @param amount ETH amount credited (in wei).
+    event PlayerCredited(address indexed player, address indexed recipient, uint256 amount);
 
+    /// @notice Emitted when an ETH lootbox is successfully opened
+    /// @param player The player who opened the lootbox
+    /// @param index The day index when the lootbox was opened
+    /// @param amount The ETH amount of the lootbox
+    /// @param futureLevel The target level for future tickets
+    /// @param futureTickets The number of future tickets awarded
+    /// @param burnie The total BURNIE tokens awarded
+    /// @param bonusBurnie The bonus BURNIE from presale multiplier
     event LootBoxOpened(
         address indexed player,
-        uint48 indexed day,
+        uint48 indexed index,
         uint256 amount,
         uint24 futureLevel,
         uint32 futureTickets,
-        uint32 currentTickets,
         uint256 burnie,
         uint256 bonusBurnie
     );
+
+    /// @notice Emitted when a BURNIE lootbox is successfully opened
+    /// @param player The player who opened the lootbox
+    /// @param index The RNG index of the lootbox
+    /// @param burnieAmount The BURNIE amount used to open the lootbox
+    /// @param ticketLevel The target level for tickets
+    /// @param tickets The number of tickets awarded
+    /// @param burnieReward The BURNIE reward amount
     event BurnieLootOpen(
         address indexed player,
-        uint48 indexed day,
+        uint48 indexed index,
         uint256 burnieAmount,
         uint24 ticketLevel,
         uint32 tickets,
         uint256 burnieReward
     );
-    event LootBoxDecayed(
-        address indexed player,
-        uint48 indexed day,
-        uint256 originalAmount,
-        uint256 decayedAmount
-    );
 
-    event WhaleJackpot(
+    /// @notice Emitted when a lootbox awards a whale pass jackpot
+    /// @param player The player who won the jackpot
+    /// @param day The day index of the jackpot
+    /// @param lootboxAmount The ETH amount of the lootbox
+    /// @param targetLevel The target level for the jackpot
+    /// @param tickets Tickets per level granted by the whale pass reward
+    /// @param statsBoost Reserved for future use (always 0)
+    /// @param frozenUntilLevel Reserved for future use (always 0)
+    event LootBoxWhalePassJackpot(
         address indexed player,
         uint48 indexed day,
         uint256 lootboxAmount,
@@ -326,7 +107,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 statsBoost,
         uint24 frozenUntilLevel
     );
-    event LazyPassWon(
+
+    /// @notice Emitted when a lootbox awards a lazy pass
+    /// @param player The player who received the lazy pass
+    /// @param day The day index of the award
+    /// @param lootboxAmount The ETH amount of the lootbox
+    /// @param passLevel The level of the lazy pass awarded
+    /// @param activatedNow Whether the pass was activated immediately (always false)
+    event LootBoxLazyPassAwarded(
         address indexed player,
         uint48 indexed day,
         uint256 lootboxAmount,
@@ -334,14 +122,36 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool activatedNow
     );
 
-    event LazyPassOn(address indexed player, uint24 passLevel);
+    /// @notice Emitted when a lootbox awards DGNRS tokens
+    /// @param player The player who received the reward
+    /// @param day The day index of the reward
+    /// @param lootboxAmount The ETH amount of the lootbox
+    /// @param dgnrsAmount The amount of DGNRS tokens awarded
+    event LootBoxDgnrsReward(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint256 dgnrsAmount
+    );
 
-    /// @notice Unified lootbox reward event.
-    /// @param player The player receiving the reward.
-    /// @param day The day of the reward.
-    /// @param rewardType The type of reward (0=Dgnrs, 1=Wwxrp, 2=CoinflipBoon, 3=BurnBoon, 4=Boost5, 5=Boost15, 6=GamepieceBoost, 7=TicketBoost, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon).
-    /// @param lootboxAmount The lootbox amount spent.
-    /// @param amount Primary reward amount (varies by type: DGNRS amount, WWXRP amount, boost BPS, expiry day, bonus levels, etc.).
+    /// @notice Emitted when a lootbox awards WWXRP tokens
+    /// @param player The player who received the reward
+    /// @param day The day index of the reward
+    /// @param lootboxAmount The ETH amount of the lootbox
+    /// @param wwxrpAmount The amount of WWXRP tokens awarded
+    event LootBoxWwxrpReward(
+        address indexed player,
+        uint48 indexed day,
+        uint256 lootboxAmount,
+        uint256 wwxrpAmount
+    );
+
+    /// @notice Unified lootbox reward event for boon awards
+    /// @param player The player receiving the reward
+    /// @param day The day index of the reward
+    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon)
+    /// @param lootboxAmount The lootbox amount spent (ETH-equivalent for BURNIE lootboxes)
+    /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons)
     event LootBoxReward(
         address indexed player,
         uint48 indexed day,
@@ -350,525 +160,1588 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 amount
     );
 
-    event BoostUsed(
-        address indexed player,
+    /// @notice Emitted when a deity issues a boon to another player
+    /// @param deity The deity pass holder issuing the boon
+    /// @param recipient The player receiving the boon
+    /// @param day The day index when the boon was issued
+    /// @param slot The slot index (0-4) of the boon
+    /// @param boonType The type of boon issued (1-29)
+    event DeityBoonIssued(
+        address indexed deity,
+        address indexed recipient,
         uint48 indexed day,
-        uint256 originalAmount,
-        uint256 boostedAmount,
-        uint16 boostBps
+        uint8 slot,
+        uint8 boonType
     );
 
-    // -------------------------------------------------------------------------
-    // Bit Packing Masks and Shifts
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // External Contract References
+    // =========================================================================
 
-    /// @notice Mask for 24-bit fields.
-    uint256 private constant MINT_MASK_24 = (uint256(1) << 24) - 1;
+    /// @notice Reference to the BURNIE coin contract
+    IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
 
-    /// @notice Mask for 16-bit fields.
-    uint256 private constant MINT_MASK_16 = (uint256(1) << 16) - 1;
+    /// @notice Reference to the DGNRS token contract
+    IDegenerusStonk internal constant dgnrs = IDegenerusStonk(ContractAddresses.DGNRS);
 
-    /// @notice Mask for 32-bit fields.
-    uint256 private constant MINT_MASK_32 = (uint256(1) << 32) - 1;
+    /// @notice Reference to the WWXRP token contract
+    IWrappedWrappedXRP internal constant wwxrp = IWrappedWrappedXRP(ContractAddresses.WWXRP);
 
-    /// @notice Bit shift for last minted level (24 bits at position 0).
-    uint256 private constant ETH_LAST_LEVEL_SHIFT = 0;
 
-    /// @notice Bit shift for level count (24 bits at position 24).
-    uint256 private constant ETH_LEVEL_COUNT_SHIFT = 24;
+    // =========================================================================
+    // Constants
+    // =========================================================================
 
-    /// @notice Bit shift for consecutive level streak (24 bits at position 48).
-    uint256 private constant ETH_LEVEL_STREAK_SHIFT = 48;
+    /// @dev Portion of lootbox EV reserved for boon/pass draw (10%)
+    uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
+    /// @dev Maximum boon/pass budget per lootbox (1 ETH)
+    uint256 private constant LOOTBOX_BOON_MAX_BUDGET = 1 ether;
+    /// @dev Assumed utilization of max boon value (50%)
+    uint16 private constant LOOTBOX_BOON_UTILIZATION_BPS = 5000;
 
-    /// @notice Bit shift for last mint day (32 bits at position 72).
-    uint256 private constant ETH_DAY_SHIFT = 72;
+    /// @dev Whale boon discount tiers (10%, 25%, 50%).
+    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS = 1000;
+    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS = 2500;
+    uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS = 5000;
+    /// @dev Tier identifier for 10% deity pass discount boon (1000 bps)
+    uint8 private constant DEITY_PASS_BOON_TIER_10 = 1;
+    /// @dev Tier identifier for 25% deity pass discount boon (2500 bps)
+    uint8 private constant DEITY_PASS_BOON_TIER_25 = 2;
+    /// @dev Tier identifier for 50% deity pass discount boon (5000 bps)
+    uint8 private constant DEITY_PASS_BOON_TIER_50 = 3;
+    /// @dev Maximum total deity passes (one per non-dice symbol)
+    uint32 private constant DEITY_PASS_MAX_TOTAL = 24;
 
-    /// @notice Bit shift for units-level marker (24 bits at position 104).
-    uint256 private constant ETH_LEVEL_UNITS_LEVEL_SHIFT = 104;
+    // Boon bonus values
+    /// @dev 5% bonus in basis points for coinflip boon
+    uint16 private constant LOOTBOX_BOON_BONUS_BPS = 500;
+    /// @dev Maximum bonus amount for coinflip boon (5000 BURNIE)
+    uint256 private constant LOOTBOX_BOON_MAX_BONUS = 5000 ether;
+    /// @dev Coinflip boon cap for max deposit (100k BURNIE) used in EV estimation.
+    uint256 private constant COINFLIP_BOON_MAX_DEPOSIT = 100_000 ether;
+    /// @dev Decimator boon cap for base amount (50k BURNIE) used in EV estimation.
+    uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
+    /// @dev Whale bundle standard price (used for whale discount boon EV estimation).
+    uint256 private constant WHALE_BUNDLE_STANDARD_PRICE = 4 ether;
+    /// @dev Whale pass standard tickets per level.
+    uint32 private constant WHALE_PASS_TICKETS_PER_LEVEL = 2;
+    /// @dev Whale pass bonus tickets per level for early levels.
+    uint32 private constant WHALE_PASS_BONUS_TICKETS_PER_LEVEL = 40;
+    /// @dev Last level eligible for whale pass bonus tickets.
+    uint24 private constant WHALE_PASS_BONUS_END_LEVEL = 10;
+    /// @dev Deity pass base price (used for deity discount boon EV estimation).
+    uint256 private constant DEITY_PASS_BASE = 24 ether;
+    /// @dev 10% bonus in basis points for coinflip boon
+    uint16 private constant LOOTBOX_COINFLIP_10_BONUS_BPS = 1000;
+    /// @dev 25% bonus in basis points for coinflip boon
+    uint16 private constant LOOTBOX_COINFLIP_25_BONUS_BPS = 2500;
+    /// @dev 5% lootbox boost in basis points
+    uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500;
+    /// @dev 15% lootbox boost in basis points
+    uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;
+    /// @dev 25% lootbox boost in basis points
+    uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
+    /// @dev 5% purchase boost in basis points
+    uint16 private constant LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS = 500;
+    /// @dev 15% purchase boost in basis points
+    uint16 private constant LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS = 1500;
+    /// @dev 25% purchase boost in basis points
+    uint16 private constant LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS = 2500;
+    /// @dev 10% decimator boost in basis points
+    uint16 private constant LOOTBOX_DECIMATOR_10_BONUS_BPS = 1000;
+    /// @dev 25% decimator boost in basis points
+    uint16 private constant LOOTBOX_DECIMATOR_25_BONUS_BPS = 2500;
+    /// @dev 50% decimator boost in basis points
+    uint16 private constant LOOTBOX_DECIMATOR_50_BONUS_BPS = 5000;
+    /// @dev 10 point activity boon bonus
+    uint24 private constant LOOTBOX_ACTIVITY_BOON_10_BONUS = 10;
+    /// @dev 25 point activity boon bonus
+    uint24 private constant LOOTBOX_ACTIVITY_BOON_25_BONUS = 25;
+    /// @dev 50 point activity boon bonus
+    uint24 private constant LOOTBOX_ACTIVITY_BOON_50_BONUS = 50;
 
-    /// @notice Bit shift for level units counter (16 bits at position 228).
-    uint256 private constant ETH_LEVEL_UNITS_SHIFT = 228;
+    // Lootbox roll constants
+    /// @dev Base ticket roll budget in BPS (~127% EV after variance, 55% chance path)
+    uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 16_100;
+    /// @dev 1% chance for tier 1 ticket variance (4.6x multiplier)
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS = 100;
+    /// @dev 4% chance for tier 2 ticket variance (2.3x multiplier)
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS = 400;
+    /// @dev 20% chance for tier 3 ticket variance (1.1x multiplier)
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS = 2000;
+    /// @dev 45% chance for tier 4 ticket variance (0.651x multiplier)
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_CHANCE_BPS = 4500;
+    /// @dev 4.6x ticket multiplier for tier 1
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER1_BPS = 46_000;
+    /// @dev 2.3x ticket multiplier for tier 2
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER2_BPS = 23_000;
+    /// @dev 1.1x ticket multiplier for tier 3
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER3_BPS = 11_000;
+    /// @dev 0.651x ticket multiplier for tier 4
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER4_BPS = 6_510;
+    /// @dev 0.45x ticket multiplier for tier 5 (default)
+    uint16 private constant LOOTBOX_TICKET_VARIANCE_TIER5_BPS = 4_500;
+    /// @dev 0.001% of DGNRS pool per ETH for small tier
+    uint16 private constant LOOTBOX_DGNRS_POOL_SMALL_PPM = 10;
+    /// @dev 0.039% of DGNRS pool per ETH for medium tier
+    uint16 private constant LOOTBOX_DGNRS_POOL_MEDIUM_PPM = 390;
+    /// @dev 0.08% of DGNRS pool per ETH for large tier
+    uint16 private constant LOOTBOX_DGNRS_POOL_LARGE_PPM = 800;
+    /// @dev 0.8% of DGNRS pool per ETH for mega tier
+    uint16 private constant LOOTBOX_DGNRS_POOL_MEGA_PPM = 8000;
+    /// @dev Fixed WWXRP prize amount (1 token)
+    uint256 private constant LOOTBOX_WWXRP_PRIZE = 1 ether;
+    /// @dev Base BPS for low BURNIE path (58.1%)
+    uint16 private constant LOOTBOX_LARGE_BURNIE_LOW_BASE_BPS = 5_808;
+    /// @dev Step increase in BPS for low BURNIE path (4.77% per step)
+    uint16 private constant LOOTBOX_LARGE_BURNIE_LOW_STEP_BPS = 477;
+    /// @dev Base BPS for high BURNIE path (307%)
+    uint16 private constant LOOTBOX_LARGE_BURNIE_HIGH_BASE_BPS = 30_705;
+    /// @dev Step increase in BPS for high BURNIE path (94.3% per step)
+    uint16 private constant LOOTBOX_LARGE_BURNIE_HIGH_STEP_BPS = 9_430;
+    /// @dev Presale BURNIE bonus in BPS (62% bonus, reduced to keep presale total stable)
+    uint16 private constant LOOTBOX_PRESALE_BURNIE_BONUS_BPS = 6_200;
+    /// @dev Whale pass price (200 tickets over levels 10-109)
+    uint256 private constant LOOTBOX_WHALE_PASS_PRICE = 4.35 ether;
+    /// @dev Half whale pass price (100 tickets over levels 10-109)
+    uint256 private constant HALF_WHALE_PASS_PRICE = 2.175 ether;
+    /// @dev Threshold above which lootbox is split into two rolls (0.5 ETH)
+    uint256 private constant LOOTBOX_SPLIT_THRESHOLD = 0.5 ether;
 
-    /// @notice Bit shift for bonus-paid flag (1 bit at position 244).
-    uint256 private constant ETH_LEVEL_BONUS_SHIFT = 244;
+    // Activity score EV multiplier constants (ETH lootbox only)
+    /// @dev 60% activity score = neutral 100% EV
+    uint16 private constant ACTIVITY_SCORE_NEUTRAL_BPS = 6_000;
+    /// @dev 305%+ activity score = maximum 135% EV (deity pass theoretical max)
+    uint16 private constant ACTIVITY_SCORE_MAX_BPS = 30_500;
+    /// @dev Minimum EV at 0% activity (80%)
+    uint16 private constant LOOTBOX_EV_MIN_BPS = 8_000;
+    /// @dev Neutral EV at 60% activity (100%)
+    uint16 private constant LOOTBOX_EV_NEUTRAL_BPS = 10_000;
+    /// @dev Maximum EV at 260%+ activity (135%)
+    uint16 private constant LOOTBOX_EV_MAX_BPS = 13_500;
+    /// @dev Maximum EV benefit cap per account per level (10 ETH)
+    uint256 private constant LOOTBOX_EV_BENEFIT_CAP = 10 ether;
 
-    /// @notice Bit shift for frozen-until-level (24 bits at position 128).
-    ///         Used for whale bundle presales: freezes streak/count updates until specified level.
-    uint256 private constant ETH_FROZEN_UNTIL_LEVEL_SHIFT = 128;
+    /// @dev Probability scale for granular boon rolls (ppm = 1e6).
+    uint256 private constant BOON_PPM_SCALE = 1_000_000;
 
-    /// @notice Bit shift for whale bundle type (2 bits at position 152).
-    ///         Tracks active bundle: 0=none, 1=10-level, 3=100-level.
-    uint256 private constant ETH_WHALE_BUNDLE_TYPE_SHIFT = 152;
+    // Active boon categories (lootbox only keeps one active category at a time).
+    uint8 private constant BOON_CAT_NONE = 0;
+    uint8 private constant BOON_CAT_COINFLIP = 1;
+    uint8 private constant BOON_CAT_LOOTBOX = 3;
+    uint8 private constant BOON_CAT_PURCHASE = 4;
+    uint8 private constant BOON_CAT_DECIMATOR = 6;
+    uint8 private constant BOON_CAT_WHALE = 7;
+    uint8 private constant BOON_CAT_LAZY = 8;
+    uint8 private constant BOON_CAT_ACTIVITY = 9;
+    uint8 private constant BOON_CAT_DEITY_PASS = 10;
+    uint8 private constant BOON_CAT_WHALE_PASS = 11;
+    uint8 private constant BOON_CAT_LAZY_PASS = 12;
 
-    // -------------------------------------------------------------------------
-    // Mint Data Recording
-    // -------------------------------------------------------------------------
+    // Deity boon constants
+    /// @dev Number of boon slots available per deity per day
+    uint8 private constant DEITY_DAILY_BOON_COUNT = 3;
 
-    /// @notice Purchase gamepieces, tickets, and loot boxes for a buyer.
-    /// @dev Delegatecalled by DegenerusGame. Handles payment routing, affiliates, and queues.
-    /// @param buyer Recipient of the purchased items.
-    /// @param gamepieceQuantity Number of gamepieces to purchase.
-    /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100).
-    /// @param lootBoxAmount Number of loot boxes to purchase.
-    /// @param affiliateCode Referral code for affiliate attribution.
-    /// @param payKind Payment kind selector (ETH/claimable/combined).
-    function purchase(
-        address buyer,
-        uint256 gamepieceQuantity,
-        uint256 ticketQuantity,
-        uint256 lootBoxAmount,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind
-    ) external payable {
-        _purchaseFor(
-            buyer,
-            gamepieceQuantity,
-            ticketQuantity,
-            lootBoxAmount,
-            affiliateCode,
-            payKind
+    /// @dev Boon type: 5% coinflip bonus
+    uint8 private constant DEITY_BOON_COINFLIP_5 = 1;
+    /// @dev Boon type: 10% coinflip bonus
+    uint8 private constant DEITY_BOON_COINFLIP_10 = 2;
+    /// @dev Boon type: 25% coinflip bonus
+    uint8 private constant DEITY_BOON_COINFLIP_25 = 3;
+    /// @dev Boon type: 5% lootbox boost
+    uint8 private constant DEITY_BOON_LOOTBOX_5 = 5;
+    /// @dev Boon type: 15% lootbox boost
+    uint8 private constant DEITY_BOON_LOOTBOX_15 = 6;
+    /// @dev Boon type: 5% purchase boost
+    uint8 private constant DEITY_BOON_PURCHASE_5 = 7;
+    /// @dev Boon type: 15% purchase boost
+    uint8 private constant DEITY_BOON_PURCHASE_15 = 8;
+    /// @dev Boon type: 25% purchase boost
+    uint8 private constant DEITY_BOON_PURCHASE_25 = 9;
+    /// @dev Boon type: 10% decimator boost
+    uint8 private constant DEITY_BOON_DECIMATOR_10 = 13;
+    /// @dev Boon type: 25% decimator boost
+    uint8 private constant DEITY_BOON_DECIMATOR_25 = 14;
+    /// @dev Boon type: 50% decimator boost
+    uint8 private constant DEITY_BOON_DECIMATOR_50 = 15;
+    /// @dev Boon type: 10% whale discount
+    uint8 private constant DEITY_BOON_WHALE_10 = 16;
+    /// @dev Boon type: 10 point activity bonus
+    uint8 private constant DEITY_BOON_ACTIVITY_10 = 17;
+    /// @dev Boon type: 25 point activity bonus
+    uint8 private constant DEITY_BOON_ACTIVITY_25 = 18;
+    /// @dev Boon type: 50 point activity bonus
+    uint8 private constant DEITY_BOON_ACTIVITY_50 = 19;
+    /// @dev Boon type: 25% lootbox boost
+    uint8 private constant DEITY_BOON_LOOTBOX_25 = 22;
+    /// @dev Boon type: 25% whale discount
+    uint8 private constant DEITY_BOON_WHALE_25 = 23;
+    /// @dev Boon type: 50% whale discount
+    uint8 private constant DEITY_BOON_WHALE_50 = 24;
+    /// @dev Boon type: 10% deity pass discount
+    uint8 private constant DEITY_BOON_DEITY_PASS_10 = 25;
+    /// @dev Boon type: 25% deity pass discount
+    uint8 private constant DEITY_BOON_DEITY_PASS_25 = 26;
+    /// @dev Boon type: 50% deity pass discount
+    uint8 private constant DEITY_BOON_DEITY_PASS_50 = 27;
+    /// @dev Boon type: whale pass award
+    uint8 private constant DEITY_BOON_WHALE_PASS = 28;
+    /// @dev Boon type: lazy pass award
+    uint8 private constant DEITY_BOON_LAZY_PASS = 29;
+
+    // Deity boon weights (used for weighted random selection)
+    /// @dev Weight for 5% coinflip boon
+    uint16 private constant DEITY_BOON_WEIGHT_COINFLIP_5 = 200;
+    /// @dev Weight for 10% coinflip boon
+    uint16 private constant DEITY_BOON_WEIGHT_COINFLIP_10 = 40;
+    /// @dev Weight for 25% coinflip boon
+    uint16 private constant DEITY_BOON_WEIGHT_COINFLIP_25 = 8;
+    /// @dev Weight for 5% lootbox boost boon
+    uint16 private constant DEITY_BOON_WEIGHT_LOOTBOX_5 = 200;
+    /// @dev Weight for 15% lootbox boost boon
+    uint16 private constant DEITY_BOON_WEIGHT_LOOTBOX_15 = 30;
+    /// @dev Weight for 25% lootbox boost boon
+    uint16 private constant DEITY_BOON_WEIGHT_LOOTBOX_25 = 8;
+    /// @dev Weight for 5% purchase boost boon
+    uint16 private constant DEITY_BOON_WEIGHT_PURCHASE_5 = 400;
+    /// @dev Weight for 15% purchase boost boon
+    uint16 private constant DEITY_BOON_WEIGHT_PURCHASE_15 = 80;
+    /// @dev Weight for 25% purchase boost boon
+    uint16 private constant DEITY_BOON_WEIGHT_PURCHASE_25 = 16;
+    /// @dev Weight for 10% decimator boost boon
+    uint16 private constant DEITY_BOON_WEIGHT_DECIMATOR_10 = 40;
+    /// @dev Weight for 25% decimator boost boon
+    uint16 private constant DEITY_BOON_WEIGHT_DECIMATOR_25 = 8;
+    /// @dev Weight for 50% decimator boost boon
+    uint16 private constant DEITY_BOON_WEIGHT_DECIMATOR_50 = 2;
+    /// @dev Weight for 10% whale boon
+    uint16 private constant DEITY_BOON_WEIGHT_WHALE_10 = 28;
+    /// @dev Weight for 25% whale boon
+    uint16 private constant DEITY_BOON_WEIGHT_WHALE_25 = 10;
+    /// @dev Weight for 50% whale boon
+    uint16 private constant DEITY_BOON_WEIGHT_WHALE_50 = 2;
+    /// @dev Weight for 10% deity pass discount boon
+    uint16 private constant DEITY_BOON_WEIGHT_DEITY_PASS_10 = 28;
+    /// @dev Weight for 25% deity pass discount boon
+    uint16 private constant DEITY_BOON_WEIGHT_DEITY_PASS_25 = 10;
+    /// @dev Weight for 50% deity pass discount boon
+    uint16 private constant DEITY_BOON_WEIGHT_DEITY_PASS_50 = 2;
+    /// @dev Weight for 10 point activity boon
+    uint16 private constant DEITY_BOON_WEIGHT_ACTIVITY_10 = 100;
+    /// @dev Weight for 25 point activity boon
+    uint16 private constant DEITY_BOON_WEIGHT_ACTIVITY_25 = 30;
+    /// @dev Weight for 50 point activity boon
+    uint16 private constant DEITY_BOON_WEIGHT_ACTIVITY_50 = 8;
+    /// @dev Weight for whale pass award
+    uint16 private constant DEITY_BOON_WEIGHT_WHALE_PASS = 8;
+    /// @dev Weight for lazy pass award
+    uint16 private constant DEITY_BOON_WEIGHT_LAZY_PASS = 40;
+    /// @dev Combined weight of deity pass discount boons (10% + 25% + 50%)
+    uint16 private constant DEITY_BOON_WEIGHT_DEITY_PASS_ALL = 40;
+    /// @dev Total weight sum when decimator boons are allowed
+    uint16 private constant DEITY_BOON_WEIGHT_TOTAL = 1298;
+    /// @dev Total weight sum when decimator boons are not allowed
+    uint16 private constant DEITY_BOON_WEIGHT_TOTAL_NO_DECIMATOR = 1248;
+
+    // =========================================================================
+    // Lootbox Opening Functions
+    // =========================================================================
+
+    /// @dev Calculates EV multiplier based on activity score (ETH lootbox only).
+    ///      Linear scaling: 0% activity → 80% EV, 60% activity → 100% EV, 260%+ activity → 135% EV.
+    /// @param player The player address to calculate EV multiplier for
+    /// @return The EV multiplier in basis points (8000-13500)
+    function _lootboxEvMultiplierBps(address player) private view returns (uint256) {
+        uint256 score = IDegenerusGame(address(this)).playerActivityScore(player);
+        return _lootboxEvMultiplierFromScore(score);
+    }
+
+    /// @dev Calculates EV multiplier from a raw activity score.
+    ///      Linear interpolation between thresholds.
+    /// @param score The activity score in basis points
+    /// @return The EV multiplier in basis points (8000-13500)
+    function _lootboxEvMultiplierFromScore(
+        uint256 score
+    ) private pure returns (uint256) {
+        if (score <= ACTIVITY_SCORE_NEUTRAL_BPS) {
+            // Linear: 0% → 80% EV, 60% → 100% EV
+            return LOOTBOX_EV_MIN_BPS +
+                (score * (LOOTBOX_EV_NEUTRAL_BPS - LOOTBOX_EV_MIN_BPS)) /
+                ACTIVITY_SCORE_NEUTRAL_BPS;
+        }
+
+        if (score >= ACTIVITY_SCORE_MAX_BPS) {
+            return LOOTBOX_EV_MAX_BPS;
+        }
+
+        // Linear: 60% → 100% EV, 260% → 135% EV
+        uint256 excess = score - ACTIVITY_SCORE_NEUTRAL_BPS;
+        uint256 maxExcess = ACTIVITY_SCORE_MAX_BPS - ACTIVITY_SCORE_NEUTRAL_BPS;
+        return
+            LOOTBOX_EV_NEUTRAL_BPS +
+            (excess * (LOOTBOX_EV_MAX_BPS - LOOTBOX_EV_NEUTRAL_BPS)) /
+            maxExcess;
+    }
+
+    /// @dev Apply EV multiplier with per-account per-level cap of 10 ETH.
+    ///      Tracks how much benefit has been used and only applies EV adjustment
+    ///      to the uncapped portion. Remainder gets 100% EV (neutral).
+    /// @param player Player address
+    /// @param lvl Current game level
+    /// @param amount Lootbox ETH amount
+    /// @param evMultiplierBps EV multiplier in basis points (8000-13500)
+    /// @return scaledAmount Amount after EV adjustment
+    function _applyEvMultiplierWithCap(
+        address player,
+        uint24 lvl,
+        uint256 amount,
+        uint256 evMultiplierBps
+    ) private returns (uint256 scaledAmount) {
+        // If EV is exactly 100%, no tracking needed
+        if (evMultiplierBps == LOOTBOX_EV_NEUTRAL_BPS) {
+            return amount;
+        }
+
+        // Check how much EV benefit capacity remains for this level
+        uint256 usedBenefit = lootboxEvBenefitUsedByLevel[player][lvl];
+        uint256 remainingCap = usedBenefit >= LOOTBOX_EV_BENEFIT_CAP
+            ? 0
+            : LOOTBOX_EV_BENEFIT_CAP - usedBenefit;
+
+        if (remainingCap == 0) {
+            // Cap exhausted: apply 100% EV (neutral)
+            return amount;
+        }
+
+        // Determine how much of this lootbox gets the EV adjustment
+        uint256 adjustedPortion = amount > remainingCap ? remainingCap : amount;
+        uint256 neutralPortion = amount - adjustedPortion;
+
+        // Update tracking
+        lootboxEvBenefitUsedByLevel[player][lvl] = usedBenefit + adjustedPortion;
+
+        // Calculate scaled amount:
+        // - adjustedPortion gets the full EV multiplier
+        // - neutralPortion gets 100% EV
+        uint256 adjustedValue = (adjustedPortion * evMultiplierBps) / 10_000;
+        scaledAmount = adjustedValue + neutralPortion;
+    }
+
+    /// @notice Open an ETH lootbox once RNG is available
+    /// @dev Blocked during RNG lock to prevent ticket manipulation during jackpots.
+    ///      Applies activity score EV multiplier with a 10 ETH cap per account per level.
+    /// @param player Player address to open lootbox for
+    /// @param index The RNG index of the lootbox
+    /// @custom:reverts E When lootbox amount is zero
+    /// @custom:reverts RngNotReady When RNG word has not been set for this index
+    /// @custom:reverts RngLocked When RNG is locked during jackpot resolution
+    function openLootBox(address player, uint48 index) external {
+        if (rngLockedFlag) revert RngLocked();
+
+        uint256 packed = lootboxEth[index][player];
+        uint256 amount = packed & ((1 << 232) - 1);
+        if (amount == 0) revert E();
+
+        uint24 purchaseLevel = uint24(packed >> 232);
+        uint256 rngWord = lootboxRngWordByIndex[index];
+        if (rngWord == 0) revert RngNotReady();
+
+        uint48 currentDay = _simulatedDayIndex();
+        uint48 day = lootboxDay[index][player];
+        if (day == 0) {
+            day = currentDay;
+        }
+
+        bool presale = lootboxPresaleActive;
+        uint256 baseAmount = lootboxEthBase[index][player];
+        if (baseAmount == 0) {
+            baseAmount = amount;
+        }
+
+        uint24 currentLevel = level + 1;
+        bool withinGracePeriod = currentDay <= day + 7;
+        uint24 baseLevelPacked = lootboxBaseLevelPacked[index][player];
+        uint24 graceLevel = baseLevelPacked == 0 ? currentLevel : baseLevelPacked - 1;
+        uint24 baseLevel = withinGracePeriod ? graceLevel : purchaseLevel;
+
+        uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+        (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(baseLevel, entropy);
+
+        if (targetLevel < currentLevel) {
+            targetLevel = currentLevel;
+        }
+
+        // Apply activity score EV multiplier to reward amount (80% to 135%)
+        // EV benefit (above/below 100%) is capped at 10 ETH per account per level
+        uint16 evScorePacked = lootboxEvScorePacked[index][player];
+        uint256 evMultiplierBps = evScorePacked == 0
+            ? _lootboxEvMultiplierBps(player)
+            : _lootboxEvMultiplierFromScore(uint256(evScorePacked - 1));
+        uint256 scaledAmount = _applyEvMultiplierWithCap(
+            player,
+            currentLevel,
+            amount,
+            evMultiplierBps
+        );
+
+        lootboxEth[index][player] = 0;
+        lootboxEthBase[index][player] = 0;
+        lootboxBaseLevelPacked[index][player] = 0;
+        lootboxEvScorePacked[index][player] = 0;
+        _resolveLootboxCommon(
+            player,
+            day,
+            scaledAmount,
+            baseAmount,
+            targetLevel,
+            currentLevel,
+            nextEntropy,
+            presale,
+            true,
+            true,
+            true,
+            true
         );
     }
 
-    function _purchaseFor(
-        address buyer,
-        uint256 gamepieceQuantity,
-        uint256 ticketQuantity,
-        uint256 lootBoxAmount,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind
-    ) private {
-        uint24 currentLevel = level;
+    /// @notice Open a BURNIE lootbox once RNG is available
+    /// @dev Blocked during RNG lock to prevent ticket manipulation during jackpots.
+    ///      Converts BURNIE to ETH-equivalent value at 80% rate for resolution.
+    /// @param player Player address to open lootbox for
+    /// @param index The RNG index of the lootbox
+    /// @custom:reverts E When lootbox amount is zero or price is zero
+    /// @custom:reverts RngNotReady When RNG word has not been set for this index
+    /// @custom:reverts RngLocked When RNG is locked during jackpot resolution
+    function openBurnieLootBox(address player, uint48 index) external {
+        if (rngLockedFlag) revert RngLocked();
+
+        uint256 burnieAmount = lootboxBurnie[index][player];
+        if (burnieAmount == 0) revert E();
+
+        uint256 rngWord = lootboxRngWordByIndex[index];
+        if (rngWord == 0) revert RngNotReady();
+
+        lootboxBurnie[index][player] = 0;
+
+        // Resolve using ETH-equivalent value at 80% rate without whale/presale bonuses
         uint256 priceWei = price;
+        if (priceWei == 0) revert E();
+        uint256 amountEth = (burnieAmount * priceWei * 80) / (PRICE_COIN_UNIT * 100);
+        if (amountEth == 0) revert E();
 
-        if (lootBoxAmount != 0 && lootBoxAmount < LOOTBOX_MIN) revert E();
-
-        uint256 gamepieceCost = 0;
-        uint256 ticketCost = 0;
-
-        if (gamepieceQuantity > 0) {
-            if (gamepieceQuantity > type(uint32).max) revert E();
-            gamepieceCost = priceWei * gamepieceQuantity;
+        uint24 currentLevel = level + 1;
+        uint48 day = lootboxDay[index][player];
+        if (day == 0) {
+            day = _simulatedDayIndex();
         }
 
-        if (ticketQuantity > 0) {
-            if (ticketQuantity > type(uint32).max) revert E();
-            ticketCost = (priceWei * ticketQuantity) / (4 * TICKET_SCALE);
+        uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amountEth)));
+        (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(currentLevel, entropy);
+
+        (uint32 tickets, uint256 burnieReward, ) = _resolveLootboxCommon(
+            player,
+            day,
+            amountEth,
+            amountEth,
+            targetLevel,
+            currentLevel,
+            nextEntropy,
+            false,
+            false,
+            false,
+            false,
+            true
+        );
+
+        emit BurnieLootOpen(
+            player,
+            index,
+            burnieAmount,
+            targetLevel,
+            tickets,
+            burnieReward
+        );
+    }
+
+    /// @notice Resolve a lootbox directly for decimator claims (no RNG wait needed)
+    /// @dev Jackpot/claim lootboxes do not award boons (allowBoons=false).
+    /// @param player Player address to resolve for
+    /// @param amount ETH amount for the lootbox resolution
+    /// @param rngWord RNG word to use for resolution
+    function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord) external {
+        if (amount == 0) return;
+
+        uint48 day = _simulatedDayIndex();
+        uint24 currentLevel = level + 1;
+        uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+        (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(currentLevel, entropy);
+
+        _resolveLootboxCommon(
+            player,
+            day,
+            amount,
+            amount,
+            targetLevel,
+            currentLevel,
+            nextEntropy,
+            false,
+            true,
+            true,
+            true,
+            false
+        );
+    }
+
+    // =========================================================================
+    // Deity Boon Functions
+    // =========================================================================
+
+    /// @notice Get a deity's available boon slots for the current day
+    /// @dev Returns deterministically generated boon types based on deity address and day.
+    ///      Decimator boons only appear when decimator window is open.
+    /// @param deity The deity pass holder address
+    /// @return slots Array of 3 boon types (1-29) for each slot
+    /// @return usedMask Bitmask of which slots have been used today (bit 0 = slot 0, etc.)
+    /// @return day The current day index
+    function deityBoonSlots(
+        address deity
+    ) external view returns (uint8[3] memory slots, uint8 usedMask, uint48 day) {
+        day = _simulatedDayIndex();
+        if (deityBoonDay[deity] == day) {
+            usedMask = deityBoonUsedMask[deity];
         }
 
-        uint256 totalCost = gamepieceCost + ticketCost + lootBoxAmount;
-        if (totalCost == 0) revert E();
-
-        uint256 initialClaimable = claimableWinnings[buyer];
-
-        uint256 ethForGamepieces = 0;
-        uint256 ethForTickets = 0;
-
-        uint256 remainingEth = msg.value;
-        if (remainingEth < lootBoxAmount) revert E();
-        unchecked {
-            remainingEth -= lootBoxAmount;
-        }
-
-        if (remainingEth > 0 && (gamepieceCost + ticketCost) > 0) {
-            ethForGamepieces = (remainingEth * gamepieceCost) / (gamepieceCost + ticketCost);
-            ethForTickets = remainingEth - ethForGamepieces;
-        }
-
-        if (gamepieceCost > 0 && gamepieceQuantity > 0) {
-            (bool success, ) = ContractAddresses.GAMEPIECES.call{value: ethForGamepieces}(
-                abi.encodeWithSignature(
-                    "purchase((uint256,uint8,uint8,bool,bytes32))",
-                    gamepieceQuantity,
-                    uint8(0),
-                    uint8(payKind),
-                    false,
-                    affiliateCode
-                )
-            );
-            if (!success) revert E();
-        }
-
-        if (ticketCost > 0 && ticketQuantity > 0) {
-            (bool success, ) = ContractAddresses.GAMEPIECES.call{value: ethForTickets}(
-                abi.encodeWithSignature(
-                    "purchase((uint256,uint8,uint8,bool,bytes32))",
-                    ticketQuantity,
-                    uint8(1),
-                    uint8(payKind),
-                    false,
-                    affiliateCode
-                )
-            );
-            if (!success) revert E();
-        }
-
-        if (lootBoxAmount > 0) {
-            uint48 day = _currentDayIndex();
-            uint48 index = lootboxRngIndex;
-            bool presale = lootboxPresaleActive;
-
-            uint256 packed = lootboxEth[index][buyer];
-            uint256 existingAmount = packed & ((1 << 232) - 1);
-            uint48 storedDay = lootboxDay[index][buyer];
-
-            if (existingAmount == 0) {
-                lootboxDay[index][buyer] = day;
-                lootboxIndexQueue[buyer].push(index);
-                emit LootBoxIdx(buyer, index, day);
-                if (presale) {
-                    lootboxPresale[index][buyer] = true;
-                }
-            } else {
-                if (storedDay != day) revert E();
-                if (lootboxPresale[index][buyer] != presale) revert E();
-            }
-
-            uint256 boostedAmount = _applyLootboxBoostOnPurchase(
-                buyer,
-                day,
-                lootBoxAmount
-            );
-            uint256 existingBase = lootboxEthBase[index][buyer];
-            if (existingAmount != 0 && existingBase == 0) {
-                existingBase = existingAmount;
-            }
-            lootboxEthBase[index][buyer] = existingBase + lootBoxAmount;
-
-            // Pack: [232 bits: amount] [24 bits: purchase level]
-            uint24 purchaseLevel = level;
-            uint256 newAmount = existingAmount + boostedAmount;
-            lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
-            lootboxEthTotal += lootBoxAmount;
-            _maybeRequestLootboxRng(lootBoxAmount);
-
-            uint256 futureBps = presale ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS : LOOTBOX_SPLIT_FUTURE_BPS;
-            uint256 nextBps = presale ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS : LOOTBOX_SPLIT_NEXT_BPS;
-            uint256 vaultBps = presale ? LOOTBOX_PRESALE_SPLIT_VAULT_BPS : 0;
-
-            uint256 futureShare = (lootBoxAmount * futureBps) / 10_000;
-            uint256 nextShare = (lootBoxAmount * nextBps) / 10_000;
-            uint256 vaultShare = (lootBoxAmount * vaultBps) / 10_000;
-            uint256 rewardShare;
-            unchecked {
-                rewardShare = lootBoxAmount - futureShare - nextShare - vaultShare;
-            }
-
-            if (futureShare != 0) {
-                futurePrizePool += futureShare;
-            }
-            if (nextShare != 0) {
-                nextPrizePool += nextShare;
-            }
-            if (vaultShare != 0) {
-                (bool ok, ) = payable(ContractAddresses.VAULT).call{value: vaultShare}("");
-                if (!ok) revert E();
-            }
-            if (rewardShare != 0) {
-                futurePrizePool += rewardShare;
-            }
-
-            if (affiliateCode != bytes32(0)) {
-                // Loot boxes are always paid with fresh ETH (msg.value), not claimable
-                uint24 affiliateLevel = currentLevel;
-                if (gameState == GAME_STATE_BURN) {
-                    unchecked {
-                        affiliateLevel = currentLevel + 1;
-                    }
-                }
-                uint256 lootboxRakeback = affiliate.payAffiliate(
-                    lootBoxAmount,
-                    affiliateCode,
-                    buyer,
-                    affiliateLevel,
-                    true // always fresh ETH for lootboxes
-                );
-                if (lootboxRakeback != 0) {
-                    coin.creditFlip(buyer, lootboxRakeback);
-                }
-            }
-
-            emit LootBoxBuy(buyer, day, lootBoxAmount, presale, futureShare, nextShare, vaultShare, rewardShare);
-
-            coin.notifyQuestLootBox(buyer, lootBoxAmount);
-            _awardEarlybirdDgnrs(buyer, lootBoxAmount);
-        }
-
-        uint256 finalClaimable = claimableWinnings[buyer];
-        uint256 totalClaimableUsed = initialClaimable > finalClaimable ? initialClaimable - finalClaimable : 0;
-        bool spentAllClaimable = (finalClaimable <= 1 && totalClaimableUsed > 0);
-
-        if (spentAllClaimable && totalClaimableUsed >= priceWei * 3) {
-            uint256 bonusAmount = (totalClaimableUsed * PRICE_COIN_UNIT * 10) / (priceWei * 100);
-            if (bonusAmount > 0) {
-                coin.creditFlip(buyer, bonusAmount);
-            }
+        bool decimatorAllowed = _isDecimatorWindow();
+        bool deityPassAvailable = deityPassOwners.length < DEITY_PASS_MAX_TOTAL;
+        for (uint8 i = 0; i < DEITY_DAILY_BOON_COUNT; ) {
+            slots[i] = _deityBoonForSlot(deity, day, i, decimatorAllowed, deityPassAvailable);
+            unchecked { ++i; }
         }
     }
 
-    /// @notice Purchase a low-EV loot box with BURNIE.
-    /// @dev Uses the current lootbox RNG index; rewards are tickets + small BURNIE only.
-    function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external {
-        if (buyer == address(0)) revert E();
-        _purchaseBurnieLootboxFor(buyer, burnieAmount);
+    /// @notice Issue a deity boon to a recipient
+    /// @dev Deity can issue up to 5 boons per day, one per recipient per day.
+    /// @param deity The deity pass holder issuing the boon
+    /// @param recipient The player receiving the boon
+    /// @param slot The slot index (0-2) to use
+    /// @custom:reverts E When deity or recipient is zero address
+    /// @custom:reverts E When deity tries to issue boon to themselves
+    /// @custom:reverts E When slot is >= 5
+    /// @custom:reverts E When deity has no purchased passes
+    /// @custom:reverts E When no RNG is available for the day
+    /// @custom:reverts E When recipient already received a boon today
+    /// @custom:reverts E When slot was already used today
+    function issueDeityBoon(address deity, address recipient, uint8 slot) external {
+        if (deity == address(0) || recipient == address(0)) revert E();
+        if (deity == recipient) revert E();
+        if (slot >= DEITY_DAILY_BOON_COUNT) revert E();
+        if (deityPassPurchasedCount[deity] == 0) revert E();
+
+        uint48 day = _simulatedDayIndex();
+        if (rngWordByDay[day] == 0 && rngWordCurrent == 0) revert E();
+        if (deityBoonDay[deity] != day) {
+            deityBoonDay[deity] = day;
+            deityBoonUsedMask[deity] = 0;
+        }
+        if (deityBoonRecipientDay[recipient] == day) revert E();
+
+        uint8 mask = deityBoonUsedMask[deity];
+        uint8 slotMask = uint8(1) << slot;
+        if ((mask & slotMask) != 0) revert E();
+        deityBoonUsedMask[deity] = mask | slotMask;
+        deityBoonRecipientDay[recipient] = day;
+
+        bool decimatorAllowed = _isDecimatorWindow();
+        bool deityPassAvailable = deityPassOwners.length < DEITY_PASS_MAX_TOTAL;
+        uint8 boonType = _deityBoonForSlot(deity, day, slot, decimatorAllowed, deityPassAvailable);
+        _applyBoon(recipient, boonType, day, uint48(block.timestamp), day, 0, true);
+
+        emit DeityBoonIssued(deity, recipient, day, slot, boonType);
     }
 
-    function _purchaseBurnieLootboxFor(address buyer, uint256 burnieAmount) private {
-        if (burnieAmount < BURNIE_LOOTBOX_MIN) revert E();
-        uint48 index = lootboxRngIndex;
-        if (index == 0) revert E();
+    // =========================================================================
+    // Internal Helper Functions
+    // =========================================================================
 
-        coin.burnCoin(buyer, burnieAmount);
-
-        uint256 existingAmount = lootboxBurnie[index][buyer];
-        uint256 newAmount = existingAmount + burnieAmount;
-        if (newAmount < existingAmount) revert E();
-        lootboxBurnie[index][buyer] = newAmount;
-
-        uint256 priceWei = price;
-        if (priceWei != 0) {
-            uint256 virtualEth = (burnieAmount * priceWei) / PRICE_COIN_UNIT;
-            if (virtualEth != 0) {
-                _maybeRequestLootboxRng(virtualEth);
-            }
-        }
-
-        emit BurnieLootBuy(buyer, index, burnieAmount);
-    }
-
-
-
-    function rollLootboxRng(address player) external {
-        if (player == address(0)) revert E();
-        uint48 index = lootboxRngIndex;
-        if (index == 0) revert E();
-        if (lootboxEth[index][player] == 0 && lootboxBurnie[index][player] == 0) revert E();
-        if (lootboxEth[index][player] != 0 && lootboxDay[index][player] == 0) revert E();
-        if (lootboxRngWordByIndex[index] != 0) revert E();
-
-        _requireLootboxRngLinkBalance();
-        uint256 burnieCost = _lootboxRngRollCost();
-        coin.burnCoin(player, burnieCost);
-        if (!_tryRequestLootboxRng(index)) revert E();
-
-        uint256 threshold = lootboxRngThreshold;
-        if (threshold == 0) {
-            threshold = 1 ether / ContractAddresses.COST_DIVISOR;
-        }
-        uint256 pending = lootboxRngPendingEth;
-        if (pending > threshold) {
-            lootboxRngPendingEth = pending - threshold;
+    /// @dev Roll a target level for lootbox resolution.
+    ///      95% chance: 0-5 levels above base. 5% chance: 5-50 levels above base.
+    /// @param baseLevel The base level to roll from
+    /// @param entropy Starting entropy value
+    /// @return targetLevel The rolled target level
+    /// @return nextEntropy Updated entropy for subsequent rolls
+    function _rollTargetLevel(
+        uint24 baseLevel,
+        uint256 entropy
+    ) private pure returns (uint24 targetLevel, uint256 nextEntropy) {
+        uint256 levelEntropy = EntropyLib.entropyStep(entropy);
+        uint256 rangeRoll = levelEntropy % 100;
+        if (rangeRoll < 5) {
+            // 5% chance: far future (5-50 levels ahead)
+            uint256 farEntropy = EntropyLib.entropyStep(levelEntropy);
+            uint256 levelOffset = (farEntropy % 46) + 5;
+            targetLevel = baseLevel + uint24(levelOffset);
+            nextEntropy = farEntropy;
         } else {
-            lootboxRngPendingEth = 0;
+            // 95% chance: near future (0-5 levels ahead)
+            uint256 levelOffset = levelEntropy % 6;
+            targetLevel = baseLevel + uint24(levelOffset);
+            nextEntropy = levelEntropy;
         }
-        lootboxRngIndex = index + 1;
-        emit LootboxRngRolled(player, index, burnieCost);
     }
 
-    function _maybeRequestLootboxRng(uint256 lootBoxAmount) private {
-        uint256 threshold = lootboxRngThreshold;
-        if (threshold == 0) {
-            threshold = 1 ether / ContractAddresses.COST_DIVISOR;
+    /// @dev Common lootbox resolution logic shared by ETH and BURNIE lootboxes.
+    ///      Handles whale pass jackpots, lazy pass awards, ticket/BURNIE rolls, and boons.
+    /// @param player Player receiving rewards
+    /// @param day Day index for events
+    /// @param amount ETH-equivalent amount for reward calculations
+    /// @param boonAmount Amount used for boon chance calculations
+    /// @param targetLevel Target level for future tickets
+    /// @param currentLevel Current game level
+    /// @param entropy Starting entropy value
+    /// @param presale Whether this is a presale lootbox (2x BURNIE multiplier)
+    /// @param allowWhalePass Whether to roll for whale pass jackpot
+    /// @param allowLazyPass Whether to roll for lazy pass award
+    /// @param emitLootboxEvent Whether to emit LootBoxOpened event
+    /// @param allowBoons Whether to roll for boons
+    /// @return futureTickets Number of tickets awarded for future level
+    /// @return burnieAmount Total BURNIE awarded
+    /// @return bonusBurnie Bonus BURNIE from presale multiplier
+    function _resolveLootboxCommon(
+        address player,
+        uint48 day,
+        uint256 amount,
+        uint256 boonAmount,
+        uint24 targetLevel,
+        uint24 currentLevel,
+        uint256 entropy,
+        bool presale,
+        bool allowWhalePass,
+        bool allowLazyPass,
+        bool emitLootboxEvent,
+        bool allowBoons
+    )
+        private
+        returns (
+            uint32 futureTickets,
+            uint256 burnieAmount,
+            uint256 bonusBurnie
+        )
+    {
+        // Unused for now; retained for future boon-chance tuning.
+        boonAmount;
+        if (targetLevel < currentLevel) {
+            targetLevel = currentLevel;
+        }
+        uint256 targetPrice = PriceLookupLib.priceForLevel(targetLevel);
+        if (targetPrice == 0) revert E();
+
+        uint256 boonBudget = (amount * LOOTBOX_BOON_BUDGET_BPS) / 10_000;
+        if (boonBudget > LOOTBOX_BOON_MAX_BUDGET) {
+            boonBudget = LOOTBOX_BOON_MAX_BUDGET;
+        }
+        if (boonBudget > amount) {
+            boonBudget = amount;
+        }
+        uint256 mainAmount = amount - boonBudget;
+        uint256 amountFirst = mainAmount;
+        uint256 amountSecond = 0;
+        if (mainAmount > LOOTBOX_SPLIT_THRESHOLD) {
+            amountFirst = mainAmount / 2;
+            amountSecond = mainAmount - amountFirst;
         }
 
-        uint256 pending = lootboxRngPendingEth + lootBoxAmount;
-        if (pending < threshold) {
-            lootboxRngPendingEth = pending;
+        uint256 burniePresale;
+        uint256 burnieNoMultiplier;
+
+        (
+            uint256 burnieOut,
+            uint32 ticketsOut,
+            uint256 nextEntropy,
+            bool applyPresaleMultiplier
+        ) = _resolveLootboxRoll(
+            player,
+            amountFirst,
+            amount,
+            targetLevel,
+            targetPrice,
+            currentLevel,
+            day,
+            entropy
+        );
+
+        if (burnieOut != 0) {
+            if (applyPresaleMultiplier) {
+                burniePresale += burnieOut;
+            } else {
+                burnieNoMultiplier += burnieOut;
+            }
+        }
+        if (ticketsOut != 0) {
+            uint256 totalTickets = uint256(futureTickets) + ticketsOut;
+            if (totalTickets > type(uint32).max) revert E();
+            futureTickets = uint32(totalTickets);
+        }
+        entropy = nextEntropy;
+
+        if (amountSecond != 0) {
+            (burnieOut, ticketsOut, nextEntropy, applyPresaleMultiplier) =
+                _resolveLootboxRoll(
+                    player,
+                    amountSecond,
+                    amount,
+                    targetLevel,
+                    targetPrice,
+                    currentLevel,
+                    day,
+                    entropy
+                );
+
+            if (burnieOut != 0) {
+                if (applyPresaleMultiplier) {
+                    burniePresale += burnieOut;
+                } else {
+                    burnieNoMultiplier += burnieOut;
+                }
+            }
+            if (ticketsOut != 0) {
+                uint256 totalTickets = uint256(futureTickets) + ticketsOut;
+                if (totalTickets > type(uint32).max) revert E();
+                futureTickets = uint32(totalTickets);
+            }
+            entropy = nextEntropy;
+        }
+
+        if (allowBoons) {
+            _rollLootboxBoons(
+                player,
+                day,
+                amount,
+                boonBudget,
+                entropy,
+                allowWhalePass,
+                allowLazyPass
+            );
+            // Nested delegatecall to BoonModule for activity boon consumption
+            (bool okAct, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+                abi.encodeWithSelector(IDegenerusGameBoonModule.consumeActivityBoon.selector, player)
+            );
+            if (!okAct) revert E();
+        }
+
+        if (futureTickets != 0) {
+            _queueTicketsScaled(player, targetLevel, futureTickets);
+        }
+
+        burnieAmount = burnieNoMultiplier + burniePresale;
+        bonusBurnie = 0;
+        if (presale && burniePresale != 0) {
+            bonusBurnie = (burniePresale * LOOTBOX_PRESALE_BURNIE_BONUS_BPS) / 10_000;
+            burnieAmount += bonusBurnie;
+        }
+
+        if (burnieAmount != 0) {
+            coin.creditFlip(player, burnieAmount);
+        }
+
+        if (emitLootboxEvent) {
+            emit LootBoxOpened(
+                player,
+                day,
+                amount,
+                targetLevel,
+                futureTickets,
+                burnieAmount,
+                bonusBurnie
+            );
+        }
+        return (futureTickets, burnieAmount, bonusBurnie);
+    }
+
+    /// @dev Roll for lootbox boons. Lootbox can award at most one boon.
+    ///      If a boon is already active, only refresh or upgrade that same category.
+    ///      Uses a single roll with granular ppm-based probability and deity-weighted pool.
+    /// @param player Player address
+    /// @param day Current day index
+    /// @param originalAmount Amount used for chance calculations
+    /// @param boonBudget Amount of lootbox value allocated to boon/pass draw
+    /// @param entropy Entropy for random rolls
+    /// @param allowWhalePass Whether whale pass boons are eligible
+    /// @param allowLazyPass Whether lazy pass boons are eligible
+    function _rollLootboxBoons(
+        address player,
+        uint48 day,
+        uint256 originalAmount,
+        uint256 boonBudget,
+        uint256 entropy,
+        bool allowWhalePass,
+        bool allowLazyPass
+    ) private {
+        if (player == address(0) || originalAmount == 0) return;
+
+        // Nested delegatecall to BoonModule for expired boon cleanup
+        (bool okClr, ) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector, player)
+        );
+        if (!okClr) revert E();
+        uint8 activeCategory = _activeBoonCategory(player);
+
+        uint48 nowTs = uint48(block.timestamp);
+        uint48 currentDay = _simulatedDayIndexAt(nowTs);
+        uint24 currentLevel = level + 1;
+
+        uint24 lazyPassLevel = currentLevel == 0 ? 1 : currentLevel + 1;
+        uint256 lazyPassValue = allowLazyPass ? _lazyPassPriceForLevel(lazyPassLevel) : 0;
+
+        bool decimatorAllowed = _isDecimatorWindow();
+        bool deityEligible =
+            (deityPassCount[player] == 0 && deityPassOwners.length < DEITY_PASS_MAX_TOTAL);
+        bool lazyPassEligible = allowLazyPass && lazyPassValue != 0;
+
+        (uint256 totalWeight, uint256 avgMaxValue) = _boonPoolStats(
+            decimatorAllowed,
+            deityEligible,
+            allowWhalePass,
+            lazyPassEligible,
+            lazyPassValue
+        );
+        if (totalWeight == 0 || avgMaxValue == 0) return;
+
+        uint256 expectedPerBoon = (avgMaxValue * LOOTBOX_BOON_UTILIZATION_BPS) / 10_000;
+        if (expectedPerBoon == 0) return;
+
+        if (boonBudget == 0) return;
+
+        uint256 totalChance = (boonBudget * BOON_PPM_SCALE) / expectedPerBoon;
+        if (totalChance > BOON_PPM_SCALE) totalChance = BOON_PPM_SCALE;
+        if (totalChance == 0) return;
+
+        uint256 roll = entropy % BOON_PPM_SCALE;
+        if (roll >= totalChance) return;
+
+        uint8 boonType = _boonFromRoll(
+            (roll * totalWeight) / totalChance,
+            decimatorAllowed,
+            deityEligible,
+            allowWhalePass,
+            lazyPassEligible
+        );
+
+        uint8 selectedCategory = _boonCategory(boonType);
+        if (activeCategory != BOON_CAT_NONE && activeCategory != selectedCategory) {
             return;
         }
 
-        uint48 index = lootboxRngIndex;
-        if (_tryRequestLootboxRng(index)) {
-            lootboxRngPendingEth = pending - threshold;
-            lootboxRngIndex = index + 1;
-        } else {
-            lootboxRngPendingEth = pending;
+        _applyBoon(player, boonType, day, nowTs, currentDay, originalAmount, false);
+    }
+
+    /// @dev Convert BURNIE amount to ETH value using current price.
+    function _burnieToEthValue(
+        uint256 burnieAmount,
+        uint256 priceWei
+    ) private pure returns (uint256 valueWei) {
+        if (burnieAmount == 0 || priceWei == 0) return 0;
+        valueWei = (burnieAmount * priceWei) / PRICE_COIN_UNIT;
+    }
+
+    /// @dev Activate a 100-level whale pass for a player.
+    ///      Applies the same mint/streak bonuses as a whale bundle purchase.
+    /// @return ticketStartLevel The first level tickets are queued for.
+    function _activateWhalePass(
+        address player
+    ) private returns (uint24 ticketStartLevel) {
+        uint24 passLevel = level + 1;
+
+        // Tickets always start at x1 (next 50-level boundary + 1)
+        ticketStartLevel = passLevel <= 4
+            ? 1
+            : uint24(((passLevel + 1) / 50) * 50 + 1);
+
+        _applyWhalePassStats(player, ticketStartLevel);
+
+        // Queue tickets: 40/lvl for bonus levels (passLevel to 10), 2/lvl for the rest
+        for (uint24 i = 0; i < 100; ) {
+            uint24 lvl = ticketStartLevel + i;
+            bool isBonus = (lvl >= passLevel && lvl <= WHALE_PASS_BONUS_END_LEVEL);
+            _queueTickets(
+                player,
+                lvl,
+                isBonus ? WHALE_PASS_BONUS_TICKETS_PER_LEVEL : WHALE_PASS_TICKETS_PER_LEVEL
+            );
+            unchecked { ++i; }
         }
     }
 
-    function _tryRequestLootboxRng(uint48 index) private returns (bool requested) {
-        if (index == 0) return false;
-        if (lootboxRngWordByIndex[index] != 0) return false;
-        if (
-            address(vrfCoordinator) == address(0) ||
-            vrfKeyHash == bytes32(0) ||
-            vrfSubscriptionId == 0
-        ) {
-            return false;
-        }
-
-        try
-            vrfCoordinator.requestRandomWords(
-                VRFRandomWordsRequest({
-                    keyHash: vrfKeyHash,
-                    subId: vrfSubscriptionId,
-                    requestConfirmations: LOOTBOX_VRF_REQUEST_CONFIRMATIONS,
-                    callbackGasLimit: LOOTBOX_VRF_CALLBACK_GAS_LIMIT,
-                    numWords: 1,
-                    extraArgs: hex""
-                })
-            )
-        returns (uint256 requestId) {
-            lootboxRngRequestIndexById[requestId] = index;
-            requested = true;
-        } catch {}
-    }
-
-    function _lootboxRngRollCost() private view returns (uint256 cost) {
+    /// @dev Calculate total weight and average max boon value (in ETH) for EV budgeting.
+    function _boonPoolStats(
+        bool decimatorAllowed,
+        bool deityEligible,
+        bool allowWhalePass,
+        bool allowLazyPass,
+        uint256 lazyPassValue
+    ) private view returns (uint256 totalWeight, uint256 avgMaxValue) {
+        uint256 weightedMax = 0;
         uint256 priceWei = price;
-        if (priceWei == 0) revert E();
-        uint256 ethEquivalent;
-        try admin._linkAmountToEth(LOOTBOX_RNG_LINK_COST) returns (uint256 ethAmount) {
-            ethEquivalent = ethAmount;
-        } catch {
-            revert LinkPriceUnavailable();
+
+        // Coinflip boons (max bonus on 100k BURNIE deposit)
+        uint256 coinflipMax5 = _burnieToEthValue(
+            (COINFLIP_BOON_MAX_DEPOSIT * LOOTBOX_BOON_BONUS_BPS) / 10_000,
+            priceWei
+        );
+        uint256 coinflipMax10 = _burnieToEthValue(
+            (COINFLIP_BOON_MAX_DEPOSIT * LOOTBOX_COINFLIP_10_BONUS_BPS) / 10_000,
+            priceWei
+        );
+        uint256 coinflipMax25 = _burnieToEthValue(
+            (COINFLIP_BOON_MAX_DEPOSIT * LOOTBOX_COINFLIP_25_BONUS_BPS) / 10_000,
+            priceWei
+        );
+
+        totalWeight += DEITY_BOON_WEIGHT_COINFLIP_5;
+        weightedMax += DEITY_BOON_WEIGHT_COINFLIP_5 * coinflipMax5;
+        totalWeight += DEITY_BOON_WEIGHT_COINFLIP_10;
+        weightedMax += DEITY_BOON_WEIGHT_COINFLIP_10 * coinflipMax10;
+        totalWeight += DEITY_BOON_WEIGHT_COINFLIP_25;
+        weightedMax += DEITY_BOON_WEIGHT_COINFLIP_25 * coinflipMax25;
+
+        // Lootbox boost boons (max 10 ETH)
+        uint256 boostCap = 10 ether;
+        uint256 lootboxMax5 = (boostCap * LOOTBOX_BOOST_5_BONUS_BPS) / 10_000;
+        uint256 lootboxMax15 = (boostCap * LOOTBOX_BOOST_15_BONUS_BPS) / 10_000;
+        uint256 lootboxMax25 = (boostCap * LOOTBOX_BOOST_25_BONUS_BPS) / 10_000;
+
+        totalWeight += DEITY_BOON_WEIGHT_LOOTBOX_5;
+        weightedMax += DEITY_BOON_WEIGHT_LOOTBOX_5 * lootboxMax5;
+        totalWeight += DEITY_BOON_WEIGHT_LOOTBOX_15;
+        weightedMax += DEITY_BOON_WEIGHT_LOOTBOX_15 * lootboxMax15;
+        totalWeight += DEITY_BOON_WEIGHT_LOOTBOX_25;
+        weightedMax += DEITY_BOON_WEIGHT_LOOTBOX_25 * lootboxMax25;
+
+        // Purchase boost boons (max 10 ETH)
+        uint256 purchaseMax5 = (boostCap * LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS) / 10_000;
+        uint256 purchaseMax15 = (boostCap * LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS) / 10_000;
+        uint256 purchaseMax25 = (boostCap * LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS) / 10_000;
+
+        totalWeight += DEITY_BOON_WEIGHT_PURCHASE_5;
+        weightedMax += DEITY_BOON_WEIGHT_PURCHASE_5 * purchaseMax5;
+        totalWeight += DEITY_BOON_WEIGHT_PURCHASE_15;
+        weightedMax += DEITY_BOON_WEIGHT_PURCHASE_15 * purchaseMax15;
+        totalWeight += DEITY_BOON_WEIGHT_PURCHASE_25;
+        weightedMax += DEITY_BOON_WEIGHT_PURCHASE_25 * purchaseMax25;
+
+        if (decimatorAllowed) {
+            uint256 decMax10 = _burnieToEthValue(
+                (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_10_BONUS_BPS) / 10_000,
+                priceWei
+            );
+            uint256 decMax25 = _burnieToEthValue(
+                (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_25_BONUS_BPS) / 10_000,
+                priceWei
+            );
+            uint256 decMax50 = _burnieToEthValue(
+                (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_50_BONUS_BPS) / 10_000,
+                priceWei
+            );
+            totalWeight += DEITY_BOON_WEIGHT_DECIMATOR_10;
+            weightedMax += DEITY_BOON_WEIGHT_DECIMATOR_10 * decMax10;
+            totalWeight += DEITY_BOON_WEIGHT_DECIMATOR_25;
+            weightedMax += DEITY_BOON_WEIGHT_DECIMATOR_25 * decMax25;
+            totalWeight += DEITY_BOON_WEIGHT_DECIMATOR_50;
+            weightedMax += DEITY_BOON_WEIGHT_DECIMATOR_50 * decMax50;
         }
-        if (ethEquivalent == 0) revert LinkPriceUnavailable();
-        cost = (ethEquivalent * PRICE_COIN_UNIT) / priceWei;
-        if (cost == 0) revert LinkPriceUnavailable();
-    }
 
-    function _requireLootboxRngLinkBalance() private view {
-        uint256 minBalance = lootboxRngMinLinkBalance;
-        if (minBalance == 0) return;
+        // Whale discount boons (10/25/50% off standard price)
+        uint256 whaleMax10 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS) / 10_000;
+        uint256 whaleMax25 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS) / 10_000;
+        uint256 whaleMax50 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS) / 10_000;
+        totalWeight += DEITY_BOON_WEIGHT_WHALE_10;
+        weightedMax += DEITY_BOON_WEIGHT_WHALE_10 * whaleMax10;
+        totalWeight += DEITY_BOON_WEIGHT_WHALE_25;
+        weightedMax += DEITY_BOON_WEIGHT_WHALE_25 * whaleMax25;
+        totalWeight += DEITY_BOON_WEIGHT_WHALE_50;
+        weightedMax += DEITY_BOON_WEIGHT_WHALE_50 * whaleMax50;
 
-        uint256 subId = vrfSubscriptionId;
-        address coordinator = address(vrfCoordinator);
-        if (subId == 0 || coordinator == address(0)) revert LinkBalanceUnavailable();
-
-        try
-            IVRFCoordinator(coordinator).getSubscription(subId)
-        returns (uint96 balance, uint96, uint64, address, address[] memory) {
-            if (uint256(balance) < minBalance) revert LinkBalanceTooLow();
-        } catch {
-            revert LinkBalanceUnavailable();
+        // Deity pass discount boons (if eligible)
+        if (deityEligible) {
+            uint256 k = deityPassOwners.length;
+            uint256 deityPrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
+            uint256 deityMax10 = (deityPrice * 1000) / 10_000;
+            uint256 deityMax25 = (deityPrice * 2500) / 10_000;
+            uint256 deityMax50 = (deityPrice * 5000) / 10_000;
+            totalWeight += DEITY_BOON_WEIGHT_DEITY_PASS_10;
+            weightedMax += DEITY_BOON_WEIGHT_DEITY_PASS_10 * deityMax10;
+            totalWeight += DEITY_BOON_WEIGHT_DEITY_PASS_25;
+            weightedMax += DEITY_BOON_WEIGHT_DEITY_PASS_25 * deityMax25;
+            totalWeight += DEITY_BOON_WEIGHT_DEITY_PASS_50;
+            weightedMax += DEITY_BOON_WEIGHT_DEITY_PASS_50 * deityMax50;
         }
+
+        // Activity boons (value assumed 0 for EV budgeting)
+        totalWeight += DEITY_BOON_WEIGHT_ACTIVITY_10;
+        totalWeight += DEITY_BOON_WEIGHT_ACTIVITY_25;
+        totalWeight += DEITY_BOON_WEIGHT_ACTIVITY_50;
+
+        // Pass awards (lootbox-only unless enabled)
+        if (allowWhalePass) {
+            totalWeight += DEITY_BOON_WEIGHT_WHALE_PASS;
+            weightedMax += DEITY_BOON_WEIGHT_WHALE_PASS * LOOTBOX_WHALE_PASS_PRICE;
+        }
+        if (allowLazyPass && lazyPassValue != 0) {
+            totalWeight += DEITY_BOON_WEIGHT_LAZY_PASS;
+            weightedMax += DEITY_BOON_WEIGHT_LAZY_PASS * lazyPassValue;
+        }
+
+        if (totalWeight == 0) return (0, 0);
+        avgMaxValue = weightedMax / totalWeight;
     }
 
-    /// @dev Check and clear expired boost, return whether still active
-    function _checkBoostExpired(bool hasBoost, uint48 timestamp) private view returns (bool) {
-        if (!hasBoost) return false;
-        return block.timestamp <= uint256(timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS;
+    /// @dev Convert a weighted roll into a lootbox boon type with eligibility filters.
+    function _boonFromRoll(
+        uint256 roll,
+        bool decimatorAllowed,
+        bool deityEligible,
+        bool allowWhalePass,
+        bool allowLazyPass
+    ) private pure returns (uint8 boonType) {
+        uint256 cursor = 0;
+        cursor += DEITY_BOON_WEIGHT_COINFLIP_5;
+        if (roll < cursor) return DEITY_BOON_COINFLIP_5;
+        cursor += DEITY_BOON_WEIGHT_COINFLIP_10;
+        if (roll < cursor) return DEITY_BOON_COINFLIP_10;
+        cursor += DEITY_BOON_WEIGHT_COINFLIP_25;
+        if (roll < cursor) return DEITY_BOON_COINFLIP_25;
+        cursor += DEITY_BOON_WEIGHT_LOOTBOX_5;
+        if (roll < cursor) return DEITY_BOON_LOOTBOX_5;
+        cursor += DEITY_BOON_WEIGHT_LOOTBOX_15;
+        if (roll < cursor) return DEITY_BOON_LOOTBOX_15;
+        cursor += DEITY_BOON_WEIGHT_LOOTBOX_25;
+        if (roll < cursor) return DEITY_BOON_LOOTBOX_25;
+        cursor += DEITY_BOON_WEIGHT_PURCHASE_5;
+        if (roll < cursor) return DEITY_BOON_PURCHASE_5;
+        cursor += DEITY_BOON_WEIGHT_PURCHASE_15;
+        if (roll < cursor) return DEITY_BOON_PURCHASE_15;
+        cursor += DEITY_BOON_WEIGHT_PURCHASE_25;
+        if (roll < cursor) return DEITY_BOON_PURCHASE_25;
+        if (decimatorAllowed) {
+            cursor += DEITY_BOON_WEIGHT_DECIMATOR_10;
+            if (roll < cursor) return DEITY_BOON_DECIMATOR_10;
+            cursor += DEITY_BOON_WEIGHT_DECIMATOR_25;
+            if (roll < cursor) return DEITY_BOON_DECIMATOR_25;
+            cursor += DEITY_BOON_WEIGHT_DECIMATOR_50;
+            if (roll < cursor) return DEITY_BOON_DECIMATOR_50;
+        }
+        cursor += DEITY_BOON_WEIGHT_WHALE_10;
+        if (roll < cursor) return DEITY_BOON_WHALE_10;
+        cursor += DEITY_BOON_WEIGHT_WHALE_25;
+        if (roll < cursor) return DEITY_BOON_WHALE_25;
+        cursor += DEITY_BOON_WEIGHT_WHALE_50;
+        if (roll < cursor) return DEITY_BOON_WHALE_50;
+        if (deityEligible) {
+            cursor += DEITY_BOON_WEIGHT_DEITY_PASS_10;
+            if (roll < cursor) return DEITY_BOON_DEITY_PASS_10;
+            cursor += DEITY_BOON_WEIGHT_DEITY_PASS_25;
+            if (roll < cursor) return DEITY_BOON_DEITY_PASS_25;
+            cursor += DEITY_BOON_WEIGHT_DEITY_PASS_50;
+            if (roll < cursor) return DEITY_BOON_DEITY_PASS_50;
+        }
+        cursor += DEITY_BOON_WEIGHT_ACTIVITY_10;
+        if (roll < cursor) return DEITY_BOON_ACTIVITY_10;
+        cursor += DEITY_BOON_WEIGHT_ACTIVITY_25;
+        if (roll < cursor) return DEITY_BOON_ACTIVITY_25;
+        cursor += DEITY_BOON_WEIGHT_ACTIVITY_50;
+        if (roll < cursor) return DEITY_BOON_ACTIVITY_50;
+        if (allowWhalePass) {
+            cursor += DEITY_BOON_WEIGHT_WHALE_PASS;
+            if (roll < cursor) return DEITY_BOON_WHALE_PASS;
+        }
+        if (allowLazyPass) {
+            cursor += DEITY_BOON_WEIGHT_LAZY_PASS;
+            if (roll < cursor) return DEITY_BOON_LAZY_PASS;
+        }
+        return DEITY_BOON_ACTIVITY_50;
     }
 
-    /// @dev Calculate boost amount given base amount and bonus bps
-    function _calculateBoost(uint256 amount, uint16 bonusBps) private pure returns (uint256) {
-        uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
-        return (cappedAmount * bonusBps) / 10_000;
+    /// @dev Determine which boon category is currently active for the player.
+    function _activeBoonCategory(address player) private view returns (uint8 category) {
+        if (coinflipBoonBps[player] != 0) return BOON_CAT_COINFLIP;
+        if (
+            lootboxBoon25Active[player] ||
+            lootboxBoon15Active[player] ||
+            lootboxBoon5Active[player]
+        ) return BOON_CAT_LOOTBOX;
+        if (purchaseBoostBps[player] != 0) return BOON_CAT_PURCHASE;
+        if (decimatorBoostBps[player] != 0) return BOON_CAT_DECIMATOR;
+        if (whaleBoonDay[player] != 0) return BOON_CAT_WHALE;
+        if (lazyPassBoonDay[player] != 0 || lazyPassBoonDiscountBps[player] != 0) {
+            return BOON_CAT_LAZY;
+        }
+        if (activityBoonPending[player] != 0) return BOON_CAT_ACTIVITY;
+        if (deityPassBoonTier[player] != 0) return BOON_CAT_DEITY_PASS;
+        return BOON_CAT_NONE;
     }
 
-    function _applyLootboxBoostOnPurchase(
+    /// @dev Map a boon type to its category.
+    function _boonCategory(uint8 boonType) private pure returns (uint8 category) {
+        if (boonType <= DEITY_BOON_COINFLIP_25) return BOON_CAT_COINFLIP;
+        if (boonType == DEITY_BOON_LOOTBOX_5 || boonType == DEITY_BOON_LOOTBOX_15 || boonType == DEITY_BOON_LOOTBOX_25) {
+            return BOON_CAT_LOOTBOX;
+        }
+        if (boonType == DEITY_BOON_PURCHASE_5 || boonType == DEITY_BOON_PURCHASE_15 || boonType == DEITY_BOON_PURCHASE_25) {
+            return BOON_CAT_PURCHASE;
+        }
+        if (boonType == DEITY_BOON_DECIMATOR_10 || boonType == DEITY_BOON_DECIMATOR_25 || boonType == DEITY_BOON_DECIMATOR_50) {
+            return BOON_CAT_DECIMATOR;
+        }
+        if (boonType == DEITY_BOON_WHALE_10 || boonType == DEITY_BOON_WHALE_25 || boonType == DEITY_BOON_WHALE_50) {
+            return BOON_CAT_WHALE;
+        }
+        if (boonType == DEITY_BOON_ACTIVITY_10 || boonType == DEITY_BOON_ACTIVITY_25 || boonType == DEITY_BOON_ACTIVITY_50) {
+            return BOON_CAT_ACTIVITY;
+        }
+        if (boonType == DEITY_BOON_WHALE_PASS) {
+            return BOON_CAT_WHALE_PASS;
+        }
+        if (boonType == DEITY_BOON_LAZY_PASS) {
+            return BOON_CAT_LAZY_PASS;
+        }
+        return BOON_CAT_DEITY_PASS;
+    }
+
+    /// @dev Apply a boon to a player. Handles both lootbox-sourced and deity-sourced boons.
+    ///      Lootbox boons: upgrade semantics (only if higher), emit events, deity day = 0.
+    ///      Deity boons: overwrite, no events, deity day = day.
+    function _applyBoon(
         address player,
+        uint8 boonType,
         uint48 day,
-        uint256 amount
-    ) private returns (uint256 boostedAmount) {
-        boostedAmount = amount;
-        uint16 consumedBoostBps = 0;
-
-        // Check 15% boost first (rarer, better boost)
-        bool has15 = _checkBoostExpired(lootboxBoon15Active[player], lootboxBoon15Timestamp[player]);
-        if (!has15 && lootboxBoon15Active[player]) {
-            lootboxBoon15Active[player] = false;
+        uint48 nowTs,
+        uint48 currentDay,
+        uint256 originalAmount,
+        bool isDeity
+    ) private {
+        // Coinflip boons (types 1-3)
+        if (boonType <= DEITY_BOON_COINFLIP_25) {
+            uint16 bps = boonType == DEITY_BOON_COINFLIP_25
+                ? LOOTBOX_COINFLIP_25_BONUS_BPS
+                : (boonType == DEITY_BOON_COINFLIP_10 ? LOOTBOX_COINFLIP_10_BONUS_BPS : LOOTBOX_BOON_BONUS_BPS);
+            if (isDeity || bps > coinflipBoonBps[player]) {
+                coinflipBoonBps[player] = bps;
+            }
+            coinflipBoonTimestamp[player] = nowTs;
+            deityCoinflipBoonDay[player] = isDeity ? day : uint48(0);
+            if (!isDeity) emit LootBoxReward(player, day, 2, originalAmount, LOOTBOX_BOON_MAX_BONUS);
+            return;
         }
-        if (has15) {
-            boostedAmount += _calculateBoost(amount, LOOTBOX_BOOST_15_BONUS_BPS);
-            consumedBoostBps = LOOTBOX_BOOST_15_BONUS_BPS;
-            lootboxBoon15Active[player] = false;
+
+        // Lootbox boost boons (types 5, 6, 22)
+        if (boonType == DEITY_BOON_LOOTBOX_5 || boonType == DEITY_BOON_LOOTBOX_15 || boonType == DEITY_BOON_LOOTBOX_25) {
+            if (isDeity) {
+                if (boonType == DEITY_BOON_LOOTBOX_25) {
+                    lootboxBoon25Active[player] = true;
+                    lootboxBoon25Timestamp[player] = nowTs;
+                    deityLootboxBoon25Day[player] = day;
+                } else if (boonType == DEITY_BOON_LOOTBOX_15) {
+                    lootboxBoon15Active[player] = true;
+                    lootboxBoon15Timestamp[player] = nowTs;
+                    deityLootboxBoon15Day[player] = day;
+                } else {
+                    lootboxBoon5Active[player] = true;
+                    lootboxBoon5Timestamp[player] = nowTs;
+                    deityLootboxBoon5Day[player] = day;
+                }
+            } else {
+                uint16 selectedBps = boonType == DEITY_BOON_LOOTBOX_25
+                    ? LOOTBOX_BOOST_25_BONUS_BPS
+                    : (boonType == DEITY_BOON_LOOTBOX_15 ? LOOTBOX_BOOST_15_BONUS_BPS : LOOTBOX_BOOST_5_BONUS_BPS);
+                uint16 currentBps = lootboxBoon25Active[player]
+                    ? LOOTBOX_BOOST_25_BONUS_BPS
+                    : (lootboxBoon15Active[player]
+                        ? LOOTBOX_BOOST_15_BONUS_BPS
+                        : (lootboxBoon5Active[player] ? LOOTBOX_BOOST_5_BONUS_BPS : 0));
+                uint16 activeBps = selectedBps > currentBps ? selectedBps : currentBps;
+                lootboxBoon25Active[player] = activeBps == LOOTBOX_BOOST_25_BONUS_BPS;
+                lootboxBoon15Active[player] = activeBps == LOOTBOX_BOOST_15_BONUS_BPS;
+                lootboxBoon5Active[player] = activeBps == LOOTBOX_BOOST_5_BONUS_BPS;
+                if (lootboxBoon25Active[player]) {
+                    lootboxBoon25Timestamp[player] = nowTs;
+                    deityLootboxBoon25Day[player] = 0;
+                } else if (lootboxBoon15Active[player]) {
+                    lootboxBoon15Timestamp[player] = nowTs;
+                    deityLootboxBoon15Day[player] = 0;
+                } else if (lootboxBoon5Active[player]) {
+                    lootboxBoon5Timestamp[player] = nowTs;
+                    deityLootboxBoon5Day[player] = 0;
+                }
+                uint8 rewardType = activeBps == LOOTBOX_BOOST_25_BONUS_BPS
+                    ? 6 : (activeBps == LOOTBOX_BOOST_15_BONUS_BPS ? 5 : 4);
+                emit LootBoxReward(player, day, rewardType, originalAmount, activeBps);
+            }
+            return;
+        }
+
+        // Purchase boost boons (types 7, 8, 9)
+        if (boonType == DEITY_BOON_PURCHASE_5 || boonType == DEITY_BOON_PURCHASE_15 || boonType == DEITY_BOON_PURCHASE_25) {
+            uint16 bps = boonType == DEITY_BOON_PURCHASE_25
+                ? LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
+                : (boonType == DEITY_BOON_PURCHASE_15 ? LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS : LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS);
+            if (isDeity || bps > purchaseBoostBps[player]) {
+                purchaseBoostBps[player] = bps;
+            }
+            purchaseBoostTimestamp[player] = nowTs;
+            deityPurchaseBoostDay[player] = isDeity ? day : uint48(0);
+            if (!isDeity) {
+                uint8 rewardType = bps == LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
+                    ? 6 : (bps == LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS ? 5 : 4);
+                emit LootBoxReward(player, day, rewardType, originalAmount, bps);
+            }
+            return;
+        }
+
+        // Decimator boost boons (types 13, 14, 15)
+        if (boonType == DEITY_BOON_DECIMATOR_10 || boonType == DEITY_BOON_DECIMATOR_25 || boonType == DEITY_BOON_DECIMATOR_50) {
+            uint16 bps = boonType == DEITY_BOON_DECIMATOR_50
+                ? LOOTBOX_DECIMATOR_50_BONUS_BPS
+                : (boonType == DEITY_BOON_DECIMATOR_25 ? LOOTBOX_DECIMATOR_25_BONUS_BPS : LOOTBOX_DECIMATOR_10_BONUS_BPS);
+            if (isDeity || bps > decimatorBoostBps[player]) {
+                decimatorBoostBps[player] = bps;
+            }
+            deityDecimatorBoostDay[player] = isDeity ? day : uint48(0);
+            if (!isDeity) emit LootBoxReward(player, day, 8, originalAmount, bps);
+            return;
+        }
+
+        // Whale discount boons (types 16, 23, 24)
+        if (boonType == DEITY_BOON_WHALE_10 || boonType == DEITY_BOON_WHALE_25 || boonType == DEITY_BOON_WHALE_50) {
+            uint16 bps = boonType == DEITY_BOON_WHALE_50
+                ? LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS
+                : (boonType == DEITY_BOON_WHALE_25 ? LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS : LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS);
+            if (isDeity || bps > whaleBoonDiscountBps[player]) {
+                whaleBoonDiscountBps[player] = bps;
+            }
+            whaleBoonDay[player] = isDeity ? day : currentDay;
+            deityWhaleBoonDay[player] = isDeity ? day : uint48(0);
+            if (!isDeity) emit LootBoxReward(player, day, 9, originalAmount, bps);
+            return;
+        }
+
+        // Activity boons (types 17, 18, 19)
+        if (boonType == DEITY_BOON_ACTIVITY_10 || boonType == DEITY_BOON_ACTIVITY_25 || boonType == DEITY_BOON_ACTIVITY_50) {
+            uint24 amt = boonType == DEITY_BOON_ACTIVITY_50
+                ? LOOTBOX_ACTIVITY_BOON_50_BONUS
+                : (boonType == DEITY_BOON_ACTIVITY_25 ? LOOTBOX_ACTIVITY_BOON_25_BONUS : LOOTBOX_ACTIVITY_BOON_10_BONUS);
+            if (isDeity || amt > activityBoonPending[player]) {
+                activityBoonPending[player] = amt;
+            }
+            activityBoonTimestamp[player] = nowTs;
+            deityActivityBoonDay[player] = isDeity ? day : uint48(0);
+            if (!isDeity) emit LootBoxReward(player, day, 10, originalAmount, amt);
+            return;
+        }
+
+        // Deity pass discount boons (types 25, 26, 27)
+        if (boonType == DEITY_BOON_DEITY_PASS_10 || boonType == DEITY_BOON_DEITY_PASS_25 || boonType == DEITY_BOON_DEITY_PASS_50) {
+            uint8 tier = boonType == DEITY_BOON_DEITY_PASS_50
+                ? DEITY_PASS_BOON_TIER_50
+                : (boonType == DEITY_BOON_DEITY_PASS_25 ? DEITY_PASS_BOON_TIER_25 : DEITY_PASS_BOON_TIER_10);
+            if (isDeity || tier > deityPassBoonTier[player]) {
+                deityPassBoonTier[player] = tier;
+            }
+            deityPassBoonTimestamp[player] = nowTs;
+            deityDeityPassBoonDay[player] = isDeity ? day : uint48(0);
+            if (!isDeity) {
+                uint16 bps = tier == DEITY_PASS_BOON_TIER_50 ? 5000 : (tier == DEITY_PASS_BOON_TIER_25 ? 2500 : 1000);
+                emit LootBoxReward(player, day, 10, originalAmount, bps);
+            }
+            return;
+        }
+
+        // Whale pass (type 28)
+        if (boonType == DEITY_BOON_WHALE_PASS) {
+            uint24 startLevel = _activateWhalePass(player);
+            if (!isDeity) {
+                emit LootBoxWhalePassJackpot(player, day, originalAmount, startLevel, WHALE_PASS_TICKETS_PER_LEVEL, 0, 0);
+            }
+            return;
+        }
+
+        // Lazy pass (type 29)
+        if (boonType == DEITY_BOON_LAZY_PASS) {
+            uint24 passLevel = level + 1;
+            passLevel = passLevel + 1;
+            _activate10LevelPass(player, passLevel, 4);
+            if (!isDeity) {
+                emit LootBoxLazyPassAwarded(player, day, originalAmount, passLevel, true);
+            }
+        }
+    }
+
+    /// @dev Resolve a single lootbox roll to determine reward type.
+    ///      55% tickets, 10% DGNRS, 10% WWXRP, 25% BURNIE.
+    /// @param player Player receiving the reward
+    /// @param amount Amount for this roll (may be half of total for split lootboxes)
+    /// @param lootboxAmount Total lootbox amount (for events)
+    /// @param targetLevel Target level for tickets
+    /// @param targetPrice Price at target level
+    /// @param currentLevel Current game level
+    /// @param day Current day index
+    /// @param entropy Starting entropy
+    /// @return burnieOut BURNIE tokens to award
+    /// @return ticketsOut Tickets to queue for future level
+    /// @return nextEntropy Updated entropy
+    /// @return applyPresaleMultiplier Whether BURNIE should get presale multiplier
+    function _resolveLootboxRoll(
+        address player,
+        uint256 amount,
+        uint256 lootboxAmount,
+        uint24 targetLevel,
+        uint256 targetPrice,
+        uint24 currentLevel,
+        uint48 day,
+        uint256 entropy
+    )
+        private
+        returns (
+            uint256 burnieOut,
+            uint32 ticketsOut,
+            uint256 nextEntropy,
+            bool applyPresaleMultiplier
+        )
+    {
+        nextEntropy = EntropyLib.entropyStep(entropy);
+        if (amount == 0) return (0, 0, nextEntropy, false);
+
+        uint256 roll = nextEntropy % 20;
+        if (roll < 11) {
+            // 55% chance: tickets (returned as scaled × TICKET_SCALE)
+            uint256 ticketBudget = (amount * LOOTBOX_TICKET_ROLL_BPS) / 10_000;
+            (uint32 ticketsScaled, uint256 entropyAfter) =
+                _lootboxTicketCount(ticketBudget, targetPrice, nextEntropy);
+            nextEntropy = entropyAfter;
+            if (ticketsScaled != 0) {
+                if (targetLevel < currentLevel) {
+                    // Convert to BURNIE if target level already passed
+                    burnieOut = (uint256(ticketsScaled) * PRICE_COIN_UNIT) / TICKET_SCALE;
+                } else {
+                    ticketsOut = ticketsScaled;
+                }
+            }
+            applyPresaleMultiplier = false;
+        } else if (roll < 13) {
+            // 10% chance: DGNRS tokens
+            nextEntropy = EntropyLib.entropyStep(nextEntropy);
+            uint256 dgnrsAmount = _lootboxDgnrsReward(amount, nextEntropy);
+            if (dgnrsAmount != 0) {
+                _creditDgnrsReward(player, dgnrsAmount);
+                emit LootBoxDgnrsReward(
+                    player,
+                    day,
+                    lootboxAmount,
+                    dgnrsAmount
+                );
+            }
+            applyPresaleMultiplier = false;
+        } else if (roll < 15) {
+            // 10% chance: WWXRP tokens
+            nextEntropy = EntropyLib.entropyStep(nextEntropy);
+            uint256 wwxrpAmount = LOOTBOX_WWXRP_PRIZE;
+            if (wwxrpAmount != 0) {
+                wwxrp.mintPrize(player, wwxrpAmount);
+                emit LootBoxWwxrpReward(
+                    player,
+                    day,
+                    lootboxAmount,
+                    wwxrpAmount
+                );
+            }
+            applyPresaleMultiplier = false;
         } else {
-            // Check 5% boost if no 15% boost
-            bool has5 = _checkBoostExpired(lootboxBoon5Active[player], lootboxBoon5Timestamp[player]);
-            if (!has5 && lootboxBoon5Active[player]) {
-                lootboxBoon5Active[player] = false;
+            // 25% chance: large BURNIE reward with variance
+            nextEntropy = EntropyLib.entropyStep(nextEntropy);
+            uint256 varianceRoll = nextEntropy % 20;
+            uint256 largeBurnieBps;
+            if (varianceRoll < 16) {
+                // Low path (80%): rolls 0-15, 58%-130% of value
+                largeBurnieBps = LOOTBOX_LARGE_BURNIE_LOW_BASE_BPS +
+                    varianceRoll * LOOTBOX_LARGE_BURNIE_LOW_STEP_BPS;
+            } else {
+                // High path (20%): rolls 16-19, 307%-590% of value
+                largeBurnieBps = LOOTBOX_LARGE_BURNIE_HIGH_BASE_BPS +
+                    (varianceRoll - 16) * LOOTBOX_LARGE_BURNIE_HIGH_STEP_BPS;
             }
-            if (has5) {
-                boostedAmount += _calculateBoost(amount, LOOTBOX_BOOST_5_BONUS_BPS);
-                consumedBoostBps = LOOTBOX_BOOST_5_BONUS_BPS;
-                lootboxBoon5Active[player] = false;
+
+            uint256 burnieBudget = (amount * largeBurnieBps) / 10_000;
+            burnieOut = (burnieBudget * PRICE_COIN_UNIT) / targetPrice;
+            applyPresaleMultiplier = true;
+        }
+    }
+
+    /// @dev Calculate scaled ticket count from budget with variance tiers.
+    ///      Returns count × TICKET_SCALE (100) for fractional ticket support.
+    ///      1% get 4.6x, 4% get 2.3x, 20% get 1.1x, 45% get 0.651x, 30% get 0.45x.
+    /// @param budgetWei ETH budget for tickets
+    /// @param priceWei Price per ticket at target level
+    /// @param entropy Starting entropy
+    /// @return countScaled Number of tickets × TICKET_SCALE
+    /// @return nextEntropy Updated entropy
+    function _lootboxTicketCount(
+        uint256 budgetWei,
+        uint256 priceWei,
+        uint256 entropy
+    ) private pure returns (uint32 countScaled, uint256 nextEntropy) {
+        if (budgetWei == 0 || priceWei == 0) {
+            return (0, entropy);
+        }
+
+        nextEntropy = EntropyLib.entropyStep(entropy);
+        uint256 varianceRoll = nextEntropy % 10_000;
+        uint256 ticketBps;
+
+        if (varianceRoll < LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS) {
+            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER1_BPS;
+        } else if (
+            varianceRoll <
+            LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS +
+                LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS
+        ) {
+            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER2_BPS;
+        } else if (
+            varianceRoll <
+            LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS +
+                LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS +
+                LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS
+        ) {
+            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER3_BPS;
+        } else if (
+            varianceRoll <
+            LOOTBOX_TICKET_VARIANCE_TIER1_CHANCE_BPS +
+                LOOTBOX_TICKET_VARIANCE_TIER2_CHANCE_BPS +
+                LOOTBOX_TICKET_VARIANCE_TIER3_CHANCE_BPS +
+                LOOTBOX_TICKET_VARIANCE_TIER4_CHANCE_BPS
+        ) {
+            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER4_BPS;
+        } else {
+            ticketBps = LOOTBOX_TICKET_VARIANCE_TIER5_BPS;
+        }
+
+        uint256 adjustedBudget = (budgetWei * ticketBps) / 10_000;
+        uint256 base = (adjustedBudget * TICKET_SCALE) / priceWei;
+        if (base > type(uint32).max) revert E();
+        countScaled = uint32(base);
+    }
+
+    /// @dev Calculate DGNRS reward amount from lootbox pool.
+    ///      79.5% small tier, 15% medium, 5% large, 0.5% mega.
+    ///      Falls back to BURNIE-equivalent if pool is empty.
+    /// @param amount ETH amount for calculation
+    /// @param entropy Entropy for tier selection
+    /// @return dgnrsAmount DGNRS tokens to award
+    function _lootboxDgnrsReward(
+        uint256 amount,
+        uint256 entropy
+    ) private view returns (uint256 dgnrsAmount) {
+        uint256 tierRoll = entropy % 1000;
+        uint256 ppm;
+        if (tierRoll < 795) {
+            ppm = LOOTBOX_DGNRS_POOL_SMALL_PPM;
+        } else if (tierRoll < 945) {
+            ppm = LOOTBOX_DGNRS_POOL_MEDIUM_PPM;
+        } else if (tierRoll < 995) {
+            ppm = LOOTBOX_DGNRS_POOL_LARGE_PPM;
+        } else {
+            ppm = LOOTBOX_DGNRS_POOL_MEGA_PPM;
+        }
+
+        uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Lootbox);
+        uint256 unit = 1 ether;
+
+        if (poolBalance != 0 && ppm != 0 && unit != 0) {
+            dgnrsAmount = (poolBalance * ppm * amount) /
+                (1_000_000 * unit);
+            if (dgnrsAmount > poolBalance) {
+                dgnrsAmount = poolBalance;
             }
         }
 
-        if (consumedBoostBps != 0) {
-            emit BoostUsed(player, day, amount, boostedAmount, consumedBoostBps);
+        if (dgnrsAmount == 0 && unit != 0) {
+            // Fallback: convert to BURNIE-equivalent
+            dgnrsAmount = (amount * PRICE_COIN_UNIT) / unit;
         }
     }
 
-
-
-
-
-
-
-    function _currentDayIndex() private view returns (uint48) {
-        uint48 currentDayBoundary = uint48((block.timestamp - JACKPOT_RESET_TIME) / 1 days);
-        return currentDayBoundary - ContractAddresses.DEPLOY_DAY_BOUNDARY + 1;
-    }
-
-
-
-
-
-
-
-
-
-
-
-    function _entropyStep(uint256 state) private pure returns (uint256) {
-        unchecked {
-            state ^= state << 7;
-            state ^= state >> 9;
-            state ^= state << 8;
+    /// @dev Credit DGNRS reward to player from pool, minting remainder if pool is insufficient.
+    /// @param player Player to credit
+    /// @param amount DGNRS amount to credit
+    function _creditDgnrsReward(address player, uint256 amount) private {
+        if (amount == 0) return;
+        uint256 transferred = dgnrs.transferFromPool(
+            IDegenerusStonk.Pool.Lootbox,
+            player,
+            amount
+        );
+        if (transferred < amount) {
+            dgnrs.mintForGame(player, amount - transferred);
         }
-        return state;
     }
 
-
-    // -------------------------------------------------------------------------
-    // Internal Helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * @notice Get current day index for mint tracking.
-     * @dev Returns day index relative to deploy time (day 1 = deploy day).
-     *      Days reset at JACKPOT_RESET_TIME (22:57 UTC), not midnight.
-     * @return Day index (1-indexed from deploy day).
-     */
-    function _currentMintDay() private view returns (uint32) {
-        uint48 day = dailyIdx;
-        if (day == 0) {
-            // Calculate from timestamp if not yet set
-            uint48 currentDayBoundary = uint48((block.timestamp - JACKPOT_RESET_TIME) / 1 days);
-            day = currentDayBoundary - ContractAddresses.DEPLOY_DAY_BOUNDARY + 1;
+    /// @dev Get the value for a lazy pass at a specific level.
+    ///      Value equals the sum of per-level ticket prices across 10 levels.
+    /// @param passLevel The lazy pass start level
+    /// @return The value in ETH (scaled by cost divisor), or 0 if invalid level
+    function _lazyPassPriceForLevel(
+        uint24 passLevel
+    ) private pure returns (uint256) {
+        if (passLevel == 0) return 0;
+        uint256 total = 0;
+        for (uint24 i = 0; i < 10; ) {
+            total += PriceLookupLib.priceForLevel(passLevel + i);
+            unchecked {
+                ++i;
+            }
         }
-        return uint32(day);
+        return total;
     }
 
-    /**
-     * @notice Update day field in packed data (only if changed).
-     * @param data Current packed data.
-     * @param day New day value.
-     * @param dayShift Bit position of day field.
-     * @param dayMask Mask for day field.
-     * @return Updated packed data.
-     */
-    function _setMintDay(uint256 data, uint32 day, uint256 dayShift, uint256 dayMask) private pure returns (uint256) {
-        uint32 prevDay = uint32((data >> dayShift) & dayMask);
-        if (prevDay == day) {
-            return data; // No change needed
+    /// @dev Check if decimator window is currently open.
+    /// @return True if decimator boons can be awarded/used
+    function _isDecimatorWindow() private view returns (bool) {
+        return decWindowOpen;
+    }
+
+    /// @dev Get the daily RNG seed for deity boon generation.
+    ///      Falls back to current RNG word or deterministic hash if unavailable.
+    /// @param day The day index
+    /// @return seed The RNG seed for this day
+    function _deityDailySeed(uint48 day) private view returns (uint256 seed) {
+        uint256 rngWord = rngWordByDay[day];
+        if (rngWord == 0) {
+            rngWord = rngWordCurrent;
         }
-        uint256 clearedDay = data & ~(dayMask << dayShift);
-        return clearedDay | (uint256(day) << dayShift);
+        if (rngWord == 0) {
+            rngWord = uint256(keccak256(abi.encodePacked(day, address(this))));
+        }
+        return rngWord;
     }
 
-    /**
-     * @notice Set a field in packed data.
-     * @param data Current packed data.
-     * @param shift Bit position of field.
-     * @param mask Mask for field width.
-     * @param value New value for field.
-     * @return Updated packed data.
-     */
-    function _setPacked(uint256 data, uint256 shift, uint256 mask, uint256 value) private pure returns (uint256) {
-        return (data & ~(mask << shift)) | ((value & mask) << shift);
+    /// @dev Deterministically generate a boon type for a deity's slot on a given day.
+    /// @param deity The deity address
+    /// @param day The day index
+    /// @param slot The slot index (0-2)
+    /// @param decimatorAllowed Whether decimator boons can be generated
+    /// @param deityPassAvailable Whether deity passes are still available for purchase
+    /// @return boonType The boon type (1-29)
+    function _deityBoonForSlot(
+        address deity,
+        uint48 day,
+        uint8 slot,
+        bool decimatorAllowed,
+        bool deityPassAvailable
+    ) private view returns (uint8 boonType) {
+        uint256 seed = uint256(keccak256(abi.encode(_deityDailySeed(day), deity, day, slot)));
+        uint256 total = decimatorAllowed
+            ? DEITY_BOON_WEIGHT_TOTAL
+            : DEITY_BOON_WEIGHT_TOTAL_NO_DECIMATOR;
+        if (!deityPassAvailable) total -= DEITY_BOON_WEIGHT_DEITY_PASS_ALL;
+        uint256 roll = seed % total;
+        return _boonFromRoll(roll, decimatorAllowed, deityPassAvailable, true, true);
     }
+
 }

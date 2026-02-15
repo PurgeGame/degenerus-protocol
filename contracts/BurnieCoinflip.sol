@@ -4,11 +4,11 @@ pragma solidity ^0.8.26;
 /**
  * @title BurnieCoinflip
  * @author Burnie Degenerus
- * @notice Standalone coinflip wagering system for BurnieCoin
+ * @notice Standalone daily coinflip wagering system for BurnieCoin
  *
  * @dev ARCHITECTURE:
  *      - Extracted from BurnieCoin to reduce contract size
- *      - Manages daily and afKing coinflip systems
+ *      - Manages daily coinflip system with optional afKing mode bonuses
  *      - Integrates with BurnieCoin for burn/mint operations
  *      - Handles auto-rebuy, bounty system, and quest rewards
  *
@@ -27,8 +27,6 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 interface IBurnieCoin {
     function burnForCoinflip(address from, uint256 amount) external;
     function mintForCoinflip(address to, uint256 amount) external;
-    function questModule() external view returns (IDegenerusQuests);
-    function _resolvePlayer(address player) external view returns (address);
 }
 
 interface IWrappedWrappedXRP {
@@ -41,21 +39,55 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     event CoinflipDeposit(address indexed player, uint256 creditedFlip);
-    event AfKingFlipRecorded(uint48 indexed epoch, uint16 rewardPercent, bool win);
-    event AfKingRngModeUpdated(address indexed player, bool dailyOnly);
     event CoinflipAutoRebuyToggled(address indexed player, bool enabled);
     event CoinflipAutoRebuyStopSet(address indexed player, uint256 stopAmount);
     event QuestCompleted(
         address indexed player,
         uint8 questType,
         uint32 streak,
-        uint256 reward,
-        bool hardMode,
-        bool completedBoth
+        uint256 reward
     );
+    /// @notice Emitted when flip stake is credited to a future day.
+    /// @param player The player receiving stake credit.
+    /// @param day The target flip day being credited.
+    /// @param amount The amount credited (includes any boosts).
+    /// @param newTotal The new total stake for that day.
+    event CoinflipStakeUpdated(
+        address indexed player,
+        uint48 indexed day,
+        uint256 amount,
+        uint256 newTotal
+    );
+    /// @notice Emitted when a coinflip day is resolved.
+    /// @param day The resolved day.
+    /// @param win Whether the flip outcome is a win.
+    /// @param rewardPercent Bonus percent applied on wins.
+    /// @param bountyAfter The bounty pool amount after rollover.
+    /// @param bountyPaid Amount paid to the bounty owner for this day (0 if none).
+    /// @param bountyRecipient Recipient of bounty payout (address(0) if none).
+    event CoinflipDayResolved(
+        uint48 indexed day,
+        bool win,
+        uint16 rewardPercent,
+        uint128 bountyAfter,
+        uint128 bountyPaid,
+        address bountyRecipient
+    );
+    /// @notice Emitted when the daily top bettor is updated.
+    /// @param day The day being updated.
+    /// @param player New top bettor.
+    /// @param score The score in whole tokens (uint96-capped).
+    event CoinflipTopUpdated(
+        uint48 indexed day,
+        address indexed player,
+        uint96 score
+    );
+    /// @notice Emitted when the biggest flip record is updated.
+    /// @param player The player setting the record.
+    /// @param recordAmount The new record amount (raw, before bonuses).
+    event BiggestFlipUpdated(address indexed player, uint256 recordAmount);
     event BountyOwed(address indexed player, uint128 bounty, uint256 recordFlip);
     event BountyPaid(address indexed to, uint256 amount);
-    event CoinflipFinished(bool win);
 
     /*+======================================================================+
       |                          CUSTOM ERRORS                               |
@@ -85,7 +117,7 @@ contract BurnieCoinflip {
 
     // Constants
     uint256 private constant MIN = 10_000 ether;
-    uint256 private constant COINFLIP_LOSS_WWXRP_REWARD = 0.1 ether;
+    uint256 private constant COINFLIP_LOSS_WWXRP_REWARD = 1 ether;
     uint16 private constant COINFLIP_EXTRA_MIN_PERCENT = 78;
     uint16 private constant COINFLIP_EXTRA_RANGE = 38;
     uint16 private constant COINFLIP_RATIO_BPS_SCALE = 10_000;
@@ -94,16 +126,10 @@ contract BurnieCoinflip {
     int256 private constant COINFLIP_EV_EQUAL_BPS = 0;
     int256 private constant COINFLIP_EV_TRIPLE_BPS = 300;
     uint16 private constant COINFLIP_REWARD_MEAN_BPS = 9685;
-    uint16 private constant COINFLIP_NORMAL_MEAN_BPS =
-        uint16(
-            (uint256(COINFLIP_EXTRA_MIN_PERCENT) * 2 +
-                uint256(COINFLIP_EXTRA_RANGE) -
-                1) * 100 / 2
-        );
     uint16 private constant BPS_DENOMINATOR = 10_000;
     uint16 private constant AFKING_RECYCLE_BONUS_BPS = 160;
-    uint16 private constant AFKING_DEITY_EDGE_BPS = 150;
-    uint16 private constant AFKING_DAILY_ONLY_WIN_PENALTY_BPS = 50;
+    uint16 private constant AFKING_DEITY_BONUS_PER_LEVEL_HALF_BPS = 2;
+    uint16 private constant AFKING_DEITY_BONUS_MAX_HALF_BPS = 300;
     uint48 private constant JACKPOT_RESET_TIME = 82620;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
     uint8 private constant COIN_CLAIM_DAYS = 90;
@@ -111,33 +137,30 @@ contract BurnieCoinflip {
     uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1095;
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
     uint256 private constant AFKING_KEEP_MIN_COIN = 20_000 ether;
+    IDegenerusQuests internal constant questModule =
+        IDegenerusQuests(ContractAddresses.QUESTS);
 
     // Coinflip day result struct
     struct CoinflipDayResult {
-        uint128 totalIn;
-        uint128 totalOut;
         uint16 rewardPercent;
         bool win;
+    }
+
+    // Player coinflip state (packed where possible)
+    struct PlayerCoinflipState {
+        uint128 claimableStored;
+        uint48 lastClaim;
+        uint48 autoRebuyStartDay;
+        bool autoRebuyEnabled;
+        uint128 autoRebuyStop;
+        uint128 autoRebuyCarry;
     }
 
     // Daily coinflip storage
     mapping(uint48 => mapping(address => uint256)) internal coinflipBalance;
     mapping(uint48 => CoinflipDayResult) internal coinflipDayResult;
-    mapping(address => uint48) internal lastCoinflipClaim;
-    mapping(address => bool) internal coinflipAutoRebuyEnabled;
-    mapping(address => uint256) internal coinflipAutoRebuyStop;
-    mapping(address => uint256) internal coinflipAutoRebuyCarry;
-    mapping(address => uint256) internal coinflipClaimableStored;
-    mapping(address => uint48) internal coinflipAutoRebuyStartDay;
+    mapping(address => PlayerCoinflipState) internal playerState;
 
-    // AfKing flip storage
-    mapping(address => bool) internal afKingDailyOnly;
-    mapping(uint48 => mapping(address => uint256)) internal afKingFlipBalance;
-    mapping(uint48 => CoinflipDayResult) internal afKingFlipResult;
-    mapping(address => uint48) internal afKingLastClaim;
-    mapping(address => uint256) internal afKingClaimableStored;
-    mapping(address => uint256) internal afKingAutoRebuyCarry;
-    mapping(address => uint48) internal afKingAutoRebuyStartEpoch;
 
     // Bounty system
     uint128 public currentBounty = 1_000 ether;
@@ -146,12 +169,11 @@ contract BurnieCoinflip {
 
     // RNG state
     uint48 internal flipsClaimableDay;
-    uint48 internal afKingFlipsClaimableEpoch;
 
     // Leaderboard
     struct PlayerScore {
         address player;
-        uint128 score;
+        uint96 score;
     }
     mapping(uint48 => PlayerScore) internal coinflipTopByDay;
 
@@ -170,21 +192,21 @@ contract BurnieCoinflip {
       |                         MODIFIERS                                    |
       +======================================================================+*/
 
-    modifier onlyDegenerusGame() {
-        if (msg.sender != address(degenerusGame)) revert OnlyDegenerusGame();
-        _;
-    }
-
     modifier onlyDegenerusGameContract() {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyDegenerusGame();
+        if (msg.sender != address(degenerusGame)) revert OnlyDegenerusGame();
         _;
     }
 
     modifier onlyFlipCreditors() {
         if (
-            msg.sender != ContractAddresses.LAZY_PASS &&
-            msg.sender != address(degenerusGame)
+            msg.sender != address(degenerusGame) &&
+            msg.sender != address(burnie)
         ) revert OnlyFlipCreditors();
+        _;
+    }
+
+    modifier onlyBurnieCoin() {
+        if (msg.sender != address(burnie)) revert OnlyBurnieCoin();
         _;
     }
 
@@ -192,19 +214,33 @@ contract BurnieCoinflip {
       |                    CORE COINFLIP FUNCTIONS                           |
       +======================================================================+*/
 
-    /// @notice Deposit BURNIE into coinflip system (daily or afKing mode).
-    function depositCoinflip(address player, uint256 amount) external {
-        bool directDeposit = player == address(0) || player == msg.sender;
-        address caller = _resolvePlayer(player);
-        if (degenerusGame.afKingModeFor(caller)) {
-            if (afKingDailyOnly[caller]) {
-                _depositCoinflip(caller, amount, directDeposit);
-            } else {
-                _depositAfKingCoinflip(caller, amount, directDeposit);
-            }
-        } else {
-            _depositCoinflip(caller, amount, directDeposit);
+    /// @notice Settle coinflip state before afKing mode changes.
+    /// @dev Processes pending claims so mode change doesn't affect in-flight flips.
+    /// @param player The player to settle.
+    function settleFlipModeChange(address player) external onlyDegenerusGameContract {
+        // Process any pending claimable amounts before mode change
+        uint256 mintable = _claimCoinflipsInternal(player, false);
+        if (mintable != 0) {
+            PlayerCoinflipState storage state = playerState[player];
+            state.claimableStored = uint128(uint256(state.claimableStored) + mintable);
         }
+    }
+
+    /// @notice Deposit BURNIE into daily coinflip system.
+    function depositCoinflip(address player, uint256 amount) external {
+        address caller;
+        bool directDeposit;
+        if (player == address(0) || player == msg.sender) {
+            caller = msg.sender;
+            directDeposit = true;
+        } else {
+            if (!degenerusGame.isOperatorApproved(player, msg.sender)) {
+                revert NotApproved();
+            }
+            caller = player;
+            directDeposit = false;
+        }
+        _depositCoinflip(caller, amount, directDeposit);
     }
 
     /// @dev Internal deposit for daily coinflip mode.
@@ -213,15 +249,16 @@ contract BurnieCoinflip {
         uint256 amount,
         bool directDeposit
     ) private {
+        PlayerCoinflipState storage state = playerState[caller];
         if (amount != 0) {
+            if (amount < MIN) revert AmountLTMin();
             // Prevent deposits during critical RNG resolution phase
             if (_coinflipLockedDuringLevelJackpot()) revert CoinflipLocked();
-            if (amount < MIN) revert AmountLTMin();
         }
 
         uint256 mintable = _claimCoinflipsInternal(caller, false);
         if (mintable != 0) {
-            coinflipClaimableStored[caller] += mintable;
+            state.claimableStored = uint128(uint256(state.claimableStored) + mintable);
         }
 
         if (amount == 0) {
@@ -233,113 +270,53 @@ contract BurnieCoinflip {
         burnie.burnForCoinflip(caller, amount);
 
         // Quests can layer on bonus flip credit when the quest is active/completed.
-        IDegenerusQuests module = burnie.questModule();
-        uint256 questReward;
+        IDegenerusQuests module = questModule;
         (
             uint256 reward,
-            bool hardMode,
             uint8 questType,
             uint32 streak,
-            bool completed,
-            bool completedBoth
+            bool completed
         ) = module.handleFlip(caller, amount);
-        questReward = _questApplyReward(
+        uint256 questReward = _questApplyReward(
             caller,
             reward,
-            hardMode,
             questType,
             streak,
-            completed,
-            completedBoth
+            completed
         );
 
         // Principal + quest bonus become the pending flip stake.
+        IDegenerusGame game = degenerusGame;
+        game.recordCoinflipDeposit(amount);
         uint256 creditedFlip = amount + questReward;
-        uint256 rollAmount = coinflipAutoRebuyEnabled[caller]
-            ? coinflipAutoRebuyCarry[caller]
+        uint256 rollAmount = state.autoRebuyEnabled
+            ? state.autoRebuyCarry
             : mintable;
-        if (creditedFlip > rollAmount) {
-            uint256 bonus = _recyclingBonus(creditedFlip - rollAmount);
+        uint256 rebetAmount = creditedFlip <= rollAmount
+            ? creditedFlip
+            : rollAmount;
+        if (rebetAmount != 0) {
+            // Recycling bonus applies only to the rebet portion (not fresh money).
+            uint256 bonus;
+            bool isAfKing = game.afKingModeFor(caller);
+            if (isAfKing) {
+                uint16 deityBonusHalfBps = game.deityPassCountFor(caller) != 0
+                    ? _afKingDeityBonusHalfBpsWithLevel(caller, game.level())
+                    : 0;
+                bonus = _afKingRecyclingBonus(rebetAmount, deityBonusHalfBps);
+            } else {
+                bonus = _recyclingBonus(rebetAmount);
+            }
             creditedFlip += bonus;
         }
         // Direct deposits can set biggestFlip/bounty; indirect deposits cannot.
-        addFlip(
+        _addDailyFlip(
             caller,
             creditedFlip,
             directDeposit ? amount : 0,
             directDeposit,
             directDeposit
         );
-        degenerusGame.recordCoinflipDeposit(amount);
-
-        emit CoinflipDeposit(caller, amount);
-    }
-
-    /// @dev Internal deposit for afKing coinflip mode.
-    function _depositAfKingCoinflip(
-        address caller,
-        uint256 amount,
-        bool directDeposit
-    ) private {
-        if (amount != 0) {
-            if (_coinflipLockedDuringLevelJackpot()) revert CoinflipLocked();
-            if (amount < MIN) revert AmountLTMin();
-        }
-
-        uint256 mintableDaily = _claimCoinflipsInternal(caller, false);
-        if (mintableDaily != 0) {
-            coinflipClaimableStored[caller] += mintableDaily;
-        }
-
-        uint256 mintable = _claimAfKingFlipsInternal(caller, false);
-        if (mintable != 0) {
-            afKingClaimableStored[caller] += mintable;
-        }
-
-        if (amount == 0) {
-            emit CoinflipDeposit(caller, 0);
-            return;
-        }
-
-        burnie.burnForCoinflip(caller, amount);
-
-        IDegenerusQuests module = burnie.questModule();
-        uint256 questReward;
-        (
-            uint256 reward,
-            bool hardMode,
-            uint8 questType,
-            uint32 streak,
-            bool completed,
-            bool completedBoth
-        ) = module.handleFlip(caller, amount);
-        questReward = _questApplyReward(
-            caller,
-            reward,
-            hardMode,
-            questType,
-            streak,
-            completed,
-            completedBoth
-        );
-
-        uint256 creditedFlip = amount + questReward;
-        uint256 rollAmount = coinflipAutoRebuyEnabled[caller]
-            ? afKingAutoRebuyCarry[caller]
-            : mintable;
-        if (creditedFlip > rollAmount) {
-            uint256 bonus = _recyclingBonus(creditedFlip - rollAmount);
-            creditedFlip += bonus;
-        }
-
-        addFlip(
-            caller,
-            creditedFlip,
-            directDeposit ? amount : 0,
-            directDeposit,
-            directDeposit
-        );
-
         emit CoinflipDeposit(caller, amount);
     }
 
@@ -348,19 +325,43 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     /// @notice Claim coinflip winnings (exact amount).
+    /// @dev Blocked during RNG lock to prevent BAF credit manipulation during jackpots.
     function claimCoinflips(
         address player,
         uint256 amount
     ) external returns (uint256 claimed) {
-        return _claimCoinflipsAmount(_resolvePlayer(player), amount);
+        if (degenerusGame.rngLocked()) revert RngLocked();
+        return _claimCoinflipsAmount(_resolvePlayer(player), amount, true);
     }
 
     /// @notice Claim coinflip winnings (keep multiples).
+    /// @dev Blocked during RNG lock to prevent BAF credit manipulation during jackpots.
     function claimCoinflipsKeepMultiple(
         address player,
         uint256 multiples
     ) external returns (uint256 claimed) {
+        if (degenerusGame.rngLocked()) revert RngLocked();
         return _claimCoinflipsKeepMultiple(_resolvePlayer(player), multiples);
+    }
+
+    /// @notice Claim coinflip winnings via BurnieCoin to cover token transfers/burns.
+    /// @dev Access: BurnieCoin only. Blocked during RNG lock.
+    function claimCoinflipsFromBurnie(
+        address player,
+        uint256 amount
+    ) external onlyBurnieCoin returns (uint256 claimed) {
+        if (degenerusGame.rngLocked()) revert RngLocked();
+        return _claimCoinflipsAmount(player, amount, true);
+    }
+
+    /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
+    /// @dev Access: BurnieCoin only. Blocked during RNG lock.
+    function consumeCoinflipsForBurn(
+        address player,
+        uint256 amount
+    ) external onlyBurnieCoin returns (uint256 consumed) {
+        if (degenerusGame.rngLocked()) revert RngLocked();
+        return _claimCoinflipsAmount(player, amount, false);
     }
 
     /// @dev Internal claim keeping multiples of auto-rebuy stop amount.
@@ -368,33 +369,30 @@ contract BurnieCoinflip {
         address player,
         uint256 multiples
     ) private returns (uint256 claimed) {
-        if (!coinflipAutoRebuyEnabled[player]) revert AutoRebuyNotEnabled();
+        PlayerCoinflipState storage state = playerState[player];
+        if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
 
-        uint256 keepMultiple = coinflipAutoRebuyStop[player];
+        uint256 keepMultiple = state.autoRebuyStop;
         if (keepMultiple == 0) revert KeepMultipleZero();
 
-        uint256 mintableDaily = _claimCoinflipsInternal(player, false);
-        uint256 mintableAfKing = _claimAfKingFlipsInternal(player, false);
-        uint256 storedDaily = coinflipClaimableStored[player] + mintableDaily;
-        uint256 storedAfKing = afKingClaimableStored[player] + mintableAfKing;
-        uint256 available = storedDaily + storedAfKing;
-        if (available < keepMultiple) {
-            coinflipClaimableStored[player] = storedDaily;
-            afKingClaimableStored[player] = storedAfKing;
+        uint256 mintable = _claimCoinflipsInternal(player, false);
+        uint256 stored = state.claimableStored + mintable;
+        if (stored < keepMultiple) {
+            if (mintable != 0) {
+                state.claimableStored = uint128(stored);
+            }
             return 0;
         }
 
-        uint256 maxMultiples = available / keepMultiple;
+        uint256 maxMultiples = stored / keepMultiple;
         uint256 claimMultiples = multiples == 0 || multiples > maxMultiples ? maxMultiples : multiples;
-        uint256 toClaim = claimMultiples * keepMultiple;
+        uint256 toClaim;
+        unchecked {
+            toClaim = claimMultiples * keepMultiple;
+        }
 
-        if (toClaim >= storedDaily) {
-            uint256 remaining = toClaim - storedDaily;
-            coinflipClaimableStored[player] = 0;
-            afKingClaimableStored[player] = storedAfKing - remaining;
-        } else {
-            coinflipClaimableStored[player] = storedDaily - toClaim;
-            afKingClaimableStored[player] = storedAfKing;
+        if (mintable != 0 || toClaim != 0) {
+            state.claimableStored = uint128(stored - toClaim);
         }
         burnie.mintForCoinflip(player, toClaim);
         claimed = toClaim;
@@ -403,30 +401,26 @@ contract BurnieCoinflip {
     /// @dev Internal claim exact amount.
     function _claimCoinflipsAmount(
         address player,
-        uint256 amount
+        uint256 amount,
+        bool mintTokens
     ) private returns (uint256 claimed) {
-        uint256 mintableDaily = _claimCoinflipsInternal(player, false);
-        uint256 mintableAfKing = _claimAfKingFlipsInternal(player, false);
-        uint256 storedDaily = coinflipClaimableStored[player] + mintableDaily;
-        uint256 storedAfKing = afKingClaimableStored[player] + mintableAfKing;
-        uint256 available = storedDaily + storedAfKing;
-        if (available == 0) return 0;
+        PlayerCoinflipState storage state = playerState[player];
+        uint256 mintable = _claimCoinflipsInternal(player, false);
+        uint256 stored = state.claimableStored + mintable;
+        if (stored == 0) return 0;
 
         uint256 toClaim = amount;
-        if (toClaim > available) {
-            toClaim = available;
+        if (toClaim > stored) {
+            toClaim = stored;
         }
-        if (toClaim >= storedDaily) {
-            uint256 remaining = toClaim - storedDaily;
-            coinflipClaimableStored[player] = 0;
-            afKingClaimableStored[player] = storedAfKing - remaining;
-        } else {
-            coinflipClaimableStored[player] = storedDaily - toClaim;
-            afKingClaimableStored[player] = storedAfKing;
+        if (mintable != 0 || toClaim != 0) {
+            state.claimableStored = uint128(stored - toClaim);
         }
 
         if (toClaim != 0) {
-            burnie.mintForCoinflip(player, toClaim);
+            if (mintTokens) {
+                burnie.mintForCoinflip(player, toClaim);
+            }
             claimed = toClaim;
         }
     }
@@ -436,38 +430,44 @@ contract BurnieCoinflip {
         address player,
         bool deepAutoRebuy
     ) internal returns (uint256 mintable) {
+        IDegenerusGame game = degenerusGame;
+        PlayerCoinflipState storage state = playerState[player];
+        bool afKingMode = game.syncAfKingLazyPassFromCoin(player);
         uint48 latest = flipsClaimableDay;
-        uint48 start = lastCoinflipClaim[player];
+        uint48 start = state.lastClaim;
 
-        bool rebuyActive = coinflipAutoRebuyEnabled[player];
+        bool rebuyActive = state.autoRebuyEnabled;
         bool deep = deepAutoRebuy && rebuyActive;
-        uint256 keepMultiple = rebuyActive ? coinflipAutoRebuyStop[player] : 0;
+        uint256 keepMultiple = rebuyActive ? state.autoRebuyStop : 0;
         uint256 carry;
         uint256 winningBafCredit;
         uint256 lossCount;
-        bool afKingMode = degenerusGame.afKingModeFor(player);
         bool afKingActive = rebuyActive && afKingMode;
-        bool dailyOnlyPenalty = afKingMode && afKingDailyOnly[player];
-        bool hasDeityPass = afKingActive &&
-            degenerusGame.deityPassCountFor(player) != 0;
+        bool hasDeityPass = afKingActive && game.deityPassCountFor(player) != 0;
+        uint16 deityBonusHalfBps;
+        bool levelCached;
+        uint24 cachedLevel;
+        if (hasDeityPass) {
+            cachedLevel = game.level();
+            levelCached = true;
+            deityBonusHalfBps = _afKingDeityBonusHalfBpsWithLevel(player, cachedLevel);
+        }
 
+        uint256 oldCarry = state.autoRebuyCarry;
         if (rebuyActive) {
-            carry = coinflipAutoRebuyCarry[player];
-        } else {
-            uint256 staleCarry = coinflipAutoRebuyCarry[player];
-            if (staleCarry != 0) {
-                mintable += staleCarry;
-                coinflipAutoRebuyCarry[player] = 0;
-            }
+            carry = oldCarry;
+        } else if (oldCarry != 0) {
+            mintable += oldCarry;
+            state.autoRebuyCarry = 0;
         }
 
         if (start >= latest) return mintable;
 
         // Enforce claim window unless auto-rebuy is enabled (settles back to enable day).
-        uint8 windowDays = _claimWindowDays(player);
+        uint8 windowDays = start == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
         uint48 minClaimableDay;
         if (rebuyActive) {
-            minClaimableDay = coinflipAutoRebuyStartDay[player];
+            minClaimableDay = state.autoRebuyStartDay;
             if (minClaimableDay > latest) {
                 minClaimableDay = latest;
             }
@@ -491,7 +491,7 @@ contract BurnieCoinflip {
 
         uint32 remaining;
         if (deep) {
-            uint48 available = latest > start ? latest - start : 0;
+            uint48 available = latest - start;
             uint48 cap = available > AUTO_REBUY_OFF_CLAIM_DAYS_MAX
                 ? AUTO_REBUY_OFF_CLAIM_DAYS_MAX
                 : available;
@@ -502,11 +502,14 @@ contract BurnieCoinflip {
 
         // Auto-rebuy-off processes a larger fixed window while keeping tx cost bounded.
         while (remaining != 0 && cursor <= latest) {
-            CoinflipDayResult storage result = coinflipDayResult[cursor];
+            CoinflipDayResult memory result = coinflipDayResult[cursor];
+            uint16 rewardPercent = result.rewardPercent;
+            bool win = result.win;
 
-            // Unresolved day detection: stop processing
-            if (result.rewardPercent == 0 && !result.win) {
-                break; // day not settled yet; keep stake intact
+            // Skip unresolved days (gaps from missed resolution)
+            if (rewardPercent == 0 && !win) {
+                unchecked { ++cursor; --remaining; }
+                continue;
             }
 
             uint256 storedStake = coinflipBalance[cursor][player];
@@ -521,167 +524,10 @@ contract BurnieCoinflip {
             }
 
             if (stake != 0) {
-                if (result.win) {
+                if (win) {
                     // Winnings = principal + (principal * rewardPercent%) where rewardPercent already in percent (not bps).
                     uint256 payout = stake +
-                        (stake * uint256(result.rewardPercent)) /
-                        100;
-                    if (dailyOnlyPenalty) {
-                        uint256 penalty = (stake *
-                            uint256(AFKING_DAILY_ONLY_WIN_PENALTY_BPS)) /
-                            BPS_DENOMINATOR;
-                        payout -= penalty;
-                    }
-                    winningBafCredit += payout;
-                    if (rebuyActive) {
-                        if (keepMultiple != 0) {
-                            uint256 reserved = (payout / keepMultiple) *
-                                keepMultiple;
-                            if (reserved != 0) {
-                                mintable += reserved;
-                            }
-                            carry = payout - reserved;
-                        } else {
-                            carry = payout;
-                        }
-                        if (carry != 0) {
-                            if (afKingActive) {
-                                carry += _afKingRecyclingBonus(carry, hasDeityPass);
-                            } else {
-                                carry += _recyclingBonus(carry);
-                            }
-                        }
-                    } else {
-                        mintable += payout;
-                    }
-                } else {
-                    unchecked {
-                        ++lossCount;
-                    }
-                    if (rebuyActive) {
-                        carry = 0;
-                    }
-                }
-            }
-
-            processed = cursor;
-            unchecked {
-                ++cursor;
-                --remaining;
-            }
-        }
-
-        if (winningBafCredit != 0) {
-            uint24 bafLvl = _bafBracketLevel(degenerusGame.level());
-            jackpots.recordBafFlip(player, bafLvl, winningBafCredit);
-        }
-
-        // Update last claim pointer if we processed any days
-        if (processed != start) {
-            lastCoinflipClaim[player] = processed;
-        }
-
-        if (rebuyActive) {
-            coinflipAutoRebuyCarry[player] = carry;
-        } else if (coinflipAutoRebuyCarry[player] != 0) {
-            coinflipAutoRebuyCarry[player] = 0;
-        }
-
-        if (lossCount != 0) {
-            wwxrp.mintPrize(player, lossCount * COINFLIP_LOSS_WWXRP_REWARD);
-        }
-
-        return mintable;
-    }
-
-    /// @dev Process afKing coinflip claims and calculate winnings.
-    function _claimAfKingFlipsInternal(
-        address player,
-        bool deepAutoRebuy
-    ) internal returns (uint256 mintable) {
-        uint48 latest = afKingFlipsClaimableEpoch;
-        uint48 start = afKingLastClaim[player];
-
-        bool rebuyActive = coinflipAutoRebuyEnabled[player];
-        bool deep = deepAutoRebuy && rebuyActive;
-        uint256 keepMultiple = rebuyActive ? coinflipAutoRebuyStop[player] : 0;
-        uint256 carry;
-        uint256 winningBafCredit;
-        uint256 lossCount;
-        bool afKingActive = rebuyActive && degenerusGame.afKingModeFor(player);
-        bool hasDeityPass = afKingActive &&
-            degenerusGame.deityPassCountFor(player) != 0;
-
-        if (rebuyActive) {
-            carry = afKingAutoRebuyCarry[player];
-        } else {
-            uint256 staleCarry = afKingAutoRebuyCarry[player];
-            if (staleCarry != 0) {
-                mintable += staleCarry;
-                afKingAutoRebuyCarry[player] = 0;
-            }
-        }
-
-        if (start >= latest) return mintable;
-
-        uint8 windowEpochs = _claimWindowEpochs(start);
-        uint48 minClaimableEpoch;
-        if (rebuyActive) {
-            minClaimableEpoch = afKingAutoRebuyStartEpoch[player];
-            if (minClaimableEpoch > latest) {
-                minClaimableEpoch = latest;
-            }
-        } else {
-            unchecked {
-                minClaimableEpoch = latest > windowEpochs
-                    ? latest - windowEpochs
-                    : 0;
-            }
-        }
-        if (start < minClaimableEpoch) {
-            start = minClaimableEpoch;
-            if (rebuyActive && carry != 0) {
-                carry = 0;
-            }
-        }
-
-        uint48 cursor;
-        unchecked {
-            cursor = start + 1;
-        }
-        uint48 processed = start;
-
-        uint32 remaining;
-        if (deep) {
-            uint48 available = latest > start ? latest - start : 0;
-            uint48 cap = available > AUTO_REBUY_OFF_CLAIM_DAYS_MAX
-                ? AUTO_REBUY_OFF_CLAIM_DAYS_MAX
-                : available;
-            remaining = uint32(cap);
-        } else {
-            remaining = windowEpochs;
-        }
-
-        while (remaining != 0 && cursor <= latest) {
-            CoinflipDayResult storage result = afKingFlipResult[cursor];
-            if (result.rewardPercent == 0 && !result.win) {
-                break;
-            }
-
-            uint256 storedStake = afKingFlipBalance[cursor][player];
-            uint256 stake = storedStake;
-            if (rebuyActive && carry != 0) {
-                stake += carry;
-            }
-
-            if (storedStake != 0) {
-                afKingFlipBalance[cursor][player] = 0;
-            }
-
-            if (stake != 0) {
-                if (result.win) {
-                    uint256 payout = stake +
-                        (stake * uint256(result.rewardPercent)) /
+                        (stake * uint256(rewardPercent)) /
                         100;
                     winningBafCredit += payout;
                     if (rebuyActive) {
@@ -699,7 +545,7 @@ contract BurnieCoinflip {
                             if (afKingActive) {
                                 carry += _afKingRecyclingBonus(
                                     carry,
-                                    hasDeityPass
+                                    deityBonusHalfBps
                                 );
                             } else {
                                 carry += _recyclingBonus(carry);
@@ -726,18 +572,42 @@ contract BurnieCoinflip {
         }
 
         if (winningBafCredit != 0) {
-            uint24 bafLvl = _bafBracketLevel(degenerusGame.level());
+            if (!levelCached) {
+                cachedLevel = game.level();
+                levelCached = true;
+            }
+            (
+                uint24 purchaseLevel_,
+                bool inJackpotPhase,
+                bool lastPurchaseDay_,
+                bool rngLocked_,
+
+            ) = game.purchaseInfo();
+            bool over = game.gameOver();
+            if (
+                !inJackpotPhase &&
+                !over &&
+                lastPurchaseDay_ &&
+                rngLocked_ &&
+                (purchaseLevel_ % 10 == 0)
+            ) {
+                revert RngLocked();
+            }
+            uint24 bafLevel = cachedLevel;
+            if (!inJackpotPhase && !over) {
+                bafLevel = purchaseLevel_;
+            }
+            uint24 bafLvl = _bafBracketLevel(bafLevel);
             jackpots.recordBafFlip(player, bafLvl, winningBafCredit);
         }
 
+        // Update last claim pointer if we processed any days
         if (processed != start) {
-            afKingLastClaim[player] = processed;
+            state.lastClaim = processed;
         }
 
-        if (rebuyActive) {
-            afKingAutoRebuyCarry[player] = carry;
-        } else if (afKingAutoRebuyCarry[player] != 0) {
-            afKingAutoRebuyCarry[player] = 0;
+        if (rebuyActive && oldCarry != carry) {
+            state.autoRebuyCarry = uint128(carry);
         }
 
         if (lossCount != 0) {
@@ -750,43 +620,6 @@ contract BurnieCoinflip {
     /*+======================================================================+
       |                    STAKE MANAGEMENT                                  |
       +======================================================================+*/
-
-    /// @dev Internal function to add flip stake to player's balance.
-    function addFlip(
-        address player,
-        uint256 coinflipDeposit,
-        uint256 recordAmount,
-        bool canArmBounty,
-        bool bountyEligible
-    ) internal {
-        if (degenerusGame.afKingModeFor(player)) {
-            if (afKingDailyOnly[player]) {
-                _addDailyFlip(
-                    player,
-                    coinflipDeposit,
-                    recordAmount,
-                    canArmBounty,
-                    bountyEligible
-                );
-            } else {
-                _addAfKingFlip(
-                    player,
-                    coinflipDeposit,
-                    recordAmount,
-                    canArmBounty,
-                    bountyEligible
-                );
-            }
-            return;
-        }
-        _addDailyFlip(
-            player,
-            coinflipDeposit,
-            recordAmount,
-            canArmBounty,
-            bountyEligible
-        );
-    }
 
     /// @dev Add daily flip stake for player.
     function _addDailyFlip(
@@ -812,7 +645,6 @@ contract BurnieCoinflip {
         }
 
         // Determine which future day this stake applies to (always the next window).
-        bool rngLocked = game.rngLocked();
         uint48 targetDay = _targetFlipDay();
 
         uint256 prevStake = coinflipBalance[targetDay][player];
@@ -821,58 +653,33 @@ contract BurnieCoinflip {
         // Update player's stake for target day
         coinflipBalance[targetDay][player] = newStake;
         _updateTopDayBettor(player, newStake, targetDay);
+        emit CoinflipStakeUpdated(player, targetDay, coinflipDeposit, newStake);
 
         // Bounty logic: only when RNG not locked (prevents manipulation after VRF request).
         // Uses the raw deposit amount (recordAmount), not bonuses or existing stake.
-        if (!rngLocked && canArmBounty && bountyEligible && recordAmount != 0) {
-            uint256 record = biggestFlipEver;
-            if (recordAmount > record) {
+        if (canArmBounty && bountyEligible && recordAmount != 0) {
+            uint128 record = biggestFlipEver;
+            if (recordAmount > record && !game.rngLocked()) {
+                address currentBountyOwner = bountyOwedTo;
+                uint128 bounty = currentBounty;
                 // Guard against overflow: cap at uint128.max for record tracking
                 if (recordAmount > type(uint128).max) revert Insufficient();
                 biggestFlipEver = uint128(recordAmount);
+                emit BiggestFlipUpdated(player, recordAmount);
 
                 // Bounty arms when setting a new record with an eligible stake.
                 // If bounty already armed, must exceed by 1% (min +1) to steal it.
                 uint256 threshold = record;
-                if (bountyOwedTo != address(0)) {
-                    uint256 onePercent = record / 100;
+                if (currentBountyOwner != address(0)) {
+                    uint256 onePercent = uint256(record) / 100;
                     // Ensure minimum 1 wei increase if 1% rounds to 0
-                    threshold = record + (onePercent == 0 ? 1 : onePercent);
+                    threshold = uint256(record) + (onePercent == 0 ? 1 : onePercent);
                 }
                 if (recordAmount >= threshold) {
                     bountyOwedTo = player;
-                    emit BountyOwed(player, currentBounty, recordAmount);
+                    emit BountyOwed(player, bounty, recordAmount);
                 }
             }
-        }
-    }
-
-    /// @dev Add afKing flip stake for player.
-    function _addAfKingFlip(
-        address player,
-        uint256 coinflipDeposit,
-        uint256 recordAmount,
-        bool canArmBounty,
-        bool bountyEligible
-    ) private {
-        if (recordAmount != 0) {
-            uint16 boonBps = degenerusGame.consumeCoinflipBoon(player);
-            if (boonBps > 0) {
-                uint256 maxDeposit = 100_000 ether;
-                uint256 cappedDeposit = coinflipDeposit > maxDeposit
-                    ? maxDeposit
-                    : coinflipDeposit;
-                uint256 boost = (cappedDeposit * boonBps) / 10_000;
-                coinflipDeposit += boost;
-            }
-        }
-
-        uint48 targetEpoch = _targetAfKingEpoch();
-        uint256 prevStake = afKingFlipBalance[targetEpoch][player];
-        afKingFlipBalance[targetEpoch][player] = prevStake + coinflipDeposit;
-
-        if (canArmBounty && bountyEligible) {
-            // afKing flips do not arm daily bounty records.
         }
     }
 
@@ -910,55 +717,43 @@ contract BurnieCoinflip {
         uint256 keepMultiple,
         bool strict
     ) private {
+        PlayerCoinflipState storage state = playerState[player];
         uint256 mintable;
         if (degenerusGame.rngLocked()) revert RngLocked();
 
         if (enabled) {
             mintable = _claimCoinflipsInternal(player, false);
-            uint256 mintableAfKing = _claimAfKingFlipsInternal(player, false);
-            if (mintableAfKing != 0) {
-                mintable += mintableAfKing;
-            }
-            if (coinflipAutoRebuyEnabled[player]) {
+            if (state.autoRebuyEnabled) {
                 if (strict) revert AutoRebuyAlreadyEnabled();
-                coinflipAutoRebuyStop[player] = keepMultiple;
+                state.autoRebuyStop = uint128(keepMultiple);
                 emit CoinflipAutoRebuyStopSet(player, keepMultiple);
             } else {
                 if (strict) {
-                    coinflipAutoRebuyStop[player] = keepMultiple;
-                    coinflipAutoRebuyEnabled[player] = true;
-                    coinflipAutoRebuyStartDay[player] = lastCoinflipClaim[player];
-                    afKingAutoRebuyStartEpoch[player] = afKingLastClaim[player];
+                    state.autoRebuyStop = uint128(keepMultiple);
+                    state.autoRebuyEnabled = true;
+                    state.autoRebuyStartDay = state.lastClaim;
                     emit CoinflipAutoRebuyStopSet(player, keepMultiple);
                     emit CoinflipAutoRebuyToggled(player, true);
                 } else {
-                    coinflipAutoRebuyEnabled[player] = true;
-                    coinflipAutoRebuyStartDay[player] = lastCoinflipClaim[player];
-                    afKingAutoRebuyStartEpoch[player] = afKingLastClaim[player];
+                    state.autoRebuyEnabled = true;
+                    state.autoRebuyStartDay = state.lastClaim;
                     emit CoinflipAutoRebuyToggled(player, true);
-                    coinflipAutoRebuyStop[player] = keepMultiple;
+                    state.autoRebuyStop = uint128(keepMultiple);
                     emit CoinflipAutoRebuyStopSet(player, keepMultiple);
                 }
             }
+            if (keepMultiple != 0 && keepMultiple < AFKING_KEEP_MIN_COIN) {
+                degenerusGame.deactivateAfKingFromCoin(player);
+            }
         } else {
             mintable = _claimCoinflipsInternal(player, true);
-            uint256 mintableAfKing = _claimAfKingFlipsInternal(player, true);
-            if (mintableAfKing != 0) {
-                mintable += mintableAfKing;
-            }
-            uint256 carry = coinflipAutoRebuyCarry[player];
+            uint256 carry = state.autoRebuyCarry;
             if (carry != 0) {
                 mintable += carry;
-                coinflipAutoRebuyCarry[player] = 0;
+                state.autoRebuyCarry = 0;
             }
-            uint256 afKingCarry = afKingAutoRebuyCarry[player];
-            if (afKingCarry != 0) {
-                mintable += afKingCarry;
-                afKingAutoRebuyCarry[player] = 0;
-            }
-            coinflipAutoRebuyEnabled[player] = false;
-            coinflipAutoRebuyStartDay[player] = 0;
-            afKingAutoRebuyStartEpoch[player] = 0;
+            state.autoRebuyEnabled = false;
+            state.autoRebuyStartDay = 0;
             emit CoinflipAutoRebuyToggled(player, false);
             degenerusGame.deactivateAfKingFromCoin(player);
         }
@@ -974,14 +769,11 @@ contract BurnieCoinflip {
         uint256 keepMultiple
     ) private {
         if (degenerusGame.rngLocked()) revert RngLocked();
-        if (!coinflipAutoRebuyEnabled[player]) revert AutoRebuyNotEnabled();
+        PlayerCoinflipState storage state = playerState[player];
+        if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
 
         uint256 mintable = _claimCoinflipsInternal(player, false);
-        uint256 mintableAfKing = _claimAfKingFlipsInternal(player, false);
-        if (mintableAfKing != 0) {
-            mintable += mintableAfKing;
-        }
-        coinflipAutoRebuyStop[player] = keepMultiple;
+        state.autoRebuyStop = uint128(keepMultiple);
         emit CoinflipAutoRebuyStopSet(player, keepMultiple);
 
         if (mintable != 0) {
@@ -991,24 +783,6 @@ contract BurnieCoinflip {
         if (keepMultiple != 0 && keepMultiple < AFKING_KEEP_MIN_COIN) {
             degenerusGame.deactivateAfKingFromCoin(player);
         }
-    }
-
-    /// @notice Toggle afKing daily-only mode.
-    function setAfKingDailyOnly(address player, bool dailyOnly) external {
-        address caller = _resolvePlayer(player);
-        if (afKingDailyOnly[caller] == dailyOnly) return;
-
-        uint256 mintableDaily = _claimCoinflipsInternal(caller, false);
-        if (mintableDaily != 0) {
-            coinflipClaimableStored[caller] += mintableDaily;
-        }
-        uint256 mintableAfKing = _claimAfKingFlipsInternal(caller, false);
-        if (mintableAfKing != 0) {
-            afKingClaimableStored[caller] += mintableAfKing;
-        }
-
-        afKingDailyOnly[caller] = dailyOnly;
-        emit AfKingRngModeUpdated(caller, dailyOnly);
     }
 
     /*+======================================================================+
@@ -1057,25 +831,29 @@ contract BurnieCoinflip {
         bool win = (rngWord & 1) == 1;
 
         // Record the day's result for future claims
-        CoinflipDayResult storage dayResult = coinflipDayResult[epoch];
-        dayResult.rewardPercent = rewardPercent;
-        dayResult.win = win;
+        coinflipDayResult[epoch] = CoinflipDayResult({
+            rewardPercent: rewardPercent,
+            win: win
+        });
 
         // Bounty resolution: if someone armed the bounty, remove half; if win, credit that half to them.
         uint128 currentBounty_ = currentBounty;
         uint256 slice;
         address to;
-        if (bountyOwedTo != address(0) && currentBounty_ > 0) {
-            to = bountyOwedTo;
+        address bountyOwner = bountyOwedTo;
+        uint128 bountyPaid;
+        if (bountyOwner != address(0) && currentBounty_ > 0) {
             slice = currentBounty_ >> 1; // pay/delete half of the bounty pool
             unchecked {
                 currentBounty_ -= uint128(slice);
             }
             if (win) {
+                to = bountyOwner;
                 // Credit as flip stake, not direct mint
-                addFlip(to, slice, 0, false, false);
+                _addDailyFlip(to, slice, 0, false, false);
                 emit BountyPaid(to, slice);
                 game.payCoinflipBountyDgnrs(to);
+                bountyPaid = uint128(slice);
             }
             // Clear bounty owner regardless of win/loss
             bountyOwedTo = address(0);
@@ -1090,66 +868,14 @@ contract BurnieCoinflip {
             currentBounty = currentBounty_ + uint128(PRICE_COIN_UNIT);
         }
 
-        emit CoinflipFinished(win);
-    }
-
-    /// @notice Record afKing flip RNG result (called by game contract).
-    function recordAfKingRng(
-        uint256 rngWord,
-        bool bonusFlip
-    ) external onlyDegenerusGameContract {
-        if (rngWord == 0) return;
-
-        uint48 epoch = afKingFlipsClaimableEpoch + 1;
-        afKingFlipsClaimableEpoch = epoch;
-
-        (uint16 rewardPercent, bool win) = _afKingRngResult(
-            rngWord,
+        emit CoinflipDayResolved(
             epoch,
-            bonusFlip
+            win,
+            rewardPercent,
+            currentBounty,
+            bountyPaid,
+            to
         );
-        afKingFlipResult[epoch] = CoinflipDayResult({
-            totalIn: 0,
-            totalOut: 0,
-            rewardPercent: rewardPercent,
-            win: win
-        });
-        emit AfKingFlipRecorded(epoch, rewardPercent, win);
-    }
-
-    /// @dev Calculate afKing RNG result.
-    function _afKingRngResult(
-        uint256 rngWord,
-        uint48 epoch,
-        bool bonusFlip
-    ) private view returns (uint16 rewardPercent, bool win) {
-        uint256 seedWord = uint256(keccak256(abi.encodePacked(rngWord, epoch)));
-
-        uint256 roll = seedWord % 20;
-        if (roll == 0) {
-            rewardPercent = 50;
-        } else if (roll == 1) {
-            rewardPercent = 150;
-        } else {
-            rewardPercent = uint16(
-                (seedWord % COINFLIP_EXTRA_RANGE) + COINFLIP_EXTRA_MIN_PERCENT
-            );
-        }
-
-        IDegenerusGame game = degenerusGame;
-        bool presaleBonus = bonusFlip && game.lootboxPresaleActiveFlag();
-        if (presaleBonus) {
-            unchecked {
-                rewardPercent += 6;
-            }
-        } else if (bonusFlip) {
-            (uint256 prevTotal, uint256 currentTotal) = game
-                .lastPurchaseDayFlipTotals();
-            int256 evBps = _coinflipTargetEvBps(prevTotal, currentTotal);
-            rewardPercent = _applyEvToRewardPercent(rewardPercent, evBps);
-        }
-
-        win = (seedWord & 1) == 1;
     }
 
     /*+======================================================================+
@@ -1162,7 +888,7 @@ contract BurnieCoinflip {
         uint256 amount
     ) external onlyFlipCreditors {
         if (player == address(0) || amount == 0) return;
-        addFlip(player, amount, 0, false, false);
+        _addDailyFlip(player, amount, 0, false, false);
     }
 
     /// @notice Credit flips to multiple players (batch).
@@ -1174,7 +900,7 @@ contract BurnieCoinflip {
             address player = players[i];
             uint256 amount = amounts[i];
             if (player != address(0) && amount != 0) {
-                addFlip(player, amount, 0, false, false);
+                _addDailyFlip(player, amount, 0, false, false);
             }
             unchecked {
                 ++i;
@@ -1189,9 +915,8 @@ contract BurnieCoinflip {
     /// @notice Preview claimable coinflip winnings.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable) {
         uint256 daily = _viewClaimableCoin(player);
-        uint256 afKing = _viewClaimableAfKing(player);
-        uint256 stored = coinflipClaimableStored[player] + afKingClaimableStored[player];
-        return daily + afKing + stored;
+        uint256 stored = playerState[player].claimableStored;
+        return daily + stored;
     }
 
     /// @notice Get player's current coinflip stake for next day.
@@ -1211,15 +936,11 @@ contract BurnieCoinflip {
             uint48 startDay
         )
     {
-        enabled = coinflipAutoRebuyEnabled[player];
-        stop = coinflipAutoRebuyStop[player];
-        carry = coinflipAutoRebuyCarry[player];
-        startDay = coinflipAutoRebuyStartDay[player];
-    }
-
-    /// @notice Get player's afKing daily-only mode.
-    function afKingDailyOnlyMode(address player) external view returns (bool dailyOnly) {
-        return afKingDailyOnly[player];
+        PlayerCoinflipState storage state = playerState[player];
+        enabled = state.autoRebuyEnabled;
+        stop = state.autoRebuyStop;
+        carry = state.autoRebuyCarry;
+        startDay = state.autoRebuyStartDay;
     }
 
     /// @notice Get last day's coinflip leaderboard winner.
@@ -1230,8 +951,8 @@ contract BurnieCoinflip {
     {
         uint48 lastDay = flipsClaimableDay;
         if (lastDay == 0) return (address(0), 0);
-        PlayerScore storage top = coinflipTopByDay[lastDay];
-        return (top.player, top.score);
+        PlayerScore memory top = coinflipTopByDay[lastDay];
+        return (top.player, uint128(top.score));
     }
 
     /// @dev View helper for daily coinflip claimable winnings.
@@ -1240,13 +961,10 @@ contract BurnieCoinflip {
     ) internal view returns (uint256 total) {
         // Pending flip winnings within the claim window; staking removed.
         uint48 latestDay = flipsClaimableDay;
-        uint48 startDay = lastCoinflipClaim[player];
+        uint48 startDay = playerState[player].lastClaim;
         if (startDay >= latestDay) return 0;
 
-        bool dailyOnlyPenalty = afKingDailyOnly[player] &&
-            degenerusGame.afKingModeFor(player);
-
-        uint8 windowDays = _claimWindowDays(player);
+        uint8 windowDays = startDay == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
         uint48 minClaimableDay;
         unchecked {
             minClaimableDay = latestDay > windowDays
@@ -1258,64 +976,28 @@ contract BurnieCoinflip {
         }
 
         uint8 remaining = windowDays;
-        uint48 cursor = startDay + 1;
-        while (remaining != 0 && cursor <= latestDay) {
-            CoinflipDayResult storage result = coinflipDayResult[cursor];
-            // Unresolved day detection: both fields zero means day not yet settled
-            if (result.rewardPercent == 0 && !result.win) break;
-
-            uint256 flipStake = coinflipBalance[cursor][player];
-            if (flipStake != 0 && result.win) {
-                // Payout = principal + (principal * rewardPercent%)
-                uint256 payout = flipStake +
-                    (flipStake * uint256(result.rewardPercent)) /
-                    100;
-                if (dailyOnlyPenalty) {
-                    uint256 penalty = (flipStake *
-                        uint256(AFKING_DAILY_ONLY_WIN_PENALTY_BPS)) /
-                        BPS_DENOMINATOR;
-                    payout -= penalty;
-                }
-                total += payout;
-            }
-            unchecked {
-                ++cursor;
-                --remaining;
-            }
-        }
-    }
-
-    /// @dev View helper for afKing coinflip claimable winnings.
-    function _viewClaimableAfKing(
-        address player
-    ) internal view returns (uint256 total) {
-        uint48 latestEpoch = afKingFlipsClaimableEpoch;
-        uint48 startEpoch = afKingLastClaim[player];
-        if (startEpoch >= latestEpoch) return 0;
-
-        uint8 windowEpochs = _claimWindowEpochs(startEpoch);
-        uint48 minClaimableEpoch;
+        uint48 cursor;
         unchecked {
-            minClaimableEpoch = latestEpoch > windowEpochs
-                ? latestEpoch - windowEpochs
-                : 0;
+            cursor = startDay + 1;
         }
-        if (startEpoch < minClaimableEpoch) {
-            startEpoch = minClaimableEpoch;
-        }
+        while (remaining != 0 && cursor <= latestDay) {
+            CoinflipDayResult memory result = coinflipDayResult[cursor];
+            // Skip unresolved days (both fields zero) instead of breaking,
+            // to handle gaps from missed resolution.
+            if (result.rewardPercent == 0 && !result.win) {
+                unchecked { ++cursor; --remaining; }
+                continue;
+            }
 
-        uint8 remaining = windowEpochs;
-        uint48 cursor = startEpoch + 1;
-        while (remaining != 0 && cursor <= latestEpoch) {
-            CoinflipDayResult storage result = afKingFlipResult[cursor];
-            if (result.rewardPercent == 0 && !result.win) break;
-
-            uint256 flipStake = afKingFlipBalance[cursor][player];
-            if (flipStake != 0 && result.win) {
-                uint256 payout = flipStake +
-                    (flipStake * uint256(result.rewardPercent)) /
-                    100;
-                total += payout;
+            if (result.win) {
+                uint256 flipStake = coinflipBalance[cursor][player];
+                if (flipStake != 0) {
+                    // Payout = principal + (principal * rewardPercent%)
+                    uint256 payout = flipStake +
+                        (flipStake * uint256(result.rewardPercent)) /
+                        100;
+                    total += payout;
+                }
             }
             unchecked {
                 ++cursor;
@@ -1336,12 +1018,12 @@ contract BurnieCoinflip {
     {
         (
             ,
-            uint8 gameState_,
+            bool inJackpotPhase,
             bool lastPurchaseDay_,
             bool rngLocked_,
 
         ) = degenerusGame.purchaseInfo();
-        locked = (gameState_ == 2) && lastPurchaseDay_ && rngLocked_;
+        locked = (!inJackpotPhase) && !degenerusGame.gameOver() && lastPurchaseDay_ && rngLocked_;
     }
 
     /// @dev Calculate recycling bonus for daily flip deposits (1% bonus, capped at 1000 BURNIE).
@@ -1357,13 +1039,30 @@ contract BurnieCoinflip {
     /// @dev Calculate recycling bonus for afKing flip deposits.
     function _afKingRecyclingBonus(
         uint256 amount,
-        bool hasDeityPass
+        uint16 deityBonusHalfBps
     ) private pure returns (uint256 bonus) {
         if (amount == 0) return 0;
-        uint16 bonusBps = hasDeityPass
-            ? AFKING_RECYCLE_BONUS_BPS + AFKING_DEITY_EDGE_BPS
-            : AFKING_RECYCLE_BONUS_BPS;
-        bonus = (amount * bonusBps) / BPS_DENOMINATOR;
+        uint256 totalHalfBps =
+            uint256(AFKING_RECYCLE_BONUS_BPS) * 2 +
+            uint256(deityBonusHalfBps);
+        bonus = (amount * totalHalfBps) / (uint256(BPS_DENOMINATOR) * 2);
+    }
+
+    /// @dev Calculate deity pass bonus in half-bps using a cached level.
+    function _afKingDeityBonusHalfBpsWithLevel(
+        address player,
+        uint24 currentLevel
+    ) private view returns (uint16) {
+        uint24 activationLevel = degenerusGame.afKingActivatedLevelFor(player);
+        if (activationLevel == 0) return 0;
+        if (currentLevel <= activationLevel) return 0;
+
+        uint24 levelsActive = currentLevel - activationLevel;
+        uint24 bonus = levelsActive * uint24(AFKING_DEITY_BONUS_PER_LEVEL_HALF_BPS);
+        if (bonus > AFKING_DEITY_BONUS_MAX_HALF_BPS) {
+            return AFKING_DEITY_BONUS_MAX_HALF_BPS;
+        }
+        return uint16(bonus);
     }
 
     /// @dev Derive target EV (in bps) based on last-purchase-day flip totals.
@@ -1426,39 +1125,25 @@ contract BurnieCoinflip {
     }
 
     /// @dev Calculate the target day for new coinflip deposits.
+    ///      Uses the game's day index.
     function _targetFlipDay() internal view returns (uint48) {
-        uint48 currentDayBoundary = uint48(
-            (block.timestamp - JACKPOT_RESET_TIME) / 1 days
-        );
-        uint48 currentDay = currentDayBoundary -
-            ContractAddresses.DEPLOY_DAY_BOUNDARY +
-            1;
-        return currentDay + 1;
-    }
-
-    /// @dev Calculate the target epoch for new afKing flip deposits.
-    function _targetAfKingEpoch() private view returns (uint48) {
-        return afKingFlipsClaimableEpoch + 1;
+        return degenerusGame.currentDayView() + 1;
     }
 
     /// @dev Helper to process quest rewards and emit event.
     function _questApplyReward(
         address player,
         uint256 reward,
-        bool hardMode,
         uint8 questType,
         uint32 streak,
-        bool completed,
-        bool completedBoth
+        bool completed
     ) private returns (uint256) {
         if (!completed) return 0;
         emit QuestCompleted(
             player,
             questType,
             streak,
-            reward,
-            hardMode,
-            completedBoth
+            reward
         );
         return reward;
     }
@@ -1482,14 +1167,8 @@ contract BurnieCoinflip {
         PlayerScore memory dayLeader = coinflipTopByDay[day];
         if (score > dayLeader.score || dayLeader.player == address(0)) {
             coinflipTopByDay[day] = PlayerScore({player: player, score: score});
+            emit CoinflipTopUpdated(day, player, score);
         }
-    }
-
-    /// @dev Calculate claim window days for a player.
-    function _claimWindowDays(address player) private view returns (uint8 windowDays) {
-        windowDays = lastCoinflipClaim[player] == 0
-            ? COIN_CLAIM_FIRST_DAYS
-            : COIN_CLAIM_DAYS;
     }
 
     /// @dev Round level to BAF bracket (nearest 10).
@@ -1508,13 +1187,6 @@ contract BurnieCoinflip {
             }
         }
         return player;
-    }
-
-    /// @dev Calculate claim window epochs for afKing flips.
-    function _claimWindowEpochs(
-        uint48 lastClaim
-    ) private pure returns (uint8 windowEpochs) {
-        windowEpochs = lastClaim == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
     }
 
     /// @dev Check if caller is approved to act on behalf of player.

@@ -6,7 +6,7 @@ pragma solidity ^0.8.26;
   |                      DEGENERUS TRAIT UTILS LIBRARY                           |
   |                                                                              |
   |  Pure utility library for deterministic trait generation from random seeds.  |
-  |  Used by DegenerusGamepieces to assign visual traits to gamepieces.                |
+  |  Used by ticket and trait sampling flows to derive deterministic traits.      |
   |                                                                              |
   +==============================================================================+
   |                           TRAIT SYSTEM OVERVIEW                              |
@@ -32,7 +32,7 @@ pragma solidity ^0.8.26;
   |  |  Bits 15-8:  Trait B (quadrant 1)                                      |  |
   |  |  Bits 7-0:   Trait A (quadrant 0)                                      |  |
   |  |                                                                        |  |
-  |  |  [DDDDDDDD][CCCCCCCC][BBBBBBBB][AAAAAAAA] = 32 bits                    |  |
+  |  |  [DDDDDDDD][CCCCCCCC][BBBBBBBB][AAAAAAAA] = 32 bits                     |  |
   |  +------------------------------------------------------------------------+  |
   |                                                                              |
   |  WEIGHTED DISTRIBUTION:                                                      |
@@ -83,8 +83,8 @@ pragma solidity ^0.8.26;
 
 /// @title DegenerusTraitUtils
 /// @author Burnie Degenerus
-/// @notice Pure library for deterministic trait generation from random seeds.
-/// @dev Used by DegenerusGamepieces to derive gamepiece visual traits.
+/// @notice Pure library for deterministic trait generation from random seeds
+/// @dev Used by game ticket and trait utilities for deterministic trait derivation.
 ///      All functions are internal pure - no state, no external calls.
 /// @custom:security-contact burnie@degener.us
 library DegenerusTraitUtils {
@@ -95,32 +95,24 @@ library DegenerusTraitUtils {
       |  Lower buckets (0-3) have ~13.3% each, higher buckets less common.   |
       +======================================================================+*/
 
-    /// @dev Map a 32-bit random input to a 0-7 bucket with fixed piecewise distribution.
+    /// @notice Maps a 32-bit random input to a 0-7 bucket with weighted distribution
+    /// @dev Scales uint32 (0 to 2^32-1) down to 0-74 range, then maps to bucket.
+    ///      Uses uint64 intermediate to prevent overflow during scaling.
     ///
-    ///      ALGORITHM:
-    ///      1. Scale uint32 (0 to 2^32-1) down to 0-74 range
-    ///      2. Map scaled value to bucket via thresholds
-    ///
-    ///      SCALING MATH:
-    ///      scaled = (rnd * 75) >> 32
-    ///      This maps [0, 2^32-1] → [0, 74] uniformly
-    ///
-    ///      BUCKET THRESHOLDS:
-    ///      Bucket 0: scaled < 10  (range 0-9,   width 10, ~13.3%)
-    ///      Bucket 1: scaled < 20  (range 10-19, width 10, ~13.3%)
-    ///      Bucket 2: scaled < 30  (range 20-29, width 10, ~13.3%)
-    ///      Bucket 3: scaled < 40  (range 30-39, width 10, ~13.3%)
-    ///      Bucket 4: scaled < 49  (range 40-48, width 9,  ~12.0%)
-    ///      Bucket 5: scaled < 58  (range 49-57, width 9,  ~12.0%)
-    ///      Bucket 6: scaled < 67  (range 58-66, width 9,  ~12.0%)
-    ///      Bucket 7: scaled >= 67 (range 67-74, width 8,  ~10.7%)
-    ///
-    /// @param rnd 32-bit random input value.
-    /// @return Bucket index 0-7 with weighted distribution.
+    ///      Bucket thresholds:
+    ///      - Bucket 0: scaled < 10  (width 10, ~13.3%)
+    ///      - Bucket 1: scaled < 20  (width 10, ~13.3%)
+    ///      - Bucket 2: scaled < 30  (width 10, ~13.3%)
+    ///      - Bucket 3: scaled < 40  (width 10, ~13.3%)
+    ///      - Bucket 4: scaled < 49  (width 9,  ~12.0%)
+    ///      - Bucket 5: scaled < 58  (width 9,  ~12.0%)
+    ///      - Bucket 6: scaled < 67  (width 9,  ~12.0%)
+    ///      - Bucket 7: scaled >= 67 (width 8,  ~10.7%)
+    /// @param rnd 32-bit random input value
+    /// @return Bucket index 0-7 with weighted distribution
     function weightedBucket(uint32 rnd) internal pure returns (uint8) {
         unchecked {
             // Scale uint32 to 0-74 range using 64-bit intermediate to prevent overflow
-            // (rnd * 75) could overflow uint32, so we use uint64
             uint32 scaled = uint32((uint64(rnd) * 75) >> 32);
 
             // Piecewise bucket assignment with descending probability for higher buckets
@@ -142,21 +134,12 @@ library DegenerusTraitUtils {
       |  Combines category (3 bits) and sub-bucket (3 bits).                 |
       +======================================================================+*/
 
-    /// @dev Produce a 6-bit trait ID from a 64-bit random value.
-    ///
-    ///      ALGORITHM:
-    ///      1. Use low 32 bits for category bucket (0-7)
-    ///      2. Use high 32 bits for sub-bucket (0-7)
-    ///      3. Combine: (category << 3) | sub = 6 bits
-    ///
-    ///      OUTPUT FORMAT (6 bits):
-    ///      [CCC][SSS] where C = category, S = sub-bucket
-    ///      Range: 0 to 63 (0b000000 to 0b111111)
-    ///
-    ///      NOTE: Quadrant bits (bits 7-6) are added by caller
-    ///
-    /// @param rnd 64-bit random input value.
-    /// @return 6-bit trait ID (0-63, quadrant bits not included).
+    /// @notice Produces a 6-bit trait ID from a 64-bit random value
+    /// @dev Uses low 32 bits for category bucket and high 32 bits for sub-bucket.
+    ///      Output format: [CCC][SSS] where C = category (bits 5-3), S = sub-bucket (bits 2-0).
+    ///      Quadrant bits (bits 7-6) are added by the caller.
+    /// @param rnd 64-bit random input value
+    /// @return 6-bit trait ID (0-63, quadrant bits not included)
     function traitFromWord(uint64 rnd) internal pure returns (uint8) {
         // Category from low 32 bits
         uint8 category = weightedBucket(uint32(rnd));
@@ -172,30 +155,20 @@ library DegenerusTraitUtils {
       |  Packs 4 traits into 32-bit value for efficient storage.             |
       +======================================================================+*/
 
-    /// @dev Pack the 4 quadrant traits derived from a 256-bit random seed.
+    /// @notice Packs 4 quadrant traits derived from a 256-bit random seed into 32 bits
+    /// @dev Splits 256-bit seed into 4 × 64-bit words, generates 6-bit trait from each,
+    ///      adds quadrant identifier, and packs into 32-bit value.
     ///
-    ///      ALGORITHM:
-    ///      1. Split 256-bit seed into 4 × 64-bit words
-    ///      2. Generate 6-bit trait from each word
-    ///      3. Add quadrant identifier (0, 64, 128, 192) to each trait
-    ///      4. Pack into 32-bit value
+    ///      Seed usage:
+    ///      - bits [63:0]    → Trait A (quadrant 0)
+    ///      - bits [127:64]  → Trait B (quadrant 1)
+    ///      - bits [191:128] → Trait C (quadrant 2)
+    ///      - bits [255:192] → Trait D (quadrant 3)
     ///
-    ///      SEED USAGE:
-    ///      bits [63:0]    → Trait A (quadrant 0, | 0)
-    ///      bits [127:64]  → Trait B (quadrant 1, | 64)
-    ///      bits [191:128] → Trait C (quadrant 2, | 128)
-    ///      bits [255:192] → Trait D (quadrant 3, | 192)
-    ///
-    ///      OUTPUT FORMAT (32 bits):
-    ///      [traitD:8][traitC:8][traitB:8][traitA:8]
-    ///
-    ///      Each trait byte: [QQ][CCC][SSS]
-    ///      - QQ: Quadrant (0-3)
-    ///      - CCC: Category (0-7)
-    ///      - SSS: Sub-bucket (0-7)
-    ///
-    /// @param rand 256-bit random seed (typically from keccak256).
-    /// @return 32-bit packed traits value.
+    ///      Output format: [traitD:8][traitC:8][traitB:8][traitA:8]
+    ///      Each trait byte: [QQ][CCC][SSS] (quadrant, category, sub-bucket)
+    /// @param rand 256-bit random seed (typically from keccak256)
+    /// @return 32-bit packed traits value
     function packedTraitsFromSeed(uint256 rand) internal pure returns (uint32) {
         // Extract 6-bit trait from each 64-bit word, add quadrant identifier
         uint8 traitA = traitFromWord(uint64(rand)); // Quadrant 0: bits 7-6 = 00
@@ -207,27 +180,4 @@ library DegenerusTraitUtils {
         return uint32(traitA) | (uint32(traitB) << 8) | (uint32(traitC) << 16) | (uint32(traitD) << 24);
     }
 
-    /*+======================================================================+
-      |                      TOKEN TRAIT DERIVATION                          |
-      +======================================================================+
-      |  Deterministically derives traits from token ID.                     |
-      |  Same tokenId always produces same traits (critical for on-chain).   |
-      +======================================================================+*/
-
-    /// @dev Deterministically derive packed traits for a token ID.
-    ///
-    ///      ALGORITHM:
-    ///      1. Hash tokenId with keccak256 to get 256-bit seed
-    ///      2. Pass seed to packedTraitsFromSeed
-    ///
-    ///      DETERMINISM:
-    ///      keccak256(abi.encodePacked(tokenId)) is deterministic,
-    ///      so same tokenId always produces same traits.
-    ///      This is critical for on-chain trait verification.
-    ///
-    /// @param tokenId Token ID to derive traits for.
-    /// @return 32-bit packed traits value.
-    function packedTraitsForToken(uint256 tokenId) internal pure returns (uint32) {
-        return packedTraitsFromSeed(uint256(keccak256(abi.encodePacked(tokenId))));
-    }
 }

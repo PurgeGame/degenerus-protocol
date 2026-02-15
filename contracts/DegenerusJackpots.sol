@@ -2,124 +2,10 @@
 pragma solidity ^0.8.26;
 
 /*+==============================================================================+
-  |                                                                              |
   |                        DEGENERUS JACKPOTS CONTRACT                           |
   |                                                                              |
-  |  Standalone contract managing two distinct jackpot systems:                  |
-  |  1. BAF (Big Ass Flip) - Rewards top coinflip bettors per level              |
-  |  2. Decimator - Pro-rata distribution to burn participants                   |
-  |                                                                              |
-  +==============================================================================+
-  |                           ARCHITECTURE OVERVIEW                              |
-  +==============================================================================+
-  |                                                                              |
-  |  +-------------------------------------------------------------------------+ |
-  |  |                       BAF JACKPOT FLOW                                  | |
-  |  |                                                                         | |
-  |  |  Coin Contract                                                          | |
-  |  |       |                                                                 | |
-  |  |       ▼ recordBafFlip(player, lvl, amount)                              | |
-  |  |  +-----------------+                                                    | |
-  |  |  | BAF Leaderboard | ← Top 4 bettors tracked per level                  | |
-  |  |  |  (bafTop[lvl])  |                                                    | |
-  |  |  +--------+--------+                                                    | |
-  |  |           |                                                             | |
-  |  |           ▼ Level ends → runBafJackpot()                                | |
-  |  |  +-----------------------------------------------------------------+    | |
-  |  |  |                    PRIZE DISTRIBUTION (90%)                     |    | |
-  |  |  +-----------------------------------------------------------------+    | |
-  |  |  | 10% → Top BAF bettor for level                                  |    | |
-  |  |  | 10% → Top coinflip bettor from last 24h window                  |    | |
-  |  |  |  5% → Random pick: 3rd or 4th BAF leaderboard slot              |    | |
-  |  |  | 10% → Exterminator draw (from prior 20 levels, 5/3/2/0%)        |    | |
-  |  |  | 10% → Affiliate draw (top referrers, prior 20 levels)           |    | |
-  |  |  | 20% → Scatter 1st place (50 rounds × 4 trait tickets)           |    | |
-  |  |  | 25% → Scatter 2nd place (50 rounds × 4 trait tickets)           |    | |
-  |  |  | 10% → Returned to future pool                                   |    | |
-  |  |  +-----------------------------------------------------------------+    | |
-  |  |                                                                         | |
-  |  |  ELIGIBILITY: ethMintStreakCount >= 8                                   | |
-  |  +-------------------------------------------------------------------------+ |
-  |                                                                              |
-  |  +-------------------------------------------------------------------------+ |
-  |  |                     DECIMATOR JACKPOT FLOW                              | |
-  |  |                                                                         | |
-  |  |  Coin Contract                                                          | |
-  |  |       |                                                                 | |
-  |  |       ▼ recordDecBurn(player, lvl, bucket, baseAmount, multBps)         | |
-  |  |  +-----------------------------------------------------------------+    | |
-  |  |  |                    BUCKET SYSTEM                                |    | |
-  |  |  |                                                                 |    | |
-  |  |  |  bucket (denom): 2..12 (player's chosen denominator)            |    | |
-  |  |  |  subBucket: 0..(denom-1), derived from hash(player,lvl,bucket)  |    | |
-  |  |  |                                                                 |    | |
-  |  |  |  decBucketBurnTotal[lvl][denom][sub] += delta                   |    | |
-  |  |  |  decBurn[lvl][player] = {burn, bucket, subBucket, claimed}      |    | |
-  |  |  +-----------------------------------------------------------------+    | |
-  |  |           |                                                             | |
-  |  |           ▼ Level ends → runDecimatorJackpot()                          | |
-  |  |  +-----------------------------------------------------------------+    | |
-  |  |  |  For each denom 2..12:                                          |    | |
-  |  |  |    winningSub = hash(rngWord, denom) % denom                    |    | |
-  |  |  |    totalBurn += decBucketBurnTotal[lvl][denom][winningSub]      |    | |
-  |  |  |                                                                 |    | |
-  |  |  |  Snapshot: poolWei, totalBurn, active=true                      |    | |
-  |  |  |  (actual distribution deferred to claims)                       |    | |
-  |  |  +-----------------------------------------------------------------+    | |
-  |  |           |                                                             | |
-  |  |           ▼ claimDecimatorJackpot(lvl)                                  | |
-  |  |  +-----------------------------------------------------------------+    | |
-  |  |  |  If player's subBucket == winningSub for their denom:           |    | |
-  |  |  |    payout = (poolWei × playerBurn) / totalBurn                  |    | |
-  |  |  |                                                                 |    | |
-  |  |  |  Pro-rata share based on burn contribution                      |    | |
-  |  |  +-----------------------------------------------------------------+    | |
-  |  +-------------------------------------------------------------------------+ |
-  |                                                                              |
-  +==============================================================================+
-  |                         SECURITY CONSIDERATIONS                              |
-  +==============================================================================+
-  |                                                                              |
-  |  1. ACCESS CONTROL:                                                          |
-  |     • onlyCoin: recordBafFlip, recordDecBurn (hooks from coin contract)      |
-  |     • onlyGame: runBafJackpot, runDecimatorJackpot, consumeDecClaim          |
-  |     • addresses fixed at deploy (no wiring)                                  |
-  |                                                                              |
-  |  2. CONSTANT ADDRESSES:                                                      |
-  |     • coin, game, affiliate addresses are compile-time constants             |
-  |     • Prevents malicious contract replacement                                |
-  |                                                                              |
-  |  3. RNG FAIRNESS:                                                            |
-  |     • VRF-derived randomness from game contract                              |
-  |     • Entropy chained via keccak256 for multiple draws                       |
-  |     • Subbucket selection deterministic once RNG committed                   |
-  |                                                                              |
-  |  4. DOUBLE-CLAIM PREVENTION:                                                 |
-  |     • DecEntry.claimed flag prevents re-claiming                             |
-  |     • Checked before payout calculation                                      |
-  |                                                                              |
-  |  5. ELIGIBILITY GATES:                                                       |
-  |     • BAF requires 8+ ETH mint streak                                        |
-  |     • Prevents sybil/dormant account exploitation                            |
-  |                                                                              |
-  |  6. OVERFLOW PROTECTION:                                                     |
-  |     • Solidity 0.8+ automatic checks                                         |
-  |     • uint192 cap on burn amounts (explicit saturation)                      |
-  |     • Score capped at uint96.max for leaderboard                             |
-  |                                                                              |
-  |  7. UNFILLED PRIZE HANDLING:                                                 |
-  |     • Unawarded shares returned via returnAmountWei                          |
-  |     • No funds locked if no eligible winners                                 |
-  |                                                                              |
-  +==============================================================================+
-  |                           TRUST ASSUMPTIONS                                  |
-  +==============================================================================+
-  |                                                                              |
-  |  TRUSTED CONTRACTS (compile-time constants):                                 |
-  |  • coin:          BurnieCoin (calls recordBafFlip, recordDecBurn)            |
-  |  • degenerusGame: Core game (calls runBafJackpot, runDecimatorJackpot)       |
-  |  • affiliate:     Affiliate program (queries for top referrers)              |
-  |                                                                              |
+  |  Standalone contract managing the BAF (Big Ass Flip) jackpot system.         |
+  |  Decimator logic is handled in the game decimator module.                    |
   +==============================================================================+*/
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
@@ -144,15 +30,13 @@ interface IDegenerusCoinJackpotView {
 // Contract
 // ===========================================================================
 
-/**
- * @title DegenerusJackpots
- * @author Burnie Degenerus
- * @notice Standalone contract managing BAF and Decimator jackpot systems.
- * @dev BurnieCoin forwards flips/burns into this contract; game calls to resolve jackpots.
- *      - BAF: Leaderboard-based distribution to top coinflip bettors
- *      - Decimator: Pro-rata bucket-based distribution to burn participants
- * @custom:security-contact burnie@degener.us
- */
+/// @title DegenerusJackpots
+/// @author Burnie Degenerus
+/// @notice Standalone contract managing the BAF jackpot system.
+/// @dev BurnieCoin forwards flips into this contract; game calls to resolve jackpots.
+///      - BAF: Leaderboard-based distribution to top coinflip bettors
+///      - Decimator: handled in the game decimator module
+/// @custom:security-contact burnie@degener.us
 contract DegenerusJackpots is IDegenerusJackpots {
     /*+======================================================================+
       |                              ERRORS                                  |
@@ -161,73 +45,53 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  specific failure condition in jackpot operations.                   |
       +======================================================================+*/
 
-    /// @notice Decimator claim round not active for this level.
-    error DecClaimInactive();
-
-    /// @notice Player already claimed Decimator jackpot for this level.
-    error DecAlreadyClaimed();
-
-    /// @notice Player's subbucket did not win the Decimator draw.
-    error DecNotWinner();
-
-    /// @notice Caller is not the coin contract.
+    /// @notice Thrown when a function restricted to the coin contract is called by another address.
     error OnlyCoin();
 
-    /// @notice Caller is not the game contract.
+    /// @notice Thrown when a function restricted to the game contract is called by another address.
     error OnlyGame();
+
+    /*+======================================================================+
+      |                              EVENTS                                  |
+      +======================================================================+
+      |  Events for tracking BAF state changes for indexers.                 |
+      +======================================================================+*/
+
+    /// @notice Emitted when a player's BAF flip stake is recorded.
+    /// @param player Address of the player.
+    /// @param lvl Current game level (BAF bracket).
+    /// @param amount Amount added this flip.
+    /// @param newTotal Player's new total stake for this level.
+    event BafFlipRecorded(
+        address indexed player,
+        uint24 indexed lvl,
+        uint256 amount,
+        uint256 newTotal
+    );
 
     /*+======================================================================+
       |                              STRUCTS                                 |
       +======================================================================+
-      |  Data structures for BAF leaderboard and Decimator burn tracking.    |
+      |  Data structures for BAF leaderboard tracking.                       |
       +======================================================================+*/
 
     /// @notice Leaderboard entry for BAF coinflip stakes.
     /// @dev Packed into single slot: address (160) + score (96) = 256 bits.
     struct PlayerScore {
-        address player; // Player address
-        uint96 score;   // Weighted coinflip stake (whole tokens, capped at uint96.max)
-    }
-
-    /// @notice Per-player Decimator burn tracking for a specific level.
-    /// @dev Packed for gas efficiency: burn (192) + bucket (8) + subBucket (8) + claimed (8) = 216 bits.
-    ///      - bucket: Player's chosen denominator (2-12)
-    ///      - subBucket: Deterministic assignment 0..(bucket-1) from hash
-    ///      - claimed: 0 = unclaimed, 1 = claimed
-    struct DecEntry {
-        uint192 burn;      // Total BURNIE burned by player this level (capped at uint192.max)
-        uint8 bucket;      // Player's denominator choice (locked at first burn)
-        uint8 subBucket;   // Deterministic subbucket from hash(player, lvl, bucket)
-        uint8 claimed;     // Claim flag (0 or 1)
-    }
-
-    /// @notice Snapshot of the last Decimator claim round.
-    /// @dev Created when runDecimatorJackpot is called. Claims expire when next decimator runs.
-    ///      - lvl: Level of this jackpot
-    ///      - poolWei: ETH prize pool for this level
-    ///      - totalBurn: Sum of burns in winning subbuckets across all denoms
-    ///      - rngWord: VRF randomness for player-specific lootbox derivation
-    struct LastDecClaimRound {
-        uint24 lvl;        // Level of this decimator jackpot
-        uint256 poolWei;   // ETH prize pool available for claims
-        uint248 totalBurn; // Total qualifying burn (denominator for pro-rata)
-        uint256 rngWord;   // VRF random word for lootbox entropy
+        /// @notice Player address.
+        address player;
+        /// @notice Weighted coinflip stake (whole tokens, capped at uint96.max).
+        uint96 score;
     }
 
     /*+======================================================================+
-      |                        HELPER FUNCTIONS                              |
-      +======================================================================+
-      |  Internal pure/view helpers used by jackpot logic.                   |
-      +======================================================================+*/
-
-    /*+======================================================================+
-      |                            CONSTANT STATE                           |
+      |                            CONSTANT STATE                            |
       +======================================================================+
       |  Trusted contract addresses fixed at deployment.                     |
       +======================================================================+*/
 
-    /// @notice Coin contract for coinflip stats queries (constant).
-    IDegenerusCoinJackpotView internal constant coin = IDegenerusCoinJackpotView(ContractAddresses.COIN);
+    /// @notice Coinflip contract for coinflip stats queries (constant).
+    IDegenerusCoinJackpotView internal constant coin = IDegenerusCoinJackpotView(ContractAddresses.COINFLIP);
 
     /// @notice Core game contract for jackpot resolution and player queries (constant).
     IDegenerusGame internal constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
@@ -238,17 +102,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /*+======================================================================+
       |                            CONSTANTS                                 |
       +======================================================================+
-      |  Fixed values for prize calculations and bucket configuration.       |
+      |  Fixed values for prize calculations and BAF configuration.          |
       +======================================================================+*/
-
-    /// @dev BURNIE unit per ETH mint (1000 BURNIE).
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-
-    /// @dev Basis points denominator (10000 = 100%).
-    uint16 private constant BPS_DENOMINATOR = 10_000;
-
-    /// @dev Multiplier cap for Decimator burns (200 mints worth).
-    uint256 private constant DECIMATOR_MULTIPLIER_CAP = 200 * PRICE_COIN_UNIT;
 
     /// @dev Bit offset in winnerMask for scatter winner flags.
     ///      First 128 bits for direct winners, upper bits for scatter.
@@ -261,8 +116,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @dev Fixed number of scatter rounds to keep BAF gas bounded.
     uint8 private constant BAF_SCATTER_ROUNDS = 50;
 
-    /// @dev Maximum denominator for Decimator buckets (2-12 inclusive).
-    uint8 private constant DECIMATOR_MAX_DENOM = 12;
 
     /*+======================================================================+
       |                         BAF STATE STORAGE                            |
@@ -270,45 +123,14 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Per-player BAF totals and top-4 leaderboard per level.              |
       +======================================================================+*/
 
-    /// @dev Per-bracket coinflip totals.
-    ///      Keyed by BAF bracket level, then player.
+    /// @notice Accumulated coinflip stake per player per BAF bracket level.
     mapping(uint24 => mapping(address => uint256)) internal bafTotals;
 
-    /// @dev Top-4 coinflip bettors for BAF per level (sorted by score descending).
+    /// @notice Top-4 coinflip bettors for BAF per level (sorted by score descending).
     mapping(uint24 => PlayerScore[4]) internal bafTop;
 
-    /// @dev Current length of bafTop array for each level (0-4).
+    /// @notice Current length of bafTop array for each level (0-4).
     mapping(uint24 => uint8) internal bafTopLen;
-
-    /*+======================================================================+
-      |                       DECIMATOR STATE STORAGE                        |
-      +======================================================================+
-      |  Per-level burn tracking with bucket/subbucket system for claims.    |
-      |                                                                      |
-      |  BUCKET SYSTEM:                                                      |
-      |  - Player selects denominator (2-12) at first burn                   |
-      |  - Subbucket (0..denom-1) assigned deterministically from hash       |
-      |  - At resolution, one winning subbucket per denom is selected        |
-      |  - Winners get pro-rata share of pool based on burn contribution     |
-      +======================================================================+*/
-
-    /// @dev Per-level, per-player Decimator burn tracking.
-    ///      Earlier levels remain claimable after player participates in later ones.
-    mapping(uint24 => mapping(address => DecEntry)) internal decBurn;
-
-    /// @dev Aggregated burn totals per level/denom/subbucket.
-    ///      decBucketBurnTotal[lvl][denom][sub] = total burn in that subbucket.
-    ///      Array sized [13][13] to allow direct indexing (denom 0-12, sub 0-12).
-    mapping(uint24 => uint256[13][13]) internal decBucketBurnTotal;
-
-    /// @dev Last Decimator claim round. Claims expire when next decimator runs.
-    ///      Snapshotted when runDecimatorJackpot is called.
-    LastDecClaimRound internal lastDecClaimRound;
-
-    /// @dev Packed winning subbucket per denominator for a level.
-    ///      4 bits each for denom 2..12 (44 bits total, fits in uint64).
-    ///      Layout: bits 0-3 = denom 2, bits 4-7 = denom 3, etc.
-    mapping(uint24 => uint64) internal decBucketOffsetPacked;
 
     /*+======================================================================+
       |                      MODIFIERS & ACCESS CONTROL                      |
@@ -316,15 +138,15 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Access control for trusted callers only.                            |
       +======================================================================+*/
 
-    /// @dev Restricts function to coin contract only.
-    ///      Used for recordBafFlip and recordDecBurn hooks.
+    /// @dev Restricts function to coin or coinflip contract.
+    /// @custom:reverts OnlyCoin When caller is not the coin or coinflip contract.
     modifier onlyCoin() {
-        if (msg.sender != ContractAddresses.COIN) revert OnlyCoin();
+        if (msg.sender != ContractAddresses.COIN && msg.sender != ContractAddresses.COINFLIP) revert OnlyCoin();
         _;
     }
 
     /// @dev Restricts function to game contract only.
-    ///      Used for runBafJackpot, runDecimatorJackpot, consumeDecClaim.
+    /// @custom:reverts OnlyGame When caller is not the game contract.
     modifier onlyGame() {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         _;
@@ -333,17 +155,16 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /*+======================================================================+
       |                      COIN CONTRACT HOOKS                             |
       +======================================================================+
-      |  Called by BurnieCoin to record coinflip/burn activity.              |
+      |  Called by BurnieCoin to record coinflip activity.                   |
       |  These hooks build state used by jackpot resolution.                 |
       +======================================================================+*/
 
     /// @notice Record a coinflip stake for BAF leaderboard tracking.
-    /// @dev Access: coin contract only. Called on every manual coinflip.
-    ///      - Accumulates per BAF bracket level
-    ///      - Updates top-4 leaderboard for the level
+    /// @dev Called by coin contract on every manual coinflip. Silently ignores vault address.
     /// @param player Address of the player.
-    /// @param lvl Current game level.
-    /// @param amount Raw flip amount.
+    /// @param lvl Current game level (BAF bracket).
+    /// @param amount Raw coinflip stake amount.
+    /// @custom:access Restricted to coin contract via onlyCoin modifier.
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external override onlyCoin {
         if (player == ContractAddresses.VAULT) return;
         // Accumulate total (unchecked safe: reasonable values won't overflow uint256)
@@ -355,74 +176,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
         // Update top-4 leaderboard with new total
         _updateBafTop(lvl, player, total);
-    }
 
-    /// @notice Record a Decimator burn for jackpot eligibility.
-    /// @dev Access: coin contract only. Called on every Decimator burn.
-    ///      - First burn locks player's bucket (denominator) choice
-    ///      - Subbucket is deterministically assigned from hash
-    ///      - Subsequent burns in same level accumulate in locked bucket
-    ///      - Burn amount capped at uint192.max (saturating)
-    /// @param player Address of the player.
-    /// @param lvl Current game level.
-    /// @param bucket Player's chosen denominator (2-12).
-    /// @param baseAmount Burn amount before multiplier (includes quest rewards).
-    /// @param multBps Player bonus multiplier in bps.
-    /// @return bucketUsed The bucket actually used (may differ if already locked).
-    function recordDecBurn(
-        address player,
-        uint24 lvl,
-        uint8 bucket,
-        uint256 baseAmount,
-        uint256 multBps
-    ) external override onlyCoin returns (uint8 bucketUsed) {
-        DecEntry storage e = decBurn[lvl][player];
-        uint192 prevBurn = e.burn;
-
-        // First burn this level: lock bucket and assign deterministic subbucket
-        if (e.bucket == 0) {
-            e.bucket = bucket;
-            e.subBucket = _decSubbucketFor(player, lvl, bucket);
-        }
-
-        bucketUsed = e.bucket;
-
-        uint256 effectiveAmount = _decEffectiveAmount(uint256(prevBurn), baseAmount, multBps);
-
-        // Accumulate burn with uint192 saturation
-        uint256 updated = uint256(prevBurn) + effectiveAmount;
-        if (updated > type(uint192).max) updated = type(uint192).max;
-        uint192 newBurn = uint192(updated);
-        e.burn = newBurn;
-
-        // Update subbucket aggregate if burn increased
-        uint192 delta = newBurn - prevBurn;
-        if (delta != 0) {
-            _decUpdateSubbucket(lvl, bucketUsed, e.subBucket, delta);
-        }
-
-        return bucketUsed;
-    }
-
-    /// @dev Apply multiplier until the cap is reached; extra amount is counted at 1x.
-    function _decEffectiveAmount(
-        uint256 prevBurn,
-        uint256 baseAmount,
-        uint256 multBps
-    ) private pure returns (uint256 effectiveAmount) {
-        if (baseAmount == 0) return 0;
-        if (multBps <= BPS_DENOMINATOR || prevBurn >= DECIMATOR_MULTIPLIER_CAP) {
-            return baseAmount;
-        }
-
-        uint256 remaining = DECIMATOR_MULTIPLIER_CAP - prevBurn;
-        uint256 fullEffective = (baseAmount * multBps) / BPS_DENOMINATOR;
-        if (fullEffective <= remaining) return fullEffective;
-
-        uint256 maxMultBase = (remaining * BPS_DENOMINATOR) / multBps;
-        if (maxMultBase > baseAmount) maxMultBase = baseAmount;
-        uint256 multiplied = (maxMultBase * multBps) / BPS_DENOMINATOR;
-        effectiveAmount = multiplied + (baseAmount - maxMultBase);
+        emit BafFlipRecorded(player, lvl, amount, total);
     }
 
     /*+======================================================================+
@@ -432,14 +187,13 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |                                                                      |
       |  PRIZE DISTRIBUTION:                                                 |
       |  +-----------------------------------------------------------------+ |
-      |  | 10% | Top BAF bettor for this level                           | |
-      |  | 10% | Top coinflip bettor from last 24h window                 | |
-      |  |  5% | Random pick: 3rd or 4th BAF slot                         | |
-      |  | 10% | Exterminator draw (prior 20 levels, 5/3/2/0%)            | |
-      |  | 10% | Affiliate draw (top referrers, 5/3/2/0%)                 | |
-      |  | 20% | Scatter 1st place (50 rounds × 4 trait tickets)          | |
-      |  | 25% | Scatter 2nd place (50 rounds × 4 trait tickets)          | |
-      |  | 10% | Returned to future pool                                 | |
+      |  | 10% | Top BAF bettor for this level                             | |
+      |  | 10% | Top coinflip bettor from last 24h window                  | |
+      |  |  5% | Random pick: 3rd or 4th BAF slot                          | |
+      |  | 11.25% | Affiliate draw (top referrers, weighted 5/3/2/0)       | |
+      |  | 22.5%  | Scatter 1st place (50 rounds × 4 trait tickets)        | |
+      |  | 28.125%| Scatter 2nd place (50 rounds × 4 trait tickets)        | |
+      |  | 10% | Returned to future pool                                   | |
       |  +-----------------------------------------------------------------+ |
       |                                                                      |
       |  ELIGIBILITY (required for all winners):                             |
@@ -453,9 +207,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
       +======================================================================+*/
 
     /// @notice Resolve the BAF jackpot for a level.
-    /// @dev Access: game contract only. Called at level end.
-    ///      Distributes poolWei across multiple winner categories with eligibility checks.
+    /// @dev Distributes poolWei across multiple winner categories with eligibility checks.
     ///      Returns arrays of winners/amounts plus winnerMask for scatter ticket handling.
+    ///      Clears leaderboard state after resolution.
     /// @param poolWei Total ETH prize pool for distribution.
     /// @param lvl Level number being resolved.
     /// @param rngWord VRF-derived randomness seed.
@@ -463,6 +217,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @return amounts Array of prize amounts corresponding to winners.
     /// @return winnerMask Bitmask indicating scatter winners (high bits) for ticket routing.
     /// @return returnAmountWei Unawarded prize amount to return to caller.
+    /// @custom:access Restricted to game contract via onlyGame modifier.
     function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,
@@ -474,9 +229,10 @@ contract DegenerusJackpots is IDegenerusJackpots {
         returns (address[] memory winners, uint256[] memory amounts, uint256 winnerMask, uint256 returnAmountWei)
     {
         uint256 P = poolWei;
-        // Max distinct winners: 1 (top BAF) + 1 (top flip) + 1 (pick) + 3 (exterminator draw) + 3 (affiliate draw) + 50 + 50 (scatter buckets) = 109.
-        address[] memory tmpW = new address[](112);
-        uint256[] memory tmpA = new uint256[](112);
+        uint256 slice10 = P / 10;
+        // Max distinct winners: 1 (top BAF) + 1 (top flip) + 1 (pick) + 3 (affiliate draw) + 50 + 50 (scatter buckets) = 106.
+        address[] memory tmpW = new address[](106);
+        uint256[] memory tmpA = new uint256[](106);
         uint256 n;
         uint256 toReturn;
         uint256 mask;
@@ -486,7 +242,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
         {
             // Slice A: 10% to the top BAF bettor for the level.
-            uint256 topPrize = P / 10;
+            uint256 topPrize = (P * 9) / 80;
             (address w, ) = _bafTop(lvl, 0);
             if (_creditOrRefund(w, topPrize, tmpW, tmpA, n)) {
                 unchecked {
@@ -499,7 +255,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
         {
             // Slice A2: 10% to the top coinflip bettor from the last day window.
-            uint256 topPrize = P / 10;
+            uint256 topPrize = (P * 9) / 80;
             (address w, ) = coin.coinflipTopLastDay();
             if (_creditOrRefund(w, topPrize, tmpW, tmpA, n)) {
                 unchecked {
@@ -515,7 +271,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 ++salt;
             }
             entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
-            uint256 prize = P / 20;
+            uint256 prize = (P * 9) / 160;
             uint8 pick = 2 + uint8(entropy & 1);
             (address w, ) = _bafTop(lvl, pick);
             // Slice B: 5% to either the 3rd or 4th BAF leaderboard slot (pseudo-random tie-break).
@@ -529,148 +285,15 @@ contract DegenerusJackpots is IDegenerusJackpots {
         }
 
         {
-            unchecked {
-                ++salt;
-            }
-            entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
-        }
-
-        {
-            // Slice B2: exterminator achievers (past 20 levels) share 10% across four descending prizes (5/3/2/0%).
-            uint256[4] memory exPrizes = [(P * 5) / 100, (P * 3) / 100, (P * 2) / 100, uint256(0)];
-            uint256 exterminatorSlice;
-            unchecked {
-                exterminatorSlice = exPrizes[0] + exPrizes[1] + exPrizes[2];
-            }
-
-            unchecked {
-                ++salt;
-            }
-            entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
-
-            address[20] memory exCandidates;
-            uint256[20] memory exScores;
-            uint8 exCount;
-
-            // Collect exterminators from each of the prior 20 levels (deduped).
-            for (uint8 offset = 1; offset <= 20; ) {
-                if (lvl <= offset) break;
-                address ex = degenerusGame.levelExterminator(uint24(lvl - offset));
-                if (ex != address(0)) {
-                    bool seen;
-                    for (uint8 i; i < exCount; ) {
-                        if (exCandidates[i] == ex) {
-                            seen = true;
-                            break;
-                        }
-                        unchecked {
-                            ++i;
-                        }
-                    }
-                    if (!seen) {
-                        exCandidates[exCount] = ex;
-                        exScores[exCount] = _bafScore(ex, lvl);
-                        unchecked {
-                            ++exCount;
-                        }
-                    }
-                }
-                unchecked {
-                    ++offset;
-                }
-            }
-
-            // Shuffle candidate order to randomize draws.
-            for (uint8 i = exCount; i > 1; ) {
-                unchecked {
-                    ++salt;
-                }
-                entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
-                uint256 j = entropy % i;
-                uint8 idxA = i - 1;
-                address addrTmp = exCandidates[idxA];
-                exCandidates[idxA] = exCandidates[j];
-                exCandidates[j] = addrTmp;
-                uint256 scoreTmp = exScores[idxA];
-                exScores[idxA] = exScores[j];
-                exScores[j] = scoreTmp;
-                unchecked {
-                    --i;
-                }
-            }
-
-            address[4] memory exWinners;
-            uint256[4] memory exWinnerScores;
-            uint8 exWinCount;
-
-            for (uint8 i; i < exCount && exWinCount < 4; ) {
-                address cand = exCandidates[i];
-                if (_eligible(cand)) {
-                    exWinners[exWinCount] = cand;
-                    exWinnerScores[exWinCount] = exScores[i];
-                    unchecked {
-                        ++exWinCount;
-                    }
-                }
-                unchecked {
-                    ++i;
-                }
-            }
-
-            if (exWinCount == 0) {
-                toReturn += exterminatorSlice;
-            } else {
-                // Sort by BAF score so higher scores take the larger cuts (5/3/2/0%).
-                for (uint8 i; i < exWinCount; ) {
-                    uint8 bestIdx = i;
-                    for (uint8 j = i + 1; j < exWinCount; ) {
-                        if (exWinnerScores[j] > exWinnerScores[bestIdx]) {
-                            bestIdx = j;
-                        }
-                        unchecked {
-                            ++j;
-                        }
-                    }
-                    if (bestIdx != i) {
-                        address wTmp = exWinners[i];
-                        exWinners[i] = exWinners[bestIdx];
-                        exWinners[bestIdx] = wTmp;
-                        uint256 sTmp = exWinnerScores[i];
-                        exWinnerScores[i] = exWinnerScores[bestIdx];
-                        exWinnerScores[bestIdx] = sTmp;
-                    }
-                    unchecked {
-                        ++i;
-                    }
-                }
-
-                uint256 paidEx;
-                for (uint8 i; i < exWinCount; ) {
-                    uint256 prize = exPrizes[i];
-                    paidEx += prize;
-                    if (prize != 0) {
-                        tmpW[n] = exWinners[i];
-                        tmpA[n] = prize;
-                        unchecked {
-                            ++n;
-                        }
-                    }
-                    unchecked {
-                        ++i;
-                    }
-                }
-                if (paidEx < exterminatorSlice) {
-                    toReturn += exterminatorSlice - paidEx;
-                }
-            }
-        }
-
-        {
-            // Slice C: affiliate achievers (past 20 levels) share 10% across four descending prizes.
-            uint256[4] memory affiliatePrizes = [(P * 5) / 100, (P * 3) / 100, (P * 2) / 100, uint256(0)];
+            // Slice C: affiliate achievers (past 20 levels) share 11.25% across four descending prizes.
+            uint256 affiliateTotal = (P * 9) / 80;
+            uint256[4] memory affiliatePrizes;
+            affiliatePrizes[0] = (affiliateTotal * 5) / 10;
+            affiliatePrizes[1] = (affiliateTotal * 3) / 10;
+            affiliatePrizes[2] = affiliateTotal - affiliatePrizes[0] - affiliatePrizes[1];
             uint256 affiliateSlice;
             unchecked {
-                affiliateSlice = affiliatePrizes[0] + affiliatePrizes[1] + affiliatePrizes[2] + affiliatePrizes[3];
+                affiliateSlice = affiliatePrizes[0] + affiliatePrizes[1] + affiliatePrizes[2];
             }
 
             unchecked {
@@ -795,15 +418,15 @@ contract DegenerusJackpots is IDegenerusJackpots {
             }
         }
 
-        // Retro-top slice removed; return 10% to the reward pool.
-        toReturn += P / 10;
+        // Return 10% to the reward pool (retro-top slice removed).
+        toReturn += slice10;
 
         // Scatter slice: 200 total draws (4 tickets * 50 rounds). Per round, take top-2 by BAF score.
         // Game applies special ticket handling for the last BAF_SCATTER_TICKET_WINNERS scatter winners via `winnerMask`.
         {
             // Slice E: scatter tickets from trait sampler so casual participants can land smaller cuts.
-            uint256 scatterTop = (P * 20) / 100;
-            uint256 scatterSecond = (P * 25) / 100;
+            uint256 scatterTop = (P * 9) / 40;
+            uint256 scatterSecond = (P * 45) / 160;
             address[50] memory firstWinners;
             address[50] memory secondWinners;
             uint256 firstCount;
@@ -845,13 +468,13 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 }
 
                 // Bucket winners if eligible and capacity not exceeded; otherwise refund their would-be share later.
-                if (firstCount < 50 && _eligible(best)) {
+                if (_eligible(best)) {
                     firstWinners[firstCount] = best;
                     unchecked {
                         ++firstCount;
                     }
                 }
-                if (secondCount < 50 && _eligible(second)) {
+                if (_eligible(second)) {
                     secondWinners[secondCount] = second;
                     unchecked {
                         ++secondCount;
@@ -914,14 +537,11 @@ contract DegenerusJackpots is IDegenerusJackpots {
             }
         }
 
-        winners = new address[](n);
-        amounts = new uint256[](n);
-        for (uint256 i; i < n; ) {
-            winners[i] = tmpW[i];
-            amounts[i] = tmpA[i];
-            unchecked {
-                ++i;
-            }
+        winners = tmpW;
+        amounts = tmpA;
+        assembly ("memory-safe") {
+            mstore(winners, n)
+            mstore(amounts, n)
         }
 
         winnerMask = mask;
@@ -932,179 +552,16 @@ contract DegenerusJackpots is IDegenerusJackpots {
     }
 
     /*+======================================================================+
-      |                    DECIMATOR JACKPOT RESOLUTION                      |
-      +======================================================================+
-      |  Snapshots winning subbuckets for deferred claim distribution.       |
-      |                                                                      |
-      |  RESOLUTION FLOW:                                                    |
-      |  1. For each denom 2..12, select random winning subbucket            |
-      |  2. Sum total burns across all winning subbuckets                    |
-      |  3. Snapshot poolWei and totalBurn for claims                        |
-      |  4. Players claim pro-rata share via claimDecimatorJackpot           |
-      |                                                                      |
-      |  CLAIM FORMULA:                                                      |
-      |  payout = (poolWei × playerBurn) / totalBurn                         |
-      |                                                                      |
-      |  SECURITY:                                                           |
-      |  • VRF-derived randomness for subbucket selection                    |
-      |  • No double snapshots (returns pool if already active)              |
-      |  • Returns full pool if no qualifying burns                          |
-      +======================================================================+*/
-
-    /// @notice Snapshot Decimator jackpot winners for deferred claims.
-    /// @dev Access: game contract only. Called at level end.
-    ///      Selects winning subbucket per denominator and snapshots totals.
-    ///      Actual distribution happens via claim functions.
-    /// @param poolWei Total ETH prize pool for this level.
-    /// @param lvl Level number being resolved.
-    /// @param rngWord VRF-derived randomness seed.
-    /// @return returnAmountWei Amount to return (non-zero if no winners or already snapshotted).
-    function runDecimatorJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
-    )
-        external
-        override
-        onlyGame
-        returns (uint256 returnAmountWei)
-    {
-        // Decimator jackpots defer ETH distribution to per-player claims
-        // Prevent double-snapshotting: return pool if this level already active
-        if (lastDecClaimRound.lvl == lvl) {
-            return poolWei;
-        }
-
-        uint256 totalBurn;
-        uint64 packedOffsets;
-
-        // Select winning subbucket for each denominator (2-12)
-        uint256 decSeed = rngWord;
-        for (uint8 denom = 2; denom <= DECIMATOR_MAX_DENOM; ) {
-            // Deterministically select winning subbucket from VRF
-            uint8 winningSub = _decWinningSubbucket(decSeed, denom);
-            packedOffsets = _packDecWinningSubbucket(packedOffsets, denom, winningSub);
-
-            // Accumulate burn total from winning subbucket
-            uint256 subTotal = decBucketBurnTotal[lvl][denom][winningSub];
-            if (subTotal != 0) {
-                totalBurn += subTotal;
-            }
-
-            unchecked {
-                ++denom;
-            }
-        }
-
-        // Store packed winning subbuckets for claim validation
-        decBucketOffsetPacked[lvl] = packedOffsets;
-
-        // No qualifying burns: return full pool
-        if (totalBurn == 0) {
-            return poolWei;
-        }
-
-        // Safety: If totalBurn exceeds uint248, return pool (economically impossible but defensive)
-        if (totalBurn > type(uint248).max) {
-            return poolWei;
-        }
-
-        // Snapshot last claim round (overwrites previous - old claims expire)
-        lastDecClaimRound.lvl = lvl;
-        lastDecClaimRound.poolWei = poolWei;
-        lastDecClaimRound.totalBurn = uint248(totalBurn);
-        lastDecClaimRound.rngWord = rngWord; // Store VRF for lootbox entropy
-
-        return 0; // All funds held for claims
-    }
-
-    /*+======================================================================+
-      |                      DECIMATOR CLAIM FUNCTIONS                       |
-      +======================================================================+
-      |  Allow players to claim their pro-rata share of Decimator jackpot.   |
-      |                                                                      |
-      |  CLAIM REQUIREMENTS:                                                 |
-      |  • Round must be active (snapshotted via runDecimatorJackpot)        |
-      |  • Player must not have already claimed                              |
-      |  • Player's subbucket must match winning subbucket for their denom   |
-      |                                                                      |
-      |  SECURITY:                                                           |
-      |  • claimed flag prevents double-claims                               |
-      |  • Pro-rata calculation based on snapshotted totals                  |
-      +======================================================================+*/
-
-    /// @dev Internal claim validation and marking.
-    ///      Validates eligibility and marks as claimed if successful.
-    /// @param player Address claiming the jackpot.
-    /// @param lvl Level to claim from.
-    /// @return amountWei Pro-rata payout amount.
-    function _consumeDecClaim(address player, uint24 lvl) internal returns (uint256 amountWei) {
-        // Only allow claims for the last decimator (claims expire when next decimator runs)
-        if (lastDecClaimRound.lvl != lvl) revert DecClaimInactive();
-
-        DecEntry storage e = decBurn[lvl][player];
-        if (e.claimed != 0) revert DecAlreadyClaimed();
-
-        // Calculate pro-rata share if player's subbucket won
-        uint64 packedOffsets = decBucketOffsetPacked[lvl];
-        uint256 totalBurn = uint256(lastDecClaimRound.totalBurn);
-        amountWei = _decClaimableFromEntry(lastDecClaimRound.poolWei, totalBurn, e, lvl, packedOffsets);
-        if (amountWei == 0) revert DecNotWinner();
-
-        // Mark as claimed to prevent double-claiming
-        e.claimed = 1;
-    }
-
-    /// @notice Consume Decimator claim on behalf of player.
-    /// @dev Access: game contract only. Used for game-initiated claims.
-    /// @param player Address to claim for.
-    /// @param lvl Level to claim from.
-    /// @return amountWei Pro-rata payout amount.
-    function consumeDecClaim(address player, uint24 lvl) external onlyGame returns (uint256 amountWei) {
-        return _consumeDecClaim(player, lvl);
-    }
-
-    /// @notice Claim Decimator jackpot for caller.
-    /// @dev Public function for players to claim their own jackpot.
-    ///      Credits payout to player's claimable balance via game contract.
-    ///      Claims expire when next decimator runs.
-    ///      Internally calls the batch version with a single-element array.
-    /// @param lvl Level to claim from (must be the last decimator).
-    function claimDecimatorJackpot(uint24 lvl) external {
-        address[] memory players = new address[](1);
-        uint256[] memory amounts = new uint256[](1);
-        players[0] = msg.sender;
-        amounts[0] = _consumeDecClaim(msg.sender, lvl);
-        degenerusGame.creditDecJackpotClaimBatch(players, amounts, lastDecClaimRound.rngWord);
-    }
-
-    /// @notice Check if player can claim Decimator jackpot for a level.
-    /// @dev View function for UI to show claimable amounts.
-    ///      Only returns non-zero for the last decimator (claims expire when next one runs).
-    /// @param player Address to check.
-    /// @param lvl Level to check (must be the last decimator).
-    /// @return amountWei Claimable amount (0 if not winner or already claimed or expired).
-    /// @return winner True if player is a winner for this level.
-    function decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner) {
-        // Only show claimable for the last decimator
-        if (lastDecClaimRound.lvl != lvl) {
-            return (0, false);
-        }
-        return _decClaimable(lastDecClaimRound, player, lvl);
-    }
-
-    /*+======================================================================+
       |                      INTERNAL HELPER FUNCTIONS                       |
       +======================================================================+
       |  Utility functions for eligibility, bucket packing, and scoring.     |
       +======================================================================+*/
 
     /// @dev Check if player meets BAF eligibility requirements.
-    ///      Requirements:
-    ///      - 8+ consecutive ETH mint streak
     /// @param player Address to check.
-    /// @return True if player is eligible for BAF prizes.
+    /// @return True if player has 8+ consecutive ETH mint streak.
     function _eligible(address player) internal view returns (bool) {
+        if (player == address(0)) return false;
         return degenerusGame.ethMintStreakCount(player) >= 8;
     }
 
@@ -1133,125 +590,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
     }
 
     /*+======================================================================+
-      |                    DECIMATOR BUCKET HELPERS                          |
-      +======================================================================+
-      |  Packing/unpacking for winning subbucket storage and calculation.    |
-      +======================================================================+*/
-
-    /// @dev Deterministically select winning subbucket for a denominator.
-    /// @param entropy VRF-derived randomness.
-    /// @param denom Denominator (2-12).
-    /// @return Winning subbucket index (0 to denom-1).
-    function _decWinningSubbucket(uint256 entropy, uint8 denom) private pure returns (uint8) {
-        if (denom == 0) return 0;
-        return uint8(uint256(keccak256(abi.encode(entropy, denom))) % denom);
-    }
-
-    /// @dev Pack a winning subbucket into the packed uint64.
-    ///      Layout: 4 bits per denom, starting at denom 2.
-    /// @param packed Current packed value.
-    /// @param denom Denominator to pack (2-12).
-    /// @param sub Winning subbucket for this denom.
-    /// @return Updated packed value.
-    function _packDecWinningSubbucket(uint64 packed, uint8 denom, uint8 sub) private pure returns (uint64) {
-        uint8 shift = (denom - 2) << 2; // 4 bits per denom
-        uint64 mask = uint64(0xF) << shift;
-        return (packed & ~mask) | ((uint64(sub) & 0xF) << shift);
-    }
-
-    /// @dev Unpack a winning subbucket from the packed uint64.
-    /// @param packed Packed winning subbuckets.
-    /// @param denom Denominator to unpack (2-12).
-    /// @return Winning subbucket for this denom.
-    function _unpackDecWinningSubbucket(uint64 packed, uint8 denom) private pure returns (uint8) {
-        if (denom < 2) return 0;
-        uint8 shift = (denom - 2) << 2;
-        return uint8((packed >> shift) & 0xF);
-    }
-
-    /// @dev Calculate pro-rata claimable amount for a player's DecEntry.
-    /// @param poolWei Total pool available for claims.
-    /// @param totalBurn Total qualifying burn (denominator).
-    /// @param e Player's DecEntry storage reference.
-    /// @param lvl Level number.
-    /// @param packedOffsets Packed winning subbuckets.
-    /// @return amountWei Player's pro-rata share (0 if not winner).
-    function _decClaimableFromEntry(
-        uint256 poolWei,
-        uint256 totalBurn,
-        DecEntry storage e,
-        uint24 lvl,
-        uint64 packedOffsets
-    ) private view returns (uint256 amountWei) {
-        if (totalBurn == 0) return 0;
-
-        uint8 denom = e.bucket;
-        uint8 sub = e.subBucket;
-        uint192 entryBurn = e.burn;
-
-        // No participation or zero burn
-        if (denom == 0 || entryBurn == 0) return 0;
-
-        // Check if player's subbucket matches winning subbucket
-        uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, denom);
-        if (sub != winningSub) return 0;
-
-        // Safety check: verify subbucket has burns
-        if (decBucketBurnTotal[lvl][denom][winningSub] == 0) return 0;
-
-        // Pro-rata share: (pool × playerBurn) / totalBurn
-        amountWei = (poolWei * uint256(entryBurn)) / totalBurn;
-    }
-
-    /// @dev Internal view helper for decClaimable.
-    /// @param round LastDecClaimRound storage reference.
-    /// @param player Address to check.
-    /// @param lvl Level number.
-    /// @return amountWei Claimable amount.
-    /// @return winner True if player is a winner.
-    function _decClaimable(
-        LastDecClaimRound storage round,
-        address player,
-        uint24 lvl
-    ) internal view returns (uint256 amountWei, bool winner) {
-        uint256 totalBurn = uint256(round.totalBurn);
-        if (totalBurn == 0) return (0, false);
-
-        DecEntry storage e = decBurn[lvl][player];
-        if (e.claimed != 0) return (0, false);
-
-        uint64 packedOffsets = decBucketOffsetPacked[lvl];
-        amountWei = _decClaimableFromEntry(round.poolWei, totalBurn, e, lvl, packedOffsets);
-        winner = amountWei != 0;
-    }
-
-    /// @dev Update aggregated burn totals for a subbucket.
-    /// @param lvl Level number.
-    /// @param denom Denominator (bucket).
-    /// @param sub Subbucket index.
-    /// @param delta Burn amount to add.
-    function _decUpdateSubbucket(
-        uint24 lvl,
-        uint8 denom,
-        uint8 sub,
-        uint192 delta
-    ) internal {
-        if (delta == 0 || denom == 0) return;
-        decBucketBurnTotal[lvl][denom][sub] += uint256(delta);
-    }
-
-    /// @dev Deterministically assign subbucket for a player.
-    ///      Hash of (player, lvl, bucket) ensures consistent assignment.
-    /// @param player Address.
-    /// @param lvl Level number.
-    /// @param bucket Denominator.
-    /// @return Subbucket index (0 to bucket-1).
-    function _decSubbucketFor(address player, uint24 lvl, uint8 bucket) private pure returns (uint8) {
-        if (bucket == 0) return 0;
-        return uint8(uint256(keccak256(abi.encodePacked(player, lvl, bucket))) % bucket);
-    }
-
-    /*+======================================================================+
       |                      BAF LEADERBOARD HELPERS                         |
       +======================================================================+
       |  Maintain sorted top-4 leaderboard per level.                        |
@@ -1260,7 +598,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @dev Get player's BAF score for a level.
     /// @param player Address to query.
     /// @param lvl Level number.
-    /// @return Weighted coinflip total (0 if player not in this level).
+    /// @return Accumulated coinflip total (0 if player not in this level).
     function _bafScore(address player, uint24 lvl) private view returns (uint256) {
         return bafTotals[lvl][player];
     }
@@ -1278,7 +616,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @dev Update top-4 BAF leaderboard with new stake.
     ///      Maintains sorted order (highest score first).
-    ///      Handles: existing player update, new player insertion, capacity management.
+    ///      Handles existing player update, new player insertion, and capacity management.
     /// @param lvl Level number.
     /// @param player Address.
     /// @param stake New total stake for player.
@@ -1355,7 +693,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
     }
 
     /// @dev Clear leaderboard state for a level after jackpot resolution.
-    ///      Called at end of runBafJackpot to free storage.
     /// @param lvl Level number.
     function _clearBafTop(uint24 lvl) private {
         uint8 len = bafTopLen[lvl];

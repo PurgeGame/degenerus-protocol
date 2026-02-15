@@ -5,11 +5,19 @@ pragma solidity ^0.8.26;
 /// @notice Interface for the affiliate referral system with multi-tier rewards and leaderboard tracking.
 /// @dev Implements 3-tier referral structure: Player → Affiliate (base) → Upline1 (20%) → Upline2 (4%).
 interface IDegenerusAffiliate {
+    /// @notice Affiliate payout routing mode.
+    /// @dev 0=coinflip credit (default), 1=degenerette credit bucket, 2=50% coin (remaining 50% discarded).
+    enum PayoutMode {
+        Coinflip,
+        Degenerette,
+        SplitCoinflipCoin
+    }
+
     /// @notice Process affiliate rewards for a purchase or gameplay action.
     /// @dev Handles referral resolution, reward scaling, and multi-tier distribution.
     ///      Fresh ETH rewards: 25% (levels 1-3), 20% (levels 4+).
     ///      Recycled ETH rewards: 5% (all levels).
-    ///      Access restricted to COIN and GAMEPIECES contracts.
+    ///      Access restricted to COIN and GAME purchase paths.
     /// @param amount Base reward amount (18 decimals).
     /// @param code Affiliate code provided with the transaction (may be bytes32(0)).
     /// @param sender The player making the purchase.
@@ -23,6 +31,31 @@ interface IDegenerusAffiliate {
         uint24 lvl,
         bool isFreshEth
     ) external returns (uint256 playerRakeback);
+
+    /// @notice Set payout mode for an affiliate code owned by the caller.
+    /// @param code Affiliate code to configure.
+    /// @param mode Routing mode.
+    function setAffiliatePayoutMode(bytes32 code, PayoutMode mode) external;
+
+    /// @notice Get payout mode for an affiliate code.
+    /// @param code Affiliate code to query.
+    /// @return mode Current payout mode.
+    function affiliatePayoutMode(bytes32 code) external view returns (PayoutMode mode);
+
+    /// @notice View pending Degenerette credit balance for a player.
+    /// @param player Address to query.
+    /// @return amount Pending credit amount (18 decimals).
+    function pendingDegeneretteCreditOf(address player) external view returns (uint256 amount);
+
+    /// @notice Consume pending Degenerette credit for a player.
+    /// @dev Access: game contract only.
+    /// @param player Player address.
+    /// @param amount Amount to consume.
+    /// @return consumed Amount consumed.
+    function consumeDegeneretteCredit(
+        address player,
+        uint256 amount
+    ) external returns (uint256 consumed);
 
     /// @notice Get the top affiliate for a given game level.
     /// @dev Returns the affiliate with the highest earnings for that level.

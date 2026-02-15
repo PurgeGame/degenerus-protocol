@@ -9,13 +9,13 @@ pragma solidity ^0.8.26;
  * @dev ARCHITECTURE:
  *      - ERC20 standard with game contract transfer bypass
  *      - Coinflip: Daily stake windows with VRF-based 50/50 outcomes, 50-150% bonus on wins
- *      - Quest integration: Bonus flip credits for gameplay actions (mint/burn)
+ *      - Quest integration: Bonus flip credits for gameplay actions
  *      - Decimator burns: Burn-to-participate for decimator jackpot eligibility
  *      - Bounty: 1000 BURNIE/window accumulator; half removed each window (paid on win)
  *      - Vault escrow: 2M BURNIE virtual reserve, minted only on ContractAddresses.VAULT withdrawal
  *
  * @dev CRITICAL INVARIANTS:
- *      - totalSupply + _vaultMintAllowance = supplyIncUncirculated
+ *      - totalSupply + vaultAllowance = supplyIncUncirculated
  *      - coinflipBalance[day][player] immutable after settlement (day <= flipsClaimableDay)
  *      - Only one bountyOwedTo address at a time
  *
@@ -28,21 +28,17 @@ pragma solidity ^0.8.26;
  */
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
-import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
-import {IDegenerusStonk} from "./interfaces/IDegenerusStonk.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
-
-interface IWrappedWrappedXRP {
-    function mintPrize(address to, uint256 amount) external;
-}
 
 interface IBurnieCoinflip {
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
-    function afKingDailyOnlyMode(address player) external view returns (bool dailyOnly);
+    function claimCoinflipsFromBurnie(address player, uint256 amount) external returns (uint256 claimed);
+    function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
     function coinflipAmount(address player) external view returns (uint256);
     function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint48 startDay);
     function creditFlip(address player, uint256 amount) external;
+    function creditFlipBatch(address[3] calldata players, uint256[3] calldata amounts) external;
 }
 
 contract BurnieCoin {
@@ -65,23 +61,6 @@ contract BurnieCoin {
         uint256 amount
     );
 
-    /// @notice Emitted when a player deposits BURNIE into the coinflip pool.
-    /// @param player The depositor's address.
-    /// @param creditedFlip The raw amount deposited (excludes quest bonuses credited separately).
-
-    /// @notice Emitted when an afKing flip result is recorded from an RNG word.
-    /// @param epoch Monotonic RNG event index for the active afKing stream.
-    /// @param rewardPercent Bonus percent on wins (e.g., 150 = 150% bonus).
-    /// @param win True if the flip outcome is a win.
-
-    /// @notice Emitted when a player toggles afKing daily-only flip mode.
-    /// @param player The player whose mode was updated.
-    /// @param dailyOnly True to use daily-only RNG, false for every RNG word.
-
-    /// @notice Emitted when a player toggles coinflip auto-rebuy.
-
-    /// @notice Emitted when a player sets the coinflip auto-rebuy keep multiple.
-
     /// @notice Emitted when a player burns BURNIE during a decimator window.
     /// @param player The burner's address.
     /// @param amountBurned The amount burned (18 decimals).
@@ -92,114 +71,10 @@ contract BurnieCoin {
         uint8 bucket
     );
 
-    /// @notice Emitted when a player stakes BURNIE on a turbo flip.
-    /// @param player The staker address.
-    /// @param lootboxIndex Lootbox RNG index the flip is tied to.
-    /// @param amount Amount staked (18 decimals).
-    event TurboFlipStaked(
-        address indexed player,
-        uint48 indexed lootboxIndex,
-        uint256 amount
-    );
-
-    /// @notice Emitted when a player stakes multiple turbo flips for one RNG word.
-    /// @param player The staker address.
-    /// @param lootboxIndex Lootbox RNG index the flips are tied to.
-    /// @param amountPerFlip Amount per flip (18 decimals).
-    /// @param flipCount Number of flips in the batch.
-    /// @param totalAmount Total amount staked (amountPerFlip * flipCount).
-    event TurboFlipStakedBatch(
-        address indexed player,
-        uint48 indexed lootboxIndex,
-        uint256 amountPerFlip,
-        uint8 flipCount,
-        uint256 totalAmount
-    );
-
-    /// @notice Emitted when a turbo flip is resolved.
-    /// @param player The player resolved.
-    /// @param lootboxIndex Lootbox RNG index used.
-    /// @param win True if the flip won.
-    /// @param payout Amount credited as claimable (18 decimals).
-    /// @param payoutBps Payout multiplier in basis points (1x = 10000).
-    event TurboFlipResolved(
-        address indexed player,
-        uint48 indexed lootboxIndex,
-        bool win,
-        uint256 payout,
-        uint32 payoutBps
-    );
-
-    /// @notice Emitted when a player stakes BURNIE on a turbo decimator lane.
-    /// @param player The staker address.
-    /// @param lootboxIndex Lootbox RNG index the bet is tied to.
-    /// @param lane Selected lane (0-9).
-    /// @param amount Amount staked (18 decimals).
-    event TurboDecimatorStaked(
-        address indexed player,
-        uint48 indexed lootboxIndex,
-        uint8 lane,
-        uint256 amount
-    );
-
-    /// @notice Emitted when a turbo decimator bet is resolved.
-    /// @param player The player resolved.
-    /// @param lootboxIndex Lootbox RNG index used.
-    /// @param winningLane The winning lane (0-9).
-    /// @param win True if the player picked the winning lane.
-    /// @param payout Amount credited as claimable (18 decimals).
-    /// @param payoutBps Payout multiplier in basis points (1x = 10000).
-    event TurboDecimatorResolved(
-        address indexed player,
-        uint48 indexed lootboxIndex,
-        uint8 winningLane,
-        bool win,
-        uint256 payout,
-        uint32 payoutBps
-    );
-
-    /// @notice Emitted when a player stakes DGNRS on a turbo decimator lane.
-    /// @param player The staker address.
-    /// @param lootboxIndex Lootbox RNG index the bet is tied to.
-    /// @param lane Selected lane (0-9).
-    /// @param amount Amount staked (18 decimals).
-    event TurboDecimatorDgnrsStaked(
-        address indexed player,
-        uint48 indexed lootboxIndex,
-        uint8 lane,
-        uint256 amount
-    );
-
-    /// @notice Emitted when a turbo decimator DGNRS bet is resolved.
-    /// @param player The player resolved.
-    /// @param lootboxIndex Lootbox RNG index used.
-    /// @param winningLane The winning lane (0-9).
-    /// @param win True if the player picked the winning lane.
-    /// @param payout Amount credited as claimable (18 decimals).
-    /// @param payoutBps Payout multiplier in basis points (1x = 10000).
-    event TurboDecimatorDgnrsResolved(
-        address indexed player,
-        uint48 indexed lootboxIndex,
-        uint8 winningLane,
-        bool win,
-        uint256 payout,
-        uint32 payoutBps
-    );
-
-    /// @notice Emitted when turbo winnings are claimed and minted.
-    /// @param player The recipient address.
-    /// @param amount Amount minted (18 decimals).
-    event TurboClaimed(address indexed player, uint256 amount);
-
-    /// @notice Emitted when turbo DGNRS winnings are claimed.
-    /// @param player The recipient address.
-    /// @param amount Amount transferred (18 decimals).
-    event TurboDgnrsClaimed(address indexed player, uint256 amount);
-
     /// @notice Emitted when the daily quest is rolled for a new day.
     /// @param day The day index (1-indexed, day 1 = deploy day).
     /// @param questType The type of quest rolled (see IDegenerusQuests).
-    /// @param highDifficulty Whether hard mode is active for this quest.
+    /// @param highDifficulty Always false (difficulty removed).
     event DailyQuestRolled(
         uint48 indexed day,
         uint8 questType,
@@ -211,20 +86,17 @@ contract BurnieCoin {
     /// @param questType The type of quest completed.
     /// @param streak The player's current completion streak.
     /// @param reward The reward amount credited (as flip stake).
-    /// @param hardMode Whether the quest was completed in hard mode.
     event QuestCompleted(
         address indexed player,
         uint8 questType,
         uint32 streak,
-        uint256 reward,
-        bool hardMode,
-        bool completedBoth
+        uint256 reward
     );
 
     /// @notice Emitted when ContractAddresses.ADMIN credits LINK-funded bonus directly.
     /// @param player The recipient of the credit.
     /// @param amount The amount minted (18 decimals).
-    event LinkCredit(address indexed player, uint256 amount);
+
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The contract that escrowed the funds (VAULT or GAME).
@@ -254,71 +126,26 @@ contract BurnieCoin {
     /// @notice Deposit/burn amount is below the minimum threshold (10,000 BURNIE).
     error AmountLTMin();
 
-    /// @notice Turbo lane index is invalid.
-    error TurboLaneInvalid();
-
-    /// @notice Turbo lane mismatch for an existing stake.
-    error TurboLaneMismatch();
-
-    /// @notice Turbo RNG word is not ready for this lootbox index.
-    error TurboRngNotReady();
-
-    /// @notice Turbo RNG word already known for current lootbox index.
-    error TurboRngAlreadyKnown();
-
-    /// @notice No turbo stake exists to resolve.
-    error TurboNoStake();
-
-    /// @notice Turbo flip count is invalid (must be 1-10).
-    error TurboFlipCountInvalid();
-
-    /// @notice Turbo flip amount mismatch for an existing stake.
-    error TurboFlipAmountMismatch();
-
-    /// @notice Turbo flip side mismatch for an existing stake.
-    error TurboFlipSideMismatch();
-
     /// @notice Zero address not allowed for transfers, mints, or wiring.
     error ZeroAddress();
-    /// @notice Recipient address is not allowed for this operation.
-    error InvalidRecipient();
 
     /// @notice Decimator burn attempted outside an active decimator window.
     error NotDecimatorWindow();
 
-    /// @notice Caller is not the ContractAddresses.ADMIN address.
-    error OnlyAdmin();
-
     /// @notice Caller is not the authorized affiliate contract.
     error OnlyAffiliate();
 
-    /// @notice Caller is not the authorized gamepiece (gamepieces) contract.
-    error OnlyGamepieces();
-
-    /// @notice Coinflip deposits are locked during level jackpot resolution.
-    error CoinflipLocked();
-
-    /// @notice RNG is locked (VRF pending).
-    error RngLocked();
-
-    /// @notice Caller is not authorized (trusted contracts: GAME, GAMEPIECES, AFFILIATE, ICON_COLOR_REGISTRY).
+    /// @notice Caller is not authorized (trusted contracts: GAME, AFFILIATE).
     error OnlyTrustedContracts();
 
-    /// @notice Caller is not authorized (flip creditors: GAME, GAMEPIECES, AFFILIATE).
+    /// @notice Caller is not authorized (flip creditors: GAME, AFFILIATE).
     error OnlyFlipCreditors();
 
-    /// @notice Caller is not authorized (vault operations: VAULT or GAME).
-    error OnlyVaultOrGame();
-
-    /// @notice Auto-rebuy must be disabled before manual cash-out/claims.
-    error AutoRebuyActive();
-
-    /// @notice Auto-rebuy is already enabled.
-
-    /// @notice Auto-rebuy is not enabled.
-    /// @notice Auto-rebuy keep multiple is zero (no reservable multiples).
     /// @notice Caller is not approved to act for the player.
     error NotApproved();
+
+    /// @notice Supply values exceed uint128 bounds.
+    error SupplyOverflow();
 
     /*+======================================================================+
       |                         ERC20 STATE                                  |
@@ -330,7 +157,7 @@ contract BurnieCoin {
       |  +-----------------------------------------------------------------+ |
       |  | Slot | Variable                    | Type                       | |
       |  +------+-----------------------------+----------------------------+ |
-      |  |  0   | totalSupply                 | uint256                    | |
+      |  |  0   | _supply (total/vault)       | uint128 + uint128          | |
       |  |  1   | balanceOf                   | mapping(address => uint256)| |
       |  |  2   | allowance                   | mapping(addr => mapping)   | |
       |  +-----------------------------------------------------------------+ |
@@ -342,9 +169,37 @@ contract BurnieCoin {
     /// @notice Token symbol (ticker).
     string public constant symbol = "BURNIE";
 
+    /// @dev Minimum BURNIE amount for decimator burns (prevents dust spam).
+    uint256 private constant DECIMATOR_MIN = 10_000 ether;
+
+    /// @dev Base bucket denominator for decimator weighting (lower = better odds).
+    uint8 private constant DECIMATOR_BUCKET_BASE = 12;
+
+    /// @dev Minimum bucket for normal and level-100 decimators.
+    uint8 private constant DECIMATOR_MIN_BUCKET_NORMAL = 5;
+    uint8 private constant DECIMATOR_MIN_BUCKET_100 = 2;
+
+    /// @dev Cap for activity score bonus applied to decimator buckets (lazy pass max = 235%).
+    uint16 private constant DECIMATOR_ACTIVITY_CAP_BPS = 23_500;
+
+    /// @dev Max base amount eligible for decimator boon boost.
+    uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
+
+    /// @dev Quest type ids (must match DegenerusQuests).
+    uint8 private constant QUEST_TYPE_MINT_ETH = 1;
+
+    /// @dev Basis points denominator (10000 = 1x).
+    uint16 private constant BPS_DENOMINATOR = 10_000;
+
+    /// @dev Packed supply state to keep total/vault allowance in a single slot.
+    struct Supply {
+        uint128 totalSupply;
+        uint128 vaultAllowance;
+    }
+
     /// @notice Total circulating supply (excludes ContractAddresses.VAULT's virtual allowance).
     /// @dev Increases on mint, decreases on burn. Always equals sum of all balanceOf entries.
-    uint256 public totalSupply;
+    Supply private _supply = Supply({totalSupply: 0, vaultAllowance: uint128(2_000_000 ether)});
 
     /// @notice Token balance for each address.
     /// @dev Standard ERC20 balance mapping.
@@ -377,8 +232,8 @@ contract BurnieCoin {
       |  the references cannot be updated post-deploy.                       |
       |                                                                      |
       |  CONSTANT REFERENCES:                                                |
-      |  • GAME, QUESTS, JACKPOTS, AFFILIATE                                  |
-|  • VAULT, ADMIN, ICON_COLOR_REGISTRY                                  |
+      |  • GAME, QUESTS, AFFILIATE                                           |
+      |  • VAULT, ADMIN, COINFLIP                                            |
       +======================================================================+*/
 
     /// @notice The main game contract; provides level, RNG state, and purchase info.
@@ -389,62 +244,9 @@ contract BurnieCoin {
     IDegenerusQuests internal constant questModule =
         IDegenerusQuests(ContractAddresses.QUESTS);
 
-    /// @notice The jackpots module for decimator burns and BAF flip tracking.
-    IDegenerusJackpots internal constant jackpots =
-        IDegenerusJackpots(ContractAddresses.JACKPOTS);
-
-    /// @notice WWXRP contract for coinflip loss rewards.
-    IWrappedWrappedXRP internal constant wwxrp =
-        IWrappedWrappedXRP(ContractAddresses.WWXRP);
-
-    /// @notice DGNRS token contract for turbo decimator payouts.
-    IDegenerusStonk internal constant dgnrs =
-        IDegenerusStonk(ContractAddresses.DGNRS);
-
     /// @notice BurnieCoinflip contract - handles all coinflip wagering logic.
-    /// @dev Set via setCoinflipContract() after deployment.
-    address public coinflipContract;
-
-    /*+======================================================================+
-      |                      TURBO FLIP & DECIMATOR                          |
-      +======================================================================+
-      |  Fast-settlement flip and decimator bets resolved via lootbox RNG.  |
-      |  Stakes are stored per lootbox RNG index and resolved on demand.    |
-      +======================================================================+*/
-
-    /// @notice Pending turbo flip stakes by lootbox RNG index.
-    mapping(uint48 => mapping(address => uint256)) internal turboFlipStake;
-
-    /// @notice Pending turbo flip counts by lootbox RNG index.
-    mapping(uint48 => mapping(address => uint8)) internal turboFlipCount;
-
-    /// @notice Pending turbo flip side (true = bet on loss) by lootbox RNG index.
-    mapping(uint48 => mapping(address => bool)) internal turboFlipBetOnLoss;
-
-    /// @notice Pending turbo decimator stakes by lootbox RNG index.
-    mapping(uint48 => mapping(address => uint256)) internal turboDecimatorStake;
-
-    /// @notice Pending turbo decimator lane selection by lootbox RNG index.
-    /// @dev Lane is meaningful only when turboDecimatorStake > 0.
-    mapping(uint48 => mapping(address => uint8)) internal turboDecimatorLane;
-
-    /// @notice Pending turbo decimator DGNRS stakes by lootbox RNG index.
-    mapping(uint48 => mapping(address => uint256)) internal turboDecimatorDgnrsStake;
-
-    /// @notice Pending turbo decimator DGNRS lane selection by lootbox RNG index.
-    /// @dev Lane is meaningful only when turboDecimatorDgnrsStake > 0.
-    mapping(uint48 => mapping(address => uint8)) internal turboDecimatorDgnrsLane;
-
-    /// @notice Claimable turbo winnings held for manual claims.
-    mapping(address => uint256) internal turboClaimableStored;
-
-    /// @notice Claimable turbo DGNRS winnings held for manual claims.
-    mapping(address => uint256) internal turboDgnrsClaimableStored;
-
-    /// @notice Total pending turbo flip BURNIE amount (for manual RNG trigger threshold).
-    /// @dev Tracks combined pending stakes across all turbo flips.
-    ///      Incremented when staking turboflips, decremented when resolving.
-    uint256 internal turboFlipPendingBurnie;
+    /// @dev Fixed at deploy time via ContractAddresses.
+    address internal constant coinflipContract = ContractAddresses.COINFLIP;
 
     // Deploy day boundary moved to ContractAddresses.DEPLOY_DAY_BOUNDARY (compile-time constant)
 
@@ -455,12 +257,10 @@ contract BurnieCoin {
       |  exists "on paper" but hasn't entered circulation. The ContractAddresses.VAULT can     |
       |  mint from this allowance when distributing to players.              |
       +======================================================================+*/
-
     /// @notice Virtual supply the ContractAddresses.VAULT is authorized to mint (not yet circulating).
-    /// @dev Seeded to 2,000,000 BURNIE. Increases via vaultEscrow(), decreases via vaultMintTo().
-    ///      supplyIncUncirculated = totalSupply + _vaultMintAllowance.
+    /// @dev Seeded to 2,000,000 BURNIE in `_supply`. Increases via vaultEscrow(), decreases via vaultMintTo().
+    ///      supplyIncUncirculated = totalSupply + vaultAllowance.
     /// @custom:security Only ContractAddresses.VAULT/game can increase; only ContractAddresses.VAULT can mint from it.
-    uint256 private _vaultMintAllowance = 2_000_000 ether;
 
     /*+======================================================================+
       |                         VIEW HELPERS                                 |
@@ -472,8 +272,23 @@ contract BurnieCoin {
     /// @dev Proxies to BurnieCoinflip contract for coinflip-related claims.
     /// @return The total BURNIE claimable from past winning coinflips.
     function claimableCoin() external view returns (uint256) {
-        if (coinflipContract == address(0)) return 0;
         return IBurnieCoinflip(coinflipContract).previewClaimCoinflips(msg.sender);
+    }
+
+    /// @notice Total spendable BURNIE at the current time (balance + claimable if RNG unlocked).
+    /// @dev If RNG is locked, claimable coinflips cannot be pulled, so only returns on-chain balance.
+    ///      For ContractAddresses.VAULT, includes virtual vault allowance + any actual balance.
+    /// @param player The address to query.
+    /// @return spendable Total spendable amount right now.
+    function balanceOfWithClaimable(address player) external view returns (uint256 spendable) {
+        spendable = balanceOf[player];
+        if (player == ContractAddresses.VAULT) {
+            spendable += uint256(_supply.vaultAllowance);
+        }
+        if (degenerusGame.rngLocked()) return spendable;
+        unchecked {
+            spendable += IBurnieCoinflip(coinflipContract).previewClaimCoinflips(player);
+        }
     }
 
     /// @notice Preview the amount claimCoinflips(amount) would mint for a player.
@@ -481,111 +296,7 @@ contract BurnieCoin {
     /// @param player The player to preview for.
     /// @return mintable Amount of BURNIE that would be minted on claim.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable) {
-        if (coinflipContract == address(0)) return 0;
         return IBurnieCoinflip(coinflipContract).previewClaimCoinflips(player);
-    }
-
-    /// @notice Check if a player is using daily-only afKing flip mode.
-    /// @dev Proxies to BurnieCoinflip contract.
-    /// @param player The player address to query.
-    /// @return dailyOnly True if daily-only mode is enabled.
-    function afKingDailyOnlyMode(address player) external view returns (bool dailyOnly) {
-        if (coinflipContract == address(0)) return false;
-        return IBurnieCoinflip(coinflipContract).afKingDailyOnlyMode(player);
-    }
-
-    /// @notice Preview turbo winnings claimable for a player.
-    /// @param player The player to preview for.
-    /// @return mintable Amount of BURNIE claimable from turbo resolutions.
-    function previewClaimTurbo(address player) external view returns (uint256 mintable) {
-        return turboClaimableStored[player];
-    }
-
-    /// @notice Preview turbo DGNRS winnings claimable for a player.
-    /// @param player The player to preview for.
-    /// @return mintable Amount of DGNRS claimable from turbo resolutions.
-    function previewClaimTurboDgnrs(address player) external view returns (uint256 mintable) {
-        return turboDgnrsClaimableStored[player];
-    }
-
-    /// @notice Get pending turbo stakes for a player at a lootbox RNG index.
-    /// @param player The player address to query.
-    /// @param lootboxIndex Lootbox RNG index.
-    /// @return flipStake Pending turbo flip stake.
-    /// @return decimatorStake Pending turbo decimator stake.
-    /// @return lane Selected lane for turbo decimator (0-9).
-    function turboStakeInfo(
-        address player,
-        uint48 lootboxIndex
-    ) external view returns (uint256 flipStake, uint256 decimatorStake, uint8 lane) {
-        uint8 flipCount = turboFlipCount[lootboxIndex][player];
-        uint256 amountPerFlip = turboFlipStake[lootboxIndex][player];
-        if (flipCount == 0 && amountPerFlip != 0) {
-            flipCount = 1;
-        }
-        flipStake = flipCount == 0 ? 0 : amountPerFlip * uint256(flipCount);
-        decimatorStake = turboDecimatorStake[lootboxIndex][player];
-        lane = turboDecimatorLane[lootboxIndex][player];
-    }
-
-    /// @notice Get pending turbo flip details for a player at a lootbox RNG index.
-    /// @param player The player address to query.
-    /// @param lootboxIndex Lootbox RNG index.
-    /// @return amountPerFlip Pending amount per flip.
-    /// @return flipCount Pending flip count (0-10).
-    /// @return totalStake Pending total stake (amountPerFlip * flipCount).
-    function turboFlipInfo(
-        address player,
-        uint48 lootboxIndex
-    ) external view returns (uint256 amountPerFlip, uint8 flipCount, uint256 totalStake) {
-        amountPerFlip = turboFlipStake[lootboxIndex][player];
-        flipCount = turboFlipCount[lootboxIndex][player];
-        if (flipCount == 0 && amountPerFlip != 0) {
-            flipCount = 1;
-        }
-        totalStake = flipCount == 0 ? 0 : amountPerFlip * uint256(flipCount);
-    }
-
-    /// @notice Get pending turbo flip details including side selection.
-    /// @param player The player address to query.
-    /// @param lootboxIndex Lootbox RNG index.
-    /// @return amountPerFlip Pending amount per flip.
-    /// @return flipCount Pending flip count (0-10).
-    /// @return totalStake Pending total stake (amountPerFlip * flipCount).
-    /// @return betOnLoss True if the stake is on the loss side.
-    function turboFlipInfoDetailed(
-        address player,
-        uint48 lootboxIndex
-    )
-        external
-        view
-        returns (
-            uint256 amountPerFlip,
-            uint8 flipCount,
-            uint256 totalStake,
-            bool betOnLoss
-        )
-    {
-        amountPerFlip = turboFlipStake[lootboxIndex][player];
-        flipCount = turboFlipCount[lootboxIndex][player];
-        if (flipCount == 0 && amountPerFlip != 0) {
-            flipCount = 1;
-        }
-        totalStake = flipCount == 0 ? 0 : amountPerFlip * uint256(flipCount);
-        betOnLoss = turboFlipBetOnLoss[lootboxIndex][player];
-    }
-
-    /// @notice Get pending turbo DGNRS decimator stakes for a player at a lootbox RNG index.
-    /// @param player The player address to query.
-    /// @param lootboxIndex Lootbox RNG index.
-    /// @return decimatorStake Pending turbo decimator DGNRS stake.
-    /// @return lane Selected lane for turbo decimator DGNRS (0-9).
-    function turboDgnrsStakeInfo(
-        address player,
-        uint48 lootboxIndex
-    ) external view returns (uint256 decimatorStake, uint8 lane) {
-        decimatorStake = turboDecimatorDgnrsStake[lootboxIndex][player];
-        lane = turboDecimatorDgnrsLane[lootboxIndex][player];
     }
 
     /// @notice Get coinflip auto-rebuy settings for a player.
@@ -596,30 +307,26 @@ contract BurnieCoin {
     function coinflipAutoRebuyInfo(
         address player
     ) external view returns (bool enabled, uint256 stopAmount, uint256 carry) {
-        if (coinflipContract == address(0)) return (false, 0, 0);
-        uint48 startDay;
-        (enabled, stopAmount, carry, startDay) = IBurnieCoinflip(coinflipContract).coinflipAutoRebuyInfo(player);
+        (enabled, stopAmount, carry, ) = IBurnieCoinflip(coinflipContract).coinflipAutoRebuyInfo(player);
+    }
+
+    /// @notice Total circulating supply (excludes ContractAddresses.VAULT allowance).
+    function totalSupply() external view returns (uint256) {
+        return _supply.totalSupply;
     }
 
     /// @notice Total supply including uncirculated ContractAddresses.VAULT allowance.
     /// @dev Used by ContractAddresses.VAULT share calculations and dashboards.
     /// @return The sum of circulating supply + virtual ContractAddresses.VAULT reserve.
     function supplyIncUncirculated() external view returns (uint256) {
-        return totalSupply + _vaultMintAllowance;
+        return uint256(_supply.totalSupply) + uint256(_supply.vaultAllowance);
     }
 
     /// @notice Virtual coin reserved for the ContractAddresses.VAULT (not yet circulating).
     /// @dev Exposed for the ContractAddresses.VAULT share math and external dashboards.
     /// @return The current ContractAddresses.VAULT mint allowance in BURNIE (18 decimals).
     function vaultMintAllowance() external view returns (uint256) {
-        return _vaultMintAllowance;
-    }
-
-    /// @notice Get total pending turbo flip BURNIE amount.
-    /// @dev Used by manual RNG trigger threshold check.
-    /// @return The total pending turbo flip BURNIE (18 decimals).
-    function turboFlipPendingBurnieAmount() external view returns (uint256) {
-        return turboFlipPendingBurnie;
+        return _supply.vaultAllowance;
     }
 
     /*+======================================================================+
@@ -673,8 +380,11 @@ contract BurnieCoin {
     /// @param spender The address authorized to spend.
     /// @param amount The maximum amount that can be spent.
     /// @return True on success.
-    function approve(address spender, uint256 amount) public returns (bool) {
-        allowance[msg.sender][spender] = amount;
+    function approve(address spender, uint256 amount) external returns (bool) {
+        uint256 current = allowance[msg.sender][spender];
+        if (current != amount) {
+            allowance[msg.sender][spender] = amount;
+        }
         emit Approval(msg.sender, spender, amount);
         return true;
     }
@@ -684,7 +394,8 @@ contract BurnieCoin {
     /// @param to The recipient address.
     /// @param amount The amount to transfer (18 decimals).
     /// @return True on success.
-    function transfer(address to, uint256 amount) public returns (bool) {
+    function transfer(address to, uint256 amount) external returns (bool) {
+        _claimCoinflipShortfall(msg.sender, amount);
         _transfer(msg.sender, to, amount);
         return true;
     }
@@ -701,20 +412,26 @@ contract BurnieCoin {
         address from,
         address to,
         uint256 amount
-    ) public returns (bool) {
+    ) external returns (bool) {
         // Game contract bypass: no allowance check needed for trusted game operations
         if (msg.sender != ContractAddresses.GAME) {
             uint256 allowed = allowance[from][msg.sender];
             // Infinite approval optimization: skip allowance update for max value
-            if (allowed != type(uint256).max) {
+            if (allowed != type(uint256).max && amount != 0) {
                 // Solidity 0.8+ will revert on underflow if allowed < amount
                 uint256 newAllowance = allowed - amount;
                 allowance[from][msg.sender] = newAllowance;
                 emit Approval(from, msg.sender, newAllowance);
             }
         }
+        _claimCoinflipShortfall(from, amount);
         _transfer(from, to, amount);
         return true;
+    }
+
+    function _toUint128(uint256 value) private pure returns (uint128) {
+        if (value > type(uint128).max) revert SupplyOverflow();
+        return uint128(value);
     }
 
     /// @notice Internal transfer helper.
@@ -729,8 +446,11 @@ contract BurnieCoin {
 
         if (to == ContractAddresses.VAULT) {
             // Vault receives no circulating BURNIE; redirect to mint allowance.
-            totalSupply -= amount;
-            _vaultMintAllowance += amount;
+            uint128 amount128 = _toUint128(amount);
+            unchecked {
+                _supply.totalSupply -= amount128;
+                _supply.vaultAllowance += amount128;
+            }
             emit Transfer(from, address(0), amount);
             emit VaultEscrowRecorded(from, amount);
             return;
@@ -747,12 +467,15 @@ contract BurnieCoin {
     /// @param amount The amount to mint (18 decimals).
     function _mint(address to, uint256 amount) internal {
         if (to == address(0)) revert ZeroAddress();
+        uint128 amount128 = _toUint128(amount);
         if (to == ContractAddresses.VAULT) {
-            _vaultMintAllowance += amount;
+            unchecked {
+                _supply.vaultAllowance += amount128;
+            }
             emit VaultEscrowRecorded(address(0), amount);
             return;
         }
-        totalSupply += amount;
+        _supply.totalSupply += amount128;
         balanceOf[to] += amount;
         emit Transfer(address(0), to, amount);
     }
@@ -764,16 +487,19 @@ contract BurnieCoin {
     /// @param amount The amount to burn (18 decimals).
     function _burn(address from, uint256 amount) internal {
         if (from == address(0)) revert ZeroAddress();
+        uint128 amount128 = _toUint128(amount);
         if (from == ContractAddresses.VAULT) {
-            uint256 allowanceVault = _vaultMintAllowance;
-            if (amount > allowanceVault) revert Insufficient();
-            _vaultMintAllowance = allowanceVault - amount;
+            uint128 allowanceVault = _supply.vaultAllowance;
+            if (amount128 > allowanceVault) revert Insufficient();
+            unchecked {
+                _supply.vaultAllowance = allowanceVault - amount128;
+            }
             emit VaultAllowanceSpent(from, amount);
             return;
         }
         // Solidity 0.8+ reverts on underflow if balanceOf[from] < amount
         balanceOf[from] -= amount;
-        totalSupply -= amount;
+        _supply.totalSupply -= amount128;
         emit Transfer(from, address(0), amount);
     }
 
@@ -783,14 +509,6 @@ contract BurnieCoin {
       |  Permission functions for BurnieCoinflip contract to burn/mint      |
       |  BURNIE tokens. Only the designated coinflip contract can call.     |
       +======================================================================+*/
-
-    /// @notice Set the BurnieCoinflip contract address.
-    /// @dev Admin-only function. Should be called once after BurnieCoinflip deployment.
-    /// @param _coinflipContract The address of the BurnieCoinflip contract.
-    function setCoinflipContract(address _coinflipContract) external onlyDegenerusGameContract {
-        if (_coinflipContract == address(0)) revert ZeroAddress();
-        coinflipContract = _coinflipContract;
-    }
 
     /// @notice Burns BURNIE from a player for coinflip deposits.
     /// @dev Only callable by the BurnieCoinflip contract.
@@ -810,98 +528,67 @@ contract BurnieCoin {
         _mint(to, amount);
     }
 
-    function _requireApproved(address player) private view {
-        if (msg.sender != player && !degenerusGame.isOperatorApproved(player, msg.sender)) {
-            revert NotApproved();
+    /// @notice Mint BURNIE for game payouts (e.g., Degenerette wins).
+    /// @dev Only callable by the DegenerusGame contract.
+    /// @param to The player's address to mint to.
+    /// @param amount The amount of BURNIE to mint (18 decimals).
+    function mintForGame(address to, uint256 amount) external {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        if (amount == 0) return;
+        _mint(to, amount);
+    }
+
+    /// @notice Credit BURNIE directly to a player's wallet balance.
+    /// @dev Only callable by trusted flip creditors (GAME, AFFILIATE).
+    /// @param player Recipient address.
+    /// @param amount Amount of BURNIE (18 decimals).
+    function creditCoin(address player, uint256 amount) external onlyFlipCreditors {
+        if (player == address(0) || amount == 0) return;
+        _mint(player, amount);
+    }
+
+    /// @notice Credit FLIP to a player.
+    /// @dev Only callable by trusted contracts (GAME, AFFILIATE).
+    ///      Forwards to BurnieCoinflip which implements the actual flip credit logic.
+    /// @param player Recipient address.
+    /// @param amount Amount of FLIP (18 decimals).
+    function creditFlip(address player, uint256 amount) external onlyFlipCreditors {
+        IBurnieCoinflip(coinflipContract).creditFlip(player, amount);
+    }
+
+    /// @notice Credit FLIP to up to 3 players in a single call (gas optimization).
+    /// @dev Only callable by trusted contracts (GAME, AFFILIATE).
+    /// @param players Array of 3 recipient addresses (unused slots should be address(0)).
+    /// @param amounts Array of 3 amounts corresponding to each player.
+    function creditFlipBatch(address[3] calldata players, uint256[3] calldata amounts) external onlyFlipCreditors {
+        IBurnieCoinflip(coinflipContract).creditFlipBatch(players, amounts);
+    }
+
+    function _claimCoinflipShortfall(address player, uint256 amount) private {
+        if (amount == 0) return;
+        if (degenerusGame.rngLocked()) return;
+        uint256 balance = balanceOf[player];
+        if (balance >= amount) return;
+        unchecked {
+            IBurnieCoinflip(coinflipContract).claimCoinflipsFromBurnie(
+                player,
+                amount - balance
+            );
         }
     }
 
-    function _resolvePlayer(address player) private view returns (address resolved) {
-        if (player == address(0)) return msg.sender;
-        if (player != msg.sender) _requireApproved(player);
-        return player;
+    function _consumeCoinflipShortfall(address player, uint256 amount) private returns (uint256 consumed) {
+        if (amount == 0) return 0;
+        if (degenerusGame.rngLocked()) return 0;
+        uint256 balance = balanceOf[player];
+        if (balance >= amount) return 0;
+        unchecked {
+            return IBurnieCoinflip(coinflipContract).consumeCoinflipsForBurn(
+                player,
+                amount - balance
+            );
+        }
     }
-
-    /*+======================================================================+
-      |                         CONSTANTS                                    |
-      +======================================================================+
-      |  Protocol parameters and unit conversions. These define the          |
-      |  economic boundaries of the coinflip and decimator systems.          |
-      |                                                                      |
-      |  VALUE SUMMARY:                                                      |
-      |  • ether (1e18)            - Standard 18-decimal token unit          |
-      |  • PRICE_COIN_UNIT (1000)  - Bounty increment per window             |
-      |  • MIN (10,000 BURNIE)     - Minimum deposit/burn threshold          |
-      |  • COINFLIP_EXTRA [78-115] - Payout multiplier range for normal      |
-      |  • BPS_DENOMINATOR (10000) - Basis points conversion                 |
-      |  • DECIMATOR_BUCKET (12)   - Base bucket for decimator weighting     |
-      |  • JACKPOT_RESET_TIME      - Daily reset boundary (22:57 UTC)        |
-      |  • COIN_CLAIM_DAYS (90)    - Max days to claim past winnings         |
-      |  • COIN_CLAIM_FIRST_DAYS   - First-claim window (30 days)            |
-      +======================================================================+*/
-
-    /// @dev 1000 BURNIE - used for bounty accumulation.
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-
-    /// @dev Minimum amount for coinflip deposits and decimator burns (10,000 BURNIE).
-    ///      Prevents dust attacks and meaningless micro-stakes.
-
-    /// @dev WWXRP consolation reward per losing coinflip (0.1 WWXRP).
-
-    /// @dev Minimum keep-multiple for afKing coin auto-rebuy (20,000 BURNIE).
-
-    /// @dev Base percentage for normal coinflip payouts (non-extreme outcomes).
-    ///      Range: [78, 78+37] = [78%, 115%] when added to principal.
-
-    /// @dev Basis points denominator for percentage calculations (100.00%).
-    uint16 private constant BPS_DENOMINATOR = 10_000;
-
-    /// @dev Base bucket denominator for decimator weighting.
-    ///      Lower bucket = more valuable. Adjusted based on activity multiplier.
-    uint8 private constant DECIMATOR_BUCKET = 12;
-
-    /// @dev Turbo decimator lane count (0-9).
-    uint8 private constant TURBO_DECIMATOR_LANES = 10;
-
-    /// @dev Turbo flip max count per RNG word.
-    uint8 private constant TURBO_FLIP_MAX_COUNT = 10;
-
-    /// @dev Turbo flip payout multipliers (bps). 1x = 10_000.
-    uint32 private constant TURBO_FLIP_PAYOUT_BPS = 19_000; // 1.90x = 95% EV
-    uint32 private constant TURBO_FLIP_PAYOUT_BPS_MAX = 19_800; // 1.98x = 99% EV
-
-    /// @dev Turbo flip payout when betting on loss side (bps). 1x = 10_000.
-    uint32 private constant TURBO_FLIP_LOSS_PAYOUT_BPS = 18_000; // 1.80x = 90% EV
-
-    /// @dev Turbo flip payout RNG domain tag (prevents collisions with other uses).
-    bytes32 private constant TURBO_FLIP_PAYOUT_TAG =
-        keccak256("turbo-flip-payout");
-
-    /// @dev Turbo decimator payout multipliers (bps). 1x = 10_000.
-    uint32 private constant TURBO_DECIMATOR_PAYOUT_BPS = 95_000; // 9.5x = 95% EV (1/10 win)
-    uint32 private constant TURBO_DECIMATOR_PAYOUT_BPS_MAX = 99_000; // 9.9x = 99% EV
-
-    /// @dev Max activity score used for bucket scaling (no whale/trophy):
-    ///      50% streak + 25% count + 100% quest + 50% affiliate = 225% bonus.
-    uint16 private constant ACTIVITY_SCORE_MAX_NO_EXTRA_BPS = 32_500;
-
-    /// @dev Seconds offset from midnight UTC for daily coinflip reset boundary (22:57 UTC).
-    uint48 private constant JACKPOT_RESET_TIME = 82620;
-
-    /// @dev Maximum number of past days a player can claim coinflip winnings.
-    ///      After 90 days, unclaimed winnings expire (stakes are forfeit).
-    uint8 private constant COIN_CLAIM_DAYS = 90;
-
-    /// @dev First-claim window for players who have never claimed.
-    uint8 private constant COIN_CLAIM_FIRST_DAYS = 30;
-
-    /// @dev Max number of days to process when turning auto-rebuy off.
-    ///      Bounds gas without dynamic gas checks.
-    uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1095;
-
-    /// @dev Maximum BAF (Biggest Active Flip) bracket level.
-    ///      Levels are grouped into brackets of 10 for leaderboard tracking.
-    uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
 
     /*+======================================================================+
       |                         MODIFIERS                                    |
@@ -914,28 +601,26 @@ contract BurnieCoin {
       |  |  Modifier              | Allowed Callers                        | |
       |  +------------------------+----------------------------------------+ |
       |  |  onlyDegenerusGame     | degenerusGame only                     | |
-      |  |  onlyTrustedContracts  | GAME, GAMEPIECES, AFFILIATE, ICON_COLOR_REGISTRY | |
-      |  |  onlyFlipCreditors     | GAME, GAMEPIECES, AFFILIATE            | |
+      |  |  onlyTrustedContracts  | GAME, AFFILIATE                      | |
+      |  |  onlyFlipCreditors     | GAME, AFFILIATE   | |
       |  |  onlyVault             | VAULT only                             | |
       |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
 
     /// @dev Restricts access to the DegenerusGame contract only.
-    ///      Used for: processCoinflipPayouts, rollDailyQuest, notifyQuestBurn.
+    ///      Used for: processCoinflipPayouts, rollDailyQuest.
     modifier onlyDegenerusGameContract() {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         _;
     }
 
-    /// @dev Restricts access to game, gamepiece, affiliate, or color registry contracts.
+    /// @dev Restricts access to game, affiliate, or color registry contracts.
     ///      Used for: burnCoin (gameplay burns).
     modifier onlyTrustedContracts() {
         address sender = msg.sender;
         if (
             sender != ContractAddresses.GAME &&
-            sender != ContractAddresses.GAMEPIECES &&
-            sender != ContractAddresses.AFFILIATE &&
-            sender != ContractAddresses.ICON_COLOR_REGISTRY
+            sender != ContractAddresses.AFFILIATE
         ) revert OnlyTrustedContracts();
         _;
     }
@@ -946,7 +631,6 @@ contract BurnieCoin {
         address sender = msg.sender;
         if (
             sender != ContractAddresses.GAME &&
-            sender != ContractAddresses.GAMEPIECES &&
             sender != ContractAddresses.AFFILIATE
         ) revert OnlyFlipCreditors();
         _;
@@ -959,6 +643,47 @@ contract BurnieCoin {
         _;
     }
 
+    /*+======================================================================+
+      |                     VAULT ESCROW FUNCTIONS                           |
+      +======================================================================+
+      |  Virtual mint allowance management for the VAULT. vaultEscrow()      |
+      |  increases the allowance (called by game/modules), vaultMintTo()     |
+      |  mints from the allowance (called by VAULT only).                    |
+      +======================================================================+*/
+
+    /// @notice Increase the vault's mint allowance without transferring tokens.
+    /// @dev Called by game contract and modules to credit virtual BURNIE to the vault.
+    /// @param amount Amount to add to vault's mint allowance.
+    function vaultEscrow(uint256 amount) external {
+        address sender = msg.sender;
+        if (
+            sender != ContractAddresses.GAME &&
+            sender != ContractAddresses.VAULT
+        ) revert OnlyVault();
+        uint128 amount128 = _toUint128(amount);
+        unchecked {
+            _supply.vaultAllowance += amount128;
+        }
+        emit VaultEscrowRecorded(sender, amount);
+    }
+
+    /// @notice Mint tokens to recipient from vault's allowance.
+    /// @dev Only callable by VAULT. Reduces vault allowance and mints to recipient.
+    /// @param to Recipient address.
+    /// @param amount Amount to mint.
+    function vaultMintTo(address to, uint256 amount) external onlyVault {
+        if (to == address(0)) revert ZeroAddress();
+        uint128 amount128 = _toUint128(amount);
+        uint128 allowanceVault = _supply.vaultAllowance;
+        if (amount128 > allowanceVault) revert Insufficient();
+        unchecked {
+            _supply.vaultAllowance = allowanceVault - amount128;
+            _supply.totalSupply += amount128;
+            balanceOf[to] += amount;
+        }
+        emit VaultAllowanceSpent(address(this), amount);
+        emit Transfer(address(0), to, amount);
+    }
 
     /// @notice Compute affiliate quest rewards while preserving quest module access control.
     /// @dev Access: affiliate contract only. Routes through coin contract to enforce access.
@@ -974,22 +699,18 @@ contract BurnieCoin {
         if (player == address(0) || amount == 0) return 0;
         (
             uint256 reward,
-            bool hardMode,
             uint8 questType,
             uint32 streak,
-            bool completed,
-            bool completedBoth
+            bool completed
         ) = module.handleAffiliate(player, amount);
-        return
-            _questApplyReward(
-                player,
-                reward,
-                hardMode,
-                questType,
-                streak,
-                completed,
-                completedBoth
-            );
+        questReward = _questApplyReward(
+            player,
+            reward,
+            questType,
+            streak,
+            completed
+        );
+        return questReward;
     }
 
     /*+======================================================================+
@@ -1021,125 +742,95 @@ contract BurnieCoin {
         }
     }
 
-    /// @notice Roll the daily quest with explicit overrides for quest types.
-    /// @dev Access: game contract only. Used when game state requires specific quest types.
-    /// @param day The day index to roll for.
-    /// @param entropy VRF-sourced randomness.
-    /// @param forceMintEth Force a mint-with-ETH quest type.
-    /// @param forceBurn Force a burn quest type.
-    function rollDailyQuestWithOverrides(
-        uint48 day,
-        uint256 entropy,
-        bool forceMintEth,
-        bool forceBurn
-    ) external onlyDegenerusGameContract {
-        IDegenerusQuests module = questModule;
-        (bool rolled, uint8[2] memory questTypes, bool highDifficulty) = module
-            .rollDailyQuestWithOverrides(day, entropy, forceMintEth, forceBurn);
-        if (rolled) {
-            for (uint256 i; i < 2; ) {
-                emit DailyQuestRolled(day, questTypes[i], highDifficulty);
-                unchecked {
-                    ++i;
-                }
-            }
-        }
-    }
-
     /// @notice Notify quest module of a mint action.
-    /// @dev Access: gamepiece contract only. Credits quest rewards as flip stakes.
+    /// @dev Access: game contract only. Credits quest rewards as flip stakes and
+    ///      notifies the game to update mint streak on slot-0 (MINT_ETH) completion.
     /// @param player The player who minted.
-    /// @param quantity Number of gamepieces minted.
+    /// @param quantity Number of mint units.
     /// @param paidWithEth Whether the mint was paid with ETH (vs BURNIE).
     function notifyQuestMint(
         address player,
         uint32 quantity,
         bool paidWithEth
     ) external {
-        if (msg.sender != ContractAddresses.GAMEPIECES) revert OnlyGamepieces();
-        IDegenerusQuests module = questModule;
-        (
-            uint256 reward,
-            bool hardMode,
-            uint8 questType,
-            uint32 streak,
-            bool completed,
-            bool completedBoth
-        ) = module.handleMint(player, quantity, paidWithEth);
-        uint256 questReward = _questApplyReward(
-            player,
-            reward,
-            hardMode,
-            questType,
-            streak,
-            completed,
-            completedBoth
-        );
-        if (questReward != 0 && coinflipContract != address(0)) {
-            IBurnieCoinflip(coinflipContract).creditFlip(player, questReward);
-        }
-    }
-
-    /// @notice Notify quest module of an gamepiece burn.
-    /// @dev Access: game contract only. Credits quest rewards as flip stakes.
-    /// @param player The player who burned gamepieces.
-    /// @param quantity Number of gamepieces burned.
-    function notifyQuestBurn(address player, uint32 quantity) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         IDegenerusQuests module = questModule;
         (
             uint256 reward,
-            bool hardMode,
             uint8 questType,
             uint32 streak,
-            bool completed,
-            bool completedBoth
-        ) = module.handleBurn(player, quantity);
+            bool completed
+        ) = module.handleMint(player, quantity, paidWithEth);
         uint256 questReward = _questApplyReward(
             player,
             reward,
-            hardMode,
             questType,
             streak,
-            completed,
-            completedBoth
+            completed
         );
-        if (questReward != 0 && coinflipContract != address(0)) {
+        if (completed && paidWithEth && questType == QUEST_TYPE_MINT_ETH) {
+            degenerusGame.recordMintQuestStreak(player);
+        }
+        if (questReward != 0) {
             IBurnieCoinflip(coinflipContract).creditFlip(player, questReward);
         }
     }
 
     /// @notice Notify quest module of a loot box purchase.
-    /// @dev Access: game contract only. Credits quest rewards as flip stakes.
+    /// @dev Access: game or lootbox contract. Credits quest rewards as flip stakes.
     /// @param player The player who purchased the loot box.
     /// @param amountWei ETH amount spent on the loot box (in wei).
     function notifyQuestLootBox(address player, uint256 amountWei) external {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        address sender = msg.sender;
+        if (sender != ContractAddresses.GAME) revert OnlyGame();
         IDegenerusQuests module = questModule;
         (
             uint256 reward,
-            bool hardMode,
             uint8 questType,
             uint32 streak,
-            bool completed,
-            bool completedBoth
+            bool completed
         ) = module.handleLootBox(player, amountWei);
         uint256 questReward = _questApplyReward(
             player,
             reward,
-            hardMode,
             questType,
             streak,
-            completed,
-            completedBoth
+            completed
         );
-        if (questReward != 0 && coinflipContract != address(0)) {
+        if (questReward != 0) {
+            IBurnieCoinflip(coinflipContract).creditFlip(player, questReward);
+        }
+    }
+
+    /// @notice Notify quest module of a Degenerette bet.
+    /// @dev Access: game contract only. Credits quest rewards as flip stakes.
+    /// @param player The player who placed the bet.
+    /// @param amount Bet amount (wei for ETH, base units for BURNIE).
+    /// @param paidWithEth True if bet was paid with ETH, false for BURNIE.
+    function notifyQuestDegenerette(address player, uint256 amount, bool paidWithEth) external {
+        address sender = msg.sender;
+        if (sender != ContractAddresses.GAME) revert OnlyGame();
+        IDegenerusQuests module = questModule;
+        (
+            uint256 reward,
+            uint8 questType,
+            uint32 streak,
+            bool completed
+        ) = module.handleDegenerette(player, amount, paidWithEth);
+        uint256 questReward = _questApplyReward(
+            player,
+            reward,
+            questType,
+            streak,
+            completed
+        );
+        if (questReward != 0) {
             IBurnieCoinflip(coinflipContract).creditFlip(player, questReward);
         }
     }
 
     /// @notice Burn BURNIE from `target` during gameplay/affiliate flows.
-    /// @dev Access: DegenerusGame, gamepiece, or affiliate.
+    /// @dev Access: DegenerusGame, game, or affiliate.
     ///      Used for purchases, fees, and affiliate utilities.
     ///      Reverts on zero address or insufficient balance.
     /// @param target The address to burn from.
@@ -1148,7 +839,99 @@ contract BurnieCoin {
         address target,
         uint256 amount
     ) external onlyTrustedContracts {
-        _burn(target, amount);
+        uint256 consumed = _consumeCoinflipShortfall(target, amount);
+        _burn(target, amount - consumed);
+    }
+
+    /*+======================================================================+
+      |                          DECIMATOR                                  |
+      +======================================================================+
+      |  Burn BURNIE during active decimator windows to accrue weighted      |
+      |  participation for the decimator jackpot.                            |
+      +======================================================================+*/
+
+    /// @notice Burn BURNIE during an active Decimator window to accrue weighted participation.
+    /// @dev SECURITY: Burns BEFORE downstream calls (CEI pattern).
+    ///      Quest rewards are added to the base amount before bucket calculation.
+    ///      Bucket determines jackpot weight (lower = better odds).
+    /// @param player Player address to burn for (address(0) = msg.sender).
+    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (10,000 BURNIE).
+    function decimatorBurn(address player, uint256 amount) external {
+        address caller;
+        if (player == address(0) || player == msg.sender) {
+            caller = msg.sender;
+        } else {
+            if (!degenerusGame.isOperatorApproved(player, msg.sender)) {
+                revert NotApproved();
+            }
+            caller = player;
+        }
+
+        if (amount < DECIMATOR_MIN) revert AmountLTMin();
+
+        (bool open, uint24 lvl) = degenerusGame.decWindow();
+        if (!open) revert NotDecimatorWindow();
+
+        uint256 consumed = _consumeCoinflipShortfall(caller, amount);
+        // CEI: burn before any downstream calls after coinflip consumption
+        _burn(caller, amount - consumed);
+
+        // Quest processing (bonus applies to decimator weight and coinflip credit)
+        (
+            uint256 reward,
+            uint8 questType,
+            uint32 streak,
+            bool completed
+        ) = questModule.handleDecimator(caller, amount);
+
+        uint256 questReward = _questApplyReward(
+            caller,
+            reward,
+            questType,
+            streak,
+            completed
+        );
+
+        if (questReward != 0) {
+            IBurnieCoinflip(coinflipContract).creditFlip(caller, questReward);
+        }
+
+        uint256 baseAmount = amount + questReward;
+
+        // Activity score bonus (raw bps), capped for decimator scaling.
+        uint256 bonusBps = degenerusGame.playerActivityScore(caller);
+        if (bonusBps > DECIMATOR_ACTIVITY_CAP_BPS) {
+            bonusBps = DECIMATOR_ACTIVITY_CAP_BPS;
+        }
+
+        uint256 decBurnMultBps = _decimatorBurnMultiplier(bonusBps);
+        uint8 minBucket = (lvl % 100 == 0)
+            ? DECIMATOR_MIN_BUCKET_100
+            : DECIMATOR_MIN_BUCKET_NORMAL;
+        uint8 bucket = _adjustDecimatorBucket(
+            bonusBps,
+            minBucket
+        );
+
+        // Decimator boon: percent boost on base amount (capped to 50k BURNIE).
+        uint16 boonBps = degenerusGame.consumeDecimatorBoon(caller);
+        if (boonBps > 0) {
+            uint256 cappedBase = baseAmount > DECIMATOR_BOON_CAP
+                ? DECIMATOR_BOON_CAP
+                : baseAmount;
+            uint256 boost = (cappedBase * boonBps) / BPS_DENOMINATOR;
+            baseAmount += boost;
+        }
+
+        uint8 bucketUsed = degenerusGame.recordDecBurn(
+            caller,
+            lvl,
+            bucket,
+            baseAmount,
+            decBurnMultBps
+        );
+
+        emit DecimatorBurn(caller, amount, bucketUsed);
     }
 
     /*+======================================================================+
@@ -1161,20 +944,6 @@ contract BurnieCoin {
     /// @param player The player address to query.
     /// @return The stake amount for the current target day (18 decimals).
     function coinflipAmount(address player) external view returns (uint256) {
-        if (coinflipContract == address(0)) return 0;
-        return IBurnieCoinflip(coinflipContract).coinflipAmount(player);
-    }
-
-    /// @notice Return the player's coinflip stake for the most recently opened day window.
-    /// @dev Proxies to BurnieCoinflip contract.
-    ///      Useful for UIs showing "last day's bet" that is now being resolved.
-    /// @param player The player address to query.
-    /// @return The stake amount from the previous day (18 decimals).
-    function coinflipAmountLastDay(
-        address player
-    ) external view returns (uint256) {
-        // Note: This function is deprecated and returns the same as coinflipAmount
-        if (coinflipContract == address(0)) return 0;
         return IBurnieCoinflip(coinflipContract).coinflipAmount(player);
     }
 
@@ -1182,23 +951,45 @@ contract BurnieCoin {
       |                    QUEST INTEGRATION HELPERS                         |
       +======================================================================+*/
 
+    /// @dev Adjust decimator bucket based on activity score bonus.
+    ///      Higher bonus yields lower bucket (better odds), capped at DECIMATOR_ACTIVITY_CAP_BPS.
+    function _adjustDecimatorBucket(
+        uint256 bonusBps,
+        uint8 minBucket
+    ) private pure returns (uint8 adjustedBucket) {
+        adjustedBucket = DECIMATOR_BUCKET_BASE;
+        if (bonusBps == 0) return adjustedBucket;
+
+        if (bonusBps > DECIMATOR_ACTIVITY_CAP_BPS) {
+            bonusBps = DECIMATOR_ACTIVITY_CAP_BPS;
+        }
+
+        uint256 range = uint256(DECIMATOR_BUCKET_BASE) - uint256(minBucket);
+        uint256 reduction = (range * bonusBps + (DECIMATOR_ACTIVITY_CAP_BPS / 2)) / DECIMATOR_ACTIVITY_CAP_BPS;
+        uint256 bucket = uint256(DECIMATOR_BUCKET_BASE) - reduction;
+        if (bucket < minBucket) bucket = minBucket;
+        adjustedBucket = uint8(bucket);
+    }
+
+    /// @dev Decimator burn multiplier: 1x base plus one-third of activity bonus.
+    function _decimatorBurnMultiplier(uint256 bonusBps) private pure returns (uint256 decMultBps) {
+        if (bonusBps == 0) return BPS_DENOMINATOR;
+        return BPS_DENOMINATOR + (bonusBps / 3);
+    }
+
     /// @dev Apply quest reward if quest was completed. Emits QuestCompleted event.
     /// @param player The player who completed the quest.
     /// @param reward The raw reward amount.
-    /// @param hardMode Whether completed in hard mode.
     /// @param questType The type of quest completed.
     /// @param streak The player's current streak.
     /// @param completed Whether the quest was actually completed.
-    /// @param completedBoth Whether this completion finished both quest slots for the day.
     /// @return The reward amount (0 if not completed).
     function _questApplyReward(
         address player,
         uint256 reward,
-        bool hardMode,
         uint8 questType,
         uint32 streak,
-        bool completed,
-        bool completedBoth
+        bool completed
     ) private returns (uint256) {
         if (!completed) return 0;
         // Event captures quest progress for indexers/UI; raw reward is returned to the caller.
@@ -1206,9 +997,7 @@ contract BurnieCoin {
             player,
             questType,
             streak,
-            reward,
-            hardMode,
-            completedBoth
+            reward
         );
         return reward;
     }}
