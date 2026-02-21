@@ -4,13 +4,38 @@
   "description": "Degenerus Protocol - Smart Contracts",
   "type": "module",
   "scripts": {
-    "compile": "hardhat compile"
+    "compile": "hardhat compile",
+    "test": "hardhat test test/unit/*.test.js test/integration/*.test.js test/deploy/*.test.js test/access/*.test.js test/edge/*.test.js test/gas/*.test.js",
+    "test:unit": "hardhat test test/unit/",
+    "test:integration": "hardhat test test/integration/",
+    "test:deploy": "hardhat test test/deploy/",
+    "test:access": "hardhat test test/access/",
+    "test:edge": "hardhat test test/edge/",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy-local.js --network localhost",
+    "sim:local": "node scripts/testnet/run-local.js",
+    "sim:analysis": "node scripts/testnet/build-analysis-db.js",
+    "sim:dashboard": "node scripts/simulation/dashboard-server.js",
+    "test:sim": "hardhat test test/simulation/"
   },
-  "keywords": ["solidity", "ethereum", "degenerus", "smart-contracts"],
-  "license": "MIT",
+  "keywords": [
+    "solidity",
+    "ethereum",
+    "degenerus",
+    "smart-contracts"
+  ],
+  "license": "AGPL-3.0-only",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "@openzeppelin/contracts": "^5.4.0",
+    "dotenv": "^17.3.1",
     "hardhat": "^2.28.3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
   }
 }
