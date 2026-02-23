@@ -97,13 +97,6 @@ interface IDegenerusGame {
     /// @return approved True if operator can act for owner.
     function isOperatorApproved(address owner, address operator) external view returns (bool);
 
-    /// @notice Enqueue future tickets for a player.
-    /// @dev Used for whale bundles and presale purchases.
-    /// @param buyer The player receiving the tickets.
-    /// @param quantityScaled Number of tickets to enqueue (2 decimals, scaled by 100).
-    /// @param lvlOffset Level offset from current level.
-    function enqueueTickets(address buyer, uint32 quantityScaled, uint24 lvlOffset) external;
-
     /// @notice Record a ticket purchase and calculate rewards.
     /// @dev Access restricted to authorized contracts (COIN or GAME self-call).
     /// @param player The player making the purchase.

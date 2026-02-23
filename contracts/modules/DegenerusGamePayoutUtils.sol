@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -15,7 +14,8 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
     event PlayerCredited(address indexed player, address indexed recipient, uint256 amount);
 
     /// @dev Half whale pass price (100 tickets over levels 10-109).
-    uint256 internal constant HALF_WHALE_PASS_PRICE = 2.175 ether;
+    uint256 internal constant HALF_WHALE_PASS_PRICE =
+        2.175 ether;
 
     struct AutoRebuyCalc {
         bool toFuture;
@@ -46,15 +46,16 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
     ) internal pure returns (AutoRebuyCalc memory c) {
         if (!state.autoRebuyEnabled) return c;
 
-        if (state.keepMultiple != 0) {
-            c.reserved = (weiAmount / state.keepMultiple) * state.keepMultiple;
+        if (state.takeProfit != 0) {
+            c.reserved = (weiAmount / state.takeProfit) * state.takeProfit;
         }
         c.rebuyAmount = weiAmount - c.reserved;
 
-        c.toFuture = (EntropyLib.entropyStep(
+        uint256 levelOffset = (EntropyLib.entropyStep(
             entropy ^ uint256(uint160(beneficiary)) ^ weiAmount
-        ) & 1) != 0;
-        c.targetLevel = currentLevel + (c.toFuture ? 2 : 1);
+        ) & 3) + 1; // 1-4 levels ahead
+        c.toFuture = levelOffset > 1; // +1 → next (25%), +2/+3/+4 → future (75%)
+        c.targetLevel = currentLevel + uint24(levelOffset);
 
         uint256 ticketPrice = PriceLookupLib.priceForLevel(c.targetLevel) >> 2;
         if (ticketPrice == 0) return c;

@@ -7,8 +7,7 @@ import {MintPaymentKind} from "./IDegenerusGame.sol";
 /// @notice Interface for the game advancement module handling VRF and game progression
 interface IDegenerusGameAdvanceModule {
     /// @notice Advances the game state by processing pending operations
-    /// @param cap Maximum number of operations to process in this call
-    function advanceGame(uint32 cap) external;
+    function advanceGame() external;
 
     /// @notice Requests mid-day lootbox RNG when threshold conditions are met.
     function requestLootboxRng() external;
@@ -85,12 +84,10 @@ interface IDegenerusGameJackpotModule {
     /// @param isDaily Whether this is a daily jackpot (vs other type)
     /// @param lvl The current game level
     /// @param randWord Random word for winner selection
-    /// @param cap Emergency unit cap for daily jackpot chunking (0 = default)
     function payDailyJackpot(
         bool isDaily,
         uint24 lvl,
-        uint256 randWord,
-        uint32 cap
+        uint256 randWord
     ) external;
 
     /// @notice Pays daily jackpot rewards in coin and tickets
@@ -114,10 +111,9 @@ interface IDegenerusGameJackpotModule {
     ) external;
 
     /// @notice Processes a batch of ticket entries for a specific level
-    /// @param writesBudget Maximum number of storage writes allowed
     /// @param lvl The level to process tickets for
     /// @return finished True if all tickets have been processed
-    function processTicketBatch(uint32 writesBudget, uint24 lvl) external returns (bool finished);
+    function processTicketBatch(uint24 lvl) external returns (bool finished);
 
     /// @notice Pays early bird lootbox jackpot rewards
     /// @param lvl The current game level
@@ -279,13 +275,11 @@ interface IDegenerusGameMintModule {
     ) external;
 
     /// @notice Processes a batch of future ticket claims
-    /// @param playersToProcess Maximum number of players to process
     /// @param lvl The level to process tickets for
     /// @return worked Whether any processing was done
     /// @return finished Whether all pending tickets are processed
     /// @return writesUsed Number of storage writes used
     function processFutureTicketBatch(
-        uint32 playersToProcess,
         uint24 lvl
     ) external returns (bool worked, bool finished, uint32 writesUsed);
 
@@ -332,7 +326,7 @@ interface IDegenerusGameLootboxModule {
 }
 
 /// @title IDegenerusGameBoonModule
-/// @notice Interface for boon consumption and lootbox view functions
+/// @notice Interface for boon consumption
 interface IDegenerusGameBoonModule {
     /// @notice Consumes a player's coinflip boon and returns its value
     /// @param player Address of the player
@@ -348,40 +342,6 @@ interface IDegenerusGameBoonModule {
     /// @param player Address of the player
     /// @return boostBps Boost value in basis points
     function consumeDecimatorBoost(address player) external returns (uint16 boostBps);
-
-    /// @notice Checks if a player has a whale boon available
-    /// @param player Address of the player
-    /// @return True if the player has a whale boon
-    function hasWhaleBoon(address player) external view returns (bool);
-
-    /// @notice Consumes a player's whale boon
-    /// @param player Address of the player
-    function consumeWhaleBoon(address player) external;
-
-    /// @notice Returns the lootbox amount for a player at a given index
-    /// @param player Address of the player
-    /// @param index Lootbox index
-    /// @return Amount associated with the lootbox
-    function lootboxAmountFor(address player, uint48 index) external view returns (uint256);
-
-    /// @notice Returns the Burnie lootbox amount for a player at a given index
-    /// @param player Address of the player
-    /// @param index Burnie lootbox index
-    /// @return Amount associated with the Burnie lootbox
-    function burnieLootboxAmountFor(address player, uint48 index) external view returns (uint256);
-
-    /// @notice Returns the current lootbox index
-    /// @return Current lootbox index
-    function currentLootboxIndex() external view returns (uint48);
-
-    /// @notice Returns the RNG word for a specific lootbox index
-    /// @param index Lootbox index
-    /// @return RNG word used for that lootbox
-    function lootboxRngWordForIndex(uint48 index) external view returns (uint256);
-
-    /// @notice Returns the pending Burnie amount awaiting RNG resolution
-    /// @return Amount of Burnie lootbox value pending resolution
-    function lootboxRngPendingBurnieAmount() external view returns (uint256);
 
     /// @notice Clear all expired boons for a player
     /// @param player Address of the player

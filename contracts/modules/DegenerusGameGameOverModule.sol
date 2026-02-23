@@ -33,7 +33,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
 
     /// @notice Fixed refund amount per deity pass for early game over (levels 1-9)
-    uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND = 20 ether;
+    uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
+        20 ether;
 
     /// @notice Generic error for failed operations
     /// @dev Used for transfer failures and other error conditions

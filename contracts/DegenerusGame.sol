@@ -188,10 +188,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Deity pass refund window (24 months) if level 1 never starts.
     uint48 private constant DEITY_PASS_REFUND_DAYS = 730;
 
-    /// @dev Minimum keep-multiple for afKing ETH auto-rebuy (5 ETH).
-    uint256 private constant AFKING_KEEP_MIN_ETH = 5 ether;
+    /// @dev Minimum take profit for afKing ETH auto-rebuy (5 ETH).
+    uint256 private constant AFKING_KEEP_MIN_ETH =
+        5 ether;
 
-    /// @dev Minimum keep-multiple for afKing coin auto-rebuy (20,000 BURNIE).
+    /// @dev Minimum take profit for afKing coin auto-rebuy (20,000 BURNIE).
     uint256 private constant AFKING_KEEP_MIN_COIN = 20_000 ether;
 
     /// @dev Number of levels afKing mode is locked after activation.
@@ -210,7 +211,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     uint16 private constant AFFILIATE_DGNRS_DEITY_BONUS_BPS = 2000;
 
     /// @dev Minimum affiliate score (approx 10 ETH of referral volume).
-    uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10 ether;
+    uint256 private constant AFFILIATE_DGNRS_MIN_SCORE =
+        10 ether;
 
     /// @dev Deity pass activity score bonus (80%).
     uint16 private constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8000;
@@ -282,7 +284,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                                                                                        |
       |  Gating:                                                                               |
       |  • Standard calls require caller to have minted today (skin-in-game)                   |
-      |  • cap != 0 bypasses gate but forfeits BURNIE bounty eligibility                       |
+      |  • CREATOR address bypasses the daily mint gate                                         |
       |  • RNG must be ready (not locked) or recently stale (18h timeout)                      |
       |                                                                                        |
       |  Presale: lootboxPresaleActive toggle (orthogonal to state machine)                    |
@@ -297,7 +299,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///
     ///      FLOW OVERVIEW:
     ///      1. Check liveness guards (2.5yr deploy timeout, 365-day inactivity)
-    ///      2. Apply daily gate (must have minted today unless cap != 0)
+    ///      2. Apply daily gate (must have minted today, CREATOR bypasses)
     ///      3. Process transition housekeeping during jackpot→purchase transition
     ///      4. Gate on RNG readiness (request new VRF if needed)
     ///      5. Process ticket batches
@@ -312,16 +314,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      - RNG gating ensures fairness (no manipulation during VRF window)
     ///      - Batched processing prevents DoS from large queues
     ///
-    /// @param cap Gas budget override for batched operations.
-    ///            0 = standard flow with bounty eligibility during jackpot time (no RNG request/unlock).
-    ///            >0 = emergency unstuck mode (no bounty).
-    function advanceGame(uint32 cap) external {
+    function advanceGame() external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ADVANCE_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameAdvanceModule.advanceGame.selector,
-                    cap
+                    IDegenerusGameAdvanceModule.advanceGame.selector
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -1110,27 +1108,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  This prevents gas exhaustion from large purchases.                  |
       +======================================================================+*/
 
-    /// @notice Queue tickets after purchase-side processing.
-    /// @dev Access: self-call only (from delegate modules).
-    ///      All tickets queue into ticketQueue[level] and are processed during advanceGame.
-    /// @param buyer Player to credit tickets to.
-    /// @param quantityScaled Number of tickets to queue (2 decimals, scaled by 100).
-    /// @param lvlOffset Level offset from current burn level (0 = current burn level, 1 = purchase level).
-    function enqueueTickets(
-        address buyer,
-        uint32 quantityScaled,
-        uint24 lvlOffset
-    ) external {
-        if (msg.sender != address(this)) revert E();
-        if (quantityScaled == 0) return;
-
-        // Calculate target level
-        uint24 targetLevel = level + lvlOffset;
-
-        // Queue tickets for target level (unified system)
-        _queueTicketsScaled(buyer, targetLevel, quantityScaled);
-    }
-
     /*+================================================================================================================+
       |                    DELEGATE MODULE HELPERS                                                                     |
       +================================================================================================================+
@@ -1549,17 +1526,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Emitted when a player toggles decimator auto-rebuy on or off.
     event DecimatorAutoRebuyToggled(address indexed player, bool enabled);
 
-    /// @notice Emitted when a player sets the auto-rebuy keep multiple.
-    event AutoRebuyKeepMultipleSet(
+    /// @notice Emitted when a player sets the auto-rebuy take profit.
+    event AutoRebuyTakeProfitSet(
         address indexed player,
-        uint256 keepMultiple
+        uint256 takeProfit
     );
 
     /// @notice Emitted when a player toggles afKing mode on or off.
     event AfKingModeToggled(address indexed player, bool enabled);
 
     /// @notice Enable or disable auto-rebuy for claimable winnings.
-    /// @dev When enabled, the remainder (after reserving full keep-multiples) is
+    /// @dev When enabled, the remainder (after reserving take profit) is
     ///      converted to tickets for next level or next+1 (50/50) during jackpot award flow.
     ///      ETH goes to nextPrizePool for next-level tickets, or futurePrizePool for next+1.
     ///
@@ -1589,16 +1566,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         emit DecimatorAutoRebuyToggled(player, enabled);
     }
 
-    /// @notice Set the auto-rebuy keep multiple (amount reserved for manual claim).
+    /// @notice Set the auto-rebuy take profit (amount reserved for manual claim).
     /// @dev Complete multiples remain claimable; remainder is eligible for auto-rebuy.
     /// @param player Player address to configure (address(0) = msg.sender).
-    /// @param keepMultiple Amount in wei; 0 means no reservation (rebuy all).
-    function setAutoRebuyKeepMultiple(
+    /// @param takeProfit Amount in wei; 0 means no reservation (rebuy all).
+    function setAutoRebuyTakeProfit(
         address player,
-        uint256 keepMultiple
+        uint256 takeProfit
     ) external {
         player = _resolvePlayer(player);
-        _setAutoRebuyKeepMultiple(player, keepMultiple);
+        _setAutoRebuyTakeProfit(player, takeProfit);
     }
 
     function _setAutoRebuy(address player, bool enabled) private {
@@ -1613,18 +1590,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    function _setAutoRebuyKeepMultiple(
+    function _setAutoRebuyTakeProfit(
         address player,
-        uint256 keepMultiple
+        uint256 takeProfit
     ) private {
         if (rngLockedFlag) revert RngLocked();
         AutoRebuyState storage state = autoRebuyState[player];
-        uint128 keepMultipleValue = uint128(keepMultiple);
-        if (state.keepMultiple != keepMultipleValue) {
-            state.keepMultiple = keepMultipleValue;
+        uint128 takeProfitValue = uint128(takeProfit);
+        if (state.takeProfit != takeProfitValue) {
+            state.takeProfit = takeProfitValue;
         }
-        emit AutoRebuyKeepMultipleSet(player, keepMultiple);
-        if (keepMultiple != 0 && keepMultiple < AFKING_KEEP_MIN_ETH) {
+        emit AutoRebuyTakeProfitSet(player, takeProfit);
+        if (takeProfit != 0 && takeProfit < AFKING_KEEP_MIN_ETH) {
             _deactivateAfKing(player);
         }
     }
@@ -1647,40 +1624,40 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return !decimatorAutoRebuyDisabled[player];
     }
 
-    /// @notice Check the auto-rebuy keep multiple for a player.
+    /// @notice Check the auto-rebuy take profit for a player.
     /// @param player Player address to check.
-    /// @return keepMultiple Amount reserved as complete multiples (wei).
-    function autoRebuyKeepMultipleFor(
+    /// @return takeProfit Amount reserved as complete multiples (wei).
+    function autoRebuyTakeProfitFor(
         address player
-    ) external view returns (uint256 keepMultiple) {
-        return autoRebuyState[player].keepMultiple;
+    ) external view returns (uint256 takeProfit) {
+        return autoRebuyState[player].takeProfit;
     }
 
     /// @notice Enable or disable afKing mode.
-    /// @dev Enabling afKing forces auto-rebuy on for ETH and coin and clamps keep-multiples
+    /// @dev Enabling afKing forces auto-rebuy on for ETH and coin and clamps take profit
     ///      to minimums (5 ETH / 20k BURNIE) unless set to 0. Requires a lazy pass.
     /// @param player Player address to configure (address(0) = msg.sender).
     /// @param enabled True to enable afKing mode, false to disable.
-    /// @param ethKeepMultiple Desired ETH keep multiple (wei).
-    /// @param coinKeepMultiple Desired coin keep multiple (BURNIE, 18 decimals).
+    /// @param ethTakeProfit Desired ETH take profit (wei).
+    /// @param coinTakeProfit Desired coin take profit (BURNIE, 18 decimals).
     /// @custom:reverts RngLocked If RNG is locked.
     /// @custom:reverts E If enabling without a lazy pass.
     /// @custom:reverts AfKingLockActive If disabling during lock period.
     function setAfKingMode(
         address player,
         bool enabled,
-        uint256 ethKeepMultiple,
-        uint256 coinKeepMultiple
+        uint256 ethTakeProfit,
+        uint256 coinTakeProfit
     ) external {
         player = _resolvePlayer(player);
-        _setAfKingMode(player, enabled, ethKeepMultiple, coinKeepMultiple);
+        _setAfKingMode(player, enabled, ethTakeProfit, coinTakeProfit);
     }
 
     function _setAfKingMode(
         address player,
         bool enabled,
-        uint256 ethKeepMultiple,
-        uint256 coinKeepMultiple
+        uint256 ethTakeProfit,
+        uint256 coinTakeProfit
     ) private {
         if (rngLockedFlag) revert RngLocked();
         if (!enabled) {
@@ -1690,11 +1667,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!_hasAnyLazyPass(player)) revert E();
 
         AutoRebuyState storage state = autoRebuyState[player];
-        uint256 adjustedEthKeep = ethKeepMultiple;
+        uint256 adjustedEthKeep = ethTakeProfit;
         if (adjustedEthKeep != 0 && adjustedEthKeep < AFKING_KEEP_MIN_ETH) {
             adjustedEthKeep = AFKING_KEEP_MIN_ETH;
         }
-        uint256 adjustedCoinKeep = coinKeepMultiple;
+        uint256 adjustedCoinKeep = coinTakeProfit;
         if (adjustedCoinKeep != 0 && adjustedCoinKeep < AFKING_KEEP_MIN_COIN) {
             adjustedCoinKeep = AFKING_KEEP_MIN_COIN;
         }
@@ -1703,9 +1680,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             state.autoRebuyEnabled = true;
             emit AutoRebuyToggled(player, true);
         }
-        if (state.keepMultiple != adjustedEthKeep) {
-            state.keepMultiple = uint128(adjustedEthKeep);
-            emit AutoRebuyKeepMultipleSet(player, adjustedEthKeep);
+        if (state.takeProfit != adjustedEthKeep) {
+            state.takeProfit = uint128(adjustedEthKeep);
+            emit AutoRebuyTakeProfitSet(player, adjustedEthKeep);
         }
         coinflip.setCoinflipAutoRebuy(player, true, adjustedCoinKeep);
 

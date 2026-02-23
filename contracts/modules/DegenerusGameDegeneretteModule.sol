@@ -239,7 +239,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @dev Currency type identifier for WWXRP token.
     uint8 private constant CURRENCY_WWXRP = 3;
 
-    /// @dev Minimum bet amount for ETH (0.005 ETH).
+    /// @dev Minimum bet amount for ETH (0.005 ETH on mainnet).
     uint256 private constant MIN_BET_ETH = 5 ether / 1000;
 
     /// @dev Minimum bet amount for BURNIE (100 tokens with 18 decimals).

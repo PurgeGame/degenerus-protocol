@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 /// @title IDegenerusStonk
-/// @notice Interface for the DGNRS token contract
+/// @notice Interface for the DGNRS token contract (contract-to-contract calls only)
 /// @dev DGNRS is backed by ETH, stETH, and BURNIE reserves with pool-based distribution
 interface IDegenerusStonk {
     /// @notice DGNRS reward pools (pre-minted supply buckets)
@@ -40,12 +40,6 @@ interface IDegenerusStonk {
     /// @param amount Amount of DGNRS to transfer
     /// @return transferred Amount actually transferred (may be less if source pool has insufficient balance)
     function transferBetweenPools(Pool from, Pool to, uint256 amount) external returns (uint256 transferred);
-
-    /// @notice Mint DGNRS tokens for game payouts
-    /// @dev Restricted to authorized game contracts only
-    /// @param to Recipient address
-    /// @param amount Amount of DGNRS to mint
-    function mintForGame(address to, uint256 amount) external;
 
     /// @notice Burn DGNRS tokens for game bets
     /// @dev Restricted to authorized game contracts only

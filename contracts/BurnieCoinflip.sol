@@ -100,7 +100,7 @@ contract BurnieCoinflip {
     error OnlyDegenerusGame();
     error AutoRebuyNotEnabled();
     error AutoRebuyAlreadyEnabled();
-    error KeepMultipleZero();
+    error TakeProfitZero();
     error RngLocked();
     error Insufficient();
     error NotApproved();
@@ -116,7 +116,7 @@ contract BurnieCoinflip {
     IWrappedWrappedXRP public immutable wwxrp;
 
     // Constants
-    uint256 private constant MIN = 10_000 ether;
+    uint256 private constant MIN = 100 ether;
     uint256 private constant COINFLIP_LOSS_WWXRP_REWARD = 1 ether;
     uint16 private constant COINFLIP_EXTRA_MIN_PERCENT = 78;
     uint16 private constant COINFLIP_EXTRA_RANGE = 38;
@@ -130,6 +130,7 @@ contract BurnieCoinflip {
     uint16 private constant AFKING_RECYCLE_BONUS_BPS = 160;
     uint16 private constant AFKING_DEITY_BONUS_PER_LEVEL_HALF_BPS = 2;
     uint16 private constant AFKING_DEITY_BONUS_MAX_HALF_BPS = 300;
+    uint256 private constant DEITY_RECYCLE_CAP = 1_000_000 ether;
     uint48 private constant JACKPOT_RESET_TIME = 82620;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
     uint8 private constant COIN_CLAIM_DAYS = 90;
@@ -334,14 +335,14 @@ contract BurnieCoinflip {
         return _claimCoinflipsAmount(_resolvePlayer(player), amount, true);
     }
 
-    /// @notice Claim coinflip winnings (keep multiples).
+    /// @notice Claim coinflip winnings (take profit multiples).
     /// @dev Blocked during RNG lock to prevent BAF credit manipulation during jackpots.
-    function claimCoinflipsKeepMultiple(
+    function claimCoinflipsTakeProfit(
         address player,
         uint256 multiples
     ) external returns (uint256 claimed) {
         if (degenerusGame.rngLocked()) revert RngLocked();
-        return _claimCoinflipsKeepMultiple(_resolvePlayer(player), multiples);
+        return _claimCoinflipsTakeProfit(_resolvePlayer(player), multiples);
     }
 
     /// @notice Claim coinflip winnings via BurnieCoin to cover token transfers/burns.
@@ -365,30 +366,30 @@ contract BurnieCoinflip {
     }
 
     /// @dev Internal claim keeping multiples of auto-rebuy stop amount.
-    function _claimCoinflipsKeepMultiple(
+    function _claimCoinflipsTakeProfit(
         address player,
         uint256 multiples
     ) private returns (uint256 claimed) {
         PlayerCoinflipState storage state = playerState[player];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
 
-        uint256 keepMultiple = state.autoRebuyStop;
-        if (keepMultiple == 0) revert KeepMultipleZero();
+        uint256 takeProfit = state.autoRebuyStop;
+        if (takeProfit == 0) revert TakeProfitZero();
 
         uint256 mintable = _claimCoinflipsInternal(player, false);
         uint256 stored = state.claimableStored + mintable;
-        if (stored < keepMultiple) {
+        if (stored < takeProfit) {
             if (mintable != 0) {
                 state.claimableStored = uint128(stored);
             }
             return 0;
         }
 
-        uint256 maxMultiples = stored / keepMultiple;
+        uint256 maxMultiples = stored / takeProfit;
         uint256 claimMultiples = multiples == 0 || multiples > maxMultiples ? maxMultiples : multiples;
         uint256 toClaim;
         unchecked {
-            toClaim = claimMultiples * keepMultiple;
+            toClaim = claimMultiples * takeProfit;
         }
 
         if (mintable != 0 || toClaim != 0) {
@@ -438,7 +439,7 @@ contract BurnieCoinflip {
 
         bool rebuyActive = state.autoRebuyEnabled;
         bool deep = deepAutoRebuy && rebuyActive;
-        uint256 keepMultiple = rebuyActive ? state.autoRebuyStop : 0;
+        uint256 takeProfit = rebuyActive ? state.autoRebuyStop : 0;
         uint256 carry;
         uint256 winningBafCredit;
         uint256 lossCount;
@@ -506,7 +507,7 @@ contract BurnieCoinflip {
             uint16 rewardPercent = result.rewardPercent;
             bool win = result.win;
 
-            // Skip unresolved days (gaps from missed resolution)
+            // Skip unresolved days (gaps from testnet day-advance or missed resolution)
             if (rewardPercent == 0 && !win) {
                 unchecked { ++cursor; --remaining; }
                 continue;
@@ -531,9 +532,9 @@ contract BurnieCoinflip {
                         100;
                     winningBafCredit += payout;
                     if (rebuyActive) {
-                        if (keepMultiple != 0) {
-                            uint256 reserved = (payout / keepMultiple) *
-                                keepMultiple;
+                        if (takeProfit != 0) {
+                            uint256 reserved = (payout / takeProfit) *
+                                takeProfit;
                             if (reserved != 0) {
                                 mintable += reserved;
                             }
@@ -691,7 +692,7 @@ contract BurnieCoinflip {
     function setCoinflipAutoRebuy(
         address player,
         bool enabled,
-        uint256 keepMultiple
+        uint256 takeProfit
     ) external {
         bool fromGame = msg.sender == ContractAddresses.GAME;
         if (player == address(0)) {
@@ -699,22 +700,22 @@ contract BurnieCoinflip {
         } else if (!fromGame && player != msg.sender) {
             _requireApproved(player);
         }
-        _setCoinflipAutoRebuy(player, enabled, keepMultiple, !fromGame);
+        _setCoinflipAutoRebuy(player, enabled, takeProfit, !fromGame);
     }
 
-    /// @notice Set auto-rebuy keep multiple.
-    function setCoinflipAutoRebuyKeepMultiple(
+    /// @notice Set auto-rebuy take profit.
+    function setCoinflipAutoRebuyTakeProfit(
         address player,
-        uint256 keepMultiple
+        uint256 takeProfit
     ) external {
-        _setCoinflipAutoRebuyKeepMultiple(_resolvePlayer(player), keepMultiple);
+        _setCoinflipAutoRebuyTakeProfit(_resolvePlayer(player), takeProfit);
     }
 
     /// @dev Internal auto-rebuy configuration.
     function _setCoinflipAutoRebuy(
         address player,
         bool enabled,
-        uint256 keepMultiple,
+        uint256 takeProfit,
         bool strict
     ) private {
         PlayerCoinflipState storage state = playerState[player];
@@ -725,24 +726,24 @@ contract BurnieCoinflip {
             mintable = _claimCoinflipsInternal(player, false);
             if (state.autoRebuyEnabled) {
                 if (strict) revert AutoRebuyAlreadyEnabled();
-                state.autoRebuyStop = uint128(keepMultiple);
-                emit CoinflipAutoRebuyStopSet(player, keepMultiple);
+                state.autoRebuyStop = uint128(takeProfit);
+                emit CoinflipAutoRebuyStopSet(player, takeProfit);
             } else {
                 if (strict) {
-                    state.autoRebuyStop = uint128(keepMultiple);
+                    state.autoRebuyStop = uint128(takeProfit);
                     state.autoRebuyEnabled = true;
                     state.autoRebuyStartDay = state.lastClaim;
-                    emit CoinflipAutoRebuyStopSet(player, keepMultiple);
+                    emit CoinflipAutoRebuyStopSet(player, takeProfit);
                     emit CoinflipAutoRebuyToggled(player, true);
                 } else {
                     state.autoRebuyEnabled = true;
                     state.autoRebuyStartDay = state.lastClaim;
                     emit CoinflipAutoRebuyToggled(player, true);
-                    state.autoRebuyStop = uint128(keepMultiple);
-                    emit CoinflipAutoRebuyStopSet(player, keepMultiple);
+                    state.autoRebuyStop = uint128(takeProfit);
+                    emit CoinflipAutoRebuyStopSet(player, takeProfit);
                 }
             }
-            if (keepMultiple != 0 && keepMultiple < AFKING_KEEP_MIN_COIN) {
+            if (takeProfit != 0 && takeProfit < AFKING_KEEP_MIN_COIN) {
                 degenerusGame.deactivateAfKingFromCoin(player);
             }
         } else {
@@ -763,24 +764,24 @@ contract BurnieCoinflip {
         }
     }
 
-    /// @dev Internal auto-rebuy keep multiple configuration.
-    function _setCoinflipAutoRebuyKeepMultiple(
+    /// @dev Internal auto-rebuy take profit configuration.
+    function _setCoinflipAutoRebuyTakeProfit(
         address player,
-        uint256 keepMultiple
+        uint256 takeProfit
     ) private {
         if (degenerusGame.rngLocked()) revert RngLocked();
         PlayerCoinflipState storage state = playerState[player];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
 
         uint256 mintable = _claimCoinflipsInternal(player, false);
-        state.autoRebuyStop = uint128(keepMultiple);
-        emit CoinflipAutoRebuyStopSet(player, keepMultiple);
+        state.autoRebuyStop = uint128(takeProfit);
+        emit CoinflipAutoRebuyStopSet(player, takeProfit);
 
         if (mintable != 0) {
             burnie.mintForCoinflip(player, mintable);
         }
 
-        if (keepMultiple != 0 && keepMultiple < AFKING_KEEP_MIN_COIN) {
+        if (takeProfit != 0 && takeProfit < AFKING_KEEP_MIN_COIN) {
             degenerusGame.deactivateAfKingFromCoin(player);
         }
     }
@@ -983,7 +984,7 @@ contract BurnieCoinflip {
         while (remaining != 0 && cursor <= latestDay) {
             CoinflipDayResult memory result = coinflipDayResult[cursor];
             // Skip unresolved days (both fields zero) instead of breaking,
-            // to handle gaps from missed resolution.
+            // to handle gaps from testnet day-advance or missed resolution.
             if (result.rewardPercent == 0 && !result.win) {
                 unchecked { ++cursor; --remaining; }
                 continue;
@@ -1037,15 +1038,20 @@ contract BurnieCoinflip {
     }
 
     /// @dev Calculate recycling bonus for afKing flip deposits.
+    /// Deity bonus portion is capped at DEITY_RECYCLE_CAP; remainder gets base only.
     function _afKingRecyclingBonus(
         uint256 amount,
         uint16 deityBonusHalfBps
     ) private pure returns (uint256 bonus) {
         if (amount == 0) return 0;
-        uint256 totalHalfBps =
-            uint256(AFKING_RECYCLE_BONUS_BPS) * 2 +
-            uint256(deityBonusHalfBps);
-        bonus = (amount * totalHalfBps) / (uint256(BPS_DENOMINATOR) * 2);
+        uint256 baseHalfBps = uint256(AFKING_RECYCLE_BONUS_BPS) * 2;
+        if (deityBonusHalfBps == 0 || amount <= DEITY_RECYCLE_CAP) {
+            uint256 totalHalfBps = baseHalfBps + uint256(deityBonusHalfBps);
+            return (amount * totalHalfBps) / (uint256(BPS_DENOMINATOR) * 2);
+        }
+        uint256 fullHalfBps = baseHalfBps + uint256(deityBonusHalfBps);
+        return (DEITY_RECYCLE_CAP * fullHalfBps + (amount - DEITY_RECYCLE_CAP) * baseHalfBps)
+            / (uint256(BPS_DENOMINATOR) * 2);
     }
 
     /// @dev Calculate deity pass bonus in half-bps using a cached level.
@@ -1125,7 +1131,6 @@ contract BurnieCoinflip {
     }
 
     /// @dev Calculate the target day for new coinflip deposits.
-    ///      Uses the game's day index.
     function _targetFlipDay() internal view returns (uint48) {
         return degenerusGame.currentDayView() + 1;
     }

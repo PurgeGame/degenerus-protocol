@@ -77,7 +77,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     /// @dev 25% boost to lootbox value in basis points.
     uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
 
-    /// @dev Maximum lootbox value eligible for boost (10 ETH).
+    /// @dev Maximum lootbox value eligible for boost (10 ETH scaled).
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
 
     /// @dev Lootbox boost expiry duration (48 hours).
@@ -152,7 +152,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     /// @dev Deity pass base price (24 ETH, unscaled). Actual price = 24 + T(n) where T(n) = n*(n+1)/2, n = passes sold so far.
     uint256 private constant DEITY_PASS_BASE = 24 ether;
 
-    /// @dev BURNIE transfer cost for deity pass trade (5 ETH worth).
+    /// @dev BURNIE transfer cost for deity pass trade (5 ETH worth, scaled).
     uint256 private constant DEITY_TRANSFER_ETH_COST = 5 ether;
 
     /// @dev Deity pass boon expiry (4 days in seconds, matches lootbox PURCHASE_BOOST_EXPIRY_SECONDS).
@@ -289,11 +289,11 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             unchecked { ++i; }
         }
 
-        // Split payment: pre-game 50/50, post-game 5/95
+        // Split payment: pre-game 70/30, post-game 95/5 (future/next)
         uint256 nextShare;
 
         if (level == 0) {
-            nextShare = (totalPrice * 5000) / 10_000;
+            nextShare = (totalPrice * 3000) / 10_000;
         } else {
             nextShare = (totalPrice * 500) / 10_000;
         }
@@ -514,10 +514,10 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             deityPassRefundable[buyer] += totalPrice;
         }
 
-        // Fund distribution: pre-game 50/50, post-game 5/95
+        // Fund distribution: pre-game 70/30, post-game 95/5 (future/next)
         uint256 nextShare;
         if (level == 0) {
-            nextShare = (totalPrice * 5000) / 10_000;
+            nextShare = (totalPrice * 3000) / 10_000;
         } else {
             nextShare = (totalPrice * 500) / 10_000;
         }

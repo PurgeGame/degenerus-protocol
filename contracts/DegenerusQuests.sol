@@ -91,13 +91,6 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 reward
     );
 
-    /// @notice Emitted when quest streak shields are awarded.
-    event QuestStreakShieldAwarded(
-        address indexed player,
-        uint16 amount,
-        uint16 newTotal
-    );
-
     /// @notice Emitted when quest streak shields are consumed on missed days.
     event QuestStreakShieldUsed(
         address indexed player,
@@ -322,28 +315,6 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 entropy
     ) external onlyCoin returns (bool rolled, uint8[2] memory questTypes, bool highDifficulty) {
         return _rollDailyQuest(day, entropy);
-    }
-
-    /**
-     * @notice Award quest streak shields to a player (stackable).
-     * @dev Access: GAME contract only.
-     *      Each shield can cover one missed quest day and is consumed on use.
-     *      Silently returns if player is zero address or amount is zero.
-     *      Clamps at uint16 max on overflow.
-     * @param player The player to receive shields.
-     * @param amount Number of shields to award.
-     * @custom:reverts OnlyGame When caller is not GAME contract.
-     */
-    function awardQuestStreakShield(address player, uint16 amount) external onlyGame {
-        if (player == address(0) || amount == 0) return;
-        uint16 current = questStreakShieldCount[player];
-        uint16 updated = current + amount;
-        if (updated < current) {
-            questStreakShieldCount[player] = type(uint16).max;
-        } else {
-            questStreakShieldCount[player] = updated;
-        }
-        emit QuestStreakShieldAwarded(player, amount, questStreakShieldCount[player]);
     }
 
     function resetQuestStreak(address player) external onlyGame {
@@ -835,7 +806,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      Quest types are returned exactly as stored for the current day.
      * @return quests Array of QuestInfo structs with type, day, and requirements.
      */
-    function getActiveQuests() external view override returns (QuestInfo[2] memory quests) {
+    function getActiveQuests() external view returns (QuestInfo[2] memory quests) {
         DailyQuest[QUEST_SLOT_COUNT] memory local = _materializeActiveQuestsForView();
         uint48 currentDay = _currentQuestDay(local);
         PlayerQuestState memory emptyState;
@@ -895,7 +866,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param player The player address to query.
      * @return viewData Comprehensive view including quests, progress, completion, and streak.
      */
-    function getPlayerQuestView(address player) external view override returns (PlayerQuestView memory viewData) {
+    function getPlayerQuestView(address player) external view returns (PlayerQuestView memory viewData) {
         DailyQuest[QUEST_SLOT_COUNT] memory local = _materializeActiveQuestsForView();
         uint48 currentDay = _currentQuestDay(local);
         PlayerQuestState memory state = questPlayerState[player];

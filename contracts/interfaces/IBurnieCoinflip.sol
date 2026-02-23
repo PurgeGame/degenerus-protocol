@@ -52,15 +52,15 @@ interface IBurnieCoinflip {
     function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
 
     /// @notice Claim coinflip winnings in multiples of the auto-rebuy stop amount.
-    /// @dev Requires auto-rebuy to be enabled with a non-zero keepMultiple configured.
-    ///      Claims the largest whole multiple of keepMultiple that doesn't exceed balance.
+    /// @dev Requires auto-rebuy to be enabled with a non-zero takeProfit configured.
+    ///      Claims the largest whole multiple of takeProfit that doesn't exceed balance.
     /// @param player The player claiming (address(0) for msg.sender).
     /// @param multiples Number of multiples to claim (0 = claim max available multiples).
     /// @return claimed The actual amount claimed and minted.
     /// @custom:reverts RngLocked If VRF randomness is currently being resolved.
     /// @custom:reverts AutoRebuyNotEnabled If player does not have auto-rebuy enabled.
-    /// @custom:reverts KeepMultipleZero If auto-rebuy stop amount is zero.
-    function claimCoinflipsKeepMultiple(
+    /// @custom:reverts TakeProfitZero If auto-rebuy stop amount is zero.
+    function claimCoinflipsTakeProfit(
         address player,
         uint256 multiples
     ) external returns (uint256 claimed);
@@ -71,26 +71,26 @@ interface IBurnieCoinflip {
     ///      processes a larger window of pending claims and mints all accumulated tokens.
     /// @param player The player configuring auto-rebuy (address(0) for msg.sender).
     /// @param enabled Whether auto-rebuy should be enabled.
-    /// @param keepMultiple The threshold amount; winnings above this are auto-claimed in multiples.
+    /// @param takeProfit The threshold amount; winnings above this are auto-claimed in multiples.
     /// @custom:reverts RngLocked If VRF randomness is currently being resolved.
     /// @custom:reverts AutoRebuyAlreadyEnabled If enabling when already enabled (in strict mode).
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function setCoinflipAutoRebuy(
         address player,
         bool enabled,
-        uint256 keepMultiple
+        uint256 takeProfit
     ) external;
 
-    /// @notice Update the keep multiple threshold for auto-rebuy mode.
+    /// @notice Update the take profit threshold for auto-rebuy mode.
     /// @dev Only callable when auto-rebuy is already enabled. Processes pending claims before updating.
     /// @param player The player configuring (address(0) for msg.sender).
-    /// @param keepMultiple The new threshold amount for auto-claiming multiples.
+    /// @param takeProfit The new threshold amount for auto-claiming multiples.
     /// @custom:reverts RngLocked If VRF randomness is currently being resolved.
     /// @custom:reverts AutoRebuyNotEnabled If player does not have auto-rebuy enabled.
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
-    function setCoinflipAutoRebuyKeepMultiple(
+    function setCoinflipAutoRebuyTakeProfit(
         address player,
-        uint256 keepMultiple
+        uint256 takeProfit
     ) external;
 
     /// @notice Settle coinflip state before afKing mode changes.

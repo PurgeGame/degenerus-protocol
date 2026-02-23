@@ -302,7 +302,7 @@ contract BurnieCoin {
     /// @notice Get coinflip auto-rebuy settings for a player.
     /// @param player The player's address.
     /// @return enabled True if auto-rebuy is enabled.
-    /// @return stopAmount The keep multiple reserved on wins (0 = keep everything in auto-rebuy).
+    /// @return stopAmount The take profit amount reserved on wins (0 = keep everything in auto-rebuy).
     /// @return carry The current auto-rebuy carry (rolled bankroll).
     function coinflipAutoRebuyInfo(
         address player

@@ -206,7 +206,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     /**
      * @notice Credit ETH to a player's claimable balance.
      * @dev If auto-rebuy is enabled, converts the remainder to tickets with auto-rebuy
-     *      bonus instead of crediting claimable balance. Complete keep-multiples
+     *      bonus instead of crediting claimable balance. Complete take profit multiples
      *      remain claimable, and fractional dust is dropped unconditionally.
      *
      * @param beneficiary Address to credit.
