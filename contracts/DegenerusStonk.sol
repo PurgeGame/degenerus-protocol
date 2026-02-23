@@ -8,14 +8,14 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 /// @notice Interface for game contract player-facing functions
 interface IDegenerusGamePlayer {
-    function advanceGame(uint32 cap) external;
+    function advanceGame() external;
     function level() external view returns (uint24);
     function mintPrice() external view returns (uint256);
     function setAfKingMode(
         address player,
         bool enabled,
-        uint256 ethKeepMultiple,
-        uint256 coinKeepMultiple
+        uint256 ethTakeProfit,
+        uint256 coinTakeProfit
     ) external;
     function purchase(
         address buyer,
@@ -388,7 +388,7 @@ contract DegenerusStonk {
         game.setAfKingMode(
             address(0),
             true,
-            0,
+            10 ether,
             0
         );
     }
@@ -498,7 +498,7 @@ contract DegenerusStonk {
     /// @dev Restricted to DGNRS holders
     /// @custom:reverts NotHolder If caller has no DGNRS balance
     function gameAdvance() external onlyHolder {
-        game.advanceGame(0);
+        game.advanceGame();
     }
 
     /// @notice Purchase tickets and lootboxes on behalf of DGNRS
@@ -514,7 +514,7 @@ contract DegenerusStonk {
         MintPaymentKind payKind
     ) external payable {
         uint256 priceWei = game.mintPrice();
-        uint256 ticketCost = (priceWei * ticketQuantity) / 4;
+        uint256 ticketCost = (priceWei * ticketQuantity) / (4 * 100);
         uint256 totalCost = ticketCost + lootBoxAmount;
         _checkAndRecordEthSpend(msg.sender, totalCost);
 
@@ -785,17 +785,6 @@ contract DegenerusStonk {
         poolBalances[toIdx] += amount;
         emit PoolRebalance(from, to, amount);
         return amount;
-    }
-
-    /// @notice Mint DGNRS tokens for game payouts
-    /// @dev Only callable by game contract. Used for Degenerette wins and other game rewards.
-    /// @param to Recipient address
-    /// @param amount Amount to mint
-    /// @custom:reverts Unauthorized If caller is not game contract
-    /// @custom:reverts ZeroAddress If to is zero address
-    function mintForGame(address to, uint256 amount) external onlyGame {
-        if (amount == 0) return;
-        _mint(to, amount);
     }
 
     /// @notice Burn DGNRS tokens for game bets
