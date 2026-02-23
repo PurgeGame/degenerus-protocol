@@ -8,7 +8,7 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 
 /// @notice Interface for game player actions on DegenerusGame contract
 interface IDegenerusGamePlayerActions {
-    function advanceGame(uint32 cap) external;
+    function advanceGame() external;
     function purchase(
         address buyer,
         uint256 ticketQuantity,
@@ -34,12 +34,12 @@ interface IDegenerusGamePlayerActions {
     ) external payable;
     function resolveDegeneretteBets(address player, uint64[] calldata betIds) external;
     function setAutoRebuy(address player, bool enabled) external;
-    function setAutoRebuyKeepMultiple(address player, uint256 keepMultiple) external;
+    function setAutoRebuyTakeProfit(address player, uint256 takeProfit) external;
     function setAfKingMode(
         address player,
         bool enabled,
-        uint256 ethKeepMultiple,
-        uint256 coinKeepMultiple
+        uint256 ethTakeProfit,
+        uint256 coinTakeProfit
     ) external;
     function setOperatorApproval(address operator, bool approved) external;
     function claimableWinningsOf(address player) external view returns (uint256);
@@ -54,11 +54,11 @@ interface IDegenerusGamePlayerActions {
 interface IDegenerusCoinPlayerActions {
     function depositCoinflip(address player, uint256 amount) external;
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
-    function claimCoinflipsKeepMultiple(address player, uint256 multiples) external returns (uint256 claimed);
+    function claimCoinflipsTakeProfit(address player, uint256 multiples) external returns (uint256 claimed);
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
     function decimatorBurn(address player, uint256 amount) external;
-    function setCoinflipAutoRebuy(address player, bool enabled, uint256 keepMultiple) external;
-    function setCoinflipAutoRebuyKeepMultiple(address player, uint256 keepMultiple) external;
+    function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
+    function setCoinflipAutoRebuyTakeProfit(address player, uint256 takeProfit) external;
 }
 
 /// @notice Interface for WWXRP vault-minting
@@ -468,10 +468,9 @@ contract DegenerusVault {
 
     /// @notice Advance the game on behalf of the vault
     /// @dev Requires caller to hold >30% of DGVE supply
-    /// @param cap Maximum number of game iterations
     /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
-    function gameAdvance(uint32 cap) external onlyVaultOwner {
-        gamePlayer.advanceGame(cap);
+    function gameAdvance() external onlyVaultOwner {
+        gamePlayer.advanceGame();
     }
 
     /// @notice Purchase tickets and lootboxes for the vault
@@ -641,11 +640,11 @@ contract DegenerusVault {
         gamePlayer.setAutoRebuy(address(this), enabled);
     }
 
-    /// @notice Set the auto-rebuy keep multiple for the vault
-    /// @param keepMultiple Multiple of minimum balance to keep before auto-rebuying
+    /// @notice Set the auto-rebuy take profit for the vault
+    /// @param takeProfit Amount to take profit before auto-rebuying
     /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
-    function gameSetAutoRebuyKeepMultiple(uint256 keepMultiple) external onlyVaultOwner {
-        gamePlayer.setAutoRebuyKeepMultiple(address(this), keepMultiple);
+    function gameSetAutoRebuyTakeProfit(uint256 takeProfit) external onlyVaultOwner {
+        gamePlayer.setAutoRebuyTakeProfit(address(this), takeProfit);
     }
 
     /// @notice Enable or disable auto-rebuy for decimator claims
@@ -657,15 +656,15 @@ contract DegenerusVault {
 
     /// @notice Configure AFK king mode settings for the vault
     /// @param enabled Whether AFK king mode should be enabled
-    /// @param ethKeepMultiple ETH keep multiple threshold
-    /// @param coinKeepMultiple Coin keep multiple threshold
+    /// @param ethTakeProfit ETH take profit threshold
+    /// @param coinTakeProfit Coin take profit threshold
     /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
     function gameSetAfKingMode(
         bool enabled,
-        uint256 ethKeepMultiple,
-        uint256 coinKeepMultiple
+        uint256 ethTakeProfit,
+        uint256 coinTakeProfit
     ) external onlyVaultOwner {
-        gamePlayer.setAfKingMode(address(this), enabled, ethKeepMultiple, coinKeepMultiple);
+        gamePlayer.setAfKingMode(address(this), enabled, ethTakeProfit, coinTakeProfit);
     }
 
     /// @notice Approve or revoke an operator for the vault's game actions
@@ -691,14 +690,14 @@ contract DegenerusVault {
         return coinPlayer.claimCoinflips(address(this), amount);
     }
 
-    /// @notice Claim coinflip winnings keeping a multiple of deposits
-    /// @param multiples Number of deposit multiples to keep
+    /// @notice Claim coinflip winnings as take profit multiples
+    /// @param multiples Number of take profit multiples to claim
     /// @return claimed Actual amount claimed
     /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
-    function coinClaimCoinflipsKeepMultiple(
+    function coinClaimCoinflipsTakeProfit(
         uint256 multiples
     ) external onlyVaultOwner returns (uint256 claimed) {
-        return coinPlayer.claimCoinflipsKeepMultiple(address(this), multiples);
+        return coinPlayer.claimCoinflipsTakeProfit(address(this), multiples);
     }
 
     /// @notice Burn coins in the decimator for the vault
@@ -710,17 +709,17 @@ contract DegenerusVault {
 
     /// @notice Configure coinflip auto-rebuy for the vault
     /// @param enabled Whether auto-rebuy should be enabled
-    /// @param keepMultiple Multiple of minimum balance to keep
+    /// @param takeProfit Amount to take profit
     /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
-    function coinSetAutoRebuy(bool enabled, uint256 keepMultiple) external onlyVaultOwner {
-        coinPlayer.setCoinflipAutoRebuy(address(this), enabled, keepMultiple);
+    function coinSetAutoRebuy(bool enabled, uint256 takeProfit) external onlyVaultOwner {
+        coinPlayer.setCoinflipAutoRebuy(address(this), enabled, takeProfit);
     }
 
-    /// @notice Set coinflip auto-rebuy keep multiple for the vault
-    /// @param keepMultiple Multiple of minimum balance to keep
+    /// @notice Set coinflip auto-rebuy take profit for the vault
+    /// @param takeProfit Amount to take profit
     /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
-    function coinSetAutoRebuyKeepMultiple(uint256 keepMultiple) external onlyVaultOwner {
-        coinPlayer.setCoinflipAutoRebuyKeepMultiple(address(this), keepMultiple);
+    function coinSetAutoRebuyTakeProfit(uint256 takeProfit) external onlyVaultOwner {
+        coinPlayer.setCoinflipAutoRebuyTakeProfit(address(this), takeProfit);
     }
 
     /// @notice Mint WWXRP from the vault's uncirculating reserve to a recipient

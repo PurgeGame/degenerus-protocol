@@ -2,3 +2,11 @@ node_modules/
 cache/
 artifacts/
 .env
+.claude/
+deployments/
+scripts/
+test/
+runs/
+wallets.json
+profiles.json
+contracts/mocks/

@@ -104,68 +104,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         deityDecimatorBoostDay[player] = 0;
     }
 
-    /// @notice Check if a player has an active whale boon
-    /// @param player The player address to check
-    /// @return hasBoon True if the player has an active whale boon
-    function hasWhaleBoon(address player) external view returns (bool hasBoon) {
-        uint48 boonDay = whaleBoonDay[player];
-        if (boonDay == 0) return false;
-        uint48 currentDay = _simulatedDayIndex();
-        uint48 deityDay = deityWhaleBoonDay[player];
-        if (deityDay != 0) {
-            return deityDay == currentDay;
-        }
-        return currentDay <= boonDay + 4;
-    }
-
-    /// @notice Consume a player's whale boon
-    /// @param player The player address to consume whale boon for
-    function consumeWhaleBoon(address player) external {
-        whaleBoonDay[player] = 0;
-        deityWhaleBoonDay[player] = 0;
-        whaleBoonDiscountBps[player] = 0;
-    }
-
-    // =========================================================================
-    // View Functions
-    // =========================================================================
-
-    /// @notice Get the ETH lootbox amount for a player at a specific index
-    /// @param player The player address
-    /// @param index The lootbox RNG index
-    /// @return The ETH amount stored for this lootbox (0 if none)
-    function lootboxAmountFor(address player, uint48 index) external view returns (uint256) {
-        uint256 packed = lootboxEth[index][player];
-        return packed & ((1 << 232) - 1);
-    }
-
-    /// @notice Get the BURNIE lootbox amount for a player at a specific index
-    /// @param player The player address
-    /// @param index The lootbox RNG index
-    /// @return The BURNIE amount stored for this lootbox (0 if none)
-    function burnieLootboxAmountFor(address player, uint48 index) external view returns (uint256) {
-        return lootboxBurnie[index][player];
-    }
-
-    /// @notice Get the current lootbox RNG index
-    /// @return The current RNG index for new lootboxes
-    function currentLootboxIndex() external view returns (uint48) {
-        return lootboxRngIndex;
-    }
-
-    /// @notice Get the RNG word for a specific lootbox index
-    /// @param index The lootbox RNG index
-    /// @return The RNG word (0 if not yet resolved)
-    function lootboxRngWordForIndex(uint48 index) external view returns (uint256) {
-        return lootboxRngWordByIndex[index];
-    }
-
-    /// @notice Get the pending BURNIE amount for lootbox RNG request
-    /// @return The accumulated BURNIE amount awaiting RNG
-    function lootboxRngPendingBurnieAmount() external view returns (uint256) {
-        return lootboxRngPendingBurnie;
-    }
-
     // =========================================================================
     // Boon Maintenance Functions (called via nested delegatecall from LootboxModule)
     // =========================================================================

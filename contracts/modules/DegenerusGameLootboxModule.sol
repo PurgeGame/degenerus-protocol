@@ -194,8 +194,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev Portion of lootbox EV reserved for boon/pass draw (10%)
     uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
-    /// @dev Maximum boon/pass budget per lootbox (1 ETH)
-    uint256 private constant LOOTBOX_BOON_MAX_BUDGET = 1 ether;
+    /// @dev Maximum boon/pass budget per lootbox (1 ETH scaled)
+    uint256 private constant LOOTBOX_BOON_MAX_BUDGET =
+        1 ether;
     /// @dev Assumed utilization of max boon value (50%)
     uint16 private constant LOOTBOX_BOON_UTILIZATION_BPS = 5000;
 
@@ -222,7 +223,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Decimator boon cap for base amount (50k BURNIE) used in EV estimation.
     uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
     /// @dev Whale bundle standard price (used for whale discount boon EV estimation).
-    uint256 private constant WHALE_BUNDLE_STANDARD_PRICE = 4 ether;
+    uint256 private constant WHALE_BUNDLE_STANDARD_PRICE =
+        4 ether;
     /// @dev Whale pass standard tickets per level.
     uint32 private constant WHALE_PASS_TICKETS_PER_LEVEL = 2;
     /// @dev Whale pass bonus tickets per level for early levels.
@@ -302,11 +304,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Presale BURNIE bonus in BPS (62% bonus, reduced to keep presale total stable)
     uint16 private constant LOOTBOX_PRESALE_BURNIE_BONUS_BPS = 6_200;
     /// @dev Whale pass price (200 tickets over levels 10-109)
-    uint256 private constant LOOTBOX_WHALE_PASS_PRICE = 4.35 ether;
+    uint256 private constant LOOTBOX_WHALE_PASS_PRICE =
+        4.35 ether;
     /// @dev Half whale pass price (100 tickets over levels 10-109)
-    uint256 private constant HALF_WHALE_PASS_PRICE = 2.175 ether;
-    /// @dev Threshold above which lootbox is split into two rolls (0.5 ETH)
-    uint256 private constant LOOTBOX_SPLIT_THRESHOLD = 0.5 ether;
+    uint256 private constant HALF_WHALE_PASS_PRICE =
+        2.175 ether;
+    /// @dev Threshold above which lootbox is split into two rolls (0.5 ETH scaled)
+    uint256 private constant LOOTBOX_SPLIT_THRESHOLD =
+        0.5 ether;
 
     // Activity score EV multiplier constants (ETH lootbox only)
     /// @dev 60% activity score = neutral 100% EV
@@ -319,8 +324,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_EV_NEUTRAL_BPS = 10_000;
     /// @dev Maximum EV at 260%+ activity (135%)
     uint16 private constant LOOTBOX_EV_MAX_BPS = 13_500;
-    /// @dev Maximum EV benefit cap per account per level (10 ETH)
-    uint256 private constant LOOTBOX_EV_BENEFIT_CAP = 10 ether;
+    /// @dev Maximum EV benefit cap per account per level (10 ETH scaled)
+    uint256 private constant LOOTBOX_EV_BENEFIT_CAP =
+        10 ether;
 
     /// @dev Probability scale for granular boon rolls (ppm = 1e6).
     uint256 private constant BOON_PPM_SCALE = 1_000_000;
@@ -1530,13 +1536,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             nextEntropy = EntropyLib.entropyStep(nextEntropy);
             uint256 dgnrsAmount = _lootboxDgnrsReward(amount, nextEntropy);
             if (dgnrsAmount != 0) {
-                _creditDgnrsReward(player, dgnrsAmount);
-                emit LootBoxDgnrsReward(
-                    player,
-                    day,
-                    lootboxAmount,
-                    dgnrsAmount
-                );
+                uint256 paid = _creditDgnrsReward(player, dgnrsAmount);
+                if (paid != 0) {
+                    emit LootBoxDgnrsReward(
+                        player,
+                        day,
+                        lootboxAmount,
+                        paid
+                    );
+                }
             }
             applyPresaleMultiplier = false;
         } else if (roll < 15) {
@@ -1628,9 +1636,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         countScaled = uint32(base);
     }
 
-    /// @dev Calculate DGNRS reward amount from lootbox pool.
+    /// @dev Calculate DGNRS reward amount from the lootbox pool.
     ///      79.5% small tier, 15% medium, 5% large, 0.5% mega.
-    ///      Falls back to BURNIE-equivalent if pool is empty.
     /// @param amount ETH amount for calculation
     /// @param entropy Entropy for tier selection
     /// @return dgnrsAmount DGNRS tokens to award
@@ -1653,33 +1660,25 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Lootbox);
         uint256 unit = 1 ether;
 
-        if (poolBalance != 0 && ppm != 0 && unit != 0) {
-            dgnrsAmount = (poolBalance * ppm * amount) /
-                (1_000_000 * unit);
-            if (dgnrsAmount > poolBalance) {
-                dgnrsAmount = poolBalance;
-            }
-        }
-
-        if (dgnrsAmount == 0 && unit != 0) {
-            // Fallback: convert to BURNIE-equivalent
-            dgnrsAmount = (amount * PRICE_COIN_UNIT) / unit;
+        if (poolBalance == 0 || ppm == 0 || unit == 0) return 0;
+        dgnrsAmount = (poolBalance * ppm * amount) /
+            (1_000_000 * unit);
+        if (dgnrsAmount > poolBalance) {
+            dgnrsAmount = poolBalance;
         }
     }
 
-    /// @dev Credit DGNRS reward to player from pool, minting remainder if pool is insufficient.
+    /// @dev Credit DGNRS reward to player from pool only.
     /// @param player Player to credit
-    /// @param amount DGNRS amount to credit
-    function _creditDgnrsReward(address player, uint256 amount) private {
-        if (amount == 0) return;
-        uint256 transferred = dgnrs.transferFromPool(
+    /// @param amount Requested DGNRS amount to credit
+    /// @return paid Actual DGNRS amount paid from pool
+    function _creditDgnrsReward(address player, uint256 amount) private returns (uint256 paid) {
+        if (amount == 0) return 0;
+        paid = dgnrs.transferFromPool(
             IDegenerusStonk.Pool.Lootbox,
             player,
             amount
         );
-        if (transferred < amount) {
-            dgnrs.mintForGame(player, amount - transferred);
-        }
     }
 
     /// @dev Get the value for a lazy pass at a specific level.

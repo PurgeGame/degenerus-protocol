@@ -77,8 +77,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
     /// @dev Safe write budget for gas control (keeps cold batch under 15M gas).
     uint32 private constant WRITES_BUDGET_SAFE = 550;
-    /// @dev Minimum writes to ensure progress.
-    uint32 private constant WRITES_BUDGET_MIN = 8;
 
     /// @dev LCG multiplier for trait generation.
     uint64 private constant TICKET_LCG_MULT = 6364136223846793005;
@@ -89,14 +87,17 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
     /// @dev Loot box minimum purchase amount (0.01 ETH).
     uint256 private constant LOOTBOX_MIN = 0.01 ether;
-    /// @dev BURNIE loot box minimum purchase amount.
+    /// @dev BURNIE loot box minimum purchase amount (scaled for testnet).
     uint256 private constant BURNIE_LOOTBOX_MIN = 1000 ether;
+    /// @dev Absolute minimum ticket buy-in (ETH equivalent).
+    uint256 private constant TICKET_MIN_BUYIN_WEI = 0.0025 ether;
 
     /// @dev Lootbox boost amounts applied to the next lootbox purchase.
     uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500;
     uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;
     uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
-    uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
+    uint256 private constant LOOTBOX_BOOST_MAX_VALUE =
+        10 ether;
     uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800;
 
     /// @dev Loot box pool split: 90% future, 10% next.
@@ -282,7 +283,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     function processFutureTicketBatch(
-        uint32 writesBudget,
         uint24 lvl
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
         uint256 entropy = rngWordCurrent;
@@ -309,12 +309,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         }
 
         // Set up write budget with cold storage scaling on first batch
-        if (writesBudget == 0) {
-            writesBudget = WRITES_BUDGET_SAFE;
-        } else if (writesBudget < WRITES_BUDGET_MIN) {
-            writesBudget = WRITES_BUDGET_MIN;
-        }
-
+        uint32 writesBudget = WRITES_BUDGET_SAFE;
         if (idx == 0) {
             writesBudget -= (writesBudget * 35) / 100; // 65% scaling for cold storage
         }
@@ -335,13 +330,15 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     if (packed != 0) {
                         ticketsOwedPacked[lvl][player] = 0;
                     }
-                    unchecked { ++idx; }
+                    // Charge one budget unit for skip/cleanup progress so sparse
+                    // queues cannot consume unbounded work in one call.
+                    unchecked { ++idx; ++used; }
                     processed = 0;
                     continue;
                 }
                 if (!_rollRemainder(entropy, baseKey, rem)) {
                     ticketsOwedPacked[lvl][player] = 0;
-                    unchecked { ++idx; }
+                    unchecked { ++idx; ++used; }
                     processed = 0;
                     continue;
                 }
@@ -797,6 +794,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 priceWei = price;
         uint256 costWei = (priceWei * quantity) / (4 * TICKET_SCALE);
         if (costWei == 0) revert E();
+        if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
 
         uint256 adjustedQuantity = quantity;
         if (!payInCoin) {

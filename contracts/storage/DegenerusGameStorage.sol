@@ -63,7 +63,7 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [12:13] dailyEthPhase            uint8    0=current level, 1=carryover       |
  * | [13:32] <padding>                        19 bytes unused                     |
  * +-----------------------------------------------------------------------------+
- *   Total: 13 + 6 = 19 bytes (13 bytes padding)
+ *   Total: 13 bytes (19 bytes padding)
  *
  * +-----------------------------------------------------------------------------+
  * | SLOT 2 (32 bytes) — Price                                                   |
@@ -130,17 +130,20 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant TICKET_SCALE = 100;
 
     /// @dev ETH threshold for whale pass claim eligibility from lootbox wins.
-    uint256 internal constant LOOTBOX_CLAIM_THRESHOLD = 5 ether;
+    uint256 internal constant LOOTBOX_CLAIM_THRESHOLD =
+        5 ether;
 
     /// @dev Bootstrap value for prize pool target at level 1 (before any level completes).
     ///      levelPrizePool[0] is initialized to this value conceptually.
-    uint256 internal constant BOOTSTRAP_PRIZE_POOL = 50 ether;
+    uint256 internal constant BOOTSTRAP_PRIZE_POOL =
+        50 ether;
 
     /// @dev Level at which earlybird DGNRS rewards end (exclusive).
     uint24 internal constant EARLYBIRD_END_LEVEL = 3;
 
     /// @dev Total ETH target for earlybird DGNRS emission curve.
-    uint256 internal constant EARLYBIRD_TARGET_ETH = 1_000 ether;
+    uint256 internal constant EARLYBIRD_TARGET_ETH =
+        1_000 ether;
 
     /// @dev Current-pool daily jackpot percentage is rolled in JackpotModule.
     ///      Days 1-4 use a random 6%-14% slice of remaining currentPrizePool.
@@ -272,7 +275,8 @@ abstract contract DegenerusGameStorage {
     ///
     ///      SECURITY: Price updates are game-controlled. uint128 prevents
     ///      overflow in multiplication with reasonable quantities.
-    uint128 internal price = uint128(0.01 ether);
+    uint128 internal price =
+        uint128(0.01 ether);
 
     // =========================================================================
     // SLOTS 3+: Full-Width Balances and Pools
@@ -755,11 +759,11 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Packed auto-rebuy/afKing state per player to reduce SLOADs.
-    ///      keepMultiple is in wei for ETH auto-rebuy (0 = rebuy all).
-    ///      Note: coinflip auto-rebuy keep multiples are stored in BurnieCoinflip.
+    ///      takeProfit is in wei for ETH auto-rebuy (0 = rebuy all).
+    ///      Note: coinflip auto-rebuy take profit amounts are stored in BurnieCoinflip.
     struct AutoRebuyState {
-        /// @dev ETH amount to keep before auto-rebuy (wei). 0 = rebuy all winnings.
-        uint128 keepMultiple;
+        /// @dev ETH amount to take profit before auto-rebuy (wei). 0 = rebuy all winnings.
+        uint128 takeProfit;
         /// @dev Level at which afKing mode was activated. Used for lock period calculation. Reset to 0 when deactivated.
         uint24 afKingActivatedLevel;
         /// @dev True if auto-rebuy is enabled for this player.
@@ -769,7 +773,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Auto-rebuy toggle and afKing mode state (packed into one slot per player).
-    ///      When auto-rebuy is enabled, the remainder (after reserving keep-multiples)
+    ///      When auto-rebuy is enabled, the remainder (after reserving take profit)
     ///      is converted to tickets for next level or next+1 (50/50) during jackpot
     ///      award flow. ETH goes to nextPrizePool for next-level tickets or to
     ///      futurePrizePool for next+1 tickets, and tickets are queued per level.
@@ -1131,7 +1135,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Returns the day index for a specific timestamp.
-    function _simulatedDayIndexAt(uint48 ts) internal view returns (uint48) {
+    function _simulatedDayIndexAt(uint48 ts) internal pure returns (uint48) {
         return GameTimeLib.currentDayIndexAt(ts);
     }
 
@@ -1184,7 +1188,8 @@ abstract contract DegenerusGameStorage {
     uint256 internal lootboxRngPendingEth;
 
     /// @dev ETH threshold that triggers a lootbox RNG request (wei).
-    uint256 internal lootboxRngThreshold = 1 ether;
+    uint256 internal lootboxRngThreshold =
+        1 ether;
 
     /// @dev Minimum LINK balance required to allow manual lootbox RNG rolls.
     ///      Defaults to ~2 weeks of daily VRF (assumes ~1 LINK/day).

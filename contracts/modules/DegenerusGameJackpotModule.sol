@@ -129,27 +129,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
     uint16 private constant DAILY_CURRENT_BPS_MAX = 1400;
 
-    /// @dev Target future/next ratio in bps (2.0x = 20000 bps).
-    uint16 private constant FUTURE_NEXT_TARGET_BPS = 20_000;
-
-    /// @dev Max skew applied to next-pool rebalancing (±3%).
-    uint16 private constant FUTURE_NEXT_SKEW_MAX_BPS = 300;
-
-    /// @dev Random jitter around the mean skew (±1%).
-    uint16 private constant FUTURE_NEXT_SKEW_JITTER_BPS = 100;
-
-    /// @dev Max adjustment from future/next ratio (±1.5%).
-    uint16 private constant FUTURE_NEXT_RATIO_ADJUST_MAX_BPS = 150;
-
-    /// @dev Time thresholds for skew curve.
-    uint48 private constant FUTURE_NEXT_TIME_FAST = 1 days;
-    uint48 private constant FUTURE_NEXT_TIME_PEAK = 14 days;
-    uint48 private constant FUTURE_NEXT_TIME_DECAY = 28 days;
-
-    /// @dev Domain separator for future/next skew roll derivation.
-    bytes32 private constant FUTURE_NEXT_SKEW_TAG =
-        keccak256("future-next-skew");
-
     /// @dev Domain separator for rare future-pool dump roll derivation.
     bytes32 private constant FUTURE_DUMP_TAG = keccak256("future-dump");
 
@@ -166,18 +145,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Default SSTORE budget for processTicketBatch to stay safely under 15M gas.
     uint32 private constant WRITES_BUDGET_SAFE = 550;
 
-    /// @dev Minimum writes budget to ensure progress even with very low caps.
-    uint32 private constant WRITES_BUDGET_MIN = 8;
-
     // -------------------------------------------------------------------------
     // Constants — Daily Jackpot Chunking
     // -------------------------------------------------------------------------
 
     /// @dev Default unit budget for daily jackpot ETH distribution (conservative).
     uint16 private constant DAILY_JACKPOT_UNITS_SAFE = 1000;
-
-    /// @dev Minimum units to guarantee progress (auto-rebuy counts as 3 units).
-    uint16 private constant DAILY_JACKPOT_UNITS_MIN = 3;
 
     /// @dev Winner unit cost when auto-rebuy is enabled.
     uint8 private constant DAILY_JACKPOT_UNITS_AUTOREBUY = 3;
@@ -280,12 +253,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param isDaily True for scheduled daily jackpot, false for early-burn jackpot.
     /// @param lvl Current game level.
     /// @param randWord VRF entropy for winner selection and trait derivation.
-    /// @param cap Emergency unit cap for daily jackpot chunking (0 = default).
     function payDailyJackpot(
         bool isDaily,
         uint24 lvl,
-        uint256 randWord,
-        uint32 cap
+        uint256 randWord
     ) external {
         uint48 questDay = _calculateDayIndex();
         uint32 winningTraitsPacked;
@@ -418,7 +389,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 entropyDaily = randWord ^ (uint256(lvl) << 192);
             uint8[4] memory traitIdsDaily = JackpotBucketLib
                 .unpackWinningTraits(winningTraitsPacked);
-            uint16 unitsBudget = _dailyJackpotUnitsBudget(cap);
+            uint16 unitsBudget = DAILY_JACKPOT_UNITS_SAFE;
             (
                 ,
                 ,
@@ -834,7 +805,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 rngWord
     ) external {
         // Consolidate pools for this level's jackpot calculations.
-        uint256 nextPoolSnapshot = nextPrizePool;
         currentPrizePool += nextPrizePool;
         nextPrizePool = 0;
 
@@ -854,31 +824,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 if (moveWei != 0) {
                     futurePrizePool -= moveWei;
                     currentPrizePool += moveWei;
-                }
-            }
-        } else if (nextPoolSnapshot != 0) {
-            uint48 elapsed = _futureNextElapsed();
-            int256 skewBps = _futureNextSkewBps(
-                futurePrizePool,
-                nextPoolSnapshot,
-                elapsed,
-                rngWord
-            );
-            if (skewBps != 0) {
-                uint256 moveBps = uint256(skewBps > 0 ? skewBps : -skewBps);
-                uint256 moveWei = (nextPoolSnapshot * moveBps) / 10_000;
-                if (moveWei != 0) {
-                    if (skewBps > 0) {
-                        if (moveWei > futurePrizePool)
-                            moveWei = futurePrizePool;
-                        futurePrizePool -= moveWei;
-                        currentPrizePool += moveWei;
-                    } else {
-                        if (moveWei > currentPrizePool)
-                            moveWei = currentPrizePool;
-                        currentPrizePool -= moveWei;
-                        futurePrizePool += moveWei;
-                    }
                 }
             }
         }
@@ -930,7 +875,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Credits ETH to a player's claimable balance. Uses unchecked arithmetic because
     ///      uint256 overflow is practically impossible with real ETH amounts.
-    ///      With auto-rebuy enabled, reserves full keep-multiples for claim and
+    ///      With auto-rebuy enabled, reserves full take profit for claim and
     ///      converts the remainder to tickets. Fractional dust is ignored.
     /// @param beneficiary Address to credit.
     /// @param weiAmount Wei to add to their claimable balance.
@@ -1278,85 +1223,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         return seed % FUTURE_DUMP_ODDS == 0;
     }
 
-    /// @dev Compute signed skew based on elapsed time (primary), ratio (secondary), and jitter.
-    function _futureNextSkewBps(
-        uint256 futurePool,
-        uint256 nextPool,
-        uint48 elapsed,
-        uint256 rngWord
-    ) private pure returns (int256) {
-        int256 mean = _futureNextTimeMeanBps(elapsed) +
-            _futureNextRatioAdjustBps(futurePool, nextPool);
-        int256 skew = mean;
-        if (FUTURE_NEXT_SKEW_JITTER_BPS != 0) {
-            uint256 seed = uint256(
-                keccak256(abi.encodePacked(rngWord, FUTURE_NEXT_SKEW_TAG))
-            );
-            uint256 range = (uint256(FUTURE_NEXT_SKEW_JITTER_BPS) * 2) + 1;
-            int256 jitter = int256(seed % range) -
-                int256(uint256(FUTURE_NEXT_SKEW_JITTER_BPS));
-            skew = mean + jitter;
-        }
-        int256 maxSkew = int256(uint256(FUTURE_NEXT_SKEW_MAX_BPS));
-        if (skew > maxSkew) return maxSkew;
-        if (skew < -maxSkew) return -maxSkew;
-        return skew;
-    }
-
-    /// @dev Compute mean skew from elapsed time (fast/slow favor future, peak at 2 weeks).
-    function _futureNextTimeMeanBps(
-        uint48 elapsed
-    ) private pure returns (int256) {
-        int256 minSkew = -int256(uint256(FUTURE_NEXT_SKEW_MAX_BPS));
-        int256 maxSkew = int256(uint256(FUTURE_NEXT_SKEW_MAX_BPS));
-
-        if (elapsed <= FUTURE_NEXT_TIME_FAST) {
-            return minSkew;
-        }
-        if (elapsed <= FUTURE_NEXT_TIME_PEAK) {
-            uint256 span = FUTURE_NEXT_TIME_PEAK - FUTURE_NEXT_TIME_FAST;
-            uint256 elapsedAfter = elapsed - FUTURE_NEXT_TIME_FAST;
-            int256 delta = maxSkew - minSkew; // 600 bps span
-            int256 add = (delta * int256(uint256(elapsedAfter))) /
-                int256(uint256(span));
-            return minSkew + add;
-        }
-        if (elapsed <= FUTURE_NEXT_TIME_DECAY) {
-            uint256 span = FUTURE_NEXT_TIME_DECAY - FUTURE_NEXT_TIME_PEAK;
-            uint256 elapsedAfter = elapsed - FUTURE_NEXT_TIME_PEAK;
-            int256 delta = minSkew - maxSkew; // -600 bps span
-            int256 add = (delta * int256(uint256(elapsedAfter))) /
-                int256(uint256(span));
-            return maxSkew + add;
-        }
-        return minSkew;
-    }
-
-    /// @dev Compute ratio-based adjustment (2x target, ±1.5% cap).
-    function _futureNextRatioAdjustBps(
-        uint256 futurePool,
-        uint256 nextPool
-    ) private pure returns (int256) {
-        if (nextPool == 0) return 0;
-        uint256 ratioBps = (futurePool * 10_000) / nextPool; // 1.0x = 10000 bps
-        int256 diff = int256(ratioBps) -
-            int256(uint256(FUTURE_NEXT_TARGET_BPS));
-        int256 adjust = (diff *
-            int256(uint256(FUTURE_NEXT_RATIO_ADJUST_MAX_BPS))) / 10_000;
-        int256 maxAdjust = int256(uint256(FUTURE_NEXT_RATIO_ADJUST_MAX_BPS));
-        if (adjust > maxAdjust) return maxAdjust;
-        if (adjust < -maxAdjust) return -maxAdjust;
-        return adjust;
-    }
-
-    function _futureNextElapsed() private view returns (uint48 elapsed) {
-        uint48 start = levelStartTime;
-        if (start == 0) return 0;
-        uint48 end = uint48(block.timestamp);
-        if (end <= start) return 0;
-        return end - start;
-    }
-
     // =========================================================================
     // Internal Helpers — Jackpot Execution
     // =========================================================================
@@ -1416,20 +1282,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Daily Jackpot ETH — Chunked Distribution
     // =========================================================================
 
-    /// @dev Compute the daily jackpot unit budget for this call.
-    ///      cap only reduces the budget (emergency mode); it cannot increase it.
-    function _dailyJackpotUnitsBudget(
-        uint32 cap
-    ) private pure returns (uint16 budget) {
-        uint32 b = cap == 0 ? DAILY_JACKPOT_UNITS_SAFE : cap;
-        if (b > DAILY_JACKPOT_UNITS_SAFE) {
-            b = DAILY_JACKPOT_UNITS_SAFE;
-        }
-        if (b < DAILY_JACKPOT_UNITS_MIN) {
-            b = DAILY_JACKPOT_UNITS_MIN;
-        }
-        return uint16(b);
-    }
+
 
     /// @dev Winner unit cost (auto-rebuy counts as 3x).
     function _winnerUnits(address winner) private view returns (uint8 units) {
@@ -1975,11 +1828,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Budget defaults to WRITES_BUDGET_SAFE (780) if not specified.
     ///      - Minimum budget is WRITES_BUDGET_MIN (8) to ensure progress.
     ///
-    /// @param writesBudget Maximum SSTORE writes allowed this call (0 = use default).
     /// @param lvl Level whose tickets should be processed.
     /// @return finished True if all tickets for this level have been fully processed.
     function processTicketBatch(
-        uint32 writesBudget,
         uint24 lvl
     ) external returns (bool finished) {
         address[] storage queue = ticketQueue[lvl];
@@ -2000,12 +1851,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             return true;
         }
 
-        if (writesBudget == 0) {
-            writesBudget = WRITES_BUDGET_SAFE;
-        } else if (writesBudget < WRITES_BUDGET_MIN) {
-            writesBudget = WRITES_BUDGET_MIN;
-        }
-
+        uint32 writesBudget = WRITES_BUDGET_SAFE;
         if (idx == 0) {
             writesBudget -= (writesBudget * 35) / 100; // 65% scaling for cold storage
         }
@@ -2102,7 +1948,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 entropy,
                 rollSalt
             );
-            if (skip) return (0, true);
+            // Charge one budget unit even when skipping so sparse/remainder-only
+            // queues cannot bypass the per-call work cap.
+            if (skip) return (1, true);
             owed = 1;
         }
 
@@ -2420,7 +2268,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Calculate current day index.
+    /// @dev Calculate current day index with testnet offset applied.
     ///      Day 1 = deploy day. Days reset at JACKPOT_RESET_TIME (22:57 UTC).
     /// @return Day index (1-indexed from deploy day).
     function _calculateDayIndex() private view returns (uint48) {

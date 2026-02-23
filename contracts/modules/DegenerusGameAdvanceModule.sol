@@ -96,23 +96,23 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint256 private constant BURNIE_RNG_TRIGGER = 40_000 ether;
     uint32 private constant VAULT_PERPETUAL_TICKETS = 16;
     uint8 private constant ETH_PERK_ODDS = 100;
-    uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 2000;
-    uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 300;
+    uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
+    uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1300;
     uint16 private constant NEXT_TO_FUTURE_BPS_WEEK_STEP = 100;
     uint16 private constant NEXT_TO_FUTURE_BPS_X9_BONUS = 200;
     uint16 private constant NEXT_SKIM_VARIANCE_BPS = 1000;
     uint16 private constant NEXT_SKIM_VARIANCE_MIN_BPS = 1000;
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
 
-    /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH).
+    /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH, unscaled).
     uint256 private constant LOOTBOX_PRESALE_ETH_CAP = 200 ether;
 
     /// @dev BURNIE bounty for eligible advanceGame calls (500 BURNIE flip credit).
     uint256 private constant ADVANCE_BOUNTY = PRICE_COIN_UNIT >> 1;
 
     /// @notice Advance game state. Called daily to process jackpots, mints, and phase transitions.
-    /// @param cap Write budget for batched ops. 0 = normal (with bounty), >0 = emergency mode.
-    function advanceGame(uint32 cap) external {
+    ///         Caller receives ADVANCE_BOUNTY (500 BURNIE) as flip credit.
+    function advanceGame() external {
         address caller = msg.sender;
         uint48 ts = uint48(block.timestamp);
         uint48 day = _simulatedDayIndexAt(ts);
@@ -135,7 +135,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             return;
         }
 
-        _enforceDailyMintGate(caller, purchaseLevel, cap, dailyIdx);
+        _enforceDailyMintGate(caller, purchaseLevel, dailyIdx);
 
         if (day == dailyIdx) revert NotTimeYet();
 
@@ -150,7 +150,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // Phase transition housekeeping + near-future tickets
             if (phaseTransitionActive) {
-                if (!_processPhaseTransition(cap, purchaseLevel)) {
+                if (!_processPhaseTransition(purchaseLevel)) {
                     stage = STAGE_TRANSITION_WORKING;
                     break;
                 }
@@ -172,7 +172,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 dailyEthBucketCursor == 0 &&
                 dailyEthWinnerCursor == 0
             ) {
-                if (!_prepareFinalDayFutureTickets(cap, lvl)) {
+                if (!_prepareFinalDayFutureTickets(lvl)) {
                     stage = STAGE_FUTURE_TICKETS_WORKING;
                     break;
                 }
@@ -180,7 +180,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // Process current level tickets
             (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(
-                cap,
                 purchaseLevel
             );
             if (ticketWorked || !ticketsFinished) {
@@ -192,7 +191,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (!inJackpot) {
                 // Pre-target: daily jackpots while building prize pool
                 if (!lastPurchaseDay) {
-                    payDailyJackpot(false, purchaseLevel, rngWord, cap);
+                    payDailyJackpot(false, purchaseLevel, rngWord);
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
                     if (nextPrizePool >= levelPrizePool[purchaseLevel - 1]) {
                         lastPurchaseDay = true;
@@ -209,7 +208,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         bool futureWorked,
                         bool futureFinished,
 
-                    ) = _processFutureTicketBatch(cap, nextLevel);
+                    ) = _processFutureTicketBatch(nextLevel);
                     if (futureWorked || !futureFinished) {
                         stage = STAGE_FUTURE_TICKETS_WORKING;
                         break;
@@ -258,7 +257,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 dailyEthPoolBudget != 0 ||
                 dailyEthWinnerCursor != 0
             ) {
-                payDailyJackpot(true, lastDailyJackpotLevel, rngWord, cap);
+                payDailyJackpot(true, lastDailyJackpotLevel, rngWord);
                 stage = STAGE_JACKPOT_ETH_RESUME;
                 break;
             }
@@ -280,12 +279,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // Fresh daily jackpot
-            payDailyJackpot(true, lvl, rngWord, cap);
+            payDailyJackpot(true, lvl, rngWord);
             stage = STAGE_JACKPOT_DAILY_STARTED;
         } while (false);
 
         emit Advance(stage, lvl);
-        if (cap == 0) coin.creditFlip(caller, ADVANCE_BOUNTY);
+        coin.creditFlip(caller, ADVANCE_BOUNTY);
     }
 
     /*+========================================================================================+
@@ -375,7 +374,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         lastExterminatedTrait = TRAIT_ID_TIMEOUT;
         exterminationInvertFlag = false;
         if (lvl % 100 == 0) {
-            levelPrizePool[lvl] = futurePrizePool;
+            levelPrizePool[lvl] = futurePrizePool / 3;
         }
         jackpotCounter = 0;
     }
@@ -475,8 +474,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function payDailyJackpot(
         bool isDaily,
         uint24 lvl,
-        uint256 randWord,
-        uint32 cap
+        uint256 randWord
     ) internal {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
@@ -485,8 +483,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     IDegenerusGameJackpotModule.payDailyJackpot.selector,
                     isDaily,
                     lvl,
-                    randWord,
-                    cap
+                    randWord
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -549,14 +546,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Enforce "must mint today" gate for advanceGame callers.
-    ///      Skipped for CREATOR and when cap > 0 (emergency/maintenance).
+    ///      Skipped for CREATOR.
     function _enforceDailyMintGate(
         address caller,
         uint24 lvl,
-        uint32 cap,
         uint48 dailyIdx_
     ) private view {
-        if (cap != 0 || caller == ContractAddresses.CREATOR) return;
+        if (caller == ContractAddresses.CREATOR) return;
         uint32 gateIdx = uint32(dailyIdx_);
         if (gateIdx == 0) return;
 
@@ -875,7 +871,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if ((lvl % 100) == 0) {
             reserved = 0; // Skip extra future->next move on x00 levels
         } else {
-            reserved = futurePrizePool / 5; // 20% on normal levels
+            reserved = (futurePrizePool * 15) / 100; // 15% on normal levels
         }
 
         if (reserved != 0) {
@@ -894,13 +890,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Process a batch of future ticket rewards for the specified level.
     ///      Called during jackpot phase of level N-1 to activate tickets for level N.
-    /// @param playersToProcess Max players to process this call (0 = default batch size).
     /// @param lvl Target level to activate (typically current level + 1).
     /// @return worked True if any queued entries were processed.
     /// @return finished True if all queued entries for this level are processed.
     /// @return writesUsed Number of SSTORE operations used in this batch.
     function _processFutureTicketBatch(
-        uint32 playersToProcess,
         uint24 lvl
     ) private returns (bool worked, bool finished, uint32 writesUsed) {
         (bool ok, bytes memory data) = ContractAddresses
@@ -908,7 +902,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameMintModule.processFutureTicketBatch.selector,
-                    playersToProcess,
                     lvl
                 )
             );
@@ -920,11 +913,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Before the final jackpot-day draw, process ticket queues for levels
     ///      lvl+2..lvl+5 (near-future lootbox levels). Uses existing ticket cursor
     ///      state so work can resume across multiple advanceGame calls.
-    /// @param cap Gas budget override for batched operations.
     /// @param lvl Current jackpot level.
     /// @return finished True when all target future levels are fully processed.
     function _prepareFinalDayFutureTickets(
-        uint32 cap,
         uint24 lvl
     ) private returns (bool finished) {
         uint24 startLevel = lvl + 2;
@@ -934,7 +925,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Continue an in-flight future level first to preserve progress.
         if (resumeLevel >= startLevel && resumeLevel <= endLevel) {
             (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
-                cap,
                 resumeLevel
             );
             if (worked || !levelFinished) return false;
@@ -944,7 +934,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         for (uint24 target = startLevel; target <= endLevel; ) {
             if (target != resumeLevel) {
                 (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
-                    cap,
                     target
                 );
                 if (worked || !levelFinished) return false;
@@ -964,14 +953,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     /// @dev Process a batch of current level tickets via jackpot module delegatecall.
-    /// @param writesBudget Count of SSTORE writes allowed (0 = use default).
-    /// @dev Run one ticket batch and detect whether any progress was made.
-    /// @param writesBudget Gas budget for this batch.
     /// @param lvl Current level.
     /// @return worked True if any tickets were processed.
     /// @return finished True if all tickets for this level have been fully processed.
     function _runProcessTicketBatch(
-        uint32 writesBudget,
         uint24 lvl
     ) private returns (bool worked, bool finished) {
         uint32 prevCursor = ticketCursor;
@@ -981,7 +966,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameJackpotModule.processTicketBatch.selector,
-                    writesBudget,
                     lvl
                 )
             );
@@ -994,11 +978,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Process jackpot→purchase transition housekeeping (vault perpetual tickets + auto-stake).
     ///      Deity pass holders get virtual trait-targeted tickets at jackpot resolution time
     ///      (zero gas cost here). Vault addresses (DGNRS, VAULT) get generic queued tickets.
-    /// @param cap Gas budget override for batched operations.
     /// @param purchaseLevel Current purchase level (level + 1).
     /// @return finished True if all transition work completed this call.
     function _processPhaseTransition(
-        uint32 cap,
         uint24 purchaseLevel
     ) private returns (bool finished) {
         // Vault perpetual tickets: 16 generic tickets per level for DGNRS and VAULT
@@ -1010,7 +992,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Non-blocking: if stETH contract fails, game continues normally.
         _autoStakeExcessEth();
 
-        cap;
         return true;
     }
 

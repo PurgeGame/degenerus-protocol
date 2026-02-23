@@ -124,22 +124,12 @@ interface IDegenerusQuests {
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
-    /// @notice Awards streak shield protection to a player
-    /// @dev Shields protect the player's streak from breaking when missing a day
-    /// @param player The address of the player to award shields to
-    /// @param amount The number of streak shields to award
-    function awardQuestStreakShield(address player, uint16 amount) external;
-
     /// @notice Awards bonus streak days to a player
     /// @dev Directly increases the player's streak count
     /// @param player The address of the player to award bonus to
     /// @param amount The number of bonus streak days to award
     /// @param currentDay The current unix day for tracking purposes
     function awardQuestStreakBonus(address player, uint16 amount, uint48 currentDay) external;
-
-    /// @notice Returns the currently active quests for today
-    /// @return quests Array of two QuestInfo structs representing today's quests
-    function getActiveQuests() external view returns (QuestInfo[2] memory quests);
 
     /// @notice Returns the quest state for a specific player
     /// @param player The address of the player to query
@@ -157,9 +147,4 @@ interface IDegenerusQuests {
             bool[2] memory completed
         );
 
-    /// @notice Returns a complete view of a player's quest state including active quests
-    /// @dev Convenience function that combines active quests with player-specific state
-    /// @param player The address of the player to query
-    /// @return viewData Complete quest view including quests, progress, completion, and streak info
-    function getPlayerQuestView(address player) external view returns (PlayerQuestView memory viewData);
 }
