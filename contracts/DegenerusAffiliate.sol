@@ -132,6 +132,9 @@ contract DegenerusAffiliate {
     /// @notice Thrown when caller is not in the authorized set (coin, game, lootbox).
     error OnlyAuthorized();
 
+    /// @notice Thrown when caller is not the deployment creator.
+    error OnlyCreator();
+
     /// @notice Thrown when attempting to create an affiliate code with zero or reserved value.
     error Zero();
 
@@ -199,6 +202,7 @@ contract DegenerusAffiliate {
     uint16 private constant REWARD_SCALE_RECYCLED_BPS = 500;
     uint16 private constant BPS_DENOMINATOR = 10_000;
     bytes32 private constant AFFILIATE_ROLL_TAG = keccak256("affiliate-payout-roll-v1");
+    uint256 private constant PACKED_REFERRAL_SIZE = 52;
 
     /// @notice Sentinel value indicating a player's referral slot is permanently locked.
     /// @dev Set when a player makes an invalid referral attempt (self-referral, unknown code)
@@ -245,7 +249,19 @@ contract DegenerusAffiliate {
     //                              CONSTRUCTOR
     // =====================================================================
 
-    constructor() {
+    constructor(
+        address[] memory bootstrapOwners,
+        bytes32[] memory bootstrapCodes,
+        uint8[] memory bootstrapRakebacks,
+        address[] memory bootstrapPlayers,
+        bytes32[] memory bootstrapReferralCodes
+    ) {
+        if (
+            bootstrapOwners.length != bootstrapCodes.length ||
+            bootstrapOwners.length != bootstrapRakebacks.length ||
+            bootstrapPlayers.length != bootstrapReferralCodes.length
+        ) revert Insufficient();
+
         affiliateCode[AFFILIATE_CODE_VAULT] = AffiliateCodeInfo({
             owner: ContractAddresses.VAULT,
             rakeback: 0,
@@ -264,6 +280,28 @@ contract DegenerusAffiliate {
         emit Affiliate(0, AFFILIATE_CODE_DGNRS, ContractAddresses.VAULT);
         emit Affiliate(0, AFFILIATE_CODE_VAULT, ContractAddresses.DGNRS);
 
+        uint256 len = bootstrapOwners.length;
+        for (uint256 i; i < len; ) {
+            _createAffiliateCode(
+                bootstrapOwners[i],
+                bootstrapCodes[i],
+                bootstrapRakebacks[i]
+            );
+            unchecked {
+                ++i;
+            }
+        }
+
+        uint256 referralLen = bootstrapPlayers.length;
+        for (uint256 i; i < referralLen; ) {
+            _bootstrapReferral(
+                bootstrapPlayers[i],
+                bootstrapReferralCodes[i]
+            );
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     // =====================================================================
@@ -286,19 +324,7 @@ contract DegenerusAffiliate {
      * @param rakebackPct Percentage of rewards returned to referred players (0-25).
      */
     function createAffiliateCode(bytes32 code_, uint8 rakebackPct) external {
-        // SECURITY: Prevent reserved values from being claimed.
-        if (code_ == bytes32(0) || code_ == REF_CODE_LOCKED) revert Zero();
-        // SECURITY: Cap rakeback to prevent affiliate from giving away all rewards.
-        if (rakebackPct > MAX_RAKEBACK_PCT) revert InvalidRakeback();
-        AffiliateCodeInfo storage info = affiliateCode[code_];
-        // SECURITY: First-come-first-served; codes cannot be overwritten.
-        if (info.owner != address(0)) revert Insufficient();
-        affiliateCode[code_] = AffiliateCodeInfo({
-            owner: msg.sender,
-            rakeback: rakebackPct,
-            payoutMode: uint8(PayoutMode.Coinflip)
-        });
-        emit Affiliate(1, code_, msg.sender); // 1 = code created
+        _createAffiliateCode(msg.sender, code_, rakebackPct);
     }
 
     /// @notice Set payout mode for an affiliate code owned by the caller.
@@ -374,6 +400,53 @@ contract DegenerusAffiliate {
         if (existing != bytes32(0) && !_vaultReferralMutable(existing)) revert Insufficient();
         _setReferralCode(msg.sender, code_);
         emit Affiliate(0, code_, msg.sender); // 0 = player referred
+    }
+
+    /**
+     * @notice Batch-seed referrals for pre-known players.
+     * @dev Access: ContractAddresses.CREATOR only.
+     *      Useful to seed referrals in chunks after deployment when list size is large.
+     * @param players Players to assign.
+     * @param codes Referral codes for each player.
+     */
+    function bootstrapReferrals(
+        address[] calldata players,
+        bytes32[] calldata codes
+    ) external {
+        if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
+        if (players.length != codes.length) revert Insufficient();
+        uint256 len = players.length;
+        for (uint256 i; i < len; ) {
+            _bootstrapReferral(players[i], codes[i]);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /**
+     * @notice Gas-optimized batch referral seeding from packed calldata.
+     * @dev Access: ContractAddresses.CREATOR only.
+     *      Each entry is 52 bytes: [20-byte player][32-byte referral code].
+     * @param packed Concatenated referral entries.
+     */
+    function bootstrapReferralsPacked(bytes calldata packed) external {
+        if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
+        uint256 len = packed.length;
+        if (len % PACKED_REFERRAL_SIZE != 0) revert Insufficient();
+
+        for (uint256 offset; offset < len; ) {
+            address player;
+            bytes32 code;
+            assembly {
+                player := shr(96, calldataload(add(packed.offset, offset)))
+                code := calldataload(add(add(packed.offset, offset), 20))
+            }
+            _bootstrapReferral(player, code);
+            unchecked {
+                offset += PACKED_REFERRAL_SIZE;
+            }
+        }
     }
 
     /**
@@ -724,6 +797,39 @@ contract DegenerusAffiliate {
         if (code == bytes32(0)) return address(0);
         if (code == REF_CODE_LOCKED || code == AFFILIATE_CODE_VAULT) return ContractAddresses.VAULT;
         return affiliateCode[code].owner;
+    }
+
+    /// @dev Shared code registration logic for user-created and constructor-bootstrapped codes.
+    function _createAffiliateCode(
+        address owner,
+        bytes32 code_,
+        uint8 rakebackPct
+    ) private {
+        if (owner == address(0)) revert Zero();
+        // SECURITY: Prevent reserved values from being claimed.
+        if (code_ == bytes32(0) || code_ == REF_CODE_LOCKED) revert Zero();
+        // SECURITY: Cap rakeback to prevent affiliate from giving away all rewards.
+        if (rakebackPct > MAX_RAKEBACK_PCT) revert InvalidRakeback();
+        AffiliateCodeInfo storage info = affiliateCode[code_];
+        // SECURITY: First-come-first-served; codes cannot be overwritten.
+        if (info.owner != address(0)) revert Insufficient();
+        affiliateCode[code_] = AffiliateCodeInfo({
+            owner: owner,
+            rakeback: rakebackPct,
+            payoutMode: uint8(PayoutMode.Coinflip)
+        });
+        emit Affiliate(1, code_, owner); // 1 = code created
+    }
+
+    /// @dev Shared referral assignment logic for constructor bootstrapping and creator batches.
+    function _bootstrapReferral(address player, bytes32 code_) private {
+        if (player == address(0)) revert Zero();
+        AffiliateCodeInfo storage info = affiliateCode[code_];
+        address referrer = info.owner;
+        if (referrer == address(0) || referrer == player) revert Insufficient();
+        if (playerReferralCode[player] != bytes32(0)) revert Insufficient();
+        _setReferralCode(player, code_);
+        emit Affiliate(0, code_, player); // 0 = player referred
     }
 
     /// @dev Route affiliate rewards by code-configured payout mode.
