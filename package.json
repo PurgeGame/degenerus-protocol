@@ -13,12 +13,17 @@
     "test:edge": "hardhat test test/edge/",
     "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "compile:testnet": "TESTNET_BUILD=1 hardhat compile",
+    "deploy:sepolia:testnet": "TESTNET_BUILD=1 hardhat run scripts/deploy-sepolia-testnet.js --network sepolia",
     "node": "hardhat node",
     "deploy:local": "hardhat run scripts/deploy-local.js --network localhost",
     "sim:local": "node scripts/testnet/run-local.js",
     "sim:analysis": "node scripts/testnet/build-analysis-db.js",
     "sim:dashboard": "node scripts/simulation/dashboard-server.js",
-    "test:sim": "hardhat test test/simulation/"
+    "test:sim": "hardhat test test/simulation/",
+    "db:sepolia:backfill": "node scripts/backfill-sepolia-events.js",
+    "db:sepolia:analysis": "node scripts/testnet/build-analysis-db.js runs/sepolia",
+    "db:sepolia": "bash scripts/generate-sepolia-db.sh"
   },
   "keywords": [
     "solidity",

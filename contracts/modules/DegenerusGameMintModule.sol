@@ -751,7 +751,22 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
             emit LootBoxBuy(buyer, day, lootBoxAmount, presale, futureShare, nextShare, vaultShare, rewardShare);
 
-            // Lootbox quests can use recycled ETH; slot 0 mint quests remain fresh-only.
+            // Match ticket purchase behavior: mint quest progress uses whole ticket-equivalent
+            // units and only the fresh-ETH portion when claimable is mixed in.
+            if (priceWei != 0) {
+                uint256 questUnitsRaw = lootBoxAmount / priceWei;
+                if (questUnitsRaw > type(uint32).max) {
+                    questUnitsRaw = type(uint32).max;
+                }
+                if (questUnitsRaw != 0 && lootboxFreshEth != 0) {
+                    uint256 scaled = (questUnitsRaw * lootboxFreshEth) / lootBoxAmount;
+                    if (scaled != 0) {
+                        coin.notifyQuestMint(buyer, uint32(scaled), true);
+                    }
+                }
+            }
+
+            // Lootbox quests continue tracking full lootbox spend (fresh + recycled).
             coin.notifyQuestLootBox(buyer, lootBoxAmount);
             _awardEarlybirdDgnrs(buyer, lootboxFreshEth, purchaseLevel);
         }
@@ -899,7 +914,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             bonusCredit = streakBonus + rakeback;
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
             bonusCredit += coinCost / 10;
-            bonusCredit += (quantity * PRICE_COIN_UNIT) / (40 * TICKET_SCALE);
+            if (quantity >= 10 * 4 * TICKET_SCALE) {
+                bonusCredit += (quantity * PRICE_COIN_UNIT) / (40 * TICKET_SCALE);
+            }
             if (lastPurchaseDay && (targetLevel % 100) > 90) {
                 bonusCredit += coinCost / 5;
             }
@@ -944,6 +961,19 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         if (index == 0) revert E();
 
         coin.burnCoin(buyer, burnieAmount);
+
+        if (lastPurchaseDay) {
+            uint256 questUnitsRaw = burnieAmount / PRICE_COIN_UNIT;
+            if (questUnitsRaw > type(uint32).max) {
+                questUnitsRaw = type(uint32).max;
+            }
+            if (
+                questUnitsRaw != 0 &&
+                IDegenerusGame(address(this)).ethMintLevelCount(buyer) != 0
+            ) {
+                coin.notifyQuestMint(buyer, uint32(questUnitsRaw), false);
+            }
+        }
 
         uint256 existingAmount = lootboxBurnie[index][buyer];
         if (lootboxDay[index][buyer] == 0) {
