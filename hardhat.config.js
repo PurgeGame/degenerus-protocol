@@ -1,6 +1,8 @@
 import "@nomicfoundation/hardhat-toolbox";
 import "dotenv/config";
 
+const isTestnetBuild = process.env.TESTNET_BUILD === "1";
+
 /** @type import("hardhat/config").HardhatUserConfig */
 const config = {
   solidity: {
@@ -28,9 +30,9 @@ const config = {
     ]
   },
   paths: {
-    sources: "./contracts",
-    cache: "cache",
-    artifacts: "artifacts"
+    sources: isTestnetBuild ? "./contracts-testnet" : "./contracts",
+    cache: isTestnetBuild ? "cache-testnet" : "cache",
+    artifacts: isTestnetBuild ? "artifacts-testnet" : "artifacts",
   },
   networks: {
     hardhat: {

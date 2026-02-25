@@ -1,6 +1,8 @@
 node_modules/
 cache/
+cache-testnet/
 artifacts/
+artifacts-testnet/
 .env
 .claude/
 deployments/
@@ -10,3 +12,5 @@ runs/
 wallets.json
 profiles.json
 contracts/mocks/
+docs/
+contracts-testnet/
