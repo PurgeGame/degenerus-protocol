@@ -730,7 +730,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             _queueWhalePassClaimCore(winner, amount);
             return;
         }
-        // Resolve lootbox via delegatecall to open module (no EV score for prize claims)
+        // Resolve lootbox via delegatecall to open module
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
@@ -740,8 +740,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                         .selector,
                     winner,
                     amount,
-                    rngWord,
-                    false
+                    rngWord
                 )
             );
         if (!ok) _revertDelegate(data);

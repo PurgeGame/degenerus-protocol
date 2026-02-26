@@ -268,12 +268,10 @@ interface IDegenerusGameMintModule {
     /// @param player Address of the lootbox owner
     /// @param amount Amount associated with the lootbox
     /// @param rngWord Random word for lootbox resolution
-    /// @param applyEvScore Whether to apply activity-score EV multiplier (80-135%)
     function resolveLootboxDirect(
         address player,
         uint256 amount,
-        uint256 rngWord,
-        bool applyEvScore
+        uint256 rngWord
     ) external;
 
     /// @notice Processes a batch of future ticket claims
@@ -304,12 +302,10 @@ interface IDegenerusGameLootboxModule {
     /// @param player Address of the lootbox owner
     /// @param amount Amount associated with the lootbox
     /// @param rngWord Random word for lootbox resolution
-    /// @param applyEvScore Whether to apply activity-score EV multiplier (80-135%)
     function resolveLootboxDirect(
         address player,
         uint256 amount,
-        uint256 rngWord,
-        bool applyEvScore
+        uint256 rngWord
     ) external;
 
     /// @notice Returns deity boon slot information
