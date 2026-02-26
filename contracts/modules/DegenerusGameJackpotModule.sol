@@ -60,6 +60,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      source level whose trait pool is used for winner selection.
     event DailyCarryoverStarted(uint24 indexed jackpotLevel, uint24 carryoverSourceLevel);
 
+    /// @dev Emitted when a far-future ticket holder (5-99 levels ahead) wins the daily BURNIE jackpot.
+    ///      These winners are drawn from ticketQueue (traits not yet assigned).
+    event FarFutureCoinJackpotWinner(
+        address indexed winner,
+        uint24 indexed currentLevel,
+        uint24 indexed winnerLevel,
+        uint256 amount
+    );
+
     /// @dev Emitted for each jackpot winner draw with the exact winning ticket reference.
     ///      ticketIndex is the index in traitBurnTicket[level][traitId], or uint256.max for deity virtual entries.
     event JackpotTicketWinner(
@@ -189,6 +198,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Salt base for daily coin jackpot winner selection.
     uint8 private constant DAILY_COIN_SALT_BASE = 252;
+
+    /// @dev Share of daily BURNIE budget awarded to far-future ticket holders (25%).
+    uint16 private constant FAR_FUTURE_COIN_BPS = 2500;
+
+    /// @dev Number of far-future levels to sample for BURNIE jackpot (10 winners max).
+    uint8 private constant FAR_FUTURE_COIN_SAMPLES = 10;
+
+    /// @dev Salt base for far-future coin jackpot winner selection.
+    uint8 private constant FAR_FUTURE_COIN_SALT_BASE = 248;
+
+    /// @dev Domain separator for far-future coin jackpot entropy derivation.
+    bytes32 private constant FAR_FUTURE_COIN_TAG = keccak256("far-future-coin");
 
     /// @dev Maximum winners for lootbox jackpot distributions (gas safety).
     ///      Lower than JACKPOT_MAX_WINNERS because lootboxes do multiple rolls per winner.
@@ -623,21 +644,28 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // --- Coin Jackpot ---
         uint256 coinBudget = _calcDailyCoinBudget(lvl);
         if (coinBudget != 0) {
-            uint256 coinEntropy = randWord ^
-                (uint256(lvl) << 192) ^
-                uint256(COIN_JACKPOT_TAG);
-            uint24 targetLevel = _selectDailyCoinTargetLevel(
-                lvl,
-                winningTraitsPacked,
-                coinEntropy
-            );
-            if (targetLevel != 0) {
-                _awardDailyCoinToTraitWinners(
-                    targetLevel,
+            // Split: 25% far-future, 75% near-future
+            uint256 farBudget = (coinBudget * FAR_FUTURE_COIN_BPS) / 10_000;
+            _awardFarFutureCoinJackpot(lvl, farBudget, randWord);
+
+            uint256 nearBudget = coinBudget - farBudget;
+            if (nearBudget != 0) {
+                uint256 coinEntropy = randWord ^
+                    (uint256(lvl) << 192) ^
+                    uint256(COIN_JACKPOT_TAG);
+                uint24 targetLevel = _selectDailyCoinTargetLevel(
+                    lvl,
                     winningTraitsPacked,
-                    coinBudget,
                     coinEntropy
                 );
+                if (targetLevel != 0) {
+                    _awardDailyCoinToTraitWinners(
+                        targetLevel,
+                        winningTraitsPacked,
+                        nearBudget,
+                        coinEntropy
+                    );
+                }
             }
         }
 
@@ -1737,8 +1765,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Distributes jackpot loot box rewards to winners based on trait buckets.
     ///      Awards tickets only (no BURNIE) using jackpot loot box mechanics.
 
-    // _awardFutureTicketCoinJackpot removed - replaced by payDailyCoinJackpot()
-
     /// @dev Derives daily winning traits.
     ///      Base path uses fixed symbol-0 with random color in Q0/Q1/Q2 and
     ///      fully random in Q3.
@@ -2283,16 +2309,25 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         coin.creditFlip(ContractAddresses.DGNRS, coinAmount);
     }
 
-    /// @notice Pays daily BURNIE jackpot to random ticket holders from winning traits.
+    /// @notice Pays daily BURNIE jackpot to random ticket holders.
     /// @dev Runs every day in its own transaction. Awards 0.5% of prize pool target in BURNIE.
-    ///      Uses winning traits from the daily/early jackpot when available; otherwise rolls
-    ///      with the same logic. Picks a random level in [lvl, lvl+4] and pays winners from
-    ///      those trait-level tickets.
+    ///      75% goes to near-future trait-matched winners ([lvl, lvl+4]).
+    ///      25% goes to far-future ticketQueue holders ([lvl+5, lvl+99]).
     /// @param lvl Current level.
     /// @param randWord VRF entropy for winner selection.
     function payDailyCoinJackpot(uint24 lvl, uint256 randWord) external {
         uint256 coinBudget = _calcDailyCoinBudget(lvl);
         if (coinBudget == 0) return;
+
+        // Split: 25% far-future, 75% near-future
+        uint256 farBudget = (coinBudget * FAR_FUTURE_COIN_BPS) / 10_000;
+        uint256 nearBudget = coinBudget - farBudget;
+
+        // --- Far-future portion (ticketQueue-based, no traits) ---
+        _awardFarFutureCoinJackpot(lvl, farBudget, randWord);
+
+        // --- Near-future portion (trait-matched) ---
+        if (nearBudget == 0) return;
 
         uint48 questDay = _calculateDayIndex();
         (uint32 winningTraitsPacked, bool valid) = _loadDailyWinningTraits(
@@ -2323,7 +2358,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         _awardDailyCoinToTraitWinners(
             targetLevel,
             winningTraitsPacked,
-            coinBudget,
+            nearBudget,
             entropy
         );
     }
@@ -2445,6 +2480,86 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 unchecked {
                     ++i;
                 }
+            }
+            coin.creditFlipBatch(batchPlayers, batchAmounts);
+        }
+    }
+
+    /// @dev Awards 25% of the BURNIE coin budget to random ticket holders on far-future levels.
+    ///      Samples up to 10 random levels in [lvl+5, lvl+99], picks 1 winner per level from
+    ///      that level's ticketQueue (traits not yet assigned), and splits the budget evenly.
+    function _awardFarFutureCoinJackpot(
+        uint24 lvl,
+        uint256 farBudget,
+        uint256 rngWord
+    ) private {
+        if (farBudget == 0) return;
+
+        uint256 entropy = rngWord ^
+            (uint256(lvl) << 192) ^
+            uint256(FAR_FUTURE_COIN_TAG);
+
+        // First pass: find up to FAR_FUTURE_COIN_SAMPLES winners from ticketQueue
+        address[10] memory winners;
+        uint24[10] memory winnerLevels;
+        uint8 found;
+
+        for (uint8 s; s < FAR_FUTURE_COIN_SAMPLES; ) {
+            entropy = EntropyLib.entropyStep(entropy ^ uint256(s));
+
+            // Pick a random level in [lvl+5, lvl+99]
+            uint24 candidate = lvl + 5 + uint24(entropy % 95);
+
+            address[] storage queue = ticketQueue[candidate];
+            uint256 len = queue.length;
+            if (len != 0) {
+                uint256 idx = (entropy >> 32) % len;
+                address winner = queue[idx];
+                if (winner != address(0)) {
+                    winners[found] = winner;
+                    winnerLevels[found] = candidate;
+                    unchecked { ++found; }
+                }
+            }
+
+            unchecked { ++s; }
+        }
+
+        if (found == 0) return;
+
+        // Distribute evenly among found winners
+        uint256 perWinner = farBudget / found;
+        if (perWinner == 0) return;
+
+        address[3] memory batchPlayers;
+        uint256[3] memory batchAmounts;
+        uint256 batchCount;
+
+        for (uint8 i; i < found; ) {
+            emit FarFutureCoinJackpotWinner(
+                winners[i],
+                lvl,
+                winnerLevels[i],
+                perWinner
+            );
+
+            batchPlayers[batchCount] = winners[i];
+            batchAmounts[batchCount] = perWinner;
+            unchecked { ++batchCount; }
+
+            if (batchCount == 3) {
+                coin.creditFlipBatch(batchPlayers, batchAmounts);
+                batchCount = 0;
+            }
+
+            unchecked { ++i; }
+        }
+
+        if (batchCount != 0) {
+            for (uint256 j = batchCount; j < 3; ) {
+                batchPlayers[j] = address(0);
+                batchAmounts[j] = 0;
+                unchecked { ++j; }
             }
             coin.creditFlipBatch(batchPlayers, batchAmounts);
         }
