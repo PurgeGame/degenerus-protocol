@@ -33,12 +33,13 @@ function log(...args) {
 async function run() {
   const { strategyName, walletKey, allWalletKeys, rpcUrl, projectRoot,
     contracts: deployedContracts, mocks: mockContracts,
-    gameAddress, intervalMs } = workerData;
+    gameAddress, intervalMs, artifactsBase } = workerData;
 
   // Create isolated provider + wallet
   const provider = createProvider(rpcUrl);
   const wallet = new ethers.Wallet(walletKey, provider);
-  const abis = loadContractAbis(projectRoot, deployedContracts, mockContracts);
+  const abiOpts = artifactsBase ? { artifactsBase } : {};
+  const abis = loadContractAbis(projectRoot, deployedContracts, mockContracts, abiOpts);
 
   // Create contracts with this worker's wallet as default signer
   const contractInstances = {};
@@ -65,6 +66,7 @@ async function run() {
     config: {},
     log,
     gameAddress,
+    stethAddress: workerData.stethAddress || null,
     allWallets,
     profile: workerData.profile || null,
     name: workerData.profile?.name || `${strategyName}-${wallet.address.slice(2, 6)}`,

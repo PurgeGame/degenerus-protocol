@@ -58,6 +58,7 @@ export function loadSepoliaConfig() {
     external: deployment.external,
     deployDayBoundary: deployment.deployDayBoundary,
     isLocal: false, // Real network — no evm_increaseTime
+    artifactsBase: path.join('artifacts-testnet', 'contracts-testnet'),
     startBlock,
     deployerKey: process.env.PURGE_DEPLOYER_KEY || process.env.DEPLOYER_PRIVATE_KEY || null,
     ownerKey: wallets?.ownerPrivateKey || process.env.PURGE_DEPLOYER_KEY || process.env.DEPLOYER_PRIVATE_KEY || null,
@@ -65,19 +66,19 @@ export function loadSepoliaConfig() {
     playerNames: wallets?.players?.map(p => p.name) || [],
     signers: deployment.signers || {},
     dbPath: process.env.PURGE_DB_PATH || path.join(PROJECT_ROOT, 'testnet-events.db'),
-    // Sepolia: ~12s blocks, lower batch sizes, longer poll intervals
-    eventBatchSize: 100,
-    eventPollInterval: 12_000,
-    // Actor intervals — paced for real network latency
+    // Sepolia via Alchemy free tier: ~5 block getLogs limit, 12s blocks
+    eventBatchSize: 5,
+    eventPollInterval: 15_000,
+    // Actor intervals — fast for testnet throughput
     intervals: {
-      advancer: 15_000,
-      buyer: [20_000, 60_000],
-      burner: [30_000, 90_000],
-      flipper: [30_000, 90_000],
-      claimer: 60_000,
-      statePoll: 15_000,
-      stateDeepPoll: 60_000,
-      eventHealth: 30_000,
+      advancer: 6_000,
+      buyer: [8_000, 15_000],
+      burner: [15_000, 30_000],
+      flipper: [15_000, 30_000],
+      claimer: 30_000,
+      statePoll: 12_000,
+      stateDeepPoll: 30_000,
+      eventHealth: 20_000,
     },
   };
 }
