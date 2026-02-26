@@ -34,6 +34,9 @@ interface IWrappedWrappedXRP {
  * - Deity boon system (deityBoonSlots, issueDeityBoon)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
+    /// @dev Testnet ETH divisor — scales ETH prices down by 1M.
+    uint256 private constant D = 1_000_000;
+
     // =========================================================================
     // Errors
     // =========================================================================
@@ -196,7 +199,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
     /// @dev Maximum boon/pass budget per lootbox (1 ETH scaled)
     uint256 private constant LOOTBOX_BOON_MAX_BUDGET =
-        1 ether;
+        1 ether / D;
     /// @dev Assumed utilization of max boon value (50%)
     uint16 private constant LOOTBOX_BOON_UTILIZATION_BPS = 5000;
 
@@ -224,7 +227,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
     /// @dev Whale bundle standard price (used for whale discount boon EV estimation).
     uint256 private constant WHALE_BUNDLE_STANDARD_PRICE =
-        4 ether;
+        4 ether / D;
     /// @dev Whale pass standard tickets per level.
     uint32 private constant WHALE_PASS_TICKETS_PER_LEVEL = 2;
     /// @dev Whale pass bonus tickets per level for early levels.
@@ -232,7 +235,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Last level eligible for whale pass bonus tickets.
     uint24 private constant WHALE_PASS_BONUS_END_LEVEL = 10;
     /// @dev Deity pass base price (used for deity discount boon EV estimation).
-    uint256 private constant DEITY_PASS_BASE = 24 ether;
+    uint256 private constant DEITY_PASS_BASE = 24 ether / D;
     /// @dev 10% bonus in basis points for coinflip boon
     uint16 private constant LOOTBOX_COINFLIP_10_BONUS_BPS = 1000;
     /// @dev 25% bonus in basis points for coinflip boon
@@ -305,13 +308,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_PRESALE_BURNIE_BONUS_BPS = 6_200;
     /// @dev Whale pass price (200 tickets over levels 10-109)
     uint256 private constant LOOTBOX_WHALE_PASS_PRICE =
-        4.35 ether;
+        4.35 ether / D;
     /// @dev Half whale pass price (100 tickets over levels 10-109)
     uint256 private constant HALF_WHALE_PASS_PRICE =
-        2.175 ether;
+        2.175 ether / D;
     /// @dev Threshold above which lootbox is split into two rolls (0.5 ETH scaled)
     uint256 private constant LOOTBOX_SPLIT_THRESHOLD =
-        0.5 ether;
+        0.5 ether / D;
 
     // Activity score EV multiplier constants (ETH lootbox only)
     /// @dev 60% activity score = neutral 100% EV
@@ -326,7 +329,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_EV_MAX_BPS = 13_500;
     /// @dev Maximum EV benefit cap per account per level (10 ETH scaled)
     uint256 private constant LOOTBOX_EV_BENEFIT_CAP =
-        10 ether;
+        10 ether / D;
 
     /// @dev Probability scale for granular boon rolls (ppm = 1e6).
     uint256 private constant BOON_PPM_SCALE = 1_000_000;
@@ -1116,7 +1119,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         weightedMax += DEITY_BOON_WEIGHT_COINFLIP_25 * coinflipMax25;
 
         // Lootbox boost boons (max 10 ETH)
-        uint256 boostCap = 10 ether;
+        uint256 boostCap = 10 ether / D;
         uint256 lootboxMax5 = (boostCap * LOOTBOX_BOOST_5_BONUS_BPS) / 10_000;
         uint256 lootboxMax15 = (boostCap * LOOTBOX_BOOST_15_BONUS_BPS) / 10_000;
         uint256 lootboxMax25 = (boostCap * LOOTBOX_BOOST_25_BONUS_BPS) / 10_000;
@@ -1175,7 +1178,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Deity pass discount boons (if eligible)
         if (deityEligible) {
             uint256 k = deityPassOwners.length;
-            uint256 deityPrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
+            uint256 deityPrice = DEITY_PASS_BASE + (k * (k + 1) * (1 ether / D)) / 2;
             uint256 deityMax10 = (deityPrice * 1000) / 10_000;
             uint256 deityMax25 = (deityPrice * 2500) / 10_000;
             uint256 deityMax50 = (deityPrice * 5000) / 10_000;
@@ -1664,7 +1667,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Lootbox);
-        uint256 unit = 1 ether;
+        uint256 unit = 1 ether / D;
 
         if (poolBalance == 0 || ppm == 0 || unit == 0) return 0;
         dgnrsAmount = (poolBalance * ppm * amount) /

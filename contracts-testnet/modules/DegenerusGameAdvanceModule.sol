@@ -93,7 +93,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint16 private constant TRAIT_ID_TIMEOUT = 420;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
-    uint16 private constant VRF_REQUEST_CONFIRMATIONS = 2; // TESTNET: reduced for fast Sepolia runs
+    uint16 private constant VRF_REQUEST_CONFIRMATIONS = 3; // TESTNET: Sepolia VRF min is 3
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 3;
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether; // BURNIE, not ETH
     uint256 private constant BURNIE_RNG_TRIGGER = 40_000 ether; // BURNIE, not ETH

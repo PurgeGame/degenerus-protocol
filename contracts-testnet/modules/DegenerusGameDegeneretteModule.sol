@@ -239,22 +239,25 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @dev Currency type identifier for WWXRP token.
     uint8 private constant CURRENCY_WWXRP = 3;
 
+    /// @dev Testnet ETH divisor — scales ETH prices down by 1M.
+    uint256 private constant D = 1_000_000;
+
     /// @dev Minimum bet amount for ETH (0.005 ETH on mainnet).
-    uint256 private constant MIN_BET_ETH = 5 ether / 1000;
+    uint256 private constant MIN_BET_ETH = 5 ether / 1000 / D;
 
     /// @dev Minimum bet amount for BURNIE (100 tokens with 18 decimals).
-    uint256 private constant MIN_BET_BURNIE = 100 ether;
+    uint256 private constant MIN_BET_BURNIE = 100 ether; // BURNIE, not ETH
 
     /// @dev Minimum bet amount for WWXRP (1 token with 18 decimals).
-    uint256 private constant MIN_BET_WWXRP = 1 ether;
+    uint256 private constant MIN_BET_WWXRP = 1 ether; // WWXRP, not ETH
 
     /// @dev Maximum spins per bet (encoded as ticketCount in packed bet).
     uint8 private constant MAX_SPINS_PER_BET = 10;
 
     /// @dev Consolation prize thresholds - minimum bet to qualify for loser prize.
-    uint256 private constant CONSOLATION_MIN_ETH = 10 ether / 1000;
-    uint256 private constant CONSOLATION_MIN_BURNIE = 500 ether; // 500 BURNIE
-    uint256 private constant CONSOLATION_MIN_WWXRP = 20 ether; // 20 WWXRP
+    uint256 private constant CONSOLATION_MIN_ETH = 10 ether / 1000 / D;
+    uint256 private constant CONSOLATION_MIN_BURNIE = 500 ether; // BURNIE, not ETH
+    uint256 private constant CONSOLATION_MIN_WWXRP = 20 ether; // WWXRP, not ETH
 
     /// @dev Consolation prize amount (1 WWXRP).
     uint256 private constant CONSOLATION_PRIZE_WWXRP = 1 ether;
