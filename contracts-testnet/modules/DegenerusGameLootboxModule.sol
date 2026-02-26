@@ -677,7 +677,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player address to resolve for
     /// @param amount ETH amount for the lootbox resolution
     /// @param rngWord RNG word to use for resolution
-    function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, bool applyEvScore) external {
+    function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord) external {
         if (amount == 0) return;
 
         uint48 day = _simulatedDayIndex();
@@ -685,11 +685,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
         (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(currentLevel, entropy);
 
-        uint256 scaledAmount = amount;
-        if (applyEvScore) {
-            uint256 evMultiplierBps = _lootboxEvMultiplierBps(player);
-            scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
-        }
+        uint256 evMultiplierBps = _lootboxEvMultiplierBps(player);
+        uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
 
         _resolveLootboxCommon(
             player,

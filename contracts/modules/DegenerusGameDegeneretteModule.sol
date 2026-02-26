@@ -765,8 +765,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
                     IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
                     player,
                     amount,
-                    rngWord,
-                    true
+                    rngWord
                 )
             );
         if (!ok) _revertDelegate(data);
