@@ -23,7 +23,7 @@ pragma solidity ^0.8.26;
  *      - Access control: onlyDegenerusGameContract, onlyFlipCreditors, onlyVault
  *      - CEI pattern: burns before external calls
  *      - RNG lock prevents stake manipulation during VRF callback
- *      - MIN threshold (10,000 BURNIE) prevents dust spam
+ *      - MIN threshold (1,000 BURNIE) prevents dust spam
  *      - 90-day auto-expiry on unclaimed coinflips (30-day window for first claim)
  */
 
@@ -123,7 +123,7 @@ contract BurnieCoin {
     /// @notice Requested amount exceeds available balance or allowance.
     error Insufficient();
 
-    /// @notice Deposit/burn amount is below the minimum threshold (10,000 BURNIE).
+    /// @notice Deposit/burn amount is below the minimum threshold (1,000 BURNIE).
     error AmountLTMin();
 
     /// @notice Zero address not allowed for transfers, mints, or wiring.
@@ -170,7 +170,7 @@ contract BurnieCoin {
     string public constant symbol = "BURNIE";
 
     /// @dev Minimum BURNIE amount for decimator burns (prevents dust spam).
-    uint256 private constant DECIMATOR_MIN = 10_000 ether;
+    uint256 private constant DECIMATOR_MIN = 1_000 ether;
 
     /// @dev Base bucket denominator for decimator weighting (lower = better odds).
     uint8 private constant DECIMATOR_BUCKET_BASE = 12;
@@ -855,7 +855,7 @@ contract BurnieCoin {
     ///      Quest rewards are added to the base amount before bucket calculation.
     ///      Bucket determines jackpot weight (lower = better odds).
     /// @param player Player address to burn for (address(0) = msg.sender).
-    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (10,000 BURNIE).
+    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 BURNIE).
     function decimatorBurn(address player, uint256 amount) external {
         address caller;
         if (player == address(0) || player == msg.sender) {

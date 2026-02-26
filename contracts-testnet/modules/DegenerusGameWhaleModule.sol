@@ -77,8 +77,11 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     /// @dev 25% boost to lootbox value in basis points.
     uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
 
+    /// @dev Testnet ETH divisor — scales all ETH prices down by 1M.
+    uint256 private constant D = 1_000_000;
+
     /// @dev Maximum lootbox value eligible for boost (10 ETH scaled).
-    uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
+    uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether / D;
 
     /// @dev Lootbox boost expiry duration (48 hours).
     uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800;
@@ -123,10 +126,10 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     uint16 private constant LAZY_PASS_TO_FUTURE_BPS = 1000;
 
     /// @dev Whale bundle early price (levels 0-3).
-    uint256 private constant WHALE_BUNDLE_EARLY_PRICE = 2.4 ether;
+    uint256 private constant WHALE_BUNDLE_EARLY_PRICE = 2.4 ether / D;
 
     /// @dev Whale bundle standard price (x49/x99 levels).
-    uint256 private constant WHALE_BUNDLE_STANDARD_PRICE = 4 ether;
+    uint256 private constant WHALE_BUNDLE_STANDARD_PRICE = 4 ether / D;
 
     /// @dev Whale bundle bonus tickets per level for levels up to 10.
     uint32 private constant WHALE_BONUS_TICKETS_PER_LEVEL = 40;
@@ -150,10 +153,10 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     uint16 private constant DEITY_LOOTBOX_POST_BPS = 1000;
 
     /// @dev Deity pass base price (24 ETH, unscaled). Actual price = 24 + T(n) where T(n) = n*(n+1)/2, n = passes sold so far.
-    uint256 private constant DEITY_PASS_BASE = 24 ether;
+    uint256 private constant DEITY_PASS_BASE = 24 ether / D;
 
     /// @dev BURNIE transfer cost for deity pass trade (5 ETH worth, scaled).
-    uint256 private constant DEITY_TRANSFER_ETH_COST = 5 ether;
+    uint256 private constant DEITY_TRANSFER_ETH_COST = 5 ether / D;
 
     /// @dev Deity pass boon expiry (4 days in seconds, matches lootbox PURCHASE_BOOST_EXPIRY_SECONDS).
     uint48 private constant DEITY_PASS_BOON_EXPIRY_SECONDS = 345600;
@@ -193,13 +196,16 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
 
         if (quantity == 0 || quantity > 100) revert E();
 
-        // Check for valid whale boon (10/25/50% off standard price)
+        // Check for valid whale boon (allows purchase at any level with 10/25/50% off)
         bool hasValidBoon = false;
         uint48 boonDay = whaleBoonDay[buyer];
         if (boonDay != 0) {
             uint48 currentDay = _currentMintDay();
             hasValidBoon = currentDay <= boonDay + 4;
         }
+
+        // TESTNET: whale bundle purchasable at any level (no x49/x99 gate)
+        // Without a boon at levels 0-3, use early price; otherwise standard price
 
         uint256 prevData = mintPacked_[buyer];
 
@@ -223,8 +229,8 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             levelsToAdd = deltaFreeze;
         }
 
-        // Price: boon applies 10/25/50% off standard price,
-        //        otherwise 2.4 ETH at levels 0-3, 4 ETH after
+        // Price: boon applies 10/25/50% off standard price at any level,
+        //        otherwise 2.4 ETH at levels 0-3, 4 ETH at all other levels
         uint256 unitPrice;
         if (hasValidBoon) {
             uint16 discountBps = whaleBoonDiscountBps[buyer];
@@ -352,7 +358,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         uint256 totalPrice;
         uint32 bonusTickets;
         if (currentLevel <= 2 && !hasValidBoon) {
-            totalPrice = 0.24 ether;
+            totalPrice = 0.24 ether / D;
             uint256 balance = totalPrice - baseCost;
             if (balance != 0) {
                 uint256 ticketPrice = PriceLookupLib.priceForLevel(startLevel);
@@ -440,7 +446,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         if (deityPassCount[buyer] != 0) revert E();
 
         uint256 k = deityPassOwners.length;
-        uint256 basePrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
+        uint256 basePrice = DEITY_PASS_BASE + (k * (k + 1) * (1 ether / D)) / 2;
 
         // Apply discount boon if active (tier 1=10%, 2=25%, 3=50%)
         uint256 totalPrice = basePrice;
