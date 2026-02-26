@@ -178,8 +178,8 @@ contract DegenerusQuests is IDegenerusQuests {
     // Quest Targets (fixed)
     // -------------------------------------------------------------------------
 
-    /// @dev Fixed mint target in whole tickets.
-    uint32 private constant QUEST_MINT_TARGET = 2;
+    /// @dev Fixed mint target in whole tickets (1 ticket = 1000 BURNIE).
+    uint32 private constant QUEST_MINT_TARGET = 1;
 
     /// @dev Fixed BURNIE target for flip/affiliate/decimator quests (2x price in BURNIE).
     uint256 private constant QUEST_BURNIE_TARGET = 2 * PRICE_COIN_UNIT;
@@ -375,7 +375,6 @@ contract DegenerusQuests is IDegenerusQuests {
     ) private returns (bool rolled, uint8[2] memory questTypes, bool highDifficulty) {
         DailyQuest[QUEST_SLOT_COUNT] storage quests = activeQuests;
         bool decAllowed = _canRollDecimatorQuest();
-        bool mintBurnieAllowed = _canRollMintBurnieQuest();
 
         // Swap 128-bit halves to derive independent entropy for slot 1
         uint256 bonusEntropy = (entropy >> 128) | (entropy << 128);
@@ -384,8 +383,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint8 bonusType = _bonusQuestType(
             bonusEntropy,
             primaryType,
-            decAllowed,
-            mintBurnieAllowed
+            decAllowed
         );
 
         _seedQuestType(quests[0], day, primaryType);
@@ -999,16 +997,6 @@ contract DegenerusQuests is IDegenerusQuests {
     // -------------------------------------------------------------------------
 
     /**
-     * @dev Mint-with-BURNIE quests are only enabled on the last purchase day.
-     * @return True if lastPurchaseDay flag is set.
-     */
-    function _canRollMintBurnieQuest() private view returns (bool) {
-        IDegenerusGame game_ = questGame;
-        (, , bool lastPurchaseDay_, , ) = game_.purchaseInfo();
-        return lastPurchaseDay_;
-    }
-
-    /**
      * @dev Decimator quests are unlocked at specific level boundaries.
      *
      *      Availability Rules:
@@ -1300,21 +1288,19 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - Excludes the primary type (no duplicate quests)
      *      - Base weight is 1 for all types (more uniform)
      *      - FLIP gets 4x weight
-     *      - MINT_BURNIE gets 10x weight when allowed
+     *      - MINT_BURNIE gets 10x weight
      *      - DEGENERETTE_ETH and DEGENERETTE_BURNIE use base weight (1x)
      *      - Decimator gets 4x weight when allowed
      *      - Lootbox gets 3x weight
      * @param entropy VRF entropy (typically swapped halves of primary entropy).
      * @param primaryType The primary quest type (to exclude from selection).
      * @param decAllowed True if decimator quests can be rolled.
-     * @param mintBurnieAllowed True if mint-with-BURNIE quests can be rolled.
      * @return The selected quest type.
      */
     function _bonusQuestType(
         uint256 entropy,
         uint8 primaryType,
-        bool decAllowed,
-        bool mintBurnieAllowed
+        bool decAllowed
     ) private pure returns (uint8) {
         uint16[QUEST_TYPE_COUNT] memory weights;
         uint16 total;
@@ -1340,17 +1326,11 @@ contract DegenerusQuests is IDegenerusQuests {
                 }
                 continue;
             }
-            if (!mintBurnieAllowed && candidate == QUEST_TYPE_MINT_BURNIE) {
-                unchecked {
-                    ++candidate;
-                }
-                continue;
-            }
             // Apply type-specific weights
             uint16 weight = 1;
             if (candidate == QUEST_TYPE_FLIP) {
                 weight = 4;
-            } else if (candidate == QUEST_TYPE_MINT_BURNIE && mintBurnieAllowed) {
+            } else if (candidate == QUEST_TYPE_MINT_BURNIE) {
                 weight = 10;
             } else if (candidate == QUEST_TYPE_DECIMATOR && decAllowed) {
                 weight = 4;

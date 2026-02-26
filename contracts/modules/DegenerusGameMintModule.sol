@@ -837,12 +837,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
             _coinReceive(payer, coinCost, targetLevel);
 
-            if (lastPurchaseDay) {
+            {
                 uint32 questQty = uint32(quantity / (4 * TICKET_SCALE));
-                if (
-                    questQty != 0 &&
-                    IDegenerusGame(address(this)).ethMintLevelCount(payer) != 0
-                ) {
+                if (questQty != 0) {
                     coin.notifyQuestMint(payer, questQty, false);
                 }
             }
@@ -962,15 +959,12 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
         coin.burnCoin(buyer, burnieAmount);
 
-        if (lastPurchaseDay) {
+        {
             uint256 questUnitsRaw = burnieAmount / PRICE_COIN_UNIT;
             if (questUnitsRaw > type(uint32).max) {
                 questUnitsRaw = type(uint32).max;
             }
-            if (
-                questUnitsRaw != 0 &&
-                IDegenerusGame(address(this)).ethMintLevelCount(buyer) != 0
-            ) {
+            if (questUnitsRaw != 0) {
                 coin.notifyQuestMint(buyer, uint32(questUnitsRaw), false);
             }
         }
