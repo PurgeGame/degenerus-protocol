@@ -111,6 +111,21 @@ async function main() {
   try {
     await hre.run("compile", { force: true, quiet: true });
     console.log("  Compilation successful.");
+
+    // Guard: Hardhat ESM may re-run script, consuming extra nonces for mocks.
+    // Re-check nonce and re-predict if it drifted.
+    const actualNonce = await deployer.getNonce();
+    if (actualNonce !== startingNonce) {
+      console.log(`  Nonce drifted: ${startingNonce} → ${actualNonce} (re-predicting)`);
+      const repredicted = predictAddresses(deployer.address, actualNonce);
+      // Update predicted map in-place
+      for (const [k, v] of repredicted) predicted.set(k, v);
+      // Re-patch ContractAddresses with corrected addresses
+      restoreContractAddresses(TESTNET_CONTRACT_ADDRESSES);
+      patchContractAddresses(predicted, external, deployDayBoundary, VRF_KEY_HASH, TESTNET_CONTRACT_ADDRESSES);
+      await hre.run("compile", { force: true, quiet: true });
+      console.log(`  Re-patched and recompiled with nonce ${actualNonce}`);
+    }
     console.log("");
 
     // =========================================================================
@@ -259,14 +274,10 @@ function getConstructorArgs(
       predicted.get("WWXRP"),
     ];
   }
+  // Testnet DegenerusAffiliate has a parameterless constructor
+  // (no bootstrap arrays like mainnet)
   if (key === "AFFILIATE") {
-    return [
-      affiliateBootstrap.owners,
-      affiliateBootstrap.codes,
-      affiliateBootstrap.rakebacks,
-      affiliatePreReferrals.players,
-      affiliatePreReferrals.codes,
-    ];
+    return [];
   }
   return [];
 }
@@ -404,10 +415,14 @@ function parseAffiliatePreReferrals() {
   return { players, codes };
 }
 
-main().catch((err) => {
-  console.error(err);
-  try {
-    restoreContractAddresses(TESTNET_CONTRACT_ADDRESSES);
-  } catch {}
-  process.exit(1);
-});
+// Guard against Hardhat ESM double-execution
+if (!globalThis.__SEPOLIA_DEPLOY_RUNNING) {
+  globalThis.__SEPOLIA_DEPLOY_RUNNING = true;
+  main().catch((err) => {
+    console.error(err);
+    try {
+      restoreContractAddresses(TESTNET_CONTRACT_ADDRESSES);
+    } catch {}
+    process.exit(1);
+  });
+}

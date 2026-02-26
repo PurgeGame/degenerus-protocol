@@ -32,7 +32,7 @@ const DEFAULT_ACTORS = [
 
 export class Orchestrator {
   constructor(opts = {}) {
-    this.config = loadConfig();
+    this.config = opts.config || loadConfig();
     this.actorFilter = opts.actors || null; // null = all, or array of names
     this.loggerOnly = opts.loggerOnly || false;
     this.workers = new Map();
@@ -69,7 +69,8 @@ export class Orchestrator {
     console.log(`Chain head: ${blockNumber}`);
 
     // Load ABIs (protocol + mock contracts)
-    const abis = loadContractAbis(cfg.projectRoot, cfg.contracts, cfg.mocks);
+    const abiOpts = cfg.artifactsBase ? { artifactsBase: cfg.artifactsBase } : {};
+    const abis = loadContractAbis(cfg.projectRoot, cfg.contracts, cfg.mocks, abiOpts);
 
     // Start event logger with ticket tracking callback
     this.eventLogger = await startEventLogger({
@@ -216,7 +217,13 @@ export class Orchestrator {
       mocks: cfg.mocks || {},
       gameAddress: cfg.contracts.GAME,
       intervalMs: this.resolveInterval(actor, cfg),
+      artifactsBase: cfg.artifactsBase || null,
     };
+
+    // Advancer-sepolia needs mock stETH address for rebase
+    if (actor.strategy === 'advancer-sepolia') {
+      workerData.stethAddress = cfg.mocks?.STETH_TOKEN || null;
+    }
 
     // Claimer needs all wallet keys
     if (actor.strategy === 'claimer') {

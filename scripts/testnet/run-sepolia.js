@@ -15,6 +15,15 @@
  * Usage:
  *   node scripts/testnet/run-sepolia.js [--skip-bootstrap] [--actors advancer-sepolia,buyer-1,...]
  */
+
+// Crash resilience: log unhandled errors instead of silently dying
+process.on('unhandledRejection', (reason, promise) => {
+  console.error(`[FATAL] Unhandled rejection:`, reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error(`[FATAL] Uncaught exception:`, err);
+});
+
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -160,17 +169,17 @@ try {
 // Start orchestrator with Sepolia config
 log('Starting orchestrator...');
 
-// Default Sepolia actor layout: advancer-sepolia + 8 buyers
+// Default Sepolia actor layout: advancer-sepolia + 8 buyers (fast intervals for testnet)
 const SEPOLIA_DEFAULT_ACTORS = [
-  { name: 'advancer-sepolia', strategy: 'advancer-sepolia', walletSource: 'deployer', interval: 15_000 },
-  { name: 'whale-buyer',     strategy: 'whale-buyer',      walletSource: 'player:0', interval: [20_000, 60_000] },
-  { name: 'deity-buyer',     strategy: 'deity-buyer',      walletSource: 'player:1', interval: [20_000, 60_000] },
-  { name: 'target-buyer',    strategy: 'target-buyer',     walletSource: 'player:2', interval: [20_000, 60_000] },
-  { name: 'buyer-1',         strategy: 'buyer',            walletSource: 'player:3', interval: [20_000, 60_000] },
-  { name: 'buyer-2',         strategy: 'buyer',            walletSource: 'player:4', interval: [20_000, 60_000] },
-  { name: 'buyer-3',         strategy: 'buyer',            walletSource: 'player:5', interval: [20_000, 60_000] },
-  { name: 'buyer-4',         strategy: 'buyer',            walletSource: 'player:6', interval: [20_000, 60_000] },
-  { name: 'buyer-5',         strategy: 'buyer',            walletSource: 'player:7', interval: [20_000, 60_000] },
+  { name: 'advancer-sepolia', strategy: 'advancer-sepolia', walletSource: 'deployer', interval: 6_000 },
+  { name: 'whale-buyer',     strategy: 'whale-buyer',      walletSource: 'player:0', interval: [8_000, 15_000] },
+  { name: 'deity-buyer',     strategy: 'deity-buyer',      walletSource: 'player:1', interval: [8_000, 15_000] },
+  { name: 'target-buyer',    strategy: 'target-buyer',     walletSource: 'player:2', interval: [8_000, 15_000] },
+  { name: 'buyer-1',         strategy: 'buyer',            walletSource: 'player:3', interval: [8_000, 15_000] },
+  { name: 'buyer-2',         strategy: 'buyer',            walletSource: 'player:4', interval: [8_000, 15_000] },
+  { name: 'buyer-3',         strategy: 'buyer',            walletSource: 'player:5', interval: [8_000, 15_000] },
+  { name: 'buyer-4',         strategy: 'buyer',            walletSource: 'player:6', interval: [8_000, 15_000] },
+  { name: 'buyer-5',         strategy: 'buyer',            walletSource: 'player:7', interval: [8_000, 15_000] },
 ];
 
 // Parse requested actor filter
@@ -180,10 +189,14 @@ const actorFilter = actorsArg
 
 class SepoliaOrchestrator extends Orchestrator {
   constructor(opts) {
-    super(opts);
-    // Override config with Sepolia config
-    this.config = loadSepoliaConfig();
-    this.config.dbPath = dbPath;
+    const sepoliaCfg = loadSepoliaConfig();
+    sepoliaCfg.dbPath = dbPath;
+    // Limit player keys to only those used by actors (avoid polling 100 players on Alchemy free tier)
+    const maxPlayerIdx = Math.max(...SEPOLIA_DEFAULT_ACTORS
+      .filter(a => a.walletSource.startsWith('player:'))
+      .map(a => parseInt(a.walletSource.split(':')[1], 10)));
+    sepoliaCfg.playerKeys = sepoliaCfg.playerKeys.slice(0, maxPlayerIdx + 1);
+    super({ ...opts, config: sepoliaCfg });
   }
 
   getActorConfigs() {
