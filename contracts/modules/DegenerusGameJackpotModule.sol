@@ -254,8 +254,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      DAILY PATH (isDaily=true):
     ///      - Day 1-4: Distributes a random 6%-14% slice of remaining currentPrizePool.
     ///      - Day 5: Distributes 100% of remaining currentPrizePool.
-    ///      - Day 1 and day 5 also run the early-bird lootbox jackpot (from futurePrizePool).
-    ///      - On day 1/day 5, carryover is skipped and replaced by early-bird.
+    ///      - Day 1 also runs the early-bird lootbox jackpot (from futurePrizePool).
+    ///      - On day 1, carryover is skipped and replaced by early-bird.
     ///      - On day 2-4, seeds a carryover jackpot at flat 1% from the unified future pool.
     ///      - Carryover picks a random eligible source in [lvl+1, lvl+N], where N
     ///        is the highest offset (up to +5) that has actual winning-trait tickets.
@@ -307,14 +307,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             if (!isResuming) {
                 uint8 counter = jackpotCounter;
                 uint8 counterStep = 1;
-                bool isEarlyBirdDay = (counter == 0 ||
-                    counter == JACKPOT_LEVEL_CAP - 1);
+                bool isEarlyBirdDay = (counter == 0);
                 uint256 poolSnapshot = currentPrizePool;
                 uint16 dailyBps = _dailyCurrentPoolBps(counter, randWord);
                 uint256 budget = (poolSnapshot * dailyBps) / 10_000;
 
-                // Run the big early-bird lootbox jackpot on day 1 and day 5.
-                // These days replace the normal daily carryover flow.
+                // Run the early-bird lootbox jackpot on day 1 only.
+                // This day replaces the normal daily carryover flow.
                 if (isEarlyBirdDay) {
                     _runEarlyBirdLootboxJackpot(lvl + 1, randWord);
                 }
