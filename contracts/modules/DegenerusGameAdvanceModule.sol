@@ -89,7 +89,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 3 days;
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint16 private constant TRAIT_ID_TIMEOUT = 420;
-    uint32 private constant VRF_CALLBACK_GAS_LIMIT = 200_000;
+    uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 3;
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
