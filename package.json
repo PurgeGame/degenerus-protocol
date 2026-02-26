@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "compile": "hardhat compile",
-    "test": "hardhat test test/unit/*.test.js test/integration/*.test.js test/deploy/*.test.js test/access/*.test.js test/edge/*.test.js test/gas/*.test.js",
+    "test": "hardhat test test/unit/*.test.js test/integration/*.test.js test/deploy/*.test.js test/access/*.test.js test/edge/*.test.js test/gas/*.test.js test/adversarial/*.test.js",
     "test:unit": "hardhat test test/unit/",
     "test:integration": "hardhat test test/integration/",
     "test:deploy": "hardhat test test/deploy/",
     "test:access": "hardhat test test/access/",
     "test:edge": "hardhat test test/edge/",
+    "test:adversarial": "hardhat test test/adversarial/*.test.js",
+    "test:adversarial:sepolia-actors": "RUN_SEPOLIA_ACTOR_TESTS=1 hardhat test test/adversarial/SepoliaActorAdversarial.test.js",
     "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
     "compile:testnet": "TESTNET_BUILD=1 hardhat compile",
@@ -21,6 +23,7 @@
     "sim:analysis": "node scripts/testnet/build-analysis-db.js",
     "sim:dashboard": "node scripts/simulation/dashboard-server.js",
     "test:sim": "hardhat test test/simulation/",
+    "run:sepolia:terminal": "node scripts/play-testnet-lvl101-terminal.js --target 101 --complete-target --idle-days 365 --players 4",
     "db:sepolia:backfill": "node scripts/backfill-sepolia-events.js",
     "db:sepolia:analysis": "node scripts/testnet/build-analysis-db.js runs/sepolia",
     "db:sepolia": "bash scripts/generate-sepolia-db.sh"
