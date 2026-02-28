@@ -351,10 +351,6 @@ interface IDegenerusGame {
     /// @param newThreshold New threshold value in wei.
     function setLootboxRngThreshold(uint256 newThreshold) external;
 
-    /// @notice End the lootbox presale period (admin function).
-    /// @dev One-way transition; cannot be re-enabled after calling.
-    function endLootboxPresale() external;
-
     /// @notice Sample up to 4 trait burn tickets from a random trait and recent level (last 20).
     /// @dev View function for BAF scatter selection; uses provided entropy.
     /// @param entropy Random entropy for sampling (typically from VRF).
