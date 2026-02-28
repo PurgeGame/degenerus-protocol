@@ -506,18 +506,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                       LOOT BOX CONTROLS                             |
       +======================================================================+*/
 
-    /// @notice End loot box presale mode manually (auto-ends when purchase phase ends).
-    /// @dev Access: CREATOR only. One-way: cannot be re-enabled.
-    ///      Presale starts active by default and auto-ends when jackpot phase begins.
-    /// @custom:reverts E If caller is not CREATOR or presale is already inactive.
-    function endLootboxPresale() external {
-        if (msg.sender != ContractAddresses.CREATOR) revert E();
-        if (!lootboxPresaleActive) revert E();
-
-        lootboxPresaleActive = false;
-        emit LootBoxPresaleStatus(false);
-    }
-
     /// @notice Current day index.
     function currentDayView() external view returns (uint48) {
         return _simulatedDayIndex();
