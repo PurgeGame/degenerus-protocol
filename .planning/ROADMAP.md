@@ -89,15 +89,15 @@ Plans:
   2. Degenerette bet resolution timing relative to VRF fulfillment is verified — no bet placed before VRF request can have foreknowledge of outcome
   3. The daily ETH distribution bucket cursor is confirmed resistant to griefing — no sequence of calls can advance the cursor past unfilled buckets
   4. Trait burn ticket iteration in GameOverModule is confirmed bounded — an explicit maximum trait count is enforced preventing gas exhaustion at phase transitions
-**Plans**: TBD
+**Plans:** 6 plans
 
 Plans:
-- [ ] 03b-01: Audit LootboxModule — VRF word derivation path, activity score EV multiplier formula, payout calculation
-- [ ] 03b-02: Audit GameOverModule — terminal settlement logic, fund distribution sequence, all-paths coverage
-- [ ] 03b-03: Model lootbox EV multiplier mathematically; verify activity score cannot produce guaranteed positive EV
-- [ ] 03b-04: Audit degenerette bet resolution relative to VRF timing; verify no pre-VRF bet can exploit known outcomes
-- [ ] 03b-05: Verify daily ETH distribution bucket cursor logic; test griefing resistance
-- [ ] 03b-06: Confirm trait burn iteration bound; verify gas ceiling at maximum realistic trait count
+- [ ] 03b-01-PLAN.md — Audit LootboxModule — VRF word derivation path, activity score EV multiplier formula, payout calculation
+- [ ] 03b-02-PLAN.md — Audit GameOverModule — terminal settlement logic, fund distribution sequence, all-paths coverage
+- [ ] 03b-03-PLAN.md — Model lootbox EV multiplier mathematically; verify activity score cannot produce guaranteed positive EV
+- [ ] 03b-04-PLAN.md — Audit degenerette bet resolution relative to VRF timing; verify no pre-VRF bet can exploit known outcomes
+- [ ] 03b-05-PLAN.md — Verify daily ETH distribution bucket cursor logic; test griefing resistance
+- [ ] 03b-06-PLAN.md — Confirm trait burn iteration bound; verify gas ceiling at maximum realistic trait count
 
 ### Phase 3c: Supporting Mechanics Modules
 **Goal**: WhaleModule, BoonModule, DecimatorModule, DegeneretteModule, and MintStreakUtils are audited for pricing correctness, bit packing integrity, and behavioral safety
@@ -206,7 +206,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in order: 1 → 2 → 3a → 3b → 3c → 4 → 5 → 6 → 7
+Phases execute in order: 1 -> 2 -> 3a -> 3b -> 3c -> 4 -> 5 -> 6 -> 7
 Note: Phase 3a, 3b, and 3c all depend on Phase 2 and can be partially parallelized.
 
 | Phase | Plans Complete | Status | Completed |
