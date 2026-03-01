@@ -68,7 +68,7 @@ Requirements for the security audit. Each maps to roadmap phases.
 - [ ] **XCON-04**: BurnieCoin.burnCoin() behavior on insufficient balance is safe — no path creates free nudges or coinflips
 - [ ] **XCON-05**: Cross-function reentrancy — ETH callback from `claimWinnings` cannot reenter `purchase` or other state-changing functions
 - [ ] **XCON-06**: stETH rebasing cannot create a reentrancy vector via Lido internal callbacks during staking paths
-- [ ] **XCON-07**: Constructor-time cross-contract calls execute in correct order given the deploy sequence
+- [x] **XCON-07**: Constructor-time cross-contract calls execute in correct order given the deploy sequence
 
 ### Input Validation
 
@@ -190,7 +190,7 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | XCON-04 | Phase 7 | Pending |
 | XCON-05 | Phase 7 | Pending |
 | XCON-06 | Phase 7 | Pending |
-| XCON-07 | Phase 7 | Pending |
+| XCON-07 | Phase 7 | Complete |
 
 **Coverage:**
 - v1 requirements: 56 total
