@@ -89,8 +89,8 @@ Requirements for the security audit. Each maps to roadmap phases.
 - [x] **ECON-02**: Activity score cannot be cheaply inflated via quest streaks, affiliate self-referral, or coordinated chains to unlock high-EV lootboxes
 - [x] **ECON-03**: Affiliate referral system does not create positive-sum extraction where referrer+referee extract more than deposited
 - [x] **ECON-04**: MEV/sandwich attacks on ticket purchase price escalation cannot extract value at phase boundaries
-- [ ] **ECON-05**: Block proposer cannot manipulate `advanceGame` timing to control which level transitions occur
-- [ ] **ECON-06**: Whale bundle + lootbox purchase sequences cannot extract more than deposited at levels 0-3
+- [x] **ECON-05**: Block proposer cannot manipulate `advanceGame` timing to control which level transitions occur
+- [x] **ECON-06**: Whale bundle + lootbox purchase sequences cannot extract more than deposited at levels 0-3
 - [ ] **ECON-07**: AfKing mode transitions do not create windows for double-spend or double-credit
 
 ### Game State Machine
@@ -175,8 +175,8 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | ECON-02 | Phase 5 | Complete |
 | ECON-03 | Phase 5 | Complete |
 | ECON-04 | Phase 5 | Complete |
-| ECON-05 | Phase 5 | Pending |
-| ECON-06 | Phase 5 | Pending |
+| ECON-05 | Phase 5 | Complete |
+| ECON-06 | Phase 5 | Complete |
 | ECON-07 | Phase 5 | Pending |
 | AUTH-01 | Phase 6 | Pending |
 | AUTH-02 | Phase 6 | Pending |
