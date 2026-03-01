@@ -413,19 +413,18 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
 
     /**
      * @notice Purchase a deity pass for a specific symbol.
-     * @dev Available at any time. One per player, max 24 total (one per non-dice symbol).
-     *      Buyer chooses from available symbols (0-23). Virtual trait-targeted jackpot
+     * @dev Available at any time. One per player, up to 32 total (one per symbol).
+     *      Buyer chooses from available symbols (0-31). Virtual trait-targeted jackpot
      *      entries are computed at resolution time — no explicit ticket queuing needed.
      *
      *      Price: 24 + T(n) ETH where n = passes sold so far, T(n) = n*(n+1)/2.
-     *      First pass costs 24 ETH, last (24th) costs 300 ETH.
+     *      First pass costs 24 ETH, last (32nd) costs 520 ETH.
      *
      *      Fund distribution:
-     *      - Pre-game (level 0): 50% next pool, 50% future pool
+     *      - Pre-game (level 0): 30% next pool, 70% future pool
      *      - Post-game (level > 0): 5% next pool, 95% future pool
      * @param buyer The address receiving the pass.
-     * @param symbolId Symbol to claim (0-23: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23).
-     * @custom:reverts E When 24 deity passes have already been issued.
+     * @param symbolId Symbol to claim (0-31: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23, Q3 Dice 24-31).
      * @custom:reverts E When buyer already owns a deity pass.
      * @custom:reverts E When symbolId is out of range or already taken.
      * @custom:reverts E When msg.value does not match current deity pass price.

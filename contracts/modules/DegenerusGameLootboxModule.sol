@@ -210,7 +210,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint8 private constant DEITY_PASS_BOON_TIER_25 = 2;
     /// @dev Tier identifier for 50% deity pass discount boon (5000 bps)
     uint8 private constant DEITY_PASS_BOON_TIER_50 = 3;
-    /// @dev Maximum total deity passes (one per non-dice symbol)
+    /// @dev Threshold used by deity-pass discount boon availability logic.
     uint32 private constant DEITY_PASS_MAX_TOTAL = 24;
 
     // Boon bonus values
