@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T07:06:58.537Z"
+last_updated: "2026-03-01T07:07:21.666Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 29
-  completed_plans: 18
+  completed_plans: 20
 ---
 
 # Project State
@@ -58,6 +58,9 @@ Progress: [██░░░░░░░░] 20%
 | Phase 03a P04 | 3min | 2 tasks | 1 files |
 | Phase 03c P06 | 3min | 1 tasks | 1 files |
 | Phase 03c P05 | 3min | 1 tasks | 1 files |
+| Phase 03c P03 | 5min | 1 tasks | 1 files |
+| Phase 03b P06 | 5min | 2 tasks | 1 files |
+| Phase 03c P02 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -88,6 +91,10 @@ Recent decisions affecting current work:
 - [Phase 03a]: price state variable (AdvanceModule) and PriceLookupLib are independent pricing systems -- Informational, not a defect
 - [Phase 03c]: MATH-08 PASS: All 9 mintPacked_ fields verified correct across 32 setPacked and 34 read sites; three INFORMATIONAL doc findings only
 - [Phase 03a]: INPT-01 through INPT-04 all PASS: no input validation gaps across MintModule, JackpotModule, EndgameModule
+- [Phase 03c]: MATH-07 PASS conditional: base coinflip range [50,150] correct; presale/EV adjustments exceeding 150% are intentional separate mechanics
+- [Phase 03c]: Lootbox boon stale timestamps are deliberate gas optimization; _decEffectiveAmount L565 guard is dead code (defense-in-depth); Decimator bucket validation externalized to coin contract
+- [Phase 03b]: DOS-03 PASS: All trait-related iteration bounded by explicit caps; worst-case ~13M gas within 30M block limit
+- [Phase 03b]: deityPassOwners actual cap is 32 (symbol ID uniqueness), not 24 (DEITY_PASS_MAX_TOTAL is boon-eligibility only); Informational
 
 ### Pending Todos
 

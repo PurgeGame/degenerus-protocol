@@ -48,8 +48,8 @@ Requirements for the security audit. Each maps to roadmap phases.
 - [x] **MATH-04**: Lazy pass pricing (sum-of-10-level-prices at level 3+) correctly sums the price curve
 - [ ] **MATH-05**: Lootbox EV multiplier formula produces expected values — activity score cannot create guaranteed positive EV extraction
 - [ ] **MATH-06**: Degenerette bet resolution pays out correctly — no bet timing relative to VRF creates advantaged positions
-- [ ] **MATH-07**: Coinflip 50-150% bonus range is correctly bounded — edge cases at 50% and 150% do not over/underpay
-- [ ] **MATH-08**: BitPackingLib 24-bit field packing/unpacking is correct — no field overflow or bleed across boundaries
+- [x] **MATH-07**: Coinflip 50-150% bonus range is correctly bounded — edge cases at 50% and 150% do not over/underpay
+- [x] **MATH-08**: BitPackingLib 24-bit field packing/unpacking is correct — no field overflow or bleed across boundaries
 
 ### Access Control
 
@@ -159,8 +159,8 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | MATH-06 | Phase 3b | Pending |
 | DOS-02 | Phase 3b | Pending |
 | DOS-03 | Phase 3b | Pending |
-| MATH-07 | Phase 3c | Pending |
-| MATH-08 | Phase 3c | Pending |
+| MATH-07 | Phase 3c | Complete |
+| MATH-08 | Phase 3c | Complete |
 | ACCT-01 | Phase 4 | Pending |
 | ACCT-02 | Phase 4 | Pending |
 | ACCT-03 | Phase 4 | Pending |
