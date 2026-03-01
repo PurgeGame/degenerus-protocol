@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T16:14:03.014Z"
+last_updated: "2026-03-01T03:24:33Z"
 progress:
-  total_phases: 1
+  total_phases: 2
   completed_phases: 0
-  total_plans: 4
-  completed_plans: 3
+  total_plans: 10
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,35 +18,37 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** Phase 1 — Storage Foundation Verification
+**Current focus:** Phase 2 — Core State Machine and VRF Lifecycle
 
 ## Current Position
 
-Phase: 1 of 9 (Storage Foundation Verification)
-Plan: 3 of 4 in current phase
+Phase: 2 of 9 (Core State Machine and VRF Lifecycle)
+Plan: 1 of 6 in current phase (02-03 complete)
 Status: Executing
-Last activity: 2026-02-28 — Completed 01-04 testnet isolation verification (STOR-04 PASS)
+Last activity: 2026-02-28 — Completed 02-03 VRF security checklist (RNG-04/RNG-05/RNG-07 PASS)
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 13%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 2min
-- Total execution time: 4min
+- Total plans completed: 3
+- Average duration: 3min
+- Total execution time: 9min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 2 | 4min | 2min |
+| 02 | 1 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (2min), 01-04 (2min)
+- Last 5 plans: 01-02 (2min), 01-04 (2min), 02-03 (5min)
 - Trend: stable
 
 *Updated after each plan completion*
+| Phase 02 P03 | 5min | 2 tasks | 1 files |
 | Phase 01 P04 | 2min | 2 tasks | 1 files |
 | Phase 01 P03 | 3min | 2 tasks | 1 files |
 
@@ -62,6 +64,9 @@ Recent decisions affecting current work:
 - [Init]: Findings report without code fixes — assessment first, fixes separately
 - [Phase 01]: Used dual grep patterns (visibility-keyword + precise type-visibility-name) for defense-in-depth source scanning
 - [Phase 01]: STOR-04 PASS: TESTNET_ETH_DIVISOR has zero occurrences in mainnet contracts/
+- [Phase 02]: Both VRF V2.5 checklist deviations (18h re-requesting, no VRFConsumerBaseV2Plus) are well-justified with equivalent security
+- [Phase 02]: Lootbox RNG index 0 unreachable by design (1-based indexing with defense-in-depth guard)
+- [Phase 02]: _threeDayRngGap duplication is identical and correct but creates future maintenance risk
 
 ### Pending Todos
 
@@ -75,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Completed 01-04-PLAN.md (testnet isolation verification)
+Last session: 2026-03-01
+Stopped at: Completed 02-03-PLAN.md (VRF security checklist)
 Resume file: None
