@@ -72,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Static opcode analysis sufficient for VRF callback gas measurement given ~85% headroom margin
 - [Phase 02]: Coordinator rotation revert against stale fulfillment is correct defensive behavior, not a vulnerability
 - [Phase 02]: Non-standard xorshift constants (7,9,8) accepted as safe; VRF seed quality dominates PRNG properties for <30 iterations
+- [Phase 02]: FSM-02 rated PASS conditional due to two theoretical edge cases at intersection of multiple simultaneous failures
+- [Phase 02]: RNG-06 rated unconditional PASS -- liveness timeout serves as ultimate escape valve clearing rngLockedFlag even with ADMIN key loss
 
 ### Pending Todos
 
@@ -86,5 +88,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 02-03-PLAN.md (VRF security checklist)
+Stopped at: Completed 02-05-PLAN.md (stuck-state recovery analysis)
 Resume file: None
