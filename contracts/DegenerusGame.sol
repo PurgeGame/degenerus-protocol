@@ -1492,8 +1492,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (paid == 0) revert E();
 
         if (hasDeityPass && score != 0) {
-            uint256 burnieBase = (score * PRICE_COIN_UNIT) / 1 ether;
-            uint256 bonus = (burnieBase * AFFILIATE_DGNRS_DEITY_BONUS_BPS) /
+            uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) /
                 10_000;
             if (bonus != 0) {
                 coin.creditFlip(player, bonus);
