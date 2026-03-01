@@ -85,7 +85,7 @@ Requirements for the security audit. Each maps to roadmap phases.
 
 ### Economic Attack Surface
 
-- [ ] **ECON-01**: Sybil group with 51%+ ticket ownership cannot extract positive group EV from prize pool mechanics
+- [x] **ECON-01**: Sybil group with 51%+ ticket ownership cannot extract positive group EV from prize pool mechanics
 - [ ] **ECON-02**: Activity score cannot be cheaply inflated via quest streaks, affiliate self-referral, or coordinated chains to unlock high-EV lootboxes
 - [x] **ECON-03**: Affiliate referral system does not create positive-sum extraction where referrer+referee extract more than deposited
 - [x] **ECON-04**: MEV/sandwich attacks on ticket purchase price escalation cannot extract value at phase boundaries
@@ -171,7 +171,7 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | ACCT-08 | Phase 4 | Pending |
 | ACCT-09 | Phase 4 | Pending |
 | ACCT-10 | Phase 4 | Pending |
-| ECON-01 | Phase 5 | Pending |
+| ECON-01 | Phase 5 | Complete |
 | ECON-02 | Phase 5 | Pending |
 | ECON-03 | Phase 5 | Complete |
 | ECON-04 | Phase 5 | Complete |

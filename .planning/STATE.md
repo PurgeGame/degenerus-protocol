@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T12:48:42.597Z"
+last_updated: "2026-03-01T12:49:38.430Z"
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 45
-  completed_plans: 32
+  completed_plans: 34
 ---
 
 # Project State
@@ -74,6 +74,8 @@ Progress: [██░░░░░░░░] 20%
 | Phase 03a P07 | 12min | 2 tasks | 1 files |
 | Phase 05 P04 | 3min | 1 tasks | 1 files |
 | Phase 05 P03 | 4min | 1 tasks | 1 files |
+| Phase 05 P01 | 5min | 1 tasks | 1 files |
+| Phase 05 P02 | 5min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -142,6 +144,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Deity pass frontrunning rated INFORMATIONAL (24+ ETH commitment, one-per-address, 32-pass cap, no profitable exit)
 - [Phase 05]: ECON-03 PASS: affiliate rewards are BURNIE mints (not ETH transfers), circular referral pairs structurally negative-sum
 - [Phase 05]: Weighted winner roll determinism classified Informational: EV-preserving, max +24% single-tx variance, irrelevant for sybil sets
+- [Phase 05]: ECON-01 PASS: All 6 prize channels at most proportional to ticket ownership; BAF leaderboard sub-proportional; activity score dilution penalizes splitting
+- [Phase 05]: Lootbox per-account cap expansion via multi-account splitting is irrelevant -- total lootbox volume bounded by total deposit, not account count
 
 ### Pending Todos
 
