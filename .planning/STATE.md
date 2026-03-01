@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T07:11:10.455Z"
+last_updated: "2026-03-01T12:48:42.597Z"
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 29
-  completed_plans: 28
+  total_phases: 8
+  completed_phases: 5
+  total_plans: 45
+  completed_plans: 32
 ---
 
 # Project State
@@ -72,6 +72,8 @@ Progress: [██░░░░░░░░] 20%
 | Phase 03a P03 | 4min | 2 tasks | 1 files |
 | Phase 03b P02 | 8min | 2 tasks | 1 files |
 | Phase 03a P07 | 12min | 2 tasks | 1 files |
+| Phase 05 P04 | 3min | 1 tasks | 1 files |
+| Phase 05 P03 | 4min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -136,6 +138,10 @@ Recent decisions affecting current work:
 - [Phase 03a]: Slither 0.11.5: 17 HIGH all FALSE POSITIVE (uninitialized-state on delegatecall storage), 60 MEDIUM all triaged (57 FP, 3 INFO)
 - [Phase 03a]: Aderyn unavailable (Rust 1.89 required, system has 1.86); Slither coverage sufficient
 - [Phase 03a]: Static analysis confirms all 9 Phase 3a requirement PASSes; no contradictions with manual audit
+- [Phase 05]: ECON-04 PASS: rngLockedFlag set atomically with price update eliminates all sandwich windows; step-function pricing has zero price impact; per-level pool isolation eliminates cross-level arbitrage
+- [Phase 05]: Deity pass frontrunning rated INFORMATIONAL (24+ ETH commitment, one-per-address, 32-pass cap, no profitable exit)
+- [Phase 05]: ECON-03 PASS: affiliate rewards are BURNIE mints (not ETH transfers), circular referral pairs structurally negative-sum
+- [Phase 05]: Weighted winner roll determinism classified Informational: EV-preserving, max +24% single-tx variance, irrelevant for sybil sets
 
 ### Pending Todos
 
