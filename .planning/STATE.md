@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T12:49:38.430Z"
+last_updated: "2026-03-01T12:49:40.319Z"
 progress:
   total_phases: 8
   completed_phases: 5
@@ -146,6 +146,7 @@ Recent decisions affecting current work:
 - [Phase 05]: Weighted winner roll determinism classified Informational: EV-preserving, max +24% single-tx variance, irrelevant for sybil sets
 - [Phase 05]: ECON-01 PASS: All 6 prize channels at most proportional to ticket ownership; BAF leaderboard sub-proportional; activity score dilution penalizes splitting
 - [Phase 05]: Lootbox per-account cap expansion via multi-account splitting is irrelevant -- total lootbox volume bounded by total deposit, not account count
+- [Phase 05]: ECON-02 PASS: No activity score inflation vector produces cost-to-inflate less than EV-benefit-unlocked; quest streak cheapest at 0.25 ETH/100 days
 
 ### Pending Todos
 
