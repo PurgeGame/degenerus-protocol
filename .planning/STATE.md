@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T07:07:30.996Z"
+last_updated: "2026-03-01T07:07:35.551Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 29
-  completed_plans: 21
+  completed_plans: 22
 ---
 
 # Project State
@@ -98,6 +98,7 @@ Recent decisions affecting current work:
 - [Phase 03c]: PRICING-F01: lazyPassBoonDiscountBps is dead code (never written non-zero anywhere in codebase)
 - [Phase 03c]: All pricing formulas (whale/lazy/deity) arithmetically safe -- max boon discount 5000 BPS, no overflow at boundary values
 - [Phase 03a]: MATH-01 PASS: Ticket cost formula max product ~1.03e27, 50 orders below uint256 max; lootbox BPS split remainder provably non-negative
+- [Phase 03a]: All 15 unchecked blocks in MintModule individually verified safe; affiliate rakeback confirmed BURNIE-only (no ETH pool impact)
 
 ### Pending Todos
 
