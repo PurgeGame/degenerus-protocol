@@ -107,6 +107,7 @@ Recent decisions affecting current work:
 - [Phase 03c]: F02 MEDIUM: _currentMintDay vs _simulatedDayIndex inconsistency in whale vs lazy pass boon validity checks
 - [Phase 03b]: MATH-06 PASS: No bet timing creates advantaged positions; commit-reveal pattern is sound
 - [Phase 03b]: futurePrizePool cannot reach 0 through degenerette payouts (geometric decay with 10% cap converges to 1 wei)
+- [Phase 03b]: DOS-02 PASS: Daily ETH cursor system griefing-resistant -- all writes within delegatecall chain, deterministic resume, unitsBudget=1000 constant
 
 ### Pending Todos
 

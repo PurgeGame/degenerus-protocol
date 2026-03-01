@@ -47,7 +47,7 @@ Requirements for the security audit. Each maps to roadmap phases.
 - [ ] **MATH-03**: Whale bundle pricing (2.4 ETH levels 0-3, 4 ETH x49/x99) is correctly enforced across all purchase paths
 - [x] **MATH-04**: Lazy pass pricing (sum-of-10-level-prices at level 3+) correctly sums the price curve
 - [ ] **MATH-05**: Lootbox EV multiplier formula produces expected values — activity score cannot create guaranteed positive EV extraction
-- [ ] **MATH-06**: Degenerette bet resolution pays out correctly — no bet timing relative to VRF creates advantaged positions
+- [x] **MATH-06**: Degenerette bet resolution pays out correctly — no bet timing relative to VRF creates advantaged positions
 - [x] **MATH-07**: Coinflip 50-150% bonus range is correctly bounded — edge cases at 50% and 150% do not over/underpay
 - [x] **MATH-08**: BitPackingLib 24-bit field packing/unpacking is correct — no field overflow or bleed across boundaries
 
@@ -156,7 +156,7 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | INPT-04 | Phase 3a | Complete |
 | DOS-01 | Phase 3a | Pending |
 | MATH-05 | Phase 3b | Pending |
-| MATH-06 | Phase 3b | Pending |
+| MATH-06 | Phase 3b | Complete |
 | DOS-02 | Phase 3b | Pending |
 | DOS-03 | Phase 3b | Complete |
 | MATH-07 | Phase 3c | Complete |
