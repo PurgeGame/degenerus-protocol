@@ -158,7 +158,7 @@ Plans:
 - [ ] 05-02-PLAN.md — Enumerate activity score inflation vectors; compute cost-per-EV-unit for quest streaks and affiliate self-referral
 - [ ] 05-03-PLAN.md — Model affiliate referral extraction: circular structures, referrer+referee combined EV vs deposited (BURNIE denomination)
 - [ ] 05-04-PLAN.md — Analyze MEV attack surface on phase boundaries: sandwich attacks on ticket purchase escalation
-- [ ] 05-05-PLAN.md — Model block proposer advanceGame timing manipulation: level transition control and outcome influence
+- [x] 05-05-PLAN.md — Model block proposer advanceGame timing manipulation: level transition control and outcome influence
 - [ ] 05-06-PLAN.md — Quantify whale bundle economic impact at arbitrary levels (Phase 3c F01 HIGH finding)
 - [ ] 05-07-PLAN.md — Audit AfKing mode transitions: verify no double-spend or double-credit window exists
 
