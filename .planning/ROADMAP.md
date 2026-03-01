@@ -49,15 +49,15 @@ Plans:
   3. All `requestId` matching paths are traced; any scenario where a stale or mismatched ID could apply the wrong VRF word to wrong game state is documented
   4. The complete FSM transition graph (PURCHASE to JACKPOT to gameOver) is enumerated with all legal transitions confirmed and all illegal transitions confirmed unreachable
   5. All stuck-state recovery paths (18h timeout, 3-day emergency, 30-day sweep) are confirmed reachable and not prematurely triggerable
-**Plans**: TBD
+**Plans:** 6 plans
 
 Plans:
-- [ ] 02-01: Trace `rngLockedFlag` state machine through all paths; map every set/clear site; evaluate nudge window timing
-- [ ] 02-02: Run Foundry gas snapshot on `rawFulfillRandomWords` at worst-case state; compare against 300k VRF_CALLBACK_GAS_LIMIT
-- [ ] 02-03: Apply Chainlink VRF V2.5 8-point security checklist; document pass/fail for each point including requestId handling and concurrent request safety
-- [ ] 02-04: Map complete FSM transition graph for PURCHASE/JACKPOT/gameOver; enumerate all guard conditions
-- [ ] 02-05: Trace all stuck-state recovery paths; verify timeout preconditions and premature-trigger resistance
-- [ ] 02-06: Review EntropyLib.entropyStep() XOR-shift derivation; verify no exploitable bias; confirm no block.timestamp/blockhash randomness sources
+- [ ] 02-01-PLAN.md — Trace `rngLockedFlag` state machine through all paths; map every set/clear site; evaluate nudge window timing
+- [ ] 02-02-PLAN.md — Measure `rawFulfillRandomWords` gas cost at worst-case state; compare against 300k VRF_CALLBACK_GAS_LIMIT
+- [ ] 02-03-PLAN.md — Apply Chainlink VRF V2.5 8-point security checklist; document pass/fail for each point including requestId handling and concurrent request safety
+- [ ] 02-04-PLAN.md — Map complete FSM transition graph for PURCHASE/JACKPOT/gameOver; enumerate all guard conditions
+- [ ] 02-05-PLAN.md — Trace all stuck-state recovery paths; verify timeout preconditions and premature-trigger resistance
+- [ ] 02-06-PLAN.md — Review EntropyLib.entropyStep() XOR-shift derivation; verify no exploitable bias; confirm no block.timestamp/blockhash randomness sources
 
 ### Phase 3a: Core ETH Flow Modules
 **Goal**: MintModule, JackpotModule, and EndgameModule are audited for correct ETH inflow/outflow handling, price formula integrity, and input validation
