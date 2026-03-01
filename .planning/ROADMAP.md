@@ -108,7 +108,7 @@ Plans:
   2. Lazy pass pricing (sum-of-10-level-prices at level 3+) correctly accumulates the price curve — verified arithmetically with specific level examples
   3. BurnieCoinflip 50-150% bonus range is confirmed correctly bounded — edge cases at exactly 50% and 150% are tested and pay correctly
   4. BitPackingLib 24-bit field operations are confirmed correct — no field overflow or cross-field bleed identified in any packing/unpacking path
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
 - [ ] 03c-01: Audit WhaleModule — bundle and lazy pass pricing enforcement across all purchase paths
