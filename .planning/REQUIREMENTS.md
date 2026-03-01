@@ -16,14 +16,14 @@ Requirements for the security audit. Each maps to roadmap phases.
 
 ### RNG State Machine
 
-- [ ] **RNG-01**: `rngLockedFlag` remains set continuously from VRF request through word consumption in `advanceGame` — no window exists for nudge manipulation
+- [x] **RNG-01**: `rngLockedFlag` remains set continuously from VRF request through word consumption in `advanceGame` — no window exists for nudge manipulation
 - [x] **RNG-02**: `rawFulfillRandomWords` cannot revert under any condition (gas limit, panic, require) — VRF coordinator does not retry failed callbacks
 - [x] **RNG-03**: `rawFulfillRandomWords` gas cost stays under 200,000 gas with headroom against VRF_CALLBACK_GAS_LIMIT (300,000)
 - [x] **RNG-04**: `requestId` matching is correct — no mismatch can cause wrong VRF word applied to wrong game state
 - [x] **RNG-05**: Concurrent VRF requests (daily RNG vs lootbox mid-day RNG) cannot create requestId ordering conflicts
 - [x] **RNG-06**: RNG lock cannot be bypassed or stuck permanently — all stuck states are recoverable via stall recovery
 - [x] **RNG-07**: 18-hour VRF retry timeout cannot be abused by a validator to selectively trigger or delay fulfillment
-- [ ] **RNG-08**: `reverseFlip()` nudge mechanism cannot be exploited by a block proposer who sees the fulfilled VRF word in mempool
+- [x] **RNG-08**: `reverseFlip()` nudge mechanism cannot be exploited by a block proposer who sees the fulfilled VRF word in mempool
 - [x] **RNG-09**: `EntropyLib.entropyStep()` XOR-shift derivation from VRF seed does not introduce predictable patterns exploitable by an attacker
 - [x] **RNG-10**: No code path uses `block.timestamp` or `blockhash` as a randomness source beyond VRF integration
 
@@ -133,14 +133,14 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | STOR-02 | Phase 1 | Pending |
 | STOR-03 | Phase 1 | Pending |
 | STOR-04 | Phase 1 | Complete |
-| RNG-01 | Phase 2 | Pending |
+| RNG-01 | Phase 2 | Complete |
 | RNG-02 | Phase 2 | Complete |
 | RNG-03 | Phase 2 | Complete |
 | RNG-04 | Phase 2 | Complete |
 | RNG-05 | Phase 2 | Complete |
 | RNG-06 | Phase 2 | Complete |
 | RNG-07 | Phase 2 | Complete |
-| RNG-08 | Phase 2 | Pending |
+| RNG-08 | Phase 2 | Complete |
 | RNG-09 | Phase 2 | Complete |
 | RNG-10 | Phase 2 | Complete |
 | FSM-01 | Phase 2 | Pending |
