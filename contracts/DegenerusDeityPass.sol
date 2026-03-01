@@ -29,7 +29,7 @@ interface IDeityPassRendererV1 {
 /// @title DegenerusDeityPass
 /// @notice Minimal ERC721 for deity passes. 32 tokens max (one per symbol).
 ///         On transfer, calls back to the game contract to burn BURNIE, update storage,
-///         and nuke sender stats. tokenId = symbolId (0-23).
+///         and nuke sender stats. tokenId = symbolId (0-31).
 contract DegenerusDeityPass {
     // -------------------------------------------------------------------------
     // Errors
