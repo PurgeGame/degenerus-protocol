@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T07:04:45.717Z"
+last_updated: "2026-03-01T07:05:51.879Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 29
-  completed_plans: 11
+  completed_plans: 13
 ---
 
 # Project State
@@ -55,6 +55,7 @@ Progress: [██░░░░░░░░] 20%
 | Phase 01 P04 | 2min | 2 tasks | 1 files |
 | Phase 01 P03 | 3min | 2 tasks | 1 files |
 | Phase 03a P05 | 3min | 2 tasks | 1 files |
+| Phase 03a P04 | 3min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - [Phase 02]: FSM-03 PASS: Multi-step game-over handles all intermediate states; VRF 3-day historical fallback ensures completion
 - [Phase 02]: LOW finding FSM-F02: handleGameOverDrain receives stale dailyIdx, may skip BAF/Decimator distribution (funds preserved for final sweep)
 - [Phase 03a]: MATH-02 PASS: Deity pass T(n) overflow impossible -- max intermediate value 53 orders of magnitude below uint256 max
+- [Phase 03a]: Saw-tooth price pattern (0.24->0.04 at x00->x01) documented as intentional game design
+- [Phase 03a]: price state variable (AdvanceModule) and PriceLookupLib are independent pricing systems -- Informational, not a defect
+- [Phase 03c]: MATH-08 PASS: All 9 mintPacked_ fields verified correct across 32 setPacked and 34 read sites; three INFORMATIONAL doc findings only
 
 ### Pending Todos
 
@@ -95,5 +99,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 02-04-PLAN.md (FSM transition graph audit)
+Stopped at: Completed 03c-06-PLAN.md (BitPackingLib field packing/unpacking integrity audit)
 Resume file: None
