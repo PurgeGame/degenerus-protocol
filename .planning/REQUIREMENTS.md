@@ -80,7 +80,7 @@ Requirements for the security audit. Each maps to roadmap phases.
 ### Denial of Service
 
 - [ ] **DOS-01**: No unbounded loop exists that can be exploited to exhaust block gas limit
-- [ ] **DOS-02**: Daily ETH distribution bucket cursor cannot be griefed to skip distributions
+- [x] **DOS-02**: Daily ETH distribution bucket cursor cannot be griefed to skip distributions
 - [x] **DOS-03**: Trait burn ticket iteration is bounded — large trait counts cannot block phase transitions
 
 ### Economic Attack Surface
@@ -157,7 +157,7 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | DOS-01 | Phase 3a | Pending |
 | MATH-05 | Phase 3b | Pending |
 | MATH-06 | Phase 3b | Complete |
-| DOS-02 | Phase 3b | Pending |
+| DOS-02 | Phase 3b | Complete |
 | DOS-03 | Phase 3b | Complete |
 | MATH-07 | Phase 3c | Complete |
 | MATH-08 | Phase 3c | Complete |

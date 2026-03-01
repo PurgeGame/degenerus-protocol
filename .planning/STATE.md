@@ -108,6 +108,9 @@ Recent decisions affecting current work:
 - [Phase 03b]: MATH-06 PASS: No bet timing creates advantaged positions; commit-reveal pattern is sound
 - [Phase 03b]: futurePrizePool cannot reach 0 through degenerette payouts (geometric decay with 10% cap converges to 1 wei)
 - [Phase 03b]: DOS-02 PASS: Daily ETH cursor system griefing-resistant -- all writes within delegatecall chain, deterministic resume, unitsBudget=1000 constant
+- [Phase 03b]: MATH-05 PASS: No activity score creates guaranteed positive-EV extraction exceeding investment cost; 3.5 ETH max benefit per level at 135% EV with 10 ETH raw-input cap
+- [Phase 03b]: Cap tracks raw input (not benefit delta) -- confirmed conservative design, 2.86x faster depletion than benefit-tracking alternative
+- [Phase 03b]: Only deity pass holders (24+ ETH) can reach 305% activity / 135% EV; non-deity max is 265% / ~129% EV
 
 ### Pending Todos
 
@@ -122,5 +125,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03c-05-PLAN.md (BurnieCoinflip bonus range audit)
+Stopped at: Completed 03b-03-PLAN.md (Lootbox EV model - MATH-05 PASS)
 Resume file: None
