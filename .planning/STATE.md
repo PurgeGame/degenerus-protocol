@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T07:07:57.760Z"
+last_updated: "2026-03-01T07:07:58.773Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 29
-  completed_plans: 23
+  completed_plans: 24
 ---
 
 # Project State
@@ -64,6 +64,7 @@ Progress: [██░░░░░░░░] 20%
 | Phase 03a P01 | 4min | 2 tasks | 1 files |
 | Phase 03c P01 | 4min | 1 tasks | 1 files |
 | Phase 03b P04 | 5min | 2 tasks | 1 files |
+| Phase 03b P05 | 5min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,7 @@ Recent decisions affecting current work:
 - [Phase 03c]: F01 HIGH: Whale bundle lacks level eligibility guard -- NatSpec says levels 0-3/x49/x99 but code allows any level at 4 ETH; needs design confirmation
 - [Phase 03c]: F02 MEDIUM: _currentMintDay vs _simulatedDayIndex inconsistency in whale vs lazy pass boon validity checks
 - [Phase 03b]: MATH-06 PASS: No bet timing creates advantaged positions; commit-reveal pattern is sound
+- [Phase 03b]: futurePrizePool cannot reach 0 through degenerette payouts (geometric decay with 10% cap converges to 1 wei)
 
 ### Pending Todos
 
