@@ -123,23 +123,23 @@ Plans:
 **Depends on**: Phase 3a, Phase 3b, Phase 3c
 **Requirements**: ACCT-01, ACCT-02, ACCT-03, ACCT-04, ACCT-05, ACCT-06, ACCT-07, ACCT-08, ACCT-09, ACCT-10
 **Success Criteria** (what must be TRUE):
-  1. A Medusa invariant harness asserting `balance + stETH >= claimablePool` runs without violation across all mapped inflow/outflow paths — or violations found are documented as critical findings
+  1. A systematic manual trace of all 16 claimablePool mutation sites confirms `balance + stETH >= claimablePool` holds across all mapped inflow/outflow paths — or violations found are documented as critical findings
   2. All BPS fee splits (90/10 pool, affiliate BPS, any other split) are confirmed to sum to their input amount — any rounding accumulation gap is quantified (in wei) and rated by severity
-  3. `claimWinnings()` is confirmed non-reenterable — ETH/stETH transfer before state clear is either protected by a reentrancy guard or confirmed safe by CEI analysis
+  3. `claimWinnings()` is confirmed non-reenterable — CEI pattern confirmed safe with exhaustive reachability analysis of all functions callable from ETH callback
   4. No code path is found that caches `steth.balanceOf(this)` in a state variable — stETH rebasing behavior is documented as handled correctly or a finding is raised
   5. Game-over settlement terminal distribution is confirmed to reach a zero-balance state with no funds permanently locked
-**Plans**: TBD
+**Plans:** 9 plans
 
 Plans:
-- [ ] 04-01: Trace all ETH inflow paths (purchase, receive(), external deposits) and outflow paths (claimWinnings, vault, fees) across all contracts
-- [ ] 04-02: Write and run Medusa invariant harness for core accounting invariant; fuzz across all path combinations
-- [ ] 04-03: Audit all BPS fee splits — verify both halves sum to input; quantify rounding accumulation at scale
-- [ ] 04-04: Audit `claimWinnings()` for reentrancy — trace ETH and stETH transfer sequences; verify CEI compliance or guard presence
-- [ ] 04-05: Search all contracts for cached stETH balance state variables; document stETH rebasing handling
-- [ ] 04-06: Trace game-over settlement sequence across all 5 steps; verify zero terminal balance
-- [ ] 04-07: Audit stall recovery paths (3-day emergency, 30-day sweep) — verify preconditions and premature-trigger resistance
-- [ ] 04-08: Audit DegenerusVault stETH yield accounting — verify COIN mint amounts match expected vault yields
-- [ ] 04-09: Audit BurnieCoin supply invariant — trace all mint and burn paths; verify circulating supply consistency
+- [ ] 04-01-PLAN.md — Trace all ETH inflow/outflow paths across all contracts; verify pool attribution matches msg.value/payout exactly
+- [ ] 04-02-PLAN.md — Systematic manual trace of all 16 claimablePool mutation sites for invariant symmetry and ETH backing
+- [ ] 04-03-PLAN.md — Audit all BPS fee splits across all modules; verify sum-to-input with remainder pattern analysis
+- [ ] 04-04-PLAN.md — Audit claimWinnings() for reentrancy; exhaustive CEI analysis with no reentrancy guard present
+- [ ] 04-05-PLAN.md — Search for cached stETH balance; document stETH rebasing impact (pre-confirmed PASS, formal documentation)
+- [ ] 04-06-PLAN.md — Trace game-over settlement to zero terminal balance; verify handleGameOverDrain and handleFinalSweep
+- [ ] 04-07-PLAN.md — Audit stall recovery paths accounting impact; verify timeout arithmetic and premature-trigger resistance
+- [ ] 04-08-PLAN.md — Audit DegenerusVault share-based redemption formulas and stETH yield accrual
+- [ ] 04-09-PLAN.md — Audit BurnieCoin supply invariant; trace all mint/burn paths through packed Supply struct
 
 ### Phase 5: Economic Attack Surface
 **Goal**: All identified economic attack vectors (Sybil, MEV/block proposer, whale, affiliate) are modeled and assessed — either confirmed non-exploitable with reasoning, or documented as findings with quantified impact
@@ -216,7 +216,7 @@ Note: Phase 3a, 3b, and 3c all depend on Phase 2 and can be partially paralleliz
 | 3a. Core ETH Flow Modules | 0/7 | Planned | - |
 | 3b. VRF-Dependent Modules | 6/6 | Complete | 2026-03-01 |
 | 3c. Supporting Mechanics Modules | 6/6 | Complete | 2026-03-01 |
-| 4. ETH and Token Accounting Integrity | 0/9 | Not started | - |
+| 4. ETH and Token Accounting Integrity | 0/9 | Planned | - |
 | 5. Economic Attack Surface | 0/7 | Not started | - |
 | 6. Access Control and Privilege Model | 0/7 | Not started | - |
 | 7. Cross-Contract Integration Synthesis | 0/6 | Not started | - |
