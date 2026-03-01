@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T07:07:35.551Z"
+last_updated: "2026-03-01T07:07:50.481Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 29
-  completed_plans: 22
+  completed_plans: 24
 ---
 
 # Project State
@@ -61,6 +61,7 @@ Progress: [██░░░░░░░░] 20%
 | Phase 03c P03 | 5min | 1 tasks | 1 files |
 | Phase 03b P06 | 5min | 2 tasks | 1 files |
 | Phase 03c P02 | 3min | 1 tasks | 1 files |
+| Phase 03a P01 | 4min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,8 @@ Recent decisions affecting current work:
 - [Phase 03c]: All pricing formulas (whale/lazy/deity) arithmetically safe -- max boon discount 5000 BPS, no overflow at boundary values
 - [Phase 03a]: MATH-01 PASS: Ticket cost formula max product ~1.03e27, 50 orders below uint256 max; lootbox BPS split remainder provably non-negative
 - [Phase 03a]: All 15 unchecked blocks in MintModule individually verified safe; affiliate rakeback confirmed BURNIE-only (no ETH pool impact)
+- [Phase 03c]: F01 HIGH: Whale bundle lacks level eligibility guard -- NatSpec says levels 0-3/x49/x99 but code allows any level at 4 ETH; needs design confirmation
+- [Phase 03c]: F02 MEDIUM: _currentMintDay vs _simulatedDayIndex inconsistency in whale vs lazy pass boon validity checks
 
 ### Pending Todos
 
@@ -113,5 +116,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03c-06-PLAN.md (BitPackingLib field packing/unpacking integrity audit)
+Stopped at: Completed 03c-05-PLAN.md (BurnieCoinflip bonus range audit)
 Resume file: None
