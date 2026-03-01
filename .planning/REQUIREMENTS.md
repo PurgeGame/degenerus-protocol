@@ -42,10 +42,10 @@ Requirements for the security audit. Each maps to roadmap phases.
 
 ### Token and Pricing Math
 
-- [ ] **MATH-01**: Ticket price escalation formula (PriceLookupLib) is monotonically increasing and does not overflow at max level
+- [x] **MATH-01**: Ticket price escalation formula (PriceLookupLib) is monotonically increasing and does not overflow at max level
 - [x] **MATH-02**: Deity pass pricing T(n) = n*(n+1)/2 + 24 ETH does not overflow at realistic pass counts (n=100, n=1000)
 - [ ] **MATH-03**: Whale bundle pricing (2.4 ETH levels 0-3, 4 ETH x49/x99) is correctly enforced across all purchase paths
-- [ ] **MATH-04**: Lazy pass pricing (sum-of-10-level-prices at level 3+) correctly sums the price curve
+- [x] **MATH-04**: Lazy pass pricing (sum-of-10-level-prices at level 3+) correctly sums the price curve
 - [ ] **MATH-05**: Lootbox EV multiplier formula produces expected values — activity score cannot create guaranteed positive EV extraction
 - [ ] **MATH-06**: Degenerette bet resolution pays out correctly — no bet timing relative to VRF creates advantaged positions
 - [ ] **MATH-07**: Coinflip 50-150% bonus range is correctly bounded — edge cases at 50% and 150% do not over/underpay
@@ -146,10 +146,10 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | FSM-01 | Phase 2 | Complete |
 | FSM-02 | Phase 2 | Complete |
 | FSM-03 | Phase 2 | Complete |
-| MATH-01 | Phase 3a | Pending |
+| MATH-01 | Phase 3a | Complete |
 | MATH-02 | Phase 3a | Complete |
 | MATH-03 | Phase 3a | Pending |
-| MATH-04 | Phase 3a | Pending |
+| MATH-04 | Phase 3a | Complete |
 | INPT-01 | Phase 3a | Pending |
 | INPT-02 | Phase 3a | Pending |
 | INPT-03 | Phase 3a | Pending |
