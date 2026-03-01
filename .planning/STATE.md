@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T07:09:08.832Z"
+last_updated: "2026-03-01T07:11:10.455Z"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 29
-  completed_plans: 25
+  completed_plans: 28
 ---
 
 # Project State
@@ -68,6 +68,9 @@ Progress: [██░░░░░░░░] 20%
 | Phase 03b P03 | 6min | 2 tasks | 1 files |
 | Phase 03a P02 | 6min | 2 tasks | 1 files |
 | Phase 03c P04 | 4min | 1 tasks | 1 files |
+| Phase 03b P01 | 7min | 2 tasks | 1 files |
+| Phase 03a P03 | 4min | 2 tasks | 1 files |
+| Phase 03b P02 | 8min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -120,6 +123,15 @@ Recent decisions affecting current work:
 - [Phase 03c]: Hero boost integer rounding (max 0.005% deviation) rated Informational -- always rounds against player, not exploitable
 - [Phase 03c]: ETH pool cap per-spin enforcement means worst-case 10-spin extraction is 65% of pool (geometric decay), not 100%
 - [Phase 03c]: Activity score max 30500 BPS matches ACTIVITY_SCORE_MAX_BPS constant exactly -- no uncapped component
+- [Phase 03b]: openBurnieLootBox intentionally bypasses EV multiplier -- hardcoded 80% rate is always sub-neutral, no cap bypass
+- [Phase 03b]: Boon fallback DEITY_BOON_ACTIVITY_50 (line 1269) confirmed unreachable dead code via weight consistency proof across all 16 flag combinations
+- [Phase 03b]: BURNIE low-path actual range is 58.08-129.63% (not 58-134% as documented) -- Informational documentation discrepancy
+- [Phase 03a]: Level 50 BAF 25% bonus is one-time only (not every 50th level) -- classified as design intent
+- [Phase 03a]: DOS-01 PASS for EndgameModule: all loops bounded (106 BAF winners max, 100 ticket range)
+- [Phase 03a]: Dual _addClaimableEth implementations diverge in claimablePool management but both correct -- maintenance risk documented
+- [Phase 03b]: GO-F01 MEDIUM: double refund possible via refundDeityPass + handleGameOverDrain at level 0
+- [Phase 03b]: deityPassOwners bounded by symbolId<32 (max 32), not DEITY_PASS_MAX_TOTAL=24
+- [Phase 03b]: MATH-05 terminal settlement: PASS conditional on GO-F01 assessment
 
 ### Pending Todos
 
@@ -134,5 +146,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03c-04-PLAN.md (DegeneretteModule and MintStreakUtils audit)
+Stopped at: Completed 03b-01-PLAN.md (LootboxModule VRF derivation and EV multiplier audit)
 Resume file: None
