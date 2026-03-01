@@ -172,7 +172,7 @@ Plans:
   3. All delegatecall module entry points are confirmed unreachable via direct external calls — only accessible through DegenerusGame's delegatecall dispatch
   4. Every `_resolvePlayer()` call site is audited — value flows to `player` not `msg.sender` in all cases, or the exception is documented
   5. `operatorApprovals` delegation is confirmed non-escalating — operator cannot exceed player permissions, revocation takes immediate effect
-**Plans**: TBD
+**Plans:** 7 plans
 
 Plans:
 - [ ] 06-01: Run Slither `vars-and-auth` printer on all 22 contracts; triage all findings against expected privilege model
@@ -218,5 +218,5 @@ Note: Phase 3a, 3b, and 3c all depend on Phase 2 and can be partially paralleliz
 | 3c. Supporting Mechanics Modules | 6/6 | Complete | 2026-03-01 |
 | 4. ETH and Token Accounting Integrity | 0/9 | Planned | - |
 | 5. Economic Attack Surface | 0/7 | Planned | - |
-| 6. Access Control and Privilege Model | 0/7 | Not started | - |
+| 6. Access Control and Privilege Model | 0/7 | Planned | - |
 | 7. Cross-Contract Integration Synthesis | 0/6 | Not started | - |

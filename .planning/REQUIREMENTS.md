@@ -54,7 +54,7 @@ Requirements for the security audit. Each maps to roadmap phases.
 ### Access Control
 
 - [ ] **AUTH-01**: All admin-only functions (`msg.sender == CREATOR`) are correctly gated — no privilege escalation path exists
-- [ ] **AUTH-02**: VRF coordinator callback (`rawFulfillRandomWords`) is restricted to the coordinator address only
+- [x] **AUTH-02**: VRF coordinator callback (`rawFulfillRandomWords`) is restricted to the coordinator address only
 - [ ] **AUTH-03**: Module-only entry points cannot be called directly — only reachable via DegenerusGame delegatecall
 - [ ] **AUTH-04**: `operatorApprovals` delegation cannot grant more permissions than the player has — revocation is immediate
 - [ ] **AUTH-05**: `_resolvePlayer()` correctly routes value flows to `player` not `msg.sender` across all call sites
@@ -179,7 +179,7 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | ECON-06 | Phase 5 | Complete |
 | ECON-07 | Phase 5 | Complete |
 | AUTH-01 | Phase 6 | Pending |
-| AUTH-02 | Phase 6 | Pending |
+| AUTH-02 | Phase 6 | Complete |
 | AUTH-03 | Phase 6 | Pending |
 | AUTH-04 | Phase 6 | Pending |
 | AUTH-05 | Phase 6 | Pending |
