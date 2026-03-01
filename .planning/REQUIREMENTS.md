@@ -95,9 +95,9 @@ Requirements for the security audit. Each maps to roadmap phases.
 
 ### Game State Machine
 
-- [ ] **FSM-01**: FSM transitions PURCHASE ↔ JACKPOT → gameOver are complete — no illegal transitions possible
+- [x] **FSM-01**: FSM transitions PURCHASE ↔ JACKPOT → gameOver are complete — no illegal transitions possible
 - [x] **FSM-02**: No game state exists that cannot be exited — all stuck states have recovery paths
-- [ ] **FSM-03**: Multi-step game-over sequence (advanceGame→VRF→fulfill→advanceGame→gameOver) correctly handles all intermediate states
+- [x] **FSM-03**: Multi-step game-over sequence (advanceGame→VRF→fulfill→advanceGame→gameOver) correctly handles all intermediate states
 
 ## v2 Requirements
 
@@ -143,9 +143,9 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | RNG-08 | Phase 2 | Complete |
 | RNG-09 | Phase 2 | Complete |
 | RNG-10 | Phase 2 | Complete |
-| FSM-01 | Phase 2 | Pending |
+| FSM-01 | Phase 2 | Complete |
 | FSM-02 | Phase 2 | Complete |
-| FSM-03 | Phase 2 | Pending |
+| FSM-03 | Phase 2 | Complete |
 | MATH-01 | Phase 3a | Pending |
 | MATH-02 | Phase 3a | Pending |
 | MATH-03 | Phase 3a | Pending |
