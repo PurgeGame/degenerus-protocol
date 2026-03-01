@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Phase: 2 of 9 (Core State Machine and VRF Lifecycle)
-Plan: 5 of 6 in current phase (02-01, 02-02, 02-03, 02-05, 02-06 complete)
+Plan: 6 of 6 in current phase (02-01, 02-02, 02-03, 02-04, 02-05, 02-06 complete)
 Status: Executing
-Last activity: 2026-03-01 — Completed 02-02 VRF callback gas and revert safety audit (RNG-02/RNG-03 PASS)
+Last activity: 2026-03-01 — Completed 02-04 FSM transition graph audit (FSM-01/FSM-03 PASS)
 
 Progress: [██░░░░░░░░] 19%
 
@@ -74,6 +74,7 @@ Recent decisions affecting current work:
 - [Phase 02]: Non-standard xorshift constants (7,9,8) accepted as safe; VRF seed quality dominates PRNG properties for <30 iterations
 - [Phase 02]: FSM-02 rated PASS conditional due to two theoretical edge cases at intersection of multiple simultaneous failures
 - [Phase 02]: RNG-06 rated unconditional PASS -- liveness timeout serves as ultimate escape valve clearing rngLockedFlag even with ADMIN key loss
+- [Phase 02]: Intra-transaction VRF-before-lock ordering classified as Informational (not exploitable with async Chainlink VRF V2.5)
 
 ### Pending Todos
 
