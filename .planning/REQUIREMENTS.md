@@ -72,10 +72,10 @@ Requirements for the security audit. Each maps to roadmap phases.
 
 ### Input Validation
 
-- [ ] **INPT-01**: Ticket quantity bounds prevent overflow and enforce minimum/maximum constraints
-- [ ] **INPT-02**: Lootbox amount limits are enforced — no quantity creates gas exhaustion or unbounded iteration
-- [ ] **INPT-03**: MintPaymentKind enum bounds are validated — invalid enum values cannot corrupt state
-- [ ] **INPT-04**: Zero-address guards are present on all external-facing functions that accept addresses
+- [x] **INPT-01**: Ticket quantity bounds prevent overflow and enforce minimum/maximum constraints
+- [x] **INPT-02**: Lootbox amount limits are enforced — no quantity creates gas exhaustion or unbounded iteration
+- [x] **INPT-03**: MintPaymentKind enum bounds are validated — invalid enum values cannot corrupt state
+- [x] **INPT-04**: Zero-address guards are present on all external-facing functions that accept addresses
 
 ### Denial of Service
 
@@ -150,10 +150,10 @@ Deferred to future audit engagement. Tracked but not in current roadmap.
 | MATH-02 | Phase 3a | Complete |
 | MATH-03 | Phase 3a | Pending |
 | MATH-04 | Phase 3a | Complete |
-| INPT-01 | Phase 3a | Pending |
-| INPT-02 | Phase 3a | Pending |
-| INPT-03 | Phase 3a | Pending |
-| INPT-04 | Phase 3a | Pending |
+| INPT-01 | Phase 3a | Complete |
+| INPT-02 | Phase 3a | Complete |
+| INPT-03 | Phase 3a | Complete |
+| INPT-04 | Phase 3a | Complete |
 | DOS-01 | Phase 3a | Pending |
 | MATH-05 | Phase 3b | Pending |
 | MATH-06 | Phase 3b | Pending |
