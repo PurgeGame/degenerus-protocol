@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T07:07:21.666Z"
+last_updated: "2026-03-01T07:07:30.996Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 29
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 # Project State
@@ -95,6 +95,9 @@ Recent decisions affecting current work:
 - [Phase 03c]: Lootbox boon stale timestamps are deliberate gas optimization; _decEffectiveAmount L565 guard is dead code (defense-in-depth); Decimator bucket validation externalized to coin contract
 - [Phase 03b]: DOS-03 PASS: All trait-related iteration bounded by explicit caps; worst-case ~13M gas within 30M block limit
 - [Phase 03b]: deityPassOwners actual cap is 32 (symbol ID uniqueness), not 24 (DEITY_PASS_MAX_TOTAL is boon-eligibility only); Informational
+- [Phase 03c]: PRICING-F01: lazyPassBoonDiscountBps is dead code (never written non-zero anywhere in codebase)
+- [Phase 03c]: All pricing formulas (whale/lazy/deity) arithmetically safe -- max boon discount 5000 BPS, no overflow at boundary values
+- [Phase 03a]: MATH-01 PASS: Ticket cost formula max product ~1.03e27, 50 orders below uint256 max; lootbox BPS split remainder provably non-negative
 
 ### Pending Todos
 
