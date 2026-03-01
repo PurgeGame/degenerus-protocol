@@ -69,16 +69,16 @@ Plans:
   3. Ticket quantity bounds, lootbox amount limits, and MintPaymentKind enum bounds are confirmed enforced or documented as bypass paths
   4. A Slither + Aderyn scan of all three modules is completed with every HIGH/MEDIUM finding triaged (confirmed, false positive, or new finding)
   5. No unbounded iteration is found in MintModule, JackpotModule, or EndgameModule that could exhaust the block gas limit
-**Plans**: TBD
+**Plans:** 7 plans
 
 Plans:
-- [ ] 03a-01: Audit MintModule — ETH inflow paths, purchase cost formula, BPS splits, payment kind routing
-- [ ] 03a-02: Audit JackpotModule — ETH outflow paths, prize pool credit, 90/10 split implementation
-- [ ] 03a-03: Audit EndgameModule — level transition guards, phase boundary conditions, state mutation safety
-- [ ] 03a-04: Verify PriceLookupLib ticket escalation formula (monotonicity, overflow at max level)
-- [ ] 03a-05: Verify deity pass T(n) triangular formula at n=100 and n=1000; run Halmos bounded check
-- [ ] 03a-06: Input validation sweep across all three modules — quantity bounds, enum bounds, zero-address guards
-- [ ] 03a-07: Run Slither + Aderyn on all three modules; triage all HIGH/MEDIUM detections
+- [ ] 03a-01-PLAN.md — Audit MintModule: ETH inflow paths, purchase cost formula, BPS splits, payment kind routing
+- [ ] 03a-02-PLAN.md — Audit JackpotModule: ETH outflow paths, prize pool credit, 90/10 split, loop bounds
+- [ ] 03a-03-PLAN.md — Audit EndgameModule: level transition guards, phase boundary conditions, state mutation safety
+- [ ] 03a-04-PLAN.md — Verify PriceLookupLib ticket escalation (saw-tooth monotonicity, overflow) and lazy pass summation
+- [ ] 03a-05-PLAN.md — Verify deity pass T(n) triangular formula at n=100 and n=1000; verify k bound
+- [ ] 03a-06-PLAN.md — Input validation sweep across all three modules: quantity bounds, enum bounds, zero-address guards
+- [ ] 03a-07-PLAN.md — Run Slither on modules; triage all HIGH/MEDIUM detections; attempt Aderyn
 
 ### Phase 3b: VRF-Dependent Modules
 **Goal**: LootboxModule and GameOverModule are audited for correct VRF word usage, lootbox EV formula integrity, and terminal settlement correctness
@@ -213,7 +213,7 @@ Note: Phase 3a, 3b, and 3c all depend on Phase 2 and can be partially paralleliz
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation Verification | 4/4 | Complete | 2026-02-28 |
 | 2. Core State Machine and VRF Lifecycle | 6/6 | Complete | 2026-03-01 |
-| 3a. Core ETH Flow Modules | 0/7 | Not started | - |
+| 3a. Core ETH Flow Modules | 0/7 | Planned | - |
 | 3b. VRF-Dependent Modules | 0/6 | Not started | - |
 | 3c. Supporting Mechanics Modules | 0/6 | Not started | - |
 | 4. ETH and Token Accounting Integrity | 0/9 | Not started | - |
