@@ -117,6 +117,9 @@ Recent decisions affecting current work:
 - [Phase 03a]: DOS-01 PASS: All 32 loops in JackpotModule bounded by explicit constants or gas budgets
 - [Phase 03a]: consolidatePrizePools verified wei-exact via subtraction-remainder conservation proof
 - [Phase 03a]: JackpotModule vs EndgameModule _addClaimableEth functionally equivalent despite different claimablePool update patterns
+- [Phase 03c]: Hero boost integer rounding (max 0.005% deviation) rated Informational -- always rounds against player, not exploitable
+- [Phase 03c]: ETH pool cap per-spin enforcement means worst-case 10-spin extraction is 65% of pool (geometric decay), not 100%
+- [Phase 03c]: Activity score max 30500 BPS matches ACTIVITY_SCORE_MAX_BPS constant exactly -- no uncapped component
 
 ### Pending Todos
 
@@ -131,5 +134,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03b-03-PLAN.md (Lootbox EV model - MATH-05 PASS)
+Stopped at: Completed 03c-04-PLAN.md (DegeneretteModule and MintStreakUtils audit)
 Resume file: None
