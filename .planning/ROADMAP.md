@@ -151,16 +151,16 @@ Plans:
   3. MEV/block proposer attack surface on ticket purchase price escalation at phase boundaries is analyzed — any profitable sandwich or reorder strategy is documented with specific transaction sequences
   4. Whale bundle plus lootbox purchase EV at levels 0-3 is computed — any combination that extracts more than deposited is documented as a finding
   5. AfKing mode transition windows are confirmed free from double-spend or double-credit opportunities
-**Plans**: TBD
+**Plans:** 7 plans
 
 Plans:
-- [ ] 05-01: Build Sybil EV model — prize pool mechanics, group ticket fraction, expected payout vs deposit
-- [ ] 05-02: Enumerate activity score inflation vectors; compute cost-per-EV-unit for quest streaks and affiliate self-referral
-- [ ] 05-03: Model affiliate referral extraction — circular structures, referrer+referee combined EV vs deposited
-- [ ] 05-04: Analyze MEV attack surface on phase boundaries — sandwich attacks on ticket purchase escalation
-- [ ] 05-05: Model block proposer `advanceGame` timing manipulation — level transition control and outcome influence
-- [ ] 05-06: Compute whale bundle + lootbox EV at levels 0-3 across all bundle sizes and activity score tiers
-- [ ] 05-07: Audit AfKing mode transitions — verify no double-spend or double-credit window exists
+- [ ] 05-01-PLAN.md — Build Sybil EV model: prize pool mechanics, group ticket fraction, expected payout vs deposit
+- [ ] 05-02-PLAN.md — Enumerate activity score inflation vectors; compute cost-per-EV-unit for quest streaks and affiliate self-referral
+- [ ] 05-03-PLAN.md — Model affiliate referral extraction: circular structures, referrer+referee combined EV vs deposited (BURNIE denomination)
+- [ ] 05-04-PLAN.md — Analyze MEV attack surface on phase boundaries: sandwich attacks on ticket purchase escalation
+- [ ] 05-05-PLAN.md — Model block proposer advanceGame timing manipulation: level transition control and outcome influence
+- [ ] 05-06-PLAN.md — Quantify whale bundle economic impact at arbitrary levels (Phase 3c F01 HIGH finding)
+- [ ] 05-07-PLAN.md — Audit AfKing mode transitions: verify no double-spend or double-credit window exists
 
 ### Phase 6: Access Control and Privilege Model
 **Goal**: Complete authorization matrix for all 22 contracts produced with all privileged entry points confirmed correctly gated and no escalation paths identified
@@ -217,6 +217,6 @@ Note: Phase 3a, 3b, and 3c all depend on Phase 2 and can be partially paralleliz
 | 3b. VRF-Dependent Modules | 6/6 | Complete | 2026-03-01 |
 | 3c. Supporting Mechanics Modules | 6/6 | Complete | 2026-03-01 |
 | 4. ETH and Token Accounting Integrity | 0/9 | Planned | - |
-| 5. Economic Attack Surface | 0/7 | Not started | - |
+| 5. Economic Attack Surface | 0/7 | Planned | - |
 | 6. Access Control and Privilege Model | 0/7 | Not started | - |
 | 7. Cross-Contract Integration Synthesis | 0/6 | Not started | - |
