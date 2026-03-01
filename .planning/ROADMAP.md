@@ -175,7 +175,7 @@ Plans:
 **Plans:** 7 plans
 
 Plans:
-- [ ] 06-01: Run Slither `vars-and-auth` printer on all 22 contracts; triage all findings against expected privilege model
+- [x] 06-01: Run Slither `vars-and-auth` printer on all 22 contracts; triage all findings against expected privilege model
 - [ ] 06-02: Audit all `msg.sender == CREATOR` guards — enumerate every admin-only function; verify no bypass exists
 - [ ] 06-03: Confirm `rawFulfillRandomWords` VRF coordinator check — trace caller validation in DegenerusGame and AdvanceModule
 - [ ] 06-04: Audit module entry point accessibility — verify all 10 modules are unreachable via direct external calls
