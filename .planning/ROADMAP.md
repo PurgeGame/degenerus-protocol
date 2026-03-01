@@ -193,15 +193,14 @@ Plans:
   3. Cross-function reentrancy via ETH callback from `claimWinnings` is traced — confirmed it cannot reenter `purchase` or other state-changing functions
   4. Constructor-time cross-contract call ordering is confirmed correct relative to the documented deploy sequence — no constructor references a contract not yet deployed at that nonce offset
   5. A final findings report exists with all findings severity-rated (Critical/High/Medium/Low/Informational) and with remediation guidance for each finding
-**Plans**: TBD
+**Plans:** 5 plans
 
 Plans:
-- [ ] 07-01: Audit all delegatecall sites in DegenerusGame — confirm return value checking on all 10 module dispatches
-- [ ] 07-02: Audit stETH.submit(), stETH.transfer() call sites — return value checking; Lido callback reentrancy safety
-- [ ] 07-03: Audit LINK.transferAndCall() and BurnieCoin.burnCoin() call sites — return value checking and reentrancy
-- [ ] 07-04: Trace cross-function reentrancy from `claimWinnings` ETH callback — test reentry into purchase, advanceGame, and other state-changing functions
-- [ ] 07-05: Audit constructor-time cross-contract calls against the deploy sequence nonce offsets
-- [ ] 07-06: Synthesize all phase findings — deduplicate, rate severity, write remediation guidance; produce final prioritized findings report
+- [ ] 07-01-PLAN.md — Audit all delegatecall return values across ~30 call sites in DegenerusGame (XCON-01)
+- [ ] 07-02-PLAN.md — Audit stETH/LINK/BurnieCoin external call return values and callback safety (XCON-02, XCON-04)
+- [ ] 07-03-PLAN.md — Cross-function reentrancy confirmation extending Phase 4-04; stETH/LINK callback safety (XCON-03, XCON-05, XCON-06)
+- [ ] 07-04-PLAN.md — Constructor-time cross-contract call ordering vs DEPLOY_ORDER (XCON-07)
+- [ ] 07-05-PLAN.md — FINAL FINDINGS REPORT: synthesize all Phases 1-7 findings into prioritized deliverable (XCON-05, XCON-06, XCON-07)
 
 ## Progress
 
@@ -219,4 +218,4 @@ Note: Phase 3a, 3b, and 3c all depend on Phase 2 and can be partially paralleliz
 | 4. ETH and Token Accounting Integrity | 0/9 | Planned | - |
 | 5. Economic Attack Surface | 0/7 | Planned | - |
 | 6. Access Control and Privilege Model | 0/7 | Planned | - |
-| 7. Cross-Contract Integration Synthesis | 0/6 | Not started | - |
+| 7. Cross-Contract Integration Synthesis | 0/5 | Not started | - |
