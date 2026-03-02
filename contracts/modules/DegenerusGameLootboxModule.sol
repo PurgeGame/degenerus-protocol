@@ -204,6 +204,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS = 1000;
     uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS = 2500;
     uint16 private constant LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS = 5000;
+    /// @dev Lazy pass boon discount tiers (10%, 25%, 50%).
+    uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS = 1000;
+    uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS = 2500;
+    uint16 private constant LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS = 5000;
     /// @dev Tier identifier for 10% deity pass discount boon (1000 bps)
     uint8 private constant DEITY_PASS_BOON_TIER_10 = 1;
     /// @dev Tier identifier for 25% deity pass discount boon (2500 bps)
@@ -338,7 +342,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint8 private constant BOON_CAT_PURCHASE = 4;
     uint8 private constant BOON_CAT_DECIMATOR = 6;
     uint8 private constant BOON_CAT_WHALE = 7;
-    uint8 private constant BOON_CAT_LAZY = 8;
     uint8 private constant BOON_CAT_ACTIVITY = 9;
     uint8 private constant BOON_CAT_DEITY_PASS = 10;
     uint8 private constant BOON_CAT_WHALE_PASS = 11;
@@ -392,8 +395,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint8 private constant DEITY_BOON_DEITY_PASS_50 = 27;
     /// @dev Boon type: whale pass award
     uint8 private constant DEITY_BOON_WHALE_PASS = 28;
-    /// @dev Boon type: lazy pass award
-    uint8 private constant DEITY_BOON_LAZY_PASS = 29;
+    /// @dev Boon type: 10% lazy pass discount
+    uint8 private constant DEITY_BOON_LAZY_PASS_10 = 29;
+    /// @dev Boon type: 25% lazy pass discount
+    uint8 private constant DEITY_BOON_LAZY_PASS_25 = 30;
+    /// @dev Boon type: 50% lazy pass discount
+    uint8 private constant DEITY_BOON_LAZY_PASS_50 = 31;
 
     // Deity boon weights (used for weighted random selection)
     /// @dev Weight for 5% coinflip boon
@@ -440,8 +447,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant DEITY_BOON_WEIGHT_ACTIVITY_50 = 8;
     /// @dev Weight for whale pass award
     uint16 private constant DEITY_BOON_WEIGHT_WHALE_PASS = 8;
-    /// @dev Weight for lazy pass award
-    uint16 private constant DEITY_BOON_WEIGHT_LAZY_PASS = 40;
+    /// @dev Weight for 10% lazy pass discount boon
+    uint16 private constant DEITY_BOON_WEIGHT_LAZY_PASS_10 = 30;
+    /// @dev Weight for 25% lazy pass discount boon
+    uint16 private constant DEITY_BOON_WEIGHT_LAZY_PASS_25 = 8;
+    /// @dev Weight for 50% lazy pass discount boon
+    uint16 private constant DEITY_BOON_WEIGHT_LAZY_PASS_50 = 2;
     /// @dev Combined weight of deity pass discount boons (10% + 25% + 50%)
     uint16 private constant DEITY_BOON_WEIGHT_DEITY_PASS_ALL = 40;
     /// @dev Total weight sum when decimator boons are allowed
@@ -1194,8 +1205,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             weightedMax += DEITY_BOON_WEIGHT_WHALE_PASS * LOOTBOX_WHALE_PASS_PRICE;
         }
         if (allowLazyPass && lazyPassValue != 0) {
-            totalWeight += DEITY_BOON_WEIGHT_LAZY_PASS;
-            weightedMax += DEITY_BOON_WEIGHT_LAZY_PASS * lazyPassValue;
+            uint256 lpMax10 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS) / 10_000;
+            uint256 lpMax25 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS) / 10_000;
+            uint256 lpMax50 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS) / 10_000;
+            totalWeight += DEITY_BOON_WEIGHT_LAZY_PASS_10;
+            weightedMax += DEITY_BOON_WEIGHT_LAZY_PASS_10 * lpMax10;
+            totalWeight += DEITY_BOON_WEIGHT_LAZY_PASS_25;
+            weightedMax += DEITY_BOON_WEIGHT_LAZY_PASS_25 * lpMax25;
+            totalWeight += DEITY_BOON_WEIGHT_LAZY_PASS_50;
+            weightedMax += DEITY_BOON_WEIGHT_LAZY_PASS_50 * lpMax50;
         }
 
         if (totalWeight == 0) return (0, 0);
@@ -1262,8 +1280,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (roll < cursor) return DEITY_BOON_WHALE_PASS;
         }
         if (allowLazyPass) {
-            cursor += DEITY_BOON_WEIGHT_LAZY_PASS;
-            if (roll < cursor) return DEITY_BOON_LAZY_PASS;
+            cursor += DEITY_BOON_WEIGHT_LAZY_PASS_10;
+            if (roll < cursor) return DEITY_BOON_LAZY_PASS_10;
+            cursor += DEITY_BOON_WEIGHT_LAZY_PASS_25;
+            if (roll < cursor) return DEITY_BOON_LAZY_PASS_25;
+            cursor += DEITY_BOON_WEIGHT_LAZY_PASS_50;
+            if (roll < cursor) return DEITY_BOON_LAZY_PASS_50;
         }
         return DEITY_BOON_ACTIVITY_50;
     }
@@ -1280,7 +1302,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (decimatorBoostBps[player] != 0) return BOON_CAT_DECIMATOR;
         if (whaleBoonDay[player] != 0) return BOON_CAT_WHALE;
         if (lazyPassBoonDay[player] != 0 || lazyPassBoonDiscountBps[player] != 0) {
-            return BOON_CAT_LAZY;
+            return BOON_CAT_LAZY_PASS;
         }
         if (activityBoonPending[player] != 0) return BOON_CAT_ACTIVITY;
         if (deityPassBoonTier[player] != 0) return BOON_CAT_DEITY_PASS;
@@ -1308,7 +1330,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (boonType == DEITY_BOON_WHALE_PASS) {
             return BOON_CAT_WHALE_PASS;
         }
-        if (boonType == DEITY_BOON_LAZY_PASS) {
+        if (boonType == DEITY_BOON_LAZY_PASS_10 || boonType == DEITY_BOON_LAZY_PASS_25 || boonType == DEITY_BOON_LAZY_PASS_50) {
             return BOON_CAT_LAZY_PASS;
         }
         return BOON_CAT_DEITY_PASS;
@@ -1470,14 +1492,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             return;
         }
 
-        // Lazy pass (type 29)
-        if (boonType == DEITY_BOON_LAZY_PASS) {
-            uint24 passLevel = level + 1;
-            passLevel = passLevel + 1;
-            _activate10LevelPass(player, passLevel, 4);
-            if (!isDeity) {
-                emit LootBoxLazyPassAwarded(player, day, originalAmount, passLevel, true);
+        // Lazy pass discount boons (types 29, 30, 31)
+        if (boonType == DEITY_BOON_LAZY_PASS_10 || boonType == DEITY_BOON_LAZY_PASS_25 || boonType == DEITY_BOON_LAZY_PASS_50) {
+            uint16 bps = boonType == DEITY_BOON_LAZY_PASS_50
+                ? LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS
+                : (boonType == DEITY_BOON_LAZY_PASS_25 ? LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS : LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS);
+            if (isDeity || bps > lazyPassBoonDiscountBps[player]) {
+                lazyPassBoonDiscountBps[player] = bps;
             }
+            lazyPassBoonDay[player] = isDeity ? day : currentDay;
+            deityLazyPassBoonDay[player] = isDeity ? day : uint48(0);
+            if (!isDeity) emit LootBoxReward(player, day, 11, originalAmount, bps);
         }
     }
 
