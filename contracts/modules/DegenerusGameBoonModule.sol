@@ -237,17 +237,19 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             whaleDay = 0;
         }
         uint48 lazyDay = lazyPassBoonDay[player];
-        uint16 lazyDiscount = lazyPassBoonDiscountBps[player];
-        if (lazyDay != 0 && currentDay > lazyDay + 4) {
-            lazyPassBoonDay[player] = 0;
-            if (lazyDiscount != 0) {
+        if (lazyDay != 0) {
+            uint48 deityDay = deityLazyPassBoonDay[player];
+            if (deityDay != 0 && deityDay != currentDay) {
+                lazyPassBoonDay[player] = 0;
                 lazyPassBoonDiscountBps[player] = 0;
+                deityLazyPassBoonDay[player] = 0;
+                lazyDay = 0;
+            } else if (currentDay > lazyDay + 4) {
+                lazyPassBoonDay[player] = 0;
+                lazyPassBoonDiscountBps[player] = 0;
+                deityLazyPassBoonDay[player] = 0;
+                lazyDay = 0;
             }
-            lazyDay = 0;
-            lazyDiscount = 0;
-        } else if (lazyDay == 0 && lazyDiscount != 0) {
-            lazyPassBoonDiscountBps[player] = 0;
-            lazyDiscount = 0;
         }
 
         uint8 deityTier = deityPassBoonTier[player];

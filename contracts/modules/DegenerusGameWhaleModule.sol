@@ -116,7 +116,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     /// @dev Lazy pass: share of purchase value awarded as lootbox after presale (10%).
     uint16 private constant LAZY_PASS_LOOTBOX_POST_BPS = 1000;
 
-    /// @dev Lazy pass: default discount for legacy boons without stored tier (10%).
+    /// @dev Lazy pass: default discount for boons without stored tier (10%).
     uint16 private constant LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS = 1000;
 
     /// @dev Lazy pass: split to future pool (matches standard purchase split).
@@ -323,16 +323,22 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         uint48 boonDay = lazyPassBoonDay[buyer];
         if (boonDay != 0) {
             uint48 currentDay = _simulatedDayIndex();
-            if (currentDay <= boonDay + 4) {
+            uint48 deityDay = deityLazyPassBoonDay[buyer];
+            if (deityDay != 0 && deityDay != currentDay) {
+                lazyPassBoonDay[buyer] = 0;
+                lazyPassBoonDiscountBps[buyer] = 0;
+                deityLazyPassBoonDay[buyer] = 0;
+            } else if (currentDay <= boonDay + 4) {
                 hasValidBoon = true;
             } else {
                 lazyPassBoonDay[buyer] = 0;
                 lazyPassBoonDiscountBps[buyer] = 0;
+                deityLazyPassBoonDay[buyer] = 0;
             }
         } else if (boonDiscountBps != 0) {
             lazyPassBoonDiscountBps[buyer] = 0;
         }
-        if (currentLevel > 3 && currentLevel % 10 != 9 && !hasValidBoon) revert E();
+        if (currentLevel > 2 && currentLevel % 10 != 9 && !hasValidBoon) revert E();
 
         // Cap 1: disallow if player has deity pass or active frozen pass
         if (deityPassCount[buyer] != 0) revert E();
@@ -348,32 +354,49 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         uint256 baseCost = _lazyPassCost(startLevel);
         if (baseCost == 0) revert E();
 
-        // Levels 0-2: flat 0.24 ETH, balance converted to bonus tickets at startLevel
+        // Levels 0-2: flat 0.24 ETH worth of benefits, balance → bonus tickets
+        // Boon at 0-2: same benefits, discounted payment
+        // Levels 3+: baseCost, boon applies discount to baseCost
+        // benefitValue = undiscounted value used for earlybird/lootbox/pool splits
         uint256 totalPrice;
+        uint256 benefitValue;
         uint32 bonusTickets;
-        if (currentLevel <= 2 && !hasValidBoon) {
-            totalPrice = 0.24 ether;
-            uint256 balance = totalPrice - baseCost;
+        if (currentLevel <= 2) {
+            benefitValue = 0.24 ether;
+            uint256 balance = benefitValue - baseCost;
             if (balance != 0) {
                 uint256 ticketPrice = PriceLookupLib.priceForLevel(startLevel);
                 bonusTickets = uint32((balance * 4) / ticketPrice);
             }
+            if (hasValidBoon) {
+                if (boonDiscountBps == 0) {
+                    boonDiscountBps = LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS;
+                }
+                totalPrice = (benefitValue * (10_000 - boonDiscountBps)) / 10_000;
+            } else {
+                totalPrice = benefitValue;
+            }
         } else {
-            totalPrice = baseCost;
+            benefitValue = baseCost;
             if (hasValidBoon) {
                 if (boonDiscountBps == 0) {
                     boonDiscountBps = LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS;
                 }
                 totalPrice =
-                    (totalPrice * (10_000 - boonDiscountBps)) /
+                    (baseCost * (10_000 - boonDiscountBps)) /
                     10_000;
-                lazyPassBoonDay[buyer] = 0;
-                lazyPassBoonDiscountBps[buyer] = 0;
+            } else {
+                totalPrice = baseCost;
             }
+        }
+        if (hasValidBoon) {
+            lazyPassBoonDay[buyer] = 0;
+            lazyPassBoonDiscountBps[buyer] = 0;
+            deityLazyPassBoonDay[buyer] = 0;
         }
         if (msg.value != totalPrice) revert E();
 
-        _awardEarlybirdDgnrs(buyer, totalPrice, startLevel);
+        _awardEarlybirdDgnrs(buyer, benefitValue, startLevel);
 
         _activate10LevelPass(
             buyer,
@@ -386,7 +409,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             _queueTickets(buyer, startLevel, bonusTickets);
         }
 
-        // Split payment like standard purchases (future + next)
+        // Split actual payment into pools (future + next)
         uint256 futureShare = (totalPrice * LAZY_PASS_TO_FUTURE_BPS) / 10_000;
         if (futureShare != 0) {
             futurePrizePool += futureShare;
@@ -400,12 +423,10 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         }
 
         // Award lootbox as a percentage of pass value (presale 20%, post 10%)
-        uint16 lootboxBps = hasValidBoon
-            ? LAZY_PASS_LOOTBOX_POST_BPS
-            : (lootboxPresaleActive
-                ? LAZY_PASS_LOOTBOX_PRESALE_BPS
-                : LAZY_PASS_LOOTBOX_POST_BPS);
-        uint256 lootboxAmount = (totalPrice * lootboxBps) / 10_000;
+        uint16 lootboxBps = lootboxPresaleActive
+            ? LAZY_PASS_LOOTBOX_PRESALE_BPS
+            : LAZY_PASS_LOOTBOX_POST_BPS;
+        uint256 lootboxAmount = (benefitValue * lootboxBps) / 10_000;
         if (lootboxAmount == 0) return;
 
         _recordLootboxEntry(buyer, lootboxAmount, currentLevel + 1, mintPacked_[buyer]);
