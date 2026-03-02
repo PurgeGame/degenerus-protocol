@@ -956,36 +956,34 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint16));
     }
 
-    /// @notice Get the current day's deity boon slots and usage state.
+    /// @notice Get raw deity boon state for off-chain or viewer contract computation.
     /// @param deity The deity address to query.
-    /// @return slots Array of 3 boon slot types assigned for today.
-    /// @return usedMask Bitmask of slots already used (bit i = slot i used).
+    /// @return dailySeed RNG seed for today's boon generation.
     /// @return day Current day index.
-    function deityBoonSlots(
+    /// @return usedMask Bitmask of slots already used (bit i = slot i used).
+    /// @return decimatorOpen Whether decimator boons are available.
+    /// @return deityPassAvailable Whether deity pass boons can be generated.
+    function deityBoonData(
         address deity
     )
         external
         view
-        returns (uint8[3] memory slots, uint8 usedMask, uint48 day)
+        returns (
+            uint256 dailySeed,
+            uint48 day,
+            uint8 usedMask,
+            bool decimatorOpen,
+            bool deityPassAvailable
+        )
     {
-        // Access storage directly since deity boon data is in DegenerusGameStorage
         day = _simulatedDayIndex();
-        if (deityBoonDay[deity] != day) {
-            // No slots assigned today - return empty
-            return (slots, 0, day);
-        }
-        usedMask = deityBoonUsedMask[deity];
-        // Slots would need to be computed from seed - delegate for consistency
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_LOOTBOX_MODULE
-            .staticcall(
-                abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.deityBoonSlots.selector,
-                    deity
-                )
-            );
-        if (!ok) revert E();
-        return abi.decode(data, (uint8[3], uint8, uint48));
+        usedMask = deityBoonDay[deity] == day ? deityBoonUsedMask[deity] : 0;
+        decimatorOpen = decWindowOpen;
+        deityPassAvailable = deityPassOwners.length < 24;
+        uint256 rngWord = rngWordByDay[day];
+        if (rngWord == 0) rngWord = rngWordCurrent;
+        if (rngWord == 0) rngWord = uint256(keccak256(abi.encodePacked(day, address(this))));
+        dailySeed = rngWord;
     }
 
     /// @notice Issue a deity boon to a recipient.
