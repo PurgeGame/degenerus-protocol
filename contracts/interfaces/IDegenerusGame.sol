@@ -132,14 +132,17 @@ interface IDegenerusGame {
     /// @return boostBps Boost amount in basis points.
     function consumePurchaseBoost(address player) external returns (uint16 boostBps);
 
-    /// @notice Get the current day's deity boon slots and usage state.
-    /// @param deity Deity address to query.
-    /// @return slots The 5 boon types for the current day.
-    /// @return usedMask Bitmask of used slots (bit i set = slot i used).
-    /// @return day The current day index.
-    function deityBoonSlots(
+    /// @notice Get raw deity boon state for off-chain or viewer contract computation.
+    /// @param deity The deity address to query.
+    function deityBoonData(
         address deity
-    ) external view returns (uint8[3] memory slots, uint8 usedMask, uint48 day);
+    ) external view returns (
+        uint256 dailySeed,
+        uint48 day,
+        uint8 usedMask,
+        bool decimatorOpen,
+        bool deityPassAvailable
+    );
 
     /// @notice Issue a deity boon to a recipient.
     /// @param deity Deity issuing the boon (address(0) = msg.sender).
