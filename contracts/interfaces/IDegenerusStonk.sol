@@ -80,10 +80,6 @@ interface IDegenerusStonk {
     /// @return Amount of ETH in reserves
     function ethReserve() external view returns (uint256);
 
-    /// @notice Get the stETH reserve backing DGNRS
-    /// @return Amount of stETH in reserves
-    function stethReserve() external view returns (uint256);
-
     /// @notice Get the BURNIE reserve backing DGNRS
     /// @dev Includes claimable coinflip backing
     /// @return Amount of BURNIE in reserves
