@@ -132,8 +132,6 @@ contract DegenerusAffiliate {
     /// @notice Thrown when caller is not in the authorized set (coin, game, lootbox).
     error OnlyAuthorized();
 
-    /// @notice Thrown when caller is not the deployment creator.
-    error OnlyCreator();
 
     /// @notice Thrown when attempting to create an affiliate code with zero or reserved value.
     error Zero();
@@ -202,7 +200,6 @@ contract DegenerusAffiliate {
     uint16 private constant REWARD_SCALE_RECYCLED_BPS = 500;
     uint16 private constant BPS_DENOMINATOR = 10_000;
     bytes32 private constant AFFILIATE_ROLL_TAG = keccak256("affiliate-payout-roll-v1");
-    uint256 private constant PACKED_REFERRAL_SIZE = 52;
 
     /// @notice Sentinel value indicating a player's referral slot is permanently locked.
     /// @dev Set when a player makes an invalid referral attempt (self-referral, unknown code)
@@ -400,53 +397,6 @@ contract DegenerusAffiliate {
         if (existing != bytes32(0) && !_vaultReferralMutable(existing)) revert Insufficient();
         _setReferralCode(msg.sender, code_);
         emit Affiliate(0, code_, msg.sender); // 0 = player referred
-    }
-
-    /**
-     * @notice Batch-seed referrals for pre-known players.
-     * @dev Access: ContractAddresses.CREATOR only.
-     *      Useful to seed referrals in chunks after deployment when list size is large.
-     * @param players Players to assign.
-     * @param codes Referral codes for each player.
-     */
-    function bootstrapReferrals(
-        address[] calldata players,
-        bytes32[] calldata codes
-    ) external {
-        if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
-        if (players.length != codes.length) revert Insufficient();
-        uint256 len = players.length;
-        for (uint256 i; i < len; ) {
-            _bootstrapReferral(players[i], codes[i]);
-            unchecked {
-                ++i;
-            }
-        }
-    }
-
-    /**
-     * @notice Gas-optimized batch referral seeding from packed calldata.
-     * @dev Access: ContractAddresses.CREATOR only.
-     *      Each entry is 52 bytes: [20-byte player][32-byte referral code].
-     * @param packed Concatenated referral entries.
-     */
-    function bootstrapReferralsPacked(bytes calldata packed) external {
-        if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
-        uint256 len = packed.length;
-        if (len % PACKED_REFERRAL_SIZE != 0) revert Insufficient();
-
-        for (uint256 offset; offset < len; ) {
-            address player;
-            bytes32 code;
-            assembly {
-                player := shr(96, calldataload(add(packed.offset, offset)))
-                code := calldataload(add(add(packed.offset, offset), 20))
-            }
-            _bootstrapReferral(player, code);
-            unchecked {
-                offset += PACKED_REFERRAL_SIZE;
-            }
-        }
     }
 
     /**
@@ -821,7 +771,7 @@ contract DegenerusAffiliate {
         emit Affiliate(1, code_, owner); // 1 = code created
     }
 
-    /// @dev Shared referral assignment logic for constructor bootstrapping and creator batches.
+    /// @dev Referral assignment logic for constructor bootstrapping.
     function _bootstrapReferral(address player, bytes32 code_) private {
         if (player == address(0)) revert Zero();
         AffiliateCodeInfo storage info = affiliateCode[code_];
