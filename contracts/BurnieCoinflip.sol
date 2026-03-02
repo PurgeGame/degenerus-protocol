@@ -254,7 +254,7 @@ contract BurnieCoinflip {
         if (amount != 0) {
             if (amount < MIN) revert AmountLTMin();
             // Prevent deposits during critical RNG resolution phase
-            if (_coinflipLockedDuringLevelJackpot()) revert CoinflipLocked();
+            if (_coinflipLockedDuringTransition()) revert CoinflipLocked();
         }
 
         uint256 mintable = _claimCoinflipsInternal(caller, false);
@@ -1011,20 +1011,22 @@ contract BurnieCoinflip {
       |                    INTERNAL HELPER FUNCTIONS                         |
       +======================================================================+*/
 
-    /// @dev Check if coinflip deposits are locked during level jackpot resolution.
-    function _coinflipLockedDuringLevelJackpot()
+    /// @dev Check if coinflip deposits are locked during BAF resolution levels.
+    ///      Only blocks at levels where BAF jackpot fires (every 10th) to prevent
+    ///      front-running the BAF leaderboard between VRF request and fulfillment.
+    function _coinflipLockedDuringTransition()
         private
         view
         returns (bool locked)
     {
         (
-            ,
+            uint24 purchaseLevel_,
             bool inJackpotPhase,
             bool lastPurchaseDay_,
             bool rngLocked_,
 
         ) = degenerusGame.purchaseInfo();
-        locked = (!inJackpotPhase) && !degenerusGame.gameOver() && lastPurchaseDay_ && rngLocked_;
+        locked = (!inJackpotPhase) && !degenerusGame.gameOver() && lastPurchaseDay_ && rngLocked_ && (purchaseLevel_ % 10 == 0);
     }
 
     /// @dev Calculate recycling bonus for daily flip deposits (1% bonus, capped at 1000 BURNIE).

@@ -40,30 +40,28 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [18:22] (unused)                 uint32   Previously airdropTicketsProcessedCount |
  * | [22:26] (unused)                 uint32   Previously airdropIndex           |
  * | [26:29] level                    uint24   Current jackpot level (starts at 0) |
- * | [29:31] lastExterminatedTrait    uint16   Last level's exterminated trait (420=sentinel) |
- * | [31:32] jackpotPhaseFlag         bool    Phase: false=PURCHASE, true=JACKPOT |
+ * | [29:30] jackpotPhaseFlag         bool    Phase: false=PURCHASE, true=JACKPOT |
+ * | [30:32] <padding>                        2 bytes unused                      |
  * +-----------------------------------------------------------------------------+
- *   Total: 6+6+6+4+4+3+2+1 = 32 bytes ✓ (perfectly packed)
+ *   Total: 6+6+6+4+4+3+1+2 = 32 bytes ✓ (perfectly packed)
  *
  * +-----------------------------------------------------------------------------+
  * | SLOT 1 (32 bytes) — Cursors, Counters, Boolean Flags                        |
  * +-----------------------------------------------------------------------------+
  * | [0:1]   jackpotCounter           uint8    Jackpots processed this level      |
  * | [1:2]   earlyBurnPercent         uint8    Previous pool % in early burn      |
- * | [2:3]   levelJackpotPaid         bool     Level jackpot executed flag        |
- * | [3:4]   levelJackpotLootboxPaid  bool     Level jackpot lootbox paid flag    |
- * | [4:5]   lastPurchaseDay          bool     Prize target met flag              |
- * | [5:6]   decWindowOpen            bool     Decimator window latch             |
- * | [6:7]   rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
- * | [7:8]   exterminationInvertFlag  bool     Exterminator bonus inversion       |
- * | [8:9]   phaseTransitionActive    bool     Level transition in progress       |
- * | [9:10]  gameOver                 bool     Terminal state flag                |
- * | [10:11] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [11:12] dailyEthBucketCursor     uint8    Bucket cursor for daily ETH dist   |
- * | [12:13] dailyEthPhase            uint8    0=current level, 1=carryover       |
- * | [13:32] <padding>                        19 bytes unused                     |
+ * | [2:3]   poolConsolidationDone    bool     Pool consolidation executed flag   |
+ * | [3:4]   lastPurchaseDay          bool     Prize target met flag              |
+ * | [4:5]   decWindowOpen            bool     Decimator window latch             |
+ * | [5:6]   rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
+ * | [6:7]   phaseTransitionActive    bool     Level transition in progress       |
+ * | [7:8]   gameOver                 bool     Terminal state flag                |
+ * | [8:9]   dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
+ * | [9:10]  dailyEthBucketCursor     uint8    Bucket cursor for daily ETH dist   |
+ * | [10:11] dailyEthPhase            uint8    0=current level, 1=carryover       |
+ * | [11:32] <padding>                        21 bytes unused                     |
  * +-----------------------------------------------------------------------------+
- *   Total: 13 bytes (19 bytes padding)
+ *   Total: 11 bytes (21 bytes padding)
  *
  * +-----------------------------------------------------------------------------+
  * | SLOT 2 (32 bytes) — Price                                                   |
@@ -92,7 +90,6 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  *
  * 4. INITIALIZATION: Default values are set inline. For critical variables:
  *    - levelStartTime = deploy timestamp (set in constructor)
- *    - lastExterminatedTrait = 420 (sentinel: no trait exterminated last level)
  *    - jackpotPhaseFlag = false (purchase phase)
  *    - decWindowOpen = false (opens at level 4 jackpot phase start)
  *    - price = 0.01 ether (initial mint price)
@@ -184,11 +181,6 @@ abstract contract DegenerusGameStorage {
     ///      to overflow at realistic progression rates.
     uint24 public level = 0;
 
-    /// @dev The last level's exterminated trait ID.
-    ///      420 is a sentinel value meaning "no extermination last level".
-    ///      Valid trait IDs are 0-255, so 420 is unambiguously a sentinel.
-    uint16 internal lastExterminatedTrait = 420;
-
     /// @notice Current game phase flag.
     ///      false = purchase phase
     ///      true  = jackpot phase
@@ -213,16 +205,11 @@ abstract contract DegenerusGameStorage {
     ///      calculations in the jackpot module.
     uint8 internal earlyBurnPercent;
 
-    /// @dev True once the level jackpot ETH has been executed for the
-    ///      current purchase phase. Prevents double-payment.
+    /// @dev True once prize pool consolidation has been executed for the
+    ///      current purchase phase. Prevents double-execution.
     ///
-    ///      SECURITY: Critical for jackpot integrity. Reset at level transition.
-    bool internal levelJackpotPaid;
-
-    /// @dev True once the level jackpot lootbox distribution has been executed.
-    ///      Used for phased execution: lootbox first, then ETH.
-    ///      Reset at level transition along with levelJackpotPaid.
-    bool internal levelJackpotLootboxPaid;
+    ///      SECURITY: Critical for pool integrity. Reset at level transition.
+    bool internal poolConsolidationDone;
 
     /// @dev True once the prize target is met for current level.
     ///      When true, next tick skips normal daily/jackpot prep and proceeds
@@ -239,10 +226,6 @@ abstract contract DegenerusGameStorage {
     ///      Mid-day lootbox RNG does NOT set this flag.
     ///      Used to block burns/opens during jackpot resolution window.
     bool internal rngLockedFlag;
-
-    /// @dev Toggles inversion of exterminator bonus on certain levels.
-    ///      Adds variety to extermination mechanics across levels.
-    bool internal exterminationInvertFlag;
 
     /// @dev True while jackpot→purchase transition housekeeping is in progress.
     bool internal phaseTransitionActive;
@@ -384,15 +367,6 @@ abstract contract DegenerusGameStorage {
     ///      Compared with current to detect activity trends for payout tuning.
     uint256 internal lastPurchaseDayFlipTotalPrev;
 
-    /// @dev Winning traits for level jackpot, stored for phased execution.
-    ///      Packed uint32 format: [trait3|trait2|trait1|trait0] (8 bits each).
-    ///      Set during lootbox phase, used during ETH phase.
-    uint32 internal levelJackpotWinningTraits;
-
-    /// @dev ETH pool for level jackpot after lootbox budget deduction.
-    ///      Stored during lootbox phase, used during ETH distribution phase.
-    uint256 internal levelJackpotEthPool;
-
     // =========================================================================
     // Future Mint Awards
     // =========================================================================
@@ -406,11 +380,11 @@ abstract contract DegenerusGameStorage {
     ///
     ///      PROCESSING SCHEDULE:
     ///      - Current level tickets: Processed continuously during advanceGame (each call)
-    ///      - Next level tickets: Activated at END of purchase phase (before level jackpot)
+    ///      - Next level tickets: Activated at END of purchase phase (before pool consolidation)
     ///
     ///      EXAMPLE (Level 5 purchase phase):
     ///      - lvlOffset=0 → ticketQueue[5] → Processed continuously throughout level 5
-    ///      - lvlOffset=1 → ticketQueue[6] → Activated at end of purchase phase (before level jackpot)
+    ///      - lvlOffset=1 → ticketQueue[6] → Activated at end of purchase phase (before pool consolidation)
     ///
     ///      This allows lootbox tickets to participate in early-bird jackpots at jackpot phase start.
     mapping(uint24 => address[]) internal ticketQueue;
@@ -791,12 +765,6 @@ abstract contract DegenerusGameStorage {
     /// @dev Day index when purchase boost was awarded (expires at jackpot reset).
     mapping(address => uint48) internal purchaseBoostDay;
 
-    /// @dev Deprecated. Use purchaseBoostBps.
-    mapping(address => uint16) internal _deprecated_ticketBoostBps;
-
-    /// @dev Deprecated. Use purchaseBoostDay.
-    mapping(address => uint48) internal _deprecated_ticketBoostTimestamp;
-
     /// @dev Decimator burn boost basis points (10%/25%/50%), one-time, no expiry.
     mapping(address => uint16) internal decimatorBoostBps;
 
@@ -834,19 +802,19 @@ abstract contract DegenerusGameStorage {
     /// @dev Level associated with the current ETH perk burn counter.
     uint24 internal ethPerkLevel;
 
-    /// @dev Count of ETH perk tokens burned this level (pre-extermination only).
+    /// @dev Count of ETH perk tokens burned this level.
     uint16 internal ethPerkBurnCount;
 
     /// @dev Level associated with the current BURNIE perk burn counter.
     uint24 internal burniePerkLevel;
 
-    /// @dev Count of BURNIE perk tokens burned this level (pre-extermination only).
+    /// @dev Count of BURNIE perk tokens burned this level.
     uint16 internal burniePerkBurnCount;
 
     /// @dev Level associated with the current DGNRS perk burn counter.
     uint24 internal dgnrsPerkLevel;
 
-    /// @dev Count of DGNRS perk tokens burned this level (pre-extermination only).
+    /// @dev Count of DGNRS perk tokens burned this level.
     uint16 internal dgnrsPerkBurnCount;
 
     // =========================================================================
@@ -1369,11 +1337,13 @@ abstract contract DegenerusGameStorage {
     // Lazy Pass Boon State
     // =========================================================================
 
-    /// @dev Day when lazy pass boon was awarded (lootbox source).
-    ///      Allows discounted lazy pass purchase for 5 days.
+    /// @dev Day when lazy pass boon was awarded.
+    ///      Allows discounted lazy pass purchase for 4 days.
     mapping(address => uint48) internal lazyPassBoonDay;
-    /// @dev Lazy pass boon discount in BPS (10/15/25%). 0 means no active discount.
+    /// @dev Lazy pass boon discount in BPS (1000/2500/5000).
     mapping(address => uint16) internal lazyPassBoonDiscountBps;
+    /// @dev Deity-sourced day index (expires when day changes). 0 for lootbox-sourced boons.
+    mapping(address => uint48) internal deityLazyPassBoonDay;
 
     // =========================================================================
     // Degenerette Hero Wager Tracking (Daily)

@@ -26,9 +26,8 @@ import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
  *        module's own storage rather than the game's.
  *
  *      JACKPOT FLOW OVERVIEW:
- *      1. `calcPrizePoolForLevelJackpot` — Computes pool splits (reward vs prize vs level jackpot) at level start.
- *      2. `payLevelJackpotLootbox` / `payLevelJackpotEth` — Distributes the level jackpot after purchases close.
- *      3. `payDailyJackpot` — Handles early-burn rewards during purchase phase and rolling dailies at EOL.
+ *      1. Pool consolidation at level transition (prize pool splits and merges).
+ *      2. `payDailyJackpot` — Handles early-burn rewards during purchase phase and rolling dailies at EOL.
  *      4. `processTicketBatch` — Batched airdrop processing with gas budgeting to stay block-safe.
  *
  *      FUND ACCOUNTING:
@@ -103,9 +102,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Constants — Share Distribution (Basis Points)
     // -------------------------------------------------------------------------
 
-    /// @dev Level jackpot trait bucket shares packed into 64 bits: [6000, 1333, 1333, 1334] = 10000 bps.
+    /// @dev Day-5 trait bucket shares packed into 64 bits: [6000, 1333, 1333, 1334] = 10000 bps.
     ///      With rotation, the 60% share is assigned to the solo (1-winner) bucket.
-    uint64 private constant LEVEL_JACKPOT_SHARES_PACKED =
+    uint64 private constant FINAL_DAY_SHARES_PACKED =
         (uint64(6000)) |
             (uint64(1333) << 16) |
             (uint64(1333) << 32) |
@@ -167,11 +166,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev LCG multiplier for deterministic trait generation (Knuth's MMIX constant).
     uint64 private constant TICKET_LCG_MULT = 0x5851F42D4C957F2D;
 
-    /// @dev Portion of level jackpot ETH converted to tickets (20%).
-    uint16 private constant LEVEL_JACKPOT_TICKET_BPS = 2000;
-
-    /// @dev Portion of DGNRS reward pool paid to the level jackpot big winner (1%).
-    uint16 private constant LEVEL_JACKPOT_DGNRS_BPS = 100;
+    /// @dev Portion of DGNRS reward pool paid to the day-5 solo bucket winner (1%).
+    uint16 private constant FINAL_DAY_DGNRS_BPS = 100;
 
     /// @dev Portion of reward-pool-funded daily jackpot ETH converted to loot boxes (50%).
     uint16 private constant DAILY_REWARD_JACKPOT_LOOTBOX_BPS = 5000;
@@ -298,7 +294,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 winningTraitsPacked = _rollWinningTraits(
                     lvl,
                     randWord,
-                    true,
                     true
                 );
                 _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
@@ -429,10 +424,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             DAILY_JACKPOT_SCALE_MAX_BPS
                         );
 
-                    // Day 5 uses level jackpot shares (60/13/13/13) for the big payout;
+                    // Day 5 uses weighted shares (60/13/13/13) for the big payout;
                     // days 1-4 use equal shares (20/20/20/20).
                     uint64 sharesPacked = (jackpotCounter == JACKPOT_LEVEL_CAP - 1)
-                        ? LEVEL_JACKPOT_SHARES_PACKED
+                        ? FINAL_DAY_SHARES_PACKED
                         : DAILY_JACKPOT_SHARES_PACKED;
                     uint16[4] memory shareBpsDaily = JackpotBucketLib
                         .shareBpsByBucket(
@@ -511,7 +506,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         );
 
                     uint64 carrySharesPacked = (jackpotCounter == JACKPOT_LEVEL_CAP - 1)
-                        ? LEVEL_JACKPOT_SHARES_PACKED
+                        ? FINAL_DAY_SHARES_PACKED
                         : DAILY_JACKPOT_SHARES_PACKED;
                     uint16[4] memory shareBpsNext = JackpotBucketLib
                         .shareBpsByBucket(
@@ -520,7 +515,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         );
 
                     (
-                        uint256 paidCarryEth,
+                        ,
                         bool carryComplete
                     ) = _processDailyEthChunk(
                             carryoverSourceLevel,
@@ -534,7 +529,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     if (!carryComplete) {
                         return;
                     }
-                    paidCarryEth;
                 }
 
                 dailyEthPhase = 0;
@@ -549,7 +543,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         // Non-daily (early-burn) path - BURNIE only, no ETH bonuses
-        winningTraitsPacked = _rollWinningTraits(lvl, randWord, false, false);
+        winningTraitsPacked = _rollWinningTraits(lvl, randWord, false);
         _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
 
         bool isEthDay = false;
@@ -563,7 +557,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 1;
             if (questDay > startDay) {
                 uint48 daysSince = questDay - startDay;
-                isEthDay = (daysSince % 3) == 0 && lvl != 1; // Skip every-3rd-day ETH jackpot at level 1
+                isEthDay = (daysSince % 3) == 2 && lvl != 1; // ETH jackpot on purchase days 3, 6, 9…
             }
         }
         uint256 ethDaySlice;
@@ -713,7 +707,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param rngWord VRF random word.
     function awardFinalDayDgnrsReward(uint24 lvl, uint256 rngWord) external {
         uint256 dgnrsPool = dgnrs.poolBalance(IDegenerusStonk.Pool.Reward);
-        uint256 reward = (dgnrsPool * LEVEL_JACKPOT_DGNRS_BPS) / 10_000;
+        uint256 reward = (dgnrsPool * FINAL_DAY_DGNRS_BPS) / 10_000;
         if (reward == 0) return;
 
         // Re-derive solo bucket from the Day 5 winning traits
@@ -804,15 +798,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         nextPrizePool += totalBudget;
     }
 
-    /// @notice Early Bird Lootbox Jackpot - rewards players who got tickets from lootboxes.
-    /// @dev Takes 3% from the unified future pool and awards tickets to 100 winners
-    ///      with even ETH split. ETH backing is added to nextPrizePool.
-    /// @param lvl The ticket level to sample winners from.
-    /// @param rngWord VRF entropy for sampling winners.
-    function payEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) external {
-        _runEarlyBirdLootboxJackpot(lvl, rngWord);
-    }
-
     /// @notice Computes and applies prize pool splits at the start of a new level's jackpot phase.
     /// @dev This is the "budgeting" function that determines how ETH flows between pools:
     ///
@@ -823,7 +808,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      3. Credit coinflip and distribute yield surplus.
     ///
     ///      The entire currentPrizePool stays available for daily jackpots
-    ///      (no separate level jackpot split).
+    ///      (no separate level-transition split).
     ///
     /// @param lvl Current game level.
     /// @param rngWord VRF entropy for percentage rolls.
@@ -1559,7 +1544,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param traitShare Total ETH/COIN allocated to this bucket.
     /// @param entropy Current entropy state.
     /// @param winnerCount Number of winners to select.
-    /// @param dgnrsReward DGNRS reward for the solo bucket winner (level jackpot only).
+    /// @param dgnrsReward DGNRS reward for the solo bucket winner (day-5 only).
     /// @return entropyState Updated entropy after selection.
     /// @return ethDelta ETH credited to claimable balances.
     /// @return liabilityDelta Total claimable liability added.
@@ -1756,7 +1741,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 futurePrizePool += whalePassSpent;
             }
             // whalePassSpent tracked via lootboxSpent; remainder captured by
-            // currentPrizePool += (ethPool - paidEth) in payLevelJackpotEth.
+            // currentPrizePool captures remainder via pool consolidation.
             lootboxSpent = whalePassAmount;
         }
     }
@@ -2338,7 +2323,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             winningTraitsPacked = _rollWinningTraits(
                 lvl,
                 randWord,
-                useBurn,
                 useBurn
             );
             _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
@@ -2569,11 +2553,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     function _rollWinningTraits(
         uint24 lvl,
         uint256 randWord,
-        bool useBurnCounts,
-        bool applyExterminated
+        bool useBurnCounts
     ) private view returns (uint32 packed) {
         lvl;
-        applyExterminated;
         if (useBurnCounts) {
             packed = JackpotBucketLib.packWinningTraits(
                 _getWinningTraits(randWord)

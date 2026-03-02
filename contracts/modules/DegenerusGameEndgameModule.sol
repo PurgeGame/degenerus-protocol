@@ -20,9 +20,9 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *
  * ## When Called
  *
- * Reward jackpots (BAF/Decimator) are resolved during the level jackpot RNG period
+ * Reward jackpots (BAF/Decimator) are resolved during the level transition RNG period
  * via `runRewardJackpots()`. Affiliate trophies/rewards are minted during level
- * jackpot time via `rewardTopAffiliate()`.
+ * transition via `rewardTopAffiliate()`.
  *
  * ## Settlement Flow
  *
@@ -95,7 +95,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
 
     /// @notice Mint trophy and DGNRS reward for the top affiliate of a level.
-    /// @dev Callable during the level jackpot; guarded by a per-level paid flag.
+    /// @dev Callable during level transition; guarded by a per-level paid flag.
     /// @param lvl The level to reward.
     function rewardTopAffiliate(uint24 lvl) external {
         (address top, ) = affiliate.affiliateTop(lvl);
@@ -112,7 +112,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         emit AffiliateDgnrsReward(top, lvl, paid);
     }
 
-    /// @notice Run reward jackpots (BAF/Decimator) during the level jackpot RNG period.
+    /// @notice Run reward jackpots (BAF/Decimator) during the level transition RNG period.
     /// @dev Called via delegatecall from DegenerusGame during purchase jackpot time.
     /// @param lvl Level to resolve jackpots for.
     /// @param rngWord VRF entropy for jackpot selection and randomization.
@@ -499,7 +499,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
 
         // Award tickets for 100 levels, with N tickets per level (where N = half-passes)
         // Start level depends on game state:
-        // - BURN phase (state 3): tickets won't be processed this level, start at level+1
+        // - Jackpot phase: tickets won't be processed this level, start at level+1
         // - Otherwise: tickets can be processed this level, start at current level
         // Example: 3 half-passes = 3 tickets/level × 100 levels = 300 tickets
         // Safe: halfPasses fits in uint32 (ETH supply limits prevent overflow)

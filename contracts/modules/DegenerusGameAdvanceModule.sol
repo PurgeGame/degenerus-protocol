@@ -47,8 +47,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_TICKETS_WORKING = 5;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
     uint8 private constant STAGE_FUTURE_TICKETS_WORKING = 7;
-    uint8 private constant STAGE_LEVEL_JACKPOT_LOOTBOX = 8;
-    uint8 private constant STAGE_LEVEL_JACKPOT_ETH = 9;
+    // Stages 8-9 were level jackpot stages (removed)
     uint8 private constant STAGE_ENTERED_JACKPOT = 13;
     uint8 private constant STAGE_JACKPOT_ETH_RESUME = 15;
     uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 16;
@@ -88,7 +87,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 912;
     uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 3 days;
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
-    uint16 private constant TRAIT_ID_TIMEOUT = 420;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 3;
@@ -215,12 +213,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     }
                 }
 
-                // Consolidate prize pools (no separate level jackpot split)
-                if (!levelJackpotPaid) {
+                // Consolidate prize pools for level transition
+                if (!poolConsolidationDone) {
                     levelPrizePool[purchaseLevel] = nextPrizePool;
                     _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);
                     _consolidatePrizePools(purchaseLevel, rngWord);
-                    levelJackpotPaid = true;
+                    poolConsolidationDone = true;
                 }
 
                 if (lootboxPresaleActive && (lvl >= 3 || lootboxPresaleMintEth >= LOOTBOX_PRESALE_ETH_CAP)) lootboxPresaleActive = false;
@@ -235,8 +233,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     decWindowOpen = true;
                 }
 
-                levelJackpotPaid = false;
-                levelJackpotLootboxPaid = false;
+                poolConsolidationDone = false;
                 lastPurchaseDay = false;
                 levelStartTime = ts;
                 _drawDownFuturePrizePool(lvl);
@@ -370,9 +367,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _endPhase() private {
         uint24 lvl = level;
         phaseTransitionActive = true;
-        // Extermination mechanics removed in no-NFT variant.
-        lastExterminatedTrait = TRAIT_ID_TIMEOUT;
-        exterminationInvertFlag = false;
         if (lvl % 100 == 0) {
             levelPrizePool[lvl] = futurePrizePool / 3;
         }
@@ -396,7 +390,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |  context, with access to all storage. Modules are constant.                                                    |
       +================================================================================================================+*/
 
-    /// @dev Reward the top affiliate for a level during the level jackpot.
+    /// @dev Reward the top affiliate for a level during level transition.
     function _rewardTopAffiliate(uint24 lvl) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ENDGAME_MODULE
@@ -409,7 +403,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Resolve BAF/Decimator jackpots during the level jackpot RNG period.
+    /// @dev Resolve BAF/Decimator jackpots during the level transition RNG period.
     function _runRewardJackpots(uint24 lvl, uint256 rngWord) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ENDGAME_MODULE
@@ -467,8 +461,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Pay daily jackpot via jackpot module delegatecall.
-    ///      Called each day during States 2 and 3.
-    /// @param isDaily True if degenerus phase (State 3), false if purchase phase (State 2).
+    ///      Called each day during purchase phase and jackpot phase.
+    /// @param isDaily True for jackpot phase, false for purchase phase (early-burn).
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
     function payDailyJackpot(
@@ -489,7 +483,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Pay Phase 2 coin+ticket jackpot via jackpot module delegatecall.
+    /// @dev Pay coin+ticket portion of daily jackpot via jackpot module delegatecall.
     ///      Called when dailyJackpotCoinTicketsPending is true to complete the split
     ///      daily jackpot (gas optimization to stay under 15M block limit).
     /// @param randWord VRF random word for winner selection.
@@ -508,7 +502,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Pay daily BURNIE jackpot via jackpot module delegatecall.
-    ///      Called each day during States 2 and 3 in its own transaction.
+    ///      Called each day during purchase phase in its own transaction.
     ///      Awards 0.5% of prize pool target in BURNIE to current and future ticket holders.
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
@@ -525,25 +519,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Pay early bird lootbox jackpot to next-level ticket holders (from lootboxes).
-    ///      Takes a slice from the unified future pool, awards loot boxes.
-    ///      Called after next-level tickets are activated at end of purchase phase.
-    /// @param lvl The level whose tickets were just activated.
-    /// @param randWord VRF random word for winner selection.
-    function _payEarlyBirdLootboxJackpot(uint24 lvl, uint256 randWord) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule
-                        .payEarlyBirdLootboxJackpot
-                        .selector,
-                    lvl,
-                    randWord
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
 
     /// @dev Enforce "must mint today" gate for advanceGame callers.
     ///      Skipped for CREATOR.
