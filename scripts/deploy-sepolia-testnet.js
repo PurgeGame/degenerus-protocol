@@ -16,9 +16,8 @@ import { deployContract, verifyAddresses } from "./lib/deployHelpers.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Sepolia external addresses — real Chainlink VRF V2.5
-const SEPOLIA_LINK_TOKEN = "0x779877A7B0D9E8603169DdbD7836e478b4624789";
-const SEPOLIA_VRF_COORDINATOR = "0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B";
+// VRF: deploy MockVRFCoordinator + MockLinkToken (Chainlink VRF on Sepolia is dead)
+// Key hash doesn't matter for mock — use a dummy value
 const VRF_KEY_HASH =
   "0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae";
 
@@ -51,24 +50,27 @@ async function main() {
   }
 
   // =========================================================================
-  // Phase 1: Deploy mock external contracts (stETH, WXRP only — real VRF)
+  // Phase 1: Deploy mock external contracts (stETH, WXRP, VRF, LINK)
   // =========================================================================
-  console.log("Phase 1: Deploying mock contracts (stETH, WXRP)...");
-  console.log("  VRF: Using real Chainlink VRF V2.5 on Sepolia");
+  console.log("Phase 1: Deploying mock contracts (stETH, WXRP, VRF, LINK)...");
 
   const mockStETH = await deploy("MockStETH");
   const mockWXRP = await deploy("MockWXRP");
+  const mockLinkToken = await deploy("MockLinkToken");
+  const mockVRFCoordinator = await deploy("MockVRFCoordinator");
 
   const mocks = {
     STETH_TOKEN: await mockStETH.getAddress(),
     WXRP: await mockWXRP.getAddress(),
+    LINK_TOKEN: await mockLinkToken.getAddress(),
+    VRF_COORDINATOR: await mockVRFCoordinator.getAddress(),
   };
 
-  console.log(`  MockStETH:        ${mocks.STETH_TOKEN}`);
-  console.log(`  MockWXRP:         ${mocks.WXRP}`);
-  console.log(`  VRF Coordinator:  ${SEPOLIA_VRF_COORDINATOR} (real Chainlink)`);
-  console.log(`  LINK Token:       ${SEPOLIA_LINK_TOKEN} (real Sepolia)`);
-  console.log(`  VRF Key Hash:     ${VRF_KEY_HASH}`);
+  console.log(`  MockStETH:           ${mocks.STETH_TOKEN}`);
+  console.log(`  MockWXRP:            ${mocks.WXRP}`);
+  console.log(`  MockLinkToken:       ${mocks.LINK_TOKEN}`);
+  console.log(`  MockVRFCoordinator:  ${mocks.VRF_COORDINATOR}`);
+  console.log(`  VRF Key Hash:        ${VRF_KEY_HASH} (unused by mock)`);
   console.log("");
 
   // =========================================================================
@@ -83,8 +85,8 @@ async function main() {
 
   const external = {
     STETH_TOKEN: mocks.STETH_TOKEN,
-    LINK_TOKEN: SEPOLIA_LINK_TOKEN,
-    VRF_COORDINATOR: SEPOLIA_VRF_COORDINATOR,
+    LINK_TOKEN: mocks.LINK_TOKEN,
+    VRF_COORDINATOR: mocks.VRF_COORDINATOR,
     WXRP: mocks.WXRP,
     CREATOR: deployer.address,
   };
@@ -191,8 +193,8 @@ async function main() {
       contracts: Object.fromEntries(deployedAddrs),
       mocks,
       external: {
-        LINK_TOKEN: SEPOLIA_LINK_TOKEN,
-        VRF_COORDINATOR: SEPOLIA_VRF_COORDINATOR,
+        LINK_TOKEN: mocks.LINK_TOKEN,
+        VRF_COORDINATOR: mocks.VRF_COORDINATOR,
         VRF_KEY_HASH: VRF_KEY_HASH,
       },
     };
@@ -213,6 +215,8 @@ async function main() {
     }
     allContracts.add("MockStETH");
     allContracts.add("MockWXRP");
+    allContracts.add("MockLinkToken");
+    allContracts.add("MockVRFCoordinator");
 
     for (const name of allContracts) {
       const artifact = await hre.artifacts.readArtifact(name);
@@ -221,6 +225,35 @@ async function main() {
     }
     console.log(`  ABIs: ${abisDir}/ (${allContracts.size} files)`);
     console.log("");
+
+    // =========================================================================
+    // Phase 6: Verify contracts on Etherscan
+    // =========================================================================
+    if (process.env.ETHERSCAN_API_KEY) {
+      console.log("Phase 6: Verifying contracts on Etherscan...");
+      console.log("  (verification runs in background — failures are non-fatal)");
+      console.log("");
+
+      // Verify mocks first
+      await verifyOnEtherscan("MockStETH", mocks.STETH_TOKEN, []);
+      await verifyOnEtherscan("MockWXRP", mocks.WXRP, []);
+      await verifyOnEtherscan("MockLinkToken", mocks.LINK_TOKEN, []);
+      await verifyOnEtherscan("MockVRFCoordinator", mocks.VRF_COORDINATOR, []);
+
+      // Verify all protocol contracts
+      for (const key of DEPLOY_ORDER) {
+        const contractName = KEY_TO_CONTRACT[key];
+        const addr = deployedAddrs.get(key);
+        const args = getConstructorArgs(key, predicted, affiliateBootstrap, affiliatePreReferrals);
+        await verifyOnEtherscan(contractName, addr, args);
+      }
+
+      console.log("  Verification phase complete.");
+      console.log("");
+    } else {
+      console.log("Phase 6: Skipping Etherscan verification (no ETHERSCAN_API_KEY).");
+      console.log("");
+    }
 
     // =========================================================================
     // Done
@@ -236,12 +269,10 @@ async function main() {
     console.log(`    DGNRS:    ${deployedAddrs.get("DGNRS")}`);
     console.log(`    Admin:    ${deployedAddrs.get("ADMIN")}`);
     console.log("");
-    console.log("  VRF: Real Chainlink VRF V2.5 (auto-fulfillment)");
+    console.log("  VRF: MockVRFCoordinator (instant fulfillment by advancer)");
     console.log("  NEXT STEPS:");
-    console.log("    1. Fund VRF subscription with LINK via Admin.onTokenTransfer()");
-    console.log("       (send LINK to Admin address using transferAndCall)");
-    console.log("    2. Run: node scripts/testnet/run-sepolia.js");
-    console.log("    3. Or manually: advanceDay() + advanceGame() to progress");
+    console.log("    1. Run: node scripts/testnet/run-sepolia.js");
+    console.log("    2. Or manually: advanceDay() + advanceGame() to progress");
     console.log("");
     console.log(`  Manifest: ${manifestPath}`);
     console.log("=".repeat(70));
@@ -252,6 +283,27 @@ async function main() {
 }
 
 // --- Helpers ---
+
+/**
+ * Verify a contract on Etherscan. Non-fatal: logs errors but does not throw.
+ */
+async function verifyOnEtherscan(contractName, address, constructorArguments = []) {
+  try {
+    process.stdout.write(`  [verify] ${contractName} @ ${address}...`);
+    await hre.run("verify:verify", {
+      address,
+      constructorArguments,
+    });
+    console.log(" OK");
+  } catch (err) {
+    const msg = err.message || String(err);
+    if (msg.includes("Already Verified") || msg.includes("already verified")) {
+      console.log(" already verified");
+    } else {
+      console.log(` FAILED: ${msg.slice(0, 120)}`);
+    }
+  }
+}
 
 async function deploy(contractName, args = []) {
   const factory = await hre.ethers.getContractFactory(contractName);

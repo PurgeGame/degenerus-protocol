@@ -17,14 +17,15 @@ The Degenerus Protocol is a zero-rake game system where player ETH deposits are 
 
 ### 1. Degen Gambler (Thrill-Seeking, Loss-Tolerant)
 
-**Optimal Actions:**
-- Purchase tickets at low levels (0.01 ETH) for cheap entry
-- Open lootboxes for high-variance rolls (1% chance of 4.6x ticket multiplier)
-- Play Degenerette with hero quadrant for volatility boost (up to 100,000x on 8-match)
-- Chase the daily coinflip bounty with largest-ever deposits
-- Participate in BAF jackpot leaderboards at x10 levels
+**Role in the Economy:** The degen gambler is the primary source of EV for the rest of the system. These players are not EV-maximizing rational actors — they play for excitement, variance, and the chance to hit a life-changing jackpot tomorrow. The game is deliberately designed to offer them options with negative expected value (Degenerette at low activity scores, coinflip without compounding strategy, lootboxes without EV optimization) because they don't care about marginal EV — they care about the experience and the upside tail. The EV they "lose" is not destroyed; it is redistributed to the prize pools, jackpots, and lootbox resolutions that fund returns for EV maximizers, whales, and affiliates. Without degen gamblers, the system has no primary revenue source.
 
-**Alignment with System Health:** ALIGNED. The degen gambler provides essential liquidity. Their purchases fill the prize pools (10% future, 90% next). Their BURNIE burns in Degenerette and coinflip maintain token velocity. Their high activity score (quest completion, streaks) earns them better ROI (up to 99.9% in Degenerette), creating a virtuous engagement loop.
+**What They Do:**
+- Buy tickets, open lootboxes, play Degenerette, flip coins — whatever feels fun
+- Chase the 100,000x Degenerette jackpot, the daily coinflip bounty, the scatter jackpot
+- Their "optimal actions" are whatever is in their head — these are not spreadsheet players
+- Some will stumble into good EV (high activity scores, quest streaks) simply by playing a lot
+
+**Alignment with System Health:** ESSENTIAL. The degen gambler is the economic engine. Their purchases fill the prize pools (10% future, 90% next). Their BURNIE burns in Degenerette and coinflip maintain token velocity. The negative EV they accept is the subsidy that makes the entire prize structure work. If a degen gambler ever decides to optimize, the path to +EV is open to them (activity score, quest streaks, mint streaks) — the game rewards engagement, and degens who play a lot naturally accumulate the bonuses that improve their returns.
 
 ### 2. EV Maximizer (Rational, Risk-Neutral)
 
@@ -48,7 +49,7 @@ The Degenerus Protocol is a zero-rake game system where player ETH deposits are 
 - Dominate BAF leaderboard through large coinflip stakes for 10% of jackpot pool
 - Use whale bundle's 40% activity bonus to boost all other EV calculations
 
-**Alignment with System Health:** ALIGNED. Whales provide essential upfront capital and lock liquidity through deity pass and whale bundle purchases, funding the prize pools that benefit all players. Their edges (BAF leaderboard, enhanced recycling, activity bonuses) are earned through capital commitment, not information asymmetry. Smaller players still have fair access to the vast majority of jackpot payouts — scatter distribution (50% of jackpot, trait-based) is broadly distributed, daily jackpot is accessible to anyone with an 8-mint streak, and the decimator is purely ticket-based. The 24-pass cap on deity passes prevents unbounded whale accumulation.
+**Alignment with System Health:** ALIGNED. Whales provide essential upfront capital and lock liquidity through deity pass and whale bundle purchases, funding the prize pools that benefit all players. Their edges (BAF leaderboard, enhanced recycling, activity bonuses) are earned through capital commitment, not information asymmetry. Smaller players still have fair access to the vast majority of jackpot payouts — scatter distribution (50% of jackpot, trait-based) is broadly distributed, daily jackpot is accessible to anyone with an 8-mint streak, and the decimator is purely ticket-based. The 32-pass cap on deity passes prevents unbounded whale accumulation.
 
 ### 4. Affiliate (Commission-Seeking)
 
@@ -87,10 +88,10 @@ The Degenerus Protocol is a zero-rake game system where player ETH deposits are 
 - Purchase whale bundle for instant 100-level coverage (catches up on tickets)
 - Focus on quest completion and coinflip for BURNIE accumulation
 - Target lootbox EV bonus by rapidly building activity score (quest streak + mint streak)
-- Accept that BAF leaderboard positions are dominated by long-term players
+- BAF leaderboard resets every 10 levels — compete for top positions in the current cycle
 - Look for deity pass discount boons from lootboxes (10/25/50% off)
 
-**Alignment with System Health:** STRUCTURALLY DISADVANTAGED but PARTIALLY MITIGATED. Late entrants face: (a) higher ticket prices at later levels, (b) established leaderboard positions, (c) deity passes already sold at lower prices. Mitigations include: whale bundle coverage, lootbox ticket rolls for future levels (5% chance of 5-50 levels ahead), and the fact that prize pools grow proportionally with participation. See Death Spiral section for cascading risks.
+**Alignment with System Health:** SLIGHTLY DISADVANTAGED but LARGELY FAIR. Higher ticket prices at later levels don't meaningfully hurt late entrants — prize pools scale with deposits, so the EV per ticket is roughly the same regardless of when you join. Earlier players didn't get cheaper tickets for the same jackpot; they got cheaper tickets for smaller pools. The real disadvantage is deity passes already sold at lower prices (quadratic pricing means later passes cost more). BAF leaderboard resets every 10 levels, so there is no incumbency advantage there. Whale bundles and lootbox ticket rolls provide catch-up mechanics.
 
 ---
 
@@ -156,23 +157,9 @@ The Degenerus Protocol is a zero-rake game system where player ETH deposits are 
 
 ---
 
-## [MEDIUM] Vault Share Concentration and Drain Strategy
+## [N/A] Vault Share Concentration
 
-**Mechanism:** DegenerusVault has dual share classes (DGVE for ETH+stETH, DGVB for BURNIE). Initial supply: 1 trillion shares each minted to CREATOR. Claim formula: `claimAmount = (reserve * sharesBurned) / totalSupply`. Refill mechanism: if ALL shares burned, 1T new shares minted to the burner.
-
-**Actor Type:** Whale (requires CREATOR cooperation or DGVE acquisition)
-
-**Attack Steps:**
-1. Accumulate >30% of DGVE supply to become vault owner (required for owner operations)
-2. Wait for reserves to accumulate (stETH yield, BURNIE vault allowance)
-3. Burn shares to claim pro-rata reserves
-4. If attacker can acquire and burn ALL shares, trigger refill for 1T new shares and repeat
-
-**Profitability:** VARIABLE. The vault's reserves grow with: (a) stETH yield from game deposits, (b) BURNIE vault mint allowance (2M initial), (c) game claimable winnings. A 30% holder burning their shares claims 30% of reserves. The refill mechanism only triggers when ALL shares are burned, requiring 100% ownership -- practically impossible since CREATOR starts with all shares and likely distributes them.
-
-**System Impact:** LOW-MEDIUM. The vault is designed to be drained by share burning -- this is its intended function. The risk is concentration: if a small number of actors control most shares, they can extract disproportionate reserves. However, this is a standard tokenized vault design, not a vulnerability per se.
-
-**Mitigation:** The >30% threshold for vault owner operations prevents small holders from executing owner functions. Share distribution strategy at launch determines concentration risk. Consider implementing time-locks or gradual claim mechanisms if vault drain timing is a concern.
+**Not a concern.** The vault (DGVE/DGVB shares) is retained by the CREATOR and not distributed to players. The vault owner has no privileged game operations — they can only burn their own shares to claim pro-rata reserves. This is the protocol operator's revenue mechanism, not a player-facing attack surface.
 
 ---
 
@@ -241,11 +228,11 @@ The BURNIE token must maintain value for this to be profitable in ETH terms. BUR
 4. Top BAF position earns 10% of jackpot pool (10-25% of future pool)
 5. At x10 levels, if future pool is 100 ETH and jackpot takes 15%, top BAF earns 1.5 ETH
 
-**Profitability:** MODERATE for large players. The 8-mint-streak eligibility gate ensures minimum engagement. But BAF leaderboard is purely size-based (total winning flip credit), giving large stakers a structural advantage. Four top-4 positions per level are available, with the top position getting 60% of the 10% top-BAF allocation.
+**Profitability:** MODERATE for large players within a given 10-level cycle. The 8-mint-streak eligibility gate ensures minimum engagement. BAF leaderboard is size-based (total winning flip credit), giving large stakers an advantage — but it resets every 10 levels, so dominance must be re-earned each cycle. Four top-4 positions per level are available, with the top position getting 60% of the 10% top-BAF allocation.
 
-**System Impact:** MODERATE. BAF concentration means large players capture disproportionate jackpot shares. However, the scatter mechanism (50% of jackpot, trait-based) distributes broadly, and the daily flip leaderboard provides an alternative path. The 5-daily-jackpot cap per level prevents indefinite extraction.
+**System Impact:** LOW-MODERATE. The 10-level reset prevents permanent leaderboard lock-in. The scatter mechanism (50% of jackpot, trait-based) distributes broadly regardless of BAF position. The daily flip leaderboard provides an alternative path. The 5-daily-jackpot cap per level prevents indefinite extraction.
 
-**Mitigation:** The scatter distribution (50 rounds x 4 trait tickets, top-2 by BAF score per round) provides broad-based distribution. Consider whether the trait-matching mechanism provides sufficient randomization to prevent large players from dominating scatter rounds as well (it does -- trait assignment is deterministic from player address but varies per round).
+**Mitigation:** The 10-level BAF reset is the primary defense — no one accumulates a permanent advantage. The scatter distribution (50 rounds x 4 trait tickets, top-2 by BAF score per round) provides broad-based distribution. Trait assignment is deterministic from player address but varies per round, preventing systematic scatter domination.
 
 ---
 
@@ -266,58 +253,43 @@ The BURNIE token must maintain value for this to be profitable in ETH terms. BUR
 
 ---
 
-## [HIGH] Degenerette ETH Payout Pool Solvency Under Extreme Wins
+## [LOW] Degenerette ETH Payout Pool Solvency Under Extreme Wins
 
-**Mechanism:** Degenerette ETH bets go to futurePrizePool. Wins are distributed 25% ETH (capped at 10% of pool) + 75% lootbox. The 8-match jackpot pays 100,000x at 100% ROI (adjusted by activity score).
+**Mechanism:** Degenerette ETH bets go to futurePrizePool. Wins are distributed 25% ETH (capped at 10% of pool) + 75% lootbox. The 8-match jackpot pays 100,000x.
 
-**Actor Type:** Any Player (probabilistic)
+**Why This Is Not a Real Concern:**
 
-**Attack Steps:**
-1. Place ETH bet on Degenerette with 8-match jackpot potential
-2. An 8-match hit at 0.005 ETH minimum with 99.9% ROI yields: 0.005 * 100,000 * 0.999 = 499.5 ETH theoretical payout
-3. ETH portion: 25% = ~124.9 ETH, capped at 10% of futurePrizePool
-4. If futurePrizePool is only 50 ETH, ETH payout caps at 5 ETH
-5. Remaining ~119.9 ETH + 375 ETH lootbox portion = ~494.5 ETH in lootbox
+Degenerette is a net contributor of ETH to the system — the house edge means more ETH flows in from losing bets than flows out from wins over time. On the rare occasion someone hits a massive jackpot:
 
-**Profitability:** The contract explicitly states "No max payout check needed: ETH payouts are capped at 10% of pool at distribution time, so solvency is guaranteed regardless of jackpot size." The 10% cap (`ETH_WIN_CAP_BPS = 1000`) on the ETH portion ensures the pool cannot be drained. The 75% lootbox portion converts to tickets and BURNIE, not ETH.
+1. **ETH portion is hard-capped** at 10% of futurePrizePool (`ETH_WIN_CAP_BPS = 1000`). The pool cannot be drained regardless of jackpot size.
+2. **The lootbox portion (75%) resolves as tickets spread across ~100 future levels.** This isn't a sudden obligation — it's distributed game activity that plays out over the long term, diluted across many levels of prize pool competition.
+3. **Very large wins (>5 ETH lootbox half) get deferred to whale pass claims**, further spreading the impact.
 
-However, large lootbox conversions create future ticket obligations. If a 500 ETH equivalent lootbox resolves, it produces massive ticket volumes at future levels. These tickets have real prize-pool claim potential when they reach resolution.
-
-**System Impact:** MEDIUM-HIGH. While ETH solvency is maintained by the 10% cap, extreme jackpot hits create large deferred obligations through lootbox tickets. The whale pass claim threshold (>5 ETH deferred) mitigates sudden ticket floods, but large lootbox resolutions still inject significant ticket volume into future levels. The self-correcting mechanism: more tickets at a level means more competition for the same jackpot pool, diluting individual returns.
-
-**Mitigation:** The 10% pool cap is the primary defense and it is robust. The lootbox resolution converts excess to tickets (time-distributed) and BURNIE (inflationary but burnable). The system is solvent by construction for ETH payouts. Monitor for lootbox-driven ticket inflation at specific future levels.
+**Severity:** LOW. The system is solvent by construction. The 10% ETH cap is the hard guarantee, and the lootbox ticket distribution across 100 levels means even a 100,000x jackpot hit creates only a modest per-level ticket increase relative to normal volume.
 
 ---
 
-## [MEDIUM] Late-Entry Disadvantage and Soft Ponzi Characteristics
+## [LOW] Late-Entry Disadvantage and Soft Ponzi Characteristics
 
-**Mechanism:** Prize pools grow from player deposits. Early players enter at 0.01 ETH, later players at up to 0.24 ETH. Prize distribution occurs at jackpot levels. Future pool feeds next pool which feeds current pool.
+**Mechanism:** Prize pools grow from player deposits. Ticket prices increase with level. Prize distribution occurs at jackpot levels.
 
-**Actor Type:** Late Entrant
+**Why Higher Ticket Prices Don't Matter:**
 
-**Attack Steps (or rather, disadvantage analysis):**
-1. At level 50, ticket price is 0.08 ETH (8x the level 0 price)
-2. Early players already have tickets at level 50 from whale bundles bought at 2.4 ETH
-3. Jackpot leaderboards (BAF) are dominated by players with months of coinflip history
-4. Deity passes are more expensive: 24 + T(n) ETH where n = passes sold (T(12) = 78 ETH for the 12th pass = 102 ETH total)
-5. Prize pools may be depleted by earlier jackpot distributions
+Ticket prices scale with level, but so do prize pools — because the pools are funded by those same ticket purchases. A player buying a 0.08 ETH ticket at level 50 is competing for a pool that was filled by 0.08 ETH tickets, not the 0.01 ETH tickets from level 0. The EV per ticket is roughly constant regardless of entry level. Early players didn't get "cheap" tickets for today's jackpot — they got cheap tickets for small early pools.
 
-**Profitability:** NEGATIVE for late entrants relative to early ones. However:
-- Prize pools are proportional to total deposits (stETH yield grows with deposits)
-- Whale bundles provide catch-up mechanism (100 levels of coverage)
-- Lootbox ticket rolls can target future levels (5% chance of 5-50 levels ahead)
-- New deposits refresh prize pools
-- Late entrants benefit from larger pools even if share is smaller
+The only real early advantages are:
+- **Deity passes** are cheaper when fewer have been sold (quadratic pricing: 24 + T(n) ETH)
+- **Whale bundle bonus tickets** (40/level for first 10 levels) reward early whale buyers with extra coverage
+- These represent a small fraction of total tickets in the system
 
-**System Impact:** HIGH. This is the classic "early advantage" problem in any level-based game with growing costs. It is not a Ponzi scheme because:
+**Not a Ponzi Because:**
 1. No payouts from new player deposits directly to old players (zero-rake)
 2. Prize funding comes from stETH yield, not principal
-3. Ticket purchases go to prize pools that benefit all eligible players
+3. Ticket purchases go to prize pools that benefit all eligible players at that level
 4. No recruitment requirement for returns
+5. BAF leaderboard resets every 10 levels — no permanent incumbency advantage
 
-However, the *perception* of late-entry disadvantage can become self-fulfilling if it deters new players, reducing yield, reducing prizes, reducing attractiveness.
-
-**Mitigation:** The protocol has several catch-up mechanisms: whale bundles (ticket coverage), activity score system (rewards engagement over capital), quest system (BURNIE accumulation), and the fact that prize pools grow with participation. The BOOTSTRAP_PRIZE_POOL (50 ETH at level 0) ensures minimum pool size. Consider explicit "catch-up" mechanics or reduced-price entry windows at higher levels.
+**System Impact:** LOW. Late entrants face roughly equivalent per-ticket EV to early players. The activity score system rewards engagement over capital, and whale bundles provide instant catch-up on ticket coverage. The BOOTSTRAP_PRIZE_POOL (50 ETH at level 0) ensures minimum starting pool size.
 
 ---
 
@@ -325,66 +297,71 @@ However, the *perception* of late-entry disadvantage can become self-fulfilling 
 
 ### Scenario A: Player Exodus Cascade
 
-**Trigger:** Extended period of unfavorable coinflip outcomes (e.g., 5+ consecutive loss days at the global level)
+**Trigger:** General loss of interest or external market conditions driving players away
 
-**Cascade Mechanism:**
-1. Global 50/50 coinflip produces loss days where ALL players lose their stake
-2. Auto-rebuy carries reset to zero on loss days
-3. Players with large carries lose accumulated compound value
-4. Player frustration increases, some disable auto-rebuy and withdraw
-5. Reduced coinflip deposits lower bounty accumulation (1000 BURNIE/day)
-6. Lower BAF credits reduce jackpot competitiveness
-7. Fewer daily mints reduce advanceGame() eligibility pool
-8. Game progression slows, reducing jackpot frequency
-9. Slower progression reduces engagement, further reducing deposits
+**Why It's Self-Correcting:**
 
-**Severity:** MODERATE. The 50% loss rate means 5 consecutive losses has P = 3.125% -- uncommon but not rare over a long time horizon. However, the protocol has circuit breakers:
+The protocol's prize pools are locked and accumulating — they don't leave with the players. When players exit:
+
+1. Prize pools (daily jackpot, scatter jackpot, lootbox pool, Decimator pool) continue growing from stETH yield
+2. Fewer active players means each remaining player's share of those pools increases
+3. This creates a natural "buy low" attractor: as player count drops, per-player EV rises, drawing opportunistic players back in
+4. The coinflip is a sideshow engagement mechanic, not the core value proposition — the real draw is jackpots, Degenerette, and Decimator, all of which pay ETH
+
+**Structural Resilience:**
 - stETH yield continues regardless of player activity
-- CREATOR can bypass daily mint gate to advance game
-- 912-day idle timeout at level 0, 365-day inactivity timeout later
-- Prize pools accumulate during inactive periods, creating recovery incentive
+- Prize pools accumulate during inactive periods, making re-entry increasingly attractive
+- 912-day idle timeout at level 0, 365-day inactivity timeout later — the game is patient
+- CREATOR can bypass daily mint gate to advance game if needed
 
-**Recovery Mechanism:** Accumulated prize pools during low-activity periods create a natural attractor: as pools grow, expected returns for active players increase, drawing players back. The 3-day emergency stall timeout ensures game progression continues even with minimal participation.
+**Severity:** LOW. The only true failure is 365 days of *zero* activity triggering game-over. Any activity at all keeps the game alive, and growing prize pools create increasing incentive for someone to show up.
 
-### Scenario B: BURNIE Token Price Decline Spiral
+### Scenario B: BURNIE Token Price Decline — Why It Has a Floor
 
-**Trigger:** BURNIE sells exceed buys, price drops, reducing utility value
+BURNIE cannot spiral to zero because every unit of BURNIE in existence was minted in exchange for ETH entering the system. The token has concrete utility that translates directly into ETH value:
 
-**Cascade Mechanism:**
-1. BURNIE price drops (relative to ETH)
-2. Quest rewards (100-200 BURNIE/day) worth less in ETH
-3. Coinflip stakes worth less, reducing engagement incentive
-4. Decimator burns become cheaper (can burn more for same ETH cost), but prizes are in ETH
-5. BURNIE-denominated activities lose appeal
-6. Players shift to ETH-only activities (Degenerette ETH bets, ticket purchases)
-7. Reduced BURNIE demand further depresses price
-8. Vault DGVB shares (BURNIE-backed) lose value
-9. Overall protocol engagement metrics decline
+**ETH-Backed Issuance:** Every source of BURNIE requires ETH flowing in:
+- Minting tickets with ETH → BURNIE coin rewards
+- Quest rewards are funded by ongoing ETH ticket purchases
+- Vault BURNIE is backed by the vaultMintAllowance reserve
 
-**Severity:** LOW-MODERATE. BURNIE is never minted without ETH entering the system to cover it, and the primary sink (ticket/lootbox purchases) scales naturally with play. The coinflip is net deflationary (~1.6% of all stakes permanently destroyed). If players stop engaging, BURNIE deflation is moot because the game-over jackpot process is BURNIE-denominated and triggers on inactivity. The structural equilibrium makes hyperinflation unlikely. The vaultMintAllowance (2M BURNIE) provides a virtual reserve.
+**Utility Floor — Ticket Fuel:** BURNIE purchases tickets at a fixed rate (1000 BURNIE/ticket regardless of level). As long as people play the game, there is base demand for BURNIE as ticket fuel. If BURNIE price drops below this implied value, rational players buy cheap BURNIE for tickets instead of paying ETH — creating buy pressure that restores the floor.
 
-**Circuit Breakers:**
-- Decimator burns increase as BURNIE gets cheaper (positive for token)
-- BURNIE ticket purchases have fixed unit cost (1000 BURNIE/ticket regardless of level) maintaining base demand
-- BURNIE lootboxes convert at 80% ETH-equivalent, maintaining a price floor relative to ticket value
-- Coinflip burns ALL deposits at stake time; losers get nothing back, winners receive newly minted tokens (~1.97x) — net ~1.6% deflationary
+**Utility Floor — Decimator:** Burning BURNIE in the Decimator competes for ETH prize pools. If BURNIE is cheap, the cost-per-ETH-of-expected-value via Decimator drops, making it an increasingly attractive arbitrage. Rational players buy cheap BURNIE to burn for a shot at ETH prizes — again creating buy pressure proportional to the discount.
+
+**Utility Floor — Lootboxes:** BURNIE lootboxes convert at 80% ETH-equivalent value, providing another price reference tied to ETH.
+
+**Net Deflationary Pressure:** The coinflip burns ALL deposits at stake time; losers get nothing back, winners receive newly minted tokens (~1.97x) — net ~1.6% of all stakes are permanently destroyed. This means total BURNIE supply shrinks over time relative to the ETH that created it.
+
+**Severity:** LOW. The price can fluctuate, but the structural floor is set by the ETH-denominated utility of BURNIE across tickets, Decimator, and lootboxes. A "spiral" requires the utility to disappear, which only happens if the game itself stops — at which point the game-over jackpot process handles final distribution.
 
 ### Scenario C: Whale Departure Cascade
 
 **Trigger:** Top deity pass holders exit the game
 
-**Cascade Mechanism:**
-1. Whale sells/abandons deity pass (non-transferable, so they simply stop playing)
-2. BAF leaderboard loses top competitor, reducing competitive tension
-3. Whale's daily activity (mints, flips, lootboxes) disappears
-4. Prize pool growth rate slows
-5. Affiliate rewards from whale's referral network decline
-6. Other whales see reduced competition and may reduce their own activity
-7. Game progression slows if whales were primary advanceGame() callers
+**Why Whale Departure Is Net Positive for Remaining Players:**
 
-**Severity:** LOW-MODERATE. Deity passes are capped at 24 total, so maximum whale concentration is limited. The scatter jackpot mechanism (50% of jackpot, distributed by traits) ensures broad distribution even without whale participation. The protocol's engagement mechanics are designed for broad participation, not whale dependency.
+A whale is a net *extractor* — they deposit ETH, but their high activity scores, deity boons, and affiliate networks mean they capture a disproportionate share of prize pools relative to their deposits. When a whale leaves:
 
-**Circuit Breaker:** Deity pass refund mechanism (if level 0 after 24 months, 730 days = DEITY_PASS_REFUND_DAYS) provides a safety net for early buyers if the game fails to progress. This prevents total loss and maintains minimum confidence.
+1. **Their deposits disappear** — prize pool growth rate slows (negative effect)
+2. **Their extraction disappears** — they stop claiming jackpots, Degenerette payouts, Decimator prizes, affiliate rakes, and deity boon advantages (positive effect)
+3. **Effect #2 outweighs #1** — because the whale was a skilled, optimized player capturing *more* than they put in (that's what makes them a whale). Their share of prize distributions is redistributed across all remaining players.
+
+**Concrete Mechanism:**
+- Jackpot pools (daily, scatter, lootbox) are sized by total deposits. A whale leaving reduces deposits by X but removes a player who was winning >X in expected jackpot value.
+- Activity score rankings compress upward — every remaining player's relative position improves, boosting their EV multiplier (80-135% range) and jackpot weighting.
+- Decimator bucket competition decreases — fewer high-multiplier burns means remaining burners face better odds per ETH of prize pool.
+- Degenerette payout pool has one fewer skilled bettor extracting from it.
+
+**The "Whale Departure Paradox":** The protocol is healthier per-player after a whale leaves, even though total volume drops. This is structurally different from DeFi protocols where whale departure causes liquidity crises — here, prize pools are locked and accumulated, not withdrawable.
+
+**When It IS Negative:**
+- If the whale dumps their BURNIE holdings on exit, creating sell pressure on the token price
+- If departure triggers a confidence cascade where *many* players leave simultaneously — but even then, the remaining players' per-capita EV increases further. The only true failure mode is if the game ends entirely (idle timeout after 365 days of zero activity). As long as the game continues, every departure concentrates more prize pool value into fewer hands.
+
+**Severity:** LOW. Deity passes are capped at 32 total, limiting maximum whale concentration. The scatter jackpot mechanism (50% of jackpot, distributed by traits) ensures broad distribution independent of whale participation. The self-correcting EV rebalancing means the game naturally adjusts to any population size — fewer players means more prize per player.
+
+**Circuit Breaker:** Deity pass refund mechanism (if level 0 after 24 months, 730 days = DEITY_PASS_REFUND_DAYS) provides a safety net for early buyers if the game fails to progress.
 
 ### Scenario D: Combined Stress Test
 
@@ -442,7 +419,7 @@ The dominant strategy for all player types is consistent daily engagement. The a
 - Deity passes sell at increasing prices, funding prize pools
 - Game progresses through levels, unlocking new jackpot opportunities
 
-**Steady-State:** At maturity (all 24 deity passes sold, stable player base), the protocol becomes a yield-funded entertainment system where stETH yield is redistributed based on engagement metrics. The key metric is whether stETH yield on total deposits exceeds the expected value distributed through prizes. Since the protocol is zero-rake and prizes come from yield, this should be sustainable indefinitely.
+**Steady-State:** At maturity (all 32 deity passes sold, stable player base), the protocol becomes a yield-funded entertainment system where stETH yield is redistributed based on engagement metrics. The key metric is whether stETH yield on total deposits exceeds the expected value distributed through prizes. Since the protocol is zero-rake and prizes come from yield, this should be sustainable indefinitely.
 
 ### Decline Scenario
 
@@ -474,7 +451,7 @@ The Degenerus Protocol demonstrates sophisticated mechanism design with several 
 
 The primary structural risks are:
 1. **Late-entry disadvantage** -- the perception (even if not the reality) of early-player advantage could deter growth
-2. **Deity pass concentration** -- 24 passes with quadratic pricing creates a permanent class divide in engagement rewards
+2. **Deity pass concentration** -- 32 passes with quadratic pricing creates a permanent class divide in engagement rewards
 3. **Player acquisition dependency** -- the system is robust while people play, but prolonged player drought tests the timeout/game-over mechanisms
 
 ---
@@ -536,7 +513,7 @@ That said, internal monitoring and optional power-user dashboards (gated behind 
 | Ticket price range | 0.01 - 0.24 ETH | Entry cost scaling |
 | Whale bundle price | 2.4 / 4 ETH | Catch-up mechanism cost |
 | Deity pass base | 24 ETH + T(n) | Whale commitment cost |
-| Deity pass cap | 24 total | Concentration limit |
+| Deity pass cap | 32 total | Concentration limit |
 | Coinflip win rate | 50% (VRF) | Fair game guarantee |
 | Coinflip reward range | 50-150% (normal 78-115%) | Bonus on top of stake |
 | Coinflip reward mean | 96.85% | Slight negative EV |
