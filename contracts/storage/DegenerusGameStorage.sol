@@ -681,10 +681,9 @@ abstract contract DegenerusGameStorage {
     // SECURITY: Single-use consumable; prevents stacking/hoarding.
     // Expiration prevents indefinite storage.
 
-    /// @dev Timestamp when coinflip boon was awarded (per player).
-    ///      Used to enforce 2-day expiration window.
-    ///      If block.timestamp > coinflipBoonTimestamp + 2 days, boon is expired.
-    mapping(address => uint48) internal coinflipBoonTimestamp;
+    /// @dev Day index when coinflip boon was awarded (per player).
+    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
+    mapping(address => uint48) internal coinflipBoonDay;
 
     // =========================================================================
     // Lootbox Boost Boons
@@ -699,9 +698,9 @@ abstract contract DegenerusGameStorage {
     ///      Simple boolean prevents accumulation.
     mapping(address => bool) internal lootboxBoon5Active;
 
-    /// @dev Timestamp when lootbox 5% boost boon was awarded (per player).
-    ///      Used to enforce 2-day expiration window.
-    mapping(address => uint48) internal lootboxBoon5Timestamp;
+    /// @dev Day index when lootbox 5% boost boon was awarded (per player).
+    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
+    mapping(address => uint48) internal lootboxBoon5Day;
 
     /// @dev Lootbox 15% boost boon active flag per player (simple on/off).
     ///      Awarded randomly from lootboxes (0.5% chance per ETH spent).
@@ -712,9 +711,9 @@ abstract contract DegenerusGameStorage {
     ///      Simple boolean prevents accumulation.
     mapping(address => bool) internal lootboxBoon15Active;
 
-    /// @dev Timestamp when lootbox 15% boost boon was awarded (per player).
-    ///      Used to enforce 2-day expiration window.
-    mapping(address => uint48) internal lootboxBoon15Timestamp;
+    /// @dev Day index when lootbox 15% boost boon was awarded (per player).
+    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
+    mapping(address => uint48) internal lootboxBoon15Day;
 
     /// @dev Lootbox 25% boost boon active flag per player (simple on/off).
     ///      Awarded randomly from lootboxes (0.1% chance per ETH spent).
@@ -725,9 +724,9 @@ abstract contract DegenerusGameStorage {
     ///      Simple boolean prevents accumulation.
     mapping(address => bool) internal lootboxBoon25Active;
 
-    /// @dev Timestamp when lootbox 25% boost boon was awarded (per player).
-    ///      Used to enforce 2-day expiration window.
-    mapping(address => uint48) internal lootboxBoon25Timestamp;
+    /// @dev Day index when lootbox 25% boost boon was awarded (per player).
+    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
+    mapping(address => uint48) internal lootboxBoon25Day;
 
     // =========================================================================
     // Whale Bundle Boon
@@ -750,9 +749,9 @@ abstract contract DegenerusGameStorage {
     ///      Applied on lootbox open via game call; expires if not opened within 2 days.
     mapping(address => uint24) internal activityBoonPending;
 
-    /// @dev Timestamp when activity boon was last assigned (per player).
-    ///      Used to enforce 2-day expiration window.
-    mapping(address => uint48) internal activityBoonTimestamp;
+    /// @dev Day index when activity boon was last assigned (per player).
+    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
+    mapping(address => uint48) internal activityBoonDay;
 
     // =========================================================================
     // Auto-Rebuy + afKing Mode (Packed)
@@ -789,13 +788,13 @@ abstract contract DegenerusGameStorage {
     /// @dev Purchase boost basis points (5%/15%/25%), one-time, time-limited.
     mapping(address => uint16) internal purchaseBoostBps;
 
-    /// @dev Timestamp when purchase boost was awarded.
-    mapping(address => uint48) internal purchaseBoostTimestamp;
+    /// @dev Day index when purchase boost was awarded (expires at jackpot reset).
+    mapping(address => uint48) internal purchaseBoostDay;
 
     /// @dev Deprecated. Use purchaseBoostBps.
     mapping(address => uint16) internal _deprecated_ticketBoostBps;
 
-    /// @dev Deprecated. Use purchaseBoostTimestamp.
+    /// @dev Deprecated. Use purchaseBoostDay.
     mapping(address => uint48) internal _deprecated_ticketBoostTimestamp;
 
     /// @dev Decimator burn boost basis points (10%/25%/50%), one-time, no expiry.
@@ -1303,8 +1302,8 @@ abstract contract DegenerusGameStorage {
     ///      Awarded randomly from lootboxes; extremely rare.
     mapping(address => uint8) internal deityPassBoonTier;
 
-    /// @dev Timestamp when deity pass boon was awarded (4-day expiry for lootbox-rolled).
-    mapping(address => uint48) internal deityPassBoonTimestamp;
+    /// @dev Day index when deity pass boon was awarded (4-day expiry for lootbox-rolled).
+    mapping(address => uint48) internal deityPassBoonDay;
 
     /// @dev Day when deity-granted deity pass boon was issued (1-day expiry).
     mapping(address => uint48) internal deityDeityPassBoonDay;

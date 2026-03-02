@@ -80,8 +80,8 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     /// @dev Maximum lootbox value eligible for boost (10 ETH scaled).
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
 
-    /// @dev Lootbox boost expiry duration (48 hours).
-    uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800;
+    /// @dev Lootbox boost expiry duration (2 game days, expires at jackpot reset).
+    uint48 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
 
     /// @dev PPM scale for DGNRS pool calculations (1,000,000 = 100%).
     uint32 private constant DGNRS_WHALE_REWARD_PPM_SCALE = 1_000_000;
@@ -155,8 +155,8 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     /// @dev BURNIE transfer cost for deity pass trade (5 ETH worth, scaled).
     uint256 private constant DEITY_TRANSFER_ETH_COST = 5 ether;
 
-    /// @dev Deity pass boon expiry (4 days in seconds, matches lootbox PURCHASE_BOOST_EXPIRY_SECONDS).
-    uint48 private constant DEITY_PASS_BOON_EXPIRY_SECONDS = 345600;
+    /// @dev Deity pass boon expiry (4 game days, expires at jackpot reset).
+    uint48 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
     // -------------------------------------------------------------------------
     // Purchases
@@ -197,7 +197,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         bool hasValidBoon = false;
         uint48 boonDay = whaleBoonDay[buyer];
         if (boonDay != 0) {
-            uint48 currentDay = _currentMintDay();
+            uint48 currentDay = _simulatedDayIndex();
             hasValidBoon = currentDay <= boonDay + 4;
         }
 
@@ -445,14 +445,14 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         uint256 totalPrice = basePrice;
         uint8 boonTier = deityPassBoonTier[buyer];
         if (boonTier != 0) {
-            uint48 boonTs = deityPassBoonTimestamp[buyer];
             // Check expiry: 4 days for lootbox-rolled, 1 day for deity-granted
             bool expired;
             uint48 deityDay = deityDeityPassBoonDay[buyer];
             if (deityDay != 0) {
                 expired = _simulatedDayIndex() > deityDay;
             } else {
-                expired = boonTs > 0 && block.timestamp > uint256(boonTs) + DEITY_PASS_BOON_EXPIRY_SECONDS;
+                uint48 stampDay = deityPassBoonDay[buyer];
+                expired = stampDay > 0 && _simulatedDayIndex() > stampDay + DEITY_PASS_BOON_EXPIRY_DAYS;
             }
             if (!expired) {
                 uint16 discountBps = boonTier == 3 ? uint16(5000) : (boonTier == 2 ? uint16(2500) : uint16(1000));
@@ -460,7 +460,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             }
             // Consume boon regardless of expiry
             deityPassBoonTier[buyer] = 0;
-            deityPassBoonTimestamp[buyer] = 0;
+            deityPassBoonDay[buyer] = 0;
             deityDeityPassBoonDay[buyer] = 0;
         }
         if (msg.value != totalPrice) revert E();
@@ -775,12 +775,13 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     ) private returns (uint256 boostedAmount) {
         boostedAmount = amount;
         uint16 consumedBoostBps = 0;
+        uint48 currentDay = _simulatedDayIndex();
 
         // Check 25% boost first (rarest, best boost)
         bool has25Boost = lootboxBoon25Active[player];
         if (has25Boost) {
-            uint48 boost25Timestamp = lootboxBoon25Timestamp[player];
-            if (block.timestamp > uint256(boost25Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+            uint48 stampDay = lootboxBoon25Day[player];
+            if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                 has25Boost = false;
                 lootboxBoon25Active[player] = false;
             }
@@ -795,8 +796,8 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             // Check 15% boost next
             bool has15Boost = lootboxBoon15Active[player];
             if (has15Boost) {
-                uint48 boost15Timestamp = lootboxBoon15Timestamp[player];
-                if (block.timestamp > uint256(boost15Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                uint48 stampDay = lootboxBoon15Day[player];
+                if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                     has15Boost = false;
                     lootboxBoon15Active[player] = false;
                 }
@@ -811,8 +812,8 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
                 // Check 5% boost last
                 bool has5Boost = lootboxBoon5Active[player];
                 if (has5Boost) {
-                    uint48 boost5Timestamp = lootboxBoon5Timestamp[player];
-                    if (block.timestamp > uint256(boost5Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                    uint48 stampDay = lootboxBoon5Day[player];
+                    if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                         has5Boost = false;
                         lootboxBoon5Active[player] = false;
                     }

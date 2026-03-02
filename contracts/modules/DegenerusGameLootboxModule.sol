@@ -763,7 +763,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool decimatorAllowed = _isDecimatorWindow();
         bool deityPassAvailable = deityPassOwners.length < DEITY_PASS_MAX_TOTAL;
         uint8 boonType = _deityBoonForSlot(deity, day, slot, decimatorAllowed, deityPassAvailable);
-        _applyBoon(recipient, boonType, day, uint48(block.timestamp), day, 0, true);
+        _applyBoon(recipient, boonType, day, day, 0, true);
 
         emit DeityBoonIssued(deity, recipient, day, slot, boonType);
     }
@@ -994,8 +994,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (!okClr) revert E();
         uint8 activeCategory = _activeBoonCategory(player);
 
-        uint48 nowTs = uint48(block.timestamp);
-        uint48 currentDay = _simulatedDayIndexAt(nowTs);
+        uint48 currentDay = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
 
         uint24 lazyPassLevel = currentLevel == 0 ? 1 : currentLevel + 1;
@@ -1040,7 +1039,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             return;
         }
 
-        _applyBoon(player, boonType, day, nowTs, currentDay, originalAmount, false);
+        _applyBoon(player, boonType, day, currentDay, originalAmount, false);
     }
 
     /// @dev Convert BURNIE amount to ETH value using current price.
@@ -1322,7 +1321,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         address player,
         uint8 boonType,
         uint48 day,
-        uint48 nowTs,
         uint48 currentDay,
         uint256 originalAmount,
         bool isDeity
@@ -1335,7 +1333,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (isDeity || bps > coinflipBoonBps[player]) {
                 coinflipBoonBps[player] = bps;
             }
-            coinflipBoonTimestamp[player] = nowTs;
+            coinflipBoonDay[player] = currentDay;
             deityCoinflipBoonDay[player] = isDeity ? day : uint48(0);
             if (!isDeity) emit LootBoxReward(player, day, 2, originalAmount, LOOTBOX_BOON_MAX_BONUS);
             return;
@@ -1346,15 +1344,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (isDeity) {
                 if (boonType == DEITY_BOON_LOOTBOX_25) {
                     lootboxBoon25Active[player] = true;
-                    lootboxBoon25Timestamp[player] = nowTs;
+                    lootboxBoon25Day[player] = currentDay;
                     deityLootboxBoon25Day[player] = day;
                 } else if (boonType == DEITY_BOON_LOOTBOX_15) {
                     lootboxBoon15Active[player] = true;
-                    lootboxBoon15Timestamp[player] = nowTs;
+                    lootboxBoon15Day[player] = currentDay;
                     deityLootboxBoon15Day[player] = day;
                 } else {
                     lootboxBoon5Active[player] = true;
-                    lootboxBoon5Timestamp[player] = nowTs;
+                    lootboxBoon5Day[player] = currentDay;
                     deityLootboxBoon5Day[player] = day;
                 }
             } else {
@@ -1371,13 +1369,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 lootboxBoon15Active[player] = activeBps == LOOTBOX_BOOST_15_BONUS_BPS;
                 lootboxBoon5Active[player] = activeBps == LOOTBOX_BOOST_5_BONUS_BPS;
                 if (lootboxBoon25Active[player]) {
-                    lootboxBoon25Timestamp[player] = nowTs;
+                    lootboxBoon25Day[player] = currentDay;
                     deityLootboxBoon25Day[player] = 0;
                 } else if (lootboxBoon15Active[player]) {
-                    lootboxBoon15Timestamp[player] = nowTs;
+                    lootboxBoon15Day[player] = currentDay;
                     deityLootboxBoon15Day[player] = 0;
                 } else if (lootboxBoon5Active[player]) {
-                    lootboxBoon5Timestamp[player] = nowTs;
+                    lootboxBoon5Day[player] = currentDay;
                     deityLootboxBoon5Day[player] = 0;
                 }
                 uint8 rewardType = activeBps == LOOTBOX_BOOST_25_BONUS_BPS
@@ -1395,7 +1393,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (isDeity || bps > purchaseBoostBps[player]) {
                 purchaseBoostBps[player] = bps;
             }
-            purchaseBoostTimestamp[player] = nowTs;
+            purchaseBoostDay[player] = currentDay;
             deityPurchaseBoostDay[player] = isDeity ? day : uint48(0);
             if (!isDeity) {
                 uint8 rewardType = bps == LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
@@ -1440,7 +1438,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (isDeity || amt > activityBoonPending[player]) {
                 activityBoonPending[player] = amt;
             }
-            activityBoonTimestamp[player] = nowTs;
+            activityBoonDay[player] = currentDay;
             deityActivityBoonDay[player] = isDeity ? day : uint48(0);
             if (!isDeity) emit LootBoxReward(player, day, 10, originalAmount, amt);
             return;
@@ -1454,7 +1452,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (isDeity || tier > deityPassBoonTier[player]) {
                 deityPassBoonTier[player] = tier;
             }
-            deityPassBoonTimestamp[player] = nowTs;
+            deityPassBoonDay[player] = currentDay;
             deityDeityPassBoonDay[player] = isDeity ? day : uint48(0);
             if (!isDeity) {
                 uint16 bps = tier == DEITY_PASS_BOON_TIER_50 ? 5000 : (tier == DEITY_PASS_BOON_TIER_25 ? 2500 : 1000);
