@@ -705,6 +705,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 refundAmount = deityPassRefundable[buyer];
         if (refundAmount == 0) revert E();
         deityPassRefundable[buyer] = 0;
+        deityPassPaidTotal[buyer] = 0;
 
         // Burn ERC721 to prevent double-refund
         uint8 symbolId = deityPassSymbol[buyer];
@@ -2654,6 +2655,43 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             unchecked {
                 ++i;
             }
+        }
+    }
+
+    /// @notice Sample up to 4 far-future ticket holders from ticketQueue.
+    /// @dev View function for BAF far-future selection; samples levels [current+5, current+99].
+    ///      Tries up to 10 random levels, returns however many non-zero holders are found (max 4).
+    /// @param entropy Random entropy for sampling (typically from VRF).
+    /// @return tickets Array of player addresses (length 0-4).
+    function sampleFarFutureTickets(
+        uint256 entropy
+    ) external view returns (address[] memory tickets) {
+        uint24 currentLvl = level;
+        address[4] memory tmp;
+        uint8 found;
+        uint256 word = entropy;
+
+        for (uint8 s; s < 10 && found < 4; ) {
+            word = uint256(keccak256(abi.encodePacked(word, s)));
+            uint24 candidate = currentLvl + 5 + uint24(word % 95);
+
+            address[] storage queue = ticketQueue[candidate];
+            uint256 len = queue.length;
+            if (len != 0) {
+                uint256 idx = (word >> 32) % len;
+                address winner = queue[idx];
+                if (winner != address(0)) {
+                    tmp[found] = winner;
+                    unchecked { ++found; }
+                }
+            }
+            unchecked { ++s; }
+        }
+
+        tickets = new address[](found);
+        for (uint8 i; i < found; ) {
+            tickets[i] = tmp[i];
+            unchecked { ++i; }
         }
     }
 

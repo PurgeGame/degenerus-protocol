@@ -39,20 +39,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     event Advance(uint8 stage, uint24 lvl);
 
-    // Advance stage constants
+    // Advance stage constants (sequential, matching advanceGame flow)
     uint8 private constant STAGE_GAMEOVER = 0;
     uint8 private constant STAGE_RNG_REQUESTED = 1;
     uint8 private constant STAGE_TRANSITION_WORKING = 2;
     uint8 private constant STAGE_TRANSITION_DONE = 3;
+    uint8 private constant STAGE_FUTURE_TICKETS_WORKING = 4;
     uint8 private constant STAGE_TICKETS_WORKING = 5;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
-    uint8 private constant STAGE_FUTURE_TICKETS_WORKING = 7;
-    // Stages 8-9 were level jackpot stages (removed)
-    uint8 private constant STAGE_ENTERED_JACKPOT = 13;
-    uint8 private constant STAGE_JACKPOT_ETH_RESUME = 15;
-    uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 16;
-    uint8 private constant STAGE_JACKPOT_COIN_TICKETS = 17;
-    uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 18;
+    uint8 private constant STAGE_ENTERED_JACKPOT = 7;
+    uint8 private constant STAGE_JACKPOT_ETH_RESUME = 8;
+    uint8 private constant STAGE_JACKPOT_COIN_TICKETS = 9;
+    uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 10;
+    uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 11;
     event ReverseFlip(
         address indexed caller,
         uint256 totalQueued,

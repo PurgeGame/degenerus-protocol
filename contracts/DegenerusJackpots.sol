@@ -190,10 +190,10 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  | 10% | Top BAF bettor for this level                             | |
       |  | 10% | Top coinflip bettor from last 24h window                  | |
       |  |  5% | Random pick: 3rd or 4th BAF slot                          | |
-      |  | 11.25% | Affiliate draw (top referrers, weighted 5/3/2/0)       | |
-      |  | 22.5%  | Scatter 1st place (50 rounds × 4 trait tickets)        | |
-      |  | 28.125%| Scatter 2nd place (50 rounds × 4 trait tickets)        | |
-      |  | 10% | Returned to future pool                                   | |
+      |  | 10% | Affiliate draw (top referrers, weighted 5/3/2/0)          | |
+      |  |  5% | Far-future ticket holders (3% 1st / 2% 2nd by BAF score)  | |
+      |  | 40% | Scatter 1st place (50 rounds × 4 trait tickets)           | |
+      |  | 20% | Scatter 2nd place (50 rounds × 4 trait tickets)           | |
       |  +-----------------------------------------------------------------+ |
       |                                                                      |
       |  ELIGIBILITY (required for all winners):                             |
@@ -229,10 +229,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
         returns (address[] memory winners, uint256[] memory amounts, uint256 winnerMask, uint256 returnAmountWei)
     {
         uint256 P = poolWei;
-        uint256 slice10 = P / 10;
-        // Max distinct winners: 1 (top BAF) + 1 (top flip) + 1 (pick) + 3 (affiliate draw) + 50 + 50 (scatter buckets) = 106.
-        address[] memory tmpW = new address[](106);
-        uint256[] memory tmpA = new uint256[](106);
+        // Max distinct winners: 1 (top BAF) + 1 (top flip) + 1 (pick) + 3 (affiliate draw) + 2 (far-future) + 50 + 50 (scatter) = 108.
+        address[] memory tmpW = new address[](108);
+        uint256[] memory tmpA = new uint256[](108);
         uint256 n;
         uint256 toReturn;
         uint256 mask;
@@ -242,7 +241,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
         {
             // Slice A: 10% to the top BAF bettor for the level.
-            uint256 topPrize = (P * 9) / 80;
+            uint256 topPrize = P / 10;
             (address w, ) = _bafTop(lvl, 0);
             if (_creditOrRefund(w, topPrize, tmpW, tmpA, n)) {
                 unchecked {
@@ -255,7 +254,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
         {
             // Slice A2: 10% to the top coinflip bettor from the last day window.
-            uint256 topPrize = (P * 9) / 80;
+            uint256 topPrize = P / 10;
             (address w, ) = coin.coinflipTopLastDay();
             if (_creditOrRefund(w, topPrize, tmpW, tmpA, n)) {
                 unchecked {
@@ -271,7 +270,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 ++salt;
             }
             entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
-            uint256 prize = (P * 9) / 160;
+            uint256 prize = P / 20;
             uint8 pick = 2 + uint8(entropy & 1);
             (address w, ) = _bafTop(lvl, pick);
             // Slice B: 5% to either the 3rd or 4th BAF leaderboard slot (pseudo-random tie-break).
@@ -285,8 +284,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
         }
 
         {
-            // Slice C: affiliate achievers (past 20 levels) share 11.25% across four descending prizes.
-            uint256 affiliateTotal = (P * 9) / 80;
+            // Slice C: affiliate achievers (past 20 levels) share 10% across four descending prizes.
+            uint256 affiliateTotal = P / 10;
             uint256[4] memory affiliatePrizes;
             affiliatePrizes[0] = (affiliateTotal * 5) / 10;
             affiliatePrizes[1] = (affiliateTotal * 3) / 10;
@@ -418,15 +417,54 @@ contract DegenerusJackpots is IDegenerusJackpots {
             }
         }
 
-        // Return 10% to the reward pool (retro-top slice removed).
-        toReturn += slice10;
+        // Slice D: 5% to far-future ticket holders (3% 1st / 2% 2nd by BAF score).
+        {
+            unchecked { ++salt; }
+            entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
+            address[] memory farTickets = degenerusGame.sampleFarFutureTickets(entropy);
+
+            uint256 farFirst = (P * 3) / 100;
+            uint256 farSecond = P / 50;
+
+            address best;
+            uint256 bestScore;
+            address second;
+            uint256 secondScore;
+
+            uint256 fLen = farTickets.length;
+            for (uint256 i; i < fLen; ) {
+                address cand = farTickets[i];
+                uint256 score = _bafScore(cand, lvl);
+                if (score > bestScore || best == address(0)) {
+                    second = best;
+                    secondScore = bestScore;
+                    best = cand;
+                    bestScore = score;
+                } else if ((score > secondScore || second == address(0)) && cand != best) {
+                    second = cand;
+                    secondScore = score;
+                }
+                unchecked { ++i; }
+            }
+
+            if (_creditOrRefund(best, farFirst, tmpW, tmpA, n)) {
+                unchecked { ++n; }
+            } else {
+                toReturn += farFirst;
+            }
+            if (_creditOrRefund(second, farSecond, tmpW, tmpA, n)) {
+                unchecked { ++n; }
+            } else {
+                toReturn += farSecond;
+            }
+        }
 
         // Scatter slice: 200 total draws (4 tickets * 50 rounds). Per round, take top-2 by BAF score.
         // Game applies special ticket handling for the last BAF_SCATTER_TICKET_WINNERS scatter winners via `winnerMask`.
         {
             // Slice E: scatter tickets from trait sampler so casual participants can land smaller cuts.
-            uint256 scatterTop = (P * 9) / 40;
-            uint256 scatterSecond = (P * 45) / 160;
+            uint256 scatterTop = (P * 2) / 5;
+            uint256 scatterSecond = P / 5;
             address[50] memory firstWinners;
             address[50] memory secondWinners;
             uint256 firstCount;
