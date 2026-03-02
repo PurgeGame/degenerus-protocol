@@ -45,11 +45,6 @@ interface IDegenerusGamePlayer {
         uint256 ticketQuantity,
         uint256 lootBoxBurnieAmount
     ) external;
-    function purchaseDeityPass(address buyer, bool useBoon) external payable;
-    function deityBoonSlots(
-        address deity
-    ) external view returns (uint8[3] memory slots, uint8 usedMask, uint48 day);
-    function issueDeityBoon(address deity, address recipient, uint8 slot) external;
 }
 
 /// @notice Interface for BURNIE coin contract player-facing functions
@@ -125,11 +120,7 @@ contract DegenerusStonk {
     /// @notice Thrown when trying to unlock tokens before level change
     error LockStillActive();
 
-    /// @notice Thrown when caller lacks the required DGNRS supply share for boon issuance
-    error BoonIssuerInsufficient();
 
-    /// @notice Thrown when caller already issued a boon this level
-    error BoonAlreadyIssued();
 
     // =====================================================================
     //                              EVENTS
@@ -284,9 +275,6 @@ contract DegenerusStonk {
     /// @dev Affiliate code used for DGNRS purchases
     bytes32 private constant AFFILIATE_CODE_DGNRS = bytes32("DGNRS");
 
-    /// @dev Minimum share (in BPS) required to issue deity boons (0.05% = 5 bps).
-    uint16 private constant BOON_ISSUER_MIN_BPS = 5;
-
     /// @dev Reward for completing a quest on behalf of the contract (0.05% of remaining Reward pool).
     uint16 private constant QUEST_CONTRIBUTION_BPS = 5;
 
@@ -302,9 +290,6 @@ contract DegenerusStonk {
 
     /// @notice Cumulative BURNIE spent this level by each address
     mapping(address => uint256) private burnieSpentThisLevel;
-
-    /// @notice Last level when an address issued a deity boon
-    mapping(address => uint24) private lastDeityBoonLevel;
 
     /// @dev Game contract reference for player actions and claimable queries
     IDegenerusGamePlayer private constant game = IDegenerusGamePlayer(ContractAddresses.GAME);
@@ -566,57 +551,6 @@ contract DegenerusStonk {
         if (burnieAmount == 0) revert Insufficient();
         _checkAndRecordBurnieSpend(msg.sender, burnieAmount);
         game.purchaseBurnieLootbox(address(0), burnieAmount);
-    }
-
-    /// @notice Purchase a deity pass using an active boon on behalf of DGNRS.
-    /// @dev Uses DGNRS contract ETH + claimable winnings; no per-holder spend limit.
-    ///      priceWei must match the boon tier price required by the game contract.
-    /// @param priceWei Expected price (15/25/50 ETH).
-    function gamePurchaseDeityPassFromBoon(uint256 priceWei) external onlyHolder {
-        if (priceWei == 0) revert Insufficient();
-        if (address(this).balance < priceWei) {
-            uint256 claimable = _claimableWinnings();
-            if (claimable != 0) {
-                game.claimWinnings(address(0));
-            }
-        }
-        if (address(this).balance < priceWei) revert Insufficient();
-        game.purchaseDeityPass{value: priceWei}(address(0), true);
-    }
-
-    /// @notice Get the current day's deity boon slots for DGNRS.
-    /// @return slots Array of 5 boon slot types
-    /// @return usedMask Bitmask of already-used slots
-    /// @return day Current day index
-    function gameDeityBoonSlots()
-        external
-        view
-        returns (uint8[3] memory slots, uint8 usedMask, uint48 day)
-    {
-        return game.deityBoonSlots(address(this));
-    }
-
-    /// @notice Issue a deity boon from DGNRS to a recipient.
-    /// @dev Requires caller to own at least 0.5% of total DGNRS supply.
-    /// @param recipient Recipient of the boon
-    /// @param slot Slot index (0-4)
-    function gameIssueDeityBoon(address recipient, uint8 slot) external {
-        uint24 currentLevel = game.level();
-        if (lastDeityBoonLevel[msg.sender] == currentLevel) revert BoonAlreadyIssued();
-
-        uint256 supply = totalSupply;
-        if (supply == 0) revert BoonIssuerInsufficient();
-
-        uint256 locked = lockedBalance[msg.sender];
-        if (locked == 0 || lockedLevel[msg.sender] != currentLevel) {
-            revert BoonIssuerInsufficient();
-        }
-        if (locked * BPS_DENOM < supply * BOON_ISSUER_MIN_BPS) {
-            revert BoonIssuerInsufficient();
-        }
-
-        lastDeityBoonLevel[msg.sender] = currentLevel;
-        game.issueDeityBoon(address(0), recipient, slot);
     }
 
     /// @notice Place a Degenerette bet using ETH (or claimable ETH).
