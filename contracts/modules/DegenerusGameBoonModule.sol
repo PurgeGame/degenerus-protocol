@@ -20,9 +20,10 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     // Constants
     // =========================================================================
 
-    uint48 private constant COINFLIP_BOON_EXPIRY_SECONDS = 172800;
-    uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800;
-    uint48 private constant PURCHASE_BOOST_EXPIRY_SECONDS = 345600;
+    uint48 private constant COINFLIP_BOON_EXPIRY_DAYS = 2;
+    uint48 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
+    uint48 private constant PURCHASE_BOOST_EXPIRY_DAYS = 4;
+    uint48 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
     IDegenerusQuests internal constant quests = IDegenerusQuests(ContractAddresses.QUESTS);
 
@@ -35,26 +36,25 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @return boonBps The bonus in basis points (0 if no boon, 500/1000/2500 otherwise)
     function consumeCoinflipBoon(address player) external returns (uint16 boonBps) {
         if (player == address(0)) return 0;
-        uint48 nowTs = uint48(block.timestamp);
-        uint48 currentDay = _simulatedDayIndexAt(nowTs);
+        uint48 currentDay = _simulatedDayIndex();
         uint48 deityDay = deityCoinflipBoonDay[player];
         if (deityDay != 0 && deityDay != currentDay) {
             coinflipBoonBps[player] = 0;
-            coinflipBoonTimestamp[player] = 0;
+            coinflipBoonDay[player] = 0;
             deityCoinflipBoonDay[player] = 0;
             return 0;
         }
-        uint48 ts = coinflipBoonTimestamp[player];
-        if (ts > 0 && uint256(nowTs) > uint256(ts) + COINFLIP_BOON_EXPIRY_SECONDS) {
+        uint48 stampDay = coinflipBoonDay[player];
+        if (stampDay > 0 && currentDay > stampDay + COINFLIP_BOON_EXPIRY_DAYS) {
             coinflipBoonBps[player] = 0;
-            coinflipBoonTimestamp[player] = 0;
+            coinflipBoonDay[player] = 0;
             deityCoinflipBoonDay[player] = 0;
             return 0;
         }
         boonBps = coinflipBoonBps[player];
         if (boonBps == 0) return 0;
         coinflipBoonBps[player] = 0;
-        coinflipBoonTimestamp[player] = 0;
+        coinflipBoonDay[player] = 0;
         deityCoinflipBoonDay[player] = 0;
     }
 
@@ -63,26 +63,25 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @return boostBps The bonus in basis points (0 if no boost, 500/1500/2500 otherwise)
     function consumePurchaseBoost(address player) external returns (uint16 boostBps) {
         if (player == address(0)) return 0;
-        uint48 nowTs = uint48(block.timestamp);
-        uint48 currentDay = _simulatedDayIndexAt(nowTs);
+        uint48 currentDay = _simulatedDayIndex();
         uint48 deityDay = deityPurchaseBoostDay[player];
         if (deityDay != 0 && deityDay != currentDay) {
             purchaseBoostBps[player] = 0;
-            purchaseBoostTimestamp[player] = 0;
+            purchaseBoostDay[player] = 0;
             deityPurchaseBoostDay[player] = 0;
             return 0;
         }
-        uint48 ts = purchaseBoostTimestamp[player];
-        if (ts > 0 && uint256(nowTs) > uint256(ts) + PURCHASE_BOOST_EXPIRY_SECONDS) {
+        uint48 stampDay = purchaseBoostDay[player];
+        if (stampDay > 0 && currentDay > stampDay + PURCHASE_BOOST_EXPIRY_DAYS) {
             purchaseBoostBps[player] = 0;
-            purchaseBoostTimestamp[player] = 0;
+            purchaseBoostDay[player] = 0;
             deityPurchaseBoostDay[player] = 0;
             return 0;
         }
         boostBps = purchaseBoostBps[player];
         if (boostBps == 0) return 0;
         purchaseBoostBps[player] = 0;
-        purchaseBoostTimestamp[player] = 0;
+        purchaseBoostDay[player] = 0;
         deityPurchaseBoostDay[player] = 0;
     }
 
@@ -113,22 +112,21 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @param player The player address to check and clear expired boons for
     /// @return hasAnyBoon True if the player has at least one active (non-expired) boon
     function checkAndClearExpiredBoon(address player) external returns (bool hasAnyBoon) {
-        uint256 nowTs = block.timestamp;
-        uint48 currentDay = _simulatedDayIndexAt(uint48(nowTs));
+        uint48 currentDay = _simulatedDayIndex();
 
         uint16 coinflipBps = coinflipBoonBps[player];
         if (coinflipBps != 0) {
             uint48 deityDay = deityCoinflipBoonDay[player];
             if (deityDay != 0 && deityDay != currentDay) {
                 coinflipBoonBps[player] = 0;
-                coinflipBoonTimestamp[player] = 0;
+                coinflipBoonDay[player] = 0;
                 deityCoinflipBoonDay[player] = 0;
                 coinflipBps = 0;
             } else {
-                uint48 ts = coinflipBoonTimestamp[player];
-                if (ts > 0 && nowTs > uint256(ts) + COINFLIP_BOON_EXPIRY_SECONDS) {
+                uint48 stampDay = coinflipBoonDay[player];
+                if (stampDay > 0 && currentDay > stampDay + COINFLIP_BOON_EXPIRY_DAYS) {
                     coinflipBoonBps[player] = 0;
-                    coinflipBoonTimestamp[player] = 0;
+                    coinflipBoonDay[player] = 0;
                     deityCoinflipBoonDay[player] = 0;
                     coinflipBps = 0;
                 }
@@ -143,8 +141,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 deityLootboxBoon25Day[player] = 0;
                 lootbox25 = false;
             } else {
-                uint48 ts = lootboxBoon25Timestamp[player];
-                if (ts > 0 && nowTs > uint256(ts) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                uint48 stampDay = lootboxBoon25Day[player];
+                if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                     lootboxBoon25Active[player] = false;
                     deityLootboxBoon25Day[player] = 0;
                     lootbox25 = false;
@@ -165,8 +163,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 deityLootboxBoon15Day[player] = 0;
                 lootbox15 = false;
             } else {
-                uint48 ts = lootboxBoon15Timestamp[player];
-                if (ts > 0 && nowTs > uint256(ts) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                uint48 stampDay = lootboxBoon15Day[player];
+                if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                     lootboxBoon15Active[player] = false;
                     deityLootboxBoon15Day[player] = 0;
                     lootbox15 = false;
@@ -187,8 +185,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 deityLootboxBoon5Day[player] = 0;
                 lootbox5 = false;
             } else {
-                uint48 ts = lootboxBoon5Timestamp[player];
-                if (ts > 0 && nowTs > uint256(ts) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                uint48 stampDay = lootboxBoon5Day[player];
+                if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                     lootboxBoon5Active[player] = false;
                     deityLootboxBoon5Day[player] = 0;
                     lootbox5 = false;
@@ -206,14 +204,14 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             uint48 deityDay = deityPurchaseBoostDay[player];
             if (deityDay != 0 && deityDay != currentDay) {
                 purchaseBoostBps[player] = 0;
-                purchaseBoostTimestamp[player] = 0;
+                purchaseBoostDay[player] = 0;
                 deityPurchaseBoostDay[player] = 0;
                 purchaseBps = 0;
             } else {
-                uint48 ts = purchaseBoostTimestamp[player];
-                if (ts > 0 && nowTs > uint256(ts) + PURCHASE_BOOST_EXPIRY_SECONDS) {
+                uint48 stampDay = purchaseBoostDay[player];
+                if (stampDay > 0 && currentDay > stampDay + PURCHASE_BOOST_EXPIRY_DAYS) {
                     purchaseBoostBps[player] = 0;
-                    purchaseBoostTimestamp[player] = 0;
+                    purchaseBoostDay[player] = 0;
                     deityPurchaseBoostDay[player] = 0;
                     purchaseBps = 0;
                 }
@@ -258,15 +256,15 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             if (deityDay != 0) {
                 if (currentDay > deityDay) {
                     deityPassBoonTier[player] = 0;
-                    deityPassBoonTimestamp[player] = 0;
+                    deityPassBoonDay[player] = 0;
                     deityDeityPassBoonDay[player] = 0;
                     deityTier = 0;
                 }
             } else {
-                uint48 ts = deityPassBoonTimestamp[player];
-                if (ts > 0 && nowTs > uint256(ts) + PURCHASE_BOOST_EXPIRY_SECONDS) {
+                uint48 stampDay = deityPassBoonDay[player];
+                if (stampDay > 0 && currentDay > stampDay + DEITY_PASS_BOON_EXPIRY_DAYS) {
                     deityPassBoonTier[player] = 0;
-                    deityPassBoonTimestamp[player] = 0;
+                    deityPassBoonDay[player] = 0;
                     deityTier = 0;
                 }
             }
@@ -277,14 +275,14 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             uint48 deityDay = deityActivityBoonDay[player];
             if (deityDay != 0 && deityDay != currentDay) {
                 activityBoonPending[player] = 0;
-                activityBoonTimestamp[player] = 0;
+                activityBoonDay[player] = 0;
                 deityActivityBoonDay[player] = 0;
                 activityPending = 0;
             } else {
-                uint48 ts = activityBoonTimestamp[player];
-                if (ts > 0 && nowTs > uint256(ts) + COINFLIP_BOON_EXPIRY_SECONDS) {
+                uint48 stampDay = activityBoonDay[player];
+                if (stampDay > 0 && currentDay > stampDay + COINFLIP_BOON_EXPIRY_DAYS) {
                     activityBoonPending[player] = 0;
-                    activityBoonTimestamp[player] = 0;
+                    activityBoonDay[player] = 0;
                     deityActivityBoonDay[player] = 0;
                     activityPending = 0;
                 }
@@ -310,26 +308,25 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         uint24 pending = activityBoonPending[player];
         if (pending == 0 || player == address(0)) return;
 
-        uint48 nowTs = uint48(block.timestamp);
-        uint48 currentDay = _simulatedDayIndexAt(nowTs);
+        uint48 currentDay = _simulatedDayIndex();
         uint48 deityDay = deityActivityBoonDay[player];
         if (deityDay != 0 && deityDay != currentDay) {
             activityBoonPending[player] = 0;
-            activityBoonTimestamp[player] = 0;
+            activityBoonDay[player] = 0;
             deityActivityBoonDay[player] = 0;
             return;
         }
 
-        uint48 ts = activityBoonTimestamp[player];
-        if (ts > 0 && uint256(nowTs) > uint256(ts) + COINFLIP_BOON_EXPIRY_SECONDS) {
+        uint48 stampDay = activityBoonDay[player];
+        if (stampDay > 0 && currentDay > stampDay + COINFLIP_BOON_EXPIRY_DAYS) {
             activityBoonPending[player] = 0;
-            activityBoonTimestamp[player] = 0;
+            activityBoonDay[player] = 0;
             deityActivityBoonDay[player] = 0;
             return;
         }
 
         activityBoonPending[player] = 0;
-        activityBoonTimestamp[player] = 0;
+        activityBoonDay[player] = 0;
         deityActivityBoonDay[player] = 0;
 
         uint256 prevData = mintPacked_[player];
