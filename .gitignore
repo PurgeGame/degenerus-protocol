@@ -14,3 +14,4 @@ profiles.json
 contracts/mocks/
 docs/
 contracts-testnet/
+.planning/

@@ -70,7 +70,7 @@ Each task was committed atomically:
 
 1. **Task 1+2: Level guards, BAF/Decimator accounting, CEI, loop bounds** - `83f20f9` (feat)
 
-**Plan metadata:** (pending)
+**Plan metadata:** `09492b3` (docs: complete plan)
 
 ## Files Created/Modified
 

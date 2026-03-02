@@ -1,16 +1,17 @@
-import { BaseStrategy, GAS_LIMIT } from './base.js';
+import { ethers } from 'ethers';
+import { BaseStrategy, GAS_LIMIT, GAS_LIMIT_LOW } from './base.js';
 
 /**
- * Sepolia advancer strategy: the game clock for real Chainlink VRF.
+ * Sepolia advancer strategy: the game clock with mock VRF fulfillment.
  *
- * Uses creatorAdvanceDay() instead of evm_increaseTime, and waits for
- * real Chainlink VRF fulfillment instead of mock fulfillment.
+ * Uses creatorAdvanceDay() instead of evm_increaseTime.
+ * Fulfills VRF instantly via MockVRFCoordinator (no Chainlink dependency).
  *
  * State machine phases:
  *   'ready'    → call advanceDay(), enter 'activity'
  *   'activity' → wait for buyers, then call advanceGame() to request VRF
  *                on success → 'vrf'; on failure → stay in 'activity' and retry
- *   'vrf'      → poll isRngFulfilled(), call advanceGame() to consume
+ *   'vrf'      → fulfillVrf() + advanceGame() to consume (instant, no polling)
  *                when rngLocked becomes false → 'ready'
  *
  * CRITICAL: Never advance the day without completing the VRF cycle.
@@ -20,12 +21,6 @@ import { BaseStrategy, GAS_LIMIT } from './base.js';
 
 // How long (ms) to wait after advancing the day before requesting VRF.
 const DAY_ACTIVITY_WINDOW_MS = 10_000;
-
-// How often (ms) to poll for VRF fulfillment.
-const VRF_POLL_INTERVAL_MS = 4_000;
-
-// Max time (ms) to wait for VRF fulfillment before logging a warning.
-const VRF_TIMEOUT_MS = 180_000; // 3 minutes
 
 // How long (ms) to wait before retrying a failed advanceGame().
 const ADVANCE_RETRY_DELAY_MS = 10_000;
@@ -37,7 +32,6 @@ export class AdvancerSepoliaStrategy extends BaseStrategy {
     this.stethAddress = opts.stethAddress;
     this._phase = 'init';  // 'init' | 'ready' | 'activity' | 'vrf'
     this._phaseStartTime = 0;
-    this._vrfWaitStart = 0;
     this._advanceRetries = 0;
   }
 
@@ -50,7 +44,6 @@ export class AdvancerSepoliaStrategy extends BaseStrategy {
       if (rngLocked) {
         this.log('game is mid-VRF from previous session — driving VRF cycle');
         this._phase = 'vrf';
-        this._vrfWaitStart = Date.now();
       } else {
         this._phase = 'ready';
       }
@@ -73,13 +66,15 @@ export class AdvancerSepoliaStrategy extends BaseStrategy {
 
   /**
    * 'ready' phase: Advance the simulated day, enter activity window.
+   * If advanceDay() fails (e.g. rate limited), stay in 'ready' and retry next tick.
    */
   async _doAdvanceDay() {
     const result = await this.safeSend('advanceDay',
       this.game.advanceDay({ gasLimit: 100_000 })
     );
     if (!result.success) {
-      this.log('advanceDay failed — may already be advanced or not CREATOR');
+      this.log('advanceDay failed — will retry next tick');
+      return; // stay in 'ready' phase
     }
     if (this.stethAddress) await this.rebaseSteth();
 
@@ -108,7 +103,6 @@ export class AdvancerSepoliaStrategy extends BaseStrategy {
     if (rngLocked) {
       this.log('rng already locked (another actor called advanceGame?) — entering VRF phase');
       this._phase = 'vrf';
-      this._vrfWaitStart = Date.now();
       return;
     }
 
@@ -118,52 +112,41 @@ export class AdvancerSepoliaStrategy extends BaseStrategy {
 
     if (result.success) {
       this._phase = 'vrf';
-      this._vrfWaitStart = Date.now();
       this._advanceRetries = 0;
     } else {
       this._advanceRetries++;
       this._phaseStartTime = Date.now(); // reset timer for retry
       if (this._advanceRetries <= 3) {
         this.log(`advanceGame failed (attempt ${this._advanceRetries}) — retrying in ${ADVANCE_RETRY_DELAY_MS / 1000}s`);
+      } else if (this._advanceRetries >= 10) {
+        // Too many failures — likely advanceDay didn't actually go through. Reset to ready.
+        this.log(`advanceGame failed ${this._advanceRetries} times — resetting to ready phase`);
+        this._phase = 'ready';
       } else {
-        this.log(`advanceGame failed ${this._advanceRetries} times — still retrying (check pool/target)`);
+        this.log(`advanceGame failed ${this._advanceRetries} times — still retrying`);
       }
     }
   }
 
   /**
-   * 'vrf' phase: Wait for Chainlink VRF fulfillment and drive advanceGame().
+   * 'vrf' phase: Fulfill VRF via mock coordinator and drive advanceGame().
+   * Instant — no polling or waiting for Chainlink.
    */
   async _doVrfPhase() {
-    for (let step = 0; step < 30; step++) {
+    for (let step = 0; step < 20; step++) {
       const [locked, fulfilled] = await Promise.all([
         this.game.rngLocked(),
         this.game.isRngFulfilled(),
       ]);
 
       if (!locked) {
-        this._vrfWaitStart = 0;
         this._phase = 'ready';
         this.log('VRF cycle complete — ready for next day');
         return;
       }
 
       if (!fulfilled) {
-        const waited = Date.now() - (this._vrfWaitStart || Date.now());
-        if (waited > VRF_TIMEOUT_MS) {
-          // Contract has 5-minute VRF retry: calling advanceGame re-requests VRF
-          this.log(`VRF not fulfilled after ${Math.round(waited / 1000)}s — triggering contract retry`);
-          const retryResult = await this.safeSend('advanceGame (VRF retry)',
-            this.game.advanceGame({ gasLimit: GAS_LIMIT })
-          );
-          if (retryResult.success) {
-            this.log('VRF re-requested via contract retry mechanism');
-            this._vrfWaitStart = Date.now(); // reset timer for new request
-          } else {
-            this.log('VRF retry failed — will try again next cycle');
-          }
-        }
-        await new Promise(r => setTimeout(r, VRF_POLL_INTERVAL_MS));
+        await this.fulfillVrf();
         continue;
       }
 
@@ -174,19 +157,47 @@ export class AdvancerSepoliaStrategy extends BaseStrategy {
     }
   }
 
+  /**
+   * Fulfill VRF using MockVRFCoordinator.
+   * Calls fulfillRandomWords(requestId, randomWord) which invokes
+   * rawFulfillRandomWords on the game contract.
+   */
   async rebaseSteth() {
     try {
-      const { ethers } = await import('ethers');
       const steth = new ethers.Contract(
         this.stethAddress,
         ['function rebase() external'],
         this.wallet
       );
       await this.safeSend('stETH rebase',
-        steth.rebase({ gasLimit: 500_000 })
+        steth.rebase({ gasLimit: 100_000 })
       );
     } catch (err) {
       this.log(`stETH rebase error: ${err.message?.slice(0, 80)}`);
     }
   }
+
+  async fulfillVrf() {
+    try {
+      const vrfCoord = this.contracts.vrf_coordinator.connect(this.wallet);
+      const requestId = await vrfCoord.lastRequestId();
+
+      if (requestId === 0n) {
+        this.log('VRF: no requests yet');
+        return;
+      }
+
+      const randomWord = BigInt(ethers.hexlify(ethers.randomBytes(32)));
+      const result = await this.safeSend(`VRF fulfill #${requestId}`,
+        vrfCoord.fulfillRandomWords(requestId, randomWord, { gasLimit: GAS_LIMIT_LOW })
+      );
+
+      if (result.success) {
+        this.log(`VRF fulfilled with word: ${randomWord.toString().slice(0, 20)}...`);
+      }
+    } catch (err) {
+      this.log(`VRF error: ${err.message}`);
+    }
+  }
+
 }
