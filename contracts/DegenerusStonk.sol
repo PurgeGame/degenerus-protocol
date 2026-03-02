@@ -226,9 +226,6 @@ contract DegenerusStonk {
     /// @notice ETH backing for DGNRS tokens
     uint256 public ethReserve;
 
-    /// @notice stETH backing for DGNRS tokens
-    uint256 public stethReserve;
-
     // =====================================================================
     //                          POOL STATE
     // =====================================================================
@@ -264,8 +261,7 @@ contract DegenerusStonk {
     /// @dev BURNIE payout rate for ETH purchases (70% of value).
     uint16 private constant BURNIE_ETH_BUY_BPS = 7000;
 
-    /// @dev Non-creator pools are reweighted after exterminator removal:
-    ///      original [10,30,10,10,10] over 70% -> [1143,3428,1143,1143,1143] over 80%.
+    /// @dev Non-creator pool distribution (BPS of total supply).
     uint16 private constant WHALE_POOL_BPS = 1143;
     uint16 private constant AFFILIATE_POOL_BPS = 3428;
     uint16 private constant LOOTBOX_POOL_BPS = 1143;
