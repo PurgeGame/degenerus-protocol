@@ -1796,11 +1796,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  lives in the ContractAddresses.GAME_JACKPOT_MODULE (via delegatecall).                       |
       |                                                                                               |
       |  Jackpot Types:                                                                               |
-      |  • Daily jackpot - Paid each day to burn ticket holders                                       |
-      |  • Level jackpot - Paid when prize pool target is met                                         |
+      |  • Daily jackpot - Paid each day to burn ticket holders (day 5 = full pool payout)             |
       |  • Decimator - Special 100-level milestone jackpot (30% of pool)                              |
       |  • BAF - Big-ass-flip jackpot (20% of pool at L%100=0)                                        |
-      |  • Extermination jackpot path removed in no-NFT variant                                       |
       +===============================================================================================+*/
 
     /*+======================================================================+

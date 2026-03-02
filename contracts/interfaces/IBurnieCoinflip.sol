@@ -20,7 +20,7 @@ interface IBurnieCoinflip {
     /// @param player The player making the deposit (address(0) or msg.sender for direct deposit).
     /// @param amount Amount of BURNIE to deposit (must be >= 100 BURNIE minimum).
     /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 BURNIE.
-    /// @custom:reverts CoinflipLocked If deposits are locked during level jackpot resolution.
+    /// @custom:reverts CoinflipLocked If deposits are locked during level transition RNG resolution.
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function depositCoinflip(address player, uint256 amount) external;
 
