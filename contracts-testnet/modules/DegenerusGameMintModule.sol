@@ -101,7 +101,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE =
         10 ether / D;
-    uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800;
+    uint48 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
 
     /// @dev Loot box pool split: 90% future, 10% next.
     uint16 private constant LOOTBOX_SPLIT_FUTURE_BPS = 9000;
@@ -111,6 +111,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 4000;
     uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 4000;
     uint16 private constant LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000;
+
+    /// @dev Number of daily jackpots per level (must match AdvanceModule).
+    uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
     // -------------------------------------------------------------------------
     // Events
@@ -867,10 +870,20 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 }
             }
 
+            // Final jackpot day affiliate bonus: +10pp on fresh ETH
+            uint256 freshBurnie = freshEth != 0
+                ? _ethToBurnieValue(freshEth, priceWei)
+                : 0;
+            if (freshBurnie != 0 && jackpotPhaseFlag && jackpotCounter == JACKPOT_LEVEL_CAP - 1) {
+                freshBurnie = targetLevel <= 3
+                    ? (freshBurnie * 7) / 5
+                    : (freshBurnie * 3) / 2;
+            }
+
             uint256 rakeback;
             if (payKind == MintPaymentKind.Combined && freshEth != 0) {
                 rakeback += affiliate.payAffiliate(
-                    _ethToBurnieValue(freshEth, priceWei),
+                    freshBurnie,
                     affiliateCode,
                     buyer,
                     targetLevel,
@@ -886,13 +899,21 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                         false
                     );
                 }
+            } else if (payKind == MintPaymentKind.DirectEth) {
+                rakeback += affiliate.payAffiliate(
+                    freshBurnie,
+                    affiliateCode,
+                    buyer,
+                    targetLevel,
+                    true
+                );
             } else {
                 rakeback += affiliate.payAffiliate(
                     _ethToBurnieValue(costWei, priceWei),
                     affiliateCode,
                     buyer,
                     targetLevel,
-                    payKind == MintPaymentKind.DirectEth
+                    false
                 );
             }
 
@@ -997,8 +1018,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         // Check 25% boost first (rarest, best boost)
         bool has25 = lootboxBoon25Active[player];
         if (has25) {
-            uint48 ts = lootboxBoon25Timestamp[player];
-            if (ts != 0 && block.timestamp > uint256(ts) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+            uint48 stampDay = lootboxBoon25Day[player];
+            if (stampDay != 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                 lootboxBoon25Active[player] = false;
                 has25 = false;
             }
@@ -1011,8 +1032,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             // Check 15% boost
             bool has15 = lootboxBoon15Active[player];
             if (has15) {
-                uint48 ts = lootboxBoon15Timestamp[player];
-                if (ts != 0 && block.timestamp > uint256(ts) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                uint48 stampDay = lootboxBoon15Day[player];
+                if (stampDay != 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                     lootboxBoon15Active[player] = false;
                     has15 = false;
                 }
@@ -1025,8 +1046,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 // Check 5% boost if no 15% or 25% boost
                 bool has5 = lootboxBoon5Active[player];
                 if (has5) {
-                    uint48 ts = lootboxBoon5Timestamp[player];
-                    if (ts != 0 && block.timestamp > uint256(ts) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                    uint48 stampDay = lootboxBoon5Day[player];
+                    if (stampDay != 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                         lootboxBoon5Active[player] = false;
                         has5 = false;
                     }
