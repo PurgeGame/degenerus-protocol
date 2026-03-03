@@ -2257,6 +2257,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return decWindowOpen || _isGameoverImminent();
     }
 
+    /// @notice Check if the current jackpot phase is compressed (3 days instead of 5).
+    function isCompressedJackpot() external view returns (bool) {
+        return compressedJackpotFlag;
+    }
+
     /// @dev True when gameover would trigger within ~10 days.
     ///      Used to allow decimator burns near liveness timeout.
     function _isGameoverImminent() private view returns (bool) {

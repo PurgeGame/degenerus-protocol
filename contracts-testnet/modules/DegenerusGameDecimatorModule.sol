@@ -562,7 +562,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (fullEffective <= remaining) return fullEffective;
 
         uint256 maxMultBase = (remaining * BPS_DENOMINATOR) / multBps;
-        if (maxMultBase > baseAmount) maxMultBase = baseAmount;
         uint256 multiplied = (maxMultBase * multBps) / BPS_DENOMINATOR;
         effectiveAmount = multiplied + (baseAmount - maxMultBase);
     }

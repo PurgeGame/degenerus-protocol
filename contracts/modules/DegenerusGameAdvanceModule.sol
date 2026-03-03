@@ -153,6 +153,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
                 phaseTransitionActive = false;
                 _unlockRng(day);
+                purchaseStartDay = day;
                 jackpotPhaseFlag = false;
                 stage = STAGE_TRANSITION_DONE;
                 break;
@@ -192,6 +193,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
                     if (nextPrizePool >= levelPrizePool[purchaseLevel - 1]) {
                         lastPurchaseDay = true;
+                        compressedJackpotFlag = (day - purchaseStartDay <= 2);
                     }
                     _unlockRng(day);
                     stage = STAGE_PURCHASE_DAILY;
@@ -370,6 +372,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             levelPrizePool[lvl] = futurePrizePool / 3;
         }
         jackpotCounter = 0;
+        compressedJackpotFlag = false;
     }
 
     /*+================================================================================================================+

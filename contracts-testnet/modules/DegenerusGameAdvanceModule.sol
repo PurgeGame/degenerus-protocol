@@ -47,8 +47,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_TICKETS_WORKING = 5;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
     uint8 private constant STAGE_FUTURE_TICKETS_WORKING = 7;
-    uint8 private constant STAGE_LEVEL_JACKPOT_LOOTBOX = 8;
-    uint8 private constant STAGE_LEVEL_JACKPOT_ETH = 9;
+    // Stages 8-9 were level jackpot stages (removed)
     uint8 private constant STAGE_ENTERED_JACKPOT = 13;
     uint8 private constant STAGE_JACKPOT_ETH_RESUME = 15;
     uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 16;
@@ -91,7 +90,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 912;
     uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 10 minutes; // TESTNET: reduced from 3 days
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
-    uint16 private constant TRAIT_ID_TIMEOUT = 420;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 3; // TESTNET: Sepolia VRF min is 3
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 3;
@@ -159,6 +157,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
                 phaseTransitionActive = false;
                 _unlockRng(day);
+                purchaseStartDay = day;
                 jackpotPhaseFlag = false;
                 stage = STAGE_TRANSITION_DONE;
                 break;
@@ -198,6 +197,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
                     if (nextPrizePool >= levelPrizePool[purchaseLevel - 1]) {
                         lastPurchaseDay = true;
+                        compressedJackpotFlag = (day - purchaseStartDay <= 2);
                     }
                     _unlockRng(day);
                     stage = STAGE_PURCHASE_DAILY;
@@ -218,12 +218,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     }
                 }
 
-                // Consolidate prize pools (no separate level jackpot split)
-                if (!levelJackpotPaid) {
+                // Consolidate prize pools for level transition
+                if (!poolConsolidationDone) {
                     levelPrizePool[purchaseLevel] = nextPrizePool;
                     _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);
                     _consolidatePrizePools(purchaseLevel, rngWord);
-                    levelJackpotPaid = true;
+                    poolConsolidationDone = true;
                 }
 
                 if (lootboxPresaleActive && (lvl >= 3 || lootboxPresaleMintEth >= LOOTBOX_PRESALE_ETH_CAP)) lootboxPresaleActive = false;
@@ -238,8 +238,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     decWindowOpen = true;
                 }
 
-                levelJackpotPaid = false;
-                levelJackpotLootboxPaid = false;
+                poolConsolidationDone = false;
                 lastPurchaseDay = false;
                 levelStartTime = ts;
                 _drawDownFuturePrizePool(lvl);
@@ -373,13 +372,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _endPhase() private {
         uint24 lvl = level;
         phaseTransitionActive = true;
-        // Extermination mechanics removed in no-NFT variant.
-        lastExterminatedTrait = TRAIT_ID_TIMEOUT;
-        exterminationInvertFlag = false;
         if (lvl % 100 == 0) {
             levelPrizePool[lvl] = futurePrizePool / 3;
         }
         jackpotCounter = 0;
+        compressedJackpotFlag = false;
     }
 
     /*+================================================================================================================+
@@ -399,7 +396,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |  context, with access to all storage. Modules are constant.                                                    |
       +================================================================================================================+*/
 
-    /// @dev Reward the top affiliate for a level during the level jackpot.
+    /// @dev Reward the top affiliate for a level during level transition.
     function _rewardTopAffiliate(uint24 lvl) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ENDGAME_MODULE
@@ -412,7 +409,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Resolve BAF/Decimator jackpots during the level jackpot RNG period.
+    /// @dev Resolve BAF/Decimator jackpots during the level transition RNG period.
     function _runRewardJackpots(uint24 lvl, uint256 rngWord) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ENDGAME_MODULE
@@ -521,26 +518,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameJackpotModule.payDailyCoinJackpot.selector,
-                    lvl,
-                    randWord
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @dev Pay early bird lootbox jackpot to next-level ticket holders (from lootboxes).
-    ///      Takes a slice from the unified future pool, awards loot boxes.
-    ///      Called after next-level tickets are activated at end of purchase phase.
-    /// @param lvl The level whose tickets were just activated.
-    /// @param randWord VRF random word for winner selection.
-    function _payEarlyBirdLootboxJackpot(uint24 lvl, uint256 randWord) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule
-                        .payEarlyBirdLootboxJackpot
-                        .selector,
                     lvl,
                     randWord
                 )

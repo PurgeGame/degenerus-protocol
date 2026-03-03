@@ -59,9 +59,11 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [8:9]   dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
  * | [9:10]  dailyEthBucketCursor     uint8    Bucket cursor for daily ETH dist   |
  * | [10:11] dailyEthPhase            uint8    0=current level, 1=carryover       |
- * | [11:32] <padding>                        21 bytes unused                     |
+ * | [11:12] compressedJackpotFlag    bool     Compressed jackpot phase active    |
+ * | [12:18] purchaseStartDay         uint48   Day index when purchase phase began|
+ * | [18:32] <padding>                        14 bytes unused                     |
  * +-----------------------------------------------------------------------------+
- *   Total: 11 bytes (21 bytes padding)
+ *   Total: 18 bytes (14 bytes padding)
  *
  * +-----------------------------------------------------------------------------+
  * | SLOT 2 (32 bytes) — Price                                                   |
@@ -191,7 +193,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // SLOT 1: Cursors, Counters, and Boolean Flags
     // =========================================================================
-    // Boolean flags pack efficiently (1 byte each in EVM). Total: 19 bytes used (13 bytes padding).
+    // Boolean flags pack efficiently (1 byte each in EVM). Total: 18 bytes used (14 bytes padding).
 
     /// @dev Count of jackpots processed within the current level.
     ///      Capped at 5 (JACKPOT_LEVEL_CAP in JackpotModule); triggers level
@@ -245,6 +247,17 @@ abstract contract DegenerusGameStorage {
     /// @dev Daily jackpot ETH phase.
     ///      0 = current level, 1 = carryover.
     uint8 internal dailyEthPhase;
+
+    /// @dev True when jackpot phase is compressed (3 days instead of 5).
+    ///      Set when purchase-phase target is met within the first 2 daily advances,
+    ///      signaling high player interest. Cleared at phase end.
+    bool internal compressedJackpotFlag;
+
+    /// @dev Game day index when the current purchase phase opened.
+    ///      Used to determine whether the purchase target was met quickly enough
+    ///      to trigger compressed jackpot mode. Default 0 works for level 0 since
+    ///      the first daily advance is day 1, giving day - 0 = 1 ≤ 2.
+    uint48 internal purchaseStartDay;
 
     // =========================================================================
     // SLOT 2: Mint Price

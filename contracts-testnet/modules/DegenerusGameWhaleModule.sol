@@ -83,8 +83,8 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     /// @dev Maximum lootbox value eligible for boost (10 ETH scaled).
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether / D;
 
-    /// @dev Lootbox boost expiry duration (48 hours).
-    uint48 private constant LOOTBOX_BOOST_EXPIRY_SECONDS = 172800;
+    /// @dev Lootbox boost expiry duration (2 game days, expires at jackpot reset).
+    uint48 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
 
     /// @dev PPM scale for DGNRS pool calculations (1,000,000 = 100%).
     uint32 private constant DGNRS_WHALE_REWARD_PPM_SCALE = 1_000_000;
@@ -158,8 +158,8 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     /// @dev BURNIE transfer cost for deity pass trade (5 ETH worth, scaled).
     uint256 private constant DEITY_TRANSFER_ETH_COST = 5 ether / D;
 
-    /// @dev Deity pass boon expiry (4 days in seconds, matches lootbox PURCHASE_BOOST_EXPIRY_SECONDS).
-    uint48 private constant DEITY_PASS_BOON_EXPIRY_SECONDS = 345600;
+    /// @dev Deity pass boon expiry (4 game days, expires at jackpot reset).
+    uint48 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
     // -------------------------------------------------------------------------
     // Purchases
@@ -196,11 +196,11 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
 
         if (quantity == 0 || quantity > 100) revert E();
 
-        // Check for valid whale boon (allows purchase at any level with 10/25/50% off)
+        // Check for valid whale boon (10/25/50% off standard price)
         bool hasValidBoon = false;
         uint48 boonDay = whaleBoonDay[buyer];
         if (boonDay != 0) {
-            uint48 currentDay = _currentMintDay();
+            uint48 currentDay = _simulatedDayIndex();
             hasValidBoon = currentDay <= boonDay + 4;
         }
 
@@ -329,16 +329,22 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         uint48 boonDay = lazyPassBoonDay[buyer];
         if (boonDay != 0) {
             uint48 currentDay = _simulatedDayIndex();
-            if (currentDay <= boonDay + 4) {
+            uint48 deityDay = deityLazyPassBoonDay[buyer];
+            if (deityDay != 0 && deityDay != currentDay) {
+                lazyPassBoonDay[buyer] = 0;
+                lazyPassBoonDiscountBps[buyer] = 0;
+                deityLazyPassBoonDay[buyer] = 0;
+            } else if (currentDay <= boonDay + 4) {
                 hasValidBoon = true;
             } else {
                 lazyPassBoonDay[buyer] = 0;
                 lazyPassBoonDiscountBps[buyer] = 0;
+                deityLazyPassBoonDay[buyer] = 0;
             }
         } else if (boonDiscountBps != 0) {
             lazyPassBoonDiscountBps[buyer] = 0;
         }
-        if (currentLevel > 3 && currentLevel % 10 != 9 && !hasValidBoon) revert E();
+        if (currentLevel > 2 && currentLevel % 10 != 9 && !hasValidBoon) revert E();
 
         // Cap 1: disallow if player has deity pass or active frozen pass
         if (deityPassCount[buyer] != 0) revert E();
@@ -354,32 +360,49 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         uint256 baseCost = _lazyPassCost(startLevel);
         if (baseCost == 0) revert E();
 
-        // Levels 0-2: flat 0.24 ETH, balance converted to bonus tickets at startLevel
+        // Levels 0-2: flat 0.24 ETH worth of benefits, balance → bonus tickets
+        // Boon at 0-2: same benefits, discounted payment
+        // Levels 3+: baseCost, boon applies discount to baseCost
+        // benefitValue = undiscounted value used for earlybird/lootbox/pool splits
         uint256 totalPrice;
+        uint256 benefitValue;
         uint32 bonusTickets;
-        if (currentLevel <= 2 && !hasValidBoon) {
-            totalPrice = 0.24 ether / D;
-            uint256 balance = totalPrice - baseCost;
+        if (currentLevel <= 2) {
+            benefitValue = 0.24 ether / D;
+            uint256 balance = benefitValue - baseCost;
             if (balance != 0) {
                 uint256 ticketPrice = PriceLookupLib.priceForLevel(startLevel);
                 bonusTickets = uint32((balance * 4) / ticketPrice);
             }
+            if (hasValidBoon) {
+                if (boonDiscountBps == 0) {
+                    boonDiscountBps = LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS;
+                }
+                totalPrice = (benefitValue * (10_000 - boonDiscountBps)) / 10_000;
+            } else {
+                totalPrice = benefitValue;
+            }
         } else {
-            totalPrice = baseCost;
+            benefitValue = baseCost;
             if (hasValidBoon) {
                 if (boonDiscountBps == 0) {
                     boonDiscountBps = LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS;
                 }
                 totalPrice =
-                    (totalPrice * (10_000 - boonDiscountBps)) /
+                    (baseCost * (10_000 - boonDiscountBps)) /
                     10_000;
-                lazyPassBoonDay[buyer] = 0;
-                lazyPassBoonDiscountBps[buyer] = 0;
+            } else {
+                totalPrice = baseCost;
             }
+        }
+        if (hasValidBoon) {
+            lazyPassBoonDay[buyer] = 0;
+            lazyPassBoonDiscountBps[buyer] = 0;
+            deityLazyPassBoonDay[buyer] = 0;
         }
         if (msg.value != totalPrice) revert E();
 
-        _awardEarlybirdDgnrs(buyer, totalPrice, startLevel);
+        _awardEarlybirdDgnrs(buyer, benefitValue, startLevel);
 
         _activate10LevelPass(
             buyer,
@@ -392,7 +415,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             _queueTickets(buyer, startLevel, bonusTickets);
         }
 
-        // Split payment like standard purchases (future + next)
+        // Split actual payment into pools (future + next)
         uint256 futureShare = (totalPrice * LAZY_PASS_TO_FUTURE_BPS) / 10_000;
         if (futureShare != 0) {
             futurePrizePool += futureShare;
@@ -406,12 +429,10 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         }
 
         // Award lootbox as a percentage of pass value (presale 20%, post 10%)
-        uint16 lootboxBps = hasValidBoon
-            ? LAZY_PASS_LOOTBOX_POST_BPS
-            : (lootboxPresaleActive
-                ? LAZY_PASS_LOOTBOX_PRESALE_BPS
-                : LAZY_PASS_LOOTBOX_POST_BPS);
-        uint256 lootboxAmount = (totalPrice * lootboxBps) / 10_000;
+        uint16 lootboxBps = lootboxPresaleActive
+            ? LAZY_PASS_LOOTBOX_PRESALE_BPS
+            : LAZY_PASS_LOOTBOX_POST_BPS;
+        uint256 lootboxAmount = (benefitValue * lootboxBps) / 10_000;
         if (lootboxAmount == 0) return;
 
         _recordLootboxEntry(buyer, lootboxAmount, currentLevel + 1, mintPacked_[buyer]);
@@ -452,14 +473,14 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         uint256 totalPrice = basePrice;
         uint8 boonTier = deityPassBoonTier[buyer];
         if (boonTier != 0) {
-            uint48 boonTs = deityPassBoonTimestamp[buyer];
             // Check expiry: 4 days for lootbox-rolled, 1 day for deity-granted
             bool expired;
             uint48 deityDay = deityDeityPassBoonDay[buyer];
             if (deityDay != 0) {
                 expired = _simulatedDayIndex() > deityDay;
             } else {
-                expired = boonTs > 0 && block.timestamp > uint256(boonTs) + DEITY_PASS_BOON_EXPIRY_SECONDS;
+                uint48 stampDay = deityPassBoonDay[buyer];
+                expired = stampDay > 0 && _simulatedDayIndex() > stampDay + DEITY_PASS_BOON_EXPIRY_DAYS;
             }
             if (!expired) {
                 uint16 discountBps = boonTier == 3 ? uint16(5000) : (boonTier == 2 ? uint16(2500) : uint16(1000));
@@ -467,7 +488,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             }
             // Consume boon regardless of expiry
             deityPassBoonTier[buyer] = 0;
-            deityPassBoonTimestamp[buyer] = 0;
+            deityPassBoonDay[buyer] = 0;
             deityDeityPassBoonDay[buyer] = 0;
         }
         if (msg.value != totalPrice) revert E();
@@ -783,11 +804,13 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         boostedAmount = amount;
         uint16 consumedBoostBps = 0;
 
+        uint48 currentDay = _simulatedDayIndex();
+
         // Check 25% boost first (rarest, best boost)
         bool has25Boost = lootboxBoon25Active[player];
         if (has25Boost) {
-            uint48 boost25Timestamp = lootboxBoon25Timestamp[player];
-            if (block.timestamp > uint256(boost25Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+            uint48 stampDay = lootboxBoon25Day[player];
+            if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                 has25Boost = false;
                 lootboxBoon25Active[player] = false;
             }
@@ -802,8 +825,8 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             // Check 15% boost next
             bool has15Boost = lootboxBoon15Active[player];
             if (has15Boost) {
-                uint48 boost15Timestamp = lootboxBoon15Timestamp[player];
-                if (block.timestamp > uint256(boost15Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                uint48 stampDay = lootboxBoon15Day[player];
+                if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                     has15Boost = false;
                     lootboxBoon15Active[player] = false;
                 }
@@ -818,8 +841,8 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
                 // Check 5% boost last
                 bool has5Boost = lootboxBoon5Active[player];
                 if (has5Boost) {
-                    uint48 boost5Timestamp = lootboxBoon5Timestamp[player];
-                    if (block.timestamp > uint256(boost5Timestamp) + LOOTBOX_BOOST_EXPIRY_SECONDS) {
+                    uint48 stampDay = lootboxBoon5Day[player];
+                    if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
                         has5Boost = false;
                         lootboxBoon5Active[player] = false;
                     }

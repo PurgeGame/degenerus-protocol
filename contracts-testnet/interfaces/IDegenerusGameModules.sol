@@ -115,11 +115,6 @@ interface IDegenerusGameJackpotModule {
     /// @return finished True if all tickets have been processed
     function processTicketBatch(uint24 lvl) external returns (bool finished);
 
-    /// @notice Pays early bird lootbox jackpot rewards
-    /// @param lvl The current game level
-    /// @param rngWord Random word for winner selection
-    function payEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) external;
-
     /// @notice Pays daily coin jackpot rewards
     /// @param lvl The current game level
     /// @param randWord Random word for winner selection
