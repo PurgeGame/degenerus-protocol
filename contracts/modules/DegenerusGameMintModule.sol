@@ -109,6 +109,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 4000;
     uint16 private constant LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000;
 
+    /// @dev Number of daily jackpots per level (must match AdvanceModule).
+    uint8 private constant JACKPOT_LEVEL_CAP = 5;
+
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
@@ -879,10 +882,20 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 }
             }
 
+            // Final jackpot day affiliate bonus: +10pp on fresh ETH
+            uint256 freshBurnie = freshEth != 0
+                ? _ethToBurnieValue(freshEth, priceWei)
+                : 0;
+            if (freshBurnie != 0 && jackpotPhaseFlag && jackpotCounter == JACKPOT_LEVEL_CAP - 1) {
+                freshBurnie = targetLevel <= 3
+                    ? (freshBurnie * 7) / 5
+                    : (freshBurnie * 3) / 2;
+            }
+
             uint256 rakeback;
             if (payKind == MintPaymentKind.Combined && freshEth != 0) {
                 rakeback += affiliate.payAffiliate(
-                    _ethToBurnieValue(freshEth, priceWei),
+                    freshBurnie,
                     affiliateCode,
                     buyer,
                     targetLevel,
@@ -898,13 +911,21 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                         false
                     );
                 }
+            } else if (payKind == MintPaymentKind.DirectEth) {
+                rakeback += affiliate.payAffiliate(
+                    freshBurnie,
+                    affiliateCode,
+                    buyer,
+                    targetLevel,
+                    true
+                );
             } else {
                 rakeback += affiliate.payAffiliate(
                     _ethToBurnieValue(costWei, priceWei),
                     affiliateCode,
                     buyer,
                     targetLevel,
-                    payKind == MintPaymentKind.DirectEth
+                    false
                 );
             }
 
