@@ -230,11 +230,11 @@ where:
 - $\alpha_i \in [0, 1]$ is the normalized affiliate bonus
 - $\beta_i \in \{0, 0.10, 0.40, 0.80\}$ is the pass bonus (none, 10-level whale, 100-level whale, deity)
 
-The activity score maps to an EV multiplier $\mu: [0, 3.05] \rightarrow [0.80, 1.35]$ for lootboxes:
+The activity score maps to an EV multiplier $\mu: [0, 3.05] \rightarrow [0.80, 1.35]$ for lootboxes, saturating at $a = 2.55$:
 
 $$\mu(a) = \begin{cases}
 0.80 + \frac{a}{3} & \text{if } a \leq 0.60 \\
-0.80 + 0.20 + \frac{(a - 0.60) \cdot 0.35}{2.45} & \text{if } a > 0.60
+0.80 + 0.20 + \frac{(\min(a, 2.55) - 0.60) \cdot 0.35}{1.95} & \text{if } a > 0.60
 \end{cases}$$
 
 And to a Degenerette ROI $\rho: [0, 3.05] \rightarrow [0.90, 0.999]$:
@@ -367,8 +367,8 @@ $$u_E(\mathbf{o}) = \mathbb{E}[\text{net payout}]$$
 
 **Dominant strategy (Proposition 4.1):** *The EV maximizer's dominant strategy is:*
 
-1. *Maximize activity score* $a_i \rightarrow 3.05$ (maintain daily quests, mint streaks, affiliate engagement)
-2. *Purchase ETH lootboxes at maximum activity score* ($\mu = 1.35$, i.e., +35% EV, capped at 10 ETH benefit/level)
+1. *Maximize activity score* $a_i \rightarrow 2.55$ for lootbox EV (achievable via deity pass OR full affiliate + whale bundle), $a_i \rightarrow 3.05$ for Degenerette ROI
+2. *Purchase ETH lootboxes at $a_i \geq 2.55$* ($\mu = 1.35$, i.e., +35% EV, capped at 10 ETH benefit/level)
 3. *Place ETH Degenerette bets at max activity* ($\rho = 0.999$, near-zero house edge, with +5% ETH bonus redistributed to high-match buckets)
 4. *Enable afKing auto-rebuy* (1.6% base + deity bonus compounding on wins)
 5. *Acquire deity pass early* (permanent +80% activity bonus)
@@ -377,9 +377,9 @@ $$u_E(\mathbf{o}) = \mathbb{E}[\text{net payout}]$$
 
 (1) Activity score $a_i$ is monotonically increasing in streak lengths and participation breadth. Higher $a_i$ increases $\mu(a_i)$ and $\rho(a_i)$, both of which increase expected payouts on lootboxes and Degenerette. Since all activity-building actions have marginal cost less than their marginal EV benefit at high activity levels, maximizing $a_i$ is dominant.
 
-(2) Lootbox EV at $a_i = 3.05$: $\mu(3.05) = 1.35$, meaning each ETH spent yields 1.35 ETH in expected value. This is strictly positive EV. The 10 ETH/level cap bounds total extraction but does not eliminate profitability.
+(2) Lootbox EV saturates at $a_i = 2.55$: $\mu(2.55) = 1.35$, meaning each ETH spent yields 1.35 ETH in expected value. This is strictly positive EV. The 10 ETH/level cap bounds total extraction but does not eliminate profitability. Note: lootbox EV caps at 255% activity — achievable with deity pass alone or full affiliate + whale bundle, without requiring both.
 
-(3) Degenerette ETH at $a_i = 3.05$: Base ROI $\rho = 0.999$ plus the +5% ETH bonus redistributed to match buckets 5–8. The effective ROI on high-match outcomes exceeds 1.60. The overall blended EV approaches or exceeds 1.0 at maximum activity, making it weakly dominant over abstention.
+(3) Degenerette ETH at $a_i = 3.05$: Base ROI $\rho = 0.999$ plus the +5% ETH bonus redistributed to match buckets 5–8. The effective ROI on high-match outcomes exceeds 1.60. The overall blended EV approaches or exceeds 1.0 at maximum activity, making it weakly dominant over abstention. (Degenerette ROI continues to improve up to 305%, unlike lootbox EV which caps at 255%.)
 
 (4) afKing auto-rebuy converts winning payouts to tickets at 145% value (45% bonus). For a 50/50 coinflip with mean reward 96.85%, the recycling bonus of 1.6% + deity bonus pushes expected retention above 1.0.
 
@@ -846,7 +846,7 @@ Therefore, condition (3) of Definition 9.1 fails: player departure does not caus
 
 **Proposition 9.1** (Whale Departure is Net Positive for Remaining Players). *When a whale (high-activity, capital-intensive player) exits the protocol, the remaining players' per-capita expected value increases.*
 
-*Proof.* A whale with activity score $a_W = 3.05$ extracts more than they deposit (that is the definition of a successful whale — they earn positive EV on lootboxes at $\mu = 1.35$, near-zero edge Degenerette, BAF leaderboard prizes, etc.). When they exit:
+*Proof.* A whale with activity score $a_W \geq 2.55$ extracts more than they deposit (that is the definition of a successful whale — they earn positive EV on lootboxes at $\mu = 1.35$, near-zero edge Degenerette, BAF leaderboard prizes, etc.). When they exit:
 
 1. Their deposits cease: $P^{next}_\ell$ growth decreases by $c_W$ per level.
 2. Their extractions cease: Prize distributions lose a player who was winning $> c_W$ in expectation.
@@ -1040,7 +1040,7 @@ Whether this theoretical robustness translates to empirical resilience is an ope
 |-----------|--------|-------|-----------------|
 | stETH yield rate | $r$ | 0.03–0.05 | External value injection |
 | Activity score range | $a_i$ | [0, 3.05] | Incentive multiplier |
-| Lootbox EV range | $\mu(a)$ | [0.80, 1.35] | Engagement reward |
+| Lootbox EV range | $\mu(a)$ | [0.80, 1.35] | Engagement reward (saturates at $a = 2.55$) |
 | Degenerette ROI range | $\rho(a)$ | [0.90, 0.999] | Engagement reward |
 | Lootbox EV cap | — | 10 ETH/level/account | Extraction bound |
 | Degenerette ETH cap | — | 10% of future pool | Solvency guarantee |

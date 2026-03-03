@@ -207,7 +207,7 @@ The BURNIE token must maintain value for this to be profitable in ETH terms. BUR
 4. Build quest streak to 100 for maximum activity bonus (10,000 BPS)
 5. Use high activity score to boost lootbox EV to 135% and Degenerette ROI to 99.9%
 
-**Profitability:** LOW INDIVIDUAL, HIGH AGGREGATE. The 300 BURNIE daily reward for quest completion is modest. The real value is the activity score boost. At high activity (305% = max), lootbox EV reaches 135% and Degenerette ROI reaches 99.9%. The cost to maintain a 100-day quest streak is approximately 100 * 0.005 ETH = 0.5 ETH in minimum ticket purchases plus BURNIE costs for slot 1. The activity score benefit is worth significantly more through boosted EV on all other activities.
+**Profitability:** LOW INDIVIDUAL, HIGH AGGREGATE. The 300 BURNIE daily reward for quest completion is modest. The real value is the activity score boost. Lootbox EV reaches 135% at 255% activity (achievable with deity pass OR full affiliate + whale bundle, without needing both). Degenerette ROI reaches 99.9% at 305% activity (full engagement). The cost to maintain a 100-day quest streak is approximately 100 * 0.005 ETH = 0.5 ETH in minimum ticket purchases plus BURNIE costs for slot 1. The activity score benefit is worth significantly more through boosted EV on all other activities.
 
 **System Impact:** BENEFICIAL. Quest gaming incentivizes daily engagement, which is the protocol's core retention mechanic. The minimum ticket purchases fund prize pools. The activity score system intentionally rewards consistent players.
 
@@ -240,11 +240,11 @@ The BURNIE token must maintain value for this to be profitable in ETH terms. BUR
 
 **Mechanism:** Degenerette ETH bets have a 3-layer payout structure that creates genuine +EV for engaged players:
 
-1. **Base ROI scales with activity score:** 90% (0% activity) → 99.9% (305% activity), following a quadratic-then-linear curve
+1. **Base ROI scales with activity score:** 90% (0% activity) → 99.9% (305% activity), following a quadratic-then-linear curve. (Degenerette ROI caps at 305%; lootbox EV caps earlier at 255%.)
 2. **+5% ETH bonus redistributed into high matches:** An additional `ETH_ROI_BONUS_BPS = 500` is stripped from low-match outcomes (0-4 matches) and concentrated into match buckets 5-8. At 6 matches, the bonus factor is ~13x, pushing effectiveRoi to ~160%+ at max activity. At 7-8 matches the bonus is even larger.
 3. **Payout split is 25% ETH / 75% lootbox:** The lootbox portion has the same activity-score EV multiplier (80-135%) as regular lootbox opens, compounding the +EV for high-activity players. At max activity, the 75% lootbox portion is scaled to 135% of face value.
 
-**Why this matters:** This is the primary +EV path in the entire protocol for anyone who cares about expected value. A player at max activity score (305%) betting ETH on Degenerette has:
+**Why this matters:** This is the primary +EV path in the entire protocol for anyone who cares about expected value. A player at max Degenerette activity score (305%) betting ETH on Degenerette has:
 - Near-zero house edge on low-match outcomes (99.9% ROI)
 - Genuinely positive EV on 5+ match outcomes (ETH bonus redistribution exceeds the 0.1% edge)
 - All excess value delivered as lootbox tickets and BURNIE, not direct ETH
