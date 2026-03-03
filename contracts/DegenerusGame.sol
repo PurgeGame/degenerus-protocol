@@ -2408,10 +2408,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Calculate player's activity score in basis points.
-    /// @dev Max theoretical 355% (35500 bps).
-    ///      Activity Score: 50% (streak) + 25% (count) + 100% (quest) + 50% (affiliate) + 40% (whale) = 265% max
+    /// @dev Activity Score: 50% (streak) + 25% (count) + 100% (quest) + 50% (affiliate) + 40% (whale) = 265% max
     ///      Deity pass adds +80% in place of whale bundle bonus (305% max base).
-    ///      Total: 305% theoretical max (realistic ~220-300%).
+    ///      Consumers apply their own caps (lootbox EV: 255%, degenerette ROI: 305%, decimator: 235%).
     /// @param player The player address to calculate for.
     /// @return scoreBps Total activity score in basis points.
     function playerActivityScore(
@@ -2519,32 +2518,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // Otherwise: (mintCount / currLevel) * 25
         // Example: level 10, 7 mints = (7 * 25) / 10 = 17.5 points
         return (uint256(mintCount) * 25) / uint256(currLevel);
-    }
-
-    /// @notice Get normalized activity score for lootbox EV calculation (0-10000 bps).
-    /// @dev Converts playerActivityScore (10000-35500 bps) to 0-10000 scale.
-    ///      10000 raw (0% bonus) → 0 activity score
-    ///      16000 raw (60% bonus) → 6000 activity score
-    ///      25000+ raw (150%+ bonus) → 10000 activity score (max)
-    /// @param player The player address to calculate for.
-    /// @return scoreBps Normalized activity score (0-10000 bps).
-    function activityScoreFor(
-        address player
-    ) external view returns (uint16 scoreBps) {
-        uint256 rawScore = _playerActivityScore(player);
-
-        // 0-6000 → 0-6000 (linear 1:1, neutral EV at 6000)
-        if (rawScore <= 6000) {
-            return uint16(rawScore);
-        }
-
-        // 6000-15000 → 6000-10000 (9000 raw range → 4000 score range)
-        if (rawScore <= 15000) {
-            return uint16(6000 + ((rawScore - 6000) * 4000) / 9000);
-        }
-
-        // Above 15000: max score
-        return 10000;
     }
 
     /*+======================================================================+

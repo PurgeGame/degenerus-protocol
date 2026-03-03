@@ -38,6 +38,12 @@ interface IDegenerusGame {
     /// @return True if decimator window is open.
     function decWindowOpenFlag() external view returns (bool);
 
+    /// @notice Check if the current jackpot phase is compressed (3 days instead of 5).
+    /// @dev Compressed mode activates when the purchase-phase target is met within the
+    ///      first 2 daily advances, signaling high player interest.
+    /// @return True if jackpot phase is compressed.
+    function isCompressedJackpot() external view returns (bool);
+
     /// @notice Get comprehensive purchase information in a single call.
     /// @dev Gas-optimized batch query for UI display.
     /// @return lvl Active direct-ticket level (lootbox purchases still route to next level during jackpot phase).
@@ -84,12 +90,6 @@ interface IDegenerusGame {
     /// @param player The player to query.
     /// @return Multiplier in bps (10000 = 1x).
     function playerActivityScore(address player) external view returns (uint256);
-
-    /// @notice Get normalized activity score for lootbox EV calculation (0-10000 bps).
-    /// @dev Converts playerActivityScore to 0-10000 scale for lootbox EV multiplier.
-    /// @param player The player to query.
-    /// @return scoreBps Normalized activity score (0-10000 bps).
-    function activityScoreFor(address player) external view returns (uint16 scoreBps);
 
     /// @notice Check if an operator is approved to act on behalf of a player.
     /// @param owner The player who granted approval.

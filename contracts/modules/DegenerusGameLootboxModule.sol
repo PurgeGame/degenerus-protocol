@@ -320,8 +320,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Activity score EV multiplier constants (ETH lootbox only)
     /// @dev 60% activity score = neutral 100% EV
     uint16 private constant ACTIVITY_SCORE_NEUTRAL_BPS = 6_000;
-    /// @dev 305%+ activity score = maximum 135% EV (deity pass theoretical max)
-    uint16 private constant ACTIVITY_SCORE_MAX_BPS = 30_500;
+    /// @dev 255%+ activity score = maximum 135% EV
+    uint16 private constant ACTIVITY_SCORE_MAX_BPS = 25_500;
     /// @dev Minimum EV at 0% activity (80%)
     uint16 private constant LOOTBOX_EV_MIN_BPS = 8_000;
     /// @dev Neutral EV at 60% activity (100%)
