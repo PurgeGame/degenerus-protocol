@@ -302,9 +302,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             if (!isResuming) {
                 uint8 counter = jackpotCounter;
                 uint8 counterStep = 1;
+                // Compressed jackpot: advance counter by 2 on non-final days
+                // so 5 logical days complete in 3 physical days.
+                if (compressedJackpotFlag && counter < JACKPOT_LEVEL_CAP - 1) {
+                    counterStep = 2;
+                }
                 bool isEarlyBirdDay = (counter == 0);
                 uint256 poolSnapshot = currentPrizePool;
                 uint16 dailyBps = _dailyCurrentPoolBps(counter, randWord);
+                // Double BPS on compressed days to combine two days' payouts.
+                if (counterStep == 2) {
+                    dailyBps *= 2;
+                }
                 uint256 budget = (poolSnapshot * dailyBps) / 10_000;
 
                 // Run the early-bird lootbox jackpot on day 1 only.
