@@ -2636,6 +2636,39 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
+    /// @notice Sample up to 4 trait burn tickets from a specific level.
+    /// @dev Simplified variant of sampleTraitTickets for targeted level sampling.
+    ///      Used by BAF scatter to sample the next level's ticket holders.
+    /// @param targetLvl The level to sample from.
+    /// @param entropy Random seed (typically VRF word) for trait and offset selection.
+    /// @return traitSel Selected trait ID.
+    /// @return tickets Array of up to 4 ticket holder addresses.
+    function sampleTraitTicketsAtLevel(
+        uint24 targetLvl,
+        uint256 entropy
+    )
+        external
+        view
+        returns (uint8 traitSel, address[] memory tickets)
+    {
+        traitSel = uint8(entropy >> 24);
+        address[] storage arr = traitBurnTicket[targetLvl][traitSel];
+        uint256 len = arr.length;
+        if (len == 0) {
+            return (traitSel, new address[](0));
+        }
+
+        uint256 take = len > 4 ? 4 : len;
+        tickets = new address[](take);
+        uint256 start = (entropy >> 40) % len;
+        for (uint256 i; i < take; ) {
+            tickets[i] = arr[(start + i) % len];
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
     /// @notice Sample up to 4 far-future ticket holders from ticketQueue.
     /// @dev View function for BAF far-future selection; samples levels [current+5, current+99].
     ///      Tries up to 10 random levels, returns however many non-zero holders are found (max 4).
