@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: unknown
-last_updated: "2026-03-01T13:35:55.334Z"
+milestone_name: Audit Pass One
+status: milestone_complete
+last_updated: "2026-03-04T18:00:00.000Z"
 progress:
   total_phases: 9
   completed_phases: 7
@@ -15,19 +15,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-28)
+See: .planning/PROJECT.md (updated 2026-03-04 after v1.0 milestone)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** Phase 2 — Core State Machine and VRF Lifecycle
+**Current focus:** Milestone v1.0 complete. Known gaps: Phase 4 ETH accounting (8 plans), Phase 7 synthesis (2 plans).
 
 ## Current Position
 
-Phase: 2 of 9 (Core State Machine and VRF Lifecycle)
-Plan: 6 of 6 in current phase (02-01, 02-02, 02-03, 02-04, 02-05, 02-06 complete)
-Status: Executing
-Last activity: 2026-03-01 — Completed 02-04 FSM transition graph audit (FSM-01/FSM-03 PASS)
+Status: ✅ v1.0 Milestone complete
+Last activity: 2026-03-04 — Milestone v1.0 archived
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████████░░] 74% (47/57 plans, 43/62 requirements)
 
 ## Performance Metrics
 
@@ -88,6 +86,7 @@ Progress: [██░░░░░░░░] 20%
 | Phase 06 P01 | 9min | 1 tasks | 1 files |
 | Phase 07 P04 | 4min | 1 tasks | 1 files |
 | Phase 07 P02 | 4min | 1 tasks | 1 files |
+| Phase quick-2 P1 | 10min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -191,6 +190,12 @@ None yet.
 - [RESOLVED by 02-01]: Nudge window timing — whether `rngLockedFlag` covers the full window between VRF fulfillment and `advanceGame` word consumption is the highest-risk open question; pass/fail determines if a critical finding exists
 - [Research flag]: Medusa Hardhat ESM compatibility — verify `--build-system hardhat` flag works before fuzzing campaigns; fall back to Echidna if crytic-compile integration fails
 - [Research flag]: stETH cached balance (Phase 4) — presence or absence of cached `steth.balanceOf(this)` in state variables is unconfirmed until code inspection
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 2 | Alter terminal payouts: remove terminal BAF, terminal decimator 10%, 90% big jackpot to next-level ticketholders | 2026-03-04 | 0b62e48 | [2-alter-terminal-payouts-remove-terminal-b](./quick/2-alter-terminal-payouts-remove-terminal-b/) |
 
 ## Session Continuity
 
