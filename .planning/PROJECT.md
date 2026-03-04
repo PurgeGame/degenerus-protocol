@@ -26,20 +26,33 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 - ✓ Affiliate referral tracking and bonus points — existing
 - ✓ Quest streak system with activity score component — existing
 - ✓ 884 tests passing (unit, integration, access control, edge cases) — existing
+- ✓ Storage layout verified: zero slot collisions across all 10 delegatecall modules — v1.0
+- ✓ VRF lifecycle confirmed safe: rngLockedFlag, callback gas, requestId matching, entropy derivation — v1.0
+- ✓ FSM transition graph: all legal transitions enumerated, illegal transitions proved unreachable — v1.0
+- ✓ Stuck-state recovery: all 5 recovery mechanisms confirmed reachable and premature-trigger resistant — v1.0
+- ✓ ETH module flow: MintModule, JackpotModule, EndgameModule, LootboxModule, GameOverModule audited — v1.0
+- ✓ Supporting modules: WhaleModule, BoonModule, DecimatorModule, DegeneretteModule, MintStreakUtils audited — v1.0
+- ✓ Input validation confirmed across all external-facing parameters — v1.0
+- ✓ DoS resistance confirmed: all loops bounded, bucket cursor griefing-resistant, trait burn bounded — v1.0
+- ✓ Economic attack surface modeled: Sybil, MEV, block proposer, whale, affiliate all bounded — v1.0
+- ✓ Access control matrix: all 22 contracts privilege-mapped, delegation safety proofs complete — v1.0
+- ✓ Delegatecall return values: all 30 call sites confirmed using uniform checked pattern — v1.0
+- ✓ Constructor ordering: all 22 constructors confirmed safe relative to deploy sequence — v1.0
+- ✓ Token math: PriceLookupLib, deity pass T(n), lazy pass, lootbox EV, BitPackingLib, coinflip range all verified — v1.0
+- ✓ stETH rebasing: no cached balance found, handling confirmed correct — v1.0
 
 ### Active
 
-- [ ] RNG manipulation analysis — can actors predict, influence, or exploit VRF outcomes?
-- [ ] RNG state machine integrity — stuck states, reentrancy, race conditions in request/fulfill lifecycle
-- [ ] ETH flow accounting — can funds get stuck, drained, or misallocated across prize pools?
-- [ ] Token/pass math verification — ticket pricing, whale bundles, deity passes, lootbox EV formulas
-- [ ] Fee split integrity — do all percentage splits sum correctly across all code paths?
-- [ ] Delegatecall storage safety — slot collision risks across 10 modules
-- [ ] Access control audit — privilege escalation, operator approval abuse
-- [ ] Cross-contract interaction safety — reentrancy, callback manipulation, flash loan vectors
-- [ ] Validator/MEV attack surface — tx reordering, censorship, sandwich attacks on game state
-- [ ] Sybil/collusion analysis — coordinated multi-wallet strategies to extract excess value
-- [ ] Edge case accounting — game over settlement, stall recovery, timeout distributions
+- [ ] ETH accounting invariant: `address(this).balance + stETH.balanceOf(this) >= claimablePool` — Phase 4 audit incomplete (8 plans pending)
+- [ ] BPS fee split formal verification — all splits not yet confirmed to sum-to-input across all paths
+- [ ] claimWinnings() reentrancy formal confirmation — CEI analysis not executed
+- [ ] Cross-function reentrancy synthesis — ETH callback from claimWinnings not formally traced
+- [ ] stETH/LINK reentrancy synthesis — Lido callback and LINK reentrancy not formally traced
+- [ ] DegenerusVault share-based redemption audit — not yet executed
+- [ ] BurnieCoin supply invariant audit — not yet executed
+- [ ] Final prioritized findings report — 07-05 not executed
+- [ ] Whale bundle level eligibility guard — F01 HIGH finding, remediation pending
+- [ ] Game-over terminal settlement: zero-balance proof pending
 
 ### Out of Scope
 
@@ -48,18 +61,34 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 - Testnet-specific contracts — mainnet deployment is the target
 - Mock contracts — test infrastructure only
 - Deployment scripts — operational, not security surface
+- Formal verification (Halmos) — deferred to v2
+- Coverage-guided fuzzing (Medusa) — deferred to v2
 
 ## Context
 
+### Current State (after v1.0)
+
+- Audit 74% complete by plan count (47/57 plans executed)
+- 43/62 requirements formally satisfied
+- ~113,562 lines Solidity audited across 22 contracts + 10 modules
+- Timeline: Feb 15 → Mar 4, 2026 (18 days, 227 files touched)
+- 5 significant findings produced:
+  - F01 HIGH: Whale bundle lacks level eligibility guard (Phase 3c)
+  - XCON-F01 MEDIUM: deityBoonSlots staticcall reads wrong storage context
+  - FSM-F02 LOW: stale dailyIdx in handleGameOverDrain
+  - Multiple Informational: dead code, misleading comments, presale bonus range
+  - 319+ Slither/Aderyn detections, all classified as false positives with reasoning
+- Largest remaining gap: Phase 4 (ETH accounting invariant) — 8 of 9 plans unexecuted
+- Second remaining gap: Phase 7 synthesis — plans 07-03 and 07-05 not executed
+
+### Technical Stack
+
 - Solidity 0.8.26/0.8.28 with viaIR, optimizer runs=2
 - All contracts under 24KB (DegenerusGame largest at 19KB)
-- Storage layout shared across main contract and all delegatecall modules via DegenerusGameStorage
-- ContractAddresses uses compile-time constants (all address(0) in source, patched at deploy)
-- Deploy order is critical: modules (N+0..10) → COIN (N+11) → COINFLIP (N+12) → GAME (N+13) → ... → ADMIN (N+21)
-- External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token
-- Game is a 2-state FSM: PURCHASE ↔ JACKPOT with terminal gameOver
-- RNG lock prevents state changes during VRF callback window (18h timeout mainnet)
-- Custom errors throughout (no revert strings), generic `E()` for most guards
+- Storage layout shared via DegenerusGameStorage
+- ContractAddresses compile-time constants, patched at deploy
+- Chainlink VRF V2.5, Lido stETH, LINK token as external dependencies
+- Audit tools: forge inspect, Slither, Aderyn, grep-based manual analysis
 
 ## Constraints
 
@@ -72,9 +101,13 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Full protocol scope (not targeted) | Interactions between contracts are where bugs hide | — Pending |
-| Validator-level threat model | Strongest realistic attacker for on-chain game | — Pending |
-| Findings report without code fixes | User wants assessment first, fixes separately | — Pending |
+| Full protocol scope (not targeted) | Cross-contract interactions are where bugs hide | ✓ Good — surfaced deityBoonSlots staticcall bug |
+| Validator-level threat model | Strongest realistic attacker for on-chain game | ✓ Good — block proposer analysis thorough |
+| Findings report without code fixes | User wants assessment first, fixes separately | — Pending (07-05 not written yet) |
+| Parallel module execution (3a/3b/3c) | Phase 2 independence enables parallelism | ✓ Good — accelerated audit velocity |
+| Accepted Phase 4 gap for v1.0 | ETH accounting incomplete but other surfaces covered | ⚠ Revisit — ACCT invariant is critical |
+| False positive classification methodology | Two-pass Slither + manual triage for all HIGH/MEDIUM | ✓ Good — prevented false-finding noise |
+| Skip final synthesis report in v1.0 | Known gap accepted as tech debt | ⚠ Revisit — 07-05 needed to close deliverable |
 
 ---
-*Last updated: 2026-02-28 after initialization*
+*Last updated: 2026-03-04 after v1.0 milestone*
