@@ -8,6 +8,21 @@ A comprehensive security review of the Degenerus Protocol smart contract suite �
 
 Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor — whale, Sybil group, or block proposer — can extract value beyond what the game mechanics intend.
 
+## Current Milestone: v2.0 Adversarial Audit
+
+**Goal:** Exhaustive adversarial security audit of all Degenerus Protocol contracts for Code4rena contest preparation — assume a well-funded attacker (~1000 ETH) and a sophisticated game-theory adversary.
+
+**Target attack surfaces:**
+- Admin/creator power abuse and rug vectors
+- `advanceGame()` gas analysis (16M hard limit) and Sybil bloat
+- VRF/RNG security (re-entrancy, griefing, prediction)
+- Economic/game-theory attacks (whale collusion, dominant strategies, EV exploits)
+- Reentrancy and cross-contract attacks
+- Access control and authorization gaps
+- Integer math and edge cases (unchecked blocks, wei-level exploits)
+- Denial of service vectors
+- Token (COIN/DGNRS) security
+
 ## Requirements
 
 ### Validated
@@ -43,16 +58,18 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 
 ### Active
 
-- [ ] ETH accounting invariant: `address(this).balance + stETH.balanceOf(this) >= claimablePool` — Phase 4 audit incomplete (8 plans pending)
-- [ ] BPS fee split formal verification — all splits not yet confirmed to sum-to-input across all paths
-- [ ] claimWinnings() reentrancy formal confirmation — CEI analysis not executed
-- [ ] Cross-function reentrancy synthesis — ETH callback from claimWinnings not formally traced
-- [ ] stETH/LINK reentrancy synthesis — Lido callback and LINK reentrancy not formally traced
-- [ ] DegenerusVault share-based redemption audit — not yet executed
-- [ ] BurnieCoin supply invariant audit — not yet executed
-- [ ] Final prioritized findings report — 07-05 not executed
-- [ ] Whale bundle level eligibility guard — F01 HIGH finding, remediation pending
-- [ ] Game-over terminal settlement: zero-balance proof pending
+- [ ] Admin power map: rug vectors, game-halt, player grief, 3-day emergency stall trigger
+- [ ] `advanceGame()` complete call graph + worst-case gas by code path (16M limit)
+- [ ] Sybil bloat analysis: per-player storage, bucket manipulation, data structure O(n) growth
+- [ ] VRF/RNG: re-entrancy, griefing, retry window exploits, coordinator spoofing
+- [ ] Economic attacks: whale collusion, dominant strategy, last-mover, EV exploits, affiliate rings
+- [ ] Reentrancy: all ETH transfer sites, cross-function reentrancy, delegatecall storage collision
+- [ ] Access control gaps: unpermissioned sensitive functions, role escalation, re-initialization
+- [ ] Integer math: unchecked blocks, division by zero, wei-level sentinel exploits
+- [ ] DoS: ETH rejection, storage bloat, gas griefing on callbacks
+- [ ] Token security: mint/burn auth, vaultMintAllowance abuse, ERC20 non-standard behavior
+- [ ] ETH accounting invariant: BPS splits, claimWinnings() CEI, game-over zero-balance proof (carried from v1.0)
+- [ ] Final prioritized findings report (CRITICAL / HIGH / MEDIUM / LOW / Gas Report)
 
 ### Out of Scope
 
@@ -110,4 +127,4 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 | Skip final synthesis report in v1.0 | Known gap accepted as tech debt | ⚠ Revisit — 07-05 needed to close deliverable |
 
 ---
-*Last updated: 2026-03-04 after v1.0 milestone*
+*Last updated: 2026-03-04 after v2.0 milestone start*

@@ -1,202 +1,169 @@
 # Requirements: Degenerus Protocol Security Audit
 
-**Defined:** 2026-02-28
-**Core Value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
+**Defined:** 2026-03-04
+**Milestone:** v2.0 — Adversarial Audit (Code4rena Preparation)
+**Core Value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor — whale, Sybil group, or block proposer — can extract value beyond what the game mechanics intend.
 
-## v1 Requirements
+## v2.0 Requirements
 
-Requirements for the security audit. Each maps to roadmap phases.
+### ETH Accounting Integrity (ACCT)
+*Closes the v1.0 Phase 4 gap. Master dependency for reentrancy synthesis.*
 
-### Storage Foundation
+- [x] **ACCT-01**: ETH accounting invariant verified: `sum(deposits) == prizePool + futurePool + claimablePool + fees` holds across all game states — **PASS** (7/7 invariant checkpoints pass, EthInvariant.test.js)
+- [x] **ACCT-02**: `_creditClaimable` call site audit: every call site confirmed to update `claimablePool` in same code path (likely HIGH if any are missing) — **PASS** (11/11 sites CORRECT, Pattern A or B)
+- [x] **ACCT-03**: BPS fee split correctness: all splits sum to input with correct rounding direction across all fee paths — **PASS** (all 4 sites use subtraction pattern)
+- [x] **ACCT-04**: `claimWinnings()` cross-function reentrancy: `purchase()` re-entry during ETH callback formally traced — **PASS** (strict CEI, sentinel before external call)
+- [x] **ACCT-05**: stETH/LINK reentrancy: Lido callback and LINK ERC-677 callback paths formally traced — **PASS+INFO+LOW** (adminStakeEthForStEth CEI-compliant; onTokenTransfer formal deviation not exploitable; creditLinkReward not implemented in BurnieCoin — LOW)
+- [x] **ACCT-06**: DegenerusVault share-based redemption: no solvency gap — rounding direction and precision loss verified under realistic deposit/redemption sequences — **PASS** (floor division safe; no partial-burn extraction)
+- [x] **ACCT-07**: BurnieCoin supply invariant: total minted equals sum of all credit sources; no free-mint path confirmed — **PASS** (packed struct + VAULT-routing; 6 mint paths enumerated and authorized)
+- [x] **ACCT-08**: Game-over terminal settlement: zero-balance proof — all claimable amounts resolvable after game-over — **PASS** (912-day level-0 timeout; gameOver=true; invariant holds)
+- [x] **ACCT-09**: `adminStakeEthForStEth` solvency guard: admin cannot stake ETH below `claimablePool` threshold; guard confirmed or MEDIUM finding raised — **PASS** (guard confirmed claimablePool-based)
+- [x] **ACCT-10**: `receive()` donation to `futurePrizePool`: inflating pool via direct ETH send cannot artificially trigger game conditions (level transition thresholds, BAF activation, etc.); selfdestruct forced ETH that bypasses `receive()` does not create extractable solvency surplus — **PASS+INFO** (futurePrizePool only; no triggers; selfdestruct is protocol reserve)
 
-- [x] **STOR-01**: All 10 delegatecall modules have identical storage layout to DegenerusGame — no module declares instance storage variables
-- [ ] **STOR-02**: Storage slot ordering in DegenerusGameStorage matches `forge inspect` output for all module contracts
-- [ ] **STOR-03**: ContractAddresses compile-time constants are correctly mapped — no address(0) values remain in deployed bytecode
-- [x] **STOR-04**: No testnet configuration (`TESTNET_ETH_DIVISOR`) bleeds into mainnet contract logic
+### Gas Analysis and Sybil Bloat (GAS)
+*Quantifies permanent DoS feasibility. Independent of ACCT, runs in parallel.*
 
-### RNG State Machine
+- [ ] **GAS-01**: `advanceGame()` complete call graph: worst-case gas measured for every code path branch via Foundry `--gas-report` adversarial harnesses
+- [ ] **GAS-02**: `processTicketBatch` gas ceiling: maximum cold SSTORE cost confirmed against 16M block limit
+- [ ] **GAS-03**: Sybil breakeven: minimum wallet count N where `advanceGame()` exceeds 16M gas derived
+- [ ] **GAS-04**: Sybil DoS cost: ETH required to reach N wallets computed and compared against 1000 ETH threat model budget
+- [ ] **GAS-05**: `payDailyJackpot` winner loop ceiling: `DAILY_ETH_MAX_WINNERS` constant read and worst-case gas measured
+- [ ] **GAS-06**: VRF callback gas measured under worst-case lootbox state: confirmed under 200K with margin
+- [ ] **GAS-07**: Rational inaction liveness: dominant whale's dominant strategy analyzed — delaying `advanceGame()` cannot produce better outcomes than advancing; protocol liveness guarantee assessed
 
-- [x] **RNG-01**: `rngLockedFlag` remains set continuously from VRF request through word consumption in `advanceGame` — no window exists for nudge manipulation
-- [x] **RNG-02**: `rawFulfillRandomWords` cannot revert under any condition (gas limit, panic, require) — VRF coordinator does not retry failed callbacks
-- [x] **RNG-03**: `rawFulfillRandomWords` gas cost stays under 200,000 gas with headroom against VRF_CALLBACK_GAS_LIMIT (300,000)
-- [x] **RNG-04**: `requestId` matching is correct — no mismatch can cause wrong VRF word applied to wrong game state
-- [x] **RNG-05**: Concurrent VRF requests (daily RNG vs lootbox mid-day RNG) cannot create requestId ordering conflicts
-- [x] **RNG-06**: RNG lock cannot be bypassed or stuck permanently — all stuck states are recoverable via stall recovery
-- [x] **RNG-07**: 18-hour VRF retry timeout cannot be abused by a validator to selectively trigger or delay fulfillment
-- [x] **RNG-08**: `reverseFlip()` nudge mechanism cannot be exploited by a block proposer who sees the fulfilled VRF word in mempool
-- [x] **RNG-09**: `EntropyLib.entropyStep()` XOR-shift derivation from VRF seed does not introduce predictable patterns exploitable by an attacker
-- [x] **RNG-10**: No code path uses `block.timestamp` or `blockhash` as a randomness source beyond VRF integration
+### Admin Power and VRF Griefing (ADMIN)
+*wireVrf is the central connecting vector for both admin abuse and VRF griefing.*
 
-### ETH Accounting
+- [ ] **ADMIN-01**: Complete admin function inventory: every privilege mapped with worst-case compromise consequence if admin key is lost or malicious
+- [ ] **ADMIN-02**: `wireVrf` coordinator substitution analysis: admin RNG control path via emergency coordinator rotation confirmed or refuted
+- [ ] **ADMIN-03**: 3-day emergency stall trigger: all conditions under which admin can deliberately force the stall confirmed; attacker sequence enumerated
+- [ ] **ADMIN-04**: VRF retry window analysis: all state-changing calls permissible during 18h RNG lock period identified; any that produce advantaged outcomes flagged
+- [ ] **ADMIN-05**: VRF subscription drain economics: LINK cost to halt game computed; griefing feasibility assessed against threat model
+- [ ] **ADMIN-06**: Player-specific grief vectors: any admin path to selectively block a specific wallet's advancement, lootbox resolution, or withdrawal identified
 
-- [ ] **ACCT-01**: Core invariant holds: `address(this).balance + stETH.balanceOf(this) >= claimablePool` after every possible transaction
-- [ ] **ACCT-02**: Prize pool 90%/10% split (currentPrizePool / futurePrizePool) sums correctly — no wei leak from rounding
-- [ ] **ACCT-03**: All BPS-based fee splits sum to the original input amount — no rounding accumulation drains the protocol
-- [ ] **ACCT-04**: `claimWinnings()` pull-pattern ETH/stETH withdrawal cannot be reentered to drain funds
-- [ ] **ACCT-05**: stETH rebasing (daily Lido yield or slashing) does not break accounting — no cached stETH balance used for payout calculations
-- [ ] **ACCT-06**: `receive()` ETH routing correctly attributes all incoming ETH to the right pool — no unattributed ETH
-- [ ] **ACCT-07**: Game-over settlement distributes all prize pool funds correctly — no funds remain locked after terminal state
-- [ ] **ACCT-08**: Stall recovery paths (3-day emergency, 30-day final sweep) correctly attribute all pool funds and cannot be triggered prematurely
-- [ ] **ACCT-09**: DegenerusVault stETH yield accounting is consistent — vault mints match expected COIN supply
-- [ ] **ACCT-10**: BurnieCoin supply invariant holds — total minted minus burned equals circulating supply across all paths
+### Assembly Safety (ASSY)
+*Raw storage writes bypass Solidity overflow checks and type safety.*
 
-### Token and Pricing Math
+- [ ] **ASSY-01**: JackpotModule assembly SSTORE slot calculation: `elem = levelSlot + traitId` verified to match actual Solidity storage declaration for `traitBurnTicket` — mismatch would cause storage corruption (potential CRITICAL)
+- [ ] **ASSY-02**: MintModule assembly SSTORE slot calculation: same verification for the parallel batch-write pattern
+- [ ] **ASSY-03**: All other assembly blocks (AdvanceModule, DecimatorModule, DegeneretteModule, DegenerusGame, DegenerusJackpots): error propagation, return data handling, and memory bounds verified
 
-- [x] **MATH-01**: Ticket price escalation formula (PriceLookupLib) is monotonically increasing and does not overflow at max level
-- [x] **MATH-02**: Deity pass pricing T(n) = n*(n+1)/2 + 24 ETH does not overflow at realistic pass counts (n=100, n=1000)
-- [ ] **MATH-03**: Whale bundle pricing (2.4 ETH levels 0-3, 4 ETH x49/x99) is correctly enforced across all purchase paths
-- [x] **MATH-04**: Lazy pass pricing (sum-of-10-level-prices at level 3+) correctly sums the price curve
-- [x] **MATH-05**: Lootbox EV multiplier formula produces expected values — activity score cannot create guaranteed positive EV extraction
-- [x] **MATH-06**: Degenerette bet resolution pays out correctly — no bet timing relative to VRF creates advantaged positions
-- [x] **MATH-07**: Coinflip 50-150% bonus range is correctly bounded — edge cases at 50% and 150% do not over/underpay
-- [x] **MATH-08**: BitPackingLib 24-bit field packing/unpacking is correct — no field overflow or bleed across boundaries
+### Token Security and Economic Attacks (TOKEN)
+*Requires admin map from ADMIN — vaultMintAllowance authorization model depends on it.*
 
-### Access Control
+- [ ] **TOKEN-01**: `vaultMintAllowance` bypass verdict: no path to unbounded COIN minting confirmed
+- [ ] **TOKEN-02**: `claimWhalePass` double-mint check: no replay or re-entry minting path confirmed
+- [ ] **TOKEN-03**: BurnieCoinflip entropy source: VRF vs. block-level data determined — HIGH if block-level data found
+- [ ] **TOKEN-04**: Whale + lootbox combined EV model: no ticket-level combination produces EV > 1.0 for any player at any activity score
+- [ ] **TOKEN-05**: Activity score inflation cost: minimum ETH required to extract maximum EV benefit bounded against cost; no positive-return inflation path
+- [ ] **TOKEN-06**: BURNIE 30-day guard completeness: all purchase paths (operator-proxied, whale bundle, lazy pass, deity pass) confirmed to apply the guard with identical timestamp comparison
+- [ ] **TOKEN-07**: Affiliate economic exploits: self-referral, wash trading, and circular referral ring EV modeled and bounded
+- [ ] **TOKEN-08**: DGNRS `lockForLevel`/`unlock` cap reset: users cannot repeatedly lock/unlock to reset per-level ETH/BURNIE spending caps and extract double EV via level transition timing
 
-- [x] **AUTH-01**: All admin-only functions (`msg.sender == CREATOR`) are correctly gated — no privilege escalation path exists
-- [x] **AUTH-02**: VRF coordinator callback (`rawFulfillRandomWords`) is restricted to the coordinator address only
-- [x] **AUTH-03**: Module-only entry points cannot be called directly — only reachable via DegenerusGame delegatecall
-- [x] **AUTH-04**: `operatorApprovals` delegation cannot grant more permissions than the player has — revocation is immediate
-- [x] **AUTH-05**: `_resolvePlayer()` correctly routes value flows to `player` not `msg.sender` across all call sites
-- [ ] **AUTH-06**: DegenerusAdmin VRF subscription management cannot be griefed by external callers
+### Vault and Stonk Economics (VAULT)
+*DegenerusVault and DegenerusStonk share the `(reserve * burned) / supply` redemption formula.*
 
-### Cross-Contract Interactions
+- [ ] **VAULT-01**: DegenerusVault ETH donation via `receive()`: direct ETH send to vault cannot manipulate the share redemption formula to benefit one shareholder class at the expense of another
+- [ ] **VAULT-02**: DegenerusStonk burn-to-claim formula: `claimAmount = (reserveBalance * sharesBurned) / totalSupply` rounding direction verified; no path for disproportionate extraction via partial burns or supply manipulation
 
-- [ ] **XCON-01**: All delegatecall return values are checked — no failing module silently succeeds
-- [ ] **XCON-02**: stETH.submit() and stETH.transfer() return values are checked — no silent failure desynchronizes state
-- [ ] **XCON-03**: LINK.transferAndCall() return value is checked and cannot create reentrancy
-- [ ] **XCON-04**: BurnieCoin.burnCoin() behavior on insufficient balance is safe — no path creates free nudges or coinflips
-- [ ] **XCON-05**: Cross-function reentrancy — ETH callback from `claimWinnings` cannot reenter `purchase` or other state-changing functions
-- [ ] **XCON-06**: stETH rebasing cannot create a reentrancy vector via Lido internal callbacks during staking paths
-- [x] **XCON-07**: Constructor-time cross-contract calls execute in correct order given the deploy sequence
+### Timestamp and Timing Attacks (TIME)
+*Validators can shift `block.timestamp` by ±900s on mainnet.*
 
-### Input Validation
+- [ ] **TIME-01**: Daily boundary validator manipulation: ±900s drift cannot allow a player to trigger two daily jackpot allocations in one real day or skip another player's daily window
+- [ ] **TIME-02**: Quest streak griefing: a validator cannot selectively delay another player's streak-claiming transaction past the day boundary to break their streak
 
-- [x] **INPT-01**: Ticket quantity bounds prevent overflow and enforce minimum/maximum constraints
-- [x] **INPT-02**: Lootbox amount limits are enforced — no quantity creates gas exhaustion or unbounded iteration
-- [x] **INPT-03**: MintPaymentKind enum bounds are validated — invalid enum values cannot corrupt state
-- [x] **INPT-04**: Zero-address guards are present on all external-facing functions that accept addresses
+### Cross-Function Reentrancy and Unchecked Blocks (REENT)
+*Integration pass — must follow ACCT, ADMIN, TOKEN, VAULT. Synthesizes all ETH-touching call sites.*
 
-### Denial of Service
+- [ ] **REENT-01**: Cross-function reentrancy matrix: all ETH transfer sites mapped with every reentrant call path enumerated
+- [ ] **REENT-02**: ERC721 `onERC721Received` callback reentrancy: all `safeMint` paths in DegenerusNFT formally verified — most commonly missed finding class in C4 game audits
+- [ ] **REENT-03**: Delegatecall multicall/operator-proxy reentrancy: no re-entry through operator delegation chain confirmed
+- [ ] **REENT-04**: 40 JackpotModule unchecked blocks audited with adversarial state sequences; recent fix commits (4592d8c, cbbafa0, 9539c6d) tested for bypass across all purchase paths
+- [ ] **REENT-05**: Shared cursor corruption: `ticketCursor`/`ticketLevel` mutual exclusion formally verified between `processTicketBatch` and `processFutureTicketBatch`
+- [ ] **REENT-06**: DecimatorModule `claimDecimatorJackpot` CEI: ETH transfer vs. state update ordering confirmed safe
+- [ ] **REENT-07**: `adminSwapEthForStEth` accounting integrity: admin ETH↔stETH swap preserves pool accounting invariant; no extraction path via the swap
 
-- [x] **DOS-01**: No unbounded loop exists that can be exploited to exhaust block gas limit
-- [x] **DOS-02**: Daily ETH distribution bucket cursor cannot be griefed to skip distributions
-- [x] **DOS-03**: Trait burn ticket iteration is bounded — large trait counts cannot block phase transitions
+### Final Report (REPORT)
+- [ ] **REPORT-01**: Final prioritized findings report delivered with CRITICAL / HIGH / MEDIUM / LOW / Gas / QA sections and Code4rena severity methodology applied throughout
+- [ ] **REPORT-02**: Coded PoC (pseudocode or tx sequence) provided for every HIGH and MEDIUM finding
+- [ ] **REPORT-03**: Gas report: `advanceGame()` worst-case gas by code path with the specific adversarial state that triggers each maximum
 
-### Economic Attack Surface
+## Future Requirements (v3.0)
 
-- [x] **ECON-01**: Sybil group with 51%+ ticket ownership cannot extract positive group EV from prize pool mechanics
-- [x] **ECON-02**: Activity score cannot be cheaply inflated via quest streaks, affiliate self-referral, or coordinated chains to unlock high-EV lootboxes
-- [x] **ECON-03**: Affiliate referral system does not create positive-sum extraction where referrer+referee extract more than deposited
-- [x] **ECON-04**: MEV/sandwich attacks on ticket purchase price escalation cannot extract value at phase boundaries
-- [x] **ECON-05**: Block proposer cannot manipulate `advanceGame` timing to control which level transitions occur
-- [x] **ECON-06**: Whale bundle + lootbox purchase sequences cannot extract more than deposited at levels 0-3
-- [x] **ECON-07**: AfKing mode transitions do not create windows for double-spend or double-credit
-
-### Game State Machine
-
-- [x] **FSM-01**: FSM transitions PURCHASE ↔ JACKPOT → gameOver are complete — no illegal transitions possible
-- [x] **FSM-02**: No game state exists that cannot be exited — all stuck states have recovery paths
-- [x] **FSM-03**: Multi-step game-over sequence (advanceGame→VRF→fulfill→advanceGame→gameOver) correctly handles all intermediate states
-
-## v2 Requirements
-
-Deferred to future audit engagement. Tracked but not in current roadmap.
-
-### Formal Verification
-
-- **FVER-01**: Bounded symbolic verification of deity pass T(n) pricing formula via Halmos
-- **FVER-02**: Bounded symbolic verification of ticket cost escalation formula via Halmos
-
-### Extended Fuzzing
-
-- **FUZZ-01**: Coverage-guided fuzzing of all ETH accounting paths via Medusa
-- **FUZZ-02**: Invariant fuzzing of all BPS split formulas across value ranges 1 wei to 1000 ETH
+- Formal verification (Halmos full FSM) — path explosion makes this infeasible in bounded time
+- Coverage-guided fuzzing campaign (Medusa) — after v2.0 confirms attack surface scope
+- Full Aderyn run — requires Rust 1.89+, deferred until toolchain upgrade
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Gas optimization | Separate concern — not security-relevant unless it creates DoS |
-| Contract rewrites / code PRs | Deliverable is findings + remediation guidance, not patches |
-| Frontend / off-chain code | Cannot change on-chain state guarantees; separate review needed |
-| Mock contracts | Test infrastructure only — not deployed |
-| Testnet-specific contracts | TESTNET_ETH_DIVISOR configs not representative of mainnet |
-| Deployment scripts | Operational tooling — deploy order noted as checklist item only |
-| Raw scanner output without triage | False positive rate too high; only manually confirmed findings |
+| Gas optimization recommendations | Separate scoring track at Code4rena; explicitly not security |
+| Frontend / off-chain code | Contracts only |
+| Testnet-specific contracts | TESTNET_ETH_DIVISOR makes findings non-transferable to mainnet |
+| Mock contracts | Test infrastructure only |
+| Deployment scripts | Operational, not security surface |
+| Creator vault drain | CREATOR holds initial 1T shares intentionally — this is the fee mechanism by design |
+| Re-running v1.0 completed checks | Storage layout, VRF lifecycle 8-point checklist, FSM transitions, per-module reentrancy — all confirmed complete |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STOR-01 | Phase 1 | Complete |
-| STOR-02 | Phase 1 | Pending |
-| STOR-03 | Phase 1 | Pending |
-| STOR-04 | Phase 1 | Complete |
-| RNG-01 | Phase 2 | Complete |
-| RNG-02 | Phase 2 | Complete |
-| RNG-03 | Phase 2 | Complete |
-| RNG-04 | Phase 2 | Complete |
-| RNG-05 | Phase 2 | Complete |
-| RNG-06 | Phase 2 | Complete |
-| RNG-07 | Phase 2 | Complete |
-| RNG-08 | Phase 2 | Complete |
-| RNG-09 | Phase 2 | Complete |
-| RNG-10 | Phase 2 | Complete |
-| FSM-01 | Phase 2 | Complete |
-| FSM-02 | Phase 2 | Complete |
-| FSM-03 | Phase 2 | Complete |
-| MATH-01 | Phase 3a | Complete |
-| MATH-02 | Phase 3a | Complete |
-| MATH-03 | Phase 3a | Pending |
-| MATH-04 | Phase 3a | Complete |
-| INPT-01 | Phase 3a | Complete |
-| INPT-02 | Phase 3a | Complete |
-| INPT-03 | Phase 3a | Complete |
-| INPT-04 | Phase 3a | Complete |
-| DOS-01 | Phase 3a | Complete |
-| MATH-05 | Phase 3b | Complete |
-| MATH-06 | Phase 3b | Complete |
-| DOS-02 | Phase 3b | Complete |
-| DOS-03 | Phase 3b | Complete |
-| MATH-07 | Phase 3c | Complete |
-| MATH-08 | Phase 3c | Complete |
-| ACCT-01 | Phase 4 | Pending |
-| ACCT-02 | Phase 4 | Pending |
-| ACCT-03 | Phase 4 | Pending |
-| ACCT-04 | Phase 4 | Pending |
-| ACCT-05 | Phase 4 | Pending |
-| ACCT-06 | Phase 4 | Pending |
-| ACCT-07 | Phase 4 | Pending |
-| ACCT-08 | Phase 4 | Pending |
-| ACCT-09 | Phase 4 | Pending |
-| ACCT-10 | Phase 4 | Pending |
-| ECON-01 | Phase 5 | Complete |
-| ECON-02 | Phase 5 | Complete |
-| ECON-03 | Phase 5 | Complete |
-| ECON-04 | Phase 5 | Complete |
-| ECON-05 | Phase 5 | Complete |
-| ECON-06 | Phase 5 | Complete |
-| ECON-07 | Phase 5 | Complete |
-| AUTH-01 | Phase 6 | Complete |
-| AUTH-02 | Phase 6 | Complete |
-| AUTH-03 | Phase 6 | Complete |
-| AUTH-04 | Phase 6 | Complete |
-| AUTH-05 | Phase 6 | Complete |
-| AUTH-06 | Phase 6 | Pending |
-| XCON-01 | Phase 7 | Pending |
-| XCON-02 | Phase 7 | Pending |
-| XCON-03 | Phase 7 | Pending |
-| XCON-04 | Phase 7 | Pending |
-| XCON-05 | Phase 7 | Pending |
-| XCON-06 | Phase 7 | Pending |
-| XCON-07 | Phase 7 | Complete |
+| ACCT-01 | Phase 8 | Pending |
+| ACCT-02 | Phase 8 | Pending |
+| ACCT-03 | Phase 8 | Pending |
+| ACCT-04 | Phase 8 | Pending |
+| ACCT-05 | Phase 8 | Pending |
+| ACCT-06 | Phase 8 | Pending |
+| ACCT-07 | Phase 8 | Pending |
+| ACCT-08 | Phase 8 | Pending |
+| ACCT-09 | Phase 8 | Pending |
+| ACCT-10 | Phase 8 | Pending |
+| GAS-01 | Phase 9 | Pending |
+| GAS-02 | Phase 9 | Pending |
+| GAS-03 | Phase 9 | Pending |
+| GAS-04 | Phase 9 | Pending |
+| GAS-05 | Phase 9 | Pending |
+| GAS-06 | Phase 9 | Pending |
+| GAS-07 | Phase 9 | Pending |
+| ADMIN-01 | Phase 10 | Pending |
+| ADMIN-02 | Phase 10 | Pending |
+| ADMIN-03 | Phase 10 | Pending |
+| ADMIN-04 | Phase 10 | Pending |
+| ADMIN-05 | Phase 10 | Pending |
+| ADMIN-06 | Phase 10 | Pending |
+| ASSY-01 | Phase 10 | Pending |
+| ASSY-02 | Phase 10 | Pending |
+| ASSY-03 | Phase 10 | Pending |
+| TOKEN-01 | Phase 11 | Pending |
+| TOKEN-02 | Phase 11 | Pending |
+| TOKEN-03 | Phase 11 | Pending |
+| TOKEN-04 | Phase 11 | Pending |
+| TOKEN-05 | Phase 11 | Pending |
+| TOKEN-06 | Phase 11 | Pending |
+| TOKEN-07 | Phase 11 | Pending |
+| TOKEN-08 | Phase 11 | Pending |
+| VAULT-01 | Phase 11 | Pending |
+| VAULT-02 | Phase 11 | Pending |
+| TIME-01 | Phase 11 | Pending |
+| TIME-02 | Phase 11 | Pending |
+| REENT-01 | Phase 12 | Pending |
+| REENT-02 | Phase 12 | Pending |
+| REENT-03 | Phase 12 | Pending |
+| REENT-04 | Phase 12 | Pending |
+| REENT-05 | Phase 12 | Pending |
+| REENT-06 | Phase 12 | Pending |
+| REENT-07 | Phase 12 | Pending |
+| REPORT-01 | Phase 13 | Pending |
+| REPORT-02 | Phase 13 | Pending |
+| REPORT-03 | Phase 13 | Pending |
 
 **Coverage:**
-- v1 requirements: 56 total
-- Mapped to phases: 56
+- v2.0 requirements: 48 total
+- Mapped to phases: 48
 - Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 after roadmap creation (Phase 3 split into 3a/3b/3c)*
+*Requirements defined: 2026-03-04*
+*Last updated: 2026-03-04 after roadmap creation (Phases 8–13)*
