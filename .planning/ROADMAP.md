@@ -88,7 +88,13 @@ Plans:
   3. ASSY-02 verdict confirmed: MintModule assembly SSTORE slot calculation verified with same method — match is PASS; mismatch produces a named corrupted slot with consequence severity
   4. ADMIN-02 verdict confirmed: `wireVrf` coordinator substitution path either allows admin to substitute an attacker-controlled coordinator that returns manipulated randomness (finding) or the authorization chain prevents this (PASS with reasoning)
   5. ADMIN-03 through ADMIN-06 verdicts confirmed: 3-day stall trigger conditions enumerated, retry window state-changing calls identified, LINK drain economics computed, player-specific grief vectors either found or ruled out
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — ASSY-01 + ASSY-02 + ASSY-03: assembly slot verification (JackpotModule, MintModule) + _revertDelegate + array-shrink patterns
+- [ ] 10-02-PLAN.md — ADMIN-01 + ADMIN-02: complete admin power map + wireVrf coordinator substitution verdict
+- [ ] 10-03-PLAN.md — ADMIN-03 + ADMIN-04: 3-day stall trigger enumeration + 18h RNG lock window analysis
+- [ ] 10-04-PLAN.md — ADMIN-05 + ADMIN-06: LINK drain economics + player-specific grief vector survey
 
 ### Phase 11: Token Security, Economic Attacks, Vault and Timing
 **Goal**: All COIN/DGNRS mint authorization paths are confirmed safe, EV models for whale and lootbox combinations produce no extractable surplus, vault redemption rounding is shareholder-neutral, and ±900s timestamp manipulation produces no advantaged game outcomes
@@ -142,7 +148,7 @@ Phases 8 and 9 can run in parallel. Phase 10 requires Phase 8 complete. Phase 11
 | 7. Cross-Contract Integration Synthesis | 4/5 | In Progress|  | - |
 | 8. ETH Accounting Invariant and CEI Verification | v2.0 | 5/5 | Complete | 2026-03-04 |
 | 9. advanceGame() Gas Analysis and Sybil Bloat | 4/4 | Complete   | 2026-03-04 | - |
-| 10. Admin Power, VRF Griefing, and Assembly Safety | v2.0 | 0/TBD | Not started | - |
+| 10. Admin Power, VRF Griefing, and Assembly Safety | v2.0 | 0/4 | Not started | - |
 | 11. Token Security, Economic Attacks, Vault and Timing | v2.0 | 0/TBD | Not started | - |
 | 12. Cross-Function Reentrancy Synthesis and Unchecked Blocks | v2.0 | 0/TBD | Not started | - |
 | 13. Final Synthesis Report | v2.0 | 0/TBD | Not started | - |
