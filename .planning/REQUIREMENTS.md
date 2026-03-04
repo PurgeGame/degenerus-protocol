@@ -23,7 +23,7 @@
 ### Gas Analysis and Sybil Bloat (GAS)
 *Quantifies permanent DoS feasibility. Independent of ACCT, runs in parallel.*
 
-- [ ] **GAS-01**: `advanceGame()` complete call graph: worst-case gas measured for every code path branch via Foundry `--gas-report` adversarial harnesses
+- [x] **GAS-01**: `advanceGame()` complete call graph: worst-case gas measured for every code path branch via Foundry `--gas-report` adversarial harnesses
 - [ ] **GAS-02**: `processTicketBatch` gas ceiling: maximum cold SSTORE cost confirmed against 16M block limit
 - [ ] **GAS-03**: Sybil breakeven: minimum wallet count N where `advanceGame()` exceeds 16M gas derived
 - [ ] **GAS-04**: Sybil DoS cost: ETH required to reach N wallets computed and compared against 1000 ETH threat model budget
@@ -120,7 +120,7 @@
 | ACCT-08 | Phase 8 | Pending |
 | ACCT-09 | Phase 8 | Pending |
 | ACCT-10 | Phase 8 | Pending |
-| GAS-01 | Phase 9 | Pending |
+| GAS-01 | Phase 9 | Complete |
 | GAS-02 | Phase 9 | Pending |
 | GAS-03 | Phase 9 | Pending |
 | GAS-04 | Phase 9 | Pending |
