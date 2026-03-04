@@ -345,6 +345,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             return true;
         }
 
+        // Safety: don't activate game over if nextPool requirement is already met
+        if (lvl != 0 && nextPrizePool >= levelPrizePool[lvl]) {
+            levelStartTime = ts;
+            return false;
+        }
+
         // Pre-gameover: acquire RNG and drain to gameover state
         if (rngWordByDay[_dailyIdx] == 0) {
             uint256 rngWord = _gameOverEntropy(ts, day, lvl, lastPurchase);

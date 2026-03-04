@@ -5,7 +5,6 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {EntropyLib} from "../libraries/EntropyLib.sol";
 
 /// @dev Minimal stETH interface (ERC20 subset)
 interface IStETH {
@@ -143,84 +142,17 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             remaining += decRefund; // Return decimator refund to remaining for terminal jackpot
         }
 
-        // 90% (+ decimator refund) to next-level ticketholders
+        // 90% (+ decimator refund) to next-level ticketholders (Day-5-style bucket distribution)
+        // gameOver=true prevents auto-rebuy inside _addClaimableEth (tickets worthless post-game)
         if (remaining != 0) {
-            uint256 credited = _payGameOverTerminalJackpot(remaining, rngWord, lvl);
-            if (credited != 0) {
-                claimablePool += credited;
-                remaining -= credited;
-            }
-            // Any uncredited remainder swept to vault
+            uint256 termPaid = IDegenerusGame(address(this))
+                .runTerminalJackpot(remaining, lvl + 1, rngWord);
+            // claimablePool already updated inside JackpotModule._distributeJackpotEth
+            remaining -= termPaid;
+            // Any undistributed remainder swept to vault
             if (remaining != 0) {
                 _sendToVault(remaining, stBal);
             }
-        }
-    }
-
-    /// @dev Distribute terminal jackpot pool pro-rata to next-level ticketholders.
-    ///      Uses 50 sampling rounds of up to 4 addresses via sampleTraitTicketsAtLevel.
-    ///      Credits directly to claimableWinnings (no auto-rebuy since game is over).
-    /// @param amount Total ETH to distribute.
-    /// @param rngWord VRF entropy seed.
-    /// @param lvl Current level (winners sampled from lvl+1).
-    /// @return credited Total ETH credited to winners.
-    function _payGameOverTerminalJackpot(
-        uint256 amount,
-        uint256 rngWord,
-        uint24 lvl
-    ) private returns (uint256 credited) {
-        uint24 targetLvl = lvl + 1;
-        uint256 entropy = rngWord;
-
-        // Phase 1: Sample 50 rounds, accumulate addresses and occurrence counts.
-        address[] memory allAddrs = new address[](200);
-        uint256[] memory counts = new uint256[](200);
-        uint256 uniqueCount;
-        uint256 totalOccurrences;
-
-        for (uint256 r; r < 50; ) {
-            entropy = EntropyLib.entropyStep(entropy);
-            (, address[] memory tickets) = IDegenerusGame(address(this))
-                .sampleTraitTicketsAtLevel(targetLvl, entropy);
-
-            uint256 tLen = tickets.length;
-            for (uint256 t; t < tLen; ) {
-                address addr = tickets[t];
-                if (addr != address(0)) {
-                    bool found;
-                    for (uint256 u; u < uniqueCount; ) {
-                        if (allAddrs[u] == addr) {
-                            counts[u]++;
-                            found = true;
-                            break;
-                        }
-                        unchecked { ++u; }
-                    }
-                    if (!found) {
-                        allAddrs[uniqueCount] = addr;
-                        counts[uniqueCount] = 1;
-                        unchecked { ++uniqueCount; }
-                    }
-                    unchecked { ++totalOccurrences; }
-                }
-                unchecked { ++t; }
-            }
-            unchecked { ++r; }
-        }
-
-        if (totalOccurrences == 0) return 0;
-
-        // Phase 2: Distribute pro-rata by occurrence count (ETH-only, no auto-rebuy).
-        for (uint256 i; i < uniqueCount; ) {
-            uint256 share = (amount * counts[i]) / totalOccurrences;
-            if (share != 0) {
-                unchecked {
-                    claimableWinnings[allAddrs[i]] += share;
-                }
-                emit PlayerCredited(allAddrs[i], allAddrs[i], share);
-                credited += share;
-            }
-            unchecked { ++i; }
         }
     }
 

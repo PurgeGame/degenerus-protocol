@@ -43,6 +43,12 @@ import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
  */
 contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
+    // Errors
+    // -------------------------------------------------------------------------
+
+    error OnlyGame();
+
+    // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
 
@@ -267,6 +273,49 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - 2/3 chance: Awards BURNIE to trait-based winners (normal path).
     ///      - No ETH bonuses from reward/futurePool during purchase phase.
     ///
+    /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
+    /// @dev Called via IDegenerusGame(address(this)) from EndgameModule and GameOverModule.
+    ///      Uses FINAL_DAY_SHARES_PACKED (60/13/13/13) with trait-based bucket distribution.
+    ///      Updates claimablePool internally — callers must NOT double-count.
+    /// @param poolWei Total ETH to distribute.
+    /// @param targetLvl Level to sample winners from (typically lvl+1).
+    /// @param rngWord VRF entropy seed.
+    /// @return paidWei Total ETH distributed (callers deduct from source pool).
+    function runTerminalJackpot(
+        uint256 poolWei,
+        uint24 targetLvl,
+        uint256 rngWord
+    ) external returns (uint256 paidWei) {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+
+        uint32 winningTraitsPacked = _rollWinningTraits(targetLvl, rngWord, true);
+        uint256 entropy = rngWord ^ (uint256(targetLvl) << 192);
+        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
+            winningTraitsPacked
+        );
+
+        uint16[4] memory bucketCounts = JackpotBucketLib.bucketCountsForPoolCap(
+            poolWei,
+            entropy,
+            DAILY_ETH_MAX_WINNERS,
+            DAILY_JACKPOT_SCALE_MAX_BPS
+        );
+        uint16[4] memory shareBps = JackpotBucketLib.shareBpsByBucket(
+            FINAL_DAY_SHARES_PACKED,
+            uint8(entropy & 3)
+        );
+
+        paidWei = _distributeJackpotEth(
+            targetLvl,
+            poolWei,
+            entropy,
+            traitIds,
+            shareBps,
+            bucketCounts,
+            0
+        );
+    }
+
     /// @param isDaily True for scheduled daily jackpot, false for early-burn jackpot.
     /// @param lvl Current game level.
     /// @param randWord VRF entropy for winner selection and trait derivation.
@@ -909,10 +958,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) private returns (uint256 claimableDelta) {
         if (weiAmount == 0) return 0;
 
-        // Auto-rebuy: convert winnings to tickets if enabled
-        AutoRebuyState memory state = autoRebuyState[beneficiary];
-        if (state.autoRebuyEnabled) {
-            return _processAutoRebuy(beneficiary, weiAmount, entropy, state);
+        // Auto-rebuy: convert winnings to tickets if enabled.
+        // Skip when game is over — tickets are worthless post-game.
+        if (!gameOver) {
+            AutoRebuyState memory state = autoRebuyState[beneficiary];
+            if (state.autoRebuyEnabled) {
+                return _processAutoRebuy(beneficiary, weiAmount, entropy, state);
+            }
         }
 
         // Normal claimable winnings path

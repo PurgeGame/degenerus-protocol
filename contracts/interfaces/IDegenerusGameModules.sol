@@ -119,6 +119,17 @@ interface IDegenerusGameJackpotModule {
     /// @param lvl The current game level
     /// @param randWord Random word for winner selection
     function payDailyCoinJackpot(uint24 lvl, uint256 randWord) external;
+
+    /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
+    /// @param poolWei Total ETH to distribute.
+    /// @param targetLvl Level to sample winners from.
+    /// @param rngWord VRF entropy seed.
+    /// @return paidWei Total ETH distributed.
+    function runTerminalJackpot(
+        uint256 poolWei,
+        uint24 targetLvl,
+        uint256 rngWord
+    ) external returns (uint256 paidWei);
 }
 
 /// @title IDegenerusGameDecimatorModule
