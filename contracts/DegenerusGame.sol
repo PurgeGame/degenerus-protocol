@@ -36,6 +36,7 @@ import {
     IDegenerusGameAdvanceModule,
     IDegenerusGameEndgameModule,
     IDegenerusGameDecimatorModule,
+    IDegenerusGameJackpotModule,
     IDegenerusGameMintModule,
     IDegenerusGameWhaleModule,
     IDegenerusGameLootboxModule,
@@ -1265,6 +1266,34 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     IDegenerusGameDecimatorModule.runDecimatorJackpot.selector,
                     poolWei,
                     lvl,
+                    rngWord
+                )
+            );
+        if (!ok) _revertDelegate(data);
+        if (data.length == 0) revert E();
+        return abi.decode(data, (uint256));
+    }
+
+    /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
+    /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
+    ///      Updates claimablePool internally — callers must NOT double-count.
+    /// @param poolWei Total ETH to distribute.
+    /// @param targetLvl Level to sample winners from.
+    /// @param rngWord VRF entropy seed.
+    /// @return paidWei Total ETH distributed.
+    function runTerminalJackpot(
+        uint256 poolWei,
+        uint24 targetLvl,
+        uint256 rngWord
+    ) external returns (uint256 paidWei) {
+        if (msg.sender != address(this)) revert E();
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_JACKPOT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameJackpotModule.runTerminalJackpot.selector,
+                    poolWei,
+                    targetLvl,
                     rngWord
                 )
             );

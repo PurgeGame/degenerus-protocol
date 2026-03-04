@@ -207,6 +207,17 @@ interface IDegenerusGame {
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
 
+    /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
+    /// @param poolWei Total ETH to distribute.
+    /// @param targetLvl Level to sample winners from.
+    /// @param rngWord VRF entropy seed.
+    /// @return paidWei Total ETH distributed.
+    function runTerminalJackpot(
+        uint256 poolWei,
+        uint24 targetLvl,
+        uint256 rngWord
+    ) external returns (uint256 paidWei);
+
     /// @notice Consume Decimator claim on behalf of player.
     /// @param player Address to claim for.
     /// @param lvl Level to claim from.
