@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T23:41:19.890Z"
+last_updated: "2026-03-04T23:42:44.131Z"
 progress:
   total_phases: 14
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 78
-  completed_plans: 69
+  completed_plans: 70
 ---
 
 # Project State
@@ -71,6 +71,7 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 11 P05 | 10 | 2 tasks | 1 files |
 | Phase 12 P03 | 12 | 2 tasks | 1 files |
 | Phase 12 P01 | 15 | 2 tasks | 1 files |
+| Phase 12 P02 | 35 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,10 @@ Recent decisions affecting current work:
 - [Phase 12]: REENT-01: PASS — all 8 ETH-transfer sites across 4 contracts are CEI-safe; sentinel pattern protects arbitrary-recipient sites; trusted-recipient sites send to non-reentrant protocol contracts
 - [Phase 12]: REENT-02: PASS — onERC721Received attacker window is safe; game state fully settled before _checkReceiver fires; purchaseDeityPass and refundDeityPass both blocked; mint() does not trigger onERC721Received
 - [Phase 12]: REENT-02 INFO: _transfer() CEI deviation (onDeityPassTransfer called before _owners[tokenId] = to) is NOT exploitable because WhaleModule.handleDeityPassTransfer reads DegenerusGame storage only, never calls back to DegenerusDeityPass to read stale _owners
+- [Phase 12]: REENT-04 PASS: all 40 JackpotModule unchecked blocks safe (26 Category A, 14 Category B, 0 Category C); JackpotModule never reads claimableWinnings[player] in unchecked arithmetic
+- [Phase 12]: Fix 4592d8c PASS: BURNIE cutoff uses block.timestamp (not msg.sender), applies to all purchase paths, lootbox correctly exempted, no level-boundary off-by-one
+- [Phase 12]: Fix cbbafa0 PASS: exactly one fromClaimable site in DegeneretteModule, <= comparison preserves sentinel, no bypass paths remain
+- [Phase 12]: Fix 9539c6d PASS (INFO): trim loop underflow-safe, entropy-rotated trim; 20-winner floor causes up to 341 combined winners vs 321 cap — intentional design trade-off (DoS prevention)
 
 ### Pending Todos
 
