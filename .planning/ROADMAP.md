@@ -34,7 +34,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full phase details and findings.
 
 - [x] **Phase 8: ETH Accounting Invariant and CEI Verification** - Verify ETH solvency invariant, _creditClaimable call site audit, BPS rounding, and all ETH-transfer CEI patterns — completed 2026-03-04
 - [x] **Phase 9: advanceGame() Gas Analysis and Sybil Bloat** - Measure worst-case gas by code path and derive Sybil breakeven under the 16M block limit (completed 2026-03-04)
-- [ ] **Phase 10: Admin Power, VRF Griefing, and Assembly Safety** - Map all admin rug vectors, enumerate VRF griefing paths, and verify assembly slot calculations
+- [x] **Phase 10: Admin Power, VRF Griefing, and Assembly Safety** - Map all admin rug vectors, enumerate VRF griefing paths, and verify assembly slot calculations (completed 2026-03-04)
 - [ ] **Phase 11: Token Security, Economic Attacks, Vault and Timing** - Confirm mint authorization, EV model correctness, BURNIE guard completeness, vault formulas, and timestamp tolerance
 - [ ] **Phase 12: Cross-Function Reentrancy Synthesis and Unchecked Blocks** - Integrate all ETH-touching call sites into a reentrancy matrix and audit all JackpotModule unchecked blocks
 - [ ] **Phase 13: Final Synthesis Report** - Deliver Code4rena-format findings report with coded PoC for every HIGH and MEDIUM finding
@@ -148,7 +148,7 @@ Phases 8 and 9 can run in parallel. Phase 10 requires Phase 8 complete. Phase 11
 | 7. Cross-Contract Integration Synthesis | 4/5 | In Progress|  | - |
 | 8. ETH Accounting Invariant and CEI Verification | v2.0 | 5/5 | Complete | 2026-03-04 |
 | 9. advanceGame() Gas Analysis and Sybil Bloat | 4/4 | Complete   | 2026-03-04 | - |
-| 10. Admin Power, VRF Griefing, and Assembly Safety | 3/4 | In Progress|  | - |
+| 10. Admin Power, VRF Griefing, and Assembly Safety | 4/4 | Complete   | 2026-03-04 | - |
 | 11. Token Security, Economic Attacks, Vault and Timing | v2.0 | 0/TBD | Not started | - |
 | 12. Cross-Function Reentrancy Synthesis and Unchecked Blocks | v2.0 | 0/TBD | Not started | - |
 | 13. Final Synthesis Report | v2.0 | 0/TBD | Not started | - |

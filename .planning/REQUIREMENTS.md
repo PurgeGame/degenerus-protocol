@@ -38,8 +38,8 @@
 - [x] **ADMIN-02**: `wireVrf` coordinator substitution analysis: admin RNG control path via emergency coordinator rotation confirmed or refuted
 - [x] **ADMIN-03**: 3-day emergency stall trigger: all conditions under which admin can deliberately force the stall confirmed; attacker sequence enumerated
 - [x] **ADMIN-04**: VRF retry window analysis: all state-changing calls permissible during 18h RNG lock period identified; any that produce advantaged outcomes flagged
-- [ ] **ADMIN-05**: VRF subscription drain economics: LINK cost to halt game computed; griefing feasibility assessed against threat model
-- [ ] **ADMIN-06**: Player-specific grief vectors: any admin path to selectively block a specific wallet's advancement, lootbox resolution, or withdrawal identified
+- [x] **ADMIN-05**: VRF subscription drain economics: LINK cost to halt game computed; griefing feasibility assessed against threat model
+- [x] **ADMIN-06**: Player-specific grief vectors: any admin path to selectively block a specific wallet's advancement, lootbox resolution, or withdrawal identified
 
 ### Assembly Safety (ASSY)
 *Raw storage writes bypass Solidity overflow checks and type safety.*
@@ -131,8 +131,8 @@
 | ADMIN-02 | Phase 10 | Complete |
 | ADMIN-03 | Phase 10 | Complete |
 | ADMIN-04 | Phase 10 | Complete |
-| ADMIN-05 | Phase 10 | Pending |
-| ADMIN-06 | Phase 10 | Pending |
+| ADMIN-05 | Phase 10 | Complete |
+| ADMIN-06 | Phase 10 | Complete |
 | ASSY-01 | Phase 10 | Complete |
 | ASSY-02 | Phase 10 | Complete |
 | ASSY-03 | Phase 10 | Complete |
