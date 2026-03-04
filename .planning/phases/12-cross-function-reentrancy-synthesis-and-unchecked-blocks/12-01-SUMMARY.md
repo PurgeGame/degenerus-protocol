@@ -252,6 +252,11 @@ None.
 - REENT-01 and REENT-02 verdicts complete and available for Phase 13 final report
 - Phase 12-02 (unchecked blocks analysis) can proceed independently
 
+## Self-Check: PASSED
+
+- File: `.planning/phases/12-cross-function-reentrancy-synthesis-and-unchecked-blocks/12-01-SUMMARY.md` — FOUND
+- Commit: `185c5d4` — FOUND
+
 ---
 *Phase: 12-cross-function-reentrancy-synthesis-and-unchecked-blocks*
 *Completed: 2026-03-04*
