@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T22:48:01.476Z"
+last_updated: "2026-03-04T22:48:36.472Z"
 progress:
   total_phases: 12
   completed_phases: 10
@@ -62,6 +62,7 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 09 P03 | 3 | 2 tasks | 2 files |
 | Phase 10 P03 | 18 | 2 tasks | 1 files |
 | Phase 10 P02 | 6 | 2 tasks | 1 files |
+| Phase 10 P01 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,12 @@ Recent decisions affecting current work:
 - [Phase 09]: GAS-06 PASS: VRF callback (rawFulfillRandomWords) measured at 62,740 gas — 137,260 below 200K target, 237,260 below 300K Chainlink limit
 - [Phase 10]: ADMIN-03 MEDIUM: wireVrf + reverting coordinator halts game in 3 game days; griefing loop repeatable; ADMIN key required
 - [Phase 10]: ADMIN-04 PASS: 18h lock window has no front-running surface; openLootBox/openBurnieLootBox are BLOCKED (RESEARCH.md correction)
+- [Phase 10]: ADMIN-02: wireVrf classified MEDIUM per C4 methodology — admin-key-required + CRITICAL impact = MEDIUM; ungated vs. stall-gated distinction vs. updateVrfCoordinatorAndSub explicit
+- [Phase 10]: ADMIN-01: 11 admin-gated functions mapped; wireVrf NatSpec/code discrepancy flagged (line 294 claims idempotency, code enforces none); isVaultOwner dual-auth documented INFO/QA; CREATOR single-EOA risk (GAS-07-I1) folded as ADMIN-01-I1 INFO/QA
+- [Phase 10]: ASSY-01 PASS: JackpotModule assembly correctly computes traitBurnTicket[lvl][traitId] slot via keccak256 mapping formula + inplace array offset
+- [Phase 10]: ASSY-02 PASS: MintModule assembly is byte-for-byte identical to JackpotModule, same verdict applies
+- [Phase 10]: ASSY-03 PASS: _revertDelegate standard delegatecall bubble-up safe in 4 locations; DegenerusJackpots array-shrink safe with n <= 108
+- [Phase 10]: Storage comment DegenerusGameStorage.sol line 104-105 is WRONG (nested mapping formula) but assembly is correct; rated INFO finding
 
 ### Pending Todos
 
@@ -106,7 +113,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-04
-Stopped at: Phase 09-03 complete — GAS-05/GAS-06 verdicts both PASS; VRF callback 62,740 gas (137,260 below 200K target); payDailyJackpot stage=11 887,410 gas (5.5% of 16M)
+Stopped at: Phase 10-02 complete — ADMIN-01 power map (11 functions, wireVrf MEDIUM) and ADMIN-02 wireVrf verdict delivered; NatSpec/code discrepancy on wireVrf idempotency flagged
 Resume file: None
 
 ## Phase 8 Findings Summary (for Phase 13 report)

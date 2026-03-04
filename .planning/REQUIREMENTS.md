@@ -34,8 +34,8 @@
 ### Admin Power and VRF Griefing (ADMIN)
 *wireVrf is the central connecting vector for both admin abuse and VRF griefing.*
 
-- [ ] **ADMIN-01**: Complete admin function inventory: every privilege mapped with worst-case compromise consequence if admin key is lost or malicious
-- [ ] **ADMIN-02**: `wireVrf` coordinator substitution analysis: admin RNG control path via emergency coordinator rotation confirmed or refuted
+- [x] **ADMIN-01**: Complete admin function inventory: every privilege mapped with worst-case compromise consequence if admin key is lost or malicious
+- [x] **ADMIN-02**: `wireVrf` coordinator substitution analysis: admin RNG control path via emergency coordinator rotation confirmed or refuted
 - [x] **ADMIN-03**: 3-day emergency stall trigger: all conditions under which admin can deliberately force the stall confirmed; attacker sequence enumerated
 - [x] **ADMIN-04**: VRF retry window analysis: all state-changing calls permissible during 18h RNG lock period identified; any that produce advantaged outcomes flagged
 - [ ] **ADMIN-05**: VRF subscription drain economics: LINK cost to halt game computed; griefing feasibility assessed against threat model
@@ -44,9 +44,9 @@
 ### Assembly Safety (ASSY)
 *Raw storage writes bypass Solidity overflow checks and type safety.*
 
-- [ ] **ASSY-01**: JackpotModule assembly SSTORE slot calculation: `elem = levelSlot + traitId` verified to match actual Solidity storage declaration for `traitBurnTicket` — mismatch would cause storage corruption (potential CRITICAL)
-- [ ] **ASSY-02**: MintModule assembly SSTORE slot calculation: same verification for the parallel batch-write pattern
-- [ ] **ASSY-03**: All other assembly blocks (AdvanceModule, DecimatorModule, DegeneretteModule, DegenerusGame, DegenerusJackpots): error propagation, return data handling, and memory bounds verified
+- [x] **ASSY-01**: JackpotModule assembly SSTORE slot calculation: `elem = levelSlot + traitId` verified to match actual Solidity storage declaration for `traitBurnTicket` — mismatch would cause storage corruption (potential CRITICAL)
+- [x] **ASSY-02**: MintModule assembly SSTORE slot calculation: same verification for the parallel batch-write pattern
+- [x] **ASSY-03**: All other assembly blocks (AdvanceModule, DecimatorModule, DegeneretteModule, DegenerusGame, DegenerusJackpots): error propagation, return data handling, and memory bounds verified
 
 ### Token Security and Economic Attacks (TOKEN)
 *Requires admin map from ADMIN — vaultMintAllowance authorization model depends on it.*
@@ -127,15 +127,15 @@
 | GAS-05 | Phase 9 | Complete |
 | GAS-06 | Phase 9 | Complete |
 | GAS-07 | Phase 9 | Complete |
-| ADMIN-01 | Phase 10 | Pending |
-| ADMIN-02 | Phase 10 | Pending |
+| ADMIN-01 | Phase 10 | Complete |
+| ADMIN-02 | Phase 10 | Complete |
 | ADMIN-03 | Phase 10 | Complete |
 | ADMIN-04 | Phase 10 | Complete |
 | ADMIN-05 | Phase 10 | Pending |
 | ADMIN-06 | Phase 10 | Pending |
-| ASSY-01 | Phase 10 | Pending |
-| ASSY-02 | Phase 10 | Pending |
-| ASSY-03 | Phase 10 | Pending |
+| ASSY-01 | Phase 10 | Complete |
+| ASSY-02 | Phase 10 | Complete |
+| ASSY-03 | Phase 10 | Complete |
 | TOKEN-01 | Phase 11 | Pending |
 | TOKEN-02 | Phase 11 | Pending |
 | TOKEN-03 | Phase 11 | Pending |
