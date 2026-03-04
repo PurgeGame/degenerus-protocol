@@ -45,6 +45,11 @@ const config = {
           optimizer: {
             enabled: true,
             runs: 2
+          },
+          outputSelection: {
+            "*": {
+              "*": ["storageLayout"]
+            }
           }
         }
       }
