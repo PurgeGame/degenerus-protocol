@@ -133,7 +133,7 @@ Phases 8 and 9 can run in parallel. Phase 10 requires Phase 8 complete. Phase 11
 | 4. ETH and Token Accounting Integrity | v1.0 | 1/9 | Incomplete — gap accepted | - |
 | 5. Economic Attack Surface | v1.0 | 7/7 | Complete | 2026-03-04 |
 | 6. Access Control and Privilege Model | v1.0 | 7/7 | Complete | 2026-03-04 |
-| 7. Cross-Contract Integration Synthesis | v1.0 | 3/5 | Incomplete — gap accepted | - |
+| 7. Cross-Contract Integration Synthesis | 4/5 | In Progress|  | - |
 | 8. ETH Accounting Invariant and CEI Verification | v2.0 | 5/5 | Complete | 2026-03-04 |
 | 9. advanceGame() Gas Analysis and Sybil Bloat | v2.0 | 0/TBD | Not started | - |
 | 10. Admin Power, VRF Griefing, and Assembly Safety | v2.0 | 0/TBD | Not started | - |
