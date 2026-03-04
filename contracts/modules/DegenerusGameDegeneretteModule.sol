@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
@@ -580,7 +580,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             if (ethPaid > totalBet) revert InvalidBet();
             if (ethPaid < totalBet) {
                 uint256 fromClaimable = totalBet - ethPaid;
-                if (claimableWinnings[player] < fromClaimable) revert InvalidBet();
+                if (claimableWinnings[player] <= fromClaimable) revert InvalidBet();
                 claimableWinnings[player] -= fromClaimable;
                 claimablePool -= fromClaimable;
             }
