@@ -125,7 +125,12 @@ Plans:
   3. REENT-04 unchecked block audit complete: all 40 JackpotModule unchecked blocks audited with adversarial state sequences; commits 4592d8c, cbbafa0, and 9539c6d each tested for bypass across all purchase paths — each block either confirmed safe or adjacent vulnerability identified
   4. REENT-05 cursor mutual exclusion confirmed: `ticketCursor`/`ticketLevel` sharing between `processTicketBatch` and `processFutureTicketBatch` is either formally proved mutually exclusive (with the code path that enforces it cited) or a state sequence producing concurrent access is demonstrated
   5. REENT-06 and REENT-07 verdicts confirmed: `claimDecimatorJackpot` CEI ordering verified safe; `adminSwapEthForStEth` pool accounting invariant preserved — each either confirmed PASS or finding raised with extraction path
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — REENT-01 + REENT-02: reentrancy matrix synthesis + ERC721 callback trace
+- [ ] 12-02-PLAN.md — REENT-04: 40 JackpotModule unchecked blocks + 3 fix commit bypass tests
+- [ ] 12-03-PLAN.md — REENT-03 + REENT-05 + REENT-06 + REENT-07: operator chain, cursor exclusion, DecimatorModule CEI, swap accounting
 
 ### Phase 13: Final Synthesis Report
 **Goal**: A complete Code4rena-format findings report is delivered covering all confirmed findings from Phases 8–12, with coded PoC for every HIGH and MEDIUM finding and a dedicated gas report
@@ -156,6 +161,6 @@ Phases 8 and 9 can run in parallel. Phase 10 requires Phase 8 complete. Phase 11
 | 8. ETH Accounting Invariant and CEI Verification | v2.0 | 5/5 | Complete | 2026-03-04 |
 | 9. advanceGame() Gas Analysis and Sybil Bloat | 4/4 | Complete   | 2026-03-04 | - |
 | 10. Admin Power, VRF Griefing, and Assembly Safety | 4/4 | Complete    | 2026-03-04 | - |
-| 11. Token Security, Economic Attacks, Vault and Timing | 5/5 | Complete   | 2026-03-04 | - |
+| 11. Token Security, Economic Attacks, Vault and Timing | 5/5 | Complete    | 2026-03-04 | - |
 | 12. Cross-Function Reentrancy Synthesis and Unchecked Blocks | v2.0 | 0/TBD | Not started | - |
 | 13. Final Synthesis Report | v2.0 | 0/TBD | Not started | - |
