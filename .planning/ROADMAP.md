@@ -65,12 +65,18 @@ Plans:
 **Depends on**: Nothing (parallel with Phase 8)
 **Requirements**: GAS-01, GAS-02, GAS-03, GAS-04, GAS-05, GAS-06, GAS-07
 **Success Criteria** (what must be TRUE):
-  1. GAS-01 verdict confirmed: complete `advanceGame()` call graph gas measured for every branch via Foundry gas-report harnesses — the specific code path and adversarial state that produces maximum gas is named with measured value in gas units
+  1. GAS-01 verdict confirmed: complete `advanceGame()` call graph gas measured for every branch via Hardhat gas harnesses — the specific code path and adversarial state that produces maximum gas is named with measured value in gas units
   2. GAS-03 breakeven N documented: minimum wallet count N where `advanceGame()` exceeds 16M gas derived from measured per-wallet cold SSTORE cost — N stated as an integer with supporting calculation
   3. GAS-04 Sybil DoS cost confirmed: ETH required to reach N wallets computed (minimum ticket cost × N) and compared against 1000 ETH threat model — verdict is either "economically feasible (MEDIUM/HIGH)" or "exceeds budget (LOW)"
   4. GAS-06 VRF callback ceiling confirmed: callback gas measured under worst-case lootbox pending state and confirmed below 200K with explicit headroom margin, or flagged as overflow risk
   5. GAS-07 rational inaction verdict delivered: dominant whale's expected-value calculation for delaying vs. advancing `advanceGame()` modeled — protocol liveness guarantee either confirmed or specific dominant strategy that harms liveness identified
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — GAS-01: advanceGame() complete call graph gas measurement (all 13+ stages)
+- [ ] 09-02-PLAN.md — GAS-02 + GAS-03 + GAS-04: Sybil Bloat ticket batch analysis and DoS economics
+- [ ] 09-03-PLAN.md — GAS-05 + GAS-06: payDailyJackpot ceiling + VRF callback gas measurement
+- [ ] 09-04-PLAN.md — GAS-07: Rational inaction liveness analysis
 
 ### Phase 10: Admin Power, VRF Griefing, and Assembly Safety
 **Goal**: Every admin privilege is mapped with its worst-case consequence, VRF griefing vectors through `wireVrf` and the retry window are fully enumerated, and all assembly SSTORE slot calculations are verified against the Solidity storage layout
@@ -135,7 +141,7 @@ Phases 8 and 9 can run in parallel. Phase 10 requires Phase 8 complete. Phase 11
 | 6. Access Control and Privilege Model | v1.0 | 7/7 | Complete | 2026-03-04 |
 | 7. Cross-Contract Integration Synthesis | 4/5 | In Progress|  | - |
 | 8. ETH Accounting Invariant and CEI Verification | v2.0 | 5/5 | Complete | 2026-03-04 |
-| 9. advanceGame() Gas Analysis and Sybil Bloat | v2.0 | 0/TBD | Not started | - |
+| 9. advanceGame() Gas Analysis and Sybil Bloat | v2.0 | 0/4 | Not started | - |
 | 10. Admin Power, VRF Griefing, and Assembly Safety | v2.0 | 0/TBD | Not started | - |
 | 11. Token Security, Economic Attacks, Vault and Timing | v2.0 | 0/TBD | Not started | - |
 | 12. Cross-Function Reentrancy Synthesis and Unchecked Blocks | v2.0 | 0/TBD | Not started | - |
