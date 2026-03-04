@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T23:18:11.077Z"
+last_updated: "2026-03-04T23:18:38.306Z"
 progress:
   total_phases: 13
   completed_phases: 11
@@ -67,6 +67,7 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 11 P04 | 8 | 2 tasks | 1 files |
 | Phase 11 P03 | 15 | 2 tasks | 1 files |
 | Phase 11 P02 | 10 | 2 tasks | 1 files |
+| Phase 11 P01 | 12 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,9 @@ Recent decisions affecting current work:
 - [Phase 11]: TOKEN-04 PASS: max EV surplus = 3.5 ETH per player per level; no whale+lootbox combination yields EV > 1.0 after accounting for purchase costs
 - [Phase 11]: TOKEN-05 PASS: activity score inflation cost floor (~24-52 ETH cheapest path to max tier) exceeds maximum EV benefit ceiling (3.5 ETH); no positive-return inflation path exists
 - [Phase 11]: TOKEN-06 PASS: operator-proxied purchaseCoin routes through _resolvePlayer() (beneficiary-naming only) then delegatecall to MintModule; COIN_PURCHASE_CUTOFF guard fires at ticketQuantity != 0 regardless of msg.sender; whale/lazy/deity passes use ETH tickets and are exempt by design
+- [Phase 11]: TOKEN-01 PASS: all vaultAllowance sites guarded — constructor seed (compile-time), _transfer-to-VAULT (net-zero), vaultEscrow (GAME+VAULT gate BurnieCoin.sol:679-682)
+- [Phase 11]: TOKEN-02 PASS: claimWhalePass strict CEI confirmed — whalePassClaims[player]=0 at line 498 before all effects; no ETH external call; replay blocked at line 495
+- [Phase 11]: TOKEN-03 PASS: BurnieCoinflip entropy VRF-only — processCoinflipPayouts uses rngWordCurrent (Chainlink VRF); historical fallback uses rngWordByDay[] not blockhash/prevrandao
 
 ### Pending Todos
 
