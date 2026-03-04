@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T22:22:10.803Z"
+last_updated: "2026-03-04T22:48:01.476Z"
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 10
-  total_plans: 66
-  completed_plans: 58
+  total_plans: 70
+  completed_plans: 61
 ---
 
 # Project State
@@ -60,6 +60,8 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 09 P04 | 8 | 2 tasks | 1 files |
 | Phase 09 P02 | 15 | 2 tasks | 2 files |
 | Phase 09 P03 | 3 | 2 tasks | 2 files |
+| Phase 10 P03 | 18 | 2 tasks | 1 files |
+| Phase 10 P02 | 6 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -88,6 +90,8 @@ Recent decisions affecting current work:
 - [Phase 09]: GAS-04 PASS: permanent Sybil DoS costs ~4,950 ETH/day at minimum ticket floor; exceeds 1,000 ETH threat model (LOW theoretical)
 - [Phase 09]: GAS-05 PASS: payDailyJackpot stage=11 at 887,410 gas (5.5% of 16M); split design (stage-11 ETH + stage-9 BURNIE) is correct optimization per source comment
 - [Phase 09]: GAS-06 PASS: VRF callback (rawFulfillRandomWords) measured at 62,740 gas — 137,260 below 200K target, 237,260 below 300K Chainlink limit
+- [Phase 10]: ADMIN-03 MEDIUM: wireVrf + reverting coordinator halts game in 3 game days; griefing loop repeatable; ADMIN key required
+- [Phase 10]: ADMIN-04 PASS: 18h lock window has no front-running surface; openLootBox/openBurnieLootBox are BLOCKED (RESEARCH.md correction)
 
 ### Pending Todos
 
