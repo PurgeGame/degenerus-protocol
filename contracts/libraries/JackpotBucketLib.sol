@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 /**
  * @title JackpotBucketLib
@@ -159,6 +159,27 @@ library JackpotBucketLib {
             unchecked {
                 ++i;
             }
+        }
+
+        // When nonSoloCap is very small (e.g. 1-2), the minimum-1 guarantee
+        // for each non-solo bucket can cause scaledTotal to exceed nonSoloCap.
+        // Trim excess by zeroing out the smallest non-solo buckets.
+        if (scaledTotal > nonSoloCap) {
+            uint256 excess = scaledTotal - nonSoloCap;
+            uint8 trimOff = uint8((entropy >> 24) & 3);
+            for (uint8 i; i < 4 && excess != 0; ) {
+                uint8 idx = uint8((uint256(trimOff) + 3 - i) & 3);
+                if (capped[idx] == 1 && counts[idx] > 1) {
+                    capped[idx] = 0;
+                    unchecked {
+                        --excess;
+                    }
+                }
+                unchecked {
+                    ++i;
+                }
+            }
+            return capped;
         }
 
         uint256 remainder = nonSoloCap - scaledTotal;

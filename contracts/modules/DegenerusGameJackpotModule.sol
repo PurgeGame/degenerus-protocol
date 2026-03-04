@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import {
     IDegenerusCoinModule
@@ -194,6 +194,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Maximum total ETH winners across daily + carryover jackpots.
     uint16 private constant DAILY_ETH_MAX_WINNERS = 321;
+
+    /// @dev Minimum carryover winners when carryover is active. Prevents the bucket
+    ///      system from receiving a cap too small to distribute across 4 trait buckets.
+    uint16 private constant DAILY_CARRYOVER_MIN_WINNERS = 20;
 
     /// @dev Maximum winners for daily coin jackpot (coin.creditFlip is 1 external call each).
     uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
@@ -513,10 +517,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
                     uint256 totalDailyWinners = JackpotBucketLib
                         .sumBucketCounts(bucketCountsDaily);
-                    dailyCarryoverWinnerCap = totalDailyWinners >=
-                        DAILY_ETH_MAX_WINNERS
-                        ? 0
-                        : uint16(DAILY_ETH_MAX_WINNERS - totalDailyWinners);
+                    if (totalDailyWinners >= DAILY_ETH_MAX_WINNERS) {
+                        dailyCarryoverWinnerCap = 0;
+                    } else {
+                        uint16 remaining = uint16(
+                            DAILY_ETH_MAX_WINNERS - totalDailyWinners
+                        );
+                        dailyCarryoverWinnerCap = remaining <
+                            DAILY_CARRYOVER_MIN_WINNERS
+                            ? DAILY_CARRYOVER_MIN_WINNERS
+                            : remaining;
+                    }
                 } else {
                     dailyCarryoverWinnerCap = DAILY_ETH_MAX_WINNERS;
                 }
