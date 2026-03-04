@@ -1716,11 +1716,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Processes solo bucket winner: half ETH claimable, half as whale pass claim.
+    /// @dev Processes solo bucket winner: 75% ETH, 25% as whale passes (only if
+    ///      the 25% covers at least one half-pass; otherwise 100% ETH).
     /// @return claimableDelta Amount to add to claimablePool.
-    /// @return ethPaid Total ETH value credited (including whale pass portion).
+    /// @return ethPaid Total ETH value credited.
     /// @return lootboxSpent Amount moved to futurePrizePool from whale pass conversion.
-    /// @return newEntropy Updated entropy after whale pass queue.
+    /// @return newEntropy Updated entropy.
     function _processSoloBucketWinner(
         address winner,
         uint256 perWinner,
@@ -1734,24 +1735,25 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 newEntropy
         )
     {
-        uint256 ethAmount = perWinner >> 1; // perWinner / 2
-        uint256 whalePassAmount = perWinner - ethAmount;
-
-        claimableDelta = _creditJackpot(false, winner, ethAmount, entropy);
-        ethPaid = ethAmount;
+        // 75/25 split: whale pass only if 25% covers at least one half-pass
+        uint256 quarterAmount = perWinner >> 2; // perWinner / 4
+        uint256 whalePassCount = quarterAmount / HALF_WHALE_PASS_PRICE;
         newEntropy = entropy;
 
-        if (whalePassAmount != 0) {
-            _queueWhalePassClaimCore(winner, whalePassAmount);
-            newEntropy = entropy;
-            uint256 whalePassSpent = (whalePassAmount / HALF_WHALE_PASS_PRICE) *
-                HALF_WHALE_PASS_PRICE;
-            if (whalePassSpent != 0) {
-                futurePrizePool += whalePassSpent;
-            }
-            // whalePassSpent tracked via lootboxSpent; remainder captured by
-            // currentPrizePool captures remainder via pool consolidation.
-            lootboxSpent = whalePassAmount;
+        if (whalePassCount != 0) {
+            uint256 whalePassSpent = whalePassCount * HALF_WHALE_PASS_PRICE;
+            uint256 ethAmount = perWinner - whalePassSpent;
+
+            claimableDelta = _creditJackpot(false, winner, ethAmount, entropy);
+            ethPaid = ethAmount;
+
+            whalePassClaims[winner] += whalePassCount;
+            futurePrizePool += whalePassSpent;
+            lootboxSpent = whalePassSpent;
+        } else {
+            // 25% too small for a whale pass — pay full amount as ETH
+            claimableDelta = _creditJackpot(false, winner, perWinner, entropy);
+            ethPaid = perWinner;
         }
     }
 
