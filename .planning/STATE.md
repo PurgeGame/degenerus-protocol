@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T22:53:54.258Z"
+last_updated: "2026-03-04T23:17:26.875Z"
 progress:
-  total_phases: 12
+  total_phases: 13
   completed_phases: 11
-  total_plans: 70
-  completed_plans: 62
+  total_plans: 75
+  completed_plans: 64
 ---
 
 # Project State
@@ -64,6 +64,8 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 10 P02 | 6 | 2 tasks | 1 files |
 | Phase 10 P01 | 2 | 2 tasks | 2 files |
 | Phase 10 P04 | 10 | 2 tasks | 1 files |
+| Phase 11 P04 | 8 | 2 tasks | 1 files |
+| Phase 11 P03 | 15 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -102,6 +104,10 @@ Recent decisions affecting current work:
 - [Phase 10]: Storage comment DegenerusGameStorage.sol line 104-105 is WRONG (nested mapping formula) but assembly is correct; rated INFO finding
 - [Phase 10]: ADMIN-05 INFO: external drain impossible (_requestRng private, requestLootboxRng requires >=40 LINK); drain is admin-neglect path only
 - [Phase 10]: ADMIN-06 PASS: no admin function modifies claimableWinnings[player]; wireVrf RNG word manipulation is batch-level (lootbox index), not wallet-level; pull pattern provides censorship resistance
+- [Phase 11]: VAULT-01 PASS: receive() event-only, 1T DGVE pre-minted at construction closes ERC4626 inflation vector; live balance formula proportional to all shareholders
+- [Phase 11]: VAULT-02 PASS: _burnFor() floor division protocol-favorable; partial burns sum ≤ full burn (proved arithmetically); onlyGame blocks Stonk donations
+- [Phase 11]: TOKEN-07 PASS: self-referral blocked at two independent code paths; REF_CODE_LOCKED=bytes32(1) permanently seals slots; circular ring INFO only (6% recirculation = designed rakeback); wash trading is 6.25% discount, no amplification
+- [Phase 11]: TOKEN-08 PASS: LockStillActive guard at unlock() line 469 blocks same-level double-cap; auto-unlock in lockForLevel() resets spend counters atomically without crediting claimables; _lockedClaimableValues is view-only; level-transition timing window is clean
 
 ### Pending Todos
 
