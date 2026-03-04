@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T23:41:19.759Z"
+last_updated: "2026-03-04T23:41:19.890Z"
 progress:
   total_phases: 14
   completed_phases: 12
@@ -126,6 +126,8 @@ Recent decisions affecting current work:
 - [Phase 12]: REENT-06 PASS: e.claimed=1 at DecimatorModule line 391 precedes _creditDecJackpotClaimCore line 424; auto-rebuy path is internal storage only
 - [Phase 12]: REENT-07 PASS: adminSwapEthForStEth is value-neutral; amount==0 guard confirmed; claimablePool untouched; stETH ERC-20 no callback
 - [Phase 12]: REENT-01: PASS — all 8 ETH-transfer sites across 4 contracts are CEI-safe; sentinel pattern protects arbitrary-recipient sites; trusted-recipient sites send to non-reentrant protocol contracts
+- [Phase 12]: REENT-02: PASS — onERC721Received attacker window is safe; game state fully settled before _checkReceiver fires; purchaseDeityPass and refundDeityPass both blocked; mint() does not trigger onERC721Received
+- [Phase 12]: REENT-02 INFO: _transfer() CEI deviation (onDeityPassTransfer called before _owners[tokenId] = to) is NOT exploitable because WhaleModule.handleDeityPassTransfer reads DegenerusGame storage only, never calls back to DegenerusDeityPass to read stale _owners
 
 ### Pending Todos
 

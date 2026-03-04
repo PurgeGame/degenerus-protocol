@@ -75,8 +75,8 @@
 ### Cross-Function Reentrancy and Unchecked Blocks (REENT)
 *Integration pass — must follow ACCT, ADMIN, TOKEN, VAULT. Synthesizes all ETH-touching call sites.*
 
-- [ ] **REENT-01**: Cross-function reentrancy matrix: all ETH transfer sites mapped with every reentrant call path enumerated
-- [ ] **REENT-02**: ERC721 `onERC721Received` callback reentrancy: all `safeMint` paths in DegenerusNFT formally verified — most commonly missed finding class in C4 game audits
+- [x] **REENT-01**: Cross-function reentrancy matrix: all ETH transfer sites mapped with every reentrant call path enumerated
+- [x] **REENT-02**: ERC721 `onERC721Received` callback reentrancy: all `safeMint` paths in DegenerusNFT formally verified — most commonly missed finding class in C4 game audits
 - [x] **REENT-03**: Delegatecall multicall/operator-proxy reentrancy: no re-entry through operator delegation chain confirmed
 - [ ] **REENT-04**: 40 JackpotModule unchecked blocks audited with adversarial state sequences; recent fix commits (4592d8c, cbbafa0, 9539c6d) tested for bypass across all purchase paths
 - [x] **REENT-05**: Shared cursor corruption: `ticketCursor`/`ticketLevel` mutual exclusion formally verified between `processTicketBatch` and `processFutureTicketBatch`
@@ -148,8 +148,8 @@
 | VAULT-02 | Phase 11 | Complete |
 | TIME-01 | Phase 11 | Complete |
 | TIME-02 | Phase 11 | Complete |
-| REENT-01 | Phase 12 | Pending |
-| REENT-02 | Phase 12 | Pending |
+| REENT-01 | Phase 12 | Complete |
+| REENT-02 | Phase 12 | Complete |
 | REENT-03 | Phase 12 | Complete |
 | REENT-04 | Phase 12 | Pending |
 | REENT-05 | Phase 12 | Complete |
