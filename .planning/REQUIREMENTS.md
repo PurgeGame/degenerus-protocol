@@ -36,8 +36,8 @@
 
 - [ ] **ADMIN-01**: Complete admin function inventory: every privilege mapped with worst-case compromise consequence if admin key is lost or malicious
 - [ ] **ADMIN-02**: `wireVrf` coordinator substitution analysis: admin RNG control path via emergency coordinator rotation confirmed or refuted
-- [ ] **ADMIN-03**: 3-day emergency stall trigger: all conditions under which admin can deliberately force the stall confirmed; attacker sequence enumerated
-- [ ] **ADMIN-04**: VRF retry window analysis: all state-changing calls permissible during 18h RNG lock period identified; any that produce advantaged outcomes flagged
+- [x] **ADMIN-03**: 3-day emergency stall trigger: all conditions under which admin can deliberately force the stall confirmed; attacker sequence enumerated
+- [x] **ADMIN-04**: VRF retry window analysis: all state-changing calls permissible during 18h RNG lock period identified; any that produce advantaged outcomes flagged
 - [ ] **ADMIN-05**: VRF subscription drain economics: LINK cost to halt game computed; griefing feasibility assessed against threat model
 - [ ] **ADMIN-06**: Player-specific grief vectors: any admin path to selectively block a specific wallet's advancement, lootbox resolution, or withdrawal identified
 
@@ -129,8 +129,8 @@
 | GAS-07 | Phase 9 | Complete |
 | ADMIN-01 | Phase 10 | Pending |
 | ADMIN-02 | Phase 10 | Pending |
-| ADMIN-03 | Phase 10 | Pending |
-| ADMIN-04 | Phase 10 | Pending |
+| ADMIN-03 | Phase 10 | Complete |
+| ADMIN-04 | Phase 10 | Complete |
 | ADMIN-05 | Phase 10 | Pending |
 | ADMIN-06 | Phase 10 | Pending |
 | ASSY-01 | Phase 10 | Pending |
