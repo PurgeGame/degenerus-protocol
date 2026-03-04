@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.26;
+pragma solidity 0.8.34;
 
 /// @title VRF Random Words Request
 /// @notice Request structure for Chainlink VRF V2.5 Plus

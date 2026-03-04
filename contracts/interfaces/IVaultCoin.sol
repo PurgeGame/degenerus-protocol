@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.26;
+pragma solidity 0.8.34;
 
 /// @notice Interface for tokens with vault mint allowance (BURNIE).
 /// @dev Used by DegenerusVault and game modules for minting tokens

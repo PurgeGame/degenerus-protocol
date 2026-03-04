@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.26;
+pragma solidity 0.8.34;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 
@@ -120,6 +120,23 @@ interface IDegenerusGameAdmin {
     /// @notice Update lootbox RNG request threshold (wei).
     /// @param newThreshold New threshold in wei.
     function setLootboxRngThreshold(uint256 newThreshold) external;
+
+    /// @notice Current ticket purchase info including live price.
+    /// @return lvl Current game level (0-indexed).
+    /// @return qty Tickets sold at current level.
+    /// @return cap Total tickets per level.
+    /// @return jackpotWei Jackpot size in wei.
+    /// @return priceWei Current ticket price in wei.
+    function purchaseInfo()
+        external
+        view
+        returns (
+            uint256 lvl,
+            uint256 qty,
+            uint256 cap,
+            uint256 jackpotWei,
+            uint256 priceWei
+        );
 }
 
 /// @dev LINK token interface (ERC-677 with transferAndCall).
@@ -628,8 +645,10 @@ contract DegenerusAdmin {
         }
         if (ethEquivalent == 0) return; // Disable rewards if oracle unavailable.
 
-        // Calculate BURNIE credit.
-        uint256 baseCredit = (ethEquivalent * PRICE_COIN_UNIT) / 1 ether;
+        // Calculate BURNIE credit. Divide by live ticket price so 1000 BURNIE = 1 ticket's worth of ETH.
+        (, , , , uint256 priceWei) = gameAdmin.purchaseInfo();
+        if (priceWei == 0) return;
+        uint256 baseCredit = (ethEquivalent * PRICE_COIN_UNIT) / priceWei;
         uint256 credit = (baseCredit * mult) / 1e18;
         if (credit == 0) return;
 
