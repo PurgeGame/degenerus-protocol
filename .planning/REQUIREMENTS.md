@@ -24,9 +24,9 @@
 *Quantifies permanent DoS feasibility. Independent of ACCT, runs in parallel.*
 
 - [x] **GAS-01**: `advanceGame()` complete call graph: worst-case gas measured for every code path branch via Foundry `--gas-report` adversarial harnesses
-- [ ] **GAS-02**: `processTicketBatch` gas ceiling: maximum cold SSTORE cost confirmed against 16M block limit
-- [ ] **GAS-03**: Sybil breakeven: minimum wallet count N where `advanceGame()` exceeds 16M gas derived
-- [ ] **GAS-04**: Sybil DoS cost: ETH required to reach N wallets computed and compared against 1000 ETH threat model budget
+- [x] **GAS-02**: `processTicketBatch` gas ceiling: maximum cold SSTORE cost confirmed against 16M block limit
+- [x] **GAS-03**: Sybil breakeven: minimum wallet count N where `advanceGame()` exceeds 16M gas derived
+- [x] **GAS-04**: Sybil DoS cost: ETH required to reach N wallets computed and compared against 1000 ETH threat model budget
 - [ ] **GAS-05**: `payDailyJackpot` winner loop ceiling: `DAILY_ETH_MAX_WINNERS` constant read and worst-case gas measured
 - [ ] **GAS-06**: VRF callback gas measured under worst-case lootbox state: confirmed under 200K with margin
 - [x] **GAS-07**: Rational inaction liveness: dominant whale's dominant strategy analyzed — delaying `advanceGame()` cannot produce better outcomes than advancing; protocol liveness guarantee assessed
@@ -121,9 +121,9 @@
 | ACCT-09 | Phase 8 | Pending |
 | ACCT-10 | Phase 8 | Pending |
 | GAS-01 | Phase 9 | Complete |
-| GAS-02 | Phase 9 | Pending |
-| GAS-03 | Phase 9 | Pending |
-| GAS-04 | Phase 9 | Pending |
+| GAS-02 | Phase 9 | Complete |
+| GAS-03 | Phase 9 | Complete |
+| GAS-04 | Phase 9 | Complete |
 | GAS-05 | Phase 9 | Pending |
 | GAS-06 | Phase 9 | Pending |
 | GAS-07 | Phase 9 | Complete |
