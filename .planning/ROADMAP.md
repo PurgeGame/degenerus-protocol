@@ -106,7 +106,14 @@ Plans:
   3. TOKEN-06 verdict confirmed: BURNIE 30-day guard applied identically across all purchase entry points (direct, operator-proxied, whale bundle, lazy pass, deity pass) with same timestamp comparison — any path that skips or weakens the guard named as bypass finding
   4. VAULT-02 verdict confirmed: DegenerusStonk `claimAmount = (reserveBalance * sharesBurned) / totalSupply` rounding direction verified — rounding consistently favors protocol over claimer (PASS) or specific partial-burn sequence that extracts disproportionate value is demonstrated
   5. TIME-01 and TIME-02 verdicts confirmed: ±900s validator timestamp drift cannot allow double daily jackpot allocation or break a target player's quest streak — either bounded by design (PASS with reasoning) or specific block timestamp sequence that exploits the window is documented
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 11-01-PLAN.md — TOKEN-01 + TOKEN-02 + TOKEN-03: vaultMintAllowance bypass, claimWhalePass CEI, BurnieCoinflip entropy source
+- [ ] 11-02-PLAN.md — TOKEN-04 + TOKEN-05 + TOKEN-06: lootbox EV cap model, activity score inflation cost, BURNIE 30-day guard completeness
+- [ ] 11-03-PLAN.md — TOKEN-07 + TOKEN-08: affiliate circular ring EV, DGNRS lock/unlock level-transition timing exploit
+- [ ] 11-04-PLAN.md — VAULT-01 + VAULT-02: DegenerusVault receive() donation safety, DegenerusStonk burn-to-claim rounding
+- [ ] 11-05-PLAN.md — TIME-01 + TIME-02: daily jackpot double-trigger analysis, quest streak griefing via validator timestamp drift
 
 ### Phase 12: Cross-Function Reentrancy Synthesis and Unchecked Blocks
 **Goal**: A complete cross-function reentrancy matrix covers every ETH-transfer site in the protocol, ERC721 callback paths are formally traced, and every unchecked block in JackpotModule is verified safe against adversarial state sequences including the three recent fix commits
@@ -148,7 +155,7 @@ Phases 8 and 9 can run in parallel. Phase 10 requires Phase 8 complete. Phase 11
 | 7. Cross-Contract Integration Synthesis | 4/5 | In Progress|  | - |
 | 8. ETH Accounting Invariant and CEI Verification | v2.0 | 5/5 | Complete | 2026-03-04 |
 | 9. advanceGame() Gas Analysis and Sybil Bloat | 4/4 | Complete   | 2026-03-04 | - |
-| 10. Admin Power, VRF Griefing, and Assembly Safety | 4/4 | Complete   | 2026-03-04 | - |
-| 11. Token Security, Economic Attacks, Vault and Timing | v2.0 | 0/TBD | Not started | - |
+| 10. Admin Power, VRF Griefing, and Assembly Safety | 4/4 | Complete    | 2026-03-04 | - |
+| 11. Token Security, Economic Attacks, Vault and Timing | v2.0 | 0/5 | Not started | - |
 | 12. Cross-Function Reentrancy Synthesis and Unchecked Blocks | v2.0 | 0/TBD | Not started | - |
 | 13. Final Synthesis Report | v2.0 | 0/TBD | Not started | - |
