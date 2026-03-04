@@ -1,0 +1,64 @@
+# Degenerus Protocol — Audit Scope
+# Solidity 0.8.26 | Hardhat + viaIR | Optimizer runs=2
+
+## In Scope — Core Deployable Contracts (22)
+contracts/BurnieCoin.sol
+contracts/BurnieCoinflip.sol
+contracts/ContractAddresses.sol
+contracts/DegenerusAdmin.sol
+contracts/DegenerusAffiliate.sol
+contracts/DegenerusDeityPass.sol
+contracts/DegenerusGame.sol
+contracts/DegenerusJackpots.sol
+contracts/DegenerusQuests.sol
+contracts/DegenerusStonk.sol
+contracts/DegenerusTraitUtils.sol
+contracts/DegenerusVault.sol
+contracts/DeityBoonViewer.sol
+contracts/Icons32Data.sol
+contracts/WrappedWrappedXRP.sol
+
+## In Scope — Delegatecall Game Modules (12)
+contracts/modules/DegenerusGameAdvanceModule.sol
+contracts/modules/DegenerusGameBoonModule.sol
+contracts/modules/DegenerusGameDecimatorModule.sol
+contracts/modules/DegenerusGameDegeneretteModule.sol
+contracts/modules/DegenerusGameEndgameModule.sol
+contracts/modules/DegenerusGameGameOverModule.sol
+contracts/modules/DegenerusGameJackpotModule.sol
+contracts/modules/DegenerusGameLootboxModule.sol
+contracts/modules/DegenerusGameMintModule.sol
+contracts/modules/DegenerusGameMintStreakUtils.sol
+contracts/modules/DegenerusGamePayoutUtils.sol
+contracts/modules/DegenerusGameWhaleModule.sol
+
+## In Scope — Shared Storage
+contracts/storage/DegenerusGameStorage.sol
+
+## In Scope — Libraries (5)
+contracts/libraries/BitPackingLib.sol
+contracts/libraries/EntropyLib.sol
+contracts/libraries/GameTimeLib.sol
+contracts/libraries/JackpotBucketLib.sol
+contracts/libraries/PriceLookupLib.sol
+
+## In Scope — Interfaces (12)
+contracts/interfaces/DegenerusGameModuleInterfaces.sol
+contracts/interfaces/IBurnieCoinflip.sol
+contracts/interfaces/IDegenerusAffiliate.sol
+contracts/interfaces/IDegenerusCoin.sol
+contracts/interfaces/IDegenerusGame.sol
+contracts/interfaces/IDegenerusGameModules.sol
+contracts/interfaces/IDegenerusJackpots.sol
+contracts/interfaces/IDegenerusQuests.sol
+contracts/interfaces/IDegenerusStonk.sol
+contracts/interfaces/IStETH.sol
+contracts/interfaces/IVaultCoin.sol
+contracts/interfaces/IVRFCoordinator.sol
+
+## Out of Scope
+contracts/mocks/             # Test mock contracts
+contracts-testnet/           # Testnet variants with D-scaling
+test/                        # Test suite
+scripts/                     # Deployment and simulation scripts
+node_modules/                # Third-party dependencies
