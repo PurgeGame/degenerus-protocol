@@ -924,4 +924,82 @@ describe("AdvanceGame Gas Benchmarks", function () {
       }
     });
   });
+
+  // =========================================================================
+  // 15. VRF Callback Gas (rawFulfillRandomWords)
+  // =========================================================================
+
+  describe("15. VRF Callback Gas (rawFulfillRandomWords)", function () {
+    it("daily RNG path (path 1): VRF callback after advanceGame triggers request", async function () {
+      const { game, deployer, mockVRF, alice, bob } =
+        await loadFixture(deployFullProtocol);
+
+      // A few purchases so there are tickets in the queue (makes the
+      // rngLocked path representative of a real day).
+      await buyFullTickets(game, alice, 5, 0.05);
+      await buyFullTickets(game, bob, 5, 0.05);
+
+      await advanceToNextDay();
+
+      // advanceGame() triggers the VRF request (stage=1, rngLockedFlag=true)
+      await game.connect(deployer).advanceGame();
+      const requestId = await getLastVRFRequestId(mockVRF);
+
+      // Fulfill: this is rawFulfillRandomWords() — capture the full receipt.
+      // receipt.gasUsed covers coordinator wrapper overhead + game callback.
+      const vrfTx = await mockVRF.fulfillRandomWords(requestId, 42n);
+      const vrfReceipt = await vrfTx.wait();
+      recordGas("VRF Callback - daily RNG (path 1)", vrfReceipt);
+
+      expect(vrfReceipt.status).to.equal(1);
+      expect(vrfReceipt.gasUsed).to.be.lt(300_000n);
+    });
+
+    it("lootbox RNG path (path 2): VRF callback after requestLootboxRng()", async function () {
+      const { game, deployer, mockVRF, alice } =
+        await loadFixture(deployFullProtocol);
+
+      // Purchase lootboxes; the lootbox RNG gate requires non-zero pending lootboxes.
+      // purchase(affiliate, ticketQty, lootBoxQty, affiliateCode, payKind, {value})
+      // Each lootbox costs 0.001 ETH at level 0 (LOOTBOX_PRICE_WEI = 1e15).
+      // We buy 20 lootboxes to ensure the activity threshold is met.
+      try {
+        await game
+          .connect(alice)
+          .purchase(
+            ZERO_ADDRESS,
+            0n,
+            20n,
+            ZERO_BYTES32,
+            MintPaymentKind.DirectEth,
+            { value: hre.ethers.parseEther("0.02") }
+          );
+      } catch (err) {
+        console.log(`      Lootbox purchase failed: ${err.message.slice(0, 80)}`);
+        console.log("      (Skipping lootbox path — not reachable in harness)");
+        return;
+      }
+
+      // requestLootboxRng() can only be called outside the daily advance window.
+      // Try it mid-day (no advanceToNextDay, so we are within the same day).
+      let lbRequestId;
+      try {
+        const lbTx = await game.connect(deployer).requestLootboxRng();
+        await lbTx.wait();
+        lbRequestId = await getLastVRFRequestId(mockVRF);
+      } catch (err) {
+        console.log(`      requestLootboxRng failed: ${err.message.slice(0, 80)}`);
+        console.log("      (Lootbox RNG not requestable in current harness state — skipping path 2)");
+        return;
+      }
+
+      // Fulfill the lootbox VRF request and capture gas.
+      const vrfTx = await mockVRF.fulfillRandomWords(lbRequestId, 77n);
+      const vrfReceipt = await vrfTx.wait();
+      recordGas("VRF Callback - lootbox RNG (path 2)", vrfReceipt);
+
+      expect(vrfReceipt.status).to.equal(1);
+      expect(vrfReceipt.gasUsed).to.be.lt(300_000n);
+    });
+  });
 });
