@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {EntropyLib} from "../libraries/EntropyLib.sol";
 
 /// @dev Minimal stETH interface (ERC20 subset)
 interface IStETH {
@@ -23,14 +23,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @notice stETH token contract for liquid staking rewards
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
-    /// @notice Jackpots contract for BAF and Decimator distributions
-    IDegenerusJackpots internal constant jackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
-
     /// @notice DGNRS token contract for fund deposits
     IDegenerusStonk internal constant dgnrs = IDegenerusStonk(ContractAddresses.DGNRS);
-
-    /// @notice Maximum BAF bracket level (rounded to nearest 10, capped at uint24 max)
-    uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
 
     /// @notice Fixed refund amount per deity pass for early game over (levels 1-9)
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
@@ -57,8 +51,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      Distribution logic:
     ///      - If game never started (level 0, not in BURN state): Full refund of deity pass payments
     ///      - If game ended early (levels 1-9): Fixed 20 ETH refund per deity pass purchased
-    ///      - Remaining funds split: 50% to BAF jackpot, remainder to Decimator jackpot
-    ///      - Any unawarded funds swept to vault and DGNRS
+    ///      - Remaining funds: 10% to Decimator, 90% to next-level ticketholders
+    ///      - Decimator refunds flow to terminal jackpot pool
+    ///      - Any uncredited remainder swept to vault and DGNRS
     ///
     ///      VRF fallback: Uses rngWordByDay which may use historical VRF word as secure
     ///      fallback if Chainlink VRF is stalled (after 3 day wait period).
@@ -133,92 +128,100 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         uint256 rngWord = rngWordByDay[day];
         if (rngWord == 0) return; // RNG not ready yet (wait for fallback)
 
-        // remaining tracks unallocated funds; BAF refunds stay here for decimator.
+        // remaining tracks unallocated funds.
         uint256 remaining = available;
 
-        uint256 bafPool = remaining / 2;
-        if (bafPool != 0) {
-            uint256 bafSpend = _payGameOverBafEthOnly(bafPool, rngWord, lvl);
-            if (bafSpend != 0) {
-                remaining -= bafSpend;
+        // 10% Decimator — refunds flow back to remaining for terminal jackpot
+        uint256 decPool = remaining / 10;
+        if (decPool != 0) {
+            uint256 decRefund = IDegenerusGame(address(this)).runDecimatorJackpot(decPool, lvl, rngWord);
+            uint256 decSpend = decPool - decRefund;
+            if (decSpend != 0) {
+                claimablePool += decSpend;
             }
+            remaining -= decPool;
+            remaining += decRefund; // Return decimator refund to remaining for terminal jackpot
         }
 
-        _payGameOverDecimatorEthOnly(remaining, rngWord, lvl, stBal);
+        // 90% (+ decimator refund) to next-level ticketholders
+        if (remaining != 0) {
+            uint256 credited = _payGameOverTerminalJackpot(remaining, rngWord, lvl);
+            if (credited != 0) {
+                claimablePool += credited;
+                remaining -= credited;
+            }
+            // Any uncredited remainder swept to vault
+            if (remaining != 0) {
+                _sendToVault(remaining, stBal);
+            }
+        }
     }
 
-    /// @dev Run a final BAF jackpot with ETH-only payouts using the calculated BAF bracket level.
-    /// @param amount Total prize pool for the BAF jackpot.
-    /// @param rngWord VRF random word for winner selection.
-    /// @param lvl Current game level used to calculate BAF bracket.
-    /// @return netSpend Amount actually credited to winners.
-    function _payGameOverBafEthOnly(
+    /// @dev Distribute terminal jackpot pool pro-rata to next-level ticketholders.
+    ///      Uses 50 sampling rounds of up to 4 addresses via sampleTraitTicketsAtLevel.
+    ///      Credits directly to claimableWinnings (no auto-rebuy since game is over).
+    /// @param amount Total ETH to distribute.
+    /// @param rngWord VRF entropy seed.
+    /// @param lvl Current level (winners sampled from lvl+1).
+    /// @return credited Total ETH credited to winners.
+    function _payGameOverTerminalJackpot(
         uint256 amount,
         uint256 rngWord,
         uint24 lvl
-    ) private returns (uint256 netSpend) {
-        uint24 bafLvl = _bafBracketLevel(lvl);
+    ) private returns (uint256 credited) {
+        uint24 targetLvl = lvl + 1;
+        uint256 entropy = rngWord;
 
-        (address[] memory winners, uint256[] memory amounts, , ) = jackpots
-            .runBafJackpot(amount, bafLvl, rngWord);
+        // Phase 1: Sample 50 rounds, accumulate addresses and occurrence counts.
+        address[] memory allAddrs = new address[](200);
+        uint256[] memory counts = new uint256[](200);
+        uint256 uniqueCount;
+        uint256 totalOccurrences;
 
-        uint256 credited;
-        uint256 len = winners.length;
-        for (uint256 i; i < len; ) {
-            address winner = winners[i];
-            uint256 prize = amounts[i];
-            if (winner != address(0) && prize != 0) {
-                unchecked {
-                    claimableWinnings[winner] += prize;
+        for (uint256 r; r < 50; ) {
+            entropy = EntropyLib.entropyStep(entropy);
+            (, address[] memory tickets) = IDegenerusGame(address(this))
+                .sampleTraitTicketsAtLevel(targetLvl, entropy);
+
+            uint256 tLen = tickets.length;
+            for (uint256 t; t < tLen; ) {
+                address addr = tickets[t];
+                if (addr != address(0)) {
+                    bool found;
+                    for (uint256 u; u < uniqueCount; ) {
+                        if (allAddrs[u] == addr) {
+                            counts[u]++;
+                            found = true;
+                            break;
+                        }
+                        unchecked { ++u; }
+                    }
+                    if (!found) {
+                        allAddrs[uniqueCount] = addr;
+                        counts[uniqueCount] = 1;
+                        unchecked { ++uniqueCount; }
+                    }
+                    unchecked { ++totalOccurrences; }
                 }
-                emit PlayerCredited(winner, winner, prize);
-                credited += prize;
+                unchecked { ++t; }
             }
-            unchecked {
-                ++i;
+            unchecked { ++r; }
+        }
+
+        if (totalOccurrences == 0) return 0;
+
+        // Phase 2: Distribute pro-rata by occurrence count (ETH-only, no auto-rebuy).
+        for (uint256 i; i < uniqueCount; ) {
+            uint256 share = (amount * counts[i]) / totalOccurrences;
+            if (share != 0) {
+                unchecked {
+                    claimableWinnings[allAddrs[i]] += share;
+                }
+                emit PlayerCredited(allAddrs[i], allAddrs[i], share);
+                credited += share;
             }
+            unchecked { ++i; }
         }
-
-        if (credited != 0) {
-            claimablePool += credited;
-        }
-
-        return credited;
-    }
-
-    /// @dev Round level up to the nearest bracket of 10 for BAF tracking.
-    /// @param lvl Current game level.
-    /// @return Bracket level rounded up to nearest 10, capped at MAX_BAF_BRACKET.
-    function _bafBracketLevel(uint24 lvl) private pure returns (uint24) {
-        unchecked {
-            uint256 bracket = ((uint256(lvl) + 9) / 10) * 10;
-            if (bracket > type(uint24).max) return MAX_BAF_BRACKET;
-            return uint24(bracket);
-        }
-    }
-
-    /// @dev Run a Decimator jackpot with ETH-only payouts using remaining non-claimable funds.
-    ///      Any refund (no eligible winners or existing snapshot) is sent to the vault.
-    /// @param amount Total amount to distribute via Decimator.
-    /// @param rngWord VRF random word for winner selection.
-    /// @param lvl Current game level for Decimator calculation.
-    /// @param stethBal Current stETH balance for vault sweep allocation.
-    function _payGameOverDecimatorEthOnly(
-        uint256 amount,
-        uint256 rngWord,
-        uint24 lvl,
-        uint256 stethBal
-    ) private {
-        uint256 refund = IDegenerusGame(address(this)).runDecimatorJackpot(
-            amount,
-            lvl,
-            rngWord
-        );
-        uint256 netSpend = amount - refund;
-        if (netSpend != 0) {
-            claimablePool += netSpend;
-        }
-        if (refund != 0) _sendToVault(refund, stethBal);
     }
 
     /// @notice Final sweep of all remaining funds to vault after 30 days post-gameover.
