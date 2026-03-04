@@ -29,7 +29,7 @@
 - [ ] **GAS-04**: Sybil DoS cost: ETH required to reach N wallets computed and compared against 1000 ETH threat model budget
 - [ ] **GAS-05**: `payDailyJackpot` winner loop ceiling: `DAILY_ETH_MAX_WINNERS` constant read and worst-case gas measured
 - [ ] **GAS-06**: VRF callback gas measured under worst-case lootbox state: confirmed under 200K with margin
-- [ ] **GAS-07**: Rational inaction liveness: dominant whale's dominant strategy analyzed — delaying `advanceGame()` cannot produce better outcomes than advancing; protocol liveness guarantee assessed
+- [x] **GAS-07**: Rational inaction liveness: dominant whale's dominant strategy analyzed — delaying `advanceGame()` cannot produce better outcomes than advancing; protocol liveness guarantee assessed
 
 ### Admin Power and VRF Griefing (ADMIN)
 *wireVrf is the central connecting vector for both admin abuse and VRF griefing.*
@@ -126,7 +126,7 @@
 | GAS-04 | Phase 9 | Pending |
 | GAS-05 | Phase 9 | Pending |
 | GAS-06 | Phase 9 | Pending |
-| GAS-07 | Phase 9 | Pending |
+| GAS-07 | Phase 9 | Complete |
 | ADMIN-01 | Phase 10 | Pending |
 | ADMIN-02 | Phase 10 | Pending |
 | ADMIN-03 | Phase 10 | Pending |
