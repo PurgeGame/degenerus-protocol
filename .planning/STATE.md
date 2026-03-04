@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T22:20:00.000Z"
+last_updated: "2026-03-04T22:17:27.806Z"
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 66
-  completed_plans: 56
+  completed_plans: 57
 ---
 
 # Project State
@@ -58,6 +58,7 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 07 P05 | 5 | 1 tasks | 1 files |
 | Phase 09 P01 | 20 | 2 tasks | 1 files |
 | Phase 09 P04 | 8 | 2 tasks | 1 files |
+| Phase 09 P02 | 15 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - [Phase 09]: GAS-07 PASS: no dominant whale strategy rationally delays advanceGame() indefinitely; three independent liveness paths confirmed via source analysis
 - [Phase 09]: CREATOR key-management risk classified INFO (GAS-07-I1), forwarded to Phase 10 ADMIN-01
 - [Phase 09]: VRF stall liveness dependency classified INFO (GAS-07-I2), forwarded to Phase 10 ADMIN-02
+- [Phase 09]: GAS-02 PASS: processTicketBatch max measured 6,284,995 gas (39.3% of 16M); Sybil cold batch 5,193,019 gas
+- [Phase 09]: GAS-03 PASS: WRITES_BUDGET_SAFE=550 enforces hard per-call ceiling of ~7.4M gas; no N wallets can push single advanceGame() call to 16M
+- [Phase 09]: GAS-04 PASS: permanent Sybil DoS costs ~4,950 ETH/day at minimum ticket floor; exceeds 1,000 ETH threat model (LOW theoretical)
 
 ### Pending Todos
 
@@ -95,7 +99,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-04
-Stopped at: Phase 09-01 complete — GAS-01 verdict PASS, 14 gas measurements across 13 scenarios, worst-case 6,284,995 gas (STAGE_TICKETS_WORKING)
+Stopped at: Phase 09-02 complete — GAS-02/03/04 verdicts all PASS; Sybil cold batch 5,193,019 gas; ceiling 7.4M; permanent DoS ~4,950 ETH/day
 Resume file: None
 
 ## Phase 8 Findings Summary (for Phase 13 report)
