@@ -1,210 +1,214 @@
 # Project Research Summary
 
-**Project:** Degenerus Protocol Security Audit
-**Domain:** Smart Contract Security Audit — VRF-based on-chain game with delegatecall modules, prize pools, and complex token economics
-**Researched:** 2026-02-28
+**Project:** Degenerus Protocol — Adversarial Security Audit v2.0 (Code4rena Preparation)
+**Domain:** Smart contract security audit — VRF-based on-chain game with delegatecall modules, ETH prize pools, and complex token economics
+**Researched:** 2026-03-04
 **Confidence:** HIGH
 
 ## Executive Summary
 
-The Degenerus Protocol is a 22-contract Solidity 0.8.x on-chain game with Chainlink VRF V2.5 randomness, a delegatecall module dispatch architecture, stETH integration via Lido, and multi-phase prize pool economics. This is a full security audit of an existing protocol — not a new build — so the work is analysis, not construction. Expert audit methodology for this class of protocol is well-documented: begin with storage layout verification before any module review, then work outward from the core state machine through module logic, accounting integrity, and finally economic attack surface. The 884-test suite is a specification baseline, not a security proof, and the audit must deliberately focus on paths the protocol team did not write tests for.
+The Degenerus Protocol is a 22-contract on-chain game with 10 delegatecall modules, Chainlink VRF V2.5, Lido stETH integration, and a three-asset token system (COIN/DGNRS/DEITY NFTs). The v1.0 audit completed static analysis (Slither, Aderyn), access control mapping, delegatecall storage layout verification, VRF lifecycle review, FSM transition enumeration, and found one HIGH finding (F01: whale bundle level eligibility bypass). The v2.0 adversarial audit is a Code4rena contest preparation pass that must complete the work v1.0 explicitly deferred: ETH accounting invariant verification (8 of 9 Phase 4 plans unexecuted), advanceGame() gas worst-case analysis, Sybil bloat modeling, admin power abuse enumeration, VRF griefing vectors, and cross-function reentrancy synthesis.
 
-The recommended audit toolchain centers on Slither (primary static analysis, including its `variable-order` and `vars-and-auth` printers), Aderyn (complementary AST analysis), Semgrep with Decurity rules (proxy-storage-collision patterns), and Medusa (coverage-guided fuzzing for accounting invariants). Foundry can be installed alongside the existing Hardhat project to write invariant test harnesses and run `forge inspect` for storage layout verification. The critical constraint on tooling is that the Hardhat ESM project must be handled carefully — some tools require the `--hardhat-ignore-compile` flag or `--build-system hardhat` overrides. Formal verification via Halmos is appropriate only for bounded checks on the deity pass triangular pricing formula and ticket cost formula; full formal verification of 22 contracts is out of scope.
+The recommended approach is to treat this audit as a Code4rena warden would: prioritize the highest-severity unconfirmed attack surfaces first, build coded PoC tests for each finding before classifying severity, and do not spend time re-running areas v1.0 already closed. The tool stack adds Medusa v1.5.0 coverage-guided fuzzing (primary) and Echidna 2.3.1 (cross-validation) for invariant testing, Halmos v0.3.3 bounded symbolic execution for critical math formulas, and Foundry forge gas-report harnesses for advanceGame() worst-case measurement — all running alongside the existing 884-test Hardhat suite without replacing it. The ETH accounting invariant is the master dependency: it cannot be declared clean until reentrancy, BPS rounding, game-over settlement, and stETH rebasing are each individually confirmed safe.
 
-The four highest-severity risk areas in this protocol — all requiring deep investigation — are: (1) the VRF callback gas limit creating a permanent-DOS path if the callback reverts; (2) the nudge mechanism allowing a block proposer to front-run `advanceGame` with a known VRF word and shift jackpot outcomes; (3) storage slot layout drift in the 10 delegatecall modules causing silent state corruption; and (4) the prize pool accounting invariant (`balance + stETH >= claimablePool`) breaking under stETH rebasing or reentrancy. These four are not independent — they connect. A storage slot collision in the AdvanceModule could break the RNG lock state machine, which creates the window for nudge manipulation. Audit phases must be sequenced to detect this kind of compound failure.
+The two highest-risk unconfirmed surfaces are: (1) the `_creditClaimable` utility function, which is called by every jackpot winner payout path and is suspected to not increment `claimablePool` — if confirmed, aggregate claimable liability exceeds the tracked pool, breaking solvency and likely constituting a Code4rena HIGH finding; and (2) `advanceGame()` gas under adversarial state, where composition of processTicketBatch (up to 11M gas cold), payDailyJackpot winner loop, and BAF multi-level scatter jackpot could approach or breach the 16M block limit with a Sybil-bloated player set costing as little as 25 ETH to construct. All other v2.0 surfaces are MEDIUM-range unless specific conditions hold.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The audit toolchain is a layered stack where each tool serves a distinct purpose. Static analysis with Slither and Aderyn runs in under 30 seconds per contract and provides the base vulnerability scan. Slither's printer suite — specifically `variable-order` for storage layout comparison and `vars-and-auth` for access control matrix generation — is directly purpose-built for the delegatecall and access control surfaces in this protocol. Semgrep with the Decurity ruleset adds DeFi-specific exploit pattern matching that Slither's general detectors miss, including a `proxy-storage-collision` rule directly relevant to the 10-module delegatecall pattern. Do not use Mythril — it has SMT solver timeouts on contracts above 300 lines and cannot complete analysis on this codebase.
-
-For dynamic analysis, Medusa (Trail of Bits, released Feb 2025) is the primary fuzzer. It is faster than Echidna for coverage discovery and parallelizes across CPU cores. The highest-value target for Medusa is the ETH accounting invariant: total ETH deposited must equal prize pools plus fees plus vault allocations across all code paths. Echidna should be used as a fallback when Medusa's Hardhat crytic-compile integration causes issues with the ESM project format. Foundry should be installed separately (not as a replacement for Hardhat) to enable `forge inspect` storage layout verification and Forge invariant harnesses for the highest-priority accounting properties.
+The v1.0 tooling (Slither 0.11.5, Aderyn, forge inspect, Hardhat) carries forward unchanged. V2.0 adds three new tool categories not used in v1.0: fuzzing, formal verification, and targeted gas profiling. The primary fuzzer is Medusa v1.5.0 (Trail of Bits, Feb 2025), which uses coverage-guided parallel fuzzing with Slither-enhanced mutation — superior to Echidna for invariant discovery speed. Echidna 2.3.1 is the secondary cross-validator. Halmos v0.3.3 handles bounded symbolic execution for specific arithmetic formulas (deity pass T(n), ticket cost formula `(priceWei * qty) / 400`, BPS splits). Foundry v1.0 provides standalone gas-report harnesses for advanceGame() worst-case measurement without touching the existing Hardhat ESM setup.
 
 **Core technologies:**
-- Slither (latest): Primary static analysis, 100+ detectors, critical printer commands for storage layout and access control mapping — industry standard from Trail of Bits
-- Aderyn (latest): Secondary static analysis, AST-based Rust analyzer with low false-positive rate — complementary to Slither, catches different pattern classes
-- Semgrep + Decurity rules: Pattern-matching for DeFi-specific exploit patterns including proxy-storage-collision — directly relevant to delegatecall pattern
-- Medusa (latest): Primary fuzzer, coverage-guided, parallel execution — best tool for accounting invariant violations and EV multiplier math
-- Foundry v1.3.0+: Standalone installation for `forge inspect` storage layout verification and Forge invariant harnesses — do not migrate the Hardhat project
-- Halmos (latest): Bounded symbolic execution for specific math formulas (deity pass T(n), ticket cost formula) — use narrowly, not for full protocol verification
-- Tenderly: Transaction simulation and cross-contract state tracing — essential for multi-step game-over sequence debugging
-- Chainlink VRF V2.5 8-point security checklist: Official mandatory review item for all VRF consumer contracts
+- Medusa v1.5.0: PRIMARY fuzzer — coverage-guided parallel fuzzing with Slither-enhanced mutation; best tool for ETH accounting invariants and behavioral state-dependent bugs
+- Echidna 2.3.1: SECONDARY fuzzer — mature Hardhat integration, corpus-based approach catches narrow FSM state-transition windows Medusa's coverage guidance may miss; generates Foundry reproducers
+- Halmos v0.3.3: Bounded symbolic execution for arithmetic overflow proofs — uses Foundry test syntax, no new DSL; placed in standalone `audit-harnesses/` directory separate from Hardhat project
+- Foundry forge v1.0: Gas profiling harnesses for advanceGame() worst-case scenarios — does not replace or migrate the Hardhat project; used only for targeted audit harnesses
+- Slither 0.11.5 with `vars-and-auth` and `call-graph` printers: Admin privilege map and full advanceGame() call tree for gas path enumeration
+- Hardhat `REPORT_GAS=true`: Baseline gas measurement across existing 884 tests before Foundry targeted adversarial scenarios
 
-### Expected Features (Audit Coverage)
+**Excluded tools (do not use):** Mythril (SMT stalls on contracts >300 lines; default max-depth 22 insufficient for multi-step FSM); MythX (same underlying engine, adds cost); Securify2 (unmaintained, no Solidity 0.8.x support); Certora Prover (CVL learning curve not justified for time-boxed audit — Halmos covers the critical math properties); Foundry as primary test environment (do not migrate the 884-test Hardhat suite).
 
-The audit is structured as three sequential phases with clear completion gates before proceeding. Phase 1 covers the non-negotiable baseline that every credible audit must complete. Phase 2 covers protocol-specific deep dives that require Phase 1 findings to be stable. Phase 3 covers economic and systemic analysis that requires both prior phases.
+### Expected Features (Audit Scope)
 
-**Must have — Phase 1 (table stakes, blocks report if incomplete):**
-- Access control enumeration — all privileged entry points mapped across all 22 contracts
-- Reentrancy analysis — all external call sites reviewed for CEI compliance, with specific focus on `claimWinnings` (ETH + stETH transfer before state clear) and stETH callback paths
-- Integer arithmetic and precision review — ticket cost formula, EV multipliers, fee splits (90/10 pool split), deity pass T(n) triangular pricing
-- Input validation sweep — ticket quantity bounds, affiliate code format, MintPaymentKind enum bounds, zero-address guards
-- ETH/stETH accounting invariant — all inbound and outbound paths traced; invariant: `address(this).balance + stETH.balanceOf(this) >= claimablePool`
-- Unchecked external call review — stETH.submit(), stETH.transfer(), LINK.transferAndCall(), VRF coordinator calls
+The audit scope is a three-phase Code4rena preparation pass. Phase 1 completes explicitly deferred v1.0 gaps. Phase 2 covers new v2.0 adversarial attack surfaces. Phase 3 synthesizes findings into a Code4rena-format report. Code4rena severity calibration: HIGH = assets directly at risk (requires coded PoC); MEDIUM = function/availability impact with stated assumptions; admin/centralization defaults to QA/LOW unless a non-hypothetical harm path exists without admin bad faith.
 
-**Should have — Phase 2 (protocol-specific depth):**
-- VRF state machine integrity — full request/fulfill/timeout/retry lifecycle; `fulfillRandomWords` non-reversion guarantee; RNG lock completeness
-- Delegatecall storage slot collision analysis — all 10 modules verified via `forge inspect` comparison against `DegenerusGame` storage layout
-- Game-over settlement correctness — terminal state fund distribution trace across the multi-step sequence
-- Stall recovery path security — emergency (3-day) and final sweep (30-day) paths; premature trigger risk
-- Cross-contract interaction safety — stETH rebasing desync, BURNIE burn return value, DGNRS transferFromPool
-- Operator approval abuse — every `_resolvePlayer()` call site verified that value flows to `player` not `msg.sender`
+**Must have (table stakes — missing means audit is incomplete):**
+- ETH accounting invariant: `sum(deposits) == prizePool + futurePool + claimablePool + fees` across all game states — the master invariant every Code4rena warden checks first
+- claimWinnings() CEI cross-function reentrancy: same-function reentrancy confirmed safe by sentinel pattern; cross-function path (purchase() during ETH callback) is unverified
+- BPS split correctness: all splits must sum to input with correct rounding direction; the `_creditClaimable` call site audit is the critical sub-task
+- advanceGame() worst-case gas: complete call graph documented in ARCHITECTURE.md; must measure against 16M block limit with Foundry harnesses
+- COIN/DGNRS mint authorization: vaultMintAllowance bypass paths and claimWhalePass double-mint check
+- Final prioritized findings report: Code4rena severity classification applied to all confirmed findings
 
-**Phase 3 (differentiating depth, requires Phase 1+2 complete):**
-- Economic invariant / EV analysis — lootbox EV multiplier, whale bundle pricing, activity score gaming
-- Sybil/coordinated multi-wallet attack analysis — can 51%+ ticket ownership yield positive group EV?
-- MEV / block proposer attack surface — nudge manipulation after VRF fulfillment, sandwich attacks on phase boundaries
-- Affiliate extraction analysis — circular affiliate structures, referrer+referee positive-sum scenarios
+**Should have (differentiators — likely MEDIUM findings):**
+- Sybil bloat calculation: per-player storage cost, O(n) growth in processTicketBatch, breakeven player count N vs. 16M gas ceiling; economic cost to reach N
+- Admin power abuse: wireVrf coordinator substitution risk, adminStakeEthForStEth solvency guard absence, 3-day stall bypass mechanics
+- VRF retry window exploitation: 18h window timing vs. any state-changing calls permissible during RNG lock period
+- BurnieCoinflip entropy source verification (HIGH if block-level data found; MEDIUM if VRF-based with incorrect EV)
+- Whale/deity combined EV model: can high-activity-score whale extract positive EV from bundle + lootbox combination?
+- Cross-function reentrancy synthesis: full ETH-touching call site map, ERC721 `onERC721Received` callback paths
+- BURNIE 30-day guard completeness across all purchase paths (not just the one in commit 4592d8c)
 
-**Explicitly out of scope (anti-features):**
-- Gas optimization recommendations (separate engagement)
-- Contract rewrites or code PRs (findings with remediation guidance only)
-- Frontend/off-chain code review
-- Mock contract or test infrastructure review
-- Testnet-specific contract configurations (focus on mainnet only)
-- Raw automated scanner output without manual triage and confirmation
+**Defer (Code4rena does not credit these):**
+- Gas optimization recommendations — separate scoring track at Code4rena, explicitly out of scope per PROJECT.md
+- Testnet contract review — TESTNET_ETH_DIVISOR=1,000,000 makes findings non-transferable to mainnet
+- Full formal verification of all 22 contracts — months-long engagement, not a time-boxed audit
+- Re-running v1.0 completed checks: access control matrix, delegatecall storage layout, VRF lifecycle 8-point checklist, FSM transition graph, per-module reentrancy (each confirmed complete and should not be repeated)
 
 ### Architecture Approach
 
-The Degenerus Protocol has a strict 7-phase audit dependency graph that cannot be reordered without creating gaps. Phase 1 (storage foundation) gates every subsequent module review because all 10 modules execute in DegenerusGame's storage context — misunderstanding the slot layout invalidates all downstream analysis. Phase 2 (core state machine and VRF lifecycle) must follow because the AdvanceModule controls the entire FSM progression and its VRF lock semantics affect what every other module can safely do. Phases 3a-3f (game modules) are partially parallelizable but all depend on Phases 1-2. Phases 4 (ETH accounting), 5 (economic attack surface), and 6 (access control) form a sequential chain. Phase 7 (cross-contract synthesis) must be last — it is the integrating pass that maps findings across boundaries and is the one phase that must never be split across reviewers.
+Degenerus uses a delegatecall hub-and-spoke pattern: DegenerusGame (19KB) owns all ETH and storage (135 variables in DegenerusGameStorage) and dispatches every complex operation via delegatecall to 10 modules that execute in Game's storage context. This eliminates upgrade-proxy attack surface but creates three architecture-level audit constraints relevant to v2.0: (1) `nonReentrant` guards at the module level do not protect Game's storage during reentrant calls — guards must be at the DegenerusGame entry point level; (2) all ETH, claimable balances, and pool accounting live in Game's storage, so any module that modifies these without updating the corresponding aggregate pool variable breaks the solvency invariant; (3) cursor state (`ticketCursor`, `ticketLevel`) is shared between `processTicketBatch` and `processFutureTicketBatch` — documented as mutually exclusive but not verified, and a corruption here would cause mid-batch level skips.
 
 **Major components:**
-1. `DegenerusGameStorage` + `ContractAddresses` (storage foundation) — canonical slot layout and compile-time address constants; must be verified before any module is opened
-2. `DegenerusGame` + `DegenerusGameAdvanceModule` + `GameTimeLib` (core state machine) — FSM, VRF callback handler, delegatecall dispatch, state transition guards; central audit target
-3. Game Modules x10 (MintModule, JackpotModule, LootboxModule, EndgameModule, WhaleModule, BoonModule, DecimatorModule, DegeneretteModule, GameOverModule, MintStreakUtils) — all execute via delegatecall in DegenerusGame's context; ordered by ETH value at risk: Mint > Jackpot > Lootbox > Endgame > Whale > supporting
-4. ETH/Token Accounting Layer (DegenerusVault, BurnieCoin, BurnieCoinflip, DegenerusStonk) — cross-contract ETH and token accounting invariants; reviewed holistically not per-contract
-5. Peripheral Contracts (DegenerusAffiliate, DegenerusQuests, DegenerusDeityPass, DegenerusJackpots) — interact with core via privilege model; access control surface
-6. External Integrations (Chainlink VRF V2.5, Lido stETH, LINK ERC-677) — each has protocol-specific audit gotchas documented separately
+1. DegenerusGame — FSM orchestrator and ETH custodian; delegates all complex logic via delegatecall; direct functions: recordMint, claimWinnings, operator approvals; all ETH in/out flows through here
+2. DegenerusGameAdvanceModule — advanceGame() tick logic, VRF request/receive, RNG gate; central DoS surface; complete call graph documented in ARCHITECTURE.md
+3. DegenerusGameJackpotModule — daily ETH distribution, ticket batch processing (processTicketBatch with 550-write budget per call, up to 11M gas cold); contains 40 unchecked blocks (highest density in codebase)
+4. DegenerusGamePayoutUtils — shared credit helpers including `_creditClaimable`; SUSPECTED to not update `claimablePool` — the most important unresolved finding candidate
+5. DegenerusAdmin — VRF subscription owner, emergency coordinator rotation; sole admin power choke point; wireVrf is the highest-risk admin function
+6. Peripheral contracts (BurnieCoinflip, DegenerusVault, DegenerusStonk, DegenerusAffiliate, DegenerusJackpots, DegenerusDeityPass) — external call targets from within delegatecall context; callback reentrancy vectors from COIN, JACKPOTS, and DEITY_PASS
+
+**Key architectural patterns confirmed in v1.0 (do not re-verify):**
+- Pull-withdrawal with 1 wei sentinel — claimableWinnings[player] = 1 before transfer; same-function reentrancy blocked
+- Delegatecall storage layout — zero slot collisions confirmed across all 10 modules
+- VRF lifecycle (8-point Chainlink checklist) — all PASS
 
 ### Critical Pitfalls
 
-The research identified 7 critical and 7 moderate pitfalls. The five most important for phase planning are:
+1. **`_creditClaimable` does not update `claimablePool` (ARCHITECTURE.md Anti-Pattern 2)** — Every call to `_creditClaimable` in JackpotModule, EndgameModule, and PayoutUtils may write to `claimableWinnings[player]` without incrementing `claimablePool`. If any caller omits the separate `claimablePool +=`, aggregate claimable liability silently exceeds the tracked pool. Prevention: audit every call site of `_creditClaimable` and confirm `claimablePool +=` is present in the same code path. This is the most likely unconfirmed HIGH finding in the protocol.
 
-1. **VRF callback gas limit silent DOS** — If `rawFulfillRandomWords` exceeds 300,000 gas (the VRF coordinator's fixed limit), the coordinator does not retry and the game is permanently stalled. Prevention: measure callback gas cost with `forge` gas snapshots at worst-case lootbox state; callback must stay under 200,000 gas with headroom; all complex post-VRF logic should be deferred to the next `advanceGame` call. Address in Phase 2 (RNG state machine).
+2. **advanceGame() gas composition under adversarial state (PITFALL 19)** — processTicketBatch uses up to 550 cold SSTOREs (~11M gas). `_prepareFinalDayFutureTickets` calls processTicketBatch 4 times per tick. payDailyJackpot winner loop adds ~8M. A Sybil attack creating 10K wallets at minimum cost (~25 ETH) could force 19 consecutive advanceGame() calls before the level can proceed. Prevention: measure with Foundry gas-report under worst-case adversarial state; flag any path >12.8M (80% of 16M limit) as HIGH DoS risk.
 
-2. **Nudge window exploitable by block proposer** — `reverseFlip()` allows BURNIE holders to add +1 offset to the upcoming VRF word. If `rngLockedFlag` is cleared before `rngWordCurrent` is consumed by `advanceGame`, a block proposer can see the fulfilled word, calculate the desired nudge count, and front-run `advanceGame` in the same block to control jackpot outcomes. Prevention: verify `rngLockedFlag` remains set continuously from VRF request through word consumption. Address in Phase 2 (highest priority).
+3. **VRF callback gas limit overflow causes silent DOS (PITFALL 1)** — `rawFulfillRandomWords` runs inside a delegatecall within a 300,000-gas limit set by VRF_CALLBACK_GAS_LIMIT. The Chainlink coordinator does not retry on revert. If lootbox pending state grows over the game's lifetime and pushes the callback above the limit, the game is permanently stalled until the 18h timeout. Prevention: measure callback gas with worst-case lootbox state using forge gas snapshots; keep under 200K with headroom.
 
-3. **Storage slot layout drift in delegatecall modules** — Any module that inherits from an extra parent or declares an instance variable shifts its slot view relative to `DegenerusGame`, causing silent state corruption. Prevention: run `forge inspect` on all 10 modules and compare slot-by-slot against DegenerusGame storage layout; this is a 30-minute automated check that must be done before any module review begins. Address in Phase 1.
+4. **adminStakeEthForStEth without solvency guard (ARCHITECTURE.md Anti-Pattern 4)** — ADMIN can stake any ETH amount from Game's balance into Lido without checking that `address(this).balance - amount >= claimablePool`. Players with pending claimWinnings() would receive stETH instead of ETH if the liquid ETH balance is exhausted. Prevention: verify whether Game enforces a solvency guard before staking; if absent, classify as MEDIUM admin power finding.
 
-4. **Rounding direction accumulation drains protocol** — Fee splits of the form `amount * bps / 10000` consistently truncate in one direction. At scale, this creates a balance sheet gap that breaks the ETH accounting invariant. Directly analogous to the $128M Balancer exploit (Nov 2025). Prevention: fuzz all fee split formulas with values from 1 wei to 1000 ETH; verify both halves of every split sum to the original amount. Address in Phase 4.
-
-5. **stETH rebasing breaks accounting invariant and game-over settlement** — `steth.balanceOf(this)` changes between blocks without transfers. Any cached stETH balance used for payout calculations drifts. During multi-step game-over, a Lido slashing event could shrink the balance below the committed settlement amount, causing all endgame withdrawals to revert. Prevention: never cache `steth.balanceOf(this)` in a state variable; game-over settlement must use live balances at payout time. Address in Phase 4 and Phase 2 edge cases.
+5. **BURNIE 30-day guard completeness across all purchase paths (PITFALL 26)** — Commit 4592d8c added a 30-day BURNIE purchase block before liveness-guard timeout, but only for the tested path. All other purchase entry points (operator-proxied, whale bundle, lazy pass, deity pass) must apply the same guard with identical timestamp comparison. This is the mitigation-bypass pattern Code4rena wardens prioritize in second-pass reviews. Prevention: enumerate all purchase paths; fuzz boundary timestamps.
 
 ## Implications for Roadmap
 
-The audit dependency graph drives the phase structure directly. This is not a preference — it is a technical requirement of the delegatecall architecture. Reviewing modules before storage layout, or economic attack surface before accounting correctness, produces findings that can be invalidated or missed entirely.
+The v2.0 audit has a dependency-driven phase build order confirmed by ARCHITECTURE.md. Two phases (1 and 2) can run in parallel if resourced. All phases precede the synthesis report.
 
-### Phase 1: Storage Foundation Verification
-**Rationale:** Every subsequent phase depends on a correct understanding of the storage layout. A slot collision found in Phase 5 is a wasted Phase 3 and Phase 4. This is a 30-minute automated pass that pays for itself immediately.
-**Delivers:** Verified storage layout map for all 10 modules; confirmed no module declares instance variables; `ContractAddresses` constants mapped to expected addresses.
-**Addresses:** FEATURES.md table stakes — delegatecall storage collision analysis (HIGH audit value, HIGH implementation cost)
-**Avoids:** PITFALLS.md Pitfall 5 (storage slot layout drift) — the single most catastrophic bug class in delegatecall systems
+### Phase 1: ETH Accounting Invariant and CEI Verification
+**Rationale:** This is the v1.0 Phase 4 gap (8 of 9 plans unexecuted) and the master dependency. The `_creditClaimable` call site audit cannot wait. ETH accounting is what every Code4rena warden checks first — it is the primary path to HIGH severity. Cannot complete cross-function reentrancy synthesis (Phase 5) until accounting paths are mapped.
+**Delivers:** Confirmed or refuted `_creditClaimable` claimablePool gap; CEI status of all ETH transfer sites (claimWinnings, refundDeityPass, degenerette resolution, endgame auto-rebuy); BPS split correctness across all fee paths; game-over zero-balance proof; stETH rebasing handling verification
+**Addresses:** Table stakes: ETH accounting invariant, claimWinnings() CEI, BPS splits, game-over settlement
+**Avoids:** Pitfalls 6, 7, 22 (stETH rebasing, rounding accumulation, ETH accounting completeness)
+**Tool:** Medusa invariant harness + manual CEI trace of all ETH transfer sites in ARCHITECTURE.md
+**Research flag:** No additional research needed — all ETH transfer sites documented in ARCHITECTURE.md
 
-### Phase 2: Core State Machine and VRF Lifecycle
-**Rationale:** The FSM and VRF state machine are the backbone of the entire protocol. Finding a bug here changes what is possible in all downstream phases. The nudge/VRF-word manipulation (Pitfall 3) is the highest-severity finding candidate in the audit and must be evaluated before any module is reviewed as "safe."
-**Delivers:** Complete VRF lifecycle analysis (8-point Chainlink checklist verified); RNG lock state machine traced through all paths; gas budget verified for `rawFulfillRandomWords`; FSM state transition completeness confirmed.
-**Uses:** Slither `data-dependency` printer, Foundry gas snapshots, manual Chainlink VRF checklist
-**Avoids:** PITFALLS.md Pitfall 1 (VRF callback DOS), Pitfall 2 (stale request ID), Pitfall 3 (nudge window manipulation)
+### Phase 2: advanceGame() Gas Analysis and Sybil Bloat Modeling
+**Rationale:** Independent of Phase 1; can run in parallel. The call graph is complete in ARCHITECTURE.md. Gas analysis determines whether Sybil DoS attacks are economically feasible against the 1000 ETH threat model, which constrains all subsequent economic attack scoping. Must read JackpotModule source to confirm DAILY_ETH_MAX_WINNERS constant before analysis is complete.
+**Delivers:** Worst-case gas measurement for every advanceGame() code path branch; Sybil bloat breakeven analysis (player count N where gas exceeds 16M); ETH cost to reach N Sybil wallets; verdict on whether DoS is exploitable within 1000 ETH threat model budget
+**Addresses:** Differentiator: advanceGame() gas ceiling, Sybil bloat permanent game brick
+**Avoids:** Pitfalls 19, 24 (advanceGame() gas ceiling, last-mover economic advantage)
+**Tool:** Foundry forge `--gas-report` with adversarial state harnesses; REPORT_GAS=true Hardhat baseline; Slither `call-graph` printer for path enumeration
+**Research flag:** No additional research needed; DAILY_ETH_MAX_WINNERS must be read from JackpotModule source
 
-### Phase 3: Game Module Logic
-**Rationale:** All 10 modules execute via delegatecall in DegenerusGame's context. They can be partially parallelized within this phase but all depend on Phases 1 and 2. Sub-ordering within the phase is by ETH value at risk: MintModule (ETH inflow) before JackpotModule (ETH outflow) before LootboxModule (VRF-dependent) before EndgameModule (level transitions) before WhaleModule (pricing formulas) before supporting modules.
-**Delivers:** Per-module findings for all 10 delegatecall modules; pricing formula correctness; lootbox EV multiplier arithmetic; game-over terminal settlement path.
-**Uses:** Slither, Aderyn, Semgrep Decurity rules, Medusa fuzzing on MintModule and JackpotModule
-**Implements:** Architecture Phase 3 sub-phases (3a through 3f)
+### Phase 3: Admin Power Enumeration and VRF Griefing
+**Rationale:** Admin and VRF griefing are partially independent but share wireVrf as a connecting vector. wireVrf is both the highest-risk admin function (coordinator substitution) and the key VRF griefing vector. Analyze once, classify in both. Admin findings default to MEDIUM at Code4rena — careful classification prevents score penalty from overseverity.
+**Delivers:** Complete admin power map (every admin function with worst-case consequence if key compromised); wireVrf coordinator substitution analysis; VRF retry window timing analysis (18h window vs. state-changing calls during lock); subscription drain economics; 3-day stall bypass mechanics
+**Addresses:** Differentiator: admin emergency stall, VRF retry window, VRF subscription drain
+**Avoids:** Pitfalls 18, 21 (admin power vectors, VRF subscription owner attack)
+**Tool:** Slither `vars-and-auth` printer + manual review of DegenerusAdmin.sol; Chainlink VRF V2.5 security docs (already confirmed in STACK.md)
+**Research flag:** No additional research needed
 
-### Phase 4: ETH and Token Accounting Integrity
-**Rationale:** The central invariant (`balance + stETH >= claimablePool`) must hold after every possible cross-contract call sequence. This is a holistic pass across DegenerusGame, DegenerusVault, BurnieCoin, and the stETH integration — it cannot be verified per-contract in isolation. Requires all Phase 3 inflow/outflow paths to be mapped first.
-**Delivers:** Verified ETH accounting invariant; fee split correctness confirmed (all BPS splits sum to input); stETH rebasing behavior documented; BurnieCoin supply invariants confirmed; `receive()` ETH routing verified.
-**Uses:** Medusa invariant harnesses asserting total ETH in == total ETH out; Foundry fuzz tests on all split formulas
-**Avoids:** PITFALLS.md Pitfall 6 (stETH rebasing), Pitfall 7 (rounding accumulation), Pitfall 14 (`receive()` routing miscounting)
+### Phase 4: Token Security and Economic Attack Modeling
+**Rationale:** Token mint authorization (COIN/DGNRS) is HIGH-severity class if a bypass exists. Requires Phase 3 admin map because vaultMintAllowance and claimWhalePass authorization models depend on knowing admin powers. BurnieCoinflip entropy source is an independent check but lower priority — it is either a simple confirmation (VRF-based, safe) or an immediate HIGH (block-level data).
+**Delivers:** vaultMintAllowance bypass verdict; claimWhalePass double-mint verdict; BurnieCoinflip entropy source confirmation; whale+lootbox combined EV model (can EV exceed 1.0 for high-activity-score whale?); activity score inflation cost analysis; BURNIE 30-day guard completeness verification across all purchase paths
+**Addresses:** Differentiator: COIN/DGNRS mint authorization, BurnieCoinflip house edge, whale/deity EV model
+**Avoids:** Pitfalls 26, 27, 28 (BURNIE guard bypass, degenerette CEI, vaultMintAllowance abuse)
+**Tool:** Manual code review + Halmos for T(n) overflow and ticket cost formula arithmetic; Medusa for BURNIE/COIN economics; targeted source reads of DegenerusGameMintStreakUtils and DecimatorModule
 
-### Phase 5: Economic Attack Surface
-**Rationale:** Economic attacks require a complete picture of all mechanics. A finding here often points back to a Phase 3 implementation detail. This phase validates that the game's incentive structure is robust against coordinated adversaries, not just that individual functions are correct.
-**Delivers:** EV model for Sybil group majority ticket ownership; whale bundle and deity pass EV analysis; MEV/block proposer attack surface quantified; affiliate extraction model; activity score manipulation vectors.
-**Uses:** Analytical modeling, Slither, Tenderly for multi-step simulation
-**Avoids:** PITFALLS.md Pitfall 11 (block proposer phase boundary reordering), Pitfall 12 (Sybil majority ticket extraction)
+### Phase 5: Cross-Function Reentrancy Synthesis and Unchecked Block Audit
+**Rationale:** Must be last of the analysis phases — integrates findings from Phases 1-4. Cross-function reentrancy requires knowing all ETH-touching call sites (Phase 1), delegatecall module call boundaries, and which external contracts can callback into Game (Phases 3-4). Unchecked block audit (225 blocks total, 40 in JackpotModule) must verify recent fixes (capBucketCounts underflow, 1 wei sentinel) did not leave adjacent unchecked decrements exposed.
+**Delivers:** Full cross-function reentrancy matrix covering all ETH transfer sites; ERC721 `onERC721Received` callback reentrancy verdict; multicall/operator-proxy delegatecall reentrancy verdict; complete unchecked block audit with adversarial state sequence tests for all 40 JackpotModule blocks; shared cursor corruption verification between processTicketBatch and processFutureTicketBatch
+**Addresses:** Differentiator: cross-function reentrancy synthesis; architecture anti-patterns 1, 2, 3
+**Avoids:** Pitfalls 20, 23, 25 (ERC721 callback reentrancy, multicall reentrancy, unchecked underflow)
+**Tool:** Manual code review with adversarial scenario Foundry tests; Echidna corpus for unchecked block state sequences
 
-### Phase 6: Access Control and Privilege Model
-**Rationale:** Access control issues are context-dependent — a function that looks properly gated may still be abusable if its accounting or economic effects (Phases 4 and 5) allow secondary extraction. Reviewing access control after understanding those phases produces higher-quality findings.
-**Delivers:** Complete authorization matrix for all 22 contracts; operator approval abuse scenarios enumerated; `DegenerusAdmin` privilege model documented; VRF subscription consumer control verified.
-**Uses:** Slither `vars-and-auth` printer
-**Avoids:** PITFALLS.md Pitfall 8 (operator approval cross-player manipulation), Pitfall 16 (VRF subscription griefing)
-
-### Phase 7: Cross-Contract Integration Synthesis
-**Rationale:** Cross-contract interaction bugs are composite — they require understanding both sides of the boundary. This phase synthesizes all prior findings across contract boundaries. It must never be split across reviewers and must be scheduled explicitly, not treated as a byproduct of per-contract work.
-**Delivers:** Full call-chain reentrancy analysis; stETH + LINK callback safety; constructor-time cross-call ordering confirmed; `fulfillRandomWords` caller validation confirmed; composite finding synthesis across all phases.
-**Uses:** Tenderly, Slither `call-graph` printer, manual cross-contract trace
-**Avoids:** FEATURES.md anti-pattern 1 (per-contract isolation missing cross-boundary bugs)
+### Phase 6: Final Synthesis Report
+**Rationale:** Required deliverable for Code4rena contest submission. Code4rena requires PoC for all HIGH/MEDIUM findings. Admin/centralization findings must be correctly classified as QA/MEDIUM (not HIGH) — overseverity reduces warden score. Gas findings are a separate scoring track and must not be mixed with security findings.
+**Delivers:** Prioritized findings report with CRITICAL / HIGH / MEDIUM / LOW / Gas / QA sections; coded PoC for all HIGH/MEDIUM findings; Code4rena severity methodology applied throughout; remediation guidance per finding
+**Addresses:** Must-have deliverable: final prioritized findings report (plan 07-05 from v1.0)
+**Avoids:** Anti-feature: admin findings submitted as HIGH (damages warden score at Code4rena)
 
 ### Phase Ordering Rationale
 
-- **Storage first (Phase 1)** because the delegatecall architecture makes all subsequent analysis invalid if slot assignments are wrong. This is the most unique constraint of this protocol versus a standard multi-contract system.
-- **VRF second (Phase 2)** because the nudge/VRF-word manipulation is the highest-severity candidate and its analysis determines whether dozens of module behaviors are exploitable. Finding this after module review wastes module review time.
-- **Modules before accounting (Phase 3 before Phase 4)** because the ETH accounting invariant cannot be verified without first mapping all inflow and outflow paths across all modules. Phase 3 produces the path map; Phase 4 verifies the invariant over it.
-- **Accounting before economics (Phase 4 before Phase 5)** because economic attacks exploit the gap between intended and actual fund flows. Economic analysis is meaningless without verified accounting.
-- **Access control late (Phase 6)** because access control findings are richer when informed by what the attacker can do with elevated access (Phases 4 and 5).
-- **Synthesis last (Phase 7)** because cross-boundary findings require per-contract understanding from all prior phases.
+- Phases 1 and 2 can run in parallel — Phase 1 focuses on accounting paths, Phase 2 focuses on gas paths; both are independent
+- Phase 3 must come after Phase 1 is scoped (admin staking can affect solvency — understanding Phase 1 accounting model helps classify Phase 3 findings correctly)
+- Phase 4 must come after Phase 3 (admin power map informs token authorization analysis; vaultMintAllowance abuse requires knowing admin capabilities)
+- Phase 5 must come after Phases 1-4 (integrating pass that synthesizes all ETH-touching call sites found in prior phases)
+- Phase 6 must be last (synthesis of all confirmed findings with severity classification)
 
 ### Research Flags
 
-Phases likely needing deeper investigation during execution (known unknowns requiring live codebase inspection):
+Phases with well-documented patterns (no additional research needed):
+- **Phase 1:** CEI and accounting invariant patterns are established; all ETH transfer sites documented in ARCHITECTURE.md; methodology is a direct application of known patterns
+- **Phase 2:** Gas profiling methodology is standard; advanceGame() call graph is complete; methodology is direct application
+- **Phase 3:** Chainlink VRF V2.5 security checklist already confirmed in STACK.md; admin function inventory in ARCHITECTURE.md
 
-- **Phase 2 (VRF and RNG):** The nudge window timing (Pitfall 3) depends on the exact sequencing of `rngLockedFlag` state transitions. The research identifies the risk and the verification approach but the pass/fail depends on reading the actual code. This is the audit's highest-risk open question.
-- **Phase 3c (LootboxModule):** The activity score EV multiplier formula and its interaction with the lootbox VRF word derivation require careful mathematical modeling. The research flags this but explicit formula analysis is needed.
-- **Phase 4 (stETH accounting):** Whether any path caches `steth.balanceOf(this)` in a state variable is determined by code inspection. Research identifies the risk pattern but not its presence or absence.
-- **Phase 5 (Economic modeling):** Sybil EV analysis requires building a mathematical model of the prize pool mechanics. No existing source documents whether the Degenerus prize pool structure is provably EV-negative for majority ticket holders.
-
-Phases with well-documented patterns (standard coverage, no additional research needed):
-
-- **Phase 1 (Storage layout):** `forge inspect` comparison is a deterministic, automated check. Methodology is fully documented.
-- **Phase 6 (Access control):** Slither `vars-and-auth` printer and the OWASP SC01 checklist provide complete coverage. Well-documented patterns.
+Phases with potential mid-execution research needs:
+- **Phase 4 (BurnieCoinflip):** If entropy source is block-level data rather than VRF, research the MEV-Boost proposer/builder separation attack mechanics specific to Ethereum mainnet (2025 PBS model differs from 2023 documentation)
+- **Phase 4 (EV modeling):** Whale+lootbox combined EV requires understanding DegenerusGameMintStreakUtils activity score implementation — read source before modeling; no external research needed
+- **Phase 5 (unchecked blocks):** JackpotModule source must be fully read before Phase 5 begins; a targeted source read (not a research pass) is needed
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Toolchain recommendations based on official sources (Chainlink docs, Trail of Bits blog, Foundry v1.0 announcement). Medusa/Halmos sourced from authoritative producers. Mythril exclusion corroborated by comparative benchmarking. |
-| Features | HIGH | OWASP SC Top 10 2026 verified from official OWASP source. Chainlink VRF V2.5 checklist from official docs. Protocol-specific vulnerability classes derived from direct codebase inspection. |
-| Architecture | HIGH (codebase) / MEDIUM (methodology) | Architecture analysis from direct inspection of DegenerusGame.sol, DegenerusGameStorage.sol, DegenerusGameAdvanceModule.sol. Methodology sourced from Hacken and Cyfrin audit guides — MEDIUM confidence. |
-| Pitfalls | HIGH | Critical pitfalls corroborated: VRF callback gas limit from official Chainlink docs; rounding from Balancer $128M post-mortem; storage collision from Audius/AllianceBlock documented incidents; stETH from official Lido integration guide. |
+| Stack | HIGH | All tools verified by primary sources: Trail of Bits (Medusa), Paradigm (Foundry v1.0), a16z (Halmos production use), official Chainlink docs. Only Halmos version (v0.3.3) has MEDIUM confidence — GitHub release date not confirmed, may be late 2024. |
+| Features | HIGH | Code4rena severity rubric sourced from official docs.code4rena.com. AI Arena C4 audit report reviewed as direct analogue (same game contract category). Scope gaps confirmed against PROJECT.md. |
+| Architecture | HIGH | All claims derived from direct source code inspection (113,562 lines Solidity). Call graph, ETH flow paths, admin surfaces, and anti-patterns are from source code, not inference. DecimatorModule and JackpotModule (full text) not yet read — these are execution-time gaps, not confidence gaps. |
+| Pitfalls | HIGH | All critical pitfalls (1-7, 18-28) confirmed from source code inspection + corroboration against real-world exploits (Balancer rounding, Euler composability, AI Arena C4, LooksRare Infiltration, Audius storage collision). |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Nudge window timing (Phase 2):** The exact state of `rngLockedFlag` between VRF fulfillment and `advanceGame` word consumption is the most important open question. Code inspection during Phase 2 will resolve this. If the window exists, this is a critical finding. If the flag covers the full window, this pitfall is mitigated.
-- **BurnieCoin `burnCoin` return behavior (Phase 4):** Whether `burnCoin` reverts on insufficient balance or returns false is not documented in the research. A 5-minute code read resolves this but it is flagged as a gap because the consequence (free nudges/coinflips) is high.
-- **EV negativity proof (Phase 5):** Whether the prize pool mechanics guarantee negative EV for a majority Sybil group requires building a mathematical model during the audit. No existing source proves or disproves this for the Degenerus structure.
-- **`TESTNET_ETH_DIVISOR` propagation:** Research confirms testnet contracts are out of scope, but auditors should verify that no testnet configuration bleeds into mainnet contract logic (e.g., conditional compilation paths). A brief search during Phase 1 is sufficient.
-- **Medusa Hardhat ESM compatibility:** Research notes that Medusa's crytic-compile integration with Hardhat ESM projects may need the `--build-system hardhat` flag. Verify this works before fuzzing campaigns begin; fall back to Echidna if integration fails.
+- **`_creditClaimable` claimablePool update — unconfirmed:** ARCHITECTURE.md flags this as "suspected missing" from reading PayoutUtils. Must be confirmed by auditing every call site of `_creditClaimable` in JackpotModule, EndgameModule, and all other callers during Phase 1. If confirmed missing, this is an immediate HIGH finding and expands Phase 1 scope.
+
+- **DAILY_ETH_MAX_WINNERS constant — not yet read:** The payDailyJackpot winner loop gas estimate (~8M) depends on this constant in JackpotModule. Must be read before Phase 2 gas analysis conclusions are finalized.
+
+- **JackpotModule cursor reset behavior — unconfirmed:** Anti-Pattern 1 in ARCHITECTURE.md identifies `ticketCursor`/`ticketLevel` sharing between processTicketBatch and processFutureTicketBatch as "documented mutually exclusive but not verified." The cursor reset path when `ticketLevel != lvl` must be read in JackpotModule source before Phase 2 and Phase 5.
+
+- **DecimatorModule CEI — not yet read:** ARCHITECTURE.md flags `claimDecimatorJackpot` as needing CEI verification. DecimatorModule was not fully read during architecture research. Phase 1 and Phase 5 must include this source file.
+
+- **Medusa ESM compatibility:** Medusa v1.5.0 uses crytic-compile's Hardhat integration. This is an ESM project (`"type": "module"`). STACK.md notes ESM projects may need `--build-system hardhat` flag. Verify compilation before writing invariant harnesses; fall back to Echidna if integration fails.
+
+- **Halmos version currency:** v0.3.3 may be from mid-2024. Run `pip install halmos && halmos --version` before Phase 4 to confirm current version and check for updates.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [Chainlink VRF V2.5 Security Considerations](https://docs.chain.link/vrf/v2-5/security) — official 8-point VRF consumer audit checklist
-- [DegenerusGameStorage.sol, DegenerusGame.sol, DegenerusGameAdvanceModule.sol] — direct codebase inspection (primary source for architecture and pitfalls)
-- [Medusa: Trail of Bits Blog (Feb 2025)](https://blog.trailofbits.com/2025/02/14/unleashing-medusa-fast-and-scalable-smart-contract-fuzzing/) — Medusa capabilities and Echidna comparison
-- [Foundry v1.0 Announcement (Paradigm)](https://www.paradigm.xyz/2025/02/announcing-foundry-v1-0) — storage layout inspection, invariant testing
-- [Lido stETH Integration Guide](https://docs.lido.fi/guides/lido-tokens-integration-guide/) — stETH rebasing behavior, share vs amount distinction
-- [OWASP Smart Contract Top 10: 2026](https://scs.owasp.org/sctop10/) — vulnerability class framework
-- [Balancer $128M rounding exploit (Check Point Research, Nov 2025)](https://research.checkpoint.com/2025/how-an-attacker-drained-128m-from-balancer-through-rounding-error-exploitation/) — rounding accumulation attack documentation
+- Direct contract source analysis: `contracts/DegenerusGame.sol`, `contracts/modules/DegenerusGameAdvanceModule.sol`, `contracts/modules/DegenerusGamePayoutUtils.sol`, `contracts/storage/DegenerusGameStorage.sol`, `contracts/DegenerusAdmin.sol` (113,562 lines inspected)
+- [Medusa v1 announcement — Trail of Bits Blog (Feb 14, 2025)](https://blog.trailofbits.com/2025/02/14/unleashing-medusa-fast-and-scalable-smart-contract-fuzzing/)
+- [Medusa GitHub releases (crytic/medusa)](https://github.com/crytic/medusa/releases) — v1.5.0 Feb 6, 2025
+- [Echidna GitHub releases (crytic/echidna)](https://github.com/crytic/echidna/releases) — v2.3.1 Jan 16, 2025
+- [Chainlink VRF V2.5 Security Considerations](https://docs.chain.link/vrf/v2-5/security) — 8-point VRF checklist, subscription owner attack
+- [Foundry v1.0 Announcement (Paradigm, Feb 2025)](https://www.paradigm.xyz/2025/02/announcing-foundry-v1-0)
+- [Code4rena Severity Categorization](https://docs.code4rena.com/competitions/severity-categorization)
+- [Code4rena AI Arena Audit Report (Feb 2024)](https://code4rena.com/reports/2024-02-ai-arena) — 8H/9M from game contract; direct analogue
+- [Halmos for Pectra formal verification (a16z, 2025)](https://a16zcrypto.com/posts/article/formal-verification-of-pectra-system-contracts-with-halmos/)
+- PROJECT.md — v2.0 milestone definition, active requirements, v1.0 gap list, out-of-scope list
 
 ### Secondary (MEDIUM confidence)
-- [Slither GitHub (crytic/slither)](https://github.com/crytic/slither) — printer commands, Hardhat integration
-- [Aderyn GitHub (Cyfrin/aderyn)](https://github.com/Cyfrin/aderyn) — AST analysis, MCP support
-- [Decurity semgrep-smart-contracts](https://github.com/Decurity/semgrep-smart-contracts) — proxy-storage-collision rule
-- [Halmos formal verification (a16z)](https://a16zcrypto.com/posts/article/formal-verification-of-pectra-system-contracts-with-halmos/) — Pectra system contract verification use case
-- [Hacken Smart Contracts Audit Methodology](https://docs.hacken.io/methodologies/smart-contracts/) — audit phase structure
-- [MixBytes: Collisions of Solidity Storage Layouts](https://mixbytes.io/blog/collisions-solidity-storage-layouts) — delegatecall storage collision patterns
-- [Solodit audit checklist](https://solodit.cyfrin.io/checklist) — ~380 community checks from real audits
-- [Chainlink VRF white hat $300K bounty (subscription owner attack)](https://cryptoslate.com/chainlink-vrf-vulnerability-thwarted-by-white-hat-hackers-with-300k-reward/) — VRF subscription management risk
-- [Fuzzing comparison: Foundry vs Echidna vs Medusa](https://github.com/devdacian/solidity-fuzzing-comparison) — Medusa invariant-breaking advantage over Foundry
+- [Fuzzing comparison: Foundry vs Echidna vs Medusa (devdacian)](https://github.com/devdacian/solidity-fuzzing-comparison) — Medusa breaks 2 invariants where Echidna breaks 1 within 5 min
+- [Halmos GitHub releases (a16z/halmos)](https://github.com/a16z/halmos/releases) — v0.3.3 latest confirmed, date uncertain
+- [Aderyn GitHub releases (Cyfrin/aderyn)](https://github.com/Cyfrin/aderyn/releases) — v0.6.8, exact date unconfirmed
+- [hardhat-gas-reporter npm (cgewecke)](https://github.com/cgewecke/hardhat-gas-reporter) — v2.x ESM compatibility status
+- [Hacken: Top 10 Smart Contract Vulnerabilities 2025](https://hacken.io/discover/smart-contract-vulnerabilities/)
+- [Immunefi: The Ultimate Guide to Reentrancy](https://medium.com/immunefi/the-ultimate-guide-to-reentrancy-19526f105ac)
+- [Chainlink VRF subscription owner $300K bounty](https://cryptoslate.com/chainlink-vrf-vulnerability-thwarted-by-white-hat-hackers-with-300k-reward/)
 
-### Tertiary (LOW confidence)
-- [Certora Goes Open Source](https://www.certora.com/blog/certora-goes-open-source) — verify current licensing before use as Phase 2 fallback
-- [Mythril limitations (Vultbase comparison)](https://www.vultbase.com/articles/smart-contract-security-tools-compared) — SMT timeout characterization; verify current tool state
+### Tertiary (corroborating exploit precedents)
+- Sherlock LooksRare Infiltration audit — VRF callback gas overflow HIGH finding
+- Code4rena Tigris audit (2022) — admin freeze-withdrawal HIGH pattern
+- Euler Finance exploit post-mortem — composable correct-but-dangerous function interaction
+- Balancer $128M exploit (Nov 2025) — rounding direction drain
+- Audius $6M hack (2022) — delegatecall storage collision
 
 ---
-*Research completed: 2026-02-28*
+*Research completed: 2026-03-04*
+*Supersedes: SUMMARY.md dated 2026-02-28 (v1.0 audit)*
 *Ready for roadmap: yes*
