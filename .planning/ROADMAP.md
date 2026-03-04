@@ -73,7 +73,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — GAS-01: advanceGame() complete call graph gas measurement (all 13+ stages)
+- [x] 09-01-PLAN.md — GAS-01: advanceGame() complete call graph gas measurement (all 13+ stages)
 - [ ] 09-02-PLAN.md — GAS-02 + GAS-03 + GAS-04: Sybil Bloat ticket batch analysis and DoS economics
 - [ ] 09-03-PLAN.md — GAS-05 + GAS-06: payDailyJackpot ceiling + VRF callback gas measurement
 - [ ] 09-04-PLAN.md — GAS-07: Rational inaction liveness analysis
