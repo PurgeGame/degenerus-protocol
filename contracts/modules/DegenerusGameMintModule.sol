@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
@@ -63,6 +63,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
     /// @notice Generic revert for overflow conditions.
     error E();
+    /// @notice BURNIE ticket purchases are blocked within 30 days of the liveness-guard timeout.
+    error CoinPurchaseCutoff();
 
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
@@ -108,6 +110,11 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 4000;
     uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 4000;
     uint16 private constant LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000;
+
+    /// @dev BURNIE ticket purchases are blocked this long after levelStartTime.
+    ///      Prevents cheap positioning in the 30-day window before the liveness guard fires.
+    uint256 private constant COIN_PURCHASE_CUTOFF = 335 days; // 365 - 30
+    uint256 private constant COIN_PURCHASE_CUTOFF_LVL0 = 882 days; // 912 - 30
 
     /// @dev Number of daily jackpots per level (must match AdvanceModule).
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
@@ -580,6 +587,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         address payer = msg.sender;
 
         if (ticketQuantity != 0) {
+            // Block BURNIE tickets within 30 days of liveness-guard game over.
+            uint256 elapsed = block.timestamp - levelStartTime;
+            if (level == 0 ? elapsed > COIN_PURCHASE_CUTOFF_LVL0 : elapsed > COIN_PURCHASE_CUTOFF) revert CoinPurchaseCutoff();
             _callTicketPurchase(
                 buyer,
                 payer,
