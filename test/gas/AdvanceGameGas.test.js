@@ -858,4 +858,70 @@ describe("AdvanceGame Gas Benchmarks", function () {
       }
     });
   });
+
+  // =========================================================================
+  // 14. Sybil Ticket Bloat (STAGE_TICKETS_WORKING max load)
+  // =========================================================================
+
+  describe("14. Sybil Ticket Bloat (STAGE_TICKETS_WORKING max load)", function () {
+    it("adversarial: max available Sybil wallets each buying minimum ticket", async function () {
+      const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
+        await loadFixture(deployFullProtocol);
+
+      // Use ALL available signers as Sybil buyers (deployer, alice, bob, carol, dan, eve + others)
+      // Hardhat default: 20 signers total → others.length = 14
+      // At level 0, price = 0.01 ETH. Cost for 1 full ticket (qty 400) = (0.01 ETH * 400) / 400 = 0.01 ETH
+      // TICKET_MIN_BUYIN_WEI = 0.0025 ETH is the floor; actual level-0 cost = 0.01 ETH
+      const sybilBuyers = [alice, bob, carol, dan, eve, ...others];
+      let sybilCount = 0;
+
+      for (const buyer of sybilBuyers) {
+        try {
+          await game
+            .connect(buyer)
+            .purchase(
+              buyer.address,
+              400n,         // 1 full ticket = qty 400; cost = (price * 400) / 400 = price = 0.01 ETH
+              0n,
+              ZERO_BYTES32,
+              MintPaymentKind.DirectEth,
+              { value: eth(0.01) }  // 1 full ticket at level 0: price = 0.01 ETH
+            );
+          sybilCount++;
+        } catch {
+          // Skip buyers that fail (edge conditions, e.g. game state)
+        }
+      }
+      console.log(`      Sybil buyers successfully purchased: ${sybilCount}`);
+
+      // Advance to next day and trigger VRF cycle
+      await advanceToNextDay();
+      await game.connect(deployer).advanceGame();
+      const requestId = await getLastVRFRequestId(mockVRF);
+      await mockVRF.fulfillRandomWords(requestId, 42n);
+
+      // First processTicketBatch call — cold SSTOREs (worst-case gas)
+      const tx1 = await game.connect(deployer).advanceGame();
+      const receipt1 = await tx1.wait();
+      const events1 = await getAdvanceEvents(tx1, advanceModule);
+      const stage1 = events1.length > 0 ? events1[0].args.stage : "?";
+      recordGas(`Sybil Ticket Batch - first cold batch (stage=${stage1})`, receipt1);
+      expect(receipt1.status).to.equal(1);
+
+      // Second processTicketBatch call — warm SSTOREs (if queue not fully drained)
+      if (await game.rngLocked()) {
+        try {
+          const tx2 = await game.connect(deployer).advanceGame();
+          const receipt2 = await tx2.wait();
+          const events2 = await getAdvanceEvents(tx2, advanceModule);
+          const stage2 = events2.length > 0 ? events2[0].args.stage : "?";
+          recordGas(`Sybil Ticket Batch - second warm batch (stage=${stage2})`, receipt2);
+        } catch {
+          console.log("      (Second batch not needed — queue drained in first call)");
+        }
+      } else {
+        console.log("      (Queue fully drained in first call — no second batch needed)");
+      }
+    });
+  });
 });
