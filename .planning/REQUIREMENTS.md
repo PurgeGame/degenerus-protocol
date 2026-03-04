@@ -54,9 +54,9 @@
 - [ ] **TOKEN-01**: `vaultMintAllowance` bypass verdict: no path to unbounded COIN minting confirmed
 - [ ] **TOKEN-02**: `claimWhalePass` double-mint check: no replay or re-entry minting path confirmed
 - [ ] **TOKEN-03**: BurnieCoinflip entropy source: VRF vs. block-level data determined — HIGH if block-level data found
-- [ ] **TOKEN-04**: Whale + lootbox combined EV model: no ticket-level combination produces EV > 1.0 for any player at any activity score
-- [ ] **TOKEN-05**: Activity score inflation cost: minimum ETH required to extract maximum EV benefit bounded against cost; no positive-return inflation path
-- [ ] **TOKEN-06**: BURNIE 30-day guard completeness: all purchase paths (operator-proxied, whale bundle, lazy pass, deity pass) confirmed to apply the guard with identical timestamp comparison
+- [x] **TOKEN-04**: Whale + lootbox combined EV model: no ticket-level combination produces EV > 1.0 for any player at any activity score
+- [x] **TOKEN-05**: Activity score inflation cost: minimum ETH required to extract maximum EV benefit bounded against cost; no positive-return inflation path
+- [x] **TOKEN-06**: BURNIE 30-day guard completeness: all purchase paths (operator-proxied, whale bundle, lazy pass, deity pass) confirmed to apply the guard with identical timestamp comparison
 - [x] **TOKEN-07**: Affiliate economic exploits: self-referral, wash trading, and circular referral ring EV modeled and bounded
 - [x] **TOKEN-08**: DGNRS `lockForLevel`/`unlock` cap reset: users cannot repeatedly lock/unlock to reset per-level ETH/BURNIE spending caps and extract double EV via level transition timing
 
@@ -139,9 +139,9 @@
 | TOKEN-01 | Phase 11 | Pending |
 | TOKEN-02 | Phase 11 | Pending |
 | TOKEN-03 | Phase 11 | Pending |
-| TOKEN-04 | Phase 11 | Pending |
-| TOKEN-05 | Phase 11 | Pending |
-| TOKEN-06 | Phase 11 | Pending |
+| TOKEN-04 | Phase 11 | Complete |
+| TOKEN-05 | Phase 11 | Complete |
+| TOKEN-06 | Phase 11 | Complete |
 | TOKEN-07 | Phase 11 | Complete |
 | TOKEN-08 | Phase 11 | Complete |
 | VAULT-01 | Phase 11 | Complete |

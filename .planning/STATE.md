@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T23:17:26.875Z"
+last_updated: "2026-03-04T23:18:11.077Z"
 progress:
   total_phases: 13
   completed_phases: 11
   total_plans: 75
-  completed_plans: 64
+  completed_plans: 66
 ---
 
 # Project State
@@ -66,6 +66,7 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 10 P04 | 10 | 2 tasks | 1 files |
 | Phase 11 P04 | 8 | 2 tasks | 1 files |
 | Phase 11 P03 | 15 | 2 tasks | 1 files |
+| Phase 11 P02 | 10 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,9 @@ Recent decisions affecting current work:
 - [Phase 11]: VAULT-02 PASS: _burnFor() floor division protocol-favorable; partial burns sum ≤ full burn (proved arithmetically); onlyGame blocks Stonk donations
 - [Phase 11]: TOKEN-07 PASS: self-referral blocked at two independent code paths; REF_CODE_LOCKED=bytes32(1) permanently seals slots; circular ring INFO only (6% recirculation = designed rakeback); wash trading is 6.25% discount, no amplification
 - [Phase 11]: TOKEN-08 PASS: LockStillActive guard at unlock() line 469 blocks same-level double-cap; auto-unlock in lockForLevel() resets spend counters atomically without crediting claimables; _lockedClaimableValues is view-only; level-transition timing window is clean
+- [Phase 11]: TOKEN-04 PASS: max EV surplus = 3.5 ETH per player per level; no whale+lootbox combination yields EV > 1.0 after accounting for purchase costs
+- [Phase 11]: TOKEN-05 PASS: activity score inflation cost floor (~24-52 ETH cheapest path to max tier) exceeds maximum EV benefit ceiling (3.5 ETH); no positive-return inflation path exists
+- [Phase 11]: TOKEN-06 PASS: operator-proxied purchaseCoin routes through _resolvePlayer() (beneficiary-naming only) then delegatecall to MintModule; COIN_PURCHASE_CUTOFF guard fires at ticketQuantity != 0 regardless of msg.sender; whale/lazy/deity passes use ETH tickets and are exempt by design
 
 ### Pending Todos
 
