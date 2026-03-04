@@ -15,3 +15,7 @@ contracts/mocks/
 docs/
 contracts-testnet/
 .planning/
+forge-out/
+lib/
+cache/fuzz/
+slither-report.json
