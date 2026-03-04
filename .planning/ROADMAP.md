@@ -18,9 +18,9 @@
 - [~] Phase 4: ETH and Token Accounting Integrity (1/9 plans) — INCOMPLETE (accepted gap)
 - [x] Phase 5: Economic Attack Surface (7/7 plans) — completed 2026-03-04
 - [x] Phase 6: Access Control and Privilege Model (7/7 plans) — completed 2026-03-04
-- [~] Phase 7: Cross-Contract Integration Synthesis (3/5 plans) — INCOMPLETE (accepted gap)
+- [x] Phase 7: Cross-Contract Integration Synthesis (5/5 plans) — completed 2026-03-04 (07-04 + 07-05 backfilled in v2.0)
 
-**Known Gaps:** Phase 4 ETH accounting invariant (8 plans), Phase 7 synthesis plans 07-03 and 07-05
+**Known Gaps:** Phase 4 ETH accounting invariant (closed by Phase 8 in v2.0)
 
 See: `.planning/milestones/v1.0-ROADMAP.md` for full phase details and findings.
 

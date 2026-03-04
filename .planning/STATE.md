@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T21:35:41.354Z"
+last_updated: "2026-03-04T21:44:00Z"
 progress:
   total_phases: 10
   completed_phases: 8
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04 after v2.0 milestone start)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** v2.0 Adversarial Audit — Phase 8 COMPLETE; Phase 9 (Gas Analysis) is next.
+**Current focus:** v2.0 Adversarial Audit — Phase 8 COMPLETE; Phase 7 v2.0 backfill (07-04 + 07-05) COMPLETE; Phase 9 (Gas Analysis) is next.
 
 ## Current Position
 
 Phase: 9 of 13 (advanceGame() Gas Analysis and Sybil Bloat) — not yet planned
 Plan: 0 of TBD in current phase
-Status: Phase 8 complete; Phase 9 ready to plan
-Last activity: 2026-03-04 — Phase 8 complete (5/5 plans, ACCT-01 through ACCT-10 all PASS or PASS+INFO; one LOW finding: creditLinkReward not implemented)
+Status: Phase 8 complete; Phase 7 final report complete (07-05); Phase 9 ready to plan
+Last activity: 2026-03-04 — Phase 07-05 complete: 527-line final findings report written, 56/56 v1 requirements assessed, 0 Critical / 1 High / 3 Medium / 6 Low / 2 Fixed severity distribution confirmed
 
 Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 
@@ -55,6 +55,7 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 
 *Updated after each plan completion*
 | Phase 07 P03 | 15 | 1 tasks | 1 files |
+| Phase 07 P05 | 5 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,9 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-03: Phase 4-04 confirmed complete — 8 unlisted functions are all access-restricted or self-call-only with zero ETH-transfer surface
 - [Phase 07]: 07-03: Cross-function reentrancy via resolveDegeneretteBets/claimDecimatorJackpot is SAFE — new credits are legitimately earned and properly balanced in claimablePool
 - [Phase 07]: 07-03: handleFinalSweep is SAFE without a mutable guard — trusted-only recipients (VAULT, DGNRS) have non-reentrant receive() functions
+- [Phase 07]: 07-05: deity pass double refund (GO-F01) reclassified to FIXED — deityPassPaidTotal[buyer] = 0 is already zeroed at refundDeityPass() line 710, closing the cross-transaction double-refund path
+- [Phase 07]: 07-05: deityBoonSlots staticcall (XCON-F01) rated MEDIUM — view-only correctness issue, no state corruption; issueDeityBoon() uses delegatecall correctly
+- [Phase 07]: 07-05: Final v1 audit severity distribution confirmed: 0 Critical, 1 High, 3 Medium, 6 Low, ~45 Info, 2 Fixed
 
 ### Pending Todos
 
@@ -85,7 +89,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-04
-Stopped at: Phase 8 complete — all 5 plans executed, ACCT-01 through ACCT-10 verdicts written, VERIFICATION.md written, ROADMAP.md updated
+Stopped at: Phase 07-05 complete — final findings report written (527 lines, 56/56 requirements), SUMMARY.md written, STATE.md and ROADMAP.md updated
 Resume file: None
 
 ## Phase 8 Findings Summary (for Phase 13 report)
