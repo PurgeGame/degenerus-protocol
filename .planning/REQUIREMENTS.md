@@ -63,8 +63,8 @@
 ### Vault and Stonk Economics (VAULT)
 *DegenerusVault and DegenerusStonk share the `(reserve * burned) / supply` redemption formula.*
 
-- [ ] **VAULT-01**: DegenerusVault ETH donation via `receive()`: direct ETH send to vault cannot manipulate the share redemption formula to benefit one shareholder class at the expense of another
-- [ ] **VAULT-02**: DegenerusStonk burn-to-claim formula: `claimAmount = (reserveBalance * sharesBurned) / totalSupply` rounding direction verified; no path for disproportionate extraction via partial burns or supply manipulation
+- [x] **VAULT-01**: DegenerusVault ETH donation via `receive()`: direct ETH send to vault cannot manipulate the share redemption formula to benefit one shareholder class at the expense of another
+- [x] **VAULT-02**: DegenerusStonk burn-to-claim formula: `claimAmount = (reserveBalance * sharesBurned) / totalSupply` rounding direction verified; no path for disproportionate extraction via partial burns or supply manipulation
 
 ### Timestamp and Timing Attacks (TIME)
 *Validators can shift `block.timestamp` by ±900s on mainnet.*
@@ -144,8 +144,8 @@
 | TOKEN-06 | Phase 11 | Pending |
 | TOKEN-07 | Phase 11 | Pending |
 | TOKEN-08 | Phase 11 | Pending |
-| VAULT-01 | Phase 11 | Pending |
-| VAULT-02 | Phase 11 | Pending |
+| VAULT-01 | Phase 11 | Complete |
+| VAULT-02 | Phase 11 | Complete |
 | TIME-01 | Phase 11 | Pending |
 | TIME-02 | Phase 11 | Pending |
 | REENT-01 | Phase 12 | Pending |
