@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T23:18:38.306Z"
+last_updated: "2026-03-04T23:19:14.264Z"
 progress:
   total_phases: 13
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 75
-  completed_plans: 66
+  completed_plans: 67
 ---
 
 # Project State
@@ -68,6 +68,7 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 11 P03 | 15 | 2 tasks | 1 files |
 | Phase 11 P02 | 10 | 2 tasks | 1 files |
 | Phase 11 P01 | 12 | 2 tasks | 1 files |
+| Phase 11 P05 | 10 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,8 @@ Recent decisions affecting current work:
 - [Phase 11]: TOKEN-01 PASS: all vaultAllowance sites guarded — constructor seed (compile-time), _transfer-to-VAULT (net-zero), vaultEscrow (GAME+VAULT gate BurnieCoin.sol:679-682)
 - [Phase 11]: TOKEN-02 PASS: claimWhalePass strict CEI confirmed — whalePassClaims[player]=0 at line 498 before all effects; no ETH external call; replay blocked at line 495
 - [Phase 11]: TOKEN-03 PASS: BurnieCoinflip entropy VRF-only — processCoinflipPayouts uses rngWordCurrent (Chainlink VRF); historical fallback uses rngWordByDay[] not blockhash/prevrandao
+- [Phase 11]: TIME-01 PASS: dailyIdx guard + Ethereum timestamp monotonicity prevents double jackpot trigger via ±900s validator drift
+- [Phase 11]: TIME-02 PASS (INFO): quest currentDay read from stored activeQuests[0].day, not block.timestamp; streak griefing risk is BURNIE-only (INFO), no ETH exposure
 
 ### Pending Todos
 

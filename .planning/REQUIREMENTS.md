@@ -69,8 +69,8 @@
 ### Timestamp and Timing Attacks (TIME)
 *Validators can shift `block.timestamp` by ±900s on mainnet.*
 
-- [ ] **TIME-01**: Daily boundary validator manipulation: ±900s drift cannot allow a player to trigger two daily jackpot allocations in one real day or skip another player's daily window
-- [ ] **TIME-02**: Quest streak griefing: a validator cannot selectively delay another player's streak-claiming transaction past the day boundary to break their streak
+- [x] **TIME-01**: Daily boundary validator manipulation: ±900s drift cannot allow a player to trigger two daily jackpot allocations in one real day or skip another player's daily window
+- [x] **TIME-02**: Quest streak griefing: a validator cannot selectively delay another player's streak-claiming transaction past the day boundary to break their streak
 
 ### Cross-Function Reentrancy and Unchecked Blocks (REENT)
 *Integration pass — must follow ACCT, ADMIN, TOKEN, VAULT. Synthesizes all ETH-touching call sites.*
@@ -146,8 +146,8 @@
 | TOKEN-08 | Phase 11 | Complete |
 | VAULT-01 | Phase 11 | Complete |
 | VAULT-02 | Phase 11 | Complete |
-| TIME-01 | Phase 11 | Pending |
-| TIME-02 | Phase 11 | Pending |
+| TIME-01 | Phase 11 | Complete |
+| TIME-02 | Phase 11 | Complete |
 | REENT-01 | Phase 12 | Pending |
 | REENT-02 | Phase 12 | Pending |
 | REENT-03 | Phase 12 | Pending |
