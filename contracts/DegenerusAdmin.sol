@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 
@@ -311,7 +311,7 @@ contract DegenerusAdmin {
 
     /// @notice Current VRF subscription ID.
     /// @dev Created during first wireVrf(); can change during emergency recovery.
-    uint64 public subscriptionId;
+    uint256 public subscriptionId;
 
     /// @notice VRF key hash for the current coordinator.
     /// @dev Different coordinators may require different key hashes.
@@ -369,7 +369,7 @@ contract DegenerusAdmin {
 
         // Store VRF config
         coordinator = ContractAddresses.VRF_COORDINATOR;
-        subscriptionId = uint64(subId);
+        subscriptionId = subId;
         vrfKeyHash = ContractAddresses.VRF_KEY_HASH;
 
         emit SubscriptionCreated(subId);
@@ -493,7 +493,7 @@ contract DegenerusAdmin {
         coordinator = newCoordinator;
         newSubId = IVRFCoordinatorV2_5Owner(newCoordinator)
             .createSubscription();
-        subscriptionId = uint64(newSubId);
+        subscriptionId = newSubId;
         vrfKeyHash = newKeyHash;
         emit CoordinatorUpdated(newCoordinator, newSubId);
         emit SubscriptionCreated(newSubId);
