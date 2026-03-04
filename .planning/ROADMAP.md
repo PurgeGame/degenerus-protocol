@@ -32,7 +32,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full phase details and findings.
 
 **Note on parallel execution:** Phases 8 and 9 are independent work streams. Phase 8 covers ETH accounting paths; Phase 9 covers gas paths. They share no dependencies and can run concurrently. All phases preceding Phase 12 must complete before the reentrancy synthesis pass begins.
 
-- [ ] **Phase 8: ETH Accounting Invariant and CEI Verification** - Verify ETH solvency invariant, _creditClaimable call site audit, BPS rounding, and all ETH-transfer CEI patterns
+- [x] **Phase 8: ETH Accounting Invariant and CEI Verification** - Verify ETH solvency invariant, _creditClaimable call site audit, BPS rounding, and all ETH-transfer CEI patterns — completed 2026-03-04
 - [ ] **Phase 9: advanceGame() Gas Analysis and Sybil Bloat** - Measure worst-case gas by code path and derive Sybil breakeven under the 16M block limit
 - [ ] **Phase 10: Admin Power, VRF Griefing, and Assembly Safety** - Map all admin rug vectors, enumerate VRF griefing paths, and verify assembly slot calculations
 - [ ] **Phase 11: Token Security, Economic Attacks, Vault and Timing** - Confirm mint authorization, EV model correctness, BURNIE guard completeness, vault formulas, and timestamp tolerance
@@ -54,11 +54,11 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full phase details and findings.
 **Plans**: 5 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — ACCT-02: _creditClaimable 11-call-site audit across 5 modules
-- [ ] 08-02-PLAN.md — ACCT-04 + ACCT-05: CEI reentrancy tracing (claimWinnings, LINK onTokenTransfer, stETH)
-- [ ] 08-03-PLAN.md — ACCT-06 + ACCT-07: DegenerusVault share rounding + BurnieCoin supply invariant
-- [ ] 08-04-PLAN.md — ACCT-01 + ACCT-08: Hardhat invariant helper + 7-state-sequence test + game-over proof
-- [ ] 08-05-PLAN.md — ACCT-03 + ACCT-09 + ACCT-10: BPS fee splits, stake guard, receive() donation safety
+- [x] 08-01-PLAN.md — ACCT-02: _creditClaimable 11-call-site audit across 5 modules — PASS
+- [x] 08-02-PLAN.md — ACCT-04 + ACCT-05: CEI reentrancy tracing (claimWinnings, LINK onTokenTransfer, stETH) — PASS, PASS+INFO+LOW
+- [x] 08-03-PLAN.md — ACCT-06 + ACCT-07: DegenerusVault share rounding + BurnieCoin supply invariant — PASS, PASS
+- [x] 08-04-PLAN.md — ACCT-01 + ACCT-08: Hardhat invariant helper + 7-state-sequence test + game-over proof — PASS, PASS
+- [x] 08-05-PLAN.md — ACCT-03 + ACCT-09 + ACCT-10: BPS fee splits, stake guard, receive() donation safety — PASS, PASS, PASS+INFO
 
 ### Phase 9: advanceGame() Gas Analysis and Sybil Bloat
 **Goal**: The worst-case gas for every `advanceGame()` code path is measured against the 16M block limit, and the ETH cost required to create a Sybil set large enough to trigger permanent DoS is computed against the 1000 ETH threat model
@@ -134,7 +134,7 @@ Phases 8 and 9 can run in parallel. Phase 10 requires Phase 8 complete. Phase 11
 | 5. Economic Attack Surface | v1.0 | 7/7 | Complete | 2026-03-04 |
 | 6. Access Control and Privilege Model | v1.0 | 7/7 | Complete | 2026-03-04 |
 | 7. Cross-Contract Integration Synthesis | v1.0 | 3/5 | Incomplete — gap accepted | - |
-| 8. ETH Accounting Invariant and CEI Verification | v2.0 | 0/5 | In progress | - |
+| 8. ETH Accounting Invariant and CEI Verification | v2.0 | 5/5 | Complete | 2026-03-04 |
 | 9. advanceGame() Gas Analysis and Sybil Bloat | v2.0 | 0/TBD | Not started | - |
 | 10. Admin Power, VRF Griefing, and Assembly Safety | v2.0 | 0/TBD | Not started | - |
 | 11. Token Security, Economic Attacks, Vault and Timing | v2.0 | 0/TBD | Not started | - |
