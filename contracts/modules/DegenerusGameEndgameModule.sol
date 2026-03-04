@@ -28,9 +28,8 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *
  * ```
  * runRewardJackpots()
- *     +- BAF (levels 10,20,...,90 — NOT x00): 10-25% of future pool
- *     +- Terminal x00: 10% Decimator + 90% next-level ticketholder jackpot
- *     +- Decimator (levels 5,15,25...85): 10% of future pool
+ *     +- BAF (every 10 levels): 10-25% of future pool (level 100 uses 20%)
+ *     +- Decimator (levels 5,15,25...85): 10% of future pool (level 100 uses 30%)
  * ```
  */
 contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
@@ -120,26 +119,16 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     ///
     /// ## BAF (Big-Ass Flip) Trigger Schedule
     ///
-    /// | Level              | Pool Source    | Pool Size       |
-    /// |--------------------|----------------|-----------------|
-    /// | 10, 20, ..., 90    | future pool    | 10%             |
-    /// | 50                 | future pool    | 25%             |
-    /// | x00 (100,200,...)  | —              | SKIPPED          |
+    /// | Level         | Pool Source    | Pool Size       |
+    /// |---------------|----------------|-----------------|
+    /// | 10, 20, 30... | future pool    | 10%             |
+    /// | 50            | future pool    | 25%             |
+    /// | 100           | future pool    | 20% special     |
     ///
-    /// ## Terminal Jackpot (x00 levels)
-    ///
-    /// | Component       | Pool Source        | Pool Size | Mechanism |
-    /// |-----------------|--------------------|-----------|--------------------|
-    /// | Decimator       | base future pool   | 10%       | Decimator buckets  |
-    /// | Big Jackpot     | base future pool   | 90%       | Day-5 bucket dist  |
-    ///
-    /// The big jackpot uses Day-5-style distribution via JackpotModule.runTerminalJackpot:
-    /// FINAL_DAY_SHARES_PACKED (60/13/13/13), trait-based buckets at targetLvl (lvl+1).
-    ///
-    /// ## Decimator Trigger Schedule (non-terminal)
+    /// ## Decimator Trigger Schedule
     ///
     /// Fires at: 5, 15, 25, 35, 45, 55, 65, 75, 85 (NOT 95)
-    /// Pool: 10% of future pool
+    /// Pool: 10% of future pool (level 100 uses 30% special)
     function runRewardJackpots(uint24 lvl, uint256 rngWord) external {
         uint256 futurePoolLocal = futurePrizePool;
         uint256 baseFuturePool = futurePoolLocal;
@@ -151,8 +140,8 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         // BAF Jackpot (every 10 levels)
         // ---------------------------------------------------------------------
 
-        if (prevMod10 == 0 && prevMod100 != 0) {
-            uint256 bafPct = lvl == 50 ? 25 : 10;
+        if (prevMod10 == 0) {
+            uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 25 : 10);
             uint256 bafPoolWei = (baseFuturePool * bafPct) / 100;
 
             // Pull the full BAF pool out first; refunds/lootbox recycle back in after resolution.
@@ -174,37 +163,17 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         }
 
         // ---------------------------------------------------------------------
-        // Terminal Jackpot (x00 levels): 10% Decimator + 90% next-level ticketholders
+        // Decimator Jackpot (level 100 special)
         // ---------------------------------------------------------------------
 
         if (prevMod100 == 0) {
-            // 10% Decimator
-            uint256 decPoolWei = (baseFuturePool * 10) / 100;
+            uint256 decPoolWei = (baseFuturePool * 30) / 100;
             if (decPoolWei != 0) {
                 uint256 returnWei = IDegenerusGame(address(this))
                     .runDecimatorJackpot(decPoolWei, lvl, rngWord);
                 uint256 spend = decPoolWei - returnWei;
                 futurePoolLocal -= spend;
                 claimableDelta += spend;
-            }
-
-            // 90% big jackpot to next-level ticketholders (Day-5-style bucket distribution)
-            uint256 termPoolWei = (baseFuturePool * 90) / 100;
-            if (termPoolWei != 0) {
-                uint256 fpBefore = futurePrizePool;
-                uint256 termPaid = IDegenerusGame(address(this))
-                    .runTerminalJackpot(termPoolWei, lvl + 1, rngWord);
-                if (termPaid != 0) {
-                    futurePoolLocal -= termPaid;
-                }
-                // Whale pass recycling / auto-rebuy may add back to futurePrizePool storage.
-                // Re-sync since futurePoolLocal is a stale cache during the external call.
-                uint256 fpAfter = futurePrizePool;
-                if (fpAfter != fpBefore) {
-                    futurePoolLocal += (fpAfter - fpBefore);
-                    futurePrizePool = fpBefore;
-                }
-                // claimablePool already updated inside _distributeJackpotEth — do NOT add to claimableDelta
             }
         }
 
