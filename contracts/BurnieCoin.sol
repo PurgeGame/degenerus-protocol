@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.26;
+pragma solidity 0.8.34;
 
 /**
  * @title BurnieCoin
@@ -20,7 +20,7 @@ pragma solidity 0.8.26;
  *      - Only one bountyOwedTo address at a time
  *
  * @dev SECURITY:
- *      - Access control: onlyDegenerusGameContract, onlyFlipCreditors, onlyVault
+ *      - Access control: onlyDegenerusGameContract, onlyFlipCreditors, onlyVault, onlyAdmin
  *      - CEI pattern: burns before external calls
  *      - RNG lock prevents stake manipulation during VRF callback
  *      - MIN threshold (1,000 BURNIE) prevents dust spam
@@ -95,8 +95,8 @@ contract BurnieCoin {
 
     /// @notice Emitted when ContractAddresses.ADMIN credits LINK-funded bonus directly.
     /// @param player The recipient of the credit.
-    /// @param amount The amount minted (18 decimals).
-
+    /// @param amount The amount credited as flip stake (18 decimals).
+    event LinkCreditRecorded(address indexed player, uint256 amount);
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The contract that escrowed the funds (VAULT or GAME).
@@ -564,6 +564,18 @@ contract BurnieCoin {
         IBurnieCoinflip(coinflipContract).creditFlipBatch(players, amounts);
     }
 
+    /// @notice Credit BURNIE as flip stake to a player as a reward for donating LINK.
+    /// @dev Only callable by ContractAddresses.ADMIN (called from onTokenTransfer after
+    ///      LINK is forwarded to the VRF subscription). Credits are given as flip stake
+    ///      so the reward is locked into the coinflip system rather than freely transferable.
+    /// @param player The recipient of the credit.
+    /// @param amount Amount of BURNIE to credit as flip stake (18 decimals).
+    function creditLinkReward(address player, uint256 amount) external onlyAdmin {
+        if (player == address(0) || amount == 0) return;
+        IBurnieCoinflip(coinflipContract).creditFlip(player, amount);
+        emit LinkCreditRecorded(player, amount);
+    }
+
     function _claimCoinflipShortfall(address player, uint256 amount) private {
         if (amount == 0) return;
         if (degenerusGame.rngLocked()) return;
@@ -601,9 +613,10 @@ contract BurnieCoin {
       |  |  Modifier              | Allowed Callers                        | |
       |  +------------------------+----------------------------------------+ |
       |  |  onlyDegenerusGame     | degenerusGame only                     | |
-      |  |  onlyTrustedContracts  | GAME, AFFILIATE                      | |
-      |  |  onlyFlipCreditors     | GAME, AFFILIATE   | |
+      |  |  onlyTrustedContracts  | GAME, AFFILIATE                        | |
+      |  |  onlyFlipCreditors     | GAME, AFFILIATE                        | |
       |  |  onlyVault             | VAULT only                             | |
+      |  |  onlyAdmin             | ADMIN only                             | |
       |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
 
@@ -640,6 +653,13 @@ contract BurnieCoin {
     ///      Used for: vaultMintTo.
     modifier onlyVault() {
         if (msg.sender != ContractAddresses.VAULT) revert OnlyVault();
+        _;
+    }
+
+    /// @dev Restricts access to the ContractAddresses.ADMIN contract only.
+    ///      Used for: creditLinkReward.
+    modifier onlyAdmin() {
+        if (msg.sender != ContractAddresses.ADMIN) revert OnlyGame();
         _;
     }
 
