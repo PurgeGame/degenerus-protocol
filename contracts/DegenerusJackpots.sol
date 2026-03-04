@@ -192,12 +192,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  |  5% | Random pick: 3rd or 4th BAF slot                          | |
       |  | 10% | Affiliate draw (top referrers, weighted 5/3/2/0)          | |
       |  |  5% | Far-future ticket holders (3% 1st / 2% 2nd by BAF score)  | |
-      |  | 40% | Scatter 1st place (50 rounds × 4 trait tickets)           | |
-      |  | 20% | Scatter 2nd place (50 rounds × 4 trait tickets)           | |
+      |  | 40% | Scatter 1st place (50 rounds x 4 next-level trait tickets) | |
+      |  | 20% | Scatter 2nd place (50 rounds x 4 next-level trait tickets) | |
       |  +-----------------------------------------------------------------+ |
       |                                                                      |
-      |  ELIGIBILITY (required for all winners):                             |
-      |  • ethMintStreakCount >= 8                                           |
+      |  ELIGIBILITY:                                                        |
+      |  * Non-zero address only (no streak requirement)                     |
       |                                                                      |
       |  SECURITY:                                                           |
       |  • VRF-derived randomness for all random selections                  |
@@ -357,7 +357,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
             for (uint8 i; i < candidateCount && winnerCount < 4; ) {
                 address cand = candidates[i];
-                if (_eligible(cand)) {
+                if (cand != address(0)) {
                     affiliateWinners[winnerCount] = cand;
                     affiliateScores[winnerCount] = candidateScores[i];
                     unchecked {
@@ -477,7 +477,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
                     ++salt;
                 }
                 entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
-                (, , address[] memory tickets) = degenerusGame.sampleTraitTickets(entropy);
+                (, address[] memory tickets) = degenerusGame.sampleTraitTicketsAtLevel(lvl + 1, entropy);
 
                 // Pick up to 4 tickets from the sampled set.
                 uint256 limit = tickets.length;
@@ -506,13 +506,13 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 }
 
                 // Bucket winners if eligible and capacity not exceeded; otherwise refund their would-be share later.
-                if (_eligible(best)) {
+                if (best != address(0)) {
                     firstWinners[firstCount] = best;
                     unchecked {
                         ++firstCount;
                     }
                 }
-                if (_eligible(second)) {
+                if (second != address(0)) {
                     secondWinners[secondCount] = second;
                     unchecked {
                         ++secondCount;
@@ -592,19 +592,11 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /*+======================================================================+
       |                      INTERNAL HELPER FUNCTIONS                       |
       +======================================================================+
-      |  Utility functions for eligibility, bucket packing, and scoring.     |
+      |  Utility functions for bucket packing and scoring.                    |
       +======================================================================+*/
 
-    /// @dev Check if player meets BAF eligibility requirements.
-    /// @param player Address to check.
-    /// @return True if player has 8+ consecutive ETH mint streak.
-    function _eligible(address player) internal view returns (bool) {
-        if (player == address(0)) return false;
-        return degenerusGame.ethMintStreakCount(player) >= 8;
-    }
-
-    /// @dev Credit prize to eligible winner or return false for refund.
-    ///      Writes to preallocated buffers if eligible.
+    /// @dev Credit prize to non-zero winner or return false for refund.
+    ///      Writes to preallocated buffers if winner is valid.
     /// @param candidate Potential winner address.
     /// @param prize Prize amount in wei.
     /// @param winnersBuf Pre-allocated winners array.
@@ -617,9 +609,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
         address[] memory winnersBuf,
         uint256[] memory amountsBuf,
         uint256 idx
-    ) private view returns (bool credited) {
+    ) private pure returns (bool credited) {
         if (prize == 0) return false;
-        if (_eligible(candidate)) {
+        if (candidate != address(0)) {
             winnersBuf[idx] = candidate;
             amountsBuf[idx] = prize;
             return true;
