@@ -28,8 +28,9 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *
  * ```
  * runRewardJackpots()
- *     +- BAF (every 10 levels): 10-25% of future pool (level 100 uses 20%)
- *     +- Decimator (levels 5,15,25...85): 10% of future pool (level 100 uses 30%)
+ *     +- BAF (levels 10,20,...,90 — NOT x00): 10-25% of future pool
+ *     +- Terminal x00: 10% Decimator + 90% next-level ticketholder jackpot
+ *     +- Decimator (levels 5,15,25...85): 10% of future pool
  * ```
  */
 contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
@@ -119,16 +120,23 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     ///
     /// ## BAF (Big-Ass Flip) Trigger Schedule
     ///
-    /// | Level         | Pool Source    | Pool Size       |
-    /// |---------------|----------------|-----------------|
-    /// | 10, 20, 30... | future pool    | 10%             |
-    /// | 50            | future pool    | 25%             |
-    /// | 100           | future pool    | 20% special     |
+    /// | Level              | Pool Source    | Pool Size       |
+    /// |--------------------|----------------|-----------------|
+    /// | 10, 20, ..., 90    | future pool    | 10%             |
+    /// | 50                 | future pool    | 25%             |
+    /// | x00 (100,200,...)  | —              | SKIPPED          |
     ///
-    /// ## Decimator Trigger Schedule
+    /// ## Terminal Jackpot (x00 levels)
+    ///
+    /// | Component       | Pool Source        | Pool Size |
+    /// |-----------------|--------------------|-----------|
+    /// | Decimator       | base future pool   | 10%       |
+    /// | Big Jackpot     | base future pool   | 90% (to next-level ticketholders) |
+    ///
+    /// ## Decimator Trigger Schedule (non-terminal)
     ///
     /// Fires at: 5, 15, 25, 35, 45, 55, 65, 75, 85 (NOT 95)
-    /// Pool: 10% of future pool (level 100 uses 30% special)
+    /// Pool: 10% of future pool
     function runRewardJackpots(uint24 lvl, uint256 rngWord) external {
         uint256 futurePoolLocal = futurePrizePool;
         uint256 baseFuturePool = futurePoolLocal;
@@ -140,8 +148,8 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         // BAF Jackpot (every 10 levels)
         // ---------------------------------------------------------------------
 
-        if (prevMod10 == 0) {
-            uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 25 : 10);
+        if (prevMod10 == 0 && prevMod100 != 0) {
+            uint256 bafPct = lvl == 50 ? 25 : 10;
             uint256 bafPoolWei = (baseFuturePool * bafPct) / 100;
 
             // Pull the full BAF pool out first; refunds/lootbox recycle back in after resolution.
@@ -163,17 +171,29 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         }
 
         // ---------------------------------------------------------------------
-        // Decimator Jackpot (level 100 special)
+        // Terminal Jackpot (x00 levels): 10% Decimator + 90% next-level ticketholders
         // ---------------------------------------------------------------------
 
         if (prevMod100 == 0) {
-            uint256 decPoolWei = (baseFuturePool * 30) / 100;
+            // 10% Decimator
+            uint256 decPoolWei = (baseFuturePool * 10) / 100;
             if (decPoolWei != 0) {
                 uint256 returnWei = IDegenerusGame(address(this))
                     .runDecimatorJackpot(decPoolWei, lvl, rngWord);
                 uint256 spend = decPoolWei - returnWei;
                 futurePoolLocal -= spend;
                 claimableDelta += spend;
+            }
+
+            // 90% big jackpot to next-level ticketholders
+            uint256 termPoolWei = (baseFuturePool * 90) / 100;
+            if (termPoolWei != 0) {
+                uint256 termClaimed = _runTerminalJackpot(termPoolWei, lvl, rngWord);
+                if (termClaimed != 0) {
+                    futurePoolLocal -= termClaimed;
+                    claimableDelta += termClaimed;
+                }
+                // If no winners found, funds stay in futurePool (termClaimed == 0)
             }
         }
 
@@ -508,6 +528,82 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         _applyWhalePassStats(player, startLevel);
         emit WhalePassClaimed(player, msg.sender, halfPasses, startLevel);
         _queueTicketRange(player, startLevel, 100, uint32(halfPasses));
+    }
+
+    // -------------------------------------------------------------------------
+    // Terminal Jackpot (x00 levels)
+    // -------------------------------------------------------------------------
+
+    /**
+     * @notice Distribute terminal jackpot pool pro-rata to next-level ticketholders.
+     * @dev Samples 50 rounds of up to 4 addresses from traitBurnTicket[lvl+1] via
+     *      sampleTraitTicketsAtLevel. Winners receive shares proportional to their
+     *      occurrence count across all rounds. Credits via _addClaimableEth
+     *      (auto-rebuy supported).
+     *
+     * @param poolWei Total ETH to distribute.
+     * @param lvl Current level (winners sampled from lvl+1).
+     * @param rngWord VRF entropy seed.
+     * @return claimableDelta Total ETH credited to claimable balances.
+     */
+    function _runTerminalJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) private returns (uint256 claimableDelta) {
+        uint24 targetLvl = lvl + 1;
+        uint256 entropy = rngWord;
+
+        // Phase 1: Sample 50 rounds, accumulate addresses and occurrence counts.
+        // Max unique winners = 50 * 4 = 200 (typically far fewer due to overlap).
+        address[] memory allAddrs = new address[](200);
+        uint256[] memory counts = new uint256[](200);
+        uint256 uniqueCount;
+        uint256 totalOccurrences;
+
+        for (uint256 r; r < 50; ) {
+            entropy = EntropyLib.entropyStep(entropy);
+            (, address[] memory tickets) = IDegenerusGame(address(this))
+                .sampleTraitTicketsAtLevel(targetLvl, entropy);
+
+            uint256 tLen = tickets.length;
+            for (uint256 t; t < tLen; ) {
+                address addr = tickets[t];
+                if (addr != address(0)) {
+                    // Search for existing entry
+                    bool found;
+                    for (uint256 u; u < uniqueCount; ) {
+                        if (allAddrs[u] == addr) {
+                            counts[u]++;
+                            found = true;
+                            break;
+                        }
+                        unchecked { ++u; }
+                    }
+                    if (!found) {
+                        allAddrs[uniqueCount] = addr;
+                        counts[uniqueCount] = 1;
+                        unchecked { ++uniqueCount; }
+                    }
+                    unchecked { ++totalOccurrences; }
+                }
+                unchecked { ++t; }
+            }
+            unchecked { ++r; }
+        }
+
+        if (totalOccurrences == 0) return 0; // No next-level ticketholders
+
+        // Phase 2: Distribute pro-rata by occurrence count.
+        entropy = EntropyLib.entropyStep(entropy);
+        for (uint256 i; i < uniqueCount; ) {
+            uint256 share = (poolWei * counts[i]) / totalOccurrences;
+            if (share != 0) {
+                claimableDelta += _addClaimableEth(allAddrs[i], share, entropy);
+                entropy = EntropyLib.entropyStep(entropy);
+            }
+            unchecked { ++i; }
+        }
     }
 
     // -------------------------------------------------------------------------
