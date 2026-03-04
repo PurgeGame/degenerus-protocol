@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T22:17:27.806Z"
+last_updated: "2026-03-04T22:22:10.803Z"
 progress:
   total_phases: 11
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 66
-  completed_plans: 57
+  completed_plans: 58
 ---
 
 # Project State
@@ -59,6 +59,7 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 09 P01 | 20 | 2 tasks | 1 files |
 | Phase 09 P04 | 8 | 2 tasks | 1 files |
 | Phase 09 P02 | 15 | 2 tasks | 2 files |
+| Phase 09 P03 | 3 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Recent decisions affecting current work:
 - [Phase 09]: GAS-02 PASS: processTicketBatch max measured 6,284,995 gas (39.3% of 16M); Sybil cold batch 5,193,019 gas
 - [Phase 09]: GAS-03 PASS: WRITES_BUDGET_SAFE=550 enforces hard per-call ceiling of ~7.4M gas; no N wallets can push single advanceGame() call to 16M
 - [Phase 09]: GAS-04 PASS: permanent Sybil DoS costs ~4,950 ETH/day at minimum ticket floor; exceeds 1,000 ETH threat model (LOW theoretical)
+- [Phase 09]: GAS-05 PASS: payDailyJackpot stage=11 at 887,410 gas (5.5% of 16M); split design (stage-11 ETH + stage-9 BURNIE) is correct optimization per source comment
+- [Phase 09]: GAS-06 PASS: VRF callback (rawFulfillRandomWords) measured at 62,740 gas — 137,260 below 200K target, 237,260 below 300K Chainlink limit
 
 ### Pending Todos
 
@@ -94,12 +97,12 @@ None yet.
 
 - [Research flag]: Medusa Hardhat ESM compatibility — verify `--build-system hardhat` flag works before fuzzing campaigns; fall back to Echidna if crytic-compile integration fails
 - [Research flag]: `_creditClaimable` claimablePool update — ARCHITECTURE.md flags as "suspected missing"; ACCT-02 is the most likely unconfirmed HIGH finding; audit every call site in Phase 8 before drawing conclusions
-- [Research flag]: DAILY_ETH_MAX_WINNERS constant not yet read — needed for GAS-05 payDailyJackpot loop gas ceiling; read JackpotModule source at start of Phase 9
+- [Resolved]: DAILY_ETH_MAX_WINNERS=321 confirmed; GAS-05 verdict PASS at 887,410 gas (stage=11)
 
 ## Session Continuity
 
 Last session: 2026-03-04
-Stopped at: Phase 09-02 complete — GAS-02/03/04 verdicts all PASS; Sybil cold batch 5,193,019 gas; ceiling 7.4M; permanent DoS ~4,950 ETH/day
+Stopped at: Phase 09-03 complete — GAS-05/GAS-06 verdicts both PASS; VRF callback 62,740 gas (137,260 below 200K target); payDailyJackpot stage=11 887,410 gas (5.5% of 16M)
 Resume file: None
 
 ## Phase 8 Findings Summary (for Phase 13 report)
