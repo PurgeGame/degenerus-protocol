@@ -51,9 +51,9 @@
 ### Token Security and Economic Attacks (TOKEN)
 *Requires admin map from ADMIN — vaultMintAllowance authorization model depends on it.*
 
-- [ ] **TOKEN-01**: `vaultMintAllowance` bypass verdict: no path to unbounded COIN minting confirmed
-- [ ] **TOKEN-02**: `claimWhalePass` double-mint check: no replay or re-entry minting path confirmed
-- [ ] **TOKEN-03**: BurnieCoinflip entropy source: VRF vs. block-level data determined — HIGH if block-level data found
+- [x] **TOKEN-01**: `vaultMintAllowance` bypass verdict: no path to unbounded COIN minting confirmed
+- [x] **TOKEN-02**: `claimWhalePass` double-mint check: no replay or re-entry minting path confirmed
+- [x] **TOKEN-03**: BurnieCoinflip entropy source: VRF vs. block-level data determined — HIGH if block-level data found
 - [x] **TOKEN-04**: Whale + lootbox combined EV model: no ticket-level combination produces EV > 1.0 for any player at any activity score
 - [x] **TOKEN-05**: Activity score inflation cost: minimum ETH required to extract maximum EV benefit bounded against cost; no positive-return inflation path
 - [x] **TOKEN-06**: BURNIE 30-day guard completeness: all purchase paths (operator-proxied, whale bundle, lazy pass, deity pass) confirmed to apply the guard with identical timestamp comparison
@@ -136,9 +136,9 @@
 | ASSY-01 | Phase 10 | Complete |
 | ASSY-02 | Phase 10 | Complete |
 | ASSY-03 | Phase 10 | Complete |
-| TOKEN-01 | Phase 11 | Pending |
-| TOKEN-02 | Phase 11 | Pending |
-| TOKEN-03 | Phase 11 | Pending |
+| TOKEN-01 | Phase 11 | Complete |
+| TOKEN-02 | Phase 11 | Complete |
+| TOKEN-03 | Phase 11 | Complete |
 | TOKEN-04 | Phase 11 | Complete |
 | TOKEN-05 | Phase 11 | Complete |
 | TOKEN-06 | Phase 11 | Complete |
