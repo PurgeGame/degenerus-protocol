@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 /*+==============================================================================+
   |                        DEGENERUS JACKPOTS CONTRACT                           |
@@ -192,8 +192,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  |  5% | Random pick: 3rd or 4th BAF slot                          | |
       |  | 10% | Affiliate draw (top referrers, weighted 5/3/2/0)          | |
       |  |  5% | Far-future ticket holders (3% 1st / 2% 2nd by BAF score)  | |
-      |  | 40% | Scatter 1st place (50 rounds x 4 next-level trait tickets) | |
-      |  | 20% | Scatter 2nd place (50 rounds x 4 next-level trait tickets) | |
+      |  | 40% | Scatter 1st place (50 rounds x 4 multi-level trait tickets) | |
+      |  | 20% | Scatter 2nd place (50 rounds x 4 multi-level trait tickets) | |
       |  +-----------------------------------------------------------------+ |
       |                                                                      |
       |  ELIGIBILITY:                                                        |
@@ -471,13 +471,35 @@ contract DegenerusJackpots is IDegenerusJackpots {
             uint256 secondCount;
             uint256 scatterStart = n;
 
+            bool isCentury = (lvl % 100 == 0);
+
             // Fixed rounds of 4-ticket sampling to keep gas bounded per call.
             for (uint8 round = 0; round < BAF_SCATTER_ROUNDS; ) {
                 unchecked {
                     ++salt;
                 }
                 entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
-                (, address[] memory tickets) = degenerusGame.sampleTraitTicketsAtLevel(lvl + 1, entropy);
+
+                // Level targeting varies by BAF type:
+                // Non-x00: 20 rounds lvl+1, 10 each lvl+2/+3/+4
+                // x00:     4 rounds lvl+1, 4 each lvl+2/+3, 38 random from past 99
+                uint24 targetLvl;
+                if (isCentury) {
+                    if (round < 4) targetLvl = lvl + 1;
+                    else if (round < 8) targetLvl = lvl + 2;
+                    else if (round < 12) targetLvl = lvl + 3;
+                    else {
+                        uint24 maxBack = lvl > 99 ? 99 : lvl - 1;
+                        targetLvl = maxBack > 0 ? lvl - 1 - uint24(entropy % maxBack) : lvl;
+                    }
+                } else {
+                    if (round < 20) targetLvl = lvl + 1;
+                    else if (round < 30) targetLvl = lvl + 2;
+                    else if (round < 40) targetLvl = lvl + 3;
+                    else targetLvl = lvl + 4;
+                }
+
+                (, address[] memory tickets) = degenerusGame.sampleTraitTicketsAtLevel(targetLvl, entropy);
 
                 // Pick up to 4 tickets from the sampled set.
                 uint256 limit = tickets.length;
