@@ -78,7 +78,7 @@
 - [x] **REENT-01**: Cross-function reentrancy matrix: all ETH transfer sites mapped with every reentrant call path enumerated
 - [x] **REENT-02**: ERC721 `onERC721Received` callback reentrancy: all `safeMint` paths in DegenerusNFT formally verified — most commonly missed finding class in C4 game audits
 - [x] **REENT-03**: Delegatecall multicall/operator-proxy reentrancy: no re-entry through operator delegation chain confirmed
-- [ ] **REENT-04**: 40 JackpotModule unchecked blocks audited with adversarial state sequences; recent fix commits (4592d8c, cbbafa0, 9539c6d) tested for bypass across all purchase paths
+- [x] **REENT-04**: 40 JackpotModule unchecked blocks audited with adversarial state sequences; recent fix commits (4592d8c, cbbafa0, 9539c6d) tested for bypass across all purchase paths
 - [x] **REENT-05**: Shared cursor corruption: `ticketCursor`/`ticketLevel` mutual exclusion formally verified between `processTicketBatch` and `processFutureTicketBatch`
 - [x] **REENT-06**: DecimatorModule `claimDecimatorJackpot` CEI: ETH transfer vs. state update ordering confirmed safe
 - [x] **REENT-07**: `adminSwapEthForStEth` accounting integrity: admin ETH↔stETH swap preserves pool accounting invariant; no extraction path via the swap
@@ -151,7 +151,7 @@
 | REENT-01 | Phase 12 | Complete |
 | REENT-02 | Phase 12 | Complete |
 | REENT-03 | Phase 12 | Complete |
-| REENT-04 | Phase 12 | Pending |
+| REENT-04 | Phase 12 | Complete |
 | REENT-05 | Phase 12 | Complete |
 | REENT-06 | Phase 12 | Complete |
 | REENT-07 | Phase 12 | Complete |
