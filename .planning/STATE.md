@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Adversarial Audit
 status: unknown
-last_updated: "2026-03-04T23:19:14.264Z"
+last_updated: "2026-03-04T23:41:19.759Z"
 progress:
-  total_phases: 13
+  total_phases: 14
   completed_phases: 12
-  total_plans: 75
-  completed_plans: 67
+  total_plans: 78
+  completed_plans: 69
 ---
 
 # Project State
@@ -69,6 +69,8 @@ Progress: [##░░░░░░░░] 17% (1/6 phases complete)
 | Phase 11 P02 | 10 | 2 tasks | 1 files |
 | Phase 11 P01 | 12 | 2 tasks | 1 files |
 | Phase 11 P05 | 10 | 2 tasks | 1 files |
+| Phase 12 P03 | 12 | 2 tasks | 1 files |
+| Phase 12 P01 | 15 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -119,6 +121,11 @@ Recent decisions affecting current work:
 - [Phase 11]: TOKEN-03 PASS: BurnieCoinflip entropy VRF-only — processCoinflipPayouts uses rngWordCurrent (Chainlink VRF); historical fallback uses rngWordByDay[] not blockhash/prevrandao
 - [Phase 11]: TIME-01 PASS: dailyIdx guard + Ethereum timestamp monotonicity prevents double jackpot trigger via ±900s validator drift
 - [Phase 11]: TIME-02 PASS (INFO): quest currentDay read from stored activeQuests[0].day, not block.timestamp; streak griefing risk is BURNIE-only (INFO), no ETH exposure
+- [Phase 12]: REENT-03 PASS: _resolvePlayer is pure view SLOAD, no callback, no multicall interface in DegenerusGame
+- [Phase 12]: REENT-05 PASS: formal mutual exclusion proof — future tickets always use lvl N+k (k>=1) vs current-level; ticketLevel!=lvl guard always resets cursor
+- [Phase 12]: REENT-06 PASS: e.claimed=1 at DecimatorModule line 391 precedes _creditDecJackpotClaimCore line 424; auto-rebuy path is internal storage only
+- [Phase 12]: REENT-07 PASS: adminSwapEthForStEth is value-neutral; amount==0 guard confirmed; claimablePool untouched; stETH ERC-20 no callback
+- [Phase 12]: REENT-01: PASS — all 8 ETH-transfer sites across 4 contracts are CEI-safe; sentinel pattern protects arbitrary-recipient sites; trusted-recipient sites send to non-reentrant protocol contracts
 
 ### Pending Todos
 

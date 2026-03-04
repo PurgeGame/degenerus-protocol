@@ -162,5 +162,5 @@ Phases 8 and 9 can run in parallel. Phase 10 requires Phase 8 complete. Phase 11
 | 9. advanceGame() Gas Analysis and Sybil Bloat | 4/4 | Complete   | 2026-03-04 | - |
 | 10. Admin Power, VRF Griefing, and Assembly Safety | 4/4 | Complete    | 2026-03-04 | - |
 | 11. Token Security, Economic Attacks, Vault and Timing | 5/5 | Complete    | 2026-03-04 | - |
-| 12. Cross-Function Reentrancy Synthesis and Unchecked Blocks | v2.0 | 0/TBD | Not started | - |
+| 12. Cross-Function Reentrancy Synthesis and Unchecked Blocks | 2/3 | In Progress|  | - |
 | 13. Final Synthesis Report | v2.0 | 0/TBD | Not started | - |
