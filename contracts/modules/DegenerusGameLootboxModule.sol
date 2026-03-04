@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
-import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
+
 import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 
 /// @notice Interface for minting WWXRP prize tokens
 interface IWrappedWrappedXRP {

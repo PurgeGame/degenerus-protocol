@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
@@ -7,8 +7,7 @@ import {
     IDegenerusGameEndgameModule,
     IDegenerusGameGameOverModule,
     IDegenerusGameJackpotModule,
-    IDegenerusGameMintModule,
-    IDegenerusGameLootboxModule
+    IDegenerusGameMintModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {
     IVRFCoordinator,
@@ -17,7 +16,7 @@ import {
 import {IStETH} from "../interfaces/IStETH.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {GameTimeLib} from "../libraries/GameTimeLib.sol";
+
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.26;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
-import {GameTimeLib} from "./libraries/GameTimeLib.sol";
+
 
 /// @notice Interface for game contract player-facing functions
 interface IDegenerusGamePlayer {
