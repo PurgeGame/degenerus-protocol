@@ -1,7 +1,38 @@
 import "@nomicfoundation/hardhat-toolbox";
+import { subtask } from "hardhat/config.js";
+import { TASK_TEST_GET_TEST_FILES } from "hardhat/builtin-tasks/task-names.js";
+import { glob } from "hardhat/internal/util/glob.js";
+import path from "node:path";
 import "dotenv/config";
 
 const isTestnetBuild = process.env.TESTNET_BUILD === "1";
+
+// Override default test file discovery to control ordering.
+// Simulations must run LAST — they advance EVM state so far that earlier
+// loadFixture snapshots become invalid if they run mid-suite.
+const TEST_DIR_ORDER = [
+  "access",
+  "deploy",
+  "unit",
+  "integration",
+  "edge",
+  "gas",
+  "adversarial",
+  "simulation",
+];
+
+subtask(TASK_TEST_GET_TEST_FILES).setAction(async (args, hre) => {
+  if (args.testFiles && args.testFiles.length > 0) {
+    return args.testFiles; // explicit files passed on CLI — honour as-is
+  }
+  const testDir = hre.config.paths.tests;
+  const ordered = [];
+  for (const dir of TEST_DIR_ORDER) {
+    const files = await glob(path.join(testDir, dir, "**", "*.test.js"));
+    ordered.push(...files.sort());
+  }
+  return ordered;
+});
 
 /** @type import("hardhat/config").HardhatUserConfig */
 const config = {
