@@ -57,8 +57,8 @@
 - [ ] **TOKEN-04**: Whale + lootbox combined EV model: no ticket-level combination produces EV > 1.0 for any player at any activity score
 - [ ] **TOKEN-05**: Activity score inflation cost: minimum ETH required to extract maximum EV benefit bounded against cost; no positive-return inflation path
 - [ ] **TOKEN-06**: BURNIE 30-day guard completeness: all purchase paths (operator-proxied, whale bundle, lazy pass, deity pass) confirmed to apply the guard with identical timestamp comparison
-- [ ] **TOKEN-07**: Affiliate economic exploits: self-referral, wash trading, and circular referral ring EV modeled and bounded
-- [ ] **TOKEN-08**: DGNRS `lockForLevel`/`unlock` cap reset: users cannot repeatedly lock/unlock to reset per-level ETH/BURNIE spending caps and extract double EV via level transition timing
+- [x] **TOKEN-07**: Affiliate economic exploits: self-referral, wash trading, and circular referral ring EV modeled and bounded
+- [x] **TOKEN-08**: DGNRS `lockForLevel`/`unlock` cap reset: users cannot repeatedly lock/unlock to reset per-level ETH/BURNIE spending caps and extract double EV via level transition timing
 
 ### Vault and Stonk Economics (VAULT)
 *DegenerusVault and DegenerusStonk share the `(reserve * burned) / supply` redemption formula.*
@@ -142,8 +142,8 @@
 | TOKEN-04 | Phase 11 | Pending |
 | TOKEN-05 | Phase 11 | Pending |
 | TOKEN-06 | Phase 11 | Pending |
-| TOKEN-07 | Phase 11 | Pending |
-| TOKEN-08 | Phase 11 | Pending |
+| TOKEN-07 | Phase 11 | Complete |
+| TOKEN-08 | Phase 11 | Complete |
 | VAULT-01 | Phase 11 | Complete |
 | VAULT-02 | Phase 11 | Complete |
 | TIME-01 | Phase 11 | Pending |
