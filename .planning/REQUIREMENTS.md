@@ -52,11 +52,11 @@ Requirements for v4.0 Pre-C4A Adversarial Stress Test. Each maps to roadmap phas
 
 ### Formal Methods Analyst
 
-- [ ] **FORMAL-01**: Certora CVL specs for key protocol properties — ETH solvency invariant, token supply conservation, access control completeness
-- [ ] **FORMAL-02**: Extended Halmos symbolic verification beyond v3.0's 10 properties — target arithmetic invariants and state transition validity at deeper bounds
-- [ ] **FORMAL-03**: Abstract interpretation / taint analysis on ETH flows — track every wei from msg.value entry to .call{value:} exit across all 22 contracts
-- [ ] **FORMAL-04**: Reachability analysis for dangerous states — can gameOver be triggered prematurely? Can claimablePool exceed ETH balance under any execution path?
-- [ ] **FORMAL-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
+- [x] **FORMAL-01**: Certora CVL specs for key protocol properties — ETH solvency invariant, token supply conservation, access control completeness
+- [x] **FORMAL-02**: Extended Halmos symbolic verification beyond v3.0's 10 properties — target arithmetic invariants and state transition validity at deeper bounds
+- [x] **FORMAL-03**: Abstract interpretation / taint analysis on ETH flows — track every wei from msg.value entry to .call{value:} exit across all 22 contracts
+- [x] **FORMAL-04**: Reachability analysis for dangerous states — can gameOver be triggered prematurely? Can claimablePool exceed ETH balance under any execution path?
+- [x] **FORMAL-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
 
 ### Dependency & Integration Attacker
 
@@ -156,11 +156,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FUZZ-04 | Phase 23 | Pending |
 | FUZZ-05 | Phase 23 | Pending |
 | FUZZ-06 | Phase 23 | Pending |
-| FORMAL-01 | Phase 24 | Pending |
-| FORMAL-02 | Phase 24 | Pending |
-| FORMAL-03 | Phase 24 | Pending |
-| FORMAL-04 | Phase 24 | Pending |
-| FORMAL-05 | Phase 24 | Pending |
+| FORMAL-01 | Phase 24 | Complete |
+| FORMAL-02 | Phase 24 | Complete |
+| FORMAL-03 | Phase 24 | Complete |
+| FORMAL-04 | Phase 24 | Complete |
+| FORMAL-05 | Phase 24 | Complete |
 | DEP-01 | Phase 25 | Complete |
 | DEP-02 | Phase 25 | Complete |
 | DEP-03 | Phase 25 | Complete |

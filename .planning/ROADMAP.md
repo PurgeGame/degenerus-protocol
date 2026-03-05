@@ -68,7 +68,7 @@ See: `.planning/milestones/v3.0-ROADMAP.md` for full phase details.
 - [x] **Phase 21: Evil Genius Hacker** -- Deep Solidity exploits: delegatecall, storage, viaIR, assembly, compiler bugs (completed 2026-03-05)
 - [ ] **Phase 22: Sybil Whale Economist** -- Economic exploitation of pricing curves, whale bundles, deity passes, BURNIE token
 - [ ] **Phase 23: Degenerate Fuzzer** -- New invariant harnesses targeting v3.0 coverage gaps and deep state space
-- [ ] **Phase 24: Formal Methods Analyst** -- Certora CVL specs and extended symbolic verification beyond v3.0
+- [x] **Phase 24: Formal Methods Analyst** -- Certora CVL specs and extended symbolic verification beyond v3.0 (completed 2026-03-05)
 - [x] **Phase 25: Dependency & Integration Attacker** -- VRF/stETH/LINK failure modes and mock fidelity gaps (completed 2026-03-05)
 - [x] **Phase 26: Gas Griefing Specialist** -- Attacker-controllable gas consumption and OOG callback attacks (completed 2026-03-05)
 - [ ] **Phase 27: White Hat Completionist** -- OWASP SC Top 10 + SWC sweep + ERC compliance + fresh-eyes review
@@ -221,7 +221,7 @@ Phases 19-28 execute in parallel (zero inter-agent dependencies). Phase 29 execu
 | 21. Evil Genius Hacker | 1/1 | Complete   | 2026-03-05 | - |
 | 22. Sybil Whale Economist | v4.0 | 0/TBD | Not started | - |
 | 23. Degenerate Fuzzer | v4.0 | 0/TBD | Not started | - |
-| 24. Formal Methods Analyst | v4.0 | 0/TBD | Not started | - |
+| 24. Formal Methods Analyst | 1/1 | Complete   | 2026-03-05 | - |
 | 25. Dependency & Integration Attacker | 1/1 | Complete   | 2026-03-05 | - |
 | 26. Gas Griefing Specialist | 1/1 | Complete   | 2026-03-05 | - |
 | 27. White Hat Completionist | v4.0 | 0/TBD | Not started | - |
