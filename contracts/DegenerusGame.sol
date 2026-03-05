@@ -707,6 +707,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (refundAmount == 0) revert E();
         deityPassRefundable[buyer] = 0;
         deityPassPaidTotal[buyer] = 0;
+        deityPassPurchasedCount[buyer] = 0;
 
         // Burn ERC721 to prevent double-refund
         uint8 symbolId = deityPassSymbol[buyer];

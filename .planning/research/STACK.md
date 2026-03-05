@@ -1,281 +1,276 @@
 # Technology Stack
 
-**Project:** Degenerus Protocol v3.0 -- Invariant Fuzzing and Blind Adversarial Hardening
+**Project:** Degenerus Protocol v5.0 -- Novel Zero-Day Attack Surface Audit
 **Researched:** 2026-03-05
-**Mode:** Additive (alongside existing Hardhat project -- DO NOT replace or migrate)
-**Supersedes:** previous STACK.md dated 2026-03-04 (v2.0 audit)
+**Mode:** Additive (alongside existing Hardhat + Foundry infrastructure -- DO NOT replace)
+**Supersedes:** previous STACK.md dated 2026-03-05 (v4.0 adversarial stress test)
 
 ---
 
-## Critical Blocker: Solidity 0.8.34 vs Foundry solc Support
+## Scope: What This File Covers (and Does NOT Cover)
 
-**Severity:** BLOCKING -- must resolve before any invariant test can import production contracts.
+This STACK.md covers ONLY configuration changes and minor additions needed for v5.0's zero-day hunting. The milestone context is narrow: increased Foundry fuzz runs, Slither full triage, and Halmos symbolic verification of pure math invariants. No new tools need to be installed.
 
-The production contracts use `pragma solidity 0.8.34` (released Feb 18, 2026). Foundry stable (v1.5.1, Dec 2025) and nightly (v1.6.0-nightly, Mar 2026) both fail to resolve solc 0.8.34 from their built-in version lists. Hardhat compiles fine because it downloads solc binaries independently.
+**Already validated (DO NOT re-research, reinstall, or upgrade):**
+- Hardhat 2.28.6 + 884 tests
+- Foundry 1.5.1-stable + 68 invariant tests across 9 harnesses (4 original + 4 v4.0 additions + 1 deploy canary)
+- Halmos 0.3.3 + 10 symbolic properties verified
+- Slither 0.11.5 (latest as of Jan 2026)
+- forge-std 1.15.0
+- Local solc 0.8.34 (hardhat config + foundry.toml both point to same binary)
 
-**Verified workaround:** Hardhat caches the solc 0.8.34 binary at:
-```
-~/.cache/hardhat-nodejs/compilers-v2/linux-amd64/solc-linux-amd64-v0.8.34+commit.80d5c536
-```
-
-Forge accepts this binary via the `solc` config option in `foundry.toml`:
-```toml
-solc = "/home/zak/.cache/hardhat-nodejs/compilers-v2/linux-amd64/solc-linux-amd64-v0.8.34+commit.80d5c536"
-auto_detect_solc = false
-```
-
-**Additional requirement:** All fuzz test files must use `pragma solidity ^0.8.26` (caret range), NOT `0.8.26` (exact). The existing 3 fuzz tests in `test/fuzz/` use exact `0.8.26` and will fail under the forced 0.8.34 compiler. This is a one-line fix per file.
-
-**Confidence:** HIGH -- verified locally that `forge build --use <path>` compiles 0.8.34 contracts successfully when test files use caret pragmas.
+**v4.0 tools NOT needed for v5.0 (skip):**
+- Certora Prover -- v5.0 scope is Halmos-only for math invariants, not unbounded formal verification
+- Echidna / Medusa -- v5.0 uses Foundry deep runs, not additional fuzzers
+- nashpy / game theory modeling -- v4.0 completed game theory analysis
+- SWC registry -- v4.0 white hat agent completed SWC cross-reference
 
 ---
 
-## Existing Foundry Setup (Already in Place)
+## Recommended Stack Changes
 
-The project already has a partial Foundry setup. DO NOT reinstall or reconfigure from scratch.
+### 1. Foundry Config: Deep Fuzz Runs (foundry.toml changes only)
 
-| Component | Current State | Action Needed |
-|-----------|--------------|---------------|
-| `foundry.toml` | Exists, basic config | Update solc path + invariant config |
-| `lib/forge-std` | v1.15.0 (latest tag) | None -- already current |
-| `test/fuzz/` | 3 property-based fuzz tests | Extend with invariant harnesses |
-| `forge-out/` | Build output directory | Already configured |
-| Remappings | `@openzeppelin/=node_modules/@openzeppelin/` | Already correct |
+| Setting | Current | Recommended | Why |
+|---------|---------|-------------|-----|
+| `[fuzz] runs` | 1000 | 10000 | 10x increase exposes edge-case inputs that 1K runs miss. Standard for pre-audit deep runs. |
+| `[invariant] runs` | 256 | 1000 | 4x increase. Each run explores a different random call sequence. |
+| `[invariant] depth` | 128 | 256 | 2x increase. Deeper call sequences find composition bugs requiring more state transitions. |
+| `[invariant] shrink_run_limit` | 5000 | 10000 | Better counterexample minimization at deeper depths. |
 
-### Existing Fuzz Tests (preserve, do not rewrite)
-
-| File | What It Tests | Pattern |
-|------|---------------|---------|
-| `BurnieCoinInvariants.t.sol` | ERC20 supply math (mint/burn/transfer/vault) | Standalone mock `MockBurnieSupply`, no real contracts |
-| `PriceLookupInvariants.t.sol` | Price curve: bounded, deterministic, cyclic, monotonic | Direct library import of `PriceLookupLib` |
-| `ShareMathInvariants.t.sol` | Vault/Stonk `(reserve * amount) / supply` formula | Standalone math, no contract dependencies |
-
-These use standalone mocks because `ContractAddresses.sol` uses compile-time `address(0)` constants, making real contract deployment in Forge impossible without the Hardhat nonce-prediction + patching pipeline. New invariant harnesses follow the same pattern.
-
----
-
-## Recommended Stack
-
-### Core Tools (Already Installed)
-
-| Technology | Version | Purpose | Status |
-|------------|---------|---------|--------|
-| Foundry (forge) | 1.5.1-stable (Dec 2025) | Invariant fuzzer, property testing | Installed, needs solc config update |
-| forge-std | 1.15.0 | Test utilities, cheatcodes, `bound()`, `CommonBase`, `StdCheats`, `StdUtils` | Installed at `lib/forge-std`, current |
-| Hardhat | 2.28.6 | Existing test suite (884 tests) | DO NOT TOUCH |
-
-### No Additional Libraries Needed
-
-The project does NOT need:
-- `solmate` -- not testing ERC implementations, testing protocol invariants
-- `openzeppelin-contracts` for Forge -- already available via `node_modules` remapping
-- `PRBMath` -- protocol uses its own math; testing existing math, not adding new
-- `halmos` -- symbolic execution is overkill for this scope; protocol math was formally verified in v1.0/v2.0
-- `echidna` / `medusa` -- Foundry invariant testing is sufficient and already set up; adding a second fuzzer adds complexity without proportional value for 5 targeted invariants
-
----
-
-## Required Configuration Changes
-
-### Updated `foundry.toml`
+**New profile for deep runs:**
 
 ```toml
-[profile.default]
-src = "contracts"
-test = "test/fuzz"
-out = "forge-out"
-libs = ["node_modules", "lib"]
+# Add to foundry.toml -- keeps default profile fast for development
+[profile.deep]
+fuzz.runs = 10000
+fuzz.max_test_rejects = 131072
+invariant.runs = 1000
+invariant.depth = 256
+invariant.shrink_run_limit = 10000
 
-# CRITICAL: Use local solc binary because Foundry cannot resolve 0.8.34
-solc = "/home/zak/.cache/hardhat-nodejs/compilers-v2/linux-amd64/solc-linux-amd64-v0.8.34+commit.80d5c536"
-auto_detect_solc = false
-via_ir = true
-optimizer = true
-optimizer_runs = 2
-evm_version = "paris"
-
-remappings = [
-    "@openzeppelin/=node_modules/@openzeppelin/",
-    "forge-std/=lib/forge-std/src/",
-]
-
-# Fuzz testing config (property-based tests -- existing)
-[fuzz]
-runs = 1000
-max_test_rejects = 65536
-seed = "0xdeadbeef"
-
-# Invariant testing config (stateful sequence-based tests -- NEW)
-[invariant]
-runs = 256             # Number of random call sequences
-depth = 128            # Calls per sequence (up from 64)
-fail_on_revert = false # Handlers bound inputs; some reverts are expected
-shrink_run_limit = 5000 # More shrink attempts for complex sequences
-show_metrics = true    # Show handler function call breakdown
-dictionary_weight = 80 # Favor dictionary values from storage/bytecode
-include_storage = true # Seed fuzzer dictionary from contract storage
-include_push_bytes = true # Seed from PUSH bytecodes
+[profile.ci]
+fuzz.runs = 50000
+invariant.runs = 5000
+invariant.depth = 512
+invariant.shrink_run_limit = 20000
 ```
 
-**Key config rationale:**
+**Usage:**
+```bash
+# Quick iteration (default profile, unchanged)
+forge test
 
-| Setting | Value | Why |
-|---------|-------|-----|
-| `depth = 128` | Up from 64 | Protocol has multi-step state machines (purchase -> VRF request -> fulfill -> advance -> game over). 64 may not reach interesting deep states. 128 gives headroom for multi-level game progression. |
-| `fail_on_revert = false` | Default behavior | Handler contracts bound inputs, but some paths (VRF not ready, RNG locked) naturally revert. We want the fuzzer to keep exploring, not abort on first revert. |
-| `shrink_run_limit = 5000` | Up from 2000 | Complex delegatecall sequences benefit from more shrink attempts to find minimal failing cases. |
-| `show_metrics = true` | Off by default | Essential for debugging handler coverage -- shows which functions the fuzzer calls and revert rates per function. |
-| `dictionary_weight = 80` | Up from default 40 | Protocol uses many magic numbers (price tiers, quantities, level thresholds). Higher dictionary weight helps fuzzer find meaningful values faster. |
-| `auto_detect_solc = false` | Off | Prevents Foundry from trying to download solc 0.8.34 (which it cannot resolve). Forces use of the local binary. |
+# v5.0 deep zero-day hunting
+FOUNDRY_PROFILE=deep forge test
 
-### Pragma Fix for Existing Test Files
-
-Change in all 3 files (`BurnieCoinInvariants.t.sol`, `PriceLookupInvariants.t.sol`, `ShareMathInvariants.t.sol`):
-
-```diff
--pragma solidity 0.8.26;
-+pragma solidity ^0.8.26;
+# Overnight CI-level exhaustive run
+FOUNDRY_PROFILE=ci forge test
 ```
 
-This allows the files to compile under solc 0.8.34 while remaining compatible with 0.8.26+.
-
----
-
-## Handler Architecture for Invariant Tests
-
-### The ContractAddresses Problem
-
-`ContractAddresses.sol` compiles all 22 contract addresses as `constant` (compile-time). In source they are `address(0)`. The Hardhat deploy pipeline predicts nonce-based addresses, patches the file, recompiles, and deploys. Forge cannot replicate this without FFI.
-
-**Decision: Use mock-based handlers.** This is the same pattern the existing 3 fuzz tests already use successfully.
-
-### Handler Design Pattern
-
-Handlers wrap mock contracts to govern fuzzer input. The pattern from forge-std:
-
+**Per-test overrides** for specific high-value invariants (Foundry supports inline config via `/// forge-config:`):
 ```solidity
-// SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
-
-import {CommonBase} from "forge-std/Base.sol";
-import {StdCheats} from "forge-std/StdCheats.sol";
-import {StdUtils} from "forge-std/StdUtils.sol";
-
-contract EthSolvencyHandler is CommonBase, StdCheats, StdUtils {
-    MockGameAccounting public protocol;
-
-    // Ghost variables -- track aggregate state across calls
-    uint256 public ghost_totalDeposited;
-    uint256 public ghost_totalWithdrawn;
-    uint256 public ghost_totalFees;
-
-    // Actor pool for multi-user testing
-    address[] public actors;
-    address internal currentActor;
-
-    modifier useActor(uint256 actorIndexSeed) {
-        currentActor = actors[bound(actorIndexSeed, 0, actors.length - 1)];
-        vm.startPrank(currentActor);
-        _;
-        vm.stopPrank();
-    }
-
-    constructor(MockGameAccounting _protocol) {
-        protocol = _protocol;
-        for (uint256 i = 0; i < 10; i++) {
-            actors.push(address(uint160(0x1000 + i)));
-        }
-    }
-
-    function purchase(uint256 actorSeed, uint256 amount) external useActor(actorSeed) {
-        amount = bound(amount, 0.01 ether, 10 ether);
-        deal(currentActor, amount);
-        protocol.purchase{value: amount}();
-        ghost_totalDeposited += amount;
-    }
-
-    receive() external payable {}
+/// forge-config: default.invariant.runs = 2000
+/// forge-config: default.invariant.depth = 512
+function invariant_ethSolvency() public {
+    // Critical invariant gets extra coverage even in default profile
 }
 ```
 
-**Key handler principles:**
-1. **Bound all inputs** with `bound()` to prevent meaningless reverts
-2. **Track ghost variables** for aggregate invariant assertions (sums, counts, deltas)
-3. **Multi-actor support** via `useActor` modifier with `vm.prank`
-4. **Skip no-ops** -- if bound produces zero, return early instead of reverting
-5. **`targetContract(address(handler))`** in setUp -- CRITICAL to restrict fuzzing to handler only
-
-### Invariant Test Template
-
-```solidity
-// SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
-
-import "forge-std/Test.sol";
-import "./handlers/EthSolvencyHandler.sol";
-
-contract EthSolvencyInvariantTest is Test {
-    MockGameAccounting protocol;
-    EthSolvencyHandler handler;
-
-    function setUp() public {
-        protocol = new MockGameAccounting();
-        handler = new EthSolvencyHandler(protocol);
-        targetContract(address(handler));
-    }
-
-    /// @notice ETH solvency: contract balance >= total claimable
-    function invariant_ethSolvency() external view {
-        assertGe(
-            address(protocol).balance,
-            protocol.totalClaimable(),
-            "ETH solvency violated"
-        );
-    }
-
-    /// @notice Conservation: deposits - withdrawals == contract balance
-    function invariant_conservation() external view {
-        assertEq(
-            handler.ghost_totalDeposited() - handler.ghost_totalWithdrawn(),
-            address(protocol).balance,
-            "Conservation violated"
-        );
-    }
-}
-```
+**Confidence:** HIGH -- Foundry profiles and inline config are stable, well-documented features. No version upgrade needed.
 
 ---
 
-## File Organization
+### 2. Halmos: Pure Math Invariant Verification (no upgrade, usage guidance)
+
+| Item | Detail |
+|------|--------|
+| Version | 0.3.3 (latest, released July 2024 -- no newer version exists) |
+| Upgrade needed | NO |
+| New capability | Write new test files targeting pure math functions |
+
+**What to verify with Halmos for v5.0:**
+
+The v5.0 scope calls for symbolic verification of pure math invariants -- precision/rounding exploitation and division-before-multiplication chains. Target functions:
+
+| Function/Library | Property to Verify | Halmos Approach |
+|------------------|-------------------|-----------------|
+| `PriceLookupLib` | Price monotonicity: `price(level+1) >= price(level)` for all levels | Bounded symbolic over level range |
+| `PriceLookupLib` | No zero-price: `price(level) > 0` for all valid levels | Exhaustive (finite domain) |
+| Deity pass T(n) | `T(n) = n*(n+1)/2` -- no overflow for valid n range | Bounded symbolic, check against reference |
+| Lazy pass pricing | Sum-of-10 calculation correctness at level boundaries | Boundary testing with symbolic level |
+| Lootbox EV | `EV <= 1.0` for all activity scores (no positive-EV exploitation) | Symbolic over activity score range |
+| `BitPackingLib` | Pack/unpack roundtrip: `unpack(pack(x)) == x` for all valid x | Full symbolic verification |
+| Vault share math | `shares * totalAssets / totalShares` -- floor division does not create extraction | Symbolic with edge values |
+| Coinflip range | Win probability matches documented odds for all bet sizes | Symbolic over bet parameters |
+
+**Critical Halmos limitation for this project:**
+Halmos uses SMT solvers that struggle with nonlinear arithmetic (multiplication, division, modulo). The protocol's math is heavy on these operations. Mitigation:
+- Use `--solver-timeout-assertion 300000` (5 min per assertion) for complex math
+- Use `--loop 0` for pure functions with no loops
+- Break complex properties into smaller, isolated assertions
+- If a property times out, document it as "needs manual proof" rather than removing it
+
+**New test file structure:**
+```
+test/fuzz/halmos/
+  PriceLookupSymbolic.t.sol    # Price curve properties
+  BitPackingSymbolic.t.sol     # Pack/unpack roundtrip
+  ShareMathSymbolic.t.sol      # Vault share math
+  DeityPricingSymbolic.t.sol   # T(n) pricing formula
+  LootboxEVSymbolic.t.sol      # EV <= 1.0 invariant
+```
+
+**Running:**
+```bash
+# Verify all symbolic properties
+halmos --contract PriceLookupSymbolicTest --solver-timeout-assertion 300000
+
+# Verify specific property
+halmos --contract BitPackingSymbolicTest --function check_roundtrip
+```
+
+**Confidence:** HIGH -- Halmos 0.3.3 is stable, pure math verification is its strongest use case. The nonlinear arithmetic limitation is well-documented and manageable for bounded domains.
+
+---
+
+### 3. Slither: Full Triage and Custom Detectors (no upgrade, usage guidance)
+
+| Item | Detail |
+|------|--------|
+| Version | 0.11.5 (latest, released Jan 2026) |
+| Upgrade needed | NO |
+| New capability | Full triage methodology + optional custom detectors |
+
+**v5.0 Slither triage approach:**
+
+Previous audits ran Slither and triaged the results (636 findings). v5.0 requires a FULL re-triage with zero-day hunting lens -- not just dismissing known false positives, but examining each finding for composition-based exploitability.
+
+**Run configuration:**
+```bash
+# Full analysis with all detectors, JSON output for structured triage
+slither . --json slither-v5.json --solc-remaps "@openzeppelin/=node_modules/@openzeppelin/" \
+  --filter-paths "node_modules|lib|test" \
+  --compile-force-framework hardhat
+
+# Focus on specific detector categories for zero-day hunting
+slither . --detect reentrancy-eth,reentrancy-no-eth,reentrancy-benign,reentrancy-events \
+  --json slither-v5-reentrancy.json
+
+# Delegatecall-specific analysis
+slither . --detect delegatecall-loop,controlled-delegatecall \
+  --json slither-v5-delegatecall.json
+
+# Arithmetic-focused detectors
+slither . --detect divide-before-multiply,tautology,incorrect-equality \
+  --json slither-v5-arithmetic.json
+```
+
+**Optional: Pessimistic.io slitherin detectors:**
+
+The `slitherin` package (by Pessimistic.io) adds 20+ custom detectors on top of Slither, including read-only reentrancy detection, unprotected setter detection, and token fallback handling. Worth running as a one-time sweep.
+
+```bash
+pip install slitherin
+slitherin . --pess --json slitherin-v5.json
+```
+
+**Confidence:** HIGH for Slither core. MEDIUM for slitherin (third-party detectors, may produce noise, but low-risk to run).
+
+---
+
+### 4. Foundry: Custom Invariant Handlers for Composition Bugs
+
+No new tools needed. The existing handler pattern (`test/fuzz/handlers/`) should be extended with composition-focused handlers:
+
+| New Handler | What It Tests | Why |
+|-------------|---------------|-----|
+| `CompositionHandler.sol` | Cross-module delegatecall sequences that exercise shared storage | v5.0 targets composition bugs -- random interleaving of module calls through DegenerusGame |
+| `PrecisionHandler.sol` | Sequences of small-value operations that accumulate rounding errors | Dust attack detection -- many small purchases/claims that exploit floor division |
+| `TemporalHandler.sol` | Time-warped sequences with `vm.warp` at boundary timestamps | Level transition + VRF timeout + game-over boundaries |
+| `LifecycleHandler.sol` | Full lifecycle from pre-purchase through game-over to post-game claims | Edge-of-lifecycle states -- the pre-first-purchase and post-gameover residual attack surface |
+
+**New invariant test files:**
+```
+test/fuzz/invariant/
+  Composition.inv.t.sol     # Cross-module shared storage invariants
+  Precision.inv.t.sol       # Accumulated rounding never exceeds dust threshold
+  Temporal.inv.t.sol        # Timestamp boundary invariants
+  Lifecycle.inv.t.sol       # Full lifecycle state invariants
+```
+
+**Confidence:** HIGH -- extends existing proven pattern, no new dependencies.
+
+---
+
+## What NOT to Add
+
+| Tool | Why Skip |
+|------|----------|
+| Foundry upgrade to nightly | v1.5.1-stable is sufficient. Nightly builds risk breaking existing 68 tests for marginal gain. |
+| Halmos upgrade | 0.3.3 IS the latest. No newer version exists. |
+| Slither upgrade | 0.11.5 IS the latest (Jan 2026). Already installed. |
+| Certora Prover | v5.0 scope is bounded math verification (Halmos handles this). Unbounded proofs are out of scope. |
+| Echidna / Medusa | Foundry deep profiles (10K-50K runs) provide sufficient coverage. Adding fuzzers adds complexity without proportional value for the v5.0 scope. |
+| Mythril | Redundant with Halmos for symbolic execution. |
+| forge-coverage (lcov) | Nice-to-have but not needed for zero-day hunting. Coverage tells you what you TESTED, not what is VULNERABLE. |
+| New Solidity version | Compiler is pinned at 0.8.34. Changing it would invalidate all prior audit work. |
+| Hardhat plugins | No new Hardhat plugins needed. The 884-test suite is stable. |
+
+---
+
+## Full Change Summary
+
+```bash
+# No installations needed. Only config changes.
+
+# 1. Update foundry.toml with deep/ci profiles (see section 1)
+# 2. Write new Halmos symbolic test files (see section 2)
+# 3. Run Slither full triage with structured output (see section 3)
+# 4. Write new composition-focused handlers and invariants (see section 4)
+
+# Optional: one-time slitherin sweep
+pip install slitherin
+```
+
+**Total new dependencies: ZERO (or 1 optional: slitherin pip package)**
+
+---
+
+## Directory Structure Changes
 
 ```
-test/fuzz/
-  # Existing (update pragma only)
-  BurnieCoinInvariants.t.sol
-  PriceLookupInvariants.t.sol
-  ShareMathInvariants.t.sol
+degenerus-contracts/
+  # MODIFIED
+  foundry.toml                          # Add [profile.deep] and [profile.ci]
 
-  # NEW: Invariant test suites
-  EthSolvencyInvariants.t.sol       # ETH accounting invariant
-  TicketQueueInvariants.t.sol       # Ticket queue state machine
-  VaultSharesInvariants.t.sol       # Vault share math invariant
-  GameFsmInvariants.t.sol           # Game FSM transition invariant
-  BurnieSupplyInvariants.t.sol      # BurnieCoin supply conservation (stateful)
+  # NEW: Halmos symbolic math tests
+  test/fuzz/halmos/
+    PriceLookupSymbolic.t.sol
+    BitPackingSymbolic.t.sol
+    ShareMathSymbolic.t.sol
+    DeityPricingSymbolic.t.sol
+    LootboxEVSymbolic.t.sol
 
-  # NEW: Handler contracts
-  handlers/
-    EthSolvencyHandler.sol
-    TicketQueueHandler.sol
-    VaultSharesHandler.sol
-    GameFsmHandler.sol
-    BurnieSupplyHandler.sol
+  # NEW: Composition-focused handlers
+  test/fuzz/handlers/
+    CompositionHandler.sol
+    PrecisionHandler.sol
+    TemporalHandler.sol
+    LifecycleHandler.sol
 
-  # NEW: Mock contracts for handlers
-  mocks/
-    MockGameAccounting.sol          # Simplified ETH flow model
-    MockTicketQueue.sol             # Level/ticket state machine
-    MockVaultAccounting.sol         # Vault deposit/burn/refill model
-    MockGameFsm.sol                 # PURCHASE/JACKPOT/GAMEOVER FSM
+  # NEW: Composition-focused invariant tests
+  test/fuzz/invariant/
+    Composition.inv.t.sol
+    Precision.inv.t.sol
+    Temporal.inv.t.sol
+    Lifecycle.inv.t.sol
+
+  # NEW: Slither triage output
+  slither-v5.json                       # Full analysis output
+  slither-v5-reentrancy.json            # Reentrancy-focused
+  slither-v5-delegatecall.json          # Delegatecall-focused
+  slither-v5-arithmetic.json            # Arithmetic-focused
 ```
 
 ---
@@ -284,49 +279,10 @@ test/fuzz/
 
 | Category | Recommended | Alternative | Why Not |
 |----------|-------------|-------------|---------|
-| Fuzzer | Foundry invariant | Echidna | Already have Foundry setup; Echidna requires Haskell toolchain; Foundry invariant testing is mature since v1.0 |
-| Fuzzer | Foundry invariant | Medusa | Medusa is powerful but adds Go dependency; 5 targeted invariants do not justify second fuzzer |
-| Deploy strategy | Mock handlers | FFI full deploy | ContractAddresses blocker; FFI is slow and fragile; mocks are sufficient for invariant properties |
-| Deploy strategy | Mock handlers | hardhat-foundry plugin | Plugin syncs artifacts but does not help with compile-time address constants |
-| Symbolic | Skip | Halmos | Protocol math already verified in v1.0/v2.0; fuzzing finds sequence-dependent bugs that symbolic execution misses |
-| Coverage | forge coverage | - | Run after invariant tests to verify handler coverage; no additional tool needed |
-
----
-
-## What NOT to Add
-
-| Avoid | Why |
-|-------|-----|
-| `@nomicfoundation/hardhat-foundry` plugin | Does not solve `ContractAddresses.sol` compile-time constant problem. Separate `forge-out` directory already works. |
-| Migrating Hardhat tests to Foundry | 884 tests work. Foundry is additive for invariant/fuzz testing only. |
-| `forge script` for deployment | Nonce-prediction + patching pipeline is Hardhat-specific. |
-| `forge snapshot` | Gas optimization is out of scope for security milestone. |
-| Echidna / Medusa alongside Foundry | Diminishing returns for 5 targeted invariants. Use Foundry exclusively. |
-| Halmos | Math properties already verified. FSM state machine would hit path explosion. |
-
----
-
-## Setup Commands
-
-```bash
-# 1. Update foundry.toml (see config above)
-# Key changes: solc path, auto_detect_solc=false, invariant section
-
-# 2. Fix existing fuzz test pragmas
-sed -i 's/pragma solidity 0.8.26;/pragma solidity ^0.8.26;/' test/fuzz/*.t.sol
-
-# 3. Verify build works
-forge build --force
-
-# 4. Run existing fuzz tests
-forge test --match-path "test/fuzz/*.t.sol" -vv
-
-# 5. Run invariant tests specifically (after they are written)
-forge test --match-path "test/fuzz/*Invariants.t.sol" -vv
-
-# 6. Run with full metrics for handler debugging
-forge test --match-path "test/fuzz/*Invariants.t.sol" -vvvv
-```
+| Deep fuzzing | Foundry profile `deep` (10K runs) | Echidna + Medusa | Adding 2 fuzzers increases complexity; Foundry 10K runs with better handlers is more targeted for v5.0 scope |
+| Math verification | Halmos 0.3.3 bounded symbolic | Certora unbounded | Overkill for pure math on finite domains; Halmos already installed and proven |
+| Static analysis | Slither 0.11.5 + slitherin | Custom Slither plugins | Writing custom detectors is time-expensive; slitherin provides 20+ ready-made detectors for common patterns |
+| Composition testing | Custom Foundry handlers | Echidna multi-contract | Foundry handlers integrate with existing test infrastructure; Echidna would require parallel harness maintenance |
 
 ---
 
@@ -334,29 +290,31 @@ forge test --match-path "test/fuzz/*Invariants.t.sol" -vvvv
 
 | Item | Confidence | Rationale |
 |------|------------|-----------|
-| Foundry 1.5.1 + forge-std 1.15.0 | HIGH | Already installed, verified working for fuzz tests |
-| Local solc 0.8.34 workaround | HIGH | Verified locally -- forge compiles 0.8.34 contracts with `--use <path>` |
-| Caret pragma fix for test files | HIGH | Standard Solidity pragma semantics, trivial change |
-| Mock handler pattern | HIGH | 3 existing tests validate the pattern; ContractAddresses blocker is real |
-| Invariant config values | MEDIUM | Reasonable for protocol complexity but may need tuning after first runs |
-| No additional libraries needed | HIGH | forge-std 1.15.0 covers all handler/cheatcode needs |
-| `depth=128` sufficient | MEDIUM | May need 256 for deep FSM exploration; start at 128 and increase if metrics show shallow coverage |
+| Foundry profile config | HIGH | Stable feature, well-documented, no version change needed |
+| Foundry inline test config | HIGH | Supported since Foundry v0.2.0, documented in official book |
+| Halmos 0.3.3 math verification | HIGH | Proven in v3.0 (10 properties verified), pure math is ideal use case |
+| Halmos nonlinear arithmetic limits | HIGH | Documented limitation, mitigations well-understood |
+| Slither 0.11.5 full triage | HIGH | Already installed, latest version, proven in prior audits |
+| slitherin third-party detectors | MEDIUM | Third-party, may produce noise, but low-risk optional addition |
+| No new tools needed | HIGH | All 3 tools (Foundry, Halmos, Slither) are at latest versions and sufficient for v5.0 scope |
 
 ---
 
 ## Sources
 
-- [Foundry Invariant Testing docs](https://getfoundry.sh/forge/invariant-testing) -- handler patterns, targetContract, ghost variables
-- [Foundry Config Reference: Testing](https://getfoundry.sh/reference/config/testing) -- all [invariant] config options
-- [Foundry Config Reference: Solidity Compiler](https://www.getfoundry.sh/config/reference/solidity-compiler) -- `solc` path, `auto_detect_solc`
-- [horsefacts/weth-invariant-testing](https://github.com/horsefacts/weth-invariant-testing) -- canonical handler pattern example
-- [RareSkills Invariant Testing Guide](https://rareskills.io/post/invariant-testing-solidity) -- ghost variables, multi-actor patterns
-- [Cyfrin Invariant Testing Guide](https://medium.com/cyfrin/invariant-testing-enter-the-matrix-c71363dea37e) -- handler design principles
-- [Solidity 0.8.34 Release](https://www.soliditylang.org/blog/2026/02/18/solidity-0.8.34-release-announcement/) -- confirms release date Feb 18, 2026
-- [forge-std releases](https://github.com/foundry-rs/forge-std/releases) -- v1.15.0 is latest
-- Local verification: `forge build --use <solc-0.8.34-path>` confirmed working on this project
+- [Foundry Invariant Testing Docs](https://getfoundry.sh/forge/invariant-testing) -- configuration, handler patterns
+- [Foundry Config Reference](https://www.getfoundry.sh/config/reference/overview) -- profile system, fuzz/invariant settings
+- [Foundry Inline Test Config](https://book.getfoundry.sh/reference/config/inline-test-config) -- per-test overrides with `/// forge-config:`
+- [Halmos GitHub](https://github.com/a16z/halmos) -- v0.3.3 is latest (July 2024), no newer release
+- [Halmos: Symbolic Testing for Formal Verification](https://a16zcrypto.com/posts/article/symbolic-testing-with-halmos-leveraging-existing-tests-for-formal-verification/) -- usage patterns, math verification examples
+- [Halmos Warnings Wiki](https://github.com/a16z/halmos/wiki/warnings) -- nonlinear arithmetic limitations
+- [slither-analyzer on PyPI](https://pypi.org/project/slither-analyzer/) -- v0.11.5, released Jan 16 2026
+- [Slither Detector Documentation](https://github.com/crytic/slither/wiki/Detector-Documentation) -- 90+ built-in detectors
+- [Slither Custom Detectors](https://github.com/crytic/slither/wiki/Adding-a-new-detector) -- plugin architecture
+- [Pessimistic.io slitherin](https://github.com/pessimistic-io/slitherin) -- 20+ additional detectors including read-only reentrancy
+- [Foundry GitHub Releases](https://github.com/foundry-rs/foundry/releases) -- v1.5.1-stable confirmed current stable
 
 ---
 
-*Stack research for: Degenerus Protocol v3.0 -- Invariant Fuzzing and Blind Adversarial Hardening*
+*Stack research for: Degenerus Protocol v5.0 -- Novel Zero-Day Attack Surface Audit*
 *Researched: 2026-03-05*
