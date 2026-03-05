@@ -106,11 +106,13 @@ Uses direct bitwise clear-and-set pattern (not setPacked), always with DAY_SHIFT
 - LEVEL_UNITS uses shift 228, starting at bit 228
 - Bits 184-227 are **NEVER written by any call site**
 
-**CONFIRMED: Gap bits 154-227 (74 bits total) are never written by any module.** They remain at their initialized value (0) for the lifetime of each player's mintPacked_ entry.
+**CONFIRMED: True gap bits (154-159 and 184-227, totaling 50 bits) are never written by any module.** They remain at their initialized value (0) for the lifetime of each player's mintPacked_ entry.
 
-Note: The research stated 73 gap bits (155-227). The actual gap is 74 bits (154-227) because WHALE_BUNDLE_TYPE only uses 2 bits (152-153), not 3 bits (152-154). The mask value 3 = 0b11 covers bits 0-1 of the shifted position, so bits 152-153. Bit 154 is also a gap bit.
+**Important clarification:** The DegenerusGame.sol header comment says bits 154-227 are "reserved". This is INCORRECT at the documentation level -- bits 160-183 are actually the MINT_STREAK_LAST_COMPLETED field, actively used by MintStreakUtils and WhaleModule. The true gap bits are:
+- Gap 1: bits 154-159 (6 bits) -- between WHALE_BUNDLE_TYPE(152-153) and MINT_STREAK_LAST_COMPLETED(160-183)
+- Gap 2: bits 184-227 (44 bits) -- between MINT_STREAK_LAST_COMPLETED(160-183) and LEVEL_UNITS(228-243)
 
-**Correction:** DegenerusGame.sol header comment says bits 152-153 are whaleBundleType (2 bits), but BitPackingLib header says bits 152-154 (3 bits). The mask is `3` which is 2 bits. The constant comment in DegenerusGame.sol is correct -- it is a 2-bit field. The BitPackingLib header doc listing "152-154" is slightly imprecise (should say 152-153). This has no security impact as the 3rd bit (154) is never written.
+**QA/Info finding:** The DegenerusGame.sol header doc marks bits 154-227 as "reserved" but bits 160-183 are the active MINT_STREAK_LAST_COMPLETED field. The comment should be updated to accurately reflect the layout. This is a documentation inaccuracy, not a security issue.
 
 ## WhaleModule Literal 160 Verification
 
