@@ -85,7 +85,7 @@ See: `.planning/milestones/v4.0-ROADMAP.md` for full phase details.
 
 - [x] **Phase 30: Tooling Setup and Static Analysis** - Configure Foundry deep profiles, run Slither full triage, fix Halmos configuration, establish baseline (completed 2026-03-05)
 - [ ] **Phase 31: Cross-Contract Composition Analysis** - Analyze delegatecall shared storage assumptions, module interaction matrix, selector collisions, BitPackingLib gaps, and build composition-focused harnesses
-- [ ] **Phase 32: Precision and Rounding Analysis** - Audit all 222 division operations, zero-rounding free actions, dust accumulation, wei lifecycle precision loss
+- [x] **Phase 32: Precision and Rounding Analysis** - Audit all 222 division operations, zero-rounding free actions, dust accumulation, wei lifecycle precision loss (completed 2026-03-05)
 - [ ] **Phase 33: Temporal, Lifecycle, and EVM-Level Analysis** - Timestamp boundaries, multi-tx races, lifecycle edge states, forced ETH, ABI encoding, assembly safety, unchecked blocks
 - [ ] **Phase 34: Economic Composition and Auditor Re-examination** - Vault share inflation, price discrepancies, affiliate farming, reward manipulation, stETH edge cases, VRF griefing costs
 - [ ] **Phase 35: Halmos Verification and Multi-Tool Synthesis** - Symbolic verification of pure math invariants, cross-tool convergence matrix, final findings report with attack narratives
@@ -121,9 +121,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 31-01: TBD
-- [ ] 31-02: TBD
-- [ ] 31-03: TBD
+- [ ] 31-01-PLAN.md — Storage slot ownership matrix and selector collision analysis
+- [ ] 31-02-PLAN.md — BitPackingLib gap bit verification and cross-module write analysis
+- [ ] 31-03-PLAN.md — Module interaction matrix and composition invariant harness
 
 ### Phase 32: Precision and Rounding Analysis
 **Goal**: All division operations, rounding behaviors, and precision loss paths are verified -- no input combination allows free actions via zero-rounding or accumulated dust extraction
@@ -137,8 +137,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 32-01: TBD
-- [ ] 32-02: TBD
+- [ ] 32-01-PLAN.md — Division operation census and classification (all 222 ops + 18 Slither INVESTIGATE)
+- [ ] 32-02-PLAN.md — Zero-rounding boundary testing with Foundry fuzz tests
+- [ ] 32-03-PLAN.md — Dust accumulation invariant tests and wei lifecycle trace
 
 ### Phase 33: Temporal, Lifecycle, and EVM-Level Analysis
 **Goal**: All timestamp boundaries, lifecycle edge states, and EVM-level mechanics are verified -- no temporal manipulation, lifecycle interleaving, forced ETH, or unchecked arithmetic can corrupt protocol state or extract value
@@ -230,8 +231,8 @@ Phases 31 and 32 can execute in parallel after Phase 30. Phase 33 depends on Pha
 | 28. Game Theory | v4.0 | 1/1 | Complete | 2026-03-05 |
 | 29. Synthesis | v4.0 | 0/0 | Complete | 2026-03-05 |
 | 30. Tooling Setup | 3/3 | Complete    | 2026-03-05 | - |
-| 31. Composition | v5.0 | 0/? | Not started | - |
-| 32. Precision | v5.0 | 0/? | Not started | - |
+| 31. Composition | v5.0 | 0/3 | Not started | - |
+| 32. Precision | 3/3 | Complete   | 2026-03-05 | - |
 | 33. Temporal/EVM | v5.0 | 0/? | Not started | - |
 | 34. Economic/Re-exam | v5.0 | 0/? | Not started | - |
 | 35. Halmos/Synthesis | v5.0 | 0/? | Not started | - |
