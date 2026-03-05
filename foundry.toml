@@ -3,15 +3,17 @@ src = "contracts"
 test = "test/fuzz"
 out = "forge-out"
 libs = ["node_modules", "lib"]
-solc_version = "0.8.26"
+solc = "/home/zak/.cache/hardhat-nodejs/compilers-v2/linux-amd64/solc-linux-amd64-v0.8.34+commit.80d5c536"
+auto_detect_solc = false
 via_ir = true
 optimizer = true
 optimizer_runs = 2
 evm_version = "paris"
 
-# Remappings for OpenZeppelin
+# Remappings for OpenZeppelin and forge-std
 remappings = [
     "@openzeppelin/=node_modules/@openzeppelin/",
+    "forge-std/=lib/forge-std/src/",
 ]
 
 # Fuzz testing config
@@ -22,5 +24,10 @@ seed = "0xdeadbeef"
 
 [invariant]
 runs = 256
-depth = 64
+depth = 128
 fail_on_revert = false
+shrink_run_limit = 5000
+show_metrics = true
+dictionary_weight = 80
+include_storage = true
+include_push_bytes = true
