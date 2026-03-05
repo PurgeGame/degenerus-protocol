@@ -47,7 +47,7 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full phase details.
 
 - [x] **Phase 14: Foundry Infrastructure and Compiler Alignment** - Full protocol deployable and testable inside Foundry's test EVM (completed 2026-03-05)
 - [x] **Phase 15: Core Handlers and ETH Solvency Invariant** - ETH solvency invariant validates the full fuzzing pipeline end-to-end (completed 2026-03-05)
-- [ ] **Phase 16: Remaining Invariant Harnesses** - BurnieCoin supply, game FSM, vault shares, and ticket queue invariants all passing
+- [x] **Phase 16: Remaining Invariant Harnesses** - BurnieCoin supply, game FSM, vault shares, and ticket queue invariants all passing (completed 2026-03-05)
 - [ ] **Phase 17: Adversarial Sessions and Formal Verification** - 4 blind attack sessions and 2 Halmos bounded model checks completed independently
 - [ ] **Phase 18: Consolidated Report and Coverage Metrics** - All findings consolidated into C4-format report with PoC tests and invariant coverage metrics
 
@@ -96,7 +96,14 @@ Plans:
   3. Vault share invariant holds: `vault.totalAssets() >= sum(all redeemable shares)` with no violations
   4. Ticket queue invariant holds: no player appears twice at same level after any call sequence
   5. CoinHandler drives BURNIE mint/burn/transfer/coinflip operations with adequate coverage (>50% non-reverting calls)
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [x] 16-01-PLAN.md -- CoinHandler + BurnieCoin supply invariant (FUZZ-02)
+- [x] 16-02-PLAN.md -- FSMHandler + Game FSM invariant (FUZZ-03)
+- [x] 16-03-PLAN.md -- Vault share invariant (FUZZ-04)
+- [x] 16-04-PLAN.md -- Ticket queue invariant (FUZZ-05)
+
+**Results:** All 14 new invariants pass across 256 runs x 128 depth. 48 total tests (14 new + 34 existing), 0 failures, 0% revert rate. Two new handlers: FSMHandler, TicketTrackingHandler.
 
 ### Phase 17: Adversarial Sessions and Formal Verification
 **Goal**: 4 independent blind adversarial sessions with distinct attacker personas and 2 Halmos bounded model checks complete, producing PoC-backed findings for any Medium+ vulnerabilities discovered
@@ -145,6 +152,6 @@ Note: Phase 17 can begin after Phase 14 completes (does not depend on 15/16).
 | 13. Final Synthesis Report | v2.0 | 4/4 | Complete | 2026-03-05 |
 | 14. Foundry Infrastructure | v3.0 | 4/4 | Complete | 2026-03-05 |
 | 15. Core Handlers and ETH Solvency | v3.0 | 3/3 | Complete | 2026-03-05 |
-| 16. Remaining Invariant Harnesses | v3.0 | 0/TBD | Not started | - |
+| 16. Remaining Invariant Harnesses | v3.0 | 4/4 | Complete | 2026-03-05 |
 | 17. Adversarial Sessions and Formal Verification | v3.0 | 0/TBD | Not started | - |
 | 18. Consolidated Report and Metrics | v3.0 | 0/TBD | Not started | - |
