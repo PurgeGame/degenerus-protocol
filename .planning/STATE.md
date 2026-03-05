@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Novel Zero-Day Attack Surface Audit
-status: in-progress
-last_updated: "2026-03-05T15:04:00Z"
+status: complete
+last_updated: "2026-03-05T15:39:00Z"
 progress:
   total_phases: 18
-  completed_phases: 17
+  completed_phases: 18
   total_plans: 88
-  completed_plans: 83
+  completed_plans: 88
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05 after v5.0 milestone start)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** Phase 35 -- Coverage Baseline and Gap Analysis
+**Current focus:** v5.0 COMPLETE -- All 18 phases, 88 plans executed
 
 ## Current Position
 
-Phase: 34 of 35 (Economic Composition and Auditor Re-examination)
+Phase: 35 of 35 (Halmos Verification and Multi-Tool Synthesis)
 Plan: 3 of 3 in current phase (COMPLETE)
-Status: Phase 34 complete, ready for Phase 35
-Last activity: 2026-03-05 -- Phase 34 completed (all 3 plans: vault/pricing, reward/boon, auditor re-examination)
+Status: v5.0 milestone COMPLETE
+Last activity: 2026-03-05 -- Phase 35 completed (all 3 plans: Halmos verification, convergence matrix, synthesis report)
 
-Progress: [██████████████░░░░░░] 57%
+Progress: [████████████████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15 (v5.0) / 112 (cumulative v1-v4)
+- Total plans completed: 18 (v5.0) / 121 (cumulative v1-v5)
 - Average duration: 7min
-- Total execution time: 90min
+- Total execution time: 120min
 
 **By Phase:**
 
@@ -45,13 +45,14 @@ Progress: [██████████████░░░░░░] 57%
 | 32 | 3 | 24min | 8min |
 | 33 | 3 | 12min | 4min |
 | 34 | 3 | 8min | 3min |
+| 35 | 3 | 30min | 10min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 4min, 3min, 3min, 3min
-- Trend: improving
+- Last 5 plans: 3min, 3min, 12min, 8min, 10min
+- Trend: Phase 35 longer due to Halmos execution (3x60s solver timeouts)
 
 *Updated after each plan completion*
-| Phase 34 P01-03 | 8min | 5 tasks | 3 files |
+| Phase 35 P01-03 | 30min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,10 @@ All v1-v4 milestone decisions archived to `.planning/milestones/`.
 - [Phase 34]: stETH read-only reentrancy impossible (ERC20, no hooks, CEI followed at all sites)
 - [Phase 34]: VRF depletion economically infeasible (attacker ETH cost exceeds LINK damage)
 - [Phase 34]: stETH slashing handled via live balanceOf reads; game invariant violation is accepted Lido dependency risk
+- [Phase 35]: Halmos check_ properties: 15 PASS, 3 model-FAIL (expected), 6 TIMEOUT; combined 28/45 verified
+- [Phase 35]: 4 multi-flag functions in convergence matrix -- all resolved SAFE with cross-phase evidence
+- [Phase 35]: Zero Medium+ findings across all v5.0 phases; same-auditor bias named as primary limitation
+- [Phase 35]: ShareMath identified as weakest verification area (Halmos timeout, Foundry fuzzing only)
 
 ### Pending Todos
 
@@ -98,12 +103,10 @@ None.
 
 ### Blockers/Concerns
 
-- Halmos timeout risk: v3.0 saw 7/12 properties timeout. Phase 35 must scope conservatively.
-- Same-auditor bias: v5.0 uses same model as v1-v4. Automated tools partially mitigate.
-- Slither viaIR compatibility: may need viaIR-disabled compilation fallback.
+None -- v5.0 milestone complete.
 
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 34 complete -- all 3 plans executed (vault/pricing, reward/boon, auditor re-examination)
+Stopped at: v5.0 COMPLETE -- Phase 35 executed (Halmos verification, convergence matrix, synthesis report)
 Resume file: None

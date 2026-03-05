@@ -6,7 +6,7 @@
 - ✅ **v2.0 Adversarial Audit** — Phases 8-13 (shipped 2026-03-05)
 - ✅ **v3.0 Adversarial Hardening** — Phases 14-18 (shipped 2026-03-05)
 - ✅ **v4.0 Pre-C4A Adversarial Stress Test** — Phases 19-29 (shipped 2026-03-05)
-- 🚧 **v5.0 Novel Zero-Day Attack Surface Audit** — Phases 30-35 (in progress)
+- ✅ **v5.0 Novel Zero-Day Attack Surface Audit** — Phases 30-35 (shipped 2026-03-05)
 
 ## Phases
 
@@ -88,7 +88,7 @@ See: `.planning/milestones/v4.0-ROADMAP.md` for full phase details.
 - [x] **Phase 32: Precision and Rounding Analysis** - Audit all 222 division operations, zero-rounding free actions, dust accumulation, wei lifecycle precision loss (completed 2026-03-05)
 - [ ] **Phase 33: Temporal, Lifecycle, and EVM-Level Analysis** - Timestamp boundaries, multi-tx races, lifecycle edge states, forced ETH, ABI encoding, assembly safety, unchecked blocks
 - [x] **Phase 34: Economic Composition and Auditor Re-examination** - Vault share inflation, price discrepancies, affiliate farming, reward manipulation, stETH edge cases, VRF griefing costs (completed 2026-03-05)
-- [ ] **Phase 35: Halmos Verification and Multi-Tool Synthesis** - Symbolic verification of pure math invariants, cross-tool convergence matrix, final findings report with attack narratives
+- [x] **Phase 35: Halmos Verification and Multi-Tool Synthesis** - Symbolic verification of pure math invariants, cross-tool convergence matrix, final findings report with attack narratives (completed 2026-03-05)
 
 ## Phase Details
 
@@ -188,9 +188,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 35-01-PLAN.md — Halmos symbolic verification (19 existing + 4 new check_ properties) (TOOL-03)
-- [ ] 35-02-PLAN.md — Cross-tool convergence matrix (Slither + Halmos + Foundry) (REEX-04)
-- [ ] 35-03-PLAN.md — Final C4A synthesis report with hypothesis investigations (SYNTH-01, SYNTH-02, SYNTH-03)
+- [x] 35-01-PLAN.md — Halmos symbolic verification (19 existing + 4 new check_ properties) (TOOL-03) — completed 2026-03-05
+- [x] 35-02-PLAN.md — Cross-tool convergence matrix (Slither + Halmos + Foundry) (REEX-04) — completed 2026-03-05
+- [x] 35-03-PLAN.md — Final C4A synthesis report with hypothesis investigations (SYNTH-01, SYNTH-02, SYNTH-03) — completed 2026-03-05
 
 ## Progress
 
@@ -235,4 +235,4 @@ Phases 31 and 32 can execute in parallel after Phase 30. Phase 33 depends on Pha
 | 32. Precision | 3/3 | Complete   | 2026-03-05 | - |
 | 33. Temporal/EVM | v5.0 | 3/3 | Complete | 2026-03-05 |
 | 34. Economic/Re-exam | 3/3 | Complete   | 2026-03-05 | - |
-| 35. Halmos/Synthesis | v5.0 | 0/3 | Planned | - |
+| 35. Halmos/Synthesis | v5.0 | 3/3 | Complete | 2026-03-05 |
