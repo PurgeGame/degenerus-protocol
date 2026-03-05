@@ -140,7 +140,13 @@ Plans:
   1. REPORT-01 prioritized findings report delivered: every confirmed finding from Phases 8–12 appears in exactly one severity section (CRITICAL / HIGH / MEDIUM / LOW / Gas / QA) with Code4rena severity methodology applied — no finding classified inconsistently with the methodology (e.g., admin-key-required paths not rated HIGH)
   2. REPORT-02 coded PoC provided for every HIGH and MEDIUM finding: each PoC is a concrete transaction sequence or pseudocode trace that a Code4rena judge can reproduce — no HIGH or MEDIUM finding is present without its PoC
   3. REPORT-03 gas report delivered: `advanceGame()` worst-case gas listed by code path with the specific adversarial state (player count, lootbox pending count, BAF activation status) that triggers each measured maximum
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Document scaffold + executive summary + severity definitions + scope/methodology
+- [ ] 13-02-PLAN.md — 4 MEDIUM findings with full PoC sequences (REPORT-01 + REPORT-02)
+- [ ] 13-03-PLAN.md — LOW finding + QA/INFO section + fix commit verifications + gas report (REPORT-03)
+- [ ] 13-04-PLAN.md — 48-row requirement coverage matrix + final integrity pass
 
 ## Progress
 
@@ -162,5 +168,5 @@ Phases 8 and 9 can run in parallel. Phase 10 requires Phase 8 complete. Phase 11
 | 9. advanceGame() Gas Analysis and Sybil Bloat | 4/4 | Complete   | 2026-03-04 | - |
 | 10. Admin Power, VRF Griefing, and Assembly Safety | 4/4 | Complete    | 2026-03-04 | - |
 | 11. Token Security, Economic Attacks, Vault and Timing | 5/5 | Complete    | 2026-03-04 | - |
-| 12. Cross-Function Reentrancy Synthesis and Unchecked Blocks | 3/3 | Complete   | 2026-03-04 | - |
-| 13. Final Synthesis Report | v2.0 | 0/TBD | Not started | - |
+| 12. Cross-Function Reentrancy Synthesis and Unchecked Blocks | 3/3 | Complete    | 2026-03-04 | - |
+| 13. Final Synthesis Report | v2.0 | 0/4 | Not started | - |
