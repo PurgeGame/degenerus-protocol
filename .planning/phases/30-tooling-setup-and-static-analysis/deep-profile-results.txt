@@ -1,0 +1,956 @@
+Compiling 100 files with Solc 0.8.34
+Solc 0.8.34 finished in 65.18s
+Compiler run successful with warnings:
+Warning (2072): Unused local variable.
+  --> test/fuzz/invariant/MultiLevel.inv.t.sol:66:9:
+   |
+66 |         uint256 currentPool = game.currentPrizePoolView();
+   |         ^^^^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+  --> test/fuzz/invariant/MultiLevel.inv.t.sol:67:9:
+   |
+67 |         uint256 nextPool = game.nextPrizePoolView();
+   |         ^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+  --> test/fuzz/invariant/MultiLevel.inv.t.sol:69:9:
+   |
+69 |         uint256 futurePool = game.futurePrizePoolTotalView();
+   |         ^^^^^^^^^^^^^^^^^^
+
+
+Ran 3 tests for test/fuzz/helpers/NonceCheck.t.sol:NonceCheck
+[PASS] test_deployerIsTestContract() (gas: 406)
+[PASS] test_nonceIncrements() (gas: 47877)
+[PASS] test_startingNonce() (gas: 2581)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 223.33µs (68.03µs CPU time)
+
+Ran 2 tests for test/fuzz/DeployCanary.t.sol:DeployCanary
+[PASS] test_allAddressesMatch() (gas: 60863)
+[PASS] test_protocolWired() (gas: 33456)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 79.31ms (82.70µs CPU time)
+
+Ran 8 tests for test/fuzz/PriceLookupInvariants.t.sol:PriceLookupInvariantsTest
+[PASS] testFuzz_costCalculation(uint24,uint256) (runs: 10000, μ: 4408, ~: 4424)
+[PASS] testFuzz_cyclicAfter100(uint24) (runs: 10000, μ: 4925, ~: 4925)
+[PASS] testFuzz_introPricing(uint24) (runs: 10000, μ: 3784, ~: 3781)
+[PASS] testFuzz_milestonePricing(uint24) (runs: 10000, μ: 3960, ~: 3960)
+[PASS] testFuzz_priceBounded(uint24) (runs: 10000, μ: 776, ~: 818)
+[PASS] testFuzz_priceDeterministic(uint24) (runs: 10000, μ: 711, ~: 753)
+[PASS] testFuzz_priceInValidSet(uint24) (runs: 10000, μ: 964, ~: 1014)
+[FAIL: `vm.assume` rejected too many inputs (131072 allowed)] testFuzz_weaklyMonotonicInCycle(uint24,uint24,uint24) (runs: 5807, μ: 4531, ~: 4342)
+Suite result: FAILED. 7 passed; 1 failed; 0 skipped; finished in 1.37s (4.11s CPU time)
+
+Ran 7 tests for test/fuzz/ShareMathInvariants.t.sol:ShareMathInvariantsTest
+[PASS] testFuzz_burnAllReturnsAll(uint128,uint128) (runs: 10000, μ: 4415, ~: 4415)
+[PASS] testFuzz_ethPreferentialSplit(uint256,uint256,uint256) (runs: 10000, μ: 5926, ~: 5907)
+[PASS] testFuzz_noOverflow(uint128,uint128,uint128) (runs: 10000, μ: 4412, ~: 4412)
+[PASS] testFuzz_payoutNeverExceedsReserve(uint128,uint128,uint128) (runs: 10000, μ: 4396, ~: 4396)
+[PASS] testFuzz_proportionalFairness(uint256,uint256) (runs: 10000, μ: 6017, ~: 6017)
+[PASS] testFuzz_refillMechanism(uint256,uint256) (runs: 10000, μ: 4444, ~: 4444)
+[PASS] testFuzz_twoUsersSolvency(uint256,uint256,uint256) (runs: 10000, μ: 6253, ~: 6253)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 1.70s (5.85s CPU time)
+
+Ran 3 tests for test/fuzz/invariant/TicketQueue.inv.t.sol:TicketQueueInvariant
+[PASS] invariant_noConsistencyViolations() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-----------------------+--------------------+-------+---------+----------╮
+| Contract              | Selector           | Calls | Reverts | Discards |
++=========================================================================+
+| TicketTrackingHandler | purchase           | 64039 | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | fulfillVrf         | 64192 | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpPastVrfTimeout | 64129 | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpTime           | 63640 | 0       | 0        |
+╰-----------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_nonParticipantHasNoTickets() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-----------------------+--------------------+-------+---------+----------╮
+| Contract              | Selector           | Calls | Reverts | Discards |
++=========================================================================+
+| TicketTrackingHandler | purchase           | 64039 | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | fulfillVrf         | 64192 | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpPastVrfTimeout | 64129 | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpTime           | 63640 | 0       | 0        |
+╰-----------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_ticketCanary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-----------------------+--------------------+-------+---------+----------╮
+| Contract              | Selector           | Calls | Reverts | Discards |
++=========================================================================+
+| TicketTrackingHandler | purchase           | 64039 | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | fulfillVrf         | 64192 | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpPastVrfTimeout | 64129 | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpTime           | 63640 | 0       | 0        |
+╰-----------------------+--------------------+-------+---------+----------╯
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 70.19s (148.83s CPU time)
+
+Ran 4 tests for test/fuzz/VRFLifecycle.t.sol:VRFLifecycle
+[PASS] test_fullVrfDailyCycle() (gas: 4236182)
+[PASS] test_vrfFulfillmentWorks() (gas: 206360)
+[PASS] test_vrfHandlerTracking() (gas: 241259)
+[PASS] test_vrfLifecycle_levelAdvancement() (gas: 41019816)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 70.78s (393.12ms CPU time)
+
+Ran 6 tests for test/fuzz/invariant/MultiLevel.inv.t.sol:MultiLevelInvariant
+[PASS] invariant_depositsExceedBalance() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 36950 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 36483 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 36498 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 36521 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 36422 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 36574 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 36552 | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_levelMonotonic() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 36950 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 36483 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 36498 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 36521 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 36422 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 36574 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 36552 | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_multiLevelCanary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 36950 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 36483 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 36498 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 36521 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 36422 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 36574 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 36552 | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_poolSumConsistency() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 36950 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 36483 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 36498 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 36521 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 36422 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 36574 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 36552 | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_priceEscalation() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 36950 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 36483 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 36498 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 36521 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 36422 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 36574 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 36552 | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_solvencyAcrossLevels() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 36950 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 36483 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 36498 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 36521 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 36422 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 36574 | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 36552 | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 75.03s (296.94s CPU time)
+
+Ran 4 tests for test/fuzz/invariant/GameFSM.inv.t.sol:GameFSMInvariant
+[PASS] invariant_fsmCanary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭------------+--------------------+-------+---------+----------╮
+| Contract   | Selector           | Calls | Reverts | Discards |
++==============================================================+
+| FSMHandler | advanceGame        | 51499 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | fulfillVrf         | 51284 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | purchase           | 51147 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpPastVrfTimeout | 51057 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpTime           | 51013 | 0       | 0        |
+╰------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_gameOverTerminal() (runs: 1000, calls: 256000, reverts: 0)
+
+╭------------+--------------------+-------+---------+----------╮
+| Contract   | Selector           | Calls | Reverts | Discards |
++==============================================================+
+| FSMHandler | advanceGame        | 51499 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | fulfillVrf         | 51284 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | purchase           | 51147 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpPastVrfTimeout | 51057 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpTime           | 51013 | 0       | 0        |
+╰------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_levelMonotonic() (runs: 1000, calls: 256000, reverts: 0)
+
+╭------------+--------------------+-------+---------+----------╮
+| Contract   | Selector           | Calls | Reverts | Discards |
++==============================================================+
+| FSMHandler | advanceGame        | 51499 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | fulfillVrf         | 51284 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | purchase           | 51147 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpPastVrfTimeout | 51057 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpTime           | 51013 | 0       | 0        |
+╰------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_validFSMState() (runs: 1000, calls: 256000, reverts: 0)
+
+╭------------+--------------------+-------+---------+----------╮
+| Contract   | Selector           | Calls | Reverts | Discards |
++==============================================================+
+| FSMHandler | advanceGame        | 51499 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | fulfillVrf         | 51284 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | purchase           | 51147 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpPastVrfTimeout | 51057 | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpTime           | 51013 | 0       | 0        |
+╰------------+--------------------+-------+---------+----------╯
+
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 112.85s (249.05s CPU time)
+
+Ran 6 tests for test/fuzz/BurnieCoinInvariants.t.sol:BurnieCoinInvariantsTest
+[PASS] testFuzz_mintBurnRoundtrip(uint128) (runs: 10000, μ: 31572, ~: 31577)
+[PASS] testFuzz_multiOp(uint128,uint128,uint128) (runs: 10000, μ: 73406, ~: 73945)
+[PASS] testFuzz_supplyInvariant_afterMint(address,uint128) (runs: 10000, μ: 42781, ~: 42781)
+[PASS] testFuzz_transferToVault(uint128) (runs: 10000, μ: 34500, ~: 34505)
+[PASS] testFuzz_vaultMintTo(uint128) (runs: 10000, μ: 42941, ~: 42941)
+[PASS] testFuzz_vaultMintTo_revertOnExceed(uint128) (runs: 10000, μ: 14105, ~: 14105)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 113.34s (231.92s CPU time)
+
+Ran 5 tests for test/fuzz/invariant/WhaleSybil.inv.t.sol:WhaleSybilInvariant
+[PASS] invariant_depositsExceedClaims() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_gameOverTerminal() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_obligationRatioHealthy() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_solvencyUnderPressure() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_whaleSybilCanary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 116.68s (552.47s CPU time)
+
+Ran 5 tests for test/fuzz/invariant/VaultShareMath.inv.t.sol:VaultShareMathInvariant
+[PASS] invariant_coinSupplyConsistencyAfterVaultOps() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 21325 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 21050 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 21524 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 21176 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 21544 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 21326 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 21180 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 21496 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 21288 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 21489 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 21258 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 21344 | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_gameSolvencyUnderVaultOps() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 21325 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 21050 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 21524 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 21176 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 21544 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 21326 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 21180 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 21496 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 21288 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 21489 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 21258 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 21344 | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultEthBalanceConsistent() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 21325 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 21050 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 21524 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 21176 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 21544 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 21326 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 21180 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 21496 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 21288 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 21489 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 21258 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 21344 | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultEthClaimsLessThanDeposits() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 21325 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 21050 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 21524 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 21176 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 21544 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 21326 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 21180 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 21496 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 21288 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 21489 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 21258 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 21344 | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultMathCanary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 21325 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 21050 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 21524 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 21176 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 21544 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 21326 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 21180 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 21496 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 21288 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 21489 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 21258 | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 21344 | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 125.16s (375.21s CPU time)
+
+Ran 4 tests for test/fuzz/invariant/DegeneretteBet.inv.t.sol:DegeneretteBetInvariant
+[PASS] invariant_degeneretteCanary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------------+--------------------+-------+---------+----------╮
+| Contract           | Selector           | Calls | Reverts | Discards |
++======================================================================+
+| DegeneretteHandler | advanceGame        | 21457 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | fulfillVrf         | 21196 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | placeEthBet        | 21258 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | purchaseTickets    | 21693 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | resolveBets        | 21378 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | warpTime           | 21208 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | advanceGame        | 21258 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | claimWinnings      | 21283 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | purchase           | 21314 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | fulfillVrf         | 21392 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpPastVrfTimeout | 21394 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpTime           | 21169 | 0       | 0        |
+╰--------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_ghostAccountingNetPositive() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------------+--------------------+-------+---------+----------╮
+| Contract           | Selector           | Calls | Reverts | Discards |
++======================================================================+
+| DegeneretteHandler | advanceGame        | 21457 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | fulfillVrf         | 21196 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | placeEthBet        | 21258 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | purchaseTickets    | 21693 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | resolveBets        | 21378 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | warpTime           | 21208 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | advanceGame        | 21258 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | claimWinnings      | 21283 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | purchase           | 21314 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | fulfillVrf         | 21392 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpPastVrfTimeout | 21394 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpTime           | 21169 | 0       | 0        |
+╰--------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_noEthCreation() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------------+--------------------+-------+---------+----------╮
+| Contract           | Selector           | Calls | Reverts | Discards |
++======================================================================+
+| DegeneretteHandler | advanceGame        | 21457 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | fulfillVrf         | 21196 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | placeEthBet        | 21258 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | purchaseTickets    | 21693 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | resolveBets        | 21378 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | warpTime           | 21208 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | advanceGame        | 21258 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | claimWinnings      | 21283 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | purchase           | 21314 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | fulfillVrf         | 21392 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpPastVrfTimeout | 21394 | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpTime           | 21169 | 0       | 0        |
+╰--------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_solvencyUnderDegenerette() (runs: 1000, calls: 256000, reverts: 0)
+
+╭------------------
+Ran 4 tests for test/fuzz/invariant/EthSolvency.inv.t.sol:EthSolvencyInvariant
+[PASS] invariant_balanceReconciliation() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 28234 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 28457 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 28437 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 28095 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 28540 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 28798 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 28429 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 28336 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 28674 | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_canary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 28234 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       
+Ran 4 tests for test/fuzz/invariant/VaultShare.inv.t.sol:VaultShareInvariant
+[PASS] invariant_vaultAllowanceBounded() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 28234 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 28457 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 28437 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 28095 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 28540 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 28798 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 28429 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 28336 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 28674 | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultCanary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 28234 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 28457 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 28437 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 28095 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 28540 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 28798 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 28429 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 28336 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 28674 | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultCoinReservesConsistent() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 28234 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 28457 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 28437 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 28095 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 28540 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 28798 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 28429 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 28336 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 28674 | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultEthNonNegative() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 28234 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 28457 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 28437 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 28095 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 28540 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 28798 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 28429 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 28336 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 28674 | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 158.80s (517.04s CPU time)
+
+Ran 4 tests for test/fuzz/invariant/EthSolvency.inv.t.sol:EthSolvencyInvariant
+[PASS] invariant_balanceReconciliation() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 28234 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 28457 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 28437 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 28095 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 28540 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 28798 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 28429 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 28336 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 28674 | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_canary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 28234 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 28457 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 28437 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 28095 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 28540 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 28798 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 28429 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 28336 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 28674 | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_ethSolvency() (runs: 1000, calls: 256000, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 28234 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 28457 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 28437 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 28095 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 28540 | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 28798 | 0       | 0        |
+|--------------+---------------------+-------+-----
+Ran 8 tests for test/fuzz/PriceLookupInvariants.t.sol:PriceLookupInvariantsTest
+[PASS] testFuzz_costCalculation(uint24,uint256) (runs: 10000, μ: 4408, ~: 4424)
+[PASS] testFuzz_cyclicAfter100(uint24) (runs: 10000, μ: 4925, ~: 4925)
+[PASS] testFuzz_introPricing(uint24) (runs: 10000, μ: 3784, ~: 3781)
+[PASS] testFuzz_milestonePricing(uint24) (runs: 10000, μ: 3960, ~: 3960)
+[PASS] testFuzz_priceBounded(uint24) (runs: 10000, μ: 776, ~: 818)
+[PASS] testFuzz_priceDeterministic(uint24) (runs: 10000, μ: 711, ~: 753)
+[PASS] testFuzz_priceInValidSet(uint24) (runs: 10000, μ: 964, ~: 1014)
+[FAIL: `vm.assume` rejected too many inputs (131072 allowed)] testFuzz_weaklyMonotonicInCycle(uint24,uint24,uint24) (runs: 5807, μ: 4531, ~: 4342)
+Suite result: FAILED. 7 passed; 1 failed; 0 skipped; finished in 200.33s (5.07s CPU time)
+
+Ran 5 tests for test/fuzz/invariant/WhaleSybil.inv.t.sol:WhaleSybilInvariant
+[PASS] invariant_depositsExceedClaims() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_gameOverTerminal() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_obligationRatioHealthy() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_solvencyUnderPressure() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_whaleSybilCanary() (runs: 1000, calls: 256000, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 42468 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 42983 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 42388 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 42827 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 42376 | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 42958 | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 200.33s (761.93s CPU time)
+
+Ran 15 test suites in 200.33s (1359.72s CPU time): 67 tests passed, 1 failed, 0 skipped (68 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/fuzz/PriceLookupInvariants.t.sol:PriceLookupInvariantsTest
+[FAIL: `vm.assume` rejected too many inputs (131072 allowed)] testFuzz_weaklyMonotonicInCycle(uint24,uint24,uint24) (runs: 5807, μ: 4531, ~: 4342)
+
+Encountered a total of 1 failing tests, 67 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test
