@@ -104,7 +104,7 @@ See: `.planning/milestones/v4.0-ROADMAP.md` for full phase details.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 30-01-PLAN.md — Foundry deep profile and coverage baseline
+- [x] 30-01-PLAN.md — Foundry deep profile and coverage baseline — completed 2026-03-05
 - [x] 30-02-PLAN.md — Slither full triage (630 findings) — completed 2026-03-05
 - [ ] 30-03-PLAN.md — Halmos configuration fix and verification
 
@@ -229,7 +229,7 @@ Phases 31 and 32 can execute in parallel after Phase 30. Phase 33 depends on Pha
 | 27. White Hat | v4.0 | 1/1 | Complete | 2026-03-05 |
 | 28. Game Theory | v4.0 | 1/1 | Complete | 2026-03-05 |
 | 29. Synthesis | v4.0 | 0/0 | Complete | 2026-03-05 |
-| 30. Tooling Setup | v5.0 | 1/3 | In Progress | - |
+| 30. Tooling Setup | 2/3 | In Progress|  | - |
 | 31. Composition | v5.0 | 0/? | Not started | - |
 | 32. Precision | v5.0 | 0/? | Not started | - |
 | 33. Temporal/EVM | v5.0 | 0/? | Not started | - |
