@@ -930,7 +930,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint256 yieldPool = totalBal - obligations;
         uint256 stakeholderShare = (yieldPool * 2300) / 10_000; // 23% each for DGNRS and Vault
-        uint256 futureShare = yieldPool - (stakeholderShare << 1); // Remainder (~46%)
+        uint256 futureShare = (yieldPool * 4600) / 10_000; // 46% to future prize pool (~8% buffer left unextracted)
 
         uint256 claimableDelta;
         if (stakeholderShare != 0) {

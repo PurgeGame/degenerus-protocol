@@ -232,7 +232,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [104-127] unitsLevel      - Level index for unitsAtLevel tracking   |
       |  [128-151] frozenUntilLevel - Whale bundle freeze level (0 = none)   |
       |  [152-153] whaleBundleType  - Bundle type (0=none,1=10,3=100)        |
-      |  [154-227] reserved        - Reserved for forward compatibility      |
+      |  [154-159] (reserved)       - 6 unused bits                           |
+      |  [160-183] mintStreakLast  - Mint streak last completed level (24b)   |
+      |  [184-227] (reserved)      - 44 unused bits                          |
       |  [228-243] unitsAtLevel    - Mints at current level                  |
       |  [244]    (deprecated)     - Previously used for bonus tracking      |
       +======================================================================+*/
