@@ -68,11 +68,11 @@ Requirements for v4.0 Pre-C4A Adversarial Stress Test. Each maps to roadmap phas
 
 ### Gas Griefing Specialist
 
-- [ ] **GAS-01**: Every function analyzed for attacker-controllable gas consumption — can any single transaction be forced above 10M gas under any circumstances? (tx limit 16.7M)
-- [ ] **GAS-02**: advanceGame and VRF callback gas recalculation against current Ethereum parameters (v2.0 used 16M block limit; needs update)
-- [ ] **GAS-03**: Storage slot bombing analysis — can attacker force expensive SSTORE operations by creating many entries in mappings/arrays (bucket cursor, ticket queue, player registry)?
-- [ ] **GAS-04**: OOG in callback/fallback patterns — can attacker cause out-of-gas in VRF callback or ETH receive callback that bricks game state?
-- [ ] **GAS-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
+- [x] **GAS-01**: Every function analyzed for attacker-controllable gas consumption — can any single transaction be forced above 10M gas under any circumstances? (tx limit 16.7M)
+- [x] **GAS-02**: advanceGame and VRF callback gas recalculation against current Ethereum parameters (v2.0 used 16M block limit; needs update)
+- [x] **GAS-03**: Storage slot bombing analysis — can attacker force expensive SSTORE operations by creating many entries in mappings/arrays (bucket cursor, ticket queue, player registry)?
+- [x] **GAS-04**: OOG in callback/fallback patterns — can attacker cause out-of-gas in VRF callback or ETH receive callback that bricks game state?
+- [x] **GAS-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
 
 ### White Hat Completionist
 
@@ -166,11 +166,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEP-03 | Phase 25 | Complete |
 | DEP-04 | Phase 25 | Complete |
 | DEP-05 | Phase 25 | Complete |
-| GAS-01 | Phase 26 | Pending |
-| GAS-02 | Phase 26 | Pending |
-| GAS-03 | Phase 26 | Pending |
-| GAS-04 | Phase 26 | Pending |
-| GAS-05 | Phase 26 | Pending |
+| GAS-01 | Phase 26 | Complete |
+| GAS-02 | Phase 26 | Complete |
+| GAS-03 | Phase 26 | Complete |
+| GAS-04 | Phase 26 | Complete |
+| GAS-05 | Phase 26 | Complete |
 | WHTHAT-01 | Phase 27 | Pending |
 | WHTHAT-02 | Phase 27 | Pending |
 | WHTHAT-03 | Phase 27 | Pending |
