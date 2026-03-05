@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Novel Zero-Day Attack Surface Audit
-status: unknown
-last_updated: "2026-03-05T14:42:37.673Z"
+status: in-progress
+last_updated: "2026-03-05T15:04:00Z"
 progress:
   total_phases: 18
-  completed_phases: 16
+  completed_phases: 17
   total_plans: 88
-  completed_plans: 80
+  completed_plans: 83
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05 after v5.0 milestone start)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** Phase 33 -- Temporal, Lifecycle, and EVM-Level Analysis
+**Current focus:** Phase 35 -- Coverage Baseline and Gap Analysis
 
 ## Current Position
 
-Phase: 33 of 35 (Temporal, Lifecycle, and EVM-Level Analysis)
+Phase: 34 of 35 (Economic Composition and Auditor Re-examination)
 Plan: 3 of 3 in current phase (COMPLETE)
-Status: Phase 33 complete, ready for Phase 34
-Last activity: 2026-03-05 -- Phase 33 completed (all 3 plans: temporal analysis, lifecycle analysis, EVM-level analysis)
+Status: Phase 34 complete, ready for Phase 35
+Last activity: 2026-03-05 -- Phase 34 completed (all 3 plans: vault/pricing, reward/boon, auditor re-examination)
 
-Progress: [████████████░░░░░░░░] 53%
+Progress: [██████████████░░░░░░] 57%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12 (v5.0) / 112 (cumulative v1-v4)
+- Total plans completed: 15 (v5.0) / 112 (cumulative v1-v4)
 - Average duration: 7min
-- Total execution time: 82min
+- Total execution time: 90min
 
 **By Phase:**
 
@@ -44,13 +44,14 @@ Progress: [████████████░░░░░░░░] 53%
 | 31 | 3 | 21min | 7min |
 | 32 | 3 | 24min | 8min |
 | 33 | 3 | 12min | 4min |
+| 34 | 3 | 8min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 8min, 8min, 4min, 4min, 4min
+- Last 5 plans: 4min, 4min, 3min, 3min, 3min
 - Trend: improving
 
 *Updated after each plan completion*
-| Phase 33 P01-03 | 12min | 6 tasks | 3 files |
+| Phase 34 P01-03 | 8min | 5 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,14 @@ All v1-v4 milestone decisions archived to `.planning/milestones/`.
 - [Phase 33]: No code path uses address(this).balance to SET internal pool amounts -- forced ETH net-negative for attacker
 - [Phase 33]: 224 unchecked blocks audited (vs 208 estimate), all SAFE
 - [Phase 33]: Assembly nested mapping uses non-standard add() for second level -- self-consistent (assembly-only access)
+- [Phase 34]: Vault donation attack independently confirmed safe (1T initial supply, proportional distribution, flash-loan resistant)
+- [Phase 34]: No cross-system price arbitrage across 7 price surfaces -- each system uses independent pricing
+- [Phase 34]: Indirect upline cycle (A->B->A) is by design: 0.8% upline reward, not 20% direct
+- [Phase 34]: Activity score manipulation cannot produce net-positive extraction (10 ETH/level EV cap, 3.5 ETH max excess)
+- [Phase 34]: All 8 boon categories are independent -- no multiplicative cross-category stacking
+- [Phase 34]: stETH read-only reentrancy impossible (ERC20, no hooks, CEI followed at all sites)
+- [Phase 34]: VRF depletion economically infeasible (attacker ETH cost exceeds LINK damage)
+- [Phase 34]: stETH slashing handled via live balanceOf reads; game invariant violation is accepted Lido dependency risk
 
 ### Pending Todos
 
@@ -96,5 +105,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Phase 33 complete -- all 3 plans executed (temporal analysis, lifecycle analysis, EVM-level analysis)
+Stopped at: Phase 34 complete -- all 3 plans executed (vault/pricing, reward/boon, auditor re-examination)
 Resume file: None
