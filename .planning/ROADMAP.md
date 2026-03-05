@@ -157,7 +157,7 @@ Plans:
   6. afKing auto-rebuy (130% bonus = 2.30x total, 145% afKing = 2.45x total). Future tickets: 95%/5% near/far split. DGNRS final-day 1% reward to solo-bucket winner
 **Plans:** 6 plans
 Plans:
-- [ ] 38-01-PLAN.md — Lootbox EV multiplier, boost system, and BURNIE coinflip mechanics
+- [x] 38-01-PLAN.md — Lootbox EV multiplier, boost system, and BURNIE coinflip mechanics
 - [ ] 38-02-PLAN.md — Degenerette match-based betting with ROI curve and 3 currencies
 - [ ] 38-03-PLAN.md — Full affiliate system (3-tier, payout modes, taper, leaderboard)
 - [ ] 38-04-PLAN.md — ETH claims with 1 wei sentinel and game-over mechanics
@@ -225,7 +225,11 @@ Plans:
   5. Degenerette payout tests: base payouts, ROI curve, hero quadrant boost/penalty, EV normalization match DegeneretteModule
   6. Coinflip payout tests: win distribution (5%/90%/5% tiers), mean payout ~1.97x, match BurnieCoinflip.sol
   7. At least one end-to-end scenario runs through both the sim engine and real contracts (via Hardhat), comparing final state to confirm parity
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 42-01-PLAN.md — Core formula validation (price escalation, BPS splits, activity score, lootbox EV)
+- [ ] 42-02-PLAN.md — Pass pricing, vault share math, coinflip, and degenerette validation
+- [ ] 42-03-PLAN.md — Hardhat cross-validation (sim vs contract end-to-end parity)
 
 ## Progress
 
@@ -241,10 +245,10 @@ Phases execute in numeric order: 36 -> 37 -> 38 (parallel with 39) -> 40 -> 41 -
 | 30-35 | v5.0 Audit | 18/18 | Complete | 2026-03-05 |
 | 36. Engine Foundation | 3/3 | Complete    | 2026-03-05 | - |
 | 37. Core Game Loop | 5/5 | Complete    | 2026-03-05 | - |
-| 38. Extended Mechanics | Sim v1.0 | 0/6 | Planned | - |
+| 38. Extended Mechanics | Sim v1.0 | 1/6 | In Progress | - |
 | 39. Passes and Vault | 3/3 | Complete    | 2026-03-05 | - |
 | 40. Player Archetypes | Sim v1.0 | 0/4 | Planned | - |
 | 41. Interactive Visualization | Sim v1.0 | 0/3 | Planned | - |
-| 42. Validation and Contract Parity | Sim v1.0 | 0/? | Not started | - |
+| 42. Validation and Contract Parity | Sim v1.0 | 0/3 | Not started | - |
 
 **Cumulative:** 35 phases complete (121 plans), 7 phases planned. 5 milestones shipped, 1 in progress.
