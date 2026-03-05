@@ -85,7 +85,7 @@
 
 ### Final Report (REPORT)
 - [x] **REPORT-01**: Final prioritized findings report delivered with CRITICAL / HIGH / MEDIUM / LOW / Gas / QA sections and Code4rena severity methodology applied throughout
-- [ ] **REPORT-02**: Coded PoC (pseudocode or tx sequence) provided for every HIGH and MEDIUM finding
+- [x] **REPORT-02**: Coded PoC (pseudocode or tx sequence) provided for every HIGH and MEDIUM finding
 - [ ] **REPORT-03**: Gas report: `advanceGame()` worst-case gas by code path with the specific adversarial state that triggers each maximum
 
 ## Future Requirements (v3.0)
@@ -156,7 +156,7 @@
 | REENT-06 | Phase 12 | Complete |
 | REENT-07 | Phase 12 | Complete |
 | REPORT-01 | Phase 13 | Complete |
-| REPORT-02 | Phase 13 | Pending |
+| REPORT-02 | Phase 13 | Complete |
 | REPORT-03 | Phase 13 | Pending |
 
 **Coverage:**
