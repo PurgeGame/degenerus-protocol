@@ -9,6 +9,7 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
+import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 
 /**
  * @title DegenerusGameWhaleModule
@@ -17,7 +18,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @dev This module is called via delegatecall from DegenerusGame, meaning all storage
  *      reads/writes operate on the game contract's storage.
  */
-contract DegenerusGameWhaleModule is DegenerusGameStorage {
+contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -869,8 +870,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_COUNT_SHIFT, BitPackingLib.MASK_24, 0);
         data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_STREAK_SHIFT, BitPackingLib.MASK_24, 0);
         data = BitPackingLib.setPacked(data, BitPackingLib.LAST_LEVEL_SHIFT, BitPackingLib.MASK_24, 0);
-        // MINT_STREAK_LAST_COMPLETED is at shift 160 (from MintStreakUtils)
-        data = BitPackingLib.setPacked(data, 160, BitPackingLib.MASK_24, 0);
+        data = BitPackingLib.setPacked(data, MINT_STREAK_LAST_COMPLETED_SHIFT, BitPackingLib.MASK_24, 0);
         mintPacked_[player] = data;
 
         // Reset quest streak via external call to quests contract

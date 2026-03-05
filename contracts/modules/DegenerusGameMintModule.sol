@@ -848,7 +848,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 bonusCredit;
         if (payInCoin) {
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
-            _coinReceive(payer, coinCost, targetLevel);
+            _coinReceive(payer, coinCost);
 
             {
                 uint32 questQty = uint32(quantity / (4 * TICKET_SCALE));
@@ -968,12 +968,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
     function _coinReceive(
         address payer,
-        uint256 amount,
-        uint24 lvl
+        uint256 amount
     ) private {
-        uint8 stepMod = uint8(lvl % 20);
-        if (stepMod == 13) amount = (amount * 3) / 2;
-        else if (stepMod == 18) amount = (amount * 9) / 10;
         coin.burnCoin(payer, amount);
     }
 

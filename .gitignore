@@ -19,3 +19,4 @@ forge-out/
 lib/
 cache/fuzz/
 slither-report.json
+out/

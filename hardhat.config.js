@@ -1,9 +1,9 @@
 import "@nomicfoundation/hardhat-toolbox";
-import { subtask } from "hardhat/config.js";
+import "dotenv/config";
 import { TASK_TEST_GET_TEST_FILES } from "hardhat/builtin-tasks/task-names.js";
+import { subtask } from "hardhat/config.js";
 import { glob } from "hardhat/internal/util/glob.js";
 import path from "node:path";
-import "dotenv/config";
 
 const isTestnetBuild = process.env.TESTNET_BUILD === "1";
 
@@ -44,7 +44,7 @@ const config = {
           viaIR: true,
           optimizer: {
             enabled: true,
-            runs: 2
+            runs: 200
           },
           outputSelection: {
             "*": {
