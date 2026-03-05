@@ -190,25 +190,77 @@ All pending and future lootbox purchases are frozen. `openLootBox` and `openBurn
 
 ## Low Findings
 
-*[Content in Plan 13-03]*
+### L-v2-01: creditLinkReward Not Implemented in BurnieCoin — LINK Forwarded Without BURNIE Credit
+
+**Severity:** LOW
+**Affected Contract:** DegenerusAdmin.sol:636 (`onTokenTransfer`), BurnieCoin.sol (IBurnieCoin interface)
+**Requirement:** ACCT-05
+**Discovered:** Phase 8, Plan 08-02
+
+**Description:**
+`creditLinkReward(address, uint256)` is declared in the `IBurnieCoin` interface but is never implemented in `BurnieCoin.sol`. When `onTokenTransfer` (the ERC-677 callback for LINK deposits) forwards LINK to the VRF subscription and then calls `COIN.creditLinkReward(from, amount)`, the call either silently fails (if the function selector resolves to a fallback) or reverts. LINK is still correctly forwarded to the Chainlink VRF subscription — the primary purpose of `onTokenTransfer` is unaffected. The missing side effect is that LINK donors do not receive the intended BURNIE reward for funding the subscription.
+
+**Root Cause:**
+Interface and implementation diverged — the BURNIE incentive for LINK donation was declared in the interface but the corresponding implementation in BurnieCoin.sol was either never written or was removed without updating the interface.
+
+**Impact:**
+No fund loss. LINK forwarding (the safety-critical path) is unaffected. BURNIE reward is simply not credited. Users who fund the VRF subscription with LINK expecting a BURNIE reward receive nothing. Impact is LOW — conditional on the BURNIE reward being advertised as a feature; if undocumented, it is an unrealized feature rather than a user-facing defect.
+
+**Remediation:**
+Option A: Implement `creditLinkReward(address donor, uint256 linkAmount)` in BurnieCoin.sol to credit BURNIE proportional to LINK amount (using the same LINK/ETH price feed already available in DegenerusAdmin).
+Option B: Remove the `creditLinkReward` call from `onTokenTransfer` and remove the function declaration from IBurnieCoin if the BURNIE incentive is deprecated.
 
 ---
 
 ## Gas Report
 
-*[Content in Plan 13-04]*
+*[Content in Plan 13-03 Task 2]*
 
 ---
 
 ## QA / Informational Findings
 
-*[Content in Plan 13-03]*
+The following observations have no direct security impact. They are reported for completeness and code quality.
+
+### Centralization Risk
+
+| ID | Severity | Contract | Description |
+|----|----------|----------|-------------|
+| ADMIN-01-SA1 | INFO | DegenerusAdmin.sol:368 (`isVaultOwner`) | Dual-auth path: any address acquiring >30% DGVE achieves full admin power equivalent to CREATOR. No time-lock, no multi-sig, no delay on governance transitions. |
+| ADMIN-01-I1 | INFO | ContractAddresses.sol (CREATOR constant) | CREATOR is a compile-time constant EOA with no key rotation path. Changing CREATOR requires full protocol redeployment. The 2-of-2 governance (CREATOR + DGVE threshold) provides no redundancy if the CREATOR key is lost. |
+
+### Documentation / NatSpec Discrepancies
+
+| ID | Severity | Contract | Description |
+|----|----------|----------|-------------|
+| ADMIN-02-INFO | QA | DegenerusGameAdvanceModule.sol:294 | wireVrf NatSpec states "Idempotent after first wire (repeats must match)" but the code performs an unconditional overwrite with no guard. This discrepancy strengthens M-v2-01 (a developer reviewing NatSpec would not anticipate unrestricted re-wiring). |
+| ASSY-01-I1 | QA | DegenerusGameStorage.sol:104-105 | Storage comment describes `traitBurnTicket` as a nested mapping formula, but the actual type is `address[][256]` (inplace encoding). Comment is incorrect; assembly slot calculation is correct. |
+
+### CEI / Callback Observations (Non-Exploitable)
+
+| ID | Severity | Contract | Description |
+|----|----------|----------|-------------|
+| ACCT-05-I1 | INFO | DegenerusAdmin.sol:613,636 | `onTokenTransfer` has a formal CEI deviation (LINK forwarded before `creditLinkReward` state update). Not exploitable: the VRF coordinator is a trusted Chainlink contract with no re-entry interface. |
+| REENT-02-INFO | INFO | DegenerusDeityPass.sol:428 | `_transfer()` calls `onDeityPassTransfer` (external delegatecall into WhaleModule) before setting `_owners[tokenId] = to`. WhaleModule reads DegenerusGame storage only, never calls back to DegenerusDeityPass, so the stale `_owners` value is never observed. |
+
+### Design Observations
+
+| ID | Severity | Contract | Description |
+|----|----------|----------|-------------|
+| ACCT-10-I1 | INFO | DegenerusGame.sol:2856 (`receive()`) | selfdestruct-forced ETH bypasses `receive()` and enters the contract balance without updating `futurePrizePool`. This ETH becomes a permanent protocol reserve, strengthening the solvency margin. No attacker benefit identified. |
+| 9539c6d-INFO-01 | INFO | JackpotBucketLib.sol (`capBucketCounts`) | `DAILY_CARRYOVER_MIN_WINNERS=20` floor can cause combined daily + carryover winner count to reach up to 341, exceeding `DAILY_ETH_MAX_WINNERS=321` by 20. Intentional DoS-prevention trade-off documented in source. Gas impact of 341 winners is well within the 30M block limit ceiling. |
 
 ---
 
 ## Fix Commit Verifications
 
-*[Content in Plan 13-03]*
+Three fix commits were introduced during the audit period and verified for bypass in Phase 12 (REENT-04).
+
+| Commit | Change | Bypass Test | Verdict |
+|--------|--------|-------------|---------|
+| `4592d8c` | Added `COIN_PURCHASE_CUTOFF` guard to `_purchaseCoinFor()`; uses `block.timestamp` (not `msg.sender`); fires when `ticketQuantity != 0`; lootbox path correctly exempt from the cutoff; level-0 vs. level-1 boundary unambiguous | Tested via combined purchase paths (direct, operator-proxied, whale bundle, lazy pass, deity pass) at both sides of the cutoff timestamp; lootbox path tested to confirm exemption | **PASS** |
+| `cbbafa0` | Changed `<` to `<=` in `claimableWinnings[player] <= fromClaimable` comparison in DegeneretteModule; exactly one `fromClaimable` site confirmed; sentinel value 1 preserved by `<=` (sentinel can never satisfy `>` without a real claimable balance) | Tested sentinel bypass: set `claimableWinnings[player] = 1` (sentinel), call `claimDegeneretteWinnings`; withdrawal blocked at `fromClaimable = 0`; sentinel preserved | **PASS** |
+| `9539c6d` | Added `if (scaledTotal > nonSoloCap)` precondition to `capBucketCounts` excess computation; trim loop uses `excess != 0` guard; entropy-rotated trim selection prevents predictable order | Tested underflow path: state where `scaledTotal <= nonSoloCap` (no excess); confirmed subtraction is not reached; tested with 20-winner floor overcommit — 341 combined winners fit within gas ceiling | **PASS** |
 
 ---
 
