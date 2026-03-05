@@ -1,341 +1,405 @@
 # Domain Pitfalls
 
-**Domain:** Adding Foundry invariant fuzzing and blind adversarial testing to an existing Hardhat-based 22-contract DeFi/GameFi protocol
+**Domain:** Adding novel zero-day attack surface hunting and automated tooling validation (Slither triage, Halmos symbolic verification, Foundry extended fuzzing) to a 22-contract GameFi protocol that has already passed 4 audit milestones with 0 Medium+ findings across 103 plans and 10 independent blind adversarial agents
 **Researched:** 2026-03-05
-**Confidence:** HIGH (project-specific analysis of existing codebase + foundry.toml config, corroborated with official Foundry docs and community experience)
+**Confidence:** HIGH (project-specific analysis of v1-v4 audit history, documented v3 limitations, 2025-2026 post-audit exploit patterns, Halmos/Slither/Foundry tool-specific limitations, cognitive bias research in audit contexts)
 
 ---
 
 ## How to Read This File
 
-Pitfalls are grouped by severity and tagged with the phase where they must be addressed:
-- **Setup** -- Foundry integration, compiler alignment, project structure
-- **Harness writing** -- Handler design, invariant formulation, targeting configuration
-- **Attack sessions** -- Adversarial brief design, bias mitigation, PoC methodology
-- **Reporting** -- Findings synthesis, confidence claims
+Pitfalls are grouped by severity and tagged with which v5.0 phase should address them:
+- **Cognitive** -- Biases specific to "5th pass" auditing after 4 clean milestones
+- **Tooling** -- Halmos, Slither, Foundry failure modes and misinterpretation risks
+- **Methodology** -- Scope creep, false novelty, anchoring on prior work
+- **Composition** -- Cross-contract and cross-tool interaction pitfalls
+- **Reporting** -- How to present v5.0 results without inflating or deflating confidence
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause wasted effort, false confidence, or invalidate the entire testing campaign.
+Mistakes that render the v5.0 milestone worthless or produce dangerous false confidence.
 
-### Pitfall 1: ContractAddresses Compile-Time Constants Block Real Invariant Testing
+### Pitfall 1: "5th Pass Confirmation Bias" -- The Protocol-Is-Clean Anchor
 
-**What goes wrong:** ContractAddresses.sol uses `address(0)` compile-time constants. Foundry compiles contracts independently of the Hardhat patch-recompile pipeline. Every cross-contract call in a Foundry-deployed contract hits `address(0)` and silently fails or reverts, making multi-contract invariant tests meaningless.
+**What goes wrong:** Four prior milestones, 103 plans, 10 blind adversarial agents, 1,029 tests -- ALL concluded zero Medium+ findings. The psychological anchor is overwhelming. Every analyst approaching this codebase now carries the implicit prior: "this code is clean." This prior corrupts the investigation. Instead of genuinely hunting zero-days, the analyst pattern-matches against known vulnerability classes, confirms the protocol handles each one correctly (as v1-v4 already showed), and concludes "still clean." The investigation becomes a confirmation exercise, not a discovery exercise.
 
-**Why it happens:** The existing test infrastructure relies on `patchContractAddresses.js` to predict nonce-based addresses, rewrite the .sol file, and recompile before deployment. Foundry has no equivalent mechanism -- `forge test` compiles once and runs. The existing fuzz tests (BurnieCoinInvariants, PriceLookupInvariants, ShareMathInvariants) deliberately sidestep this by testing mock/standalone contracts, not the real protocol.
+**Why it happens:** Bayesian reasoning is correct here -- 4 clean passes SHOULD increase prior probability of safety. But the failure mode is treating high prior probability as certainty and adjusting investigation effort accordingly. The analyst unconsciously reduces scrutiny on areas already marked "safe" and increases scrutiny on areas already known to be safe (because those are the areas they understand). This is anchoring bias compounded by effort misallocation.
 
-**Consequences:** Invariant tests that appear to deploy the full protocol actually deploy broken contracts. Tests pass because invariants hold trivially on contracts that cannot interact. Zero bugs found. False confidence going into C4 contest.
+The 2025-2026 exploit data is clear: ~70% of major DeFi exploits came from protocols that had passed professional audits. The median time between audit completion and exploit is 47 days. "Audited and clean" is not "secure."
+
+**Consequences:** v5.0 produces a report that says "automated tools confirm v1-v4 conclusions." The protocol goes to C4A with inflated confidence. Wardens find a composition bug or precision exploit in an area all 4 milestones glossed over because it "looked fine."
+
+**Warning signs:**
+- Analyst spends >60% of effort on areas v1-v4 already covered thoroughly
+- Novel attack surface investigation feels like re-checking rather than discovering
+- "No issues found" conclusions cite v1-v4 evidence rather than new independent analysis
+- Temporal, composition, and EVM-level attack surfaces receive cursory treatment because "the code is simple there"
 
 **Prevention:**
-- For system-level invariants (ETH solvency, game FSM): build a Foundry `setUp()` that deploys all 22 contracts in the correct nonce order from the same deployer, then wires addresses via constructor args or a post-deploy initialization pattern.
-- Alternative: use `vm.etch()` to place contract bytecode at expected addresses, bypassing ContractAddresses entirely.
-- Alternative: create a Foundry-specific `ContractAddresses.sol` override using remappings that provides real deployed addresses from `setUp()`.
-- Simplest and most practical: accept the existing pattern of isolated-math invariant tests (what the project already does) and reserve multi-contract integration testing for the Hardhat suite. The v3.0 milestone targets 5 specific invariants; decide per-invariant whether it needs full protocol or can use isolated mocks.
+- Start every investigation from the hypothesis "v1-v4 were wrong about this area." Force the analyst to find the specific flaw in prior reasoning before accepting the prior conclusion.
+- Allocate investigation time by INVERSE of prior coverage: areas with the most v1-v4 attention get the LEAST v5.0 attention. Areas v1-v4 barely touched (precision edge cases, temporal boundaries, EVM-level weirdness, cross-contract composition under stress) get the MOST attention.
+- Use automated tools (Slither, Halmos, Foundry) as independent ORACLES that do not share the same-model bias. If Slither flags something v1-v4 dismissed, investigate it fully rather than reflexively dismissing it.
+- Quantify the prior: "v1-v4 examined function X with Y amount of effort. The probability of a bug surviving Y effort is Z. Is Z low enough?" If Z is not quantifiable, the prior is not evidence.
 
-**Detection:** Check that `forge test --show-progress` actually executes transactions against real contract logic, not `address(0)`. Add a canary invariant: `assert(game.owner() != address(0))`.
+**Detection:** Count the number of genuinely novel attack surfaces investigated (not re-checks of known surfaces). If novel surfaces < 50% of investigation effort, confirmation bias is dominating.
 
-**Phase:** Setup (must solve before writing any system-level harnesses).
+**Phase:** All phases -- this is the meta-pitfall of v5.0.
 
 ---
 
-### Pitfall 2: Invariant Tests with Poor State Coverage Produce False Confidence
+### Pitfall 2: Slither False Positive Fatigue from 636 Pre-Existing Results
 
-**What goes wrong:** Invariant tests pass across hundreds of runs but the fuzzer never reaches interesting protocol states. For this protocol: the game never advances past level 0, VRF callbacks never fire, no whale bundles are purchased, no jackpots are triggered, no game-over is reached. The invariant `address(game).balance >= totalObligations` holds trivially because nothing happened.
+**What goes wrong:** Running Slither on this 22-contract, 85K-line codebase produces hundreds of results. The prior milestones already triaged Slither results (v1.0 used two-pass methodology, v2.0 established false-positive classification). The analyst faces a wall of 636+ detector hits, the vast majority of which are known false positives or acknowledged informational findings. Fatigue sets in. The analyst begins bulk-dismissing results by category ("all reentrancy results are false positives because we verified CEI in v2.0 Phase 12"). Buried in the dismissed results is one genuine finding that was not present in prior triage because it involves a cross-detector pattern (e.g., a reentrancy result that is only exploitable BECAUSE of a separate unchecked-return result on the same code path).
 
-**Why it happens:** Without guided handlers, Foundry's invariant fuzzer generates random call sequences where most calls revert (wrong phase, insufficient funds, RNG locked, unauthorized). The fuzzer wastes 90%+ of its depth on reverted calls. With `fail_on_revert = false` (current config in foundry.toml), these silent failures are invisible.
+**Why it happens:** Slither's false positive rate for reentrancy is ~10.9%, which is good relative to competitors (25-90%), but on 636 results that is still 60+ false positives in reentrancy alone. Triaging 636 results manually is cognitively exhausting. After the 100th false positive, the analyst's threshold for "investigate further" rises dramatically. Results that would have triggered investigation at position #10 get dismissed at position #500.
 
-**Consequences:** Invariant suite reports green. Coverage is an illusion. The dangerous states -- mid-jackpot distribution, partial game-over with pending claims, concurrent whale+regular minting -- are never tested.
+**Consequences:** A real finding is dismissed as a known false positive. The most dangerous outcome: an analyst creates a bulk exclusion rule (e.g., `--exclude reentrancy-eth`) that suppresses an entire detector category, including the one genuine hit.
+
+**Warning signs:**
+- Analyst creates broad exclusion rules (`detectors_to_exclude` by category) rather than per-finding suppression
+- Triage rate accelerates as session progresses (spending 5 min per finding initially, 10 sec per finding after an hour)
+- New Slither results (from detectors not run in v1.0) receive the same dismissal treatment as re-run detectors
+- No cross-detector analysis (investigating whether finding A + finding B compose into a real vulnerability)
 
 **Prevention:**
-- Write handler contracts that guide the fuzzer through valid state transitions: fund actors with ETH via `vm.deal()`, purchase tickets at correct price, advance through VRF request/fulfill cycles, trigger jackpots at milestone levels.
-- Use ghost variables to track cumulative ETH in/out and verify against contract balance.
-- Set `show_metrics = true` in foundry.toml's `[invariant]` section to monitor call success rates. Target >60% non-reverting calls.
-- Add phase-advancing helper functions in the handler (e.g., `advanceToLevel(n)` that does the full purchase+VRF+advance cycle).
-- Log which game states are reached and assert that deep states are actually hit.
+- NEVER bulk-exclude detector categories. Suppress individual findings with `slither.db.json` entries that include a reason string and the analyst's name/date.
+- Triage in REVERSE priority order: start with the detectors NOT run in prior milestones. These are the highest-value results because they have zero prior coverage.
+- Run Slither with `--exclude-informational --exclude-low` on first pass to reduce volume, then run full suite only on contracts/functions flagged as interesting.
+- Cross-reference Slither results with Foundry fuzzing failures. A Slither reentrancy warning on a function that Foundry invariant testing also flags as boundary-sensitive is NOT a false positive -- it is a composition signal.
+- Set a hard triage time limit (e.g., 2 hours). After the limit, STOP triaging and switch to targeted investigation of the 10 most interesting results rather than continuing to bulk-dismiss.
+- Use Slither's `--triage-mode` if available, or create a structured triage spreadsheet with columns: detector, function, severity, prior-triage-status, v5.0-assessment, cross-reference.
 
-**Detection:** After running invariants, check metrics output. If a handler function like `handler_purchaseTicket` has 95% revert rate, the invariant is not testing purchase flows. Check if `game.currentLevel()` ever exceeds level 2.
+**Detection:** Check the triage log timestamp deltas. If the last 200 results were triaged in under 30 minutes, fatigue is driving dismissal.
 
-**Phase:** Harness writing (most important phase for invariant quality).
+**Phase:** Slither triage phase (early, before manual analysis).
 
 ---
 
-### Pitfall 3: Foundry + Hardhat Compiler Version Mismatch
+### Pitfall 3: Halmos Timeout/Memory Interpreted as "Verified Safe"
 
-**What goes wrong:** foundry.toml currently specifies `solc_version = "0.8.26"` but hardhat.config.js specifies version `"0.8.34"`. Contracts compile differently under each compiler. `DegenerusGameStorage.sol` uses `pragma solidity 0.8.34` while other contracts use `0.8.26`. Foundry will fail to compile DegenerusGameStorage (and all contracts that import it) because 0.8.26 < 0.8.34.
+**What goes wrong:** v3.0 already encountered this: 7 of 12 Halmos arithmetic properties timed out. v5.0 attempts more ambitious symbolic verification -- cross-contract invariants, multi-step state transitions, precision proofs. Halmos hits path explosion on DegenerusGame (19KB, 100+ storage slots, dozens of branches in `advanceGame()` alone). The solver returns TIMEOUT after consuming gigabytes of memory. The analyst writes "no counterexample found" in the report. This is technically accurate but practically useless -- the solver did not explore enough state space to find a counterexample even if one exists.
 
-**Why it happens:** The two config files evolve independently. The Hardhat config was updated to 0.8.34 but foundry.toml was never synchronized.
+**Why it happens:** Halmos performs bounded symbolic execution. Three fundamental limitations collide with this protocol:
+1. **Path explosion:** Each branch doubles solver work. `advanceGame()` alone has dozens of branches. With 10 delegatecall modules, the branching factor is enormous.
+2. **Nonlinear arithmetic:** Division, multiplication, and modulo operations (used extensively in `PriceLookupLib`, `JackpotModule`, whale pricing) are NP-hard for SMT solvers. Halmos disables nonlinear arithmetic reasoning by default, which means the solver may generate invalid counterexamples or miss real ones.
+3. **Loop bounds:** Halmos unrolls loops up to a configurable bound (default: 2). The protocol has loops that iterate over ticket queues, player lists, and level ranges. With bound=2, the solver only checks the first 2 iterations, missing bugs that manifest at iteration 50 or at array boundary crossings.
+4. **viaIR compilation:** The bytecode produced by viaIR with optimizer runs=200 may have different branching structure than the source code, further complicating symbolic analysis.
 
-**Consequences:** Foundry cannot compile the protocol at all. Or if pragmas are loosened with `^`, subtle bytecode differences between compiler versions could mean Foundry validates different behavior than Hardhat. Storage layout could differ between versions, especially with `viaIR` enabled.
+**Consequences:** The report claims "Halmos verified N properties" but the verification is meaningless for properties that timed out. Worse: if the analyst increases timeout to get a "pass" result, Halmos may return SAT (no counterexample) simply because it exhausted its search budget, not because no counterexample exists.
+
+**Warning signs:**
+- Halmos run times exceed 10 minutes per property
+- Memory usage exceeds 4GB during verification
+- Results contain "TIMEOUT" entries described as "likely safe"
+- Loop bounds set to 2 (default) for properties that involve iteration over game levels or ticket arrays
+- Properties involving division/multiplication report "no counterexample" but `--smt-exp-by-const` and nonlinear reasoning are disabled
 
 **Prevention:**
-- Align foundry.toml `solc_version` to `"0.8.34"` to match hardhat.config.js. This is the immediate fix.
-- Use the same optimizer settings in both: `optimizer_runs = 2`, `via_ir = true`.
-- Add a CI check: `forge build` and `hardhat compile` must both succeed without errors.
+- Scope Halmos to ISOLATED, PURE properties only: `PriceLookupLib` arithmetic, `BitPackingLib` pack/unpack roundtrip, `MintStreakUtils` calculations. These are small, loop-free, and have well-defined input/output contracts.
+- Do NOT attempt full-contract symbolic verification of `DegenerusGame` or `JackpotModule`. It will timeout and produce no value.
+- For every property, document: (a) loop bound used, (b) solver timeout, (c) memory peak, (d) result (SAT/UNSAT/TIMEOUT/UNKNOWN). TIMEOUT and UNKNOWN are NOT "verified."
+- Use `vm.assume()` aggressively to constrain symbolic inputs to realistic ranges. A uint256 price that can be 0 to 2^256 will explode the solver; constraining to 0.001-100 ETH reduces state space dramatically.
+- For properties that involve delegatecall, test the MODULE in isolation (not through DegenerusGame's delegatecall dispatch). This eliminates the branching in the dispatch logic.
+- Complement Halmos with Foundry fuzz testing for the SAME properties. If Halmos times out but Foundry fuzz (10K runs) finds no violations, report "fuzz-tested (10K runs, no violations), symbolic verification inconclusive (timeout at Ns)."
+- NEVER describe a TIMEOUT result as "verified." The honest language is: "symbolic verification attempted, solver timeout after N seconds with M GB memory at loop bound K. No counterexample found within these bounds. This does NOT constitute proof of correctness."
 
-**Detection:** Run `forge build` right now. If it fails on pragma version, this pitfall is already active.
+**Detection:** Any Halmos result described as "verified" that has a corresponding TIMEOUT or UNKNOWN status is misleading. Check the raw Halmos output, not just the summary.
 
-**Phase:** Setup (must fix before any Foundry tests can compile).
+**Phase:** Halmos verification phase (should follow manual analysis, not precede it).
 
 ---
 
-### Pitfall 4: VRF Simulation Makes Invariants Vacuously True or Unreachable
+### Pitfall 4: Foundry Fuzz Run Count Theater -- 10K Runs on Wrong Invariants
 
-**What goes wrong:** The protocol's state machine is gated by VRF: `advanceGame()` requests randomness, and nothing progresses until `rawFulfillRandomWords()` is called back by the coordinator. In Foundry invariant testing, either: (a) VRF is never fulfilled so the game is permanently locked at the RNG-pending state, or (b) VRF is fulfilled with deterministic/predictable values that don't exercise the full entropy space (jackpot-hit vs jackpot-miss branching).
+**What goes wrong:** The v5.0 scope calls for "10K+ fuzz runs, 1K+ invariant runs." The analyst increases `fuzz.runs` and `invariant.runs` in `foundry.toml`, runs the existing v3.0 harnesses, watches them pass, and reports "10K fuzz runs, all invariants hold." But the existing harnesses were designed for v3.0's scope -- ETH solvency, BurnieCoin supply, ticket queue integrity, vault shares, game FSM. They do NOT cover v5.0's target areas: precision/rounding exploitation, temporal edge cases, cross-contract state composition, or economic composition attacks.
 
-**Why it happens:** Unlike Hardhat tests where `MockVRFCoordinator` can be called programmatically between test steps, Foundry invariant testing runs random call sequences. The fuzzer has no concept of "after requesting VRF, the coordinator must callback before the next advance." Without explicit handler logic, VRF fulfillment either never happens or happens at the wrong time.
+Running 10K iterations of the WRONG invariants does not improve security confidence. It is run-count theater.
 
-**Consequences:** Option (a): game stuck at level 0 forever, all game-over/jackpot/endgame invariants are vacuously true. Option (b): VRF always returns the same entropy, so jackpot/no-jackpot branching is never explored.
+**Why it happens:** Writing new Foundry invariant harnesses is hard. Extending existing ones is easier. The analyst takes the path of least resistance: increase run count on existing tests. The existing tests pass (they passed at 256 runs too). The analyst reports higher numbers without higher coverage.
+
+**Consequences:** v5.0 claims "Foundry fuzzing with 10K+ runs" but the actual NOVEL coverage (precision, temporal, composition) is zero. The run count increase provides logarithmic diminishing returns on already-passing invariants while the genuinely untested surfaces remain untested.
+
+**Warning signs:**
+- No new handler contracts or invariant functions are written for v5.0
+- The only change to Foundry config is `runs = 10000` in `foundry.toml`
+- All reported invariants were already passing at 256 runs in v3.0
+- No invariants test precision/rounding, temporal boundaries, or cross-module state composition
+- Test execution time increases 40x but coverage metrics do not change
 
 **Prevention:**
-- Handler must include a `fulfillVRF()` function that checks if a VRF request is pending and fulfills it with fuzzed randomness. This must be a targetable function in the invariant suite.
-- Use `vm.prank(vrfCoordinator)` to impersonate the VRF coordinator when calling `rawFulfillRandomWords`.
-- Track VRF fulfillment count in a ghost variable. Assert at end of campaign that VRF was fulfilled at least N times.
-- Vary the random words to cover both jackpot-hit and jackpot-miss paths (use fuzzed uint256 values, not a fixed seed).
+- v5.0 MUST write NEW invariant harnesses targeting v5.0-specific attack surfaces:
+  1. **Precision invariant:** For every division operation, the cumulative rounding error over N operations must be bounded. Handler: execute N sequential purchases with varying quantities, assert total ETH collected equals expected within epsilon.
+  2. **Temporal invariant:** Advance block.timestamp in steps of 1, 899, 900, 901, and 1800 seconds between operations. Assert no state divergence from expected behavior at timestamp boundaries.
+  3. **Composition invariant:** Execute sequences of operations across multiple modules (purchase + whale bundle + lootbox + claim) and assert no ETH is created or destroyed in aggregate.
+  4. **Zero-rounding invariant:** For every path where division occurs, provide inputs that result in zero quotient (dust amounts). Assert the protocol handles zero-result divisions correctly (no free actions, no locked funds).
+- Use Foundry's coverage-guided fuzzing (available since v1.3.0): set `corpus_dir` in `foundry.toml` to enable mutation-based sequence generation that targets new code paths.
+- Track coverage metrics BEFORE and AFTER increasing runs. If coverage does not increase between 256 and 10,000 runs, the additional runs are pure waste.
+- Use ghost variables in handlers to track cumulative state (total minted, total claimed, total rounding errors) that is not stored on-chain. These are the invariant surfaces that v3.0 handlers missed.
 
-**Detection:** After invariant run, check if `game.currentLevel()` ever exceeds 0. If not, VRF fulfillment is broken.
+**Detection:** Compare code coverage at 256 runs vs 10,000 runs. If coverage is identical, the runs are not discovering new paths. Check whether any NEW invariant functions exist that were not in v3.0.
 
-**Phase:** Harness writing (handler must include VRF fulfillment logic).
+**Phase:** Foundry fuzzing phase (should include new harness development, not just run count increase).
 
 ---
 
-### Pitfall 5: Adversarial Session Anchoring Bias (Auditor Already Knows the Code)
+### Pitfall 5: Anchoring on Known Vulnerability Classes Instead of Novel Surfaces
 
-**What goes wrong:** The "blind" adversarial sessions are conducted by the same AI/auditor that performed v1.0 and v2.0 audits. The auditor has already formed mental models of the code, classified findings, and declared areas "safe." Adversarial sessions unconsciously skip areas previously reviewed, focus on the same attack vectors, and confirm prior conclusions rather than challenging them.
+**What goes wrong:** v5.0 explicitly targets "novel zero-day attack surfaces" -- composition bugs, precision exploitation, temporal edge cases, EVM-level weirdness. But the analyst's mental model of "vulnerability" is trained on KNOWN classes: reentrancy, access control bypass, integer overflow, oracle manipulation. The analyst checks these known classes (which v1-v4 already thoroughly covered), finds nothing, and reports "no novel vulnerabilities found." The analyst never genuinely investigated novel surfaces because they do not have a mental checklist for them.
 
-**Why it happens:** Anchoring bias: initial exposure to information (the prior audit) creates a mental anchor. A reviewer who already concluded "ETH accounting is sound" will unconsciously spend less effort attacking ETH accounting, even in a supposedly blind session. This is the single biggest risk to the adversarial testing value proposition.
+**Why it happens:** Known vulnerability classes are cognitive anchors. SWC registry, OWASP Smart Contract Top 10, Code4rena historical findings -- these provide checklists. Novel surfaces have no checklist. Investigating "cross-contract state composition bugs" requires creative reasoning about how modules interact in ways nobody has enumerated. This is fundamentally harder than checking against a list, and without a list, the analyst defaults to what they know.
 
-**Consequences:** All 4 adversarial sessions find only the same class of issues already identified (or closely adjacent). Novel attack vectors -- especially cross-boundary attacks that span prior phase scoping -- remain undiscovered. The sessions produce a false sense of additional coverage.
+Industry data confirms this: approximately half of high and critical vulnerabilities come from application-specific logic errors that do not map to any known vulnerability class. These are exactly the bugs that checklist-based auditing misses.
+
+**Consequences:** v5.0 becomes "v1-v4 re-run with automated tools" instead of a genuinely novel investigation. The novel surfaces that justify v5.0's existence go unexplored.
+
+**Warning signs:**
+- Investigation report is organized by SWC categories or known vulnerability types
+- All attack vectors tested are variations of: reentrancy, access control, overflow, oracle manipulation, frontrunning
+- No investigation of: delegatecall storage composition under concurrent module calls, BitPackingLib field boundary corruption from adjacent field writes, rounding accumulation across purchase+claim+lootbox+whale paths, timestamp-boundary state divergence between modules
+- The word "novel" appears in the report summary but not in the actual findings
 
 **Prevention:**
-- Each adversarial session must have a specific, narrow attack brief that forces focus on a single attack surface (e.g., "extract ETH beyond entitlement" vs "permanently brick advanceGame").
-- Attack briefs should deliberately contradict prior conclusions: "Prove the ETH solvency invariant CAN be violated" rather than "verify it holds."
-- Use different attack methodologies per session: one does pure code review from scratch, another writes PoC exploits top-down, another uses static analysis tools (Slither custom detectors), another fuzzes specific functions.
-- Time-box sessions strictly. Anchoring worsens with open-ended scope.
-- Include at least one session focused on cross-module interactions that were never tested in isolation (delegatecall module A calling through to module B's state).
+- Structure v5.0 investigation by PROTOCOL-SPECIFIC SURFACES, not by vulnerability class:
+  1. **Delegatecall composition:** What happens when Module A writes to storage slot S, then Module B reads slot S+1 in the same transaction? Are there any cross-module storage dependencies that create unexpected state?
+  2. **Precision chains:** Trace a single wei through the entire purchase-to-claim lifecycle. At each division, track the remainder. Can an attacker construct inputs that maximize cumulative rounding in their favor?
+  3. **Temporal boundaries:** What is the protocol's behavior at exactly `block.timestamp = deadline`? At `deadline - 1`? At `deadline + 1`? For every time-gated operation, test the boundary conditions.
+  4. **EVM-level:** Can `selfdestruct` (or `SELFDESTRUCT` via legacy contracts) force ETH into contracts that do not expect it, breaking solvency invariants? Can ABI encoding produce selector collisions with existing functions? Can `DELEGATECALL` to a module that `SSTORE`s at a computed slot corrupt unrelated storage?
+  5. **Economic composition:** Can an attacker profit by executing a sequence across multiple protocol contracts (buy tickets in Game, flip coins in Coinflip, claim vault shares in Vault, sell tokens on Uniswap) that no single contract would consider an exploit?
+- For each surface, define what "novel" means operationally: a finding is novel if it cannot be described using any SWC ID, OWASP category, or prior audit finding. If it can be, it is a re-check, not discovery.
+- Require at least 50% of investigation time on surfaces that have NO prior v1-v4 coverage whatsoever.
 
-**Detection:** If all 4 adversarial sessions produce zero Medium+ findings and the auditor says "confirms v2.0 conclusions," anchoring bias is the likely cause, not perfect code.
+**Detection:** Map each v5.0 finding or investigation to a v1-v4 phase. If >70% of investigations map to prior phases, anchoring is dominating.
 
-**Phase:** Attack sessions (brief design is critical -- do this before starting any session).
+**Phase:** All manual analysis phases.
 
 ---
-
-### Pitfall 6: Delegatecall Modules Create Invisible State Corruption in Fuzzing
-
-**What goes wrong:** The 10 delegatecall modules share DegenerusGameStorage. If the invariant fuzzer targets module contracts directly (instead of through Game's delegatecall pattern), modules operate on their OWN empty storage, not Game's storage. Invariants that check Game storage see no corruption, but the fuzzer is testing nothing useful.
-
-**Why it happens:** Foundry's `targetContract` mechanism calls functions on the contract address directly. If a module is listed as a target (or `targetInterfaces` is misconfigured), the fuzzer calls module functions with `address(this) = module`, reading/writing module storage instead of Game storage. The module's storage is uninitialized, so most calls revert silently.
-
-**Consequences:** Two failure modes: (1) Module calls revert because module storage is uninitialized, silently wasting fuzzer depth (invisible with `fail_on_revert = false`). (2) In rare cases, module calls succeed on empty storage, creating impossible states that pass Game-storage invariant checks while masking real bugs.
-
-**Prevention:**
-- ONLY target the Game contract (or handler contracts that call through Game). Never add module addresses to `targetContracts`.
-- Use `targetSelectors` to restrict which Game functions are called, ensuring only the public-facing ones that internally delegatecall to modules.
-- Add a sanity invariant: for each module, assert module-local storage is zero (modules should have no local state).
-- In handler contracts, always call `game.functionThatDelegatecalls()`, never `module.functionDirectly()`.
-
-**Detection:** Run `forge test -vvv` and check call traces. If calls go directly to module addresses (0x... for MintModule etc.) instead of through Game, targeting is wrong.
-
-**Phase:** Harness writing (targeting configuration must be correct from the start).
 
 ## Moderate Pitfalls
 
-### Pitfall 7: Remapping and Import Path Conflicts Between Foundry and Hardhat
+### Pitfall 6: Composition Analysis Scope Creep
 
-**What goes wrong:** Foundry and Hardhat resolve imports differently. Hardhat uses Node.js resolution (`@openzeppelin/contracts/...` via `node_modules/`). Foundry uses explicit remappings. The current foundry.toml has `@openzeppelin/=node_modules/@openzeppelin/` which should work, but additional imports needed for test harnesses (forge-std, Chainlink VRF interfaces, internal library paths) may fail.
+**What goes wrong:** "Cross-contract state composition" sounds important but has unbounded scope. With 22 contracts and 10 modules, there are 22*21/2 = 231 pairwise contract interactions and 10*9/2 = 45 pairwise module interactions. Investigating all 276 pairs thoroughly is infeasible. The analyst either: (a) investigates a few pairs shallowly and declares "composition analysis complete," or (b) investigates deeply but runs out of time after 10 pairs, leaving 266 pairs unexplored and the other v5.0 targets (precision, temporal, EVM) unaddressed.
+
+**Why it happens:** Composition analysis is inherently combinatorial. Without a principled scoping strategy, the analyst either drowns in combinations or cherry-picks the obvious ones (which v1-v4 already covered).
 
 **Prevention:**
-- Verify all import paths compile under both `forge build` and `hardhat compile` before writing new tests.
-- Keep Foundry test files (.t.sol) in `test/fuzz/` (already configured) separate from Hardhat test files.
-- Keep `forge-out` as Foundry's output directory (already configured) to avoid artifact collision with Hardhat's `artifacts/`.
-- If Chainlink VRF interfaces are imported in test harnesses, add remapping: `@chainlink/=node_modules/@chainlink/`.
-- If `forge-std` is not installed, run `forge install foundry-rs/forge-std --no-commit`.
+- Scope composition analysis to DELEGATECALL modules only (10 modules sharing DegenerusGameStorage). These are the only contracts that share state via delegatecall, making composition bugs possible. Regular inter-contract calls use message passing and do not share storage.
+- Within delegatecall modules, prioritize pairs that WRITE to overlapping storage slots. Use `forge inspect` storage layout output to build a slot-ownership matrix. Module pairs with shared write slots are the composition risk.
+- Time-box composition analysis to 30% of total v5.0 effort. If 30% is exhausted, stop and move to precision/temporal/EVM surfaces.
+- The 22 non-module contracts interact via external calls with defined interfaces. These are lower composition risk because each contract validates its own state. Focus on the 10 delegatecall modules where the security boundary is fuzzy.
 
-**Detection:** `forge build` fails with "file not found" or "source not found" on import paths.
+**Detection:** Composition analysis consuming >50% of total milestone effort with no clear stopping criterion.
 
-**Phase:** Setup.
+**Phase:** Composition analysis phase (must have explicit scope boundaries).
 
 ---
 
-### Pitfall 8: Invariants That Are Too Weak (Tautological)
+### Pitfall 7: Slither Detector Version Mismatch
 
-**What goes wrong:** Invariants like `totalSupply >= 0` (always true for uint256), `game.owner() != address(0)` (true by construction), or `address(game).balance >= 0` (always true) pass every time and catch nothing.
+**What goes wrong:** Slither versions ship with different detectors. If v5.0 runs a different Slither version than v1.0's triage, results are not directly comparable. New detectors may produce findings that were not present in the v1.0 triage. Old detectors may have been fixed, making prior false-positive classifications invalid. The analyst compares v5.0 results against v1.0 triage entries without accounting for detector version changes.
 
-**Why it happens:** Writing strong invariants is hard. The temptation is to start with "obviously true" properties. For this protocol, weak invariants include:
-- "ETH balance >= 0" (trivially true for uint)
-- "Current level >= 0" (trivially true for uint)
-- "totalTicketsSold >= 0" (trivially true for uint)
+**Why it happens:** Slither is actively maintained. Between v1.0 (early March 2026) and v5.0, Slither may have released updates with new or modified detectors. The `slither.db.json` from v1.0 may not apply to v5.0's Slither version.
 
 **Prevention:**
-- Express invariants as equalities or tight bounds, not loose inequalities:
-  - STRONG: `address(game).balance == sumOfClaimable + currentPrizePool + futurePrizePool + adminFees`
-  - WEAK: `address(game).balance >= 0`
-- Use ghost variables in handlers to track expected values and compare against actual contract state.
-- For BurnieCoin: `totalSupply + vaultAllowance == INITIAL_SUPPLY + totalMinted - totalBurned` (partially covered by existing BurnieCoinInvariants.t.sol).
-- For Game FSM: `if rngLockedFlag == true then pendingVRFRequestId != 0`.
-- For ticket queue: `sum(all bucket ticket counts) == totalTicketsSold`.
-- Mutation test each invariant: temporarily break the contract logic and confirm the invariant catches it. If it doesn't, the invariant is too weak.
+- Document the exact Slither version and commit hash used in v5.0.
+- If using a different version than v1.0, re-run ALL detectors and triage from scratch rather than relying on v1.0's `slither.db.json`.
+- If using the same version, still check for detector configuration differences (hardhat vs foundry compilation, solc version passed to Slither).
+- Note: Slither may struggle with viaIR compilation artifacts. If Slither produces unexpected errors or zero results on some contracts, check whether viaIR is causing compilation mismatches.
 
-**Detection:** Introduce a known bug (e.g., double-credit ETH in a handler) and run invariants. If they still pass, invariants are tautological.
+**Detection:** Slither result count differs significantly from v1.0 (e.g., 636 vs 400 or 636 vs 900) without explanation.
 
-**Phase:** Harness writing.
+**Phase:** Slither setup and triage phase.
 
 ---
 
-### Pitfall 9: Adversarial Sessions Drifting into Scope Creep
+### Pitfall 8: Treating Foundry Invariant "Pass" as Proof When Handlers Are Too Constrained
 
-**What goes wrong:** An adversarial session briefed on "ETH extraction attacks" gradually drifts into reviewing gas efficiency, code style, documentation gaps, or previously-identified QA issues. The session produces a long list of informational findings but no Medium+ exploits. Time is wasted, and the session's focused adversarial value is lost.
+**What goes wrong:** v3.0 already has 48 invariant tests. The handlers in v3.0 were designed to exercise specific state transitions. But handlers that are too constrained (e.g., only calling `purchase()` with quantity 100-400 and level 0-3) will never discover bugs that manifest at quantity=1 (minimum), quantity=40000 (maximum), or level=99 (cycle boundary). The invariants "pass" because the handler never generates the inputs that would violate them.
+
+**Why it happens:** Handler design requires domain knowledge. The v3.0 handlers were good for their purpose but acknowledged limitations: "no Degenerette fuzzing, no vault deposit/withdraw fuzzing, limited deep-game-state coverage." These limitations mean the handlers are scoped to a fraction of the input space. Increasing run count does not fix handler scope -- it just runs the same constrained inputs more times.
 
 **Prevention:**
-- Each session brief must specify: (1) exact attack goal in one sentence, (2) in-scope contracts/functions (not the whole protocol), (3) what constitutes a valid finding (Medium+ severity threshold), (4) hard time limit.
-- Session output must be structured: PoC exploit code with severity justification, or "unable to achieve attack goal despite [specific attempts listed]."
-- Ban informational/QA findings from adversarial sessions. Those belong in static analysis.
-- If a session discovers a potential issue outside its scope, log it as a one-line lead for a different session. Do not pursue it.
+- Audit the existing v3.0 handlers BEFORE increasing run count. For each handler:
+  1. What is the range of each input parameter?
+  2. Does the range cover all valid inputs, including boundary values?
+  3. Are there protocol states the handler can never reach?
+- Write adversarial handlers that specifically target boundaries:
+  - `purchase()` with qty=1 (minimum), qty=40000 (100 full tickets, maximum reasonable), qty at exact price thresholds
+  - Operations at level=0 (entry), level=99 (cycle boundary), level=100 (next cycle start)
+  - Timestamps at exactly `18 hours` (VRF retry), `3 days` (emergency stall), `912 days` (pre-game timeout)
+  - ETH amounts at 1 wei (dust), at exactly `priceWei` (exact match), at `priceWei - 1` (just under)
+- Use Foundry's `bound()` helper to constrain fuzzer inputs to interesting ranges rather than uniform random.
+- Add ghost variables to handlers tracking state that invariants should check but currently do not.
 
-**Detection:** Session report contains >2 informational findings and zero Medium+ findings. The session drifted.
+**Detection:** Compare handler input ranges to the valid input domain. If handler covers <50% of the valid domain, increasing run count is futile.
 
-**Phase:** Attack sessions (brief template enforcement).
+**Phase:** Foundry harness development phase.
 
 ---
 
-### Pitfall 10: Confirmation Bias in Adversarial PoC Writing
+### Pitfall 9: EVM-Level Investigation That Stays at Source Level
 
-**What goes wrong:** The auditor writes a PoC that "almost" achieves the attack, then concludes the attack is infeasible based on the PoC failing. But the PoC failure is due to a mistake in the PoC itself (wrong function signature, missing prerequisite step, incorrect parameter encoding), not because the attack is actually blocked by the protocol.
+**What goes wrong:** v5.0 targets "EVM-level weirdness" -- selfdestruct ETH forcing, ABI encoding collisions, selector collisions, BitPackingLib corruption. But the analyst investigates these at the Solidity source level rather than the bytecode level. Source-level analysis misses compiler-introduced behaviors: viaIR stack management, optimizer-introduced jump patterns, and ABI encoder v2 edge cases that do not map to source constructs.
 
-**Why it happens:** When the auditor expects the attack to fail (because v2.0 said it was safe), a failing PoC confirms the expectation and investigation stops. A genuine adversary would debug the PoC, try variations, and escalate.
+**Why it happens:** Reading EVM bytecode is hard. Reading Solidity source is easy. The analyst defaults to the easier task.
 
 **Prevention:**
-- Every "attack infeasible" conclusion must include: (1) the exact revert reason or logical impossibility, (2) the specific line of code that blocks the attack, (3) whether the blocker is a structural invariant or a specific value check that might not hold in all states.
-- PoCs must be minimal and self-contained. If a PoC is >50 lines of setup, it probably has bugs of its own.
-- Pair each "infeasible" conclusion with a mutation test: remove the suspected defensive code and confirm the attack then succeeds. If removing the defense doesn't enable the attack, the defense isn't what's actually blocking it -- further investigation needed.
+- For selector collision analysis: use `forge inspect [contract] methodIdentifiers` to get actual 4-byte selectors, not manual keccak256 computation from source.
+- For ETH-forcing analysis: check whether any contract has a `receive()` or `fallback()` function and whether its solvency invariant accounts for ETH received outside normal paths.
+- For BitPackingLib: verify pack/unpack roundtrip at the bytecode level using Halmos (this is a good Halmos target -- small, pure, bounded).
+- For ABI encoding: check for `abi.encodePacked` with variable-length arguments (known collision risk). If found, construct concrete collision examples.
+- Run `forge inspect DegenerusGame asm` on the two most critical functions (`advanceGame`, `claimWinnings`) and verify the assembly matches source-level expectations for: (a) storage reads/writes are to expected slots, (b) external calls have expected calldata, (c) no unexpected DELEGATECALL or STATICCALL.
 
-**Detection:** "Attack infeasible" finding that doesn't cite a specific line of defense in the contract source code.
+**Detection:** EVM-level section of report contains zero bytecode references, zero `forge inspect` output, and zero analysis of compiled artifacts.
 
-**Phase:** Attack sessions (PoC review methodology).
+**Phase:** EVM-level investigation phase.
 
 ---
 
-### Pitfall 11: `fail_on_revert = false` Hides Handler Bugs
+### Pitfall 10: Precision/Rounding Analysis That Checks Individual Operations Instead of Chains
 
-**What goes wrong:** With `fail_on_revert = false` (current foundry.toml config), handler functions that revert due to bugs in the handler itself (not the protocol) are silently swallowed. The invariant suite appears healthy but is actually testing almost nothing because every handler call reverts.
+**What goes wrong:** The analyst checks each division operation individually: "this division rounds down, losing at most 1 wei -- negligible." This per-operation analysis misses CUMULATIVE rounding across a chain of operations. Real-world exploits in 2025 demonstrated this: rounding errors measured as "less than 1 wei per swap" were "treated as negligible," but "no invariant was asserted over N repeated operations" and "fuzzers without stateful sequence modeling couldn't discover this."
+
+In this protocol, a purchase involves: price lookup (division for level-based pricing) -> cost calculation (multiplication then division by 400) -> prize pool split (90/10 division) -> potential jackpot calculation (division) -> potential lootbox EV (division). Each step loses at most 1 wei, but 5 divisions in sequence could lose 5 wei per purchase. Over 10,000 purchases, the cumulative error is 50,000 wei -- still negligible in ETH terms. But if an attacker can construct inputs that maximize rounding in their favor at each step (e.g., purchasing exactly the quantity where division truncation gives them 1 extra wei of claim), the cumulative effect over many transactions could be meaningful.
+
+**Why it happens:** Per-operation rounding analysis is the standard approach. Chain analysis requires tracing values through multiple function calls and tracking cumulative error bounds. This is tedious and protocol-specific. No automated tool does it well.
 
 **Prevention:**
-- During development, temporarily set `fail_on_revert = true` to surface handler bugs. Fix all handler reverts that are handler bugs (vs. expected rejections of invalid fuzzed inputs).
-- Then switch to `fail_on_revert = false` for production runs, but with `show_metrics = true` to monitor revert rates.
-- Acceptable revert rate: 20-40%. If >60%, handlers need better input bounding via `vm.assume()` or `bound()`.
-- In handler functions, use `bound(amount, minValid, maxValid)` instead of `vm.assume()` to avoid rejection-heavy runs.
+- Map the complete "wei lifecycle" through the protocol: ETH enters via `purchase()` or `purchaseWhaleBundle()`, flows through prize pool split, sits in `currentPrizePool`/`futurePrizePool`, exits via `claimWinnings()` or `claimLoot()`. At each transformation, note the rounding direction (floor vs ceil) and maximum error.
+- Compute the worst-case cumulative rounding error over N transactions. If the error is always in the protocol's favor (floor rounding on payouts), this is safe. If the error can be in the user's favor (floor rounding on costs), an attacker can extract value.
+- Write a Foundry invariant that tracks cumulative rounding: `sum_of_all_costs_paid >= sum_of_all_prizes_claimed + contract_balance_delta`. If this invariant fails under fuzzing, there is a rounding exploit.
+- Check the specific formula: `costWei = (priceWei * ticketQuantity) / 400`. With `ticketQuantity = 1`, this gives `priceWei / 400`, which for `priceWei = 0.01 ether = 10^16 wei` gives `2.5 * 10^13 wei` -- no rounding. But for non-standard prices or quantities not divisible by 400, rounding occurs. Enumerate these cases.
 
-**Detection:** `show_metrics` output shows >80% revert rate on handler functions.
+**Detection:** Rounding analysis that uses the phrase "at most 1 wei" for each operation without computing the aggregate across the full transaction lifecycle.
 
-**Phase:** Harness writing (iterative refinement during handler development).
+**Phase:** Precision analysis phase.
 
 ---
 
-### Pitfall 12: Insufficient Invariant Run Depth for Multi-Step Protocol States
+### Pitfall 11: Temporal Analysis That Tests Minutes But Not Multi-Block Boundaries
 
-**What goes wrong:** Current config: `runs = 256, depth = 64`. For a protocol where interesting states require 10+ sequential successful steps (purchase at each price tier, VRF fulfill between each, reach milestone level, trigger jackpot), depth=64 seems sufficient but is not. Many of those 64 calls will revert (wrong function, wrong parameters, wrong phase), leaving only 5-15 successful state transitions per run.
+**What goes wrong:** The analyst tests timestamp manipulation within the +/- 900 second tolerance (v2.0 already verified this). But temporal edge cases in this protocol span MUCH longer timescales: 18 hours (VRF retry), 3 days (emergency stall), 30 days (final sweep), 365 days (inactivity), 912 days (pre-game timeout). The analyst tests the well-understood 900-second boundary but misses the interaction between MULTIPLE time-gated mechanisms. Example: what happens when VRF retry timeout (18h) fires at the exact same timestamp as emergency stall (3 days)? Is there a race condition between these two recovery mechanisms?
+
+**Why it happens:** Short-timescale temporal analysis (minutes/hours) is easy to test. Long-timescale interactions (days/years) require advancing the EVM timestamp significantly, which changes many protocol states simultaneously. The analyst tests each timeout in isolation rather than testing timeout INTERACTIONS.
 
 **Prevention:**
-- For system-level invariants, increase depth to 128-256 and runs to 512-1024. This is a 4-16x increase in compute but worth it for system-level properties.
-- Use handler functions that batch multiple protocol steps into a single call (e.g., `handler_advanceThroughLevel()` does purchase+VRF+advance as one atomic handler call). This compresses the effective depth needed.
-- Monitor `show_metrics` to count successful state transitions per run. If average successful calls per run is <10, increase depth or improve handler input bounding.
+- Map all time-gated state transitions in the protocol with their exact thresholds.
+- For each PAIR of time gates, compute whether they can fire simultaneously or within the same block. If they can, write a test that triggers both in the same transaction and verify the protocol handles the composition correctly.
+- Test the "time gap" attack: advance timestamp by exactly the difference between two timeouts in a single `vm.warp()` call. Does the protocol process both timeouts correctly when they overlap?
+- Test the "stale state" attack: advance timestamp far beyond all timeouts (e.g., +1000 days). Does the protocol handle the case where ALL time-gated mechanisms have expired simultaneously?
 
-**Detection:** Maximum game level reached across all invariant runs is <3. Increase depth or add batching handlers.
+**Detection:** Temporal analysis that tests each timeout in isolation but never tests timeout interactions or simultaneous expiration.
 
-**Phase:** Harness writing (tuning after initial implementation).
+**Phase:** Temporal edge case phase.
+
+---
 
 ## Minor Pitfalls
 
-### Pitfall 13: Artifact Directory Collision Between Toolchains
+### Pitfall 12: Running All Three Tools Sequentially Instead of Cross-Referencing
 
-**What goes wrong:** Foundry writes to `forge-out/` and Hardhat writes to `artifacts/`. Some IDE tools, linters, or scripts may accidentally read the wrong artifact directory, causing confusing ABI mismatches or stale compilation results.
+**What goes wrong:** The analyst runs Slither, triages results, files report. Then runs Halmos, documents results, files report. Then runs Foundry fuzzing, documents results, files report. Each tool produces independent findings that are never cross-referenced. A Slither warning about "unprotected delegatecall" on the same function where Halmos times out on a storage invariant and Foundry fuzzing shows a boundary value anomaly -- these three signals together point to a real issue that none of them individually would surface.
 
-**Prevention:** Keep the current separation (already configured correctly). Add `forge-out/` to `.gitignore` if not already present. Never reference `forge-out/` in Hardhat scripts or vice versa.
+**Prevention:**
+- After each tool run, create a function-level signal matrix: which functions were flagged by which tools, at what severity.
+- Functions flagged by 2+ tools are HIGHEST PRIORITY for manual investigation, regardless of individual tool severity.
+- Functions flagged by zero tools are SECOND HIGHEST PRIORITY -- they may be blind spots shared by all three tools.
+- Functions flagged by exactly one tool at low severity are lowest priority.
 
-**Phase:** Setup.
+**Detection:** Final report has three separate tool sections with no cross-reference analysis.
+
+**Phase:** Synthesis phase (after all tool runs complete).
 
 ---
 
-### Pitfall 14: Invariant Testing Only Tests "Normal" Actors
+### Pitfall 13: View Function Abuse Gets Skipped Because "Views Can't Change State"
 
-**What goes wrong:** Handler functions use `vm.prank(actors[i])` with a small set of pre-configured actors (alice, bob, carol). The fuzzer never tests calls from unexpected addresses: the zero address, the contract itself, the VRF coordinator address, the deployer/owner, other protocol contracts. Edge-case access control bugs are missed.
+**What goes wrong:** v5.0's scope includes "view function abuse." The analyst dismisses this because view functions are `view` or `pure` -- they cannot modify state by EVM rules. But view function abuse is about INFORMATION LEAKAGE and ORACLE MANIPULATION, not direct state changes. If a view function returns stale or manipulable data that other contracts or off-chain systems rely on, the view function is the attack vector even though it does not modify state.
+
+In this protocol, view functions like `purchaseInfo()`, `priceForLevel()`, and pool balance queries may be called by off-chain systems (frontend, bots) or potentially by other protocols that integrate with Degenerus. If these views can return inconsistent data during multi-step operations (e.g., `purchaseInfo().priceWei` between VRF request and fulfillment), external systems may act on stale data.
 
 **Prevention:**
-- Include a mix of privileged and unprivileged actors: owner, random users, contract addresses (Game, Vault, Coin), the VRF coordinator.
-- Add specific handler functions that attempt unauthorized actions (e.g., `handler_unauthorizedAdvance()` that pranks a random non-owner address and tries to call admin-only functions).
-- Include the Game contract's own address as a potential msg.sender to test self-call/reentrancy scenarios.
+- Enumerate all `view` and `pure` external functions.
+- For each, determine: who calls this? If only the frontend, low risk. If other on-chain contracts could call this, medium risk.
+- For view functions that read state modified by pending VRF callbacks, determine whether the return value is consistent before and after callback execution. Inconsistency is not a vulnerability in isolation but could be exploitable by flash bots or MEV searchers.
+- Check whether any view function performs `staticcall` to external contracts (VRF coordinator, stETH). The external contract's behavior during `staticcall` may differ from expectations.
 
-**Detection:** Review handler actor list. If it only contains 3-5 regular user addresses, access control invariants are undertested.
+**Detection:** v5.0 report that does not mention view functions at all, or dismisses them with "cannot change state."
 
-**Phase:** Harness writing.
+**Phase:** Manual analysis phase (novel surfaces).
 
 ---
 
-### Pitfall 15: Treating Passing Invariants as Proof of Correctness
+### Pitfall 14: Reporting v5.0 Results Without Calibrating Against Prior Milestones
 
-**What goes wrong:** After the invariant suite passes with 256 runs x 64 depth, the team declares the protocol "fuzz-tested" and uses this as formal evidence in C4 documentation. But 256x64 = ~16K call sequences is a tiny fraction of the state space for 22 contracts with dozens of functions.
+**What goes wrong:** v5.0 produces findings (or "no findings"). The report presents these in isolation without contextualizing against v1-v4. If v5.0 finds a Low issue, is it NEW (missed by 4 prior milestones and 10 blind agents) or is it a RE-DISCOVERY of a known acknowledged Low? If v5.0 finds nothing, is that because the protocol is genuinely secure, or because v5.0's investigation overlapped entirely with v1-v4's coverage?
 
 **Prevention:**
-- Never describe invariant test results as "proving" anything. They increase confidence; they are not formal verification.
-- Report invariant testing with honest metrics: runs, depth, revert rate, maximum game state depth reached, ghost variable value ranges observed.
-- Pair invariant testing with targeted property-based tests that force specific dangerous states (the existing unit test suite already covers many of these).
-- In C4 submission docs, describe invariant testing as "additional dynamic analysis assurance" not "formal verification of correctness."
+- Every v5.0 finding must be cross-referenced against v1-v4's cumulative 6 Low and 44 QA/Info findings. Is this finding new or duplicative?
+- "No findings" reports must include a coverage delta: what did v5.0 investigate that v1-v4 did NOT? If the coverage delta is empty, v5.0 added no value.
+- The v5.0 report must explicitly answer: "What can v5.0's automated tools tell us that 4 milestones of manual analysis could not?"
+- Calibrate confidence honestly: "v5.0 automated tooling covers X% of contract surface with Y% of input space. Combined with v1-v4 manual analysis, total coverage is estimated at Z%."
 
-**Detection:** Any documentation that says "fuzz testing proves X" instead of "fuzz testing found no violations of X across N call sequences."
+**Detection:** v5.0 report that does not reference any prior milestone or does not distinguish novel findings from re-discoveries.
 
-**Phase:** Reporting.
+**Phase:** Final reporting phase.
 
 ---
 
-### Pitfall 16: All Adversarial Sessions Share the Same Information Anchor
+### Pitfall 15: Writing Halmos Properties That Are Trivially True
 
-**What goes wrong:** All 4 adversarial sessions see the same prior audit reports, read the same v1.0/v2.0 findings, and start from the same mental model. They are "blind" in name only. Information overlap causes all sessions to explore the same attack surface and miss the same blind spots.
+**What goes wrong:** The analyst writes Halmos properties like `assert(x + y >= x)` (trivially true in Solidity 0.8.x due to overflow protection) or `assert(balance >= 0)` (trivially true for uint256). These properties verify compiler guarantees, not protocol invariants. They always pass, producing "verified" results that inflate the report without testing anything meaningful.
 
 **Prevention:**
-- Vary the information provided to each session:
-  - Session 1: Contract source code only. No prior audit results. Fresh-eyes approach.
-  - Session 2: Source code + architecture docs (storage layout, deploy order, module pattern). No findings.
-  - Session 3: Source code + prior audit's QA/Low findings only (hints at weak spots without revealing the conclusion "safe").
-  - Session 4: Full prior audit results, explicitly tasked with "find what v1.0 and v2.0 missed."
-- Each session must produce findings independently before any cross-session synthesis.
-- The consolidated report should note which sessions found overlapping issues vs. unique issues.
+- Every Halmos property must reference a protocol-specific invariant, not a language invariant. "Pack then unpack returns original value" is protocol-specific (tests BitPackingLib). "Addition does not overflow" is a language invariant (tested by the compiler).
+- Before writing a Halmos property, ask: "Could this property fail if the CODE is wrong but the COMPILER is correct?" If the answer is no, the property is trivial.
+- Focus Halmos on properties where the protocol deviates from standard patterns: custom bit packing, manual slot computation in assembly, unchecked blocks, division chains.
 
-**Detection:** Session 2's findings are a subset of session 1's. Information isolation failed.
+**Detection:** Halmos properties that do not reference any contract function or storage variable are testing the compiler, not the protocol.
 
-**Phase:** Attack sessions (brief design, before any session starts).
+**Phase:** Halmos property design phase.
+
+---
 
 ## Phase-Specific Warnings
 
 | Phase Topic | Likely Pitfall | Mitigation |
 |-------------|---------------|------------|
-| Setup: Compiler alignment | Compiler version mismatch (#3) | Align foundry.toml solc to 0.8.34 immediately |
-| Setup: Build verification | Remapping conflicts (#7) | Run `forge build` and fix all import errors before writing tests |
-| Setup: Architecture decision | ContractAddresses blocking (#1) | Decide mock-only vs full-deploy strategy per invariant upfront |
-| Setup: Artifact isolation | Directory collision (#13) | Verify forge-out/ in .gitignore, no cross-references |
-| Harness: Handler design | Poor state coverage (#2) | Write VRF-aware handlers with ghost variables, monitor revert rates |
-| Harness: Targeting | Delegatecall module targeting (#6) | ONLY target Game contract and handlers, never modules directly |
-| Harness: Invariant strength | Tautological invariants (#8) | Use equalities not inequalities, mutation-test every invariant |
-| Harness: Config tuning | fail_on_revert hiding bugs (#11) | Develop with fail_on_revert=true, run with false+show_metrics |
-| Harness: Config tuning | Insufficient depth (#12) | Batch protocol steps in handlers, increase depth for system tests |
-| Harness: VRF simulation | Game stuck at level 0 (#4) | Handler must include fulfillVRF() as targetable function |
-| Harness: Actor diversity | Only normal actors tested (#14) | Include privileged, contract, and adversarial addresses |
-| Attack sessions: Brief design | Anchoring bias (#5) | Contradiction-framed briefs, varied methodology per session |
-| Attack sessions: Brief design | Information overlap (#16) | Vary information given to each session |
-| Attack sessions: Execution | Scope creep (#9) | Strict scope + severity threshold + time box in briefs |
-| Attack sessions: PoC quality | Confirmation bias in PoCs (#10) | Require specific defense citation, mutation-test "infeasible" claims |
-| Reporting: Claims | False confidence (#15) | Report metrics honestly, never claim "proof" |
+| Slither triage | False positive fatigue (#2) | Per-finding suppression, reverse priority order, time-box to 2 hours |
+| Slither triage | Detector version mismatch (#7) | Document version, re-triage if version differs from v1.0 |
+| Halmos verification | Timeout = "verified" (#3) | Scope to isolated pure functions, honest bounds reporting |
+| Halmos verification | Trivially true properties (#15) | Protocol-specific invariants only, test the code not the compiler |
+| Foundry fuzzing | Run count theater (#4) | New harnesses for v5.0 surfaces, coverage metrics before/after |
+| Foundry fuzzing | Constrained handlers (#8) | Audit handler input ranges, write boundary-targeting handlers |
+| Manual: Composition | Scope creep (#6) | Delegatecall modules only, time-box to 30% of effort |
+| Manual: Composition | Source-only analysis (#9) | forge inspect, bytecode verification of critical functions |
+| Manual: Precision | Per-operation not chain (#10) | Wei lifecycle tracing, cumulative rounding invariant |
+| Manual: Temporal | Isolated timeout testing (#11) | Timeout interaction matrix, simultaneous expiration tests |
+| Manual: EVM-level | Stays at source level (#9) | forge inspect, selector enumeration, ABI encoding review |
+| Manual: View functions | Dismissed as non-writable (#13) | Information leakage analysis, staticcall edge cases |
+| All phases | Confirmation bias (#1) | Inverse coverage allocation, hypothesis inversion |
+| All phases | Anchoring on known classes (#5) | Protocol-specific surface structuring, 50% novel allocation |
+| Cross-tool synthesis | Sequential not cross-referenced (#12) | Function-level signal matrix, multi-tool flag prioritization |
+| Final report | Uncalibrated results (#14) | Coverage delta from v1-v4, novel vs duplicative finding classification |
 
 ## Sources
 
-- [Foundry Book: Invariant Testing](https://book.getfoundry.sh/forge/invariant-testing) -- official documentation on handler patterns, ghost variables, targeting, metrics (HIGH confidence)
-- [RareSkills: Invariant Testing in Foundry](https://rareskills.io/post/invariant-testing-solidity) -- handler best practices, common mistakes (MEDIUM confidence)
-- [Three Sigma: Foundry Cheatcodes Invariant Testing](https://threesigma.xyz/blog/foundry/foundry-cheatcodes-invariant-testing) -- revert handling, call distribution issues (MEDIUM confidence)
-- [Patrick Collins: Fuzz/Invariant Tests as Bare Minimum](https://patrickalphac.medium.com/fuzz-invariant-tests-the-new-bare-minimum-for-smart-contract-security-87ebe150e88c) -- false sense of security from shallow coverage (MEDIUM confidence)
-- [horsefacts/weth-invariant-testing](https://github.com/horsefacts/weth-invariant-testing) -- reference implementation of handler-based invariant testing (HIGH confidence)
-- [Cyfrin: Smart Contract Fuzzing and Invariants](https://www.cyfrin.io/blog/smart-contract-fuzzing-and-invariants-testing-foundry) -- state coverage limitations (MEDIUM confidence)
-- [Cyfrin: Foundry VRF Mock Guide](https://updraft.cyfrin.io/courses/foundry/smart-contract-lottery/deploy-mock-chainlink-vrf) -- deterministic VRF mock patterns (MEDIUM confidence)
-- [Kurt Merbeth: Audited, Tested, Still Broken (2025)](https://medium.com/coinmonks/audited-tested-and-still-broken-smart-contract-hacks-of-2025-a76c94e203d1) -- post-audit failure patterns, economic attack blind spots (MEDIUM confidence)
-- [Hardhat Issue #5561: hardhat-foundry compiler settings](https://github.com/NomicFoundation/hardhat/issues/5561) -- compiler config synchronization problems (HIGH confidence)
-- [Sigma Prime: Forge Testing Leveling](https://blog.sigmaprime.io/forge-testing-leveling.html) -- progression from unit to invariant testing methodology (MEDIUM confidence)
-- Project source: `foundry.toml`, `hardhat.config.js`, `ContractAddresses.sol`, `test/fuzz/*.t.sol`, `test/helpers/deployFixture.js` -- direct inspection (HIGH confidence)
+- [Audited, Tested, and Still Broken: Smart Contract Hacks of 2025](https://medium.com/coinmonks/audited-tested-and-still-broken-smart-contract-hacks-of-2025-a76c94e203d1) -- Rounding exploit patterns, "no invariant over N operations," stateful sequence modeling gap (MEDIUM confidence)
+- [The State of Web3 Security in 2025: Why Most Exploits Come From Audited Contracts](https://olympix.security/blog/the-state-of-web3-security-in-2025-why-most-exploits-come-from-audited-contracts) -- 70% of exploits from audited contracts, composition failures (MEDIUM confidence)
+- [QuillAudits: Why Audited Contracts Still Get Hacked](https://www.quillaudits.com/blog/smart-contract/smart-contract-pass-audits-but-still-gets-hacked) -- External dependency blind spots, business logic errors, 47-day median exploit time (MEDIUM confidence)
+- [Halmos GitHub Wiki: Errors](https://github.com/a16z/halmos/wiki/errors) -- Timeout handling, path explosion mitigation, loop bound configuration (HIGH confidence)
+- [Halmos GitHub Wiki: Warnings](https://github.com/a16z/halmos/wiki/warnings) -- Bounded execution limitations, nonlinear arithmetic disabled by default (HIGH confidence)
+- [a16z: Symbolic Testing with Halmos](https://a16zcrypto.com/posts/article/symbolic-testing-with-halmos-leveraging-existing-tests-for-formal-verification/) -- vm.assume() optimization, minimal test scope recommendation (HIGH confidence)
+- [a16z: Formal Verification of Pectra System Contracts with Halmos](https://a16zcrypto.com/posts/article/formal-verification-of-pectra-system-contracts-with-halmos/) -- Practical Halmos usage on production contracts (HIGH confidence)
+- [Slither GitHub](https://github.com/crytic/slither) -- 10.9% false positive rate for reentrancy, detector configuration, slither.db.json (HIGH confidence)
+- [Trail of Bits: Slither Framework](https://blog.trailofbits.com/2018/10/19/slither-a-solidity-static-analysis-framework/) -- Triage methodology, detector architecture (HIGH confidence)
+- [Foundry Book: Invariant Testing](https://book.getfoundry.sh/forge/invariant-testing) -- Handler-based approach, runs/depth configuration, coverage-guided fuzzing (HIGH confidence)
+- [RareSkills: Invariant Testing in Foundry](https://rareskills.io/post/invariant-testing-solidity) -- Ghost variables, handler design patterns, bound() usage (HIGH confidence)
+- [Cyfrin: Fuzz / Invariant Tests as Bare Minimum](https://patrickalphac.medium.com/fuzz-invariant-tests-the-new-bare-minimum-for-smart-contract-security-87ebe150e88c) -- Stateful sequence modeling, coverage vs run count tradeoff (MEDIUM confidence)
+- [Smart Contract Security Risks and Audits Statistics 2026](https://coinlaw.io/smart-contract-security-risks-and-audits-statistics/) -- Industry audit failure rates (MEDIUM confidence)
+- [Hacken: Top 10 Smart Contract Vulnerabilities in 2025](https://hacken.io/discover/smart-contract-vulnerabilities/) -- Application-specific logic errors as ~50% of high/critical findings (MEDIUM confidence)
+- v3.0 Consolidated Report (18-REPORT.md) -- 7 documented coverage limitations, same-auditor bias acknowledgment (HIGH confidence, project source)
+- v4.0 Synthesis Report (29-01-SUMMARY.md) -- 10/10 agents unanimous zero Medium+, 5 Low, 30 QA/Info (HIGH confidence, project source)
+- PROJECT.md v5.0 milestone context -- Target areas, tooling scope, prior milestone results (HIGH confidence, project source)
