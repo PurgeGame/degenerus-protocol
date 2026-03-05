@@ -214,7 +214,48 @@ Option B: Remove the `creditLinkReward` call from `onTokenTransfer` and remove t
 
 ## Gas Report
 
-*[Content in Plan 13-03 Task 2]*
+**Requirement:** REPORT-03
+**Source:** `test/gas/AdvanceGameGas.test.js` (Hardhat local network, adversarial harnesses)
+**Phases:** 9-01, 9-02, 9-03
+
+### advanceGame() Worst-Case Gas by Code Path
+
+All 16 measurements below represent adversarial states designed to maximize gas for each branch. Measurements are from Hardhat local network and may vary slightly on mainnet due to London EIP-1559 opcode costs, but structural relationships hold.
+
+| Rank | Stage Name | Stage# | Gas Used | % of 16M | Adversarial State |
+|------|-----------|--------|----------|----------|-------------------|
+| 1 | STAGE_TICKETS_WORKING | 5 | **6,284,995** | 39.3% | 20 buyers x 50 full tickets each (1,000 total tickets); 550-write budget ceiling triggered |
+| 2 | STAGE_FUTURE_TICKETS_WORKING | 4 | 6,164,241 | 38.5% | 15 buyers, heavy whale bundle purchases; future ticket queues spanning levels lvl+2..lvl+5 |
+| 3 | Sybil Ticket Batch (cold SSTORE) | 6 | 5,193,019 | 32.5% | 19 unique wallets x 1 full ticket each at level 0; maximum cold SSTORE count per wallet; includes STAGE_PURCHASE_DAILY continuation |
+| 4 | STAGE_JACKPOT_ETH_RESUME | 8 | 3,118,467 | 19.5% | Resume mid-bucket ETH distribution; jackpot prize pool ~99.18 ETH; ETH cursor left mid-way through winner buckets |
+| 5 | STAGE_JACKPOT_PHASE_ENDED | 10 | 2,934,548 | 18.3% | Day 5 of jackpot phase; full end-of-level operations including level-close accounting |
+| 6 | STAGE_JACKPOT_COIN_TICKETS | 9 | 2,933,202 | 18.3% | 20 buyers; coin + ticket combined distribution after daily ETH distribution completes |
+| 7 | STAGE_PURCHASE_DAILY | 6 | 1,250,369 | 7.8% | 20 buyers x 20 tickets each; second VRF cycle to trigger daily jackpot path |
+| 8 | STAGE_JACKPOT_DAILY_STARTED | 11 | 887,410 | 5.5% | Jackpot phase after heavy purchases; first daily jackpot ETH distribution call |
+| 9 | STAGE_GAMEOVER (drain) | 0 | 652,553 | 4.1% | 912-day timeout triggered; 19 deity passes purchased requiring refund loop |
+| 10 | STAGE_TRANSITION_DONE | 3 | 262,884 | 1.6% | Full jackpot phase completed; vault perpetual tickets + stETH auto-stake |
+| 11 | STAGE_RNG_REQUESTED (fresh) | 1 | 190,909 | 1.2% | 15 buyers with 5 tickets each; VRF request with lootbox index reservation |
+| 12 | STAGE_ENTERED_JACKPOT | 7 | 189,586 | 1.2% | 99.18 ETH prize pool accumulated before jackpot entry; prize pool consolidation |
+| 13 | STAGE_RNG_REQUESTED (retry) | 1 | 164,997 | 1.0% | 18-hour timeout retry path; lootbox index remap |
+| 14 | STAGE_GAMEOVER (VRF request) | 0 | 131,966 | 0.8% | VRF request step of game-over multi-step sequence |
+| 15 | STAGE_GAMEOVER (final sweep) | 0 | 65,874 | 0.4% | 30-day post-game-over ETH/stETH split to vault + DGNRS; 200 full tickets state |
+| 16 | VRF Callback (rawFulfillRandomWords) | -- | 62,740 | 0.4% | Daily RNG fulfillment; `rngLockedFlag=true`; no pending lootbox |
+
+### Key Gas Findings
+
+**Worst-case single-call ceiling:** 6,284,995 gas (STAGE_TICKETS_WORKING, row 1 above). This is 39.3% of the 16M block limit. No code path approaches the 15M warning threshold (93.8% of 16M).
+
+**Hard ceiling mechanism:** `WRITES_BUDGET_SAFE = 550` writes enforced per `processTicketBatch` call. First-batch cold SSTORE budget scales to ~357 writes at maximum adversarial state. Mathematical gas ceiling: 357 cold SSTOREs x 20,000 gas + ~250,000 overhead = ~7,390,000 gas (46.2% of 16M). No ticket queue depth can push a single `advanceGame()` call past this ceiling.
+
+**Single-call DoS verdict (PASS):** No wallet count N produces a single `advanceGame()` call exceeding 16M gas. The WRITES_BUDGET_SAFE architecture makes single-call gas DoS via ticket queue bloat structurally impossible. Verdict: **GAS-01 PASS, GAS-02 PASS, GAS-03 PASS**.
+
+**Permanent Sybil DoS economics (LOW):** A Sybil set large enough to saturate WRITES_BUDGET_SAFE requires continuous purchases. Minimum ticket price (0.0025 ETH/ticket) implies ~4,950 ETH/day to maintain DoS pressure; at actual level-0 price (0.01 ETH/ticket) the cost is ~19,800 ETH/day. Both figures exceed the 1,000 ETH threat model budget. A sustained Sybil DoS is economically infeasible. Verdict: **GAS-04 LOW (theoretical)**.
+
+**payDailyJackpot gas (PASS):** STAGE_JACKPOT_DAILY_STARTED measured at 887,410 gas (5.5% of 16M) with `DAILY_ETH_MAX_WINNERS=321`. The two-stage split design (stage-11 ETH distribution + stage-9 BURNIE/ticket distribution) is the correct optimization. Verdict: **GAS-05 PASS**.
+
+**VRF callback headroom:** rawFulfillRandomWords measured at 62,740 gas (daily path, row 16). This is 137,260 gas below the 200K audit target and 237,260 below the 300K Chainlink gas allocation. Verdict: **GAS-06 PASS**.
+
+**Rational inaction liveness (PASS):** No whale strategy rationally delays `advanceGame()` indefinitely. Three independent liveness paths exist: (1) protocol-enforced 912-day pre-game timeout, (2) 365-day post-level inactivity timeout, (3) continuous game day advancement available to any caller. Dominant whale strategy is ticket accumulation, not game stalling. Verdict: **GAS-07 PASS**.
 
 ---
 
