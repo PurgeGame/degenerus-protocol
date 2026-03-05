@@ -31,3 +31,18 @@ show_metrics = true
 dictionary_weight = 80
 include_storage = true
 include_push_bytes = true
+
+[profile.deep.fuzz]
+runs = 10000
+max_test_rejects = 131072
+seed = "0xdeadbeef"
+
+[profile.deep.invariant]
+runs = 1000
+depth = 256
+fail_on_revert = false
+shrink_run_limit = 5000
+show_metrics = true
+dictionary_weight = 80
+include_storage = true
+include_push_bytes = true
