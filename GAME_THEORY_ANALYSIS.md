@@ -885,7 +885,7 @@ $$\text{time since last level start} \geq \begin{cases} 912 \text{ days} & \text
 
 Even in the GAMEOVER state, the protocol provides well-defined terminal payoffs:
 
-1. **Deity pass refunds:** Level 0 → full refund; levels 1–9 → 20 ETH/pass; level 10+ → no refund
+1. **Deity pass refunds:** Levels 0–9 → 20 ETH/pass (budget-capped, first-purchased-first-paid); level 10+ → no refund
 2. **BAF jackpot:** 50% of remaining assets distributed to trait-ticket holders
 3. **Decimator jackpot:** Remaining surplus to decimator participants
 4. **Final sweep:** After 30 days, unclaimed funds → vault and DGNRS reserves
