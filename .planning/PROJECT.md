@@ -2,20 +2,25 @@
 
 ## What This Is
 
-A comprehensive security review of the Degenerus Protocol smart contract suite — 22 deployable contracts and 10 delegatecall game modules implementing a multi-level ticket purchasing game with VRF-based randomness, prize pools, lootboxes, whale mechanics, and ERC20/ERC721 tokens. Four milestone audits: v1.0 (module-by-module audit), v2.0 (adversarial Code4rena-prep audit), v3.0 (invariant fuzzing + blind adversarial hardening), and v4.0 (10-agent blind adversarial stress test + game theory verification). The deliverable is a battle-tested protocol ready for Code4rena contest.
+A comprehensive security review of the Degenerus Protocol smart contract suite — 22 deployable contracts and 10 delegatecall game modules implementing a multi-level ticket purchasing game with VRF-based randomness, prize pools, lootboxes, whale mechanics, and ERC20/ERC721 tokens. Five milestone audits: v1.0 (module-by-module audit), v2.0 (adversarial Code4rena-prep audit), v3.0 (invariant fuzzing + blind adversarial hardening), v4.0 (10-agent blind adversarial stress test + game theory verification), and v5.0 (novel zero-day attack surface audit with automated tooling). The deliverable is a battle-tested protocol ready for Code4rena contest.
+
+## Milestone: v5.0 Novel Zero-Day Attack Surface Audit (COMPLETE)
+
+**Goal:** Hunt for creative, unconventional, and composition-based vulnerabilities that 10 prior audit agents missed — validated by Foundry fuzzing, Slither static analysis, and Halmos symbolic verification.
+
+**Result:** 0 Critical, 0 High, 0 Medium, 2 QA/Info. 36 requirements covered. Protocol remains LOW RISK.
+
+**Delivered:**
+- Foundry deep fuzzing (10K+ runs), Slither full triage (630 findings, 0 true positives), Halmos symbolic verification (24 check_ properties)
+- Cross-contract composition analysis: 31 delegatecall sites, 45 module interaction pairs, zero composition bugs
+- Precision audit: all 222 division operations classified, zero-rounding impossible, dust extraction infeasible
+- Temporal/lifecycle/EVM-level: 5 timeout boundaries, 224 unchecked blocks, 9 assembly blocks, all lifecycle edges verified
+- Economic re-examination: vault donation attack re-derived safe, 7 price surfaces analyzed, stETH reentrancy impossible
+- C4A-format synthesis with honest confidence assessment
 
 ## Milestone: v4.0 Pre-C4A Adversarial Stress Test (COMPLETE)
 
-**Goal:** Find every exploitable vulnerability, economic attack, and edge-case failure before Code4rena wardens do.
-
-**Result:** 0 Critical, 0 High, 0 Medium. 5 Low, 30 QA/Info. 10/10 agents unanimous. Protocol assessed LOW RISK. C4A-ready.
-
-**Delivered:**
-- 10 fully parallel blind adversarial threat model agents (Nation-State, Coercion, Evil Genius, Sybil Whale, Fuzzer, Formal Methods, Dependency, Gas Griefing, White Hat, Game Theory)
-- 97 PoC defense validation tests across 8 test files
-- 4 new Foundry invariant fuzzing harnesses (Degenerette, Vault, Multi-Level, Whale-Sybil)
-- Resilience thesis formally verified — all 4 propositions confirmed against contract code
-- C4A-ready synthesis report with zero cross-agent contradictions
+**Result:** 0 Critical, 0 High, 0 Medium. 5 Low, 30 QA/Info. 10/10 agents unanimous. Protocol assessed LOW RISK.
 
 ## Milestone: v3.0 Adversarial Hardening (COMPLETE)
 
@@ -78,10 +83,14 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 - ✓ Game theory adversarial analysis — resilience thesis verified, all 4 propositions confirmed — v4.0
 - ✓ 97 PoC defense validation tests — all passing — v4.0
 - ✓ C4A-ready synthesis report — zero contradictions, LOW RISK assessment — v4.0
+- ✓ Novel zero-day attack surface analysis (composition, precision, temporal, EVM, economic) — v5.0
+- ✓ Foundry deep fuzzing with 10K+ fuzz runs, Slither full triage (630 findings, 0 TP), Halmos symbolic verification (24 properties) — v5.0
+- ✓ Cross-contract composition: 31 delegatecall sites, 45 module pairs, zero composition bugs — v5.0
+- ✓ Precision audit: 222 division ops classified, zero-rounding impossible, dust extraction infeasible — v5.0
 
 ### Active
 
-(No active requirements — all milestones complete)
+(No active requirements — audit complete. Next milestone TBD.)
 
 ### Out of Scope
 
@@ -93,15 +102,16 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 
 ## Context
 
-### Current State (after v4.0)
+### Current State (after v5.0)
 
-- v1.0-v4.0 audit complete: 103 plans executed across 29 phases
-- All requirements satisfied: 62 (v1.0) + 48 (v2.0) + 18 (v3.0) + 55 (v4.0)
-- ~84,874 lines Solidity across 22 contracts + 10 modules
-- Cumulative findings: 0 Critical, 0 High, 0 Medium, 6 Low (all acknowledged), 44 QA/Info
-- 884 Hardhat tests + 48 Foundry invariant tests + 97 PoC tests = 1,029 total tests
-- Protocol assessed LOW RISK for C4A submission by 10 independent blind agents
-- Resilience thesis formally verified — all propositions confirmed against contract code
+- v1.0-v5.0 audit complete: 121 plans executed across 35 phases
+- All requirements satisfied: 62 (v1.0) + 48 (v2.0) + 18 (v3.0) + 55 (v4.0) + 36 (v5.0)
+- ~59,137 lines Solidity across 22 contracts + 10 modules + test infrastructure
+- Cumulative findings: 0 Critical, 0 High, 0 Medium, 6 Low (all acknowledged), 46 QA/Info
+- 884 Hardhat tests + 48 Foundry invariant + 97 PoC + ~30 precision/composition fuzz tests, 0 failures
+- 3 automated tools cross-referenced: Foundry fuzzing, Slither static analysis, Halmos symbolic verification
+- Protocol assessed LOW RISK across 5 milestone audits — C4A-ready
+- Same-auditor bias named as primary limitation; external audit recommended
 
 ### Technical Stack
 
@@ -139,6 +149,11 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 | v4.0: Contradiction-framed attack briefs | Each agent gets adversarial prompt to find exploits, not confirm safety | ✓ Good — genuine blind analysis |
 | v4.0: Game theory adversarial analysis | Attack the resilience thesis paper, not just the code | ✓ Good — all 4 propositions verified, yield split more favorable than claimed |
 | v4.0: No code fixes during analysis | Blind methodology requires unchanged codebase | ✓ Correct — findings preserved without contamination |
+| v5.0: Three-tool cross-reference (Foundry + Slither + Halmos) | Multi-tool convergence increases confidence | ✓ Good — 4 multi-flag functions investigated to resolution |
+| v5.0: Per-finding Slither triage (not bulk dismissal) | Avoid missing true positives in noise | ✓ Good — 630 findings triaged, 0 TP, 22 led to investigation |
+| v5.0: Halmos swap procedure for foundry.toml | Halmos incompatible with fuzz/invariant sections | ✓ Good — documented workaround, 24 properties executed |
+| v5.0: ShareMath timeout accepted honestly | 256-bit bvudiv intractable for SMT solvers | ✓ Correct — reported as coverage gap, not as "verified" |
+| v5.0: Same-auditor bias as primary limitation | Honest confidence requires naming weaknesses | ✓ Good — builds trust with C4A judges |
 
 ---
-*Last updated: 2026-03-05 after v4.0 milestone completion*
+*Last updated: 2026-03-05 after v5.0 milestone completion*
