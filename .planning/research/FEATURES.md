@@ -1,270 +1,194 @@
-# Feature Research: Adversarial Audit Scope (v2.0 — Code4rena Preparation)
+# Feature Landscape: Invariant Fuzzing & Blind Adversarial Testing
 
-**Domain:** Code4rena adversarial security audit of a 22-contract on-chain game with delegatecall modules, VRF, and complex economic mechanics
-**Researched:** 2026-03-04
-**Confidence:** HIGH (Code4rena official docs verified; AI Arena C4 audit report reviewed; Chainlink VRF V2.5 security docs reviewed; severity classification from official docs.code4rena.com)
-
----
-
-## How Code4rena Auditors Judge This Protocol
-
-Code4rena contestants are adversarial by nature. They race to find the highest-severity unique finding. They do not do checklists — they exploit asymmetries. The severity rubric that drives all submission decisions is:
-
-- **HIGH:** Assets can be stolen, lost, or compromised directly via a realistic attack path. No hand-wavy hypotheticals. Requires a coded, runnable PoC for EVM/Solidity audits.
-- **MEDIUM:** Function or availability of the protocol could be impacted, or value leaks via a path with stated assumptions and external requirements. Still needs a PoC.
-- **LOW/QA:** Everything else — state handling issues, spec deviations, rounding dust, event gaps, admin trust assumptions. Bundled into a single QA report per warden.
-- **Gas:** Gas optimization recommendations. Awarded separately on a curve. NOT mixed with security findings.
-- **Admin/Centralization:** Classified as QA/LOW by default at Code4rena. "Reckless admin mistakes are invalid — assume calls are previewed." Only escalates to MEDIUM if there is a realistic, non-hypothetical harm path that doesn't require the admin to act in bad faith.
-
-**Key Code4rena judging dynamics that affect scope planning:**
-
-1. The most contested audit areas produce the most duplicates. Being first with a HIGH finding matters more than finding every LOW.
-2. Overstating severity causes score reduction. A LOW submitted as HIGH damages the warden's score.
-3. For game contracts specifically: the AI Arena C4 audit (Feb 2024, $60.5K pool) produced 8 HIGH and 9 MEDIUM findings — all game-mechanics-specific, none generic. The pattern was: game state bypasses (transfer without guard, reroll without type check), accounting asymmetries (zero risk on loss, full reward on win), and randomness manipulation (transaction reversion to farm desired attributes).
+**Domain:** Foundry invariant test harnesses, handler design, and blind adversarial attack sessions for a 22-contract DeFi/game protocol with delegatecall modules
+**Researched:** 2026-03-05
+**Confidence:** HIGH (Foundry official docs, established community patterns, existing codebase analysis)
 
 ---
 
-## Feature Landscape
+## Table Stakes
 
-### Table Stakes (Audit Categories — Missing = Report Is Incomplete)
+Features that a credible invariant fuzzing + adversarial campaign must include. Missing any of these means the v3.0 milestone fails to add meaningful security assurance beyond v2.0's static analysis.
 
-These are the categories every Code4rena warden will investigate on any game contract. If v2.0 does not explicitly cover each, the final report has gaps that contestants will find.
+### Invariant Test Harnesses
 
-| Category | Why Every Warden Checks This | Complexity for Degenerus | v1.0 Status |
-|----------|------------------------------|--------------------------|-------------|
-| ETH accounting invariant | HIGH severity if ETH can be drained or locked; this is "assets directly at risk" | HIGH — stETH rebasing + BPS splits + multi-step game-over + lootbox payouts + claimable balances all interact | INCOMPLETE — 8 of 9 Phase 4 plans unexecuted; carried to v2.0 as the critical gap |
-| Cross-function reentrancy | Single-function reentrancy is obvious; cross-function is consistently missed and always HIGH | MEDIUM — claimWinnings + purchase + delegatecall paths share state; stETH.transfer() is the external call of concern | PARTIAL — single-function analyzed; cross-function synthesis explicitly listed as v2.0 gap |
-| Admin power abuse | QA-level at C4 by default; escalates to MEDIUM if admin can halt, pause, or redirect funds without player recourse | MEDIUM — DegenerusAdmin has wireVrf, subscriptionId management, emergency stall trigger; question is whether stall is irreversibly admin-triggered | NOT STARTED — listed explicitly in v2.0 active requirements |
-| advanceGame() gas ceiling | HIGH/MEDIUM if a realistic state can cause advanceGame() to exceed 16M gas, permanently bricking the game | HIGH — bucket iteration + delegatecall + VRF fulfillment all in call graph; Sybil bloat question tied here | NOT STARTED — complete call graph required |
-| VRF griefing vectors | MEDIUM for retry window abuse; HIGH if randomness can be selectively applied or discarded by an attacker | HIGH — 18h retry window, subscription drain potential, coordinator substitution via wireVrf | PARTIAL — VRF lifecycle audited in v1.0; retry window exploitation and subscription control not yet analyzed |
-| Token mint/burn authorization | HIGH if unauthorized minting exists; direct asset theft | MEDIUM — COIN.vaultMintAllowance(), DGNRS.claimWhalePass(), BurnieCoin burn/mint paths | NOT STARTED — listed in v2.0 active requirements |
-| BurnieCoinflip house edge | MEDIUM if coinflip is exploitable or EV is wrong direction; game integrity | MEDIUM — coinflip range verification, outcome front-running window, AfK transition timing | NOT STARTED — listed in v2.0 active requirements |
-| Integer arithmetic (fee splits) | HIGH if BPS splits don't sum correctly; rounding direction can drain protocol at scale | HIGH — 90/10 pool split, daily jackpot percentage, lootbox EV multiplier, deity pass T(n) | PARTIAL — formulas flagged; invariant testing not complete |
-| Access control enumeration | LOW/QA for missing guards on non-critical functions; HIGH if critical paths are unguarded | MEDIUM — 22 contracts, 10 delegatecall entry points, VRF coordinator guard | COMPLETE — v1.0 full access control matrix delivered |
-| Delegatecall storage collision | HIGH if slot mismatch exists; corrupts all downstream state | HIGH — 10 modules, all inherit DegenerusGameStorage | COMPLETE — v1.0 confirmed zero slot collisions |
-| VRF lifecycle (Chainlink 8-point) | MEDIUM-HIGH — standard Chainlink checklist for consumer contracts | MEDIUM — rngLockedFlag, requestId matching, fulfillRandomWords non-reversion | COMPLETE — v1.0 all PASS |
-| FSM transition completeness | MEDIUM if illegal FSM transitions are reachable | MEDIUM — three-state FSM (purchase/jackpot/gameOver) | COMPLETE — v1.0 all legal/illegal transitions enumerated |
-| Whale/deity pass economic exploits | MEDIUM if pricing formulas can be gamed or EV is attacker-positive | HIGH — T(n) triangular pricing, bundle-level-eligibility guard (F01 found in v1.0) | PARTIAL — F01 (whale bundle level guard) found; deeper EV modeling deferred to v2.0 |
-| Sybil bloat (storage DOS) | MEDIUM if player count growth can force advanceGame() over gas limit | HIGH — per-player storage, bucket cursor mechanics, trait burn iteration | NOT STARTED — listed in v2.0 active requirements |
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| ETH solvency invariant harness | Core protocol invariant: sum of all claimable balances + prize pools <= contract ETH balance. This is THE invariant for any ETH-holding protocol. | High | Requires ghost variables tracking every ETH inflow (purchases, whale bundles, deity passes) and outflow (claims, jackpots, lootbox payouts, game-over distribution). Must deploy full protocol in Foundry which means solving the ContractAddresses compile-time constant problem. |
+| BurnieCoin supply conservation invariant | totalSupply + vaultAllowance must equal sum of all balance changes. Already have standalone math fuzz (BurnieCoinInvariants.t.sol) but need stateful multi-actor version. | Medium | Existing mock-based fuzz tests validate the math. Upgrade to handler-based invariant test with multiple actors doing mint/burn/transfer/vaultMintTo sequences. |
+| Game FSM transition invariant | Game state machine must never reach illegal states: level must only increase, gameOver must be terminal, rngLocked must follow request-fulfill-unlock cycle. | High | Requires handler that drives purchase/advanceGame/VRF-fulfill sequences. Must mock VRF coordinator in Foundry (vm.prank the callback). |
+| Handler contracts (not raw target fuzzing) | Handler-based setup is the standard for complex protocols. Raw contract fuzzing produces >99% reverts and finds nothing useful. | Medium | One handler per logical domain (MintHandler, AdvanceHandler, WhaleHandler, ClaimHandler). Each handler bounds inputs to valid ranges and manages actor state. |
+| Ghost variable tracking | Handler-side accounting that shadows protocol state. Required to assert invariants the protocol doesn't expose as view functions. | Medium | ghost_ethIn, ghost_ethOut, ghost_ticketsMinted, ghost_levelAdvances minimum. Updated in every handler function. |
+| Multi-actor support | Fuzzer must call from multiple addresses to test access control and cross-user interactions. | Low | Standard pattern: handler maintains address[] actors, uses modifiers to cycle through them with vm.prank. |
+| Bounded input generation | All handler functions must use bound() to constrain fuzzed inputs to valid ranges. | Low | Without bounding, >95% of calls revert on basic validation (zero amount, insufficient ETH). Wasted fuzzer cycles. |
 
-### Differentiators (High-Value Findings — What Wins Code4rena)
+### Blind Adversarial Attack Sessions
 
-These are the categories where well-funded adversarial contestants will spend their time on this protocol. A thorough engagement that produces findings here is what the Code4rena contest prep deliverable requires.
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Independent attack briefs (4 sessions) | Each session targets a distinct attack surface with a focused scope document. Independence prevents groupthink and ensures broad coverage. | Low | Brief writing is low complexity; the value is in scoping distinct, non-overlapping attack surfaces. |
+| ETH extraction attack session | Primary threat: can an attacker drain ETH beyond their entitlement? Covers reentrancy, rounding exploits, claim-replay, prize pool manipulation. | High | Must exercise all 8 ETH transfer sites identified in v2.0 cross-function reentrancy matrix. |
+| advanceGame bricking attack session | Can an attacker permanently brick the game state machine? Covers VRF griefing, gas exhaustion in advanceGame, level-skip attacks. | Medium | v2.0 confirmed 39.3% gas bound, but fuzzer may find sequences that push it higher or stall VRF permanently. |
+| Delegatecall reentrancy attack session | Can a malicious callback during delegatecall module execution corrupt shared storage? | Medium | 10 modules share DegenerusGameStorage. v2.0 verified CEI pattern but a fuzzer can test sequences v2.0 couldn't enumerate. |
+| PoC test for each Medium+ finding | Any finding rated Medium or above must have a reproducible proof-of-concept. Standard for C4 submissions. | Low-High | Complexity depends on what's found. Writing the PoC is the easy part; finding the bug is the hard part. |
+| C4-format findings report | Consolidated report from all attack sessions in Code4rena severity format. | Low | Template exists from v2.0 Phase 13. |
 
-| Category | Value Proposition for Auditors | Complexity | Notes |
-|----------|-------------------------------|------------|-------|
-| claimWinnings() CEI violation — cross-function reentrancy | If ETH/stETH is transferred before clearing the claimable balance, an attacker who triggers an ETH callback can reenter a different function (purchase, lootbox resolution, affiliate payout) that also modifies prize pool state — bypassing a same-function reentrancy guard. This is HIGH severity if exploitable, and consistently missed because wardens check same-function reentrancy only. | HIGH | Critical path: claimWinnings → stETH.transfer() → Lido callback → ? Most impactful if the callback can reenter purchase() before state clear. |
-| advanceGame() worst-case gas — complete call graph | advanceGame() dispatches multiple delegatecall modules. At worst-case game state (many active players, all buckets full, lootboxes pending, VRF word consuming jackpot scatter), the cumulative gas may approach or exceed the 16M block limit. If any realistic player count can trigger this, it is a permanent game-brick — HIGH severity. | HIGH | Requires full call graph trace: advanceGame → advance module → jackpot module → lootbox module → bucket iteration. Sybil bloat interacts: n cheap wallets create n more bucket entries. |
-| Admin emergency stall — rug vector analysis | The 3-day emergency stall is admin-triggered. Questions for Code4rena: (1) Can admin trigger stall immediately after a large whale deposit, before payout? (2) Does stall give admin any privileged withdrawal capability not available to players? (3) Can admin repeatedly trigger/resolve stall to delay payouts indefinitely? (4) Can wireVrf replace the VRF coordinator with a malicious contract? These are MEDIUM at C4 severity (admin trust is assumed) unless any path allows non-admin actors to trigger or unless the stall creates a direct fund-theft mechanism. | MEDIUM-HIGH | wireVrf is the highest-risk admin function: substituting a malicious VRF coordinator gives the admin full control over all RNG outcomes. Classification depends on whether the coordinator address is multisig-protected. |
-| VRF retry window exploitation | The 18h VRF retry timeout means: if VRF fulfillment is delayed (Chainlink outage, subscription drain), a waiting attacker can observe how the game state will evolve and time their retry-trigger to an advantageous moment. This is distinct from the Chainlink subscription-owner reroll attack (patched). At C4, this is MEDIUM if the attacker has no special privileges — they can trigger the retry but cannot choose the random word. | MEDIUM | Key question: does the retry path allow any bet placement or state change between the original VRF request and the retry? If yes, it becomes a selective-input attack — players can choose bets after seeing the pending VRF entropy, which is HIGH. |
-| VRF subscription drain (griefing) | A malicious user could drain the LINK subscription balance by triggering repeated VRF requests (one per game advance) via valid game play. This DoS-es the game when LINK runs out. At C4: MEDIUM if it requires genuine game participation (has economic cost); LOW if the cost is prohibitive. | MEDIUM | Depends on the cost-to-drain ratio: how much ETH does an attacker spend in tickets vs. how much LINK is drained? If LINK subscription can be replenished by anyone this is informational. |
-| BurnieCoinflip — house edge and front-running | BurnieCoin coinflips must have a provably correct house edge (if there is one), and the coinflip outcome must not be front-runnable. Key questions: (1) Is the coinflip outcome derived from a Chainlink VRF word, or from block-level data? (2) What is the expected value of the coinflip relative to COIN cost? (3) Can the AfK transition timing (enter AfK then immediately exit) create a window to flip without the AfK cost? | MEDIUM | If coinflip uses block-level data (timestamp, blockhash) instead of VRF, it is HIGH — validators can reroll. If it uses VRF but the VRF word is shared with another game outcome, the entropy pool may be predictable before the flip resolves. |
-| COIN/DGNRS mint authorization audit | vaultMintAllowance defines how much COIN the vault can mint. If this cap can be bypassed (e.g., by directly calling a mint function without going through the vault), it is HIGH. If the allowance can be set arbitrarily by admin without player recourse, it is MEDIUM (admin trust). If claimWhalePass() in DGNRS can be called for the same player twice, it is HIGH (double mint). | MEDIUM-HIGH | Specific focus: is there any call path to mint COIN or DGNRS that bypasses the authorization check? This is the token supply invariant. |
-| Whale bundle + lootbox combined EV | A well-funded whale can buy a bundle at 2.4 ETH (levels 0-3) and immediately redeem lootboxes funded by their purchase. If the lootbox EV multiplier for a high-activity-score whale exceeds 1.0, the whale extracts more ETH than deposited. This is a MEDIUM-HIGH finding because it is a designed mechanic — the question is whether the math is correct. | HIGH | Requires: (a) verify activity score cannot be inflated cheaply before bundle purchase; (b) verify lootbox EV formula cannot exceed 1.0 for any realistic activity score; (c) verify whale bundle level eligibility (F01 fix) prevents level 0 abuse. |
-| Sybil wallet storage bloat — game brick | If each Sybil wallet creates O(k) permanent storage entries (bucket slots, player records, affiliate entries), a coordinated group of n wallets creates O(n*k) entries. The next advanceGame() call must iterate over all of them. If this exceeds 16M gas, the game is permanently bricked for all players. This is HIGH at Code4rena because it directly compromises all funds in the game. | HIGH | Requires: calculate per-player storage cost, per-wallet gas contribution to advanceGame() loop, and find the wallet count n where total gas exceeds 16M. |
-| Game-over fund distribution — zero-balance proof | After game-over settlement, the contract should hold zero ETH (all funds distributed as claimable). If any path leaves funds locked (unclaimed claimable, rounding dust, stETH balance mismatch), this is MEDIUM. If any path allows funds to be claimed twice, it is HIGH. | HIGH | Multi-step sequence (advanceGame→VRF→fulfill→advanceGame→gameOver) must be traced end-to-end. The stETH balance at the time of settlement may differ from the balance at game start due to rebasing. |
-| Cross-function reentrancy synthesis | The existing v1.0 work analyzed per-module reentrancy. The missing piece is cross-function reentrancy: can an ETH callback from claimWinnings reenter purchase()? Can a stETH transfer callback from lootbox resolution reenter an affiliate payout? This synthesis pass connects all ETH-touching call sites and verifies that CEI holds across function boundaries, not just within each function. | HIGH | Specifically look for: any ETH send that is not the last operation in a function; any function called by an ETH callback that also modifies shared state without a reentrancy guard. |
+---
 
-### Anti-Features (Categories That Look Productive But Waste Audit Time)
+## Differentiators
 
-These are activities that seem audit-relevant but either are explicitly out of scope, produce only QA/Gas-level findings at Code4rena, or have been completed in v1.0.
+Features that go beyond the minimum and materially increase the chance of finding bugs that a C4 contest would surface.
 
-| Anti-Feature | Why It Seems Valuable | Why It Wastes Time | What to Do Instead |
-|--------------|----------------------|-------------------|-------------------|
-| Admin privilege findings submitted as HIGH | Admin trust abuse is a real concern; feels impactful | Code4rena explicitly categorizes admin/centralization as QA-level. "Reckless admin mistakes are invalid." Submitting admin-only attacks as HIGH gets downgraded and penalizes the warden's score. Only escalates to MEDIUM with non-hypothetical harm that doesn't require admin bad faith. | Document admin power as an enumeration in the QA report. Only escalate wireVrf (coordinator substitution) if it creates an unpermissioned attack vector — that is the one admin function with HIGH potential. |
-| Gas optimization recommendations | Finding gas inefficiencies feels thorough | Explicitly out of scope per PROJECT.md. Gas findings are submitted separately as a Gas Report at Code4rena, not mixed into security findings. Mixing dilutes the security report and wastes time on a separate scoring track. | Note gas costs only where they create a security risk (e.g., advanceGame() gas ceiling). Otherwise record as Gas Report material and do not spend security analysis time on it. |
-| Static analysis output (Slither/Aderyn) without manual triage | Tools run fast and produce output | Raw scanner output without manual triage is noise. v1.0 already classified 319+ Slither/Aderyn detections as false positives with reasoning. Revisiting them wastes time that should go to untriaged areas. | Use v1.0 triage classifications as the baseline. Only run new scans on code paths not covered in v1.0 (ETH accounting paths, admin functions, coinflip contract). |
-| Per-contract access control re-audit | Access control is critical | v1.0 delivered a complete access control matrix for all 22 contracts with delegation safety proofs. Re-auditing this is redundant. | Use v1.0 access control matrix as a reference. The v2.0 access control work is specifically admin power abuse (what privileged functions can do), not whether the function is guarded (already confirmed). |
-| Storage layout re-verification | Slot collisions are severe | v1.0 confirmed zero slot collisions across all 10 delegatecall modules with forge inspect. This is a deterministic check that does not need repeating unless a module is modified. | Only re-verify if new module code is added or existing modules are changed. Use v1.0 storage layout map as authoritative. |
-| Testnet contract review | Testnet contracts exist and are similar to mainnet | Testnet contracts use TESTNET_ETH_DIVISOR=1000000 and different VRF config. Findings on testnet are not transferable to mainnet security posture. Explicitly out of scope per PROJECT.md. | Focus exclusively on mainnet configurations. |
-| Formal verification of all 22 contracts | Exhaustive correctness proofs feel valuable | Full formal verification of 22 contracts is a months-long engagement. Out of scope per PROJECT.md. Using it as an audit phase would crowd out manual analysis time. | Use bounded symbolic execution (Halmos) only for specific numeric formulas: deity pass T(n) overflow, ticket cost formula, BPS split sums. These are bounded checks, not full verification. |
-| FSM transition re-audit | FSM has complex multi-step transitions | v1.0 enumerated all legal and illegal FSM transitions with proof of unreachability. This is complete. Re-doing it does not produce new findings. | Use v1.0 FSM transition graph as a reference. The v2.0 FSM work is specifically the advanceGame() gas budget under worst-case FSM state, not the transition logic itself. |
-| Mock/test infrastructure review | Tests are code, auditing them is thorough | Mock contracts are not deployed. Findings on test infrastructure have no mainnet security impact. Explicitly out of scope per PROJECT.md. | Use test infrastructure only as behavioral specification — if a test asserts property X, assume X is the intended behavior and verify the implementation enforces it on-chain. |
-| VRF lifecycle basic checklist re-run | VRF is complex and high-risk | v1.0 ran the full 8-point Chainlink VRF V2.5 security checklist and confirmed all items PASS. Re-running the same checklist does not produce new findings. | The v2.0 VRF work is specifically: (1) retry window exploitation timing, (2) subscription drain griefing economics, (3) coordinator substitution via wireVrf. These are second-order VRF risks beyond the basic checklist. |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Vault share accounting invariant | DegenerusVault and DegenerusStonk use share-based math. Invariant: no user can extract more ETH than their proportional share. Existing ShareMathInvariants.t.sol tests the formula; upgrade to stateful multi-deposit-multi-withdraw handler. | Medium | High-value because share math bugs are a top C4 finding category (Yearn yETH exploit Dec 2025). |
+| Ticket queue ordering invariant | Ticket purchase queue must maintain FIFO ordering and never skip entries during advanceGame processing. | Medium | Requires handler that interleaves purchases and advances, checking queue consistency after each. |
+| Cross-handler sequencing | Multiple handlers calling different protocol entry points in the same invariant campaign. Tests cross-function interaction sequences. | Medium | Foundry supports multiple targetContract entries. Key for finding bugs at module boundaries. |
+| Conditional invariants (phase-aware) | Invariants that apply only in certain game states (e.g., "no claims possible before gameOver" or "prize pool only decreases after gameOver"). | Low | Use if/else in invariant_ functions to check game.gameOver() and assert different properties per phase. |
+| Attack brief with threat model persona | Each blind adversarial session assumes a specific attacker capability (whale, Sybil, block proposer, insider). More realistic than generic "find bugs." | Low | Aligns with v2.0 threat model: 1000 ETH whale + coordinated Sybil + validator. |
+| Differential testing against v2.0 manual proofs | Fuzzer attempts to violate the specific claims made in v2.0 audit (e.g., "ACCT-01: purchase ETH fully accounted"). Turns static proofs into dynamic verification. | Medium | High confidence boost: if the fuzzer can't break v2.0's claims after 256 runs x 64 depth, those claims are battle-tested. |
+| Lootbox EV invariant | Expected value of lootbox payouts must never exceed 1.0x deposit over sufficient samples. | Medium | Statistical invariant -- harder to assert per-call. Use ghost variables to track cumulative lootbox deposits vs payouts, assert ratio <= 1.0 + epsilon. |
+
+---
+
+## Anti-Features
+
+Features to explicitly NOT build for this milestone.
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| Full protocol deployment in Foundry | ContractAddresses.sol uses compile-time constants. Deploying the real 22-contract suite in Foundry requires solving the address-patching problem (predict nonces, patch, recompile). This is a massive yak-shave for v3.0. | Use mock contracts that mirror the real contracts' storage layout and key functions, exactly as the existing BurnieCoinInvariants.t.sol already does. Test the MATH and STATE TRANSITIONS, not the deployment pipeline. |
+| Migrating 884 Hardhat tests to Foundry | Existing Hardhat tests are comprehensive and passing. Rewriting them in Solidity adds zero security value. | Keep Hardhat tests as-is. Foundry invariant tests are ADDITIVE -- they test properties Hardhat unit tests structurally cannot (random sequences of operations). |
+| Gas optimization invariants | v3.0 is about security, not gas. Gas was already analyzed in v2.0 Phase 9. | Out of scope per PROJECT.md. |
+| Formal verification | Tools like Certora or Halmos are valuable but represent a different methodology than fuzzing. Would require learning a new specification language and tool. | Fuzzing is the right tool for this milestone. Formal verification could be a v4.0 milestone. |
+| Automated vulnerability scanners (Slither/Aderyn re-run) | Already run in v1.0 with all findings triaged. Re-running adds no value unless contracts changed. | Contracts haven't changed since v2.0. Static analysis is complete. |
+| Frontend/off-chain attack vectors | Out of scope per PROJECT.md. | Contracts only. |
+| Cross-chain bridge testing | Protocol is single-chain (mainnet). No bridge exists. | N/A. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[ETH Accounting Invariant — v2.0 CRITICAL GAP]
-    └──requires──> [claimWinnings CEI cross-function reentrancy] (reentrancy breaks the invariant)
-    └──requires──> [BPS split rounding direction proof] (precision errors cause invariant drift)
-    └──requires──> [game-over zero-balance proof] (terminal state must clear all funds)
-    └──requires──> [stETH rebasing desync check — v1.0 PARTIAL] (external balance changes break invariant)
+Foundry config (foundry.toml) ── already exists
+    |
+    v
+Mock contracts for Foundry ── mirrors of real contracts with same storage layout
+    |
+    +---> ETH Solvency Handler ──> ETH Solvency Invariant Test
+    |
+    +---> BurnieCoin Handler ──> BurnieCoin Supply Invariant Test (upgrade from existing)
+    |
+    +---> Game FSM Handler ──> Game FSM Invariant Test
+    |         |
+    |         +---> VRF Mock (Foundry-native) ── must fulfill random words on demand
+    |
+    +---> Vault/Stonk Share Handler ──> Share Accounting Invariant Test (upgrade from existing)
+    |
+    +---> Multi-handler campaign ──> Cross-handler invariant test (all handlers as targets)
 
-[advanceGame() gas analysis — v2.0 CRITICAL GAP]
-    └──requires──> [complete call graph from advanceGame] (must know all code paths)
-    └──requires──> [Sybil bloat per-player storage calculation] (bloat is the worst-case trigger)
-    └──enhances──> [VRF griefing — subscription drain] (same gas budget that's strained by bloat)
-
-[Admin power abuse analysis — v2.0 GAP]
-    └──requires──> [wireVrf coordinator substitution risk] (highest-severity admin vector)
-    └──requires──> [emergency stall trigger conditions] (who can trigger, when, what it enables)
-    └──conflicts with──> [admin findings submitted as HIGH] (Code4rena caps admin trust at QA/MEDIUM)
-
-[VRF griefing — v2.0 GAP]
-    └──requires──> [VRF lifecycle — v1.0 COMPLETE] (prerequisite: understand the happy path)
-    └──requires──> [retry window timing analysis] (18h window vs. state changes between request and retry)
-    └──conflicts with──> [VRF lifecycle re-audit] (v1.0 is complete; v2.0 is second-order risks only)
-
-[Token mint/burn authorization — v2.0 GAP]
-    └──requires──> [access control matrix — v1.0 COMPLETE] (prerequisite: know who can call what)
-    └──focuses on──> [vaultMintAllowance bypass] (specific exploit path within the authorization model)
-    └──focuses on──> [claimWhalePass double-mint check] (specific invariant within the authorization model)
-
-[BurnieCoinflip house edge — v2.0 GAP]
-    └──requires──> [VRF lifecycle — v1.0 COMPLETE] (prerequisite: know how VRF entropy flows)
-    └──requires──> [COIN economic model — v1.0 PARTIAL] (prerequisite: understand COIN value vs. coinflip cost)
-
-[Whale/deity EV analysis — v2.0 GAP]
-    └──requires──> [whale bundle level eligibility — F01 fix confirmed] (prerequisite: F01 already found)
-    └──requires──> [activity score manipulation analysis] (EV depends on whether activity score is cheap to farm)
-    └──enhances──> [Sybil bloat analysis] (Sybil wallets may also manipulate activity score metrics)
-
-[Cross-function reentrancy synthesis — v2.0 GAP]
-    └──requires──> [per-module reentrancy — v1.0 COMPLETE] (prerequisite: per-function analysis done)
-    └──requires──> [ETH accounting invariant paths] (must know all ETH-touching call sites)
-    └──enables──> [claimWinnings CEI classification] (determines if the gap is exploitable cross-function)
+Attack Brief 1 (ETH extraction) ──> Independent adversarial session ──> PoCs + findings
+Attack Brief 2 (advanceGame bricking) ──> Independent adversarial session ──> PoCs + findings
+Attack Brief 3 (delegatecall reentrancy) ──> Independent adversarial session ──> PoCs + findings
+Attack Brief 4 (claimWinnings overflow) ──> Independent adversarial session ──> PoCs + findings
+    |
+    v
+Consolidated C4-format findings report
 ```
 
-### Dependency Notes
-
-- **ETH accounting invariant is the master dependency.** It depends on reentrancy, BPS math, game-over settlement, and stETH behavior. It cannot be verified before these are complete. This is why Phase 4 in v1.0 was intentionally deferred — it requires all of Phase 3 (module audit) to be done first. In v2.0, Phase 3 is complete, so Phase 4 can proceed.
-- **advanceGame() gas analysis is independent of accounting.** It can run in parallel with the ETH accounting work. The only dependency is having the full call graph, which requires reading the code directly.
-- **Admin abuse and VRF griefing are partially independent.** wireVrf connects them — coordinator substitution is both an admin power and a VRF griefing vector. Analyze wireVrf once, classify in both.
-- **Cross-function reentrancy synthesis must be last.** It integrates findings from all other categories. Running it before the accounting invariant and module audits are complete produces incomplete analysis.
+Key dependency: The mock contract approach (anti-feature: no full deployment) means handlers interact with simplified mocks. This is a deliberate tradeoff -- the existing BurnieCoinInvariants.t.sol and ShareMathInvariants.t.sol already demonstrate this pattern successfully.
 
 ---
 
-## MVP Definition (Phases of v2.0 Audit Work)
+## Handler Design Patterns for Delegatecall Architecture
 
-### Phase 1: Unfinished Business from v1.0 (Do First — Blocks Report)
+The protocol's delegatecall module pattern creates a specific challenge: the Game contract delegates to 10 modules that share DegenerusGameStorage. A handler must:
 
-These are explicitly the gaps carried over. Without them, the audit is 74% complete, not 100%.
-
-- [ ] ETH accounting invariant — trace all inbound/outbound ETH paths; assert `address(this).balance + stETH.balanceOf(this) >= claimablePool` holds across all paths
-- [ ] BPS split correctness — verify all splits sum to input amount; fuzz with values 1 wei to 1000 ETH to confirm rounding does not accumulate
-- [ ] claimWinnings() CEI — does ETH/stETH transfer happen before or after clearing the claimable balance? Is there a reentrancy guard? Does it cover delegatecall paths?
-- [ ] game-over zero-balance proof — trace the full game-over sequence and confirm contract holds zero ETH after all claimable balances are set
-- [ ] Cross-contract synthesis report (07-03, 07-05 from v1.0 plan) — integrate all findings into prioritized final report
-
-### Phase 2: New v2.0 Attack Surface (Add After Phase 1)
-
-These are the attack surfaces not covered in v1.0.
-
-- [ ] advanceGame() complete call graph — every delegatecall invocation mapped, worst-case gas path identified per code branch
-- [ ] Sybil bloat calculation — per-player storage cost, O(n) growth factor, critical player count n at which advanceGame() exceeds 16M gas
-- [ ] Admin power abuse — wireVrf coordinator substitution risk, emergency stall trigger conditions, stall-as-payout-delay analysis
-- [ ] VRF retry window exploitation — 18h window vs. state changes; any bet placement or purchase between VRF request and retry creates selective-input attack
-- [ ] VRF subscription drain economics — cost-to-drain ratio vs. game economics; determine if this is MEDIUM or informational
-- [ ] COIN/DGNRS mint authorization — vaultMintAllowance bypass paths; claimWhalePass double-mint check; burnCoin return value on insufficient balance
-- [ ] BurnieCoinflip house edge — entropy source verification (VRF vs block data), expected value calculation, AfK window timing
-- [ ] Whale/deity combined EV model — can a high-activity-score whale extract positive EV from bundle + lootbox combination?
-
-### Phase 3: Final Synthesis (Do Last — Report Gate)
-
-- [ ] Cross-function reentrancy synthesis — map all ETH-touching call sites; verify CEI holds across function boundaries, not just within each function
-- [ ] Final prioritized findings report — CRITICAL / HIGH / MEDIUM / LOW / Gas / QA sections; Code4rena severity methodology applied to all findings
+1. **Wrap the Game contract, not individual modules.** In production, users call Game which delegates. The handler should mirror this by calling Game's external functions.
+2. **Manage VRF lifecycle.** Many operations require VRF fulfillment (advanceGame, lootbox, coinflip). The handler must include a `fulfillVRF()` action that the fuzzer can call, simulating Chainlink callback.
+3. **Track shared storage via ghost variables.** Since delegatecall modules write to Game's storage, the handler must track expected state changes at the Game level, not per-module.
+4. **Bound inputs per function.** Each handler function needs specific bounds:
+   - `purchase()`: ticketQuantity in [100, 40000], payKind in [0,2], msg.value matching cost
+   - `advanceGame()`: only callable when !rngLocked
+   - `claimWinnings()`: only callable when gameOver && hasClaim
+   - Whale/deity: msg.value matching required price
 
 ---
 
-## Feature Prioritization Matrix
+## Attack Brief Structure
 
-All items below are for the v2.0 audit scope. v1.0 items are marked COMPLETE and included only as context.
+Each blind adversarial session needs a focused brief. Effective brief structure:
 
-| Category | Finding Value (C4 Severity) | Investigation Cost | Priority |
-|----------|----------------------------|--------------------|----------|
-| ETH accounting invariant | HIGH potential | HIGH — requires full path trace | P1 |
-| claimWinnings() CEI cross-function reentrancy | HIGH potential | HIGH — requires call graph | P1 |
-| BPS split rounding — game-over zero balance | MEDIUM-HIGH | MEDIUM — math + fuzz | P1 |
-| advanceGame() gas ceiling analysis | HIGH potential (if breach found) | HIGH — full call graph required | P1 |
-| Sybil bloat — permanent game brick | HIGH potential | MEDIUM — calculate per-wallet cost | P1 |
-| Admin wireVrf coordinator substitution | MEDIUM (admin trust) | LOW — single function analysis | P1 |
-| VRF retry window exploitation | MEDIUM-HIGH if state changes allowed | MEDIUM | P1 |
-| COIN/DGNRS mint authorization | HIGH if bypass exists | MEDIUM | P1 |
-| Cross-function reentrancy synthesis | HIGH potential | HIGH — integrating pass | P2 |
-| BurnieCoinflip house edge + entropy source | MEDIUM (HIGH if block data) | MEDIUM | P2 |
-| Whale/deity combined EV model | MEDIUM | HIGH — analytical modeling | P2 |
-| Admin emergency stall — payout delay | MEDIUM (admin trust) | LOW | P2 |
-| VRF subscription drain economics | MEDIUM-LOW | LOW — ratio calculation | P2 |
-| Activity score manipulation | MEDIUM | MEDIUM | P2 |
-| Final prioritized findings report (07-05) | Required deliverable | MEDIUM — synthesis only | P1 |
-| Access control matrix (v1.0) | COMPLETE | — | — |
-| Delegatecall storage collision (v1.0) | COMPLETE | — | — |
-| VRF lifecycle 8-point checklist (v1.0) | COMPLETE | — | — |
-| FSM transition graph (v1.0) | COMPLETE | — | — |
-| ETH module flow per-module audit (v1.0) | COMPLETE | — | — |
-| Input validation (v1.0) | COMPLETE | — | — |
-| Economic attack surface modeling (v1.0) | COMPLETE (partial) | — | — |
+### Template
+```
+ATTACK BRIEF: [Session Name]
+TARGET: [Specific contracts/modules in scope]
+ATTACKER PERSONA: [Capabilities -- e.g., 1000 ETH whale, block proposer, Sybil group]
+ATTACK SURFACE: [Entry points to probe]
+INVARIANTS TO BREAK: [Specific properties the attacker tries to violate]
+KNOWN DEFENSES: [What v2.0 verified -- attacker must get past these]
+OUT OF SCOPE: [What not to waste time on]
+SUCCESS CRITERIA: [What constitutes a finding at each severity level]
+```
 
-**Priority key:**
-- P1: Must complete for v2.0 audit to be credible as Code4rena contest preparation
-- P2: Should complete for thorough adversarial coverage; likely produces MEDIUM findings
-- P3: Nice to have; Gas/QA-level findings
+### What Makes a Good Brief
+- **Focused scope**: 2-4 contracts, not the whole protocol. Depth over breadth.
+- **Clear attacker model**: What resources and capabilities the attacker has.
+- **Falsifiable claims**: "v2.0 proved X. Can you disprove it?" gives the adversarial session a concrete target.
+- **Independence**: Each session should not see findings from other sessions until consolidation. Prevents anchoring bias.
+
+### Proposed 4 Sessions
+
+| Session | Target Contracts | Attacker Persona | Key Invariant to Break |
+|---------|-----------------|-------------------|----------------------|
+| ETH Extraction | Game, Jackpots, Vault, Stonk | 1000 ETH whale + reentrancy callback contract | Extract more ETH than deposited + entitled winnings |
+| advanceGame Bricking | Game, AdvanceModule, JackpotModule | Block proposer with censorship power | Permanently prevent game from advancing past a level |
+| Claim Overflow | Game, GameOverModule, EndgameModule, PayoutUtils | Sybil group (100 addresses) | Claim total > prize pool, or claim someone else's winnings |
+| Delegatecall Storage | Game, all 10 modules | Attacker with deep protocol knowledge | Corrupt shared storage via cross-module call sequence |
 
 ---
 
-## Code4rena Severity Mapping — Degenerus v2.0
+## MVP Recommendation
 
-This maps each v2.0 attack surface to the expected Code4rena severity classification if a finding is confirmed. Severity is per-C4-rubric: HIGH = assets directly at risk, MEDIUM = function/availability impact with stated assumptions, LOW/QA = everything else.
+Prioritize for maximum security value per effort:
 
-| Attack Surface | Expected C4 Severity If Found | Key Condition for Severity |
-|----------------|------------------------------|---------------------------|
-| claimWinnings CEI violation (reentrancy) | HIGH — assets directly stolen | Must have exploitable reentry path; ETH/stETH transfer before state clear with no guard |
-| BPS split rounding that accumulates | HIGH — assets permanently lost in rounding | Must demonstrate net loss > dust at realistic scale; Balancer pattern |
-| advanceGame() gas ceiling breach | HIGH — all funds permanently locked | Must show realistic player count that exceeds 16M; Sybil cost required |
-| game-over with locked/uncollectable funds | HIGH — assets lost | Must show funds remain unclaimable after terminal state |
-| COIN/DGNRS unauthorized minting | HIGH — supply inflation steals from all players | Must show bypass path to mint without authorization |
-| VRF retry + state change = selective input | HIGH — RNG manipulation gives attacker control | Must show that a bet/purchase accepted between request and retry affects outcome |
-| wireVrf → malicious coordinator | MEDIUM (not HIGH) | Admin trust assumed at C4; only HIGH if unpermissioned actor can call wireVrf |
-| Emergency stall as fund-delay mechanism | MEDIUM | Must show stall can delay claimable funds by >N days; admin intent not required |
-| Sybil bloat (near-gas-ceiling, not breach) | MEDIUM — protocol availability impacted | If breach not found but approaching limit, still worth filing as MEDIUM |
-| VRF subscription drain (griefing) | MEDIUM if economically feasible | Must calculate cost-to-drain; if prohibitive, this is LOW/informational |
-| BurnieCoinflip with block-level entropy | HIGH if confirmed | Any block-level RNG (timestamp, blockhash) is validator-manipulable — direct asset risk |
-| BurnieCoinflip negative house edge | MEDIUM | If expected value is player-positive, protocol leaks value; EV proof required |
-| Whale + lootbox positive EV extraction | MEDIUM | Must show EV > 1.0 for realistic activity score; requires analytical model |
-| Activity score cheap inflation | MEDIUM | Must show cost-to-inflate vs. lootbox EV gain is positive |
-| AfK/coinflip timing window | MEDIUM | If AfK transition state allows coinflip without AfK cost |
-| Admin functions without timelock | LOW/QA | Standard admin trust; not HIGH unless combined with a specific theft path |
-| Event emission gaps | LOW/QA | Does not affect on-chain state |
-| Dead code / unreachable branches | LOW/QA | Not exploitable, informational |
+1. **ETH solvency invariant harness** -- THE critical invariant. If the fuzzer can't break it after 256 runs x 64 depth, it's a powerful complement to v2.0's manual ACCT proofs.
+2. **Game FSM invariant harness** -- Second most critical. State machine bugs are notoriously hard to find with unit tests.
+3. **ETH extraction attack brief** -- Highest-severity attack surface. If there's a way to drain ETH, this session finds it.
+4. **BurnieCoin supply invariant** (upgrade existing) -- Low marginal effort since BurnieCoinInvariants.t.sol already exists as a foundation.
+
+**Defer:**
+- Lootbox EV invariant: Statistical property, harder to assert deterministically, lower severity than solvency.
+- Ticket queue ordering: Important but lower priority than solvency and FSM.
+- Differential testing against v2.0 proofs: Valuable but can be folded into the main invariant harnesses rather than being a separate feature.
 
 ---
 
-## What Code4rena Wardens Will Look For First
+## Complexity Budget
 
-Based on the AI Arena audit pattern (8 HIGH, 9 MEDIUM from game mechanics — all protocol-specific, none generic), experienced wardens on this protocol will start here in priority order:
+For a protocol of this size (22 contracts, 10 modules, ~113K lines), realistic scope:
 
-1. **ETH flow from purchase() to claimWinnings()** — the money in/money out path is where HIGH findings concentrate. They will trace every wei from deposit to withdrawal looking for CEI violations and accounting gaps.
-
-2. **advanceGame() with extreme state** — wardens write PoC scripts that stuff the game state (many players, max lootboxes, full buckets) and call advanceGame() to measure gas. If they hit the limit, it's an instant HIGH submission.
-
-3. **Token mint functions** — every ERC20/ERC721 mint function gets checked for authorization bypass. This is muscle memory for experienced wardens.
-
-4. **Coinflip entropy source** — the first thing any warden asks about a coinflip is "what is the randomness source?" If the answer is anything other than a Chainlink VRF word, it's a HIGH.
-
-5. **Admin functions with fund effects** — wardens build a list of every admin function that can move funds or halt game progression. wireVrf and emergency stall will both be reviewed.
-
-6. **cross-function reentrancy via ETH callbacks** — experienced wardens know that same-function reentrancy guards are usually present; they look specifically for cross-function reentry at every ETH send site.
-
-7. **Game mechanic bypasses** (analogous to AI Arena H-01 through H-04) — wardens look for functions that have a guard in one entry point but not another, or type mismatches that allow stat manipulation. The F01 finding (whale bundle level guard) is exactly this pattern. They will look for more.
+| Component | Estimated Plans | Rationale |
+|-----------|----------------|-----------|
+| Mock contracts for Foundry | 1-2 | Mirror key contracts' interfaces and storage; existing pattern in test/fuzz/ |
+| ETH solvency handler + invariant | 2-3 | Most complex handler (many entry points for ETH flow) |
+| BurnieCoin handler + invariant | 1 | Upgrade existing BurnieCoinInvariants.t.sol to stateful handler |
+| Game FSM handler + invariant | 2 | VRF mock + state machine tracking |
+| Vault/Stonk share handler + invariant | 1 | Upgrade existing ShareMathInvariants.t.sol |
+| Attack briefs (4x) | 1 | Write all 4 briefs in one plan |
+| Adversarial sessions (4x) | 4 | One plan per independent session |
+| PoC tests for findings | 1-2 | Depends on what's found |
+| Consolidated findings report | 1 | Template from v2.0 |
+| **Total** | **14-17 plans** | |
 
 ---
 
 ## Sources
 
-- [Code4rena Severity Categorization](https://docs.code4rena.com/competitions/severity-categorization) — HIGH confidence; official C4 severity rubric; defines HIGH/MEDIUM/LOW/QA/Gas criteria
-- [Code4rena Submission Guidelines](https://docs.code4rena.com/competitions/submission-guidelines) — HIGH confidence; PoC requirements, overstating severity penalties, QA bundling rules
-- [Code4rena AI Arena Audit Report (Feb 2024)](https://code4rena.com/reports/2024-02-ai-arena) — HIGH confidence; 8H/9M findings from game contract audit; direct analogue to Degenerus
-- [Chainlink VRF V2.5 Security Considerations](https://docs.chain.link/vrf/v2-5/security) — HIGH confidence; official 8-point checklist; no-re-request rule, fulfillment-must-not-revert rule
-- [Chainlink VRF Subscription Owner Attack ($300K bounty)](https://cryptoslate.com/chainlink-vrf-vulnerability-thwarted-by-white-hat-hackers-with-300k-reward/) — MEDIUM confidence; documents the reroll attack vector now patched in V2.5
-- [Hacken: Top 10 Smart Contract Vulnerabilities 2025](https://hacken.io/discover/smart-contract-vulnerabilities/) — MEDIUM confidence; access control as #1 exploit vector ($953M in 2025)
-- [Immunefi: The Ultimate Guide to Reentrancy](https://medium.com/immunefi/the-ultimate-guide-to-reentrancy-19526f105ac) — MEDIUM confidence; cross-function reentrancy documentation
-- PROJECT.md — PRIMARY SOURCE; v2.0 milestone definition, active requirements, known gaps from v1.0, out-of-scope list
-- SUMMARY.md (v1.0 research) — HIGH confidence; v1.0 completed items confirmed, gaps identified
-
----
-*Feature research for: Code4rena adversarial audit scope — Degenerus Protocol v2.0*
-*Researched: 2026-03-04*
-*Supersedes: .planning/research/FEATURES.md (2026-02-28 v1.0 version)*
+- [Foundry Invariant Testing Official Docs](https://getfoundry.sh/forge/invariant-testing) -- handler pattern, targetContract, ghost variables, configuration
+- [RareSkills Invariant Testing Guide](https://rareskills.io/post/invariant-testing-solidity) -- handler examples, actor management, DeFi invariant categories
+- [horsefacts WETH Invariant Testing](https://github.com/horsefacts/weth-invariant-testing) -- ETH solvency ghost variable pattern, bounded fuzzing
+- [Cyfrin Invariant Testing Guide](https://medium.com/cyfrin/invariant-testing-enter-the-matrix-c71363dea37e) -- multi-handler campaigns
+- [Audited, Tested, and Still Broken (2025 Hacks)](https://medium.com/coinmonks/audited-tested-and-still-broken-smart-contract-hacks-of-2025-a76c94e203d1) -- Yearn yETH share math exploit as motivation for vault invariants
+- Existing codebase: test/fuzz/BurnieCoinInvariants.t.sol, test/fuzz/ShareMathInvariants.t.sol, test/fuzz/PriceLookupInvariants.t.sol -- established mock-based fuzz pattern
+- Existing codebase: foundry.toml -- already configured with invariant runs=256, depth=64

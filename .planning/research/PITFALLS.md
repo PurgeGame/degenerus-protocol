@@ -1,648 +1,341 @@
-# Pitfalls Research
+# Domain Pitfalls
 
-**Domain:** Smart contract security audit — VRF-based on-chain game with delegatecall modules, prize pools, and complex token economics (v2.0 Adversarial Audit)
-**Researched:** 2026-03-04
-**Confidence:** HIGH (contract code directly inspected; external findings corroborated across multiple sources)
+**Domain:** Adding Foundry invariant fuzzing and blind adversarial testing to an existing Hardhat-based 22-contract DeFi/GameFi protocol
+**Researched:** 2026-03-05
+**Confidence:** HIGH (project-specific analysis of existing codebase + foundry.toml config, corroborated with official Foundry docs and community experience)
 
 ---
 
 ## How to Read This File
 
-This document extends the v1.0 pitfalls (pitfalls 1-17) with adversarial audit-specific pitfalls discovered through research into Code4rena warden patterns, post-audit exploits, and integration-specific bugs in delegatecall+VRF+pull-withdrawal architectures. Pitfalls are grouped into:
-
-1. **Critical Pitfalls (v1.0)** — Carried forward from the systematic audit pass.
-2. **Critical Pitfalls (v2.0 Adversarial)** — New categories the adversarial pass must address.
-3. **What Adversarial Passes Find That First Passes Miss** — Meta-audit methodology.
-4. **Integration Gotchas (updated)**, **Security Mistakes (updated)**, **Phase Mapping (updated)**.
-
----
-
-## Critical Pitfalls (v1.0 — Carry-Forward)
-
-### Pitfall 1: VRF Callback Gas Limit Overflow Causes Silent DOS
-
-**What goes wrong:**
-`rawFulfillRandomWords` is called by the Chainlink VRF coordinator with a fixed gas limit (300,000 gas as set in `VRF_CALLBACK_GAS_LIMIT`). The callback is routed via `delegatecall` to `DegenerusGameAdvanceModule`. If the callback logic consumes more gas than the limit, the coordinator call reverts internally but the coordinator does **not** retry — the randomness request is permanently dropped. The game's `rngRequestTime` stays set, the `rngLockedFlag` stays true, and the game is stalled until the 18-hour timeout expires. This is a silent failure mode: no event is emitted, no revert propagates.
-
-Real-world precedent: Sherlock's audit of LooksRare Infiltration (2023) found a HIGH/MEDIUM gas overflow in `fulfillRandomWords` where the callback called an internal function that looped over agents and made external ERC20 transfers. The Chainlink coordinator's max gas limit is 2,500,000 for the VRF coordinator — but consumer contracts set their own lower limit, which is the actual ceiling. Chainlink's official security docs state: "If `fulfillRandomWords()` reverts, the VRF service will not attempt to call it a second time."
-
-**Why it happens:**
-Auditors focus on whether the callback validates correctly, not whether it fits within the gas envelope. The callback routes through a delegatecall, adding overhead. As lootbox state grows (pending eth, pending burnie, index mappings), the callback may creep toward the limit over the life of the game.
-
-**How to avoid:**
-- Measure the gas cost of `rawFulfillRandomWords` with worst-case state (maximum lootbox pending, maximum nudge count) using `forge test --gas-report` or gas snapshots.
-- Ensure the callback stays under 200,000 gas with comfortable headroom so growth over the game's lifetime doesn't push it past 300,000.
-- The callback should store the word and return; all complex logic should be deferred to the next `advanceGame()` call.
-- Grep for `grep -n "rawFulfillRandomWords\|fulfillRandomWords" contracts/` and audit every line in the callback path.
-
-**Warning signs:**
-- Callback cost climbing above 150,000 gas in tests with large lootbox state.
-- Any additional logic added to the callback path without a gas re-measurement.
-
-**Phase to address:** VRF/RNG security phase (adversarial audit).
+Pitfalls are grouped by severity and tagged with the phase where they must be addressed:
+- **Setup** -- Foundry integration, compiler alignment, project structure
+- **Harness writing** -- Handler design, invariant formulation, targeting configuration
+- **Attack sessions** -- Adversarial brief design, bias mitigation, PoC methodology
+- **Reporting** -- Findings synthesis, confidence claims
 
 ---
 
-### Pitfall 2: Stale VRF Request ID Allows Late Fulfillment to Corrupt State
+## Critical Pitfalls
 
-**What goes wrong:**
-The Chainlink VRF coordinator can fulfill a request at any time — including after a timeout retry has issued a new request. The current guard `if (requestId != vrfRequestId || rngWordCurrent != 0) return;` drops old fulfillments correctly. But the dropped lootbox index reservation (`lootboxRngRequestIndexById[oldRequestId]`) may not be cleaned up if the retry logic didn't handle the transition atomically. An orphaned entry could mislead off-chain indexers or be exploited by `openLootBox` with a stale index.
+Mistakes that cause wasted effort, false confidence, or invalidate the entire testing campaign.
 
-**Why it happens:**
-Retry logic in `_finalizeRngRequest` remaps the reserved lootbox index from the old request ID to the new one only on the retry path. Late-arrival fulfillments for the old ID after a retry is fulfilled leave orphaned entries.
+### Pitfall 1: ContractAddresses Compile-Time Constants Block Real Invariant Testing
 
-**How to avoid:**
-- Verify by code review that all paths through the VRF request lifecycle (fresh, retry, late-arrive) leave `lootboxRngRequestIndexById` in a consistent state.
-- Check whether orphaned entries can be exploited by a player calling `openLootBox` with a stale index.
-- Test: trigger a retry, fulfill the new request, then send a fulfillment for the old request ID — verify the game is in correct state with no exploitable residue.
+**What goes wrong:** ContractAddresses.sol uses `address(0)` compile-time constants. Foundry compiles contracts independently of the Hardhat patch-recompile pipeline. Every cross-contract call in a Foundry-deployed contract hits `address(0)` and silently fails or reverts, making multi-contract invariant tests meaningless.
 
-**Warning signs:**
-- Test coverage does not include late-arrival of an old fulfillment after a retry has been fulfilled.
-- `lootboxRngRequestIndexById` entries growing monotonically without cleanup.
+**Why it happens:** The existing test infrastructure relies on `patchContractAddresses.js` to predict nonce-based addresses, rewrite the .sol file, and recompile before deployment. Foundry has no equivalent mechanism -- `forge test` compiles once and runs. The existing fuzz tests (BurnieCoinInvariants, PriceLookupInvariants, ShareMathInvariants) deliberately sidestep this by testing mock/standalone contracts, not the real protocol.
 
-**Phase to address:** VRF/RNG security phase.
+**Consequences:** Invariant tests that appear to deploy the full protocol actually deploy broken contracts. Tests pass because invariants hold trivially on contracts that cannot interact. Zero bugs found. False confidence going into C4 contest.
 
----
+**Prevention:**
+- For system-level invariants (ETH solvency, game FSM): build a Foundry `setUp()` that deploys all 22 contracts in the correct nonce order from the same deployer, then wires addresses via constructor args or a post-deploy initialization pattern.
+- Alternative: use `vm.etch()` to place contract bytecode at expected addresses, bypassing ContractAddresses entirely.
+- Alternative: create a Foundry-specific `ContractAddresses.sol` override using remappings that provides real deployed addresses from `setUp()`.
+- Simplest and most practical: accept the existing pattern of isolated-math invariant tests (what the project already does) and reserve multi-contract integration testing for the Hardhat suite. The v3.0 milestone targets 5 specific invariants; decide per-invariant whether it needs full protocol or can use isolated mocks.
 
-### Pitfall 3: Nudge Mechanism Lets Coordinated BURNIE Holders Bias RNG Outcomes
+**Detection:** Check that `forge test --show-progress` actually executes transactions against real contract logic, not `address(0)`. Add a canary invariant: `assert(game.owner() != address(0))`.
 
-**What goes wrong:**
-The `reverseFlip()` function allows any BURNIE holder to add +1 to the upcoming VRF word by burning BURNIE. A coordinated group that accumulates BURNIE and purchases nudges shifts the random word by a known integer, changing jackpot bucket or trait selection. After VRF fulfillment, the word is visible in mempool before `advanceGame()` is called. A block proposer can see the fulfilled word and the desired offset, then sequence nudge transactions and `advanceGame()` in the same block.
-
-Chainlink's official security guidance: "Lock the contract to further user inputs immediately after submitting the randomness request and before fulfillment." The critical question is whether this lock is maintained after the word arrives but before it is processed.
-
-**How to avoid:**
-- Verify `rngLockedFlag` remains set from VRF request through the `advanceGame()` call that consumes the word.
-- Trace every code path where `rngLockedFlag` is cleared and confirm no window exists between word arrival and word consumption.
-- Grep: `grep -n "rngLockedFlag" contracts/` — audit every write.
-
-**Warning signs:**
-- Any code path where `rngLockedFlag` is cleared before `rngWordCurrent` is consumed.
-- Test coverage that does not validate nudges cannot be added after VRF fulfillment but before word processing.
-
-**Phase to address:** VRF/RNG security phase.
+**Phase:** Setup (must solve before writing any system-level harnesses).
 
 ---
 
-### Pitfall 4: Delegatecall Return Value Propagation Masks Reverts
+### Pitfall 2: Invariant Tests with Poor State Coverage Produce False Confidence
 
-**What goes wrong:**
-Every delegatecall in `DegenerusGame` follows the pattern:
-```solidity
-(bool ok, bytes memory data) = MODULE.delegatecall(...);
-if (!ok) _revertDelegate(data);
-```
-If `_revertDelegate` doesn't correctly propagate the revert reason, callers receive an opaque failure. More critically: if any delegatecall path returns `true` with malformed return data, `_revertDelegate` is never called and the caller sees "success" with garbage return data silently decoded. V1.0 audit confirmed all 30 call sites use a uniform checked pattern — the adversarial pass must verify `_revertDelegate` itself is correct.
+**What goes wrong:** Invariant tests pass across hundreds of runs but the fuzzer never reaches interesting protocol states. For this protocol: the game never advances past level 0, VRF callbacks never fire, no whale bundles are purchased, no jackpots are triggered, no game-over is reached. The invariant `address(game).balance >= totalObligations` holds trivially because nothing happened.
 
-**How to avoid:**
-- Review `_revertDelegate` to confirm it propagates the full error selector and data without truncation.
-- Review every delegatecall return value decoding: does each decoded return value match the expected type?
-- Add fuzz tests that send malformed return data from modules (forge fuzzing can do this).
+**Why it happens:** Without guided handlers, Foundry's invariant fuzzer generates random call sequences where most calls revert (wrong phase, insufficient funds, RNG locked, unauthorized). The fuzzer wastes 90%+ of its depth on reverted calls. With `fail_on_revert = false` (current config in foundry.toml), these silent failures are invisible.
 
-**Warning signs:**
-- Any module function with multiple return paths where some return values are uninitialized.
-- Delegatecall results decoded with `abi.decode` without length validation.
+**Consequences:** Invariant suite reports green. Coverage is an illusion. The dangerous states -- mid-jackpot distribution, partial game-over with pending claims, concurrent whale+regular minting -- are never tested.
 
-**Phase to address:** Reentrancy and cross-contract attack phase.
+**Prevention:**
+- Write handler contracts that guide the fuzzer through valid state transitions: fund actors with ETH via `vm.deal()`, purchase tickets at correct price, advance through VRF request/fulfill cycles, trigger jackpots at milestone levels.
+- Use ghost variables to track cumulative ETH in/out and verify against contract balance.
+- Set `show_metrics = true` in foundry.toml's `[invariant]` section to monitor call success rates. Target >60% non-reverting calls.
+- Add phase-advancing helper functions in the handler (e.g., `advanceToLevel(n)` that does the full purchase+VRF+advance cycle).
+- Log which game states are reached and assert that deep states are actually hit.
+
+**Detection:** After running invariants, check metrics output. If a handler function like `handler_purchaseTicket` has 95% revert rate, the invariant is not testing purchase flows. Check if `game.currentLevel()` ever exceeds level 2.
+
+**Phase:** Harness writing (most important phase for invariant quality).
 
 ---
 
-### Pitfall 5: Storage Slot Layout Drift in Delegatecall Modules
+### Pitfall 3: Foundry + Hardhat Compiler Version Mismatch
 
-**What goes wrong:**
-`DegenerusGameStorage` defines the canonical storage layout used by `DegenerusGame` and all 10 modules. If any module inherits a contract that adds a storage variable **before** importing `DegenerusGameStorage`, the module's storage view is shifted. This is the storage collision attack — documented in Audius ($6M hack, 2022) and AllianceBlock upgrade (2024). V1.0 audit confirmed zero collisions — the adversarial pass must re-verify this claim with automated tooling, not just visual review.
+**What goes wrong:** foundry.toml currently specifies `solc_version = "0.8.26"` but hardhat.config.js specifies version `"0.8.34"`. Contracts compile differently under each compiler. `DegenerusGameStorage.sol` uses `pragma solidity 0.8.34` while other contracts use `0.8.26`. Foundry will fail to compile DegenerusGameStorage (and all contracts that import it) because 0.8.26 < 0.8.34.
 
-**How to avoid:**
-- Generate storage layout reports with `forge inspect DegenerusGameAdvanceModule storage-layout` and compare against `forge inspect DegenerusGame storage-layout` for every slot from 0 onward.
-- Run this check for all 10 modules.
-- Any mismatch at any slot is critical and blocks deployment.
+**Why it happens:** The two config files evolve independently. The Hardhat config was updated to 0.8.34 but foundry.toml was never synchronized.
 
-**Warning signs:**
-- Any module that inherits from more than one parent.
-- New imports added to module files without a storage layout re-check.
-- A module that declares its own storage variables.
+**Consequences:** Foundry cannot compile the protocol at all. Or if pragmas are loosened with `^`, subtle bytecode differences between compiler versions could mean Foundry validates different behavior than Hardhat. Storage layout could differ between versions, especially with `viaIR` enabled.
 
-**Phase to address:** Reentrancy and cross-contract attack phase (standalone verification step).
+**Prevention:**
+- Align foundry.toml `solc_version` to `"0.8.34"` to match hardhat.config.js. This is the immediate fix.
+- Use the same optimizer settings in both: `optimizer_runs = 2`, `via_ir = true`.
+- Add a CI check: `forge build` and `hardhat compile` must both succeed without errors.
 
----
+**Detection:** Run `forge build` right now. If it fails on pragma version, this pitfall is already active.
 
-### Pitfall 6: Prize Pool Invariant Break Via stETH Rebasing
-
-**What goes wrong:**
-The critical invariant is `address(this).balance + steth.balanceOf(this) >= claimablePool`. Lido stETH rebases daily — balances change without transfer events. Contracts that store a `steth.balanceOf(this)` snapshot then use it later for payout calculations can undercount if rebase happened between calculation and execution.
-
-Lido's integration guide states: "stETH balances change upon transfers, mints/burns, and rebases — do not cache balances over extended periods." Code4rena's 2023 Kelp DAO audit found a stETH rebasing bug where the deposit limit invariant became inaccurate due to balance fluctuation.
-
-**How to avoid:**
-- Verify that no function stores `steth.balanceOf(this)` in a state variable and uses that stored value for payout calculations.
-- Verify that `claimWinnings` uses the live balance at payout time.
-- Grep: `grep -n "steth\|stETH" contracts/` — audit every read/write.
-
-**Warning signs:**
-- Any mapping or state variable holding a previously-read stETH balance.
-- Payout logic using two separate `steth.balanceOf` calls assuming they are equal.
-
-**Phase to address:** ETH accounting invariant phase (remaining v1.0 gap).
+**Phase:** Setup (must fix before any Foundry tests can compile).
 
 ---
 
-### Pitfall 7: Rounding Direction Errors Accumulate to Protocol Drain
+### Pitfall 4: VRF Simulation Makes Invariants Vacuously True or Unreachable
 
-**What goes wrong:**
-The Balancer $128M exploit (Nov 2025) demonstrated that rounding errors in integer division, when compound across many operations, can be exploited to drain funds. This protocol has numerous BPS calculations (`PURCHASE_TO_FUTURE_BPS`, jackpot slices, affiliate shares, EV multipliers). If any consistently round in the player's favor, a coordinated attacker making many small operations can extract more than expected.
+**What goes wrong:** The protocol's state machine is gated by VRF: `advanceGame()` requests randomness, and nothing progresses until `rawFulfillRandomWords()` is called back by the coordinator. In Foundry invariant testing, either: (a) VRF is never fulfilled so the game is permanently locked at the RNG-pending state, or (b) VRF is fulfilled with deterministic/predictable values that don't exercise the full entropy space (jackpot-hit vs jackpot-miss branching).
 
-**How to avoid:**
-- For every fee/split formula, verify which direction rounding favors (protocol or player).
-- Fuzz with `amount` values of 1 wei, 2 wei, and tiny amounts to see if splits sum to more or less than input.
-- Verify sum of all split components equals input for every split formula (no dust accumulation).
-- Grep: `grep -n "bps\|BPS\|10000" contracts/` — audit every division involving basis points.
+**Why it happens:** Unlike Hardhat tests where `MockVRFCoordinator` can be called programmatically between test steps, Foundry invariant testing runs random call sequences. The fuzzer has no concept of "after requesting VRF, the coordinator must callback before the next advance." Without explicit handler logic, VRF fulfillment either never happens or happens at the wrong time.
 
-**Warning signs:**
-- Any formula `a * bps / 10000` followed by `remainder = total - computed` — check both sum to `total`.
-- Lootbox EV multiplier with activity score — small scores could yield 0 bonus.
+**Consequences:** Option (a): game stuck at level 0 forever, all game-over/jackpot/endgame invariants are vacuously true. Option (b): VRF always returns the same entropy, so jackpot/no-jackpot branching is never explored.
 
-**Phase to address:** ETH accounting invariant phase.
+**Prevention:**
+- Handler must include a `fulfillVRF()` function that checks if a VRF request is pending and fulfills it with fuzzed randomness. This must be a targetable function in the invariant suite.
+- Use `vm.prank(vrfCoordinator)` to impersonate the VRF coordinator when calling `rawFulfillRandomWords`.
+- Track VRF fulfillment count in a ghost variable. Assert at end of campaign that VRF was fulfilled at least N times.
+- Vary the random words to cover both jackpot-hit and jackpot-miss paths (use fuzzed uint256 values, not a fixed seed).
 
----
+**Detection:** After invariant run, check if `game.currentLevel()` ever exceeds 0. If not, VRF fulfillment is broken.
 
-### Pitfall 8-17 (v1.0)
-
-Pitfalls 8-17 from v1.0 are carried forward as-is:
-- **P8:** Operator approval enables cross-player manipulation
-- **P9:** ERC20 return value ignored on BURNIE/DGNRS transfers
-- **P10:** Game-over payout underpays if stETH fluctuates during settlement
-- **P11:** Block proposer can reorder `advanceGame` and player purchases
-- **P12:** Sybil groups extract proportional prize pool by owning majority tickets
-- **P13:** Unchecked arithmetic in module hot paths bypasses overflow protection
-- **P14:** `receive()` routes all ETH to `futurePrizePool` — accidental funding miscounts
-- **P15:** Generic `E()` error hides root cause in complex audit paths
-- **P16:** VRF subscription balance griefing
-- **P17:** Deity pass triangular pricing formula overflow for high pass count
-
-Full detail for each is in the v1.0 PITFALLS document (archived). See Phase Mapping at the bottom of this document for where each maps in v2.0 phases.
+**Phase:** Harness writing (handler must include VRF fulfillment logic).
 
 ---
 
-## Critical Pitfalls (v2.0 Adversarial — New)
+### Pitfall 5: Adversarial Session Anchoring Bias (Auditor Already Knows the Code)
 
-These are the pitfalls that adversarial audit passes (Code4rena wardens, second-pass analysts) commonly find after a systematic first pass. Sources: Code4rena/Sherlock report patterns, post-audit exploit post-mortems, and integration-specific research.
+**What goes wrong:** The "blind" adversarial sessions are conducted by the same AI/auditor that performed v1.0 and v2.0 audits. The auditor has already formed mental models of the code, classified findings, and declared areas "safe." Adversarial sessions unconsciously skip areas previously reviewed, focus on the same attack vectors, and confirm prior conclusions rather than challenging them.
 
----
+**Why it happens:** Anchoring bias: initial exposure to information (the prior audit) creates a mental anchor. A reviewer who already concluded "ETH accounting is sound" will unconsciously spend less effort attacking ETH accounting, even in a supposedly blind session. This is the single biggest risk to the adversarial testing value proposition.
 
-### Pitfall 18: Admin Power Vectors the v1.0 Audit Accepted as "Trusted"
+**Consequences:** All 4 adversarial sessions find only the same class of issues already identified (or closely adjacent). Novel attack vectors -- especially cross-boundary attacks that span prior phase scoping -- remain undiscovered. The sessions produce a false sense of additional coverage.
 
-**What goes wrong:**
-V1.0 completed the access control matrix and confirmed privilege assignments. However, a Code4rena context requires a different framing: **every admin capability that can halt, drain, or grief the game must be enumerated as a potential finding.** In competitive audit contests, wardens frequently escalate "trusted admin" issues to HIGH/MEDIUM when the admin can:
-- Halt the game indefinitely (e.g., never calling `advanceGame`, or triggering the 3-day emergency stall and never recovering it)
-- Drain the prize pool via a privileged withdrawal function
-- Permanently block all winner withdrawals by manipulating the payout state
-- Grief individual players through ticket invalidation or affiliate nullification
+**Prevention:**
+- Each adversarial session must have a specific, narrow attack brief that forces focus on a single attack surface (e.g., "extract ETH beyond entitlement" vs "permanently brick advanceGame").
+- Attack briefs should deliberately contradict prior conclusions: "Prove the ETH solvency invariant CAN be violated" rather than "verify it holds."
+- Use different attack methodologies per session: one does pure code review from scratch, another writes PoC exploits top-down, another uses static analysis tools (Slither custom detectors), another fuzzes specific functions.
+- Time-box sessions strictly. Anchoring worsens with open-ended scope.
+- Include at least one session focused on cross-module interactions that were never tested in isolation (delegatecall module A calling through to module B's state).
 
-The Code4rena Tigris audit (2022) found HIGH: "owner can freeze withdraws and use timelock to steal all funds." The reNFT audit (2024) found admin functions that bypassed user protections.
+**Detection:** If all 4 adversarial sessions produce zero Medium+ findings and the auditor says "confirms v2.0 conclusions," anchoring bias is the likely cause, not perfect code.
 
-**Why it happens:**
-V1.0 audits typically confirm that admin functions are gated correctly (only admin can call them). Adversarial audits ask whether those functions should exist at all from a player trust perspective, and whether their combination enables stealth rug vectors.
-
-**How to avoid:**
-- List every admin-only function that touches: (a) payout state, (b) VRF subscription, (c) contract addresses, (d) prize pool balances.
-- For each: model the worst case if the admin key is compromised or malicious.
-- Assess whether the 3-day emergency stall, combined with `adminSweepResidual`, combined with `adminSwapEthForStEth`, creates a rug path that bypasses the 30-day BURNIE timeout.
-- Check if `wireVrf` or `setSubscriptionId` can be called post-deployment to redirect VRF callbacks to a malicious coordinator.
-
-**Warning signs:**
-- Any admin function callable at any game state that modifies payout addresses or VRF coordinator address.
-- Admin functions with no time delay or multi-sig requirement on fund movements.
-- A sequence of 2-3 admin calls that collectively extract the prize pool without triggering visible on-chain alarms.
-
-**Phase to address:** Admin power map phase (first task in v2.0).
+**Phase:** Attack sessions (brief design is critical -- do this before starting any session).
 
 ---
 
-### Pitfall 19: `advanceGame()` Gas Ceiling Fails Under Adversarial State
+### Pitfall 6: Delegatecall Modules Create Invisible State Corruption in Fuzzing
 
-**What goes wrong:**
-`advanceGame()` is the critical state-advancing function with a 16M gas hard limit. V1.0 confirmed all loops are bounded. However, adversarial analysis requires measuring the worst-case call graph through a combination of:
-- Maximum number of jackpot bucket updates per day
-- Maximum Sybil-bloated lootbox state (if an attacker created maximum pending lootbox indices)
-- Maximum degenerette resolution path
-- BAF multi-level scatter jackpot (commit 9442375: multi-level scatter targeting)
+**What goes wrong:** The 10 delegatecall modules share DegenerusGameStorage. If the invariant fuzzer targets module contracts directly (instead of through Game's delegatecall pattern), modules operate on their OWN empty storage, not Game's storage. Invariants that check Game storage see no corruption, but the fuzzer is testing nothing useful.
 
-If any adversarially-constructed state pushes `advanceGame()` past 16M gas, the function becomes permanently uncallable, stalling the game. The Infiltration audit demonstrated that game loop DoS via gas exhaustion is a recognized vulnerability class in on-chain games using VRF.
+**Why it happens:** Foundry's `targetContract` mechanism calls functions on the contract address directly. If a module is listed as a target (or `targetInterfaces` is misconfigured), the fuzzer calls module functions with `address(this) = module`, reading/writing module storage instead of Game storage. The module's storage is uninitialized, so most calls revert silently.
 
-**Why it happens:**
-V1.0 loop analysis verified individual bounds but did not measure worst-case composition. A single function call can traverse multiple modules in sequence; the aggregate gas cost with adversarial state may exceed individual module bounds.
+**Consequences:** Two failure modes: (1) Module calls revert because module storage is uninitialized, silently wasting fuzzer depth (invisible with `fail_on_revert = false`). (2) In rare cases, module calls succeed on empty storage, creating impossible states that pass Game-storage invariant checks while masking real bugs.
 
-**How to avoid:**
-- Instrument `advanceGame()` with gas measurement via `forge test --gas-report` under worst-case state construction.
-- Write a test that: (1) maximizes lootbox pending indices, (2) maximizes jackpot scatter targets, (3) triggers BAF scatter, (4) measures gas.
-- Identify any input-controlled growth vector (Sybil can buy N tickets, does each ticket add O(1) state to `advanceGame()`?).
-- Grep: `grep -rn "for\|while" contracts/game/` — enumerate every loop in the `advanceGame()` call graph.
+**Prevention:**
+- ONLY target the Game contract (or handler contracts that call through Game). Never add module addresses to `targetContracts`.
+- Use `targetSelectors` to restrict which Game functions are called, ensuring only the public-facing ones that internally delegatecall to modules.
+- Add a sanity invariant: for each module, assert module-local storage is zero (modules should have no local state).
+- In handler contracts, always call `game.functionThatDelegatecalls()`, never `module.functionDirectly()`.
 
-**Warning signs:**
-- Any loop whose iteration count is proportional to total player count or total ticket count (unbounded with Sybil).
-- `advanceGame()` gas in tests exceeding 8M (over 50% of the limit under non-adversarial state is a warning).
+**Detection:** Run `forge test -vvv` and check call traces. If calls go directly to module addresses (0x... for MintModule etc.) instead of through Game, targeting is wrong.
 
-**Phase to address:** `advanceGame()` gas analysis phase (first task after admin map).
+**Phase:** Harness writing (targeting configuration must be correct from the start).
 
----
+## Moderate Pitfalls
 
-### Pitfall 20: Cross-Function Reentrancy via ERC721 `onERC721Received` Callback
+### Pitfall 7: Remapping and Import Path Conflicts Between Foundry and Hardhat
 
-**What goes wrong:**
-`DegenerusNFT.safeMint()` triggers `onERC721Received` on the recipient if it is a contract. If any game function calls `safeMint` before finalizing all state updates (CEI violation), an attacking contract can reenter via the callback:
+**What goes wrong:** Foundry and Hardhat resolve imports differently. Hardhat uses Node.js resolution (`@openzeppelin/contracts/...` via `node_modules/`). Foundry uses explicit remappings. The current foundry.toml has `@openzeppelin/=node_modules/@openzeppelin/` which should work, but additional imports needed for test harnesses (forge-std, Chainlink VRF interfaces, internal library paths) may fail.
 
-1. Attacker calls `claimWinnings(attacker_contract)` or any function ending in `safeMint`.
-2. During `onERC721Received`, attacker's contract calls back into `claimWinnings` or `purchaseWhaleBundle`.
-3. Second call sees stale pre-update state (winner not yet cleared, ticket not consumed).
+**Prevention:**
+- Verify all import paths compile under both `forge build` and `hardhat compile` before writing new tests.
+- Keep Foundry test files (.t.sol) in `test/fuzz/` (already configured) separate from Hardhat test files.
+- Keep `forge-out` as Foundry's output directory (already configured) to avoid artifact collision with Hardhat's `artifacts/`.
+- If Chainlink VRF interfaces are imported in test harnesses, add remapping: `@chainlink/=node_modules/@chainlink/`.
+- If `forge-std` is not installed, run `forge install foundry-rs/forge-std --no-commit`.
 
-Real-world precedent: Code4rena's AI Arena audit (2024) found HIGH H-08: `claimRewards()` contained reentrancy enabling excessive NFT minting. The attack vector was precisely this pattern — `claimRewards` called `_safeMint` before zeroing the claimable balance.
+**Detection:** `forge build` fails with "file not found" or "source not found" on import paths.
 
-This is the hardest category for first-pass auditors to catch because the reentrancy path goes through an ERC721 callback, not an ETH transfer, and `nonReentrant` guards are often applied only to ETH withdrawal functions.
-
-**How to avoid:**
-- Identify every function in the protocol that calls any `safeMint` or `safeTransferFrom` on a user-controlled address.
-- For each: verify state is finalized before the external call (CEI pattern).
-- Verify `nonReentrant` guards are present on all entry points that could be reentered via this callback chain, including delegatecall paths.
-- Grep: `grep -rn "safeMint\|safeTransferFrom\|_safeMint" contracts/` — enumerate every site.
-
-**Warning signs:**
-- Any `safeMint` call that occurs before the calling function zeroes claimable balances or updates a lock flag.
-- `nonReentrant` present on ETH withdrawal functions but absent on NFT minting functions.
-- Any function where the user can receive an ERC721 token AND simultaneously trigger a callback into the same contract.
-
-**Phase to address:** Reentrancy and cross-contract attack phase.
+**Phase:** Setup.
 
 ---
 
-### Pitfall 21: VRF Subscription Owner Attack Vector (Malicious Admin)
+### Pitfall 8: Invariants That Are Too Weak (Tautological)
 
-**What goes wrong:**
-Chainlink's $300K Immunefi bounty (2022) revealed: the VRF subscription owner can block randomness fulfillment and reroll requests until receiving a favorable outcome. The Degenerus Admin contract owns the VRF subscription. If the admin key is compromised, the attacker becomes the subscription owner and can:
-1. Block all `fulfillRandomWords` callbacks until a favorable VRF word arrives for a jackpot outcome.
-2. Fund the subscription with minimal LINK to cause fulfillment delays.
-3. Remove the game contract as a consumer, permanently stalling all VRF requests.
+**What goes wrong:** Invariants like `totalSupply >= 0` (always true for uint256), `game.owner() != address(0)` (true by construction), or `address(game).balance >= 0` (always true) pass every time and catch nothing.
 
-This attack requires the admin key to be compromised, making it a MEDIUM or HIGH severity finding depending on the admin's key management setup. In Code4rena contexts, this is often rated MEDIUM ("trusted admin" with a critical power vector).
+**Why it happens:** Writing strong invariants is hard. The temptation is to start with "obviously true" properties. For this protocol, weak invariants include:
+- "ETH balance >= 0" (trivially true for uint)
+- "Current level >= 0" (trivially true for uint)
+- "totalTicketsSold >= 0" (trivially true for uint)
 
-**How to avoid:**
-- Confirm the admin key uses a hardware wallet or multi-sig in production.
-- Assess whether the VRF subscription should be owned by a time-locked multi-sig rather than a single EOA.
-- Verify that no player-controlled action can remove the game as a VRF consumer.
-- Document this as a known centralization risk in the protocol's threat model documentation.
+**Prevention:**
+- Express invariants as equalities or tight bounds, not loose inequalities:
+  - STRONG: `address(game).balance == sumOfClaimable + currentPrizePool + futurePrizePool + adminFees`
+  - WEAK: `address(game).balance >= 0`
+- Use ghost variables in handlers to track expected values and compare against actual contract state.
+- For BurnieCoin: `totalSupply + vaultAllowance == INITIAL_SUPPLY + totalMinted - totalBurned` (partially covered by existing BurnieCoinInvariants.t.sol).
+- For Game FSM: `if rngLockedFlag == true then pendingVRFRequestId != 0`.
+- For ticket queue: `sum(all bucket ticket counts) == totalTicketsSold`.
+- Mutation test each invariant: temporarily break the contract logic and confirm the invariant catches it. If it doesn't, the invariant is too weak.
 
-**Warning signs:**
-- Admin contract owns the VRF subscription with a single private key.
-- No time delay on VRF consumer management functions.
-- VRF subscription LINK balance can be set to zero by admin, enabling selective fulfillment blocking.
+**Detection:** Introduce a known bug (e.g., double-credit ETH in a handler) and run invariants. If they still pass, invariants are tautological.
 
-**Phase to address:** VRF/RNG security phase and admin power map phase (overlapping concern).
-
----
-
-### Pitfall 22: Business Logic Invariant: ETH Accounting Completeness (Unfinished v1.0 Gap)
-
-**What goes wrong:**
-V1.0 explicitly identified: "Phase 4 (ETH accounting invariant) — 8 of 9 plans unexecuted." This is the largest remaining gap. The accounting invariant is:
-
-```
-sum(claimableAmounts[all players]) + futurePrizePool + currentPrizePool
-  <= address(this).balance + steth.balanceOf(this)
-```
-
-If this invariant can be violated — through rounding, through a reentrancy on `claimWinnings`, through a fee split error, through an unchecked return value from BURNIE burn — players cannot collect their winnings. This is the class of bug that is hardest to catch on first pass because it requires modeling the entire ETH lifecycle, not just individual functions.
-
-Real-world precedent: Euler Finance was exploited via interactions between donation functions, liquidation mechanisms, and collateral accounting that line-by-line code review could not detect. The Balancer $128M exploit was a rounding error that broke the pool invariant.
-
-**How to avoid:**
-- Write an invariant test (foundry invariant testing) that runs all game actions in random order and asserts the accounting invariant holds after each.
-- Manually trace every ETH entry point to its accounting destination.
-- Manually trace every ETH exit point and verify it subtracts from the correct accounting variable.
-- Test the invariant at game-over after all players claim winnings: `address(this).balance` should be 0 or near-0 with no unclaimed pools.
-
-**Warning signs:**
-- Any function that modifies `claimableAmounts[player]` without a corresponding modification to the global accounting pool.
-- Any ETH transfer that is not preceded by a corresponding decrement of `currentPrizePool` or `futurePrizePool`.
-- The `claimWinnings` function updating state after the ETH transfer (CEI violation enabling reentrancy that bypasses the invariant).
-
-**Phase to address:** ETH accounting invariant phase (must complete before adversarial audit closes).
+**Phase:** Harness writing.
 
 ---
 
-### Pitfall 23: Multicall / Operator Proxy Reentrancy via Delegatecall
+### Pitfall 9: Adversarial Sessions Drifting into Scope Creep
 
-**What goes wrong:**
-If the protocol has any multicall-like mechanism, or if `setOperatorApproval` + operator-proxied calls can be composed in a single transaction, a delegatecall-based reentrancy attack becomes possible. Real-world precedent: MakerDAO (Sherlock, 2024, HIGH): "Multicall Reentrancy Exploit via Delegatecall" — the Multicall contract's use of `delegatecall` to execute multiple function calls within the calling contract's context allowed reentrancy if any called function was not guarded.
+**What goes wrong:** An adversarial session briefed on "ETH extraction attacks" gradually drifts into reviewing gas efficiency, code style, documentation gaps, or previously-identified QA issues. The session produces a long list of informational findings but no Medium+ exploits. Time is wasted, and the session's focused adversarial value is lost.
 
-In this protocol, the concern is: can an operator-proxied call sequence that includes a delegatecall to a module trigger reentry into a different module via a callback?
+**Prevention:**
+- Each session brief must specify: (1) exact attack goal in one sentence, (2) in-scope contracts/functions (not the whole protocol), (3) what constitutes a valid finding (Medium+ severity threshold), (4) hard time limit.
+- Session output must be structured: PoC exploit code with severity justification, or "unable to achieve attack goal despite [specific attempts listed]."
+- Ban informational/QA findings from adversarial sessions. Those belong in static analysis.
+- If a session discovers a potential issue outside its scope, log it as a one-line lead for a different session. Do not pursue it.
 
-**How to avoid:**
-- Map all operator-proxied functions and verify that the delegatecall chain they invoke is fully guarded.
-- Check whether `setOperatorApproval` + batch operator calls can be combined to call the same function twice in one tx while the first call's state updates are pending.
-- Verify the `nonReentrant` guard, if present, covers the full delegatecall chain (a guard at the `DegenerusGame` entry point but not inside the module is insufficient if the module makes external calls).
+**Detection:** Session report contains >2 informational findings and zero Medium+ findings. The session drifted.
 
-**Warning signs:**
-- Operator-proxied functions that invoke delegatecall and then make external calls (ERC20 transfers, ETH sends) in the same transaction.
-- Missing `nonReentrant` at the `DegenerusGame` level on all state-modifying entry points.
-
-**Phase to address:** Reentrancy and cross-contract attack phase.
+**Phase:** Attack sessions (brief template enforcement).
 
 ---
 
-### Pitfall 24: Last-Mover / Last-Purchaser Economic Advantage at Phase Boundary
+### Pitfall 10: Confirmation Bias in Adversarial PoC Writing
 
-**What goes wrong:**
-On-chain games with discrete phase transitions (purchase phase → VRF → resolution) have a structural vulnerability: the last purchaser before phase close, or the first purchaser after phase open, may have a provable economic advantage. Block proposers who are players can capture this advantage reliably. In Code4rena game audits, this class of finding (classified under MEV/validator attacks) has been rated MEDIUM when the advantage is quantifiable and the proposer can capture it deterministically.
+**What goes wrong:** The auditor writes a PoC that "almost" achieves the attack, then concludes the attack is infeasible based on the PoC failing. But the PoC failure is due to a mistake in the PoC itself (wrong function signature, missing prerequisite step, incorrect parameter encoding), not because the attack is actually blocked by the protocol.
 
-Specific risks for this protocol:
-- Lootbox index reservation at the start of a new round (earlier index may have better timing relative to VRF word).
-- The VRF word is determined by the block in which the VRF request is sent — a block proposer can control when `advanceGame()` is called to influence which block generates the entropy seed.
-- Price escalation last-ticket purchase: the ticket that pushes the price to the next tier benefits from being the last at the lower price.
+**Why it happens:** When the auditor expects the attack to fail (because v2.0 said it was safe), a failing PoC confirms the expectation and investigation stops. A genuine adversary would debug the PoC, try variations, and escalate.
 
-**How to avoid:**
-- Model the value of being the last purchaser at each price tier.
-- Model the value of controlling the block number in which the VRF request lands.
-- If advantages are quantifiable and exceed ~0.1 ETH for a 1000-ETH adversary, flag as MEDIUM.
-- For VRF block selection: verify whether the VRF request block hash can be influenced by a validator who delays or reorders blocks.
+**Prevention:**
+- Every "attack infeasible" conclusion must include: (1) the exact revert reason or logical impossibility, (2) the specific line of code that blocks the attack, (3) whether the blocker is a structural invariant or a specific value check that might not hold in all states.
+- PoCs must be minimal and self-contained. If a PoC is >50 lines of setup, it probably has bugs of its own.
+- Pair each "infeasible" conclusion with a mutation test: remove the suspected defensive code and confirm the attack then succeeds. If removing the defense doesn't enable the attack, the defense isn't what's actually blocking it -- further investigation needed.
 
-**Warning signs:**
-- Any game variable computed from `block.number` at request time that influences jackpot outcomes.
-- Price tier boundaries where the last ticket at tier N and first at tier N+1 create measurable EV difference.
-- `advanceGame()` bounty payable to the caller creates incentive to be the phase transition executor.
+**Detection:** "Attack infeasible" finding that doesn't cite a specific line of defense in the contract source code.
 
-**Phase to address:** Economic attacks phase.
+**Phase:** Attack sessions (PoC review methodology).
 
 ---
 
-### Pitfall 25: Integer Underflow in `unchecked` Blocks Under Adversarial Wallet State
+### Pitfall 11: `fail_on_revert = false` Hides Handler Bugs
 
-**What goes wrong:**
-225 `unchecked` blocks exist across the codebase. V1.0 confirmed individual blocks have documented invariants. The adversarial audit must check that those invariants cannot be violated by an attacker who manipulates the state through a sequence of legitimate calls. Example pattern: a decrement in an unchecked block relies on the invariant "variable X is always >= amount" — but if a separate function can set X to 0 through a different code path before the decrement runs, the invariant breaks and the underflow wraps around to `type(uint256).max`.
+**What goes wrong:** With `fail_on_revert = false` (current foundry.toml config), handler functions that revert due to bugs in the handler itself (not the protocol) are silently swallowed. The invariant suite appears healthy but is actually testing almost nothing because every handler call reverts.
 
-The JackpotModule has 40 unchecked blocks — the highest density — and should receive the most scrutiny. The `capBucketCounts` underflow guard fix (commit 9539c6d) indicates this class of bug has already been found in this codebase.
+**Prevention:**
+- During development, temporarily set `fail_on_revert = true` to surface handler bugs. Fix all handler reverts that are handler bugs (vs. expected rejections of invalid fuzzed inputs).
+- Then switch to `fail_on_revert = false` for production runs, but with `show_metrics = true` to monitor revert rates.
+- Acceptable revert rate: 20-40%. If >60%, handlers need better input bounding via `vm.assume()` or `bound()`.
+- In handler functions, use `bound(amount, minValid, maxValid)` instead of `vm.assume()` to avoid rejection-heavy runs.
 
-**How to avoid:**
-- For every unchecked block that decrements, find every code path that could set the decremented variable to 0 or below the expected floor.
-- Grep: `grep -n -A 3 "unchecked" contracts/game/DegenerusGameJackpotModule.sol` — audit all 40 blocks in JackpotModule.
-- Write fuzz tests that explore state sequences (not just individual function calls) targeting each unchecked decrement.
+**Detection:** `show_metrics` output shows >80% revert rate on handler functions.
 
-**Warning signs:**
-- Unchecked decrements in JackpotModule whose invariant depends on a carryover value computed in a previous `advanceGame()` call.
-- The `capBucketCounts` guard was recently added — check if similar guards are needed elsewhere.
-- Any unchecked block whose invariant comment says "always >= 0" without proof.
-
-**Phase to address:** Integer math and edge cases phase.
+**Phase:** Harness writing (iterative refinement during handler development).
 
 ---
 
-### Pitfall 26: BURNIE 30-Day Liveness Guard Bypass via BURNIE Ticket Purchase Window
+### Pitfall 12: Insufficient Invariant Run Depth for Multi-Step Protocol States
 
-**What goes wrong:**
-The v1.0 audit added F01 HIGH: whale bundle lacks level eligibility guard. Commit 4592d8c adds: "block BURNIE ticket purchases within 30 days of liveness-guard timeout." This guard was added to prevent a specific class of exploit. The adversarial pass must verify:
-1. The guard cannot be bypassed through operator-proxied purchases.
-2. The guard correctly uses the same timestamp comparison as the liveness guard itself.
-3. The guard does not have an off-by-one on the 30-day window (block.timestamp vs block.number, timezone effects, etc.).
-4. The guard applies to ALL ticket purchase paths, not just the one tested.
+**What goes wrong:** Current config: `runs = 256, depth = 64`. For a protocol where interesting states require 10+ sequential successful steps (purchase at each price tier, VRF fulfill between each, reach milestone level, trigger jackpot), depth=64 seems sufficient but is not. Many of those 64 calls will revert (wrong function, wrong parameters, wrong phase), leaving only 5-15 successful state transitions per run.
 
-**Why it matters:**
-Guards added in response to audit findings are a common location for residual bugs in adversarial review. The mitigation review (second pass) is exactly where Code4rena wardens look: "did the fix introduce a new bug or leave a bypass?"
+**Prevention:**
+- For system-level invariants, increase depth to 128-256 and runs to 512-1024. This is a 4-16x increase in compute but worth it for system-level properties.
+- Use handler functions that batch multiple protocol steps into a single call (e.g., `handler_advanceThroughLevel()` does purchase+VRF+advance as one atomic handler call). This compresses the effective depth needed.
+- Monitor `show_metrics` to count successful state transitions per run. If average successful calls per run is <10, increase depth or improve handler input bounding.
 
-**How to avoid:**
-- Read commit 4592d8c diff in full.
-- Identify all ticket purchase entry points (direct purchase, operator-proxied, whale bundle, lazy pass, deity pass, BURNIE purchase variant).
-- Verify the 30-day guard is applied consistently across all paths with the same timestamp comparison.
-- Fuzz the boundary: call a purchase at exactly `timeout - 30 days` (allowed), `timeout - 30 days + 1` (should be blocked), and `timeout - 30 days - 1` (should be allowed).
+**Detection:** Maximum game level reached across all invariant runs is <3. Increase depth or add batching handlers.
 
-**Warning signs:**
-- Any purchase path that does not call the same internal validation function containing the 30-day guard.
-- The guard using `block.timestamp >= livenessTimeout - 30 days` vs `livenessTimeout - 2592000` (integer constant) — one is susceptible to timestamp manipulation, the other is not.
+**Phase:** Harness writing (tuning after initial implementation).
 
-**Phase to address:** Access control gaps phase.
+## Minor Pitfalls
 
----
+### Pitfall 13: Artifact Directory Collision Between Toolchains
 
-### Pitfall 27: Degenerette Bet Resolution: CEI Order and Pull-Withdrawal Race
+**What goes wrong:** Foundry writes to `forge-out/` and Hardhat writes to `artifacts/`. Some IDE tools, linters, or scripts may accidentally read the wrong artifact directory, causing confusing ABI mismatches or stale compilation results.
 
-**What goes wrong:**
-Pull-withdrawal pattern combined with delegatecall creates a specific reentrancy risk: if `resolveDegenerette()` (or equivalent) sends ETH to the winning player before updating the bet record to "resolved," a reentrancy via ETH fallback allows the player to call `resolveDegenerette` again for the same bet. The bet appears unresolved to the second call because state was not updated before the transfer.
+**Prevention:** Keep the current separation (already configured correctly). Add `forge-out/` to `.gitignore` if not already present. Never reference `forge-out/` in Hardhat scripts or vice versa.
 
-This is a textbook CEI violation that is easy to miss because the transfer goes to a user-controlled address AND the calling contract uses delegatecall, meaning the `nonReentrant` guard (if placed on the module) does not protect the game contract's storage during the reentrant call.
-
-**How to avoid:**
-- Read `DegeneretteModule` and `resolveDegenerette` (or equivalent) fully.
-- Confirm the bet resolution state is set to "resolved" before any ETH transfer or `claimable` balance update.
-- Verify `nonReentrant` is at the `DegenerusGame` entry point level, not just inside the module delegatecall.
-- Write a test: a contract that calls `resolveDegenerette`, then in its `receive()` calls `resolveDegenerette` again for the same bet ID — verify the second call reverts.
-
-**Warning signs:**
-- Any delegatecall module that sends ETH (directly or via `claimableAmounts` update) before zeroing the triggering state (bet ID, lock flag).
-- `nonReentrant` applied to the module function but not to the `DegenerusGame` entry point.
-
-**Phase to address:** Reentrancy and cross-contract attack phase.
+**Phase:** Setup.
 
 ---
 
-### Pitfall 28: Token Security — `vaultMintAllowance` Abuse Vector
+### Pitfall 14: Invariant Testing Only Tests "Normal" Actors
 
-**What goes wrong:**
-`VAULT` (deploy order N+19) calls `COIN.vaultMintAllowance()` to establish how much BURNIE the vault can mint. This allowance mechanism creates a potential abuse vector if:
-1. The vault address can be changed after deployment (to a malicious contract that drains the allowance).
-2. The allowance can be repeatedly reset by admin to allow unlimited minting.
-3. The allowance is not decremented per-mint, only set as a cap.
+**What goes wrong:** Handler functions use `vm.prank(actors[i])` with a small set of pre-configured actors (alice, bob, carol). The fuzzer never tests calls from unexpected addresses: the zero address, the contract itself, the VRF coordinator address, the deployer/owner, other protocol contracts. Edge-case access control bugs are missed.
 
-BURNIE inflation beyond intended limits destroys the tokenomics: nudge cost becomes trivial if BURNIE supply is infinitely diluted.
+**Prevention:**
+- Include a mix of privileged and unprivileged actors: owner, random users, contract addresses (Game, Vault, Coin), the VRF coordinator.
+- Add specific handler functions that attempt unauthorized actions (e.g., `handler_unauthorizedAdvance()` that pranks a random non-owner address and tries to call admin-only functions).
+- Include the Game contract's own address as a potential msg.sender to test self-call/reentrancy scenarios.
 
-**How to avoid:**
-- Read `BurnieCoin.vaultMintAllowance()` implementation.
-- Verify the vault address is immutable or set only once.
-- Verify the allowance is consumed (decremented) on every mint.
-- Verify only the vault (not admin) can mint via the allowance mechanism.
+**Detection:** Review handler actor list. If it only contains 3-5 regular user addresses, access control invariants are undertested.
 
-**Warning signs:**
-- `vaultMintAllowance` can be called by admin to reset the allowance to an arbitrary value.
-- Vault address is settable by admin post-deployment with no time delay.
-
-**Phase to address:** Token security phase.
+**Phase:** Harness writing.
 
 ---
 
-## What Adversarial Passes Find That First Passes Miss
+### Pitfall 15: Treating Passing Invariants as Proof of Correctness
 
-This section synthesizes Code4rena/Sherlock patterns into a checklist for the adversarial audit team. These are meta-observations about audit methodology, not specific pitfalls.
+**What goes wrong:** After the invariant suite passes with 256 runs x 64 depth, the team declares the protocol "fuzz-tested" and uses this as formal evidence in C4 documentation. But 256x64 = ~16K call sequences is a tiny fraction of the state space for 22 contracts with dozens of functions.
 
-### Meta-Pattern 1: Interaction Between Correct-But-Composable Functions
+**Prevention:**
+- Never describe invariant test results as "proving" anything. They increase confidence; they are not formal verification.
+- Report invariant testing with honest metrics: runs, depth, revert rate, maximum game state depth reached, ghost variable value ranges observed.
+- Pair invariant testing with targeted property-based tests that force specific dangerous states (the existing unit test suite already covers many of these).
+- In C4 submission docs, describe invariant testing as "additional dynamic analysis assurance" not "formal verification of correctness."
 
-First-pass audits verify functions are correct in isolation. Adversarial wardens ask: "what happens when a player calls A, then B, then C in the same block?" Euler Finance was exploited this way — three individually correct functions composed in a way auditors never tested. For Degenerus: what happens if a player purchases a ticket, immediately calls `reverseFlip`, triggers a lootbox open, and then operator-proxies a degenerette resolution in the same transaction?
+**Detection:** Any documentation that says "fuzz testing proves X" instead of "fuzz testing found no violations of X across N call sequences."
 
-**Implication:** Write adversarial scenario tests that chain 3-5 operations in a single transaction and verify game state invariants hold after each step.
-
-### Meta-Pattern 2: Mitigation Bypasses
-
-Code4rena mitigation reviews (second pass) are where wardens look hardest. Commit 4592d8c (BURNIE 30-day guard), 36084a1 (subscriptionId widening), cbbafa0 (1 wei sentinel), 9539c6d (capBucketCounts underflow) — every recent fix is a candidate for a bypass or incomplete fix. Specifically:
-- Was the fix applied to ALL relevant code paths or just the one tested?
-- Did the fix introduce a new edge case (e.g., the 1 wei sentinel in degenerette — does it create a new underflow path elsewhere?)?
-- Did the fix change the gas profile of `advanceGame()` in a way that pushes it closer to the 16M limit?
-
-**Implication:** For each of the last 5 commits, write a targeted test that probes the fix boundary.
-
-### Meta-Pattern 3: Trust Boundary Misconfiguration
-
-First-pass audits confirm that A can call B and B cannot be called by C. Adversarial wardens ask: "can C cause A to call B in a way A didn't intend?" In this protocol: can a player cause the admin to call a function (via griefing the admin into an emergency state) that benefits the player? Can a player's crafted transaction sequence cause the VRF callback to arrive in a state the protocol didn't expect?
-
-**Implication:** Model the protocol from the perspective of a player who controls the timing of their own calls and can observe (but not control) admin and VRF actions.
-
-### Meta-Pattern 4: Gas Griefing on Admin Functions
-
-If an admin function iterates over player state (e.g., `handleGameOverDrain` from FSM-F02), a Sybil attacker who creates many small accounts can push the admin function above the block gas limit, making it permanently uncallable. V1.0 confirmed all loops are bounded — the adversarial pass must verify the bounds are tight enough to prevent griefing.
-
-**Implication:** For every admin function with a loop, measure worst-case gas with maximum state.
-
-### Meta-Pattern 5: Stale Assumption Drift
-
-V1.0 assumptions that may have drifted since audit began:
-- Chainlink VRF V2.5 confirmation times (may have changed on mainnet).
-- Lido stETH behavior under edge conditions (slashing parameters).
-- The deploy order N+X assumptions embedded in test fixtures — are they still correct after recent contract additions?
-
-**Implication:** Re-verify all external dependency assumptions with current documentation before the final report.
+**Phase:** Reporting.
 
 ---
 
-## Technical Debt Patterns
+### Pitfall 16: All Adversarial Sessions Share the Same Information Anchor
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Generic `E()` error for all guards | Saves bytecode, stays under 24KB | Audit + debugging cost, unclear failure reasons | Acceptable for size-constrained contracts; must be mapped in tests |
-| 225 unchecked blocks for gas | Gas reduction in hot paths | Each block must be individually audited; adversarial sequences may violate invariants | Only where invariant is documented and proved unreachable by adversarial state |
-| Compile-time constant contract addresses | No governance attack surface | Any address mistake requires full redeploy | Acceptable for non-upgradeable protocol |
-| `receive()` routes all ETH to `futurePrizePool` | Simple funding mechanism | Silent miscounting if ETH arrives unexpectedly | Never in high-value multi-pool accounting without explicit enumeration of all ETH sources |
-| `delegatecall` pattern without upgrade mechanism | No proxy attack surface | Storage layout must be manually verified on every module change | Acceptable if verified by `forge inspect` on every PR |
+**What goes wrong:** All 4 adversarial sessions see the same prior audit reports, read the same v1.0/v2.0 findings, and start from the same mental model. They are "blind" in name only. Information overlap causes all sessions to explore the same attack surface and miss the same blind spots.
 
----
+**Prevention:**
+- Vary the information provided to each session:
+  - Session 1: Contract source code only. No prior audit results. Fresh-eyes approach.
+  - Session 2: Source code + architecture docs (storage layout, deploy order, module pattern). No findings.
+  - Session 3: Source code + prior audit's QA/Low findings only (hints at weak spots without revealing the conclusion "safe").
+  - Session 4: Full prior audit results, explicitly tasked with "find what v1.0 and v2.0 missed."
+- Each session must produce findings independently before any cross-session synthesis.
+- The consolidated report should note which sessions found overlapping issues vs. unique issues.
 
-## Integration Gotchas
+**Detection:** Session 2's findings are a subset of session 1's. Information isolation failed.
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| Chainlink VRF V2.5 | `rawFulfillRandomWords` gas limit exceeded causes permanent stall | Measure worst-case gas; keep callback under 200K; defer work to next `advanceGame()` call |
-| Chainlink VRF V2.5 | Subscription owner can block/reroll fulfillments | Admin key must be secured; document as centralization risk; consider time-locked multi-sig ownership |
-| Chainlink VRF V2.5 | Assuming failed fulfillment will be retried | It will not; the game's 18h timeout is the only recovery — verify it is reachable from all failure states |
-| Chainlink VRF V2.5 | VRF request from wrong block influenced by validator | Verify VRF request is sent in a deterministic block relative to game state; validator reorder window |
-| Lido stETH | Caching `balanceOf` for payout calculations | Always call `balanceOf` live at payout time; never cache rebasing token balances |
-| Lido stETH | `steth.transfer(amount)` sends exactly `amount` | May send 1-2 wei less due to share rounding; use `transferShares()` for exact amounts |
-| BURNIE ERC20 | Assuming `burnCoin` reverts on failure | Must verify — if it returns false, nudge purchases are potentially free |
-| ERC721 `safeMint` | Calling before state update enables `onERC721Received` reentrancy | Always finalize state before `safeMint`; add `nonReentrant` to the game entry point, not just the module |
+**Phase:** Attack sessions (brief design, before any session starts).
 
----
+## Phase-Specific Warnings
 
-## Security Mistakes (Domain-Specific)
-
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Not locking user inputs between VRF request and `advanceGame` | Nudges after fulfillment change a known word — predictable outcome | Verify `rngLockedFlag` covers the full window from request to word consumption |
-| Auditing modules in isolation rather than in-context | Storage layout bugs only appear when both game and module are considered together | Always check storage layout side-by-side for each module with `forge inspect` |
-| Testing only "happy path" for game-over | Multi-step game-over has many timing-dependent edge cases | Test every intermediate state: what if VRF fulfillment never arrives during game-over? |
-| Treating delegatecall success as proof of correct execution | A module can return `true` with zero-valued return data on an invalid path | Validate return data length and non-zero values where expected |
-| Ignoring affiliate credit flows in operator-proxied calls | Affiliate credit may go to operator, not player | Trace `msg.sender` vs `player` in every proxied call that touches affiliate state |
-| Accepting admin functions as "trusted" without modeling compromise | Compromised admin = subscription owner attack, prize pool drain | Map every admin power and its consequence if key is compromised |
-| Verifying loop bounds without testing adversarial state composition | Sybil bloat creates state that passes individual bounds but fails composite | Measure `advanceGame()` gas with maximum concurrent adversarial state |
-| Applying `nonReentrant` only to ETH-sending functions | ERC721 `safeTransferFrom` and `safeMint` also trigger callbacks | Add `nonReentrant` to all external entry points that eventually call `safeMint` or `safeTransferFrom` |
-| Treating recent fix commits as closed issues | Mitigation bypasses are the most common Code4rena mitigation-review finding | For each of commits 4592d8c, cbbafa0, 9539c6d: write a targeted bypass attempt test |
-
----
-
-## "Looks Done But Isn't" Checklist
-
-Carried from v1.0, extended for v2.0 adversarial scope:
-
-- [ ] **VRF gas budget:** The callback stays under 200,000 gas with worst-case lootbox state — not just average state.
-- [ ] **Storage layout verification:** `forge inspect` run on all 10 modules and compared slot-by-slot against the game contract, not just visually reviewed.
-- [ ] **Nudge window:** `reverseFlip` is provably blocked from the moment VRF word arrives until `advanceGame` consumes and clears it.
-- [ ] **stETH accounting:** No path caches `steth.balanceOf(this)` in a state variable between transactions.
-- [ ] **Fee splits sum to input:** Every BPS split verified that the two halves equal the original amount (no dust gains or losses).
-- [ ] **Operator abuse:** Every `_resolvePlayer()` call site verified that value flows to `player`, not `msg.sender`.
-- [ ] **BURNIE burn return value:** `burnCoin` implementation verified to revert (not return false) on insufficient balance.
-- [ ] **Game-over with zero stETH:** Settlement path tested when `steth.balanceOf(this)` is 0 (ETH-only treasury).
-- [ ] **Late VRF fulfillment:** Test that a fulfillment for an old request ID after a retry is fulfilled is safely ignored with no state corruption.
-- [ ] **VRF subscription consumers:** Only admin-controlled; no public function to add consumers.
-- [ ] **Admin rug sequence:** No combination of 2-3 admin calls extracts prize pool without 30-day BURNIE timeout.
-- [ ] **`advanceGame()` gas ceiling:** Worst-case state (max lootbox + BAF scatter + max degenerette resolution) stays under 12M gas (75% of 16M limit).
-- [ ] **ERC721 reentrancy:** Every `safeMint` call site verified: state is finalized before mint; `nonReentrant` at game entry point.
-- [ ] **ETH accounting invariant:** Foundry invariant test confirms `sum(claimable) <= balance + stethBalance` holds across all action sequences.
-- [ ] **BURNIE 30-day guard:** Applied identically to ALL ticket purchase paths (direct, operator-proxied, all pass types).
-- [ ] **Mitigation fix verification:** Commits 4592d8c, cbbafa0, 9539c6d each have a dedicated adversarial test probing the fix boundary.
-- [ ] **`vaultMintAllowance` consumed per-mint:** Not just a cap that can be reset arbitrarily.
-- [ ] **Degenerette resolution CEI:** Bet marked resolved before ETH/claimable update; reentrancy test written.
-
----
-
-## Recovery Strategies
-
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| VRF callback gas limit exceeded (DOS) | LOW | Wait 18h for timeout; retry fires automatically on next `advanceGame` call |
-| Storage slot collision found | HIGH | Full redeployment required; no in-place fix possible for non-upgradeable contracts |
-| Prize pool invariant broken (funds stuck) | HIGH | Admin ETH injection via `receive()` is possible but requires trust in admin key security |
-| stETH slashing drains payout buffer | MEDIUM | Admin can inject ETH via `receive()`; communicate pro-rata reduction to players |
-| Sybil group extracts excess prize pool | HIGH | No on-chain remedy; economics must be correct from day one |
-| Admin key compromised (subscription attack) | HIGH | Subscription consumer removal possible if new key can be recovered; fund loss if prize pool drained |
-| ERC721 reentrancy exploit active | HIGH | No on-chain pause mechanism; requires emergency ETH injection to restore invariant |
-| `advanceGame()` gas DoS from adversarial state | MEDIUM | Emergency stall (3-day) buys time; recovery requires game-over or state cleanup |
-
----
-
-## Pitfall-to-Phase Mapping
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| VRF callback gas limit DOS (P1) | VRF/RNG security phase | `forge test --gas-report` on `rawFulfillRandomWords` with max state |
-| Stale VRF request ID (P2) | VRF/RNG security phase | Test: old fulfillment arrives after retry is fulfilled |
-| Nudge window exploitable (P3) | VRF/RNG security phase | Trace `rngLockedFlag` state transitions through full VRF lifecycle |
-| Delegatecall return propagation masks reverts (P4) | Reentrancy phase | Unit test every delegatecall with deliberately malformed module |
-| Storage slot layout drift (P5) | Reentrancy phase | `forge inspect` all 10 modules; automated slot comparison script |
-| stETH rebasing breaks invariant (P6) | ETH accounting invariant phase | Test with live balance snapshot; test slashing scenario |
-| Rounding accumulation drains protocol (P7) | ETH accounting invariant phase | Fuzz all split formulas with values 1 wei to 1000 ETH |
-| Operator approval manipulation (P8) | Access control gaps phase | Trace value flows in operator-proxied calls for every entry point |
-| BURNIE return value ignored (P9) | Token security phase | Read `burnCoin` implementation; verify revert vs return false |
-| Game-over stETH settlement (P10) | ETH accounting invariant phase | Simulate multi-block settlement with rebase occurring between steps |
-| Block proposer reorders phase boundary (P11) | Economic attacks phase | Model value of being last/first; quantify block proposer advantage |
-| Sybil majority ticket extraction (P12) | Economic attacks phase | EV model for N% ticket ownership across levels |
-| Unchecked arithmetic in hot paths (P13) | Integer math phase | JackpotModule: verify all 40 unchecked blocks have documented invariants |
-| `receive()` ETH routing (P14) | ETH accounting invariant phase | Enumerate all ETH entry points; verify correct accounting destination |
-| Admin power rug vectors (P18) | Admin power map phase | Map every admin function; model worst-case if key is compromised |
-| `advanceGame()` gas ceiling (P19) | `advanceGame()` gas analysis phase | `forge test --gas-report` with adversarial max state; BAF scatter |
-| ERC721 `onERC721Received` reentrancy (P20) | Reentrancy phase | Test: contract re-enters via `onERC721Received`; verify `nonReentrant` at entry point |
-| VRF subscription owner attack (P21) | VRF/RNG security phase and admin map | Document centralization risk; verify no player-controlled consumer removal |
-| ETH accounting invariant (P22) | ETH accounting invariant phase | Foundry invariant test: `sum(claimable) <= balance + stethBalance` holds |
-| Multicall/operator delegatecall reentrancy (P23) | Reentrancy phase | Map operator-proxied delegatecall chains; verify `nonReentrant` coverage |
-| Last-mover economic advantage (P24) | Economic attacks phase | Model EV of controlling phase transition block |
-| Unchecked underflow via adversarial state (P25) | Integer math phase | Fuzz JackpotModule with state sequences targeting unchecked decrements |
-| BURNIE 30-day guard bypass (P26) | Access control gaps phase | Test all purchase paths; probe fix boundary for commit 4592d8c |
-| Degenerette CEI violation (P27) | Reentrancy phase | Write reentrancy test via ETH fallback on bet resolution |
-| `vaultMintAllowance` abuse (P28) | Token security phase | Read `vaultMintAllowance` implementation; verify per-mint decrement |
-
----
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Setup: Compiler alignment | Compiler version mismatch (#3) | Align foundry.toml solc to 0.8.34 immediately |
+| Setup: Build verification | Remapping conflicts (#7) | Run `forge build` and fix all import errors before writing tests |
+| Setup: Architecture decision | ContractAddresses blocking (#1) | Decide mock-only vs full-deploy strategy per invariant upfront |
+| Setup: Artifact isolation | Directory collision (#13) | Verify forge-out/ in .gitignore, no cross-references |
+| Harness: Handler design | Poor state coverage (#2) | Write VRF-aware handlers with ghost variables, monitor revert rates |
+| Harness: Targeting | Delegatecall module targeting (#6) | ONLY target Game contract and handlers, never modules directly |
+| Harness: Invariant strength | Tautological invariants (#8) | Use equalities not inequalities, mutation-test every invariant |
+| Harness: Config tuning | fail_on_revert hiding bugs (#11) | Develop with fail_on_revert=true, run with false+show_metrics |
+| Harness: Config tuning | Insufficient depth (#12) | Batch protocol steps in handlers, increase depth for system tests |
+| Harness: VRF simulation | Game stuck at level 0 (#4) | Handler must include fulfillVRF() as targetable function |
+| Harness: Actor diversity | Only normal actors tested (#14) | Include privileged, contract, and adversarial addresses |
+| Attack sessions: Brief design | Anchoring bias (#5) | Contradiction-framed briefs, varied methodology per session |
+| Attack sessions: Brief design | Information overlap (#16) | Vary information given to each session |
+| Attack sessions: Execution | Scope creep (#9) | Strict scope + severity threshold + time box in briefs |
+| Attack sessions: PoC quality | Confirmation bias in PoCs (#10) | Require specific defense citation, mutation-test "infeasible" claims |
+| Reporting: Claims | False confidence (#15) | Report metrics honestly, never claim "proof" |
 
 ## Sources
 
-**HIGH Confidence (official docs, verified code):**
-- Chainlink VRF V2.5 Security Considerations (official): https://docs.chain.link/vrf/v2-5/security
-- Lido stETH Integration Guide (official): https://docs.lido.fi/guides/lido-tokens-integration-guide/
-- DegenerusGameStorage.sol, DegenerusGame.sol, commit history — direct inspection (this codebase)
-- Balancer $128M rounding exploit post-mortem (Check Point Research, Nov 2025): https://research.checkpoint.com/2025/how-an-attacker-drained-128m-from-balancer-through-rounding-error-exploitation/
-
-**MEDIUM Confidence (multiple corroborating sources):**
-- Sherlock LooksRare Infiltration audit — VRF gas overflow finding (2023): https://github.com/sherlock-audit/2023-10-looksrare-judging/issues/136
-- Chainlink VRF white hat $300K bounty (subscription owner attack, 2022): https://cryptoslate.com/chainlink-vrf-vulnerability-thwarted-by-white-hat-hackers-with-300k-reward/
-- Code4rena AI Arena audit — ERC721 reentrancy in `claimRewards` H-08 (2024): https://code4rena.com/reports/2024-02-ai-arena
-- Code4rena Tigris audit — admin freeze/drain finding (2022): https://github.com/code-423n4/2022-12-tigris-findings/issues/377
-- MakerDAO Sherlock audit — Multicall delegatecall reentrancy (2024): https://github.com/sherlock-audit/2024-06-makerdao-endgame-judging/issues/47
-- OWASP Smart Contract Top 10 (2025) — unchecked returns, reentrancy patterns: https://owasp.org/www-project-smart-contract-top-10/2025/en/src/SC06-unchecked-external-calls.html
-- Delegatecall storage collision survey (Finxter Academy, AllianceBlock case): https://academy.finxter.com/delegatecall-or-storage-collision-attack-on-smart-contracts/
-- Olympix: Why smart contract audits fail — business logic gap analysis: https://olympix.security/blog/why-smart-contract-audits-fail
-
-**LOW Confidence (single source, not independently verified):**
-- Code4rena reNFT mitigation review admin bypass pattern (2024) — corroborated by pattern but not specific finding
-
----
-*Pitfalls research for: VRF-based on-chain game with delegatecall modules, prize pools, and complex token economics — v2.0 Adversarial Audit*
-*Researched: 2026-03-04*
+- [Foundry Book: Invariant Testing](https://book.getfoundry.sh/forge/invariant-testing) -- official documentation on handler patterns, ghost variables, targeting, metrics (HIGH confidence)
+- [RareSkills: Invariant Testing in Foundry](https://rareskills.io/post/invariant-testing-solidity) -- handler best practices, common mistakes (MEDIUM confidence)
+- [Three Sigma: Foundry Cheatcodes Invariant Testing](https://threesigma.xyz/blog/foundry/foundry-cheatcodes-invariant-testing) -- revert handling, call distribution issues (MEDIUM confidence)
+- [Patrick Collins: Fuzz/Invariant Tests as Bare Minimum](https://patrickalphac.medium.com/fuzz-invariant-tests-the-new-bare-minimum-for-smart-contract-security-87ebe150e88c) -- false sense of security from shallow coverage (MEDIUM confidence)
+- [horsefacts/weth-invariant-testing](https://github.com/horsefacts/weth-invariant-testing) -- reference implementation of handler-based invariant testing (HIGH confidence)
+- [Cyfrin: Smart Contract Fuzzing and Invariants](https://www.cyfrin.io/blog/smart-contract-fuzzing-and-invariants-testing-foundry) -- state coverage limitations (MEDIUM confidence)
+- [Cyfrin: Foundry VRF Mock Guide](https://updraft.cyfrin.io/courses/foundry/smart-contract-lottery/deploy-mock-chainlink-vrf) -- deterministic VRF mock patterns (MEDIUM confidence)
+- [Kurt Merbeth: Audited, Tested, Still Broken (2025)](https://medium.com/coinmonks/audited-tested-and-still-broken-smart-contract-hacks-of-2025-a76c94e203d1) -- post-audit failure patterns, economic attack blind spots (MEDIUM confidence)
+- [Hardhat Issue #5561: hardhat-foundry compiler settings](https://github.com/NomicFoundation/hardhat/issues/5561) -- compiler config synchronization problems (HIGH confidence)
+- [Sigma Prime: Forge Testing Leveling](https://blog.sigmaprime.io/forge-testing-leveling.html) -- progression from unit to invariant testing methodology (MEDIUM confidence)
+- Project source: `foundry.toml`, `hardhat.config.js`, `ContractAddresses.sol`, `test/fuzz/*.t.sol`, `test/helpers/deployFixture.js` -- direct inspection (HIGH confidence)
