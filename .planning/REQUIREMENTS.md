@@ -60,11 +60,11 @@ Requirements for v4.0 Pre-C4A Adversarial Stress Test. Each maps to roadmap phas
 
 ### Dependency & Integration Attacker
 
-- [ ] **DEP-01**: VRF coordinator failure mode analysis — Chainlink VRF down, delayed, returns manipulated randomness, subscription exhausted, coordinator self-destructs
-- [ ] **DEP-02**: stETH depeg scenario modeling — compute exact solvency impact at 10%, 50%, 90% stETH depeg with concrete ETH numbers
-- [ ] **DEP-03**: LINK token depletion and onTokenTransfer abuse — VRF subscription runs dry, malicious data in ERC-677 callback
-- [ ] **DEP-04**: Dependency upgrade/deprecation risk — Chainlink VRF V2.5 deprecated, Lido stETH changes rebasing behavior, LINK token upgraded
-- [ ] **DEP-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
+- [x] **DEP-01**: VRF coordinator failure mode analysis — Chainlink VRF down, delayed, returns manipulated randomness, subscription exhausted, coordinator self-destructs
+- [x] **DEP-02**: stETH depeg scenario modeling — compute exact solvency impact at 10%, 50%, 90% stETH depeg with concrete ETH numbers
+- [x] **DEP-03**: LINK token depletion and onTokenTransfer abuse — VRF subscription runs dry, malicious data in ERC-677 callback
+- [x] **DEP-04**: Dependency upgrade/deprecation risk — Chainlink VRF V2.5 deprecated, Lido stETH changes rebasing behavior, LINK token upgraded
+- [x] **DEP-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
 
 ### Gas Griefing Specialist
 
@@ -161,11 +161,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FORMAL-03 | Phase 24 | Pending |
 | FORMAL-04 | Phase 24 | Pending |
 | FORMAL-05 | Phase 24 | Pending |
-| DEP-01 | Phase 25 | Pending |
-| DEP-02 | Phase 25 | Pending |
-| DEP-03 | Phase 25 | Pending |
-| DEP-04 | Phase 25 | Pending |
-| DEP-05 | Phase 25 | Pending |
+| DEP-01 | Phase 25 | Complete |
+| DEP-02 | Phase 25 | Complete |
+| DEP-03 | Phase 25 | Complete |
+| DEP-04 | Phase 25 | Complete |
+| DEP-05 | Phase 25 | Complete |
 | GAS-01 | Phase 26 | Pending |
 | GAS-02 | Phase 26 | Pending |
 | GAS-03 | Phase 26 | Pending |
