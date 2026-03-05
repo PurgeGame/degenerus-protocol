@@ -1,38 +1,46 @@
 ---
 gsd_state_version: 1.0
-milestone: v5.0
-milestone_name: Novel Zero-Day Attack Surface Audit
-status: archived
-last_updated: "2026-03-05T17:00:00Z"
+milestone: v1.0
+milestone_name: Off-Chain Simulation Engine
+status: unknown
+last_updated: "2026-03-05T22:52:22.967Z"
 progress:
-  total_phases: 35
-  completed_phases: 35
-  total_plans: 121
-  completed_plans: 121
+  total_phases: 16
+  completed_phases: 15
+  total_plans: 84
+  completed_plans: 76
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-05 after v5.0 milestone completion)
+See: .planning/PROJECT.md (updated 2026-03-05)
 
-**Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** v5.0 ARCHIVED — All 5 milestones complete. Next: `/gsd:new-milestone` or external audit.
+**Core value:** Faithfully replicate all Degenerus Protocol game mechanics in a standalone TypeScript engine with player profiles and interactive visualization.
+**Current focus:** Phase 39 — Passes and Vault
 
 ## Current Position
 
-Phase: All complete (35 phases across 5 milestones)
-Status: v5.0 milestone ARCHIVED
-Last activity: 2026-03-05 — v5.0 milestone archived
+Phase: 39 of 42 (Passes and Vault)
+Plan: 3 of 3 in current phase
+Status: Phase complete — pending verification
+Last activity: 2026-03-05 — Completed 39-03 (Engine integration with all Phase 39 mechanics)
 
-Progress: [████████████████████] 100%
+Progress: [████████░░░░░░░░░░░░] 40% (simulation milestone)
 
 ## Accumulated Context
 
 ### Decisions
 
-All v1-v5 milestone decisions archived to `.planning/milestones/` and logged in PROJECT.md Key Decisions table.
+- v1.0 (not v6.0): Simulator is a separate project, not continuation of audit milestones
+- Pure TypeScript engine: No Hardhat dependency, runs in browser
+- New simulator from scratch: Existing econ/sim and localtest/sim have formula divergences
+- Affiliate as composable trait: Not a standalone archetype, combines with any of the 4 base types
+- Interactive React/D3 viz: For website and paper presentation
+- Code location: PurgeGame/simulator/
+- Phase 38 (Extended Mechanics) and 39 (Passes/Vault) can execute in parallel
+- Phase 42 (Validation) can start after 38+39, parallel with 40-41
 
 ### Pending Todos
 
@@ -40,10 +48,10 @@ None.
 
 ### Blockers/Concerns
 
-None — all 5 milestones complete and archived.
+None.
 
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: v5.0 ARCHIVED — milestone complete, retrospective written, ready for next milestone
+Stopped at: Completed 39-03-PLAN.md (all 3 plans, 319 tests, 7 new modules)
 Resume file: None
