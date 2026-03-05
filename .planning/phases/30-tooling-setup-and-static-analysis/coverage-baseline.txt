@@ -1,0 +1,147 @@
+Warning: `--ir-minimum` enables `viaIR` with minimum optimization, which can result in inaccurate source mappings.
+Only use this flag as a workaround if you are experiencing "stack too deep" errors.
+Note that `viaIR` is production ready since Solidity 0.8.13 and above.
+See more: https://github.com/foundry-rs/foundry/issues/3357
+Compiling 100 files with Solc 0.8.34
+Solc 0.8.34 finished in 31.23s
+Compiler run successful with warnings:
+Warning (2072): Unused local variable.
+  --> test/fuzz/invariant/MultiLevel.inv.t.sol:66:9:
+   |
+66 |         uint256 currentPool = game.currentPrizePoolView();
+   |         ^^^^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+  --> test/fuzz/invariant/MultiLevel.inv.t.sol:67:9:
+   |
+67 |         uint256 nextPool = game.nextPrizePoolView();
+   |         ^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+  --> test/fuzz/invariant/MultiLevel.inv.t.sol:69:9:
+   |
+69 |         uint256 futurePool = game.futurePrizePoolTotalView();
+   |         ^^^^^^^^^^^^^^^^^^
+
+Analysing contracts...
+Running tests...
+
+Ran 1 test for test/fuzz/invariant/MultiLevel.inv.t.sol:MultiLevelInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 13.33ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/DeployCanary.t.sol:DeployCanary
+[FAIL: EvmError: Revert] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 14.18ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/VRFLifecycle.t.sol:VRFLifecycle
+[FAIL: EvmError: Revert] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 15.55ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/invariant/WhaleSybil.inv.t.sol:WhaleSybilInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 16.22ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/invariant/CoinSupply.inv.t.sol:CoinSupplyInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 16.52ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/invariant/DegeneretteBet.inv.t.sol:DegeneretteBetInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 17.47ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/invariant/VaultShare.inv.t.sol:VaultShareInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 21.01ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/invariant/TicketQueue.inv.t.sol:TicketQueueInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 22.50ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/invariant/VaultShareMath.inv.t.sol:VaultShareMathInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 22.72ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/invariant/GameFSM.inv.t.sol:GameFSMInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 26.40ms (0.00ns CPU time)
+
+Ran 1 test for test/fuzz/invariant/EthSolvency.inv.t.sol:EthSolvencyInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 28.70ms (0.00ns CPU time)
+
+Ran 7 tests for test/fuzz/ShareMathInvariants.t.sol:ShareMathInvariantsTest
+[PASS] testFuzz_burnAllReturnsAll(uint128,uint128) (runs: 1000, μ: 6804, ~: 6804)
+[PASS] testFuzz_ethPreferentialSplit(uint256,uint256,uint256) (runs: 1000, μ: 9848, ~: 9839)
+[PASS] testFuzz_noOverflow(uint128,uint128,uint128) (runs: 1000, μ: 6896, ~: 6896)
+[PASS] testFuzz_payoutNeverExceedsReserve(uint128,uint128,uint128) (runs: 1000, μ: 6891, ~: 6891)
+[PASS] testFuzz_proportionalFairness(uint256,uint256) (runs: 1000, μ: 10957, ~: 10957)
+[PASS] testFuzz_refillMechanism(uint256,uint256) (runs: 1000, μ: 7352, ~: 7352)
+[PASS] testFuzz_twoUsersSolvency(uint256,uint256,uint256) (runs: 1000, μ: 10436, ~: 10436)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 141.20ms (615.04ms CPU time)
+
+Ran 6 tests for test/fuzz/BurnieCoinInvariants.t.sol:BurnieCoinInvariantsTest
+[PASS] testFuzz_mintBurnRoundtrip(uint128) (runs: 1000, μ: 44376, ~: 44381)
+[PASS] testFuzz_multiOp(uint128,uint128,uint128) (runs: 1000, μ: 96803, ~: 97404)
+[PASS] testFuzz_supplyInvariant_afterMint(address,uint128) (runs: 1000, μ: 58102, ~: 58102)
+[PASS] testFuzz_transferToVault(uint128) (runs: 1000, μ: 55170, ~: 55176)
+[PASS] testFuzz_vaultMintTo(uint128) (runs: 1000, μ: 55998, ~: 55998)
+[PASS] testFuzz_vaultMintTo_revertOnExceed(uint128) (runs: 1000, μ: 18467, ~: 18467)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 179.73ms (692.17ms CPU time)
+
+Ran 3 tests for test/fuzz/helpers/NonceCheck.t.sol:NonceCheck
+[PASS] test_deployerIsTestContract() (gas: 1288)
+[PASS] test_nonceIncrements() (gas: 52132)
+[PASS] test_startingNonce() (gas: 3374)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 316.50ms (339.79µs CPU time)
+
+Ran 8 tests for test/fuzz/PriceLookupInvariants.t.sol:PriceLookupInvariantsTest
+[PASS] testFuzz_costCalculation(uint24,uint256) (runs: 1000, μ: 9068, ~: 9186)
+[PASS] testFuzz_cyclicAfter100(uint24) (runs: 1000, μ: 10955, ~: 10932)
+[PASS] testFuzz_introPricing(uint24) (runs: 1000, μ: 5877, ~: 5846)
+[PASS] testFuzz_milestonePricing(uint24) (runs: 1000, μ: 7550, ~: 7550)
+[PASS] testFuzz_priceBounded(uint24) (runs: 1000, μ: 3605, ~: 3968)
+[PASS] testFuzz_priceDeterministic(uint24) (runs: 1000, μ: 4662, ~: 5388)
+[PASS] testFuzz_priceInValidSet(uint24) (runs: 1000, μ: 3676, ~: 4093)
+[PASS] testFuzz_weaklyMonotonicInCycle(uint24,uint24,uint24) (runs: 1000, μ: 8302, ~: 6964)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 340.45ms (983.34ms CPU time)
+
+Ran 15 test suites in 341.01ms (1.19s CPU time): 24 tests passed, 11 failed, 0 skipped (35 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/fuzz/DeployCanary.t.sol:DeployCanary
+[FAIL: EvmError: Revert] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/VRFLifecycle.t.sol:VRFLifecycle
+[FAIL: EvmError: Revert] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/invariant/CoinSupply.inv.t.sol:CoinSupplyInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/invariant/DegeneretteBet.inv.t.sol:DegeneretteBetInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/invariant/EthSolvency.inv.t.sol:EthSolvencyInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/invariant/GameFSM.inv.t.sol:GameFSMInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/invariant/MultiLevel.inv.t.sol:MultiLevelInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/invariant/TicketQueue.inv.t.sol:TicketQueueInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/invariant/VaultShare.inv.t.sol:VaultShareInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/invariant/VaultShareMath.inv.t.sol:VaultShareMathInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+
+Encountered 1 failing test in test/fuzz/invariant/WhaleSybil.inv.t.sol:WhaleSybilInvariant
+[FAIL: call to non-contract address 0x0000000000000000000000000000000000000000] setUp() (gas: 0)
+
+Encountered a total of 11 failing tests, 24 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 11 failed tests
