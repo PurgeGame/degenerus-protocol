@@ -84,7 +84,7 @@ See: `.planning/milestones/v4.0-ROADMAP.md` for full phase details.
 **Milestone Goal:** Hunt for creative, unconventional, and composition-based vulnerabilities that 10 prior audit agents missed -- validated by Foundry fuzzing, Slither static analysis, and Halmos symbolic verification.
 
 - [x] **Phase 30: Tooling Setup and Static Analysis** - Configure Foundry deep profiles, run Slither full triage, fix Halmos configuration, establish baseline (completed 2026-03-05)
-- [ ] **Phase 31: Cross-Contract Composition Analysis** - Analyze delegatecall shared storage assumptions, module interaction matrix, selector collisions, BitPackingLib gaps, and build composition-focused harnesses
+- [x] **Phase 31: Cross-Contract Composition Analysis** - Analyze delegatecall shared storage assumptions, module interaction matrix, selector collisions, BitPackingLib gaps, and build composition-focused harnesses (completed 2026-03-05)
 - [x] **Phase 32: Precision and Rounding Analysis** - Audit all 222 division operations, zero-rounding free actions, dust accumulation, wei lifecycle precision loss (completed 2026-03-05)
 - [ ] **Phase 33: Temporal, Lifecycle, and EVM-Level Analysis** - Timestamp boundaries, multi-tx races, lifecycle edge states, forced ETH, ABI encoding, assembly safety, unchecked blocks
 - [ ] **Phase 34: Economic Composition and Auditor Re-examination** - Vault share inflation, price discrepancies, affiliate farming, reward manipulation, stETH edge cases, VRF griefing costs
@@ -121,9 +121,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 31-01-PLAN.md — Storage slot ownership matrix and selector collision analysis
-- [ ] 31-02-PLAN.md — BitPackingLib gap bit verification and cross-module write analysis
-- [ ] 31-03-PLAN.md — Module interaction matrix and composition invariant harness
+- [x] 31-01-PLAN.md — Storage slot ownership matrix and selector collision analysis — completed 2026-03-05
+- [x] 31-02-PLAN.md — BitPackingLib gap bit verification and cross-module write analysis — completed 2026-03-05
+- [x] 31-03-PLAN.md — Module interaction matrix and composition invariant harness — completed 2026-03-05
 
 ### Phase 32: Precision and Rounding Analysis
 **Goal**: All division operations, rounding behaviors, and precision loss paths are verified -- no input combination allows free actions via zero-rounding or accumulated dust extraction
@@ -154,9 +154,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 33-01: TBD
-- [ ] 33-02: TBD
-- [ ] 33-03: TBD
+- [ ] 33-01-PLAN.md — Temporal analysis (timestamp boundaries, race conditions, cross-contract divergence)
+- [ ] 33-02-PLAN.md — Lifecycle edge states (level 0, boundary transitions, gameOver, interleaving)
+- [ ] 33-03-PLAN.md — EVM-level analysis (forced ETH, ABI encoding, assembly, unchecked blocks)
 
 ### Phase 34: Economic Composition and Auditor Re-examination
 **Goal**: All cross-system economic interactions and previously-cleared audit assumptions are re-verified -- no price discrepancy, vault manipulation, reward farming, or stETH edge case enables value extraction beyond game mechanics
@@ -231,8 +231,8 @@ Phases 31 and 32 can execute in parallel after Phase 30. Phase 33 depends on Pha
 | 28. Game Theory | v4.0 | 1/1 | Complete | 2026-03-05 |
 | 29. Synthesis | v4.0 | 0/0 | Complete | 2026-03-05 |
 | 30. Tooling Setup | 3/3 | Complete    | 2026-03-05 | - |
-| 31. Composition | v5.0 | 0/3 | Not started | - |
+| 31. Composition | v5.0 | 3/3 | Complete | 2026-03-05 |
 | 32. Precision | 3/3 | Complete   | 2026-03-05 | - |
-| 33. Temporal/EVM | v5.0 | 0/? | Not started | - |
+| 33. Temporal/EVM | v5.0 | 0/3 | Not started | - |
 | 34. Economic/Re-exam | v5.0 | 0/? | Not started | - |
 | 35. Halmos/Synthesis | v5.0 | 0/? | Not started | - |
