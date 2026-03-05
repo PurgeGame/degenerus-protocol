@@ -103,7 +103,7 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
 - [x] **Phase 36: Engine Foundation** - Project scaffolding, deterministic PRNG, state model, event system, browser-compatible engine shell (completed 2026-03-05)
 - [x] **Phase 37: Core Game Loop** - Ticket purchasing, price escalation, prize pool splits, jackpots (4-bucket traits, carryover, BURNIE jackpot), century-level mechanics, level advancement, quest streaks, activity scores (completed 2026-03-05)
 - [ ] **Phase 38: Extended Mechanics** - Lootboxes (boost system), BURNIE/FLIP economics (creditFlip vs creditCoin), Degenerette (match-based, 3 currencies), full affiliate system (3-tier, 3 payout modes, taper, leaderboard, top reward), ETH claims, game-over, afKing, future tickets, DGNRS day-5 reward
-- [ ] **Phase 39: Passes and Vault** - Whale/lazy/deity pass purchasing, deity virtual jackpot entries, pass bonuses, deity boons, game-over refunds, stETH yield, vault share math (DGVB/DGVE), DGNRS burn-to-extract
+- [x] **Phase 39: Passes and Vault** - Whale/lazy/deity pass purchasing, deity virtual jackpot entries, pass bonuses, deity boons, game-over refunds, stETH yield, vault share math (DGVB/DGVE), DGNRS burn-to-extract (completed 2026-03-05)
 - [ ] **Phase 40: Player Archetypes** - Degen, EV Maximizer, Whale, Hybrid behavioral profiles with Affiliate trait, budget constraints, decision-making logic
 - [ ] **Phase 41: Interactive Visualization** - React/D3 dashboard with wealth/pool/BURNIE/activity charts, drill-downs, parameter controls, scenario comparison, export
 - [ ] **Phase 42: Validation and Contract Parity** - Vitest formula tests, price/BPS/activity/EV/pass/vault/Degenerette/coinflip comparison suites, Hardhat cross-validation
@@ -174,7 +174,7 @@ Plans:
   3. Pass capital injection splits: Whale/Deity 30/70 (lvl 0), 5/95 (lvl 1+). Lazy 90/10 all levels
   4. stETH yield accrues at configurable daily rate and distributes 46/23/23/8 to futurePool, vault, DGNRS, and buffer
   5. Vault share math (two share tokens DGVB/DGVE, floor-division burn, 1T refill) and DGNRS pure burn-to-extract (ETH+stETH+BURNIE+WWXRP) function correctly. 16 tickets/level perpetual entries for both
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 39-01-PLAN.md — Pass pricing (whale/lazy/deity) and capital injection modules
 - [ ] 39-02-PLAN.md — stETH yield, vault share math, and DGNRS burn-to-extract modules
@@ -190,7 +190,12 @@ Plans:
   3. Affiliate trait composes onto any archetype, adding referral network building and day-5 activation pushes with rakeback balancing
   4. Budget constraints create increasing capital pressure, bankroll ruin risk, and streak maintenance cost per Section 3.6
   5. Each archetype exposes configurable parameters (aggression, budget, risk tolerance) with sensible defaults from the game theory paper
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 40-01-PLAN.md — Archetype type contracts and decision engine framework
+- [ ] 40-02-PLAN.md — Degen and EV Maximizer behavior implementations
+- [ ] 40-03-PLAN.md — Whale, Hybrid, and Affiliate trait implementations
+- [ ] 40-04-PLAN.md — Budget constraints and engine integration
 
 ### Phase 41: Interactive Visualization
 **Goal**: Users can explore simulation results through an interactive React/D3 dashboard with configurable parameters, drill-downs, and exportable charts
@@ -202,7 +207,11 @@ Plans:
   3. User can adjust simulation parameters (player count, level count, seed, archetype mix) in-browser and re-run the simulation live
   4. User can run two configurations side-by-side with overlaid comparison charts
   5. Charts export as PNG/SVG for paper figures, and the dashboard embeds in the website alongside the game theory paper (standalone component or iframe-ready)
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 41-01-PLAN.md — Vite+React scaffold, simulation hook, parameter controls, dashboard shell
+- [ ] 41-02-PLAN.md — Four core D3 charts (wealth, pools, BURNIE, activity scores)
+- [ ] 41-03-PLAN.md — Player drill-down, scenario comparison, PNG/SVG export
 
 ### Phase 42: Validation and Contract Parity
 **Goal**: A comprehensive test suite proves the simulation engine produces results matching the actual Solidity contracts for all critical calculations
@@ -233,9 +242,9 @@ Phases execute in numeric order: 36 -> 37 -> 38 (parallel with 39) -> 40 -> 41 -
 | 36. Engine Foundation | 3/3 | Complete    | 2026-03-05 | - |
 | 37. Core Game Loop | 5/5 | Complete    | 2026-03-05 | - |
 | 38. Extended Mechanics | Sim v1.0 | 0/6 | Planned | - |
-| 39. Passes and Vault | Sim v1.0 | 0/3 | Planned | - |
-| 40. Player Archetypes | Sim v1.0 | 0/? | Not started | - |
-| 41. Interactive Visualization | Sim v1.0 | 0/? | Not started | - |
+| 39. Passes and Vault | 3/3 | Complete    | 2026-03-05 | - |
+| 40. Player Archetypes | Sim v1.0 | 0/4 | Planned | - |
+| 41. Interactive Visualization | Sim v1.0 | 0/3 | Planned | - |
 | 42. Validation and Contract Parity | Sim v1.0 | 0/? | Not started | - |
 
 **Cumulative:** 35 phases complete (121 plans), 7 phases planned. 5 milestones shipped, 1 in progress.
