@@ -522,11 +522,6 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             unchecked { ++i; }
         }
 
-        // Refundable if game hasn't started
-        if (level == 0 && !gameOver) {
-            deityPassRefundable[buyer] += totalPrice;
-        }
-
         // Fund distribution: pre-game 70/30, post-game 95/5 (future/next)
         uint256 nextShare;
         if (level == 0) {
@@ -588,9 +583,6 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
             }
             unchecked { ++i; }
         }
-
-        // Zero refundable (transfer forfeits refund rights)
-        deityPassRefundable[from] = 0;
 
         // Nuke sender stats
         _nukePassHolderStats(from);

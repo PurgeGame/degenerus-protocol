@@ -186,9 +186,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Deploy idle timeout in days (for efficient day-index comparison).
     uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 912; // 2.5 years
 
-    /// @dev Deity pass refund window (24 months) if level 1 never starts.
-    uint48 private constant DEITY_PASS_REFUND_DAYS = 730;
-
     /// @dev Minimum take profit for afKing ETH auto-rebuy (5 ETH).
     uint256 private constant AFKING_KEEP_MIN_ETH =
         5 ether;
@@ -689,45 +686,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ) external payable {
         buyer = _resolvePlayer(buyer);
         _purchaseDeityPassFor(buyer, symbolId);
-    }
-
-    /// @notice Refund deity pass purchases if level 1 has not started after 24 months.
-    /// @dev Allows refund when level is still 0 (no jackpot phase reached).
-    ///      Only burns the ERC721 to prevent double-refund; other storage cleanup is
-    ///      unnecessary since the game is effectively dead if refunds are available.
-    /// @param buyer Buyer receiving the refund (address(0) = msg.sender).
-    /// @custom:reverts E If level has started, refund window not reached, or no refundable amount.
-    function refundDeityPass(address buyer) external {
-        buyer = _resolvePlayer(buyer);
-        if (level != 0 || gameOver) revert E();
-        uint48 day = _simulatedDayIndex();
-        if (day <= DEITY_PASS_REFUND_DAYS) revert E();
-
-        uint256 refundAmount = deityPassRefundable[buyer];
-        if (refundAmount == 0) revert E();
-        deityPassRefundable[buyer] = 0;
-        deityPassPaidTotal[buyer] = 0;
-        deityPassPurchasedCount[buyer] = 0;
-
-        // Burn ERC721 to prevent double-refund
-        uint8 symbolId = deityPassSymbol[buyer];
-        IDegenerusDeityPassBurn(ContractAddresses.DEITY_PASS).burn(symbolId);
-
-        // Pull from pools
-        uint256 remaining = refundAmount;
-        uint256 futurePool = futurePrizePool;
-        if (futurePool >= remaining) {
-            futurePrizePool = futurePool - remaining;
-        } else {
-            futurePrizePool = 0;
-            remaining -= futurePool;
-            uint256 nextPool = nextPrizePool;
-            if (nextPool < remaining) revert E();
-            nextPrizePool = nextPool - remaining;
-        }
-
-        emit DeityPassRefunded(buyer, refundAmount, deityPassPurchasedCount[buyer]);
-        _payoutWithStethFallback(buyer, refundAmount);
     }
 
     function _purchaseDeityPassFor(address buyer, uint8 symbolId) private {
@@ -1416,15 +1374,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 newBalance,
         MintPaymentKind payKind,
         uint256 costWei
-    );
-
-    /// @notice Emitted when a deity pass refund is issued.
-    /// @param amount ETH amount refunded.
-    /// @param quantity Number of passes refunded.
-    event DeityPassRefunded(
-        address indexed buyer,
-        uint256 amount,
-        uint256 quantity
     );
 
     /// @notice Emitted when an affiliate claims DGNRS for the previous level.

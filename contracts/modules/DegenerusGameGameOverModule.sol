@@ -25,7 +25,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @notice DGNRS token contract for fund deposits
     IDegenerusStonk internal constant dgnrs = IDegenerusStonk(ContractAddresses.DGNRS);
 
-    /// @notice Fixed refund amount per deity pass for early game over (levels 1-9)
+    /// @notice Fixed refund amount per deity pass for early game over (levels 0-9)
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
         20 ether;
 
@@ -68,42 +68,27 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalFunds = ethBal + stBal;
 
-        if (currentLevel == 0 && !jackpotPhaseFlag) {
-            uint256 ownerCount = deityPassOwners.length;
-            uint256 totalRefunded;
-            for (uint256 i; i < ownerCount; ) {
-                address owner = deityPassOwners[i];
-                uint256 refund = deityPassPaidTotal[owner];
-                if (refund != 0) {
-                    unchecked {
-                        claimableWinnings[owner] += refund;
-                        totalRefunded += refund;
-                    }
-                    deityPassPaidTotal[owner] = 0;
-                    deityPassRefundable[owner] = 0;
-                }
-                unchecked {
-                    ++i;
-                }
-            }
-            if (totalRefunded != 0) {
-                claimablePool += totalRefunded;
-            }
-        } else if (currentLevel >= 1 && currentLevel < 10) {
+        if (currentLevel < 10) {
             uint256 refundPerPass = DEITY_PASS_EARLY_GAMEOVER_REFUND;
             uint256 ownerCount = deityPassOwners.length;
+            uint256 budget = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
             uint256 totalRefunded;
             for (uint256 i; i < ownerCount; ) {
                 address owner = deityPassOwners[i];
                 uint16 purchasedCount = deityPassPurchasedCount[owner];
                 if (purchasedCount != 0) {
                     uint256 refund = refundPerPass * uint256(purchasedCount);
-                    unchecked {
-                        claimableWinnings[owner] += refund;
-                        totalRefunded += refund;
+                    if (refund > budget) {
+                        refund = budget;
                     }
-                    deityPassPaidTotal[owner] = 0;
-                    deityPassRefundable[owner] = 0;
+                    if (refund != 0) {
+                        unchecked {
+                            claimableWinnings[owner] += refund;
+                            totalRefunded += refund;
+                            budget -= refund;
+                        }
+                    }
+                    if (budget == 0) break;
                 }
                 unchecked {
                     ++i;

@@ -361,7 +361,7 @@ A whale is a net *extractor* — they deposit ETH, but their high activity score
 
 **Severity:** LOW. Deity passes are capped at 32 total, limiting maximum whale concentration. The scatter jackpot mechanism (50% of jackpot, distributed by traits) ensures broad distribution independent of whale participation. The self-correcting EV rebalancing means the game naturally adjusts to any population size — fewer players means more prize per player.
 
-**Circuit Breaker:** Deity pass refund mechanism (if level 0 after 24 months, 730 days = DEITY_PASS_REFUND_DAYS) provides a safety net for early buyers if the game fails to progress.
+**Circuit Breaker:** Deity pass holders receive a flat 20 ETH refund per pass at game over (levels 0–9), processed in purchase order and capped by available non-claimable funds.
 
 ### Scenario D: Combined Stress Test
 
@@ -432,7 +432,7 @@ The dominant strategy for all player types is consistent daily engagement. The a
 - BURNIE inflation exceeds burns, token value declines
 - Late-entry disadvantage becomes more pronounced
 
-**Terminal State:** The protocol's terminal defense is the idle timeout system. After 365 days of inactivity, the game can resolve through emergency mechanisms. Remaining prize pools can be claimed by active participants. The deity pass refund mechanism (730 days at level 0) ensures early investors are partially protected.
+**Terminal State:** The protocol's terminal defense is the idle timeout system. After 365 days of inactivity, the game can resolve through emergency mechanisms. Remaining prize pools can be claimed by active participants. Deity pass holders receive a flat 20 ETH/pass refund at game over (levels 0–9), processed in purchase order and budget-capped by available funds.
 
 ---
 
