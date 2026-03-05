@@ -85,13 +85,13 @@ Requirements for v4.0 Pre-C4A Adversarial Stress Test. Each maps to roadmap phas
 
 ### Game Theory Attacker
 
-- [ ] **GTHRY-01**: Adversarial attack on the resilience thesis (theory/index.html) — identify every claim that is wrong, understated, or unfalsifiable, with code evidence
-- [ ] **GTHRY-02**: GAMEOVER path enumeration — every contract-level AND game-theoretic path that leads to game death, with probability estimates and capital requirements
-- [ ] **GTHRY-03**: Cross-subsidy structure attack — find scenarios where the cross-subsidy breaks down and one player type can extract value at others' expense
-- [ ] **GTHRY-04**: Death spiral scenario construction — construct the most realistic scenario where rational actors let the game die despite the paper's claims
-- [ ] **GTHRY-05**: Commitment device failure analysis — under what conditions do quest streaks, future tickets, and auto-rebuy fail as retention mechanisms?
-- [ ] **GTHRY-06**: Verify every formal proposition and theorem in the paper against actual contract code — Proposition 4.1 (Solvency), Corollary 4.4 (Positive-Sum), Observation 5.1 (Dominant Strategy), Design Property 8.4 (Game Death conditions)
-- [ ] **GTHRY-07**: Runnable Hardhat/Foundry PoC test for every Medium+ finding (contract-level bugs discovered during theory verification)
+- [x] **GTHRY-01**: Adversarial attack on the resilience thesis (theory/index.html) — identify every claim that is wrong, understated, or unfalsifiable, with code evidence
+- [x] **GTHRY-02**: GAMEOVER path enumeration — every contract-level AND game-theoretic path that leads to game death, with probability estimates and capital requirements
+- [x] **GTHRY-03**: Cross-subsidy structure attack — find scenarios where the cross-subsidy breaks down and one player type can extract value at others' expense
+- [x] **GTHRY-04**: Death spiral scenario construction — construct the most realistic scenario where rational actors let the game die despite the paper's claims
+- [x] **GTHRY-05**: Commitment device failure analysis — under what conditions do quest streaks, future tickets, and auto-rebuy fail as retention mechanisms?
+- [x] **GTHRY-06**: Verify every formal proposition and theorem in the paper against actual contract code — Proposition 4.1 (Solvency), Corollary 4.4 (Positive-Sum), Observation 5.1 (Dominant Strategy), Design Property 8.4 (Game Death conditions)
+- [x] **GTHRY-07**: Runnable Hardhat/Foundry PoC test for every Medium+ finding (contract-level bugs discovered during theory verification)
 
 ### Synthesis & Contradiction Report
 
@@ -177,13 +177,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WHTHAT-04 | Phase 27 | Pending |
 | WHTHAT-05 | Phase 27 | Pending |
 | WHTHAT-06 | Phase 27 | Pending |
-| GTHRY-01 | Phase 28 | Pending |
-| GTHRY-02 | Phase 28 | Pending |
-| GTHRY-03 | Phase 28 | Pending |
-| GTHRY-04 | Phase 28 | Pending |
-| GTHRY-05 | Phase 28 | Pending |
-| GTHRY-06 | Phase 28 | Pending |
-| GTHRY-07 | Phase 28 | Pending |
+| GTHRY-01 | Phase 28 | Complete |
+| GTHRY-02 | Phase 28 | Complete |
+| GTHRY-03 | Phase 28 | Complete |
+| GTHRY-04 | Phase 28 | Complete |
+| GTHRY-05 | Phase 28 | Complete |
+| GTHRY-06 | Phase 28 | Complete |
+| GTHRY-07 | Phase 28 | Complete |
 | SYNTH-01 | Phase 29 | Pending |
 | SYNTH-02 | Phase 29 | Pending |
 | SYNTH-03 | Phase 29 | Pending |
