@@ -51,17 +51,17 @@ Requirements for novel zero-day attack surface audit. Each maps to roadmap phase
 
 ### Cross-System Economic Composition
 
-- [ ] **ECON-01**: Vault share inflation / donation attack re-examination — highest-value individual vector per industry data
-- [ ] **ECON-02**: Price discrepancy analysis between Game pricing, Vault shares, DGNRS pricing, and Degenerette odds
-- [ ] **ECON-03**: Circular affiliate chain analysis — self-referral loops, affiliate bonus farming
-- [ ] **ECON-04**: Quest reward and activity score manipulation for guaranteed jackpot/lootbox EV advantage
-- [ ] **ECON-05**: Boon effect stacking analysis — multiple boons compounding to unintended advantage
+- [x] **ECON-01**: Vault share inflation / donation attack re-examination — highest-value individual vector per industry data
+- [x] **ECON-02**: Price discrepancy analysis between Game pricing, Vault shares, DGNRS pricing, and Degenerette odds
+- [x] **ECON-03**: Circular affiliate chain analysis — self-referral loops, affiliate bonus farming
+- [x] **ECON-04**: Quest reward and activity score manipulation for guaranteed jackpot/lootbox EV advantage
+- [x] **ECON-05**: Boon effect stacking analysis — multiple boons compounding to unintended advantage
 
 ### Auditor Re-examination
 
-- [ ] **REEX-01**: Read-only reentrancy via stETH share rate changing during callback — verify no view function reads stale share rate
-- [ ] **REEX-02**: VRF subscription balance depletion as griefing vector — cost analysis for sustained depletion
-- [ ] **REEX-03**: stETH slashing reducing balance without transfer — verify protocol handles balance decrease
+- [x] **REEX-01**: Read-only reentrancy via stETH share rate changing during callback — verify no view function reads stale share rate
+- [x] **REEX-02**: VRF subscription balance depletion as griefing vector — cost analysis for sustained depletion
+- [x] **REEX-03**: stETH slashing reducing balance without transfer — verify protocol handles balance decrease
 - [ ] **REEX-04**: Cross-tool convergence matrix — function-level signal combining Slither + Halmos + Foundry flags
 
 ### Synthesis
@@ -117,14 +117,14 @@ Deferred to future release.
 | EVM-02 | Phase 33 | Pending |
 | EVM-03 | Phase 33 | Pending |
 | EVM-04 | Phase 33 | Pending |
-| ECON-01 | Phase 34 | Pending |
-| ECON-02 | Phase 34 | Pending |
-| ECON-03 | Phase 34 | Pending |
-| ECON-04 | Phase 34 | Pending |
-| ECON-05 | Phase 34 | Pending |
-| REEX-01 | Phase 34 | Pending |
-| REEX-02 | Phase 34 | Pending |
-| REEX-03 | Phase 34 | Pending |
+| ECON-01 | Phase 34 | Complete |
+| ECON-02 | Phase 34 | Complete |
+| ECON-03 | Phase 34 | Complete |
+| ECON-04 | Phase 34 | Complete |
+| ECON-05 | Phase 34 | Complete |
+| REEX-01 | Phase 34 | Complete |
+| REEX-02 | Phase 34 | Complete |
+| REEX-03 | Phase 34 | Complete |
 | REEX-04 | Phase 35 | Pending |
 | SYNTH-01 | Phase 35 | Pending |
 | SYNTH-02 | Phase 35 | Pending |
