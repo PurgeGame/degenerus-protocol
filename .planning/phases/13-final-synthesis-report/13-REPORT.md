@@ -74,7 +74,66 @@ No high findings were identified in the v2.0 adversarial audit. The four admin-k
 
 ## Medium Findings
 
-*[Content in Plan 13-02]*
+### M-v2-01: wireVrf Mid-Game Coordinator Substitution
+
+**Severity:** MEDIUM (admin-key-required; CRITICAL impact x LOW likelihood per C4 methodology)
+**Affected Contract:** DegenerusGameAdvanceModule.sol:298 (`wireVrf`)
+**Requirement:** ADMIN-02
+**Discovered:** Phase 10, Plan 10-02
+
+**Description:**
+`wireVrf` is callable by ADMIN at any time without a stall gate. An attacker controlling the CREATOR EOA (or >30% DGVE via `isVaultOwner`) can immediately substitute any address as the VRF coordinator. The sole guard for `rawFulfillRandomWords` is `require(msg.sender == vrfCoordinator, ...)` -- once `vrfCoordinator` is set to an attacker-controlled contract, the attacker can supply arbitrary random words to every subsequent game day's RNG resolution.
+
+**Root Cause:**
+`wireVrf` performs an unconditional overwrite of the coordinator address with no stall gate requirement. `updateVrfCoordinatorAndSub` (the intended emergency-rotation function) requires a 3-day observable stall first; `wireVrf` does not. The NatSpec at line 294 claims "Idempotent after first wire (repeats must match)" but no such guard is implemented in the code.
+
+**Impact:**
+Full RNG manipulation for the remainder of the game. Attacker controls jackpot winner selection, trait rarities, and lootbox outcomes on every game day. Prize pools range from dozens to hundreds of ETH; a malicious coordinator grants the attacker full control over their distribution.
+
+**Coded PoC (Transaction Sequence):**
+1. Attacker controls CREATOR EOA (or acquires >30% DGVE to satisfy `isVaultOwner`)
+2. Attacker deploys `AttackerCoordinator` -- a contract that implements `requestRandomWords` (returns any requestId) and relays `rawFulfillRandomWords` calls with a chosen word
+3. `DegenerusAdmin.wireVrfForGame(AttackerCoordinatorAddr, anySubId, anyKeyHash)` -- no stall gate, executes immediately; sets `vrfCoordinator = AttackerCoordinatorAddr`
+4. Next `advanceGame()` call triggers `_requestRng` -> `vrfCoordinator.requestRandomWords(...)` on `AttackerCoordinator`
+5. Attacker calls `DegenerusGame.rawFulfillRandomWords(requestId, [chosenWord])` from `AttackerCoordinator`; `msg.sender == vrfCoordinator` check passes
+6. `chosenWord` flows into jackpot winner selection, trait rarities, lootbox outcomes; attacker repeats each game day
+
+**Distinguishing factor vs. `updateVrfCoordinatorAndSub`:** The emergency rotation function requires a 3-day observable stall (attackers cannot act silently). `wireVrf` has no stall gate and can be called silently during any active game day.
+
+**Remediation:** Add a stall gate to `wireVrf` (require `_threeDayRngGap()` before allowing coordinator change), or document clearly that `wireVrf` is an initial-wiring-only function and add `require(vrfCoordinator == address(0), "already wired")`.
+
+### M-v2-02: wireVrf-Based Indefinitely Repeatable Stall Griefing Loop
+
+**Severity:** MEDIUM (admin-key-required; CRITICAL impact x LOW likelihood per C4 methodology)
+**Affected Contract:** DegenerusGameAdvanceModule.sol:298 (`wireVrf`) + `updateVrfCoordinatorAndSub`
+**Requirement:** ADMIN-03
+**Discovered:** Phase 10, Plan 10-03
+
+**Description:**
+Admin can call `wireVrf` with a reverting coordinator address to halt `advanceGame()` for 3 game days (the emergency stall window), then call `updateVrfCoordinatorAndSub` to recover and reset the stall gate, then repeat -- creating an indefinitely repeatable griefing loop requiring only one admin call per 3-day cycle. No observable external event (such as Chainlink outage) is required.
+
+**Root Cause:**
+The 3-day stall gate on `updateVrfCoordinatorAndSub` was designed to allow emergency coordinator rotation after an external failure, but it does not distinguish between a coordinator that failed externally and one that was deliberately swapped to a reverting address. The recovery function serves as its own stall-gate reset.
+
+**Five-Path Stall Taxonomy:**
+- Path A: LINK subscription drain (external; no admin key required)
+- Path B: Chainlink coordinator outage (external; non-adversarial)
+- Path C: Admin subscription neglect (passive)
+- Path D: Admin deploys reverting coordinator via `wireVrf` (active; 1 call)
+- Path E: Admin repeats Path D after recovery -- **indefinite loop**
+
+**Impact:**
+Each cycle halts the game for 3+ game days. `rngWordByDay` for halted days remains zero. ETH purchases can still occur during a stall but are not processed until game resumes. A persistent attacker creates arbitrarily long game delays with minimal cost (gas for two admin calls per 3-day cycle).
+
+**Coded PoC (Transaction Sequence -- Path D + E):**
+1. Day 0: Attacker calls `wireVrf(revertingAddr, validSubId, validKeyHash)` -- no guard enforced
+2. Any `advanceGame()` call hard-reverts at `_requestRng` ("Hard revert if Chainlink request fails")
+3. Days D+1, D+2: Same; `rngWordByDay` for these days remains zero; game is halted
+4. Day D+3: `_threeDayRngGap()` returns `true`; `updateVrfCoordinatorAndSub` becomes callable
+5. Attacker calls `updateVrfCoordinatorAndSub(realCoordinatorAddr, subId, keyHash)` -- resets RNG state; game resumes
+6. Attacker returns to step 1 on any subsequent game day -- loop is indefinitely repeatable
+
+**Remediation:** Separate the "initial wiring" path from the "emergency rotation" path. Add `require(vrfCoordinator == address(0), "use updateVrfCoordinatorAndSub for rotation")` to `wireVrf`. This forces all mid-game coordinator changes through the observable 3-day stall gate.
 
 ---
 
