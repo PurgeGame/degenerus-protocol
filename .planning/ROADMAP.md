@@ -229,7 +229,7 @@ Phases 31 and 32 can execute in parallel after Phase 30. Phase 33 depends on Pha
 | 27. White Hat | v4.0 | 1/1 | Complete | 2026-03-05 |
 | 28. Game Theory | v4.0 | 1/1 | Complete | 2026-03-05 |
 | 29. Synthesis | v4.0 | 0/0 | Complete | 2026-03-05 |
-| 30. Tooling Setup | 3/3 | Complete   | 2026-03-05 | - |
+| 30. Tooling Setup | 3/3 | Complete    | 2026-03-05 | - |
 | 31. Composition | v5.0 | 0/? | Not started | - |
 | 32. Precision | v5.0 | 0/? | Not started | - |
 | 33. Temporal/EVM | v5.0 | 0/? | Not started | - |
