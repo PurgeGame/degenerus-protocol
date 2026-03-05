@@ -189,6 +189,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
         address buyer,
         uint256 quantity
     ) private {
+        if (gameOver) revert E();
         uint24 passLevel = level + 1;
 
         if (quantity == 0 || quantity > 100) revert E();
@@ -317,6 +318,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     }
 
     function _purchaseLazyPass(address buyer) private {
+        if (gameOver) revert E();
         uint24 currentLevel = level;
         bool hasValidBoon = false;
         uint16 boonDiscountBps = lazyPassBoonDiscountBps[buyer];
@@ -455,6 +457,7 @@ contract DegenerusGameWhaleModule is DegenerusGameStorage {
     }
 
     function _purchaseDeityPass(address buyer, uint8 symbolId) private {
+        if (gameOver) revert E();
         if (symbolId >= 32) revert E();
         if (deityBySymbol[symbolId] != address(0)) revert E();
         if (deityPassCount[buyer] != 0) revert E();
