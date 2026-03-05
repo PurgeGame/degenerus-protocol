@@ -9,11 +9,11 @@ Requirements for v4.0 Pre-C4A Adversarial Stress Test. Each maps to roadmap phas
 
 ### Nation-State Attacker
 
-- [ ] **NSTATE-01**: Blind adversarial analysis with 10,000 ETH budget, MEV infrastructure (Flashbots, private mempools), and ability to front-run/back-run/sandwich any protocol interaction
-- [ ] **NSTATE-02**: Validator/proposer ordering attack modeling — can block proposer reorder VRF fulfillment relative to game state for profitable manipulation?
-- [ ] **NSTATE-03**: Custom malicious contract deployment — attacker deploys contracts to interact with protocol via callbacks, fallbacks, and proxy patterns
-- [ ] **NSTATE-04**: Combined nation-state attack on Chainlink infrastructure/personnel AND admin key compromise — model the "compromised admin + VRF failure" theft path with realistic attack timeline (3-day stall → coordinator rotation → manipulated randomness), enumerate mitigations
-- [ ] **NSTATE-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
+- [x] **NSTATE-01**: Blind adversarial analysis with 10,000 ETH budget, MEV infrastructure (Flashbots, private mempools), and ability to front-run/back-run/sandwich any protocol interaction
+- [x] **NSTATE-02**: Validator/proposer ordering attack modeling — can block proposer reorder VRF fulfillment relative to game state for profitable manipulation?
+- [x] **NSTATE-03**: Custom malicious contract deployment — attacker deploys contracts to interact with protocol via callbacks, fallbacks, and proxy patterns
+- [x] **NSTATE-04**: Combined nation-state attack on Chainlink infrastructure/personnel AND admin key compromise — model the "compromised admin + VRF failure" theft path with realistic attack timeline (3-day stall → coordinator rotation → manipulated randomness), enumerate mitigations
+- [x] **NSTATE-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
 
 ### Coercion Attacker
 
@@ -128,11 +128,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NSTATE-01 | Phase 19 | Pending |
-| NSTATE-02 | Phase 19 | Pending |
-| NSTATE-03 | Phase 19 | Pending |
-| NSTATE-04 | Phase 19 | Pending |
-| NSTATE-05 | Phase 19 | Pending |
+| NSTATE-01 | Phase 19 | Complete |
+| NSTATE-02 | Phase 19 | Complete |
+| NSTATE-03 | Phase 19 | Complete |
+| NSTATE-04 | Phase 19 | Complete |
+| NSTATE-05 | Phase 19 | Complete |
 | COERC-01 | Phase 20 | Pending |
 | COERC-02 | Phase 20 | Pending |
 | COERC-03 | Phase 20 | Pending |
