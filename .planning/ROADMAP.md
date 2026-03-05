@@ -64,7 +64,7 @@ See: `.planning/milestones/v3.0-ROADMAP.md` for full phase details.
 **Architecture:** Phases 19-28 are 10 fully parallel blind threat model agents with zero inter-agent dependencies. Phase 29 is the sequential synthesis gate that waits for all 10 agents to complete.
 
 - [x] **Phase 19: Nation-State Attacker** -- 10K ETH + MEV + validator ordering attacks under blind analysis (completed 2026-03-05)
-- [ ] **Phase 20: Coercion Attacker** -- Hostile admin compromise damage map and fund extraction paths
+- [x] **Phase 20: Coercion Attacker** -- Hostile admin compromise damage map and fund extraction paths (completed 2026-03-05)
 - [x] **Phase 21: Evil Genius Hacker** -- Deep Solidity exploits: delegatecall, storage, viaIR, assembly, compiler bugs (completed 2026-03-05)
 - [ ] **Phase 22: Sybil Whale Economist** -- Economic exploitation of pricing curves, whale bundles, deity passes, BURNIE token
 - [ ] **Phase 23: Degenerate Fuzzer** -- New invariant harnesses targeting v3.0 coverage gaps and deep state space
@@ -217,7 +217,7 @@ Phases 19-28 execute in parallel (zero inter-agent dependencies). Phase 29 execu
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 19. Nation-State Attacker | 1/1 | Complete   | 2026-03-05 | - |
-| 20. Coercion Attacker | v4.0 | 0/TBD | Not started | - |
+| 20. Coercion Attacker | 1/1 | Complete   | 2026-03-05 | - |
 | 21. Evil Genius Hacker | 1/1 | Complete   | 2026-03-05 | - |
 | 22. Sybil Whale Economist | v4.0 | 0/TBD | Not started | - |
 | 23. Degenerate Fuzzer | v4.0 | 0/TBD | Not started | - |

@@ -17,11 +17,11 @@ Requirements for v4.0 Pre-C4A Adversarial Stress Test. Each maps to roadmap phas
 
 ### Coercion Attacker
 
-- [ ] **COERC-01**: Complete admin key compromise damage map — every admin-callable function enumerated with maximum damage if hostile
-- [ ] **COERC-02**: Temporal classification of admin powers — instant vs time-locked vs constructor-only actions, with coercion risk per category
-- [ ] **COERC-03**: Fund extraction paths under hostile admin — can compromised admin drain vault, redirect VRF subscriptions, freeze funds permanently?
-- [ ] **COERC-04**: User recovery path analysis — what can users do if admin goes rogue? What's the worst-case outcome for locked funds?
-- [ ] **COERC-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
+- [x] **COERC-01**: Complete admin key compromise damage map — every admin-callable function enumerated with maximum damage if hostile
+- [x] **COERC-02**: Temporal classification of admin powers — instant vs time-locked vs constructor-only actions, with coercion risk per category
+- [x] **COERC-03**: Fund extraction paths under hostile admin — can compromised admin drain vault, redirect VRF subscriptions, freeze funds permanently?
+- [x] **COERC-04**: User recovery path analysis — what can users do if admin goes rogue? What's the worst-case outcome for locked funds?
+- [x] **COERC-05**: Runnable Hardhat/Foundry PoC test for every Medium+ finding
 
 ### Evil Genius Hacker
 
@@ -133,11 +133,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NSTATE-03 | Phase 19 | Complete |
 | NSTATE-04 | Phase 19 | Complete |
 | NSTATE-05 | Phase 19 | Complete |
-| COERC-01 | Phase 20 | Pending |
-| COERC-02 | Phase 20 | Pending |
-| COERC-03 | Phase 20 | Pending |
-| COERC-04 | Phase 20 | Pending |
-| COERC-05 | Phase 20 | Pending |
+| COERC-01 | Phase 20 | Complete |
+| COERC-02 | Phase 20 | Complete |
+| COERC-03 | Phase 20 | Complete |
+| COERC-04 | Phase 20 | Complete |
+| COERC-05 | Phase 20 | Complete |
 | EVIL-01 | Phase 21 | Complete |
 | EVIL-02 | Phase 21 | Complete |
 | EVIL-03 | Phase 21 | Complete |
