@@ -135,6 +135,57 @@ Each cycle halts the game for 3+ game days. `rngWordByDay` for halted days remai
 
 **Remediation:** Separate the "initial wiring" path from the "emergency rotation" path. Add `require(vrfCoordinator == address(0), "use updateVrfCoordinatorAndSub for rotation")` to `wireVrf`. This forces all mid-game coordinator changes through the observable 3-day stall gate.
 
+### M-v2-03: setLinkEthPriceFeed Malicious Oracle Path
+
+**Severity:** MEDIUM (admin-key-required; HIGH impact x LOW likelihood per C4 methodology)
+**Affected Contract:** DegenerusAdmin.sol:421 (`setLinkEthPriceFeed`)
+**Requirement:** ADMIN-01
+**Discovered:** Phase 10, Plan 10-04
+
+**Description:**
+Admin can replace the LINK/ETH Chainlink price feed with a malicious oracle that returns an arbitrary price. `onTokenTransfer` uses the feed's `latestRoundData()` result to compute the BURNIE credit for LINK donations. A near-zero LINK price causes unbounded BURNIE inflation; an extreme LINK price suppresses all BURNIE rewards.
+
+**Root Cause:**
+`setLinkEthPriceFeed` validates the current feed (via `FeedHealthy` check) but does not validate the proposed replacement feed's returned price range. Any address returning a valid AggregatorV3Interface signature passes the guard.
+
+**Impact:**
+BURNIE economic manipulation -- attacker or colluding wallets can accumulate disproportionate BURNIE by donating LINK at the artificially deflated price point. Alternatively, all LINK donors receive zero BURNIE (suppression). The ETH prize pool is not directly affected; impact is bounded to BURNIE token economics and game participation advantages conferred by BURNIE.
+
+**Coded PoC (Transaction Sequence):**
+1. Attacker controls CREATOR EOA (or >30% DGVE)
+2. Attacker deploys `MaliciousFeed` implementing `latestRoundData()` returning `(roundId, 1, startedAt, updatedAt, answeredInRound)` -- price = 1 wei (near zero)
+3. Calls `DegenerusAdmin.setLinkEthPriceFeed(MaliciousFeedAddr)` -- `FeedHealthy` check passes against current (valid) feed before replacement
+4. LINK donors call `LINK.transferAndCall(adminAddr, amount, "0x")` -> `onTokenTransfer` -> BURNIE credited at `amount * 1e18 / 1` instead of correct LINK/ETH ratio -- BURNIE inflated by factor of ~1,200 (typical LINK/ETH price)
+5. Attacker or colluding LINK donors accumulate massively inflated BURNIE balances
+
+**Remediation:** Add a `require(price >= MIN_LINK_ETH_PRICE && price <= MAX_LINK_ETH_PRICE)` sanity check in `setLinkEthPriceFeed` after reading the new feed's `latestRoundData()`, or require the new feed price to be within a percentage band of the outgoing feed.
+
+### M-v2-04: setLootboxRngThreshold Freeze Path
+
+**Severity:** MEDIUM (admin-key-required; HIGH impact x LOW likelihood per C4 methodology)
+**Affected Contract:** DegenerusAdmin.sol:459 / DegenerusGame.sol:519 (`setLootboxRngThreshold`)
+**Requirement:** ADMIN-01
+**Discovered:** Phase 10, Plan 10-04
+
+**Description:**
+Admin can set `lootboxRngThreshold = type(uint256).max`, making the RNG request threshold permanently unsatisfiable. `requestLootboxRng()` requires `pendingLootboxEth + pendingLootboxBurnie >= lootboxRngThreshold` to trigger; at `uint256.max` this condition can never be met regardless of lootbox activity, leaving all lootbox buyers' ETH and BURNIE permanently unresolvable.
+
+**Root Cause:**
+`setLootboxRngThreshold` accepts any `uint256` value with no upper bound check. The function comment does not document a maximum safe value.
+
+**Impact:**
+All pending and future lootbox purchases are frozen. `openLootBox` and `openBurnieLootBox` never receive an RNG word. Lootbox ETH remains in `claimablePool` accounting (preserving the solvency invariant) but no resolution path exists until admin reverses the threshold. A sufficiently determined malicious admin could refuse to reverse it, making the freeze permanent.
+
+**Coded PoC (Transaction Sequence):**
+1. Attacker controls CREATOR EOA (or >30% DGVE)
+2. Calls `DegenerusAdmin.setLootboxRngThreshold(type(uint256).max)` -- no upper bound check; succeeds immediately
+3. Players continue buying lootboxes; `pendingLootboxEth` and `pendingLootboxBurnie` accumulate normally
+4. `requestLootboxRng()` evaluates `pendingLootboxEth + pendingLootboxBurnie >= uint256.max` -- condition permanently unsatisfiable (total ETH in existence is ~120M ETH << uint256.max)
+5. No `openLootBox` or `openBurnieLootBox` call ever executes; all lootbox ETH locked until admin reversal
+6. If admin refuses to reverse: lootbox freeze is permanent and irrecoverable without contract upgrade
+
+**Remediation:** Add `require(threshold <= 10 ether, "threshold too high")` (or an equivalent protocol-specific maximum) in `setLootboxRngThreshold`. The threshold is a triggering mechanism, not a security barrier; a maximum of 10 ETH prevents accidental or malicious over-setting.
+
 ---
 
 ## Low Findings
