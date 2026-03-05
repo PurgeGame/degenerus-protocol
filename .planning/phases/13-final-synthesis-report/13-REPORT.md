@@ -307,7 +307,62 @@ Three fix commits were introduced during the audit period and verified for bypas
 
 ## Requirement Coverage Matrix (v2.0)
 
-*[Content in Plan 13-04]*
+This matrix covers all 48 requirements from the Degenerus Protocol v2.0 Adversarial Audit (Phases 8–12). v1.0 requirements (Phases 1–7) are covered in the Phase 7 Final Findings Report. Every requirement received a verdict during its designated phase.
+
+| Requirement | Description (short) | Phase | Verdict |
+|-------------|---------------------|-------|---------|
+| ACCT-01 | ETH solvency invariant: sum(deposits) == pools | 8 | PASS (7/7 checkpoints, EthInvariant.test.js) |
+| ACCT-02 | _creditClaimable 11-site audit | 8 | PASS (11/11 sites Pattern A or B) |
+| ACCT-03 | BPS fee splits sum to input, correct rounding | 8 | PASS (all 4 sites use subtraction pattern) |
+| ACCT-04 | claimWinnings cross-function reentrancy | 8 | PASS (strict CEI, sentinel before external call) |
+| ACCT-05 | stETH/LINK reentrancy paths | 8 | PASS + INFO + LOW (L-v2-01: creditLinkReward not implemented) |
+| ACCT-06 | DegenerusVault share redemption rounding | 8 | PASS (floor division safe; no partial-burn extraction) |
+| ACCT-07 | BurnieCoin supply invariant | 8 | PASS (6 mint paths authorized; no free-mint path) |
+| ACCT-08 | Game-over terminal settlement zero-balance proof | 8 | PASS (912-day timeout; gameOver=true; invariant holds) |
+| ACCT-09 | adminStakeEthForStEth solvency guard | 8 | PASS (guard confirmed claimablePool-based) |
+| ACCT-10 | receive() donation safety; selfdestruct surplus | 8 | PASS + INFO (ACCT-10-I1: selfdestruct becomes protocol reserve) |
+| GAS-01 | advanceGame() complete call graph gas | 9 | PASS (worst case 6,284,995 gas, STAGE_TICKETS_WORKING) |
+| GAS-02 | processTicketBatch gas ceiling | 9 | PASS (max 6,284,995 gas; 39.3% of 16M) |
+| GAS-03 | Sybil breakeven wallet count | 9 | PASS (WRITES_BUDGET_SAFE=550 caps single-call gas; no N reaches 16M) |
+| GAS-04 | Sybil DoS cost vs. 1,000 ETH budget | 9 | LOW (theoretical; ~4,950 ETH/day min cost exceeds budget) |
+| GAS-05 | payDailyJackpot winner loop ceiling | 9 | PASS (887,410 gas at 321 winners; 5.5% of 16M) |
+| GAS-06 | VRF callback gas under worst-case lootbox state | 9 | PASS (62,740 gas; 137,260 below 200K target) |
+| GAS-07 | Rational inaction liveness analysis | 9 | PASS (3 independent liveness paths; no dominant stall strategy) |
+| ADMIN-01 | Complete admin function power map | 10 | PASS + MEDIUM (M-v2-03: setLinkEthPriceFeed; M-v2-04: setLootboxRngThreshold) + INFO |
+| ADMIN-02 | wireVrf coordinator substitution | 10 | MEDIUM (M-v2-01: ungated coordinator swap enables full RNG manipulation) |
+| ADMIN-03 | 3-day stall trigger enumeration | 10 | MEDIUM (M-v2-02: wireVrf-based indefinitely repeatable griefing loop) |
+| ADMIN-04 | VRF retry window state-changing calls | 10 | PASS (openLootBox/openBurnieLootBox are BLOCKED during rngLockedFlag) |
+| ADMIN-05 | VRF subscription drain economics | 10 | INFO (external drain requires >=40 LINK; admin-neglect path only) |
+| ADMIN-06 | Player-specific grief vectors | 10 | PASS (no admin path to selectively block individual wallets) |
+| ASSY-01 | JackpotModule assembly SSTORE slot calc | 10 | PASS + INFO (ASSY-01-I1: storage comment wrong; assembly correct) |
+| ASSY-02 | MintModule assembly SSTORE slot calc | 10 | PASS (byte-for-byte identical to JackpotModule; same verdict) |
+| ASSY-03 | _revertDelegate + array-shrink assembly | 10 | PASS (4 bubble-up sites safe; n<=108 array-shrink safe) |
+| TOKEN-01 | vaultMintAllowance bypass | 11 | PASS (all mint sites traced to authorization check) |
+| TOKEN-02 | claimWhalePass double-mint / replay | 11 | PASS (whalePassClaims[player]=0 before effects; replay blocked) |
+| TOKEN-03 | BurnieCoinflip entropy source | 11 | PASS (VRF-only; no block-level data; rngWordByDay[] historical) |
+| TOKEN-04 | Whale + lootbox combined EV model | 11 | PASS (max EV surplus 3.5 ETH; no combination produces EV > 1.0) |
+| TOKEN-05 | Activity score inflation cost | 11 | PASS (inflation cost floor ~24-52 ETH >> EV benefit ceiling 3.5 ETH) |
+| TOKEN-06 | BURNIE 30-day guard completeness | 11 | PASS (guard applies identically across all 5 purchase entry points) |
+| TOKEN-07 | Affiliate circular ring EV | 11 | PASS (self-referral blocked; wash trading 6.25% discount only; no amplification) |
+| TOKEN-08 | DGNRS lockForLevel/unlock cap reset | 11 | PASS (LockStillActive guard blocks same-level double-cap; auto-unlock atomic) |
+| VAULT-01 | DegenerusVault receive() donation safety | 11 | PASS (1T DGVE pre-minted closes ERC4626 inflation; onlyGame blocks Stonk donations) |
+| VAULT-02 | DegenerusStonk burn-to-claim rounding | 11 | PASS (floor division protocol-favorable; partial burns sum <= full burn) |
+| TIME-01 | Daily jackpot double-trigger via timestamp drift | 11 | PASS (dailyIdx guard + Ethereum timestamp monotonicity prevents double trigger) |
+| TIME-02 | Quest streak griefing via validator drift | 11 | PASS + INFO (activeQuests[0].day prevents drift; streak griefing BURNIE-only, no ETH) |
+| REENT-01 | Cross-function reentrancy matrix | 12 | PASS (8 ETH-transfer sites across 4 contracts; all CEI-safe) |
+| REENT-02 | ERC721 onERC721Received callback | 12 | PASS + INFO (REENT-02-INFO: _transfer() CEI deviation not exploitable) |
+| REENT-03 | Delegatecall multicall/operator-proxy reentrancy | 12 | PASS (_resolvePlayer is pure view SLOAD; no callback interface) |
+| REENT-04 | 40 JackpotModule unchecked blocks | 12 | PASS (26 Cat A, 14 Cat B, 0 Cat C; all 3 fix commits bypass-tested: PASS) |
+| REENT-05 | Shared cursor mutual exclusion | 12 | PASS (formal proof: ticketLevel!=lvl guard always resets cursor) |
+| REENT-06 | claimDecimatorJackpot CEI ordering | 12 | PASS (e.claimed=1 precedes _creditDecJackpotClaimCore) |
+| REENT-07 | adminSwapEthForStEth accounting integrity | 12 | PASS (value-neutral; amount==0 guard; claimablePool untouched) |
+| REPORT-01 | Final prioritized findings report delivered | 13 | COMPLETE (this document) |
+| REPORT-02 | Coded PoC for every HIGH and MEDIUM finding | 13 | COMPLETE (4 PoCs in Medium Findings section; 0 HIGH findings) |
+| REPORT-03 | Gas report with adversarial states | 13 | COMPLETE (16-row gas table in Gas Report section) |
+
+**Coverage:** 48 / 48 requirements examined. 0 requirements unclassified.
+
+**v2.0 net finding count above INFO severity:** 4 MEDIUM (M-v2-01, M-v2-02, M-v2-03, M-v2-04), 1 LOW (L-v2-01). All 4 MEDIUM findings share the admin-key-required precondition class.
 
 ---
 
