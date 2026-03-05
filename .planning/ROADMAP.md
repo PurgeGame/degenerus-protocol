@@ -69,7 +69,7 @@ See: `.planning/milestones/v3.0-ROADMAP.md` for full phase details.
 - [ ] **Phase 22: Sybil Whale Economist** -- Economic exploitation of pricing curves, whale bundles, deity passes, BURNIE token
 - [ ] **Phase 23: Degenerate Fuzzer** -- New invariant harnesses targeting v3.0 coverage gaps and deep state space
 - [ ] **Phase 24: Formal Methods Analyst** -- Certora CVL specs and extended symbolic verification beyond v3.0
-- [ ] **Phase 25: Dependency & Integration Attacker** -- VRF/stETH/LINK failure modes and mock fidelity gaps
+- [x] **Phase 25: Dependency & Integration Attacker** -- VRF/stETH/LINK failure modes and mock fidelity gaps (completed 2026-03-05)
 - [ ] **Phase 26: Gas Griefing Specialist** -- Attacker-controllable gas consumption and OOG callback attacks
 - [ ] **Phase 27: White Hat Completionist** -- OWASP SC Top 10 + SWC sweep + ERC compliance + fresh-eyes review
 - [ ] **Phase 28: Game Theory Attacker** -- Adversarial attack on resilience thesis, GAMEOVER path enumeration
@@ -222,7 +222,7 @@ Phases 19-28 execute in parallel (zero inter-agent dependencies). Phase 29 execu
 | 22. Sybil Whale Economist | v4.0 | 0/TBD | Not started | - |
 | 23. Degenerate Fuzzer | v4.0 | 0/TBD | Not started | - |
 | 24. Formal Methods Analyst | v4.0 | 0/TBD | Not started | - |
-| 25. Dependency & Integration Attacker | v4.0 | 0/TBD | Not started | - |
+| 25. Dependency & Integration Attacker | 1/1 | Complete   | 2026-03-05 | - |
 | 26. Gas Griefing Specialist | v4.0 | 0/TBD | Not started | - |
 | 27. White Hat Completionist | v4.0 | 0/TBD | Not started | - |
 | 28. Game Theory Attacker | v4.0 | 0/TBD | Not started | - |
