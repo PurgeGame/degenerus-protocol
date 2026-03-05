@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-03-05 after v5.0 milestone start)
 ## Current Position
 
 Phase: 30 of 35 (Tooling Setup and Static Analysis)
-Plan: 2 of 3 in current phase
+Plan: 1 of 3 in current phase
 Status: Executing
-Last activity: 2026-03-05 -- Plan 30-02 completed (Slither triage)
+Last activity: 2026-03-05 -- Plan 30-01 completed (Foundry deep profile + coverage baseline)
 
 Progress: [█░░░░░░░░░] 5%
 
@@ -33,17 +33,17 @@ Progress: [█░░░░░░░░░] 5%
 
 **Velocity:**
 - Total plans completed: 1 (v5.0) / 104 (cumulative v1-v4)
-- Average duration: 5min
-- Total execution time: 5min
+- Average duration: 8min
+- Total execution time: 8min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 30 | 1 | 5min | 5min |
+| 30 | 1 | 8min | 8min |
 
 **Recent Trend:**
-- Last 5 plans: 5min
+- Last 5 plans: 8min
 - Trend: --
 
 *Updated after each plan completion*
@@ -58,9 +58,9 @@ All v1-v4 milestone decisions archived to `.planning/milestones/`.
 - Phases 31/32 can execute in parallel (composition and precision are independent analysis streams)
 - Phase 34 depends on Phase 32 (precision results inform economic exploitation feasibility)
 - TOOL-05 assigned to Phase 31 (composition-focused harnesses are its primary deliverable)
-- All 87 uninitialized-state findings classified as FP (delegatecall storage architecture)
-- 18 divide-before-multiply findings tagged for Phase 32 precision analysis
-- 4 reentrancy-balance findings tagged for Phase 34 CEI review
+- Deep profile: 10K fuzz / 1K invariant / 256 depth (FOUNDRY_PROFILE=deep)
+- Coverage baseline limitation: viaIR/patching incompatibility means Phase 35 uses test counts, not lcov
+- testFuzz_weaklyMonotonicInCycle vm.assume rejection is test harness issue, not protocol bug
 
 ### Pending Todos
 
@@ -75,5 +75,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Plan 30-02 completed -- Slither triage (630 findings, 0 TP, 22 INVESTIGATE)
+Stopped at: Plan 30-01 completed -- Foundry deep profile and coverage baseline
 Resume file: None
