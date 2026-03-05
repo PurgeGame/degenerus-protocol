@@ -83,7 +83,7 @@ See: `.planning/milestones/v4.0-ROADMAP.md` for full phase details.
 
 **Milestone Goal:** Hunt for creative, unconventional, and composition-based vulnerabilities that 10 prior audit agents missed -- validated by Foundry fuzzing, Slither static analysis, and Halmos symbolic verification.
 
-- [ ] **Phase 30: Tooling Setup and Static Analysis** - Configure Foundry deep profiles, run Slither full triage, fix Halmos configuration, establish baseline
+- [x] **Phase 30: Tooling Setup and Static Analysis** - Configure Foundry deep profiles, run Slither full triage, fix Halmos configuration, establish baseline (completed 2026-03-05)
 - [ ] **Phase 31: Cross-Contract Composition Analysis** - Analyze delegatecall shared storage assumptions, module interaction matrix, selector collisions, BitPackingLib gaps, and build composition-focused harnesses
 - [ ] **Phase 32: Precision and Rounding Analysis** - Audit all 222 division operations, zero-rounding free actions, dust accumulation, wei lifecycle precision loss
 - [ ] **Phase 33: Temporal, Lifecycle, and EVM-Level Analysis** - Timestamp boundaries, multi-tx races, lifecycle edge states, forced ETH, ABI encoding, assembly safety, unchecked blocks
@@ -229,7 +229,7 @@ Phases 31 and 32 can execute in parallel after Phase 30. Phase 33 depends on Pha
 | 27. White Hat | v4.0 | 1/1 | Complete | 2026-03-05 |
 | 28. Game Theory | v4.0 | 1/1 | Complete | 2026-03-05 |
 | 29. Synthesis | v4.0 | 0/0 | Complete | 2026-03-05 |
-| 30. Tooling Setup | 2/3 | In Progress|  | - |
+| 30. Tooling Setup | 3/3 | Complete   | 2026-03-05 | - |
 | 31. Composition | v5.0 | 0/? | Not started | - |
 | 32. Precision | v5.0 | 0/? | Not started | - |
 | 33. Temporal/EVM | v5.0 | 0/? | Not started | - |
