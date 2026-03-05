@@ -150,12 +150,19 @@ Plans:
 **Requirements**: CORE-10, CORE-11, CORE-12, CORE-13, CORE-14, CORE-15, CORE-16, CORE-17, CORE-18, CORE-19, CORE-20, CORE-21, CORE-22, CORE-23, CORE-27, CORE-28, CORE-30
 **Success Criteria** (what must be TRUE):
   1. Lootboxes open with EV multiplier matching contract breakpoints (80% at score 0, 100% at 60%, 135% at 255%, capped). Lootbox boost system (5/15/25% BPS from deity boons, 10 ETH cap)
-  2. BURNIE creditFlip (coinflip stake) and creditCoin (direct mint) correctly distinguished. Coinflip: 50/50, wins pay 1.5×-2.5× (mean ~1.97×). Bounty system operational
-  3. Degenerette: match-based 4-quadrant betting, 3 currencies, ROI curve from activity score (90%→99.9%), hero quadrant boost/penalty, EV normalization
+  2. BURNIE creditFlip (coinflip stake) and creditCoin (direct mint) correctly distinguished. Coinflip: 50/50, wins pay 1.5x-2.5x (mean ~1.97x). Bounty system operational
+  3. Degenerette: match-based 4-quadrant betting, 3 currencies, ROI curve from activity score (90%->99.9%), hero quadrant boost/penalty, EV normalization
   4. Full affiliate system: 3-tier referral with fresh/recycled ETH rates, 3 payout modes (coinflip/degenerette/split-coin), weighted multi-tier roll, lootbox taper, quest bonus, leaderboard, rakeback, referral locking. Top affiliate reward at level end
   5. Game-over triggers on inactivity timeout (912d/365d), terminal 10% Decimator split, remaining to next-level holders, 30-day sweep. Pull-pattern ETH claims with 1 wei sentinel
-  6. afKing auto-rebuy (130% bonus = 2.30× total, 145% afKing = 2.45× total). Future tickets: 95%/5% near/far split. DGNRS final-day 1% reward to solo-bucket winner
-**Plans**: TBD
+  6. afKing auto-rebuy (130% bonus = 2.30x total, 145% afKing = 2.45x total). Future tickets: 95%/5% near/far split. DGNRS final-day 1% reward to solo-bucket winner
+**Plans:** 6 plans
+Plans:
+- [ ] 38-01-PLAN.md — Lootbox EV multiplier, boost system, and BURNIE coinflip mechanics
+- [ ] 38-02-PLAN.md — Degenerette match-based betting with ROI curve and 3 currencies
+- [ ] 38-03-PLAN.md — Full affiliate system (3-tier, payout modes, taper, leaderboard)
+- [ ] 38-04-PLAN.md — ETH claims with 1 wei sentinel and game-over mechanics
+- [ ] 38-05-PLAN.md — afKing auto-rebuy, future ticket distribution, and DGNRS reward
+- [ ] 38-06-PLAN.md — Engine integration of all Phase 38 mechanics
 
 ### Phase 39: Passes and Vault
 **Goal**: All pass types and vault/yield mechanics operate with correct pricing, bonuses, and capital flows
@@ -207,14 +214,14 @@ Plans:
   3. Pass pricing (whale, lazy, deity) matches contract for all level ranges and purchase counts
   4. Vault share math (deposit/withdraw/yield) matches DegenerusVault.sol calculations
   5. Degenerette payout tests: base payouts, ROI curve, hero quadrant boost/penalty, EV normalization match DegeneretteModule
-  6. Coinflip payout tests: win distribution (5%/90%/5% tiers), mean payout ≈1.97×, match BurnieCoinflip.sol
+  6. Coinflip payout tests: win distribution (5%/90%/5% tiers), mean payout ~1.97x, match BurnieCoinflip.sol
   7. At least one end-to-end scenario runs through both the sim engine and real contracts (via Hardhat), comparing final state to confirm parity
 **Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 36 → 37 → 38 (parallel with 39) → 40 → 41 → 42
+Phases execute in numeric order: 36 -> 37 -> 38 (parallel with 39) -> 40 -> 41 -> 42
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -225,7 +232,7 @@ Phases execute in numeric order: 36 → 37 → 38 (parallel with 39) → 40 → 
 | 30-35 | v5.0 Audit | 18/18 | Complete | 2026-03-05 |
 | 36. Engine Foundation | 3/3 | Complete    | 2026-03-05 | - |
 | 37. Core Game Loop | 5/5 | Complete    | 2026-03-05 | - |
-| 38. Extended Mechanics | Sim v1.0 | 0/? | Not started | - |
+| 38. Extended Mechanics | Sim v1.0 | 0/6 | Planned | - |
 | 39. Passes and Vault | Sim v1.0 | 0/3 | Planned | - |
 | 40. Player Archetypes | Sim v1.0 | 0/? | Not started | - |
 | 41. Interactive Visualization | Sim v1.0 | 0/? | Not started | - |
