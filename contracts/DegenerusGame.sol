@@ -2804,6 +2804,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Accept ETH and add to the future pool reserve.
     /// @dev Plain ETH transfers are routed to jackpot reserves.
     receive() external payable {
+        if (gameOver) revert E();
         futurePrizePool += msg.value;
     }
 }
