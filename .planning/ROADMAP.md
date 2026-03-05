@@ -45,7 +45,7 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full phase details.
 
 **Milestone Goal:** Reduce C4 payout risk through dynamic invariant testing and independent blind adversarial attack sessions that find what static analysis missed.
 
-- [ ] **Phase 14: Foundry Infrastructure and Compiler Alignment** - Full protocol deployable and testable inside Foundry's test EVM
+- [x] **Phase 14: Foundry Infrastructure and Compiler Alignment** - Full protocol deployable and testable inside Foundry's test EVM (completed 2026-03-05)
 - [ ] **Phase 15: Core Handlers and ETH Solvency Invariant** - ETH solvency invariant validates the full fuzzing pipeline end-to-end
 - [ ] **Phase 16: Remaining Invariant Harnesses** - BurnieCoin supply, game FSM, vault shares, and ticket queue invariants all passing
 - [ ] **Phase 17: Adversarial Sessions and Formal Verification** - 4 blind attack sessions and 2 Halmos bounded model checks completed independently
@@ -137,7 +137,7 @@ Note: Phase 17 can begin after Phase 14 completes (does not depend on 15/16).
 | 11. Token, Vault, Timing | v2.0 | 5/5 | Complete | 2026-03-04 |
 | 12. Reentrancy Synthesis, Unchecked | v2.0 | 3/3 | Complete | 2026-03-04 |
 | 13. Final Synthesis Report | v2.0 | 4/4 | Complete | 2026-03-05 |
-| 14. Foundry Infrastructure | v3.0 | 0/4 | Planning complete | - |
+| 14. Foundry Infrastructure | v3.0 | 4/4 | Complete | 2026-03-05 |
 | 15. Core Handlers and ETH Solvency | v3.0 | 0/TBD | Not started | - |
 | 16. Remaining Invariant Harnesses | v3.0 | 0/TBD | Not started | - |
 | 17. Adversarial Sessions and Formal Verification | v3.0 | 0/TBD | Not started | - |
