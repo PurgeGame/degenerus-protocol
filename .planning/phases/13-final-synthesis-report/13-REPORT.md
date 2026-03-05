@@ -399,3 +399,9 @@ Three fix commits introduced during the audit period were each tested for bypass
 | `4592d8c` | BURNIE purchase cutoff -- `COIN_PURCHASE_CUTOFF` added to `_purchaseCoinFor()`; uses `block.timestamp`, not `msg.sender`; fires at `ticketQuantity != 0`; lootbox correctly exempted; no level-boundary off-by-one | **PASS** |
 | `cbbafa0` | Degenerette sentinel -- `<` changed to `<=` in `claimableWinnings[player] <= fromClaimable`; exactly one `fromClaimable` site in DegeneretteModule; sentinel value 1 preserved | **PASS** |
 | `9539c6d` | capBucketCounts underflow guard -- excess subtraction guarded by `if (scaledTotal > nonSoloCap)` precondition; trim loop uses `excess != 0` guard; entropy-rotated trim selection; 20-winner floor overcommit is intentional (see 9539c6d-INFO-01) | **PASS** |
+
+---
+
+*v2.0 Adversarial Audit complete. Findings from v1.0 audit (Phases 1–7) are in `.planning/phases/07-cross-contract-synthesis/07-FINAL-FINDINGS-REPORT.md`.*
+*Report generated: 2026-03-04*
+*Auditor: Claude (AI-assisted security analysis, Claude Sonnet 4.6)*
