@@ -627,7 +627,7 @@ contract BurnieCoin {
         _;
     }
 
-    /// @dev Restricts access to game, affiliate, or color registry contracts.
+    /// @dev Restricts access to game or affiliate contracts.
     ///      Used for: burnCoin (gameplay burns).
     modifier onlyTrustedContracts() {
         address sender = msg.sender;
