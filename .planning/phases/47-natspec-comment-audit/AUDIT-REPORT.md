@@ -426,6 +426,88 @@ No NatSpec findings. All @notice, @dev, @param, @return tags verified accurate.
 
 ---
 
+### DegenerusGameMintModule.sol (Plan 03)
+
+**Finding P03-1: STALE -- recordMintData NatSpec claims streak updates**
+- **File:** DegenerusGameMintModule.sol, lines 170, 177, 255
+- **Comment:** Line 170: "updated with level count, streak, whale bonuses, milestones" / Line 177: "Update streak and total" / Line 255: "skip updating total and streak"
+- **Actual code:** `recordMintData` never reads or writes the `levelStreak` field (bits 48-71 of `mintPacked_`). Streak management was moved to `DegenerusGameMintStreakUtils.sol`. The function only updates `lastLevel`, `levelCount` (total), `levelUnits`, `frozenUntilLevel`, and `whaleBundleType`.
+- **Severity:** STALE
+- **Resolution:** FIXED -- Removed all streak references from recordMintData NatSpec and inline comments.
+
+**Verified accurate NatSpec (48 NatSpec tags total):**
+- Contract-level @title/@notice/@dev: Delegate-called module handling mint history -- accurate.
+- Activity Score System documentation: Level Count, Quest Streak (external), Affiliate Points (external), Whale Bundle -- accurate.
+- Mint Data Bit Packing Layout: All 10 bit field descriptions match BitPackingLib shifts -- verified.
+- Trait Generation: 4 quadrants, 8x8 weighted grid -- matches DegenerusTraitUtils.traitFromWord.
+- recordMintData @param/@return: All 4 tags accurate. coinReward correctly noted as "currently 0".
+- Level transition logic: <4 units = don't count, >=4 units = full update -- matches code.
+- purchase @param: ticketQuantity "scaled by 100" matches TICKET_SCALE=100. payKind enum values correct.
+- _callTicketPurchase: Cost formula costWei = (priceWei * quantity) / (4 * TICKET_SCALE) -- verified.
+- Lootbox pool splits: 90/10 (normal), 40/40/20 (presale) -- match BPS constants.
+- Lootbox boost tiers: 5%/15%/25% with 2-day expiry, 10 ETH cap -- match constants.
+- _raritySymbolBatch: LCG-based PRNG, groups of 16, assembly batch-write -- accurate.
+- COIN_PURCHASE_CUTOFF: 335 days (365-30) and 882 days (912-30) -- correct.
+
+**DegenerusGameMintModule.sol overall: 1 finding (0 WRONG, 1 STALE, 0 MISLEADING) -- FIXED**
+
+---
+
+### DegenerusGameJackpotModule.sol (Plan 03)
+
+**Finding P03-2: WRONG -- processTicketBatch NatSpec says WRITES_BUDGET_SAFE is 780**
+- **File:** DegenerusGameJackpotModule.sol, line 1912
+- **Comment:** `Budget defaults to WRITES_BUDGET_SAFE (780) if not specified.`
+- **Actual code:** Line 160: `uint32 private constant WRITES_BUDGET_SAFE = 550;`
+- **Severity:** WRONG
+- **Resolution:** FIXED -- Changed to "WRITES_BUDGET_SAFE (550)".
+
+**Finding P03-3: STALE -- processTicketBatch references nonexistent WRITES_BUDGET_MIN**
+- **File:** DegenerusGameJackpotModule.sol, line 1913
+- **Comment:** `Minimum budget is WRITES_BUDGET_MIN (8) to ensure progress.`
+- **Actual code:** No WRITES_BUDGET_MIN constant exists in the contract or its inheritance chain.
+- **Severity:** STALE
+- **Resolution:** FIXED -- Removed the line entirely.
+
+**Finding P03-4: STALE -- payDailyJackpot early-burn path describes removed 1/3 chance system**
+- **File:** DegenerusGameJackpotModule.sol, lines 271-278
+- **Comment:** Describes a "1/3 chance: Awards BURNIE to random future ticket holders" system that was replaced by the current ETH-day mechanism.
+- **Actual code:** The early-burn path rolls random traits, calls _executeJackpot for trait-based distribution, and on every 3rd purchase day adds a 1% futurePrizePool ETH slice with 75% converted to lootbox tickets.
+- **Severity:** STALE
+- **Resolution:** FIXED -- Rewrote to describe actual ETH-day mechanism.
+
+**Finding P03-5: STALE -- consolidatePrizePools rebalancing NatSpec describes removed logic**
+- **File:** DegenerusGameJackpotModule.sol, line 874
+- **Comment:** "Rebalance between future/current based on elapsed time (primary), ratio (secondary), and RNG" -- describes logic that no longer exists.
+- **Actual code:** Only two mechanisms remain: (1) x00 levels use 5-dice keep roll (0-100%, avg 50%), (2) other levels use 1-in-1e15 chance for 90% dump.
+- **Severity:** STALE
+- **Resolution:** FIXED -- Rewrote to describe actual x00 keep-roll and rare-dump mechanisms.
+
+**Verified accurate NatSpec (152 NatSpec tags total):**
+- Contract-level architecture notes: delegatecall, storage alignment, fund accounting, randomness -- all accurate.
+- All timing/threshold constants verified: JACKPOT_RESET_TIME=82620s, JACKPOT_LEVEL_CAP=5.
+- FINAL_DAY_SHARES_PACKED: [6000, 1333, 1333, 1334] = 10000 BPS -- verified.
+- DAILY_JACKPOT_SHARES_PACKED: 2000 BPS each x 4 with remainder to solo bucket (40% effective) -- accurate.
+- All 6 entropy domain separators match their keccak256 preimages.
+- Daily jackpot: Day 1-4 random 6-14%, Day 5 100%, compressed jackpot step=2 -- verified.
+- Carryover: 1% from futurePrizePool, 50% lootbox, source offset [1..5] -- verified.
+- Early-bird lootbox: 3% from future pool, 100 winners, 5-level spread -- accurate.
+- Yield surplus: 23%/23%/46% split with 8% buffer -- matches BPS constants.
+- Auto-rebuy: 30%/45% bonus (13000/14500 BPS) -- accurate.
+- Solo bucket: 75/25 ETH/whale-pass split -- accurate.
+- Far-future coin: 25% of budget, 10 samples from [lvl+5, lvl+99] -- accurate.
+- All struct, event, and error NatSpec tags verified.
+
+**JackpotBucketLib.sol (21 NatSpec tags -- checked during JackpotModule audit):**
+- All pure helper functions verified: bucket counts, scaling, capping, shares, packing/unpacking, ordering.
+- Base counts [25, 15, 8, 1], scaling thresholds 10/50/200 ETH, solo bucket rotation -- all accurate.
+
+**JackpotBucketLib.sol overall: 0 findings -- CLEAN**
+
+**DegenerusGameJackpotModule.sol overall: 4 findings (1 WRONG, 3 STALE, 0 MISLEADING) -- all FIXED**
+
+---
+
 ## Summary So Far
 
 | Contract | Status | WRONG | STALE | MISLEADING | CLEAN |
@@ -442,13 +524,16 @@ No NatSpec findings. All @notice, @dev, @param, @return tags verified accurate.
 | DegenerusVault.sol | Audited | 1 (fixed) | 1 (fixed) | 0 | YES |
 | DegenerusStonk.sol | Audited | 0 | 0 | 0 | YES |
 | BurnieCoin.sol | Audited | 0 | 1 (fixed) | 0 | YES |
+| DegenerusGameMintModule.sol | Audited | 0 | 1 (fixed) | 0 | NO (fixed) |
+| DegenerusGameJackpotModule.sol | Audited | 1 (fixed) | 3 (fixed) | 0 | NO (fixed) |
+| JackpotBucketLib.sol | Audited | 0 | 0 | 0 | YES |
 | DegenerusGame.sol | NOT YET AUDITED | - | - | - | - |
 | DegenerusQuests.sol | Audited | 4 | 0 | 1 | NO (fixed) |
 | DegenerusJackpots.sol | Audited | 0 | 0 | 0 | YES |
 | DegenerusDeityPass.sol | NOT YET AUDITED | - | - | - | - |
 | Remaining Modules | NOT YET AUDITED | - | - | - | - |
 
-**Total findings so far: 38** (16 WRONG [1 new fixed], 5 STALE [2 new fixed], 17 MISLEADING) -- all WRONG/STALE findings FIXED where applicable
+**Total findings so far: 43** (17 WRONG, 9 STALE, 17 MISLEADING) -- all WRONG/STALE findings FIXED where applicable
 
 ---
 
