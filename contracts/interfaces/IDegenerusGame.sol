@@ -147,7 +147,7 @@ interface IDegenerusGame {
     /// @notice Issue a deity boon to a recipient.
     /// @param deity Deity issuing the boon (address(0) = msg.sender).
     /// @param recipient Recipient of the boon.
-    /// @param slot Slot index (0-4).
+    /// @param slot Slot index (0-2).
     function issueDeityBoon(address deity, address recipient, uint8 slot) external;
 
     /// @notice Get the future prize pool (single pool).
@@ -414,7 +414,7 @@ interface IDegenerusGame {
     function deityPassPurchasedCountFor(address player) external view returns (uint16);
 
     /// @notice Get total deity passes issued across all sources.
-    /// @return count Total count (capped at 50).
+    /// @return count Total count (capped at 32).
     function deityPassTotalIssuedCount() external view returns (uint32 count);
 
     /// @notice Purchase tickets and loot boxes with ETH or claimable.

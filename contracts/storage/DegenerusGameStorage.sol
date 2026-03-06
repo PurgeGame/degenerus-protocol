@@ -155,8 +155,8 @@ abstract contract DegenerusGameStorage {
     // Order matters: EVM packs from low to high within a slot.
 
     /// @dev Timestamp when the current level opened for purchase phase.
-    ///      Initialized to uint48.max as a sentinel indicating "game not started".
-    ///      Used for inactivity guard timing and purchase-phase 3-day ETH jackpots.
+    ///      Initialized to block.timestamp in the constructor (deploy time).
+    ///      Used for inactivity guard timing and purchase-phase daily jackpots.
     ///
     ///      SECURITY: uint48 holds timestamps until year 8.9 million — safe for any
     ///      realistic game lifetime. Overflow is not a concern.
@@ -170,11 +170,11 @@ abstract contract DegenerusGameStorage {
     uint48 internal dailyIdx;
 
     /// @dev Timestamp when the last VRF (Chainlink) request was submitted.
-    ///      Used for timeout detection and RNG lock state: rngRequestTime != 0
-    ///      means an RNG request is in-flight or awaiting processing.
+    ///      Used for timeout detection: rngRequestTime != 0 means a VRF request
+    ///      is in-flight or awaiting processing.
     ///
     ///      SECURITY: Timeout mechanism prevents permanent lockup if VRF fails.
-    ///      Also serves as the RNG lock flag (replaces deprecated rngLockedFlag).
+    ///      Note: rngLockedFlag (separate bool) controls the daily RNG lock state.
     uint48 internal rngRequestTime;
 
     /// @notice Current jackpot level (starts at 0). Purchase phase targets level + 1.

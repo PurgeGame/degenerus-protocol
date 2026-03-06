@@ -282,13 +282,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • JACKPOT (jackpotPhaseFlag=true): Pay daily jackpots, wait for burns, then → PURCHASE      |
       |  • GAMEOVER (gameOver=true): Terminal state, no transitions                             |
       |                                                                                        |
-      |  Gating:                                                                               |
-      |  • Standard calls require caller to have minted today (skin-in-game)                   |
-      |  • CREATOR address bypasses the daily mint gate                                         |
+      |  Gating (tiered bypass):                                                                |
+      |  • Deity pass holder — always bypasses                                                 |
+      |  • Anyone — bypasses after 30+ min since level start                                   |
+      |  • Pass holder (lazy/whale) — bypasses after 15+ min                                   |
+      |  • DGVE majority holder — always bypasses (last resort, external call)                 |
       |  • RNG must be ready (not locked) or recently stale (18h timeout)                      |
       |                                                                                        |
       |  Presale: lootboxPresaleActive toggle (orthogonal to state machine)                    |
-      |  • Starts active: 2x BURNIE from loot boxes, bonusFlip active                          |
+      |  • Starts active: 62% bonus BURNIE from loot boxes, bonusFlip active                    |
       |  • Auto-ends when PURCHASE→JACKPOT, or admin can end manually (one-way, cannot re-enable) |
       +========================================================================================+*/
 
@@ -299,7 +301,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///
     ///      FLOW OVERVIEW:
     ///      1. Check liveness guards (2.5yr deploy timeout, 365-day inactivity)
-    ///      2. Apply daily gate (must have minted today, CREATOR bypasses)
+    ///      2. Apply tiered daily gate (deity > anyone after 30min > pass after 15min > DGVE majority)
     ///      3. Process transition housekeeping during jackpot→purchase transition
     ///      4. Gate on RNG readiness (request new VRF if needed)
     ///      5. Process ticket batches
@@ -331,9 +333,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  One-time VRF setup function called by ADMIN during deployment phase.                  |
       +========================================================================================+*/
 
-    /// @notice One-time wiring of VRF config from the VRF ADMIN contract.
-    /// @dev Access: ADMIN only. Idempotent after first wire (repeats must match).
-    ///      SECURITY: Once wired, config cannot be changed except via emergency rotation.
+    /// @notice Wire VRF config from the VRF ADMIN contract.
+    /// @dev Access: ADMIN only. Overwrites any existing config on each call.
+    ///      SECURITY: Config can be changed via emergency rotation (updateVrfCoordinatorAndSub).
     /// @param coordinator_ Chainlink VRF V2.5 coordinator address.
     /// @param subId VRF subscription ID for LINK billing.
     /// @param keyHash_ VRF key hash identifying the oracle and gas lane.
@@ -621,20 +623,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Purchase whale bundle: sets streak/levelCount to 100 and gives 400 tickets + 1 ETH lootbox.
-    /// @dev Available when the effective bundle level is %50 == 1 (levels 1, 51, 101, 151...).
-    ///      Effective level is the active purchase level.
-    ///      Can be purchased multiple times. Fixed cost: 6 ETH.
-    ///      Sets mint streak and level count to 100, frozen until (bundle level + 99).
-    ///      Queues 4 tickets for each of levels [bundle level, bundle level+99] (400 tickets total).
-    ///      Includes 1 ETH lootbox for all purchases.
+    /// @notice Purchase whale bundle: boosts levelCount, queues 400 tickets, includes lootbox.
+    /// @dev Available at any level. Can be purchased multiple times (1-100 per call).
+    ///      Price: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), or discounted with boon.
+    ///      Queues 4 tickets for each of 100 levels [ticketStart, ticketStart+99].
+    ///      Includes lootbox (20% of price during presale, 10% after).
     ///      Frozen stats don't increment until game reaches the frozen level.
     ///
-    ///      Fund distribution - Level 1: 50% next/25% reward/25% future.
-    ///      Fund distribution - Other levels: 50% future/45% reward/5% next.
+    ///      Fund distribution - Level 0: 30% next / 70% future.
+    ///      Fund distribution - Other levels: 5% next / 95% future.
     ///
-    ///      Example at level 1: 4 tickets each for levels 1-100, stats=100, frozen until 100, 1 ETH lootbox.
-    ///      Example at level 51: 4 tickets each for levels 51-150, stats=100, frozen until 150, 1 ETH lootbox.
+    ///      Example at level 1: 4 tickets each for levels 1-100, stats boosted, frozen until 100.
+    ///      Example at level 51: 4 tickets each for levels 51-150, stats boosted, frozen until 150.
     /// @param buyer Player address to receive bundle rewards (address(0) = msg.sender).
     /// @param quantity Number of bundles to purchase.
     function purchaseWhaleBundle(
@@ -659,8 +659,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Purchase a 10-level lazy pass (direct in-game activation).
-    /// @dev Available at levels 0-3 or x9 (9, 19, 29...). One active pass at a time.
-    ///      Price equals sum of per-level ticket costs across the 10-level window.
+    /// @dev Available at levels 0-2 or x9 (9, 19, 29...), or with a valid lazy pass boon.
+    ///      Levels 0-2: flat 0.24 ETH. Levels 3+: sum of per-level ticket prices across 10-level window.
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
     function purchaseLazyPass(address buyer) external payable {
         buyer = _resolvePlayer(buyer);
@@ -952,7 +952,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Issue a deity boon to a recipient.
     /// @param deity Deity issuing the boon (address(0) = msg.sender).
     /// @param recipient Recipient of the boon.
-    /// @param slot Slot index (0-4).
+    /// @param slot Slot index (0-2).
     /// @custom:reverts E If deity attempts to issue boon to themselves.
     function issueDeityBoon(
         address deity,
