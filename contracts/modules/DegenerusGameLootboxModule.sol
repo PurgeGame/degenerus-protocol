@@ -163,8 +163,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param deity The deity pass holder issuing the boon
     /// @param recipient The player receiving the boon
     /// @param day The day index when the boon was issued
-    /// @param slot The slot index (0-4) of the boon
-    /// @param boonType The type of boon issued (1-29)
+    /// @param slot The slot index (0-2) of the boon
+    /// @param boonType The type of boon issued (1-31)
     event DeityBoonIssued(
         address indexed deity,
         address indexed recipient,
@@ -464,7 +464,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Calculates EV multiplier based on activity score (ETH lootbox only).
-    ///      Linear scaling: 0% activity → 80% EV, 60% activity → 100% EV, 260%+ activity → 135% EV.
+    ///      Linear scaling: 0% activity → 80% EV, 60% activity → 100% EV, 255%+ activity → 135% EV.
     /// @param player The player address to calculate EV multiplier for
     /// @return The EV multiplier in basis points (8000-13500)
     function _lootboxEvMultiplierBps(address player) private view returns (uint256) {
@@ -490,7 +490,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             return LOOTBOX_EV_MAX_BPS;
         }
 
-        // Linear: 60% → 100% EV, 260% → 135% EV
+        // Linear: 60% → 100% EV, 255% → 135% EV
         uint256 excess = score - ACTIVITY_SCORE_NEUTRAL_BPS;
         uint256 maxExcess = ACTIVITY_SCORE_MAX_BPS - ACTIVITY_SCORE_NEUTRAL_BPS;
         return
@@ -719,7 +719,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Returns deterministically generated boon types based on deity address and day.
     ///      Decimator boons only appear when decimator window is open.
     /// @param deity The deity pass holder address
-    /// @return slots Array of 3 boon types (1-29) for each slot
+    /// @return slots Array of 3 boon types (1-31) for each slot
     /// @return usedMask Bitmask of which slots have been used today (bit 0 = slot 0, etc.)
     /// @return day The current day index
     function deityBoonSlots(
@@ -739,13 +739,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @notice Issue a deity boon to a recipient
-    /// @dev Deity can issue up to 5 boons per day, one per recipient per day.
+    /// @dev Deity can issue up to 3 boons per day, one per recipient per day.
     /// @param deity The deity pass holder issuing the boon
     /// @param recipient The player receiving the boon
     /// @param slot The slot index (0-2) to use
     /// @custom:reverts E When deity or recipient is zero address
     /// @custom:reverts E When deity tries to issue boon to themselves
-    /// @custom:reverts E When slot is >= 5
+    /// @custom:reverts E When slot is >= 3
     /// @custom:reverts E When deity has no purchased passes
     /// @custom:reverts E When no RNG is available for the day
     /// @custom:reverts E When recipient already received a boon today
@@ -817,7 +817,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param targetLevel Target level for future tickets
     /// @param currentLevel Current game level
     /// @param entropy Starting entropy value
-    /// @param presale Whether this is a presale lootbox (2x BURNIE multiplier)
+    /// @param presale Whether this is a presale lootbox (62% bonus BURNIE multiplier)
     /// @param allowWhalePass Whether to roll for whale pass jackpot
     /// @param allowLazyPass Whether to roll for lazy pass award
     /// @param emitLootboxEvent Whether to emit LootBoxOpened event
@@ -1751,7 +1751,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param slot The slot index (0-2)
     /// @param decimatorAllowed Whether decimator boons can be generated
     /// @param deityPassAvailable Whether deity passes are still available for purchase
-    /// @return boonType The boon type (1-29)
+    /// @return boonType The boon type (1-31)
     function _deityBoonForSlot(
         address deity,
         uint48 day,
