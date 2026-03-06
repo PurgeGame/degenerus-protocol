@@ -86,10 +86,10 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Interactive Visualization
 
 - [x] **VIZ-01**: React/D3 dashboard renders simulation results with responsive layout
-- [ ] **VIZ-02**: Player wealth chart — ETH balance + claimable + estimated future ticket value over time, per player and aggregate by archetype
-- [ ] **VIZ-03**: Prize pool chart — nextPool, currentPool, futurePool, claimablePool over time
-- [ ] **VIZ-04**: BURNIE economics chart — supply, implied price (ETH-equivalent per BURNIE via ticket price ratio), coinflip volume
-- [ ] **VIZ-05**: Activity score distribution — histogram of player scores over time, archetype-colored
+- [x] **VIZ-02**: Player wealth chart — ETH balance + claimable + estimated future ticket value over time, per player and aggregate by archetype
+- [x] **VIZ-03**: Prize pool chart — nextPool, currentPool, futurePool, claimablePool over time
+- [x] **VIZ-04**: BURNIE economics chart — supply, implied price (ETH-equivalent per BURNIE via ticket price ratio), coinflip volume
+- [x] **VIZ-05**: Activity score distribution — histogram of player scores over time, archetype-colored
 - [ ] **VIZ-06**: Per-player drill-down — click player to see their strategy decisions, outcomes, streak history, pass ownership
 - [x] **VIZ-07**: Configurable simulation parameters in-browser — player count, level count, seed, archetype mix sliders
 - [x] **VIZ-08**: Re-run simulation live in browser with parameter changes
@@ -203,10 +203,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLAY-07 | Phase 40 | Pending |
 | PLAY-08 | Phase 40 | Pending |
 | VIZ-01 | Phase 41 | Complete |
-| VIZ-02 | Phase 41 | Pending |
-| VIZ-03 | Phase 41 | Pending |
-| VIZ-04 | Phase 41 | Pending |
-| VIZ-05 | Phase 41 | Pending |
+| VIZ-02 | Phase 41 | Complete |
+| VIZ-03 | Phase 41 | Complete |
+| VIZ-04 | Phase 41 | Complete |
+| VIZ-05 | Phase 41 | Complete |
 | VIZ-06 | Phase 41 | Pending |
 | VIZ-07 | Phase 41 | Complete |
 | VIZ-08 | Phase 41 | Complete |

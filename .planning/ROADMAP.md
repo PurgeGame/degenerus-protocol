@@ -207,7 +207,7 @@ Plans:
   3. User can adjust simulation parameters (player count, level count, seed, archetype mix) in-browser and re-run the simulation live
   4. User can run two configurations side-by-side with overlaid comparison charts
   5. Charts export as PNG/SVG for paper figures, and the dashboard embeds in the website alongside the game theory paper (standalone component or iframe-ready)
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 Plans:
 - [ ] 41-01-PLAN.md — Vite+React scaffold, simulation hook, parameter controls, dashboard shell
 - [ ] 41-02-PLAN.md — Four core D3 charts (wealth, pools, BURNIE, activity scores)
@@ -248,7 +248,7 @@ Phases execute in numeric order: 36 -> 37 -> 38 (parallel with 39) -> 40 -> 41 -
 | 38. Extended Mechanics | Sim v1.0 | Complete    | 2026-03-05 | 2026-03-05 |
 | 39. Passes and Vault | 3/3 | Complete    | 2026-03-05 | - |
 | 40. Player Archetypes | 4/4 | Complete    | 2026-03-05 | - |
-| 41. Interactive Visualization | 1/3 | In Progress|  | - |
+| 41. Interactive Visualization | 2/3 | In Progress|  | - |
 | 42. Validation and Contract Parity | Sim v1.0 | 0/3 | Not started | - |
 
 **Cumulative:** 37 phases complete (130 plans), 5 phases planned. 5 milestones shipped, 1 in progress.
