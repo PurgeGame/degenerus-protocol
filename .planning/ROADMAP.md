@@ -106,7 +106,7 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
 - [x] **Phase 39: Passes and Vault** - Whale/lazy/deity pass purchasing, deity virtual jackpot entries, pass bonuses, deity boons, game-over refunds, stETH yield, vault share math (DGVB/DGVE), DGNRS burn-to-extract (completed 2026-03-05)
 - [x] **Phase 40: Player Archetypes** - Degen, EV Maximizer, Whale, Hybrid behavioral profiles with Affiliate trait, budget constraints, decision-making logic (completed 2026-03-05)
 - [x] **Phase 41: Interactive Visualization** - React/D3 dashboard with wealth/pool/BURNIE/activity charts, drill-downs, parameter controls, scenario comparison, export (completed 2026-03-06)
-- [ ] **Phase 42: Validation and Contract Parity** - Vitest formula tests, price/BPS/activity/EV/pass/vault/Degenerette/coinflip comparison suites, Hardhat cross-validation
+- [x] **Phase 42: Validation and Contract Parity** - Vitest formula tests, price/BPS/activity/EV/pass/vault/Degenerette/coinflip comparison suites, Hardhat cross-validation (completed 2026-03-06)
 
 ## Phase Details
 
@@ -225,7 +225,7 @@ Plans:
   5. Degenerette payout tests: base payouts, ROI curve, hero quadrant boost/penalty, EV normalization match DegeneretteModule
   6. Coinflip payout tests: win distribution (5%/90%/5% tiers), mean payout ~1.97x, match BurnieCoinflip.sol
   7. At least one end-to-end scenario runs through both the sim engine and real contracts (via Hardhat), comparing final state to confirm parity
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 42-01-PLAN.md — Core formula validation (price escalation, BPS splits, activity score, lootbox EV)
 - [ ] 42-02-PLAN.md — Pass pricing, vault share math, coinflip, and degenerette validation
@@ -249,6 +249,6 @@ Phases execute in numeric order: 36 -> 37 -> 38 (parallel with 39) -> 40 -> 41 -
 | 39. Passes and Vault | 3/3 | Complete    | 2026-03-05 | - |
 | 40. Player Archetypes | 4/4 | Complete    | 2026-03-05 | - |
 | 41. Interactive Visualization | 3/3 | Complete    | 2026-03-06 | - |
-| 42. Validation and Contract Parity | Sim v1.0 | 0/3 | Not started | - |
+| 42. Validation and Contract Parity | Sim v1.0 | Complete    | 2026-03-06 | - |
 
 **Cumulative:** 37 phases complete (130 plans), 5 phases planned. 5 milestones shipped, 1 in progress.
