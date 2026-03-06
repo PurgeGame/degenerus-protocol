@@ -7,7 +7,8 @@
 - ✅ **v3.0 Adversarial Hardening** — Phases 14-18 (shipped 2026-03-05)
 - ✅ **v4.0 Pre-C4A Adversarial Stress Test** — Phases 19-29 (shipped 2026-03-05)
 - ✅ **v5.0 Novel Zero-Day Attack Surface Audit** — Phases 30-35 (shipped 2026-03-05)
-- 🚧 **v1.0 Off-Chain Simulation Engine** — Phases 36-42 (in progress)
+- ✅ **v1.0 Off-Chain Simulation Engine** — Phases 36-42 (shipped 2026-03-06)
+- 🚧 **v6.0 Contract Hardening & Parity Verification** — Phases 43-47 (in progress)
 
 ## Phases
 
@@ -96,145 +97,90 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
 
 </details>
 
-### v1.0 Off-Chain Simulation Engine (In Progress)
-
-**Milestone Goal:** Build a presentation-quality TypeScript simulation engine with full logic parity to Degenerus Protocol contracts, player archetypes from the game theory paper, and interactive React/D3 visualization for the website.
+<details>
+<summary>✅ v1.0 Off-Chain Simulation Engine (Phases 36-42) — SHIPPED 2026-03-06</summary>
 
 - [x] **Phase 36: Engine Foundation** - Project scaffolding, deterministic PRNG, state model, event system, browser-compatible engine shell (completed 2026-03-05)
-- [x] **Phase 37: Core Game Loop** - Ticket purchasing, price escalation, prize pool splits, jackpots (4-bucket traits, carryover, BURNIE jackpot), century-level mechanics, level advancement, quest streaks, activity scores (completed 2026-03-05)
-- [x] **Phase 38: Extended Mechanics** - Lootboxes (boost system), BURNIE/FLIP economics (creditFlip vs creditCoin), Degenerette (match-based, 3 currencies), full affiliate system (3-tier, 3 payout modes, taper, leaderboard, top reward), ETH claims, game-over, afKing, future tickets, DGNRS day-5 reward (completed 2026-03-05)
-- [x] **Phase 39: Passes and Vault** - Whale/lazy/deity pass purchasing, deity virtual jackpot entries, pass bonuses, deity boons, game-over refunds, stETH yield, vault share math (DGVB/DGVE), DGNRS burn-to-extract (completed 2026-03-05)
-- [x] **Phase 40: Player Archetypes** - Degen, EV Maximizer, Whale, Hybrid behavioral profiles with Affiliate trait, budget constraints, decision-making logic (completed 2026-03-05)
-- [x] **Phase 41: Interactive Visualization** - React/D3 dashboard with wealth/pool/BURNIE/activity charts, drill-downs, parameter controls, scenario comparison, export (completed 2026-03-06)
-- [x] **Phase 42: Validation and Contract Parity** - Vitest formula tests, price/BPS/activity/EV/pass/vault/Degenerette/coinflip comparison suites, Hardhat cross-validation (completed 2026-03-06)
+- [x] **Phase 37: Core Game Loop** - Ticket purchasing, price escalation, prize pool splits, jackpots, century-level mechanics, level advancement, quest streaks, activity scores (completed 2026-03-05)
+- [x] **Phase 38: Extended Mechanics** - Lootboxes, BURNIE/FLIP economics, Degenerette, full affiliate system, ETH claims, game-over, afKing, future tickets, DGNRS day-5 reward (completed 2026-03-05)
+- [x] **Phase 39: Passes and Vault** - Whale/lazy/deity pass purchasing, deity bonuses, game-over refunds, stETH yield, vault share math, DGNRS burn-to-extract (completed 2026-03-05)
+- [x] **Phase 40: Player Archetypes** - Degen, EV Maximizer, Whale, Hybrid behavioral profiles with Affiliate trait, budget constraints (completed 2026-03-05)
+- [x] **Phase 41: Interactive Visualization** - React/D3 dashboard with charts, drill-downs, parameter controls, scenario comparison, export (completed 2026-03-06)
+- [x] **Phase 42: Validation and Contract Parity** - Vitest formula tests, cross-validation suites, Hardhat parity (completed 2026-03-06)
+
+</details>
+
+### v6.0 Contract Hardening & Parity Verification (In Progress)
+
+**Milestone Goal:** Comprehensive testing of all recent contract changes and systematic verification that every constant, NatSpec comment, and game theory paper number matches actual contract behavior.
+
+- [ ] **Phase 43: Governance & Gating Tests** - DGVE majority governance, VRF shutdown lifecycle, tiered advanceGame mint gate (10 requirements)
+- [ ] **Phase 44: Affiliate System Tests** - Per-referrer commission caps, lootbox activity taper, leaderboard tracking (9 requirements)
+- [ ] **Phase 45: Security & Economic Hardening Tests** - Post-gameOver locks, deity refund mechanics, compressed jackpots, economic invariants (17 requirements)
+- [ ] **Phase 46: Game Theory Paper Parity** - Systematic extraction of every number from the theory paper and verification against contract constants (18 requirements)
+- [ ] **Phase 47: NatSpec Comment Audit** - Read every NatSpec comment across all 22 contracts and verify each claim against actual code (10 requirements)
 
 ## Phase Details
 
-### Phase 36: Engine Foundation
-**Goal**: Developers can instantiate and run a minimal simulation that ticks through days with deterministic, reproducible results
+### Phase 43: Governance & Gating Tests
+**Goal**: Every governance check (DGVE majority ownership) and advanceGame gating mechanism has dedicated test coverage proving correct behavior for authorized, unauthorized, and edge-case callers
 **Depends on**: Nothing (first phase of milestone)
-**Requirements**: ENG-01, ENG-02, ENG-03, ENG-04, ENG-05, ENG-06, ENG-07, ENG-08
+**Requirements**: ADMIN-01, ADMIN-02, ADMIN-03, ADMIN-04, ADMIN-05, ADMIN-06, GATE-01, GATE-02, GATE-03, GATE-04
 **Success Criteria** (what must be TRUE):
-  1. Running the engine with the same seed twice produces byte-identical output
-  2. Engine tracks per-player state (balances, scores, holdings) and global state (level, pools, supply) that update each simulated day
-  3. Structured events are emitted for state changes and can be collected by a consumer
-  4. Engine runs in a browser environment (no Node-only APIs like fs, crypto, or child_process)
-  5. User can configure player count, level count, seed, and archetype distribution before running
-**Plans:** 3/3 plans complete
-Plans:
-- [x] 36-01-PLAN.md — Project scaffolding, deterministic PRNG, and core type contracts
-- [x] 36-02-PLAN.md — Player/global state factories and event collector implementation
-- [x] 36-03-PLAN.md — Simulation engine shell with day-tick loop and public API
+  1. A test proves that only accounts holding >50.1% DGVE supply pass onlyOwner (Admin) and onlyVaultOwner (Vault) checks, and that the old CREATOR address alone fails both
+  2. A test proves shutdownVrf() is callable only by GAME, successfully cancels subscription and sweeps LINK to VAULT, silently succeeds when subscriptionId is already 0, and handles coordinator/LINK transfer failures via try/catch
+  3. A test proves the tiered advanceGame mint gate requires same-day minting, relaxes after the configured time delay, and is bypassed entirely by DGVE majority holders
+  4. A test proves non-minters without DGVE majority revert with MustMintToday()
+**Plans**: TBD
 
-### Phase 37: Core Game Loop
-**Goal**: Simulation faithfully replicates the core Degenerus game loop from ticket purchase through jackpot drawing and level advancement
-**Depends on**: Phase 36
-**Requirements**: CORE-01, CORE-02, CORE-03, CORE-04, CORE-05, CORE-06, CORE-07, CORE-08, CORE-09, CORE-24, CORE-25, CORE-26
+### Phase 44: Affiliate System Tests
+**Goal**: The affiliate commission cap and lootbox activity taper produce correct payouts across all boundary conditions, and leaderboard tracking remains accurate regardless of taper
+**Depends on**: Nothing (parallelizable with Phase 43)
+**Requirements**: AFF-01, AFF-02, AFF-03, AFF-04, AFF-05, AFF-06, AFF-07, AFF-08, AFF-09
 **Success Criteria** (what must be TRUE):
-  1. Tickets can be purchased with costs matching the contract formula (costWei = priceWei * qty / 400) and prices follow PriceLookupLib escalation
-  2. Prize pool splits (ticket 90/10, lootbox 10/90, presale 40/40/20) and pool consolidation with 15% futurePool drawdown match contract constants
-  3. Daily jackpots use 4-bucket trait system with correct winner counts (25/15/8/1 scaled), day 1-4 random 6-14% payout, day 5 100% with 60/13/13/13 split
-  4. Carryover jackpot (1% futurePool days 2-4), BURNIE coin jackpot (0.5% prior pool), and century-level mechanics (VRF keep roll, no 15% skim) operational
-  5. Activity scores combine all 5 components (quest streak, mint count, quest streak, pass bonuses, affiliate bonus) matching contract calculation
-**Plans:** 5/5 plans complete
-Plans:
-- [ ] 37-01-PLAN.md — Price lookup, ticket purchase, and pool routing modules
-- [ ] 37-02-PLAN.md — Quest system and activity score modules
-- [ ] 37-03-PLAN.md — Trait system and jackpot distribution modules
-- [ ] 37-04-PLAN.md — Level advancement and purchase-phase events modules
-- [ ] 37-05-PLAN.md — Carryover/BURNIE jackpot, century level, and engine integration
+  1. A test proves per-referrer commission is capped at 0.5 ETH BURNIE per sender per level -- cumulative small purchases hit the cap, cap resets at the next level, and different affiliates have independent caps for the same sender
+  2. A test proves lootbox activity taper: score <15000 BPS pays 100%, score 15000-25500 BPS linearly tapers from 100% to 50%, and score >=25500 BPS floors at 50%
+  3. A test proves leaderboard tracking uses the full untapered amount even when the actual payout is reduced by taper
+  4. A test proves the lootboxActivityScore parameter flows correctly through payAffiliate and produces the expected taper calculation
+**Plans**: TBD
 
-### Phase 38: Extended Mechanics
-**Goal**: All secondary game mechanics operate correctly on top of the core loop, completing the full game lifecycle from lootboxes through game-over
-**Depends on**: Phase 37
-**Requirements**: CORE-10, CORE-11, CORE-12, CORE-13, CORE-14, CORE-15, CORE-16, CORE-17, CORE-18, CORE-19, CORE-20, CORE-21, CORE-22, CORE-23, CORE-27, CORE-28, CORE-30
+### Phase 45: Security & Economic Hardening Tests
+**Goal**: Every post-audit security fix and economic change has a dedicated test proving it works correctly -- no whale/lazy/deity purchase after gameOver, no voluntary deity refund, correct gameOver deity payout, and all economic formula changes verified
+**Depends on**: Nothing (parallelizable with Phases 43-44)
+**Requirements**: FIX-01, FIX-02, FIX-03, FIX-04, FIX-05, FIX-06, FIX-07, FIX-08, FIX-09, FIX-10, FIX-11, FIX-12, ECON-01, ECON-02, ECON-03, ECON-04, ECON-05
 **Success Criteria** (what must be TRUE):
-  1. Lootboxes open with EV multiplier matching contract breakpoints (80% at score 0, 100% at 60%, 135% at 255%, capped). Lootbox boost system (5/15/25% BPS from deity boons, 10 ETH cap)
-  2. BURNIE creditFlip (coinflip stake) and creditCoin (direct mint) correctly distinguished. Coinflip: 50/50, wins pay 1.5x-2.5x (mean ~1.97x). Bounty system operational
-  3. Degenerette: match-based 4-quadrant betting, 3 currencies, ROI curve from activity score (90%->99.9%), hero quadrant boost/penalty, EV normalization
-  4. Full affiliate system: 3-tier referral with fresh/recycled ETH rates, 3 payout modes (coinflip/degenerette/split-coin), weighted multi-tier roll, lootbox taper, quest bonus, leaderboard, rakeback, referral locking. Top affiliate reward at level end
-  5. Game-over triggers on inactivity timeout (912d/365d), terminal 10% Decimator split, remaining to next-level holders, 30-day sweep. Pull-pattern ETH claims with 1 wei sentinel
-  6. afKing auto-rebuy (130% bonus = 2.30x total, 145% afKing = 2.45x total). Future tickets: 95%/5% near/far split. DGNRS final-day 1% reward to solo-bucket winner
-**Plans:** 6/6 plans complete
-Plans:
-- [x] 38-01-PLAN.md — Lootbox EV multiplier, boost system, and BURNIE coinflip mechanics
-- [x] 38-02-PLAN.md — Degenerette match-based betting with ROI curve and 3 currencies
-- [x] 38-03-PLAN.md — Full affiliate system (3-tier, payout modes, taper, leaderboard)
-- [x] 38-04-PLAN.md — ETH claims with 1 wei sentinel and game-over mechanics
-- [x] 38-05-PLAN.md — afKing auto-rebuy, future ticket distribution, and DGNRS reward
-- [x] 38-06-PLAN.md — Engine integration of all Phase 38 mechanics
+  1. Tests prove whale bundle, lazy pass, deity pass purchases, and plain ETH receive() all revert after gameOver
+  2. A test proves deity pass gameOver payout: flat 20 ETH/pass, levels 0-9 only, FIFO by purchase order, budget-capped; deity refund clears deityPassPurchasedCount; no voluntary pre-gameOver refund path exists
+  3. Tests prove the 30-day BURNIE liveness guard blocks ticket purchases, subscriptionId is uint256 (large IDs handled), 1 wei sentinel preserved in degenerette claims, capBucketCounts handles zero-count buckets without underflow, and carryover floor is enforced
+  4. Tests prove JackpotModule uses explicit 46% futureShare (2300+2300 BPS) with ~8% buffer unextracted, MintModule has no level-dependent coin cost modifiers, multi-level scatter targeting distributes correctly, compressed jackpot advances 2 per physical day when target met in <=2 days, and LINK reward formula is correct
+**Plans**: TBD
 
-### Phase 39: Passes and Vault
-**Goal**: All pass types and vault/yield mechanics operate with correct pricing, bonuses, and capital flows
-**Depends on**: Phase 37
-**Requirements**: PASS-01, PASS-02, PASS-03, PASS-04, PASS-05, PASS-06, PASS-07, VAULT-01, VAULT-02, VAULT-03, VAULT-04, VAULT-05, CORE-29
+### Phase 46: Game Theory Paper Parity
+**Goal**: Every number, formula, rate, and threshold in the game theory paper (website/theory/index.html) is verified to match the corresponding contract constant or calculation -- systematic extraction with zero gaps
+**Depends on**: Nothing (parallelizable with Phases 43-45)
+**Requirements**: PAR-01, PAR-02, PAR-03, PAR-04, PAR-05, PAR-06, PAR-07, PAR-08, PAR-09, PAR-10, PAR-11, PAR-12, PAR-13, PAR-14, PAR-15, PAR-16, PAR-17, PAR-18
 **Success Criteria** (what must be TRUE):
-  1. Whale bundles (2.4/4 ETH pricing with boon discounts), lazy passes (0.24 ETH flat or sum-of-10, x9 windows), and deity passes (24 + T(n) triangular, 32-cap, 5 ETH BURNIE transfer cost) all price correctly
-  2. Deity pass holders receive +80% activity score bonus, perpetual 2% bucket jackpot entries (min 2), 3 boons/day (bitmask), and FIFO game-over refund (20 ETH/pass, levels 0-9 only, budget-capped)
-  3. Pass capital injection splits: Whale/Deity 30/70 (lvl 0), 5/95 (lvl 1+). Lazy 90/10 all levels
-  4. stETH yield accrues at configurable daily rate and distributes 46/23/23/8 to futurePool, vault, DGNRS, and buffer
-  5. Vault share math (two share tokens DGVB/DGVE, floor-division burn, 1T refill) and DGNRS pure burn-to-extract (ETH+stETH+BURNIE+WWXRP) function correctly. 16 tickets/level perpetual entries for both
-**Plans:** 3/3 plans complete
-Plans:
-- [ ] 39-01-PLAN.md — Pass pricing (whale/lazy/deity) and capital injection modules
-- [ ] 39-02-PLAN.md — stETH yield, vault share math, and DGNRS burn-to-extract modules
-- [ ] 39-03-PLAN.md — Deity bonuses/boons/refund and engine integration
+  1. A sanity-check test verifies PriceLookupLib prices at every tier boundary (levels 0,4,5,9,10,29,30,...,200), the ticket cost formula (costWei = priceWei * qty / 400), and BURNIE entry cost (250 BURNIE = 1 entry, 1000 = 1 full ticket) all match the paper
+  2. A sanity-check test verifies prize pool split BPS (90/10 ticket, 10/90 lootbox, 40/40/20 presale), jackpot day structure (5 days, 6-14% days 1-4, 100% day 5), jackpot bucket shares (20/20/20/20 and 60/13.33/13.33/13.34), and yield distribution (23/23/46/8) all match the paper
+  3. A sanity-check test verifies activity score components and caps, lootbox EV breakpoints (80%->100% at 0-60%, 100%->135% at 60-255%), and future ticket odds (95% near, 5% far) match the paper
+  4. A sanity-check test verifies affiliate commission rates (25%/20%/5%), tier structure (direct/upline1/upline2 at 20%/4%), whale/lazy/deity pass pricing, coinflip payout distribution (5%/90%/5%, mean ~1.97x), Degenerette base payouts and ROI curve, and pass capital injection splits all match the paper
+**Plans**: TBD
 
-### Phase 40: Player Archetypes
-**Goal**: Four distinct player archetypes plus the Affiliate trait drive realistic simulated behavior with configurable parameters and budget constraints
-**Depends on**: Phase 38, Phase 39
-**Requirements**: PLAY-01, PLAY-02, PLAY-03, PLAY-04, PLAY-05, PLAY-06, PLAY-07, PLAY-08
+### Phase 47: NatSpec Comment Audit
+**Goal**: Every NatSpec comment across all 22 contracts has been read and verified against actual code -- no stale claims, no wrong numbers, no misleading descriptions survive
+**Depends on**: Phases 43-45 (test coverage for recent changes should be in place before auditing comments about those changes)
+**Requirements**: DOC-01, DOC-02, DOC-03, DOC-04, DOC-05, DOC-06, DOC-07, DOC-08, DOC-09, DOC-10
 **Success Criteria** (what must be TRUE):
-  1. Degen archetype makes irregular purchases, spins Degenerette, opens lootboxes regardless of score, and buys on day 5 -- visibly different behavior from EV Maximizer who engages daily, maximizes activity score, and times lootbox opens
-  2. Whale archetype acquires deity/whale passes early, makes large coinflip stakes, issues boons, and pursues BAF leaderboard -- Hybrid archetype shows spectrum behavior from near-degen to near-grinder
-  3. Affiliate trait composes onto any archetype, adding referral network building and day-5 activation pushes with rakeback balancing
-  4. Budget constraints create increasing capital pressure, bankroll ruin risk, and streak maintenance cost per Section 3.6
-  5. Each archetype exposes configurable parameters (aggression, budget, risk tolerance) with sensible defaults from the game theory paper
-**Plans:** 4/4 plans complete
-Plans:
-- [x] 40-01-PLAN.md — Archetype type contracts and decision engine framework
-- [x] 40-02-PLAN.md — Degen and EV Maximizer behavior implementations
-- [x] 40-03-PLAN.md — Whale, Hybrid, and Affiliate trait implementations
-- [x] 40-04-PLAN.md — Budget constraints and engine integration
-
-### Phase 41: Interactive Visualization
-**Goal**: Users can explore simulation results through an interactive React/D3 dashboard with configurable parameters, drill-downs, and exportable charts
-**Depends on**: Phase 40
-**Requirements**: VIZ-01, VIZ-02, VIZ-03, VIZ-04, VIZ-05, VIZ-06, VIZ-07, VIZ-08, VIZ-09, VIZ-10, VIZ-11
-**Success Criteria** (what must be TRUE):
-  1. Dashboard renders player wealth (ETH + claimable + future ticket value), prize pools (next/current/future/claimable), BURNIE economics (supply, implied price, coinflip volume), and activity score distribution over time
-  2. User can click any player to drill down into their strategy decisions, outcomes, streak history, and pass ownership
-  3. User can adjust simulation parameters (player count, level count, seed, archetype mix) in-browser and re-run the simulation live
-  4. User can run two configurations side-by-side with overlaid comparison charts
-  5. Charts export as PNG/SVG for paper figures, and the dashboard embeds in the website alongside the game theory paper (standalone component or iframe-ready)
-**Plans:** 3/3 plans complete
-Plans:
-- [ ] 41-01-PLAN.md — Vite+React scaffold, simulation hook, parameter controls, dashboard shell
-- [ ] 41-02-PLAN.md — Four core D3 charts (wealth, pools, BURNIE, activity scores)
-- [ ] 41-03-PLAN.md — Player drill-down, scenario comparison, PNG/SVG export
-
-### Phase 42: Validation and Contract Parity
-**Goal**: A comprehensive test suite proves the simulation engine produces results matching the actual Solidity contracts for all critical calculations
-**Depends on**: Phase 38, Phase 39
-**Requirements**: VAL-01, VAL-02, VAL-03, VAL-04, VAL-05, VAL-06, VAL-07, VAL-08, VAL-09, VAL-10
-**Success Criteria** (what must be TRUE):
-  1. Vitest formula test suite passes, covering price escalation for all 100 cycle positions, BPS splits for all payment paths, and activity score for representative states
-  2. Lootbox EV multiplier matches contract calculation at all activity score breakpoints
-  3. Pass pricing (whale, lazy, deity) matches contract for all level ranges and purchase counts
-  4. Vault share math (deposit/withdraw/yield) matches DegenerusVault.sol calculations
-  5. Degenerette payout tests: base payouts, ROI curve, hero quadrant boost/penalty, EV normalization match DegeneretteModule
-  6. Coinflip payout tests: win distribution (5%/90%/5% tiers), mean payout ~1.97x, match BurnieCoinflip.sol
-  7. At least one end-to-end scenario runs through both the sim engine and real contracts (via Hardhat), comparing final state to confirm parity
-**Plans:** 3/3 plans complete
-Plans:
-- [ ] 42-01-PLAN.md — Core formula validation (price escalation, BPS splits, activity score, lootbox EV)
-- [ ] 42-02-PLAN.md — Pass pricing, vault share math, coinflip, and degenerette validation
-- [ ] 42-03-PLAN.md — Hardhat cross-validation (sim vs contract end-to-end parity)
+  1. Every @notice and @dev comment in DegenerusAdmin, DegenerusAffiliate, AdvanceModule, MintModule, JackpotModule, and WhaleModule has been verified against the code -- any mismatch is either fixed or documented
+  2. Every @notice and @dev comment in the remaining 7 modules (Endgame, GameOver, Lootbox, Boon, Decimator, Degenerette, MintStreakUtils) and 6 standalone contracts (BurnieCoin, BurnieCoinflip, DegenerusVault, DegenerusStonk, DegenerusQuests, DegenerusJackpots) has been verified
+  3. Every error message description matches its actual trigger condition -- no error fires under conditions different from what its comment says
+  4. Every event parameter description matches the actual emitted value -- no event emits data inconsistent with its documentation
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 36 -> 37 -> 38 (parallel with 39) -> 40 -> 41 -> 42
+Phases 43, 44, 45, 46 are parallelizable (independent). Phase 47 depends on 43-45 completing first.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -243,12 +189,11 @@ Phases execute in numeric order: 36 -> 37 -> 38 (parallel with 39) -> 40 -> 41 -
 | 14-18 | v3.0 Audit | 19/19 | Complete | 2026-03-05 |
 | 19-29 | v4.0 Audit | 10/10 | Complete | 2026-03-05 |
 | 30-35 | v5.0 Audit | 18/18 | Complete | 2026-03-05 |
-| 36. Engine Foundation | 3/3 | Complete    | 2026-03-05 | - |
-| 37. Core Game Loop | 5/5 | Complete    | 2026-03-05 | - |
-| 38. Extended Mechanics | Sim v1.0 | Complete    | 2026-03-05 | 2026-03-05 |
-| 39. Passes and Vault | 3/3 | Complete    | 2026-03-05 | - |
-| 40. Player Archetypes | 4/4 | Complete    | 2026-03-05 | - |
-| 41. Interactive Visualization | 3/3 | Complete    | 2026-03-06 | - |
-| 42. Validation and Contract Parity | Sim v1.0 | Complete    | 2026-03-06 | - |
+| 36-42 | Sim v1.0 | 27/27 | Complete | 2026-03-06 |
+| 43. Governance & Gating Tests | v6.0 | 0/TBD | Not started | - |
+| 44. Affiliate System Tests | v6.0 | 0/TBD | Not started | - |
+| 45. Security & Economic Hardening Tests | v6.0 | 0/TBD | Not started | - |
+| 46. Game Theory Paper Parity | v6.0 | 0/TBD | Not started | - |
+| 47. NatSpec Comment Audit | v6.0 | 0/TBD | Not started | - |
 
-**Cumulative:** 37 phases complete (130 plans), 5 phases planned. 5 milestones shipped, 1 in progress.
+**Cumulative:** 42 phases complete, 5 phases planned. 6 milestones shipped, 1 in progress.
