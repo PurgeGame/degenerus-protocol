@@ -199,6 +199,12 @@ contract DegenerusAffiliate {
     uint16 private constant REWARD_SCALE_FRESH_L4P_BPS = 2_000;
     uint16 private constant REWARD_SCALE_RECYCLED_BPS = 500;
     uint16 private constant BPS_DENOMINATOR = 10_000;
+    uint16 private constant LOOTBOX_TAPER_START_SCORE = 15_000;
+    uint16 private constant LOOTBOX_TAPER_END_SCORE = 25_500;
+    uint16 private constant LOOTBOX_TAPER_MIN_BPS = 5_000;
+    /// @notice Max BURNIE commission an affiliate can earn from a single sender per level.
+    /// @dev At 20% fresh ETH rate, this caps after 2.5 ETH spend from that sender.
+    uint256 private constant MAX_COMMISSION_PER_REFERRER_PER_LEVEL = 0.5 ether;
     bytes32 private constant AFFILIATE_ROLL_TAG = keccak256("affiliate-payout-roll-v1");
 
     /// @notice Sentinel value indicating a player's referral slot is permanently locked.
@@ -241,6 +247,11 @@ contract DegenerusAffiliate {
     /// @dev Private storage; use affiliateTop() view to read.
     ///      Updated in _updateTopAffiliate() when affiliate exceeds current top.
     mapping(uint24 => PlayerScore) private affiliateTopByLevel;
+
+    /// @notice Commission earned by affiliate from specific sender per level.
+    /// @dev Tracks cumulative BURNIE earned: level → affiliate → sender → amount.
+    ///      Used to enforce MAX_COMMISSION_PER_REFERRER_PER_LEVEL cap.
+    mapping(uint24 => mapping(address => mapping(address => uint256))) private affiliateCommissionFromSender;
 
     // =====================================================================
     //                              CONSTRUCTOR
@@ -424,11 +435,13 @@ contract DegenerusAffiliate {
      * +--------------------------------------------------------------------+
      * | 1. Resolve referral code (stored or provided)                      |
      * | 2. Apply reward percentage based on ETH type and level             |
-     * | 3. Calculate rakeback (returned to caller for player credit)       |
-     * | 4. Pay direct affiliate (base - rakeback)                          |
-     * | 5. Pay upline1 (20% of scaled amount)                              |
-     * | 6. Pay upline2 (20% of upline1 share = 4%)                         |
-     * | 7. Quest rewards added on top                                     |
+     * | 3. Update leaderboard (full untapered amount)                      |
+     * | 4. Apply lootbox activity taper if applicable                      |
+     * | 5. Calculate rakeback (returned to caller for player credit)       |
+     * | 6. Pay direct affiliate (base - rakeback)                          |
+     * | 7. Pay upline1 (20% of scaled amount)                              |
+     * | 8. Pay upline2 (20% of upline1 share = 4%)                         |
+     * | 9. Quest rewards added on top                                     |
      * +--------------------------------------------------------------------+
      *
      * REWARD RATES:
@@ -436,11 +449,18 @@ contract DegenerusAffiliate {
      * - Fresh ETH (levels 4+): 20%
      * - Recycled ETH (all levels): 5%
      *
+     * LOOTBOX TAPER (fresh ETH only):
+     * - Activity score < 150: no taper (100% payout)
+     * - Activity score 150-255: linear taper from 100% to 50%
+     * - Activity score >= 255: 50% payout floor
+     * - Leaderboard tracking always uses full untapered amount.
+     *
      * @param amount Base reward amount (18 decimals).
      * @param code Affiliate code provided with the transaction (may be bytes32(0)).
      * @param sender The player making the purchase.
      * @param lvl Current game level (for join tracking and leaderboard).
      * @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
+     * @param lootboxActivityScore Buyer's activity score in BPS for lootbox taper (0 = no taper).
      * @return playerRakeback Amount of rakeback to credit to the player (caller handles minting and batching).
      */
     function payAffiliate(
@@ -448,7 +468,8 @@ contract DegenerusAffiliate {
         bytes32 code,
         address sender,
         uint24 lvl,
-        bool isFreshEth
+        bool isFreshEth,
+        uint16 lootboxActivityScore
     ) external returns (uint256 playerRakeback) {
         // -----------------------------------------------------------------
         // ACCESS CONTROL
@@ -549,17 +570,26 @@ contract DegenerusAffiliate {
             return 0;
         }
 
-        // Calculate rakeback (returned to player) and affiliate share.
-        uint256 affiliateShareBase;
-        uint256 rakebackShare;
-        if (rakebackPct == 0) {
-            affiliateShareBase = scaledAmount;
-        } else {
-            rakebackShare = (scaledAmount * uint256(rakebackPct)) / 100;
-            affiliateShareBase = scaledAmount - rakebackShare;
+        // -----------------------------------------------------------------
+        // PER-REFERRER COMMISSION CAP
+        // -----------------------------------------------------------------
+        // Cap commission from any single sender to 0.5 ETH BURNIE per level.
+        // This prevents a single whale from dominating an affiliate's earnings.
+        {
+            uint256 alreadyEarned = affiliateCommissionFromSender[lvl][affiliateAddr][sender];
+            if (alreadyEarned >= MAX_COMMISSION_PER_REFERRER_PER_LEVEL) {
+                // Cap fully reached - no more commission from this sender this level.
+                emit Affiliate(amount, storedCode, sender);
+                return 0;
+            }
+            uint256 remainingCap = MAX_COMMISSION_PER_REFERRER_PER_LEVEL - alreadyEarned;
+            if (scaledAmount > remainingCap) {
+                scaledAmount = remainingCap;
+            }
+            affiliateCommissionFromSender[lvl][affiliateAddr][sender] = alreadyEarned + scaledAmount;
         }
 
-        // Update leaderboard tracking (uses pre-rakeback base amount, ignores quest bonuses).
+        // Update leaderboard tracking (full amount, before any lootbox taper).
         uint256 newTotal = earned[affiliateAddr] + scaledAmount;
         earned[affiliateAddr] = newTotal;
         emit AffiliateEarningsRecorded(
@@ -572,6 +602,21 @@ contract DegenerusAffiliate {
             isFreshEth
         );
         _updateTopAffiliate(affiliateAddr, newTotal, lvl);
+
+        // Taper payout for high-activity lootbox buyers (leaderboard already recorded full amount).
+        if (lootboxActivityScore >= LOOTBOX_TAPER_START_SCORE) {
+            scaledAmount = _applyLootboxTaper(scaledAmount, lootboxActivityScore);
+        }
+
+        // Calculate rakeback (returned to player) and affiliate share.
+        uint256 affiliateShareBase;
+        uint256 rakebackShare;
+        if (rakebackPct == 0) {
+            affiliateShareBase = scaledAmount;
+        } else {
+            rakebackShare = (scaledAmount * uint256(rakebackPct)) / 100;
+            affiliateShareBase = scaledAmount - rakebackShare;
+        }
 
         playerRakeback = rakebackShare;
         // Upline rewards are paid out but not tracked for leaderboard scores (gas).
@@ -835,6 +880,18 @@ contract DegenerusAffiliate {
             affiliateTopByLevel[lvl] = PlayerScore({player: player, score: score});
             emit AffiliateTopUpdated(lvl, player, score);
         }
+    }
+
+    /// @dev Reduce affiliate payout for high-activity lootbox buyers.
+    ///      Linear taper: 100% at score 15000 → 50% at score 25500+.
+    function _applyLootboxTaper(uint256 amt, uint16 score) private pure returns (uint256) {
+        if (score >= LOOTBOX_TAPER_END_SCORE) {
+            return (amt * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
+        }
+        uint256 excess = uint256(score) - LOOTBOX_TAPER_START_SCORE;
+        uint256 range = uint256(LOOTBOX_TAPER_END_SCORE) - LOOTBOX_TAPER_START_SCORE;
+        uint256 reductionBps = (BPS_DENOMINATOR - LOOTBOX_TAPER_MIN_BPS) * excess / range;
+        return (amt * (BPS_DENOMINATOR - reductionBps)) / BPS_DENOMINATOR;
     }
 
     /// @dev Select one recipient with probability proportional to their amount.

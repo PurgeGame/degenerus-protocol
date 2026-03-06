@@ -746,7 +746,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     affiliateCode,
                     buyer,
                     purchaseLevel,
-                    true
+                    true,
+                    uint16(IDegenerusGame(address(this)).playerActivityScore(buyer))
                 );
             }
             if (lootboxClaimableUsed != 0) {
@@ -755,7 +756,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     affiliateCode,
                     buyer,
                     purchaseLevel,
-                    false
+                    false,
+                    0
                 );
             }
             if (lootboxRakeback != 0) {
@@ -909,7 +911,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     affiliateCode,
                     buyer,
                     targetLevel,
-                    true
+                    true,
+                    0
                 );
                 uint256 recycled = costWei - freshEth;
                 if (recycled != 0) {
@@ -918,7 +921,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                         affiliateCode,
                         buyer,
                         targetLevel,
-                        false
+                        false,
+                        0
                     );
                 }
             } else if (payKind == MintPaymentKind.DirectEth) {
@@ -927,7 +931,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     affiliateCode,
                     buyer,
                     targetLevel,
-                    true
+                    true,
+                    0
                 );
             } else {
                 rakeback += affiliate.payAffiliate(
@@ -935,7 +940,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     affiliateCode,
                     buyer,
                     targetLevel,
-                    false
+                    false,
+                    0
                 );
             }
 
