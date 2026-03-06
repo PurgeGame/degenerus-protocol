@@ -275,7 +275,9 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
 
     /**
      * @notice Execute BAF (Big-Ass Flip) jackpot distribution.
-     * @dev All winners receive 50% ETH / 50% lootbox-style rewards.
+     * @dev Large winners (>=5% of pool) receive 50% ETH / 50% lootbox.
+     *      Small winners (<5% of pool) alternate: even-index gets 100% ETH,
+     *      odd-index gets 100% lootbox (gas-efficient batching).
      *
      * @param poolWei Total ETH for BAF distribution.
      * @param lvl Level triggering the BAF.
@@ -284,12 +286,14 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
      * @return claimableDelta ETH credited to claimable balances.
      * @return lootboxToFuture Lootbox ETH recycled into future pool.
      *
-     * ## Payout Split (All Winners)
+     * ## Payout Split
      *
-     * | Portion | Reward Type                              |
-     * |---------|------------------------------------------|
-     * | 50%     | Claimable ETH (immediate)                |
-     * | 50%     | Lootbox future tickets (claimWhalePass)  |
+     * | Winner Size        | Portion | Reward Type                              |
+     * |--------------------|---------|------------------------------------------|
+     * | Large (>=5% pool)  | 50%     | Claimable ETH (immediate)                |
+     * | Large (>=5% pool)  | 50%     | Lootbox future tickets (claimWhalePass)  |
+     * | Small even-index   | 100%    | Claimable ETH (immediate)                |
+     * | Small odd-index    | 100%    | Lootbox future tickets                   |
      *
      * ## Lootbox Flow (Tiered by Amount)
      *
@@ -481,13 +485,10 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     }
 
     /**
-     * @notice Claim deferred whale pass rewards for the caller.
+     * @notice Claim deferred whale pass rewards for a player.
      * @dev Unified claim function for all large lootbox rewards (>5 ETH).
      *      Awards deterministic tickets based on pre-calculated half-pass count.
      *      Tickets start at current level + 1 to avoid giving tickets for an already-active level.
-     */
-    /**
-     * @notice Claim deferred whale pass rewards for a player.
      * @param player Player address to claim for.
      */
     function claimWhalePass(address player) external {
