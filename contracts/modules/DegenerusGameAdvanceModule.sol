@@ -19,6 +19,11 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 
+/// @dev Vault interface for DGVE ownership check (advanceGame mint-gate bypass).
+interface IDegenerusVaultOwner {
+    function isVaultOwner(address account) external view returns (bool);
+}
+
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.
 contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+======================================================================+
@@ -105,6 +110,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev BURNIE bounty for eligible advanceGame calls (500 BURNIE flip credit).
     uint256 private constant ADVANCE_BOUNTY = PRICE_COIN_UNIT >> 1;
+
+    /// @dev Vault contract for DGVE ownership check (advanceGame mint-gate bypass).
+    IDegenerusVaultOwner private constant vault =
+        IDegenerusVaultOwner(ContractAddresses.VAULT);
 
     /// @notice Advance game state. Called daily to process jackpots, mints, and phase transitions.
     ///         Caller receives ADVANCE_BOUNTY (500 BURNIE) as flip credit.
@@ -528,13 +537,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
 
     /// @dev Enforce "must mint today" gate for advanceGame callers.
-    ///      Skipped for CREATOR.
+    ///      DGVE majority (>50.1%) bypass checked last so normal callers never pay for it.
     function _enforceDailyMintGate(
         address caller,
         uint24 lvl,
         uint48 dailyIdx_
     ) private view {
-        if (caller == ContractAddresses.CREATOR) return;
         uint32 gateIdx = uint32(dailyIdx_);
         if (gateIdx == 0) return;
 
@@ -550,7 +558,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
             bool hasLazyPass = frozenUntilLevel > lvl ||
                 deityPassCount[caller] != 0;
-            if (!hasLazyPass) revert MustMintToday();
+            // DGVE majority bypass — only reached when caller would otherwise revert
+            if (!hasLazyPass && !vault.isVaultOwner(caller))
+                revert MustMintToday();
         }
     }
 
