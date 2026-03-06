@@ -1178,7 +1178,7 @@ contract BurnieCoinflip {
         }
     }
 
-    /// @dev Round level to BAF bracket (nearest 10).
+    /// @dev Round level up to next BAF bracket (multiple of 10).
     function _bafBracketLevel(uint24 lvl) private pure returns (uint24) {
         uint256 bracket = ((uint256(lvl) + 9) / 10) * 10;
         if (bracket > type(uint24).max) return MAX_BAF_BRACKET;
