@@ -311,67 +311,37 @@ No findings. All 5 NatSpec tags verified accurate:
 
 ---
 
-## Summary So Far
-
-| Contract | Status | WRONG | STALE | MISLEADING | CLEAN |
-|---|---|---|---|---|---|
-| DegenerusAdmin.sol | COMPLETE | 0 | 2 | 4 | NO (1 fixed, 5 new) |
-| DegenerusAffiliate.sol | COMPLETE | 3 | 0 | 4 | NO (4 fixed, 3 new) |
-| DegenerusGameEndgameModule.sol | Audited | 0 | 1 | 1 | NO (fixed) |
-| DegenerusGameGameOverModule.sol | Audited | 1 | 0 | 0 | NO (fixed) |
-| DegenerusGameBoonModule.sol | Audited | 0 | 0 | 0 | YES |
-| DegenerusGameMintStreakUtils.sol | Audited | 0 | 0 | 0 | YES |
-| BurnieCoinflip.sol | Audited | 0 | 0 | 1 | NO (fixed) |
-| DegenerusGameAdvanceModule.sol | Audited | 3 | 0 | 1 | NO (all fixed) |
-| DegenerusGameWhaleModule.sol | Audited | 4 | 0 | 4 | NO (all fixed) |
-| DegenerusVault.sol | NOT YET AUDITED | - | - | - | - |
-| DegenerusStonk.sol | NOT YET AUDITED | - | - | - | - |
-| BurnieCoin.sol | NOT YET AUDITED | - | - | - | - |
-| DegenerusGame.sol | NOT YET AUDITED | - | - | - | - |
-| DegenerusQuests.sol | NOT YET AUDITED | - | - | - | - |
-| DegenerusJackpots.sol | NOT YET AUDITED | - | - | - | - |
-| DegenerusDeityPass.sol | NOT YET AUDITED | - | - | - | - |
-| Remaining Modules | NOT YET AUDITED | - | - | - | - |
-
-**Total findings so far: 29** (11 WRONG, 3 STALE, 15 MISLEADING) -- all WRONG/STALE findings FIXED where applicable
-
----
-
-## Next Batches Required
-
-- **Remaining:** DegenerusVault.sol, DegenerusStonk.sol, BurnieCoin.sol, DegenerusGame.sol, DegenerusQuests.sol, DegenerusJackpots.sol, DegenerusDeityPass.sol, remaining modules
-
 ### DegenerusQuests.sol
 
-**Finding 20: WRONG -- PlayerQuestState streak mechanics says "BOTH slots"**
+**Finding 35: WRONG -- PlayerQuestState streak mechanics says "BOTH slots"**
 - **File:** DegenerusQuests.sol, line 236 (struct NatSpec)
 - **Comment:** `streak increments only when BOTH slots complete on a day`
 - **Actual code:** `_questComplete` at line 1422 checks `(mask & QUEST_STATE_STREAK_CREDITED) == 0` and increments streak on the FIRST slot completion of any day, not when both are complete.
 - **Severity:** WRONG
 - **Resolution:** Fixed -- changed to "streak increments on the first quest slot completion of a day (not both)"
 
-**Finding 21: WRONG -- _questComplete reward description says slot 0 pays 0 BURNIE**
+**Finding 36: WRONG -- _questComplete reward description says slot 0 pays 0 BURNIE**
 - **File:** DegenerusQuests.sol, line 1386 (NatSpec)
 - **Comment:** `Slot 1 (random quest) pays a fixed 200 BURNIE` / `Slot 0 (deposit ETH) pays 0 BURNIE`
 - **Actual code:** Line 1432: `slot == 1 ? QUEST_RANDOM_REWARD : QUEST_SLOT0_REWARD` where `QUEST_SLOT0_REWARD = 100 ether`. Slot 0 pays 100 BURNIE, not 0.
 - **Severity:** WRONG
 - **Resolution:** Fixed -- changed to "Slot 0 (deposit ETH) pays a fixed 100 BURNIE"
 
-**Finding 22: WRONG -- handleLootBox target description says "1-3x"**
+**Finding 37: WRONG -- handleLootBox target description says "1-3x"**
 - **File:** DegenerusQuests.sol, line 694 (NatSpec)
 - **Comment:** `Target is calculated as 1-3x current ticket price (scales with game economy).`
 - **Actual code:** Uses `QUEST_LOOTBOX_TARGET_MULTIPLIER = 2` constant -- always 2x, not 1-3x. Capped at `QUEST_ETH_TARGET_CAP = 0.5 ether`.
 - **Severity:** WRONG
 - **Resolution:** Fixed -- changed to "Target is 2x current ticket price, capped at QUEST_ETH_TARGET_CAP."
 
-**Finding 23: WRONG -- handleDecimator says "2x the target of equivalent flip quests"**
+**Finding 38: WRONG -- handleDecimator says "2x the target of equivalent flip quests"**
 - **File:** DegenerusQuests.sol, line 590 (NatSpec)
 - **Comment:** `Decimator quests have 2x the target of equivalent flip quests.`
 - **Actual code:** `_questTargetValue` returns `QUEST_BURNIE_TARGET` for both FLIP and DECIMATOR. They share the same target (2000 BURNIE). No 2x multiplier.
 - **Severity:** WRONG
 - **Resolution:** Fixed -- changed to "Decimator quests share the same BURNIE target as flip quests (2000 BURNIE)."
 
-**Finding 24: MISLEADING -- Duplicate @param player in _questSyncState**
+**Finding 39: MISLEADING -- Duplicate @param player in _questSyncState**
 - **File:** DegenerusQuests.sol, lines 1113-1114 (NatSpec)
 - **Comment:** Two `@param player` tags with different descriptions.
 - **Issue:** Solidity NatSpec doesn't support duplicate @param tags. This could confuse documentation generators.
@@ -395,3 +365,87 @@ No WRONG or STALE findings. All NatSpec comments verified against code:
 - Internal helper functions (_creditOrRefund, _score96, _updateBafTop, etc.) all accurate
 
 **DegenerusJackpots.sol overall: 0 findings -- CLEAN**
+
+---
+
+## Summary So Far
+
+| Contract | Status | WRONG | STALE | MISLEADING | CLEAN |
+|---|---|---|---|---|---|
+| DegenerusAdmin.sol | COMPLETE | 0 | 2 | 4 | NO (1 fixed, 5 new) |
+| DegenerusAffiliate.sol | COMPLETE | 3 | 0 | 4 | NO (4 fixed, 3 new) |
+| DegenerusGameEndgameModule.sol | Audited | 0 | 1 | 1 | NO (fixed) |
+| DegenerusGameGameOverModule.sol | Audited | 1 | 0 | 0 | NO (fixed) |
+| DegenerusGameBoonModule.sol | Audited | 0 | 0 | 0 | YES |
+| DegenerusGameMintStreakUtils.sol | Audited | 0 | 0 | 0 | YES |
+| BurnieCoinflip.sol | Audited | 0 | 0 | 1 | NO (fixed) |
+| DegenerusGameAdvanceModule.sol | Audited | 3 | 0 | 1 | NO (all fixed) |
+| DegenerusGameWhaleModule.sol | Audited | 4 | 0 | 4 | NO (all fixed) |
+| DegenerusVault.sol | NOT YET AUDITED | - | - | - | - |
+| DegenerusStonk.sol | NOT YET AUDITED | - | - | - | - |
+| BurnieCoin.sol | NOT YET AUDITED | - | - | - | - |
+| DegenerusGame.sol | NOT YET AUDITED | - | - | - | - |
+| DegenerusQuests.sol | Audited | 4 | 0 | 1 | NO (fixed) |
+| DegenerusJackpots.sol | Audited | 0 | 0 | 0 | YES |
+| DegenerusDeityPass.sol | NOT YET AUDITED | - | - | - | - |
+| Remaining Modules | NOT YET AUDITED | - | - | - | - |
+
+**Total findings so far: 35** (15 WRONG, 3 STALE, 17 MISLEADING) -- all WRONG/STALE findings FIXED where applicable
+
+---
+
+## Next Batches Required
+
+- **Remaining:** DegenerusVault.sol, DegenerusStonk.sol, BurnieCoin.sol, DegenerusGame.sol, DegenerusDeityPass.sol, remaining modules
+
+---
+
+### DegenerusGameLootboxModule.sol (Plan 04)
+
+**Finding P04-1: WRONG -- EV breakpoint upper threshold says "260%" but code uses 255%**
+- **File:** DegenerusGameLootboxModule.sol, line 467
+- **Severity:** WRONG -- **Resolution:** FIXED to "255%+"
+
+**Finding P04-2: WRONG -- issueDeityBoon says "up to 5 boons per day" but limit is 3**
+- **File:** DegenerusGameLootboxModule.sol, line 742
+- **Severity:** WRONG -- **Resolution:** FIXED to "up to 3 boons per day"
+
+**Finding P04-3: WRONG -- issueDeityBoon @custom:reverts says "slot >= 5" but guard is >= 3**
+- **File:** DegenerusGameLootboxModule.sol, line 748
+- **Severity:** WRONG -- **Resolution:** FIXED to "slot is >= 3"
+
+**Finding P04-4: WRONG -- DeityBoonIssued slot param says "(0-4)" but range is (0-2)**
+- **File:** DegenerusGameLootboxModule.sol, line 167
+- **Severity:** WRONG -- **Resolution:** FIXED to "(0-2)"
+
+**Finding P04-5: WRONG -- Boon type ranges say "1-29" but max type is 31**
+- **File:** DegenerusGameLootboxModule.sol, lines 168, 722, 1754
+- **Severity:** WRONG -- **Resolution:** FIXED all to "(1-31)"
+
+**Finding P04-6: WRONG -- presale param says "2x BURNIE multiplier" but bonus is 62%**
+- **File:** DegenerusGameLootboxModule.sol, line 820
+- **Severity:** WRONG -- **Resolution:** FIXED to "62% bonus BURNIE multiplier"
+
+**DegenerusGameLootboxModule.sol overall: 6 findings (6 WRONG) -- all FIXED**
+
+---
+
+### DegenerusGameDecimatorModule.sol (Plan 04)
+
+All NatSpec verified (748 lines, 130 tags): 50/50 split, auto-rebuy 130%/145%, multiplier cap 200 mints, bucket range 2-12, pro-rata formula, uint192 saturation, packed subbucket layout.
+
+**DegenerusGameDecimatorModule.sol overall: 0 findings -- CLEAN**
+
+---
+
+### DegenerusGameDegeneretteModule.sol (Plan 04)
+
+**Finding P04-7: WRONG -- ROI curve third segment says "255% to 355%" but max is 305%**
+- **File:** DegenerusGameDegeneretteModule.sol, line 1134
+- **Severity:** WRONG -- **Resolution:** FIXED to "255% to 305%"
+
+**Finding P04-8: MISLEADING -- _getBasePayoutBps example says "189 = 1.89x" but 2-match base is 190**
+- **File:** DegenerusGameDegeneretteModule.sol, line 1004
+- **Severity:** MISLEADING -- **Resolution:** FIXED to "190 = 1.90x"
+
+**DegenerusGameDegeneretteModule.sol overall: 2 findings (1 WRONG, 1 MISLEADING) -- both FIXED**
