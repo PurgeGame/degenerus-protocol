@@ -537,7 +537,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
 
     /// @dev Enforce "must mint today" gate for advanceGame callers.
-    ///      DGVE majority (>50.1%) bypass checked last so normal callers never pay for it.
+    ///      Bypass tiers (only checked on revert path, zero cost for normal callers):
+    ///        1. Deity pass or DGVE majority — always bypasses
+    ///        2. Any pass holder (lazy or deity) — bypasses 15+ min after day boundary
+    ///        3. Anyone — bypasses 30+ min after day boundary
     function _enforceDailyMintGate(
         address caller,
         uint24 lvl,
@@ -552,14 +555,27 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         );
         // Allow mints from current day or previous day
         if (lastEthDay + 1 < gateIdx) {
-            uint24 frozenUntilLevel = uint24(
-                (mintData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                    BitPackingLib.MASK_24
-            );
-            bool hasLazyPass = frozenUntilLevel > lvl ||
-                deityPassCount[caller] != 0;
-            // DGVE majority bypass — only reached when caller would otherwise revert
-            if (!hasLazyPass && !vault.isVaultOwner(caller))
+            // Deity pass — always bypasses
+            if (deityPassCount[caller] != 0) return;
+
+            // Time elapsed since today's day boundary (pure arithmetic, no SLOAD)
+            // 82620 = 22:57 UTC = JACKPOT_RESET_TIME
+            uint256 elapsed = (block.timestamp - 82620) % 1 days;
+
+            // Anyone after 30 min
+            if (elapsed >= 30 minutes) return;
+
+            // Any pass holder after 15 min
+            if (elapsed >= 15 minutes) {
+                uint24 frozenUntilLevel = uint24(
+                    (mintData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                        BitPackingLib.MASK_24
+                );
+                if (frozenUntilLevel > lvl) return;
+            }
+
+            // DGVE majority bypass — last resort, external call
+            if (!vault.isVaultOwner(caller))
                 revert MustMintToday();
         }
     }
@@ -1097,6 +1113,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 price = uint128(0.08 ether);
             } else if (lvl == 60) {
                 price = uint128(0.12 ether);
+            } else if (lvl == 90) {
+                price = uint128(0.16 ether);
             } else if (lvl == 100) {
                 price = uint128(0.24 ether);
             } else if (lvl > 100) {
@@ -1107,6 +1125,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     price = uint128(0.08 ether);
                 } else if (cycleOffset == 60) {
                     price = uint128(0.12 ether);
+                } else if (cycleOffset == 90) {
+                    price = uint128(0.16 ether);
                 } else if (cycleOffset == 0) {
                     price = uint128(0.24 ether);
                 }
