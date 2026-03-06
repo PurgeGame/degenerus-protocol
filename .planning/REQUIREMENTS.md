@@ -84,8 +84,8 @@ Requirements for contract hardening milestone. Each maps to roadmap phases.
 - [x] **DOC-01**: Audit all NatSpec `@notice` and `@dev` comments in DegenerusAdmin — every claim verified against code
 - [x] **DOC-02**: Audit all NatSpec comments in DegenerusAffiliate — rates, tiers, caps match implementation
 - [x] **DOC-03**: Audit all NatSpec comments in AdvanceModule — stage descriptions, timing, gates match implementation
-- [ ] **DOC-04**: Audit all NatSpec comments in MintModule — cost formulas, split ratios, quest rewards match implementation
-- [ ] **DOC-05**: Audit all NatSpec comments in JackpotModule — bucket sizes, share splits, carryover logic match implementation
+- [x] **DOC-04**: Audit all NatSpec comments in MintModule — cost formulas, split ratios, quest rewards match implementation
+- [x] **DOC-05**: Audit all NatSpec comments in JackpotModule — bucket sizes, share splits, carryover logic match implementation
 - [x] **DOC-06**: Audit all NatSpec comments in WhaleModule — pricing, eligibility, bonus tiers match implementation
 - [x] **DOC-07**: Audit all NatSpec comments in remaining modules (Endgame, GameOver, Lootbox, Boon, Decimator, Degenerette, MintStreakUtils)
 - [x] **DOC-08**: Audit all NatSpec comments in standalone contracts (BurnieCoin, BurnieCoinflip, DegenerusVault, DegenerusStonk, DegenerusQuests, DegenerusJackpots)
@@ -175,8 +175,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOC-01 | Phase 47 | Complete |
 | DOC-02 | Phase 47 | Complete |
 | DOC-03 | Phase 47 | Complete |
-| DOC-04 | Phase 47 | Pending |
-| DOC-05 | Phase 47 | Pending |
+| DOC-04 | Phase 47 | Complete |
+| DOC-05 | Phase 47 | Complete |
 | DOC-06 | Phase 47 | Complete |
 | DOC-07 | Phase 47 | Complete |
 | DOC-08 | Phase 47 | Complete |
