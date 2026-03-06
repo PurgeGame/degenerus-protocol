@@ -55,6 +55,7 @@ Progress: [██████░░░░] 62%
 | Phase 04 P04 | 7min | 2 tasks | 1 files |
 | Phase 04 P07 | 6min | 1 tasks | 1 files |
 | Phase 47 P05 | 5min | 2 tasks | 4 files |
+| Phase 47 P01 | 7min | 2 tasks | 3 files |
 
 ### Decisions
 
@@ -76,6 +77,8 @@ Progress: [██████░░░░] 62%
 - [Phase 04]: ACCT-08 PASS: All 5 stall recovery paths correctly guarded against premature triggering and correctly preserve claimablePool
 - [Phase 47]: GameOverModule deity refund NatSpec incorrectly claimed separate level-0 full refund -- code treats all levels 0-9 identically at 20 ETH/pass
 - [Phase 47]: BurnieCoinflip payout distribution (5%/90%/5%) and COINFLIP_REWARD_MEAN_BPS=9685 verified accurate against code
+- [Phase 47]: Admin/Affiliate NatSpec: 5 original findings fixed, 8 new minor findings documented (STALE/MISLEADING)
+- [Phase 47]: lootboxActivityScore param labeled "in BPS" but values exceed 10000 -- raw activity scores, not basis points
 
 ### Pending Todos
 
@@ -87,6 +90,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-06T20:14:44Z
-Stopped at: Completed 47-05-PLAN.md
+Last session: 2026-03-06T20:16:09Z
+Stopped at: Completed 47-01-PLAN.md
 Resume file: None
