@@ -89,8 +89,8 @@ Requirements for contract hardening milestone. Each maps to roadmap phases.
 - [x] **DOC-06**: Audit all NatSpec comments in WhaleModule — pricing, eligibility, bonus tiers match implementation
 - [x] **DOC-07**: Audit all NatSpec comments in remaining modules (Endgame, GameOver, Lootbox, Boon, Decimator, Degenerette, MintStreakUtils)
 - [x] **DOC-08**: Audit all NatSpec comments in standalone contracts (BurnieCoin, BurnieCoinflip, DegenerusVault, DegenerusStonk, DegenerusQuests, DegenerusJackpots)
-- [ ] **DOC-09**: Verify all error message descriptions match their actual trigger conditions
-- [ ] **DOC-10**: Verify all event parameter descriptions match actual emitted values
+- [x] **DOC-09**: Verify all error message descriptions match their actual trigger conditions
+- [x] **DOC-10**: Verify all event parameter descriptions match actual emitted values
 
 ## v7 Requirements
 
@@ -180,8 +180,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOC-06 | Phase 47 | Complete |
 | DOC-07 | Phase 47 | Complete |
 | DOC-08 | Phase 47 | Complete |
-| DOC-09 | Phase 47 | Pending |
-| DOC-10 | Phase 47 | Pending |
+| DOC-09 | Phase 47 | Complete |
+| DOC-10 | Phase 47 | Complete |
 
 **Coverage:**
 - v6.0 requirements: 64 total
