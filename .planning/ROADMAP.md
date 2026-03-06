@@ -203,6 +203,6 @@ Phases 43, 44, 45, 46 are parallelizable (independent). Phase 47 depends on 43-4
 | 44. Affiliate System Tests | v6.0 | 0/TBD | Not started | - |
 | 45. Security & Economic Hardening Tests | v6.0 | 0/TBD | Not started | - |
 | 46. Game Theory Paper Parity | v6.0 | 0/TBD | Not started | - |
-| 47. NatSpec Comment Audit | 5/8 | In Progress |  | - |
+| 47. NatSpec Comment Audit | 5/8 | In Progress|  | - |
 
 **Cumulative:** 42 phases complete, 5 phases planned. 6 milestones shipped, 1 in progress.
