@@ -233,7 +233,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Stored per-player in `questPlayerState` mapping.
      *
      * Streak Mechanics:
-     * - `streak` increments only when BOTH slots complete on a day
+     * - `streak` increments on the first quest slot completion of a day (not both)
      * - `baseStreak` snapshots streak at day start for consistent view rendering
      * - `lastActiveDay` tracks any slot completion (not just full completion)
      * - Missing a day (gap > 1 between lastActiveDay and currentDay) resets streak
@@ -587,7 +587,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @notice Handle decimator burns counted in BURNIE base units (18 decimals).
      * @dev Access: COIN or COINFLIP contract only.
-     *      Decimator quests have 2x the target of equivalent flip quests.
+     *      Decimator quests share the same BURNIE target as flip quests (2000 BURNIE).
      * @param player The player who performed the decimator burn.
      * @param burnAmount Amount of BURNIE burned (in base units).
      * @return reward BURNIE tokens earned (in base units, 18 decimals).
@@ -691,7 +691,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Handle loot box purchase progress in ETH value (wei).
      * @dev Access: COIN or COINFLIP contract only.
      *      Loot box quests track cumulative ETH spent on loot boxes.
-     *      Target is calculated as 1-3× current ticket price (scales with game economy).
+     *      Target is 2x current ticket price, capped at QUEST_ETH_TARGET_CAP.
      * @param player The player who purchased the loot box.
      * @param amountWei ETH amount spent on the loot box (in wei).
      * @return reward BURNIE tokens earned (in base units, 18 decimals).
@@ -1110,9 +1110,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *
      *      baseStreak Snapshot:
      *      - Captures streak at start of day for consistent view rendering
-     * @param player Player address for event emission.
      * @param state Storage reference to player's quest state.
-     * @param player Player address for streak shield lookup.
+     * @param player Player address for event emission and streak shield lookup.
      * @param currentDay The current quest day.
      */
     function _questSyncState(PlayerQuestState storage state, address player, uint48 currentDay) private {
@@ -1382,8 +1381,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - lastCompletedDay updates on that first completion
      *
      *      Reward Calculation:
+     *      - Slot 0 (deposit ETH) pays a fixed 100 BURNIE
      *      - Slot 1 (random quest) pays a fixed 200 BURNIE
-     *      - Slot 0 (deposit ETH) pays 0 BURNIE
      * @param state Storage reference to player's quest state.
      * @param slot The slot index being completed.
      * @param quest The quest being completed.
