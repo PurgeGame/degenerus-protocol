@@ -471,6 +471,7 @@ All 3 reentrancy-no-eth findings involve state writes after external calls to tr
 | Is handleFinalSweep safe from reentrancy? | **YES** | No mutable state to protect (reads balances, sends excess). Recipients are trusted protocol contracts (VAULT, DGNRS). Theoretical recursive call converges to zero. |
 | Are payout helpers safe from double-callback? | **YES** | All CEI mutations occur before `_payoutWithStethFallback`/`_payoutWithEthFallback` is called. Multiple callbacks within payout helpers do not provide additional attack surface. stETH transfer does not trigger recipient callbacks. |
 | Does Slither detect any ETH reentrancy? | **NO** | 0 reentrancy-eth findings. 3 reentrancy-no-eth findings, all involving trusted protocol contracts (false positives). |
+| Is refundDeityPass safe from reentrancy? | **N/A (REMOVED)** | Function removed from codebase. Storage variable `deityPassRefundable` retained for layout but unused. GO-F01 double-refund vector eliminated. |
 
 ### Note on refundDeityPass
 
