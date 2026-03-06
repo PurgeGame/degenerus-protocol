@@ -13,6 +13,11 @@ interface IStETH {
     function approve(address spender, uint256 amount) external returns (bool);
 }
 
+/// @dev Admin interface for VRF shutdown during final sweep.
+interface IDegenerusAdminShutdown {
+    function shutdownVrf() external;
+}
+
 /**
  * @title DegenerusGameGameOverModule
  * @notice Handles game over logic including jackpot distribution and final sweeps.
@@ -24,6 +29,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
     /// @notice DGNRS token contract for fund deposits
     IDegenerusStonk internal constant dgnrs = IDegenerusStonk(ContractAddresses.DGNRS);
+
+    /// @notice Admin contract for VRF shutdown
+    IDegenerusAdminShutdown private constant admin =
+        IDegenerusAdminShutdown(ContractAddresses.ADMIN);
 
     /// @notice Fixed refund amount per deity pass for early game over (levels 0-9)
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
@@ -144,10 +153,14 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @notice Final sweep of all remaining funds to vault after 30 days post-gameover.
     /// @dev Preserves claimablePool for player withdrawals. Only sweeps excess funds.
     ///      Funds are split 50/50 between vault and DGNRS contract.
+    ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts E When ETH or stETH transfer fails
     function handleFinalSweep() external {
         if (gameOverTime == 0) return; // Game not over yet
         if (block.timestamp < uint256(gameOverTime) + 30 days) return; // Too early
+
+        // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
+        try admin.shutdownVrf() {} catch {}
 
         uint256 ethBal = address(this).balance;
         uint256 stBal = steth.balanceOf(address(this));
