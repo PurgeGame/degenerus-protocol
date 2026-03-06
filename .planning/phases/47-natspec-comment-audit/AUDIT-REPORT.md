@@ -1,9 +1,9 @@
 # NatSpec Comment Audit Report
 
-## Status: IN PROGRESS (Plans 01-02 + 05 complete)
+## Status: IN PROGRESS (Plans 01-02 + 05-06 complete)
 
-Audited so far: DegenerusAdmin.sol, DegenerusAffiliate.sol, DegenerusQuests.sol, DegenerusJackpots.sol, DegenerusGameLootboxModule.sol, DegenerusGameDecimatorModule.sol, DegenerusGameDegeneretteModule.sol, DegenerusGameEndgameModule.sol, DegenerusGameGameOverModule.sol, DegenerusGameBoonModule.sol, DegenerusGameMintStreakUtils.sol, BurnieCoinflip.sol, DegenerusGameAdvanceModule.sol, DegenerusGameWhaleModule.sol
-Remaining: DegenerusVault, DegenerusStonk, BurnieCoin, DegenerusGame, DegenerusDeityPass, remaining modules
+Audited so far: DegenerusAdmin.sol, DegenerusAffiliate.sol, DegenerusQuests.sol, DegenerusJackpots.sol, DegenerusGameLootboxModule.sol, DegenerusGameDecimatorModule.sol, DegenerusGameDegeneretteModule.sol, DegenerusGameEndgameModule.sol, DegenerusGameGameOverModule.sol, DegenerusGameBoonModule.sol, DegenerusGameMintStreakUtils.sol, BurnieCoinflip.sol, DegenerusGameAdvanceModule.sol, DegenerusGameWhaleModule.sol, BurnieCoin.sol, DegenerusVault.sol, DegenerusStonk.sol
+Remaining: DegenerusGame, DegenerusDeityPass, remaining modules
 
 ---
 
@@ -368,6 +368,64 @@ No WRONG or STALE findings. All NatSpec comments verified against code:
 
 ---
 
+
+### BurnieCoin.sol
+
+**Finding 36: STALE -- onlyTrustedContracts NatSpec references "color registry"**
+- **File:** BurnieCoin.sol, line 630
+- **Comment:** `Restricts access to game, affiliate, or color registry contracts.`
+- **Actual code (lines 634-638):** Only checks GAME and AFFILIATE. No color registry reference exists in the contract.
+- **Resolution:** FIXED -- Removed "or color registry" from comment.
+- **Severity:** STALE (FIXED)
+
+**Key verifications (all CLEAN):**
+- Supply invariant `totalSupply + vaultAllowance = supplyIncUncirculated()` verified across all 8 mutation paths
+- Mint/burn mechanics, vault escrow, coinflip integration, quest integration, decimator -- all NatSpec verified correct
+- Access control hierarchy accurately documented
+
+**BurnieCoin.sol overall: 1 finding (0 WRONG, 1 STALE fixed, 0 MISLEADING)**
+
+---
+
+### DegenerusVault.sol
+
+**Finding 37: WRONG -- gamePurchaseDeityPassFromBoon @param priceWei example values**
+- **File:** DegenerusVault.sol, line 529
+- **Comment:** `@param priceWei Expected price (15/25/50 ETH)`
+- **Actual behavior:** Deity pass price formula is 24 + T(n) ETH where T(n) = n*(n+1)/2. Values 15/25/50 are not valid deity pass prices.
+- **Resolution:** FIXED -- Updated to describe actual formula.
+- **Severity:** WRONG (FIXED)
+
+**Finding 38: STALE -- orphaned Jackpots contract NatSpec comment**
+- **File:** DegenerusVault.sol, line 370
+- **Comment:** `@dev Jackpots contract for decimator claims`
+- **Actual code:** No jackpots contract variable follows this comment. The jackpots wiring was removed but the comment survived.
+- **Resolution:** FIXED -- Removed orphaned comment.
+- **Severity:** STALE (FIXED)
+
+**Key verifications (all CLEAN):**
+- Share math formulas match code exactly
+- onlyVaultOwner >50.1% check (balance*1000 > supply*501) NatSpec accurate
+- stETH integration, refill mechanism, deposit flow, two share classes -- all NatSpec verified correct
+
+**DegenerusVault.sol overall: 2 findings (1 WRONG fixed, 1 STALE fixed, 0 MISLEADING)**
+
+---
+
+### DegenerusStonk.sol
+
+No NatSpec findings. All @notice, @dev, @param, @return tags verified accurate.
+
+**Key verifications (all CLEAN):**
+- Pool BPS allocations (20% creator + 80% pools = 100%) match constants
+- BURNIE_ETH_BUY_BPS = 7000 (70%), QUEST_CONTRIBUTION_BPS = 5 (0.05%) match usage
+- Lock/unlock, burn-to-extract, trusted spender bypass -- all NatSpec accurate
+- Note: `ethReserve` state variable (line 227) declared but unused (code observation, not NatSpec error)
+
+**DegenerusStonk.sol overall: 0 findings -- CLEAN**
+
+---
+
 ## Summary So Far
 
 | Contract | Status | WRONG | STALE | MISLEADING | CLEAN |
@@ -381,22 +439,22 @@ No WRONG or STALE findings. All NatSpec comments verified against code:
 | BurnieCoinflip.sol | Audited | 0 | 0 | 1 | NO (fixed) |
 | DegenerusGameAdvanceModule.sol | Audited | 3 | 0 | 1 | NO (all fixed) |
 | DegenerusGameWhaleModule.sol | Audited | 4 | 0 | 4 | NO (all fixed) |
-| DegenerusVault.sol | NOT YET AUDITED | - | - | - | - |
-| DegenerusStonk.sol | NOT YET AUDITED | - | - | - | - |
-| BurnieCoin.sol | NOT YET AUDITED | - | - | - | - |
+| DegenerusVault.sol | Audited | 1 (fixed) | 1 (fixed) | 0 | YES |
+| DegenerusStonk.sol | Audited | 0 | 0 | 0 | YES |
+| BurnieCoin.sol | Audited | 0 | 1 (fixed) | 0 | YES |
 | DegenerusGame.sol | NOT YET AUDITED | - | - | - | - |
 | DegenerusQuests.sol | Audited | 4 | 0 | 1 | NO (fixed) |
 | DegenerusJackpots.sol | Audited | 0 | 0 | 0 | YES |
 | DegenerusDeityPass.sol | NOT YET AUDITED | - | - | - | - |
 | Remaining Modules | NOT YET AUDITED | - | - | - | - |
 
-**Total findings so far: 35** (15 WRONG, 3 STALE, 17 MISLEADING) -- all WRONG/STALE findings FIXED where applicable
+**Total findings so far: 38** (16 WRONG [1 new fixed], 5 STALE [2 new fixed], 17 MISLEADING) -- all WRONG/STALE findings FIXED where applicable
 
 ---
 
 ## Next Batches Required
 
-- **Remaining:** DegenerusVault.sol, DegenerusStonk.sol, BurnieCoin.sol, DegenerusGame.sol, DegenerusDeityPass.sol, remaining modules
+- **Remaining:** DegenerusGame.sol, DegenerusDeityPass.sol, remaining modules
 
 ---
 
