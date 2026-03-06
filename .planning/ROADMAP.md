@@ -20,7 +20,7 @@
 - [x] Phase 3a: Core ETH Flow Modules (7/7 plans) — completed 2026-03-01
 - [x] Phase 3b: VRF-Dependent Modules (6/6 plans) — completed 2026-03-01
 - [x] Phase 3c: Supporting Mechanics Modules (6/6 plans) — completed 2026-03-01
-- [~] Phase 4: ETH and Token Accounting Integrity (1/9 plans) — INCOMPLETE (closed by Phase 8 in v2.0)
+- [x] Phase 4: ETH and Token Accounting Integrity (9/9 plans) — completed 2026-03-06
 - [x] Phase 5: Economic Attack Surface (7/7 plans) — completed 2026-03-04
 - [x] Phase 6: Access Control and Privilege Model (7/7 plans) — completed 2026-03-04
 - [x] Phase 7: Cross-Contract Integration Synthesis (5/5 plans) — completed 2026-03-04
