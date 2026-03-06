@@ -105,7 +105,7 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
 - [x] **Phase 38: Extended Mechanics** - Lootboxes (boost system), BURNIE/FLIP economics (creditFlip vs creditCoin), Degenerette (match-based, 3 currencies), full affiliate system (3-tier, 3 payout modes, taper, leaderboard, top reward), ETH claims, game-over, afKing, future tickets, DGNRS day-5 reward (completed 2026-03-05)
 - [x] **Phase 39: Passes and Vault** - Whale/lazy/deity pass purchasing, deity virtual jackpot entries, pass bonuses, deity boons, game-over refunds, stETH yield, vault share math (DGVB/DGVE), DGNRS burn-to-extract (completed 2026-03-05)
 - [x] **Phase 40: Player Archetypes** - Degen, EV Maximizer, Whale, Hybrid behavioral profiles with Affiliate trait, budget constraints, decision-making logic (completed 2026-03-05)
-- [ ] **Phase 41: Interactive Visualization** - React/D3 dashboard with wealth/pool/BURNIE/activity charts, drill-downs, parameter controls, scenario comparison, export
+- [x] **Phase 41: Interactive Visualization** - React/D3 dashboard with wealth/pool/BURNIE/activity charts, drill-downs, parameter controls, scenario comparison, export (completed 2026-03-06)
 - [ ] **Phase 42: Validation and Contract Parity** - Vitest formula tests, price/BPS/activity/EV/pass/vault/Degenerette/coinflip comparison suites, Hardhat cross-validation
 
 ## Phase Details
@@ -207,7 +207,7 @@ Plans:
   3. User can adjust simulation parameters (player count, level count, seed, archetype mix) in-browser and re-run the simulation live
   4. User can run two configurations side-by-side with overlaid comparison charts
   5. Charts export as PNG/SVG for paper figures, and the dashboard embeds in the website alongside the game theory paper (standalone component or iframe-ready)
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 41-01-PLAN.md — Vite+React scaffold, simulation hook, parameter controls, dashboard shell
 - [ ] 41-02-PLAN.md — Four core D3 charts (wealth, pools, BURNIE, activity scores)
@@ -248,7 +248,7 @@ Phases execute in numeric order: 36 -> 37 -> 38 (parallel with 39) -> 40 -> 41 -
 | 38. Extended Mechanics | Sim v1.0 | Complete    | 2026-03-05 | 2026-03-05 |
 | 39. Passes and Vault | 3/3 | Complete    | 2026-03-05 | - |
 | 40. Player Archetypes | 4/4 | Complete    | 2026-03-05 | - |
-| 41. Interactive Visualization | 2/3 | In Progress|  | - |
+| 41. Interactive Visualization | 3/3 | Complete   | 2026-03-06 | - |
 | 42. Validation and Contract Parity | Sim v1.0 | 0/3 | Not started | - |
 
 **Cumulative:** 37 phases complete (130 plans), 5 phases planned. 5 milestones shipped, 1 in progress.

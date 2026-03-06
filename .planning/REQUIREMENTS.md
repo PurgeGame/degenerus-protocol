@@ -90,12 +90,12 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **VIZ-03**: Prize pool chart — nextPool, currentPool, futurePool, claimablePool over time
 - [x] **VIZ-04**: BURNIE economics chart — supply, implied price (ETH-equivalent per BURNIE via ticket price ratio), coinflip volume
 - [x] **VIZ-05**: Activity score distribution — histogram of player scores over time, archetype-colored
-- [ ] **VIZ-06**: Per-player drill-down — click player to see their strategy decisions, outcomes, streak history, pass ownership
+- [x] **VIZ-06**: Per-player drill-down — click player to see their strategy decisions, outcomes, streak history, pass ownership
 - [x] **VIZ-07**: Configurable simulation parameters in-browser — player count, level count, seed, archetype mix sliders
 - [x] **VIZ-08**: Re-run simulation live in browser with parameter changes
-- [ ] **VIZ-09**: Scenario comparison — run two configs side-by-side and overlay charts
+- [x] **VIZ-09**: Scenario comparison — run two configs side-by-side and overlay charts
 - [x] **VIZ-10**: Embeddable in website alongside the game theory paper (standalone React component or iframe-ready)
-- [ ] **VIZ-11**: Export charts as PNG/SVG for paper figures
+- [x] **VIZ-11**: Export charts as PNG/SVG for paper figures
 
 ### Validation
 
@@ -207,12 +207,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIZ-03 | Phase 41 | Complete |
 | VIZ-04 | Phase 41 | Complete |
 | VIZ-05 | Phase 41 | Complete |
-| VIZ-06 | Phase 41 | Pending |
+| VIZ-06 | Phase 41 | Complete |
 | VIZ-07 | Phase 41 | Complete |
 | VIZ-08 | Phase 41 | Complete |
-| VIZ-09 | Phase 41 | Pending |
+| VIZ-09 | Phase 41 | Complete |
 | VIZ-10 | Phase 41 | Complete |
-| VIZ-11 | Phase 41 | Pending |
+| VIZ-11 | Phase 41 | Complete |
 | VAL-01 | Phase 42 | Pending |
 | VAL-02 | Phase 42 | Pending |
 | VAL-03 | Phase 42 | Pending |
