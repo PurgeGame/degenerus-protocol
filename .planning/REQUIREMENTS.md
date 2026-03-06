@@ -81,8 +81,8 @@ Requirements for contract hardening milestone. Each maps to roadmap phases.
 
 ### NatSpec Comment Accuracy (DOC)
 
-- [ ] **DOC-01**: Audit all NatSpec `@notice` and `@dev` comments in DegenerusAdmin — every claim verified against code
-- [ ] **DOC-02**: Audit all NatSpec comments in DegenerusAffiliate — rates, tiers, caps match implementation
+- [x] **DOC-01**: Audit all NatSpec `@notice` and `@dev` comments in DegenerusAdmin — every claim verified against code
+- [x] **DOC-02**: Audit all NatSpec comments in DegenerusAffiliate — rates, tiers, caps match implementation
 - [ ] **DOC-03**: Audit all NatSpec comments in AdvanceModule — stage descriptions, timing, gates match implementation
 - [ ] **DOC-04**: Audit all NatSpec comments in MintModule — cost formulas, split ratios, quest rewards match implementation
 - [ ] **DOC-05**: Audit all NatSpec comments in JackpotModule — bucket sizes, share splits, carryover logic match implementation
@@ -172,8 +172,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PAR-16 | Phase 46 | Pending |
 | PAR-17 | Phase 46 | Pending |
 | PAR-18 | Phase 46 | Pending |
-| DOC-01 | Phase 47 | Pending |
-| DOC-02 | Phase 47 | Pending |
+| DOC-01 | Phase 47 | Complete |
+| DOC-02 | Phase 47 | Complete |
 | DOC-03 | Phase 47 | Pending |
 | DOC-04 | Phase 47 | Pending |
 | DOC-05 | Phase 47 | Pending |
