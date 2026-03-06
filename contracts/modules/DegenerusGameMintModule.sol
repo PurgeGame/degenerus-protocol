@@ -167,14 +167,14 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
      *
      * ## Activity Score State Updates
      *
-     * - `mintPacked_[player]` updated with level count, streak, whale bonuses, milestones
+     * - `mintPacked_[player]` updated with level count, whale bonuses, milestones
      * - Only writes to storage if data actually changed
      *
      * ## Level Transition Logic
      *
      * - Same level: Just update units
      * - New level with <4 units: Only track units, don't count as "minted"
-     * - New level with ≥4 units: Update streak and total
+     * - New level with ≥4 units: Update level count total
      * - Century boundary (level 100, 200...): Total continues to accumulate
      */
     function recordMintData(
@@ -252,7 +252,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint24 frozenUntilLevel = uint24((prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24);
         bool isFrozen = frozenUntilLevel > 0 && lvl < frozenUntilLevel;
 
-        // If frozen, skip updating total and streak (they're pre-set)
+        // If frozen, skip updating total (it's pre-set by whale bundle)
         // If we've reached the frozen level, clear the flag and resume normal tracking
         if (frozenUntilLevel > 0 && lvl >= frozenUntilLevel) {
             // Clear frozen flag and whale bundle type - resume normal tracking from here

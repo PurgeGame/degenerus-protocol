@@ -270,12 +270,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///
     ///      EARLY-BURN PATH (isDaily=false):
     ///      - Triggered during purchase phase when early burns occur.
-    ///      - Pays BURNIE only (0.5% of coin-equivalent prize pool target).
-    ///      - 1/3 chance: Awards BURNIE to random future ticket holders:
-    ///        * 75% of budget to levels +2 to +5 (up to 40 winners per level)
-    ///        * 25% of budget to levels +6 to +50 (up to 2 winners per level)
-    ///      - 2/3 chance: Awards BURNIE to trait-based winners (normal path).
-    ///      - No ETH bonuses from reward/futurePool during purchase phase.
+    ///      - Rolls random (non-burn-weighted) winning traits and runs trait-based jackpot.
+    ///      - Every 3rd purchase day (day 3, 6, 9, ...): adds a 1% futurePrizePool ETH slice
+    ///        with 75% converted to lootbox tickets and remainder distributed as ETH.
+    ///      - On non-ETH days: BURNIE-only distribution via _executeJackpot.
+    ///      - Rolls daily quest at the end.
     ///
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
     /// @dev Called via IDegenerusGame(address(this)) from EndgameModule and GameOverModule.
@@ -872,8 +871,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///
     ///      FLOW:
     ///      1. Merge nextPrizePool into currentPrizePool.
-    ///      2. Rebalance between future/current based on elapsed time (primary), ratio (secondary), and RNG (±1%),
-    ///         unless a rare 1-in-1e15 dump moves 90% of future into current. Level 100 uses a special keep roll.
+    ///      2. On x00 levels: roll 5-dice keep percentage (0-100%, avg 50%) to move future->current.
+    ///         On other levels: 1-in-1e15 chance to dump 90% of future into current.
     ///      3. Credit coinflip and distribute yield surplus.
     ///
     ///      The entire currentPrizePool stays available for daily jackpots
@@ -1909,8 +1908,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///
     ///      GAS BUDGETING:
     ///      - Each ticket entry requires ~2 SSTOREs (trait ticket + count update).
-    ///      - Budget defaults to WRITES_BUDGET_SAFE (780) if not specified.
-    ///      - Minimum budget is WRITES_BUDGET_MIN (8) to ensure progress.
+    ///      - Budget defaults to WRITES_BUDGET_SAFE (550).
     ///
     /// @param lvl Level whose tickets should be processed.
     /// @return finished True if all tickets for this level have been fully processed.
