@@ -1,22 +1,23 @@
-# Degenerus Protocol Security Audit
+# Degenerus Protocol — Off-Chain Simulation Engine
 
 ## What This Is
 
-A comprehensive security review of the Degenerus Protocol smart contract suite — 22 deployable contracts and 10 delegatecall game modules implementing a multi-level ticket purchasing game with VRF-based randomness, prize pools, lootboxes, whale mechanics, and ERC20/ERC721 tokens. Five milestone audits: v1.0 (module-by-module audit), v2.0 (adversarial Code4rena-prep audit), v3.0 (invariant fuzzing + blind adversarial hardening), v4.0 (10-agent blind adversarial stress test + game theory verification), and v5.0 (novel zero-day attack surface audit with automated tooling). The deliverable is a battle-tested protocol ready for Code4rena contest.
+A standalone TypeScript simulation engine with full logic parity to the Degenerus Protocol Solidity contracts. Replicates all game mechanics (ticket purchasing, jackpots, whale/lazy/deity passes, lootboxes, quest streaks, BURNIE economics, Degenerette, vault yield) in pure math — no Hardhat dependency, runs in browser. Player profiles map to the 5 archetypes from the game theory paper (Degen, EV Maximizer, Whale, Hybrid + Affiliate as composable trait). Includes an interactive React/D3 visualization dashboard for the website and academic paper. Code lives at `PurgeGame/simulator/`, planning managed from `degenerus-contracts/.planning/`.
 
-## Milestone: v5.0 Novel Zero-Day Attack Surface Audit (COMPLETE)
+## Current Milestone: v1.0 Off-Chain Simulation Engine
 
-**Goal:** Hunt for creative, unconventional, and composition-based vulnerabilities that 10 prior audit agents missed — validated by Foundry fuzzing, Slither static analysis, and Halmos symbolic verification.
+**Goal:** Build a presentation-quality simulation engine that faithfully replicates Degenerus Protocol mechanics, with player profiles from the game theory paper and interactive visualization for the website.
 
-**Result:** 0 Critical, 0 High, 0 Medium, 2 QA/Info. 36 requirements covered. Protocol remains LOW RISK.
+**Target features:**
+- Pure TypeScript simulation engine with full logic parity to all Solidity game mechanics
+- 4 player archetypes (Degen, EV Maximizer, Whale, Hybrid) + Affiliate as composable trait on any archetype
+- Budget constraints and bankroll risk modeling per Section 3.6 of the theory paper
+- Interactive React/D3 dashboard (player wealth, pool sizes, BURNIE price, activity scores over time)
+- Configurable simulation parameters (player count, level count, seed, archetype mix)
 
-**Delivered:**
-- Foundry deep fuzzing (10K+ runs), Slither full triage (630 findings, 0 true positives), Halmos symbolic verification (24 check_ properties)
-- Cross-contract composition analysis: 31 delegatecall sites, 45 module interaction pairs, zero composition bugs
-- Precision audit: all 222 division operations classified, zero-rounding impossible, dust extraction infeasible
-- Temporal/lifecycle/EVM-level: 5 timeout boundaries, 224 unchecked blocks, 9 assembly blocks, all lifecycle edges verified
-- Economic re-examination: vault donation attack re-derived safe, 7 price surfaces analyzed, stETH reentrancy impossible
-- C4A-format synthesis with honest confidence assessment
+## Previous: Security Audit (v1.0-v5.0 COMPLETE)
+
+Five milestone audits delivered: 0 Critical, 0 High, 0 Medium, 6 Low (acknowledged), 46 QA/Info. Protocol assessed LOW RISK. 121 plans across 35 phases. See `.planning/MILESTONES.md` for details.
 
 ## Milestone: v4.0 Pre-C4A Adversarial Stress Test (COMPLETE)
 
@@ -90,7 +91,7 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 
 ### Active
 
-(No active requirements — audit complete. Next milestone TBD.)
+(Defined in REQUIREMENTS.md — v1.0 simulation engine milestone)
 
 ### Out of Scope
 
@@ -102,16 +103,13 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 
 ## Context
 
-### Current State (after v5.0)
+### Current State (v1.0 Simulation Engine)
 
-- v1.0-v5.0 audit complete: 121 plans executed across 35 phases
-- All requirements satisfied: 62 (v1.0) + 48 (v2.0) + 18 (v3.0) + 55 (v4.0) + 36 (v5.0)
-- ~59,137 lines Solidity across 22 contracts + 10 modules + test infrastructure
-- Cumulative findings: 0 Critical, 0 High, 0 Medium, 6 Low (all acknowledged), 46 QA/Info
-- 884 Hardhat tests + 48 Foundry invariant + 97 PoC + ~30 precision/composition fuzz tests, 0 failures
-- 3 automated tools cross-referenced: Foundry fuzzing, Slither static analysis, Halmos symbolic verification
-- Protocol assessed LOW RISK across 5 milestone audits — C4A-ready
-- Same-auditor bias named as primary limitation; external audit recommended
+- Pivoting from security audit to simulation engine development
+- Source of truth: 22 Solidity contracts + 10 delegatecall modules (audited, frozen)
+- Existing simulators (econ/sim TS, localtest/sim JS) have formula divergences — starting fresh
+- Game theory paper (website/theory/index.html) defines 5 player archetypes + economics
+- Target output: PurgeGame/simulator/ — standalone TS + React/D3 dashboard
 
 ### Technical Stack
 
@@ -156,4 +154,4 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 | v5.0: Same-auditor bias as primary limitation | Honest confidence requires naming weaknesses | ✓ Good — builds trust with C4A judges |
 
 ---
-*Last updated: 2026-03-05 after v5.0 milestone completion*
+*Last updated: 2026-03-05 after v1.0 simulation engine milestone start*
