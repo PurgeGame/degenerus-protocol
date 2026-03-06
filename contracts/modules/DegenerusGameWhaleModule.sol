@@ -165,20 +165,20 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /**
      * @notice Purchase a 100-level whale bundle.
-     * @dev Available at levels 0-3, x49/x99, or any level with a valid whale boon. Tickets always start at x1.
+     * @dev Available at any level. Tickets always start at x1.
      *      - Boosts levelCount by delta between current freeze and new freeze (max 100, no double dipping).
      *      - Queues 40 × quantity bonus tickets/lvl for levels passLevel-10, 2 × quantity standard tickets/lvl for the rest.
      *      - Lootbox: 20% of price (presale), 10% (post-presale).
      *      - Distributes DGNRS rewards to buyer and affiliates.
      *
-     *      Price: 2.4 ETH at levels 0-3, 4 ETH at x49/x99, 10/25/50% off standard with boon.
+     *      Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+, 10/25/50% off standard with boon.
      *
      *      Fund distribution:
-     *      - Pre-game (level 0): 50% next pool, 50% future pool
+     *      - Pre-game (level 0): 30% next pool, 70% future pool
      *      - Post-game (level > 0): 5% next pool, 95% future pool
      * @param buyer The address receiving the bundle.
      * @param quantity Number of bundles to purchase (1-100).
-     * @custom:reverts E When not at level 0-3 or x49/x99 and no valid boon exists.
+     * @custom:reverts E When gameOver is true.
      * @custom:reverts E When quantity is 0 or exceeds 100.
      * @custom:reverts E When msg.value does not match required price.
      */
@@ -304,15 +304,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /**
      * @notice Purchase a 10-level lazy pass (direct in-game activation).
-     * @dev Available at levels 0-3 or x9 (9, 19, 29...), or with a valid lazy pass boon.
-     *      Can renew when <7 levels remain on current pass freeze.
+     * @dev Available at levels 0-2 or x9 (9, 19, 29...), or with a valid lazy pass boon.
+     *      Can renew when 7 or fewer levels remain on current pass freeze.
      *      - Grants 4 tickets per level for the next 10 levels (starting at current level + 1).
      *      - Applies the standard 10-level stat boost via _activate10LevelPass.
-     *      - Price equals sum of per-level ticket prices across the 10-level window.
+     *      - Price: flat 0.24 ETH at levels 0-2 (excess buys bonus tickets), sum of per-level
+     *        ticket prices across the 10-level window at levels 3+.
      *      - Awards a lootbox equal to 20% (presale) or 10% (post-presale) of pass value.
-     *      - Boon purchases apply a 10/15/25% discount and always include a 10% lootbox.
+     *      - Boon purchases apply a discount (default 10%) to the payment amount.
      * @param buyer The address receiving the pass.
-     * @custom:reverts E When level is not 0-3 or x9 and no boon, pass has 7+ levels remaining, or msg.value is incorrect.
+     * @custom:reverts E When level is not 0-2 or x9 and no boon, pass has 8+ levels remaining, or msg.value is incorrect.
      */
     function purchaseLazyPass(address buyer) external payable {
         _purchaseLazyPass(buyer);
@@ -437,7 +438,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /**
      * @notice Purchase a deity pass for a specific symbol.
-     * @dev Available at any time. One per player, up to 32 total (one per symbol).
+     * @dev Available before gameOver. One per player, up to 32 total (one per symbol).
      *      Buyer chooses from available symbols (0-31). Virtual trait-targeted jackpot
      *      entries are computed at resolution time — no explicit ticket queuing needed.
      *
@@ -780,7 +781,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /// @dev Apply any active lootbox boost boon to the purchase amount.
     ///      Checks boosts in order: 25% > 15% > 5%. Consumes the first valid boost found.
-    ///      Boost is capped at LOOTBOX_BOOST_MAX_VALUE (10 ETH) and expires after 48 hours.
+    ///      Boost is capped at LOOTBOX_BOOST_MAX_VALUE (10 ETH) and expires after 2 game days.
     /// @param player The player whose boost to check and consume.
     /// @param day The current day index for event emission.
     /// @param amount The base lootbox amount before boost.
