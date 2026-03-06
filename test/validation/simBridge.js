@@ -40,32 +40,52 @@ export function priceForLevel(level) {
 
 const BPS_BASE = 10_000n;
 
-const TICKET_NEXT_BPS = 9000n;
-const TICKET_FUTURE_BPS = 1000n;
-const LOOTBOX_NEXT_BPS = 1000n;
-const LOOTBOX_FUTURE_BPS = 9000n;
+const PURCHASE_TO_FUTURE_BPS = 1000n;
+
+// Post-presale lootbox splits
+const LOOTBOX_SPLIT_FUTURE_BPS = 9000n;
+const LOOTBOX_SPLIT_NEXT_BPS = 1000n;
+
+// Presale lootbox splits
+const LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 4000n;
+const LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 4000n;
+const LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000n;
 
 /**
  * Split ticket payment amount into next/future pool shares.
+ * Matches DegenerusGame.recordMint(): future first via BPS, next = remainder.
  * @param {bigint} amount - Total payment in wei
  * @returns {{ nextPool: bigint, futurePool: bigint }}
  */
 export function routeTicketSplit(amount) {
+  const futurePool = (amount * PURCHASE_TO_FUTURE_BPS) / BPS_BASE;
   return {
-    nextPool: (amount * TICKET_NEXT_BPS) / BPS_BASE,
-    futurePool: (amount * TICKET_FUTURE_BPS) / BPS_BASE,
+    nextPool: amount - futurePool,
+    futurePool,
   };
 }
 
 /**
- * Split lootbox payment amount into next/future pool shares.
+ * Split lootbox payment amount into pool shares.
+ * Matches DegenerusGameMintModule._purchaseFor(): BPS splits with remainder to future.
  * @param {bigint} amount - Total payment in wei
- * @returns {{ nextPool: bigint, futurePool: bigint }}
+ * @param {boolean} [presale=false] - Whether lootbox presale is active
+ * @returns {{ nextPool: bigint, futurePool: bigint, vaultShare: bigint }}
  */
-export function routeLootboxSplit(amount) {
+export function routeLootboxSplit(amount, presale = false) {
+  const futureBps = presale ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS : LOOTBOX_SPLIT_FUTURE_BPS;
+  const nextBps = presale ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS : LOOTBOX_SPLIT_NEXT_BPS;
+  const vaultBps = presale ? LOOTBOX_PRESALE_SPLIT_VAULT_BPS : 0n;
+
+  const futureShare = (amount * futureBps) / BPS_BASE;
+  const nextShare = (amount * nextBps) / BPS_BASE;
+  const vaultShare = (amount * vaultBps) / BPS_BASE;
+  const rewardShare = amount - futureShare - nextShare - vaultShare;
+
   return {
-    nextPool: (amount * LOOTBOX_NEXT_BPS) / BPS_BASE,
-    futurePool: (amount * LOOTBOX_FUTURE_BPS) / BPS_BASE,
+    nextPool: nextShare,
+    futurePool: futureShare + rewardShare,
+    vaultShare,
   };
 }
 
@@ -84,18 +104,22 @@ const BOON_DISCOUNT_BPS = {
 
 /**
  * Calculate whale bundle price.
+ * Matches DegenerusGameWhaleModule: boon checked first (any level), then early price at levels 0-3.
  * @param {number} level - Current game level
  * @param {number} qty - Number of bundles
- * @param {number} boonTier - 0-3
+ * @param {number} boonTier - 0-3 (0 = no boon)
  * @returns {bigint} Total price in wei
  */
 export function calculateWhaleBundlePrice(level, qty, boonTier) {
-  if (level <= 3) {
-    return WHALE_EARLY_PRICE * BigInt(qty);
+  let unitPrice;
+  if (boonTier > 0) {
+    const discountBps = BOON_DISCOUNT_BPS[boonTier] ?? 1000n;
+    unitPrice = (WHALE_STANDARD_PRICE * (10000n - discountBps)) / 10000n;
+  } else if (level <= 3) {
+    unitPrice = WHALE_EARLY_PRICE;
+  } else {
+    unitPrice = WHALE_STANDARD_PRICE;
   }
-
-  const discountBps = BOON_DISCOUNT_BPS[boonTier] ?? 0n;
-  const unitPrice = (WHALE_STANDARD_PRICE * (10000n - discountBps)) / 10000n;
   return unitPrice * BigInt(qty);
 }
 
