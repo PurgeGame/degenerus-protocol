@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Off-Chain Simulation Engine
 status: unknown
-last_updated: "2026-03-05T22:52:22.967Z"
+last_updated: "2026-03-06T00:51:29.768Z"
 progress:
-  total_phases: 16
-  completed_phases: 15
-  total_plans: 84
-  completed_plans: 76
+  total_phases: 21
+  completed_phases: 19
+  total_plans: 103
+  completed_plans: 94
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-05)
 
 **Core value:** Faithfully replicate all Degenerus Protocol game mechanics in a standalone TypeScript engine with player profiles and interactive visualization.
-**Current focus:** Phase 39 — Passes and Vault
+**Current focus:** Phase 38 — Extended Mechanics
 
 ## Current Position
 
-Phase: 39 of 42 (Passes and Vault)
-Plan: 3 of 3 in current phase
-Status: Phase complete — pending verification
-Last activity: 2026-03-05 — Completed 39-03 (Engine integration with all Phase 39 mechanics)
+Phase: 38 of 42 (Extended Mechanics)
+Plan: 1 of 6 in current phase
+Status: In progress
+Last activity: 2026-03-05 — Completed 38-01 (Lootbox EV and coinflip mechanics)
 
 Progress: [████████░░░░░░░░░░░░] 40% (simulation milestone)
 
@@ -53,5 +53,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Completed 39-03-PLAN.md (all 3 plans, 319 tests, 7 new modules)
+Stopped at: Completed 38-01-PLAN.md (lootboxEv, coinflip modules, 38 tests)
 Resume file: None
