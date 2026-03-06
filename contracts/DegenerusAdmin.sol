@@ -121,7 +121,7 @@ interface IDegenerusGameAdmin {
     function setLootboxRngThreshold(uint256 newThreshold) external;
 
     /// @notice Current ticket purchase info including live price.
-    /// @return lvl Current game level (0-indexed).
+    /// @return lvl Active ticket level (level+1 during purchase phase, level during jackpot phase; NOT the 0-indexed game level).
     /// @return qty Tickets sold at current level.
     /// @return cap Total tickets per level.
     /// @return jackpotWei Jackpot size in wei.
