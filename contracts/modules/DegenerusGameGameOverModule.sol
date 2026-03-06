@@ -57,8 +57,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      Sets terminal gameOver flag.
     ///
     ///      Distribution logic:
-    ///      - If game never started (level 0, not in BURN state): Full refund of deity pass payments
-    ///      - If game ended early (levels 1-9): Fixed 20 ETH refund per deity pass purchased
+    ///      - If game ended early (levels 0-9): Fixed 20 ETH refund per deity pass purchased,
+    ///        FIFO by purchase order, budget-capped to available funds minus claimablePool
     ///      - Remaining funds: 10% to Decimator, 90% to next-level ticketholders
     ///      - Decimator refunds flow to terminal jackpot pool
     ///      - Any uncredited remainder swept to vault and DGNRS
