@@ -173,7 +173,7 @@ if (remaining != 0) {
 
 **Verdict:** CORRECT. All three payout paths produce the correct amount of BURNIE, and accounting is consistent.
 
-### B4: `vaultMintTo` correctness (BurnieCoin.sol line 674)
+### B4: `vaultMintTo` correctness (BurnieCoin.sol line 694)
 
 ```solidity
 function vaultMintTo(address to, uint256 amount) external onlyVault {
@@ -301,7 +301,7 @@ Could repeated refill cycles accumulate? No -- refill only triggers when `supply
 
 ## Part D: Cross-Contract Interactions
 
-### D1: ETH arrives via `_sendToVault` (GameOverModule line 249)
+### D1: ETH arrives via `_sendToVault` (GameOverModule line 182)
 
 The vault's `receive()` function:
 ```solidity
@@ -326,7 +326,7 @@ stETH is transferred directly to the vault. Since `_syncEthReserves()` reads `st
 
 **Verdict:** CORRECT. stETH arrives and immediately backs DGVE shares. 1-2 wei rounding is inherent to stETH, not a bug.
 
-### D3: BURNIE via `vaultEscrow` (BurnieCoin.sol line 657)
+### D3: BURNIE via `vaultEscrow` (BurnieCoin.sol line 677)
 
 When the game calls `coinToken.vaultEscrow(coinAmount)`:
 ```solidity
@@ -419,7 +419,7 @@ The vault can be a game player (via vaultOwner functions). This creates a potent
 2. DGVE redemption includes these winnings in the reserve
 3. Vault owner claims DGVE -> receives ETH -> can re-deposit
 
-This is not a vulnerability -- it is intentional design allowing the vault to participate in the game and have its winnings accrue to DGVE holders. The vault owner (>30% DGVE holder) takes on game risk on behalf of all DGVE holders.
+This is not a vulnerability -- it is intentional design allowing the vault to participate in the game and have its winnings accrue to DGVE holders. The vault owner (>50.1% DGVE holder) takes on game risk on behalf of all DGVE holders.
 
 ### INFO-05: Refill recipient is always the burner
 
