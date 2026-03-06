@@ -14,7 +14,7 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
  *      - 3-tier referral: Player → Affiliate (base) → Upline1 (20%) → Upline2 (4%)
  *      - Rakeback: 0-25% of reward returned to referred player
  *      - Affiliate payouts + quest bonuses via creditFlip; rakeback returned to caller
- *      - Fresh ETH rewards: 25% (levels 1-3), 20% (levels 4+)
+ *      - Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+)
  *      - Recycled ETH rewards: 5% (all levels)
  *      - Leaderboard: tracks top affiliate per level for mint trait bonus
  *
@@ -203,7 +203,7 @@ contract DegenerusAffiliate {
     uint16 private constant LOOTBOX_TAPER_END_SCORE = 25_500;
     uint16 private constant LOOTBOX_TAPER_MIN_BPS = 5_000;
     /// @notice Max BURNIE commission an affiliate can earn from a single sender per level.
-    /// @dev At 20% fresh ETH rate, this caps after 2.5 ETH spend from that sender.
+    /// @dev At 25% fresh ETH rate (levels 0-3), caps after 2.0 ETH spend; at 20% (levels 4+), caps after 2.5 ETH.
     uint256 private constant MAX_COMMISSION_PER_REFERRER_PER_LEVEL = 0.5 ether;
     bytes32 private constant AFFILIATE_ROLL_TAG = keccak256("affiliate-payout-roll-v1");
 
@@ -445,14 +445,14 @@ contract DegenerusAffiliate {
      * +--------------------------------------------------------------------+
      *
      * REWARD RATES:
-     * - Fresh ETH (levels 1-3): 25%
-     * - Fresh ETH (levels 4+): 20%
-     * - Recycled ETH (all levels): 5%
+     * - Fresh ETH (levels 0-3): 25% (REWARD_SCALE_FRESH_L1_3_BPS = 2500)
+     * - Fresh ETH (levels 4+): 20% (REWARD_SCALE_FRESH_L4P_BPS = 2000)
+     * - Recycled ETH (all levels): 5% (REWARD_SCALE_RECYCLED_BPS = 500)
      *
      * LOOTBOX TAPER (fresh ETH only):
-     * - Activity score < 150: no taper (100% payout)
-     * - Activity score 150-255: linear taper from 100% to 50%
-     * - Activity score >= 255: 50% payout floor
+     * - Activity score < 15,000: no taper (100% payout)
+     * - Activity score 15,000-25,500: linear taper from 100% to 50%
+     * - Activity score >= 25,500: 50% payout floor (LOOTBOX_TAPER_MIN_BPS = 5000)
      * - Leaderboard tracking always uses full untapered amount.
      *
      * @param amount Base reward amount (18 decimals).
@@ -551,12 +551,12 @@ contract DegenerusAffiliate {
         mapping(address => uint256) storage earned = affiliateCoinEarned[lvl];
 
         // Apply reward percentage based on ETH type and level.
-        // - Fresh ETH (levels 1-3): 25%
+        // - Fresh ETH (levels 0-3): 25%
         // - Fresh ETH (levels 4+): 20%
         // - Recycled ETH: 5%
         uint256 rewardScaleBps;
         if (isFreshEth) {
-            // Fresh ETH: 25% for first 3 levels, 20% for levels 4+
+            // Fresh ETH: 25% for first 4 levels (0-3), 20% for levels 4+
             rewardScaleBps = lvl <= 3
                 ? REWARD_SCALE_FRESH_L1_3_BPS
                 : REWARD_SCALE_FRESH_L4P_BPS;
