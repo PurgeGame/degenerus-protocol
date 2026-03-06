@@ -300,8 +300,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +========================================================================================+*/
 
     /// @notice One-time wiring of VRF config from the VRF ContractAddresses.ADMIN contract.
-    /// @dev Access: ContractAddresses.ADMIN only. Idempotent after first wire (repeats must match).
-    ///      SECURITY: Once wired, config cannot be changed except via emergency rotation.
+    /// @dev Access: ContractAddresses.ADMIN only. Overwrites any existing config on each call.
+    ///      SECURITY: Once wired, config can only be changed via emergency rotation or re-calling wireVrf from ADMIN.
     /// @param coordinator_ Chainlink VRF V2.5 coordinator address.
     /// @param subId VRF subscription ID for LINK billing.
     function wireVrf(
@@ -538,9 +538,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Enforce "must mint today" gate for advanceGame callers.
     ///      Bypass tiers (only checked on revert path, zero cost for normal callers):
-    ///        1. Deity pass or DGVE majority — always bypasses
-    ///        2. Any pass holder (lazy or deity) — bypasses 15+ min after day boundary
-    ///        3. Anyone — bypasses 30+ min after day boundary
+    ///        1. Deity pass holder — always bypasses
+    ///        2. Anyone — bypasses 30+ min after day boundary
+    ///        3. Any pass holder (lazy/whale freeze active) — bypasses 15+ min after day boundary
+    ///        4. DGVE majority holder — always bypasses (last resort, external call)
     function _enforceDailyMintGate(
         address caller,
         uint24 lvl,
@@ -747,7 +748,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Get historical VRF word as fallback for gameover RNG.
-    ///      Searches backwards from current day to find earliest available RNG word (max 30 tries).
+    ///      Searches forward from day 1 to find the earliest available RNG word (max 30 tries).
     ///      Reverts if no historical words exist (VRF never worked).
     /// @param currentDay Current day index.
     /// @return word Historical RNG word or VRF-derived fallback.
@@ -776,7 +777,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                    FUTURE PRIZE POOL DRAW                           |
       +======================================================================+
       |  Release a portion of the future prize pool once per level.         |
-      |  Normal levels draw 20%, x00 levels skip the draw.                   |
+      |  Normal levels draw 15%, x00 levels skip the draw.                   |
       +======================================================================+*/
 
     function _nextToFutureBps(
