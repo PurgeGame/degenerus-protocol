@@ -367,7 +367,6 @@ contract DegenerusVault {
     /// @dev Coin contract for coinflip actions
     IDegenerusCoinPlayerActions internal constant coinPlayer =
         IDegenerusCoinPlayerActions(ContractAddresses.COIN);
-    /// @dev Jackpots contract for decimator claims
     /// @dev BURNIE token contract for minting and transfers
     IVaultCoin internal constant coinToken = IVaultCoin(ContractAddresses.COIN);
     /// @dev WWXRP token contract for vault minting
@@ -526,7 +525,7 @@ contract DegenerusVault {
 
     /// @notice Purchase a deity pass using an active boon for the vault
     /// @dev Uses vault ETH + claimable winnings; msg.value is retained in the vault.
-    /// @param priceWei Expected price (15/25/50 ETH)
+    /// @param priceWei Expected deity pass price (24 + T(n) ETH where T(n) = n*(n+1)/2)
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If price is zero or vault cannot fund the purchase
     function gamePurchaseDeityPassFromBoon(uint256 priceWei) external payable onlyVaultOwner {
