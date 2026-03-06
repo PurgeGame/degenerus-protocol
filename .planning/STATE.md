@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Contract Hardening & Parity Verification
-status: planning
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-03-06T19:44:30Z"
-last_activity: 2026-03-06 — Completed 04-07 stall recovery path audit (ACCT-08 PASS)
+status: executing
+stopped_at: Completed 47-05-PLAN.md
+last_updated: "2026-03-06T20:14:44Z"
+last_activity: 2026-03-06 — Completed 47-05 NatSpec audit of EndgameModule, GameOverModule, BoonModule, MintStreakUtils, BurnieCoinflip
 progress:
   total_phases: 5
   completed_phases: 0
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-06)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** Phase 43 — Governance & Gating Tests
+**Current focus:** Phase 47 — NatSpec Comment Audit
 
 ## Current Position
 
-Phase: 43 of 47 (Governance & Gating Tests)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-06 — Completed 04-07 stall recovery path audit (ACCT-08 PASS)
+Phase: 47 of 47 (NatSpec Comment Audit)
+Plan: 5 of 8 in current phase
+Status: Executing
+Last activity: 2026-03-06 — Completed 47-05 NatSpec audit of EndgameModule, GameOverModule, BoonModule, MintStreakUtils, BurnieCoinflip
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████░░░░] 62%
 
 ## Performance Metrics
 
@@ -53,6 +53,8 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P06 | 5min | 1 tasks | 1 files |
 | Phase 04 P03 | 4min | 2 tasks | 1 files |
 | Phase 04 P04 | 7min | 2 tasks | 1 files |
+| Phase 04 P07 | 6min | 1 tasks | 1 files |
+| Phase 47 P05 | 5min | 2 tasks | 4 files |
 
 ### Decisions
 
@@ -71,6 +73,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 04]: ACCT-01 PASS (unconditional): ETH flow trace confirms all 15 inflow/outflow/internal paths preserve invariant; GO-F01 resolved (refundDeityPass removed)
 - [Phase 04]: ACCT-06 PASS: receive() routes all pre-gameOver ETH to futurePrizePool; reverts post-gameOver
 - [Phase 04]: ACCT-04 PASS: CEI-only reentrancy protection correct across all ETH-sending functions; Slither confirms 0 reentrancy-eth findings; refundDeityPass removed eliminates attack surface
+- [Phase 04]: ACCT-08 PASS: All 5 stall recovery paths correctly guarded against premature triggering and correctly preserve claimablePool
+- [Phase 47]: GameOverModule deity refund NatSpec incorrectly claimed separate level-0 full refund -- code treats all levels 0-9 identically at 20 ETH/pass
+- [Phase 47]: BurnieCoinflip payout distribution (5%/90%/5%) and COINFLIP_REWARD_MEAN_BPS=9685 verified accurate against code
 
 ### Pending Todos
 
@@ -82,6 +87,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-06T19:43:48Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-03-06T20:14:44Z
+Stopped at: Completed 47-05-PLAN.md
 Resume file: None

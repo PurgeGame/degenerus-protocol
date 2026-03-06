@@ -175,7 +175,16 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
   2. Every @notice and @dev comment in the remaining 7 modules (Endgame, GameOver, Lootbox, Boon, Decimator, Degenerette, MintStreakUtils) and 6 standalone contracts (BurnieCoin, BurnieCoinflip, DegenerusVault, DegenerusStonk, DegenerusQuests, DegenerusJackpots) has been verified
   3. Every error message description matches its actual trigger condition -- no error fires under conditions different from what its comment says
   4. Every event parameter description matches the actual emitted value -- no event emits data inconsistent with its documentation
-**Plans**: TBD
+**Plans:** 1/8 plans executed
+Plans:
+- [ ] 47-01-PLAN.md -- Fix existing Admin/Affiliate findings and verify completeness
+- [ ] 47-02-PLAN.md -- Audit AdvanceModule and WhaleModule NatSpec
+- [ ] 47-03-PLAN.md -- Audit MintModule and JackpotModule NatSpec
+- [ ] 47-04-PLAN.md -- Audit LootboxModule, DecimatorModule, DegeneretteModule NatSpec
+- [ ] 47-05-PLAN.md -- Audit EndgameModule, GameOverModule, BoonModule, MintStreakUtils, BurnieCoinflip NatSpec
+- [ ] 47-06-PLAN.md -- Audit BurnieCoin, DegenerusVault, DegenerusStonk NatSpec
+- [ ] 47-07-PLAN.md -- Audit DegenerusQuests, DegenerusJackpots NatSpec
+- [ ] 47-08-PLAN.md -- Cross-contract error/event verification and final report consolidation
 
 ## Progress
 
@@ -194,6 +203,6 @@ Phases 43, 44, 45, 46 are parallelizable (independent). Phase 47 depends on 43-4
 | 44. Affiliate System Tests | v6.0 | 0/TBD | Not started | - |
 | 45. Security & Economic Hardening Tests | v6.0 | 0/TBD | Not started | - |
 | 46. Game Theory Paper Parity | v6.0 | 0/TBD | Not started | - |
-| 47. NatSpec Comment Audit | v6.0 | 0/TBD | Not started | - |
+| 47. NatSpec Comment Audit | 1/8 | In Progress|  | - |
 
 **Cumulative:** 42 phases complete, 5 phases planned. 6 milestones shipped, 1 in progress.
