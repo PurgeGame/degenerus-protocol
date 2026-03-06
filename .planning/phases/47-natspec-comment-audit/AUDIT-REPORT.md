@@ -1,8 +1,8 @@
 # NatSpec Comment Audit Report
 
-## Status: IN PROGRESS (Plans 01-02 + 05-06 complete)
+## Status: IN PROGRESS (Plans 01-03 + 05-06 complete)
 
-Audited so far: DegenerusAdmin.sol, DegenerusAffiliate.sol, DegenerusQuests.sol, DegenerusJackpots.sol, DegenerusGameLootboxModule.sol, DegenerusGameDecimatorModule.sol, DegenerusGameDegeneretteModule.sol, DegenerusGameEndgameModule.sol, DegenerusGameGameOverModule.sol, DegenerusGameBoonModule.sol, DegenerusGameMintStreakUtils.sol, BurnieCoinflip.sol, DegenerusGameAdvanceModule.sol, DegenerusGameWhaleModule.sol, BurnieCoin.sol, DegenerusVault.sol, DegenerusStonk.sol
+Audited so far: DegenerusAdmin.sol, DegenerusAffiliate.sol, DegenerusQuests.sol, DegenerusJackpots.sol, DegenerusGameLootboxModule.sol, DegenerusGameDecimatorModule.sol, DegenerusGameDegeneretteModule.sol, DegenerusGameEndgameModule.sol, DegenerusGameGameOverModule.sol, DegenerusGameBoonModule.sol, DegenerusGameMintStreakUtils.sol, BurnieCoinflip.sol, DegenerusGameAdvanceModule.sol, DegenerusGameWhaleModule.sol, BurnieCoin.sol, DegenerusVault.sol, DegenerusStonk.sol, DegenerusGameMintModule.sol, DegenerusGameJackpotModule.sol, JackpotBucketLib.sol
 Remaining: DegenerusGame, DegenerusDeityPass, remaining modules
 
 ---
