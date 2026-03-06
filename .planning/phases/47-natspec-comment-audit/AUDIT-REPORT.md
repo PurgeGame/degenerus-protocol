@@ -215,6 +215,102 @@ No findings. All 5 NatSpec tags verified accurate:
 
 ---
 
+### DegenerusGameAdvanceModule.sol
+
+**Finding 23: WRONG -- wireVrf NatSpec claims idempotency**
+- **File:** DegenerusGameAdvanceModule.sol, line 303
+- **Comment:** `Idempotent after first wire (repeats must match).`
+- **Actual code:** Lines 315-317 simply overwrite `vrfCoordinator`, `vrfSubscriptionId`, and `vrfKeyHash` with no matching check. There is no idempotency enforcement.
+- **Severity:** WRONG
+- **Resolution:** FIXED -- Changed to "Overwrites any existing config on each call."
+
+**Finding 24: MISLEADING -- _enforceDailyMintGate bypass tier ordering**
+- **File:** DegenerusGameAdvanceModule.sol, lines 539-543
+- **Comment:** Lists "1. Deity pass or DGVE majority -- always bypasses" as a single tier.
+- **Actual code:** Deity pass is checked first (immediate bypass at line 559), then 30-min anyone check (line 566), then 15-min pass holder check (line 569), then DGVE majority as last resort (line 578). DGVE majority and deity pass are NOT the same tier.
+- **Severity:** MISLEADING
+- **Resolution:** FIXED -- Reordered tiers to match code: 1. Deity pass (always), 2. Anyone (30+ min), 3. Pass holder (15+ min), 4. DGVE majority (always, last resort).
+
+**Finding 25: WRONG -- _getHistoricalRngFallback search direction**
+- **File:** DegenerusGameAdvanceModule.sol, line 751
+- **Comment:** `Searches backwards from current day to find earliest available RNG word (max 30 tries).`
+- **Actual code:** Line 760 loops `for (uint48 searchDay = 1; searchDay < searchLimit)` -- this searches FORWARD from day 1, not backwards from current day.
+- **Severity:** WRONG
+- **Resolution:** FIXED -- Changed to "Searches forward from day 1 to find the earliest available RNG word."
+
+**Finding 26: WRONG -- Future prize pool draw percentage**
+- **File:** DegenerusGameAdvanceModule.sol, line 779
+- **Comment:** `Normal levels draw 20%, x00 levels skip the draw.`
+- **Actual code:** Line 882: `reserved = (futurePrizePool * 15) / 100` = 15%, not 20%.
+- **Severity:** WRONG
+- **Resolution:** FIXED -- Changed to "Normal levels draw 15%."
+
+**DegenerusGameAdvanceModule.sol overall: 4 findings (3 WRONG, 0 STALE, 1 MISLEADING) -- all FIXED**
+
+---
+
+### DegenerusGameWhaleModule.sol
+
+**Finding 27: WRONG -- purchaseWhaleBundle level restrictions**
+- **File:** DegenerusGameWhaleModule.sol, lines 168-174 (NatSpec)
+- **Comment:** `Available at levels 0-3, x49/x99, or any level with a valid whale boon` and `@custom:reverts E When not at level 0-3 or x49/x99 and no valid boon exists.`
+- **Actual code:** No level restriction exists in `_purchaseWhaleBundle`. Code allows purchase at ANY level. Levels 0-3 get early price (2.4 ETH), all other levels get standard price (4 ETH), boon applies discount.
+- **Severity:** WRONG
+- **Resolution:** FIXED -- Changed to "Available at any level" and updated revert doc.
+
+**Finding 28: WRONG -- purchaseWhaleBundle fund distribution at level 0**
+- **File:** DegenerusGameWhaleModule.sol, line 177
+- **Comment:** `Pre-game (level 0): 50% next pool, 50% future pool`
+- **Actual code:** Lines 290-294: `nextShare = (totalPrice * 3000) / 10_000` = 30% next, 70% future. The inline comment at line 287 correctly says "70/30" (future/next).
+- **Severity:** WRONG
+- **Resolution:** FIXED -- Changed to "30% next pool, 70% future pool".
+
+**Finding 29: WRONG -- purchaseLazyPass level eligibility**
+- **File:** DegenerusGameWhaleModule.sol, line 307
+- **Comment:** `Available at levels 0-3 or x9 (9, 19, 29...).`
+- **Actual code:** Line 344: `if (currentLevel > 2 && ...)` -- allows levels 0-2 (not 0-3).
+- **Severity:** WRONG
+- **Resolution:** FIXED -- Changed to "Available at levels 0-2 or x9 (9, 19, 29...)."
+
+**Finding 30: MISLEADING -- purchaseLazyPass renewal window**
+- **File:** DegenerusGameWhaleModule.sol, line 308
+- **Comment:** `Can renew when <7 levels remain on current pass freeze.`
+- **Actual code:** Line 354: `if (frozenUntilLevel > currentLevel + 7) revert E()` -- exactly 7 is allowed.
+- **Severity:** MISLEADING
+- **Resolution:** FIXED -- Changed to "Can renew when 7 or fewer levels remain."
+
+**Finding 31: MISLEADING -- purchaseLazyPass price description**
+- **File:** DegenerusGameWhaleModule.sol, line 311
+- **Comment:** `Price equals sum of per-level ticket prices across the 10-level window.`
+- **Actual code:** Levels 0-2 use flat 0.24 ETH price with excess buying bonus tickets, not the sum formula.
+- **Severity:** MISLEADING
+- **Resolution:** FIXED -- Documented both pricing modes.
+
+**Finding 32: MISLEADING -- purchaseLazyPass boon lootbox claim**
+- **File:** DegenerusGameWhaleModule.sol, line 313
+- **Comment:** `Boon purchases apply a 10/15/25% discount and always include a 10% lootbox.`
+- **Actual code:** Lootbox BPS depends on `lootboxPresaleActive` (20%/10%), no special boon handling.
+- **Severity:** MISLEADING
+- **Resolution:** FIXED -- Changed to "Boon purchases apply a discount (default 10%) to the payment amount."
+
+**Finding 33: WRONG -- purchaseDeityPass availability**
+- **File:** DegenerusGameWhaleModule.sol, line 441
+- **Comment:** `Available at any time.`
+- **Actual code:** Line 461: `if (gameOver) revert E()` -- NOT available after gameOver.
+- **Severity:** WRONG
+- **Resolution:** FIXED -- Changed to "Available before gameOver."
+
+**Finding 34: MISLEADING -- _applyLootboxBoostOnPurchase expiry description**
+- **File:** DegenerusGameWhaleModule.sol, line 783
+- **Comment:** `expires after 48 hours`
+- **Actual code:** Uses `LOOTBOX_BOOST_EXPIRY_DAYS = 2` (2 game days at 22:57 UTC boundary, not 48 hours).
+- **Severity:** MISLEADING
+- **Resolution:** FIXED -- Changed to "expires after 2 game days."
+
+**DegenerusGameWhaleModule.sol overall: 8 findings (4 WRONG, 0 STALE, 4 MISLEADING) -- all FIXED**
+
+---
+
 ## Summary So Far
 
 | Contract | Status | WRONG | STALE | MISLEADING | CLEAN |
@@ -226,6 +322,8 @@ No findings. All 5 NatSpec tags verified accurate:
 | DegenerusGameBoonModule.sol | Audited | 0 | 0 | 0 | YES |
 | DegenerusGameMintStreakUtils.sol | Audited | 0 | 0 | 0 | YES |
 | BurnieCoinflip.sol | Audited | 0 | 0 | 1 | NO (fixed) |
+| DegenerusGameAdvanceModule.sol | Audited | 3 | 0 | 1 | NO (all fixed) |
+| DegenerusGameWhaleModule.sol | Audited | 4 | 0 | 4 | NO (all fixed) |
 | DegenerusVault.sol | NOT YET AUDITED | - | - | - | - |
 | DegenerusStonk.sol | NOT YET AUDITED | - | - | - | - |
 | BurnieCoin.sol | NOT YET AUDITED | - | - | - | - |
@@ -235,10 +333,65 @@ No findings. All 5 NatSpec tags verified accurate:
 | DegenerusDeityPass.sol | NOT YET AUDITED | - | - | - | - |
 | Remaining Modules | NOT YET AUDITED | - | - | - | - |
 
-**Total findings so far: 17** (4 WRONG, 3 STALE, 10 MISLEADING) -- all original WRONG findings FIXED, 8 new findings documented
+**Total findings so far: 29** (11 WRONG, 3 STALE, 15 MISLEADING) -- all WRONG/STALE findings FIXED where applicable
 
 ---
 
 ## Next Batches Required
 
 - **Remaining:** DegenerusVault.sol, DegenerusStonk.sol, BurnieCoin.sol, DegenerusGame.sol, DegenerusQuests.sol, DegenerusJackpots.sol, DegenerusDeityPass.sol, remaining modules
+
+### DegenerusQuests.sol
+
+**Finding 20: WRONG -- PlayerQuestState streak mechanics says "BOTH slots"**
+- **File:** DegenerusQuests.sol, line 236 (struct NatSpec)
+- **Comment:** `streak increments only when BOTH slots complete on a day`
+- **Actual code:** `_questComplete` at line 1422 checks `(mask & QUEST_STATE_STREAK_CREDITED) == 0` and increments streak on the FIRST slot completion of any day, not when both are complete.
+- **Severity:** WRONG
+- **Resolution:** Fixed -- changed to "streak increments on the first quest slot completion of a day (not both)"
+
+**Finding 21: WRONG -- _questComplete reward description says slot 0 pays 0 BURNIE**
+- **File:** DegenerusQuests.sol, line 1386 (NatSpec)
+- **Comment:** `Slot 1 (random quest) pays a fixed 200 BURNIE` / `Slot 0 (deposit ETH) pays 0 BURNIE`
+- **Actual code:** Line 1432: `slot == 1 ? QUEST_RANDOM_REWARD : QUEST_SLOT0_REWARD` where `QUEST_SLOT0_REWARD = 100 ether`. Slot 0 pays 100 BURNIE, not 0.
+- **Severity:** WRONG
+- **Resolution:** Fixed -- changed to "Slot 0 (deposit ETH) pays a fixed 100 BURNIE"
+
+**Finding 22: WRONG -- handleLootBox target description says "1-3x"**
+- **File:** DegenerusQuests.sol, line 694 (NatSpec)
+- **Comment:** `Target is calculated as 1-3x current ticket price (scales with game economy).`
+- **Actual code:** Uses `QUEST_LOOTBOX_TARGET_MULTIPLIER = 2` constant -- always 2x, not 1-3x. Capped at `QUEST_ETH_TARGET_CAP = 0.5 ether`.
+- **Severity:** WRONG
+- **Resolution:** Fixed -- changed to "Target is 2x current ticket price, capped at QUEST_ETH_TARGET_CAP."
+
+**Finding 23: WRONG -- handleDecimator says "2x the target of equivalent flip quests"**
+- **File:** DegenerusQuests.sol, line 590 (NatSpec)
+- **Comment:** `Decimator quests have 2x the target of equivalent flip quests.`
+- **Actual code:** `_questTargetValue` returns `QUEST_BURNIE_TARGET` for both FLIP and DECIMATOR. They share the same target (2000 BURNIE). No 2x multiplier.
+- **Severity:** WRONG
+- **Resolution:** Fixed -- changed to "Decimator quests share the same BURNIE target as flip quests (2000 BURNIE)."
+
+**Finding 24: MISLEADING -- Duplicate @param player in _questSyncState**
+- **File:** DegenerusQuests.sol, lines 1113-1114 (NatSpec)
+- **Comment:** Two `@param player` tags with different descriptions.
+- **Issue:** Solidity NatSpec doesn't support duplicate @param tags. This could confuse documentation generators.
+- **Severity:** MISLEADING
+- **Resolution:** Fixed -- merged into single `@param player Player address for event emission and streak shield lookup.`
+
+**DegenerusQuests.sol overall: 5 findings (4 WRONG, 1 MISLEADING) -- all fixed**
+
+---
+
+### DegenerusJackpots.sol
+
+No WRONG or STALE findings. All NatSpec comments verified against code:
+
+- Prize distribution percentages (10/10/5/10/5/40/20 = 100%) match code exactly
+- Scatter level targeting rules (x00 vs non-x00) match code conditionals
+- BAF leaderboard management (top-4 sorted, scored by whole tokens) accurately described
+- Access control descriptions (onlyCoin for recordBafFlip, onlyGame for runBafJackpot) correct
+- Max winners count (108 = 1+1+1+3+2+50+50) verified against code
+- Scatter ticket handling and winnerMask bit layout accurately described
+- Internal helper functions (_creditOrRefund, _score96, _updateBafTop, etc.) all accurate
+
+**DegenerusJackpots.sol overall: 0 findings -- CLEAN**
