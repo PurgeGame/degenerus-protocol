@@ -1001,7 +1001,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
 
     /// @dev Gets the base payout multiplier in centi-x for a match count.
     /// @param matches Number of matches (0-8).
-    /// @return Base payout in centi-x (189 = 1.89x at 100% ROI).
+    /// @return Base payout in centi-x (190 = 1.90x at 100% ROI).
     function _getBasePayoutBps(uint8 matches) private pure returns (uint256) {
         if (matches >= 8) return QUICK_PLAY_BASE_PAYOUT_8_MATCHES;
         return (QUICK_PLAY_BASE_PAYOUTS_PACKED >> (uint256(matches) * 32)) & 0xFFFFFFFF;
@@ -1131,7 +1131,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             uint256 roiDelta = ROI_HIGH_BPS - ROI_MID_BPS;
             roiBps = ROI_MID_BPS + (delta * roiDelta) / span;
         } else {
-            // Linear segment: 255% to 355% activity → 99.5% to 99.9% ROI
+            // Linear segment: 255% to 305% activity → 99.5% to 99.9% ROI
             uint256 delta = score - ACTIVITY_SCORE_HIGH_BPS;
             uint256 span = ACTIVITY_SCORE_MAX_BPS - ACTIVITY_SCORE_HIGH_BPS;
             uint256 roiDelta = ROI_MAX_BPS - ROI_HIGH_BPS;
