@@ -13,7 +13,7 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
     /// @param amount Wei credited.
     event PlayerCredited(address indexed player, address indexed recipient, uint256 amount);
 
-    /// @dev Half whale pass price (100 tickets over levels 10-109).
+    /// @dev Half whale pass price unit (each half-pass = 1 ticket/level for 100 levels).
     uint256 internal constant HALF_WHALE_PASS_PRICE =
         2.175 ether;
 
