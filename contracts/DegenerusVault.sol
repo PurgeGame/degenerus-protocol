@@ -310,7 +310,7 @@ contract DegenerusVault {
     // ---------------------------------------------------------------------
     /// @notice Caller is not the GAME contract
     error Unauthorized();
-    /// @notice Caller does not hold >30% of DGVE supply
+    /// @notice Caller does not hold >50.1% of DGVE supply
     error NotVaultOwner();
     /// @notice Insufficient balance, allowance, or reserve for operation
     error Insufficient();
@@ -391,7 +391,7 @@ contract DegenerusVault {
         _;
     }
 
-    /// @dev Restricts function to accounts holding >30% of DGVE supply
+    /// @dev Restricts function to accounts holding >50.1% of DGVE supply
     modifier onlyVaultOwner() {
         if (!_isVaultOwner(msg.sender)) revert NotVaultOwner();
         _;
@@ -405,16 +405,16 @@ contract DegenerusVault {
         }
     }
 
-    /// @dev Check if account holds >30% of DGVE supply (balance * 10 > supply * 3)
+    /// @dev Check if account holds >50.1% of DGVE supply (balance * 1000 > supply * 501)
     /// @param account Address to check
     /// @return True if account qualifies as vault owner
     function _isVaultOwner(address account) private view returns (bool) {
         uint256 supply = ethShare.totalSupply();
         uint256 balance = ethShare.balanceOf(account);
-        return balance * 10 > supply * 3;
+        return balance * 1000 > supply * 501;
     }
 
-    /// @notice Check if account holds >30% of DGVE supply
+    /// @notice Check if account holds >50.1% of DGVE supply
     /// @param account Address to check
     /// @return True if account qualifies as vault owner
     function isVaultOwner(address account) external view returns (bool) {
@@ -467,8 +467,8 @@ contract DegenerusVault {
     // ---------------------------------------------------------------------
 
     /// @notice Advance the game on behalf of the vault
-    /// @dev Requires caller to hold >30% of DGVE supply
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @dev Requires caller to hold >50.1% of DGVE supply
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameAdvance() external onlyVaultOwner {
         gamePlayer.advanceGame();
     }
@@ -480,7 +480,7 @@ contract DegenerusVault {
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method for minting
     /// @param ethValue Additional ETH from vault balance to use (on top of msg.value)
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If total value exceeds vault balance
     function gamePurchase(
         uint256 ticketQuantity,
@@ -501,7 +501,7 @@ contract DegenerusVault {
 
     /// @notice Purchase BURNIE tickets through the game contract
     /// @param ticketQuantity Number of tickets to purchase
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If ticketQuantity is zero
     function gamePurchaseTicketsBurnie(uint256 ticketQuantity) external onlyVaultOwner {
         if (ticketQuantity == 0) revert Insufficient();
@@ -510,7 +510,7 @@ contract DegenerusVault {
 
     /// @notice Purchase a BURNIE lootbox for the vault
     /// @param burnieAmount Amount of BURNIE to burn
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If burnieAmount is zero
     function gamePurchaseBurnieLootbox(uint256 burnieAmount) external onlyVaultOwner {
         if (burnieAmount == 0) revert Insufficient();
@@ -519,7 +519,7 @@ contract DegenerusVault {
 
     /// @notice Open a lootbox owned by the vault
     /// @param lootboxIndex Index of the lootbox to open
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameOpenLootBox(uint48 lootboxIndex) external onlyVaultOwner {
         gamePlayer.openLootBox(address(this), lootboxIndex);
     }
@@ -527,7 +527,7 @@ contract DegenerusVault {
     /// @notice Purchase a deity pass using an active boon for the vault
     /// @dev Uses vault ETH + claimable winnings; msg.value is retained in the vault.
     /// @param priceWei Expected price (15/25/50 ETH)
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If price is zero or vault cannot fund the purchase
     function gamePurchaseDeityPassFromBoon(uint256 priceWei) external payable onlyVaultOwner {
         if (priceWei == 0) revert Insufficient();
@@ -542,13 +542,13 @@ contract DegenerusVault {
     }
 
     /// @notice Claim winnings for the vault (preferring stETH)
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameClaimWinnings() external onlyVaultOwner {
         gamePlayer.claimWinningsStethFirst();
     }
 
     /// @notice Claim a whale pass for the vault
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameClaimWhalePass() external onlyVaultOwner {
         gamePlayer.claimWhalePass(address(this));
     }
@@ -560,7 +560,7 @@ contract DegenerusVault {
     /// @param customTicket Custom packed traits
     /// @param customSpecial Custom special (1=ETH,2=BURNIE,3=DGNRS)
     /// @param ethValue Additional ETH from vault balance to use (on top of msg.value)
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If msg.value + ethValue exceeds total bet or vault balance
     function gameDegeneretteBetEth(
         uint128 amountPerTicket,
@@ -587,7 +587,7 @@ contract DegenerusVault {
     /// @param ticketCount Number of tickets (must satisfy game rules)
     /// @param customTicket Custom packed traits
     /// @param customSpecial Custom special (1=ETH,2=BURNIE,3=DGNRS)
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameDegeneretteBetBurnie(
         uint128 amountPerTicket,
         uint8 ticketCount,
@@ -609,7 +609,7 @@ contract DegenerusVault {
     /// @param ticketCount Number of tickets (must satisfy game rules)
     /// @param customTicket Custom packed traits
     /// @param customSpecial Custom special (1=ETH,2=BURNIE,3=DGNRS)
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameDegeneretteBetWwxrp(
         uint128 amountPerTicket,
         uint8 ticketCount,
@@ -628,28 +628,28 @@ contract DegenerusVault {
 
     /// @notice Resolve Degenerette bets for the vault
     /// @param betIds Bet identifiers to resolve
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameResolveDegeneretteBets(uint64[] calldata betIds) external onlyVaultOwner {
         gamePlayer.resolveDegeneretteBets(address(this), betIds);
     }
 
     /// @notice Enable or disable auto-rebuy for the vault
     /// @param enabled Whether auto-rebuy should be enabled
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameSetAutoRebuy(bool enabled) external onlyVaultOwner {
         gamePlayer.setAutoRebuy(address(this), enabled);
     }
 
     /// @notice Set the auto-rebuy take profit for the vault
     /// @param takeProfit Amount to take profit before auto-rebuying
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameSetAutoRebuyTakeProfit(uint256 takeProfit) external onlyVaultOwner {
         gamePlayer.setAutoRebuyTakeProfit(address(this), takeProfit);
     }
 
     /// @notice Enable or disable auto-rebuy for decimator claims
     /// @param enabled True to enable, false to disable
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameSetDecimatorAutoRebuy(bool enabled) external onlyVaultOwner {
         gamePlayer.setDecimatorAutoRebuy(address(this), enabled);
     }
@@ -658,7 +658,7 @@ contract DegenerusVault {
     /// @param enabled Whether AFK king mode should be enabled
     /// @param ethTakeProfit ETH take profit threshold
     /// @param coinTakeProfit Coin take profit threshold
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameSetAfKingMode(
         bool enabled,
         uint256 ethTakeProfit,
@@ -670,14 +670,14 @@ contract DegenerusVault {
     /// @notice Approve or revoke an operator for the vault's game actions
     /// @param operator Address to approve or revoke
     /// @param approved Whether to approve or revoke
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameSetOperatorApproval(address operator, bool approved) external onlyVaultOwner {
         gamePlayer.setOperatorApproval(operator, approved);
     }
 
     /// @notice Deposit coins into coinflip for the vault
     /// @param amount Amount of coins to deposit
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinDepositCoinflip(uint256 amount) external onlyVaultOwner {
         coinPlayer.depositCoinflip(address(this), amount);
     }
@@ -685,7 +685,7 @@ contract DegenerusVault {
     /// @notice Claim coinflip winnings for the vault
     /// @param amount Maximum amount to claim
     /// @return claimed Actual amount claimed
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinClaimCoinflips(uint256 amount) external onlyVaultOwner returns (uint256 claimed) {
         return coinPlayer.claimCoinflips(address(this), amount);
     }
@@ -693,7 +693,7 @@ contract DegenerusVault {
     /// @notice Claim coinflip winnings as take profit multiples
     /// @param multiples Number of take profit multiples to claim
     /// @return claimed Actual amount claimed
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinClaimCoinflipsTakeProfit(
         uint256 multiples
     ) external onlyVaultOwner returns (uint256 claimed) {
@@ -702,7 +702,7 @@ contract DegenerusVault {
 
     /// @notice Burn coins in the decimator for the vault
     /// @param amount Amount of coins to burn
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinDecimatorBurn(uint256 amount) external onlyVaultOwner {
         coinPlayer.decimatorBurn(address(this), amount);
     }
@@ -710,14 +710,14 @@ contract DegenerusVault {
     /// @notice Configure coinflip auto-rebuy for the vault
     /// @param enabled Whether auto-rebuy should be enabled
     /// @param takeProfit Amount to take profit
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinSetAutoRebuy(bool enabled, uint256 takeProfit) external onlyVaultOwner {
         coinPlayer.setCoinflipAutoRebuy(address(this), enabled, takeProfit);
     }
 
     /// @notice Set coinflip auto-rebuy take profit for the vault
     /// @param takeProfit Amount to take profit
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinSetAutoRebuyTakeProfit(uint256 takeProfit) external onlyVaultOwner {
         coinPlayer.setCoinflipAutoRebuyTakeProfit(address(this), takeProfit);
     }
@@ -725,7 +725,7 @@ contract DegenerusVault {
     /// @notice Mint WWXRP from the vault's uncirculating reserve to a recipient
     /// @param to Recipient address
     /// @param amount Amount of WWXRP to mint
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function wwxrpMint(address to, uint256 amount) external onlyVaultOwner {
         if (amount == 0) return;
         wwxrpToken.vaultMintTo(to, amount);
@@ -733,7 +733,7 @@ contract DegenerusVault {
 
     /// @notice Claim a decimator jackpot for the vault
     /// @param lvl Jackpot level to claim
-    /// @custom:reverts NotVaultOwner If caller does not hold >30% of DGVE
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function jackpotsClaimDecimator(uint24 lvl) external onlyVaultOwner {
         gamePlayer.claimDecimatorJackpot(lvl);
     }

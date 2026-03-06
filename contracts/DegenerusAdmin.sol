@@ -22,9 +22,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  *   - No post-deployment setup needed
  *
  * OWNERSHIP MODEL:
- *   - Single owner (CREATOR) set via ContractAddresses
- *   - No ownership transfer capability (intentional simplicity)
- *   - Owner cannot change after deployment
+ *   - Owner is anyone holding >50.1% of DGVE supply (vault governance token)
+ *   - No single-address owner; ownership is transferable via DGVE market
  *
  * VRF SUBSCRIPTION LIFECYCLE:
  *   1. Created atomically during constructor call
@@ -197,7 +196,7 @@ interface IAggregatorV3 {
 
 /// @dev Vault interface for ownership check.
 interface IDegenerusVaultOwner {
-    /// @notice Check if account holds >30% of DGVE supply.
+    /// @notice Check if account holds >50.1% of DGVE supply.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -212,7 +211,7 @@ contract DegenerusAdmin {
     // =========================================================================
     // Using custom errors for gas efficiency and clear failure reasons.
 
-    /// @dev Caller is not the contract CREATOR/owner.
+    /// @dev Caller does not hold >50.1% of DGVE supply.
     error NotOwner();
 
     /// @dev Caller is not authorized for this operation (e.g., wrong token sender).
@@ -236,8 +235,6 @@ contract DegenerusAdmin {
     /// @dev Game-over has started; operation not allowed.
     error GameOver();
 
-    /// @dev Game-over has not started yet.
-    error GameNotOver();
 
     /// @dev Price feed is healthy; replacement not allowed.
     error FeedHealthy();
@@ -364,12 +361,9 @@ contract DegenerusAdmin {
     IDegenerusVaultOwner private constant vault =
         IDegenerusVaultOwner(ContractAddresses.VAULT);
 
-    /// @dev Restricts function to CREATOR or anyone holding >30% of DGVE.
+    /// @dev Restricts function to anyone holding >50.1% of DGVE.
     modifier onlyOwner() {
-        if (
-            msg.sender != ContractAddresses.CREATOR &&
-            !vault.isVaultOwner(msg.sender)
-        ) revert NotOwner();
+        if (!vault.isVaultOwner(msg.sender)) revert NotOwner();
         _;
     }
 
@@ -548,34 +542,36 @@ contract DegenerusAdmin {
         emit EmergencyRecovered(newCoordinator, newSubId, funded);
     }
 
-    /// @notice Cancel VRF subscription and sweep LINK after GAME-over.
-    /// @dev Final cleanup function. No VRF stall required — only GAME-over flag.
+    /// @notice Cancel VRF subscription and sweep LINK to vault after GAME-over.
+    /// @dev Only callable by the GAME contract (during handleFinalSweep).
+    ///      Uses try/catch internally so the caller can safely fire-and-forget.
     ///
     ///      SECURITY NOTES:
-    ///      - Requires gameOver() to be true.
-    ///      - LINK refunded to specified target address.
+    ///      - Only GAME contract can call (trusted, runs during final sweep).
+    ///      - LINK refunded to VAULT address.
     ///      - Sets subscriptionId to 0 to prevent re-use.
-    ///
-    /// @param target Address to receive the LINK refund.
-    function shutdownAndRefund(address target) external onlyOwner {
-        if (target == address(0)) revert ZeroAddress();
+    function shutdownVrf() external {
+        if (msg.sender != ContractAddresses.GAME) revert NotAuthorized();
         uint256 subId = subscriptionId;
-        if (subId == 0) revert NoSubscription();
+        if (subId == 0) return;
 
-        // SECURITY: Only allow shutdown after GAME-over has started.
-        if (!gameAdmin.gameOver()) revert GameNotOver();
-
-        // Cancel subscription; LINK refunds go to target.
-        IVRFCoordinatorV2_5Owner(coordinator).cancelSubscription(subId, target);
-        emit SubscriptionCancelled(subId, target);
         subscriptionId = 0;
+        address target = ContractAddresses.VAULT;
 
-        // Sweep any LINK sitting on this contract to target.
+        // Cancel subscription; LINK refunds go to vault.
+        try IVRFCoordinatorV2_5Owner(coordinator).cancelSubscription(subId, target) {
+            emit SubscriptionCancelled(subId, target);
+        } catch {}
+
+        // Sweep any LINK sitting on this contract to vault.
         uint256 bal = linkToken.balanceOf(address(this));
         if (bal != 0) {
-            if (!linkToken.transfer(target, bal)) revert LinkTransferFailed();
-            emit SubscriptionShutdown(subId, target, bal);
-            return;
+            try linkToken.transfer(target, bal) returns (bool ok) {
+                if (ok) {
+                    emit SubscriptionShutdown(subId, target, bal);
+                    return;
+                }
+            } catch {}
         }
 
         emit SubscriptionShutdown(subId, target, 0);

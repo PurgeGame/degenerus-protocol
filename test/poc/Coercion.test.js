@@ -91,13 +91,13 @@ describe("Coercion Attacker: Admin Key Compromise", function () {
       ).to.be.reverted;
     });
 
-    it("shutdownAndRefund requires gameOver flag -- cannot steal LINK before game ends", async function () {
+    it("shutdownVrf only callable by GAME contract -- cannot steal LINK", async function () {
       const { deployer, admin, alice } = await loadFixture(deployFixture);
 
-      // Try to shutdown and redirect LINK to attacker
+      // Try to shutdown VRF as attacker
       await expect(
-        admin.shutdownAndRefund(alice.address)
-      ).to.be.reverted; // GameNotOver
+        admin.connect(alice).shutdownVrf()
+      ).to.be.reverted; // NotAuthorized
     });
   });
 

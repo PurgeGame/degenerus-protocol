@@ -467,28 +467,21 @@ describe("DegenerusAdmin", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 6. shutdownAndRefund
+  // 6. shutdownVrf
   // ---------------------------------------------------------------------------
-  describe("shutdownAndRefund", function () {
-    it("reverts when game is not over", async function () {
+  describe("shutdownVrf", function () {
+    it("reverts when called by non-GAME address", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        admin.connect(deployer).shutdownAndRefund(deployer.address)
-      ).to.be.revertedWithCustomError(admin, "GameNotOver");
+        admin.connect(deployer).shutdownVrf()
+      ).to.be.revertedWithCustomError(admin, "NotAuthorized");
     });
 
-    it("reverts when called by non-owner", async function () {
+    it("reverts when called by alice", async function () {
       const { admin, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        admin.connect(alice).shutdownAndRefund(alice.address)
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
-    });
-
-    it("reverts when target is zero address", async function () {
-      const { admin, deployer } = await loadFixture(deployFullProtocol);
-      await expect(
-        admin.connect(deployer).shutdownAndRefund(ZERO_ADDRESS)
-      ).to.be.revertedWithCustomError(admin, "ZeroAddress");
+        admin.connect(alice).shutdownVrf()
+      ).to.be.revertedWithCustomError(admin, "NotAuthorized");
     });
   });
 

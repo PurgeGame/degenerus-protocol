@@ -20,3 +20,11 @@ lib/
 cache/fuzz/
 slither-report.json
 out/
+ECONOMIC_ANALYSIS.md
+GAME_THEORY_ANALYSIS.md
+GAME_THEORY_ANALYSIS.html
+scope.txt
+slither-notes.md
+Makefile
+simulation-stats.json
+.tmp-*
