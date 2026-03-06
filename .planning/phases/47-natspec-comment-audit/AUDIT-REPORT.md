@@ -371,7 +371,7 @@ No WRONG or STALE findings. All NatSpec comments verified against code:
 
 ### BurnieCoin.sol
 
-**Finding 36: STALE -- onlyTrustedContracts NatSpec references "color registry"**
+**Finding 40: STALE -- onlyTrustedContracts NatSpec references "color registry"**
 - **File:** BurnieCoin.sol, line 630
 - **Comment:** `Restricts access to game, affiliate, or color registry contracts.`
 - **Actual code (lines 634-638):** Only checks GAME and AFFILIATE. No color registry reference exists in the contract.
@@ -389,14 +389,14 @@ No WRONG or STALE findings. All NatSpec comments verified against code:
 
 ### DegenerusVault.sol
 
-**Finding 37: WRONG -- gamePurchaseDeityPassFromBoon @param priceWei example values**
+**Finding 41: WRONG -- gamePurchaseDeityPassFromBoon @param priceWei example values**
 - **File:** DegenerusVault.sol, line 529
 - **Comment:** `@param priceWei Expected price (15/25/50 ETH)`
 - **Actual behavior:** Deity pass price formula is 24 + T(n) ETH where T(n) = n*(n+1)/2. Values 15/25/50 are not valid deity pass prices.
 - **Resolution:** FIXED -- Updated to describe actual formula.
 - **Severity:** WRONG (FIXED)
 
-**Finding 38: STALE -- orphaned Jackpots contract NatSpec comment**
+**Finding 42: STALE -- orphaned Jackpots contract NatSpec comment**
 - **File:** DegenerusVault.sol, line 370
 - **Comment:** `@dev Jackpots contract for decimator claims`
 - **Actual code:** No jackpots contract variable follows this comment. The jackpots wiring was removed but the comment survived.
