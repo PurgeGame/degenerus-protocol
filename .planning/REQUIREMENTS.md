@@ -69,8 +69,8 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 
 ### Interfaces
 
-- [ ] **IFACE-01**: Every interface function signature verified to match its implementation
-- [ ] **IFACE-02**: Every interface NatSpec verified to match implementation behavior
+- [x] **IFACE-01**: Every interface function signature verified to match its implementation
+- [x] **IFACE-02**: Every interface NatSpec verified to match implementation behavior
 
 ### Cross-Contract Verification
 
@@ -141,8 +141,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SOCIAL-01 | Phase 55 | Complete |
 | SOCIAL-02 | Phase 55 | Pending |
 | SOCIAL-03 | Phase 55 | Complete |
-| IFACE-01 | Phase 55 | Pending |
-| IFACE-02 | Phase 55 | Pending |
+| IFACE-01 | Phase 55 | Complete |
+| IFACE-02 | Phase 55 | Complete |
 | ADMIN-01 | Phase 56 | Pending |
 | ADMIN-02 | Phase 56 | Pending |
 | ADMIN-03 | Phase 56 | Pending |
