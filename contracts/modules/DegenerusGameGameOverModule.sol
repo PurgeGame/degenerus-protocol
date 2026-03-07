@@ -114,6 +114,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         gameOver = true; // Terminal state
         gameOverTime = uint48(block.timestamp);
         gameOverFinalJackpotPaid = true;
+        nextPrizePool = 0;
+        futurePrizePool = 0;
+        currentPrizePool = 0;
 
         if (available == 0) return; // Nothing to distribute
 

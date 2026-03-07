@@ -876,8 +876,8 @@ contract DegenerusVault {
 
         emit Claim(player, amount, ethOut, stEthOut, 0);
 
-        if (ethOut != 0) _payEth(player, ethOut);
         if (stEthOut != 0) _paySteth(player, stEthOut);
+        if (ethOut != 0) _payEth(player, ethOut);
     }
 
     // ---------------------------------------------------------------------
