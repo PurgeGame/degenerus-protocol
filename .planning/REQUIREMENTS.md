@@ -28,7 +28,7 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 - [x] **MOD-06**: DegenerusGameGameOverModule.sol — every function audited with JSON + markdown report
 - [ ] **MOD-07**: DegenerusGameWhaleModule.sol — every function audited with JSON + markdown report
 - [ ] **MOD-08**: DegenerusGameDegeneretteModule.sol — every function audited with JSON + markdown report
-- [ ] **MOD-09**: DegenerusGameBoonModule.sol — every function audited with JSON + markdown report
+- [x] **MOD-09**: DegenerusGameBoonModule.sol — every function audited with JSON + markdown report
 - [ ] **MOD-10**: DegenerusGameDecimatorModule.sol — every function audited with JSON + markdown report
 - [ ] **MOD-11**: DegenerusGameMintStreakUtils.sol — every function audited with JSON + markdown report
 - [ ] **MOD-12**: DegenerusGamePayoutUtils.sol — every function audited with JSON + markdown report
@@ -128,7 +128,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MOD-06 | Phase 51 | Complete |
 | MOD-07 | Phase 52 | Pending |
 | MOD-08 | Phase 52 | Pending |
-| MOD-09 | Phase 52 | Pending |
+| MOD-09 | Phase 52 | Complete |
 | MOD-10 | Phase 52 | Pending |
 | MOD-11 | Phase 53 | Pending |
 | MOD-12 | Phase 53 | Pending |
