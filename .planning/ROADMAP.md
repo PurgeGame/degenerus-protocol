@@ -9,6 +9,7 @@
 - ✅ **v5.0 Novel Zero-Day Attack Surface Audit** — Phases 30-35 (shipped 2026-03-05)
 - ✅ **v1.0 Off-Chain Simulation Engine** — Phases 36-42 (shipped 2026-03-06)
 - ✅ **v6.0 Contract Hardening & Parity Verification** — Phases 43-47 (shipped 2026-03-07)
+- 🚧 **v7.0 Function-Level Exhaustive Audit** — Phases 48-58 (in progress)
 
 ## Phases
 
@@ -111,7 +112,7 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
 </details>
 
 <details>
-<summary>v6.0 Contract Hardening & Parity Verification (Phases 43-47) — SHIPPED 2026-03-07</summary>
+<summary>✅ v6.0 Contract Hardening & Parity Verification (Phases 43-47) — SHIPPED 2026-03-07</summary>
 
 - [x] Phase 43: Governance & Gating Tests (1/1 plan) — completed 2026-03-07
 - [x] Phase 44: Affiliate System Tests (1/1 plan) — completed 2026-03-07
@@ -125,6 +126,163 @@ See: `.planning/milestones/v6.0-ROADMAP.md` for full phase details.
 
 </details>
 
+### v7.0 Function-Level Exhaustive Audit (In Progress)
+
+**Milestone Goal:** Exhaustive function-by-function audit of every production Solidity file -- structured JSON + markdown reports per function covering callers, callees, state mutations, invariants, NatSpec accuracy, gas waste, and correctness verdict.
+
+- [ ] **Phase 48: Audit Infrastructure** - Define JSON schema, cross-reference index format, and state mutation map format
+- [ ] **Phase 49: Core Game Contract** - DegenerusGame.sol (19KB) and DegenerusGameStorage.sol function-level audit
+- [ ] **Phase 50: ETH Flow Modules** - AdvanceModule, MintModule, JackpotModule function-level audit
+- [ ] **Phase 51: Endgame & Lifecycle Modules** - EndgameModule, LootboxModule, GameOverModule function-level audit
+- [ ] **Phase 52: Whale & Player Modules** - WhaleModule, DegeneretteModule, BoonModule, DecimatorModule function-level audit
+- [ ] **Phase 53: Module Utilities & Libraries** - MintStreakUtils, PayoutUtils, BitPackingLib, EntropyLib, GameTimeLib, PriceLookupLib, JackpotBucketLib audit
+- [ ] **Phase 54: Token & Economics Contracts** - BurnieCoin, BurnieCoinflip (16KB), DegenerusVault, DegenerusStonk function-level audit
+- [ ] **Phase 55: Pass, Social & Interface Contracts** - DeityPass, DeityBoonViewer, Affiliate, Quests, Jackpots, and all interface verification
+- [ ] **Phase 56: Admin & Support Contracts** - DegenerusAdmin, TraitUtils, ContractAddresses, Icons32Data, WrappedWrappedXRP audit
+- [ ] **Phase 57: Cross-Contract Verification & Prior Claims** - Call graph, ETH flow map, mutation matrix, gas flags, v1-v6 spot-check, game theory cross-ref
+- [ ] **Phase 58: Synthesis Report** - Aggregate findings, severity ratings, confidence assessment, executive summary
+
+## Phase Details
+
+### Phase 48: Audit Infrastructure
+**Goal**: All subsequent audit phases have a defined output schema and format -- every function audit produces consistent, machine-readable JSON alongside human-readable markdown
+**Depends on**: Nothing (first phase of v7.0)
+**Requirements**: INFRA-01, INFRA-02, INFRA-03
+**Success Criteria** (what must be TRUE):
+  1. A JSON schema file exists that defines the structure for every function-level audit entry (signature, visibility, params, state reads/writes, callers, callees, invariants, NatSpec verdict, gas flags, overall verdict)
+  2. A cross-reference index template exists showing how to record every caller/callee relationship with context annotations (delegatecall vs direct, internal vs external)
+  3. A state mutation map template exists showing how to record which functions write which storage slots, partitioned by module
+  4. A sample audit entry exists demonstrating the schema applied to a real function
+**Plans**: TBD
+
+### Phase 49: Core Game Contract
+**Goal**: Every function in DegenerusGame.sol and every storage variable in DegenerusGameStorage.sol has a complete audit report with correctness verdict
+**Depends on**: Phase 48
+**Requirements**: CORE-01, CORE-02
+**Success Criteria** (what must be TRUE):
+  1. Every public/external function in DegenerusGame.sol has a JSON + markdown audit entry covering callers, callees, state mutations, invariants, NatSpec accuracy, gas flags, and verdict
+  2. Every internal/private function in DegenerusGame.sol has a JSON + markdown audit entry
+  3. Every storage variable in DegenerusGameStorage.sol is documented with its slot, type, which modules read it, and which modules write it
+  4. All delegatecall dispatch paths from DegenerusGame into modules are enumerated with their selectors and target modules
+**Plans**: TBD
+
+### Phase 50: ETH Flow Modules
+**Goal**: Every function in the three core ETH-path modules (Advance, Mint, Jackpot) has a complete audit report
+**Depends on**: Phase 48
+**Requirements**: MOD-01, MOD-02, MOD-03
+**Success Criteria** (what must be TRUE):
+  1. Every function in DegenerusGameAdvanceModule.sol has a JSON + markdown audit entry with verdict
+  2. Every function in DegenerusGameMintModule.sol has a JSON + markdown audit entry with verdict
+  3. Every function in DegenerusGameJackpotModule.sol has a JSON + markdown audit entry with verdict
+  4. All ETH mutation paths through these three modules are traced and annotated
+**Plans**: TBD
+
+### Phase 51: Endgame & Lifecycle Modules
+**Goal**: Every function in the three game lifecycle modules (Endgame, Lootbox, GameOver) has a complete audit report
+**Depends on**: Phase 48
+**Requirements**: MOD-04, MOD-05, MOD-06
+**Success Criteria** (what must be TRUE):
+  1. Every function in DegenerusGameEndgameModule.sol has a JSON + markdown audit entry with verdict
+  2. Every function in DegenerusGameLootboxModule.sol has a JSON + markdown audit entry with verdict
+  3. Every function in DegenerusGameGameOverModule.sol has a JSON + markdown audit entry with verdict
+  4. Game-over terminal state transitions and prize distribution paths are fully traced
+**Plans**: TBD
+
+### Phase 52: Whale & Player Modules
+**Goal**: Every function in the four player interaction modules (Whale, Degenerette, Boon, Decimator) has a complete audit report
+**Depends on**: Phase 48
+**Requirements**: MOD-07, MOD-08, MOD-09, MOD-10
+**Success Criteria** (what must be TRUE):
+  1. Every function in DegenerusGameWhaleModule.sol has a JSON + markdown audit entry with verdict
+  2. Every function in DegenerusGameDegeneretteModule.sol has a JSON + markdown audit entry with verdict
+  3. Every function in DegenerusGameBoonModule.sol has a JSON + markdown audit entry with verdict
+  4. Every function in DegenerusGameDecimatorModule.sol has a JSON + markdown audit entry with verdict
+  5. All whale pricing formulas (bundle, lazy pass, deity pass) are verified against game theory paper
+**Plans**: TBD
+
+### Phase 53: Module Utilities & Libraries
+**Goal**: Every function in the 2 module utility contracts and 5 library contracts has a complete audit report
+**Depends on**: Phase 48
+**Requirements**: MOD-11, MOD-12, LIB-01, LIB-02, LIB-03, LIB-04, LIB-05
+**Success Criteria** (what must be TRUE):
+  1. Every function in DegenerusGameMintStreakUtils.sol has a JSON + markdown audit entry with verdict
+  2. Every function in DegenerusGamePayoutUtils.sol has a JSON + markdown audit entry with verdict
+  3. Every function in BitPackingLib.sol, EntropyLib.sol, GameTimeLib.sol, PriceLookupLib.sol, and JackpotBucketLib.sol has a JSON + markdown audit entry with verdict
+  4. All library call sites across the protocol are enumerated for each library
+**Plans**: TBD
+
+### Phase 54: Token & Economics Contracts
+**Goal**: Every function in BurnieCoin, BurnieCoinflip (16KB), DegenerusVault, and DegenerusStonk has a complete audit report
+**Depends on**: Phase 48
+**Requirements**: TOKEN-01, TOKEN-02, TOKEN-03, TOKEN-04
+**Success Criteria** (what must be TRUE):
+  1. Every function in BurnieCoin.sol has a JSON + markdown audit entry with verdict
+  2. Every function in BurnieCoinflip.sol has a JSON + markdown audit entry with verdict (including coinflip resolution and payout distribution)
+  3. Every function in DegenerusVault.sol has a JSON + markdown audit entry with verdict (including stETH yield and share math)
+  4. Every function in DegenerusStonk.sol has a JSON + markdown audit entry with verdict
+**Plans**: TBD
+
+### Phase 55: Pass, Social & Interface Contracts
+**Goal**: Every function in DeityPass, DeityBoonViewer, Affiliate, Quests, and Jackpots has a complete audit report, and every interface signature and NatSpec is verified against its implementation
+**Depends on**: Phase 48
+**Requirements**: PASS-01, PASS-02, SOCIAL-01, SOCIAL-02, SOCIAL-03, IFACE-01, IFACE-02
+**Success Criteria** (what must be TRUE):
+  1. Every function in DegenerusDeityPass.sol and DeityBoonViewer.sol has a JSON + markdown audit entry with verdict
+  2. Every function in DegenerusAffiliate.sol, DegenerusQuests.sol, and DegenerusJackpots.sol has a JSON + markdown audit entry with verdict
+  3. Every interface function signature across all interface files matches its implementation exactly (parameter types, return types, visibility)
+  4. Every interface NatSpec comment matches the actual behavior of the implementing function
+**Plans**: TBD
+
+### Phase 56: Admin & Support Contracts
+**Goal**: Every function in Admin, TraitUtils, and support contracts has a complete audit report, and ContractAddresses constants are verified
+**Depends on**: Phase 48
+**Requirements**: ADMIN-01, ADMIN-02, ADMIN-03, ADMIN-04, ADMIN-05
+**Success Criteria** (what must be TRUE):
+  1. Every function in DegenerusAdmin.sol has a JSON + markdown audit entry with verdict (including VRF wiring and admin privilege paths)
+  2. Every function in DegenerusTraitUtils.sol has a JSON + markdown audit entry with verdict
+  3. Every constant in ContractAddresses.sol is verified against the deploy order and actual usage across all contracts
+  4. Every function in Icons32Data.sol and WrappedWrappedXRP.sol has a JSON + markdown audit entry with verdict
+**Plans**: TBD
+
+### Phase 57: Cross-Contract Verification & Prior Claims
+**Goal**: Complete cross-cutting analysis across the entire protocol -- call graph, ETH flow map, state mutation matrix, gas flags, and verification of prior v1-v6 claims against current code
+**Depends on**: Phases 49-56 (all individual contract audits)
+**Requirements**: XREF-01, XREF-02, XREF-03, GAS-01, GAS-02, VERIFY-01, VERIFY-02
+**Success Criteria** (what must be TRUE):
+  1. A complete call graph exists showing every caller/callee relationship across the protocol, annotated with call type (delegatecall, direct external, internal)
+  2. An ETH flow map traces every path ETH enters, moves within, or exits the protocol (deposits, splits, claims, refunds, sweeps)
+  3. A state mutation matrix shows which modules can write which storage slots via delegatecall, with no undocumented writes
+  4. All impossible condition checks and redundant storage reads are flagged across all contracts
+  5. Critical claims from v1-v6 audits are spot-checked against current code, and game theory paper intent is cross-referenced for ambiguous functions
+**Plans**: TBD
+
+### Phase 58: Synthesis Report
+**Goal**: A complete aggregate findings report with severity ratings and an executive summary with honest confidence assessment
+**Depends on**: Phase 57 (cross-contract verification complete)
+**Requirements**: SYNTH-01, SYNTH-02
+**Success Criteria** (what must be TRUE):
+  1. An aggregate findings report exists listing every finding from Phases 49-57, classified by severity (Critical/High/Medium/Low/QA)
+  2. An executive summary exists with overall protocol confidence assessment, coverage metrics, and honest limitations
+  3. Every finding has a clear description, affected function(s), severity justification, and remediation guidance where applicable
+**Plans**: TBD
+
 ## Progress
 
+**Execution Order:**
+Phases 48 first (infrastructure). Phases 49-56 can be parallelized after 48. Phase 57 depends on 49-56. Phase 58 depends on 57.
+
 **Cumulative:** 47 phases complete across 7 milestones shipped.
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 48. Audit Infrastructure | 0/TBD | Not started | - |
+| 49. Core Game Contract | 0/TBD | Not started | - |
+| 50. ETH Flow Modules | 0/TBD | Not started | - |
+| 51. Endgame & Lifecycle Modules | 0/TBD | Not started | - |
+| 52. Whale & Player Modules | 0/TBD | Not started | - |
+| 53. Module Utilities & Libraries | 0/TBD | Not started | - |
+| 54. Token & Economics Contracts | 0/TBD | Not started | - |
+| 55. Pass, Social & Interface Contracts | 0/TBD | Not started | - |
+| 56. Admin & Support Contracts | 0/TBD | Not started | - |
+| 57. Cross-Contract Verification & Prior Claims | 0/TBD | Not started | - |
+| 58. Synthesis Report | 0/TBD | Not started | - |
