@@ -223,3 +223,5 @@ Confidence levels:
 3. **No LOW confidence items.** Every examined function has at least partial evidence of its design intent, either through NatSpec, test names, or audit findings.
 
 4. **v7.0 function-level audits provide strong corroboration.** The Phase 50-56 audits verified 400+ individual functions with 0 bugs found, providing independent confirmation of all prior claim categories.
+
+5. **MEDIUM confidence items are value-justification gaps, not correctness gaps.** The 4 MEDIUM items all involve numeric constants that are correctly implemented and verified safe -- the gap is only that the game theory paper rationale for choosing those specific values (vs alternatives) is not explicitly documented in the source code.
