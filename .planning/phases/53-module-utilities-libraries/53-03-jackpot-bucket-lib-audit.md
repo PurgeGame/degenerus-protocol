@@ -517,3 +517,132 @@ Exact inverse of `packWinningTraits`. See roundtrip verification above.
 **NatSpec Accuracy:** Accurate. States "largest count first; ties keep lower index."
 **Gas Flags:** None. Two short loops (3 and 4 iterations).
 **Verdict:** CORRECT
+
+---
+
+## Bucket Scaling Analysis
+
+The following table shows bucket count scaling at key ETH pool thresholds. Base counts are [25, 15, 8, 1] (before rotation). The solo bucket (count=1) is never scaled. Two configurations are used in the codebase:
+
+**Configuration A -- Normal Jackpot:** maxScaleBps=40,000 (4x), JACKPOT_MAX_WINNERS=300
+**Configuration B -- Daily/Final Day:** maxScaleBps=66,667 (6.67x), DAILY_ETH_MAX_WINNERS=321
+
+### Configuration A: Normal Jackpot (4x cap, 300 max winners)
+
+| ETH Pool | Scale BPS | Scale Factor | Non-Solo Counts | Total Winners | Capped? |
+|----------|-----------|--------------|-----------------|---------------|---------|
+| 0 ETH | N/A | N/A | [0, 0, 0, 0] | 0 | N/A (empty pool) |
+| 5 ETH | 10,000 | 1.00x | [25, 15, 8, 1] | 49 | No |
+| 10 ETH | 10,000 | 1.00x | [25, 15, 8, 1] | 49 | No |
+| 25 ETH | 13,750 | 1.38x | [34, 20, 11, 1] | 66 | No |
+| 30 ETH | 15,000 | 1.50x | [37, 22, 12, 1] | 72 | No |
+| 50 ETH | 20,000 | 2.00x | [50, 30, 16, 1] | 97 | No |
+| 100 ETH | 26,666 | 2.67x | [66, 39, 21, 1] | 127 | No |
+| 125 ETH | 30,000 | 3.00x | [75, 45, 24, 1] | 145 | No |
+| 200 ETH | 40,000 | 4.00x | [100, 60, 32, 1] | 193 | No |
+| 500 ETH | 40,000 | 4.00x | [100, 60, 32, 1] | 193 | No |
+
+With maxTotal=300 and max uncapped total of 193, the cap is never reached under Configuration A. This means `capBucketCounts` is always a no-op for normal jackpots.
+
+### Configuration B: Daily Jackpot (6.67x cap, 321 max winners)
+
+| ETH Pool | Scale BPS | Scale Factor | Non-Solo Counts | Total Winners | Capped? |
+|----------|-----------|--------------|-----------------|---------------|---------|
+| 0 ETH | N/A | N/A | [0, 0, 0, 0] | 0 | N/A |
+| 5 ETH | 10,000 | 1.00x | [25, 15, 8, 1] | 49 | No |
+| 50 ETH | 20,000 | 2.00x | [50, 30, 16, 1] | 97 | No |
+| 200 ETH | 66,667 | 6.67x | [166, 100, 53, 1] | 320 | No |
+| 500 ETH | 66,667 | 6.67x | [166, 100, 53, 1] | 320 | No |
+
+With maxTotal=321 and max uncapped total of 320, the cap is also never reached under Configuration B. The constants are precisely tuned: `(25 * 66667) / 10000 = 166`, `(15 * 66667) / 10000 = 100`, `(8 * 66667) / 10000 = 53`, total = 166 + 100 + 53 + 1 = 320 <= 321.
+
+**Observation:** The cap mechanism (`capBucketCounts`) exists as a safety net but is never triggered by the current constant configuration. The constants were chosen to make the 4x/6.67x scaled totals fit within the respective maxTotal values. This is good defensive programming.
+
+---
+
+## Share Distribution Verification
+
+The `bucketShares` function guarantees exact distribution of the pool with zero dust loss:
+
+**Mechanism:**
+1. For each non-remainder bucket: `share = (pool * shareBps[i]) / 10000`, rounded down to `unit * count` multiples.
+2. The remainder bucket receives: `pool - sum(other shares)`.
+
+**Proof of exactness:** `shares[remainderIdx] = pool - distributed`, where `distributed` is the sum of all non-remainder shares. Therefore `sum(shares) = distributed + (pool - distributed) = pool`. QED.
+
+**Rounding direction:** Non-remainder buckets are always rounded DOWN (integer division). This means the remainder bucket always receives >= its BPS-proportional share. The remainder bucket (solo bucket, which receives the 60% share) benefits from all rounding dust.
+
+**Edge case -- all bucketCounts are 0 except remainder:**
+When all non-remainder buckets have count=0, their shares are computed but not stored (stay 0). The share values are still added to `distributed`. Then `shares[remainderIdx] = pool - distributed`. If all shareBps sum to 10000, then `distributed = pool - (pool * shareBps[remainderIdx] / 10000)` and the remainder gets the rest. Due to integer division, this may differ from `pool * shareBps[remainderIdx] / 10000` by at most a few wei.
+
+**Edge case -- unit is 0:**
+When `unit == 0`, no unit rounding is applied. Shares are just `(pool * shareBps[i]) / 10000` without further rounding. Dust still goes to remainder.
+
+---
+
+## Library Call Sites
+
+All 13 functions are called exclusively from `DegenerusGameJackpotModule.sol`. No other contract imports or uses `JackpotBucketLib`.
+
+### Call Site Map
+
+| Function | Line(s) | Calling Function | Context |
+|----------|---------|-----------------|---------|
+| `unpackWinningTraits` | 296 | `distributeJackpotFinalDay` | Unpack traits for final-day jackpot distribution |
+| `unpackWinningTraits` | 785 | `_distributeDgnrsFinalDay` | Re-derive traits for DGNRS token final-day reward |
+| `unpackWinningTraits` | 1041 | `_hasTraitTickets` | Check if any trait has tickets at a level |
+| `unpackWinningTraits` | 1117 | `_selectAndStoreWinners` | Unpack traits for winner selection |
+| `unpackWinningTraits` | 1322 | `_executeJackpot` | Unpack traits for standard jackpot execution |
+| `unpackWinningTraits` | 2453 | `_distributeCoinJackpot` | Unpack traits for BURNIE coin jackpot |
+| `unpackWinningTraits` | 2689 | `_hasActualTraitTickets` | Check for actual (non-virtual) trait tickets |
+| `bucketCountsForPoolCap` | 300 | `distributeJackpotFinalDay` | Get scaled bucket counts for final-day ETH pool |
+| `shareBpsByBucket` | 306 | `distributeJackpotFinalDay` | Get rotated share BPS for final-day distribution |
+| `shareBpsByBucket` | 1325 | `_executeJackpot` | Get rotated share BPS for standard jackpot |
+| `soloBucketIndex` | 783 | `_distributeDgnrsFinalDay` | Find solo bucket for DGNRS reward targeting |
+| `soloBucketIndex` | 1414 | `_distributeJackpotEth` | Identify remainder bucket (=solo) for share calc |
+| `soloBucketIndex` | 1536, 1538 | `_distributeNormalJackpotEth` | Identify remainder and solo buckets |
+| `traitBucketCounts` | 1341 | `_runJackpotEthFlow` | Get base counts for standard jackpot |
+| `scaleTraitBucketCountsWithCap` | 1344-1350 | `_runJackpotEthFlow` | Scale and cap for standard jackpot |
+| `bucketShares` | 1415 | `_distributeJackpotEth` | Compute per-bucket ETH shares (final-day chunked) |
+| `bucketShares` | 1540 | `_distributeNormalJackpotEth` | Compute per-bucket ETH shares (normal) |
+| `bucketOrderLargestFirst` | 1423 | `_distributeJackpotEth` | Order buckets for chunked distribution (largest first for gas efficiency) |
+| `packWinningTraits` | 2632 | `_rollWinningTraits` | Pack burn-count-weighted traits |
+| `packWinningTraits` | 2636 | `_rollWinningTraits` | Pack random traits (non-burn path) |
+| `getRandomTraits` | 2637 | `_rollWinningTraits` | Derive random traits when not using burn counts |
+
+**Total call sites:** 22 references across 11 distinct caller functions, all within JackpotModule.
+
+**Most-called function:** `unpackWinningTraits` (7 call sites) -- used wherever packed winning traits need to be interpreted.
+
+**Least-called functions:** `sumBucketCounts` (0 external call sites, called only by `capBucketCounts` within the library), `getRandomTraits` (1 call site).
+
+---
+
+## Findings Summary
+
+### Verdict Distribution
+
+| Verdict | Count | Functions |
+|---------|-------|-----------|
+| CORRECT | 13 | All functions |
+| CONCERN | 0 | -- |
+| BUG | 0 | -- |
+| GAS | 0 | -- |
+
+### Key Findings
+
+1. **All 13 functions verified CORRECT.** No bugs, no concerns, no gas issues found.
+
+2. **Solo bucket preservation is robust.** The `count > 1` guard in `scaleTraitBucketCountsWithCap` and the `nonSoloCap = maxTotal - 1` reserve in `capBucketCounts` together ensure the solo bucket is never modified during scaling or capping.
+
+3. **Dust-free share distribution.** The remainder-bucket pattern in `bucketShares` algebraically guarantees `sum(shares) == pool` with zero wei lost.
+
+4. **Trait quadrant coverage is complete.** `getRandomTraits` covers all 256 trait IDs across 4 non-overlapping quadrants of 64 each, with uniform probability within each quadrant.
+
+5. **Pack/unpack roundtrip is exact.** `unpackWinningTraits(packWinningTraits(x)) == x` for all valid inputs. Bijective mapping.
+
+6. **Cap mechanism is a safety net.** Current constant configurations (4x/300 and 6.67x/321) are tuned such that uncapped totals never exceed maxTotal. The cap logic exists as defensive programming.
+
+7. **Entropy bit usage is well-separated.** Bucket rotation uses bits [0-1], solo index derives from the same bits (intentionally inverse), share rotation adds +1 offset. Trait generation uses bits [0-23]. Cap trimming/remainder uses bits [24-25]. No unintended entropy correlation between independent decisions.
+
+8. **`bucketOrderLargestFirst` is a partial sort.** Only order[0] is guaranteed to be the largest. The remaining elements maintain original index order. This is sufficient for its single use case in `_distributeJackpotEth`, which processes the largest bucket first for gas efficiency in chunked distribution.
