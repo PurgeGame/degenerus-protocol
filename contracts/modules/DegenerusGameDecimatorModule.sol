@@ -459,6 +459,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 weiAmount,
         uint256 entropy
     ) private returns (bool handled) {
+        if (gameOver) return false;
         AutoRebuyState memory state = autoRebuyState[beneficiary];
         if (!state.autoRebuyEnabled) return false;
         if (decimatorAutoRebuyDisabled[beneficiary]) return false;
