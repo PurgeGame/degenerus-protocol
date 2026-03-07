@@ -666,3 +666,122 @@ Multi-tier affiliate referral system with configurable rakeback. Features: affil
 | `AFFILIATE_CODE_VAULT` | bytes32("VAULT") | Reserved VAULT affiliate code |
 | `AFFILIATE_CODE_DGNRS` | bytes32("DGNRS") | Reserved DGNRS affiliate code |
 | `AFFILIATE_ROLL_TAG` | keccak256("affiliate-payout-roll-v1") | Domain separator for weighted roll entropy |
+
+---
+
+## Access Control Matrix
+
+| Modifier / Check | Functions | Who Can Call |
+|-------------------|-----------|-------------|
+| `msg.sender == COIN \|\| msg.sender == GAME` | `payAffiliate` | BurnieCoin or DegenerusGame contracts |
+| `msg.sender == GAME` | `consumeDegeneretteCredit` | DegenerusGame contract only |
+| `info.owner == msg.sender` | `setAffiliatePayoutMode` | Owner of the specific affiliate code |
+| (none -- open) | `createAffiliateCode` | Any external account |
+| (none -- open) | `referPlayer` | Any external account (but reverts on invalid/self/duplicate) |
+| (none -- open, view) | `affiliatePayoutMode`, `pendingDegeneretteCreditOf`, `getReferrer`, `affiliateTop`, `affiliateScore`, `affiliateBonusPointsBest` | Any caller |
+| (constructor only) | `constructor`, `_bootstrapReferral` | Deploy transaction |
+
+**Notes:**
+- `payAffiliate` accepts both COIN and GAME as callers, broader than the interface-level `onlyGame` description. The actual code checks both.
+- `consumeDegeneretteCredit` is GAME-only (not COIN).
+- There is no `onlyAdmin` or `onlyOwner` anywhere -- the contract is fully autonomous post-deployment with no admin upgrade paths.
+
+## Storage Mutation Map
+
+| Function | Variables Written | Write Type |
+|----------|------------------|------------|
+| `constructor` | `affiliateCode[VAULT]`, `affiliateCode[DGNRS]`, `playerReferralCode[VAULT]`, `playerReferralCode[DGNRS]`, plus bootstrapped codes/referrals | Initialize (one-time) |
+| `createAffiliateCode` (via `_createAffiliateCode`) | `affiliateCode[code_]` | Insert (first-come, permanent) |
+| `setAffiliatePayoutMode` | `affiliateCode[code_].payoutMode` | Update (owner only) |
+| `referPlayer` (via `_setReferralCode`) | `playerReferralCode[msg.sender]` | Insert/Update (once, or presale override) |
+| `consumeDegeneretteCredit` | `pendingDegeneretteCredit[player]` | Decrement (min(amount, balance)) |
+| `payAffiliate` -> referral resolution | `playerReferralCode[sender]` | Insert (first purchase or presale override) |
+| `payAffiliate` -> commission tracking | `affiliateCommissionFromSender[lvl][affiliate][sender]` | Increment (cumulative) |
+| `payAffiliate` -> leaderboard | `affiliateCoinEarned[lvl][affiliateAddr]` | Increment (cumulative) |
+| `payAffiliate` -> top affiliate | `affiliateTopByLevel[lvl]` | Update (only if new top) |
+| `payAffiliate` -> degenerette credit (via `_routeAffiliateReward`) | `pendingDegeneretteCredit[player]` | Increment (Degenerette mode) |
+
+**Storage Slot Summary (6 mappings):**
+
+| Mapping | Key Structure | Value Type | Written By |
+|---------|--------------|------------|------------|
+| `affiliateCode` | `bytes32 code` | `AffiliateCodeInfo{address,uint8,uint8}` (1 slot) | constructor, `_createAffiliateCode`, `setAffiliatePayoutMode` |
+| `affiliateCoinEarned` | `uint24 lvl -> address affiliate` | `uint256` | `payAffiliate` |
+| `playerReferralCode` | `address player` | `bytes32` | `_setReferralCode` |
+| `pendingDegeneretteCredit` | `address player` | `uint256` | `_routeAffiliateReward`, `consumeDegeneretteCredit` |
+| `affiliateTopByLevel` | `uint24 lvl` | `PlayerScore{address,uint96}` (1 slot) | `_updateTopAffiliate` |
+| `affiliateCommissionFromSender` | `uint24 lvl -> address affiliate -> address sender` | `uint256` | `payAffiliate` |
+
+## ETH Mutation Path Map
+
+| Path | Source | Destination | Trigger | Function |
+|------|--------|-------------|---------|----------|
+| (none) | -- | -- | -- | -- |
+
+**No direct ETH flows.** DegenerusAffiliate does not hold, receive, or transfer ETH. All rewards are BURNIE-denominated virtual credits routed through:
+
+| Credit Path | Mode | Recipient | Mechanism |
+|------------|------|-----------|-----------|
+| FLIP credit | Coinflip (0) | Affiliate/upline winner | `coin.creditFlip(player, amount)` |
+| COIN credit | SplitCoinflipCoin (2) | Affiliate/upline winner | `coin.creditCoin(player, amount >> 1)` (50% credited, 50% discarded) |
+| Degenerette credit | Degenerette (1) | Affiliate/upline winner | `pendingDegeneretteCredit[player] += amount` (stored locally) |
+| Rakeback | (returned to caller) | Purchasing player | `return playerRakeback` (caller handles minting) |
+
+## Cross-Contract Call Graph
+
+| Function | Calls To | Target Contract | Method | Direction |
+|----------|----------|----------------|--------|-----------|
+| `_routeAffiliateReward` | BurnieCoin | `ContractAddresses.COIN` | `creditFlip(player, amount)` | Outbound (Coinflip mode) |
+| `_routeAffiliateReward` | BurnieCoin | `ContractAddresses.COIN` | `creditCoin(player, amount)` | Outbound (SplitCoinflipCoin mode) |
+| `payAffiliate` | BurnieCoin | `ContractAddresses.COIN` | `affiliateQuestReward(affiliate, base)` | Outbound (1-3 calls per payout) |
+| `_vaultReferralMutable` | DegenerusGame | `ContractAddresses.GAME` | `lootboxPresaleActiveFlag()` | Outbound (view call) |
+
+**Inbound Calls (from other contracts to Affiliate):**
+
+| Caller Contract | Method Called | Purpose |
+|----------------|-------------|---------|
+| DegenerusGame / BurnieCoin | `payAffiliate(...)` | Process affiliate reward on purchase |
+| DegenerusGame | `consumeDegeneretteCredit(player, amount)` | Consume stored degenerette credit |
+| Any (view) | `affiliateTop(lvl)` | Query top affiliate per level |
+| Any (view) | `affiliateScore(lvl, player)` | Query affiliate earnings |
+| Any (view) | `affiliateBonusPointsBest(lvl, player)` | Calculate mint trait bonus |
+| Any (view) | `getReferrer(player)` | Look up referrer address |
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | None found |
+| CONCERN | 0 | None found |
+| GAS (informational) | 2 | (1) `setAffiliatePayoutMode` emits event even on no-op same-mode call; (2) `payAffiliate` constructs `vaultInfo` memory struct unconditionally |
+| NATSPEC (informational) | 1 | IDegenerusAffiliate interface says "levels 1-3" for fresh ETH reward, but implementation uses `lvl <= 3` (levels 0-3). Contract NatSpec is correct; interface NatSpec is slightly off. |
+| CORRECT | 20 | All 20 functions verified correct |
+
+### Detailed Informational Notes
+
+**1. [GAS-INFO] Event emission on no-op payout mode change**
+- **Location:** `setAffiliatePayoutMode` (line 341-349)
+- **Detail:** If `info.payoutMode == modeRaw` already, the storage write is correctly skipped, but `AffiliatePayoutModeUpdated` still fires. Callers re-setting the same mode waste ~2000 gas on the log.
+- **Impact:** Negligible. User-facing function; unlikely to be called repeatedly with same mode.
+
+**2. [GAS-INFO] Unconditional vaultInfo construction**
+- **Location:** `payAffiliate` (line 489-493)
+- **Detail:** `vaultInfo` memory struct is allocated on every `payAffiliate` call, even when the code resolves to a non-VAULT affiliate. Compiler may optimize this away with viaIR, but in theory adds ~60 gas for unused memory allocation.
+- **Impact:** Negligible in context of cross-contract calls (~100k+ gas per payAffiliate).
+
+**3. [NATSPEC-INFO] Interface vs implementation level range**
+- **Location:** IDegenerusAffiliate.sol line 11 says "levels 1-3"; DegenerusAffiliate.sol uses `lvl <= 3` (levels 0-3)
+- **Detail:** The 25% fresh ETH rate applies to levels 0, 1, 2, 3 in the implementation. The interface comment says "levels 1-3" which omits level 0.
+- **Impact:** Informational only. Implementation is authoritative and correct for the game design (level 0 is presale/first level).
+
+### Design Observations
+
+1. **Weighted winner selection is deterministic per (day, sender, code).** Same sender purchasing twice on the same day with the same affiliate code will produce the same weighted roll outcome. This is intentional -- it avoids VRF overhead for BURNIE credit distribution and is not exploitable since the reward is virtual FLIP/COIN credit, not ETH.
+
+2. **Per-referrer commission cap (0.5 ETH BURNIE)** prevents a single whale from dominating an affiliate's leaderboard score. After cap is reached, the affiliate earns nothing more from that specific sender at that level, but other senders can still contribute.
+
+3. **Lootbox taper only applies to payout, not leaderboard tracking.** The full untapered amount is always recorded in `affiliateCoinEarned` for leaderboard purposes, while the actual FLIP/COIN payout is reduced. This means leaderboard rankings reflect true affiliate activity regardless of taper.
+
+4. **Multi-tier upline shares are post-taper.** Upline1 gets 20% and Upline2 gets 4% of the tapered `scaledAmount`, meaning taper reduces all tiers proportionally.
+
+5. **SplitCoinflipCoin mode is deflationary.** Only 50% of the reward is credited as COIN; the other 50% is simply never minted. This acts as a voluntary burn mechanism for affiliates who choose this mode.
