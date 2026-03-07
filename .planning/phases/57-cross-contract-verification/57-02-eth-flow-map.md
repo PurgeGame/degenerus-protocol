@@ -494,9 +494,10 @@ Affiliate "ETH value" is a virtual calculation for BURNIE conversion only.
 | Internal pool movements | 38 (I1-I38) |
 | ETH exit points | 17 (X1-X17) |
 | Total unique ETH paths | 72 |
-| Contracts handling ETH | 7 (DegenerusGame, DegenerusVault, DegenerusStonk, DegenerusAdmin, MintModule, WhaleModule, GameOverModule) |
-| Modules handling ETH (via delegatecall) | 7 (AdvanceModule, MintModule, JackpotModule, EndgameModule, LootboxModule, WhaleModule, DegeneretteModule, DecimatorModule, GameOverModule, PayoutUtils) |
+| Standalone contracts handling ETH | 4 (DegenerusGame, DegenerusVault, DegenerusStonk, DegenerusAdmin) |
+| Delegatecall modules handling ETH | 10 (AdvanceModule, MintModule, JackpotModule, EndgameModule, LootboxModule, WhaleModule, DegeneretteModule, DecimatorModule, GameOverModule, PayoutUtils) |
 | Contracts NOT handling ETH | 6 (BurnieCoin, BurnieCoinflip, DegenerusAffiliate, DegenerusQuests, DegenerusDeityPass, WrappedWrappedXRP) |
+| Non-ETH modules (via delegatecall) | 1 (BoonModule -- modifies boon state only, no ETH movement) |
 | Contracts with `receive()` | 3 (DegenerusGame, DegenerusVault, DegenerusStonk) |
 | Contracts with `steth.submit{value:}` | 2 (DegenerusGame via adminStakeEthForStEth, AdvanceModule via _autoStakeExcessEth) |
 | Conservation violations | 0 |
