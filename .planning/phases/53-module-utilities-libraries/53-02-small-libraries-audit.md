@@ -347,3 +347,173 @@ The NatSpec states levels 10+ use a "100-level cycle, excluding intro tiers." Th
 3. The function is deterministic and pure.
 
 **Verdict:** CORRECT
+
+---
+
+## BitPackingLib Bit Layout Diagram
+
+Visual layout of the 256-bit `mintPacked_[player]` word:
+
+```
+Bit 255                                                                    Bit 0
+|                                                                              |
+v                                                                              v
+[reserved ][LEVEL_UNITS][--------gap--------][STREAK_LAST][--gap--][WHALE][FROZEN_UNTIL ][UNITS_LEVEL  ][    DAY     ][  STREAK   ][ LVL_COUNT ][LAST_LEVEL  ]
+[244-255  ][228-243    ][184-227            ][160-183    ][155-159][152-4][128-151      ][104-127      ][72-103      ][48-71      ][24-47      ][0-23        ]
+  12 bits    16 bits      44 bits (unused)    24 bits     5 bits  3 bits  24 bits        24 bits        32 bits       24 bits      24 bits      24 bits
+```
+
+**Field Summary:**
+
+| Position | Width | Field | Purpose |
+|----------|-------|-------|---------|
+| [0-23] | 24 | LAST_LEVEL | Last level the player purchased |
+| [24-47] | 24 | LEVEL_COUNT | Total number of level purchases |
+| [48-71] | 24 | LEVEL_STREAK | Consecutive level streak count |
+| [72-103] | 32 | DAY | Day index of last purchase (enough for 11.7M years) |
+| [104-127] | 24 | LEVEL_UNITS_LEVEL | Which level the units count tracks |
+| [128-151] | 24 | FROZEN_UNTIL_LEVEL | Whale bundle frozen level target |
+| [152-154] | 3 | WHALE_BUNDLE_TYPE | Bundle type: 0=none, 1=10-lvl, 3=100-lvl |
+| [155-159] | 5 | (gap) | Unused, available for future fields |
+| [160-183] | 24 | MINT_STREAK_LAST_COMPLETED | Last level credited for mint streak (defined in MintStreakUtils) |
+| [184-227] | 44 | (gap) | Unused, available for future fields |
+| [228-243] | 16 | LEVEL_UNITS | Units purchased at current level (max 65535) |
+| [244-255] | 12 | (reserved) | Documented as reserved in NatSpec |
+
+**Total used:** 199 bits of 256 (78%). **Remaining:** 61 bits across 3 gaps.
+
+---
+
+## PriceLookupLib Price Tier Table
+
+Complete price tier reference with cycle visualization:
+
+```
+Level:  0    4  5    9  10        29  30        59  60        89  90   99  100  101       129  130       200
+Price: 0.01 ETH |0.02 ETH| 0.04 ETH   | 0.08 ETH   | 0.12 ETH   |0.16 ETH|0.24|  0.04 ETH  |  0.08... |0.24
+       ----intro----      |-------------- first cycle (no intro) --------| |--- repeating 100-lvl cycle -->
+```
+
+| Tier | Levels | Price (ETH) | Price (wei) | Frequency |
+|------|--------|-------------|-------------|-----------|
+| Intro Low | 0-4 | 0.01 | 1e16 | Once (5 levels) |
+| Intro High | 5-9 | 0.02 | 2e16 | Once (5 levels) |
+| Cycle Low | 10-29, x01-x29 | 0.04 | 4e16 | 20 levels per cycle |
+| Cycle Mid | 30-59, x30-x59 | 0.08 | 8e16 | 30 levels per cycle |
+| Cycle High | 60-89, x60-x89 | 0.12 | 1.2e17 | 30 levels per cycle |
+| Cycle Final | 90-99, x90-x99 | 0.16 | 1.6e17 | 10 levels per cycle |
+| Milestone | 100, 200, 300... | 0.24 | 2.4e17 | 1 level per cycle |
+
+**Cost per full 100-level cycle (levels 100-199):**
+- 1 milestone: 0.24 ETH
+- 29 low: 29 * 0.04 = 1.16 ETH
+- 30 mid: 30 * 0.08 = 2.40 ETH
+- 30 high: 30 * 0.12 = 3.60 ETH
+- 10 final: 10 * 0.16 = 1.60 ETH
+- **Total per cycle: 9.00 ETH** (at 1 ticket per level)
+
+---
+
+## Library Call Sites
+
+### BitPackingLib Call Sites
+
+| Contract | Import | Usage Pattern | Fields Accessed |
+|----------|--------|---------------|-----------------|
+| **DegenerusGame** | Yes | Read-only (shift + mask extraction) | FROZEN_UNTIL_LEVEL, LAST_LEVEL, LEVEL_COUNT, WHALE_BUNDLE_TYPE |
+| **DegenerusGameStorage** | Yes | Read + write (setPacked calls) | FROZEN_UNTIL_LEVEL, LAST_LEVEL, LEVEL_COUNT, WHALE_BUNDLE_TYPE, DAY |
+| **DegenerusGameMintModule** | Yes | Read + write (setPacked calls) | LAST_LEVEL, LEVEL_COUNT, LEVEL_UNITS, LEVEL_UNITS_LEVEL, FROZEN_UNTIL_LEVEL, WHALE_BUNDLE_TYPE |
+| **DegenerusGameWhaleModule** | Yes | Read + write (setPacked + direct bit ops) | FROZEN_UNTIL_LEVEL, LEVEL_COUNT, WHALE_BUNDLE_TYPE, LAST_LEVEL, DAY, LEVEL_STREAK, MINT_STREAK_LAST_COMPLETED |
+| **DegenerusGameAdvanceModule** | Yes | Read-only (shift + mask extraction) | DAY, FROZEN_UNTIL_LEVEL |
+| **DegenerusGameBoonModule** | Yes | Read + write (setPacked calls) | LEVEL_COUNT |
+| **DegenerusGameMintStreakUtils** | Yes | Read + write (direct bit ops + mask) | LEVEL_STREAK, MINT_STREAK_LAST_COMPLETED |
+| **DegenerusGameDegeneretteModule** | Yes | Read-only (shift + mask extraction) | LEVEL_COUNT, FROZEN_UNTIL_LEVEL, WHALE_BUNDLE_TYPE |
+
+**Total importing contracts: 8** (DegenerusGame, DegenerusGameStorage, MintModule, WhaleModule, AdvanceModule, BoonModule, MintStreakUtils, DegeneretteModule)
+
+Note: DecimatorModule and LootboxModule do NOT import BitPackingLib (contrary to the plan's hypothesis).
+
+### EntropyLib Call Sites
+
+| Contract | Import | Call Count | Usage |
+|----------|--------|------------|-------|
+| **DegenerusGamePayoutUtils** | Yes | 1 | Level offset randomization for payout distribution |
+| **DegenerusGameMintModule** | Yes | 1 | Lootbox roll entropy derivation |
+| **DegenerusGameEndgameModule** | Yes | 1 | BAF/decimator entropy derivation |
+| **DegenerusGameLootboxModule** | Yes | 6 | Level entropy, far entropy, boon generation, deity boon rolls |
+| **DegenerusGameJackpotModule** | Yes | 8 | Ticket processing, winner selection, BURNIE coin jackpots, LCG step, chunk entropy |
+
+**Total importing contracts: 5** (PayoutUtils, MintModule, EndgameModule, LootboxModule, JackpotModule)
+
+Note: DecimatorModule and DegeneretteModule do NOT import EntropyLib (contrary to the plan's hypothesis). They receive entropy-derived values from callers rather than calling EntropyLib directly.
+
+### GameTimeLib Call Sites
+
+| Contract | Import | Call Count | Usage |
+|----------|--------|------------|-------|
+| **DegenerusGameStorage** | Yes | 2 | `_currentDay()` wraps `currentDayIndex()`; `_currentDayAt()` wraps `currentDayIndexAt()` |
+| **DegenerusAffiliate** | Yes | 1 | Affiliate day tracking for commission calculations |
+
+**Total importing contracts: 2** (DegenerusGameStorage, DegenerusAffiliate)
+
+All module access to day index goes through DegenerusGameStorage helper functions, not direct GameTimeLib calls.
+
+### PriceLookupLib Call Sites
+
+| Contract | Import | Call Count | Usage |
+|----------|--------|------------|-------|
+| **DegenerusGamePayoutUtils** | Yes | 1 | Ticket price lookup (`>> 2` for quarter-ticket unit price) |
+| **DegenerusGameWhaleModule** | Yes | 2 | Lazy pass cost (sum-of-level-prices), whale bundle level pricing |
+| **DegenerusGameEndgameModule** | Yes | 1 | BAF target price for endgame calculations |
+| **DegenerusGameJackpotModule** | Yes | 4 | Level prices array, ticket price, BURNIE coin unit price |
+| **DegenerusGameLootboxModule** | Yes | 2 | Lootbox target price, deity pass level-sum pricing |
+
+**Total importing contracts: 5** (PayoutUtils, WhaleModule, EndgameModule, JackpotModule, LootboxModule)
+
+Note: MintModule does NOT import PriceLookupLib directly; it receives price information from the game contract. This is by design -- MintModule's pricing comes from DegenerusGame which calls into MintModule via delegatecall, passing the price via parameters.
+
+---
+
+## Findings Summary
+
+### Verdict Summary
+
+| Library | Functions | Constants | Verdicts |
+|---------|-----------|-----------|----------|
+| BitPackingLib | 1 | 10 (3 masks + 7 shifts) | 1 CORRECT |
+| EntropyLib | 1 | 0 | 1 CORRECT (NatSpec informational) |
+| GameTimeLib | 2 | 1 | 2 CORRECT |
+| PriceLookupLib | 1 | 0 | 1 CORRECT |
+| **Total** | **5** | **11** | **5 CORRECT, 0 CONCERN, 0 BUG** |
+
+### Issues Found
+
+**BUG:** None
+
+**CONCERN:** None
+
+**GAS:** None
+
+**INFORMATIONAL:**
+1. **EntropyLib NatSpec:** `@dev` says "Standard xorshift64 algorithm" but operates on uint256. Should say "xorshift" or "xorshift adapted for 256 bits." Zero impact on correctness or security.
+2. **BitPackingLib NatSpec:** Header comment does not document bits [160-183] (MINT_STREAK_LAST_COMPLETED). Acceptable because that constant is defined in MintStreakUtils, not BitPackingLib.
+3. **PriceLookupLib NatSpec:** Describes levels 10-29 as part of "100-level cycle" but code uses direct comparison (not modular arithmetic) for levels < 100. Functionally equivalent but slightly misleading.
+
+### Cross-Library Dependencies
+
+```
+BitPackingLib  <-- no dependencies (standalone)
+EntropyLib     <-- no dependencies (standalone)
+GameTimeLib    <-- ContractAddresses (compile-time constant)
+PriceLookupLib <-- no dependencies (standalone)
+```
+
+All four libraries are leaf dependencies with no circular references. Three are fully standalone; GameTimeLib depends on a compile-time constant.
+
+### Security Assessment
+
+All four libraries are **pure/view internal functions** with no access control requirements, no ETH handling, and no external calls. They pose no direct attack surface. Their security properties are:
+1. **BitPackingLib:** Correct bit manipulation. No value truncation bugs. Callers responsible for passing valid shift/mask combinations.
+2. **EntropyLib:** Deterministic derivation from VRF. Not used as standalone randomness. Zero-state produces zero output, but VRF seeds are always non-zero.
+3. **GameTimeLib:** Arithmetic safe post-deployment. Underflow impossible in production.
+4. **PriceLookupLib:** Complete coverage of all uint24 inputs. No missing branches. All prices non-zero.
