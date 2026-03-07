@@ -144,7 +144,9 @@ Plans:
   2. A test proves lootbox activity taper: score <15000 BPS pays 100%, score 15000-25500 BPS linearly tapers from 100% to 50%, and score >=25500 BPS floors at 50%
   3. A test proves leaderboard tracking uses the full untapered amount even when the actual payout is reduced by taper
   4. A test proves the lootboxActivityScore parameter flows correctly through payAffiliate and produces the expected taper calculation
-**Plans**: TBD
+**Plans:** 1 plans
+Plans:
+- [ ] 44-01-PLAN.md -- Validate and commit affiliate commission cap and lootbox taper tests (AFF-01..09)
 
 ### Phase 45: Security & Economic Hardening Tests
 **Goal**: Every post-audit security fix and economic change has a dedicated test proving it works correctly -- no whale/lazy/deity purchase after gameOver, no voluntary deity refund, correct gameOver deity payout, and all economic formula changes verified
@@ -166,7 +168,9 @@ Plans:
   2. A sanity-check test verifies prize pool split BPS (90/10 ticket, 10/90 lootbox, 40/40/20 presale), jackpot day structure (5 days, 6-14% days 1-4, 100% day 5), jackpot bucket shares (20/20/20/20 and 60/13.33/13.33/13.34), and yield distribution (23/23/46/8) all match the paper
   3. A sanity-check test verifies activity score components and caps, lootbox EV breakpoints (80%->100% at 0-60%, 100%->135% at 60-255%), and future ticket odds (95% near, 5% far) match the paper
   4. A sanity-check test verifies affiliate commission rates (25%/20%/5%), tier structure (direct/upline1/upline2 at 20%/4%), whale/lazy/deity pass pricing, coinflip payout distribution (5%/90%/5%, mean ~1.97x), Degenerette base payouts and ROI curve, and pass capital injection splits all match the paper
-**Plans**: TBD
+**Plans:** 1 plans
+Plans:
+- [ ] 46-01-PLAN.md -- Validate and strengthen paper parity tests (PAR-01..18)
 
 ### Phase 47: NatSpec Comment Audit
 **Goal**: Every NatSpec comment across all 22 contracts has been read and verified against actual code -- no stale claims, no wrong numbers, no misleading descriptions survive
@@ -202,9 +206,9 @@ Phases 43, 44, 45, 46 are parallelizable (independent). Phase 47 depends on 43-4
 | 30-35 | v5.0 Audit | 18/18 | Complete | 2026-03-05 |
 | 36-42 | Sim v1.0 | 27/27 | Complete | 2026-03-06 |
 | 43. Governance & Gating Tests | v6.0 | 0/1 | Not started | - |
-| 44. Affiliate System Tests | v6.0 | 0/TBD | Not started | - |
+| 44. Affiliate System Tests | v6.0 | 0/1 | Not started | - |
 | 45. Security & Economic Hardening Tests | v6.0 | 0/TBD | Not started | - |
-| 46. Game Theory Paper Parity | v6.0 | 0/TBD | Not started | - |
+| 46. Game Theory Paper Parity | v6.0 | 0/1 | Not started | - |
 | 47. NatSpec Comment Audit | 8/8 | Complete    | 2026-03-06 | - |
 
 **Cumulative:** 42 phases complete, 5 phases planned. 6 milestones shipped, 1 in progress.
