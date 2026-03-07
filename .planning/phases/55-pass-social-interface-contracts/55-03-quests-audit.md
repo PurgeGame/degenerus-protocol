@@ -908,3 +908,143 @@ Wait -- in unchecked, `uint256(current) + delta` can overflow uint256 if delta i
 **NatSpec Accuracy:** No NatSpec on the modifier itself, but usage is clear from function-level docs.
 **Gas Flags:** None.
 **Verdict:** CORRECT
+
+---
+
+## Access Control Matrix
+
+| Modifier | Functions | Who Can Call |
+|----------|-----------|-------------|
+| `onlyCoin` | `rollDailyQuest`, `handleMint`, `handleFlip`, `handleDecimator`, `handleAffiliate`, `handleLootBox`, `handleDegenerette` | BurnieCoin or BurnieCoinflip contract (ContractAddresses.COIN / COINFLIP) |
+| `onlyGame` | `resetQuestStreak`, `awardQuestStreakBonus` | DegenerusGame contract (ContractAddresses.GAME) |
+| (none/view) | `getActiveQuests`, `playerQuestStates`, `getPlayerQuestView` | Any caller (view functions) |
+| (private) | `_rollDailyQuest`, `_canRollDecimatorQuest`, `_nextQuestVersion`, `_seedQuestType`, `_bonusQuestType`, `_questHandleProgressSlot`, `_questSyncState`, `_questSyncProgress`, `_questProgressValid`, `_questProgressValidStorage`, `_questReady`, `_questCompleted`, `_questComplete`, `_questCompleteWithPair`, `_maybeCompleteOther`, `_questTargetValue`, `_questViewData`, `_questRequirements`, `_currentDayQuestOfType`, `_clampedAdd128`, `_currentQuestDay`, `_materializeActiveQuestsForView` | Internal only |
+
+## Storage Mutation Map
+
+| Function | Variables Written | Write Type |
+|----------|------------------|------------|
+| `rollDailyQuest` (via `_rollDailyQuest`) | `activeQuests[0].day`, `activeQuests[0].questType`, `activeQuests[0].version`, `activeQuests[1].day`, `activeQuests[1].questType`, `activeQuests[1].version`, `questVersionCounter` | Overwrite (2 quest slots seeded, version counter incremented twice) |
+| `resetQuestStreak` | `questPlayerState[player].streak`, `questPlayerState[player].baseStreak` | Reset to 0 |
+| `awardQuestStreakBonus` | `questPlayerState[player].streak` (via sync + add), `questPlayerState[player].lastActiveDay`, plus all `_questSyncState` writes | Increment (clamped at uint24 max) |
+| `handleMint` | `questPlayerState[player].progress[slot]`, plus all `_questSyncState`, `_questSyncProgress`, `_questComplete` writes | Accumulate + complete |
+| `handleFlip` | `questPlayerState[player].progress[slotIndex]`, plus sync + complete writes | Accumulate + complete |
+| `handleDecimator` | `questPlayerState[player].progress[slotIndex]`, plus sync + complete writes | Accumulate + complete |
+| `handleAffiliate` | `questPlayerState[player].progress[slotIndex]`, plus sync + complete writes | Accumulate + complete |
+| `handleLootBox` | `questPlayerState[player].progress[slotIndex]`, plus sync + complete writes | Accumulate + complete |
+| `handleDegenerette` | Via `_questHandleProgressSlot`: `questPlayerState[player].progress[slot]`, plus sync + complete writes | Accumulate + complete |
+| `_questSyncState` | `questStreakShieldCount[player]` (decremented), `state.streak` (reset to 0 on miss), `state.lastSyncDay`, `state.completionMask` (reset to 0), `state.baseStreak` (snapshot) | Reset/decrement on new day |
+| `_questSyncProgress` | `state.lastProgressDay[slot]`, `state.lastQuestVersion[slot]`, `state.progress[slot]` (reset to 0) | Reset on day/version mismatch |
+| `_questComplete` | `state.completionMask` (set slot bit + STREAK_CREDITED), `state.lastActiveDay`, `state.streak` (increment), `state.lastCompletedDay` | Set/increment on completion |
+
+## ETH Mutation Path Map
+
+| Path | Source | Destination | Trigger | Function |
+|------|--------|-------------|---------|----------|
+| (none) | N/A | N/A | N/A | N/A |
+
+DegenerusQuests does not hold, receive, or transfer ETH. All rewards are denominated in BURNIE token units and returned as return values to the caller (BurnieCoin), which handles the actual token minting/transfer. The contract has no `receive()` or `fallback()` function and no `payable` functions.
+
+## Cross-Contract Call Graph
+
+| Function | Calls To | Contract | Method | Direction |
+|----------|----------|----------|--------|-----------|
+| `_canRollDecimatorQuest` | questGame | IDegenerusGame | `decWindowOpenFlag()` | Read |
+| `_canRollDecimatorQuest` | questGame | IDegenerusGame | `level()` | Read |
+| `handleMint` | questGame | IDegenerusGame | `mintPrice()` | Read (only if paidWithEth) |
+| `handleLootBox` | questGame | IDegenerusGame | `mintPrice()` | Read |
+| `handleDegenerette` | questGame | IDegenerusGame | `mintPrice()` | Read (only if paidWithEth) |
+| `_questReady` | questGame | IDegenerusGame | `mintPrice()` | Read (if ETH-type and mintPrice not cached) |
+| `_questRequirements` | questGame | IDegenerusGame | `mintPrice()` | Read (for ETH-type quests in view functions) |
+
+**Inbound calls (from other contracts to DegenerusQuests):**
+
+| Caller | Method | Purpose |
+|--------|--------|---------|
+| BurnieCoin | `rollDailyQuest` | Roll daily quests on day transition |
+| BurnieCoin | `handleMint` | Track mint progress |
+| BurnieCoin | `handleFlip` | Track flip/unstake progress |
+| BurnieCoin | `handleDecimator` | Track decimator burn progress |
+| BurnieCoin | `handleAffiliate` | Track affiliate earnings progress |
+| BurnieCoin | `handleLootBox` | Track lootbox purchase progress |
+| BurnieCoin | `handleDegenerette` | Track degenerette bet progress |
+| BurnieCoinflip | All `onlyCoin` methods | Same as BurnieCoin (shares modifier access) |
+| DegenerusGame | `resetQuestStreak` | Reset streak on game event |
+| DegenerusGame | `awardQuestStreakBonus` | Award bonus streak days |
+
+## Quest Type Matrix
+
+| Quest Type | ID | Handler | Target Metric | Target Value | Completion Condition | Reward |
+|------------|-----|---------|---------------|-------------|---------------------|--------|
+| MINT_BURNIE | 0 | `handleMint` (paidWithEth=false) | Tickets minted (count) | 1 ticket | progress >= 1 | Slot-dependent (100/200 BURNIE) |
+| MINT_ETH | 1 | `handleMint` (paidWithEth=true) | ETH deposited (wei) | slot0: 1x mintPrice, slot1: 2x mintPrice (cap 0.5 ETH) | progress >= target | Slot-dependent (100/200 BURNIE) |
+| FLIP | 2 | `handleFlip` | BURNIE staked/unstaked | 2000 BURNIE | progress >= 2000e18 | Slot-dependent (100/200 BURNIE) |
+| AFFILIATE | 3 | `handleAffiliate` | BURNIE earned from referrals | 2000 BURNIE | progress >= 2000e18 | Slot-dependent (100/200 BURNIE) |
+| RESERVED | 4 | (none -- skipped in rolling) | N/A | N/A | N/A | N/A |
+| DECIMATOR | 5 | `handleDecimator` | BURNIE burned | 2000 BURNIE | progress >= 2000e18 | Slot-dependent (100/200 BURNIE) |
+| LOOTBOX | 6 | `handleLootBox` | ETH spent on lootboxes (wei) | 2x mintPrice (cap 0.5 ETH) | progress >= target | Slot-dependent (100/200 BURNIE) |
+| DEGENERETTE_ETH | 7 | `handleDegenerette` (paidWithEth=true) | ETH bet amount (wei) | 2x mintPrice (cap 0.5 ETH) | progress >= target | Slot-dependent (100/200 BURNIE) |
+| DEGENERETTE_BURNIE | 8 | `handleDegenerette` (paidWithEth=false) | BURNIE bet amount | 2000 BURNIE | progress >= 2000e18 | Slot-dependent (100/200 BURNIE) |
+
+**Slot reward structure:**
+- Slot 0 (always MINT_ETH): 100 BURNIE (`QUEST_SLOT0_REWARD`)
+- Slot 1 (weighted-random): 200 BURNIE (`QUEST_RANDOM_REWARD`)
+
+**Bonus quest type weights (slot 1 selection, excluding slot 0 primary MINT_ETH and RESERVED):**
+
+| Quest Type | Weight | Probability (dec enabled) | Probability (dec disabled) |
+|------------|--------|--------------------------|---------------------------|
+| MINT_BURNIE | 10 | 41.7% | 50.0% |
+| FLIP | 4 | 16.7% | 20.0% |
+| AFFILIATE | 1 | 4.2% | 5.0% |
+| DECIMATOR | 4 | 16.7% | 0% (excluded) |
+| LOOTBOX | 3 | 12.5% | 15.0% |
+| DEGENERETTE_ETH | 1 | 4.2% | 5.0% |
+| DEGENERETTE_BURNIE | 1 | 4.2% | 5.0% |
+| **Total** | **24** / **20** | 100% | 100% |
+
+## Slot 1 Completion Gate
+
+Slot 1 (bonus quest) cannot be completed unless slot 0 (deposit ETH quest) is already completed. This is enforced by the check `if (slotIndex == 1 && (state.completionMask & 1) == 0)` in all handlers and `_questHandleProgressSlot`. Progress still accumulates but completion is deferred until slot 0 is done.
+
+## Streak Mechanics Summary
+
+1. **Increment:** Streak increments by 1 on first quest completion of any day (STREAK_CREDITED bit prevents double-counting)
+2. **Reset:** If gap between lastActiveDay and currentDay > 1, streak resets to 0 (unless shields cover missed days)
+3. **Shields:** `questStreakShieldCount[player]` consumed first; if missedDays > shields, streak resets after consuming all shields
+4. **Bonus:** `awardQuestStreakBonus` adds to streak directly (clamped at uint24 max = 16,777,215)
+5. **Manual reset:** `resetQuestStreak` zeroes streak and baseStreak (game-initiated)
+6. **baseStreak:** Snapshot taken at start of each day for consistent view rendering during the day
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | None found |
+| CONCERN | 2 | See below |
+| GAS | 1 | See below |
+| CORRECT | 34 | All other functions verified correct (includes 2 modifiers) |
+
+### CONCERN-01: `resetQuestStreak` missing event emission (informational)
+
+**Severity:** Informational
+**Location:** `resetQuestStreak` (line 320-324)
+**Issue:** The `_questSyncState` function emits `QuestStreakReset` when streak decays to 0 due to missed days, but `resetQuestStreak` (game-initiated reset) does not emit any event. Off-chain indexers tracking streak resets may miss game-initiated resets.
+**Impact:** Frontend/analytics only. No on-chain correctness impact.
+**Recommendation:** Consider emitting `QuestStreakReset` in `resetQuestStreak`.
+
+### CONCERN-02: `playerQuestStates` NatSpec inaccuracy on `lastCompletedDay` (informational)
+
+**Severity:** Informational
+**Location:** `playerQuestStates` NatSpec (line 832) and `PlayerQuestState.lastCompletedDay` (line 252)
+**Issue:** NatSpec says "Last day where BOTH quests completed" but the field is actually set on the first quest completion of the day (when STREAK_CREDITED is set in `_questComplete`, line 1427). The struct comment says "Last day where BOTH quests completed" but code behavior is "last day where streak was credited (first completion)".
+**Impact:** Developer confusion only. No on-chain correctness impact.
+**Recommendation:** Update NatSpec to "Last day where at least one quest was completed (streak credited)".
+
+### GAS-01: `handleLootBox` unconditional mintPrice fetch
+
+**Severity:** Informational (gas)
+**Location:** `handleLootBox` (line 725)
+**Issue:** `questGame.mintPrice()` is fetched unconditionally after finding the lootbox quest slot, even if progress will not meet the target. The call is needed for `_questTargetValue` but could be deferred until the comparison.
+**Impact:** ~2600 gas external call overhead on every lootbox quest progress update.
+**Recommendation:** Fetch mintPrice lazily (only when needed for target comparison or completion).
