@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Contract Hardening & Parity Verification
-status: in-progress
-stopped_at: Completed 46-01-PLAN.md (Phase 46 complete)
-last_updated: "2026-03-07T07:41:17Z"
-last_activity: 2026-03-07 — Completed Phase 46 Game Theory Paper Parity (118 tests, PAR-01..18)
+status: completed
+stopped_at: Completed 43-01-PLAN.md (Phase 43 complete)
+last_updated: "2026-03-07T07:46:03.091Z"
+last_activity: 2026-03-07 — Completed Phase 43 Governance & Gating Tests (32 tests, ADMIN-01..06, GATE-01..04)
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 5
   total_plans: 13
-  completed_plans: 11
-  percent: 85
+  completed_plans: 13
+  percent: 92
 ---
 
 # Project State
@@ -21,28 +21,29 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-06)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** Phases 45, 46 complete; Phases 43, 44 remaining
+**Current focus:** Phases 43, 45, 46 complete; Phase 44 remaining
 
 ## Current Position
 
-Phase: 46 of 47 (Game Theory Paper Parity)
+Phase: 43 of 47 (Governance & Gating Tests)
 Plan: 1 of 1 in current phase
 Status: Phase Complete
-Last activity: 2026-03-07 — Completed Phase 46 Game Theory Paper Parity (118 tests, PAR-01..18)
+Last activity: 2026-03-07 — Completed Phase 43 Governance & Gating Tests (32 tests, ADMIN-01..06, GATE-01..04)
 
-Progress: [████████░░] 85%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3 (v6.0 milestone)
-- Average duration: 7min
-- Total execution time: 22min
+- Total plans completed: 4 (v6.0 milestone)
+- Average duration: 10min
+- Total execution time: 40min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
+| 43 | 1 | 18min | 18min |
 | 45 | 2 | 8min | 4min |
 | 46 | 1 | 14min | 14min |
 
@@ -66,6 +67,7 @@ Progress: [████████░░] 85%
 | Phase 45 P01 | 3min | 2 tasks | 1 files |
 | Phase 45 P02 | 5min | 2 tasks | 2 files |
 | Phase 46 P01 | 14min | 2 tasks | 1 files |
+| Phase 43 P01 | 18min | 2 tasks | 1 files |
 
 ### Decisions
 
@@ -103,6 +105,8 @@ Progress: [████████░░] 85%
 - [Phase 46]: Whale bundle sets bundleType=3 (100-level), not bundleType=1; activity score is 11500 BPS (50% streak + 25% count + 40% whale pass)
 - [Phase 46]: Static assertions with source-file cross-references are correct approach for private Solidity constants
 - [Phase 46]: Phase 46 COMPLETE: 118 tests in PaperParity.test.js, all 18 PAR requirements verified (8 on-chain, 10 static+source)
+- [Phase 43]: No changes needed to pre-existing test file -- all 10 requirements fully covered by 32 tests
+- [Phase 43]: Phase 43 COMPLETE: 32 tests in GovernanceGating.test.js, all 10 requirements verified (ADMIN-01..06, GATE-01..04)
 
 ### Pending Todos
 
@@ -114,6 +118,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T07:41:17Z
-Stopped at: Completed 46-01-PLAN.md (Phase 46 complete)
+Last session: 2026-03-07T07:43:54Z
+Stopped at: Completed 43-01-PLAN.md (Phase 43 complete)
 Resume file: None

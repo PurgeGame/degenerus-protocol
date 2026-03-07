@@ -114,7 +114,7 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
 
 **Milestone Goal:** Comprehensive testing of all recent contract changes and systematic verification that every constant, NatSpec comment, and game theory paper number matches actual contract behavior.
 
-- [ ] **Phase 43: Governance & Gating Tests** - DGVE majority governance, VRF shutdown lifecycle, tiered advanceGame mint gate (10 requirements)
+- [x] **Phase 43: Governance & Gating Tests** - DGVE majority governance, VRF shutdown lifecycle, tiered advanceGame mint gate (10 requirements) (completed 2026-03-07)
 - [ ] **Phase 44: Affiliate System Tests** - Per-referrer commission caps, lootbox activity taper, leaderboard tracking (9 requirements)
 - [x] **Phase 45: Security & Economic Hardening Tests** - Post-gameOver locks, deity refund mechanics, compressed jackpots, economic invariants (17 requirements) (completed 2026-03-07)
 - [x] **Phase 46: Game Theory Paper Parity** - Systematic extraction of every number from the theory paper and verification against contract constants (18 requirements) (completed 2026-03-07)
@@ -133,7 +133,7 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
   4. A test proves non-minters without DGVE majority revert with MustMintToday()
 **Plans:** 1 plans
 Plans:
-- [ ] 43-01-PLAN.md -- Validate and commit governance/gating tests (ADMIN-01..06, GATE-01..04)
+- [x] 43-01-PLAN.md -- Validate and commit governance/gating tests (ADMIN-01..06, GATE-01..04)
 
 ### Phase 44: Affiliate System Tests
 **Goal**: The affiliate commission cap and lootbox activity taper produce correct payouts across all boundary conditions, and leaderboard tracking remains accurate regardless of taper
@@ -208,7 +208,7 @@ Phases 43, 44, 45, 46 are parallelizable (independent). Phase 47 depends on 43-4
 | 19-29 | v4.0 Audit | 10/10 | Complete | 2026-03-05 |
 | 30-35 | v5.0 Audit | 18/18 | Complete | 2026-03-05 |
 | 36-42 | Sim v1.0 | 27/27 | Complete | 2026-03-06 |
-| 43. Governance & Gating Tests | v6.0 | 0/1 | Not started | - |
+| 43. Governance & Gating Tests | v6.0 | 1/1 | Complete | 2026-03-07 |
 | 44. Affiliate System Tests | v6.0 | 0/1 | Not started | - |
 | 45. Security & Economic Hardening Tests | v6.0 | 2/2 | Complete | 2026-03-07 |
 | 46. Game Theory Paper Parity | v6.0 | 1/1 | Complete | 2026-03-07 |
