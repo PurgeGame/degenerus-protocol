@@ -85,8 +85,8 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 
 ### Prior Verification
 
-- [ ] **VERIFY-01**: v1-v6 critical claims spot-checked against current code
-- [ ] **VERIFY-02**: Game theory paper intent cross-referenced for ambiguous functions
+- [x] **VERIFY-01**: v1-v6 critical claims spot-checked against current code
+- [x] **VERIFY-02**: Game theory paper intent cross-referenced for ambiguous functions
 
 ### Synthesis
 
@@ -158,8 +158,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | XREF-03 | Phase 57 | Pending |
 | GAS-01 | Phase 57 | Complete |
 | GAS-02 | Phase 57 | Complete |
-| VERIFY-01 | Phase 57 | Pending |
-| VERIFY-02 | Phase 57 | Pending |
+| VERIFY-01 | Phase 57 | Complete |
+| VERIFY-02 | Phase 57 | Complete |
 | SYNTH-01 | Phase 58 | Pending |
 | SYNTH-02 | Phase 58 | Pending |
 
