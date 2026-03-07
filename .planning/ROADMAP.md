@@ -282,7 +282,7 @@ Phases 48 first (infrastructure). Phases 49-56 can be parallelized after 48. Pha
 |-------|----------------|--------|-----------|
 | 48. Audit Infrastructure | 0/TBD | Not started | - |
 | 49. Core Game Contract | 0/TBD | Not started | - |
-| 50. ETH Flow Modules | 4/4 | Complete   | 2026-03-07 |
+| 50. ETH Flow Modules | 4/4 | Complete    | 2026-03-07 |
 | 51. Endgame & Lifecycle Modules | 0/TBD | Not started | - |
 | 52. Whale & Player Modules | 0/TBD | Not started | - |
 | 53. Module Utilities & Libraries | 0/TBD | Not started | - |
