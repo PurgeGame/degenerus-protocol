@@ -560,7 +560,7 @@ The `_raritySymbolBatch` function uses inline assembly for storage slot calculat
 
 | Contract | Functions Audited | Findings | Finding IDs |
 |----------|------------------|----------|-------------|
-| DegenerusGame.sol | 141 | 4 | QA-04, QA-10, QA-11, QA-12, QA-13 |
+| DegenerusGame.sol | 141 | 5 | QA-04, QA-10, QA-11, QA-12, QA-13 |
 | DegenerusGameStorage.sol | 11 | 0 | -- |
 | DegenerusGameAdvanceModule.sol | 37 | 2 | QA-14, QA-15 |
 | DegenerusGameMintModule.sol | 16 | 0 | -- |
