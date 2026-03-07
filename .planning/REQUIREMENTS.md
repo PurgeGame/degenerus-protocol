@@ -15,7 +15,7 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 
 ### Core Game
 
-- [ ] **CORE-01**: DegenerusGame.sol — every function audited with JSON + markdown report
+- [x] **CORE-01**: DegenerusGame.sol — every function audited with JSON + markdown report
 - [ ] **CORE-02**: DegenerusGameStorage.sol — every storage variable documented and verified against usage
 
 ### Delegatecall Modules
@@ -118,7 +118,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFRA-01 | Phase 48 | Complete |
 | INFRA-02 | Phase 48 | Complete |
 | INFRA-03 | Phase 48 | Complete |
-| CORE-01 | Phase 49 | Pending |
+| CORE-01 | Phase 49 | Complete |
 | CORE-02 | Phase 49 | Pending |
 | MOD-01 | Phase 50 | Complete |
 | MOD-02 | Phase 50 | Complete |
