@@ -362,7 +362,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // Pre-gameover: acquire RNG and drain to gameover state
-        if (rngWordByDay[_dailyIdx] == 0) {
+        if (rngWordByDay[day] == 0) {
             uint256 rngWord = _gameOverEntropy(ts, day, lvl, lastPurchase);
             if (rngWord == 1 || rngWord == 0) return true;
             _unlockRng(day);

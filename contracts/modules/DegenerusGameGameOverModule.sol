@@ -113,16 +113,23 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         gameOver = true; // Terminal state
         gameOverTime = uint48(block.timestamp);
+
+        if (available == 0) {
+            gameOverFinalJackpotPaid = true;
+            nextPrizePool = 0;
+            futurePrizePool = 0;
+            currentPrizePool = 0;
+            return;
+        }
+
+        // Get RNG word for jackpot selection (includes VRF fallback after 3 days)
+        uint256 rngWord = rngWordByDay[day];
+        if (rngWord == 0) return; // RNG not ready yet — don't latch, allow retry
+
         gameOverFinalJackpotPaid = true;
         nextPrizePool = 0;
         futurePrizePool = 0;
         currentPrizePool = 0;
-
-        if (available == 0) return; // Nothing to distribute
-
-        // Get RNG word for jackpot selection (includes VRF fallback after 3 days)
-        uint256 rngWord = rngWordByDay[day];
-        if (rngWord == 0) return; // RNG not ready yet (wait for fallback)
 
         // remaining tracks unallocated funds.
         uint256 remaining = available;
