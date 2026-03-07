@@ -134,7 +134,7 @@ See: `.planning/milestones/v6.0-ROADMAP.md` for full phase details.
 - [x] **Phase 49: Core Game Contract** - DegenerusGame.sol (19KB) and DegenerusGameStorage.sol function-level audit (completed 2026-03-07)
 - [x] **Phase 50: ETH Flow Modules** - AdvanceModule, MintModule, JackpotModule function-level audit (completed 2026-03-07)
 - [x] **Phase 51: Endgame & Lifecycle Modules** - EndgameModule, LootboxModule, GameOverModule function-level audit (completed 2026-03-07)
-- [ ] **Phase 52: Whale & Player Modules** - WhaleModule, DegeneretteModule, BoonModule, DecimatorModule function-level audit
+- [x] **Phase 52: Whale & Player Modules** - WhaleModule, DegeneretteModule, BoonModule, DecimatorModule function-level audit (completed 2026-03-07)
 - [x] **Phase 53: Module Utilities & Libraries** - MintStreakUtils, PayoutUtils, BitPackingLib, EntropyLib, GameTimeLib, PriceLookupLib, JackpotBucketLib audit (completed 2026-03-07)
 - [x] **Phase 54: Token & Economics Contracts** - BurnieCoin, BurnieCoinflip (16KB), DegenerusVault, DegenerusStonk function-level audit (completed 2026-03-07)
 - [x] **Phase 55: Pass, Social & Interface Contracts** - DeityPass, DeityBoonViewer, Affiliate, Quests, Jackpots, and all interface verification (completed 2026-03-07)
@@ -214,7 +214,7 @@ Plans:
   3. Every function in DegenerusGameBoonModule.sol has a JSON + markdown audit entry with verdict
   4. Every function in DegenerusGameDecimatorModule.sol has a JSON + markdown audit entry with verdict
   5. All whale pricing formulas (bundle, lazy pass, deity pass) are verified against game theory paper
-**Plans:** 2/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [ ] 52-01-PLAN.md -- WhaleModule function-level audit (18 functions)
 - [ ] 52-02-PLAN.md -- DegeneretteModule function-level audit (31 functions)
@@ -312,10 +312,10 @@ Phases 48 first (infrastructure). Phases 49-56 can be parallelized after 48. Pha
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 48. Audit Infrastructure | 2/2 | Complete    | 2026-03-07 |
-| 49. Core Game Contract | 7/7 | Complete   | 2026-03-07 |
+| 49. Core Game Contract | 7/7 | Complete    | 2026-03-07 |
 | 50. ETH Flow Modules | 4/4 | Complete    | 2026-03-07 |
 | 51. Endgame & Lifecycle Modules | 4/4 | Complete    | 2026-03-07 |
-| 52. Whale & Player Modules | 2/4 | In Progress|  |
+| 52. Whale & Player Modules | 4/4 | Complete   | 2026-03-07 |
 | 53. Module Utilities & Libraries | 4/4 | Complete    | 2026-03-07 |
 | 54. Token & Economics Contracts | 4/4 | Complete    | 2026-03-07 |
 | 55. Pass, Social & Interface Contracts | 5/5 | Complete    | 2026-03-07 |
