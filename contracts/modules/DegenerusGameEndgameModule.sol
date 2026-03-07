@@ -34,6 +34,13 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  */
 contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
+    // Errors
+    // -------------------------------------------------------------------------
+
+    /// @notice Generic revert for invalid parameters or unauthorized access.
+    error E();
+
+    // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
 
@@ -489,6 +496,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
      * @param player Player address to claim for.
      */
     function claimWhalePass(address player) external {
+        if (gameOver) revert E();
         uint256 halfPasses = whalePassClaims[player];
         if (halfPasses == 0) return;
 
