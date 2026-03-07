@@ -491,3 +491,114 @@ This correctly handles the empty-string return for Dice quadrant (3) by generati
 **NatSpec Accuracy:** NatSpec says "Quadrant 3 (Dice) returns empty string; renderer generates '1..8' dynamically" and "Will revert with array out-of-bounds if idx >= 8 for quadrants 0-2" -- correct. The quadrant naming (0=Crypto, 1=Zodiac, 2=Cards, 3=Dice) matches the 0-indexed getter convention.
 **Gas Flags:** None.
 **Verdict:** CORRECT
+
+---
+
+## Cross-Cutting Analysis
+
+### TraitUtils Call Sites
+
+| Caller Contract | Function | TraitUtils Function Called | Purpose |
+|----------------|----------|--------------------------|---------|
+| DegenerusGameMintModule | `_traitSample` (line 467) | `traitFromWord` | Generate individual trait IDs for ticket minting; caller adds quadrant bits via `(uint8(i & 3) << 6)` |
+| DegenerusGameJackpotModule | jackpot trait sampling (line 2180) | `traitFromWord` | Generate trait IDs for jackpot ticket sampling |
+| DegenerusGameDegeneretteModule | degenerette result (line 644) | `packedTraitsFromSeed` | Generate 4-trait packed result from keccak256 seed |
+
+**Observation:** `traitFromWord` is called directly by MintModule and JackpotModule (where they need individual traits with caller-managed quadrant bits), while `packedTraitsFromSeed` is called by DegeneretteModule (where all 4 traits are needed in one packed value). This split is intentional -- MintModule/JackpotModule iterate over quadrants and call `traitFromWord` per-quadrant, while DegeneretteModule needs all 4 at once.
+
+### ContractAddresses Usage Matrix
+
+| Constant | Used By (Contracts) | Purpose |
+|----------|-------------------|---------|
+| `DEPLOY_DAY_BOUNDARY` | GameTimeLib | Day-of-game computation reference epoch |
+| `VRF_KEY_HASH` | DegenerusAdmin | Chainlink VRF V2.5 key hash for randomness requests |
+| `ICONS_32` | DegenerusDeityPass | SVG icon path and symbol name retrieval for tokenURI |
+| `GAME_MINT_MODULE` | (delegatecall target from Game) | Mint module delegatecall address |
+| `GAME_ADVANCE_MODULE` | (delegatecall target from Game) | Advance module delegatecall address |
+| `GAME_WHALE_MODULE` | (delegatecall target from Game) | Whale bundle module delegatecall address |
+| `GAME_JACKPOT_MODULE` | (delegatecall target from Game) | Jackpot module delegatecall address |
+| `GAME_DECIMATOR_MODULE` | (delegatecall target from Game) | Decimator module delegatecall address |
+| `GAME_ENDGAME_MODULE` | (delegatecall target from Game) | Endgame module delegatecall address |
+| `GAME_GAMEOVER_MODULE` | AdvanceModule | Game over module delegatecall address |
+| `GAME_LOOTBOX_MODULE` | (delegatecall target from Game) | Lootbox module delegatecall address |
+| `GAME_BOON_MODULE` | LootboxModule | Boon module delegatecall address (nested delegatecall) |
+| `GAME_DEGENERETTE_MODULE` | (delegatecall target from Game) | Degenerette module delegatecall address |
+| `COIN` | Game, Coinflip, Admin, Affiliate, Vault, MintModule, AdvanceModule, WhaleModule, JackpotModule, LootboxModule, DecimatorModule, DegeneretteModule | BurnieCoin token contract |
+| `COINFLIP` | Game, BurnieCoin, Quests, Stonk | BurnieCoinflip contract |
+| `GAME` | Admin, DeityPass, Affiliate, Jackpots, Coinflip, Vault, Stonk, Quests, GameStorage, DecimatorModule, JackpotModule | Central game contract for access control and callbacks |
+| `VAULT` | Affiliate, Game, Stonk, MintModule, AdvanceModule, GameOverModule, JackpotModule | Vault contract for ETH/stETH/BURNIE management |
+| `AFFILIATE` | Game, EndgameModule, WhaleModule, DegeneretteModule | Affiliate system for referral tracking |
+| `JACKPOTS` | Game, EndgameModule, DecimatorModule | Jackpots computation contract |
+| `QUESTS` | BurnieCoin, Coinflip, Game, BoonModule, Stonk, DegeneretteModule | Quest tracking and rewards |
+| `DGNRS` | Affiliate, Game, GameStorage, Stonk, GameOverModule, AdvanceModule, LootboxModule, JackpotModule, EndgameModule | DegenerusStonk token |
+| `ADMIN` | Game, AdvanceModule, BurnieCoin | Admin contract for VRF and shutdown |
+| `DEITY_PASS` | Game, WhaleModule | DeityPass ERC721 for minting |
+| `WWXRP` | Vault, WrappedWrappedXRP, LootboxModule, DegeneretteModule | WrappedWrappedXRP token |
+| `STETH_TOKEN` | Game, Vault, AdvanceModule, JackpotModule, GameOverModule | Lido stETH for yield |
+| `LINK_TOKEN` | Admin | Chainlink LINK for VRF subscription funding |
+| `CREATOR` | Icons32Data, Vault (initial supply mint), Stonk (creator amount) | Deployer EOA for admin operations |
+| `VRF_COORDINATOR` | Admin | Chainlink VRF V2.5 coordinator |
+| `WXRP` | WrappedWrappedXRP | Underlying XRP token for wrapping |
+
+### Icons32Data Consumers
+
+| Consumer | Function Called | Purpose |
+|----------|---------------|---------|
+| DegenerusDeityPass | `data(tokenId)` | Retrieve SVG path data for deity pass token rendering |
+| DegenerusDeityPass | `symbol(quadrant, symbolIdx)` | Retrieve human-readable symbol name for metadata |
+
+Icons32Data has exactly one consumer contract (DegenerusDeityPass). The interaction flows:
+1. `tokenURI(tokenId)` computes `quadrant = tokenId / 8`, `symbolIdx = tokenId % 8`
+2. Calls `icons.data(tokenId)` for SVG path
+3. Calls `icons.symbol(quadrant, symbolIdx)` for name
+4. Falls back to "Dice N" if symbol returns empty (quadrant 3)
+
+### Deploy Order Verification
+
+| Nonce Offset | Constant | Contract | Constructor Dependencies | Verified |
+|-------------|----------|----------|--------------------------|----------|
+| N+0 | ICONS_32 | Icons32Data | None | CORRECT |
+| N+1 | GAME_MINT_MODULE | DegenerusGameMintModule | None (delegatecall target) | CORRECT |
+| N+2 | GAME_ADVANCE_MODULE | DegenerusGameAdvanceModule | None (delegatecall target) | CORRECT |
+| N+3 | GAME_WHALE_MODULE | DegenerusGameWhaleModule | None (delegatecall target) | CORRECT |
+| N+4 | GAME_JACKPOT_MODULE | DegenerusGameJackpotModule | None (delegatecall target) | CORRECT |
+| N+5 | GAME_DECIMATOR_MODULE | DegenerusGameDecimatorModule | None (delegatecall target) | CORRECT |
+| N+6 | GAME_ENDGAME_MODULE | DegenerusGameEndgameModule | None (delegatecall target) | CORRECT |
+| N+7 | GAME_GAMEOVER_MODULE | DegenerusGameGameOverModule | None (delegatecall target) | CORRECT |
+| N+8 | GAME_LOOTBOX_MODULE | DegenerusGameLootboxModule | None (delegatecall target) | CORRECT |
+| N+9 | GAME_BOON_MODULE | DegenerusGameBoonModule | None (delegatecall target) | CORRECT |
+| N+10 | GAME_DEGENERETTE_MODULE | DegenerusGameDegeneretteModule | None (delegatecall target) | CORRECT |
+| N+11 | COIN | BurnieCoin | None (storage init only) | CORRECT |
+| N+12 | COINFLIP | BurnieCoinflip | None (immutable args only) | CORRECT |
+| N+13 | GAME | DegenerusGame | None (internal storage only; seeds DGNRS/VAULT tickets) | CORRECT |
+| N+14 | WWXRP | WrappedWrappedXRP | None | CORRECT |
+| N+15 | AFFILIATE | DegenerusAffiliate | None (uses VAULT/DGNRS constants but no constructor calls) | CORRECT |
+| N+16 | JACKPOTS | DegenerusJackpots | None | CORRECT |
+| N+17 | QUESTS | DegenerusQuests | None | CORRECT |
+| N+18 | DEITY_PASS | DegenerusDeityPass | None (owner-based, no constructor cross-calls) | CORRECT |
+| N+19 | VAULT | DegenerusVault | Calls `COIN.vaultMintAllowance()` -- requires COIN at N+11 | CORRECT |
+| N+20 | DGNRS | DegenerusStonk | Calls `GAME.claimWhalePass()` / `GAME.setAfKingMode()` -- requires GAME at N+13 | CORRECT |
+| N+21 | ADMIN | DegenerusAdmin | Calls `GAME.wireVrf()` -- requires GAME at N+13 | CORRECT |
+
+All 22 deploy order entries verified. No circular dependencies. All constructor-time cross-contract calls respect the nonce ordering.
+
+---
+
+## Findings Summary
+
+| Contract | Functions | Verdicts | Bugs | Concerns | Informationals |
+|----------|-----------|----------|------|----------|----------------|
+| DegenerusTraitUtils | 3 | 3 CORRECT | 0 | 0 | 0 |
+| ContractAddresses | 29 constants | All CORRECT | 0 | 0 | 0 |
+| Icons32Data | 6 (incl. constructor) | 6 CORRECT | 0 | 0 | 1 (setter/getter indexing) |
+| **Total** | **9 functions + 29 constants** | **All CORRECT** | **0** | **0** | **1** |
+
+### Informational Notes
+
+1. **Icons32Data setter/getter quadrant indexing** (informational): `setSymbols` uses 1-indexed quadrants (1=Crypto, 2=Zodiac, 3=Cards) while `symbol` view uses 0-indexed (0=Crypto, 1=Zodiac, 2=Cards, 3=Dice). This is an intentional design choice -- Dice (quadrant 3 in getter) has no setter because names are generated dynamically. Not a bug, but worth documenting for future maintainers.
+
+### Security Assessment
+
+- **DegenerusTraitUtils:** Zero attack surface. Pure library with no state, no external calls, no ETH handling. Mathematical correctness proven via range analysis.
+- **ContractAddresses:** Zero runtime attack surface. Compile-time constants patched before deployment. Security depends entirely on the deploy pipeline (`patchContractAddresses.js`) producing correct values.
+- **Icons32Data:** Minimal attack surface. Only CREATOR can write data, and only before finalization. After `finalize()`, the contract is permanently read-only. No ETH handling, no external calls beyond ContractAddresses import. Trust assumption: CREATOR provides valid, non-malicious SVG path data.
