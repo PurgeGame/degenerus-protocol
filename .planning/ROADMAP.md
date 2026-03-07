@@ -115,7 +115,7 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
 **Milestone Goal:** Comprehensive testing of all recent contract changes and systematic verification that every constant, NatSpec comment, and game theory paper number matches actual contract behavior.
 
 - [x] **Phase 43: Governance & Gating Tests** - DGVE majority governance, VRF shutdown lifecycle, tiered advanceGame mint gate (10 requirements) (completed 2026-03-07)
-- [ ] **Phase 44: Affiliate System Tests** - Per-referrer commission caps, lootbox activity taper, leaderboard tracking (9 requirements)
+- [x] **Phase 44: Affiliate System Tests** - Per-referrer commission caps, lootbox activity taper, leaderboard tracking (9 requirements) (completed 2026-03-07)
 - [x] **Phase 45: Security & Economic Hardening Tests** - Post-gameOver locks, deity refund mechanics, compressed jackpots, economic invariants (17 requirements) (completed 2026-03-07)
 - [x] **Phase 46: Game Theory Paper Parity** - Systematic extraction of every number from the theory paper and verification against contract constants (18 requirements) (completed 2026-03-07)
 - [x] **Phase 47: NatSpec Comment Audit** - Read every NatSpec comment across all 22 contracts and verify each claim against actual code (10 requirements) (completed 2026-03-06)
@@ -144,7 +144,7 @@ Plans:
   2. A test proves lootbox activity taper: score <15000 BPS pays 100%, score 15000-25500 BPS linearly tapers from 100% to 50%, and score >=25500 BPS floors at 50%
   3. A test proves leaderboard tracking uses the full untapered amount even when the actual payout is reduced by taper
   4. A test proves the lootboxActivityScore parameter flows correctly through payAffiliate and produces the expected taper calculation
-**Plans:** 1 plans
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 44-01-PLAN.md -- Validate and commit affiliate commission cap and lootbox taper tests (AFF-01..09)
 
@@ -209,7 +209,7 @@ Phases 43, 44, 45, 46 are parallelizable (independent). Phase 47 depends on 43-4
 | 30-35 | v5.0 Audit | 18/18 | Complete | 2026-03-05 |
 | 36-42 | Sim v1.0 | 27/27 | Complete | 2026-03-06 |
 | 43. Governance & Gating Tests | v6.0 | 1/1 | Complete | 2026-03-07 |
-| 44. Affiliate System Tests | v6.0 | 0/1 | Not started | - |
+| 44. Affiliate System Tests | 1/1 | Complete   | 2026-03-07 | - |
 | 45. Security & Economic Hardening Tests | v6.0 | 2/2 | Complete | 2026-03-07 |
 | 46. Game Theory Paper Parity | v6.0 | 1/1 | Complete | 2026-03-07 |
 | 47. NatSpec Comment Audit | 8/8 | Complete    | 2026-03-06 | - |
