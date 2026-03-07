@@ -80,8 +80,8 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 
 ### Gas Optimization
 
-- [ ] **GAS-01**: Impossible condition checks flagged across all contracts
-- [ ] **GAS-02**: Redundant storage reads and unnecessary computation flagged
+- [x] **GAS-01**: Impossible condition checks flagged across all contracts
+- [x] **GAS-02**: Redundant storage reads and unnecessary computation flagged
 
 ### Prior Verification
 
@@ -156,8 +156,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | XREF-01 | Phase 57 | Pending |
 | XREF-02 | Phase 57 | Pending |
 | XREF-03 | Phase 57 | Pending |
-| GAS-01 | Phase 57 | Pending |
-| GAS-02 | Phase 57 | Pending |
+| GAS-01 | Phase 57 | Complete |
+| GAS-02 | Phase 57 | Complete |
 | VERIFY-01 | Phase 57 | Pending |
 | VERIFY-02 | Phase 57 | Pending |
 | SYNTH-01 | Phase 58 | Pending |
