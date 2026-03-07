@@ -131,7 +131,9 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
   2. A test proves shutdownVrf() is callable only by GAME, successfully cancels subscription and sweeps LINK to VAULT, silently succeeds when subscriptionId is already 0, and handles coordinator/LINK transfer failures via try/catch
   3. A test proves the tiered advanceGame mint gate requires same-day minting, relaxes after the configured time delay, and is bypassed entirely by DGVE majority holders
   4. A test proves non-minters without DGVE majority revert with MustMintToday()
-**Plans**: TBD
+**Plans:** 1 plans
+Plans:
+- [ ] 43-01-PLAN.md -- Validate and commit governance/gating tests (ADMIN-01..06, GATE-01..04)
 
 ### Phase 44: Affiliate System Tests
 **Goal**: The affiliate commission cap and lootbox activity taper produce correct payouts across all boundary conditions, and leaderboard tracking remains accurate regardless of taper
@@ -199,10 +201,10 @@ Phases 43, 44, 45, 46 are parallelizable (independent). Phase 47 depends on 43-4
 | 19-29 | v4.0 Audit | 10/10 | Complete | 2026-03-05 |
 | 30-35 | v5.0 Audit | 18/18 | Complete | 2026-03-05 |
 | 36-42 | Sim v1.0 | 27/27 | Complete | 2026-03-06 |
-| 43. Governance & Gating Tests | v6.0 | 0/TBD | Not started | - |
+| 43. Governance & Gating Tests | v6.0 | 0/1 | Not started | - |
 | 44. Affiliate System Tests | v6.0 | 0/TBD | Not started | - |
 | 45. Security & Economic Hardening Tests | v6.0 | 0/TBD | Not started | - |
 | 46. Game Theory Paper Parity | v6.0 | 0/TBD | Not started | - |
-| 47. NatSpec Comment Audit | 8/8 | Complete   | 2026-03-06 | - |
+| 47. NatSpec Comment Audit | 8/8 | Complete    | 2026-03-06 | - |
 
 **Cumulative:** 42 phases complete, 5 phases planned. 6 milestones shipped, 1 in progress.
