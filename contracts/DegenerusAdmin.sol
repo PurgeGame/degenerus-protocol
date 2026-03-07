@@ -14,7 +14,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  *   1. VRF subscription ownership and management
  *   2. Emergency recovery during VRF failures
  *   3. LINK token donation handling with reward multipliers
- *   4. Presale administration functions
+ *   4. LINK/ETH price feed management for reward valuation
  *
  * DEPLOYMENT:
  *   - Deploy with no constructor parameters (VRF config from ContractAddresses)
@@ -242,8 +242,6 @@ contract DegenerusAdmin {
     /// @dev Price feed decimals do not match expected LINK/ETH decimals.
     error InvalidFeedDecimals();
 
-    /// @dev LINK transfer failed.
-    error LinkTransferFailed();
 
     // =========================================================================
     // EVENTS
@@ -324,7 +322,7 @@ contract DegenerusAdmin {
     address public coordinator;
 
     /// @notice Current VRF subscription ID.
-    /// @dev Created during first wireVrf(); can change during emergency recovery.
+    /// @dev Created atomically during constructor; can change during emergency recovery.
     uint256 public subscriptionId;
 
     /// @notice VRF key hash for the current coordinator.
@@ -350,8 +348,6 @@ contract DegenerusAdmin {
 
     /// @dev Max staleness window before LINK/ETH feed is considered unhealthy.
     uint256 private constant LINK_ETH_MAX_STALE = 1 days;
-
-    /// @dev Terminal gameover flag for shutdown gating.
 
     // =========================================================================
     // ACCESS CONTROL
@@ -586,8 +582,8 @@ contract DegenerusAdmin {
     ///
     ///      FLOW:
     ///      1. Validate sender is LINK token contract
-    ///      2. Forward LINK to VRF subscription
-    ///      3. Calculate reward multiplier based on subscription balance
+    ///      2. Calculate reward multiplier based on current subscription balance
+    ///      3. Forward LINK to VRF subscription
     ///      4. Convert LINK to ETH-equivalent using price feed
     ///      5. Credit BURNIE reward to donor (live COIN)
     ///

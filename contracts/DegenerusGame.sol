@@ -1906,15 +1906,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Only available while RNG is unlocked (before VRF request is in-flight).
     ///      MECHANISM: Adds 1 to the VRF word for each nudge, changing outcomes.
     ///      SECURITY: Players cannot predict the base word, only influence it.
-    /// @param player Player address paying for the nudge (address(0) = msg.sender).
     /// @custom:reverts RngLocked If RNG is currently locked (VRF request pending).
-    function reverseFlip(address player) external {
+    function reverseFlip() external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_ADVANCE_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameAdvanceModule.reverseFlip.selector,
-                    player
+                    IDegenerusGameAdvanceModule.reverseFlip.selector
                 )
             );
         if (!ok) _revertDelegate(data);
