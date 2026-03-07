@@ -154,13 +154,17 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     }
 
     /// @notice Final sweep of all remaining funds to vault after 30 days post-gameover.
-    /// @dev Preserves claimablePool for player withdrawals. Only sweeps excess funds.
+    /// @dev Forfeits all unclaimed winnings and sweeps entire balance.
     ///      Funds are split 50/50 between vault and DGNRS contract.
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts E When ETH or stETH transfer fails
     function handleFinalSweep() external {
         if (gameOverTime == 0) return; // Game not over yet
         if (block.timestamp < uint256(gameOverTime) + 30 days) return; // Too early
+        if (finalSwept) return; // Already swept
+
+        finalSwept = true;
+        claimablePool = 0;
 
         // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
         try admin.shutdownVrf() {} catch {}
@@ -169,13 +173,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalFunds = ethBal + stBal;
 
-        // Calculate available funds (excluding claimable winnings reserve)
-        uint256 available = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
+        if (totalFunds == 0) return;
 
-        if (available == 0) return; // Nothing to sweep
-
-        // Send all available funds to vault and DGNRS (uses helper for correct ETH/stETH split)
-        _sendToVault(available, stBal);
+        _sendToVault(totalFunds, stBal);
     }
 
     /// @dev Send funds to vault (50%) and DGNRS (50%), prioritizing stETH transfers over ETH.

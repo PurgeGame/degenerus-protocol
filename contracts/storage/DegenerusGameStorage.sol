@@ -647,6 +647,10 @@ abstract contract DegenerusGameStorage {
     ///      Prevents duplicate payouts of the gameover prize pool.
     bool internal gameOverFinalJackpotPaid;
 
+    /// @dev True once the 30-day post-gameover final sweep has executed.
+    ///      All remaining funds (including unclaimed winnings) are forfeited.
+    bool internal finalSwept;
+
     // =========================================================================
     // Whale Pass Claims (Deferred >5 ETH lootboxes)
     // =========================================================================

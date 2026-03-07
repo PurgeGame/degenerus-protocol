@@ -1418,6 +1418,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     function _claimWinningsInternal(address player, bool stethFirst) private {
+        if (finalSwept) revert E();
         uint256 amount = claimableWinnings[player];
         if (amount <= 1) revert E();
         uint256 payout;
@@ -2140,7 +2141,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Get the claimable pool (reserved for player winnings claims).
     /// @return The claimablePool value (ETH wei).
     function claimablePoolView() external view returns (uint256) {
+        if (finalSwept) return 0;
         return claimablePool;
+    }
+
+    /// @notice Check if the final sweep has executed (all funds forfeited).
+    function isFinalSwept() external view returns (bool) {
+        return finalSwept;
     }
 
     /// @notice Get the yield surplus (stETH appreciation above all pool obligations).
@@ -2512,6 +2519,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Returns 0 if balance is only the 1 wei sentinel.
     /// @return Claimable amount in wei (excludes sentinel).
     function getWinnings() external view returns (uint256) {
+        if (finalSwept) return 0;
         uint256 stored = claimableWinnings[msg.sender];
         if (stored <= 1) return 0;
         unchecked {
@@ -2525,6 +2533,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function claimableWinningsOf(
         address player
     ) external view returns (uint256) {
+        if (finalSwept) return 0;
         return claimableWinnings[player];
     }
 
