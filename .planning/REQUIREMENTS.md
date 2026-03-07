@@ -115,59 +115,59 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | — | Pending |
-| INFRA-02 | — | Pending |
-| INFRA-03 | — | Pending |
-| CORE-01 | — | Pending |
-| CORE-02 | — | Pending |
-| MOD-01 | — | Pending |
-| MOD-02 | — | Pending |
-| MOD-03 | — | Pending |
-| MOD-04 | — | Pending |
-| MOD-05 | — | Pending |
-| MOD-06 | — | Pending |
-| MOD-07 | — | Pending |
-| MOD-08 | — | Pending |
-| MOD-09 | — | Pending |
-| MOD-10 | — | Pending |
-| MOD-11 | — | Pending |
-| MOD-12 | — | Pending |
-| TOKEN-01 | — | Pending |
-| TOKEN-02 | — | Pending |
-| TOKEN-03 | — | Pending |
-| TOKEN-04 | — | Pending |
-| PASS-01 | — | Pending |
-| PASS-02 | — | Pending |
-| SOCIAL-01 | — | Pending |
-| SOCIAL-02 | — | Pending |
-| SOCIAL-03 | — | Pending |
-| ADMIN-01 | — | Pending |
-| ADMIN-02 | — | Pending |
-| ADMIN-03 | — | Pending |
-| ADMIN-04 | — | Pending |
-| ADMIN-05 | — | Pending |
-| LIB-01 | — | Pending |
-| LIB-02 | — | Pending |
-| LIB-03 | — | Pending |
-| LIB-04 | — | Pending |
-| LIB-05 | — | Pending |
-| IFACE-01 | — | Pending |
-| IFACE-02 | — | Pending |
-| XREF-01 | — | Pending |
-| XREF-02 | — | Pending |
-| XREF-03 | — | Pending |
-| GAS-01 | — | Pending |
-| GAS-02 | — | Pending |
-| VERIFY-01 | — | Pending |
-| VERIFY-02 | — | Pending |
-| SYNTH-01 | — | Pending |
-| SYNTH-02 | — | Pending |
+| INFRA-01 | Phase 48 | Pending |
+| INFRA-02 | Phase 48 | Pending |
+| INFRA-03 | Phase 48 | Pending |
+| CORE-01 | Phase 49 | Pending |
+| CORE-02 | Phase 49 | Pending |
+| MOD-01 | Phase 50 | Pending |
+| MOD-02 | Phase 50 | Pending |
+| MOD-03 | Phase 50 | Pending |
+| MOD-04 | Phase 51 | Pending |
+| MOD-05 | Phase 51 | Pending |
+| MOD-06 | Phase 51 | Pending |
+| MOD-07 | Phase 52 | Pending |
+| MOD-08 | Phase 52 | Pending |
+| MOD-09 | Phase 52 | Pending |
+| MOD-10 | Phase 52 | Pending |
+| MOD-11 | Phase 53 | Pending |
+| MOD-12 | Phase 53 | Pending |
+| TOKEN-01 | Phase 54 | Pending |
+| TOKEN-02 | Phase 54 | Pending |
+| TOKEN-03 | Phase 54 | Pending |
+| TOKEN-04 | Phase 54 | Pending |
+| PASS-01 | Phase 55 | Pending |
+| PASS-02 | Phase 55 | Pending |
+| SOCIAL-01 | Phase 55 | Pending |
+| SOCIAL-02 | Phase 55 | Pending |
+| SOCIAL-03 | Phase 55 | Pending |
+| IFACE-01 | Phase 55 | Pending |
+| IFACE-02 | Phase 55 | Pending |
+| ADMIN-01 | Phase 56 | Pending |
+| ADMIN-02 | Phase 56 | Pending |
+| ADMIN-03 | Phase 56 | Pending |
+| ADMIN-04 | Phase 56 | Pending |
+| ADMIN-05 | Phase 56 | Pending |
+| LIB-01 | Phase 53 | Pending |
+| LIB-02 | Phase 53 | Pending |
+| LIB-03 | Phase 53 | Pending |
+| LIB-04 | Phase 53 | Pending |
+| LIB-05 | Phase 53 | Pending |
+| XREF-01 | Phase 57 | Pending |
+| XREF-02 | Phase 57 | Pending |
+| XREF-03 | Phase 57 | Pending |
+| GAS-01 | Phase 57 | Pending |
+| GAS-02 | Phase 57 | Pending |
+| VERIFY-01 | Phase 57 | Pending |
+| VERIFY-02 | Phase 57 | Pending |
+| SYNTH-01 | Phase 58 | Pending |
+| SYNTH-02 | Phase 58 | Pending |
 
 **Coverage:**
-- v7.0 requirements: 42 total
-- Mapped to phases: 0
-- Unmapped: 42
+- v7.0 requirements: 47 total
+- Mapped to phases: 47
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-07*
-*Last updated: 2026-03-07 after initial definition*
+*Last updated: 2026-03-07 after roadmap creation*

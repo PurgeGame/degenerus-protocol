@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: Function-Level Exhaustive Audit
 status: active
-stopped_at: —
+stopped_at: Roadmap created
 last_updated: "2026-03-07"
-last_activity: 2026-03-07 — Milestone v7.0 started
+last_activity: 2026-03-07 — Roadmap created for v7.0 (11 phases, 47 requirements)
 progress:
-  total_phases: 0
+  total_phases: 11
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,76 +21,52 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** Defining requirements for v7.0 Function-Level Exhaustive Audit
+**Current focus:** Phase 48 -- Audit Infrastructure (define JSON schema, cross-ref format, mutation map format)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 48 (1 of 11) — Audit Infrastructure
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-07 — Milestone v7.0 started
+Status: Ready to plan
+Last activity: 2026-03-07 — Roadmap created for v7.0
+
+Progress: [░░░░░░░░░░] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0
+- Average duration: —
+- Total execution time: 0 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+**Recent Trend:**
+- Last 5 plans: —
+- Trend: —
+
+*Updated after each plan completion*
 
 ## Accumulated Context
-| Phase 04 P01 | 6min | 2 tasks | 1 files |
-| Phase 04 P02 | 7min | 1 tasks | 1 files |
-| Phase 04 P09 | 5min | 1 tasks | 1 files |
-| Phase 04 P08 | 2min | 1 tasks | 1 files |
-| Phase 04 P06 | 5min | 1 tasks | 1 files |
-| Phase 04 P03 | 4min | 2 tasks | 1 files |
-| Phase 04 P04 | 7min | 2 tasks | 1 files |
-| Phase 04 P07 | 6min | 1 tasks | 1 files |
-| Phase 47 P05 | 5min | 2 tasks | 4 files |
-| Phase 47 P01 | 7min | 2 tasks | 3 files |
-| Phase 47 P02 | 7min | 2 tasks | 3 files |
-| Phase 47 P07 | 8min | 2 tasks | 2 files |
-| Phase 47 P04 | 9min | 2 tasks | 3 files |
-| Phase 47 P06 | 11min | 2 tasks | 3 files |
-| Phase 47 P03 | 15min | 2 tasks | 3 files |
-| Phase 47 P08 | 25min | 2 tasks | 5 files |
-| Phase 45 P01 | 3min | 2 tasks | 1 files |
-| Phase 45 P02 | 5min | 2 tasks | 2 files |
-| Phase 46 P01 | 14min | 2 tasks | 1 files |
-| Phase 43 P01 | 18min | 2 tasks | 1 files |
 
 ### Decisions
 
-- v6.0 continues phase numbering from 43 (after Phase 42 sim engine)
-- Simulation engine v1.0 shipped (phases 36-42 complete)
-- Three verification layers: dedicated tests (43-45), game theory paper parity (46), NatSpec audit (47)
-- Phases 43-46 are parallelizable; Phase 47 depends on 43-45
-- Level 90 price miss motivates systematic constant verification (PAR phase)
-- [Phase 04]: ACCT-09 PASS: vault share redemption formulas are mathematically correct with vault-favorable rounding
-- [Phase 04]: Yield surplus uses independent computation (92% distributed), not subtraction-remainder. Intentional 8% safety buffer.
-- [Phase 04]: ACCT-02 PASS: 90/10 split is wei-exact via subtraction-remainder
-- [Phase 04]: ACCT-03 PASS: all 20 BPS splits across 7 modules conserve input
-- [Phase 04]: ACCT-07 PASS (unconditional): game-over settlement traces to zero terminal balance; GO-F01 CLOSED (refundDeityPass removed)
-- [Phase 04]: ACCT-10 PASS: BurnieCoin supply invariant totalSupply + vaultAllowance = supplyIncUncirculated() verified across all 8 paths
-- [Phase 04]: ACCT-01 PASS: claimablePool invariant holds across all 18 mutation sites (6 dec, 10 inc, 2 read-only)
-- [Phase 04]: ACCT-01 PASS (unconditional): ETH flow trace confirms all 15 inflow/outflow/internal paths preserve invariant; GO-F01 resolved (refundDeityPass removed)
-- [Phase 04]: ACCT-06 PASS: receive() routes all pre-gameOver ETH to futurePrizePool; reverts post-gameOver
-- [Phase 04]: ACCT-04 PASS: CEI-only reentrancy protection correct across all ETH-sending functions; Slither confirms 0 reentrancy-eth findings; refundDeityPass removed eliminates attack surface
-- [Phase 04]: ACCT-08 PASS: All 5 stall recovery paths correctly guarded against premature triggering and correctly preserve claimablePool
-- [Phase 47]: GameOverModule deity refund NatSpec incorrectly claimed separate level-0 full refund -- code treats all levels 0-9 identically at 20 ETH/pass
-- [Phase 47]: BurnieCoinflip payout distribution (5%/90%/5%) and COINFLIP_REWARD_MEAN_BPS=9685 verified accurate against code
-- [Phase 47]: Admin/Affiliate NatSpec: 5 original findings fixed, 8 new minor findings documented (STALE/MISLEADING)
-- [Phase 47]: lootboxActivityScore param labeled "in BPS" but values exceed 10000 -- raw activity scores, not basis points
-- [Phase 47]: AdvanceModule wireVrf has no idempotency (NatSpec was wrong); WhaleModule has no level restriction on whale bundles; lazy pass eligibility is levels 0-2 not 0-3; future pool draw is 15% not 20%
-- [Phase 47]: DegenerusQuests streak increments on first slot completion (not both); slot 0 pays 100 BURNIE (not 0); lootbox target is 2x (not 1-3x); decimator target equals flip target
-- [Phase 47]: DegenerusJackpots NatSpec fully clean -- all prize distribution percentages and BAF mechanics verified accurate
-- [Phase 47]: Plan 04: LootboxModule had 6 WRONG NatSpec (deity boon limits/ranges, EV threshold, presale multiplier); DecimatorModule clean; DegeneretteModule had 2 findings (ROI curve, payout example)
-- [Phase 47]: BurnieCoin supply invariant confirmed across all 8 mutation paths; DegenerusVault deity pass price NatSpec corrected; DegenerusStonk fully clean
-- [Phase 47]: MintModule streak NatSpec classified STALE (moved to MintStreakUtils); JackpotModule WRITES_BUDGET_SAFE corrected 780->550; early-burn and consolidation descriptions updated to match current code
-- [Phase 47]: DegenerusGame.sol had 8 NatSpec fixes (tiered mint gate, whale pricing, lazy pass, deity boon slots, wireVrf, fund distribution, presale bonus); DeityPass and all 5 libraries fully clean
-- [Phase 47]: Phase 47 COMPLETE: 64 total findings across 31 contracts, 53 fixes applied, cross-contract error/event verification done (DOC-09/DOC-10)
-- [Phase 45]: All 12 FIX requirements validated complete -- 23 dedicated tests + 7 cross-cutting tests in SecurityEconHardening.test.js
-- [Phase 45]: All 5 ECON requirements validated complete -- 9 tests in SecurityEconHardening.test.js + 8 integration tests in CompressedJackpot.test.js
-- [Phase 45]: Phase 45 COMPLETE: 47 tests across 2 files, all 17 requirements (FIX-01..12, ECON-01..05) have verified coverage
-- [Phase 46]: Whale bundle sets bundleType=3 (100-level), not bundleType=1; activity score is 11500 BPS (50% streak + 25% count + 40% whale pass)
-- [Phase 46]: Static assertions with source-file cross-references are correct approach for private Solidity constants
-- [Phase 46]: Phase 46 COMPLETE: 118 tests in PaperParity.test.js, all 18 PAR requirements verified (8 on-chain, 10 static+source)
-- [Phase 43]: No changes needed to pre-existing test file -- all 10 requirements fully covered by 32 tests
-- [Phase 43]: Phase 43 COMPLETE: 32 tests in GovernanceGating.test.js, all 10 requirements verified (ADMIN-01..06, GATE-01..04)
-- [Phase 44]: All 39 affiliate hardening tests validated against contract source -- no gaps found, no modifications needed; full suite passes at 1185 tests
+- v7.0 starts at Phase 48 (after v6.0 Phase 47)
+- 11 phases derived from 47 requirements across 13 categories
+- Phase 48 (Infrastructure) must complete first -- defines output format for all audit phases
+- Phases 49-56 are parallelizable after Phase 48 (independent contract audits)
+- Phase 57 (Cross-Contract) depends on all of 49-56
+- Phase 58 (Synthesis) depends on Phase 57
+- DegenerusGame.sol (19KB) and Storage get their own phase (49) due to size/centrality
+- BurnieCoinflip.sol (16KB) grouped with other token contracts (Phase 54)
+- 10 delegatecall modules split into 3 phases by functional affinity (ETH flow / lifecycle / player interaction)
+- Libraries grouped with module utils (Phase 53) since they share the "shared utility" pattern
+- Interfaces verified alongside the contracts they describe (Phase 55)
+- REQUIREMENTS.md stated 42 requirements but actual count is 47 -- traceability table corrected
 
 ### Pending Todos
 
@@ -102,6 +78,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T07:46:09.692Z
-Stopped at: Completed 44-01-PLAN.md
+Last session: 2026-03-07
+Stopped at: Roadmap created for v7.0
 Resume file: None
