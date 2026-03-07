@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** Phase 51 -- Endgame Lifecycle Modules audit (LootboxModule Part 2 complete)
+**Current focus:** Phase 51 -- Endgame Lifecycle Modules audit (EndgameModule audit complete)
 
 ## Current Position
 
