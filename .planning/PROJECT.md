@@ -1,19 +1,22 @@
-# Degenerus Protocol — Off-Chain Simulation Engine
+# Degenerus Protocol — Contract Hardening & Parity Verification
 
 ## What This Is
 
-A standalone TypeScript simulation engine with full logic parity to the Degenerus Protocol Solidity contracts. Replicates all game mechanics (ticket purchasing, jackpots, whale/lazy/deity passes, lootboxes, quest streaks, BURNIE economics, Degenerette, vault yield) in pure math — no Hardhat dependency, runs in browser. Player profiles map to the 5 archetypes from the game theory paper (Degen, EV Maximizer, Whale, Hybrid + Affiliate as composable trait). Includes an interactive React/D3 visualization dashboard for the website and academic paper. Code lives at `PurgeGame/simulator/`, planning managed from `degenerus-contracts/.planning/`.
+22-contract on-chain gaming protocol (Degenerus Protocol) with 10 delegatecall game modules. Currently undergoing comprehensive testing and parity verification after a series of contract changes — admin governance, advance module gating, affiliate economics, and game-over mechanics.
 
-## Current Milestone: v1.0 Off-Chain Simulation Engine
+## Current Milestone: v6.0 Contract Hardening & Parity Verification
 
-**Goal:** Build a presentation-quality simulation engine that faithfully replicates Degenerus Protocol mechanics, with player profiles from the game theory paper and interactive visualization for the website.
+**Goal:** Comprehensive testing of all recent contract changes and systematic verification that every constant, NatSpec comment, and game theory paper number matches actual contract behavior.
 
 **Target features:**
-- Pure TypeScript simulation engine with full logic parity to all Solidity game mechanics
-- 4 player archetypes (Degen, EV Maximizer, Whale, Hybrid) + Affiliate as composable trait on any archetype
-- Budget constraints and bankroll risk modeling per Section 3.6 of the theory paper
-- Interactive React/D3 dashboard (player wealth, pool sizes, BURNIE price, activity scores over time)
-- Configurable simulation parameters (player count, level count, seed, archetype mix)
+- Full test coverage for all post-audit contract changes (admin, advance, affiliate, game-over, whale, deity, etc.)
+- NatSpec comment accuracy audit — every comment checked against actual code logic
+- Game theory paper (website/theory/index.html) → contract constant parity verification
+- Sanity-check test suite exercising every magic number, BPS split, price tier, and threshold
+
+## Previous: Off-Chain Simulation Engine (v1.0 IN PROGRESS)
+
+Simulation engine milestone paused — phases 36, 39, 41 complete; phases 37, 38, 40, 42 pending.
 
 ## Previous: Security Audit (v1.0-v5.0 COMPLETE)
 
@@ -91,34 +94,34 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 
 ### Active
 
-(Defined in REQUIREMENTS.md — v1.0 simulation engine milestone)
+(Defined in REQUIREMENTS.md — v6.0 hardening milestone)
 
 ### Out of Scope
 
-- Gas optimization — separate concern, not security-relevant
-- Frontend/off-chain code — contracts only
+- Gas optimization — separate concern
+- Simulation engine — paused, separate milestone
 - Testnet-specific contracts — mainnet deployment is the target
 - Mock contracts — test infrastructure only
-- Deployment scripts — operational, not security surface
+- Deployment scripts — operational, not testing surface
 
 ## Context
 
-### Current State (v1.0 Simulation Engine)
+### Current State (v6.0 Contract Hardening)
 
-- Pivoting from security audit to simulation engine development
-- Source of truth: 22 Solidity contracts + 10 delegatecall modules (audited, frozen)
-- Existing simulators (econ/sim TS, localtest/sim JS) have formula divergences — starting fresh
-- Game theory paper (website/theory/index.html) defines 5 player archetypes + economics
-- Target output: PurgeGame/simulator/ — standalone TS + React/D3 dashboard
+- Contracts have been significantly modified since the v1.0-v5.0 audits
+- Recent changes: CREATOR gate removed, DGVE majority governance, tiered mint gate, affiliate commission caps, lootbox activity taper, auto VRF shutdown, compressed jackpots, game-over redesign
+- 951 tests passing but many recent changes lack dedicated test coverage
+- Known miss: level 90 price change was in PriceLookupLib but not caught by any test across 30+ rounds
+- Game theory paper (website/theory/index.html) is the canonical source of truth for protocol numbers
 
 ### Technical Stack
 
-- Solidity 0.8.26/0.8.28 with viaIR, optimizer runs=200
+- Solidity 0.8.34 with viaIR, optimizer runs=200
 - All contracts under 24KB (DegenerusGame largest at 19KB)
 - Storage layout shared via DegenerusGameStorage
 - ContractAddresses compile-time constants, patched at deploy
 - Chainlink VRF V2.5, Lido stETH, LINK token as external dependencies
-- Audit tools: forge inspect, Slither, Aderyn, Hardhat gas harnesses, Foundry invariant fuzzing, Halmos symbolic verification
+- Test stack: Hardhat/Mocha (951 tests), Foundry invariant fuzzing, Halmos symbolic verification
 
 ## Constraints
 
@@ -154,4 +157,4 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 | v5.0: Same-auditor bias as primary limitation | Honest confidence requires naming weaknesses | ✓ Good — builds trust with C4A judges |
 
 ---
-*Last updated: 2026-03-05 after v1.0 simulation engine milestone start*
+*Last updated: 2026-03-06 after v6.0 contract hardening milestone start*
