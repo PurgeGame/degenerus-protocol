@@ -4,19 +4,23 @@
 
 22-contract on-chain gaming protocol (Degenerus Protocol) with 10 delegatecall game modules. Currently undergoing comprehensive testing and parity verification after a series of contract changes — admin governance, advance module gating, affiliate economics, and game-over mechanics.
 
-## Current Milestone: v6.0 Contract Hardening & Parity Verification
+## Current Milestone: v7.0 Function-Level Exhaustive Audit
 
-**Goal:** Comprehensive testing of all recent contract changes and systematic verification that every constant, NatSpec comment, and game theory paper number matches actual contract behavior.
+**Goal:** Exhaustive function-by-function audit of every production Solidity file — structured JSON + markdown reports per function covering callers, callees, state mutations, invariants, NatSpec accuracy, gas waste, and correctness verdict.
 
 **Target features:**
-- Full test coverage for all post-audit contract changes (admin, advance, affiliate, game-over, whale, deity, etc.)
-- NatSpec comment accuracy audit — every comment checked against actual code logic
-- Game theory paper (website/theory/index.html) → contract constant parity verification
-- Sanity-check test suite exercising every magic number, BPS split, price tier, and threshold
+- Function-level audit report (JSON + markdown) for every function in every production .sol file
+- Cross-reference call graph mapping every caller/callee relationship across the protocol
+- State mutation map showing which functions write which storage slots
+- NatSpec and comment accuracy verification against actual behavior
+- Gas optimization flags (impossible conditions, redundant reads, dead branches)
+- Prior v1-v6 claim spot-checking against current code
+- Game theory paper cross-reference for intent verification on ambiguous functions
+- Synthesis report with aggregate findings, severity ratings, and confidence assessment
 
-## Previous: Off-Chain Simulation Engine (v1.0 IN PROGRESS)
+## Previous: v6.0 Contract Hardening & Parity Verification (COMPLETE)
 
-Simulation engine milestone paused — phases 36, 39, 41 complete; phases 37, 38, 40, 42 pending.
+5 phases (43-47), 13 plans. 1185 tests passing. Governance/gating, affiliate hardening, security/economic hardening, game theory paper parity (118 tests), NatSpec audit (64 findings, 53 fixes). All requirements satisfied.
 
 ## Previous: Security Audit (v1.0-v5.0 COMPLETE)
 
@@ -94,7 +98,7 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 
 ### Active
 
-(Defined in REQUIREMENTS.md — v6.0 hardening milestone)
+(Defined in REQUIREMENTS.md — v7.0 function-level exhaustive audit)
 
 ### Out of Scope
 
@@ -106,22 +110,22 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 
 ## Context
 
-### Current State (v6.0 Contract Hardening)
+### Current State (v7.0 Function-Level Exhaustive Audit)
 
-- Contracts have been significantly modified since the v1.0-v5.0 audits
-- Recent changes: CREATOR gate removed, DGVE majority governance, tiered mint gate, affiliate commission caps, lootbox activity taper, auto VRF shutdown, compressed jackpots, game-over redesign
-- 951 tests passing but many recent changes lack dedicated test coverage
-- Known miss: level 90 price change was in PriceLookupLib but not caught by any test across 30+ rounds
+- v1-v6 audits covered threat models, attack surfaces, invariants, and NatSpec — but not function-level exhaustive coverage
+- 1185 tests passing across Hardhat (unit, integration, access control, edge cases, hardening, parity)
+- 45 production .sol files to audit (15 contracts, 12 modules/utils, 1 storage, 5 libraries, 12 interfaces)
 - Game theory paper (website/theory/index.html) is the canonical source of truth for protocol numbers
+- Prior audit approach was threat-model-driven; this milestone is code-coverage-driven
 
 ### Technical Stack
 
-- Solidity 0.8.34 with viaIR, optimizer runs=200
+- Solidity 0.8.28 with viaIR, optimizer runs=200
 - All contracts under 24KB (DegenerusGame largest at 19KB)
 - Storage layout shared via DegenerusGameStorage
 - ContractAddresses compile-time constants, patched at deploy
 - Chainlink VRF V2.5, Lido stETH, LINK token as external dependencies
-- Test stack: Hardhat/Mocha (951 tests), Foundry invariant fuzzing, Halmos symbolic verification
+- Test stack: Hardhat/Mocha (1185 tests), Foundry invariant fuzzing, Halmos symbolic verification
 
 ## Constraints
 
@@ -157,4 +161,4 @@ Every ETH that enters the protocol must be accounted for, every RNG outcome must
 | v5.0: Same-auditor bias as primary limitation | Honest confidence requires naming weaknesses | ✓ Good — builds trust with C4A judges |
 
 ---
-*Last updated: 2026-03-06 after v6.0 contract hardening milestone start*
+*Last updated: 2026-03-07 after v7.0 function-level exhaustive audit start*
