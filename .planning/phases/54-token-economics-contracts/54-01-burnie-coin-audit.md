@@ -1083,3 +1083,158 @@ ERC-20 token ("Burnies", BURNIE, 18 decimals) with uint128-packed supply state (
 | **Used by** | `creditLinkReward()` |
 
 **Verdict:** CORRECT -- reuses OnlyGame error to save bytecode (informational)
+
+---
+
+## Access Control Matrix
+
+| Modifier / Check | Functions | Who Can Call | Error |
+|---|---|---|---|
+| `onlyDegenerusGameContract` | `rollDailyQuest` | DegenerusGame only | `OnlyGame()` |
+| `onlyTrustedContracts` | `burnCoin` | DegenerusGame, DegenerusAffiliate | `OnlyTrustedContracts()` |
+| `onlyFlipCreditors` | `creditCoin`, `creditFlip`, `creditFlipBatch` | DegenerusGame, DegenerusAffiliate | `OnlyFlipCreditors()` |
+| `onlyVault` | `vaultMintTo` | DegenerusVault only | `OnlyVault()` |
+| `onlyAdmin` | `creditLinkReward` | DegenerusAdmin only | `OnlyGame()` (reused) |
+| inline: `msg.sender != GAME` | `mintForGame`, `notifyQuestMint`, `notifyQuestLootBox`, `notifyQuestDegenerette` | DegenerusGame only | `OnlyGame()` |
+| inline: `msg.sender != coinflipContract` | `burnForCoinflip`, `mintForCoinflip` | BurnieCoinflip only | `OnlyGame()` (reused) |
+| inline: `msg.sender != AFFILIATE` | `affiliateQuestReward` | DegenerusAffiliate only | `OnlyAffiliate()` |
+| inline: `sender != GAME && sender != VAULT` | `vaultEscrow` | DegenerusGame, DegenerusVault | `OnlyVault()` (reused) |
+| (no access control) | `approve`, `transfer`, `transferFrom`, `decimatorBurn` | Any caller | N/A |
+| (view -- no access control) | `claimableCoin`, `balanceOfWithClaimable`, `previewClaimCoinflips`, `coinflipAutoRebuyInfo`, `totalSupply`, `supplyIncUncirculated`, `vaultMintAllowance`, `coinflipAmount` | Any caller | N/A |
+
+**Notes:**
+- `onlyTrustedContracts` and `onlyFlipCreditors` have identical caller sets (GAME + AFFILIATE) but use different errors for auditability
+- `decimatorBurn` has no modifier but enforces operator approval via `degenerusGame.isOperatorApproved` when player != msg.sender
+- Several functions reuse `OnlyGame()` error across different access control checks (coinflip, admin) to reduce bytecode size
+
+---
+
+## Storage Mutation Map
+
+| Function | Variables Written | Write Type |
+|---|---|---|
+| `approve` | `allowance[owner][spender]` | Set to exact value |
+| `transfer` | `balanceOf[from]`, `balanceOf[to]`, `_supply.totalSupply` (VAULT path), `_supply.vaultAllowance` (VAULT path) | Subtract/Add |
+| `transferFrom` | `allowance[from][spender]`, `balanceOf[from]`, `balanceOf[to]`, `_supply.totalSupply` (VAULT path), `_supply.vaultAllowance` (VAULT path) | Subtract/Add |
+| `_transfer` | `balanceOf[from]`, `balanceOf[to]`, `_supply.totalSupply` (VAULT path), `_supply.vaultAllowance` (VAULT path) | Subtract/Add |
+| `_mint` | `_supply.totalSupply` (normal), `_supply.vaultAllowance` (VAULT), `balanceOf[to]` (normal) | Add |
+| `_burn` | `_supply.totalSupply` (normal), `_supply.vaultAllowance` (VAULT), `balanceOf[from]` (normal) | Subtract |
+| `burnForCoinflip` | via `_burn`: `balanceOf[from]`, `_supply.totalSupply` | Subtract |
+| `mintForCoinflip` | via `_mint`: `balanceOf[to]`, `_supply.totalSupply` | Add |
+| `mintForGame` | via `_mint`: `balanceOf[to]`, `_supply.totalSupply` | Add |
+| `creditCoin` | via `_mint`: `balanceOf[player]`, `_supply.totalSupply` | Add |
+| `vaultEscrow` | `_supply.vaultAllowance` | Add |
+| `vaultMintTo` | `_supply.vaultAllowance`, `_supply.totalSupply`, `balanceOf[to]` | Sub/Add/Add |
+| `burnCoin` | via `_burn`: `balanceOf[target]`, `_supply.totalSupply` | Subtract |
+| `decimatorBurn` | via `_burn`: `balanceOf[caller]`, `_supply.totalSupply` | Subtract |
+| `_claimCoinflipShortfall` | none locally (coinflipContract mints via `mintForCoinflip` callback) | Indirect |
+| `_consumeCoinflipShortfall` | none locally (coinflipContract adjusts its own state) | Indirect |
+| `_questApplyReward` | none (event only) | None |
+| `rollDailyQuest` | none locally (questModule writes internally) | Indirect |
+| `notifyQuestMint` | none locally (questModule + coinflipContract write) | Indirect |
+| `notifyQuestLootBox` | none locally (questModule + coinflipContract write) | Indirect |
+| `notifyQuestDegenerette` | none locally (questModule + coinflipContract write) | Indirect |
+| `affiliateQuestReward` | none locally (questModule writes internally) | Indirect |
+| `creditFlip` | none locally (coinflipContract writes internally) | Indirect |
+| `creditFlipBatch` | none locally (coinflipContract writes internally) | Indirect |
+| `creditLinkReward` | none locally (coinflipContract writes internally) | Indirect |
+
+**Key observation:** Only 3 storage variables are mutated in BurnieCoin: `_supply` (packed totalSupply+vaultAllowance), `balanceOf`, and `allowance`. All other state changes are delegated to external contracts (BurnieCoinflip, DegenerusQuests).
+
+---
+
+## ETH Mutation Path Map
+
+| Path | Source | Destination | Trigger | Function |
+|---|---|---|---|---|
+| (none) | N/A | N/A | N/A | N/A |
+
+**BurnieCoin does not handle ETH.** It is a pure ERC-20 token contract. No `receive()`, no `fallback()`, no `payable` functions. All ETH flows are handled by DegenerusGame, Vault, and other contracts. BurnieCoin only manages BURNIE token balances and supply.
+
+---
+
+## Cross-Contract Call Graph
+
+| Function | Calls To | Contract | Method |
+|---|---|---|---|
+| `claimableCoin` | BurnieCoinflip | `coinflipContract` | `previewClaimCoinflips(msg.sender)` |
+| `balanceOfWithClaimable` | DegenerusGame | `degenerusGame` | `rngLocked()` |
+| `balanceOfWithClaimable` | BurnieCoinflip | `coinflipContract` | `previewClaimCoinflips(player)` |
+| `previewClaimCoinflips` | BurnieCoinflip | `coinflipContract` | `previewClaimCoinflips(player)` |
+| `coinflipAutoRebuyInfo` | BurnieCoinflip | `coinflipContract` | `coinflipAutoRebuyInfo(player)` |
+| `coinflipAmount` | BurnieCoinflip | `coinflipContract` | `coinflipAmount(player)` |
+| `creditFlip` | BurnieCoinflip | `coinflipContract` | `creditFlip(player, amount)` |
+| `creditFlipBatch` | BurnieCoinflip | `coinflipContract` | `creditFlipBatch(players, amounts)` |
+| `creditLinkReward` | BurnieCoinflip | `coinflipContract` | `creditFlip(player, amount)` |
+| `_claimCoinflipShortfall` | DegenerusGame | `degenerusGame` | `rngLocked()` |
+| `_claimCoinflipShortfall` | BurnieCoinflip | `coinflipContract` | `claimCoinflipsFromBurnie(player, shortfall)` |
+| `_consumeCoinflipShortfall` | DegenerusGame | `degenerusGame` | `rngLocked()` |
+| `_consumeCoinflipShortfall` | BurnieCoinflip | `coinflipContract` | `consumeCoinflipsForBurn(player, shortfall)` |
+| `rollDailyQuest` | DegenerusQuests | `questModule` | `rollDailyQuest(day, entropy)` |
+| `notifyQuestMint` | DegenerusQuests | `questModule` | `handleMint(player, quantity, paidWithEth)` |
+| `notifyQuestMint` | DegenerusGame | `degenerusGame` | `recordMintQuestStreak(player)` |
+| `notifyQuestMint` | BurnieCoinflip | `coinflipContract` | `creditFlip(player, questReward)` |
+| `notifyQuestLootBox` | DegenerusQuests | `questModule` | `handleLootBox(player, amountWei)` |
+| `notifyQuestLootBox` | BurnieCoinflip | `coinflipContract` | `creditFlip(player, questReward)` |
+| `notifyQuestDegenerette` | DegenerusQuests | `questModule` | `handleDegenerette(player, amount, paidWithEth)` |
+| `notifyQuestDegenerette` | BurnieCoinflip | `coinflipContract` | `creditFlip(player, questReward)` |
+| `affiliateQuestReward` | DegenerusQuests | `questModule` | `handleAffiliate(player, amount)` |
+| `decimatorBurn` | DegenerusGame | `degenerusGame` | `isOperatorApproved(player, msg.sender)` |
+| `decimatorBurn` | DegenerusGame | `degenerusGame` | `decWindow()` |
+| `decimatorBurn` | DegenerusQuests | `questModule` | `handleDecimator(caller, amount)` |
+| `decimatorBurn` | BurnieCoinflip | `coinflipContract` | `creditFlip(caller, questReward)` |
+| `decimatorBurn` | DegenerusGame | `degenerusGame` | `playerActivityScore(caller)` |
+| `decimatorBurn` | DegenerusGame | `degenerusGame` | `consumeDecimatorBoon(caller)` |
+| `decimatorBurn` | DegenerusGame | `degenerusGame` | `recordDecBurn(caller, lvl, bucket, baseAmount, decMultBps)` |
+| `burnCoin` | DegenerusGame | `degenerusGame` | `rngLocked()` (via _consumeCoinflipShortfall) |
+| `burnCoin` | BurnieCoinflip | `coinflipContract` | `consumeCoinflipsForBurn(target, shortfall)` (via _consumeCoinflipShortfall) |
+
+**Summary of external dependencies:**
+- **DegenerusGame** (`degenerusGame`): 8 unique methods called (rngLocked, decWindow, isOperatorApproved, playerActivityScore, consumeDecimatorBoon, recordDecBurn, recordMintQuestStreak)
+- **BurnieCoinflip** (`coinflipContract`): 7 unique methods called (previewClaimCoinflips, coinflipAmount, coinflipAutoRebuyInfo, creditFlip, creditFlipBatch, claimCoinflipsFromBurnie, consumeCoinflipsForBurn)
+- **DegenerusQuests** (`questModule`): 5 unique methods called (rollDailyQuest, handleMint, handleLootBox, handleDegenerette, handleAffiliate, handleDecimator)
+
+---
+
+## Findings Summary
+
+| Severity | Count | Details |
+|---|---|---|
+| BUG | 0 | None found |
+| CONCERN | 2 | Both informational NatSpec issues (see below) |
+| GAS | 0 | No significant gas issues; all unchecked blocks verified safe |
+| CORRECT | 33 | All 33 functions verified correct |
+
+### Concern Details
+
+**CONCERN 1 (Informational): `creditCoin` -- NatSpec mismatch in interface**
+- IDegenerusCoin.sol interface NatSpec says "Credits coin to a player's balance without minting new tokens"
+- Implementation calls `_mint()` which DOES increase `totalSupply` (mints new tokens)
+- **Impact:** None on correctness -- behavior is intentional for game reward distribution
+- **Recommendation:** Update interface NatSpec to "Mints coin to a player's balance"
+
+**CONCERN 2 (Informational): `notifyQuestLootBox` -- NatSpec says "game or lootbox contract"**
+- Code only checks `msg.sender != ContractAddresses.GAME`
+- Lootbox module is called via delegatecall through Game, so msg.sender is always GAME
+- **Impact:** None -- functionally correct, comment slightly misleading
+- **Recommendation:** Update NatSpec to "game contract only (lootbox operations are delegatecalled)"
+
+### Verified Invariants
+
+1. **Supply invariant:** `totalSupply + vaultAllowance = supplyIncUncirculated` -- maintained by all mint/burn/transfer paths. VAULT redirect in `_transfer` correctly adjusts both sides. `vaultMintTo` correctly moves from allowance to supply. `vaultEscrow` correctly increases allowance only.
+
+2. **uint128 truncation safety:** `_toUint128` reverts with `SupplyOverflow()` if any value exceeds uint128 max (~3.4e38). This is called on every mint, burn, vault escrow, and vault redirect path. Normal balance operations use uint256 and are not truncated. Overflow of uint256 balanceOf is impossible in practice.
+
+3. **CEI pattern:** `decimatorBurn` and `burnCoin` burn tokens BEFORE making external calls to quest module, coinflip, and game contracts. No reentrancy vector.
+
+4. **Access control completeness:** Every state-changing function that mints, burns, or credits tokens has appropriate access control. The only unrestricted state-changing functions are: `approve` (standard ERC-20), `transfer` (standard ERC-20, operates on msg.sender's balance), `transferFrom` (standard ERC-20, requires allowance or GAME bypass), and `decimatorBurn` (any caller can burn their own tokens or operator-approved tokens).
+
+5. **Auto-claim on shortfall:** `_claimCoinflipShortfall` (for transfers) mints from coinflip winnings. `_consumeCoinflipShortfall` (for burns) consumes without minting. Both correctly check `rngLocked()` to prevent claiming during VRF resolution. Both use unchecked subtraction guarded by prior balance check.
+
+6. **Quest reward flow:** All notify functions follow the same pattern: call questModule.handle* -> _questApplyReward (emit event) -> creditFlip if reward > 0. The reward is credited as flip stake, not wallet balance.
+
+---
+
+*Audit completed: 2026-03-07*
+*Auditor: Claude Opus 4.6*
+*Contract: BurnieCoin.sol (1023 lines, 33 functions, 5 modifiers)*
