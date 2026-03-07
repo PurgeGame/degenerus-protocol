@@ -37,26 +37,26 @@ Requirements for contract hardening milestone. Each maps to roadmap phases.
 
 ### Security Fixes (FIX)
 
-- [ ] **FIX-01**: Test whale bundle purchase reverts after gameOver
-- [ ] **FIX-02**: Test lazy pass purchase reverts after gameOver
-- [ ] **FIX-03**: Test deity pass purchase reverts after gameOver
-- [ ] **FIX-04**: Test `receive()` reverts after gameOver (plain ETH transfers blocked)
-- [ ] **FIX-05**: Test deity pass refund clears deityPassPurchasedCount for the refunded buyer
-- [ ] **FIX-06**: Test no voluntary deity refund path exists — only gameOver-triggered refund
-- [ ] **FIX-07**: Test gameOver deity payout: flat 20 ETH/pass, levels 0-9 only, FIFO by purchase order, budget-capped
-- [ ] **FIX-08**: Test BURNIE ticket purchases revert within 30 days of liveness-guard timeout
-- [ ] **FIX-09**: Test subscriptionId stored as uint256 (not uint64) — large subscription IDs handled correctly
-- [ ] **FIX-10**: Test 1 wei sentinel preserved in degenerette bet collection — claimable set to 1 not 0 after claim
-- [ ] **FIX-11**: Test capBucketCounts does not underflow — zero-count buckets handled safely
-- [ ] **FIX-12**: Test carryover floor — minimum carryover amount enforced
+- [x] **FIX-01**: Test whale bundle purchase reverts after gameOver
+- [x] **FIX-02**: Test lazy pass purchase reverts after gameOver
+- [x] **FIX-03**: Test deity pass purchase reverts after gameOver
+- [x] **FIX-04**: Test `receive()` reverts after gameOver (plain ETH transfers blocked)
+- [x] **FIX-05**: Test deity pass refund clears deityPassPurchasedCount for the refunded buyer
+- [x] **FIX-06**: Test no voluntary deity refund path exists — only gameOver-triggered refund
+- [x] **FIX-07**: Test gameOver deity payout: flat 20 ETH/pass, levels 0-9 only, FIFO by purchase order, budget-capped
+- [x] **FIX-08**: Test BURNIE ticket purchases revert within 30 days of liveness-guard timeout
+- [x] **FIX-09**: Test subscriptionId stored as uint256 (not uint64) — large subscription IDs handled correctly
+- [x] **FIX-10**: Test 1 wei sentinel preserved in degenerette bet collection — claimable set to 1 not 0 after claim
+- [x] **FIX-11**: Test capBucketCounts does not underflow — zero-count buckets handled safely
+- [x] **FIX-12**: Test carryover floor — minimum carryover amount enforced
 
 ### Economic Hardening (ECON)
 
-- [ ] **ECON-01**: Test JackpotModule uses explicit 46% futureShare (2300+2300 BPS) — ~8% buffer stays unextracted
-- [ ] **ECON-02**: Test MintModule has no level-dependent coin cost modifiers (removed step 13/18 multipliers)
-- [ ] **ECON-03**: Test multi-level scatter targeting for BAF rounds — tickets distributed across correct level range
-- [ ] **ECON-04**: Test compressed jackpot — when target met in <=2 days, counter advances 2 per physical day (5 logical days in 3 physical)
-- [ ] **ECON-05**: Test LINK reward formula correctness (post-fix)
+- [x] **ECON-01**: Test JackpotModule uses explicit 46% futureShare (2300+2300 BPS) — ~8% buffer stays unextracted
+- [x] **ECON-02**: Test MintModule has no level-dependent coin cost modifiers (removed step 13/18 multipliers)
+- [x] **ECON-03**: Test multi-level scatter targeting for BAF rounds — tickets distributed across correct level range
+- [x] **ECON-04**: Test compressed jackpot — when target met in <=2 days, counter advances 2 per physical day (5 logical days in 3 physical)
+- [x] **ECON-05**: Test LINK reward formula correctness (post-fix)
 
 ### Game Theory Paper Parity (PAR)
 
@@ -137,23 +137,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AFF-07 | Phase 44 | Pending |
 | AFF-08 | Phase 44 | Pending |
 | AFF-09 | Phase 44 | Pending |
-| FIX-01 | Phase 45 | Pending |
-| FIX-02 | Phase 45 | Pending |
-| FIX-03 | Phase 45 | Pending |
-| FIX-04 | Phase 45 | Pending |
-| FIX-05 | Phase 45 | Pending |
-| FIX-06 | Phase 45 | Pending |
-| FIX-07 | Phase 45 | Pending |
-| FIX-08 | Phase 45 | Pending |
-| FIX-09 | Phase 45 | Pending |
-| FIX-10 | Phase 45 | Pending |
-| FIX-11 | Phase 45 | Pending |
-| FIX-12 | Phase 45 | Pending |
-| ECON-01 | Phase 45 | Pending |
-| ECON-02 | Phase 45 | Pending |
-| ECON-03 | Phase 45 | Pending |
-| ECON-04 | Phase 45 | Pending |
-| ECON-05 | Phase 45 | Pending |
+| FIX-01 | Phase 45 | Complete |
+| FIX-02 | Phase 45 | Complete |
+| FIX-03 | Phase 45 | Complete |
+| FIX-04 | Phase 45 | Complete |
+| FIX-05 | Phase 45 | Complete |
+| FIX-06 | Phase 45 | Complete |
+| FIX-07 | Phase 45 | Complete |
+| FIX-08 | Phase 45 | Complete |
+| FIX-09 | Phase 45 | Complete |
+| FIX-10 | Phase 45 | Complete |
+| FIX-11 | Phase 45 | Complete |
+| FIX-12 | Phase 45 | Complete |
+| ECON-01 | Phase 45 | Complete |
+| ECON-02 | Phase 45 | Complete |
+| ECON-03 | Phase 45 | Complete |
+| ECON-04 | Phase 45 | Complete |
+| ECON-05 | Phase 45 | Complete |
 | PAR-01 | Phase 46 | Pending |
 | PAR-02 | Phase 46 | Pending |
 | PAR-03 | Phase 46 | Pending |

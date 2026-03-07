@@ -116,7 +116,7 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
 
 - [ ] **Phase 43: Governance & Gating Tests** - DGVE majority governance, VRF shutdown lifecycle, tiered advanceGame mint gate (10 requirements)
 - [ ] **Phase 44: Affiliate System Tests** - Per-referrer commission caps, lootbox activity taper, leaderboard tracking (9 requirements)
-- [ ] **Phase 45: Security & Economic Hardening Tests** - Post-gameOver locks, deity refund mechanics, compressed jackpots, economic invariants (17 requirements)
+- [x] **Phase 45: Security & Economic Hardening Tests** - Post-gameOver locks, deity refund mechanics, compressed jackpots, economic invariants (17 requirements) (completed 2026-03-07)
 - [ ] **Phase 46: Game Theory Paper Parity** - Systematic extraction of every number from the theory paper and verification against contract constants (18 requirements)
 - [x] **Phase 47: NatSpec Comment Audit** - Read every NatSpec comment across all 22 contracts and verify each claim against actual code (10 requirements) (completed 2026-03-06)
 
@@ -157,7 +157,10 @@ Plans:
   2. A test proves deity pass gameOver payout: flat 20 ETH/pass, levels 0-9 only, FIFO by purchase order, budget-capped; deity refund clears deityPassPurchasedCount; no voluntary pre-gameOver refund path exists
   3. Tests prove the 30-day BURNIE liveness guard blocks ticket purchases, subscriptionId is uint256 (large IDs handled), 1 wei sentinel preserved in degenerette claims, capBucketCounts handles zero-count buckets without underflow, and carryover floor is enforced
   4. Tests prove JackpotModule uses explicit 46% futureShare (2300+2300 BPS) with ~8% buffer unextracted, MintModule has no level-dependent coin cost modifiers, multi-level scatter targeting distributes correctly, compressed jackpot advances 2 per physical day when target met in <=2 days, and LINK reward formula is correct
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [x] 45-01-PLAN.md -- Validate security fix tests (FIX-01..12)
+- [x] 45-02-PLAN.md -- Validate economic hardening tests (ECON-01..05) and commit both files
 
 ### Phase 46: Game Theory Paper Parity
 **Goal**: Every number, formula, rate, and threshold in the game theory paper (website/theory/index.html) is verified to match the corresponding contract constant or calculation -- systematic extraction with zero gaps
@@ -207,7 +210,7 @@ Phases 43, 44, 45, 46 are parallelizable (independent). Phase 47 depends on 43-4
 | 36-42 | Sim v1.0 | 27/27 | Complete | 2026-03-06 |
 | 43. Governance & Gating Tests | v6.0 | 0/1 | Not started | - |
 | 44. Affiliate System Tests | v6.0 | 0/1 | Not started | - |
-| 45. Security & Economic Hardening Tests | v6.0 | 0/TBD | Not started | - |
+| 45. Security & Economic Hardening Tests | v6.0 | 2/2 | Complete | 2026-03-07 |
 | 46. Game Theory Paper Parity | v6.0 | 0/1 | Not started | - |
 | 47. NatSpec Comment Audit | 8/8 | Complete    | 2026-03-06 | - |
 
