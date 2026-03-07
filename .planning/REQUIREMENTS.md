@@ -38,7 +38,7 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 - [x] **TOKEN-01**: BurnieCoin.sol — every function audited with JSON + markdown report
 - [x] **TOKEN-02**: BurnieCoinflip.sol — every function audited with JSON + markdown report
 - [ ] **TOKEN-03**: DegenerusVault.sol — every function audited with JSON + markdown report
-- [ ] **TOKEN-04**: DegenerusStonk.sol — every function audited with JSON + markdown report
+- [x] **TOKEN-04**: DegenerusStonk.sol — every function audited with JSON + markdown report
 
 ### Pass & Viewer
 
@@ -135,7 +135,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TOKEN-01 | Phase 54 | Complete |
 | TOKEN-02 | Phase 54 | Complete |
 | TOKEN-03 | Phase 54 | Pending |
-| TOKEN-04 | Phase 54 | Pending |
+| TOKEN-04 | Phase 54 | Complete |
 | PASS-01 | Phase 55 | Pending |
 | PASS-02 | Phase 55 | Pending |
 | SOCIAL-01 | Phase 55 | Pending |
