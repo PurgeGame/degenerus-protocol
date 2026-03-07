@@ -16,6 +16,7 @@ const TEST_DIR_ORDER = [
   "unit",
   "integration",
   "edge",
+  "validation",
   "gas",
   "adversarial",
   "simulation",

@@ -129,14 +129,14 @@ contract DegenerusAffiliate {
     //                              ERRORS
     // =====================================================================
 
-    /// @notice Thrown when caller is not in the authorized set (coin, game, lootbox).
+    /// @notice Thrown when caller is not in the authorized set (coin, game).
     error OnlyAuthorized();
 
 
     /// @notice Thrown when attempting to create an affiliate code with zero or reserved value.
     error Zero();
 
-    /// @notice Generic insufficient condition error (code taken, invalid referral, ETH forward fail).
+    /// @notice Generic insufficient condition error (code taken, invalid referral, array length mismatch).
     error Insufficient();
 
     /// @notice Thrown when rakeback percentage exceeds the maximum allowed (25%).
@@ -460,7 +460,7 @@ contract DegenerusAffiliate {
      * @param sender The player making the purchase.
      * @param lvl Current game level (for join tracking and leaderboard).
      * @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
-     * @param lootboxActivityScore Buyer's activity score in BPS for lootbox taper (0 = no taper).
+     * @param lootboxActivityScore Buyer's activity score for lootbox taper (0 = no taper; 15000+ triggers linear taper to 50% floor at 25500).
      * @return playerRakeback Amount of rakeback to credit to the player (caller handles minting and batching).
      */
     function payAffiliate(
