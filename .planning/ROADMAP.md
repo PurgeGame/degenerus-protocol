@@ -136,7 +136,7 @@ See: `.planning/milestones/v6.0-ROADMAP.md` for full phase details.
 - [x] **Phase 51: Endgame & Lifecycle Modules** - EndgameModule, LootboxModule, GameOverModule function-level audit (completed 2026-03-07)
 - [ ] **Phase 52: Whale & Player Modules** - WhaleModule, DegeneretteModule, BoonModule, DecimatorModule function-level audit
 - [x] **Phase 53: Module Utilities & Libraries** - MintStreakUtils, PayoutUtils, BitPackingLib, EntropyLib, GameTimeLib, PriceLookupLib, JackpotBucketLib audit (completed 2026-03-07)
-- [ ] **Phase 54: Token & Economics Contracts** - BurnieCoin, BurnieCoinflip (16KB), DegenerusVault, DegenerusStonk function-level audit
+- [x] **Phase 54: Token & Economics Contracts** - BurnieCoin, BurnieCoinflip (16KB), DegenerusVault, DegenerusStonk function-level audit (completed 2026-03-07)
 - [ ] **Phase 55: Pass, Social & Interface Contracts** - DeityPass, DeityBoonViewer, Affiliate, Quests, Jackpots, and all interface verification
 - [ ] **Phase 56: Admin & Support Contracts** - DegenerusAdmin, TraitUtils, ContractAddresses, Icons32Data, WrappedWrappedXRP audit
 - [ ] **Phase 57: Cross-Contract Verification & Prior Claims** - Call graph, ETH flow map, mutation matrix, gas flags, v1-v6 spot-check, game theory cross-ref
@@ -291,7 +291,7 @@ Phases 48 first (infrastructure). Phases 49-56 can be parallelized after 48. Pha
 | 51. Endgame & Lifecycle Modules | 4/4 | Complete    | 2026-03-07 |
 | 52. Whale & Player Modules | 2/4 | In Progress|  |
 | 53. Module Utilities & Libraries | 4/4 | Complete    | 2026-03-07 |
-| 54. Token & Economics Contracts | 2/4 | In Progress|  |
+| 54. Token & Economics Contracts | 4/4 | Complete   | 2026-03-07 |
 | 55. Pass, Social & Interface Contracts | 0/TBD | Not started | - |
 | 56. Admin & Support Contracts | 0/TBD | Not started | - |
 | 57. Cross-Contract Verification & Prior Claims | 0/TBD | Not started | - |
