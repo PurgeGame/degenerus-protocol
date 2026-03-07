@@ -481,3 +481,94 @@ Emitted by `recordBafFlip` after accumulating stake and updating leaderboard. Pa
 Defines a minimal view interface for querying the top coinflip bettor from the last 24-hour window. Note: the constant `coin` is typed as `IDegenerusCoinJackpotView` pointing to `ContractAddresses.COINFLIP`, not `ContractAddresses.COIN`. This is correct -- the coinflip contract tracks per-day betting activity.
 
 **Verdict:** CORRECT
+
+---
+
+## Access Control Matrix
+
+| Modifier | Functions | Who Can Call | Reverts With |
+|----------|-----------|-------------|--------------|
+| `onlyCoin` | `recordBafFlip` | BurnieCoin contract (`ContractAddresses.COIN`) OR BurnieCoinflip contract (`ContractAddresses.COINFLIP`) | `OnlyCoin()` |
+| `onlyGame` | `runBafJackpot` | DegenerusGame contract (`ContractAddresses.GAME`) | `OnlyGame()` |
+| (none -- private) | `_creditOrRefund`, `_bafScore`, `_score96`, `_updateBafTop`, `_bafTop`, `_clearBafTop` | Internal only | N/A |
+
+**Note:** The plan's context references `coinflipTopLastDay` as an external view on this contract, but DegenerusJackpots does not implement that function. The contract *calls* `coinflipTopLastDay()` on the COINFLIP contract via the local `IDegenerusCoinJackpotView` interface. There are no unprotected external state-changing functions.
+
+**Access Control Completeness:** All state-changing external functions have access control modifiers. No public/external state-changing function is unprotected. The contract cannot receive ETH (no `receive()` or `fallback()`).
+
+## Storage Mutation Map
+
+| Function | Variables Written | Write Type | Condition |
+|----------|------------------|------------|-----------|
+| `recordBafFlip` | `bafTotals[lvl][player]` | Accumulate (+=) | Always (unless player == VAULT) |
+| `recordBafFlip` via `_updateBafTop` | `bafTop[lvl][i].player`, `bafTop[lvl][i].score` | Insert / Update / Shift | When score qualifies for top-4 |
+| `recordBafFlip` via `_updateBafTop` | `bafTopLen[lvl]` | Increment (+1) | Case 2 only: board not full |
+| `runBafJackpot` via `_clearBafTop` | `bafTopLen[lvl]` | Delete (-> 0) | When len != 0 |
+| `runBafJackpot` via `_clearBafTop` | `bafTop[lvl][i]` (all entries) | Delete (-> zero) | For each i in 0..len-1 |
+
+**Storage variables inventory:**
+
+| Variable | Type | Slot Layout |
+|----------|------|-------------|
+| `bafTotals` | `mapping(uint24 => mapping(address => uint256))` | 256-bit per entry |
+| `bafTop` | `mapping(uint24 => PlayerScore[4])` | 4 x 256-bit per level (address + uint96 packed) |
+| `bafTopLen` | `mapping(uint24 => uint8)` | 8-bit per level |
+
+**Key observation:** `bafTotals` is never cleared. After `runBafJackpot` resolves a level, the accumulated stakes remain in storage permanently. Only the leaderboard (`bafTop`, `bafTopLen`) is cleared. This means `_bafScore` will return stale scores for resolved levels if queried again, but this is harmless since `runBafJackpot` is only called once per level.
+
+## ETH Mutation Path Map
+
+| Path | Source | Destination | Trigger | Function | Mechanism |
+|------|--------|-------------|---------|----------|-----------|
+| (none) | N/A | N/A | N/A | N/A | N/A |
+
+**This contract does not move ETH.** Despite the plan's context referencing "_creditOrRefund ETH payout path", the `_creditOrRefund` function is `pure` and only writes to memory arrays. The actual ETH distribution is handled by the JackpotModule in DegenerusGame, which receives the `winners[]` and `amounts[]` arrays returned by `runBafJackpot` and performs the transfers. There is no `receive()`, `fallback()`, or `payable` function in this contract.
+
+## Cross-Contract Call Graph
+
+| Caller Function | Target Contract | Target Method | Call Type | Direction |
+|----------------|-----------------|---------------|-----------|-----------|
+| `runBafJackpot` | BurnieCoinflip (`ContractAddresses.COINFLIP`) | `coinflipTopLastDay()` | Static call (view) | Outbound |
+| `runBafJackpot` | DegenerusAffiliate (`ContractAddresses.AFFILIATE`) | `affiliateTop(uint24)` | Static call (view) | Outbound |
+| `runBafJackpot` | DegenerusGame (`ContractAddresses.GAME`) | `sampleFarFutureTickets(uint256)` | Static call (view) | Outbound |
+| `runBafJackpot` | DegenerusGame (`ContractAddresses.GAME`) | `sampleTraitTicketsAtLevel(uint24, uint256)` | Static call (view) | Outbound |
+| `recordBafFlip` | (none) | N/A | N/A | N/A |
+
+**Inbound calls:**
+
+| Caller Contract | Method Called | Access Control |
+|----------------|--------------|----------------|
+| BurnieCoin or BurnieCoinflip | `recordBafFlip` | `onlyCoin` modifier |
+| DegenerusGame (JackpotModule) | `runBafJackpot` | `onlyGame` modifier |
+
+**External call count in `runBafJackpot`:**
+- 1x `coinflipTopLastDay()` (fixed)
+- Up to 20x `affiliateTop(lvl)` (loop, bounded)
+- 1x `sampleFarFutureTickets(entropy)` (fixed)
+- Up to 50x `sampleTraitTicketsAtLevel(targetLvl, entropy)` (loop, bounded by BAF_SCATTER_ROUNDS)
+
+**Reentrancy consideration:** All external calls are to trusted protocol contracts via compile-time constant addresses. All external calls are view calls (static calls) that cannot modify state. No reentrancy risk.
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | None found |
+| CONCERN | 0 | None found |
+| GAS | 0 | No wasteful patterns (all loops bounded, early returns on no-ops) |
+| INFORMATIONAL | 2 | See below |
+| CORRECT | 9 | All 9 functions verified correct |
+
+**INFORMATIONAL-01: Misleading function name `_creditOrRefund`**
+- The name implies ETH credit or refund operations, but the function is `pure` and only writes to memory arrays
+- No actual ETH transfer or BurnieCoin credit occurs in this contract
+- Impact: None (code is correct, name is just misleading for auditors)
+- Recommendation: Consider renaming to `_bufferWinner` or `_writeWinnerEntry`
+
+**INFORMATIONAL-02: `bafTotals` never cleared**
+- After `runBafJackpot` resolves a level, `bafTotals[lvl][player]` remains in storage permanently
+- Only `bafTop` and `bafTopLen` are cleared by `_clearBafTop`
+- Impact: None -- `recordBafFlip` accumulates into the same mapping for the current level, and resolved levels are never re-resolved. The stale data is harmless but consumes storage permanently.
+- Note: Clearing `bafTotals` would require iterating all players which is impractical (unbounded gas)
+
+**Overall assessment:** DegenerusJackpots is a clean, well-structured computation contract with no ETH handling. All 9 functions are verified CORRECT with 0 bugs and 0 concerns. The contract's sole purpose is to compute BAF jackpot winner lists and maintain per-level leaderboards, delegating actual prize distribution to the game contract.
