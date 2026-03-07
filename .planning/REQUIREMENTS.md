@@ -65,7 +65,7 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 - [x] **LIB-02**: EntropyLib.sol — every function audited with JSON + markdown report
 - [x] **LIB-03**: GameTimeLib.sol — every function audited with JSON + markdown report
 - [x] **LIB-04**: PriceLookupLib.sol — every function audited with JSON + markdown report
-- [ ] **LIB-05**: JackpotBucketLib.sol — every function audited with JSON + markdown report
+- [x] **LIB-05**: JackpotBucketLib.sol — every function audited with JSON + markdown report
 
 ### Interfaces
 
@@ -152,7 +152,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LIB-02 | Phase 53 | Complete |
 | LIB-03 | Phase 53 | Complete |
 | LIB-04 | Phase 53 | Complete |
-| LIB-05 | Phase 53 | Pending |
+| LIB-05 | Phase 53 | Complete |
 | XREF-01 | Phase 57 | Pending |
 | XREF-02 | Phase 57 | Pending |
 | XREF-03 | Phase 57 | Pending |
