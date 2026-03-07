@@ -75,7 +75,7 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 ### Cross-Contract Verification
 
 - [ ] **XREF-01**: Complete call graph with context annotations (delegatecall vs direct, internal vs external)
-- [ ] **XREF-02**: ETH flow map — every path ETH enters, moves within, or exits the protocol
+- [x] **XREF-02**: ETH flow map — every path ETH enters, moves within, or exits the protocol
 - [ ] **XREF-03**: State mutation matrix — which modules can write which storage slots via delegatecall
 
 ### Gas Optimization
@@ -154,7 +154,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LIB-04 | Phase 53 | Complete |
 | LIB-05 | Phase 53 | Complete |
 | XREF-01 | Phase 57 | Pending |
-| XREF-02 | Phase 57 | Pending |
+| XREF-02 | Phase 57 | Complete |
 | XREF-03 | Phase 57 | Pending |
 | GAS-01 | Phase 57 | Complete |
 | GAS-02 | Phase 57 | Complete |
