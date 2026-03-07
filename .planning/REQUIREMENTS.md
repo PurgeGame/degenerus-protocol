@@ -47,9 +47,9 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 
 ### Social & Rewards
 
-- [ ] **SOCIAL-01**: DegenerusAffiliate.sol — every function audited with JSON + markdown report
+- [x] **SOCIAL-01**: DegenerusAffiliate.sol — every function audited with JSON + markdown report
 - [ ] **SOCIAL-02**: DegenerusQuests.sol — every function audited with JSON + markdown report
-- [ ] **SOCIAL-03**: DegenerusJackpots.sol — every function audited with JSON + markdown report
+- [x] **SOCIAL-03**: DegenerusJackpots.sol — every function audited with JSON + markdown report
 
 ### Admin & Support
 
@@ -138,9 +138,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TOKEN-04 | Phase 54 | Complete |
 | PASS-01 | Phase 55 | Complete |
 | PASS-02 | Phase 55 | Complete |
-| SOCIAL-01 | Phase 55 | Pending |
+| SOCIAL-01 | Phase 55 | Complete |
 | SOCIAL-02 | Phase 55 | Pending |
-| SOCIAL-03 | Phase 55 | Pending |
+| SOCIAL-03 | Phase 55 | Complete |
 | IFACE-01 | Phase 55 | Pending |
 | IFACE-02 | Phase 55 | Pending |
 | ADMIN-01 | Phase 56 | Pending |
