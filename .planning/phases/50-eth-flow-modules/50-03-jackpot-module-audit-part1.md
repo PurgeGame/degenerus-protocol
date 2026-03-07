@@ -448,3 +448,625 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 **Concern:** The `_raritySymbolBatch` function uses raw assembly to compute storage slots via `keccak256`. The slot calculation uses `add(levelSlot, traitId)` for the array length slot -- this relies on the EVM's nested mapping layout being `keccak256(traitId, keccak256(level, slot))`. However, the code computes `levelSlot = keccak256(lvl, traitBurnTicket.slot)` and then accesses `add(levelSlot, traitId)`. For a `mapping(uint24 => address[][256])`, the 256-element fixed array's slot for element `traitId` is `keccak256(lvl, slot) + traitId`. This is correct for a fixed-size array within a mapping -- Solidity stores fixed arrays contiguously starting at the mapping value slot.
 
 **Verdict:** CORRECT
+
+---
+
+### `_distributeYieldSurplus(uint256 rngWord)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _distributeYieldSurplus(uint256 rngWord) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `rngWord` (uint256): VRF entropy for auto-rebuy in `_addClaimableEth` |
+| **Returns** | None |
+
+**State Reads:** `steth.balanceOf(address(this))`, `address(this).balance`, `currentPrizePool`, `nextPrizePool`, `claimablePool`, `futurePrizePool`, `autoRebuyState[VAULT]`, `autoRebuyState[DGNRS]`, `gameOver`, `level`
+
+**State Writes:** `claimableWinnings[VAULT]`, `claimableWinnings[DGNRS]`, `claimablePool`, `futurePrizePool`, `nextPrizePool` (via auto-rebuy), `ticketsOwedPacked[]`, `ticketQueue[]`, `whalePassClaims[]`
+
+**Callers:** `consolidatePrizePools`
+
+**Callees:** `steth.balanceOf`, `_addClaimableEth` (x2 for VAULT and DGNRS)
+
+**ETH Flow:**
+- Compute yield surplus: `totalBal - obligations` where `totalBal = ETH balance + stETH balance`, `obligations = currentPrizePool + nextPrizePool + claimablePool + futurePrizePool`
+- 23% to VAULT claimable: `(yieldPool * 2300) / 10000`
+- 23% to DGNRS claimable: `(yieldPool * 2300) / 10000`
+- 46% to futurePrizePool: `(yieldPool * 4600) / 10000`
+- ~8% unextracted buffer: `10000 - (2300 + 2300 + 4600) = 800 bps`
+
+**Percentage Verification:** 2300 + 2300 + 4600 = 9200 bps. 10000 - 9200 = 800 bps (8%) left unextracted as buffer. This matches the NatSpec comment "~8% buffer left unextracted". VERIFIED.
+
+**Invariants:**
+- No-op if `totalBal <= obligations` (no surplus to distribute)
+- `claimablePool += claimableDelta` only if `claimableDelta != 0`
+- `futurePrizePool += futureShare` only if `futureShare != 0`
+- Auto-rebuy may route stakeholder shares to tickets instead of claimable
+
+**NatSpec Accuracy:** CORRECT. Comments state "23% each for DGNRS and Vault" and "46% to future prize pool (~8% buffer left unextracted)".
+
+**Gas Flags:** Two external calls to `_addClaimableEth` (which may trigger auto-rebuy with further external calls). stETH `balanceOf` is an external call. All necessary.
+
+**Verdict:** CORRECT
+
+---
+
+### `_addClaimableEth(address beneficiary, uint256 weiAmount, uint256 entropy)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _addClaimableEth(address beneficiary, uint256 weiAmount, uint256 entropy) private returns (uint256 claimableDelta)` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `beneficiary` (address): Recipient; `weiAmount` (uint256): Wei to credit; `entropy` (uint256): RNG for auto-rebuy |
+| **Returns** | `uint256`: Amount to add to claimablePool |
+
+**State Reads:** `gameOver`, `autoRebuyState[beneficiary]`
+
+**State Writes:** `claimableWinnings[beneficiary]` (via `_creditClaimable`), or auto-rebuy state changes
+
+**Callers:** `_distributeYieldSurplus`, `_resolveTraitWinners`, `_processDailyEthChunk`, `_creditJackpot`
+
+**Callees:** `_processAutoRebuy` (if auto-rebuy enabled and not gameOver), `_creditClaimable` (otherwise)
+
+**ETH Flow:**
+- If `gameOver == true` or auto-rebuy disabled: `weiAmount -> claimableWinnings[beneficiary]`, returns `weiAmount`
+- If auto-rebuy enabled and `!gameOver`: delegates to `_processAutoRebuy`, returns reserved amount only
+
+**Invariants:**
+- Returns 0 if `weiAmount == 0`
+- `gameOver` check prevents post-game auto-rebuy (tickets worthless after game ends)
+- Return value represents the amount that should be added to `claimablePool` by the caller
+
+**NatSpec Accuracy:** CORRECT. Describes auto-rebuy branch and gameOver guard.
+
+**Gas Flags:** None. Minimal branching logic.
+
+**Verdict:** CORRECT
+
+---
+
+### `_processAutoRebuy(address player, uint256 newAmount, uint256 entropy, AutoRebuyState memory state)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _processAutoRebuy(address player, uint256 newAmount, uint256 entropy, AutoRebuyState memory state) private returns (uint256 claimableDelta)` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `player` (address): Winning player; `newAmount` (uint256): New winnings in wei; `entropy` (uint256): RNG seed; `state` (AutoRebuyState): Player's auto-rebuy config |
+| **Returns** | `uint256`: Amount to add to claimablePool (reserved take-profit only) |
+
+**State Reads:** `level`, `autoRebuyState[player]` (passed in), `price` (via PriceLookupLib)
+
+**State Writes:** `futurePrizePool` (75% chance: +ethSpent), `nextPrizePool` (25% chance: +ethSpent), `claimableWinnings[player]` (reserved amount), `ticketsOwedPacked[]`, `ticketQueue[]`
+
+**Callers:** `_addClaimableEth`
+
+**Callees:** `_calcAutoRebuy` (from PayoutUtils), `_queueTickets`, `_creditClaimable`
+
+**ETH Flow:**
+1. Take profit: `reserved = (newAmount / takeProfit) * takeProfit` (truncated to take-profit granularity)
+2. Rebuy amount: `newAmount - reserved`
+3. Level offset: 1-4 levels ahead (entropy-derived). +1 = nextPrizePool (25%), +2/+3/+4 = futurePrizePool (75%)
+4. Ticket price: `PriceLookupLib.priceForLevel(targetLevel) >> 2` (ticket = 1/4 level price)
+5. Base tickets: `rebuyAmount / ticketPrice`
+6. Bonus: 30% normal (`13000` bps), 45% afKing (`14500` bps)
+7. `ethSpent = baseTickets * ticketPrice` (no bonus applied to ETH, only tickets)
+8. Fractional dust (rebuyAmount - ethSpent) is dropped
+
+**Auto-Rebuy ETH Accounting:**
+- `ethSpent` goes to `futurePrizePool` or `nextPrizePool` (backing the tickets)
+- `reserved` goes to `claimableWinnings[player]`
+- `newAmount - ethSpent - reserved` = dust, dropped unconditionally
+- Return value = `reserved` (only the claimed portion adds to claimablePool liability)
+
+**Note on dust:** The dust amount is `(newAmount - reserved) - ethSpent = (newAmount - reserved) % ticketPrice`. This dust is NOT accounted for -- it is neither credited to the player nor added to any pool. This creates a small ETH leak where `sum(pools) + claimablePool < address(this).balance`. However, this dust is captured by the yield surplus mechanism (`_distributeYieldSurplus`), which measures `totalBal - obligations`. The dust becomes part of the yield surplus. This is an intentional design decision, not a bug.
+
+**Invariants:**
+- If `_calcAutoRebuy` returns `hasTickets == false`, full amount goes to claimable (fallback path)
+- Bonus BPS are `13000` (130%) and `14500` (145%) -- these are multiplied by baseTickets and divided by 10000, giving 1.3x and 1.45x ticket counts. The naming `bonusBps` is slightly misleading since these are total multipliers, not bonus-only. However, `_calcAutoRebuy` computes `bonusTickets = (baseTickets * bonusBps) / 10000`, so with 13000 bps this gives 1.3x base = 30% bonus. This is correct.
+- `ticketCount` capped at `type(uint32).max`
+
+**NatSpec Accuracy:** CORRECT. States "fixed 30% bonus by default, 45% when afKing is active".
+
+**Gas Flags:** `_calcAutoRebuy` is `pure` -- no storage reads. Good gas efficiency.
+
+**Verdict:** CORRECT
+
+---
+
+### `_hasTraitTickets(uint24 lvl, uint32 packedTraits)` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _hasTraitTickets(uint24 lvl, uint32 packedTraits) private view returns (bool)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `lvl` (uint24): Level to check; `packedTraits` (uint32): 4 packed trait IDs |
+| **Returns** | `bool`: True if any trait has tickets or virtual deity entries |
+
+**State Reads:** `traitBurnTicket[lvl][trait].length`, `deityBySymbol[fullSymId]`
+
+**State Writes:** None
+
+**Callers:** `_validateTicketBudget`, `_selectDailyCoinTargetLevel`, `_selectCarryoverSourceOffset` (via `_hasActualTraitTickets`, `_highestCarryoverSourceOffset`)
+
+**Callees:** `JackpotBucketLib.unpackWinningTraits`
+
+**ETH Flow:** None.
+
+**Invariants:**
+- Returns true if ANY of the 4 traits has non-empty ticket array OR a virtual deity entry
+- Virtual deity check: `fullSymId = (trait >> 6) * 8 + (trait & 0x07)`. This maps traitId (quadrant 2 bits, color 3 bits, symbol 3 bits) to a flat symbol index (0-31). Deity entries are checked if `fullSymId < 32`.
+- Early exit on first found trait (short-circuit)
+
+**NatSpec Accuracy:** Minimal but correct.
+
+**Gas Flags:** Up to 4 SLOAD (array length) + 4 SLOAD (deity mapping) in worst case. Acceptable.
+
+**Verdict:** CORRECT
+
+---
+
+### `_validateTicketBudget(uint256 budget, uint24 lvl, uint32 packedTraits)` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _validateTicketBudget(uint256 budget, uint24 lvl, uint32 packedTraits) private view returns (uint256)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `budget` (uint256): Proposed budget; `lvl` (uint24): Level; `packedTraits` (uint32): Winning traits |
+| **Returns** | `uint256`: budget if valid, 0 if no trait tickets exist |
+
+**State Reads:** Via `_hasTraitTickets`
+
+**State Writes:** None
+
+**Callers:** `payDailyJackpot` (daily and carryover lootbox budgets)
+
+**Callees:** `_hasTraitTickets`
+
+**ETH Flow:** None.
+
+**Invariants:**
+- Returns 0 if `budget != 0 && !_hasTraitTickets(lvl, packedTraits)` (no recipients = zero budget)
+- Returns budget unchanged if budget is 0 or trait tickets exist
+- Logic: `(budget != 0 && !_hasTraitTickets) ? 0 : budget` -- this correctly handles all cases
+
+**NatSpec Accuracy:** Minimal but correct ("Zeros budget if no trait tickets exist").
+
+**Gas Flags:** None.
+
+**Verdict:** CORRECT
+
+---
+
+### `_budgetToTicketUnits(uint256 budget, uint24 lvl)` [private pure]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _budgetToTicketUnits(uint256 budget, uint24 lvl) private pure returns (uint256)` |
+| **Visibility** | private |
+| **Mutability** | pure |
+| **Parameters** | `budget` (uint256): ETH budget; `lvl` (uint24): Level for price lookup |
+| **Returns** | `uint256`: Number of ticket units the budget can buy |
+
+**State Reads:** None (pure)
+
+**State Writes:** None
+
+**Callers:** `payDailyJackpot`, `_distributeLootboxAndTickets`
+
+**Callees:** `PriceLookupLib.priceForLevel`
+
+**ETH Flow:** None.
+
+**Invariants:**
+- Returns 0 if budget is 0 or ticketPrice is 0
+- Formula: `(budget << 2) / ticketPrice` = `(budget * 4) / ticketPrice`
+- This gives the number of tickets at `ticketPrice / 4` each (ticket cost = 1/4 of level price)
+- Consistent with `PriceLookupLib.priceForLevel(lvl) >> 2` used elsewhere for ticket pricing
+
+**NatSpec Accuracy:** CORRECT. "Tickets cost ticketPrice/4".
+
+**Gas Flags:** Pure function, no storage access.
+
+**Verdict:** CORRECT
+
+---
+
+### `_distributeLootboxAndTickets(uint24 lvl, uint32 winningTraitsPacked, uint256 lootboxBudget, uint256 randWord)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _distributeLootboxAndTickets(uint24 lvl, uint32 winningTraitsPacked, uint256 lootboxBudget, uint256 randWord) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `lvl` (uint24): Current level; `winningTraitsPacked` (uint32): Packed trait IDs; `lootboxBudget` (uint256): ETH to convert to tickets; `randWord` (uint256): Entropy |
+| **Returns** | None |
+
+**State Reads:** Via `_distributeTicketJackpot`
+
+**State Writes:** `nextPrizePool`, `ticketsOwedPacked[]`, `ticketQueue[]`
+
+**Callers:** `payDailyJackpot` (early-burn path, isEthDay)
+
+**Callees:** `_budgetToTicketUnits`, `_distributeTicketJackpot`
+
+**ETH Flow:**
+- `nextPrizePool += lootboxBudget` (ETH backing for tickets)
+- Ticket units calculated for `lvl + 1` price
+- Tickets distributed to trait winners at current level
+
+**Invariants:**
+- Lootbox budget adds to nextPrizePool (tickets are for future levels)
+- Ticket units at `lvl + 1` price but winners drawn from `lvl` ticket pool
+- Uses salt 242 for entropy differentiation
+
+**NatSpec Accuracy:** Minimal but correct.
+
+**Gas Flags:** None.
+
+**Verdict:** CORRECT
+
+---
+
+### `_distributeTicketJackpot(uint24 lvl, uint32 winningTraitsPacked, uint256 ticketUnits, uint256 entropy, uint16 maxWinners, uint8 saltBase)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _distributeTicketJackpot(uint24 lvl, uint32 winningTraitsPacked, uint256 ticketUnits, uint256 entropy, uint16 maxWinners, uint8 saltBase) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `lvl` (uint24): Level for winner selection; `winningTraitsPacked` (uint32): Traits; `ticketUnits` (uint256): Total tickets to distribute; `entropy` (uint256): RNG; `maxWinners` (uint16): Winner cap; `saltBase` (uint8): Entropy salt |
+| **Returns** | None |
+
+**State Reads:** `traitBurnTicket[lvl][]`, `deityBySymbol[]`
+
+**State Writes:** `ticketsOwedPacked[]`, `ticketQueue[]`
+
+**Callers:** `_distributeLootboxAndTickets`, `payDailyJackpotCoinAndTickets`
+
+**Callees:** `JackpotBucketLib.unpackWinningTraits`, `_computeBucketCounts`, `_distributeTicketsToBuckets`
+
+**ETH Flow:** None (ticket distribution only).
+
+**Invariants:**
+- No-op if `ticketUnits == 0`
+- Cap: `min(maxWinners, ticketUnits)` to avoid allocating more winners than tickets
+- Uses `_computeBucketCounts` which divides winners evenly across active trait buckets
+- No-op if `activeCount == 0`
+
+**NatSpec Accuracy:** Minimal but correct.
+
+**Gas Flags:** None.
+
+**Verdict:** CORRECT
+
+---
+
+### `_distributeTicketsToBuckets(uint24 lvl, uint8[4] traitIds, uint16[4] counts, uint256 ticketUnits, uint256 entropy, uint16 cap, uint8 saltBase)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _distributeTicketsToBuckets(uint24 lvl, uint8[4] memory traitIds, uint16[4] memory counts, uint256 ticketUnits, uint256 entropy, uint16 cap, uint8 saltBase) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `lvl` (uint24): Level; `traitIds` (uint8[4]): Trait IDs; `counts` (uint16[4]): Winners per bucket; `ticketUnits` (uint256): Total tickets; `entropy` (uint256): RNG; `cap` (uint16): Total winner cap; `saltBase` (uint8): Salt |
+| **Returns** | None |
+
+**State Reads:** Via `_distributeTicketsToBucket`
+
+**State Writes:** Via `_distributeTicketsToBucket`
+
+**Callers:** `_distributeTicketJackpot`
+
+**Callees:** `EntropyLib.entropyStep`, `_distributeTicketsToBucket`
+
+**ETH Flow:** None.
+
+**Invariants:**
+- `baseUnits = ticketUnits / cap` (even distribution)
+- `distParams` packs `extra = ticketUnits % cap` (first `extra` winners get +1 unit) and `offset = entropy % cap` (randomized starting position for +1 distribution)
+- `globalIdx` tracks position across all buckets for fair +1 distribution
+- Skips buckets with 0 counts
+
+**NatSpec Accuracy:** Minimal but correct.
+
+**Gas Flags:** None.
+
+**Verdict:** CORRECT
+
+---
+
+### `_distributeTicketsToBucket(uint24 lvl, uint8 traitId, uint16 count, uint256 entropy, uint8 salt, uint256 baseUnits, uint256 distParams, uint16 cap, uint256 startIdx)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _distributeTicketsToBucket(uint24 lvl, uint8 traitId, uint16 count, uint256 entropy, uint8 salt, uint256 baseUnits, uint256 distParams, uint16 cap, uint256 startIdx) private returns (uint256 endIdx)` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `lvl` (uint24): Level; `traitId` (uint8): Trait; `count` (uint16): Winners; `entropy` (uint256): RNG; `salt` (uint8): Salt; `baseUnits` (uint256): Tickets per winner; `distParams` (uint256): Packed extra/offset; `cap` (uint16): Total cap; `startIdx` (uint256): Global index |
+| **Returns** | `uint256`: Updated global index (endIdx) |
+
+**State Reads:** `traitBurnTicket[lvl][traitId]`, `deityBySymbol[]`
+
+**State Writes:** `ticketsOwedPacked[]`, `ticketQueue[]`
+
+**Callers:** `_distributeTicketsToBuckets`
+
+**Callees:** `_randTraitTicket`, `_queueTickets`
+
+**ETH Flow:** None.
+
+**Invariants:**
+- Count capped at `MAX_BUCKET_WINNERS` (250)
+- Winners selected from trait pool (duplicates allowed)
+- Each winner gets `baseUnits + (1 if cursor < extra)` tickets
+- Cursor wraps at `cap` to ensure fair +1 distribution
+- Tickets queued at `lvl + 1` (next level)
+- Units capped at `type(uint32).max`
+- No-op for address(0) winners or zero units
+
+**NatSpec Accuracy:** Minimal but correct.
+
+**Gas Flags:** None.
+
+**Verdict:** CORRECT
+
+---
+
+### `_computeBucketCounts(uint24 lvl, uint8[4] traitIds, uint16 maxWinners, uint256 entropy)` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _computeBucketCounts(uint24 lvl, uint8[4] memory traitIds, uint16 maxWinners, uint256 entropy) private view returns (uint16[4] memory counts, uint8 activeCount)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `lvl` (uint24): Level; `traitIds` (uint8[4]): Trait IDs; `maxWinners` (uint16): Total winner cap; `entropy` (uint256): RNG |
+| **Returns** | `counts` (uint16[4]): Winners per bucket; `activeCount` (uint8): Number of active buckets |
+
+**State Reads:** `traitBurnTicket[lvl][trait].length`, `deityBySymbol[]`
+
+**State Writes:** None
+
+**Callers:** `_distributeTicketJackpot`, `_awardDailyCoinToTraitWinners`
+
+**Callees:** None (self-contained logic)
+
+**ETH Flow:** None.
+
+**Invariants:**
+- Active buckets: traits with ticket entries OR virtual deity entries
+- Winners split evenly: `baseCount = maxWinners / activeCount`
+- Remainder distributed starting from `entropy & 3` position
+- `sum(counts) == maxWinners` (exact allocation, no waste)
+- Returns (all zeros, 0) if no active buckets
+
+**NatSpec Accuracy:** Minimal but correct.
+
+**Gas Flags:** Up to 8 SLOADs (4 array lengths + 4 deity lookups). Acceptable.
+
+**Verdict:** CORRECT
+
+---
+
+### `_runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `lvl` (uint24): Target level (typically current + 1); `rngWord` (uint256): VRF entropy |
+| **Returns** | None |
+
+**State Reads:** `futurePrizePool`, `traitBurnTicket[lvl][]`, `deityBySymbol[]`
+
+**State Writes:** `futurePrizePool` (deducted 3%), `nextPrizePool` (receives full budget), `ticketsOwedPacked[]`, `ticketQueue[]`
+
+**Callers:** `payDailyJackpot` (day 1 only, replaces carryover)
+
+**Callees:** `PriceLookupLib.priceForLevel`, `EntropyLib.entropyStep`, `_randTraitTicket`, `_queueTickets`
+
+**ETH Flow:**
+1. `reserveContribution = (futurePrizePool * 300) / 10000` = 3% from unified reserve
+2. `futurePrizePool -= reserveContribution`
+3. For each of 100 winners: select random trait ticket holder at current level, roll level offset 0-4, convert `perWinnerEth` to tickets at that level's price
+4. `nextPrizePool += totalBudget` (full 3% budget backs tickets in next pool)
+
+**Invariants:**
+- Fixed 100 winners max
+- Even split: `perWinnerEth = totalBudget / 100`
+- Random trait selection (uniform, not burn-weighted -- `uint8(entropy)` gives uniform trait ID)
+- Level offset: `entropy % 5` gives 0-4 offset from base level
+- No-op if `totalBudget == 0`
+- Budget goes to `nextPrizePool` AFTER ticket distribution (backing the tickets)
+- Winners drawn from `traitBurnTicket[lvl]` (the parameter `lvl`, which is `currentLevel + 1`)
+
+**NatSpec Accuracy:** CORRECT.
+
+**Gas Flags:** Fixed 100 iterations with 2 entropy steps + 1 winner selection each. This is bounded and safe for gas. PriceLookupLib prices cached in `levelPrices[5]` memory array -- good optimization.
+
+**Verdict:** CORRECT
+
+---
+
+### `_futureKeepBps(uint256 rngWord)` [private pure]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _futureKeepBps(uint256 rngWord) private pure returns (uint256)` |
+| **Visibility** | private |
+| **Mutability** | pure |
+| **Parameters** | `rngWord` (uint256): VRF entropy |
+| **Returns** | `uint256`: Keep percentage in basis points (0-10000) |
+
+**State Reads:** None (pure)
+
+**State Writes:** None
+
+**Callers:** `consolidatePrizePools`
+
+**Callees:** `keccak256`
+
+**ETH Flow:** None (calculation only).
+
+**Dice Math Verification:**
+- 5 dice, each `seed >> (k*16) % 4` gives values 0-3
+- Total range: 0 to 15 (5 dice x max 3)
+- `keepBps = (total * 10000) / 15`
+- Minimum: `(0 * 10000) / 15 = 0` (0% keep = 100% moved)
+- Maximum: `(15 * 10000) / 15 = 10000` (100% keep = 0% moved)
+- Average: `(7.5 * 10000) / 15 = 5000` (50% keep = 50% moved)
+- Distribution: Each die averages 1.5, so 5 dice average 7.5. The distribution is roughly normal (sum of uniforms). VERIFIED.
+
+**Invariants:**
+- Returns 0-10000 (0-100%)
+- Seed is domain-separated by `FUTURE_KEEP_TAG`
+- 16-bit shifts between dice values provide independent draws from different parts of the hash
+
+**NatSpec Accuracy:** CORRECT. "5 dice with zeros (0-3), mapped to 0-100% keep (avg 50%)".
+
+**Gas Flags:** Single keccak256 + 5 modulo operations. Minimal.
+
+**Verdict:** CORRECT
+
+---
+
+### `_shouldFutureDump(uint256 rngWord)` [private pure]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _shouldFutureDump(uint256 rngWord) private pure returns (bool)` |
+| **Visibility** | private |
+| **Mutability** | pure |
+| **Parameters** | `rngWord` (uint256): VRF entropy |
+| **Returns** | `bool`: True if the dump should occur |
+
+**State Reads:** None (pure)
+
+**State Writes:** None
+
+**Callers:** `consolidatePrizePools`
+
+**Callees:** `keccak256`
+
+**ETH Flow:** None (calculation only).
+
+**Modulo Verification:**
+- `seed % FUTURE_DUMP_ODDS == 0` where `FUTURE_DUMP_ODDS = 1_000_000_000_000_000` (1e15)
+- Probability: 1 in 1 quadrillion
+- keccak256 output is uniformly distributed over uint256, so `seed % 1e15 == 0` has exactly 1/1e15 probability. VERIFIED.
+- Domain-separated by `FUTURE_DUMP_TAG`
+
+**NatSpec Accuracy:** CORRECT. "1 in 1e15 chance to dump 90% of future into current on normal levels".
+
+**Gas Flags:** Single keccak256 + 1 modulo. Minimal.
+
+**Verdict:** CORRECT
+
+---
+
+## ETH Mutation Path Map (Part 1)
+
+### Pool Consolidation Flow
+
+| Step | Source | Destination | Trigger | Function | Amount |
+|------|--------|-------------|---------|----------|--------|
+| 1 | nextPrizePool | currentPrizePool | Level transition (always) | `consolidatePrizePools` | 100% of nextPrizePool |
+| 2a | futurePrizePool | currentPrizePool | x00 levels | `consolidatePrizePools` | (1 - keepBps/10000) x futurePrizePool |
+| 2b | futurePrizePool | currentPrizePool | Non-x00 (1e-15 odds) | `consolidatePrizePools` | 90% of futurePrizePool |
+| 3 | Yield surplus | claimablePool (VAULT) | Surplus exists | `_distributeYieldSurplus` | 23% of surplus |
+| 4 | Yield surplus | claimablePool (DGNRS) | Surplus exists | `_distributeYieldSurplus` | 23% of surplus |
+| 5 | Yield surplus | futurePrizePool | Surplus exists | `_distributeYieldSurplus` | 46% of surplus |
+| 6 | (8% surplus) | Unextracted buffer | Surplus exists | `_distributeYieldSurplus` | 8% of surplus |
+
+### Daily Jackpot ETH Flow
+
+| Step | Source | Destination | Trigger | Function | Amount |
+|------|--------|-------------|---------|----------|--------|
+| 1 | currentPrizePool | dailyLootboxBudget -> nextPrizePool | Fresh daily start | `payDailyJackpot` | 20% of daily BPS slice |
+| 2 | futurePrizePool | reserveSlice (carryover pool) | Days 2-4 (not day 1) | `payDailyJackpot` | 1% of futurePrizePool |
+| 3 | reserveSlice | carryoverLootboxBudget -> nextPrizePool | Carryover has tickets | `payDailyJackpot` | 50% of reserveSlice |
+| 4 | currentPrizePool | claimablePool (winners) | Phase 0 chunk | `_processDailyEthChunk` | Per-winner share |
+| 5 | dailyCarryoverEthPool | claimablePool (winners) | Phase 1 chunk | `_processDailyEthChunk` | Per-winner share |
+| 6 | (Phase 0/1 winners) | futurePrizePool/nextPrizePool | Auto-rebuy active | `_processAutoRebuy` | ethSpent portion |
+| 7 | (Solo bucket winner) | futurePrizePool (whale pass) | Solo bucket >= 1 half-pass | `_processSoloBucketWinner` | 25% of solo share |
+
+**Daily BPS Slice (days 1-4):** Random 6%-14% of `currentPrizePool` (avg 10%). Day 5: 100%.
+
+**Compressed Jackpot:** BPS doubled on compressed days (counterStep=2), combining two days' payouts.
+
+### Early-Burn Jackpot ETH Flow
+
+| Step | Source | Destination | Trigger | Function | Amount |
+|------|--------|-------------|---------|----------|--------|
+| 1 | futurePrizePool | ethDaySlice | Every 3rd purchase day | `payDailyJackpot` | 1% of futurePrizePool |
+| 2 | ethDaySlice | lootboxBudget -> nextPrizePool | Trait tickets exist | `_distributeLootboxAndTickets` | 75% of ethDaySlice |
+| 3 | ethDaySlice | claimablePool (winners) | Via _executeJackpot | `_executeJackpot` | Remaining 25% |
+
+### Early-Bird Lootbox Flow (Day 1 Only)
+
+| Step | Source | Destination | Trigger | Function | Amount |
+|------|--------|-------------|---------|----------|--------|
+| 1 | futurePrizePool | totalBudget | Day 1 jackpot | `_runEarlyBirdLootboxJackpot` | 3% of futurePrizePool |
+| 2 | totalBudget | nextPrizePool (ticket backing) | Always | `_runEarlyBirdLootboxJackpot` | 100% of totalBudget |
+| 3 | (tickets) | ticketQueue[lvl+0..4] | Per winner | `_runEarlyBirdLootboxJackpot` | perWinnerEth / ticketPrice |
+
+### Yield Surplus Flow
+
+| Step | Source | Destination | Trigger | Function | Amount |
+|------|--------|-------------|---------|----------|--------|
+| 1 | stETH appreciation | yieldPool (calculated) | totalBal > obligations | `_distributeYieldSurplus` | totalBal - obligations |
+| 2 | yieldPool | claimableWinnings[VAULT] | stakeholderShare != 0 | `_addClaimableEth` | 23% |
+| 3 | yieldPool | claimableWinnings[DGNRS] | stakeholderShare != 0 | `_addClaimableEth` | 23% |
+| 4 | yieldPool | futurePrizePool | futureShare != 0 | `_distributeYieldSurplus` | 46% |
+| 5 | yieldPool | (unextracted buffer) | Always | (implicit) | 8% |
+
+### Auto-Rebuy Flow
+
+| Step | Source | Destination | Trigger | Function | Amount |
+|------|--------|-------------|---------|----------|--------|
+| 1 | Jackpot winnings | reserved (take-profit) | takeProfit != 0 | `_processAutoRebuy` | Truncated to takeProfit granularity |
+| 2 | reserved | claimableWinnings[player] | reserved != 0 | `_creditClaimable` | Full reserved amount |
+| 3 | rebuyAmount | ticketCount tickets | hasTickets == true | `_queueTickets` | baseTickets x ticketPrice |
+| 4 | ethSpent | nextPrizePool | targetLevel = currentLevel + 1 (25%) | `_processAutoRebuy` | ethSpent |
+| 5 | ethSpent | futurePrizePool | targetLevel = currentLevel + 2..4 (75%) | `_processAutoRebuy` | ethSpent |
+| 6 | dust | (dropped) | rebuyAmount % ticketPrice | (implicit) | rebuyAmount - ethSpent |
+
+**Bonus Tickets:** 30% bonus (13000 bps) normally, 45% bonus (14500 bps) with afKing. Bonus applied to ticket count only, NOT to ethSpent.
+
+---
+
+## Findings Summary (Part 1)
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | None found |
+| CONCERN | 1 | `_raritySymbolBatch` assembly storage slot calculation is correct but relies on EVM fixed-array-within-mapping layout -- any Solidity version change to storage layout would break this |
+| GAS | 0 | No unnecessary computation found. Gas optimizations (budget/5, pool/100, LCG batch generation, creditFlipBatch) are all sound |
+| CORRECT | 21 | All 21 functions in Part 1 scope verified correct |
+
+### Concern Details
+
+**CONCERN-1: Assembly storage slot calculation in `processTicketBatch` -> `_raritySymbolBatch`**
+- **Function:** `_raritySymbolBatch` (line 2143)
+- **Issue:** Uses raw assembly to compute storage slots for `traitBurnTicket[lvl][traitId]`. The calculation `levelSlot = keccak256(lvl, traitBurnTicket.slot)` then `elem = add(levelSlot, traitId)` assumes the 256-element fixed-size array within the mapping is stored contiguously at the mapping value slot. This is correct for Solidity 0.8.34 but is an implicit coupling to EVM storage layout.
+- **Risk:** Low. Solidity storage layout has been stable since 0.5.x and is part of the ABI specification. The contract is not upgradeable, so a Solidity version change would require a full redeploy regardless.
+- **Impact:** None at current version. Informational only.
+
+### Positive Observations
+
+1. **Comprehensive resumability:** The daily jackpot's two-phase chunking with 6 cursor/state variables provides reliable mid-execution resume. Each advanceGame call picks up exactly where the last left off.
+
+2. **Sound ETH accounting:** All ETH flows are traceable. Dust from auto-rebuy is captured by the yield surplus mechanism. No ETH is permanently lost.
+
+3. **Consistent entropy derivation:** All random selections use domain-separated entropy via tags and XOR mixing. No entropy reuse across different selection contexts.
+
+4. **Gas-bounded operations:** processTicketBatch uses writes-budget accounting, daily jackpot uses units-budget accounting, and winner counts are hard-capped. All operations are bounded.
+
+5. **gameOver guard on auto-rebuy:** `_addClaimableEth` correctly prevents auto-rebuy when `gameOver == true`, ensuring post-game winnings are claimable as ETH.
+
+6. **Solo bucket whale pass conversion:** `_processSoloBucketWinner` correctly applies 75/25 split only when 25% covers at least one half-pass, falling back to 100% ETH otherwise.
