@@ -508,6 +508,9 @@ describe("Paper Parity (Phase 46)", function () {
   // PAR-08: Affiliate commission rates
   // =========================================================================
 
+  // Affiliate commission rates are private constants in DegenerusAffiliate.sol:198-200.
+  // Behavioral verification of affiliate payouts is covered in unit/DegenerusAffiliate.test.js
+  // and unit/AffiliateHardening.test.js.
   describe("PAR-08: Affiliate commission rates", function () {
     it("fresh ETH L1-3: 25% (2500 BPS)", async function () {
       // REWARD_SCALE_FRESH_L1_3_BPS = 2_500
@@ -529,6 +532,9 @@ describe("Paper Parity (Phase 46)", function () {
   // PAR-09: Affiliate tier structure
   // =========================================================================
 
+  // Affiliate tier percentages (20% upline1, 4% upline2) are hardcoded in
+  // DegenerusAffiliate.payAffiliate(). Behavioral verification of the multi-tier
+  // payout chain is covered in unit/DegenerusAffiliate.test.js.
   describe("PAR-09: Affiliate tier structure (direct -> upline1 at 20% -> upline2 at 4%)", function () {
     it("upline1 receives 20% of scaled affiliate amount", async function () {
       // From payAffiliate: "Pay upline1 (20% of scaled amount)"
@@ -728,6 +734,10 @@ describe("Paper Parity (Phase 46)", function () {
   // PAR-13: Coinflip payout distribution
   // =========================================================================
 
+  // Coinflip constants are private in BurnieCoinflip.sol:121-122.
+  // The payout distribution (5%/90%/5%) and mean ~1.97x are verified through
+  // mathematical reconstruction of the payout formula. Behavioral testing
+  // is in unit/BurnieCoinflip.test.js.
   describe("PAR-13: Coinflip payout distribution (5%/90%/5% tiers)", function () {
     it("5% chance for 50% bonus (unlucky: 1.5x total payout)", async function () {
       // roll == 0 out of 20 = 5%: rewardPercent = 50
@@ -774,6 +784,11 @@ describe("Paper Parity (Phase 46)", function () {
   // PAR-14: Yield distribution split
   // =========================================================================
 
+  // Yield distribution BPS (2300/2300/4600 + 800 buffer) are private constants
+  // in DegenerusGame.sol. The split is verified statically and reconciled with the
+  // paper's 50/25/25 description (paper describes the theoretical split of the 92%
+  // that is distributed: 46/23/23 normalizes to ~50/25/25). On-chain yield
+  // distribution testing is covered in unit/DegenerusVault.test.js.
   describe("PAR-14: Yield distribution split (23%/23%/46%/8%)", function () {
     it("vault share: 23% (2300 BPS)", async function () {
       // stakeholderShare = (yieldPool * 2300) / 10_000
@@ -838,6 +853,9 @@ describe("Paper Parity (Phase 46)", function () {
   // PAR-16: Degenerette base payouts and ROI curve
   // =========================================================================
 
+  // QUICK_PLAY_BASE_PAYOUTS_PACKED and ROI BPS values are private constants in
+  // DegenerusGameDegeneretteModule.sol. The packed value reconstruction verifies
+  // the encoding. Behavioral testing is in unit/DegenerusGame.test.js (Degenerette tests).
   describe("PAR-16: Degenerette base payouts and ROI curve", function () {
     it("base payouts at 100% ROI: 0, 0, 1.90, 4.75, 15, 42.5, 195, 1000, 100000", async function () {
       // QUICK_PLAY_BASE_PAYOUTS_PACKED encodes:
@@ -963,6 +981,10 @@ describe("Paper Parity (Phase 46)", function () {
   // PAR-18: Future ticket odds
   // =========================================================================
 
+  // Future ticket roll logic uses private constants in DegenerusGameLootboxModule.sol.
+  // The 95%/5% split and offset ranges [0,5]/[5,50] are verified statically.
+  // Behavioral testing would require VRF fulfillment to observe actual ticket
+  // level assignments.
   describe("PAR-18: Future ticket odds (95% near k in [0,5], 5% far k in [5,50])", function () {
     it("95% near future: 0-5 levels ahead", async function () {
       // _rollTargetLevel: rangeRoll < 5 => far (5%), else near (95%)
@@ -1050,3 +1072,31 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Paper Parity Verification Summary
+// ---------------------------------------------------------------------------
+// All 18 PAR requirements verified. Verification methods:
+//
+// ON-CHAIN (actual contract interaction):
+//   PAR-01: PriceLookupTester.priceForLevel() at 30+ levels
+//   PAR-02: game.purchase() with exact costWei amounts
+//   PAR-03: Pool delta verification after ticket/lootbox purchases
+//   PAR-06: game.playerActivityScore() after whale bundle purchase
+//   PAR-10: game.purchaseWhaleBundle() at 2.4 ETH
+//   PAR-11: game.purchaseLazyPass() at 0.24 ETH + PriceLookupTester
+//   PAR-12: game.purchaseDeityPass() for k=0,1,2 with exact prices
+//   PAR-17: Pool delta verification after whale bundle purchase
+//
+// STATIC + SOURCE VERIFICATION (private constants):
+//   PAR-04: JACKPOT_LEVEL_CAP, DAILY_CURRENT_BPS_MIN/MAX (private)
+//   PAR-05: Packed share constants reconstructed and verified
+//   PAR-07: Lootbox EV breakpoint constants (private)
+//   PAR-08: Affiliate commission rate constants (private)
+//   PAR-09: Affiliate tier percentages (hardcoded in payAffiliate)
+//   PAR-13: Coinflip payout constants (private)
+//   PAR-14: Yield distribution BPS (private, reconciled with paper)
+//   PAR-15: PRICE_COIN_UNIT arithmetic verification
+//   PAR-16: Degenerette packed payouts + ROI curve BPS (private)
+//   PAR-18: Future ticket roll logic constants (private)
+// ---------------------------------------------------------------------------
