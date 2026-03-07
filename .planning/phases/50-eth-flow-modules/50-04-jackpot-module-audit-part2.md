@@ -671,3 +671,774 @@
 
 **Verdict:** CORRECT
 
+---
+
+## Ticket Batch Processing
+
+### `_resolveZeroOwedRemainder(uint40 packed, uint24 lvl, address player, uint256 entropy, uint256 rollSalt)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _resolveZeroOwedRemainder(uint40 packed, uint24 lvl, address player, uint256 entropy, uint256 rollSalt) private returns (uint40 newPacked, bool skip)` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `packed` (uint40): Packed ticket owed (owed:32, remainder:8); `lvl` (uint24): Level; `player` (address): Ticket holder; `entropy` (uint256): VRF entropy; `rollSalt` (uint256): Deterministic salt for remainder roll |
+| **Returns** | `newPacked` (uint40): Updated packed value; `skip` (bool): True if player should be skipped |
+
+**State Reads:** None (packed passed in)
+**State Writes:** `ticketsOwedPacked[lvl][player]` (cleared or updated)
+
+**Callers:** `_processOneTicketEntry`
+**Callees:** `_rollRemainder`
+
+**ETH Flow:** None.
+
+**Logic:**
+1. Extract `rem = uint8(packed)` (fractional remainder, 0-99).
+2. If `rem == 0`: Clear storage if packed was non-zero, return skip=true.
+3. If `rem != 0`: Roll `_rollRemainder(entropy, rollSalt, rem)` -- `rem%` chance of winning 1 extra ticket.
+   - Win: Set `newPacked = 1 << 8` (1 ticket owed, 0 remainder). Update storage if changed.
+   - Lose: Clear storage, return skip=true.
+
+**Invariants:**
+- Handles the edge case where a player's owed count is 0 but they have a fractional remainder.
+- The remainder roll is deterministic (same entropy + salt = same result).
+- Storage is only written if the value actually changes (gas optimization).
+
+**NatSpec Accuracy:** Matches. "Resolves the zero-owed remainder case for ticket processing."
+
+**Gas Flags:** 1 SSTORE on average (either clear or update). Efficient.
+
+**Verdict:** CORRECT
+
+---
+
+### `_processOneTicketEntry(address player, uint24 lvl, uint32 room, uint32 processed, uint256 entropy, uint256 queueIdx)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _processOneTicketEntry(address player, uint24 lvl, uint32 room, uint32 processed, uint256 entropy, uint256 queueIdx) private returns (uint32 writesUsed, bool advance)` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `player` (address): Ticket holder; `lvl` (uint24): Level; `room` (uint32): Remaining SSTORE budget; `processed` (uint32): Tickets already processed this entry; `entropy` (uint256): VRF entropy; `queueIdx` (uint256): Position in ticketQueue |
+| **Returns** | `writesUsed` (uint32): SSTOREs consumed; `advance` (bool): True if this entry is complete |
+
+**State Reads:** `ticketsOwedPacked[lvl][player]`
+**State Writes:** `ticketsOwedPacked[lvl][player]` (via `_finalizeTicketEntry`); `traitBurnTicket` (via `_generateTicketBatch`)
+
+**Callers:** `processTicketBatch`
+**Callees:** `_resolveZeroOwedRemainder`, `_generateTicketBatch`, `_finalizeTicketEntry`
+
+**ETH Flow:** None.
+
+**Processing logic:**
+1. Load packed owed: `owed = uint32(packed >> 8)`, remainder = `uint8(packed)`.
+2. If `owed == 0`: Handle via `_resolveZeroOwedRemainder`. Charge 1 budget unit even on skip.
+3. Calculate overhead: `baseOv = 4` (first batch with <=2 owed) or `2` (subsequent).
+4. Calculate batch size `take`: `min(owed, maxT)` where `maxT` depends on available room.
+   - If `availRoom <= 256`: `maxT = availRoom / 2` (2 writes per ticket: array push + count).
+   - If `availRoom > 256`: `maxT = availRoom - 256` (amortized overhead for large batches).
+5. Generate trait tickets via `_generateTicketBatch`.
+6. Calculate writesUsed: `(take <= 256 ? take*2 : take+256) + baseOv + (take==owed ? 1 : 0)`.
+7. Finalize via `_finalizeTicketEntry`.
+
+**Invariants:**
+- `rollSalt = (lvl << 224) | (queueIdx << 192) | (player << 32)` -- deterministic per-entry.
+- Budget accounting ensures gas stays within block limits.
+- Returns `(0, false)` when budget is exhausted (signals caller to stop).
+
+**NatSpec Accuracy:** Matches. "Processes a single ticket entry, returning writes used and whether to advance."
+
+**Gas Flags:** The writes-used formula accurately models the SSTORE cost of `_raritySymbolBatch` assembly. The threshold at 256 accounts for the trait-counting overhead in memory.
+
+**Verdict:** CORRECT
+
+---
+
+### `_generateTicketBatch(address player, uint24 lvl, uint32 processed, uint32 take, uint256 entropy, uint256 queueIdx)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _generateTicketBatch(address player, uint24 lvl, uint32 processed, uint32 take, uint256 entropy, uint256 queueIdx) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `player` (address): Ticket holder; `lvl` (uint24): Level; `processed` (uint32): Start index; `take` (uint32): Count; `entropy` (uint256): VRF entropy; `queueIdx` (uint256): Queue position |
+| **Returns** | None |
+
+**State Reads:** `traitBurnTicket[lvl][traitId].length` (via assembly)
+**State Writes:** `traitBurnTicket[lvl][traitId]` -- pushes player address N times per trait occurrence
+
+**Callers:** `_processOneTicketEntry`
+**Callees:** `_raritySymbolBatch`, emits `TraitsGenerated`
+
+**ETH Flow:** None.
+
+**Algorithm:**
+1. Constructs `baseKey = (lvl << 224) | (queueIdx << 192) | (player << 32)`.
+2. Delegates to `_raritySymbolBatch` for LCG-based trait generation and storage writes.
+3. Emits `TraitsGenerated(player, lvl, queueIdx, processed, take, entropy)`.
+
+**LCG verification (TICKET_LCG_MULT = 0x5851F42D4C957F2D):**
+- This is Knuth's MMIX LCG multiplier (6364136223846793005). Full 64-bit period when seed is odd.
+- The seed is forced odd via `uint64(seed) | 1`.
+- Each group of 16 tickets shares a seed derived from `(baseKey + groupIdx) ^ entropyWord`.
+- Within a group, LCG steps produce independent trait values.
+
+**Invariants:**
+- Deterministic: same inputs always produce same traits.
+- `processed` parameter allows resuming mid-entry (different startIndex each call).
+
+**NatSpec Accuracy:** "Wrapper for _raritySymbolBatch to reduce stack usage." Accurate.
+
+**Gas Flags:** None. Assembly-optimized batch writes.
+
+**Verdict:** CORRECT
+
+---
+
+### `_finalizeTicketEntry(uint24 lvl, address player, uint40 packed, uint32 owed, uint32 take, uint256 entropy, uint256 rollSalt)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _finalizeTicketEntry(uint24 lvl, address player, uint40 packed, uint32 owed, uint32 take, uint256 entropy, uint256 rollSalt) private returns (bool done)` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `lvl` (uint24): Level; `player` (address): Ticket holder; `packed` (uint40): Current packed state; `owed` (uint32): Total owed; `take` (uint32): Processed this batch; `entropy` (uint256): VRF entropy; `rollSalt` (uint256): Salt for remainder roll |
+| **Returns** | `bool`: True if entry is complete |
+
+**State Reads:** None (packed passed in)
+**State Writes:** `ticketsOwedPacked[lvl][player]` (updated or unchanged)
+
+**Callers:** `_processOneTicketEntry`
+**Callees:** `_rollRemainder`
+
+**ETH Flow:** None.
+
+**Logic:**
+1. `remainingOwed = owed - take` (unchecked -- safe because `take <= owed`).
+2. If `remainingOwed == 0` and `rem != 0`: Roll remainder. If win, set `remainingOwed = 1`. Clear `rem`.
+3. Pack new value: `(remainingOwed << 8) | rem`.
+4. Write to storage only if changed.
+5. Return `remainingOwed == 0` (done).
+
+**Invariants:**
+- Remainder is only rolled when all owed tickets are processed (`remainingOwed == 0`).
+- After remainder roll: either 0 or 1 ticket owed, remainder cleared.
+- Storage write only when value changes (gas optimization).
+
+**NatSpec Accuracy:** Matches. "Finalizes ticket entry after processing, rolling remainder dust."
+
+**Gas Flags:** 0-1 SSTOREs. Efficient.
+
+**Verdict:** CORRECT
+
+---
+
+### `_rollRemainder(uint256 entropy, uint256 rollSalt, uint8 rem)` [private pure]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _rollRemainder(uint256 entropy, uint256 rollSalt, uint8 rem) private pure returns (bool win)` |
+| **Visibility** | private |
+| **Mutability** | pure |
+| **Parameters** | `entropy` (uint256): VRF entropy; `rollSalt` (uint256): Deterministic salt; `rem` (uint8): Remainder value (0-99) |
+| **Returns** | `bool`: True if remainder roll wins (probability = rem/100) |
+
+**State Reads:** None
+**State Writes:** None
+
+**Callers:** `_resolveZeroOwedRemainder`, `_finalizeTicketEntry`
+**Callees:** `EntropyLib.entropyStep`
+
+**ETH Flow:** None.
+
+**Fairness verification:**
+- `rollEntropy = EntropyLib.entropyStep(entropy ^ rollSalt)` -- xorshift64 derivation.
+- `win = (rollEntropy % TICKET_SCALE) < rem` where `TICKET_SCALE = 100`.
+- For `rem = 50`: 50% chance. For `rem = 1`: 1% chance. For `rem = 99`: 99% chance.
+- The modulo bias is negligible for a 256-bit input modulo 100.
+
+**Invariants:**
+- `rem` must be in range 0-99 (guaranteed by the packing format: uint8 with max 99 from ticket scaling).
+- `rem = 0` means 0% chance (but callers check for this before calling).
+- Deterministic: same entropy + salt = same result.
+
+**NatSpec Accuracy:** Matches. "Roll remainder chance for a fractional ticket (0-99)."
+
+**Gas Flags:** None. Single computation.
+
+**Verdict:** CORRECT
+
+---
+
+### `_raritySymbolBatch(address player, uint256 baseKey, uint32 startIndex, uint32 count, uint256 entropyWord)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _raritySymbolBatch(address player, uint256 baseKey, uint32 startIndex, uint32 count, uint256 entropyWord) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `player` (address): Ticket holder; `baseKey` (uint256): Encoded (lvl, queueIdx, player); `startIndex` (uint32): Starting ticket index; `count` (uint32): Tickets to generate; `entropyWord` (uint256): VRF entropy |
+| **Returns** | None |
+
+**State Reads:** `traitBurnTicket[lvl][traitId].length` (via assembly)
+**State Writes:** `traitBurnTicket[lvl][traitId]` -- appends player address for each trait occurrence (via assembly)
+
+**Callers:** `_generateTicketBatch`
+**Callees:** `DegenerusTraitUtils.traitFromWord`
+
+**ETH Flow:** None.
+
+**Algorithm:**
+1. **Trait generation** (groups of 16 using LCG):
+   - For each group of 16 tickets: `seed = (baseKey + groupIdx) ^ entropyWord`.
+   - `s = uint64(seed) | 1` (force odd for full LCG period).
+   - LCG step: `s = s * TICKET_LCG_MULT + 1` per ticket.
+   - Trait: `DegenerusTraitUtils.traitFromWord(s) + (uint8(i & 3) << 6)` -- adds quadrant from ticket index mod 4.
+   - Tracks unique traits and occurrence counts in memory arrays.
+
+2. **Batch storage writes** (assembly):
+   - For each unique trait: load array length, extend by occurrences, write player address.
+   - Uses keccak256-based storage slot calculation matching Solidity's dynamic array layout.
+
+**DegenerusTraitUtils.traitFromWord verification:**
+- Takes uint64, splits into low 32 (category via `weightedBucket`) and high 32 (sub via `weightedBucket`).
+- Returns 6-bit trait: `(category << 3) | sub`.
+- Quadrant bits (2 MSBs) added by caller: `(i & 3) << 6`.
+- Result is full 8-bit trait ID: `[QQ][CCC][SSS]`.
+
+**Invariants:**
+- LCG produces deterministic, non-repeating sequence within each 16-ticket group.
+- Quadrant assignment cycles through 0,1,2,3 based on ticket index, ensuring balanced distribution.
+- Assembly writes are memory-safe (declared with `"memory-safe"` annotation).
+- Storage slot calculation matches Solidity compiler's layout for `mapping(uint24 => address[][256])`.
+
+**NatSpec Accuracy:** Matches. Documents the 3-step algorithm (generate, track, batch-write).
+
+**Gas Flags:** Assembly-optimized. ~2 SSTOREs per ticket (array length update + data slot write). This is the minimum possible for appending to a storage array.
+
+**Verdict:** CORRECT
+
+---
+
+## Winner Selection
+
+### `_randTraitTicket(address[][256] storage traitBurnTicket_, uint256 randomWord, uint8 trait, uint8 numWinners, uint8 salt)` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _randTraitTicket(address[][256] storage traitBurnTicket_, uint256 randomWord, uint8 trait, uint8 numWinners, uint8 salt) private view returns (address[] memory winners)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `traitBurnTicket_` (storage ref): Trait ticket mapping; `randomWord` (uint256): VRF entropy; `trait` (uint8): Trait ID; `numWinners` (uint8): Winners to select (max 255); `salt` (uint8): Additional entropy differentiation |
+| **Returns** | `address[]`: Selected winner addresses (may contain duplicates) |
+
+**State Reads:** `traitBurnTicket_[trait].length`, `traitBurnTicket_[trait][idx]`, `deityBySymbol[fullSymId]`
+**State Writes:** None
+
+**Callers:** `_runEarlyBirdLootboxJackpot`, `_distributeTicketsToBucket`, `awardFinalDayDgnrsReward`
+**Callees:** None
+
+**ETH Flow:** None.
+
+**Winner selection algorithm:**
+1. `effectiveLen = len + virtualCount` where `virtualCount = max(len/50, 2)` if deity exists for this symbol.
+2. Entropy derivation: `slice = randomWord ^ (trait << 128) ^ (salt << 192)`.
+3. For each winner: `idx = slice % effectiveLen`. If `idx < len`, select from holders. If `idx >= len`, select deity.
+4. Advance: `slice = (slice >> 16) | (slice << 240)` -- 16-bit rotation per winner.
+
+**Deity virtual entries:**
+- `fullSymId = (trait >> 6) * 8 + (trait & 0x07)` -- maps trait to one of 32 unique symbols.
+- If `deityBySymbol[fullSymId] != address(0)`, deity gets `virtualCount` virtual entries.
+- `virtualCount = max(len/50, 2)` -- floor(2% of bucket tickets), minimum 2.
+- Deity can win multiple times (duplicates allowed).
+
+**Duplicate handling:**
+- Duplicates are intentionally allowed. A player with N tickets in the pool has N/effectiveLen probability of being selected per draw. Multiple draws mean they can win multiple times.
+
+**Empty array handling:**
+- If `effectiveLen == 0 || numWinners == 0`: returns empty array. Graceful.
+
+**Entropy quality:**
+- 16-bit rotation means after 16 winners, the entropy repeats. However, `numWinners` is capped at MAX_BUCKET_WINNERS (250), so with `effectiveLen` typically much larger than 2^16, the selection remains well-distributed. For small pools (< 16 entries), the modulo operation provides sufficient differentiation.
+
+**Invariants:**
+- Deterministic: same inputs = same winners.
+- Salt prevents different callers with same randomWord from selecting the same winners.
+- No storage mutations -- safe for view context.
+
+**NatSpec Accuracy:** Matches. Documents duplicates, virtual deity entries, and selection algorithm.
+
+**Gas Flags:** Up to 250 storage reads for `holders[idx]`. Each is a cold read on first access but may be warm for duplicates.
+
+**Verdict:** CORRECT
+
+---
+
+### `_randTraitTicketWithIndices(address[][256] storage traitBurnTicket_, uint256 randomWord, uint8 trait, uint8 numWinners, uint8 salt)` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _randTraitTicketWithIndices(address[][256] storage traitBurnTicket_, uint256 randomWord, uint8 trait, uint8 numWinners, uint8 salt) private view returns (address[] memory winners, uint256[] memory ticketIndexes)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | Same as `_randTraitTicket` |
+| **Returns** | `winners` (address[]): Selected winners; `ticketIndexes` (uint256[]): Corresponding ticket indices (uint256.max for deity virtual entries) |
+
+**State Reads:** Same as `_randTraitTicket`
+**State Writes:** None
+
+**Callers:** `_processDailyEthChunk`, `_resolveTraitWinners`, `_awardDailyCoinToTraitWinners`
+**Callees:** None
+
+**ETH Flow:** None.
+
+**Behavior comparison with `_randTraitTicket`:**
+- Identical winner selection algorithm (same entropy derivation, same rotation, same deity logic).
+- Additionally returns `ticketIndexes[i]`: the actual index in the holders array, or `type(uint256).max` for deity virtual entries.
+- Used for `JackpotTicketWinner` event emission which includes the winning ticket index.
+
+**Invariants:**
+- Same inputs produce same winners as `_randTraitTicket` (algorithms are identical).
+- `ticketIndexes[i] == type(uint256).max` iff `winners[i] == deity`.
+
+**NatSpec Accuracy:** Matches. "Same selection as _randTraitTicket plus winner ticket indices."
+
+**Gas Flags:** Same as `_randTraitTicket` + memory allocation for ticketIndexes array.
+
+**Verdict:** CORRECT
+
+---
+
+## Utility Helpers
+
+### `_calculateDayIndex()` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _calculateDayIndex() private view returns (uint48)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | None |
+| **Returns** | `uint48`: Day index (1-indexed from deploy day) |
+
+**State Reads:** Via `_simulatedDayIndex` (reads `block.timestamp` and storage for testnet offset)
+**State Writes:** None
+
+**Callers:** `payDailyJackpot`, `_getWinningTraits`, `payDailyCoinJackpot`, `payDailyJackpotCoinAndTickets`
+**Callees:** `_simulatedDayIndex` (inherited from DegenerusGameStorage)
+
+**ETH Flow:** None.
+
+**Day boundary:** Days reset at JACKPOT_RESET_TIME = 82620 seconds = 22:57 UTC. Day 1 corresponds to deploy day.
+
+**Invariants:**
+- Single delegate to `_simulatedDayIndex()` which handles testnet time simulation.
+- Monotonically increasing within a level (time only moves forward).
+
+**NatSpec Accuracy:** Matches. "Calculate current day index with testnet offset applied."
+
+**Gas Flags:** None.
+
+**Verdict:** CORRECT
+
+---
+
+### `_creditDgnrsCoinflip(uint256 prizePoolWei)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _creditDgnrsCoinflip(uint256 prizePoolWei) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `prizePoolWei` (uint256): Current prize pool size |
+| **Returns** | None |
+
+**State Reads:** `price`
+**State Writes:** None directly (external call to coin.creditFlip)
+
+**Callers:** `consolidatePrizePools`
+**Callees:** `coin.creditFlip`
+
+**ETH Flow:** None. Credits BURNIE to DGNRS contract address for coinflip rewards.
+
+**BURNIE calculation:**
+- `coinAmount = (prizePoolWei * PRICE_COIN_UNIT) / (priceWei * 20)`
+- PRICE_COIN_UNIT = 1000 ether (1000 BURNIE per ETH at reference price).
+- Effective: `coinAmount = prizePoolWei * 1000 / (price * 20) = prizePoolWei * 50 / price`.
+- This credits 5% of the prize pool's BURNIE-equivalent to the DGNRS coinflip system.
+
+**Invariants:**
+- No-op if `price == 0` (division by zero protection).
+- No-op if `coinAmount == 0` (small prize pools).
+- Credits go to `ContractAddresses.DGNRS` address.
+
+**NatSpec Accuracy:** No NatSpec. Function name is self-documenting.
+
+**Gas Flags:** 1 external call to `coin.creditFlip`. Acceptable.
+
+**Verdict:** CORRECT
+
+---
+
+### `_calcDailyCoinBudget(uint24 lvl)` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _calcDailyCoinBudget(uint24 lvl) private view returns (uint256)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `lvl` (uint24): Current level |
+| **Returns** | `uint256`: Daily BURNIE budget in wei-equivalent |
+
+**State Reads:** `price`, `levelPrizePool[lvl - 1]`
+**State Writes:** None
+
+**Callers:** `payDailyCoinJackpot`, `payDailyJackpotCoinAndTickets`
+**Callees:** None
+
+**ETH Flow:** None. Pure calculation.
+
+**Budget formula:**
+- `(levelPrizePool[lvl - 1] * PRICE_COIN_UNIT) / (priceWei * 200)`
+- `= levelPrizePool[lvl-1] * 1000 / (price * 200)`
+- `= levelPrizePool[lvl-1] * 5 / price`
+- This is 0.5% of the level's prize pool expressed in BURNIE units.
+
+**Invariants:**
+- Uses `lvl - 1` to reference the previous level's prize pool (the pool that was accumulated during purchases).
+- No-op (returns 0) if `price == 0`.
+
+**NatSpec Accuracy:** Matches. "Calculate 0.5% of prize pool target in BURNIE."
+
+**Gas Flags:** 2 SLOADs (price + levelPrizePool). Both likely warm in jackpot context.
+
+**Verdict:** CORRECT
+
+---
+
+### `_dailyCurrentPoolBps(uint8 counter, uint256 randWord)` [private pure]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _dailyCurrentPoolBps(uint8 counter, uint256 randWord) private pure returns (uint16 bps)` |
+| **Visibility** | private |
+| **Mutability** | pure |
+| **Parameters** | `counter` (uint8): Jackpot day counter (0-4); `randWord` (uint256): VRF entropy |
+| **Returns** | `uint16`: Basis points of currentPrizePool to distribute |
+
+**State Reads:** None
+**State Writes:** None
+
+**Callers:** `payDailyJackpot` (daily path)
+**Callees:** None
+
+**ETH Flow:** None. Determines the percentage of currentPrizePool to distribute.
+
+**BPS calculation:**
+- Day 5 (`counter >= JACKPOT_LEVEL_CAP - 1 = 4`): Returns 10000 (100%).
+- Days 1-4: `seed = keccak256(randWord, DAILY_CURRENT_BPS_TAG, counter)`.
+  - `bps = DAILY_CURRENT_BPS_MIN + (seed % range)` where range = 1400 - 600 + 1 = 801.
+  - Result: uniform random in [600, 1400] = [6%, 14%], average 10%.
+
+**Bounds verification:**
+- Minimum: 600 bps = 6%.
+- Maximum: 600 + 800 = 1400 bps = 14%.
+- Range = 1400 - 600 + 1 = 801 values. Uniform distribution.
+- Day 5: 10000 bps = 100%. All remaining currentPrizePool distributed.
+
+**Invariants:**
+- Counter-dependent entropy (counter is part of keccak256 input), so each day gets a different percentage.
+- Deterministic: same randWord + counter = same bps.
+
+**NatSpec Accuracy:** Matches. "Days 1-4: random 6%-14% (avg 10%). Day 5: 100%."
+
+**Gas Flags:** Single keccak256. Efficient.
+
+**Verdict:** CORRECT
+
+---
+
+### `_hasActualTraitTickets(uint24 lvl, uint32 packedTraits)` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _hasActualTraitTickets(uint24 lvl, uint32 packedTraits) private view returns (bool)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `lvl` (uint24): Level to check; `packedTraits` (uint32): Packed winning traits |
+| **Returns** | `bool`: True if any winning trait has non-virtual tickets at this level |
+
+**State Reads:** `traitBurnTicket[lvl][traitIds[i]].length` for i in 0..3
+**State Writes:** None
+
+**Callers:** `_highestCarryoverSourceOffset`, `_selectCarryoverSourceOffset`
+**Callees:** `JackpotBucketLib.unpackWinningTraits`
+
+**ETH Flow:** None.
+
+**Difference from `_hasTraitTickets`:**
+- `_hasTraitTickets` checks both actual tickets AND virtual deity entries.
+- `_hasActualTraitTickets` only checks actual tickets (non-zero array length).
+- Used for carryover source selection where deity-only levels should not be eligible (deity entries are virtual, not backed by actual ticket purchases).
+
+**Invariants:**
+- Returns true if ANY of the 4 winning traits has at least 1 actual ticket at the level.
+
+**NatSpec Accuracy:** Matches. "Return true if any winning trait has actual (non-virtual) tickets."
+
+**Gas Flags:** Up to 4 SLOADs for array lengths. Acceptable.
+
+**Verdict:** CORRECT
+
+---
+
+### `_highestCarryoverSourceOffset(uint24 lvl, uint32 winningTraitsPacked)` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _highestCarryoverSourceOffset(uint24 lvl, uint32 winningTraitsPacked) private view returns (uint8 offset)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `lvl` (uint24): Current level; `winningTraitsPacked` (uint32): Packed traits |
+| **Returns** | `uint8`: Highest eligible offset (1-5) or 0 if none |
+
+**State Reads:** Via `_hasActualTraitTickets` (traitBurnTicket)
+**State Writes:** None
+
+**Callers:** `_selectCarryoverSourceOffset`
+**Callees:** `_hasActualTraitTickets`
+
+**ETH Flow:** None.
+
+**Scan logic:** Iterates from offset 5 down to 1. Returns the first offset where `lvl + offset` has actual trait tickets for the winning traits. Returns 0 if none found.
+
+**Invariants:**
+- Maximum offset is DAILY_CARRYOVER_MAX_OFFSET (5), checking levels lvl+5, lvl+4, ..., lvl+1.
+- Only considers actual (non-virtual) tickets via `_hasActualTraitTickets`.
+
+**NatSpec Accuracy:** Matches. "Return highest eligible carryover source offset in [1..5] with actual winning-trait tickets."
+
+**Gas Flags:** Up to 5 x 4 = 20 SLOADs. Bounded.
+
+**Verdict:** CORRECT
+
+---
+
+### `_selectCarryoverSourceOffset(uint24 lvl, uint32 winningTraitsPacked, uint256 randWord, uint8 counter)` [private view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _selectCarryoverSourceOffset(uint24 lvl, uint32 winningTraitsPacked, uint256 randWord, uint8 counter) private view returns (uint8 offset)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `lvl` (uint24): Current level; `winningTraitsPacked` (uint32): Packed traits; `randWord` (uint256): VRF entropy; `counter` (uint8): Jackpot counter |
+| **Returns** | `uint8`: Selected carryover source offset (1-5) or 0 if none |
+
+**State Reads:** Via `_highestCarryoverSourceOffset` and `_hasActualTraitTickets`
+**State Writes:** None
+
+**Callers:** `payDailyJackpot` (daily path, non-early-bird days)
+**Callees:** `_highestCarryoverSourceOffset`, `_hasActualTraitTickets`
+
+**ETH Flow:** None.
+
+**Selection algorithm:**
+1. Find `highestEligible` via `_highestCarryoverSourceOffset`.
+2. If 0: no eligible source. If 1: only one option, return 1.
+3. Random start: `startOffset = (keccak256(randWord, DAILY_CARRYOVER_SOURCE_TAG, counter) % highestEligible) + 1`.
+4. Probe all offsets in [1..highestEligible] cyclically from startOffset.
+5. Return first offset with actual trait tickets.
+
+**Invariants:**
+- Counter-dependent entropy (different carryover source per jackpot day).
+- Falls back to 0 if no offset has actual tickets (shouldn't happen if `highestEligible > 0`, but defensive).
+- The cyclic probe ensures all eligible offsets are checked.
+
+**NatSpec Accuracy:** Matches. "Select a random eligible carryover source offset in [1..highestEligible]."
+
+**Gas Flags:** Up to 5 x 4 = 20 SLOADs for the probe (worst case all 5 offsets checked). Bounded.
+
+**Verdict:** CORRECT
+
+---
+
+### `_packDailyTicketBudgets(uint8 counterStep, uint256 dailyTicketUnits, uint256 carryoverTicketUnits, uint8 carryoverSourceOffset)` [private pure]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _packDailyTicketBudgets(uint8 counterStep, uint256 dailyTicketUnits, uint256 carryoverTicketUnits, uint8 carryoverSourceOffset) private pure returns (uint256)` |
+| **Visibility** | private |
+| **Mutability** | pure |
+| **Parameters** | `counterStep` (uint8): Counter increment (1 or 2); `dailyTicketUnits` (uint256): Ticket units for daily distribution; `carryoverTicketUnits` (uint256): Ticket units for carryover; `carryoverSourceOffset` (uint8): Carryover source level offset |
+| **Returns** | `uint256`: Packed value |
+
+**State Reads:** None
+**State Writes:** None
+
+**Callers:** `payDailyJackpot` (daily path)
+**Callees:** None
+
+**ETH Flow:** None.
+
+**Bit layout verification:**
+```
+Bits [7:0]     = counterStep (8 bits)
+Bits [71:8]    = dailyTicketUnits (64 bits)
+Bits [135:72]  = carryoverTicketUnits (64 bits)
+Bits [143:136] = carryoverSourceOffset (8 bits)
+Total: 144 bits used out of 256
+```
+
+**Packing formula:**
+- `counterStep | (dailyTicketUnits << 8) | (carryoverTicketUnits << 72) | (carryoverSourceOffset << 136)`
+
+**Invariants:**
+- `dailyTicketUnits` is cast from uint256 but only 64 bits are meaningful (capped by `_budgetToTicketUnits` which returns values fitting in uint64).
+- `carryoverTicketUnits` similarly fits in 64 bits.
+- No overlap between fields.
+
+**NatSpec Accuracy:** No explicit NatSpec but the packing layout comment in `payDailyJackpot` matches.
+
+**Gas Flags:** None. Pure bitwise operations.
+
+**Verdict:** CORRECT
+
+---
+
+### `_unpackDailyTicketBudgets(uint256 packed)` [private pure]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _unpackDailyTicketBudgets(uint256 packed) private pure returns (uint8 counterStep, uint256 dailyTicketUnits, uint256 carryoverTicketUnits, uint8 carryoverSourceOffset)` |
+| **Visibility** | private |
+| **Mutability** | pure |
+| **Parameters** | `packed` (uint256): Packed ticket budgets |
+| **Returns** | `counterStep` (uint8): Counter increment; `dailyTicketUnits` (uint256): Daily ticket units; `carryoverTicketUnits` (uint256): Carryover ticket units; `carryoverSourceOffset` (uint8): Carryover source offset |
+
+**State Reads:** None
+**State Writes:** None
+
+**Callers:** `payDailyJackpot`, `payDailyJackpotCoinAndTickets`
+**Callees:** None
+
+**ETH Flow:** None.
+
+**Unpacking formula:**
+- `counterStep = uint8(packed)` -- bits [7:0]
+- `dailyTicketUnits = uint64(packed >> 8)` -- bits [71:8], masked to 64 bits
+- `carryoverTicketUnits = uint64(packed >> 72)` -- bits [135:72], masked to 64 bits
+- `carryoverSourceOffset = uint8(packed >> 136)` -- bits [143:136]
+
+**Symmetry verification:** The unpack operations are the exact inverse of the pack operations in `_packDailyTicketBudgets`. The `uint64()` cast on ticket units matches the 64-bit field width, preventing data from bleeding between fields.
+
+**NatSpec Accuracy:** No explicit NatSpec. Self-documenting.
+
+**Gas Flags:** None. Pure bitwise operations.
+
+**Verdict:** CORRECT
+
+---
+
+## ETH Mutation Path Map (Part 2)
+
+### Jackpot ETH Distribution Flow
+
+| Step | Source | Destination | Amount/Formula | Function |
+|------|--------|-------------|----------------|----------|
+| 1 | ethPool (from caller) | 4 bucket shares | `JackpotBucketLib.bucketShares(ethPool, shareBps, bucketCounts, remainderIdx, unit)` | `_distributeJackpotEth` |
+| 2 | Bucket share | Per-winner amount | `perWinner = share / totalCount` | `_processOneBucket` -> `_resolveTraitWinners` |
+| 3a | Per-winner (multi-bucket) | `claimableWinnings[winner]` | Full `perWinner` via `_addClaimableEth` | `_resolveTraitWinners` |
+| 3b | Per-winner (solo bucket, >= 8.7 ETH) | 75% `claimableWinnings[winner]` + 25% `whalePassClaims[winner]` + `futurePrizePool` | `ethAmount = perWinner - whalePassSpent` | `_processSoloBucketWinner` |
+| 3c | Per-winner (solo bucket, < 8.7 ETH) | `claimableWinnings[winner]` | Full `perWinner` | `_processSoloBucketWinner` |
+| 3d | Per-winner (auto-rebuy enabled) | `nextPrizePool` or `futurePrizePool` + `ticketQueue` + `claimableWinnings[winner]` (take-profit) | `_processAutoRebuy` splits based on level offset | `_addClaimableEth` -> `_processAutoRebuy` |
+| 4 | Aggregate liability | `claimablePool += liabilityDelta` | Sum of all claimable credits (excludes auto-rebuy and whale pass conversions) | `_distributeJackpotEth` / `_processDailyEthChunk` |
+
+### Chunked Daily ETH Distribution Flow
+
+| Step | Source | Destination | Amount/Formula | Function |
+|------|--------|-------------|----------------|----------|
+| 1 | `currentPrizePool` | `dailyEthPoolBudget` | `currentPrizePool * dailyBps / 10000` (6-14% days 1-4, 100% day 5) | `payDailyJackpot` |
+| 2 | `dailyEthPoolBudget` | Per-bucket shares | Via `_processDailyEthChunk` | `payDailyJackpot` Phase 0 |
+| 3 | Per-bucket share | Per-winner credit | `perWinner = share / totalCount` with gas-bounded cursor | `_processDailyEthChunk` |
+| 4 | `futurePrizePool` | `dailyCarryoverEthPool` | 1% of futurePrizePool (non-early-bird days) | `payDailyJackpot` |
+| 5 | `dailyCarryoverEthPool` | Per-winner credit (carryover level) | Via `_processDailyEthChunk` Phase 1 | `payDailyJackpot` Phase 1 |
+| 6 | Paid ETH (daily) | `currentPrizePool -= paidDailyEth` | Deducted after Phase 0 completes | `payDailyJackpot` |
+
+### Coin (BURNIE) Distribution Flow
+
+| Step | Source | Destination | Amount/Formula | Function |
+|------|--------|-------------|----------------|----------|
+| 1 | `levelPrizePool[lvl-1]` | `coinBudget` | `levelPrizePool * 1000 / (price * 200)` = 0.5% in BURNIE | `_calcDailyCoinBudget` |
+| 2 | `coinBudget` | 75% near-future + 25% far-future | `farBudget = coinBudget * 2500 / 10000` | `payDailyCoinJackpot` |
+| 3a | Near-future budget | Trait-matched winners [lvl, lvl+4] | `coin.creditFlipBatch(winners, amounts)` | `_awardDailyCoinToTraitWinners` |
+| 3b | Far-future budget | ticketQueue winners [lvl+5, lvl+99] | `coin.creditFlipBatch(winners, amounts)` | `_awardFarFutureCoinJackpot` |
+| 4 | DGNRS coinflip credit | `coin.creditFlip(DGNRS, amount)` | 5% of prizePool in BURNIE-equivalent | `_creditDgnrsCoinflip` |
+
+### Ticket Generation Flow
+
+| Step | Source | Destination | Amount/Formula | Function |
+|------|--------|-------------|----------------|----------|
+| 1 | Winning traits (from VRF) | 4 trait IDs | `_rollWinningTraits` -> burn-weighted or random | `_rollWinningTraits` |
+| 2 | Trait IDs + level | Winner addresses | `_randTraitTicket(traitBurnTicket[lvl], entropy, traitId, count, salt)` | `_distributeTicketJackpot` |
+| 3 | Winners + ticket units | Queued tickets | `_queueTickets(winner, lvl+1, units)` | `_distributeTicketsToBucket` |
+| 4 | Queued tickets | Trait burn tickets | `_raritySymbolBatch` -> `traitBurnTicket[lvl][traitId].push(player)` | `processTicketBatch` |
+
+## Cross-Reference: Part 1 <-> Part 2 Linkage
+
+### Entry Point -> Distribution Chain
+
+| Part 1 Entry Point | Part 2 Internal Functions Called | Flow Description |
+|---|---|---|
+| `payDailyJackpot` (daily=true) | `_processDailyEthChunk` -> `_skipEntropyToBucket` -> `_randTraitTicketWithIndices` -> `_addClaimableEth` | Daily ETH jackpot with chunked gas-safe distribution. Phase 0: current level. Phase 1: carryover level. |
+| `payDailyJackpot` (daily=false) | `_executeJackpot` -> `_runJackpotEthFlow` -> `_distributeJackpotEth` -> `_processOneBucket` -> `_resolveTraitWinners` -> `_creditJackpot` / `_processSoloBucketWinner` | Early-burn jackpot with non-chunked ETH distribution. |
+| `payDailyJackpotCoinAndTickets` | `_calcDailyCoinBudget`, `_awardFarFutureCoinJackpot`, `_selectDailyCoinTargetLevel`, `_awardDailyCoinToTraitWinners`, `_distributeTicketJackpot` | Phase 2: coin + ticket distribution after daily ETH completes. |
+| `payDailyCoinJackpot` | `_calcDailyCoinBudget`, `_awardFarFutureCoinJackpot`, `_loadDailyWinningTraits`, `_rollWinningTraits`, `_selectDailyCoinTargetLevel`, `_awardDailyCoinToTraitWinners` | Standalone daily BURNIE jackpot (called separately from ETH jackpot). |
+| `runTerminalJackpot` | `_rollWinningTraits`, `_distributeJackpotEth` -> `_processOneBucket` -> `_resolveTraitWinners` | Terminal (x00 level / endgame) jackpot with FINAL_DAY_SHARES_PACKED. |
+| `consolidatePrizePools` | `_creditDgnrsCoinflip`, `_distributeYieldSurplus` (Part 1) | Pool consolidation at level transition: merge next->current, future dump roll, yield surplus. |
+| `processTicketBatch` | `_processOneTicketEntry` -> `_resolveZeroOwedRemainder`, `_generateTicketBatch` -> `_raritySymbolBatch`, `_finalizeTicketEntry`, `_rollRemainder` | Batched ticket processing with gas-bounded iteration. |
+
+### Shared Helpers (used by both Part 1 and Part 2 functions)
+
+| Helper | Part 1 Users | Part 2 Users |
+|---|---|---|
+| `_rollWinningTraits` | `payDailyJackpot` | `payDailyCoinJackpot`, `runTerminalJackpot` |
+| `_syncDailyWinningTraits` | `payDailyJackpot` | `payDailyCoinJackpot` |
+| `_calculateDayIndex` | `payDailyJackpot` | `_getWinningTraits`, `payDailyCoinJackpot`, `payDailyJackpotCoinAndTickets` |
+| `_addClaimableEth` | `_distributeYieldSurplus` | `_resolveTraitWinners`, `_processDailyEthChunk`, `_processSoloBucketWinner` |
+| `_hasTraitTickets` | `_validateTicketBudget` | `_selectDailyCoinTargetLevel` |
+
+## Findings Summary (Part 2)
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | No bugs found |
+| CONCERN | 0 | No concerns identified |
+| GAS | 1 | Minor: `_distributeJackpotEth` computes `soloBucketIndex(entropy)` twice when `dgnrsReward != 0` (once for `remainderIdx`, once for `soloIdx`). Both produce identical results. Compiler likely optimizes. |
+| CORRECT | 36 | All functions verified correct |
+
+**NatSpec notes:**
+- `_executeJackpot`: NatSpec mentions COIN distribution but function only handles ETH. Stale comment, no behavioral impact.
+- `_processSoloBucketWinner`: Return name `lootboxSpent` is legacy; actually tracks whale pass conversions.
+
+## Combined JackpotModule Summary
+
+### Function Coverage
+
+| Part | Scope | Functions Audited | Lines |
+|------|-------|-------------------|-------|
+| Part 1 (Plan 50-03) | External entry points, pool consolidation, yield surplus, auto-rebuy, early-bird lootbox, ticket distribution helpers | ~30 functions | 1-1318 |
+| Part 2 (Plan 50-04) | Internal distribution engine, coin jackpots, ticket batch processing, winner selection, trait/entropy helpers | 36 functions | 1319-2794 |
+| **Total** | **Full contract** | **~66 functions** | **2794 lines** |
+
+### Overall Verdict
+
+**CORRECT** -- No bugs or security concerns found in Part 2 scope.
+
+Key architectural strengths:
+1. **Gas safety:** Chunked daily distribution with cursor-based resumption prevents block gas limit violations.
+2. **Determinism:** All entropy derivation is reproducible from VRF seed + salts, enabling resumption mid-distribution.
+3. **Fair winner selection:** Duplicates allowed by design (more tickets = more chances). Deity virtual entries give pass holders proportional representation (2%, min 2).
+4. **Balanced ETH flow:** Solo bucket gets largest share (60% on day 5) but must accept 25% whale pass conversion for large payouts, recycling ETH back into the prize pool.
+5. **Separation of concerns:** ETH distribution (Phase 1) and COIN+ticket distribution (Phase 2) are separated into different transactions to stay within gas limits.
+
