@@ -1439,3 +1439,184 @@ DegenerusVault is a multi-asset vault with two independent share classes (DGVE f
 **Verdict:** CORRECT
 
 ---
+
+## Vault Share Math Verification
+
+### Share Classes
+
+The vault uses two independent share classes, each deployed as a separate `DegenerusVaultShare` ERC-20 contract:
+
+| Share Token | Symbol | Claims | Reserve Source |
+|-------------|--------|--------|----------------|
+| coinShare | DGVB | BURNIE | vaultMintAllowance + vault BURNIE balance + claimable coinflips |
+| ethShare | DGVE | ETH + stETH | address(this).balance + stETH balance + claimable game winnings |
+
+### How Shares Are Minted
+
+- **Construction:** 1T * 1e18 (INITIAL_SUPPLY) minted to CREATOR for both DGVB and DGVE.
+- **Refill:** When all shares of a class are burned (supplyBefore == amount), 1T * 1e18 (REFILL_SUPPLY) is minted to the burner. This prevents zero-supply states.
+- **No ongoing minting:** There is no mechanism for new share holders to enter (no deposit-for-shares). Share supply only changes via refill.
+
+### Backing Ratio Calculation
+
+**DGVB (BURNIE claims):**
+```
+coinReserve = vaultMintAllowance + coinToken.balanceOf(vault) + previewClaimCoinflips(vault)
+coinOut = (coinReserve * sharesBurned) / totalSupply
+```
+
+**DGVE (ETH+stETH claims):**
+```
+ethReserve = address(vault).balance + stETH.balanceOf(vault) + claimableWinnings(vault)
+claimValue = (ethReserve * sharesBurned) / totalSupply
+```
+
+Where `claimableWinnings` is adjusted: if <= 1, treated as 0; else decremented by 1 (game sentinel value).
+
+### Burn-to-Extract Proportional Output
+
+**Forward calculation (shares -> output):** Floor division `(reserve * amount) / supply` -- rounds DOWN, in vault's favor (against the burner). The burner receives slightly less than their proportional share.
+
+**Reverse calculation (target output -> shares required):** Ceiling division `(targetOut * supply + reserve - 1) / reserve` -- rounds UP, ensuring the user burns enough shares. This is used in `previewBurnForCoinOut` and `previewBurnForEthOut`.
+
+### Rounding Safety
+
+| Direction | Formula | Rounding | Favors |
+|-----------|---------|----------|--------|
+| Forward (burn -> output) | `(reserve * amount) / supply` | Floor (down) | Vault (against burner) |
+| Reverse (output -> burn) | `(out * supply + reserve - 1) / reserve` | Ceiling (up) | Vault (burner burns more) |
+
+Both directions favor the vault. No rounding exploit possible.
+
+### Edge Cases
+
+| Case | Behavior | Safe? |
+|------|----------|-------|
+| First burn | Creator holds all 1T shares; proportional calculation works normally | Yes |
+| Last burn (all shares) | Burns all, receives proportional output, then 1T REFILL minted to burner | Yes |
+| Zero totalSupply | Impossible -- refill mechanism prevents it | N/A |
+| Reserve == 0 | coinOut/claimValue = 0; preview functions revert (coinOut/targetValue > reserve) | Yes |
+| Single wei reserve | (1 * amount) / supply = 0 for any amount < supply; dust is harmless | Yes |
+
+### stETH Yield Mechanics
+
+stETH is a rebasing token from Lido. As Lido earns staking rewards, the `balanceOf` all holders increases automatically. For the vault:
+
+1. **Acquisition:** stETH enters the vault via `deposit()` (GAME transfers stETH via `_pullSteth`) or via `gameClaimWinnings()` (which calls `claimWinningsStethFirst` -- preferring stETH).
+2. **Yield accrual:** stETH balance increases over time due to Lido rebasing. This yield accrues entirely to DGVE holders since stETH is part of the ETH reserve.
+3. **Extraction:** When DGVE holders burn shares, they receive ETH first, then stETH for any remainder. The increased stETH balance from yield means each DGVE share is worth more over time.
+4. **No active management:** The vault does not call `steth.submit()` or perform any Lido-specific actions. It simply holds stETH and benefits from passive rebasing.
+
+---
+
+## Pool Accounting Map
+
+| Pool | Assets | Reserve Calculation | Deposit Path | Withdrawal Path | Game Usage |
+|------|--------|---------------------|-------------|-----------------|------------|
+| ETH (DGVE) | ETH + stETH | `address(this).balance + steth.balanceOf(this) + claimableWinnings` | `deposit()` (msg.value for ETH, transferFrom for stETH), `receive()` (donations) | `burnEth()` -> `_burnEthFor()` -> `_payEth` / `_paySteth` | gamePurchase (ETH), gameDegeneretteBetEth (ETH), gamePurchaseDeityPassFromBoon (ETH) |
+| BURNIE (DGVB) | BURNIE mint allowance + held BURNIE + claimable coinflips | `vaultMintAllowance + balanceOf(this) + previewClaimCoinflips` | `deposit()` (virtual escrow via `vaultEscrow`) | `burnCoin()` -> `_burnCoinFor()` -> transfer/claimCoinflips/vaultMintTo | gamePurchaseTicketsBurnie, gamePurchaseBurnieLootbox, coinDepositCoinflip, coinDecimatorBurn |
+| WWXRP | Separate (not pooled) | Via `wwxrpToken.vaultMintAllowance()` (not tracked in vault) | N/A (mint-only) | `wwxrpMint()` -> `vaultMintTo` | gameDegeneretteBetWwxrp (uses game's WWXRP, not vault's) |
+
+**Pool isolation verified:** ETH+stETH (DGVE) and BURNIE (DGVB) are completely independent. No function mixes share classes. WWXRP is a separate mint pathway that does not affect either share class.
+
+---
+
+## ETH Mutation Path Map
+
+| # | Path | Source | Destination | Trigger | Function |
+|---|------|--------|-------------|---------|----------|
+| 1 | Game deposit | GAME contract | Vault ETH balance | Game calls deposit{value} | `deposit()` |
+| 2 | ETH donation | Any sender | Vault ETH balance | Direct ETH transfer | `receive()` |
+| 3 | Purchase tickets | Vault ETH balance | GAME contract | Vault owner initiates | `gamePurchase()` |
+| 4 | Deity pass | Vault ETH balance | GAME contract | Vault owner initiates | `gamePurchaseDeityPassFromBoon()` |
+| 5 | Auto-claim for deity | GAME claimable -> Vault ETH | Vault ETH balance | Insufficient balance for deity pass | `gamePurchaseDeityPassFromBoon()` |
+| 6 | Degenerette ETH bet | Vault ETH balance | GAME contract | Vault owner initiates | `gameDegeneretteBetEth()` |
+| 7 | Burn ETH shares | Vault ETH balance | Player | DGVE holder burns shares | `_burnEthFor()` -> `_payEth()` |
+| 8 | Burn ETH (stETH portion) | Vault stETH balance | Player | DGVE holder burns shares (ETH insufficient) | `_burnEthFor()` -> `_paySteth()` |
+| 9 | Auto-claim for burn | GAME claimable -> Vault ETH | Vault ETH balance | claimValue > combined during burn | `_burnEthFor()` |
+| 10 | stETH deposit | GAME stETH | Vault stETH balance | Game calls deposit(stEthAmount) | `deposit()` -> `_pullSteth()` |
+| 11 | Game winnings claim | GAME contract | Vault stETH/ETH balance | Vault owner claims | `gameClaimWinnings()` |
+| 12 | Decimator jackpot | GAME contract | Vault ETH balance | Vault owner claims jackpot | `jackpotsClaimDecimator()` |
+| 13 | Lootbox rewards | GAME contract | Vault ETH/stETH/BURNIE | Vault owner opens lootbox | `gameOpenLootBox()` |
+| 14 | Degenerette winnings | GAME contract | Vault ETH/BURNIE/WWXRP | Vault owner resolves bets | `gameResolveDegeneretteBets()` |
+
+---
+
+## Game Proxy Function Matrix
+
+| Vault Function | Game/Coin Function Called | ETH Forwarded | Additional Logic |
+|---------------|--------------------------|---------------|------------------|
+| `gameAdvance()` | `gamePlayer.advanceGame()` | No | None |
+| `gamePurchase(...)` | `gamePlayer.purchase{value}(vault, ...)` | Yes (msg.value + ethValue) | `_combinedValue` adds vault ETH |
+| `gamePurchaseTicketsBurnie(qty)` | `gamePlayer.purchaseCoin(vault, qty, 0)` | No | Reverts if qty == 0 |
+| `gamePurchaseBurnieLootbox(amt)` | `gamePlayer.purchaseBurnieLootbox(vault, amt)` | No | Reverts if amt == 0 |
+| `gameOpenLootBox(idx)` | `gamePlayer.openLootBox(vault, idx)` | No | None |
+| `gamePurchaseDeityPassFromBoon(price)` | `gamePlayer.purchaseDeityPass{value: price}(vault, true)` | Yes (priceWei) | Auto-claims winnings if underfunded |
+| `gameClaimWinnings()` | `gamePlayer.claimWinningsStethFirst()` | No (receives ETH/stETH) | Prefers stETH for yield |
+| `gameClaimWhalePass()` | `gamePlayer.claimWhalePass(vault)` | No | None |
+| `gameDegeneretteBetEth(...)` | `gamePlayer.placeFullTicketBets{value}(vault, 0, ...)` | Yes (msg.value + ethValue) | Reverts if overpayment |
+| `gameDegeneretteBetBurnie(...)` | `gamePlayer.placeFullTicketBets(vault, 1, ...)` | No | None |
+| `gameDegeneretteBetWwxrp(...)` | `gamePlayer.placeFullTicketBets(vault, 3, ...)` | No | None |
+| `gameResolveDegeneretteBets(ids)` | `gamePlayer.resolveDegeneretteBets(vault, ids)` | No | None |
+| `gameSetAutoRebuy(on)` | `gamePlayer.setAutoRebuy(vault, on)` | No | Config only |
+| `gameSetAutoRebuyTakeProfit(tp)` | `gamePlayer.setAutoRebuyTakeProfit(vault, tp)` | No | Config only |
+| `gameSetDecimatorAutoRebuy(on)` | `gamePlayer.setDecimatorAutoRebuy(vault, on)` | No | Config only |
+| `gameSetAfKingMode(...)` | `gamePlayer.setAfKingMode(vault, ...)` | No | Config only |
+| `gameSetOperatorApproval(op, ok)` | `gamePlayer.setOperatorApproval(op, ok)` | No | Config only |
+| `coinDepositCoinflip(amt)` | `coinPlayer.depositCoinflip(vault, amt)` | No | None |
+| `coinClaimCoinflips(amt)` | `coinPlayer.claimCoinflips(vault, amt)` | No | Returns claimed |
+| `coinClaimCoinflipsTakeProfit(mult)` | `coinPlayer.claimCoinflipsTakeProfit(vault, mult)` | No | Returns claimed |
+| `coinDecimatorBurn(amt)` | `coinPlayer.decimatorBurn(vault, amt)` | No | None |
+| `coinSetAutoRebuy(on, tp)` | `coinPlayer.setCoinflipAutoRebuy(vault, on, tp)` | No | Config only |
+| `coinSetAutoRebuyTakeProfit(tp)` | `coinPlayer.setCoinflipAutoRebuyTakeProfit(vault, tp)` | No | Config only |
+| `wwxrpMint(to, amt)` | `wwxrpToken.vaultMintTo(to, amt)` | No | Early return if amt == 0 |
+| `jackpotsClaimDecimator(lvl)` | `gamePlayer.claimDecimatorJackpot(lvl)` | No (receives ETH) | None |
+
+---
+
+## Storage Mutation Map
+
+The DegenerusVault contract itself has minimal state -- only `coinTracked` (uint256) is mutable. The two share tokens (`coinShare`, `ethShare`) are immutable references.
+
+| Function | Variables Written | Write Type |
+|----------|------------------|------------|
+| `constructor()` | `coinShare`, `ethShare` (immutable), `coinTracked` | Initialize |
+| `deposit()` | `coinTracked` (via `_syncCoinReserves`, then += coinAmount) | Sync + Increment |
+| `_burnCoinFor()` | `coinTracked` (via `_syncCoinReserves`, then -= remaining) | Sync + Decrement |
+| `_syncCoinReserves()` | `coinTracked` (= current vaultMintAllowance) | Sync |
+
+All other functions in DegenerusVault are either view functions or delegate state changes to external contracts (GAME, COIN, share tokens).
+
+**DegenerusVaultShare state mutations:**
+
+| Function | Variables Written | Write Type |
+|----------|------------------|------------|
+| `constructor()` | `name`, `symbol`, `totalSupply`, `balanceOf[CREATOR]` | Initialize |
+| `approve()` | `allowance[owner][spender]` | Set |
+| `_transfer()` | `balanceOf[from]`, `balanceOf[to]` | Decrement/Increment |
+| `transferFrom()` | `allowance[from][sender]` (if not max) | Decrement |
+| `vaultMint()` | `totalSupply`, `balanceOf[to]` | Increment |
+| `vaultBurn()` | `balanceOf[from]`, `totalSupply` | Decrement |
+
+---
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | No bugs found |
+| CONCERN | 1 | NatSpec inaccuracy on `customSpecial` parameter in gameDegeneretteBetEth/Burnie/Wwxrp (describes currency types but underlying interface parameter is `heroQuadrant` for payout boost). Functional behavior is correct -- value is passed through unchanged. |
+| GAS | 0 | No gas issues found |
+| NatSpec Informational | 1 | The `customSpecial` parameter naming and description is misleading (see CONCERN above). The parameter is actually `heroQuadrant` in the game interface. |
+| CORRECT | 47 | All 48 functions verified correct (47 fully CORRECT + 1 CONCERN with correct behavior) |
+
+### Key Verification Results
+
+1. **Share math rounding:** All divisions round in vault's favor (floor for output, ceiling for input). No rounding exploit vectors.
+2. **Pool isolation:** ETH+stETH (DGVE) and BURNIE (DGVB) are fully independent. No function mixes share classes. WWXRP is a separate mint pathway.
+3. **Refill mechanism:** Prevents zero-supply on both share classes. Activated only when entire supply is burned.
+4. **stETH yield:** Passive Lido rebasing accrues entirely to DGVE holders. No active management required.
+5. **Game proxy pattern:** All 25 game/coin proxy functions correctly pass `address(this)` as the player/buyer. Access controlled by onlyVaultOwner (>50.1% DGVE).
+6. **Claimable sentinel:** Both `_burnEthFor` and `_ethReservesView` correctly handle the game's 1-wei sentinel value for claimable winnings.
+7. **BURNIE payout waterfall:** `_burnCoinFor` pays from vault balance first, then coinflips, then mints from allowance -- minimizing allowance consumption.
+8. **Access control:** `onlyGame` for deposits, `onlyVaultOwner` for gameplay, `_requireApproved` for burns (operator approval via game contract).
