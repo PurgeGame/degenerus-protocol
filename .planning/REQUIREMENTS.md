@@ -30,8 +30,8 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 - [ ] **MOD-08**: DegenerusGameDegeneretteModule.sol — every function audited with JSON + markdown report
 - [x] **MOD-09**: DegenerusGameBoonModule.sol — every function audited with JSON + markdown report
 - [x] **MOD-10**: DegenerusGameDecimatorModule.sol — every function audited with JSON + markdown report
-- [ ] **MOD-11**: DegenerusGameMintStreakUtils.sol — every function audited with JSON + markdown report
-- [ ] **MOD-12**: DegenerusGamePayoutUtils.sol — every function audited with JSON + markdown report
+- [x] **MOD-11**: DegenerusGameMintStreakUtils.sol — every function audited with JSON + markdown report
+- [x] **MOD-12**: DegenerusGamePayoutUtils.sol — every function audited with JSON + markdown report
 
 ### Token & Economics
 
@@ -130,8 +130,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MOD-08 | Phase 52 | Pending |
 | MOD-09 | Phase 52 | Complete |
 | MOD-10 | Phase 52 | Complete |
-| MOD-11 | Phase 53 | Pending |
-| MOD-12 | Phase 53 | Pending |
+| MOD-11 | Phase 53 | Complete |
+| MOD-12 | Phase 53 | Complete |
 | TOKEN-01 | Phase 54 | Pending |
 | TOKEN-02 | Phase 54 | Pending |
 | TOKEN-03 | Phase 54 | Pending |
