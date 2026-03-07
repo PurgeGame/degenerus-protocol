@@ -1798,3 +1798,378 @@ DegenerusGame.sol defines additional private constants not in Storage: `DEPLOY_I
 
 **Read by:** DegeneretteModule (R), EndgameModule (R)
 **Written by:** DegeneretteModule (W)
+
+---
+
+## Functions
+
+DegenerusGameStorage defines 11 internal functions used as shared helpers by DegenerusGame and all delegatecall modules.
+
+### Function 1: `_queueTickets(address buyer, uint24 targetLevel, uint32 quantity)`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal |
+| **Mutability** | state-modifying |
+| **Lines** | 477-502 |
+| **Purpose** | Queue whole tickets for a buyer at a target level |
+
+**Parameters:** buyer (address), targetLevel (uint24), quantity (uint32)
+**Returns:** void
+
+**Logic:**
+1. No-op if quantity is 0
+2. Emits `TicketsQueued(buyer, targetLevel, quantity)`
+3. Reads `ticketsOwedPacked[targetLevel][buyer]` -- extracts owed (32b) and remainder (8b)
+4. If both owed and remainder are 0, pushes buyer to `ticketQueue[targetLevel]`
+5. Adds quantity to owed, caps at uint32.max
+6. Writes updated packed value back
+
+**Storage reads:** ticketsOwedPacked, ticketQueue (implicit via push check)
+**Storage writes:** ticketsOwedPacked, ticketQueue (push on first entry)
+**Called by:** MintModule, WhaleModule, DegenerusGame constructor, EndgameModule, JackpotModule
+**Verdict:** CORRECT -- Properly handles first-entry queue push, overflow cap, and remainder preservation
+
+### Function 2: `_queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled)`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal |
+| **Mutability** | state-modifying |
+| **Lines** | 509-557 |
+| **Purpose** | Queue fractional tickets with 2-decimal precision. Accumulates remainders and promotes to whole tickets when remainder >= TICKET_SCALE (100) |
+
+**Parameters:** buyer (address), targetLevel (uint24), quantityScaled (uint32)
+**Returns:** void
+
+**Logic:**
+1. No-op if quantityScaled is 0
+2. Emits `TicketsQueuedScaled(buyer, targetLevel, quantityScaled)`
+3. Reads packed owed/remainder; pushes buyer to queue if both are 0
+4. Splits quantityScaled into whole (/ TICKET_SCALE) and fractional (% TICKET_SCALE) parts
+5. Adds whole tickets to owed (capped at uint32.max)
+6. Adds fractional to remainder; if remainder >= TICKET_SCALE, promotes 1 to owed and subtracts TICKET_SCALE
+7. Writes updated packed value
+
+**Storage reads:** ticketsOwedPacked, ticketQueue
+**Storage writes:** ticketsOwedPacked, ticketQueue (on first entry)
+**Called by:** _queueLootboxTickets, MintModule
+**Verdict:** CORRECT -- Fractional accumulation is sound; promotion logic prevents remainder overflow
+
+### Function 3: `_queueTicketRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel)`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal |
+| **Mutability** | state-modifying |
+| **Lines** | 565-598 |
+| **Purpose** | Queue tickets for a contiguous range of levels with same quantity per level. Optimized for whale/lazy pass claims |
+
+**Parameters:** buyer (address), startLevel (uint24), numLevels (uint24), ticketsPerLevel (uint32)
+**Returns:** void
+
+**Logic:**
+1. Emits `TicketsQueuedRange(buyer, startLevel, numLevels, ticketsPerLevel)`
+2. Loops from startLevel to startLevel + numLevels - 1
+3. For each level: reads packed, pushes to queue if first entry, adds ticketsPerLevel (capped), writes back
+4. Uses unchecked increment for loop counter and level
+
+**Storage reads:** ticketsOwedPacked, ticketQueue
+**Storage writes:** ticketsOwedPacked, ticketQueue (per level on first entry)
+**Called by:** _activate10LevelPass, WhaleModule, EndgameModule
+**Verdict:** CORRECT -- Gas-efficient loop with unchecked increments for safe operations; same cap logic as _queueTickets
+
+### Function 4: `_queueLootboxTickets(address buyer, uint24 targetLevel, uint256 quantityScaled)`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal |
+| **Mutability** | state-modifying |
+| **Lines** | 604-614 |
+| **Purpose** | Queue lootbox tickets with 2-decimal precision, capping at uint32.max before delegating to _queueTicketsScaled |
+
+**Parameters:** buyer (address), targetLevel (uint24), quantityScaled (uint256)
+**Returns:** void
+
+**Logic:**
+1. No-op if quantityScaled is 0
+2. Caps quantityScaled to uint32.max if exceeding
+3. Calls `_queueTicketsScaled(buyer, targetLevel, uint32(quantityScaled))`
+
+**Storage reads:** None directly (delegates to _queueTicketsScaled)
+**Storage writes:** None directly (delegates)
+**Called by:** LootboxModule, MintModule
+**Verdict:** CORRECT -- Simple wrapper with safe uint32 downcast after cap check
+
+### Function 5: `_awardEarlybirdDgnrs(address buyer, uint256 purchaseWei, uint24 currentLevel)`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal |
+| **Mutability** | state-modifying |
+| **Lines** | 893-953 |
+| **Purpose** | Award earlybird DGNRS tokens to buyers during early levels using a quadratic emission curve |
+
+**Parameters:** buyer (address), purchaseWei (uint256), currentLevel (uint24)
+**Returns:** void
+
+**Logic:**
+1. No-op if purchaseWei == 0, buyer == address(0), or level >= EARLYBIRD_END_LEVEL (3)
+2. When level >= EARLYBIRD_END_LEVEL: one-shot dump of remaining earlybird pool into reward pool (marks with type(uint256).max sentinel)
+3. Initializes earlybirdDgnrsPoolStart on first call to pool balance
+4. Computes quadratic curve: d(x) = 2Tx - x^2 where T = EARLYBIRD_TARGET_ETH
+5. Payout = poolStart * (d(nextEthIn) - d(ethIn)) / T^2
+6. Transfers DGNRS from Earlybird pool to buyer
+
+**Storage reads:** earlybirdDgnrsPoolStart, earlybirdEthIn
+**Storage writes:** earlybirdDgnrsPoolStart, earlybirdEthIn
+**External calls:** DGNRS.poolBalance(), DGNRS.transferFromPool(), DGNRS.transferBetweenPools()
+**Called by:** DegenerusGame.recordMint, WhaleModule
+**Verdict:** CORRECT -- Quadratic emission curve front-loads rewards; overflow safe due to 1000 ETH target cap; sentinel pattern prevents re-entry of dump logic
+
+### Function 6: `_activate10LevelPass(address player, uint24 ticketStartLevel, uint32 ticketsPerLevel)`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal |
+| **Mutability** | state-modifying |
+| **Lines** | 961-1041 |
+| **Purpose** | Activate a 10-level pass. Updates mintPacked_ (levelCount, frozenUntilLevel, bundleType, lastLevel, day) and queues tickets for 10-level range |
+
+**Parameters:** player (address), ticketStartLevel (uint24), ticketsPerLevel (uint32)
+**Returns:** void
+
+**Logic:**
+1. Reads current mintPacked_ for player
+2. Calculates target frozen level = ticketStartLevel + 9
+3. New frozen level = max(current, target); delta = extension amount
+4. Levels to add = min(10, deltaFreeze) -- prevents double-counting if overlapping passes
+5. Updates packed fields: levelCount, frozenUntilLevel, bundleType (1 if <= current), lastLevel, day
+6. Writes mintPacked_ and calls _queueTicketRange for 10 levels
+
+**Storage reads:** mintPacked_
+**Storage writes:** mintPacked_
+**Called by:** WhaleModule (lazy pass), LootboxModule (lootbox lazy pass award)
+**Verdict:** CORRECT -- Delta-based level counting prevents double-dipping on overlapping passes; frozen level uses max() for monotonic advancement
+
+### Function 7: `_applyWhalePassStats(address player, uint24 ticketStartLevel)`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal |
+| **Mutability** | state-modifying |
+| **Lines** | 1046-1110 |
+| **Purpose** | Apply whale pass stats (levelCount/freeze/bundleType/lastLevel/day) without queueing tickets |
+
+**Parameters:** player (address), ticketStartLevel (uint24)
+**Returns:** void
+
+**Logic:**
+1. Same delta-based calculation as _activate10LevelPass but for 100 levels
+2. Target frozen = ticketStartLevel + 99
+3. Sets bundleType to 3 (100-level bundle)
+4. Does NOT call _queueTicketRange (tickets queued separately in WhaleModule)
+
+**Storage reads:** mintPacked_
+**Storage writes:** mintPacked_
+**Called by:** WhaleModule (whale bundle), EndgameModule (whale pass claim)
+**Verdict:** CORRECT -- Identical delta-based logic to prevent stat inflation; ticket separation allows flexible queueing
+
+### Function 8: `_simulatedDayIndex()`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal view |
+| **Mutability** | view |
+| **Lines** | 1113-1115 |
+| **Purpose** | Returns current day index from GameTimeLib |
+
+**Returns:** uint48
+
+**Logic:** Direct delegation to `GameTimeLib.currentDayIndex()`
+
+**Storage reads:** None (uses block.timestamp internally)
+**Called by:** DegenerusGame (multiple view functions), LootboxModule, BoonModule, MintModule, AdvanceModule
+**Verdict:** CORRECT -- Pure delegation to library
+
+### Function 9: `_simulatedDayIndexAt(uint48 ts)`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal pure |
+| **Mutability** | pure |
+| **Lines** | 1118-1120 |
+| **Purpose** | Returns day index for a specific timestamp |
+
+**Parameters:** ts (uint48)
+**Returns:** uint48
+
+**Logic:** Direct delegation to `GameTimeLib.currentDayIndexAt(ts)`
+
+**Storage reads:** None
+**Called by:** AdvanceModule (for timestamp-based day calculation)
+**Verdict:** CORRECT -- Pure function, no state access
+
+### Function 10: `_currentMintDay()`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal view |
+| **Mutability** | view |
+| **Lines** | 1123-1129 |
+| **Purpose** | Get current mint day from dailyIdx or fallback to _simulatedDayIndex() |
+
+**Returns:** uint32
+
+**Logic:**
+1. Reads dailyIdx
+2. If 0 (game hasn't started), falls back to _simulatedDayIndex()
+3. Returns as uint32 (safe truncation since dailyIdx fits in uint32 for practical game lifetimes)
+
+**Storage reads:** dailyIdx
+**Called by:** _activate10LevelPass, _applyWhalePassStats, MintModule
+**Verdict:** CORRECT -- Fallback ensures valid day before first advanceGame; uint32 truncation safe for practical values
+
+### Function 11: `_setMintDay(uint256 data, uint32 day, uint256 dayShift, uint256 dayMask)`
+
+| Field | Value |
+|-------|-------|
+| **Visibility** | internal pure |
+| **Mutability** | pure |
+| **Lines** | 1132-1142 |
+| **Purpose** | Update day field in packed mint data if changed (optimization: skip SSTORE if no change) |
+
+**Parameters:** data (uint256), day (uint32), dayShift (uint256), dayMask (uint256)
+**Returns:** uint256 (updated packed data)
+
+**Logic:**
+1. Extracts previous day from packed data
+2. Returns unchanged data if prevDay == day (no-op optimization)
+3. Clears day field and sets new value using bit manipulation
+
+**Storage reads:** None (pure function, operates on passed data)
+**Called by:** _activate10LevelPass, _applyWhalePassStats, MintModule
+**Verdict:** CORRECT -- Gas-efficient no-op check before bit manipulation; standard clear-and-set pattern
+
+---
+
+## Delegatecall Dispatch Paths
+
+All delegatecall paths from DegenerusGame.sol into the 10 modules, with selectors and function signatures. The AdvanceModule additionally dispatches to secondary modules (GameOverModule, EndgameModule, JackpotModule, MintModule) from within its own delegatecall context.
+
+### Direct Delegatecall from DegenerusGame.sol
+
+| # | Source Function | Target Module | Target Function | Selector | Access Control |
+|---|----------------|--------------|-----------------|----------|----------------|
+| 1 | advanceGame() | AdvanceModule | advanceGame() | 0x75b5e924 | Public (daily gate inside module) |
+| 2 | wireVrf() | AdvanceModule | wireVrf() | 0x06349d97 | ADMIN only (checked in module) |
+| 3 | updateVrfCoordinatorAndSub() | AdvanceModule | updateVrfCoordinatorAndSub() | 0x049d4020 | ADMIN only (checked in module) |
+| 4 | requestLootboxRng() | AdvanceModule | requestLootboxRng() | 0xb9073281 | Public |
+| 5 | reverseFlip() | AdvanceModule | reverseFlip() | 0xe068fdb5 | Public |
+| 6 | rawFulfillRandomWords() | AdvanceModule | rawFulfillRandomWords() | 0x1fe543e3 | VRF Coordinator only (checked in module) |
+| 7 | _purchaseFor() [purchase()] | MintModule | purchase() | 0x3f298725 | Public (via _resolvePlayer) |
+| 8 | purchaseCoin() | MintModule | purchaseCoin() | 0x4babe387 | Public (via _resolvePlayer) |
+| 9 | purchaseBurnieLootbox() | MintModule | purchaseBurnieLootbox() | 0x43886aaf | Public (via _resolvePlayer) |
+| 10 | _recordMintDataModule() [recordMint()] | MintModule | recordMintData() | 0x105ea8e6 | Self-call only |
+| 11 | _purchaseWhaleBundleFor() [purchaseWhaleBundle()] | WhaleModule | purchaseWhaleBundle() | 0xdbf15de3 | Public payable (via _resolvePlayer) |
+| 12 | _purchaseLazyPassFor() [purchaseLazyPass()] | WhaleModule | purchaseLazyPass() | 0xa86176fa | Public payable (via _resolvePlayer) |
+| 13 | _purchaseDeityPassFor() [purchaseDeityPass()] | WhaleModule | purchaseDeityPass() | 0xe1e124c5 | Public payable (via _resolvePlayer) |
+| 14 | onDeityPassTransfer() | WhaleModule | handleDeityPassTransfer() | 0x7d044328 | DEITY_PASS contract only |
+| 15 | _openLootBoxFor() [openLootBox()] | LootboxModule | openLootBox() | 0xca09b1f8 | Public (via _resolvePlayer) |
+| 16 | _openBurnieLootBoxFor() [openBurnieLootBox()] | LootboxModule | openBurnieLootBox() | 0x4b7b467f | Public (via _resolvePlayer) |
+| 17 | issueDeityBoon() | LootboxModule | issueDeityBoon() | 0x64759067 | Public (via _resolvePlayer, deity != recipient) |
+| 18 | consumeCoinflipBoon() | BoonModule | consumeCoinflipBoon() | 0x9a0e1436 | COIN or COINFLIP only |
+| 19 | consumeDecimatorBoon() | BoonModule | consumeDecimatorBoost() | 0x01738ebd | COIN only |
+| 20 | consumePurchaseBoost() | BoonModule | consumePurchaseBoost() | 0xef8c2c9f | Self-call only |
+| 21 | placeFullTicketBets() | DegeneretteModule | placeFullTicketBets() | 0xb0fbe56e | Public payable (via _resolvePlayer) |
+| 22 | placeFullTicketBetsFromAffiliateCredit() | DegeneretteModule | placeFullTicketBetsFromAffiliateCredit() | 0x5ba5befd | Public (via _resolvePlayer) |
+| 23 | resolveDegeneretteBets() | DegeneretteModule | resolveBets() | 0xd62ff33c | Public (via _resolvePlayer) |
+| 24 | creditDecJackpotClaimBatch() | DecimatorModule | creditDecJackpotClaimBatch() | 0xe3962c02 | JACKPOTS contract only (checked in module) |
+| 25 | creditDecJackpotClaim() | DecimatorModule | creditDecJackpotClaim() | 0x816f5ee7 | JACKPOTS contract only (checked in module) |
+| 26 | recordDecBurn() | DecimatorModule | recordDecBurn() | 0xbd225b88 | COIN only (checked in module) |
+| 27 | runDecimatorJackpot() | DecimatorModule | runDecimatorJackpot() | 0x275d3a40 | Self-call only |
+| 28 | consumeDecClaim() | DecimatorModule | consumeDecClaim() | 0xcb8725db | Self-call only |
+| 29 | claimDecimatorJackpot() | DecimatorModule | claimDecimatorJackpot() | 0xc15cc2f3 | Public |
+| 30 | runTerminalJackpot() | JackpotModule | runTerminalJackpot() | 0xa56efd97 | Self-call only |
+| 31 | _claimWhalePassFor() [claimWhalePass()] | EndgameModule | claimWhalePass() | 0x210ff5ec | Public (via _resolvePlayer) |
+
+### Indirect Delegatecall from AdvanceModule (within advanceGame() context)
+
+The AdvanceModule, executing via delegatecall from DegenerusGame, further dispatches to secondary modules. These execute in DegenerusGame's storage context (nested delegatecall).
+
+| # | AdvanceModule Function | Target Module | Target Function | Selector | Notes |
+|---|----------------------|--------------|-----------------|----------|-------|
+| A1 | _checkLiveness() | GameOverModule | handleGameOverDrain() | 0x249ae441 | When gameOver && day drain pending |
+| A2 | _checkLiveness() | GameOverModule | handleFinalSweep() | 0x68740da8 | Post-gameover final sweep (1 month) |
+| A3 | _rewardTopAffiliate() | EndgameModule | rewardTopAffiliate() | 0x0151fb53 | Level transition reward |
+| A4 | _runRewardJackpots() | EndgameModule | runRewardJackpots() | 0x9215a840 | Endgame settlement |
+| A5 | _consolidatePrizePools() | JackpotModule | consolidatePrizePools() | 0xf69e361d | Prize pool merge at phase transition |
+| A6 | _awardFinalDayDgnrsReward() | JackpotModule | awardFinalDayDgnrsReward() | 0xecc00965 | DGNRS reward on final daily jackpot |
+| A7 | payDailyJackpot() | JackpotModule | payDailyJackpot() | 0x2ef8c646 | Daily ETH jackpot distribution |
+| A8 | payDailyJackpotCoinAndTickets() | JackpotModule | payDailyJackpotCoinAndTickets() | 0xb1c9ed2d | Coin+ticket portion (split gas) |
+| A9 | _payDailyCoinJackpot() | JackpotModule | payDailyCoinJackpot() | 0x7a50cdf5 | Daily BURNIE jackpot |
+| A10 | _runProcessTicketBatch() | JackpotModule | processTicketBatch() | 0x2ff3118b | Batch ticket processing |
+| A11 | _processFutureTicketBatch() | MintModule | processFutureTicketBatch() | 0xe0a53bd7 | Near-future ticket activation |
+
+### Module Address Constants
+
+| Module | Constant | Address (Source) |
+|--------|----------|------------------|
+| AdvanceModule | GAME_ADVANCE_MODULE | ContractAddresses.GAME_ADVANCE_MODULE |
+| MintModule | GAME_MINT_MODULE | ContractAddresses.GAME_MINT_MODULE |
+| WhaleModule | GAME_WHALE_MODULE | ContractAddresses.GAME_WHALE_MODULE |
+| JackpotModule | GAME_JACKPOT_MODULE | ContractAddresses.GAME_JACKPOT_MODULE |
+| DecimatorModule | GAME_DECIMATOR_MODULE | ContractAddresses.GAME_DECIMATOR_MODULE |
+| EndgameModule | GAME_ENDGAME_MODULE | ContractAddresses.GAME_ENDGAME_MODULE |
+| GameOverModule | GAME_GAMEOVER_MODULE | ContractAddresses.GAME_GAMEOVER_MODULE |
+| LootboxModule | GAME_LOOTBOX_MODULE | ContractAddresses.GAME_LOOTBOX_MODULE |
+| BoonModule | GAME_BOON_MODULE | ContractAddresses.GAME_BOON_MODULE |
+| DegeneretteModule | GAME_DEGENERETTE_MODULE | ContractAddresses.GAME_DEGENERETTE_MODULE |
+
+All 10 module addresses are compile-time constants from ContractAddresses.sol (zeroed in source, populated by deploy pipeline via nonce prediction).
+
+---
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | No bugs found |
+| CONCERN | 0 | No concerns identified |
+| GAS | 0 | No gas issues (packed slots are optimal) |
+| INFORMATIONAL | 2 | 1 deprecated storage variable (_deprecated_deityTicketBoostDay), 1 NatSpec comment references "airdrop" fields in Slot 0 that have been repurposed |
+| CORRECT | 11 | All 11 functions verified correct |
+
+### Detailed Informationals
+
+**INFO-1: Deprecated storage variable `_deprecated_deityTicketBoostDay`**
+- Dead storage preserved for slot alignment
+- No reads or writes anywhere in the codebase
+- Correct approach for non-upgradeable contracts (cannot remove without shifting slots)
+
+**INFO-2: Slot 0 NatSpec references removed airdrop fields**
+- Slot 0 layout comment shows bytes [18:22] and [22:26] as "unused" with notes about previous airdrop uses
+- These are correctly documented as unused padding
+- No impact on correctness
+
+---
+
+## Storage Collision Analysis
+
+**No collisions detected.** All delegatecall modules inherit DegenerusGameStorage as their sole ancestor, ensuring identical slot layouts. The contract enforces this via:
+
+1. All storage variables declared in a single contract (DegenerusGameStorage)
+2. No module declares its own storage variables
+3. Inheritance chain: Module -> DegenerusGameStorage (no diamond inheritance)
+4. Constants and immutables stored in bytecode, not storage slots
+
+**Bit-packed variables verified:**
+- Slot 0: 6+6+6+4+4+3+1+2 = 32 bytes (perfect packing)
+- Slot 1: 1+1+1+1+1+1+1+1+1+1+1+1+6+14 = 32 bytes (18 used, 14 padding)
+- Slot 2: 16+16 = 32 bytes (128-bit price + 128-bit padding)
+- mintPacked_: All bit fields verified non-overlapping via BitPackingLib shift constants
+- dailyTicketBudgetsPacked: Internal bit packing with explicit offset documentation
+- degeneretteBets: 237 bits used of 256 (19 bits available)
+- topDegeneretteByLevel: 96+160 = 256 bits (perfectly packed)
+- lootboxEth: 232+24 = 256 bits (perfectly packed)
+- decBucketOffsetPacked: 44 bits used of 64 (20 bits available)
