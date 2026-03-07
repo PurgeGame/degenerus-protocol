@@ -185,3 +185,241 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 - Minor: `stethBal = 0` assignment on line 195 is unnecessary since the variable is only read in the DGNRS block which re-checks `dgnrsAmount <= stethBal`. After vault takes all stETH and sets `stethBal = 0`, DGNRS correctly falls through to the pure-ETH path. The assignment is redundant but not harmful.
 
 **Verdict:** CORRECT
+
+---
+
+## Game-Over Terminal State Machine
+
+### Overview
+
+The game-over state is a permanent, irreversible terminal condition triggered by liveness guards (inactivity timeouts). Once entered, the system transitions through a multi-phase shutdown sequence: drain (jackpot distribution + vault transfer), waiting period (30 days for player claims), and final sweep (remaining dust to vault).
+
+### Pre-GameOver State
+
+Game-over is triggered by `DegenerusGameAdvanceModule._checkLiveness()` when:
+
+- **Level 0:** `block.timestamp - levelStartTime > 912 days` (~2.5 years since deploy with no level advancement)
+- **Level > 0:** `block.timestamp - levelStartTime > 365 days` (1 year of inactivity at any level)
+
+The liveness guard fires during any `advanceGame()` call. Before invoking `handleGameOverDrain`, the AdvanceModule:
+
+1. Checks if `nextPrizePool >= levelPrizePool[level]` -- if yes, the game is not actually stalled (safety check prevents false game-over)
+2. Acquires RNG via `_gameOverEntropy()`:
+   - Requests Chainlink VRF (returns 1 = request sent, wait for fulfillment)
+   - After 3-day VRF timeout: falls back to earliest historical VRF word from `rngWordByDay`
+   - Stores the word in `rngWordByDay[dailyIdx]`
+3. Calls `handleGameOverDrain(dailyIdx)` via delegatecall
+
+### handleGameOverDrain Phase
+
+On entry, `gameOverFinalJackpotPaid == false` (first and only execution):
+
+```
+Step 1: Snapshot balances
+  ethBal = address(this).balance
+  stBal  = steth.balanceOf(address(this))
+  totalFunds = ethBal + stBal
+
+Step 2: Deity pass refunds (level < 10 only)
+  budget = totalFunds - claimablePool  (protect existing liabilities)
+  For each deityPassOwners[i] (FIFO order):
+    refund = 20 ETH * purchasedCount
+    refund = min(refund, budget)
+    if refund != 0:
+      claimableWinnings[owner] += refund
+      totalRefunded += refund
+      budget -= refund
+    if budget == 0: break
+  claimablePool += totalRefunded
+
+Step 3: Recalculate available (after deity refunds may have increased claimablePool)
+  available = totalFunds - claimablePool
+  if available == 0: return (all funds reserved for claims)
+
+Step 4: Set terminal flags
+  gameOver = true
+  gameOverTime = block.timestamp
+  gameOverFinalJackpotPaid = true
+
+Step 5: Fetch RNG
+  rngWord = rngWordByDay[day]
+  if rngWord == 0: return (RNG not ready, wait)
+
+Step 6: Decimator jackpot (10%)
+  decPool = available / 10
+  decRefund = runDecimatorJackpot(decPool, lvl, rngWord)
+  claimablePool += (decPool - decRefund)
+  remaining = available - decPool + decRefund
+
+Step 7: Terminal jackpot (remaining 90% + decimator refund)
+  termPaid = runTerminalJackpot(remaining, lvl+1, rngWord)
+  remaining -= termPaid
+
+Step 8: Vault sweep (undistributed remainder)
+  if remaining > 0: _sendToVault(remaining, stBal)
+```
+
+### 30-Day Waiting Period
+
+After `handleGameOverDrain` completes:
+- `gameOver == true`, `gameOverTime` is set, `gameOverFinalJackpotPaid == true`
+- Players can still call `claimWinnings()` to withdraw their credited balances
+- `claimablePool` tracks the aggregate liability
+- The system holds ETH/stETH >= `claimablePool` to cover all pending claims
+- No new purchases or game actions are possible (game logic checks `gameOver` flag)
+
+### handleFinalSweep Phase
+
+After `block.timestamp >= gameOverTime + 30 days`:
+- Triggered by any `advanceGame()` call (liveness guard routes to `handleFinalSweep` when `gameOver == true`)
+- Shuts down VRF subscription via `admin.shutdownVrf()` (fire-and-forget)
+- Sweeps excess funds: `totalFunds - claimablePool` to Vault (50%) and DGNRS (50%)
+- `claimablePool` reserve is preserved for ongoing player withdrawals
+- Can be called multiple times safely (no-ops after first sweep)
+
+### Post-Sweep Terminal State
+
+After final sweep:
+- All excess ETH/stETH transferred to Vault and DGNRS
+- Only `claimablePool` ETH remains in the game contract
+- Players can still claim their `claimableWinnings` indefinitely (no expiry on claims)
+- VRF subscription cancelled, LINK swept to vault
+- System is fully drained and inert
+
+### State Transition Diagram
+
+```
+[Normal Game]
+    |
+    | advanceGame() -> _checkLiveness() fires
+    | (912d level-0 timeout OR 365d inactivity)
+    v
+[Liveness Triggered]
+    |
+    | Safety check: nextPrizePool < levelPrizePool[level]
+    | Acquire RNG via _gameOverEntropy()
+    v
+[RNG Acquired] ------rngWord==0/1------> [Wait for VRF/Fallback]
+    |                                          |
+    | rngWord ready                            | (re-call advanceGame)
+    v                                          |
+[handleGameOverDrain]  <-----------------------+
+    |
+    | gameOver=true, gameOverTime=now, gameOverFinalJackpotPaid=true
+    | Deity refunds credited (level<10)
+    | Decimator jackpot (10%)
+    | Terminal jackpot (90%+refund)
+    | Remainder -> vault/DGNRS
+    v
+[Drain Complete, Pools Zeroed]
+    |
+    | 30 days pass...
+    | (players claim winnings during this period)
+    v
+[handleFinalSweep]
+    |
+    | VRF shutdown (fire-and-forget)
+    | Excess funds -> vault (50%) + DGNRS (50%)
+    | claimablePool preserved
+    v
+[Fully Swept, Terminal]
+    |
+    | Players claim remaining winnings indefinitely
+    v
+[Inert Contract]
+```
+
+## Deity Pass Refund Logic
+
+### Refund Calculation
+
+- **Eligibility:** Only for early game over (levels 0-9, i.e., `currentLevel < 10`)
+- **Rate:** Flat `DEITY_PASS_EARLY_GAMEOVER_REFUND = 20 ether` per deity pass purchased
+- **Count source:** `deityPassPurchasedCount[owner]` (excludes non-purchased passes like grants)
+- **Per-owner refund:** `20 ETH * purchasedCount`
+
+### Budget Constraint
+
+- **Budget:** `totalFunds - claimablePool` (total contract ETH+stETH minus existing claim liabilities)
+- If budget < total refunds needed, passes are refunded FIFO until budget exhausted
+- Remaining pass holders receive zero or partial refund
+
+### FIFO Ordering
+
+- Iteration follows `deityPassOwners[]` array, which preserves insertion order
+- First-purchased (earliest array index) gets refunded first
+- If budget runs out mid-iteration, the loop breaks with `if (budget == 0) break`
+- Later purchasers may receive nothing if budget is exhausted
+
+### Budget Exhaustion Example
+
+With 3 deity pass owners (each purchased 1 pass) and budget = 45 ETH:
+- Owner A: refund = 20 ETH, budget = 25 ETH remaining
+- Owner B: refund = 20 ETH, budget = 5 ETH remaining
+- Owner C: refund = min(20, 5) = 5 ETH, budget = 0 ETH -- loop breaks
+
+### Accounting
+
+- Refunds credited to `claimableWinnings[owner]` (pull pattern, not direct transfer)
+- `claimablePool += totalRefunded` after loop (single update, not per-iteration)
+- Deity refunds reduce the "available" pool for subsequent jackpot distribution
+
+## ETH Mutation Path Map
+
+| # | Path | Source | Destination | Trigger | Function | Amount |
+|---|------|--------|-------------|---------|----------|--------|
+| 1 | Deity refund credit | Available balance (totalFunds - claimablePool) | claimableWinnings[owner] (pull-pattern credit) | Game over, level < 10 | handleGameOverDrain | 20 ETH/pass, budget-capped |
+| 2 | Decimator jackpot | Available balance (10%) | DecimatorModule snapshot (deferred claims) | Game over drain | handleGameOverDrain -> runDecimatorJackpot | available / 10 |
+| 3 | Decimator refund return | DecimatorModule (unallocated) | Terminal jackpot pool | Decimator has no winners | handleGameOverDrain | decRefund (returned to remaining) |
+| 4 | Terminal jackpot | Remaining (90% + dec refund) | claimableWinnings via JackpotModule | Game over drain | handleGameOverDrain -> runTerminalJackpot | remaining after decimator |
+| 5 | Undistributed vault sweep | Remainder after terminal jackpot | Vault (50%) + DGNRS (50%) | Terminal jackpot underpays | handleGameOverDrain -> _sendToVault | remaining - termPaid |
+| 6 | stETH to Vault | Contract stETH balance | DegenerusVault (stETH transfer) | Game over drain or final sweep | _sendToVault | min(vaultAmount, stethBal) |
+| 7 | stETH to DGNRS | Contract stETH balance (after vault) | DegenerusStonk (approve+depositSteth) | Game over drain or final sweep | _sendToVault | min(dgnrsAmount, remaining stethBal) |
+| 8 | ETH to Vault | Contract ETH balance | DegenerusVault (raw ETH call) | stETH insufficient for vault share | _sendToVault | vaultAmount - stethBal |
+| 9 | ETH to DGNRS | Contract ETH balance | DegenerusStonk (raw ETH call) | stETH insufficient for DGNRS share | _sendToVault | dgnrsAmount - remaining stethBal |
+| 10 | Final sweep excess | All excess (totalFunds - claimablePool) | Vault (50%) + DGNRS (50%) | 30 days post-gameover | handleFinalSweep -> _sendToVault | totalFunds - claimablePool |
+| 11 | VRF shutdown + LINK sweep | Admin VRF subscription LINK | DegenerusVault | 30 days post-gameover | handleFinalSweep -> admin.shutdownVrf() | All subscription LINK |
+
+### ETH Flow Ordering Within handleGameOverDrain
+
+```
+totalFunds (ETH + stETH)
+    |
+    +--> claimablePool reserved (existing liabilities)
+    |
+    +--> Deity refunds (level<10): credited to claimableWinnings, claimablePool increased
+    |
+    +--> available = totalFunds - claimablePool (recalculated after deity refunds)
+    |
+    +--> 10% to Decimator jackpot
+    |       |
+    |       +--> decSpend -> claimablePool (winners credited)
+    |       +--> decRefund -> returned to remaining
+    |
+    +--> remaining to Terminal jackpot (next-level ticketholders)
+    |       |
+    |       +--> termPaid -> claimablePool (via JackpotModule internally)
+    |       +--> undistributed -> _sendToVault (50% vault, 50% DGNRS)
+    |
+    +--> [30 days later] handleFinalSweep: excess -> _sendToVault
+```
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | None found |
+| CONCERN | 0 | None found |
+| GAS (informational) | 1 | `handleFinalSweep` has no guard flag; re-calls cost gas for no-op (harmless, negligible lifetime impact) |
+| CORRECT | 3 | All 3 functions verified correct |
+
+### Overall Assessment
+
+All 3 functions in DegenerusGameGameOverModule are **CORRECT**. The module implements a clean, irreversible terminal state machine with proper accounting invariants. Key strengths:
+
+- Idempotency via `gameOverFinalJackpotPaid` flag (drain runs exactly once)
+- Solvency preservation: `claimablePool` always reserved before any distribution
+- Pull pattern for deity refunds (no direct transfers to external addresses during drain)
+- Fire-and-forget VRF shutdown (cannot block fund recovery)
+- 30-day waiting period provides ample time for player claim withdrawals
+- stETH-first priority in `_sendToVault` maximizes yield-bearing asset flow to permanent reserves
