@@ -34,7 +34,7 @@ export async function assertSolvencyInvariant(game, steth) {
 
   const current = await game.currentPrizePoolView();
   const next = await game.nextPrizePoolView();
-  const future = await game.futurePrizePoolView(0n); // 0n = current future pool (BigInt required for uint24)
+  const future = await game.futurePrizePoolView();
   const claimable = await game.claimablePoolView();
   const obligations = current + next + future + claimable;
 

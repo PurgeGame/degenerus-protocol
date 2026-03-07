@@ -2037,10 +2037,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Get the unified future pool reserve.
-    /// @param lvl Unused; retained for interface compatibility.
     /// @return The futurePrizePool value (ETH wei).
-    function futurePrizePoolView(uint24 lvl) external view returns (uint256) {
-        lvl;
+    function futurePrizePoolView() external view returns (uint256) {
         return futurePrizePool;
     }
 
