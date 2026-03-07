@@ -167,7 +167,7 @@ Plans:
   2. Every internal/private function in DegenerusGame.sol has a JSON + markdown audit entry
   3. Every storage variable in DegenerusGameStorage.sol is documented with its slot, type, which modules read it, and which modules write it
   4. All delegatecall dispatch paths from DegenerusGame into modules are enumerated with their selectors and target modules
-**Plans:** 3/7 plans executed
+**Plans:** 5/7 plans executed
 Plans:
 - [ ] 49-01-PLAN.md -- Core entry points audit (advanceGame, wireVrf, recordMint, operator approval) (CORE-01)
 - [ ] 49-02-PLAN.md -- Purchase & mint payment audit (purchase, purchaseCoin, whale/lazy/deity pass) (CORE-01)
@@ -312,7 +312,7 @@ Phases 48 first (infrastructure). Phases 49-56 can be parallelized after 48. Pha
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 48. Audit Infrastructure | 2/2 | Complete    | 2026-03-07 |
-| 49. Core Game Contract | 3/7 | In Progress|  |
+| 49. Core Game Contract | 5/7 | In Progress|  |
 | 50. ETH Flow Modules | 4/4 | Complete    | 2026-03-07 |
 | 51. Endgame & Lifecycle Modules | 4/4 | Complete    | 2026-03-07 |
 | 52. Whale & Player Modules | 2/4 | In Progress|  |
