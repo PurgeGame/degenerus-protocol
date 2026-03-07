@@ -117,7 +117,7 @@ See: `.planning/milestones/v5.0-ROADMAP.md` for full phase details.
 - [ ] **Phase 43: Governance & Gating Tests** - DGVE majority governance, VRF shutdown lifecycle, tiered advanceGame mint gate (10 requirements)
 - [ ] **Phase 44: Affiliate System Tests** - Per-referrer commission caps, lootbox activity taper, leaderboard tracking (9 requirements)
 - [x] **Phase 45: Security & Economic Hardening Tests** - Post-gameOver locks, deity refund mechanics, compressed jackpots, economic invariants (17 requirements) (completed 2026-03-07)
-- [ ] **Phase 46: Game Theory Paper Parity** - Systematic extraction of every number from the theory paper and verification against contract constants (18 requirements)
+- [x] **Phase 46: Game Theory Paper Parity** - Systematic extraction of every number from the theory paper and verification against contract constants (18 requirements) (completed 2026-03-07)
 - [x] **Phase 47: NatSpec Comment Audit** - Read every NatSpec comment across all 22 contracts and verify each claim against actual code (10 requirements) (completed 2026-03-06)
 
 ## Phase Details
@@ -173,7 +173,7 @@ Plans:
   4. A sanity-check test verifies affiliate commission rates (25%/20%/5%), tier structure (direct/upline1/upline2 at 20%/4%), whale/lazy/deity pass pricing, coinflip payout distribution (5%/90%/5%, mean ~1.97x), Degenerette base payouts and ROI curve, and pass capital injection splits all match the paper
 **Plans:** 1 plans
 Plans:
-- [ ] 46-01-PLAN.md -- Validate and strengthen paper parity tests (PAR-01..18)
+- [x] 46-01-PLAN.md -- Validate and strengthen paper parity tests (PAR-01..18)
 
 ### Phase 47: NatSpec Comment Audit
 **Goal**: Every NatSpec comment across all 22 contracts has been read and verified against actual code -- no stale claims, no wrong numbers, no misleading descriptions survive
@@ -211,7 +211,7 @@ Phases 43, 44, 45, 46 are parallelizable (independent). Phase 47 depends on 43-4
 | 43. Governance & Gating Tests | v6.0 | 0/1 | Not started | - |
 | 44. Affiliate System Tests | v6.0 | 0/1 | Not started | - |
 | 45. Security & Economic Hardening Tests | v6.0 | 2/2 | Complete | 2026-03-07 |
-| 46. Game Theory Paper Parity | v6.0 | 0/1 | Not started | - |
+| 46. Game Theory Paper Parity | v6.0 | 1/1 | Complete | 2026-03-07 |
 | 47. NatSpec Comment Audit | 8/8 | Complete    | 2026-03-06 | - |
 
 **Cumulative:** 42 phases complete, 5 phases planned. 6 milestones shipped, 1 in progress.

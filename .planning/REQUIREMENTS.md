@@ -60,24 +60,24 @@ Requirements for contract hardening milestone. Each maps to roadmap phases.
 
 ### Game Theory Paper Parity (PAR)
 
-- [ ] **PAR-01**: Verify PriceLookupLib prices match game theory paper at every tier boundary (levels 0,4,5,9,10,29,30,59,60,89,90,99,100,129,130,159,160,189,190,199,200)
-- [ ] **PAR-02**: Verify ticket cost formula `costWei = (priceWei * qty) / 400` matches paper's "one entry = P_l/4 ETH"
-- [ ] **PAR-03**: Verify prize pool split BPS (90/10 ticket, 10/90 lootbox, 40/40/20 presale lootbox) match paper
-- [ ] **PAR-04**: Verify jackpot day structure (5 days, 6-14% days 1-4, 100% day 5) matches paper
-- [ ] **PAR-05**: Verify jackpot bucket shares (20/20/20/20 days 1-4, 60/13.33/13.33/13.34 day 5) match paper
-- [ ] **PAR-06**: Verify activity score components and caps (50% streak, 25% mint count, 100% quest, 50% affiliate, +10%/+40%/+80% passes) match paper
-- [ ] **PAR-07**: Verify lootbox EV breakpoints (80%->100% at 0-60%, 100%->135% at 60-255%) match paper
-- [ ] **PAR-08**: Verify affiliate commission rates (25% fresh L1-3, 20% fresh L4+, 5% recycled) match paper
-- [ ] **PAR-09**: Verify affiliate tier structure (direct -> upline1 at 20% -> upline2 at 4%) matches paper
-- [ ] **PAR-10**: Verify whale bundle pricing (2.4 ETH levels 0-3, 4 ETH level 4+) matches paper
-- [ ] **PAR-11**: Verify lazy pass pricing (0.24 ETH flat levels 0-2, sum-of-10-level-prices level 3+) matches paper
-- [ ] **PAR-12**: Verify deity pass T(n) pricing (24 + k*(k+1)/2 ETH) matches paper
-- [ ] **PAR-13**: Verify coinflip payout distribution (5%/90%/5% tiers, mean ~1.97x) matches paper
-- [ ] **PAR-14**: Verify yield distribution split (23% vault, 23% DGNRS, 46% futurePool, 8% buffer) matches paper
-- [ ] **PAR-15**: Verify BURNIE entry cost (250 BURNIE = 1 entry, 1000 BURNIE = 1 full ticket) matches paper
-- [ ] **PAR-16**: Verify Degenerette base payouts and ROI curve match paper
-- [ ] **PAR-17**: Verify pass capital injection splits (30/70 level 0, 5/95 level 1+ for whale/deity; 90/10 all levels for lazy) match paper
-- [ ] **PAR-18**: Verify future ticket odds (95% near k in [0,5], 5% far k in [5,50]) match paper
+- [x] **PAR-01**: Verify PriceLookupLib prices match game theory paper at every tier boundary (levels 0,4,5,9,10,29,30,59,60,89,90,99,100,129,130,159,160,189,190,199,200)
+- [x] **PAR-02**: Verify ticket cost formula `costWei = (priceWei * qty) / 400` matches paper's "one entry = P_l/4 ETH"
+- [x] **PAR-03**: Verify prize pool split BPS (90/10 ticket, 10/90 lootbox, 40/40/20 presale lootbox) match paper
+- [x] **PAR-04**: Verify jackpot day structure (5 days, 6-14% days 1-4, 100% day 5) matches paper
+- [x] **PAR-05**: Verify jackpot bucket shares (20/20/20/20 days 1-4, 60/13.33/13.33/13.34 day 5) match paper
+- [x] **PAR-06**: Verify activity score components and caps (50% streak, 25% mint count, 100% quest, 50% affiliate, +10%/+40%/+80% passes) match paper
+- [x] **PAR-07**: Verify lootbox EV breakpoints (80%->100% at 0-60%, 100%->135% at 60-255%) match paper
+- [x] **PAR-08**: Verify affiliate commission rates (25% fresh L1-3, 20% fresh L4+, 5% recycled) match paper
+- [x] **PAR-09**: Verify affiliate tier structure (direct -> upline1 at 20% -> upline2 at 4%) matches paper
+- [x] **PAR-10**: Verify whale bundle pricing (2.4 ETH levels 0-3, 4 ETH level 4+) matches paper
+- [x] **PAR-11**: Verify lazy pass pricing (0.24 ETH flat levels 0-2, sum-of-10-level-prices level 3+) matches paper
+- [x] **PAR-12**: Verify deity pass T(n) pricing (24 + k*(k+1)/2 ETH) matches paper
+- [x] **PAR-13**: Verify coinflip payout distribution (5%/90%/5% tiers, mean ~1.97x) matches paper
+- [x] **PAR-14**: Verify yield distribution split (23% vault, 23% DGNRS, 46% futurePool, 8% buffer) matches paper
+- [x] **PAR-15**: Verify BURNIE entry cost (250 BURNIE = 1 entry, 1000 BURNIE = 1 full ticket) matches paper
+- [x] **PAR-16**: Verify Degenerette base payouts and ROI curve match paper
+- [x] **PAR-17**: Verify pass capital injection splits (30/70 level 0, 5/95 level 1+ for whale/deity; 90/10 all levels for lazy) match paper
+- [x] **PAR-18**: Verify future ticket odds (95% near k in [0,5], 5% far k in [5,50]) match paper
 
 ### NatSpec Comment Accuracy (DOC)
 
@@ -154,24 +154,24 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ECON-03 | Phase 45 | Complete |
 | ECON-04 | Phase 45 | Complete |
 | ECON-05 | Phase 45 | Complete |
-| PAR-01 | Phase 46 | Pending |
-| PAR-02 | Phase 46 | Pending |
-| PAR-03 | Phase 46 | Pending |
-| PAR-04 | Phase 46 | Pending |
-| PAR-05 | Phase 46 | Pending |
-| PAR-06 | Phase 46 | Pending |
-| PAR-07 | Phase 46 | Pending |
-| PAR-08 | Phase 46 | Pending |
-| PAR-09 | Phase 46 | Pending |
-| PAR-10 | Phase 46 | Pending |
-| PAR-11 | Phase 46 | Pending |
-| PAR-12 | Phase 46 | Pending |
-| PAR-13 | Phase 46 | Pending |
-| PAR-14 | Phase 46 | Pending |
-| PAR-15 | Phase 46 | Pending |
-| PAR-16 | Phase 46 | Pending |
-| PAR-17 | Phase 46 | Pending |
-| PAR-18 | Phase 46 | Pending |
+| PAR-01 | Phase 46 | Complete |
+| PAR-02 | Phase 46 | Complete |
+| PAR-03 | Phase 46 | Complete |
+| PAR-04 | Phase 46 | Complete |
+| PAR-05 | Phase 46 | Complete |
+| PAR-06 | Phase 46 | Complete |
+| PAR-07 | Phase 46 | Complete |
+| PAR-08 | Phase 46 | Complete |
+| PAR-09 | Phase 46 | Complete |
+| PAR-10 | Phase 46 | Complete |
+| PAR-11 | Phase 46 | Complete |
+| PAR-12 | Phase 46 | Complete |
+| PAR-13 | Phase 46 | Complete |
+| PAR-14 | Phase 46 | Complete |
+| PAR-15 | Phase 46 | Complete |
+| PAR-16 | Phase 46 | Complete |
+| PAR-17 | Phase 46 | Complete |
+| PAR-18 | Phase 46 | Complete |
 | DOC-01 | Phase 47 | Complete |
 | DOC-02 | Phase 47 | Complete |
 | DOC-03 | Phase 47 | Complete |
@@ -190,4 +190,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-06*
-*Last updated: 2026-03-06 after roadmap creation*
+*Last updated: 2026-03-07 — PAR-01..18 complete (Phase 46)*
