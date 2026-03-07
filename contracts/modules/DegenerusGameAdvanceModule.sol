@@ -371,7 +371,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         (ok, data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
             abi.encodeWithSelector(
                 IDegenerusGameGameOverModule.handleGameOverDrain.selector,
-                _dailyIdx
+                day
             )
         );
         if (!ok) _revertDelegate(data);

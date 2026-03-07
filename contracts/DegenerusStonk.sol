@@ -807,10 +807,6 @@ contract DegenerusStonk {
             }
         }
 
-        if (ethOut > 0) {
-            (bool success, ) = player.call{value: ethOut}("");
-            if (!success) revert TransferFailed();
-        }
         if (stethOut > 0) {
             if (!steth.transfer(player, stethOut)) revert TransferFailed();
         }
@@ -818,6 +814,11 @@ contract DegenerusStonk {
         if (wwxrpOut > 0) {
             if (!wwxrp.transfer(player, wwxrpOut)) revert TransferFailed();
             emit BurnWwxrp(player, wwxrpOut);
+        }
+
+        if (ethOut > 0) {
+            (bool success, ) = player.call{value: ethOut}("");
+            if (!success) revert TransferFailed();
         }
 
         emit Burn(player, amount, ethOut, stethOut, burnieOut);
