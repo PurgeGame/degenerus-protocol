@@ -9,31 +9,31 @@ Requirements for contract hardening milestone. Each maps to roadmap phases.
 
 ### Governance & Admin (ADMIN)
 
-- [ ] **ADMIN-01**: Test that only accounts holding >50.1% DGVE supply pass `onlyOwner` check in DegenerusAdmin (CREATOR address alone must fail)
-- [ ] **ADMIN-02**: Test that only accounts holding >50.1% DGVE supply pass `onlyVaultOwner` check in DegenerusVault (threshold is `balance * 1000 > supply * 501`)
-- [ ] **ADMIN-03**: Test that `shutdownVrf()` reverts when called by any address except GAME contract
-- [ ] **ADMIN-04**: Test that `shutdownVrf()` cancels subscription, sweeps LINK to VAULT, and sets subscriptionId to 0
-- [ ] **ADMIN-05**: Test that `shutdownVrf()` silently succeeds (no revert) when subscriptionId is already 0
-- [ ] **ADMIN-06**: Test that `shutdownVrf()` try/catch paths handle coordinator failure and LINK transfer failure gracefully
+- [x] **ADMIN-01**: Test that only accounts holding >50.1% DGVE supply pass `onlyOwner` check in DegenerusAdmin (CREATOR address alone must fail)
+- [x] **ADMIN-02**: Test that only accounts holding >50.1% DGVE supply pass `onlyVaultOwner` check in DegenerusVault (threshold is `balance * 1000 > supply * 501`)
+- [x] **ADMIN-03**: Test that `shutdownVrf()` reverts when called by any address except GAME contract
+- [x] **ADMIN-04**: Test that `shutdownVrf()` cancels subscription, sweeps LINK to VAULT, and sets subscriptionId to 0
+- [x] **ADMIN-05**: Test that `shutdownVrf()` silently succeeds (no revert) when subscriptionId is already 0
+- [x] **ADMIN-06**: Test that `shutdownVrf()` try/catch paths handle coordinator failure and LINK transfer failure gracefully
 
 ### Advance Module Gating (GATE)
 
-- [ ] **GATE-01**: Test tiered advanceGame mint gate — caller must have minted on the current purchase day to advance
-- [ ] **GATE-02**: Test time-based unlock — gate relaxes after configured delay
-- [ ] **GATE-03**: Test DGVE majority holder bypasses mint gate entirely
-- [ ] **GATE-04**: Test that non-minter, non-DGVE-holder reverts with `MustMintToday()`
+- [x] **GATE-01**: Test tiered advanceGame mint gate — caller must have minted on the current purchase day to advance
+- [x] **GATE-02**: Test time-based unlock — gate relaxes after configured delay
+- [x] **GATE-03**: Test DGVE majority holder bypasses mint gate entirely
+- [x] **GATE-04**: Test that non-minter, non-DGVE-holder reverts with `MustMintToday()`
 
 ### Affiliate System (AFF)
 
-- [ ] **AFF-01**: Test per-referrer commission cap — affiliate earns at most 0.5 ETH BURNIE from a single sender per level
-- [ ] **AFF-02**: Test that cap tracks cumulative spend — multiple small purchases from same sender hit cap
-- [ ] **AFF-03**: Test that cap resets per level — same sender/affiliate pair can earn again at next level
-- [ ] **AFF-04**: Test that cap is per-affiliate — different affiliates have independent caps for same sender
-- [ ] **AFF-05**: Test lootbox activity taper — score <15000 BPS: 100% payout, no taper
-- [ ] **AFF-06**: Test lootbox activity taper — score 15000-25500 BPS: linear taper from 100% to 50%
-- [ ] **AFF-07**: Test lootbox activity taper — score >=25500 BPS: floor at 50% payout
-- [ ] **AFF-08**: Test leaderboard tracking uses full untapered amount (even when payout is tapered)
-- [ ] **AFF-09**: Test `lootboxActivityScore` parameter flows correctly through `payAffiliate`
+- [x] **AFF-01**: Test per-referrer commission cap — affiliate earns at most 0.5 ETH BURNIE from a single sender per level
+- [x] **AFF-02**: Test that cap tracks cumulative spend — multiple small purchases from same sender hit cap
+- [x] **AFF-03**: Test that cap resets per level — same sender/affiliate pair can earn again at next level
+- [x] **AFF-04**: Test that cap is per-affiliate — different affiliates have independent caps for same sender
+- [x] **AFF-05**: Test lootbox activity taper — score <15000 BPS: 100% payout, no taper
+- [x] **AFF-06**: Test lootbox activity taper — score 15000-25500 BPS: linear taper from 100% to 50%
+- [x] **AFF-07**: Test lootbox activity taper — score >=25500 BPS: floor at 50% payout
+- [x] **AFF-08**: Test leaderboard tracking uses full untapered amount (even when payout is tapered)
+- [x] **AFF-09**: Test `lootboxActivityScore` parameter flows correctly through `payAffiliate`
 
 ### Security Fixes (FIX)
 
@@ -118,25 +118,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ADMIN-01 | Phase 43 | Pending |
-| ADMIN-02 | Phase 43 | Pending |
-| ADMIN-03 | Phase 43 | Pending |
-| ADMIN-04 | Phase 43 | Pending |
-| ADMIN-05 | Phase 43 | Pending |
-| ADMIN-06 | Phase 43 | Pending |
-| GATE-01 | Phase 43 | Pending |
-| GATE-02 | Phase 43 | Pending |
-| GATE-03 | Phase 43 | Pending |
-| GATE-04 | Phase 43 | Pending |
-| AFF-01 | Phase 44 | Pending |
-| AFF-02 | Phase 44 | Pending |
-| AFF-03 | Phase 44 | Pending |
-| AFF-04 | Phase 44 | Pending |
-| AFF-05 | Phase 44 | Pending |
-| AFF-06 | Phase 44 | Pending |
-| AFF-07 | Phase 44 | Pending |
-| AFF-08 | Phase 44 | Pending |
-| AFF-09 | Phase 44 | Pending |
+| ADMIN-01 | Phase 43 | Complete |
+| ADMIN-02 | Phase 43 | Complete |
+| ADMIN-03 | Phase 43 | Complete |
+| ADMIN-04 | Phase 43 | Complete |
+| ADMIN-05 | Phase 43 | Complete |
+| ADMIN-06 | Phase 43 | Complete |
+| GATE-01 | Phase 43 | Complete |
+| GATE-02 | Phase 43 | Complete |
+| GATE-03 | Phase 43 | Complete |
+| GATE-04 | Phase 43 | Complete |
+| AFF-01 | Phase 44 | Complete |
+| AFF-02 | Phase 44 | Complete |
+| AFF-03 | Phase 44 | Complete |
+| AFF-04 | Phase 44 | Complete |
+| AFF-05 | Phase 44 | Complete |
+| AFF-06 | Phase 44 | Complete |
+| AFF-07 | Phase 44 | Complete |
+| AFF-08 | Phase 44 | Complete |
+| AFF-09 | Phase 44 | Complete |
 | FIX-01 | Phase 45 | Complete |
 | FIX-02 | Phase 45 | Complete |
 | FIX-03 | Phase 45 | Complete |
@@ -185,9 +185,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 **Coverage:**
 - v6.0 requirements: 64 total
-- Mapped to phases: 64
-- Unmapped: 0
+- Complete: 64
+- Pending: 0
 
 ---
 *Requirements defined: 2026-03-06*
-*Last updated: 2026-03-07 — PAR-01..18 complete (Phase 46)*
+*Last updated: 2026-03-07 — all 64 requirements complete (Phases 43-47)*
