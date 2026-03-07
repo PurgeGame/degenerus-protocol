@@ -151,9 +151,8 @@ interface IDegenerusGame {
     function issueDeityBoon(address deity, address recipient, uint8 slot) external;
 
     /// @notice Get the future prize pool (single pool).
-    /// @param lvl Unused; retained for interface compatibility.
     /// @return Future prize pool amount in wei.
-    function futurePrizePoolView(uint24 lvl) external view returns (uint256);
+    function futurePrizePoolView() external view returns (uint256);
 
     /// @notice Get the aggregate future prize pool.
     /// @return Total future prize pool amount in wei.
