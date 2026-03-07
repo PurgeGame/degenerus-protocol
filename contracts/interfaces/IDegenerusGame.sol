@@ -24,6 +24,9 @@ interface IDegenerusGame {
     /// @notice Check if the game has ended (terminal state).
     function gameOver() external view returns (bool);
 
+    /// @notice Check if the final sweep has executed (all funds forfeited).
+    function isFinalSwept() external view returns (bool);
+
     /// @notice Get the current mint price in wei.
     /// @return Base price unit in wei.
     function mintPrice() external view returns (uint256);
