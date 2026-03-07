@@ -1090,3 +1090,291 @@ BurnieCoinflip is a standalone daily coinflip wagering system for BurnieCoin (BU
 
 **Used by:** `claimCoinflipsFromBurnie`, `consumeCoinflipsForBurn`
 **Verdict:** CORRECT
+
+---
+
+## Coinflip Lifecycle Flow
+
+The BurnieCoinflip system follows a multi-phase daily lifecycle:
+
+### 1. Deposit Phase
+
+```
+Player calls depositCoinflip(player, amount)
+  |
+  +-> _depositCoinflip(caller, amount, directDeposit)
+       |
+       +-> _coinflipLockedDuringTransition()    // Check BAF lock
+       +-> _claimCoinflipsInternal(caller, false) // Settle pending claims
+       +-> burnie.burnForCoinflip(caller, amount) // BURN tokens (CEI)
+       +-> questModule.handleFlip(caller, amount)  // Quest integration
+       +-> _questApplyReward(...)                  // Apply quest bonus
+       +-> degenerusGame.recordCoinflipDeposit(amount) // Track in game
+       |
+       +-> Calculate recycling bonus:
+       |   if autoRebuyEnabled -> rollAmount = autoRebuyCarry
+       |   else                -> rollAmount = mintable (freshly settled)
+       |   rebetAmount = min(creditedFlip, rollAmount)
+       |   if afKing -> _afKingRecyclingBonus(rebetAmount, deityBonus)
+       |   else      -> _recyclingBonus(rebetAmount)
+       |
+       +-> _addDailyFlip(caller, creditedFlip, recordAmount, ...)
+            |
+            +-> consumeCoinflipBoon() // Optional boon boost (manual only)
+            +-> coinflipBalance[targetDay][player] += creditedFlip
+            +-> _updateTopDayBettor() // Leaderboard update
+            +-> Bounty logic (direct deposits only, requires beating record by 1%)
+```
+
+### 2. Resolution Phase (during advanceGame)
+
+```
+Game calls processCoinflipPayouts(bonusFlip, rngWord, epoch)
+  |
+  +-> seedWord = keccak256(rngWord, epoch)  // Per-day entropy
+  +-> Determine rewardPercent:
+  |     5% chance: 50%  (1.5x payout)
+  |     5% chance: 150% (2.5x payout)
+  |    90% chance: [78%, 115%] (normal range)
+  |
+  +-> EV adjustment (bonusFlip only, not presale):
+  |   _coinflipTargetEvBps(prevTotal, currentTotal)
+  |   _applyEvToRewardPercent(rewardPercent, evBps)
+  |
+  +-> Presale bonus: +6% if presale active and bonusFlip
+  +-> Win = (rngWord & 1) == 1  (50/50 from original rngWord)
+  |
+  +-> Record: coinflipDayResult[epoch] = {rewardPercent, win}
+  +-> Bounty resolution:
+  |   If bountyOwner exists: halve bounty pool
+  |   If win: credit half as flip stake, pay DGNRS bounty
+  |   Clear bountyOwner regardless
+  |
+  +-> flipsClaimableDay = epoch  // Enable claims
+  +-> currentBounty += 1000 ether (PRICE_COIN_UNIT)
+```
+
+### 3. Claim Phase
+
+```
+Player calls claimCoinflips(player, amount) [or variants]
+  |
+  +-> Check: !rngLocked()
+  +-> _resolvePlayer(player)
+  +-> _claimCoinflipsAmount(player, amount, true)
+       |
+       +-> _claimCoinflipsInternal(player, false)
+       |    |
+       |    +-> Iterate from lastClaim+1 to flipsClaimableDay (up to 90 days)
+       |    +-> For each resolved day:
+       |    |   Win: payout = stake + (stake * rewardPercent / 100)
+       |    |         if autoRebuy: extract takeProfit multiples -> mintable; rest -> carry
+       |    |         if autoRebuy: carry += recyclingBonus(carry)
+       |    |         else: mintable += payout
+       |    |   Loss: stake forfeited, carry zeroed, lossCount++
+       |    |
+       |    +-> BAF credit: jackpots.recordBafFlip(player, bracket, winningBafCredit)
+       |    +-> WWXRP consolation: wwxrp.mintPrize(player, lossCount * 1 ether)
+       |    +-> Update: lastClaim = processed, autoRebuyCarry = carry
+       |
+       +-> claimableStored = stored - toClaim
+       +-> burnie.mintForCoinflip(player, toClaim)  // MINT tokens
+```
+
+### 4. Auto-Rebuy Cycle
+
+```
+When autoRebuyEnabled:
+  Win payout -> extract takeProfit multiples -> mintable (claimed)
+            -> remainder -> carry (re-staked automatically)
+            -> carry gets recycling bonus (1% base, or afKing enhanced)
+  Loss      -> carry zeroed (principal lost)
+  Next deposit -> carry is added to new stake as "free roll"
+```
+
+---
+
+## EV Calculation Verification
+
+The EV adjustment system incentivizes increased coinflip activity on last-purchase-day bonus flips.
+
+### Chain of Functions
+
+1. **`_coinflipTargetEvBps(prevTotal, currentTotal)`**
+   - Inputs: previous level's last-purchase-day flip deposits vs current level's.
+   - Compute: `ratioBps = (currentTotal * 10,000) / prevTotal`
+   - Output: Target EV in BPS:
+
+   | Condition | ratioBps | evBps |
+   |-----------|----------|-------|
+   | prevTotal == 0 | N/A | 0 (neutral) |
+   | ratio <= 10,000 (1x) | <= 10,000 | 0 (neutral) |
+   | ratio >= 30,000 (3x) | >= 30,000 | 300 (+3%) |
+   | Between 1x-3x | 10,001-29,999 | lerp(0, 300) |
+
+2. **`_lerpEvBps(x0, x1, y0, y1, x)`**
+   - Standard linear interpolation.
+   - For the specific call: x0=10,000, x1=30,000, y0=0, y1=300.
+   - Example: ratioBps=20,000 (2x) -> evBps = (10,000 * 300) / 20,000 = 150 bps.
+
+3. **`_applyEvToRewardPercent(rewardPercent, evBps)`**
+   - `targetRewardBps = 10,000 + (evBps * 2)`
+   - `deltaBps = targetRewardBps - 9,685` (COINFLIP_REWARD_MEAN_BPS)
+   - `adjustedBps = (rewardPercent * 100) + deltaBps`
+   - `adjustedPercent = (adjustedBps + 50) / 100`
+
+   Worked examples:
+
+   | evBps | targetRewardBps | deltaBps | Input % | adjustedBps | Output % |
+   |-------|-----------------|----------|---------|-------------|----------|
+   | 0 | 10,000 | 315 | 96 | 9,915 | 99 |
+   | 0 | 10,000 | 315 | 78 | 8,115 | 81 |
+   | 0 | 10,000 | 315 | 115 | 11,815 | 118 |
+   | 150 | 10,300 | 615 | 96 | 10,215 | 102 |
+   | 300 | 10,600 | 915 | 96 | 10,515 | 105 |
+   | 300 | 10,600 | 915 | 78 | 8,715 | 87 |
+   | 300 | 10,600 | 915 | 115 | 12,415 | 124 |
+
+   **Observation:** Even with evBps=0 (neutral), the delta is +315 bps, shifting the mean reward from ~96.85% to ~100%. This creates a slightly positive-EV baseline for last-purchase-day bonus flips. At max activity (3x), the shift is +915 bps, pushing the effective mean to ~106%.
+
+### Recycling Bonus Verification
+
+- **Base (`_recyclingBonus`):** 1% of rebet amount, capped at 1,000 BURNIE.
+- **afKing (`_afKingRecyclingBonus`):**
+  - Base: 160 BPS = 1.6% (AFKING_RECYCLE_BONUS_BPS).
+  - Deity bonus: 0.01% per level since activation, max 1.5% (AFKING_DEITY_BONUS_MAX_HALF_BPS = 300 half-bps).
+  - Total afKing + deity: up to 1.6% + 1.5% = 3.1%.
+  - Deity bonus capped at DEITY_RECYCLE_CAP (1M BURNIE); amounts above receive base-only bonus.
+  - Half-bps math: `(amount * totalHalfBps) / (BPS_DENOMINATOR * 2)` = `(amount * totalHalfBps) / 20,000`.
+
+### afKing Deity Bonus Verification
+
+- **`_afKingDeityBonusHalfBpsWithLevel(player, currentLevel)`:**
+  - `levelsActive = currentLevel - activationLevel`
+  - `bonus = levelsActive * 2` (half-bps)
+  - Max: 300 half-bps (150 levels to max)
+  - Conversion: 300 half-bps = 150 bps = 1.5%
+
+---
+
+## Storage Mutation Map
+
+| Function | Variables Written | Write Type |
+|----------|------------------|------------|
+| `settleFlipModeChange` | `playerState[player].claimableStored` | Accumulate |
+| `_depositCoinflip` | `playerState[caller].claimableStored` | Accumulate |
+| `_claimCoinflipsTakeProfit` | `playerState[player].claimableStored` | Set (stored - toClaim) |
+| `_claimCoinflipsAmount` | `playerState[player].claimableStored` | Set (stored - toClaim) |
+| `_claimCoinflipsInternal` | `coinflipBalance[cursor][player]` | Zero (clear on process) |
+| `_claimCoinflipsInternal` | `playerState[player].lastClaim` | Set (cursor position) |
+| `_claimCoinflipsInternal` | `playerState[player].autoRebuyCarry` | Set (carry or 0) |
+| `_addDailyFlip` | `coinflipBalance[targetDay][player]` | Accumulate |
+| `_addDailyFlip` | `biggestFlipEver` | Set (new record) |
+| `_addDailyFlip` | `bountyOwedTo` | Set (new bounty owner) |
+| `_addDailyFlip` | `coinflipTopByDay[day]` (via `_updateTopDayBettor`) | Set (new leader) |
+| `_setCoinflipAutoRebuy` | `playerState[player].autoRebuyEnabled` | Set |
+| `_setCoinflipAutoRebuy` | `playerState[player].autoRebuyStop` | Set |
+| `_setCoinflipAutoRebuy` | `playerState[player].autoRebuyStartDay` | Set |
+| `_setCoinflipAutoRebuy` | `playerState[player].autoRebuyCarry` | Zero (on disable) |
+| `_setCoinflipAutoRebuyTakeProfit` | `playerState[player].autoRebuyStop` | Set |
+| `processCoinflipPayouts` | `coinflipDayResult[epoch]` | Set (new result) |
+| `processCoinflipPayouts` | `flipsClaimableDay` | Set (epoch) |
+| `processCoinflipPayouts` | `currentBounty` | Modify (halve + add 1000) |
+| `processCoinflipPayouts` | `bountyOwedTo` | Zero (clear) |
+
+---
+
+## Cross-Contract Call Graph
+
+| Function | Calls To | Contract | Method | Direction |
+|----------|----------|----------|--------|-----------|
+| `_depositCoinflip` | BurnieCoin | `burnie` | `burnForCoinflip(caller, amount)` | Outgoing |
+| `_depositCoinflip` | Quests | `questModule` | `handleFlip(caller, amount)` | Outgoing |
+| `_depositCoinflip` | Game | `degenerusGame` | `recordCoinflipDeposit(amount)` | Outgoing |
+| `_depositCoinflip` | Game | `degenerusGame` | `afKingModeFor(caller)` | Outgoing (view) |
+| `_depositCoinflip` | Game | `degenerusGame` | `deityPassCountFor(caller)` | Outgoing (view) |
+| `_depositCoinflip` | Game | `degenerusGame` | `level()` | Outgoing (view) |
+| `depositCoinflip` | Game | `degenerusGame` | `isOperatorApproved(player, msg.sender)` | Outgoing (view) |
+| `_claimCoinflipsInternal` | Game | `degenerusGame` | `syncAfKingLazyPassFromCoin(player)` | Outgoing |
+| `_claimCoinflipsInternal` | Game | `degenerusGame` | `deityPassCountFor(player)` | Outgoing (view) |
+| `_claimCoinflipsInternal` | Game | `degenerusGame` | `level()` | Outgoing (view) |
+| `_claimCoinflipsInternal` | Game | `degenerusGame` | `purchaseInfo()` | Outgoing (view) |
+| `_claimCoinflipsInternal` | Game | `degenerusGame` | `gameOver()` | Outgoing (view) |
+| `_claimCoinflipsInternal` | Jackpots | `jackpots` | `recordBafFlip(player, bafLvl, winningBafCredit)` | Outgoing |
+| `_claimCoinflipsInternal` | WWXRP | `wwxrp` | `mintPrize(player, lossCount * 1 ether)` | Outgoing |
+| `_claimCoinflipsTakeProfit` | BurnieCoin | `burnie` | `mintForCoinflip(player, toClaim)` | Outgoing |
+| `_claimCoinflipsAmount` | BurnieCoin | `burnie` | `mintForCoinflip(player, toClaim)` | Outgoing |
+| `_addDailyFlip` | Game | `degenerusGame` | `consumeCoinflipBoon(player)` | Outgoing |
+| `_addDailyFlip` | Game | `degenerusGame` | `rngLocked()` | Outgoing (view) |
+| `_coinflipLockedDuringTransition` | Game | `degenerusGame` | `purchaseInfo()` | Outgoing (view) |
+| `_coinflipLockedDuringTransition` | Game | `degenerusGame` | `gameOver()` | Outgoing (view) |
+| `_afKingDeityBonusHalfBpsWithLevel` | Game | `degenerusGame` | `afKingActivatedLevelFor(player)` | Outgoing (view) |
+| `_setCoinflipAutoRebuy` | Game | `degenerusGame` | `rngLocked()` | Outgoing (view) |
+| `_setCoinflipAutoRebuy` | Game | `degenerusGame` | `deactivateAfKingFromCoin(player)` | Outgoing |
+| `_setCoinflipAutoRebuy` | BurnieCoin | `burnie` | `mintForCoinflip(player, mintable)` | Outgoing |
+| `_setCoinflipAutoRebuyTakeProfit` | Game | `degenerusGame` | `rngLocked()` | Outgoing (view) |
+| `_setCoinflipAutoRebuyTakeProfit` | Game | `degenerusGame` | `deactivateAfKingFromCoin(player)` | Outgoing |
+| `_setCoinflipAutoRebuyTakeProfit` | BurnieCoin | `burnie` | `mintForCoinflip(player, mintable)` | Outgoing |
+| `processCoinflipPayouts` | Game | `degenerusGame` | `lootboxPresaleActiveFlag()` | Outgoing (view) |
+| `processCoinflipPayouts` | Game | `degenerusGame` | `lastPurchaseDayFlipTotals()` | Outgoing (view) |
+| `processCoinflipPayouts` | Game | `degenerusGame` | `payCoinflipBountyDgnrs(to)` | Outgoing |
+| `claimCoinflips` | Game | `degenerusGame` | `rngLocked()` | Outgoing (view) |
+| `claimCoinflipsTakeProfit` | Game | `degenerusGame` | `rngLocked()` | Outgoing (view) |
+| `claimCoinflipsFromBurnie` | Game | `degenerusGame` | `rngLocked()` | Outgoing (view) |
+| `consumeCoinflipsForBurn` | Game | `degenerusGame` | `rngLocked()` | Outgoing (view) |
+| `_resolvePlayer` | Game | `degenerusGame` | `isOperatorApproved(player, msg.sender)` | Outgoing (view) |
+| `_requireApproved` | Game | `degenerusGame` | `isOperatorApproved(player, msg.sender)` | Outgoing (view) |
+| `_targetFlipDay` | Game | `degenerusGame` | `currentDayView()` | Outgoing (view) |
+| `settleFlipModeChange` | Game (incoming) | `degenerusGame` | `settleFlipModeChange(player)` | Incoming |
+| `processCoinflipPayouts` | Game (incoming) | `degenerusGame` | `processCoinflipPayouts(...)` | Incoming |
+| `creditFlip` | Game/Coin (incoming) | `degenerusGame`/`burnie` | `creditFlip(player, amount)` | Incoming |
+| `creditFlipBatch` | Game/Coin (incoming) | `degenerusGame`/`burnie` | `creditFlipBatch(...)` | Incoming |
+| `claimCoinflipsFromBurnie` | BurnieCoin (incoming) | `burnie` | `claimCoinflipsFromBurnie(...)` | Incoming |
+| `consumeCoinflipsForBurn` | BurnieCoin (incoming) | `burnie` | `consumeCoinflipsForBurn(...)` | Incoming |
+
+### Summary by Contract
+
+| External Contract | State-Changing Calls | View Calls |
+|-------------------|---------------------|------------|
+| BurnieCoin (`burnie`) | 5 (3x mintForCoinflip, 1x burnForCoinflip) | 0 |
+| DegenerusGame (`degenerusGame`) | 5 (recordCoinflipDeposit, syncAfKingLazyPassFromCoin, deactivateAfKingFromCoin x2, consumeCoinflipBoon, payCoinflipBountyDgnrs) | 16 (rngLocked x5, purchaseInfo x2, gameOver x2, level x2, isOperatorApproved x2, afKingModeFor, deityPassCountFor x2, afKingActivatedLevelFor, currentDayView, lootboxPresaleActiveFlag, lastPurchaseDayFlipTotals) |
+| Jackpots (`jackpots`) | 1 (recordBafFlip) | 0 |
+| WWXRP (`wwxrp`) | 1 (mintPrize) | 0 |
+| Quests (`questModule`) | 1 (handleFlip) | 0 |
+
+---
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | None found |
+| CONCERN | 0 | None found |
+| GAS | 0 | No significant inefficiencies |
+| INFORMATIONAL | 2 | See below |
+| CORRECT | 37 | All functions verified correct (+ constructor + 3 modifiers) |
+
+### Informational Notes
+
+**1. Error reuse in `_resolvePlayer`**
+- `_resolvePlayer` uses `OnlyBurnieCoin()` error when an operator is not approved, instead of the more descriptive `NotApproved()`.
+- This is intentional for bytecode size optimization but could confuse debuggers.
+- Impact: None (display-only).
+
+**2. `_viewClaimableCoin` does not simulate auto-rebuy**
+- The view function `previewClaimCoinflips` returns stored + daily winnings but does not account for auto-rebuy carry or recycling bonuses.
+- For auto-rebuy players, the actual claimable amount may differ from the preview.
+- This is acceptable for a view function and documented in the audit entry.
+
+### Key Correctness Properties Verified
+
+1. **CEI Pattern:** `_depositCoinflip` burns tokens before crediting flip stake. No reentrancy vector.
+2. **RNG Lock Guards:** All claim functions check `rngLocked()` to prevent BAF credit manipulation during VRF pending.
+3. **BAF Transition Lock:** `_coinflipLockedDuringTransition()` blocks deposits at BAF resolution levels (every 10th level) on last purchase day with RNG locked.
+4. **Bounty Fairness:** Bounty requires exceeding record by 1% to steal, preventing spam. Cleared regardless of win/loss.
+5. **Auto-Rebuy Carry Integrity:** Carry is zeroed on loss, credited with recycling bonus on win. Stale carry from expired days is cleared when start < minClaimableDay.
+6. **Deity Bonus Cap:** `_afKingDeityBonusHalfBpsWithLevel` caps at 300 half-bps (1.5%). `_afKingRecyclingBonus` caps deity-portion at 1M BURNIE.
+7. **EV Adjustment Correctness:** Linear interpolation from neutral (1x activity) to +3% EV (3x activity). Baseline shift of +315 bps ensures last-purchase-day bonus flips are slightly positive-EV.
+8. **Claim Window Enforcement:** Non-auto-rebuy players expire after 30/90 days. Auto-rebuy players use `autoRebuyStartDay` as minimum (no expiry while auto-rebuy active).
+9. **Deep Auto-Rebuy:** Disabling auto-rebuy processes up to 1095 days (3 years) to recover all accumulated positions.
+10. **WWXRP Consolation:** Loss days mint 1 WWXRP per loss day -- ensures losers receive something.
