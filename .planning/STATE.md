@@ -1,52 +1,34 @@
 ---
 gsd_state_version: 1.0
-milestone: v6.0
-milestone_name: Contract Hardening & Parity Verification
-status: completed
-stopped_at: Completed 44-01-PLAN.md
-last_updated: "2026-03-07T08:54:56.882Z"
-last_activity: 2026-03-07 — Completed Phase 43 Governance & Gating Tests (32 tests, ADMIN-01..06, GATE-01..04)
+milestone: v7.0
+milestone_name: Function-Level Exhaustive Audit
+status: active
+stopped_at: —
+last_updated: "2026-03-07"
+last_activity: 2026-03-07 — Milestone v7.0 started
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
-  percent: 92
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-06)
+See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
-**Current focus:** Phases 43, 45, 46 complete; Phase 44 remaining
+**Current focus:** Defining requirements for v7.0 Function-Level Exhaustive Audit
 
 ## Current Position
 
-Phase: 43 of 47 (Governance & Gating Tests)
-Plan: 1 of 1 in current phase
-Status: Phase Complete
-Last activity: 2026-03-07 — Completed Phase 43 Governance & Gating Tests (32 tests, ADMIN-01..06, GATE-01..04)
-
-Progress: [█████████░] 92%
-
-## Performance Metrics
-
-**Velocity:**
-- Total plans completed: 4 (v6.0 milestone)
-- Average duration: 10min
-- Total execution time: 40min
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 43 | 1 | 18min | 18min |
-| 45 | 2 | 8min | 4min |
-| 46 | 1 | 14min | 14min |
-| Phase 44 P01 | 19min | 2 tasks | 1 files |
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-07 — Milestone v7.0 started
 
 ## Accumulated Context
 | Phase 04 P01 | 6min | 2 tasks | 1 files |
