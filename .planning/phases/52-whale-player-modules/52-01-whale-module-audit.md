@@ -385,3 +385,500 @@ Handles whale bundle purchases (100-level pass at 2.4/4 ETH), lazy pass purchase
 - The function is non-payable, so no ETH can be accidentally sent.
 
 **Verdict:** CORRECT
+
+---
+
+## Internal/Private Helper Functions
+
+### `_lazyPassCost(uint24 startLevel)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _lazyPassCost(uint24 startLevel) private pure returns (uint256 total)` |
+| **Visibility** | private |
+| **Mutability** | pure |
+| **Parameters** | `startLevel` (uint24): first level of the 10-level window |
+| **Returns** | `total` (uint256): sum of per-level ticket prices in wei |
+
+**State Reads:** None (pure function)
+**State Writes:** None (pure function)
+
+**Callers:**
+- `_purchaseLazyPass` -- computes base cost for 10-level lazy pass
+
+**Callees:**
+- `PriceLookupLib.priceForLevel(startLevel + i)` -- library call for each of 10 levels
+
+**ETH Flow:** None (computation only)
+
+**Invariants:**
+- Always sums exactly `LAZY_PASS_LEVELS (10)` prices
+- Return value is deterministic for a given startLevel
+- Loop uses `unchecked { ++i }` safely since i < 10 cannot overflow uint24
+
+**NatSpec Accuracy:**
+- NatSpec says "Cost equals the sum of per-level ticket prices (4 tickets per level)" -- SLIGHTLY MISLEADING: the function sums prices-per-level (each being the price of ONE ticket at that level), not 4x. The "4 tickets per level" note describes how many tickets the pass grants, not the cost multiplication. The sum represents the cost of buying 1 ticket at each of 10 levels. ACCURATE in computation, slightly confusing in documentation.
+
+**Gas Flags:** None. Simple 10-iteration loop with pure library calls.
+
+**Verification:** At startLevel=1 (level 0 purchase):
+- Levels 1-4: 0.01 ETH each = 0.04 ETH
+- Levels 5-9: 0.02 ETH each = 0.10 ETH
+- Level 10: 0.04 ETH
+- Total: 0.18 ETH -- matches expected value
+
+At startLevel=10 (level 9 purchase):
+- Level 10: 0.04 ETH
+- Levels 11-19: 0.04 ETH each = 0.36 ETH
+- Total: 0.40 ETH
+
+**Verdict:** CORRECT
+
+---
+
+### `_rewardWhaleBundleDgnrs(address buyer, address affiliateAddr, address upline, address upline2)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _rewardWhaleBundleDgnrs(address buyer, address affiliateAddr, address upline, address upline2) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `buyer` (address): bundle purchaser; `affiliateAddr` (address): direct referrer; `upline` (address): 2nd-tier referrer; `upline2` (address): 3rd-tier referrer |
+| **Returns** | none |
+
+**State Reads:**
+- `dgnrs.poolBalance(IDegenerusStonk.Pool.Whale)` -- external: whale pool DGNRS balance
+- `dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate)` -- external: affiliate pool DGNRS balance
+
+**State Writes:**
+- `dgnrs.transferFromPool(Pool.Whale, buyer, minterShare)` -- external: 1% of whale pool to buyer
+- `dgnrs.transferFromPool(Pool.Affiliate, affiliateAddr, affiliateShare)` -- external: 0.1% of affiliate pool to direct referrer
+- `dgnrs.transferFromPool(Pool.Affiliate, upline, uplineShare)` -- external: 0.02% of affiliate pool to upline
+- `dgnrs.transferFromPool(Pool.Affiliate, upline2, upline2Share)` -- external: 0.01% (uplineShare/2) of affiliate pool to upline2
+
+**Callers:**
+- `_purchaseWhaleBundle` -- called once per bundle in quantity loop
+
+**Callees:**
+- `dgnrs.poolBalance(Pool)` -- external: 2 calls per invocation
+- `dgnrs.transferFromPool(Pool, addr, amount)` -- external: up to 4 calls per invocation
+
+**ETH Flow:** None (DGNRS token transfers only, no ETH movement)
+
+**DGNRS Distribution:**
+- Buyer: `whaleReserve * 10_000 / 1_000_000` = 1% of whale pool
+- Direct affiliate: `affiliateReserve * 1_000 / 1_000_000` = 0.1% of affiliate pool
+- Upline: `affiliateReserve * 200 / 1_000_000` = 0.02% of affiliate pool
+- Upline2: `uplineShare / 2` = 0.01% of affiliate pool
+
+**Invariants:**
+- All transfers are proportional to current pool balance (re-read each call)
+- If whale pool is 0, no buyer reward
+- If affiliate pool is 0, early return (no affiliate rewards)
+- upline2Share is half of uplineShare (derived, not independently calculated from pool)
+- Each address checked for non-zero before transfer
+- Amount checked for non-zero before transfer
+
+**NatSpec Accuracy:**
+- NatSpec says "0.1% of affiliate pool" for direct affiliate -- ACCURATE (1_000 / 1_000_000 = 0.1%)
+- NatSpec says "0.02% of affiliate pool" for upline -- ACCURATE (200 / 1_000_000 = 0.02%)
+- NatSpec says "0.01% of affiliate pool" for upline2 -- ACCURATE (uplineShare/2, where uplineShare is 0.02%, so 0.01%)
+
+**Gas Flags:**
+- Called once per `quantity` in a loop. For quantity=100, this function executes 100 times with up to 600 external calls total. This is gas-heavy but functionally required since each transfer changes the pool balance.
+- The `upline2Share = uplineShare / 2` pattern calculates from the same `affiliateReserve` read, meaning upline2 gets half the upline amount (0.01% vs 0.02%), not a fresh pool proportion. This is intentional as upline2 is a derived share.
+
+**Verdict:** CORRECT
+
+---
+
+### `_rewardDeityPassDgnrs(address buyer, address affiliateAddr, address upline, address upline2)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _rewardDeityPassDgnrs(address buyer, address affiliateAddr, address upline, address upline2) private returns (uint96 buyerDgnrs)` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `buyer` (address): deity pass purchaser; `affiliateAddr` (address): direct referrer; `upline` (address): 2nd-tier referrer; `upline2` (address): 3rd-tier referrer |
+| **Returns** | `buyerDgnrs` (uint96): DGNRS amount transferred to buyer (capped at uint96 max) |
+
+**State Reads:**
+- `dgnrs.poolBalance(IDegenerusStonk.Pool.Whale)` -- external: whale pool balance
+- `dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate)` -- external: affiliate pool balance
+
+**State Writes:**
+- `dgnrs.transferFromPool(Pool.Whale, buyer, totalReward)` -- external: 5% of whale pool to buyer
+- `dgnrs.transferFromPool(Pool.Affiliate, affiliateAddr, affiliateShare)` -- external: 0.5% of affiliate pool
+- `dgnrs.transferFromPool(Pool.Affiliate, upline, uplineShare)` -- external: 0.1% of affiliate pool
+- `dgnrs.transferFromPool(Pool.Affiliate, upline2, upline2Share)` -- external: 0.05% of affiliate pool
+
+**Callers:**
+- `_purchaseDeityPass` -- called once per deity pass purchase
+
+**Callees:**
+- `dgnrs.poolBalance(Pool)` -- external: 2 calls
+- `dgnrs.transferFromPool(Pool, addr, amount)` -- external: up to 4 calls
+
+**ETH Flow:** None (DGNRS token transfers only)
+
+**DGNRS Distribution (deity pass -- 5x whale bundle rates):**
+- Buyer: `whaleReserve * 500 / 10_000` = 5% of whale pool (vs 1% for whale bundle)
+- Direct affiliate: `affiliateReserve * 5_000 / 1_000_000` = 0.5% of affiliate pool (vs 0.1%)
+- Upline: `affiliateReserve * 1_000 / 1_000_000` = 0.1% of affiliate pool (vs 0.02%)
+- Upline2: `uplineShare / 2` = 0.05% of affiliate pool (vs 0.01%)
+
+**Invariants:**
+- Buyer DGNRS return value capped at `type(uint96).max` to prevent overflow in callers
+- `transferFromPool` returns actual transferred amount (may be less than requested if pool depleted)
+- Same null-check pattern as whale bundle rewards
+
+**NatSpec Accuracy:**
+- NatSpec says "5% of whale pool" for buyer -- ACCURATE. Note: constant uses BPS (500/10000) not PPM, unlike whale bundle which uses PPM (10000/1000000). Both resolve to the correct percentages.
+- NatSpec says "0.5% of affiliate pool" -- ACCURATE (5_000 / 1_000_000 = 0.5%)
+- NatSpec says "0.1% of affiliate pool" for upline -- ACCURATE (1_000 / 1_000_000 = 0.1%)
+- NatSpec says "0.05% of affiliate pool" for upline2 -- ACCURATE (uplineShare/2)
+
+**Gas Flags:**
+- Buyer reward uses BPS scale (DEITY_WHALE_POOL_BPS = 500, divided by 10_000) while affiliate rewards use PPM scale (divided by 1_000_000). Both are correct but use different denomination conventions. Not a bug, just inconsistent constant naming.
+- The `buyerDgnrs` return value is used nowhere in the calling code (`_purchaseDeityPass` does not capture the return). The return exists for potential future use. No gas impact beyond the comparison.
+
+**Verdict:** CORRECT
+
+---
+
+### `_recordLootboxEntry(address buyer, uint256 lootboxAmount, uint24 purchaseLevel, uint256 cachedPacked)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _recordLootboxEntry(address buyer, uint256 lootboxAmount, uint24 purchaseLevel, uint256 cachedPacked) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `buyer` (address): lootbox recipient; `lootboxAmount` (uint256): base ETH amount for lootbox; `purchaseLevel` (uint24): level at time of purchase; `cachedPacked` (uint256): caller's cached mintPacked_ |
+| **Returns** | none |
+
+**State Reads:**
+- `lootboxRngIndex` -- current global lootbox RNG index
+- `lootboxEth[index][buyer]` -- existing lootbox amount for this index
+- `lootboxDay[index][buyer]` -- day of existing lootbox entry
+- `lootboxEthBase[index][buyer]` -- unboosted base lootbox amount
+- `mintPacked_[buyer]` (via `_recordLootboxMintDay`) -- mint day tracking
+- `lootboxBoon25Active/15Active/5Active[buyer]`, `lootboxBoon25Day/15Day/5Day[buyer]` (via `_applyLootboxBoostOnPurchase`) -- boost state
+
+**State Writes:**
+- `mintPacked_[buyer]` (via `_recordLootboxMintDay`) -- update mint day field
+- `lootboxDay[index][buyer] = dayIndex` -- set day (if new entry)
+- `lootboxBaseLevelPacked[index][buyer]` -- set base level (level+2, if new entry)
+- `lootboxEvScorePacked[index][buyer]` -- set activity score (if new entry)
+- `lootboxIndexQueue[buyer].push(index)` -- push index to queue (if new entry)
+- `lootboxBoon25Active/15Active/5Active[buyer]` -- consumed if boost applied (via `_applyLootboxBoostOnPurchase`)
+- `lootboxEthBase[index][buyer]` -- incremented by lootboxAmount (unboosted)
+- `lootboxEth[index][buyer]` -- set to `(purchaseLevel << 232) | newAmount` (boosted amount packed with level)
+- `lootboxEthTotal += lootboxAmount` -- global lootbox ETH tracking (unboosted)
+- `lootboxRngPendingEth += lootboxAmount` (via `_maybeRequestLootboxRng`) -- pending RNG ETH
+
+**Callers:**
+- `_purchaseWhaleBundle` -- after pool splits
+- `_purchaseLazyPass` -- after pool splits
+- `_purchaseDeityPass` -- after pool splits
+
+**Callees:**
+- `_recordLootboxMintDay(buyer, uint32(dayIndex), cachedPacked)` -- mint day update
+- `_simulatedDayIndex()` -- current day
+- `IDegenerusGame(address(this)).playerActivityScore(buyer)` -- external self-call for EV score (executes on game contract since this is delegatecall context)
+- `_applyLootboxBoostOnPurchase(buyer, dayIndex, lootboxAmount)` -- boost application
+- `_maybeRequestLootboxRng(lootboxAmount)` -- pending ETH accumulation
+
+**ETH Flow:**
+- No actual ETH movement. Records virtual lootbox amounts for later resolution.
+- `lootboxEthTotal` tracks cumulative virtual lootbox ETH across all purchases.
+- `lootboxRngPendingEth` tracks pending ETH for next RNG request threshold.
+
+**Invariants:**
+- If entry exists for this index+buyer: must be same day (`storedDay == dayIndex`), else reverts
+- If new entry: assigns day, base level (level+2), activity score, pushes to index queue
+- `lootboxEthBase` stores unboosted amount; `lootboxEth` stores boosted amount packed with level
+- `lootboxEthTotal` accumulates unboosted amounts only
+- `lootboxRngPendingEth` accumulates unboosted amounts for RNG threshold
+
+**NatSpec Accuracy:** No NatSpec on this function. The inline comments adequately describe behavior.
+
+**Gas Flags:**
+- `IDegenerusGame(address(this)).playerActivityScore(buyer)` is an external self-call. Since this runs in delegatecall context, `address(this)` is the game contract, so this calls back into the game. This is a gas-expensive pattern for what could theoretically be an internal read, but the function likely lives on the game contract itself (not the module), making the external call necessary.
+- `existingBase` initialization (line 764-767): if existingAmount != 0 but existingBase == 0, sets existingBase = existingAmount. This handles a migration case where older entries didn't track base separately.
+
+**Verdict:** CORRECT
+
+---
+
+### `_maybeRequestLootboxRng(uint256 lootboxAmount)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _maybeRequestLootboxRng(uint256 lootboxAmount) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `lootboxAmount` (uint256): ETH amount to add to pending total |
+| **Returns** | none |
+
+**State Reads:** None (only writes)
+**State Writes:**
+- `lootboxRngPendingEth += lootboxAmount` -- accumulates pending lootbox ETH
+
+**Callers:**
+- `_recordLootboxEntry` -- after recording each lootbox entry
+
+**Callees:** None
+
+**ETH Flow:** None (accounting only)
+
+**Invariants:**
+- Simple accumulation. The actual RNG request threshold check and VRF call happen elsewhere (in AdvanceModule when `requestLootboxRng` is called).
+
+**NatSpec Accuracy:**
+- NatSpec says "Accumulate lootbox ETH for pending RNG request" -- ACCURATE but function name `_maybeRequestLootboxRng` implies conditional logic (maybe request). The function always accumulates. The name is slightly misleading since it never actually requests RNG. Previously this function likely contained threshold-checking logic that was refactored out.
+
+**Gas Flags:** None. Single SLOAD + SSTORE.
+
+**Verdict:** CORRECT
+
+---
+
+### `_applyLootboxBoostOnPurchase(address player, uint48 day, uint256 amount)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _applyLootboxBoostOnPurchase(address player, uint48 day, uint256 amount) private returns (uint256 boostedAmount)` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `player` (address): player whose boost to check; `day` (uint48): current day for event; `amount` (uint256): base lootbox amount |
+| **Returns** | `boostedAmount` (uint256): amount after applying boost (>= amount) |
+
+**State Reads:**
+- `lootboxBoon25Active[player]` -- 25% boost flag
+- `lootboxBoon25Day[player]` -- 25% boost timestamp
+- `lootboxBoon15Active[player]` -- 15% boost flag
+- `lootboxBoon15Day[player]` -- 15% boost timestamp
+- `lootboxBoon5Active[player]` -- 5% boost flag
+- `lootboxBoon5Day[player]` -- 5% boost timestamp
+
+**State Writes:**
+- `lootboxBoon25Active[player] = false` -- consumed (if used or expired)
+- `lootboxBoon15Active[player] = false` -- consumed (if used or expired)
+- `lootboxBoon5Active[player] = false` -- consumed (if used or expired)
+
+**Callers:**
+- `_recordLootboxEntry` -- to apply boost before recording final amount
+
+**Callees:** None (emits event `LootBoxBoostConsumed`)
+
+**ETH Flow:** None (computation only, modifies virtual lootbox amount)
+
+**Boost Logic:**
+- Priority order: 25% > 15% > 5% (checks highest first)
+- Each boost: `cappedAmount = min(amount, 10 ETH)`, `boost = cappedAmount * boostBps / 10000`
+- The boost applies to the capped amount only, not the full amount if > 10 ETH
+- Example: 15 ETH with 25% boost -> boost = 10 * 0.25 = 2.5 ETH, boostedAmount = 17.5 ETH
+- Only ONE boost consumed per call (first valid one found)
+- Expiry: `currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS (2)` -- expired boosts are deactivated but not applied
+- Expired boosts: flag set to false but no event emitted
+
+**Invariants:**
+- `boostedAmount >= amount` (boost only adds, never subtracts)
+- At most one boost consumed per purchase
+- Boost cap ensures maximum additional value is 2.5 ETH (10 ETH * 25%)
+- Day parameter is used for event emission only, not for expiry calculation (uses `_simulatedDayIndex()`)
+
+**NatSpec Accuracy:**
+- NatSpec says "Checks boosts in order: 25% > 15% > 5%" -- ACCURATE
+- NatSpec says "Consumes the first valid boost found" -- ACCURATE
+- NatSpec says "Boost is capped at LOOTBOX_BOOST_MAX_VALUE (10 ETH)" -- ACCURATE
+- NatSpec says "expires after 2 game days" -- ACCURATE (LOOTBOX_BOOST_EXPIRY_DAYS = 2)
+
+**Gas Flags:**
+- `_simulatedDayIndex()` is called once at the top (line 796) but may also be called multiple times in the nested if-else structure. Actually, `currentDay` is cached at line 796 and reused throughout. Efficient.
+- Three separate storage reads for each boost tier (active + day). In the worst case (no active boosts), all 6 slots are read. Minor but unavoidable.
+
+**Verdict:** CORRECT
+
+---
+
+### `_recordLootboxMintDay(address player, uint32 day, uint256 cachedPacked)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _recordLootboxMintDay(address player, uint32 day, uint256 cachedPacked) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `player` (address): player address; `day` (uint32): current day index; `cachedPacked` (uint256): caller's cached mintPacked_ value |
+| **Returns** | none |
+
+**State Reads:**
+- Uses `cachedPacked` parameter (avoids SLOAD of `mintPacked_[player]`)
+
+**State Writes:**
+- `mintPacked_[player]` -- updates DAY field if changed
+
+**Callers:**
+- `_recordLootboxEntry` -- to update mint day in packed data
+
+**Callees:** None
+
+**ETH Flow:** None
+
+**Invariants:**
+- If `prevDay == day`, no-op (idempotent)
+- Only modifies the DAY field (bits 72-103) in mintPacked_, leaves all other fields intact
+- Uses bit manipulation: clears DAY field, then ORs new day value
+
+**NatSpec Accuracy:**
+- NatSpec says "Record the mint day in player's packed data for lootbox tracking" -- ACCURATE
+- NatSpec says "The caller's cached mintPacked_ value to avoid a redundant SLOAD" -- ACCURATE. The caller passes their cached copy to avoid re-reading storage.
+
+**Gas Flags:**
+- Accepts cached packed data to skip one SLOAD. Good optimization.
+- Still performs one SSTORE if day changed. Unavoidable.
+
+**Verdict:** CORRECT
+
+---
+
+### `_nukePassHolderStats(address player)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _nukePassHolderStats(address player) private` |
+| **Visibility** | private |
+| **Mutability** | state-changing |
+| **Parameters** | `player` (address): player whose stats to zero |
+| **Returns** | none |
+
+**State Reads:**
+- `mintPacked_[player]` -- current packed mint data
+
+**State Writes:**
+- `mintPacked_[player]` -- zeros 4 fields:
+  - LEVEL_COUNT (bits 24-47) -> 0
+  - LEVEL_STREAK (bits 48-71) -> 0
+  - LAST_LEVEL (bits 0-23) -> 0
+  - MINT_STREAK_LAST_COMPLETED (bits 160-183) -> 0
+- External: `IDegenerusQuestsReset(ContractAddresses.QUESTS).resetQuestStreak(player)` -- resets quest streak
+
+**Callers:**
+- `_handleDeityPassTransfer` -- penalty for transferring deity pass
+
+**Callees:**
+- `BitPackingLib.setPacked()` -- 4 calls to zero fields
+- `IDegenerusQuestsReset(ContractAddresses.QUESTS).resetQuestStreak(player)` -- external: quest streak reset
+
+**ETH Flow:** None
+
+**Invariants:**
+- Only zeros specific stat fields; preserves other packed fields (FROZEN_UNTIL_LEVEL, WHALE_BUNDLE_TYPE, DAY, LEVEL_UNITS_LEVEL, LEVEL_UNITS)
+- Quest streak reset is an external call to the Quests contract, which also runs in the game's delegatecall context (the call originates from the game address)
+
+**NatSpec Accuracy:**
+- NatSpec says "Zero mint stats and quest streak" -- ACCURATE. Four packed fields zeroed plus external quest reset.
+
+**Gas Flags:**
+- Uses `BitPackingLib.setPacked` four times sequentially on the same `data` variable. Could potentially be optimized with a single bitmask operation, but the current approach is clear and correct.
+
+**Verdict:** CORRECT
+
+---
+
+## Local Interface Declarations
+
+### `IDegenerusQuestsReset` [interface]
+
+```solidity
+interface IDegenerusQuestsReset {
+    function resetQuestStreak(address player) external;
+}
+```
+
+Minimal interface declared at end of file (line 882-885). Used only by `_nukePassHolderStats` to reset the deity pass seller's quest streak. Called in delegatecall context (msg.sender is the game contract address).
+
+### `IDegenerusDeityPassMint` [interface]
+
+```solidity
+interface IDegenerusDeityPassMint {
+    function mint(address to, uint256 tokenId) external;
+}
+```
+
+Minimal interface declared at end of file (line 888-890). Used only by `_purchaseDeityPass` to mint the ERC721 deity pass token. Called in delegatecall context (msg.sender is the game contract address, which must be authorized as a minter on the DeityPass contract).
+
+---
+
+## Pricing Formula Verification
+
+| Pass Type | Formula | Code Implementation | Verified |
+|-----------|---------|---------------------|----------|
+| Whale Bundle (early) | 2.4 ETH (levels 0-3) | `WHALE_BUNDLE_EARLY_PRICE = 2.4 ether`, `passLevel <= 4` | YES |
+| Whale Bundle (standard) | 4 ETH (levels 4+) | `WHALE_BUNDLE_STANDARD_PRICE = 4 ether` | YES |
+| Whale Bundle (boon) | 10/25/50% off standard | `(STANDARD * (10000 - discountBps)) / 10000`, default 10% if discountBps==0 | YES |
+| Lazy Pass (early) | 0.24 ETH flat (levels 0-2) | `benefitValue = 0.24 ether` | YES |
+| Lazy Pass (standard) | sum of 10 level prices | `_lazyPassCost` loops `PriceLookupLib.priceForLevel` for 10 levels | YES |
+| Lazy Pass (boon) | 10% default discount on payment | `(benefitValue or baseCost) * (10000 - boonDiscountBps) / 10000` | YES |
+| Deity Pass | 24 + T(n) ETH, T(n)=n*(n+1)/2 | `DEITY_PASS_BASE + (k*(k+1)*1 ether)/2` where k = deityPassOwners.length | YES |
+| Deity Pass (boon) | Tier 1=10%, 2=25%, 3=50% off | `(basePrice * (10000 - discountBps)) / 10000` | YES |
+| Deity Transfer | 5 ETH worth of BURNIE | `(DEITY_TRANSFER_ETH_COST * PRICE_COIN_UNIT) / price` | YES |
+
+### Spot-Check: Deity Pass Price Sequence
+
+| Pass # (k) | Formula: 24 + k*(k+1)/2 | Price (ETH) |
+|-------------|--------------------------|-------------|
+| 0 | 24 + 0 | 24 |
+| 1 | 24 + 1 | 25 |
+| 2 | 24 + 3 | 27 |
+| 3 | 24 + 6 | 30 |
+| 10 | 24 + 55 | 79 |
+| 20 | 24 + 210 | 234 |
+| 31 | 24 + 496 | 520 |
+
+Total ETH across all 32 passes: sum(24 + k*(k+1)/2 for k=0..31) = 768 + 2976 = 3744 ETH (before any boon discounts).
+
+### Spot-Check: Lazy Pass Cost at Various Levels
+
+| Level | startLevel | 10-Level Price Sum | Calculation |
+|-------|------------|-------------------|-------------|
+| 0 | 1 | 0.18 ETH | 4x0.01 + 5x0.02 + 1x0.04 |
+| 9 | 10 | 0.40 ETH | 10x0.04 (levels 10-19, all < 30) |
+| 29 | 30 | 0.80 ETH | 10x0.08 (levels 30-39, all < 60) |
+| 59 | 60 | 1.20 ETH | 10x0.12 (levels 60-69, all < 90) |
+| 89 | 90 | 1.60 ETH | 10x0.16 (levels 90-99, all < 100) |
+| 99 | 100 | 0.64 ETH | 0.24 + 9x0.04 (milestone + 9 early-cycle) |
+
+## ETH Mutation Path Map
+
+| # | Path | Source | Destination | Trigger | Function |
+|---|------|--------|-------------|---------|----------|
+| 1 | Whale bundle pre-game | msg.value | futurePrizePool (70%) + nextPrizePool (30%) | purchaseWhaleBundle at level 0 | _purchaseWhaleBundle |
+| 2 | Whale bundle post-game | msg.value | futurePrizePool (95%) + nextPrizePool (5%) | purchaseWhaleBundle at level > 0 | _purchaseWhaleBundle |
+| 3 | Lazy pass (all levels) | msg.value | futurePrizePool (10%) + nextPrizePool (90%) | purchaseLazyPass | _purchaseLazyPass |
+| 4 | Deity pass pre-game | msg.value | futurePrizePool (70%) + nextPrizePool (30%) | purchaseDeityPass at level 0 | _purchaseDeityPass |
+| 5 | Deity pass post-game | msg.value | futurePrizePool (95%) + nextPrizePool (5%) | purchaseDeityPass at level > 0 | _purchaseDeityPass |
+| 6 | Lootbox recording (whale) | (virtual) | lootboxEthTotal, lootboxRngPendingEth | purchaseWhaleBundle | _recordLootboxEntry |
+| 7 | Lootbox recording (lazy) | (virtual) | lootboxEthTotal, lootboxRngPendingEth | purchaseLazyPass | _recordLootboxEntry |
+| 8 | Lootbox recording (deity) | (virtual) | lootboxEthTotal, lootboxRngPendingEth | purchaseDeityPass | _recordLootboxEntry |
+| 9 | Lootbox boost (all) | (virtual) | lootboxEth[index][buyer] (boosted amount) | Any purchase with active boost | _applyLootboxBoostOnPurchase |
+| 10 | DGNRS whale pool | Whale pool | buyer | purchaseWhaleBundle/purchaseDeityPass | _rewardWhaleBundleDgnrs/_rewardDeityPassDgnrs |
+| 11 | DGNRS affiliate pool | Affiliate pool | referral chain (3 tiers) | purchaseWhaleBundle/purchaseDeityPass | _rewardWhaleBundleDgnrs/_rewardDeityPassDgnrs |
+| 12 | DGNRS earlybird pool | Earlybird pool | buyer | All purchases (early levels) | _awardEarlybirdDgnrs (inherited) |
+| 13 | BURNIE burn (transfer) | sender's BURNIE balance | burned | handleDeityPassTransfer | _handleDeityPassTransfer |
+
+**ETH Accounting Integrity:**
+- For every payable function (whale, lazy, deity): `futurePrizePool_delta + nextPrizePool_delta == msg.value`. Verified by code analysis -- all splits sum to totalPrice with no remainder.
+- Lootbox amounts are virtual (not additional ETH -- they record a fraction of the already-split ETH for later lootbox resolution). `lootboxEthTotal` grows by the unboosted amount.
+- No ETH leaves the contract through this module. All ETH stays in pool accounting variables.
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | None found |
+| CONCERN | 0 | None found |
+| GAS | 3 | (1) Whale DGNRS rewards loop O(quantity) with external calls; (2) 100-level ticket queuing loop; (3) _rewardDeityPassDgnrs return value unused |
+| CORRECT | 12 | All 4 external + 8 internal functions verified correct |
+
+**Overall Assessment:** All 12 functions (4 external/public + 8 internal/private) are CORRECT. No bugs or security concerns found. Three minor gas observations noted (all functionally necessary). Pricing formulas for all pass types verified against expected values. ETH mutation paths fully traced -- all ETH is properly accounted for within pool variables. NatSpec is accurate across all functions with no material discrepancies.
