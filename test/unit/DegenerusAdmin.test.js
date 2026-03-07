@@ -383,12 +383,12 @@ describe("DegenerusAdmin", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 4. _linkAmountToEth (exposed as external for try/catch)
+  // 4. linkAmountToEth (exposed as external for try/catch)
   // ---------------------------------------------------------------------------
-  describe("_linkAmountToEth", function () {
+  describe("linkAmountToEth", function () {
     it("returns 0 when no price feed is set", async function () {
       const { admin } = await loadFixture(deployFullProtocol);
-      const result = await admin._linkAmountToEth(eth("1"));
+      const result = await admin.linkAmountToEth(eth("1"));
       expect(result).to.equal(0n);
     });
 
@@ -397,7 +397,7 @@ describe("DegenerusAdmin", function () {
       const feedAddr = await mockFeed.getAddress();
       await admin.connect(deployer).setLinkEthPriceFeed(feedAddr);
       // mockFeed price is 0.004 ETH per LINK
-      const result = await admin._linkAmountToEth(eth("1"));
+      const result = await admin.linkAmountToEth(eth("1"));
       // 1 LINK * 0.004 ETH/LINK = 0.004 ETH
       expect(result).to.equal(eth("0.004"));
     });
@@ -406,7 +406,7 @@ describe("DegenerusAdmin", function () {
       const { admin, mockFeed, deployer } = await loadFixture(deployFullProtocol);
       const feedAddr = await mockFeed.getAddress();
       await admin.connect(deployer).setLinkEthPriceFeed(feedAddr);
-      const result = await admin._linkAmountToEth(0n);
+      const result = await admin.linkAmountToEth(0n);
       expect(result).to.equal(0n);
     });
   });

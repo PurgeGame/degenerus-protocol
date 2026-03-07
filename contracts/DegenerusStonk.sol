@@ -31,7 +31,7 @@ interface IDegenerusGamePlayer {
         uint128 amountPerTicket,
         uint8 ticketCount,
         uint32 customTicket,
-        uint8 customSpecial
+        uint8 heroQuadrant
     ) external payable;
     function claimWinnings(address player) external;
     function claimWinningsStethFirst() external;
@@ -218,13 +218,6 @@ contract DegenerusStonk {
 
     /// @notice Spending allowances: owner => spender => amount
     mapping(address => mapping(address => uint256)) public allowance;
-
-    // =====================================================================
-    //                          RESERVES
-    // =====================================================================
-
-    /// @notice ETH backing for DGNRS tokens
-    uint256 public ethReserve;
 
     // =====================================================================
     //                          POOL STATE
@@ -555,7 +548,7 @@ contract DegenerusStonk {
         uint128 amountPerTicket,
         uint8 ticketCount,
         uint32 customTicket,
-        uint8 customSpecial
+        uint8 heroQuadrant
     ) external payable {
         uint256 totalBet = uint256(amountPerTicket) * uint256(ticketCount);
         _checkAndRecordEthSpend(msg.sender, totalBet);
@@ -565,7 +558,7 @@ contract DegenerusStonk {
             amountPerTicket,
             ticketCount,
             customTicket,
-            customSpecial
+            heroQuadrant
         );
     }
 
@@ -575,7 +568,7 @@ contract DegenerusStonk {
         uint128 amountPerTicket,
         uint8 ticketCount,
         uint32 customTicket,
-        uint8 customSpecial
+        uint8 heroQuadrant
     ) external {
         uint256 totalBet = uint256(amountPerTicket) * uint256(ticketCount);
         _checkAndRecordBurnieSpend(msg.sender, totalBet);
@@ -585,7 +578,7 @@ contract DegenerusStonk {
             amountPerTicket,
             ticketCount,
             customTicket,
-            customSpecial
+            heroQuadrant
         );
     }
 

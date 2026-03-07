@@ -608,7 +608,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             player,
             day,
             scaledAmount,
-            baseAmount,
             targetLevel,
             currentLevel,
             nextEntropy,
@@ -658,7 +657,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             player,
             day,
             amountEth,
-            amountEth,
             targetLevel,
             currentLevel,
             nextEntropy,
@@ -699,7 +697,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             player,
             day,
             scaledAmount,
-            amount,
             targetLevel,
             currentLevel,
             nextEntropy,
@@ -813,7 +810,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player receiving rewards
     /// @param day Day index for events
     /// @param amount ETH-equivalent amount for reward calculations
-    /// @param boonAmount Amount used for boon chance calculations
     /// @param targetLevel Target level for future tickets
     /// @param currentLevel Current game level
     /// @param entropy Starting entropy value
@@ -829,7 +825,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         address player,
         uint48 day,
         uint256 amount,
-        uint256 boonAmount,
         uint24 targetLevel,
         uint24 currentLevel,
         uint256 entropy,
@@ -846,8 +841,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 bonusBurnie
         )
     {
-        // Unused for now; retained for future boon-chance tuning.
-        boonAmount;
         if (targetLevel < currentLevel) {
             targetLevel = currentLevel;
         }

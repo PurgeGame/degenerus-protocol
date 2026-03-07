@@ -72,6 +72,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         address indexed previous,
         address indexed current
     );
+    event StEthStakeFailed(uint256 amount);
 
     /*+=======================================================================+
       |                   PRECOMPUTED ADDRESSES (CONSTANT)                    |
@@ -296,12 +297,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+========================================================================================+
       |                    ADMIN VRF FUNCTIONS                                                 |
       +========================================================================================+
-      |  One-time VRF setup function called by ContractAddresses.ADMIN during deployment phase.|
+      |  Deploy-only VRF setup called from the ContractAddresses.ADMIN constructor.            |
+      |  Post-deploy VRF changes use updateVrfCoordinatorAndSub (emergency rotation).          |
       +========================================================================================+*/
 
-    /// @notice One-time wiring of VRF config from the VRF ContractAddresses.ADMIN contract.
-    /// @dev Access: ContractAddresses.ADMIN only. Overwrites any existing config on each call.
-    ///      SECURITY: Once wired, config can only be changed via emergency rotation or re-calling wireVrf from ADMIN.
+    /// @notice Wire VRF config, called once from the ADMIN constructor during deployment.
+    /// @dev Access: ContractAddresses.ADMIN only. No post-deploy caller exists on ADMIN;
+    ///      emergency VRF rotation uses updateVrfCoordinatorAndSub instead.
     /// @param coordinator_ Chainlink VRF V2.5 coordinator address.
     /// @param subId VRF subscription ID for LINK billing.
     function wireVrf(
@@ -1012,7 +1014,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 reserve = claimablePool;
         if (ethBal <= reserve) return;
         uint256 stakeable = ethBal - reserve;
-        try steth.submit{value: stakeable}(address(0)) returns (uint256) {} catch {}
+        try steth.submit{value: stakeable}(address(0)) returns (uint256) {} catch {
+            emit StEthStakeFailed(stakeable);
+        }
     }
 
     /// @dev Request new VRF random word from Chainlink.

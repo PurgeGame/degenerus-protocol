@@ -94,7 +94,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     // Main Entry Point
     // -------------------------------------------------------------------------
 
-    /// @notice Mint trophy and DGNRS reward for the top affiliate of a level.
+    /// @notice Award DGNRS reward to the top affiliate of a level.
     /// @dev Callable during level transition; guarded by a per-level paid flag.
     /// @param lvl The level to reward.
     function rewardTopAffiliate(uint24 lvl) external {
@@ -302,9 +302,6 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
      *
      * All lootbox ETH stays in futurePrizePool (source pool).
      *
-     * ## Trophy
-     *
-     * First winner (winners[0]) receives BAF trophy.
      */
     function _runBafJackpot(
         uint256 poolWei,

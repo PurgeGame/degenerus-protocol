@@ -285,7 +285,7 @@ interface IDegenerusGame {
     /// @param player The player to query.
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
     /// @return amount Lootbox value in wei.
-    /// @return presale True if this was a presale lootbox.
+    /// @return presale True if presale mode is currently active (global flag, not per-lootbox).
     function lootboxStatus(address player, uint48 lootboxIndex) external view returns (uint256 amount, bool presale);
 
     /// @notice Check whether lootbox presale mode is currently active.

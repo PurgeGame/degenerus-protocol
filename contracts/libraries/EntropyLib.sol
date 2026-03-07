@@ -9,7 +9,7 @@ pragma solidity 0.8.34;
 library EntropyLib {
     /**
      * @notice XOR-shift PRNG step for deterministic entropy derivation.
-     * @dev Standard xorshift64 algorithm. Seeded from VRF, so ultimately secure.
+     * @dev Xorshift on uint256. Seeded from VRF, so ultimately secure.
      * @param state Current PRNG state.
      * @return Next PRNG state.
      */

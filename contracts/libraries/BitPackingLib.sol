@@ -9,11 +9,14 @@ pragma solidity 0.8.34;
  *      Mint data layout (256 bits):
  *      [0-23]    LAST_LEVEL_SHIFT            - Last level purchased (24 bits)
  *      [24-47]   LEVEL_COUNT_SHIFT           - Total level purchases (24 bits)
- *      [48-71]   LEVEL_STREAK_SHIFT          - Consecutive level streak (24 bits)
+ *      [48-71]   LEVEL_STREAK_SHIFT          - Consecutive level streak (24 bits, managed by MintStreakUtils)
  *      [72-103]  DAY_SHIFT                   - Day index of last purchase (32 bits)
  *      [104-127] LEVEL_UNITS_LEVEL_SHIFT     - Level for unit tracking (24 bits)
  *      [128-151] FROZEN_UNTIL_LEVEL_SHIFT    - Frozen level for whale bundles (24 bits)
  *      [152-154] WHALE_BUNDLE_TYPE_SHIFT     - Bundle type (3 bits: 0=none, 1=10-lvl, 3=100-lvl)
+ *      [155-159] (unused)
+ *      [160-183] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
+ *      [184-227] (unused)
  *      [228-243] LEVEL_UNITS_SHIFT           - Units purchased at current level (16 bits)
  *      [244-255] (reserved)
  */

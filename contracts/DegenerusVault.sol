@@ -30,7 +30,7 @@ interface IDegenerusGamePlayerActions {
         uint128 amountPerTicket,
         uint8 ticketCount,
         uint32 customTicket,
-        uint8 customSpecial
+        uint8 heroQuadrant
     ) external payable;
     function resolveDegeneretteBets(address player, uint64[] calldata betIds) external;
     function setAutoRebuy(address player, bool enabled) external;
@@ -557,7 +557,7 @@ contract DegenerusVault {
     /// @param amountPerTicket Bet amount per ticket
     /// @param ticketCount Number of tickets (must satisfy game rules)
     /// @param customTicket Custom packed traits
-    /// @param customSpecial Custom special (1=ETH,2=BURNIE,3=DGNRS)
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
     /// @param ethValue Additional ETH from vault balance to use (on top of msg.value)
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If msg.value + ethValue exceeds total bet or vault balance
@@ -565,7 +565,7 @@ contract DegenerusVault {
         uint128 amountPerTicket,
         uint8 ticketCount,
         uint32 customTicket,
-        uint8 customSpecial,
+        uint8 heroQuadrant,
         uint256 ethValue
     ) external payable onlyVaultOwner {
         uint256 totalBet = uint256(amountPerTicket) * uint256(ticketCount);
@@ -577,7 +577,7 @@ contract DegenerusVault {
             amountPerTicket,
             ticketCount,
             customTicket,
-            customSpecial
+            heroQuadrant
         );
     }
 
@@ -585,13 +585,13 @@ contract DegenerusVault {
     /// @param amountPerTicket Bet amount per ticket
     /// @param ticketCount Number of tickets (must satisfy game rules)
     /// @param customTicket Custom packed traits
-    /// @param customSpecial Custom special (1=ETH,2=BURNIE,3=DGNRS)
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameDegeneretteBetBurnie(
         uint128 amountPerTicket,
         uint8 ticketCount,
         uint32 customTicket,
-        uint8 customSpecial
+        uint8 heroQuadrant
     ) external onlyVaultOwner {
         gamePlayer.placeFullTicketBets(
             address(this),
@@ -599,7 +599,7 @@ contract DegenerusVault {
             amountPerTicket,
             ticketCount,
             customTicket,
-            customSpecial
+            heroQuadrant
         );
     }
 
@@ -607,13 +607,13 @@ contract DegenerusVault {
     /// @param amountPerTicket Bet amount per ticket
     /// @param ticketCount Number of tickets (must satisfy game rules)
     /// @param customTicket Custom packed traits
-    /// @param customSpecial Custom special (1=ETH,2=BURNIE,3=DGNRS)
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameDegeneretteBetWwxrp(
         uint128 amountPerTicket,
         uint8 ticketCount,
         uint32 customTicket,
-        uint8 customSpecial
+        uint8 heroQuadrant
     ) external onlyVaultOwner {
         gamePlayer.placeFullTicketBets(
             address(this),
@@ -621,7 +621,7 @@ contract DegenerusVault {
             amountPerTicket,
             ticketCount,
             customTicket,
-            customSpecial
+            heroQuadrant
         );
     }
 

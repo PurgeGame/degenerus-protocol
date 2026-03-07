@@ -2160,7 +2160,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Get the current mint price in wei.
-    /// @dev Price tiers: intro 0.01/0.02, then cycle 0.04/0.08/0.12/0.24 ETH.
+    /// @dev Price tiers: intro 0.01/0.02, then cycle 0.04/0.08/0.12/0.16/0.24 ETH.
     /// @return Current price in wei.
     function mintPrice() external view returns (uint256) {
         return price;
@@ -2483,13 +2483,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @dev Calculate mint count bonus points (max 25% for perfect participation).
     ///      Perfect participation (100% mints) always = 25 points (25%).
-    ///      Level 2 with 2 mints (100%): 25 points (25%)
-    ///      Level 10 with 10 mints (100%): 25 points (25%)
-    ///      Level 10 with 7 mints (70%): 17.5 points (17.5%)
-    ///      Level 30 with 30 mints (100%): 25 points (25%)
+    ///      Level 2 with 2 mints (100%): 25 points
+    ///      Level 10 with 10 mints (100%): 25 points
+    ///      Level 10 with 7 mints (70%): (7 * 25) / 10 = 17 points
+    ///      Level 30 with 30 mints (100%): 25 points
     /// @param mintCount Player's total level mint count.
     /// @param currLevel Current game level.
-    /// @return Bonus points (0-25) scaled by participation percentage.
+    /// @return Bonus points (0-25) scaled by participation percentage (integer division).
     function _mintCountBonusPoints(
         uint24 mintCount,
         uint24 currLevel
@@ -2499,8 +2499,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // Perfect participation (mintCount >= currLevel) = 25 points
         if (mintCount >= currLevel) return 25;
 
-        // Otherwise: (mintCount / currLevel) * 25
-        // Example: level 10, 7 mints = (7 * 25) / 10 = 17.5 points
+        // Otherwise: (mintCount * 25) / currLevel (truncates)
+        // Example: level 10, 7 mints = (7 * 25) / 10 = 17 points
         return (uint256(mintCount) * 25) / uint256(currLevel);
     }
 
@@ -2724,14 +2724,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         nextOffset = uint32(end);
     }
 
-    /// @notice Get pending mints and tickets owed to a player.
+    /// @notice Get tickets owed to a player for the current level.
     /// @param player The player address.
-    /// @return mints Number of token mints owed.
     /// @return tickets Number of tickets owed for current level.
     function getPlayerPurchases(
         address player
-    ) external view returns (uint32 mints, uint32 tickets) {
-        mints = 0;
+    ) external view returns (uint32 tickets) {
         tickets = uint32(ticketsOwedPacked[level][player] >> 8);
     }
 

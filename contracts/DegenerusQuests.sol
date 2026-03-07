@@ -249,7 +249,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * +---------------------------------+---------+---------+
      */
     struct PlayerQuestState {
-        uint24 lastCompletedDay;                    // Last day where BOTH quests completed
+        uint24 lastCompletedDay;                    // Last day where a streak was credited (first slot completion)
         uint24 lastActiveDay;                       // Last day where ANY quest slot completed
         uint24 streak;                              // Current streak of days with full completion
         uint24 baseStreak;                          // Snapshot of streak at start of day (for rewards)
@@ -319,8 +319,14 @@ contract DegenerusQuests is IDegenerusQuests {
 
     function resetQuestStreak(address player) external onlyGame {
         PlayerQuestState storage state = questPlayerState[player];
+        uint24 prevStreak = state.streak;
         state.streak = 0;
         state.baseStreak = 0;
+        if (prevStreak != 0) {
+            uint48 day = activeQuests[0].day;
+            if (day == 0) day = activeQuests[1].day;
+            emit QuestStreakReset(player, prevStreak, day);
+        }
     }
 
     /**
@@ -828,7 +834,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Returns raw player quest state for debugging/analytics.
      * @param player The player address to query.
      * @return streak Current streak count.
-     * @return lastCompletedDay Last day where both quests were completed.
+     * @return lastCompletedDay Last day where a streak was credited (first slot completion).
      * @return progress Per-slot progress values (only valid if day/version match).
      * @return completed Per-slot completion flags for current day.
      */

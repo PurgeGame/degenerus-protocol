@@ -1310,8 +1310,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Internal Helpers — Jackpot Execution
     // =========================================================================
 
-    /// @dev Core jackpot execution: distributes ETH and/or COIN to winners.
+    /// @dev Core jackpot execution: distributes ETH to winners.
     ///      This is the unified entry point for daily and early-burn jackpots.
+    ///      COIN jackpots are handled separately by _executeCoinJackpot.
     ///      Pool debits are handled by the caller.
     ///
     /// @param jp Packed jackpot parameters.
@@ -1692,7 +1693,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         bool dgnrsPaid;
 
         uint256 totalPayout;
-        uint256 totalLootboxSpent;
+        uint256 totalWhalePassSpent;
         uint256 totalLiability;
         for (uint256 i; i < len; ) {
             address w = winners[i];
@@ -1709,7 +1710,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     (
                         uint256 claimDelta,
                         uint256 paid,
-                        uint256 lootSpent,
+                        uint256 wpSpent,
                         uint256 newEntropy
                     ) = _processSoloBucketWinner(w, perWinner, entropyState);
                     if (paid != 0) {
@@ -1723,7 +1724,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     }
                     totalLiability += claimDelta;
                     totalPayout += paid;
-                    totalLootboxSpent += lootSpent;
+                    totalWhalePassSpent += wpSpent;
                     entropyState = newEntropy;
                 } else {
                     // Normal bucket: pay full amount
@@ -1747,12 +1748,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 ++i;
             }
         }
-        if (totalPayout == 0 && totalLootboxSpent == 0)
+        if (totalPayout == 0 && totalWhalePassSpent == 0)
             return (entropyState, 0, 0, 0);
 
         liabilityDelta = totalLiability;
         ethDelta = totalPayout;
-        ticketSpent = totalLootboxSpent;
+        ticketSpent = totalWhalePassSpent;
 
         return (entropyState, ethDelta, liabilityDelta, ticketSpent);
     }
@@ -1782,7 +1783,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      the 25% covers at least one half-pass; otherwise 100% ETH).
     /// @return claimableDelta Amount to add to claimablePool.
     /// @return ethPaid Total ETH value credited.
-    /// @return lootboxSpent Amount moved to futurePrizePool from whale pass conversion.
+    /// @return whalePassSpent Amount moved to futurePrizePool from whale pass conversion.
     /// @return newEntropy Updated entropy.
     function _processSoloBucketWinner(
         address winner,
@@ -1793,7 +1794,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         returns (
             uint256 claimableDelta,
             uint256 ethPaid,
-            uint256 lootboxSpent,
+            uint256 whalePassSpent,
             uint256 newEntropy
         )
     {
@@ -1803,15 +1804,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         newEntropy = entropy;
 
         if (whalePassCount != 0) {
-            uint256 whalePassSpent = whalePassCount * HALF_WHALE_PASS_PRICE;
-            uint256 ethAmount = perWinner - whalePassSpent;
+            uint256 whalePassCost = whalePassCount * HALF_WHALE_PASS_PRICE;
+            uint256 ethAmount = perWinner - whalePassCost;
 
             claimableDelta = _creditJackpot(false, winner, ethAmount, entropy);
             ethPaid = ethAmount;
 
             whalePassClaims[winner] += whalePassCount;
-            futurePrizePool += whalePassSpent;
-            lootboxSpent = whalePassSpent;
+            futurePrizePool += whalePassCost;
+            whalePassSpent = whalePassCost;
         } else {
             // 25% too small for a whale pass — pay full amount as ETH
             claimableDelta = _creditJackpot(false, winner, perWinner, entropy);
@@ -2194,6 +2195,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl = uint24(baseKey >> 224);
 
         // Calculate the storage slot for this level's trait arrays.
+        // Layout assumption: traitBurnTicket is mapping(uint24 => address[256]).
+        // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
+        // with dynamic array elements at keccak256(keccak256(key . slot) + index).
+        // This relies on the standard Solidity storage layout (stable since 0.4.x).
+        // Safe here because the contract is non-upgradeable.
         uint256 levelSlot;
         assembly ("memory-safe") {
             mstore(0x00, lvl)

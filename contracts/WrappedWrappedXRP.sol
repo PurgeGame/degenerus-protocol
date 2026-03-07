@@ -60,11 +60,6 @@ contract WrappedWrappedXRP {
         uint256 amount
     );
 
-    /// @notice Emitted when someone wraps wXRP into WWXRP
-    /// @param user The user who wrapped
-    /// @param amount Amount of wXRP wrapped (and WWXRP minted)
-    
-
     /// @notice Emitted when someone unwraps WWXRP back to wXRP
     /// @param user The user who unwrapped
     /// @param amount Amount of WWXRP burned (and wXRP returned)

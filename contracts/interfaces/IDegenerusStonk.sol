@@ -76,10 +76,6 @@ interface IDegenerusStonk {
     /// @return Total number of DGNRS tokens in circulation
     function totalSupply() external view returns (uint256);
 
-    /// @notice Get the ETH reserve backing DGNRS
-    /// @return Amount of ETH in reserves
-    function ethReserve() external view returns (uint256);
-
     /// @notice Get the BURNIE reserve backing DGNRS
     /// @dev Includes claimable coinflip backing
     /// @return Amount of BURNIE in reserves

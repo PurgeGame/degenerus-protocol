@@ -373,12 +373,12 @@ contract DegenerusDeityPass {
 
     function safeTransferFrom(address from, address to, uint256 tokenId) external {
         _transfer(from, to, tokenId);
-        _checkReceiver(from, to, tokenId);
+        _checkReceiver(from, to, tokenId, "");
     }
 
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata) external {
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) external {
         _transfer(from, to, tokenId);
-        _checkReceiver(from, to, tokenId);
+        _checkReceiver(from, to, tokenId, data);
     }
 
     // -------------------------------------------------------------------------
@@ -435,9 +435,9 @@ contract DegenerusDeityPass {
         emit Transfer(from, to, tokenId);
     }
 
-    function _checkReceiver(address from, address to, uint256 tokenId) private {
+    function _checkReceiver(address from, address to, uint256 tokenId, bytes memory data) private {
         if (to.code.length != 0) {
-            try IERC721Receiver(to).onERC721Received(msg.sender, from, tokenId, "") returns (bytes4 ret) {
+            try IERC721Receiver(to).onERC721Received(msg.sender, from, tokenId, data) returns (bytes4 ret) {
                 if (ret != IERC721Receiver.onERC721Received.selector) revert NotAuthorized();
             } catch {
                 revert NotAuthorized();

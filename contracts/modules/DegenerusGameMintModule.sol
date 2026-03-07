@@ -480,6 +480,11 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint24 lvl = uint24(baseKey >> 224);
 
         // Calculate the storage slot for this level's trait arrays.
+        // Layout assumption: traitBurnTicket is mapping(uint24 => address[256]).
+        // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
+        // with dynamic array elements at keccak256(keccak256(key . slot) + index).
+        // This relies on the standard Solidity storage layout (stable since 0.4.x).
+        // Safe here because the contract is non-upgradeable.
         uint256 levelSlot;
         assembly ("memory-safe") {
             mstore(0x00, lvl)

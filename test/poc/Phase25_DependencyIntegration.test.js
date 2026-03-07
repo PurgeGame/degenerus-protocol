@@ -266,14 +266,14 @@ describe("Phase 25: Dependency & Integration Attacker PoC", function () {
   });
 
   // =========================================================================
-  // LINK-05: _linkAmountToEth handles stale/invalid oracle data
+  // LINK-05: linkAmountToEth handles stale/invalid oracle data
   // =========================================================================
   describe("LINK-05: LINK/ETH oracle staleness protection", function () {
-    it("_linkAmountToEth returns 0 on stale or invalid feed", async function () {
+    it("linkAmountToEth returns 0 on stale or invalid feed", async function () {
       const { admin } = await loadFixture(deployFullProtocol);
 
       // When feed is address(0), returns 0
-      const result = await admin._linkAmountToEth(eth(10));
+      const result = await admin.linkAmountToEth(eth(10));
       expect(result).to.equal(0);
     });
   });

@@ -6,16 +6,16 @@ pragma solidity 0.8.34;
 /// @dev Implements an intro tier followed by a 100-level cycle used across game modules
 library PriceLookupLib {
     /// @notice Get price for a specific level
-    /// @dev Price tiers:
-    ///      Intro (levels 0-9):
-    ///      - Levels 0-4: 0.01 ETH
-    ///      - Levels 5-9: 0.02 ETH
-    ///      Cycle (levels 10+ repeating every 100 levels, excluding intro tiers):
+    /// @dev Price tiers follow a 100-level cycle with discounted intro prices:
+    ///      Cycle (repeating every 100 levels):
+    ///      - Levels x00 (100, 200, etc.): 0.24 ETH (milestone)
     ///      - Levels x01-x29: 0.04 ETH
     ///      - Levels x30-x59: 0.08 ETH
     ///      - Levels x60-x89: 0.12 ETH
     ///      - Levels x90-x99: 0.16 ETH
-    ///      - Levels x00 (100, 200, etc.): 0.24 ETH
+    ///      First cycle overrides (levels 0-9 use intro pricing):
+    ///      - Levels 0-4: 0.01 ETH (instead of 0.04 ETH)
+    ///      - Levels 5-9: 0.02 ETH (instead of 0.04 ETH)
     /// @param targetLevel Level to query price for
     /// @return Price in wei
     function priceForLevel(uint24 targetLevel) internal pure returns (uint256) {
