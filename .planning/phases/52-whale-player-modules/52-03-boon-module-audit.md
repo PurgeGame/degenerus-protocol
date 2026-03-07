@@ -370,3 +370,118 @@ Returns true if ANY boon type survived the expiry checks.
 - The external call to `quests.awardQuestStreakBonus` adds ~2600 gas for the cross-contract call overhead. Acceptable.
 
 **Verdict:** CORRECT
+
+---
+
+## Boon Expiry Matrix
+
+| Boon Type | Storage Variables | Lootbox-Rolled Expiry | Deity-Granted Expiry | Consume Function |
+|-----------|-------------------|----------------------|---------------------|------------------|
+| Coinflip Boost | `coinflipBoonBps`, `coinflipBoonDay`, `deityCoinflipBoonDay` | stampDay + 2 days | deityDay != currentDay (same-day only) | `consumeCoinflipBoon` |
+| Purchase Boost | `purchaseBoostBps`, `purchaseBoostDay`, `deityPurchaseBoostDay` | stampDay + 4 days | deityDay != currentDay (same-day only) | `consumePurchaseBoost` |
+| Decimator Boost | `decimatorBoostBps`, `deityDecimatorBoostDay` | **No expiry** (no stamp day variable exists) | deityDay != currentDay (same-day only) | `consumeDecimatorBoost` |
+| Lootbox Boost 25% | `lootboxBoon25Active`, `lootboxBoon25Day`, `deityLootboxBoon25Day` | stampDay + 2 days | deityDay != currentDay (same-day only) | N/A (cleared in `checkAndClearExpiredBoon`, consumed by LootboxModule) |
+| Lootbox Boost 15% | `lootboxBoon15Active`, `lootboxBoon15Day`, `deityLootboxBoon15Day` | stampDay + 2 days | deityDay != currentDay (same-day only) | N/A (cleared in `checkAndClearExpiredBoon`, consumed by LootboxModule) |
+| Lootbox Boost 5% | `lootboxBoon5Active`, `lootboxBoon5Day`, `deityLootboxBoon5Day` | stampDay + 2 days | deityDay != currentDay (same-day only) | N/A (cleared in `checkAndClearExpiredBoon`, consumed by LootboxModule) |
+| Whale Boon | `whaleBoonDay`, `deityWhaleBoonDay`, `whaleBoonDiscountBps` | No lootbox expiry in BoonModule (handled in WhaleModule) | deityWhaleDay != currentDay (same-day only) | N/A (consumed in WhaleModule) |
+| Lazy Pass Boon | `lazyPassBoonDay`, `lazyPassBoonDiscountBps`, `deityLazyPassBoonDay` | lazyDay + 4 days (hardcoded) | deityDay != currentDay (same-day only) | N/A (consumed in WhaleModule) |
+| Deity Pass Boon | `deityPassBoonTier`, `deityPassBoonDay`, `deityDeityPassBoonDay` | stampDay + 4 days (`DEITY_PASS_BOON_EXPIRY_DAYS`) | currentDay > deityDay (inclusive -- lasts through granted day) | N/A (consumed in WhaleModule) |
+| Activity Boon | `activityBoonPending`, `activityBoonDay`, `deityActivityBoonDay` | stampDay + 2 days (`COINFLIP_BOON_EXPIRY_DAYS`) | deityDay != currentDay (same-day only) | `consumeActivityBoon` |
+
+### Expiry Pattern Summary
+
+**Standard deity expiry** (8 of 10 boon types): `deityDay != 0 && deityDay != currentDay` -- boon is valid only on the day it was granted. Expires at day rollover.
+
+**Special deity expiry** (deity pass boon only): `currentDay > deityDay` -- boon is valid through the end of the granted day (inclusive). Uses `>` instead of `!=`.
+
+**Lootbox expiry tiers:**
+- 2-day: Coinflip, Lootbox boosts (5/15/25%), Activity boon
+- 4-day: Purchase boost, Lazy pass, Deity pass
+- No expiry: Decimator boost (intentional -- incentivizes deflationary BURNIE burns)
+- N/A: Whale boon (expiry handled in WhaleModule, not BoonModule)
+
+## Storage Mutation Map
+
+| Function | Variables Written | Write Type | Condition |
+|----------|------------------|------------|-----------|
+| `consumeCoinflipBoon` | `coinflipBoonBps`, `coinflipBoonDay`, `deityCoinflipBoonDay` | delete (set to 0) | Always (on any path except address(0) early return) |
+| `consumePurchaseBoost` | `purchaseBoostBps`, `purchaseBoostDay`, `deityPurchaseBoostDay` | delete (set to 0) | Always (on any path except address(0) early return) |
+| `consumeDecimatorBoost` | `decimatorBoostBps`, `deityDecimatorBoostDay` | delete (set to 0) | Always (on any path except address(0) early return) |
+| `checkAndClearExpiredBoon` | Up to 30 boon storage variables | conditional delete (set to 0/false) | Only expired boons are cleared |
+| `consumeActivityBoon` | `activityBoonPending`, `activityBoonDay`, `deityActivityBoonDay` | delete (set to 0) | Always when pending > 0 |
+| `consumeActivityBoon` | `mintPacked_[player]` | update (bit-packed LEVEL_COUNT field) | Only if data changed |
+
+### checkAndClearExpiredBoon Detailed Mutation Map
+
+| Boon Block | Variables Cleared on Expiry | Variables NOT Cleared |
+|------------|----------------------------|----------------------|
+| Coinflip | `coinflipBoonBps`, `coinflipBoonDay`, `deityCoinflipBoonDay` | -- |
+| Lootbox 25% | `lootboxBoon25Active` (->false), `deityLootboxBoon25Day` | `lootboxBoon25Day` (stale day remains) |
+| Lootbox 15% | `lootboxBoon15Active` (->false), `deityLootboxBoon15Day` | `lootboxBoon15Day` (stale day remains) |
+| Lootbox 5% | `lootboxBoon5Active` (->false), `deityLootboxBoon5Day` | `lootboxBoon5Day` (stale day remains) |
+| Purchase | `purchaseBoostBps`, `purchaseBoostDay`, `deityPurchaseBoostDay` | -- |
+| Decimator | `decimatorBoostBps`, `deityDecimatorBoostDay` | -- (deity expiry only) |
+| Whale | `whaleBoonDay`, `deityWhaleBoonDay`, `whaleBoonDiscountBps` | -- (deity expiry only) |
+| Lazy Pass | `lazyPassBoonDay`, `lazyPassBoonDiscountBps`, `deityLazyPassBoonDay` | -- |
+| Deity Pass | `deityPassBoonTier`, `deityPassBoonDay`, `deityDeityPassBoonDay` | -- |
+| Activity | `activityBoonPending`, `activityBoonDay`, `deityActivityBoonDay` | -- |
+
+**Stale lootboxBoonXXDay note:** When lootbox boost boons expire, the `lootboxBoonXXDay` stamp day is NOT cleared (only the active flag and deity day are zeroed). This is harmless because the `active` flag is the authoritative indicator, but means up to 3 stale uint48 values may persist in storage per player. Gas cost: ~3 missed SSTORE-to-zero refunds per player per lootbox resolution. Correctness impact: none.
+
+## ETH Mutation Path Map
+
+| Path | Source | Destination | Trigger | Function |
+|------|--------|-------------|---------|----------|
+| (none) | -- | -- | This module does not move ETH directly | -- |
+
+BoonModule does not directly move ETH. It modifies boon state that affects ETH flows in other modules:
+- **Coinflip boost** -> affects coinflip stake bonus in BurnieCoinflip
+- **Purchase boost** -> affects ticket purchase bonus in MintModule
+- **Decimator boost** -> affects BURNIE burn bonus in DegenerusStonk (via COIN)
+- **Whale/Lazy/Deity pass boons** -> affect pricing discounts in WhaleModule
+- **Activity boon** -> affects level count stats and quest streaks (no ETH)
+
+## External Call Map
+
+| Function | Target | Call Type | Method | Gas Risk |
+|----------|--------|-----------|--------|----------|
+| `consumeActivityBoon` | `ContractAddresses.QUESTS` | External call | `awardQuestStreakBonus(player, bonus, currentDay)` | Low (~2600 gas overhead) |
+
+This is the **only external call** in the entire BoonModule. All other functions are pure storage manipulation.
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | -- |
+| CONCERN | 0 | -- |
+| GAS | 3 | See below |
+| CORRECT | 5 | All 5 functions verified correct |
+
+### GAS-01: Redundant SSTORE-to-zero on deity day for lootbox-rolled boons
+
+**Functions:** `consumeCoinflipBoon`, `consumePurchaseBoost`
+**Description:** These functions always clear `deityXXXDay[player] = 0` even when the boon was lootbox-rolled (deity day is already 0). The SSTORE to 0 when already 0 costs ~100 gas (warm slot, no-op). Negligible impact.
+**Recommendation:** None required. Code clarity outweighs micro-optimization.
+
+### GAS-02: Stale lootboxBoonXXDay not cleared on expiry
+
+**Function:** `checkAndClearExpiredBoon`
+**Description:** When lootbox boost boons (5%/15%/25%) expire, the `lootboxBoonXXDay` stamp day is not zeroed. This misses a ~4,800 gas refund per stale variable (3 possible = ~14,400 gas total). The active flag being authoritative means this has zero correctness impact.
+**Recommendation:** Low priority. Could add `lootboxBoonXXDay[player] = 0` to each expiry block for the gas refund, but the code is already 190 lines.
+
+### GAS-03: Whale boon deity-only expiry in BoonModule
+
+**Function:** `checkAndClearExpiredBoon`
+**Description:** Whale boon lootbox expiry is handled in WhaleModule during consumption, not in BoonModule during cleanup. This means an expired (but not deity-expired) whale boon will persist in storage until next whale bundle purchase attempt. No correctness issue since WhaleModule checks expiry on use. The `checkAndClearExpiredBoon` return value may indicate `hasAnyBoon = true` for an expired (but not yet cleaned up) whale boon, causing the `hasBoon` flag to persist longer than necessary. This is a minor UX/gas concern only.
+**Recommendation:** None required. Current design keeps WhaleModule's expiry logic self-contained.
+
+## Cross-Module Integration Points
+
+| This Module Function | Called By | Call Pattern | Notes |
+|---------------------|-----------|-------------|-------|
+| `consumeCoinflipBoon` | `DegenerusGame` -> `BurnieCoinflip.performFlip()` | delegatecall | Access: COIN or COINFLIP only |
+| `consumePurchaseBoost` | `DegenerusGame` -> `MintModule.purchase()` | delegatecall (self-call) | Access: address(this) only |
+| `consumeDecimatorBoost` | `DegenerusGame` -> `DegenerusStonk.burn()` | delegatecall | Access: COIN only |
+| `checkAndClearExpiredBoon` | `LootboxModule` | nested delegatecall | During lootbox resolution |
+| `consumeActivityBoon` | `LootboxModule` | nested delegatecall | During lootbox resolution |
