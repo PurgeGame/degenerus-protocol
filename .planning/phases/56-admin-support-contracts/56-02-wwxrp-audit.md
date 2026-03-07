@@ -392,3 +392,103 @@ Lines 63-66 contain NatSpec documentation for a `Wrapped` event that no longer e
 The event declaration was removed when wrapping was disabled, but the NatSpec comments remain. This is a cosmetic issue only -- no functional impact.
 
 **Severity:** Informational (NatSpec hygiene)
+
+---
+
+## Access Control Matrix
+
+| Modifier/Guard | Functions | Who Can Call | Error on Violation |
+|----------------|-----------|-------------|-------------------|
+| `msg.sender == MINTER_GAME \|\| MINTER_COIN \|\| MINTER_COINFLIP` | `mintPrize` | DegenerusGame, BurnieCoin, BurnieCoinflip | `OnlyMinter()` |
+| `msg.sender == MINTER_VAULT` | `vaultMintTo` | DegenerusVault | `OnlyVault()` |
+| `msg.sender == MINTER_GAME` | `burnForGame` | DegenerusGame | `OnlyMinter()` |
+| (none -- public) | `approve` | Any caller | -- |
+| (none -- public) | `transfer` | Any caller | -- |
+| (none -- public) | `transferFrom` | Any caller (with allowance) | -- |
+| (none -- public) | `unwrap` | Any WWXRP holder | -- |
+| (none -- public) | `donate` | Any caller (with wXRP approval) | -- |
+| (none -- view) | `supplyIncUncirculated` | Any caller | -- |
+| (none -- view) | `vaultMintAllowance` | Any caller | -- |
+
+**Note:** Access control uses inline `if` checks against compile-time constants from ContractAddresses, not Solidity `modifier` syntax. No modifiers are defined in this contract.
+
+---
+
+## Storage Mutation Map
+
+| Function | Variables Written | Write Type |
+|----------|------------------|------------|
+| `approve` | `allowance[owner][spender]` | Set (overwrite) |
+| `transfer` | `balanceOf[from]`, `balanceOf[to]` | Decrement, Increment |
+| `transferFrom` | `allowance[from][spender]`, `balanceOf[from]`, `balanceOf[to]` | Decrement (unless unlimited), Decrement, Increment |
+| `_transfer` | `balanceOf[from]`, `balanceOf[to]` | Decrement, Increment |
+| `_mint` | `totalSupply`, `balanceOf[to]` | Increment, Increment |
+| `_burn` | `balanceOf[from]`, `totalSupply` | Decrement, Decrement |
+| `unwrap` | `wXRPReserves`, `balanceOf[msg.sender]`, `totalSupply` | Decrement, Decrement (via _burn), Decrement (via _burn) |
+| `donate` | `wXRPReserves` | Increment |
+| `mintPrize` | `totalSupply`, `balanceOf[to]` | Increment (via _mint), Increment (via _mint) |
+| `vaultMintTo` | `vaultAllowance`, `totalSupply`, `balanceOf[to]` | Decrement (unchecked), Increment (via _mint), Increment (via _mint) |
+| `burnForGame` | `balanceOf[from]`, `totalSupply` | Decrement (via _burn), Decrement (via _burn) |
+
+**Storage Variables (4 mutable):**
+- `totalSupply` (uint256) -- circulating WWXRP supply
+- `vaultAllowance` (uint256) -- remaining uncirculating reserve, initialized to 1B ether
+- `balanceOf` (mapping address => uint256) -- per-address WWXRP balance
+- `allowance` (mapping address => address => uint256) -- ERC20 spend approvals
+- `wXRPReserves` (uint256) -- actual wXRP backing held by contract
+
+**Constants (not mutable):**
+- `name`, `symbol`, `decimals` -- ERC20 metadata
+- `INITIAL_VAULT_ALLOWANCE` -- 1B ether
+- `wXRP`, `MINTER_GAME`, `MINTER_COIN`, `MINTER_COINFLIP`, `MINTER_VAULT` -- compile-time addresses
+
+---
+
+## Token Flow Map
+
+| Path | Source | Destination | Trigger | Function | Affects wXRPReserves? |
+|------|--------|-------------|---------|----------|-----------------------|
+| Mint prize | (new supply, unbacked) | Recipient | Game/Coin/Coinflip call | `mintPrize` | No (deficit increases) |
+| Vault mint | (uncirculating reserve) | Recipient | Vault call | `vaultMintTo` | No (deficit increases) |
+| Burn for game | Holder balance | (destroyed) | Game call | `burnForGame` | No (ratio improves) |
+| Unwrap | Holder balance | (burned) + wXRP out | User call | `unwrap` | Yes (decreases) |
+| Donate | -- | wXRP reserves | Donor call | `donate` | Yes (increases) |
+| Transfer | Holder A | Holder B | User call | `transfer` | No |
+| Transfer from | Holder A | Holder B | Approved spender call | `transferFrom` | No |
+
+**Key invariant:** `wXRPReserves` is only modified by `unwrap` (decrease) and `donate` (increase). All mint/burn paths operate on WWXRP supply without touching reserves.
+
+---
+
+## Cross-Contract Call Graph
+
+| Function | Calls To | Contract | Method | Direction |
+|----------|----------|----------|--------|-----------|
+| `unwrap` | wXRP | External ERC20 (WXRP address from ContractAddresses) | `transfer(msg.sender, amount)` | Outbound (tokens leave) |
+| `donate` | wXRP | External ERC20 (WXRP address from ContractAddresses) | `transferFrom(msg.sender, address(this), amount)` | Inbound (tokens enter) |
+
+**Callers of this contract:**
+
+| External Contract | Calls | Function | Context |
+|-------------------|-------|----------|---------|
+| DegenerusGameLootboxModule | `wwxrp.mintPrize(player, 1 ether)` | `mintPrize` | Lootbox WWXRP prize (10% chance) |
+| DegenerusGameDegeneretteModule | `wwxrp.mintPrize(player, payout)` | `mintPrize` | Degenerette win payout |
+| DegenerusGameDegeneretteModule | `wwxrp.mintPrize(player, 1 ether)` | `mintPrize` | Consolation prize for qualifying WWXRP losses |
+| DegenerusGameDegeneretteModule | `wwxrp.burnForGame(player, totalBet)` | `burnForGame` | Degenerette WWXRP bet deduction |
+| BurnieCoinflip | `wwxrp.mintPrize(player, lossCount * 1 ether)` | `mintPrize` | Coinflip loss consolation |
+| DegenerusVault | `wwxrpToken.vaultMintTo(to, amount)` | `vaultMintTo` | Vault WWXRP distribution |
+| DegenerusStonk | (via `transferFrom` with approval) | `transferFrom` | Proportional WWXRP payout on DGNRS burn |
+
+---
+
+## Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | -- |
+| CONCERN | 0 | -- |
+| GAS | 1 | `vaultMintAllowance()` is redundant with auto-generated `vaultAllowance` public getter |
+| INFORMATIONAL | 2 | (1) Orphaned NatSpec for removed `Wrapped` event at lines 63-66; (2) `vaultMintTo` silent return on zero amount not documented in NatSpec |
+| CORRECT | 12 | All 12 audited functions verified correct |
+
+**Overall Assessment:** WrappedWrappedXRP is a clean, minimal ERC20 with intentionally undercollateralized design. No bugs or security concerns found. CEI pattern is properly enforced on the critical `unwrap` path. Access control correctly restricts privileged operations. The undercollateralized/first-come-first-served design is well-documented and intentional. The only findings are cosmetic (orphaned NatSpec, redundant view function, missing zero-amount documentation).
