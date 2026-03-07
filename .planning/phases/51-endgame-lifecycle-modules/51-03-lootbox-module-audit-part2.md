@@ -229,3 +229,223 @@ Part 2 covers remaining internal helpers: lootbox roll resolution, ticket count 
 **Gas Flags:** 100-iteration loop with external storage writes per iteration. This is inherently gas-heavy (~100 SSTORE operations) but necessary for the whale pass design. No optimization possible without architectural change.
 
 **Verdict:** CORRECT
+
+---
+
+### `_lazyPassPriceForLevel(uint24)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _lazyPassPriceForLevel(uint24 passLevel) private pure returns (uint256)` |
+| **Visibility** | private |
+| **Mutability** | pure |
+| **Parameters** | `passLevel` (uint24): the lazy pass start level |
+| **Returns** | `uint256`: the lazy pass value in wei (sum of 10 level prices) |
+
+**State Reads:** None (pure function)
+
+**State Writes:** None (pure function)
+
+**Callers:** `_rollLootboxBoons` (to compute lazy pass value for boon pool stats)
+
+**Callees:**
+- `PriceLookupLib.priceForLevel(passLevel + i)` -- called 10 times in loop to get ticket price at each level
+
+**ETH Flow:** None. Pure pricing calculation.
+
+**Invariants:**
+- Returns 0 for passLevel == 0 (invalid level guard).
+- Sums prices across 10 consecutive levels starting at passLevel. This matches the lazy pass design where a pass covers 10 levels of tickets.
+- Uses unchecked increment in loop for gas efficiency; no overflow risk since uint24 + 10 fits in uint24.
+
+**NatSpec Accuracy:** NatSpec says "Value equals the sum of per-level ticket prices across 10 levels." Accurate. The NatSpec also mentions "or 0 if invalid level" which is correctly handled.
+
+**Gas Flags:** None. 10 iterations of a pure library call is efficient.
+
+**Verdict:** CORRECT
+
+---
+
+### `_isDecimatorWindow()` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _isDecimatorWindow() private view returns (bool)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | None |
+| **Returns** | `bool`: true if decimator window is currently open |
+
+**State Reads:**
+- `decWindowOpen` -- boolean latch from DegenerusGameStorage (slot offset 4:5 in packed storage)
+
+**State Writes:** None (view function)
+
+**Callers:**
+- `deityBoonSlots` -- to determine if decimator boons appear in deity slots
+- `issueDeityBoon` -- to determine if decimator boons can be issued
+- `_rollLootboxBoons` -- to determine if decimator boons are in the lootbox boon pool
+
+**Callees:** None
+
+**ETH Flow:** None. Simple state read accessor.
+
+**Invariants:**
+- Pure wrapper around `decWindowOpen` storage variable. No computation, no side effects.
+- `decWindowOpen` is set to true when decimator window opens (at level 4 jackpot phase start) and controls whether decimator-related boons are available.
+
+**NatSpec Accuracy:** NatSpec says "Check if decimator window is currently open." Accurate. Returns the boolean directly.
+
+**Gas Flags:** Single SLOAD. Could be inlined by compiler. No concern.
+
+**Verdict:** CORRECT
+
+---
+
+### `_deityDailySeed(uint48)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _deityDailySeed(uint48 day) private view returns (uint256 seed)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `day` (uint48): the day index |
+| **Returns** | `seed` (uint256): the RNG seed for this day |
+
+**State Reads:**
+- `rngWordByDay[day]` -- daily RNG word from VRF fulfillment
+- `rngWordCurrent` -- fallback: current RNG word if daily not yet set
+
+**State Writes:** None (view function)
+
+**Callers:** `_deityBoonForSlot` (to generate per-slot entropy)
+
+**Callees:** None (except built-in `keccak256` for deterministic fallback)
+
+**ETH Flow:** None. RNG seed retrieval.
+
+**Invariants:**
+- Three-tier fallback: (1) `rngWordByDay[day]` if set, (2) `rngWordCurrent` if set, (3) deterministic `keccak256(abi.encodePacked(day, address(this)))` as last resort.
+- The deterministic fallback ensures deity boon slots are always available, even before any VRF fulfillment. This is necessary because deity boons need to be queryable at any time.
+- The fallback hash uses `address(this)` which in delegatecall context is the Game contract address -- consistent across calls.
+
+**NatSpec Accuracy:** NatSpec says "Get the daily RNG seed for deity boon generation. Falls back to current RNG word or deterministic hash if unavailable." Accurate. All three tiers documented.
+
+**Gas Flags:** None. At most 2 SLOADs plus one keccak256.
+
+**Verdict:** CORRECT
+
+---
+
+### `_deityBoonForSlot(address, uint48, uint8, bool, bool)` [private]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _deityBoonForSlot(address deity, uint48 day, uint8 slot, bool decimatorAllowed, bool deityPassAvailable) private view returns (uint8 boonType)` |
+| **Visibility** | private |
+| **Mutability** | view |
+| **Parameters** | `deity` (address): deity pass holder address; `day` (uint48): day index; `slot` (uint8): slot index (0-2); `decimatorAllowed` (bool): whether decimator boons are allowed; `deityPassAvailable` (bool): whether deity passes are still purchasable |
+| **Returns** | `boonType` (uint8): the boon type (1-31) for this slot |
+
+**State Reads:**
+- Via `_deityDailySeed(day)` -- reads `rngWordByDay[day]`, `rngWordCurrent`
+
+**State Writes:** None (view function)
+
+**Callers:**
+- `deityBoonSlots` -- external view to show available boon slots
+- `issueDeityBoon` -- to determine which boon to apply
+
+**Callees:**
+- `_deityDailySeed(day)` -- get the RNG seed for the day
+- `_boonFromRoll(roll, decimatorAllowed, deityPassAvailable, true, true)` -- map weighted roll to boon type
+
+**ETH Flow:** None. Pure boon type determination.
+
+**Invariants:**
+- Seed construction: `keccak256(abi.encode(dailySeed, deity, day, slot))` -- unique per deity per day per slot. Deterministic so `deityBoonSlots` and `issueDeityBoon` always agree on boon types.
+- Total weight: `DEITY_BOON_WEIGHT_TOTAL` (1298) when decimator allowed, `DEITY_BOON_WEIGHT_TOTAL_NO_DECIMATOR` (1248) when not. If deity pass unavailable, subtracts `DEITY_BOON_WEIGHT_DEITY_PASS_ALL` (40). Roll is `seed % total`.
+- Always passes `allowWhalePass=true, allowLazyPass=true` to `_boonFromRoll` -- deity boons can include all pass types.
+- Weight totals verified: With decimator: 200+40+8 + 200+30+8 + 400+80+16 + 40+8+2 + 28+10+2 + 28+10+2 + 100+30+8 + 8 + 30+8+2 = 1298. Without decimator: 1298 - (40+8+2) = 1248. Correct.
+
+**NatSpec Accuracy:** NatSpec says "Deterministically generate a boon type for a deity's slot on a given day." Accurate. The function is deterministic given the same inputs and daily seed.
+
+**Gas Flags:** None. Single keccak256 plus a modulus and a weighted lookup.
+
+**Verdict:** CORRECT
+
+---
+
+## ETH Mutation Path Map (Complete LootboxModule)
+
+This map traces every path where ETH enters, moves between pools, or exits through the LootboxModule. Since this module is called via delegatecall, all storage operations modify the DegenerusGame contract's state.
+
+### Direct ETH Flows
+
+| Path | Source | Destination | Trigger | Function | Notes |
+|------|--------|-------------|---------|----------|-------|
+| Lootbox opening (ETH) | lootboxEth[index][player] (accounting) | Cleared (zeroed) | Player opens ETH lootbox | `openLootBox` | ETH was deposited earlier during purchase; this function resolves the reward distribution |
+| BURNIE reward (ETH lootbox) | N/A (virtual) | Player via `coin.creditFlip` | Lootbox roll -> 25% large BURNIE path | `_resolveLootboxCommon` -> `_resolveLootboxRoll` | BURNIE tokens minted, no ETH moves |
+| BURNIE reward (presale bonus) | N/A (virtual) | Player via `coin.creditFlip` | Presale flag active + large BURNIE roll | `_resolveLootboxCommon` | 62% bonus on BURNIE from presale multiplier path |
+| BURNIE lootbox opening | lootboxBurnie[index][player] (accounting) | Cleared (zeroed) | Player opens BURNIE lootbox | `openBurnieLootBox` | BURNIE amount converted to ETH-equivalent at 80% rate |
+
+### Token Transfer Flows (Non-ETH Assets Moving Through Lootbox Resolution)
+
+| Path | Asset | Source | Destination | Trigger | Function |
+|------|-------|--------|-------------|---------|----------|
+| DGNRS reward | DGNRS | Lootbox Pool (DegenerusStonk) | Player | 10% lootbox roll | `_resolveLootboxRoll` -> `_creditDgnrsReward` -> `dgnrs.transferFromPool` |
+| WWXRP reward | WWXRP | Minted | Player | 10% lootbox roll | `_resolveLootboxRoll` -> `wwxrp.mintPrize` |
+| BURNIE reward (ticket-path fallback) | BURNIE | Minted via creditFlip | Player | 55% roll when targetLevel < currentLevel | `_resolveLootboxRoll` -> returned as burnieOut -> `coin.creditFlip` |
+| Whale pass tickets | Tickets | N/A | Player ticket queue (100 levels) | Whale pass boon (type 28) | `_applyBoon` -> `_activateWhalePass` -> `_queueTickets` x100 |
+| Future tickets | Tickets | N/A | Player ticket queue (target level) | 55% lootbox roll | `_resolveLootboxCommon` -> `_queueTicketsScaled` |
+
+### EV Multiplier / Scaling Paths
+
+| Path | Effect | Range | Cap | Function |
+|------|--------|-------|-----|----------|
+| Activity score EV multiplier | Scales lootbox ETH amount | 80%-135% of input | 10 ETH benefit per account per level | `openLootBox` / `resolveLootboxDirect` -> `_applyEvMultiplierWithCap` |
+| Lootbox split | Splits main amount into two independent rolls | > 0.5 ETH threshold | N/A | `_resolveLootboxCommon` |
+| Boon budget carve-out | 10% of lootbox amount reserved for boon chance | Up to 1 ETH max | LOOTBOX_BOON_MAX_BUDGET = 1 ETH | `_resolveLootboxCommon` |
+
+### Boon Award Paths (Indirect Value, No Immediate ETH Transfer)
+
+| Boon Type | Value Source | Discount/Bonus | Duration | Function |
+|-----------|-------------|----------------|----------|----------|
+| Coinflip boon (5/10/25%) | Future coinflip earnings | 5-25% bonus on coinflip deposits | Until next lootbox boon or expiry | `_applyBoon` -> writes `coinflipBoonBps` |
+| Lootbox boost (5/15/25%) | Future lootbox EV | 5-25% additional lootbox value | Until next lootbox boon or expiry | `_applyBoon` -> writes `lootboxBoon*Active` |
+| Purchase boost (5/15/25%) | Future purchase savings | 5-25% discount on ticket purchases | Until next boon or expiry | `_applyBoon` -> writes `purchaseBoostBps` |
+| Decimator boost (10/25/50%) | Future decimator earnings | 10-50% bonus on decimator claims | Only during decimator window | `_applyBoon` -> writes `decimatorBoostBps` |
+| Whale discount (10/25/50%) | Future whale bundle savings | 10-50% off whale bundle price | Until next boon or expiry | `_applyBoon` -> writes `whaleBoonDiscountBps` |
+| Lazy pass discount (10/25/50%) | Future lazy pass savings | 10-50% off lazy pass price | Until next boon or expiry | `_applyBoon` -> writes `lazyPassBoonDiscountBps` |
+| Deity pass discount (10/25/50%) | Future deity pass savings | 10-50% off deity pass price | Until next boon or expiry | `_applyBoon` -> writes `deityPassBoonTier` |
+| Activity boon (10/25/50) | Activity score boost | 10-50 point activity bonus | Consumed on next lootbox open | `_applyBoon` -> writes `activityBoonPending` |
+| Whale pass award | 100-level ticket spread | 2 tickets/level (40 bonus early) | Permanent | `_applyBoon` -> `_activateWhalePass` |
+
+## Complete LootboxModule Findings Summary
+
+| Severity | Count | Details |
+|----------|-------|---------|
+| BUG | 0 | None found |
+| CONCERN | 0 | None found |
+| GAS | 1 | `_lootboxDgnrsReward`: local variable `unit = 1 ether` could be inlined as constant (informational, compiler likely optimizes) |
+| CORRECT | 10 | All functions verified correct |
+
+**Total functions audited (Part 2): 10**
+
+- `_resolveLootboxRoll` -- CORRECT
+- `_lootboxTicketCount` -- CORRECT
+- `_lootboxDgnrsReward` -- CORRECT
+- `_creditDgnrsReward` -- CORRECT
+- `_burnieToEthValue` -- CORRECT
+- `_activateWhalePass` -- CORRECT
+- `_lazyPassPriceForLevel` -- CORRECT
+- `_isDecimatorWindow` -- CORRECT
+- `_deityDailySeed` -- CORRECT
+- `_deityBoonForSlot` -- CORRECT
+
+**Key observations:**
+1. No ETH is directly transferred in any Part 2 function. All "ETH flow" is either accounting (clearing lootbox balances), token transfers (DGNRS, WWXRP, BURNIE), or ticket queuing.
+2. The lootbox roll system provides well-balanced prize distribution with 55% tickets, 10% DGNRS, 10% WWXRP, 25% BURNIE, each with multi-tier variance for reward excitement.
+3. The deity boon system is fully deterministic (same seed + deity + day + slot = same boon), ensuring `deityBoonSlots` view and `issueDeityBoon` action always agree.
+4. Boon categories enforce single-category active boon per player -- prevents stacking different boon types simultaneously.
+5. The activity score EV multiplier (80%-135%) with per-account per-level 10 ETH cap prevents exploitation while rewarding active players.
