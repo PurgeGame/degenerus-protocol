@@ -797,7 +797,7 @@ contract BurnieCoin {
     }
 
     /// @notice Notify quest module of a loot box purchase.
-    /// @dev Access: game or lootbox contract. Credits quest rewards as flip stakes.
+    /// @dev Access: GAME only. Called from LootboxModule via delegatecall (msg.sender == GAME).
     /// @param player The player who purchased the loot box.
     /// @param amountWei ETH amount spent on the loot box (in wei).
     function notifyQuestLootBox(address player, uint256 amountWei) external {

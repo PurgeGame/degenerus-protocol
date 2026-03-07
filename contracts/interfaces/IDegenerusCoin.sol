@@ -7,7 +7,7 @@ import {IDegenerusCoinModule} from "./DegenerusGameModuleInterfaces.sol";
 /// @notice Interface for the Degenerus Coin token with game integration functionality
 /// @dev Extends IDegenerusCoinModule to provide coin management and quest notification capabilities
 interface IDegenerusCoin is IDegenerusCoinModule {
-    /// @notice Credits coin to a player's balance without minting new tokens
+    /// @notice Mints coin directly to a player's wallet balance
     /// @param player The address to credit coins to
     /// @param amount The amount of coins to credit
     function creditCoin(address player, uint256 amount) external;

@@ -7,7 +7,7 @@ pragma solidity 0.8.34;
 interface IDegenerusAffiliate {
     /// @notice Process affiliate rewards for a purchase or gameplay action.
     /// @dev Handles referral resolution, reward scaling, and multi-tier distribution.
-    ///      Fresh ETH rewards: 25% (levels 1-3), 20% (levels 4+).
+    ///      Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+).
     ///      Recycled ETH rewards: 5% (all levels).
     ///      Access restricted to COIN and GAME purchase paths.
     /// @param amount Base reward amount (18 decimals).

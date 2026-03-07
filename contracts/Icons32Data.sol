@@ -101,7 +101,7 @@ contract Icons32Data {
     /// @notice Thrown when startIndex + paths.length would exceed array bounds (33)
     error IndexOutOfBounds();
 
-    /// @notice Thrown when quadrant parameter is not 1, 2, or 3
+    /// @notice Thrown when quadrant parameter is not 0, 1, or 2
     error InvalidQuadrant();
 
     // ---------------------------------------------------------------------
@@ -162,25 +162,25 @@ contract Icons32Data {
     }
 
     /// @notice Set symbol names for a quadrant
-    /// @dev Only callable by CREATOR before finalization. Quadrant 0 (Dice) names are generated dynamically.
-    /// @param quadrant Quadrant number (1=Crypto, 2=Zodiac, 3=Cards)
+    /// @dev Only callable by CREATOR before finalization. Quadrant 3 (Dice) names are generated dynamically.
+    /// @param quadrant Quadrant index (0=Crypto, 1=Zodiac, 2=Cards) — matches symbol() getter indexing
     /// @param symbols Array of 8 symbol names for the quadrant
     /// @custom:reverts OnlyCreator When caller is not ContractAddresses.CREATOR
     /// @custom:reverts AlreadyFinalized When finalize() has already been called
-    /// @custom:reverts InvalidQuadrant When quadrant is not 1, 2, or 3
+    /// @custom:reverts InvalidQuadrant When quadrant is not 0, 1, or 2
     function setSymbols(uint256 quadrant, string[8] memory symbols) external {
         if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
         if (_finalized) revert AlreadyFinalized();
 
-        if (quadrant == 1) {
+        if (quadrant == 0) {
             for (uint256 i = 0; i < 8; ++i) {
                 _symQ1[i] = symbols[i];
             }
-        } else if (quadrant == 2) {
+        } else if (quadrant == 1) {
             for (uint256 i = 0; i < 8; ++i) {
                 _symQ2[i] = symbols[i];
             }
-        } else if (quadrant == 3) {
+        } else if (quadrant == 2) {
             for (uint256 i = 0; i < 8; ++i) {
                 _symQ3[i] = symbols[i];
             }

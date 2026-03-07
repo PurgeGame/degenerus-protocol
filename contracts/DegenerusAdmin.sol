@@ -405,7 +405,7 @@ contract DegenerusAdmin {
     ///      - FeedHealthy guard prevents changing a working feed.
     ///      - Enforces 18 decimals (Chainlink LINK/ETH standard).
     ///      - Treats stale feeds (updatedAt too old) as unhealthy.
-    ///      - Invalid feed data (answer <= 0) causes _linkAmountToEth to return 0.
+    ///      - Invalid feed data (answer <= 0) causes linkAmountToEth to return 0.
     ///
     /// @param feed New price feed address (zero to disable).
     function setLinkEthPriceFeed(address feed) external onlyOwner {
@@ -630,7 +630,7 @@ contract DegenerusAdmin {
 
         // Convert LINK amount to ETH-equivalent. Use try/catch to prevent oracle failures from blocking donations.
         uint256 ethEquivalent;
-        try this._linkAmountToEth(amount) returns (uint256 eth) {
+        try this.linkAmountToEth(amount) returns (uint256 eth) {
             ethEquivalent = eth;
         } catch {
             return; // Oracle failed, LINK forwarded but no reward.
@@ -661,7 +661,7 @@ contract DegenerusAdmin {
     /// - Assumes feed returns 18 decimal price (Chainlink LINK/ETH standard).
     /// - Rejects stale rounds (answeredInRound < roundId), future timestamps, and stale updates.
     /// - Exposed as external to allow try/catch in onTokenTransfer.
-    function _linkAmountToEth(
+    function linkAmountToEth(
         uint256 amount
     ) external view returns (uint256 ethAmount) {
         address feed = linkEthPriceFeed;
