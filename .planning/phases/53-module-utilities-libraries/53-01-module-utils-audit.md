@@ -285,3 +285,189 @@ This function does NOT increment `claimablePool`. The aggregate pool tracking is
 Unlike `_creditClaimable`, this function DOES update `claimablePool` for the remainder portion. This is because `_queueWhalePassClaimCore` is a terminal payout function (callers don't batch pool updates), whereas `_creditClaimable` is used in batch contexts where callers manage pool updates.
 
 **Verdict:** CORRECT
+
+---
+
+## Storage Mutation Map
+
+| Function | Storage Variable | Slot Type | Write Type | Condition |
+|----------|-----------------|-----------|------------|-----------|
+| `_recordMintStreakForLevel` | `mintPacked_[player]` | mapping(address => uint256) | Mask-and-set (bits 48-71 streak, bits 160-183 lastCompleted) | `player != address(0)` AND `lastCompleted != mintLevel` |
+| `_creditClaimable` | `claimableWinnings[beneficiary]` | mapping(address => uint256) | Unchecked increment (`+= weiAmount`) | `weiAmount != 0` |
+| `_calcAutoRebuy` | (none) | -- | -- | Pure function, no storage |
+| `_mintStreakEffective` | (none) | -- | -- | View function, no storage |
+| `_queueWhalePassClaimCore` | `whalePassClaims[winner]` | mapping(address => uint256) | Checked increment (`+= fullHalfPasses`) | `fullHalfPasses != 0` |
+| `_queueWhalePassClaimCore` | `claimableWinnings[winner]` | mapping(address => uint256) | Unchecked increment (`+= remainder`) | `remainder != 0` |
+| `_queueWhalePassClaimCore` | `claimablePool` | uint256 | Checked increment (`+= remainder`) | `remainder != 0` |
+
+### Storage Variables Affected (Summary)
+
+| Variable | Type | Functions Writing | Functions Reading |
+|----------|------|-------------------|-------------------|
+| `mintPacked_[player]` | mapping(address => uint256) | `_recordMintStreakForLevel` | `_recordMintStreakForLevel`, `_mintStreakEffective` |
+| `claimableWinnings[addr]` | mapping(address => uint256) | `_creditClaimable`, `_queueWhalePassClaimCore` | (implicit via `+=`) |
+| `claimablePool` | uint256 | `_queueWhalePassClaimCore` | (implicit via `+=`) |
+| `whalePassClaims[addr]` | mapping(address => uint256) | `_queueWhalePassClaimCore` | (implicit via `+=`) |
+
+---
+
+## ETH Mutation Path Map
+
+### Path 1: `_creditClaimable` -- Pull-Pattern Credit
+
+```
+Caller (JackpotModule/DecimatorModule/EndgameModule/DegeneretteModule)
+  |
+  v
+_creditClaimable(beneficiary, weiAmount)
+  |
+  +-> claimableWinnings[beneficiary] += weiAmount  (accounting credit)
+  +-> emit PlayerCredited(beneficiary, beneficiary, weiAmount)
+  |
+  NOTE: claimablePool NOT updated here -- caller manages aggregate
+  NOTE: No actual ETH transfer -- pull pattern defers to claim()
+```
+
+**Downstream:** Player later calls `DegenerusGame.claim()` which:
+- Decrements `claimableWinnings[player]`
+- Decrements `claimablePool`
+- Transfers ETH via `player.call{value: amount}("")`
+
+### Path 2: `_queueWhalePassClaimCore` -- Whale Pass Conversion + Remainder Credit
+
+```
+Caller (EndgameModule/DecimatorModule)
+  |
+  v
+_queueWhalePassClaimCore(winner, amount)
+  |
+  +-> fullHalfPasses = amount / 2.175 ETH
+  |   |
+  |   +-> whalePassClaims[winner] += fullHalfPasses  (deferred pass count)
+  |       NOTE: ETH equivalent is "locked" -- redeemed later as whale passes
+  |
+  +-> remainder = amount - (fullHalfPasses * 2.175 ETH)
+      |
+      +-> claimableWinnings[winner] += remainder  (accounting credit)
+      +-> claimablePool += remainder              (aggregate tracking)
+      +-> emit PlayerCredited(winner, winner, remainder)
+```
+
+**Downstream:**
+- Whale passes: Player calls `claimWhalePass()` to redeem queued passes as 10-level bundles
+- Remainder: Same pull-pattern claim as Path 1
+
+### Path 3: `_calcAutoRebuy` -- Pure Calculation (No ETH Movement)
+
+```
+Caller (JackpotModule/DecimatorModule/EndgameModule)
+  |
+  v
+_calcAutoRebuy(...) -> AutoRebuyCalc
+  |
+  Returns breakdown:
+  +-> reserved: ETH for take-profit (credited via _creditClaimable by caller)
+  +-> ethSpent: ETH converted to tickets (added to prize pools by caller)
+  +-> rebuyAmount - ethSpent: dust remainder (credited via _creditClaimable by caller)
+```
+
+**Note:** `_calcAutoRebuy` itself moves no ETH. The caller uses the returned `AutoRebuyCalc` struct to execute the actual ETH movements (ticket queuing, pool credits, take-profit credits).
+
+---
+
+## Caller Map (Cross-Module)
+
+### `_recordMintStreakForLevel(address, uint24)`
+
+| Caller Contract | Function | Line | Context |
+|----------------|----------|------|---------|
+| `DegenerusGame` | `recordMintQuestStreak(address)` | 447 | External entry, COIN-gated, passes `_activeTicketLevel()` |
+
+**Call chain:** COIN contract -> `DegenerusGame.recordMintQuestStreak()` -> `_recordMintStreakForLevel()`
+
+### `_mintStreakEffective(address, uint24)`
+
+| Caller Contract | Function | Line | Context |
+|----------------|----------|------|---------|
+| `DegenerusGame` | `ethMintStreakCount(address)` | 2353 | External view, passes `_activeTicketLevel()` |
+| `DegenerusGame` | `ethMintStats(address)` | 2374 | External view, passes `_activeTicketLevel()` |
+| `DegenerusGame` | `_playerActivityScore(address)` | 2416 | Internal view, passes `_activeTicketLevel()` |
+| `DegenerusGameDegeneretteModule` | (activity score calc) | 1030 | Internal call, passes `level + 1` |
+
+**Note:** DegeneretteModule passes `level + 1` instead of `_activeTicketLevel()`. Since `_activeTicketLevel()` returns `level + 1` during purchase phase (the common case when degenerette bets are active), these are equivalent in practice.
+
+### `_creditClaimable(address, uint256)`
+
+| Caller Contract | Function | Line | Context |
+|----------------|----------|------|---------|
+| `DegenerusGameJackpotModule` | (jackpot payout) | 982 | Direct jackpot credit |
+| `DegenerusGameJackpotModule` | (non-rebuy fallback) | 1010 | When auto-rebuy disabled/fails |
+| `DegenerusGameJackpotModule` | (take-profit) | 1023 | Reserved take-profit portion |
+| `DegenerusGameDegeneretteModule` | (bet payout) | 1174 | Degenerette bet winnings |
+| `DegenerusGameDecimatorModule` | (decimator payout) | 476 | Decimator claim when no auto-rebuy |
+| `DegenerusGameDecimatorModule` | (take-profit) | 488 | Decimator take-profit reservation |
+| `DegenerusGameDecimatorModule` | (non-rebuy fallback) | 517 | Decimator non-rebuy fallback |
+| `DegenerusGameEndgameModule` | (BAF payout) | 237 | Endgame/BAF auto-rebuy credit |
+| `DegenerusGameEndgameModule` | (take-profit) | 250 | Endgame take-profit reservation |
+| `DegenerusGameEndgameModule` | (non-rebuy fallback) | 264 | Endgame non-rebuy fallback |
+| `DegenerusGamePayoutUtils` | `_queueWhalePassClaimCore` | 88 | Remainder after whale pass division |
+
+**Total call sites:** 11
+
+### `_calcAutoRebuy(...)`
+
+| Caller Contract | Function | Line | Context |
+|----------------|----------|------|---------|
+| `DegenerusGameJackpotModule` | (jackpot auto-rebuy) | 1000 | Jackpot prize auto-rebuy calculation |
+| `DegenerusGameDecimatorModule` | (decimator auto-rebuy) | 466 | Decimator prize auto-rebuy calculation |
+| `DegenerusGameEndgameModule` | (endgame auto-rebuy) | 227 | Endgame/BAF prize auto-rebuy calculation |
+
+**Total call sites:** 3
+
+### `_queueWhalePassClaimCore(address, uint256)`
+
+| Caller Contract | Function | Line | Context |
+|----------------|----------|------|---------|
+| `DegenerusGameEndgameModule` | (lootbox portion) | 363 | Lootbox portion of endgame payout |
+| `DegenerusGameEndgameModule` | (direct payout) | 410 | Direct whale pass queuing |
+| `DegenerusGameDecimatorModule` | (decimator payout) | 729 | Large decimator payout conversion |
+
+**Total call sites:** 3
+
+---
+
+## Findings Summary
+
+### Verdict Breakdown
+
+| Function | Contract | Verdict |
+|----------|----------|---------|
+| `_recordMintStreakForLevel` | MintStreakUtils | CORRECT |
+| `_mintStreakEffective` | MintStreakUtils | CORRECT |
+| `_creditClaimable` | PayoutUtils | CORRECT |
+| `_calcAutoRebuy` | PayoutUtils | CORRECT |
+| `_queueWhalePassClaimCore` | PayoutUtils | CORRECT |
+
+**Summary:** 5/5 functions CORRECT. 0 BUG. 0 CONCERN.
+
+### Key Observations
+
+1. **Mint streak idempotency verified:** `_recordMintStreakForLevel` checks `lastCompleted == mintLevel` before any state mutation. A level can only be credited once.
+
+2. **Streak gap detection verified:** `_mintStreakEffective` returns 0 if `currentMintLevel > lastCompleted + 1`, correctly invalidating the streak when a level is skipped.
+
+3. **Streak saturation verified:** Streak is capped at `type(uint24).max` via explicit comparison before `unchecked` increment. Cannot overflow.
+
+4. **Auto-rebuy take-profit verified:** Formula `reserved = (weiAmount / takeProfit) * takeProfit` correctly computes the largest multiple of `takeProfit` that fits in `weiAmount`. When `takeProfit > weiAmount`, `reserved = 0` and the entire amount goes to rebuy.
+
+5. **Whale pass claim division verified:** `amount / HALF_WHALE_PASS_PRICE` integer division plus `amount - (fullHalfPasses * HALF_WHALE_PASS_PRICE)` remainder ensures every wei is accounted for. No ETH leakage possible.
+
+6. **Pull-pattern consistency:** `_creditClaimable` credits without transferring ETH, maintaining the protocol's pull-pattern withdrawal design. No reentrancy vectors.
+
+7. **`claimablePool` asymmetry is intentional:** `_creditClaimable` does NOT update `claimablePool` (callers batch it), while `_queueWhalePassClaimCore` DOES update it for remainders (terminal function). This asymmetry is correct and by design.
+
+### Gas Informational
+
+- `MINT_STREAK_FIELDS_MASK` combines two non-adjacent bit ranges into a single mask for one-pass clearing -- efficient bit-packing pattern.
+- `_creditClaimable` unchecked addition is safe given protocol ETH bounds (total ETH < 2^88 wei << uint256).
+- `_calcAutoRebuy` is pure -- no storage gas, computation-only cost.
