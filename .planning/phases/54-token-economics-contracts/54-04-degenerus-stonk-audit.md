@@ -1233,3 +1233,174 @@ DegenerusStonk (DGNRS) is a standalone ERC-20 token backed by ETH, stETH, WWXRP,
 **NatSpec Accuracy:** Accurate.
 **Gas Flags:** None.
 **Verdict:** CORRECT
+
+---
+
+## Lock-for-Level Mechanics
+
+### Lock/Unlock Lifecycle
+
+1. **Lock (`lockForLevel`):** Holder calls with a DGNRS amount. Tokens are locked against the current game level. The locked amount is additive within the same level (can call multiple times to increase lock). If a lock exists from a prior level, it auto-unlocks first (resets spending counters, emits Unlocked), then applies the new lock at the current level.
+
+2. **Spend:** While locked, holder can spend ETH or BURNIE through game proxy functions up to 10x the proportional backing value of their locked tokens:
+   - ETH limit: `10 * (totalMoney * locked / totalSupply)` where totalMoney = ETH balance + stETH balance + claimable ETH
+   - BURNIE limit: `10 * (totalBurnie * locked / totalSupply)` where totalBurnie = BURNIE balance + claimable coinflips
+   - Spending is cumulative per level -- each spend adds to the running total
+
+3. **Unlock (`unlock`):** Holder can only unlock after the game level has changed. Resets `lockedBalance`, `ethSpentThisLevel`, and `burnieSpentThisLevel` to 0. Emits Unlocked.
+
+4. **Auto-unlock on re-lock:** If holder calls `lockForLevel` while locked at a different level, the old lock is automatically released before applying the new one.
+
+5. **Burn interaction (`_reduceActiveLock`):** If tokens are burned (via `burnForGame` or `burn`) while the holder has an active lock at the current level, the lock amount is reduced by the burn amount (or zeroed if burn >= locked).
+
+6. **Transfer interaction (`_transfer`):** Locked tokens at the current level cannot be transferred. Only `balance - lockedBalance` is transferable.
+
+### Token Requirement Per Level
+
+There is no minimum token requirement per level. Any non-zero amount can be locked. The spending limit scales proportionally with the locked amount. Locking more tokens gives a higher spending limit.
+
+### Edge Cases
+
+| Scenario | Behavior |
+|----------|----------|
+| Lock at level 0 | Works normally, level 0 is valid |
+| Lock 0 tokens | Allowed (no state change, lockedLevel updated) |
+| Re-lock at same level | Additive -- increases locked amount |
+| Re-lock at different level | Auto-unlocks old lock, resets spend counters, applies new lock |
+| Unlock at same level | Reverts LockStillActive |
+| Unlock with no lock | Reverts NoLockedTokens |
+| Transfer while locked | Only unlocked portion transferable (reverts TokensLocked if exceeding) |
+| Burn while locked | _reduceActiveLock reduces lock by burn amount |
+| Spend without lock | Reverts NoLockedTokens |
+| Spend at different level | Reverts NoLockedTokens (lock must be at current level) |
+
+---
+
+## BURNIE Rebate Analysis
+
+### Rebate Formula
+
+The `_rebateBurnieFromEthValue` function converts ETH value to a BURNIE payout:
+
+```
+burnieValue = (ethValue * PRICE_COIN_UNIT) / priceWei
+            = (ethValue * 1000e18) / priceWei
+
+burnieOut   = (burnieValue * BURNIE_ETH_BUY_BPS) / BPS_DENOM
+            = (burnieValue * 7000) / 10000
+            = burnieValue * 0.70
+
+Combined:
+burnieOut = (ethValue * 1000e18 * 7000) / (priceWei * 10000)
+          = (ethValue * 700e18) / priceWei
+```
+
+**Interpretation:** For every 1x priceWei of ETH spent, the holder receives 700 BURNIE (70% of the 1000 BURNIE unit rate).
+
+### Rebate Trigger Points
+
+Only `gamePurchase` triggers BURNIE rebates. The ETH value used for the rebate depends on payment kind:
+- `DirectEth`: uses `totalCost` (ticketCost + lootBoxAmount) -- the actual ETH committed
+- `Claimable` or `Combined`: uses `msg.value` -- the ETH portion of the payment
+
+### BURNIE Source Priority
+
+1. Contract's on-hand BURNIE balance (`coin.balanceOf(address(this))`)
+2. If insufficient: claimable BURNIE from coinflip contract (`coinflip.claimCoinflips`)
+3. If still insufficient OR RNG is locked (preventing coinflip claims): rebate silently skipped
+
+### Graceful Degradation
+
+The rebate mechanism never reverts. If funds are unavailable, the rebate is simply not paid. This prevents game purchases from failing due to BURNIE availability issues.
+
+---
+
+## Game Proxy Function Matrix
+
+| Stonk Function | Game Function Called | ETH Forwarded | Requires Lock | BURNIE Rebate | Spend Tracking | Additional Logic |
+|----------------|---------------------|---------------|---------------|---------------|----------------|------------------|
+| `gameAdvance` | `game.advanceGame()` | No | No (onlyHolder) | No | None | Any holder can advance |
+| `gamePurchase` | `game.purchase{value}` | Yes (msg.value) | Yes (ETH) | Yes | ETH | Quest streak reward, affiliate code DGNRS |
+| `gamePurchaseTicketsBurnie` | `game.purchaseCoin` | No | Yes (BURNIE) | No | BURNIE | Tickets only (no lootbox) |
+| `gamePurchaseBurnieLootbox` | `game.purchaseBurnieLootbox` | No | Yes (BURNIE) | No | BURNIE | Lootbox only |
+| `gameDegeneretteBetEth` | `game.placeFullTicketBets{value}` | Yes (msg.value) | Yes (ETH) | No | ETH | Currency=0 (ETH) |
+| `gameDegeneretteBetBurnie` | `game.placeFullTicketBets` | No | Yes (BURNIE) | No | BURNIE | Currency=1 (BURNIE) |
+| `gameOpenLootBox` | `game.openLootBox` | No | No (onlyHolder) | No | None | Opens DGNRS contract's lootbox |
+| `gameClaimWhalePass` | `game.claimWhalePass` | No | No (onlyHolder) | No | None | Claims whale pass for DGNRS contract |
+| `coinDecimatorBurn` | `coin.decimatorBurn` | No | Yes (BURNIE) | No | BURNIE | Burns from DGNRS contract BURNIE balance |
+
+**Key observations:**
+- All proxy functions pass `address(0)` as buyer/player, which resolves to `msg.sender` (= DGNRS contract) in the game -- so actions are performed as the DGNRS contract entity, not the individual caller
+- Only `gamePurchase` includes a BURNIE rebate (the only ETH purchase proxy)
+- Only `gamePurchase` includes quest streak tracking (checks before/after for quest completion)
+- Lock-requiring functions enforce spending limits via `_checkAndRecordEthSpend` or `_checkAndRecordBurnieSpend`
+- Non-lock functions only require holder status (non-zero balance)
+
+---
+
+## Storage Mutation Map
+
+| Function | Variables Written | Write Type |
+|----------|------------------|------------|
+| `constructor` | `totalSupply`, `balanceOf[CREATOR]`, `balanceOf[this]`, `poolBalances[0..4]` | Initialize |
+| `approve` | `allowance[sender][spender]` | Set |
+| `transfer` | `balanceOf[from]`, `balanceOf[to]` | Decrement/Increment |
+| `transferFrom` | `allowance[from][sender]`, `balanceOf[from]`, `balanceOf[to]` | Decrement/Increment |
+| `lockForLevel` | `lockedBalance[sender]`, `lockedLevel[sender]`, `ethSpentThisLevel[sender]`, `burnieSpentThisLevel[sender]` | Set/Reset |
+| `unlock` | `lockedBalance[sender]`, `ethSpentThisLevel[sender]`, `burnieSpentThisLevel[sender]` | Zero |
+| `gamePurchase` | `ethSpentThisLevel[sender]`, `poolBalances[Reward]`, `balanceOf[this]`, `balanceOf[sender]` | Increment/Decrement |
+| `gamePurchaseTicketsBurnie` | `burnieSpentThisLevel[sender]` | Increment |
+| `gamePurchaseBurnieLootbox` | `burnieSpentThisLevel[sender]` | Increment |
+| `gameDegeneretteBetEth` | `ethSpentThisLevel[sender]` | Increment |
+| `gameDegeneretteBetBurnie` | `burnieSpentThisLevel[sender]` | Increment |
+| `coinDecimatorBurn` | `burnieSpentThisLevel[sender]` | Increment |
+| `transferFromPool` | `poolBalances[idx]`, `balanceOf[this]`, `balanceOf[to]` | Decrement/Increment |
+| `transferBetweenPools` | `poolBalances[fromIdx]`, `poolBalances[toIdx]` | Decrement/Increment |
+| `burnForGame` | `balanceOf[from]`, `totalSupply`, `lockedBalance[from]` | Decrement |
+| `burn` / `_burnFor` | `balanceOf[player]`, `totalSupply`, `lockedBalance[player]` | Decrement |
+
+---
+
+## ETH Mutation Path Map
+
+| Path | Source | Destination | Trigger | Function |
+|------|--------|-------------|---------|----------|
+| ETH deposit | Game contract | DGNRS contract balance | Game distribution | `receive()` |
+| stETH deposit | Game contract | DGNRS stETH balance | Game distribution | `depositSteth` |
+| ETH purchase forwarding | msg.sender (via msg.value) | Game contract | Holder purchase | `gamePurchase` |
+| ETH bet forwarding | msg.sender (via msg.value) | Game contract | Holder degenerette bet | `gameDegeneretteBetEth` |
+| ETH burn payout | DGNRS contract balance | Burning player | Token burn | `_burnFor` |
+| stETH burn payout | DGNRS stETH balance | Burning player | Token burn (overflow) | `_burnFor` |
+| BURNIE burn payout | DGNRS BURNIE balance | Burning player | Token burn | `_burnFor` |
+| BURNIE claimable payout | Coinflip claimable | Burning player (via DGNRS) | Token burn (shortfall) | `_burnFor` |
+| WWXRP burn payout | DGNRS WWXRP balance | Burning player | Token burn | `_burnFor` |
+| Claimable ETH materialization | Game claimable | DGNRS contract balance | Burn when balance < owed | `_burnFor` |
+| BURNIE rebate | DGNRS BURNIE balance | Caller (msg.sender) | ETH purchase | `_rebateBurnieFromEthValue` |
+| BURNIE rebate (claimable) | Coinflip claimable | Caller (via DGNRS) | ETH purchase (shortfall) | `_rebateBurnieFromEthValue` |
+
+---
+
+## Findings Summary
+
+| ID | Severity | Function | Details |
+|----|----------|----------|---------|
+| S-01 | CONCERN (informational) | `receive()` / global | `ethReserve` storage variable (line 227) is declared but never read or written. Dead storage occupying a slot. Should be removed for clarity. |
+| S-02 | CONCERN (informational) | `previewBurn` | Does not return WWXRP component. Actual `_burnFor` pays proportional WWXRP, but preview omits it. UI gap -- users won't see WWXRP portion in preview. |
+| S-03 | CONCERN (informational) | `totalBacking` | Does not include WWXRP balance in total backing calculation. Actual backing composition includes WWXRP (paid on burn), so the view under-reports total backing. |
+
+| Severity | Count | Summary |
+|----------|-------|---------|
+| BUG | 0 | None found |
+| CONCERN | 3 | S-01 dead storage, S-02/S-03 WWXRP omission in views |
+| GAS | 0 | No actionable gas optimizations |
+| CORRECT | 41 | All 44 entries verified; 41 unconditionally CORRECT, 3 with informational concerns |
+
+### Correctness Verification
+
+- **ERC-20 compliance:** Standard approve/transfer/transferFrom pattern with lock enforcement. COIN trusted-spender bypass is documented and intentional.
+- **Lock-for-level:** Properly enforces per-level locking with auto-unlock, additive locks, and proportional spending limits. _reduceActiveLock correctly handles burn interactions.
+- **BURNIE rebate:** Formula correctly converts ETH to 70% BURNIE value. Graceful degradation on insufficient funds or RNG lock.
+- **Pool accounting:** Five pools with correct BPS allocation (sums to 100%). Graceful degradation on pool depletion. No double-spend possible.
+- **Burn-to-extract:** Proportional share calculation is correct. Burns before payouts (reentrancy safe). ETH-preferential payout logic handles all edge cases. Multi-asset payout (ETH + stETH + BURNIE + WWXRP) covers all backing types.
+- **Game proxy:** All proxy functions correctly forward to game contract with DGNRS as actor. Spending limits properly enforced for locked-token actions.
+- **Quest contribution reward:** Novel mechanism -- 0.05% of Reward pool given to caller whose purchase completes a quest for the DGNRS contract. Correctly checks streak before/after.
