@@ -10,8 +10,8 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 ### Audit Infrastructure
 
 - [ ] **INFRA-01**: JSON schema defined for function-level audit reports (signature, visibility, params, state reads/writes, callers, callees, invariants, NatSpec verdict, gas flags, overall verdict)
-- [ ] **INFRA-02**: Cross-reference index mapping every function to all callers and callees across the protocol
-- [ ] **INFRA-03**: State mutation map showing which functions write which storage slots
+- [x] **INFRA-02**: Cross-reference index mapping every function to all callers and callees across the protocol
+- [x] **INFRA-03**: State mutation map showing which functions write which storage slots
 
 ### Core Game
 
@@ -116,8 +116,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | INFRA-01 | Phase 48 | Pending |
-| INFRA-02 | Phase 48 | Pending |
-| INFRA-03 | Phase 48 | Pending |
+| INFRA-02 | Phase 48 | Complete |
+| INFRA-03 | Phase 48 | Complete |
 | CORE-01 | Phase 49 | Pending |
 | CORE-02 | Phase 49 | Pending |
 | MOD-01 | Phase 50 | Complete |
