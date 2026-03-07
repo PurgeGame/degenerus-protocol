@@ -175,7 +175,12 @@ See: `.planning/milestones/v6.0-ROADMAP.md` for full phase details.
   2. Every function in DegenerusGameMintModule.sol has a JSON + markdown audit entry with verdict
   3. Every function in DegenerusGameJackpotModule.sol has a JSON + markdown audit entry with verdict
   4. All ETH mutation paths through these three modules are traced and annotated
-**Plans**: TBD
+**Plans:** 1/4 plans executed
+Plans:
+- [ ] 50-01-PLAN.md -- AdvanceModule function-level audit (~40 functions)
+- [ ] 50-02-PLAN.md -- MintModule function-level audit (~16 functions)
+- [ ] 50-03-PLAN.md -- JackpotModule Part 1: entry points, pool management, auto-rebuy (~21 functions)
+- [ ] 50-04-PLAN.md -- JackpotModule Part 2: distribution engine, coin jackpots, helpers (~36 functions)
 
 ### Phase 51: Endgame & Lifecycle Modules
 **Goal**: Every function in the three game lifecycle modules (Endgame, Lootbox, GameOver) has a complete audit report
@@ -277,7 +282,7 @@ Phases 48 first (infrastructure). Phases 49-56 can be parallelized after 48. Pha
 |-------|----------------|--------|-----------|
 | 48. Audit Infrastructure | 0/TBD | Not started | - |
 | 49. Core Game Contract | 0/TBD | Not started | - |
-| 50. ETH Flow Modules | 0/TBD | Not started | - |
+| 50. ETH Flow Modules | 1/4 | In Progress|  |
 | 51. Endgame & Lifecycle Modules | 0/TBD | Not started | - |
 | 52. Whale & Player Modules | 0/TBD | Not started | - |
 | 53. Module Utilities & Libraries | 0/TBD | Not started | - |
