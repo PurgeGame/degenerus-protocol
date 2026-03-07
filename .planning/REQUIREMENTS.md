@@ -53,7 +53,7 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 
 ### Admin & Support
 
-- [ ] **ADMIN-01**: DegenerusAdmin.sol — every function audited with JSON + markdown report
+- [x] **ADMIN-01**: DegenerusAdmin.sol — every function audited with JSON + markdown report
 - [ ] **ADMIN-02**: DegenerusTraitUtils.sol — every function audited with JSON + markdown report
 - [ ] **ADMIN-03**: ContractAddresses.sol — every constant verified against deploy order and usage
 - [ ] **ADMIN-04**: Icons32Data.sol — audited with JSON + markdown report
@@ -143,7 +143,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SOCIAL-03 | Phase 55 | Complete |
 | IFACE-01 | Phase 55 | Complete |
 | IFACE-02 | Phase 55 | Complete |
-| ADMIN-01 | Phase 56 | Pending |
+| ADMIN-01 | Phase 56 | Complete |
 | ADMIN-02 | Phase 56 | Pending |
 | ADMIN-03 | Phase 56 | Pending |
 | ADMIN-04 | Phase 56 | Pending |
