@@ -1,116 +1,113 @@
-# Requirements: Degenerus Protocol — Contract Hardening & Parity Verification
+# Requirements: Degenerus Protocol — Function-Level Exhaustive Audit
 
-**Defined:** 2026-03-06
-**Core Value:** Every constant, comment, and documented number in the codebase matches actual contract behavior, and every post-audit change has dedicated test coverage.
+**Defined:** 2026-03-07
+**Core Value:** Every ETH that enters the protocol must be accounted for, every RNG outcome must be unmanipulable, and no actor can extract value beyond what the game mechanics intend.
 
-## v6.0 Requirements
+## v7.0 Requirements
 
-Requirements for contract hardening milestone. Each maps to roadmap phases.
+Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 
-### Governance & Admin (ADMIN)
+### Audit Infrastructure
 
-- [x] **ADMIN-01**: Test that only accounts holding >50.1% DGVE supply pass `onlyOwner` check in DegenerusAdmin (CREATOR address alone must fail)
-- [x] **ADMIN-02**: Test that only accounts holding >50.1% DGVE supply pass `onlyVaultOwner` check in DegenerusVault (threshold is `balance * 1000 > supply * 501`)
-- [x] **ADMIN-03**: Test that `shutdownVrf()` reverts when called by any address except GAME contract
-- [x] **ADMIN-04**: Test that `shutdownVrf()` cancels subscription, sweeps LINK to VAULT, and sets subscriptionId to 0
-- [x] **ADMIN-05**: Test that `shutdownVrf()` silently succeeds (no revert) when subscriptionId is already 0
-- [x] **ADMIN-06**: Test that `shutdownVrf()` try/catch paths handle coordinator failure and LINK transfer failure gracefully
+- [ ] **INFRA-01**: JSON schema defined for function-level audit reports (signature, visibility, params, state reads/writes, callers, callees, invariants, NatSpec verdict, gas flags, overall verdict)
+- [ ] **INFRA-02**: Cross-reference index mapping every function to all callers and callees across the protocol
+- [ ] **INFRA-03**: State mutation map showing which functions write which storage slots
 
-### Advance Module Gating (GATE)
+### Core Game
 
-- [x] **GATE-01**: Test tiered advanceGame mint gate — caller must have minted on the current purchase day to advance
-- [x] **GATE-02**: Test time-based unlock — gate relaxes after configured delay
-- [x] **GATE-03**: Test DGVE majority holder bypasses mint gate entirely
-- [x] **GATE-04**: Test that non-minter, non-DGVE-holder reverts with `MustMintToday()`
+- [ ] **CORE-01**: DegenerusGame.sol — every function audited with JSON + markdown report
+- [ ] **CORE-02**: DegenerusGameStorage.sol — every storage variable documented and verified against usage
 
-### Affiliate System (AFF)
+### Delegatecall Modules
 
-- [x] **AFF-01**: Test per-referrer commission cap — affiliate earns at most 0.5 ETH BURNIE from a single sender per level
-- [x] **AFF-02**: Test that cap tracks cumulative spend — multiple small purchases from same sender hit cap
-- [x] **AFF-03**: Test that cap resets per level — same sender/affiliate pair can earn again at next level
-- [x] **AFF-04**: Test that cap is per-affiliate — different affiliates have independent caps for same sender
-- [x] **AFF-05**: Test lootbox activity taper — score <15000 BPS: 100% payout, no taper
-- [x] **AFF-06**: Test lootbox activity taper — score 15000-25500 BPS: linear taper from 100% to 50%
-- [x] **AFF-07**: Test lootbox activity taper — score >=25500 BPS: floor at 50% payout
-- [x] **AFF-08**: Test leaderboard tracking uses full untapered amount (even when payout is tapered)
-- [x] **AFF-09**: Test `lootboxActivityScore` parameter flows correctly through `payAffiliate`
+- [ ] **MOD-01**: DegenerusGameAdvanceModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-02**: DegenerusGameMintModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-03**: DegenerusGameJackpotModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-04**: DegenerusGameEndgameModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-05**: DegenerusGameLootboxModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-06**: DegenerusGameGameOverModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-07**: DegenerusGameWhaleModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-08**: DegenerusGameDegeneretteModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-09**: DegenerusGameBoonModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-10**: DegenerusGameDecimatorModule.sol — every function audited with JSON + markdown report
+- [ ] **MOD-11**: DegenerusGameMintStreakUtils.sol — every function audited with JSON + markdown report
+- [ ] **MOD-12**: DegenerusGamePayoutUtils.sol — every function audited with JSON + markdown report
 
-### Security Fixes (FIX)
+### Token & Economics
 
-- [x] **FIX-01**: Test whale bundle purchase reverts after gameOver
-- [x] **FIX-02**: Test lazy pass purchase reverts after gameOver
-- [x] **FIX-03**: Test deity pass purchase reverts after gameOver
-- [x] **FIX-04**: Test `receive()` reverts after gameOver (plain ETH transfers blocked)
-- [x] **FIX-05**: Test deity pass refund clears deityPassPurchasedCount for the refunded buyer
-- [x] **FIX-06**: Test no voluntary deity refund path exists — only gameOver-triggered refund
-- [x] **FIX-07**: Test gameOver deity payout: flat 20 ETH/pass, levels 0-9 only, FIFO by purchase order, budget-capped
-- [x] **FIX-08**: Test BURNIE ticket purchases revert within 30 days of liveness-guard timeout
-- [x] **FIX-09**: Test subscriptionId stored as uint256 (not uint64) — large subscription IDs handled correctly
-- [x] **FIX-10**: Test 1 wei sentinel preserved in degenerette bet collection — claimable set to 1 not 0 after claim
-- [x] **FIX-11**: Test capBucketCounts does not underflow — zero-count buckets handled safely
-- [x] **FIX-12**: Test carryover floor — minimum carryover amount enforced
+- [ ] **TOKEN-01**: BurnieCoin.sol — every function audited with JSON + markdown report
+- [ ] **TOKEN-02**: BurnieCoinflip.sol — every function audited with JSON + markdown report
+- [ ] **TOKEN-03**: DegenerusVault.sol — every function audited with JSON + markdown report
+- [ ] **TOKEN-04**: DegenerusStonk.sol — every function audited with JSON + markdown report
 
-### Economic Hardening (ECON)
+### Pass & Viewer
 
-- [x] **ECON-01**: Test JackpotModule uses explicit 46% futureShare (2300+2300 BPS) — ~8% buffer stays unextracted
-- [x] **ECON-02**: Test MintModule has no level-dependent coin cost modifiers (removed step 13/18 multipliers)
-- [x] **ECON-03**: Test multi-level scatter targeting for BAF rounds — tickets distributed across correct level range
-- [x] **ECON-04**: Test compressed jackpot — when target met in <=2 days, counter advances 2 per physical day (5 logical days in 3 physical)
-- [x] **ECON-05**: Test LINK reward formula correctness (post-fix)
+- [ ] **PASS-01**: DegenerusDeityPass.sol — every function audited with JSON + markdown report
+- [ ] **PASS-02**: DeityBoonViewer.sol — every function audited with JSON + markdown report
 
-### Game Theory Paper Parity (PAR)
+### Social & Rewards
 
-- [x] **PAR-01**: Verify PriceLookupLib prices match game theory paper at every tier boundary (levels 0,4,5,9,10,29,30,59,60,89,90,99,100,129,130,159,160,189,190,199,200)
-- [x] **PAR-02**: Verify ticket cost formula `costWei = (priceWei * qty) / 400` matches paper's "one entry = P_l/4 ETH"
-- [x] **PAR-03**: Verify prize pool split BPS (90/10 ticket, 10/90 lootbox, 40/40/20 presale lootbox) match paper
-- [x] **PAR-04**: Verify jackpot day structure (5 days, 6-14% days 1-4, 100% day 5) matches paper
-- [x] **PAR-05**: Verify jackpot bucket shares (20/20/20/20 days 1-4, 60/13.33/13.33/13.34 day 5) match paper
-- [x] **PAR-06**: Verify activity score components and caps (50% streak, 25% mint count, 100% quest, 50% affiliate, +10%/+40%/+80% passes) match paper
-- [x] **PAR-07**: Verify lootbox EV breakpoints (80%->100% at 0-60%, 100%->135% at 60-255%) match paper
-- [x] **PAR-08**: Verify affiliate commission rates (25% fresh L1-3, 20% fresh L4+, 5% recycled) match paper
-- [x] **PAR-09**: Verify affiliate tier structure (direct -> upline1 at 20% -> upline2 at 4%) matches paper
-- [x] **PAR-10**: Verify whale bundle pricing (2.4 ETH levels 0-3, 4 ETH level 4+) matches paper
-- [x] **PAR-11**: Verify lazy pass pricing (0.24 ETH flat levels 0-2, sum-of-10-level-prices level 3+) matches paper
-- [x] **PAR-12**: Verify deity pass T(n) pricing (24 + k*(k+1)/2 ETH) matches paper
-- [x] **PAR-13**: Verify coinflip payout distribution (5%/90%/5% tiers, mean ~1.97x) matches paper
-- [x] **PAR-14**: Verify yield distribution split (23% vault, 23% DGNRS, 46% futurePool, 8% buffer) matches paper
-- [x] **PAR-15**: Verify BURNIE entry cost (250 BURNIE = 1 entry, 1000 BURNIE = 1 full ticket) matches paper
-- [x] **PAR-16**: Verify Degenerette base payouts and ROI curve match paper
-- [x] **PAR-17**: Verify pass capital injection splits (30/70 level 0, 5/95 level 1+ for whale/deity; 90/10 all levels for lazy) match paper
-- [x] **PAR-18**: Verify future ticket odds (95% near k in [0,5], 5% far k in [5,50]) match paper
+- [ ] **SOCIAL-01**: DegenerusAffiliate.sol — every function audited with JSON + markdown report
+- [ ] **SOCIAL-02**: DegenerusQuests.sol — every function audited with JSON + markdown report
+- [ ] **SOCIAL-03**: DegenerusJackpots.sol — every function audited with JSON + markdown report
 
-### NatSpec Comment Accuracy (DOC)
+### Admin & Support
 
-- [x] **DOC-01**: Audit all NatSpec `@notice` and `@dev` comments in DegenerusAdmin — every claim verified against code
-- [x] **DOC-02**: Audit all NatSpec comments in DegenerusAffiliate — rates, tiers, caps match implementation
-- [x] **DOC-03**: Audit all NatSpec comments in AdvanceModule — stage descriptions, timing, gates match implementation
-- [x] **DOC-04**: Audit all NatSpec comments in MintModule — cost formulas, split ratios, quest rewards match implementation
-- [x] **DOC-05**: Audit all NatSpec comments in JackpotModule — bucket sizes, share splits, carryover logic match implementation
-- [x] **DOC-06**: Audit all NatSpec comments in WhaleModule — pricing, eligibility, bonus tiers match implementation
-- [x] **DOC-07**: Audit all NatSpec comments in remaining modules (Endgame, GameOver, Lootbox, Boon, Decimator, Degenerette, MintStreakUtils)
-- [x] **DOC-08**: Audit all NatSpec comments in standalone contracts (BurnieCoin, BurnieCoinflip, DegenerusVault, DegenerusStonk, DegenerusQuests, DegenerusJackpots)
-- [x] **DOC-09**: Verify all error message descriptions match their actual trigger conditions
-- [x] **DOC-10**: Verify all event parameter descriptions match actual emitted values
+- [ ] **ADMIN-01**: DegenerusAdmin.sol — every function audited with JSON + markdown report
+- [ ] **ADMIN-02**: DegenerusTraitUtils.sol — every function audited with JSON + markdown report
+- [ ] **ADMIN-03**: ContractAddresses.sol — every constant verified against deploy order and usage
+- [ ] **ADMIN-04**: Icons32Data.sol — audited with JSON + markdown report
+- [ ] **ADMIN-05**: WrappedWrappedXRP.sol — every function audited with JSON + markdown report
 
-## v7 Requirements
+### Libraries
 
-Deferred to future release.
+- [ ] **LIB-01**: BitPackingLib.sol — every function audited with JSON + markdown report
+- [ ] **LIB-02**: EntropyLib.sol — every function audited with JSON + markdown report
+- [ ] **LIB-03**: GameTimeLib.sol — every function audited with JSON + markdown report
+- [ ] **LIB-04**: PriceLookupLib.sol — every function audited with JSON + markdown report
+- [ ] **LIB-05**: JackpotBucketLib.sol — every function audited with JSON + markdown report
 
-### Extended Parity
+### Interfaces
 
-- **PAR2-01**: Automated CI check that NatSpec constants match contract constants
-- **PAR2-02**: Formal specification document auto-generated from contract constants
+- [ ] **IFACE-01**: Every interface function signature verified to match its implementation
+- [ ] **IFACE-02**: Every interface NatSpec verified to match implementation behavior
+
+### Cross-Contract Verification
+
+- [ ] **XREF-01**: Complete call graph with context annotations (delegatecall vs direct, internal vs external)
+- [ ] **XREF-02**: ETH flow map — every path ETH enters, moves within, or exits the protocol
+- [ ] **XREF-03**: State mutation matrix — which modules can write which storage slots via delegatecall
+
+### Gas Optimization
+
+- [ ] **GAS-01**: Impossible condition checks flagged across all contracts
+- [ ] **GAS-02**: Redundant storage reads and unnecessary computation flagged
+
+### Prior Verification
+
+- [ ] **VERIFY-01**: v1-v6 critical claims spot-checked against current code
+- [ ] **VERIFY-02**: Game theory paper intent cross-referenced for ambiguous functions
+
+### Synthesis
+
+- [ ] **SYNTH-01**: Aggregate findings report with severity ratings (Critical/High/Medium/Low/QA)
+- [ ] **SYNTH-02**: Executive summary with confidence assessment and honest limitations
+
+## Future Requirements
+
+None — this milestone covers exhaustive scope.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Gas optimization | Separate concern |
-| Simulation engine | Paused, separate milestone |
-| Testnet contracts | Mainnet is the target |
-| Deployment scripts | Operational, not testing surface |
-| Foundry/Halmos tests | Hardhat suite is the primary test framework for this milestone |
-| Pre-audit contract changes | Earlier commits already tested through 951-test suite |
+| Gas optimization fixes | Flag-only — fixes are a separate concern/milestone |
+| Mock contracts | Test infrastructure, not production attack surface |
+| Test helper contracts | Test infrastructure only (PriceLookupTester.sol) |
+| Deploy scripts | Operational, not testing surface |
+| Foundry/Halmos test files | Test code, not production |
+| New test writing | This milestone produces audit reports, not new tests |
+| Code changes/fixes | Report findings only — fixes require separate review cycle |
 
 ## Traceability
 
@@ -118,76 +115,59 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ADMIN-01 | Phase 43 | Complete |
-| ADMIN-02 | Phase 43 | Complete |
-| ADMIN-03 | Phase 43 | Complete |
-| ADMIN-04 | Phase 43 | Complete |
-| ADMIN-05 | Phase 43 | Complete |
-| ADMIN-06 | Phase 43 | Complete |
-| GATE-01 | Phase 43 | Complete |
-| GATE-02 | Phase 43 | Complete |
-| GATE-03 | Phase 43 | Complete |
-| GATE-04 | Phase 43 | Complete |
-| AFF-01 | Phase 44 | Complete |
-| AFF-02 | Phase 44 | Complete |
-| AFF-03 | Phase 44 | Complete |
-| AFF-04 | Phase 44 | Complete |
-| AFF-05 | Phase 44 | Complete |
-| AFF-06 | Phase 44 | Complete |
-| AFF-07 | Phase 44 | Complete |
-| AFF-08 | Phase 44 | Complete |
-| AFF-09 | Phase 44 | Complete |
-| FIX-01 | Phase 45 | Complete |
-| FIX-02 | Phase 45 | Complete |
-| FIX-03 | Phase 45 | Complete |
-| FIX-04 | Phase 45 | Complete |
-| FIX-05 | Phase 45 | Complete |
-| FIX-06 | Phase 45 | Complete |
-| FIX-07 | Phase 45 | Complete |
-| FIX-08 | Phase 45 | Complete |
-| FIX-09 | Phase 45 | Complete |
-| FIX-10 | Phase 45 | Complete |
-| FIX-11 | Phase 45 | Complete |
-| FIX-12 | Phase 45 | Complete |
-| ECON-01 | Phase 45 | Complete |
-| ECON-02 | Phase 45 | Complete |
-| ECON-03 | Phase 45 | Complete |
-| ECON-04 | Phase 45 | Complete |
-| ECON-05 | Phase 45 | Complete |
-| PAR-01 | Phase 46 | Complete |
-| PAR-02 | Phase 46 | Complete |
-| PAR-03 | Phase 46 | Complete |
-| PAR-04 | Phase 46 | Complete |
-| PAR-05 | Phase 46 | Complete |
-| PAR-06 | Phase 46 | Complete |
-| PAR-07 | Phase 46 | Complete |
-| PAR-08 | Phase 46 | Complete |
-| PAR-09 | Phase 46 | Complete |
-| PAR-10 | Phase 46 | Complete |
-| PAR-11 | Phase 46 | Complete |
-| PAR-12 | Phase 46 | Complete |
-| PAR-13 | Phase 46 | Complete |
-| PAR-14 | Phase 46 | Complete |
-| PAR-15 | Phase 46 | Complete |
-| PAR-16 | Phase 46 | Complete |
-| PAR-17 | Phase 46 | Complete |
-| PAR-18 | Phase 46 | Complete |
-| DOC-01 | Phase 47 | Complete |
-| DOC-02 | Phase 47 | Complete |
-| DOC-03 | Phase 47 | Complete |
-| DOC-04 | Phase 47 | Complete |
-| DOC-05 | Phase 47 | Complete |
-| DOC-06 | Phase 47 | Complete |
-| DOC-07 | Phase 47 | Complete |
-| DOC-08 | Phase 47 | Complete |
-| DOC-09 | Phase 47 | Complete |
-| DOC-10 | Phase 47 | Complete |
+| INFRA-01 | — | Pending |
+| INFRA-02 | — | Pending |
+| INFRA-03 | — | Pending |
+| CORE-01 | — | Pending |
+| CORE-02 | — | Pending |
+| MOD-01 | — | Pending |
+| MOD-02 | — | Pending |
+| MOD-03 | — | Pending |
+| MOD-04 | — | Pending |
+| MOD-05 | — | Pending |
+| MOD-06 | — | Pending |
+| MOD-07 | — | Pending |
+| MOD-08 | — | Pending |
+| MOD-09 | — | Pending |
+| MOD-10 | — | Pending |
+| MOD-11 | — | Pending |
+| MOD-12 | — | Pending |
+| TOKEN-01 | — | Pending |
+| TOKEN-02 | — | Pending |
+| TOKEN-03 | — | Pending |
+| TOKEN-04 | — | Pending |
+| PASS-01 | — | Pending |
+| PASS-02 | — | Pending |
+| SOCIAL-01 | — | Pending |
+| SOCIAL-02 | — | Pending |
+| SOCIAL-03 | — | Pending |
+| ADMIN-01 | — | Pending |
+| ADMIN-02 | — | Pending |
+| ADMIN-03 | — | Pending |
+| ADMIN-04 | — | Pending |
+| ADMIN-05 | — | Pending |
+| LIB-01 | — | Pending |
+| LIB-02 | — | Pending |
+| LIB-03 | — | Pending |
+| LIB-04 | — | Pending |
+| LIB-05 | — | Pending |
+| IFACE-01 | — | Pending |
+| IFACE-02 | — | Pending |
+| XREF-01 | — | Pending |
+| XREF-02 | — | Pending |
+| XREF-03 | — | Pending |
+| GAS-01 | — | Pending |
+| GAS-02 | — | Pending |
+| VERIFY-01 | — | Pending |
+| VERIFY-02 | — | Pending |
+| SYNTH-01 | — | Pending |
+| SYNTH-02 | — | Pending |
 
 **Coverage:**
-- v6.0 requirements: 64 total
-- Complete: 64
-- Pending: 0
+- v7.0 requirements: 42 total
+- Mapped to phases: 0
+- Unmapped: 42
 
 ---
-*Requirements defined: 2026-03-06*
-*Last updated: 2026-03-07 — all 64 requirements complete (Phases 43-47)*
+*Requirements defined: 2026-03-07*
+*Last updated: 2026-03-07 after initial definition*
