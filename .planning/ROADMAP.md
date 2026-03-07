@@ -274,7 +274,12 @@ Plans:
   3. A state mutation matrix shows which modules can write which storage slots via delegatecall, with no undocumented writes
   4. All impossible condition checks and redundant storage reads are flagged across all contracts
   5. Critical claims from v1-v6 audits are spot-checked against current code, and game theory paper intent is cross-referenced for ambiguous functions
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 57-01-PLAN.md -- Call graph and state mutation matrix (XREF-01, XREF-03)
+- [ ] 57-02-PLAN.md -- ETH flow map (XREF-02)
+- [ ] 57-03-PLAN.md -- Gas flags aggregation (GAS-01, GAS-02)
+- [ ] 57-04-PLAN.md -- Prior claims verification and game theory cross-reference (VERIFY-01, VERIFY-02)
 
 ### Phase 58: Synthesis Report
 **Goal**: A complete aggregate findings report with severity ratings and an executive summary with honest confidence assessment
@@ -303,6 +308,6 @@ Phases 48 first (infrastructure). Phases 49-56 can be parallelized after 48. Pha
 | 53. Module Utilities & Libraries | 4/4 | Complete    | 2026-03-07 |
 | 54. Token & Economics Contracts | 4/4 | Complete    | 2026-03-07 |
 | 55. Pass, Social & Interface Contracts | 5/5 | Complete    | 2026-03-07 |
-| 56. Admin & Support Contracts | 3/3 | Complete   | 2026-03-07 |
-| 57. Cross-Contract Verification & Prior Claims | 0/TBD | Not started | - |
+| 56. Admin & Support Contracts | 3/3 | Complete    | 2026-03-07 |
+| 57. Cross-Contract Verification & Prior Claims | 0/4 | Not started | - |
 | 58. Synthesis Report | 0/TBD | Not started | - |
