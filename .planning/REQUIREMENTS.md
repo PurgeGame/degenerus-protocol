@@ -42,8 +42,8 @@ Requirements for exhaustive function-level audit. Each maps to roadmap phases.
 
 ### Pass & Viewer
 
-- [ ] **PASS-01**: DegenerusDeityPass.sol — every function audited with JSON + markdown report
-- [ ] **PASS-02**: DeityBoonViewer.sol — every function audited with JSON + markdown report
+- [x] **PASS-01**: DegenerusDeityPass.sol — every function audited with JSON + markdown report
+- [x] **PASS-02**: DeityBoonViewer.sol — every function audited with JSON + markdown report
 
 ### Social & Rewards
 
@@ -136,8 +136,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TOKEN-02 | Phase 54 | Complete |
 | TOKEN-03 | Phase 54 | Complete |
 | TOKEN-04 | Phase 54 | Complete |
-| PASS-01 | Phase 55 | Pending |
-| PASS-02 | Phase 55 | Pending |
+| PASS-01 | Phase 55 | Complete |
+| PASS-02 | Phase 55 | Complete |
 | SOCIAL-01 | Phase 55 | Pending |
 | SOCIAL-02 | Phase 55 | Pending |
 | SOCIAL-03 | Phase 55 | Pending |
