@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Contract Hardening & Parity Verification
 status: completed
-stopped_at: Completed 43-01-PLAN.md (Phase 43 complete)
-last_updated: "2026-03-07T07:46:03.091Z"
+stopped_at: Completed 44-01-PLAN.md
+last_updated: "2026-03-07T07:46:09.694Z"
 last_activity: 2026-03-07 — Completed Phase 43 Governance & Gating Tests (32 tests, ADMIN-01..06, GATE-01..04)
 progress:
   total_phases: 5
@@ -46,6 +46,7 @@ Progress: [█████████░] 92%
 | 43 | 1 | 18min | 18min |
 | 45 | 2 | 8min | 4min |
 | 46 | 1 | 14min | 14min |
+| Phase 44 P01 | 19min | 2 tasks | 1 files |
 
 ## Accumulated Context
 | Phase 04 P01 | 6min | 2 tasks | 1 files |
@@ -107,6 +108,7 @@ Progress: [█████████░] 92%
 - [Phase 46]: Phase 46 COMPLETE: 118 tests in PaperParity.test.js, all 18 PAR requirements verified (8 on-chain, 10 static+source)
 - [Phase 43]: No changes needed to pre-existing test file -- all 10 requirements fully covered by 32 tests
 - [Phase 43]: Phase 43 COMPLETE: 32 tests in GovernanceGating.test.js, all 10 requirements verified (ADMIN-01..06, GATE-01..04)
+- [Phase 44]: All 39 affiliate hardening tests validated against contract source -- no gaps found, no modifications needed; full suite passes at 1185 tests
 
 ### Pending Todos
 
@@ -118,6 +120,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T07:43:54Z
-Stopped at: Completed 43-01-PLAN.md (Phase 43 complete)
+Last session: 2026-03-07T07:46:09.692Z
+Stopped at: Completed 44-01-PLAN.md
 Resume file: None
