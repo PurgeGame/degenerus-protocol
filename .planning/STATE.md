@@ -86,6 +86,7 @@ Progress: [█████████ ] 90%
 | Phase 49 P01 | 4min | 2 tasks | 1 files |
 | Phase 49 P02 | 4min | 2 tasks | 1 files |
 | Phase 49 P06 | 6min | 2 tasks | 1 files |
+| Phase 49 P04 | 6min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,7 @@ Progress: [█████████ ] 90%
 - [Phase 49]: Core entry points audit: all 12 functions CORRECT, 0 bugs; recordMint 90/10 prize pool split verified; delegatecall dispatch to AdvanceModule documented
 - [Phase 49]: All 15 purchase/mint functions verified CORRECT; 0 bugs, 0 concerns, 2 informationals; 8-path delegatecall dispatch table and 10-path ETH mutation map produced
 - [Phase 49]: All 53 view/pure functions in DegenerusGame.sol verified CORRECT with 0 bugs, 0 concerns, 4 NatSpec informationals; activity score formula verified (265%/305% max)
+- [Phase 49]: Decimator & Claims audit: all 15 functions CORRECT, 0 bugs; CEI-enforced pull pattern verified on all ETH exits; 11 mutation paths and 8 delegatecall dispatches traced
 
 ### Pending Todos
 
@@ -153,6 +155,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-07T14:24:32.262Z
-Stopped at: Completed 49-06-PLAN.md
+Last session: 2026-03-07T14:23:07Z
+Stopped at: Completed 49-04-PLAN.md
 Resume file: None
