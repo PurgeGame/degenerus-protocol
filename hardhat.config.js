@@ -5,8 +5,6 @@ import { subtask } from "hardhat/config.js";
 import { glob } from "hardhat/internal/util/glob.js";
 import path from "node:path";
 
-const isTestnetBuild = process.env.TESTNET_BUILD === "1";
-
 // Override default test file discovery to control ordering.
 // Simulations must run LAST — they advance EVM state so far that earlier
 // loadFixture snapshots become invalid if they run mid-suite.
@@ -57,9 +55,7 @@ const config = {
     ]
   },
   paths: {
-    sources: isTestnetBuild ? "./contracts-testnet" : "./contracts",
-    cache: isTestnetBuild ? "cache-testnet" : "cache",
-    artifacts: isTestnetBuild ? "artifacts-testnet" : "artifacts",
+    sources: "./contracts",
   },
   networks: {
     hardhat: {

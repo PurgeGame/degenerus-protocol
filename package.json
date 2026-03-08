@@ -15,20 +15,9 @@
     "test:adversarial:sepolia-actors": "RUN_SEPOLIA_ACTOR_TESTS=1 hardhat test test/adversarial/SepoliaActorAdversarial.test.js",
     "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
-    "compile:testnet": "TESTNET_BUILD=1 hardhat compile",
-    "deploy:sepolia:testnet": "TESTNET_BUILD=1 hardhat run scripts/deploy-sepolia-testnet.js --network sepolia",
     "node": "hardhat node",
     "deploy:local": "hardhat run scripts/deploy-local.js --network localhost",
-    "sim:local": "node scripts/testnet/run-local.js",
-    "sim:analysis": "node scripts/testnet/build-analysis-db.js",
-    "sim:dashboard": "node scripts/simulation/dashboard-server.js",
     "test:sim": "hardhat test test/simulation/",
-    "run:sepolia:terminal": "node scripts/play-testnet-lvl101-terminal.js --target 101 --complete-target --idle-days 365 --players 4",
-    "db:sepolia:backfill": "node scripts/backfill-sepolia-events.js",
-    "db:sepolia:analysis": "node scripts/testnet/build-analysis-db.js runs/sepolia",
-    "db:sepolia": "bash scripts/generate-sepolia-db.sh",
-    "lint": "solhint 'contracts/**/*.sol'",
-    "lint:fix": "prettier --write 'contracts/**/*.sol'",
     "coverage": "hardhat coverage",
     "slither": "unset VIRTUAL_ENV && slither . --filter-paths 'node_modules|mocks' --exclude naming-convention,solc-version,low-level-calls,assembly,too-many-digits,similar-names,dead-code",
     "fuzz": "forge test --match-path 'test/fuzz/*' -vv"
@@ -45,15 +34,9 @@
     "@openzeppelin/contracts": "^5.4.0",
     "dotenv": "^17.3.1",
     "hardhat": "^2.28.3",
-    "marked": "^17.0.3",
-    "prettier": "^3.8.1",
-    "prettier-plugin-solidity": "^2.2.1",
-    "solhint": "^6.0.3",
     "solidity-coverage": "^0.8.17"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
-    "express": "^5.2.1",
-    "socket.io": "^4.8.3"
+    "better-sqlite3": "^12.6.2"
   }
 }
