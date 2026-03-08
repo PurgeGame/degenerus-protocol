@@ -23,7 +23,7 @@ interface IDegenerusGamePlayerActions {
     function claimDecimatorJackpot(uint24 lvl) external;
     function setDecimatorAutoRebuy(address player, bool enabled) external;
     function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external;
-    function purchaseDeityPass(address buyer, bool useBoon) external payable;
+    function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
     function placeFullTicketBets(
         address player,
         uint8 currency,
@@ -51,14 +51,17 @@ interface IDegenerusGamePlayerActions {
 }
 
 /// @notice Interface for coin player actions (coinflip mechanics)
-interface IDegenerusCoinPlayerActions {
+interface ICoinflipPlayerActions {
     function depositCoinflip(address player, uint256 amount) external;
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
     function claimCoinflipsTakeProfit(address player, uint256 multiples) external returns (uint256 claimed);
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
-    function decimatorBurn(address player, uint256 amount) external;
     function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
     function setCoinflipAutoRebuyTakeProfit(address player, uint256 takeProfit) external;
+}
+
+interface ICoinPlayerActions {
+    function decimatorBurn(address player, uint256 amount) external;
 }
 
 /// @notice Interface for WWXRP vault-minting
@@ -364,9 +367,12 @@ contract DegenerusVault {
     /// @dev Game contract for player actions
     IDegenerusGamePlayerActions internal constant gamePlayer =
         IDegenerusGamePlayerActions(ContractAddresses.GAME);
-    /// @dev Coin contract for coinflip actions
-    IDegenerusCoinPlayerActions internal constant coinPlayer =
-        IDegenerusCoinPlayerActions(ContractAddresses.COIN);
+    /// @dev Coinflip contract for coinflip actions
+    ICoinflipPlayerActions internal constant coinflipPlayer =
+        ICoinflipPlayerActions(ContractAddresses.COINFLIP);
+    /// @dev Coin contract for decimator actions
+    ICoinPlayerActions internal constant coinPlayer =
+        ICoinPlayerActions(ContractAddresses.COIN);
     /// @dev BURNIE token contract for minting and transfers
     IVaultCoin internal constant coinToken = IVaultCoin(ContractAddresses.COIN);
     /// @dev WWXRP token contract for vault minting
@@ -528,7 +534,7 @@ contract DegenerusVault {
     /// @param priceWei Expected deity pass price (24 + T(n) ETH where T(n) = n*(n+1)/2)
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If price is zero or vault cannot fund the purchase
-    function gamePurchaseDeityPassFromBoon(uint256 priceWei) external payable onlyVaultOwner {
+    function gamePurchaseDeityPassFromBoon(uint256 priceWei, uint8 symbolId) external payable onlyVaultOwner {
         if (priceWei == 0) revert Insufficient();
         if (address(this).balance < priceWei) {
             uint256 claimable = gamePlayer.claimableWinningsOf(address(this));
@@ -537,7 +543,7 @@ contract DegenerusVault {
             }
         }
         if (address(this).balance < priceWei) revert Insufficient();
-        gamePlayer.purchaseDeityPass{value: priceWei}(address(this), true);
+        gamePlayer.purchaseDeityPass{value: priceWei}(address(this), symbolId);
     }
 
     /// @notice Claim winnings for the vault (preferring stETH)
@@ -678,7 +684,7 @@ contract DegenerusVault {
     /// @param amount Amount of coins to deposit
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinDepositCoinflip(uint256 amount) external onlyVaultOwner {
-        coinPlayer.depositCoinflip(address(this), amount);
+        coinflipPlayer.depositCoinflip(address(this), amount);
     }
 
     /// @notice Claim coinflip winnings for the vault
@@ -686,7 +692,7 @@ contract DegenerusVault {
     /// @return claimed Actual amount claimed
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinClaimCoinflips(uint256 amount) external onlyVaultOwner returns (uint256 claimed) {
-        return coinPlayer.claimCoinflips(address(this), amount);
+        return coinflipPlayer.claimCoinflips(address(this), amount);
     }
 
     /// @notice Claim coinflip winnings as take profit multiples
@@ -696,7 +702,7 @@ contract DegenerusVault {
     function coinClaimCoinflipsTakeProfit(
         uint256 multiples
     ) external onlyVaultOwner returns (uint256 claimed) {
-        return coinPlayer.claimCoinflipsTakeProfit(address(this), multiples);
+        return coinflipPlayer.claimCoinflipsTakeProfit(address(this), multiples);
     }
 
     /// @notice Burn coins in the decimator for the vault
@@ -711,14 +717,14 @@ contract DegenerusVault {
     /// @param takeProfit Amount to take profit
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinSetAutoRebuy(bool enabled, uint256 takeProfit) external onlyVaultOwner {
-        coinPlayer.setCoinflipAutoRebuy(address(this), enabled, takeProfit);
+        coinflipPlayer.setCoinflipAutoRebuy(address(this), enabled, takeProfit);
     }
 
     /// @notice Set coinflip auto-rebuy take profit for the vault
     /// @param takeProfit Amount to take profit
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinSetAutoRebuyTakeProfit(uint256 takeProfit) external onlyVaultOwner {
-        coinPlayer.setCoinflipAutoRebuyTakeProfit(address(this), takeProfit);
+        coinflipPlayer.setCoinflipAutoRebuyTakeProfit(address(this), takeProfit);
     }
 
     /// @notice Mint WWXRP from the vault's uncirculating reserve to a recipient
@@ -771,7 +777,7 @@ contract DegenerusVault {
         uint256 coinBal = _syncCoinReserves();
         uint256 supplyBefore = share.totalSupply();
         uint256 vaultBal = coinToken.balanceOf(address(this));
-        uint256 claimable = coinPlayer.previewClaimCoinflips(address(this));
+        uint256 claimable = coinflipPlayer.previewClaimCoinflips(address(this));
         if (vaultBal != 0 || claimable != 0) {
             coinBal += vaultBal + claimable;
         }
@@ -792,7 +798,7 @@ contract DegenerusVault {
             }
 
             if (remaining != 0 && claimable != 0) {
-                uint256 claimed = coinPlayer.claimCoinflips(address(this), remaining);
+                uint256 claimed = coinflipPlayer.claimCoinflips(address(this), remaining);
                 if (claimed != 0) {
                     remaining -= claimed;
                     if (!coinToken.transfer(player, claimed)) revert TransferFailed();
@@ -993,7 +999,7 @@ contract DegenerusVault {
         uint256 allowance = coinToken.vaultMintAllowance();
         mainReserve = allowance;
         uint256 vaultBal = coinToken.balanceOf(address(this));
-        uint256 claimable = coinPlayer.previewClaimCoinflips(address(this));
+        uint256 claimable = coinflipPlayer.previewClaimCoinflips(address(this));
         if (vaultBal != 0 || claimable != 0) {
             unchecked {
                 mainReserve += vaultBal + claimable;
