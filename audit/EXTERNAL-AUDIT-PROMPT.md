@@ -10,8 +10,8 @@ You are performing a comprehensive, adversarial security audit of the Degenerus 
 
 ### Protocol Overview
 
-- **22 deployable contracts**, 10 of which are **delegatecall game modules** sharing storage via `DegenerusGameStorage`
-- Solidity 0.8.26/0.8.28, viaIR enabled, optimizer runs=200
+- **23 deployable contracts** (13 core + 10 delegatecall game modules sharing storage via `DegenerusGameStorage`) + 7 inlined libraries
+- Solidity 0.8.34 (ContractAddresses: ^0.8.26), viaIR enabled, optimizer runs=200
 - All contracts under 24KB (DegenerusGame largest at 19KB)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token
 - Deploy via nonce-predicted addresses patched into `ContractAddresses.sol` at compile time
@@ -69,7 +69,7 @@ You are performing a comprehensive, adversarial security audit of the Degenerus 
 - `contracts/DegenerusAdmin.sol` — admin functions, VRF wiring
 
 **Test infrastructure:**
-- `test/` — 884 Hardhat tests
+- `test/` — 1,184 Hardhat tests
 - `test/fuzz/` — Foundry invariant fuzzing harnesses
 
 ### What to Audit
@@ -79,7 +79,7 @@ Perform a BLIND audit. Do not assume any prior findings or safety conclusions. F
 #### 1. Storage Layout and Delegatecall Safety
 - Verify storage slot assignments across all 10 modules sharing `DegenerusGameStorage`
 - Check for slot collisions, especially with `BitPackingLib` packed fields
-- Verify all 31 delegatecall sites handle return values correctly
+- Verify all 46 delegatecall sites (31 in Game + 15 cascading in modules) handle return values correctly
 - Check for function selector collisions across module boundaries
 
 #### 2. ETH Accounting and Solvency

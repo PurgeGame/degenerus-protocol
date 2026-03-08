@@ -531,7 +531,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **Callees:** `_resolvePlayer(buyer)` -> `_purchaseDeityPassFor(buyer, symbolId)`
 
 **ETH Flow:** msg.value forwarded to WhaleModule via delegatecall. Pricing: 24 + T(n) ETH where T(n) = n*(n+1)/2, n = passes sold. WhaleModule handles price validation and pool split.
-**Invariants:** Buyer resolved. Symbol ID 0-31 enforced in WhaleModule. Max 24 deity passes (one per symbol per quadrant). WhaleModule validates no duplicate symbol ownership.
+**Invariants:** Buyer resolved. Symbol ID 0-31 enforced in WhaleModule. Max 32 deity passes (one per symbol). WhaleModule validates no duplicate symbol ownership.
 **NatSpec Accuracy:** ACCURATE. Symbol mapping (Q0-Q3) correctly documented.
 **Gas Flags:** None.
 **Verdict:** CORRECT
@@ -2966,15 +2966,15 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **Invariants:**
 - Unlike `rngGate`, does NOT revert on timeout -- returns 0 to signal "waiting"
 - Level 0 skips coinflip processing (no coinflips at level 0)
-- 3-day fallback mechanism: if VRF stalled for 3 days, uses earliest historical VRF word (more secure than blockhash)
+- 3-day fallback mechanism: if VRF stalled for 3 days, uses `_getHistoricalRngFallback` which collects up to 5 early historical VRF words, hashes them together with `currentDay` and `block.prevrandao`. Historical words are committed VRF (non-manipulable), `prevrandao` adds unpredictability at the cost of 1-bit validator manipulation (propose or skip). Acceptable trade-off for gameover-only fallback when VRF is dead.
 - If VRF request itself fails (try/catch in _tryRequestRng), starts fallback timer manually by setting `rngRequestTime = ts` and `rngWordCurrent = 0`
 
 **NatSpec Accuracy:**
-- NatSpec says "Game-over RNG gate with fallback for stalled VRF. After 3-day timeout, uses earliest historical VRF word as fallback" -- ACCURATE.
-- NatSpec says "more secure than blockhash since it's already verified on-chain and cannot be manipulated" -- ACCURATE. Historical VRF words were verified by Chainlink at fulfillment time.
+- NatSpec says "Game-over RNG gate with fallback for stalled VRF" -- ACCURATE.
+- NatSpec documents multi-word historical collection with `block.prevrandao` mixing -- ACCURATE (updated post-audit).
 
 **Gas Flags:**
-- Multiple branches but all with early exits. The fallback path (historical search) is O(30) in worst case but uses cheap mapping reads.
+- Multiple branches but all with early exits. The fallback path (historical search) is O(30) in worst case but uses cheap mapping reads. Collects up to 5 words then breaks early.
 
 **Verdict:** CORRECT
 
@@ -3728,6 +3728,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 | **Returns** | None |
 
 **State Reads:**
+- `gameOver` -- terminal state check (defense-in-depth; also checked in `_callTicketPurchase`)
 - `block.timestamp` -- for elapsed time check
 - `levelStartTime` -- start of current level (inherited storage)
 - `level` -- current game level (inherited storage)
@@ -3742,7 +3743,12 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 **ETH Flow:** No ETH movement.
 
+**Revert Conditions:**
+- `E()`: `gameOver == true` (game has ended)
+- `CoinPurchaseCutoff`: BURNIE purchases blocked within 30 days of liveness-guard timeout
+
 **Invariants:**
+- `gameOver` guard prevents purchases after game termination (defense-in-depth alongside `_callTicketPurchase` check)
 - BURNIE ticket purchases are blocked within 30 days of liveness-guard timeout:
   - Level 0: `elapsed > 882 days` (912 - 30) reverts with `CoinPurchaseCutoff`
   - Other levels: `elapsed > 335 days` (365 - 30) reverts with `CoinPurchaseCutoff`
@@ -3771,6 +3777,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 | **Returns** | None |
 
 **State Reads:**
+- `gameOver` -- terminal state check (defense-in-depth; also checked in `_callTicketPurchase`)
 - `level` -- current game level
 - `price` -- current ticket price in wei
 - `rngLockedFlag` -- whether VRF is pending
@@ -3828,7 +3835,11 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 4. **Lootbox claimable shortfall:** deducted from `claimableWinnings[buyer]` and `claimablePool`
 5. **Vault share:** sent via low-level `call{value: vaultShare}` to `ContractAddresses.VAULT`
 
+**Revert Conditions:**
+- `E()`: `gameOver == true` (game has ended; defense-in-depth alongside `_callTicketPurchase` check)
+
 **Invariants:**
+- `gameOver` guard prevents purchases after game termination (defense-in-depth alongside `_callTicketPurchase` check)
 - `purchaseLevel = level + 1` (tickets target next level)
 - Lootbox purchases blocked during BAF/Decimator resolution: `rngLockedFlag && lastPurchaseDay && (purchaseLevel % 5 == 0)`
 - Minimum lootbox purchase: 0.01 ETH (`LOOTBOX_MIN`)
@@ -3959,6 +3970,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 | **Returns** | None |
 
 **State Reads:**
+- `gameOver` -- terminal state check (defense-in-depth)
 - `lootboxRngIndex` -- current lootbox RNG index
 - `lootboxBurnie[index][buyer]` -- existing BURNIE lootbox amount
 - `lootboxDay[index][buyer]` -- day of first lootbox purchase
@@ -3981,7 +3993,13 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 **ETH Flow:** No ETH movement. BURNIE is burned. Virtual ETH equivalent tracked for RNG threshold calculation.
 
+**Revert Conditions:**
+- `E()`: `gameOver == true` (game has ended; defense-in-depth)
+- `E()`: `burnieAmount < BURNIE_LOOTBOX_MIN`
+- `E()`: `lootboxRngIndex == 0`
+
 **Invariants:**
+- `gameOver` guard prevents BURNIE lootbox purchases after game termination (defense-in-depth)
 - Minimum BURNIE: `BURNIE_LOOTBOX_MIN = 1000 ether` (1000 BURNIE)
 - `lootboxRngIndex` must be > 0 (reverts if 0 -- no active lootbox RNG index)
 - Virtual ETH conversion: `(burnieAmount * priceWei) / PRICE_COIN_UNIT`
@@ -4848,7 +4866,7 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 **NatSpec Accuracy:** No explicit NatSpec beyond inline comments. Behavior matches the described flow.
 
 **Gas Flags:**
-- `soloIdx` is computed as `JackpotBucketLib.soloBucketIndex(entropy)` only when `dgnrsReward != 0`, but `remainderIdx` is always computed identically. These are the same value. Minor redundancy but the compiler likely optimizes it away.
+- `soloIdx` now reuses `remainderIdx` directly (both are `JackpotBucketLib.soloBucketIndex(entropy)` with same input). Redundant call removed post-audit.
 
 **Verdict:** CORRECT
 
@@ -6077,7 +6095,7 @@ Lootbox sub-routing (within `_awardJackpotTickets` and direct):
 - Roll: `entropy % 1e6` compared against `totalChance`
 - If roll >= totalChance, no boon awarded (early return)
 - Weighted selection: `_boonFromRoll((roll * totalWeight) / totalChance)` maps the winning roll to a specific boon type proportional to weights
-- Deity eligibility: player must have 0 deity passes AND total deity pass count < 24
+- Deity eligibility: player must have 0 deity passes AND total deity pass count < 32 (`DEITY_PASS_MAX_TOTAL`)
 - Lazy pass value calculated for `currentLevel + 1` (or 1 if level is 0)
 - `isDeity=false` passed to `_applyBoon` -- lootbox boons use upgrade semantics
 

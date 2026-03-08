@@ -214,7 +214,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Tier identifier for 50% deity pass discount boon (5000 bps)
     uint8 private constant DEITY_PASS_BOON_TIER_50 = 3;
     /// @dev Threshold used by deity-pass discount boon availability logic.
-    uint32 private constant DEITY_PASS_MAX_TOTAL = 24;
+    uint32 private constant DEITY_PASS_MAX_TOTAL = 32;
 
     // Boon bonus values
     /// @dev 5% bonus in basis points for coinflip boon
@@ -1279,7 +1279,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             cursor += DEITY_BOON_WEIGHT_LAZY_PASS_50;
             if (roll < cursor) return DEITY_BOON_LAZY_PASS_50;
         }
-        return DEITY_BOON_ACTIVITY_50;
     }
 
     /// @dev Determine which boon category is currently active for the player.

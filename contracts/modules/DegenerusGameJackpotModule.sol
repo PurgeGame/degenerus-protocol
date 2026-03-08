@@ -1535,9 +1535,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint256 unit = PriceLookupLib.priceForLevel(lvl + 1) >> 2;
         uint8 remainderIdx = JackpotBucketLib.soloBucketIndex(entropy);
-        uint8 soloIdx = dgnrsReward != 0
-            ? JackpotBucketLib.soloBucketIndex(entropy)
-            : 0;
+        uint8 soloIdx = dgnrsReward != 0 ? remainderIdx : 0;
         uint256[4] memory shares = JackpotBucketLib.bucketShares(
             ethPool,
             shareBps,
