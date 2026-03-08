@@ -1,75 +1,146 @@
-# Degenerus Protocol
+# Degenerus Protocol — Audit Repository
 
-The complete, unmodified Solidity source for every contract in the [Degenerus Protocol](https://degener.us).
+Consolidated smart contract repository for the [Degenerus Protocol](https://degener.us), prepared for competitive audit submission.
 
-This repo exists so anyone can read the code, verify the logic, and compile the exact bytecode that's deployed on-chain. No hidden mechanics, no off-chain state. Everything that matters is right here.
+## Overview
 
-Players buy tickets to enter an elimination game. Each round, a portion of players are decimated. Survivors advance, ticket prices escalate, and the prize pool grows. Jackpots, lootboxes, deity boons, and mini-games layer on top. When the dust settles, the last players standing split the pot.
+Degenerus is an on-chain elimination game on Ethereum. Players buy tickets to enter. Each round, a portion of players are eliminated via VRF-driven randomness. Survivors advance, ticket prices escalate, and the prize pool grows. Jackpots, lootboxes, deity boons, and mini-games layer on top. When the dust settles, the last players standing split the pot.
 
-Full details at **[degener.us](https://degener.us)**
+- **22 deployable contracts**, 12 delegatecall game modules sharing storage via `DegenerusGameStorage`
+- Solidity 0.8.26 / 0.8.28, `viaIR` enabled, optimizer runs = 200
+- All contracts under 24KB (DegenerusGame largest at 19KB)
+- External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token
+- Pull-pattern ETH/stETH withdrawals (no push payments)
 
-## Build & Verify
+## Repository History
+
+This repo consolidates the full development history of the Degenerus Protocol:
+
+| Era | Dates | Commits | Description |
+|-----|-------|---------|-------------|
+| Purge Game v1 | Mar 2022 — Jan 2025 | 196 | Original game contracts (PurgeGame.sol, PurgedCoin.sol) |
+| Purge Game v2 | Oct 2025 — Jan 2026 | 728 | Modular rewrite with delegatecall architecture |
+| Degenerus Protocol | Feb 2026 — present | 469 | Current protocol with full test suite and audit |
+
+## Build
 
 ```bash
 npm install
 npx hardhat compile
 ```
 
-Requires Node.js 18+. Compiles with Solidity's IR pipeline (`viaIR: true`) and optimizer runs=2 — the same settings used for the production deployment. You can diff the compiled bytecode against what's deployed on-chain to verify nothing was changed.
+Requires Node.js 18+.
+
+## Test
+
+```bash
+# Hardhat tests (884 tests)
+npx hardhat test
+
+# Foundry invariant fuzzing
+forge test
+```
 
 ## Architecture
 
-Degenerus uses a **delegatecall module pattern**. The core `DegenerusGame` contract holds all game state and delegates execution to specialized modules. Every module inherits `DegenerusGameStorage`, ensuring storage slot alignment across all delegatecall targets.
-
 ```
-DegenerusGame.sol
-  ├── MintModule           Buy tickets, enter the game
-  ├── AdvanceModule        Progress through rounds, daily RNG
+DegenerusGame.sol (main entry point, delegatecall dispatcher)
+  ├── MintModule           Ticket purchasing, ETH splitting
+  ├── AdvanceModule        Level advancement, VRF requests
+  ├── JackpotModule        Daily/weekly/grand jackpots
+  ├── EndgameModule        Final-round resolution
+  ├── GameOverModule       Game-over distribution and sweep
+  ├── LootboxModule        Lootbox drops and claims
+  ├── WhaleModule          Whale bundles, lazy passes, deity passes
   ├── BoonModule           Deity boon rewards
   ├── DecimatorModule      Elimination events
-  ├── EndgameModule        Final-round resolution
-  ├── GameOverModule       Payout distribution
-  ├── JackpotModule        Jackpot pool mechanics
-  ├── LootboxModule        Lootbox drops and claims
-  ├── WhaleModule          Whale bundles and deity passes
   └── DegeneretteModule    Degenerette mini-game
 ```
 
-### Core Contracts
+### Supporting Contracts
 
-| Contract | What It Does |
-|---|---|
-| **DegenerusGame** | Main entry point. Holds all game state, routes calls to modules via delegatecall. |
-| **BurnieCoin** | ERC-20 game token. Deflationary — every transfer burns a cut. |
-| **BurnieCoinflip** | Daily coinflip side-game. Bet BURNIE, win or burn. |
-| **DegenerusVault** | Treasury. Manages staking yield (stETH) and protocol reserves. |
-| **DegenerusJackpots** | Jackpot pool accounting — daily, weekly, and grand jackpots. |
-| **DegenerusQuests** | On-chain quest system with milestone rewards. |
-| **DegenerusAffiliate** | Referral tracking and affiliate payout splits. |
-| **DegenerusAdmin** | Admin configuration (timelocked where applicable). |
-| **DegenerusDeityPass** | ERC-721 deity passes with fully on-chain SVG rendering. |
-| **DegenerusStonk** | Bonding curve token mechanics for DGNRS. |
+| Contract | Purpose |
+|----------|---------|
+| BurnieCoin | Deflationary ERC-20 game token |
+| BurnieCoinflip | Daily coinflip side-game |
+| DegenerusVault | stETH yield treasury |
+| DegenerusJackpots | Jackpot pool accounting |
+| DegenerusQuests | On-chain quest/streak system |
+| DegenerusAffiliate | Referral tracking and payouts |
+| DegenerusAdmin | Admin configuration, VRF wiring |
+| DegenerusDeityPass | ERC-721 with on-chain SVG rendering |
+| DegenerusStonk | Bonding curve token mechanics |
+| WrappedWrappedXRP | Meme wrapper contract |
 
 ### Libraries
 
 | Library | Purpose |
-|---|---|
-| **BitPackingLib** | Bit-level packing for gas-efficient storage |
-| **EntropyLib** | Deterministic entropy derivation from VRF seeds |
-| **GameTimeLib** | Day/epoch boundary calculations |
-| **JackpotBucketLib** | Jackpot tier allocation math |
-| **PriceLookupLib** | Ticket price curve lookups by level |
+|---------|---------|
+| BitPackingLib | Bit-level packing for gas-efficient storage |
+| EntropyLib | Deterministic entropy from VRF seeds |
+| GameTimeLib | Day/epoch boundary calculations |
+| JackpotBucketLib | Jackpot tier allocation math |
+| PriceLookupLib | Ticket price curves by level |
 
-### On-Chain Rendering
+## Scope
 
-| Contract | Purpose |
-|---|---|
-| **Icons32Data** | 33 SVG path definitions for deity pass artwork |
-| **DegenerusTraitUtils** | Trait generation for on-chain metadata |
+See [`scope.txt`](scope.txt) for the complete in-scope file list.
 
-## Contract Addresses
+**In scope:** 22 core contracts + 12 modules + 1 shared storage + 5 libraries + 12 interfaces = 52 Solidity files
 
-`ContractAddresses.sol` contains compile-time address constants. The file in this repo is zeroed out — the deploy pipeline generates a concrete version with live addresses before compilation. Deployed addresses are published at **[degener.us](https://degener.us)**.
+**Out of scope:** `contracts/mocks/`, `contracts/test/`
+
+## Deployment
+
+All contract addresses are compile-time constants in `ContractAddresses.sol`. The deploy pipeline:
+1. Predicts nonce-based addresses (`scripts/lib/predictAddresses.js`)
+2. Patches `ContractAddresses.sol` with concrete addresses
+3. Recompiles and deploys in deterministic order
+
+Modules deploy first (nonce N+0..10), then supporting contracts (COIN, COINFLIP, GAME, etc.), then contracts that depend on earlier ones (VAULT → COIN, DGNRS → GAME, ADMIN → GAME).
+
+## Prior Audit Work
+
+The [`audit/`](audit/) directory contains findings from internal audit work:
+
+- **`KNOWN-ISSUES.md`** — Consolidated known issues with current status (fixed/open)
+- **`EXTERNAL-AUDIT-PROMPT.md`** — Detailed protocol overview and threat model
+- **`findings/`** — 61 detailed finding reports across 7 audit phases + 4 adversarial sessions
+- **`state-changing-function-audits.md`** — Exhaustive function-level audit of all state-changing entry points
+
+### Finding Summary
+
+| Severity | Open | Fixed |
+|----------|------|-------|
+| Critical | 0 | 0 |
+| High | 1 (spec/code mismatch) | 1 |
+| Medium | 1 (design limitation, acknowledged) | 4 |
+| Low | 4 | 2 |
+| Informational | ~45 | — |
+
+See [`audit/KNOWN-ISSUES.md`](audit/KNOWN-ISSUES.md) for details.
+
+### Test Coverage
+
+- **884 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
+- **28 Foundry invariant harnesses** — ETH solvency, supply invariants, VRF lifecycle, vault math, FSM, composition
+- **Slither** static analysis triaged (all HIGH/MEDIUM detections reviewed)
+
+## Key Mechanics for Auditors
+
+- **VRF State Machine:** `rngLockedFlag` prevents concurrent VRF requests. Request → fulfill → unlock cycle. 18-hour retry timeout, 3-day emergency fallback.
+- **Prize Pool Split:** 90% current level / 10% future levels on ticket purchase.
+- **Whale Pricing:** Bundles 2.4-4 ETH, lazy passes 0.24 ETH+, deity passes 24 + T(n) ETH triangular.
+- **Game Over:** Multi-step process: advanceGame → VRF request → fulfill → advanceGame → gameOver = true. 30-day final sweep.
+- **Pull Payments:** All ETH/stETH withdrawals use pull pattern via `claimWinnings()`.
+- **Threat Model:** 10,000 ETH whale, coordinated Sybil, block proposer with MEV, compromised admin, flash loans.
+
+## Documentation
+
+- [`docs/`](docs/) — Protocol mechanics documentation
+- [`ECONOMIC_ANALYSIS.md`](ECONOMIC_ANALYSIS.md) — Economic analysis and attack surface review
+- [`GAME_THEORY_ANALYSIS.md`](GAME_THEORY_ANALYSIS.md) — Game theory and mechanism design analysis
+- [`audit/EXTERNAL-AUDIT-PROMPT.md`](audit/EXTERNAL-AUDIT-PROMPT.md) — Comprehensive protocol overview for auditors
 
 ## License
 
