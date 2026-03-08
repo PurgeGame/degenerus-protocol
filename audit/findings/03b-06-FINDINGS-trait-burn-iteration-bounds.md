@@ -249,9 +249,9 @@ deityPassOwners.push(buyer);
 
 **Effective maximum:** Since `symbolId` must be in [0,31] and each symbol can only be assigned once (guard #2), the maximum `deityPassOwners.length` is **32**.
 
-**Note on DEITY_PASS_MAX_TOTAL:** The constant `DEITY_PASS_MAX_TOTAL = 24` is defined in LootboxModule (line 214) and used only for **boon eligibility** checks (whether to offer deity pass discount boons in lootbox rolls). It is NOT an enforcement cap on the actual push operation. The actual cap is 32 (symbol ID space).
+**Note on DEITY_PASS_MAX_TOTAL:** The constant `DEITY_PASS_MAX_TOTAL = 32` is defined in LootboxModule and matches the actual symbol ID space (0-31). It is used for **boon eligibility** checks (whether to offer deity pass discount boons in lootbox rolls). The constant now correctly aligns with the effective maximum of 32 deity passes.
 
-**Impact:** The discrepancy between DEITY_PASS_MAX_TOTAL (24) and the actual maximum (32) is **cosmetic only** for the iteration bound analysis. Even at 32 entries, the GameOver refund loop uses ~800,000 gas, which is trivially safe.
+**Impact:** `DEITY_PASS_MAX_TOTAL` and the actual symbol ID bound are now consistent at 32. The GameOver refund loop at 32 iterations costs ~800,000 gas, which is trivially safe.
 
 **Transfer path:** `transferDeityPass` in WhaleModule (line 562-569) iterates `deityPassOwners.length` to find and replace the sender. This is bounded at 32 and costs ~32 * 2,100 = ~67,200 gas. Safe.
 
@@ -349,16 +349,14 @@ This is **trivially safe** with ~29M headroom.
 
 ## 8. Findings
 
-### Finding 03b-06-F01: DEITY_PASS_MAX_TOTAL vs Actual Cap Discrepancy
+### Finding 03b-06-F01: DEITY_PASS_MAX_TOTAL vs Actual Cap Discrepancy — RESOLVED
 
-**Severity:** Informational
-**Location:** DegenerusGameLootboxModule.sol:214, DegenerusGameWhaleModule.sol:437-439
+**Severity:** Informational — **RESOLVED**
+**Location:** DegenerusGameLootboxModule.sol:217, DegenerusGameWhaleModule.sol:437-439
 
-**Description:** `DEITY_PASS_MAX_TOTAL = 24` in LootboxModule is used for boon eligibility checks (whether to offer deity pass discount boons), but the actual maximum deity pass owners is **32** (constrained by the 32 available symbol IDs in WhaleModule). The LootboxModule stops offering deity pass discount boons after 24 passes, but 8 more can still be purchased at full price.
+**Description:** `DEITY_PASS_MAX_TOTAL` was previously 24 while the actual symbol ID space allows 32. This has been corrected — `DEITY_PASS_MAX_TOTAL` is now 32, matching the effective maximum from symbol ID constraints. Deity pass discount boons are now offered until all 32 symbols are sold.
 
-**Impact:** None for iteration safety. The GameOver refund loop at 32 iterations costs ~800K gas, which is trivially safe. This is a cosmetic discrepancy in the boon system, not a bounds issue.
-
-**Recommendation:** No action needed for DOS-03. If the intent is to limit deity passes to exactly 24, an explicit length check should be added to `_purchaseDeityPass` in WhaleModule.
+**Impact:** Resolved. No discrepancy remains.
 
 ### Finding 03b-06-F02: _payGameOverBafEthOnly Winner Count From External Contract
 

@@ -230,11 +230,11 @@ Every `block.timestamp` usage in `contracts/` (excluding `contracts-testnet/`) i
 
 **blockhash:** 2 occurrences found, both in comments only:
 - `AdvanceModule.sol:688`: Comment: "more secure than blockhash since it's already verified on-chain"
-- `AdvanceModule.sol:715`: Comment: "Use earliest historical VRF word as fallback (more secure than blockhash)"
+- `AdvanceModule.sol`: NatSpec on `_getHistoricalRngFallback`: collects up to 5 early historical VRF words, hashes with `currentDay` and `block.prevrandao`
 
-These comments explicitly note that the protocol chose NOT to use blockhash.
+These comments explicitly note that the protocol chose NOT to use blockhash as a primary randomness source.
 
-**block.prevrandao:** 0 occurrences.
+**block.prevrandao:** 1 occurrence — used in `_getHistoricalRngFallback` as supplemental entropy mixed with historical VRF words for gameover-only disaster recovery fallback. Provides unpredictability to non-validators at the cost of 1-bit validator influence (propose or skip slot). Acceptable trade-off when VRF is dead.
 
 **block.difficulty:** 0 occurrences.
 

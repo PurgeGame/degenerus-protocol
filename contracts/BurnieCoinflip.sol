@@ -801,6 +801,7 @@ contract BurnieCoinflip {
 
         // Determine payout bonus percent:
         // ~5% each for extreme bonus outcomes (50% or 150%), rest is [78%, 115%]
+        // Presale bonus adds +6pp, so max is 156% during presale
         uint256 roll = seedWord % 20;
         uint16 rewardPercent;
         if (roll == 0) {

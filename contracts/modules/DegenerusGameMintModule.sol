@@ -589,6 +589,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 ticketQuantity,
         uint256 lootBoxBurnieAmount
     ) private {
+        if (gameOver) revert E();
         address payer = msg.sender;
 
         if (ticketQuantity != 0) {
@@ -618,6 +619,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) private {
+        if (gameOver) revert E();
         uint24 purchaseLevel = level + 1;
         uint256 priceWei = price;
 
@@ -991,6 +993,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     }
 
     function _purchaseBurnieLootboxFor(address buyer, uint256 burnieAmount) private {
+        if (gameOver) revert E();
         if (burnieAmount < BURNIE_LOOTBOX_MIN) revert E();
         uint48 index = lootboxRngIndex;
         if (index == 0) revert E();

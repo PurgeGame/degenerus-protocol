@@ -288,8 +288,8 @@ Informational findings are grouped by category. Approximately 45 informational f
 |----|-------|-------------|
 | I-12 | 3a-01 | Lootbox-only purchases intentionally skip `gameOver` check — allows lootbox resolution to continue after game ends |
 | I-13 | 3b-01 | `openBurnieLootBox` uses a hardcoded 80% reward rate, intentionally bypassing the standard EV multiplier |
-| I-14 | 3b-01 | Fallback `return DEITY_BOON_ACTIVITY_50` in boon selection is dead code — all prior conditions are exhaustive |
-| I-15 | 3b-06 | `deityPassOwners` array bounded at 32 (by symbolId type), while `DEITY_PASS_MAX_TOTAL = 24` would allow only 24 — the tighter runtime check is in `purchaseDeityPass` |
+| I-14 | 3b-01 | Fallback `return DEITY_BOON_ACTIVITY_50` in boon selection was dead code — **removed post-audit** |
+| I-15 | 3b-06 | `DEITY_PASS_MAX_TOTAL` now aligned to 32 (matching symbolId bound) — **resolved post-audit** |
 | I-16 | 3c-05 | Presale bonus pushes coinflip reward to 156% (above documented 150% maximum) — intentional |
 | I-17 | 5-03 | Affiliate weighted winner roll uses non-VRF entropy (deterministic seed) — EV-preserving, not manipulable for extraction |
 | I-18 | 4-02 | Decimator unclaimed funds create permanent `claimablePool` reservation — dust accumulates as unclaimable reserve |

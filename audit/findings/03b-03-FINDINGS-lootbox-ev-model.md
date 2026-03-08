@@ -468,7 +468,7 @@ EV = 10000 + ((26500 - 6000) * 3500) / 24500
 
 **Minimum deity-holder path to 305%:**
 
-1. **Deity pass:** 24.5 ETH (first pass, k=0: 24 + 0*(0+1)/2 = 24 ETH base + 0.5 ETH triangular) -- actually checking: `DEITY_PASS_BASE = 24 ether`, price = `24 + k*(k+1)/2` where k = number already sold. First pass (k=0): 24 ETH. Second (k=1): 24.5 ETH. For a new player buying the first available pass, minimum is 24 ETH if none sold, up to 24 + 23*24/2 = 300 ETH for the 24th pass.
+1. **Deity pass:** 24.5 ETH (first pass, k=0: 24 + 0*(0+1)/2 = 24 ETH base + 0.5 ETH triangular) -- actually checking: `DEITY_PASS_BASE = 24 ether`, price = `24 + k*(k+1)/2` where k = number already sold. First pass (k=0): 24 ETH. Second (k=1): 24.5 ETH. For a new player buying the first available pass, minimum is 24 ETH if none sold, up to 24 + 31*32/2 = 520 ETH for the 32nd pass.
    - **Minimum:** 24 ETH
    - **Provides:** 8,000 BPS (deity bonus) + 5,000 BPS (flat streak) + 2,500 BPS (flat mint) = 15,500 BPS
 

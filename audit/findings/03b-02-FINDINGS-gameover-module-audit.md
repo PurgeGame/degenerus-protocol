@@ -331,11 +331,9 @@ This ensures stETH is not double-counted. Both recipients get their share of stE
 - `deityBySymbol[symbolId] != address(0)` reverts (line 438) -- each symbol can only be used once
 - `deityPassCount[buyer] != 0` reverts (line 439) -- each address can only buy once
 
-These three guards together bound the maximum number of unique entries in `deityPassOwners` to **32** (not 24). The constant `DEITY_PASS_MAX_TOTAL = 24` in LootboxModule is used only for deity pass boon availability checks, NOT as a purchase limit in WhaleModule.
+These three guards together bound the maximum number of unique entries in `deityPassOwners` to **32**. The constant `DEITY_PASS_MAX_TOTAL = 32` in LootboxModule now matches this bound and is used for deity pass boon availability checks.
 
 **Impact on GameOverModule:** The refund loops at lines 80-93 and 102-116 iterate `deityPassOwners.length`, which is at most 32. Gas cost: ~32 * (2 SLOAD + 1 SSTORE) = ~32 * 25,000 = ~800,000 gas. Well within the block gas limit (30M). **PASS -- bounded and gas-safe.**
-
-**Note:** The plan expected max 24 iterations (based on `DEITY_PASS_MAX_TOTAL = 24`). The actual bound is 32 (based on `symbolId < 32`). This is a minor discrepancy but does not change the safety verdict. 32 iterations is still trivially bounded.
 
 ### 3.2 Other Loops in GameOverModule
 
@@ -564,20 +562,16 @@ This is not a vulnerability. The ordering places the terminal state flag within 
 
 ---
 
-### Finding GO-F03: deityPassOwners Bounded by symbolId (32), Not DEITY_PASS_MAX_TOTAL (24) (INFORMATIONAL)
+### Finding GO-F03: deityPassOwners Bounded by symbolId (32), DEITY_PASS_MAX_TOTAL Aligned — RESOLVED
 
-**Severity:** INFORMATIONAL
-**Location:** `DegenerusGameWhaleModule.sol:437,476`
+**Severity:** INFORMATIONAL — **RESOLVED**
+**Location:** `DegenerusGameWhaleModule.sol:437,476`, `DegenerusGameLootboxModule.sol:217`
 
 **Description:**
 
-The `deityPassOwners` array is bounded by `symbolId < 32` (WhaleModule:437) and one-pass-per-buyer guards, allowing up to 32 entries. The LootboxModule constant `DEITY_PASS_MAX_TOTAL = 24` is used only for boon eligibility checks, not as a hard limit on array size.
+The `deityPassOwners` array is bounded by `symbolId < 32` (WhaleModule:437) and one-pass-per-buyer guards, allowing up to 32 entries. The LootboxModule constant `DEITY_PASS_MAX_TOTAL` has been updated from 24 to 32, aligning with the actual symbol ID space. Deity pass discount boons are now available for all 32 potential passes.
 
-This means deity pass boons become unavailable after 24 owners, but up to 32 deity passes can still be purchased (symbols 0-31). The GameOverModule refund loops iterate all entries (up to 32). This is still well within gas limits.
-
-**Impact on must_haves truth:** The plan states "deityPassOwners iteration is bounded by DEITY_PASS_MAX_TOTAL=24 with no unbounded .push() path." The actual bound is 32 (symbolId limit), not 24. Both bounds are safe, but the stated truth is technically inaccurate.
-
-**Verdict:** No safety concern. Both 24 and 32 are trivially bounded for gas purposes.
+**Verdict:** Resolved. No discrepancy remains.
 
 ---
 
@@ -607,7 +601,7 @@ As documented in Phase 2 finding FSM-F02, `handleGameOverDrain` receives the old
 |----|----------|-------|--------|
 | GO-F01 | MEDIUM | Potential double refund via refundDeityPass + handleGameOverDrain | Deity pass holders can receive double refund at level 0 if refundDeityPass called before game-over |
 | GO-F02 | INFORMATIONAL | Terminal state set before distribution calls | Safe due to EVM atomicity, no action needed |
-| GO-F03 | INFORMATIONAL | deityPassOwners bounded by 32 (symbolId), not 24 (DEITY_PASS_MAX_TOTAL) | No safety concern, minor documentation discrepancy |
+| GO-F03 | INFORMATIONAL | deityPassOwners bounded by 32 (symbolId), DEITY_PASS_MAX_TOTAL aligned | **RESOLVED** — constant updated to 32 |
 | GO-F04 | LOW | FSM-F02 cross-reference: stale dailyIdx skips distribution | Funds preserved for final sweep; confirmed from Phase 2 |
 
 ---

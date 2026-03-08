@@ -749,30 +749,35 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         return 0;
     }
 
-    /// @dev Get historical VRF word as fallback for gameover RNG.
-    ///      Searches forward from day 1 to find the earliest available RNG word (max 30 tries).
+    /// @dev Get historical VRF fallback entropy for gameover RNG.
+    ///      Collects up to 5 early historical VRF words and hashes them together
+    ///      with currentDay and block.prevrandao. Historical words are committed VRF
+    ///      (non-manipulable), prevrandao adds unpredictability at the cost of 1-bit
+    ///      validator manipulation (propose or skip). Acceptable trade-off for a
+    ///      gameover-only fallback path when VRF is dead.
     ///      Reverts if no historical words exist (VRF never worked).
     /// @param currentDay Current day index.
-    /// @return word Historical RNG word or VRF-derived fallback.
+    /// @return word Combined historical entropy.
     function _getHistoricalRngFallback(
         uint48 currentDay
     ) private view returns (uint256 word) {
-        // Search for earliest available historical RNG word (capped at 30 tries for gas)
-        // Start from day 1 (day 0 might not exist if game started at different time)
+        uint256 found;
+        uint256 combined;
         uint48 searchLimit = currentDay > 30 ? 30 : currentDay;
         for (uint48 searchDay = 1; searchDay < searchLimit; ) {
-            word = rngWordByDay[searchDay];
-            if (word != 0) {
-                // Found a historical VRF word - use it (XOR with current day for uniqueness)
-                return uint256(keccak256(abi.encodePacked(word, currentDay)));
+            uint256 w = rngWordByDay[searchDay];
+            if (w != 0) {
+                combined = uint256(keccak256(abi.encodePacked(combined, w)));
+                unchecked { ++found; }
+                if (found == 5) break;
             }
             unchecked {
                 ++searchDay;
             }
         }
 
-        // No historical words found - VRF never worked, game is in catastrophic state
-        revert E();
+        if (found == 0) revert E();
+        return uint256(keccak256(abi.encodePacked(combined, currentDay, block.prevrandao)));
     }
 
     /*+======================================================================+

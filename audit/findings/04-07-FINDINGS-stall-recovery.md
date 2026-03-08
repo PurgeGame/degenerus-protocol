@@ -176,7 +176,7 @@ This is in `rngGate()` (normal daily RNG path), NOT in `_handleGameOverPath`. Wh
 if (rngRequestTime != 0) {
     uint48 elapsed = ts - rngRequestTime;
     if (elapsed >= GAMEOVER_RNG_FALLBACK_DELAY) {
-        // Use earliest historical VRF word as fallback (more secure than blockhash)
+        // Collect up to 5 early historical VRF words, hash with currentDay + block.prevrandao
         uint256 fallbackWord = _getHistoricalRngFallback(day);
         fallbackWord = _applyDailyRng(day, fallbackWord);
         ...
