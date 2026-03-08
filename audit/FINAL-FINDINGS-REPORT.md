@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-The Degenerus Protocol is a complex on-chain game system comprising 13 core contracts and 10 delegatecall modules (23 deployable total), plus 7 inlined libraries. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, DGNRS, Vault shares, WrappedWrappedXRP). The audit conducted a 7-phase systematic review covering 57 plans, examining approximately 16,000 lines of Solidity code.
+Degenerus Protocol is a complex on-chain game system comprising 13 core contracts and 10 delegatecall modules (23 deployable total), plus 7 inlined libraries. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, DGNRS, Vault shares, WrappedWrappedXRP). The audit conducted a 7-phase systematic review covering 57 plans, examining approximately 16,000 lines of Solidity code.
 
 **Overall Assessment: SOUND with minor issues.** The protocol demonstrates strong security architecture across all critical paths.
 
@@ -113,18 +113,16 @@ The following findings were identified during the audit and have been remediated
 | L-03 | LOW | Whale Bundle NatSpec States 50/50 Fund Split | NatSpec updated to correctly describe 30/70 split |
 | FX-01 | HIGH (pre-fix) | Deity Affiliate Bonus Calculation Error | Fixed in commit `e2bbf50` — BPS applied directly to raw score |
 | FX-02 | MEDIUM (pre-fix) | Deity Pass Double Refund | `refundDeityPass()` function removed entirely from codebase |
+| L-02 | LOW | Stale `dailyIdx` Passed to `handleGameOverDrain` | `_dailyIdx` parameter commented out; `handleGameOverDrain` now called with current `day` value |
 
 ### Remaining Open Low Findings (Acknowledged)
 
 | ID | Title | Status |
 |----|-------|--------|
 | L-01 | No Isolated VRF Callback Gas Test | Acknowledged — testing gap, no security risk |
-| L-02 | Stale `dailyIdx` Passed to `handleGameOverDrain` | Acknowledged — architectural decision, all funds preserved |
 | L-04 | Lootbox Minimum Threshold Has No Upper Bound | Acknowledged — admin trust model |
 | L-05 | Nudges Accepted During Game-Over VRF Fallback | Acknowledged — no fund loss, documentation gap |
 | L-06 / I-22 | `_threeDayRngGap` Duplicated in Two Contracts | Acknowledged — maintenance risk, downgraded to Informational |
-
-See `findings/07-FINAL-FINDINGS-REPORT.md` for the original audit-time finding details.
 
 ---
 
@@ -162,70 +160,70 @@ No Slither detection maps to an actionable finding.
 
 All 56 v1 requirements across 10 categories were evaluated.
 
-| Requirement | Description | Phase | Plan(s) | Verdict | Notes |
-|-------------|-------------|-------|---------|---------|-------|
-| **STOR-01** | Storage layout identical across delegatecall modules | 1 | 01-01 | **PASS** | All 10 modules share exact 132-variable layout, max slot 105 |
-| **STOR-02** | No instance storage in delegatecall modules | 1 | 01-02 | **PASS** | Zero instance storage found via `forge inspect` |
-| **STOR-03** | ContractAddresses compile-time constants correct | 1 | 01-03 | **PASS** | All 22 address constants verified; all address(0) in source (patched during deploy) |
-| **STOR-04** | Testnet isolation: TESTNET_ETH_DIVISOR applied consistently | 1 | 01-04 | **PASS** | 1,000,000 divisor confirmed across all relevant price computations |
-| **RNG-01** | VRF is the sole randomness source | 2 | 02-01 | **PASS** | Only `rawFulfillRandomWords` writes `rngWordCurrent`; no block-level entropy |
-| **RNG-02** | VRF callback gas within Chainlink limit | 2 | 02-02 | **PASS** | Estimated ~45K gas, 85% headroom under 300K limit |
-| **RNG-03** | VRF request/fulfill atomicity: no concurrent requests | 2 | 02-01 | **PASS** | `rngLockedFlag` prevents concurrent requests |
-| **RNG-04** | Block proposer cannot manipulate VRF outcomes | 2 | 02-01 | **PASS** | VRF preimage hidden until commit; no block-level seed mixing |
-| **RNG-05** | MEV searcher cannot extract value from VRF outcomes | 2 | 02-01, 05-04 | **PASS** | No sandwich opportunity; VRF fulfill is atomic |
-| **RNG-06** | VRF retry (18h timeout) cannot be exploited | 2 | 02-03 | **PASS** | Window allows no advantaged state changes; `rngLockedFlag` holds |
-| **RNG-07** | EntropyLib XOR mixing does not introduce bias | 2 | 02-06 | **PASS** | XOR with prime constants provides uniform distribution |
-| **RNG-08** | Lootbox RNG threshold parameter cannot break randomness | 2 | 02-01 | **PASS** | Parameter affects lootbox open eligibility, not randomness quality |
-| **RNG-09** | `rawFulfillRandomWords` access restricted to VRF coordinator | 2 | 02-01 | **PASS** | `onlyVrfCoordinator` modifier present |
-| **RNG-10** | VRF key hash and subscription ID correctly configured | 2 | 02-01 | **PASS** | wireVrf() sets both; admin-guarded configuration |
-| **FSM-01** | All FSM state transitions are complete and correct | 2 | 02-04 | **PASS** | Full FSM graph verified; no orphaned states |
-| **FSM-02** | Stuck states have recovery paths | 2 | 02-05 | **PASS** (conditional) | Recovery paths exist; M-02 documents dual-failure scenario |
-| **FSM-03** | Game-over state is terminal and correctly entered | 2 | 02-04, 04-06 | **PASS** | `gameOver = true` is one-way; all terminal conditions verified |
-| **MATH-01** | No integer overflow in ticket pricing formula | 3a | 03a-02 | **PASS** | Solidity 0.8+ overflow protection; price formula uses safe multiplication |
-| **MATH-02** | No integer underflow in pool accounting | 3a | 03a-03 | **PASS** | All subtraction paths check sufficient balance first |
-| **MATH-03** | BPS arithmetic: all splits sum to input | 4 | 04-03 | **PASS** | Remainder pattern: `dust = total - a - b - c` directs all wei |
-| **MATH-04** | Level advancement threshold arithmetic correct | 3a | 03a-01 | **PASS** | `nextLevelThreshold` computation verified; no off-by-one |
-| **MATH-05** | Lootbox probability arithmetic correct | 3b | 03b-01 | **PASS** | All probability ranges enumerated; 100% coverage |
-| **MATH-06** | Time-based boon validity uses correct day index | 3c | 03c-01 | **PASS** | Standardized on `_simulatedDayIndex()` |
-| **MATH-07** | Whale bundle fund split matches documentation | 3c | 03c-01 | **PASS** | NatSpec matches code (30/70 split) |
-| **MATH-08** | Deity pass pricing formula correct (T(n) triangular) | 3c | 03c-01 | **PASS** | `24 + T(n) ETH` formula verified; no overflow |
-| **INPT-01** | Purchase quantity input validation | 3a | 03a-04 | **PASS** | Min/max quantity checks; zero-quantity reverts |
-| **INPT-02** | ETH payment amount validation (exact match) | 3a | 03a-04 | **PASS** | Exact `msg.value == totalPrice` or refund for excess |
-| **INPT-03** | Affiliate code validation | 3a | 03a-05 | **PASS** | Valid code check before credit; no invalid code silent success |
-| **INPT-04** | Address zero checks for player resolution | 3a | 03a-06 | **PASS** | `_resolvePlayer` handles address(0) → msg.sender |
-| **DOS-01** | `processTicketBatch` loop gas bounded | 3a | 03a-07 | **PASS** | Batch size limited; cold SSTORE cost bounded per batch |
-| **DOS-02** | `payDailyJackpot` winner loop bounded | 3b | 03b-05 | **PASS** | `DAILY_ETH_MAX_WINNERS` constant limits iteration |
-| **DOS-03** | Trait burn iteration bounded | 3b | 03b-06 | **PASS** | Maximum 32 entries (symbolId bound); constant-time |
-| **ACCT-01** | ETH solvency invariant: `deposits == prizePool + futurePool + claimablePool + fees` | 4, 8 | 04-01, 08-04 | **PASS** | Verified across 7 game state sequences in EthInvariant.test.js |
-| **ACCT-02** | `claimWinnings()` CEI: state before ETH send | 4, 8 | 04-04, 08-02 | **PASS** | Sentinel `claimableWinnings[player] = 1` set before external call |
-| **ACCT-03** | stETH accounting: no double-counting of cached balances | 4 | 04-05 | **PASS** | All 13 `steth.balanceOf()` sites read live balance; no caching |
-| **ACCT-04** | Cross-function reentrancy from claimWinnings | 4, 7 | 04-04, 07-03 | **PASS** | All 48 entry points blocked during mid-claim callback; CEI verified |
-| **ACCT-05** | stETH rebasing does not break accounting invariant | 4 | 04-05 | **PASS** | 1-2 wei rounding strengthens invariant; no cached balance risk |
-| **ACCT-06** | DegenerusVault share redemption: no solvency gap | 4, 8 | 04-08, 08-03 | **PASS** | Floor division safe; no partial-burn extraction |
-| **ACCT-07** | BurnieCoin supply invariant: no free-mint path | 4, 8 | 04-09, 08-03 | **PASS** | 6 authorized mint paths; all guarded by `onlyTrustedContracts` |
-| **ACCT-08** | Game-over terminal settlement zero-balance proof | 4 | 04-06 | **PASS** | 912-day timeout; `gameOver = true`; all claimable amounts resolvable |
-| **ACCT-09** | Admin cannot stake ETH below `claimablePool` | 4 | 04-07 | **PASS** | Guard confirmed: `if (amount > balance - claimablePool) revert` |
-| **ACCT-10** | `receive()` donation cannot trigger game conditions | 4 | 04-06 | **PASS** | `futurePrizePool += msg.value` only; no threshold trigger |
-| **ECON-01** | Sybil attack is unprofitable | 5 | 05-01 | **PASS** | Splitting funds provides at most proportional returns |
-| **ECON-02** | Activity score inflation is unprofitable | 5 | 05-02 | **PASS** | Inflation cost exceeds EV unlock for all inflation levels |
-| **ECON-03** | Affiliate extraction is bounded | 5 | 05-03 | **PASS** | Affiliate rewards are BURNIE mints (not ETH); circular referral EV is zero |
-| **ECON-04** | MEV attack surface is zero | 5 | 05-04 | **PASS** | No sandwich opportunity; VRF fulfill is atomic |
-| **ECON-05** | Block proposer has zero influence on game outcomes | 5 | 05-05 | **PASS** | VRF preimage hidden; block timestamp drift is bounded and non-critical |
-| **ECON-06** | Whale bundle EV is not positive | 5 | 05-06 | **PASS** | 18.00 ETH face value for 4 ETH deposit; face value is non-liquid tickets |
-| **ECON-07** | AFK mode transitions cannot be exploited for EV | 5 | 05-07 | **PASS** | AFK transitions are admin-controlled; no player-triggered bypass |
-| **AUTH-01** | All admin functions correctly gate on ADMIN/CREATOR | 6 | 06-01, 06-02 | **PASS** | 23 contracts, all gated; no unguarded admin function |
-| **AUTH-02** | VRF coordinator address validation correct | 6 | 06-03 | **PASS** | `rawFulfillRandomWords` checks `msg.sender == coordinator` |
-| **AUTH-03** | Module isolation: modules cannot call each other except via Game | 6 | 06-04 | **PASS** | All inter-module calls route through Game's delegatecall dispatch |
-| **AUTH-04** | `_resolvePlayer` correctly handles operator delegation | 6 | 06-05, 06-06 | **PASS** | Operator approval checked; no privilege escalation |
-| **AUTH-05** | ADMIN VRF subscription management correctly authorized | 6 | 06-07 | **PASS** | `onTokenTransfer` sender validated; VRF functions guarded |
-| **AUTH-06** | CREATOR privilege scope is correctly bounded | 6 | 06-02 | **PASS** | CREATOR can set admin but cannot bypass game mechanics |
-| **XCON-01** | All delegatecall return values checked | 7 | 07-01 | **PASS** | 46/46 delegatecall sites (31 in Game + 15 in modules) |
-| **XCON-02** | stETH external call return values checked | 7 | 07-02 | **PASS** | 12/12 state-changing stETH calls checked |
-| **XCON-03** | LINK.transferAndCall creates no circular reentrancy | 7 | 07-03 | **PASS** | VRF coordinator does not call back to Admin; sender validation correct |
-| **XCON-04** | BurnieCoin.burnCoin() failure safely reverts caller | 7 | 07-02 | **PASS** | Revert propagates through delegatecall; no free nudges/bets |
-| **XCON-05** | Cross-function reentrancy from ETH callbacks blocked | 7 | 07-03 | **PASS** | All 48 entry points safe |
-| **XCON-06** | stETH rebasing creates no reentrancy vector | 7 | 07-03 | **PASS** | stETH is standard ERC-20; not ERC-677/ERC-777; no recipient callbacks |
-| **XCON-07** | Constructor cross-contract calls execute in correct order | 7 | 07-04 | **PASS** | 23 constructors classified; 3 with cross-contract calls — all targets at lower nonces |
+| Requirement | Description | Verdict | Notes |
+|-------------|-------------|---------|-------|
+| **STOR-01** | Storage layout identical across delegatecall modules | **PASS** | All 10 modules share exact 132-variable layout, max slot 105 |
+| **STOR-02** | No instance storage in delegatecall modules | **PASS** | Zero instance storage found via `forge inspect` |
+| **STOR-03** | ContractAddresses compile-time constants correct | **PASS** | All 22 address constants verified; all address(0) in source (patched during deploy) |
+| **STOR-04** | Testnet isolation: TESTNET_ETH_DIVISOR applied consistently | **PASS** | 1,000,000 divisor confirmed across all relevant price computations |
+| **RNG-01** | VRF is the sole randomness source | **PASS** | Only `rawFulfillRandomWords` writes `rngWordCurrent`; no block-level entropy |
+| **RNG-02** | VRF callback gas within Chainlink limit | **PASS** | Estimated ~45K gas, 85% headroom under 300K limit |
+| **RNG-03** | VRF request/fulfill atomicity: no concurrent requests | **PASS** | `rngLockedFlag` prevents concurrent requests |
+| **RNG-04** | Block proposer cannot manipulate VRF outcomes | **PASS** | VRF preimage hidden until commit; no block-level seed mixing |
+| **RNG-05** | MEV searcher cannot extract value from VRF outcomes | **PASS** | No sandwich opportunity; VRF fulfill is atomic |
+| **RNG-06** | VRF retry (18h timeout) cannot be exploited | **PASS** | Window allows no advantaged state changes; `rngLockedFlag` holds |
+| **RNG-07** | EntropyLib XOR mixing does not introduce bias | **PASS** | XOR with prime constants provides uniform distribution |
+| **RNG-08** | Lootbox RNG threshold parameter cannot break randomness | **PASS** | Parameter affects lootbox open eligibility, not randomness quality |
+| **RNG-09** | `rawFulfillRandomWords` access restricted to VRF coordinator | **PASS** | Inline `msg.sender != address(vrfCoordinator)` guard |
+| **RNG-10** | VRF key hash and subscription ID correctly configured | **PASS** | wireVrf() sets both; admin-guarded configuration |
+| **FSM-01** | All FSM state transitions are complete and correct | **PASS** | Full FSM graph verified; no orphaned states |
+| **FSM-02** | Stuck states have recovery paths | **PASS** (conditional) | Recovery paths exist; M-02 documents dual-failure scenario |
+| **FSM-03** | Game-over state is terminal and correctly entered | **PASS** | `gameOver = true` is one-way; all terminal conditions verified |
+| **MATH-01** | No integer overflow in ticket pricing formula | **PASS** | Solidity 0.8+ overflow protection; price formula uses safe multiplication |
+| **MATH-02** | No integer underflow in pool accounting | **PASS** | All subtraction paths check sufficient balance first |
+| **MATH-03** | BPS arithmetic: all splits sum to input | **PASS** | Remainder pattern: `dust = total - a - b - c` directs all wei |
+| **MATH-04** | Level advancement threshold arithmetic correct | **PASS** | `nextLevelThreshold` computation verified; no off-by-one |
+| **MATH-05** | Lootbox probability arithmetic correct | **PASS** | All probability ranges enumerated; 100% coverage |
+| **MATH-06** | Time-based boon validity uses correct day index | **PASS** | Standardized on `_simulatedDayIndex()` |
+| **MATH-07** | Whale bundle fund split matches documentation | **PASS** | NatSpec matches code (30/70 split) |
+| **MATH-08** | Deity pass pricing formula correct (T(n) triangular) | **PASS** | `24 + T(n) ETH` formula verified; no overflow |
+| **INPT-01** | Purchase quantity input validation | **PASS** | Min/max quantity checks; zero-quantity reverts |
+| **INPT-02** | ETH payment amount validation (exact match) | **PASS** | Exact `msg.value == totalPrice` or refund for excess |
+| **INPT-03** | Affiliate code validation | **PASS** | Valid code check before credit; no invalid code silent success |
+| **INPT-04** | Address zero checks for player resolution | **PASS** | `_resolvePlayer` handles address(0) → msg.sender |
+| **DOS-01** | `processTicketBatch` loop gas bounded | **PASS** | Batch size limited; cold SSTORE cost bounded per batch |
+| **DOS-02** | `payDailyJackpot` winner loop bounded | **PASS** | `DAILY_ETH_MAX_WINNERS` constant limits iteration |
+| **DOS-03** | Trait burn iteration bounded | **PASS** | Maximum 32 entries (symbolId bound); constant-time |
+| **ACCT-01** | ETH solvency invariant: `deposits == prizePool + futurePool + claimablePool + fees` | **PASS** | Verified across 7 game state sequences in EthInvariant.test.js |
+| **ACCT-02** | `claimWinnings()` CEI: state before ETH send | **PASS** | Sentinel `claimableWinnings[player] = 1` set before external call |
+| **ACCT-03** | stETH accounting: no double-counting of cached balances | **PASS** | All 13 `steth.balanceOf()` sites read live balance; no caching |
+| **ACCT-04** | Cross-function reentrancy from claimWinnings | **PASS** | All 48 entry points blocked during mid-claim callback; CEI verified |
+| **ACCT-05** | stETH rebasing does not break accounting invariant | **PASS** | 1-2 wei rounding strengthens invariant; no cached balance risk |
+| **ACCT-06** | DegenerusVault share redemption: no solvency gap | **PASS** | Floor division safe; no partial-burn extraction |
+| **ACCT-07** | BurnieCoin supply invariant: no free-mint path | **PASS** | 6 authorized mint paths; all guarded by `onlyTrustedContracts` |
+| **ACCT-08** | Game-over terminal settlement zero-balance proof | **PASS** | 912-day timeout; `gameOver = true`; all claimable amounts resolvable |
+| **ACCT-09** | Admin cannot stake ETH below `claimablePool` | **PASS** | Guard confirmed: `if (amount > balance - claimablePool) revert` |
+| **ACCT-10** | `receive()` donation cannot trigger game conditions | **PASS** | `futurePrizePool += msg.value` only; no threshold trigger |
+| **ECON-01** | Sybil attack is unprofitable | **PASS** | Splitting funds provides at most proportional returns |
+| **ECON-02** | Activity score inflation is unprofitable | **PASS** | Inflation cost exceeds EV unlock for all inflation levels |
+| **ECON-03** | Affiliate extraction is bounded | **PASS** | Affiliate rewards are BURNIE mints (not ETH); circular referral EV is zero |
+| **ECON-04** | MEV attack surface is zero | **PASS** | No sandwich opportunity; VRF fulfill is atomic |
+| **ECON-05** | Block proposer has zero influence on game outcomes | **PASS** | VRF preimage hidden; block timestamp drift is bounded and non-critical |
+| **ECON-06** | Whale bundle EV is not positive | **PASS** | 18.00 ETH face value for 4 ETH deposit; face value is non-liquid tickets |
+| **ECON-07** | AFK mode transitions cannot be exploited for EV | **PASS** | AFK transitions are admin-controlled; no player-triggered bypass |
+| **AUTH-01** | All admin functions correctly gate on ADMIN/CREATOR | **PASS** | 23 contracts, all gated; no unguarded admin function |
+| **AUTH-02** | VRF coordinator address validation correct | **PASS** | `rawFulfillRandomWords` checks `msg.sender == coordinator` |
+| **AUTH-03** | Module isolation: modules cannot call each other except via Game | **PASS** | All inter-module calls route through Game's delegatecall dispatch |
+| **AUTH-04** | `_resolvePlayer` correctly handles operator delegation | **PASS** | Operator approval checked; no privilege escalation |
+| **AUTH-05** | ADMIN VRF subscription management correctly authorized | **PASS** | `onTokenTransfer` sender validated; VRF functions guarded |
+| **AUTH-06** | CREATOR privilege scope is correctly bounded | **PASS** | CREATOR can set admin but cannot bypass game mechanics |
+| **XCON-01** | All delegatecall return values checked | **PASS** | 46/46 delegatecall sites (31 in Game + 15 in modules) |
+| **XCON-02** | stETH external call return values checked | **PASS** | 12/12 state-changing stETH calls checked |
+| **XCON-03** | LINK.transferAndCall creates no circular reentrancy | **PASS** | VRF coordinator does not call back to Admin; sender validation correct |
+| **XCON-04** | BurnieCoin.burnCoin() failure safely reverts caller | **PASS** | Revert propagates through delegatecall; no free nudges/bets |
+| **XCON-05** | Cross-function reentrancy from ETH callbacks blocked | **PASS** | All 48 entry points safe |
+| **XCON-06** | stETH rebasing creates no reentrancy vector | **PASS** | stETH is standard ERC-20; not ERC-677/ERC-777; no recipient callbacks |
+| **XCON-07** | Constructor cross-contract calls execute in correct order | **PASS** | 23 constructors classified; 3 with cross-contract calls — all targets at lower nonces |
 
 **Coverage Summary: 56/56 PASS** (1 conditional on M-02: FSM-02 dual-failure scenario)
 

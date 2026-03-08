@@ -755,7 +755,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      (non-manipulable), prevrandao adds unpredictability at the cost of 1-bit
     ///      validator manipulation (propose or skip). Acceptable trade-off for a
     ///      gameover-only fallback path when VRF is dead.
-    ///      Reverts if no historical words exist (VRF never worked).
+    ///      If no historical words exist, falls through to prevrandao-only
+    ///      entropy. This can only happen at level 0 (zero VRF history means
+    ///      zero completed advances), so the 1-bit validator bias is irrelevant.
     /// @param currentDay Current day index.
     /// @return word Combined historical entropy.
     function _getHistoricalRngFallback(
@@ -776,7 +778,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
 
-        if (found == 0) revert E();
         return uint256(keccak256(abi.encodePacked(combined, currentDay, block.prevrandao)));
     }
 
