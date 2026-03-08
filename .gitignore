@@ -3,6 +3,7 @@ cache/
 artifacts/
 .env
 forge-out/
+foundry.lock
 out/
 runs/
 *.sol.bak
