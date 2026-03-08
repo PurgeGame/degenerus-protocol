@@ -16,7 +16,7 @@ Requires Node.js 18+.
 ## Tests
 
 ```bash
-# Hardhat tests (884 tests)
+# Hardhat tests (1,183 tests)
 npx hardhat test
 
 # Foundry invariant fuzzing
@@ -25,7 +25,7 @@ forge test
 
 ## Architecture
 
-- **22 deployable contracts**, 12 delegatecall game modules sharing storage via `DegenerusGameStorage`
+- **23 deployable contracts** (13 core + 10 delegatecall modules), sharing storage via `DegenerusGameStorage`
 - Solidity 0.8.34, `viaIR` enabled, optimizer runs = 200
 - All contracts under 24KB (DegenerusGame largest at 19KB)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token
@@ -58,6 +58,7 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 | DegenerusAdmin | Admin configuration, VRF wiring |
 | DegenerusDeityPass | ERC-721 with on-chain SVG rendering |
 | DegenerusStonk | Bonding curve token mechanics |
+| DeityBoonViewer | Standalone deity boon slot viewer |
 | WrappedWrappedXRP | Meme wrapper contract |
 
 ### Libraries
@@ -77,13 +78,13 @@ All contract addresses are compile-time constants in `ContractAddresses.sol`. Th
 2. Patches `ContractAddresses.sol` with concrete addresses
 3. Recompiles and deploys in deterministic order
 
-Modules deploy first (nonce N+0..10), then supporting contracts (COIN, COINFLIP, GAME, etc.), then contracts that depend on earlier ones (VAULT, DGNRS, ADMIN).
+Icons32Data and modules deploy first (nonce N+0..10), then supporting contracts (COIN, COINFLIP, GAME, etc.), then contracts that depend on earlier ones (VAULT, DGNRS, ADMIN).
 
 ## Scope
 
 See [`scope.txt`](scope.txt) for the complete in-scope file list.
 
-**In scope:** 22 core contracts + 12 modules + 1 shared storage + 5 libraries + 12 interfaces = 52 Solidity files
+**In scope:** 15 core files (13 deployable + 2 libraries) + 12 module files (10 deployable + 2 abstract utils) + 1 shared storage + 5 libraries + 12 interfaces = 45 Solidity files
 
 **Out of scope:** `contracts/mocks/`, `contracts/test/`
 
@@ -106,18 +107,18 @@ The [`audit/`](audit/) directory contains findings from internal audit work:
 
 ### Finding Summary
 
-| Severity | Open | Resolved |
-|----------|------|----------|
-| Critical | 0 | 0 |
-| High | 0 | 2 |
-| Medium | 1 (acknowledged design trade-off) | 3 |
-| Low | 3 | 2 |
-| Informational | ~45 | — |
+| Severity | Count |
+|----------|-------|
+| Critical | 0 |
+| High | 0 |
+| Medium | 1 (acknowledged design trade-off) |
+| Low | 0 |
+| Informational | 8 |
 
 ### Test Coverage
 
-- **884 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
-- **28 Foundry invariant harnesses** — ETH solvency, supply invariants, VRF lifecycle, vault math, FSM, composition
+- **1,183 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
+- **21 Foundry test harnesses** (10 invariant, 7 fuzz, 3 Halmos, 1 helper) — ETH solvency, supply invariants, VRF lifecycle, vault math, FSM, composition
 - **Slither** static analysis triaged (all HIGH/MEDIUM detections reviewed)
 
 ## License

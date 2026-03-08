@@ -2,7 +2,7 @@
 
 **Audit Date:** February-March 2026
 **Auditor:** Claude (AI-assisted security analysis, Claude Opus 4.6)
-**Scope:** 13 core contracts + 10 delegatecall modules (23 deployable) + 7 libraries
+**Scope:** 13 core contracts + 10 delegatecall modules (23 deployable) + 7 libraries + 3 shared abstract contracts
 **Solidity:** 0.8.34 (ContractAddresses: ^0.8.26), viaIR enabled, optimizer runs=200
 **Methodology:** 7-phase manual code review with static analysis (Slither) support
 
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-Degenerus Protocol is a complex on-chain game system comprising 13 core contracts and 10 delegatecall modules (23 deployable total), plus 7 inlined libraries. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, DGNRS, Vault shares, WrappedWrappedXRP). The audit conducted a 7-phase systematic review covering 57 plans, examining approximately 16,000 lines of Solidity code.
+Degenerus Protocol is a complex on-chain game system comprising 13 core contracts and 10 delegatecall modules (23 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, DGNRS, Vault shares, WrappedWrappedXRP). The audit conducted a 7-phase systematic review covering 57 plans, examining approximately 16,000 lines of Solidity code.
 
 **Overall Assessment: SOUND with minor issues.** The protocol demonstrates strong security architecture across all critical paths.
 
@@ -98,31 +98,6 @@ A compromised admin can use `emergencyRecover` to point the game at an attacker-
 ## Low Findings
 
 **No low findings.**
-
----
-
-## Resolved Findings (Fixed Post-Audit)
-
-The following findings were identified during the audit and have been remediated in the current codebase. They are documented here for completeness.
-
-| ID | Original Severity | Title | Resolution |
-|----|-------------------|-------|------------|
-| H-01 | HIGH | Whale Bundle Lacks Level Eligibility Guard | NatSpec updated to document "Available at any level" — code behavior was intentional |
-| M-01 | MEDIUM | Day-Index Function Mismatch in Boon Validity Checks | Both whale and lazy pass boon checks now use `_simulatedDayIndex()` |
-| M-03 | MEDIUM | `deityBoonSlots()` staticcall Reads Module Storage | Function replaced with `deityBoonData()` computing locally in Game storage; standalone `DeityBoonViewer` contract added |
-| L-03 | LOW | Whale Bundle NatSpec States 50/50 Fund Split | NatSpec updated to correctly describe 30/70 split |
-| FX-01 | HIGH (pre-fix) | Deity Affiliate Bonus Calculation Error | Fixed in commit `e2bbf50` — BPS applied directly to raw score |
-| FX-02 | MEDIUM (pre-fix) | Deity Pass Double Refund | `refundDeityPass()` function removed entirely from codebase |
-| L-02 | LOW | Stale `dailyIdx` Passed to `handleGameOverDrain` | `_dailyIdx` parameter commented out; `handleGameOverDrain` now called with current `day` value |
-
-### Remaining Open Low Findings (Acknowledged)
-
-| ID | Title | Status |
-|----|-------|--------|
-| L-01 | No Isolated VRF Callback Gas Test | Acknowledged — testing gap, no security risk |
-| L-04 | Lootbox Minimum Threshold Has No Upper Bound | Acknowledged — admin trust model |
-| L-05 | Nudges Accepted During Game-Over VRF Fallback | Acknowledged — no fund loss, documentation gap |
-| L-06 / I-22 | `_threeDayRngGap` Duplicated in Two Contracts | Acknowledged — maintenance risk, downgraded to Informational |
 
 ---
 
@@ -245,7 +220,7 @@ All 56 v1 requirements across 10 categories were evaluated.
 
 ## Scope and Methodology
 
-### Contracts in Scope (13 core + 10 modules + 7 libraries)
+### Contracts in Scope (13 core + 10 modules + 7 libraries + 3 shared abstracts)
 
 **Core Contracts (13 deployable)**
 
@@ -256,7 +231,7 @@ All 56 v1 requirements across 10 categories were evaluated.
 | DegenerusAffiliate | Affiliate registry | ~8KB |
 | BurnieCoin | ERC-20 game token | ~9KB |
 | BurnieCoinflip | Coinflip mechanic | ~16KB |
-| DegenerusStonk (DGNRS) | Governance + whale pass NFT-like | ~11KB |
+| DegenerusStonk (DGNRS) | Passive value-accumulating token (hold/transfer/burn only) | ~7KB |
 | DegenerusVault | stETH yield sharing | ~8KB |
 | DegenerusJackpots | BAF jackpot tracking | ~7KB |
 | DegenerusQuests | Quest streak system | ~6KB |
@@ -308,10 +283,10 @@ All 56 v1 requirements across 10 categories were evaluated.
 
 ### Tools Used
 
-- **Manual source code review** (primary methodology) — all 13 core contracts, 10 modules, and 7 libraries read line by line across 57 audit plans
+- **Manual source code review** (primary methodology) — all 13 core contracts, 10 modules, 7 libraries, and 3 shared abstract contracts read line by line across 57 audit plans
 - **Slither 0.11.5** — static analysis; 1,990 detections (302 HIGH + 1,699 MEDIUM), all triaged as false positive or informational
 - **Foundry `forge inspect`** — storage slot layout verification (Phase 1)
-- **Hardhat test suite** — 1,184 tests, 0 failures, covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
+- **Hardhat test suite** — 1,183 tests, 0 failures, covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
 
 ### Key Audit Techniques
 
@@ -347,9 +322,9 @@ The following were explicitly out of scope for this audit:
 
 5. **Economic resistance:** Sybil splitting provides at most proportional returns. Activity score inflation costs more than the EV it unlocks. Affiliate rewards are BURNIE mints (not ETH), limiting extraction. No MEV sandwich opportunity exists.
 
-6. **Test coverage:** 1,184 tests with 0 failures covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites including game-over sequences, RNG stalls, whale bundle edge cases, and price escalation.
+6. **Test coverage:** 1,183 tests with 0 failures covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites including game-over sequences, RNG stalls, whale bundle edge cases, and price escalation.
 
 ---
 
-*Report generated from 57 individual audit plans across 7 phases, examining 13 core contracts, 10 delegatecall modules, and 7 libraries totaling approximately 16,000 lines of Solidity.*
+*Report generated from 57 individual audit plans across 7 phases, examining 13 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,000 lines of Solidity.*
 *Audit period: February-March 2026*

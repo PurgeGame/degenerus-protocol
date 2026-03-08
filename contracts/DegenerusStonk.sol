@@ -2,55 +2,26 @@
 pragma solidity 0.8.34;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
-import {MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
 
 /// @notice Interface for game contract player-facing functions
 interface IDegenerusGamePlayer {
     function advanceGame() external;
-    function level() external view returns (uint24);
-    function mintPrice() external view returns (uint256);
     function setAfKingMode(
         address player,
         bool enabled,
         uint256 ethTakeProfit,
         uint256 coinTakeProfit
     ) external;
-    function purchase(
-        address buyer,
-        uint256 ticketQuantity,
-        uint256 lootBoxAmount,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind
-    ) external payable;
-    function openLootBox(address player, uint48 lootboxIndex) external;
-    function placeFullTicketBets(
-        address player,
-        uint8 currency,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
-        uint8 heroQuadrant
-    ) external payable;
     function claimWinnings(address player) external;
-    function claimWinningsStethFirst() external;
     function claimWhalePass(address player) external;
     function claimableWinningsOf(address player) external view returns (uint256);
     function isOperatorApproved(address owner, address operator) external view returns (bool);
-    function rngLocked() external view returns (bool);
-    function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external;
-    function purchaseCoin(
-        address buyer,
-        uint256 ticketQuantity,
-        uint256 lootBoxBurnieAmount
-    ) external;
 }
 
 /// @notice Interface for BURNIE coin contract player-facing functions
 interface IDegenerusCoinPlayer {
-    function depositCoinflip(address player, uint256 amount) external;
-    function decimatorBurn(address player, uint256 amount) external;
     function balanceOf(address account) external view returns (uint256);
     function transfer(address to, uint256 amount) external returns (bool);
 }
@@ -58,18 +29,6 @@ interface IDegenerusCoinPlayer {
 interface IBurnieCoinflipPlayer {
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
-}
-
-interface IWrappedWrappedXRP {
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address to, uint256 amount) external returns (bool);
-}
-
-/// @notice Minimal quest view interface for streak queries
-interface IDegenerusQuestsView {
-    function playerQuestStates(address player) external view returns (
-        uint32 streak, uint32 lastCompletedDay, uint128[2] memory progress, bool[2] memory completed
-    );
 }
 
 /**
@@ -105,22 +64,8 @@ contract DegenerusStonk {
     /// @notice Thrown when caller has no DGNRS token balance
     error NotHolder();
 
-    /// @notice Thrown when action amount exceeds holder's proportional limit
-    error ActionLimitExceeded();
-
     /// @notice Thrown when caller is not approved to act on behalf of player
     error NotApproved();
-
-    /// @notice Thrown when trying to transfer locked tokens
-    error TokensLocked();
-
-    /// @notice Thrown when caller has no locked tokens for spending actions
-    error NoLockedTokens();
-
-    /// @notice Thrown when trying to unlock tokens before level change
-    error LockStillActive();
-
-
 
     // =====================================================================
     //                              EVENTS
@@ -146,23 +91,12 @@ contract DegenerusStonk {
     /// @param burnieOut BURNIE received
     event Burn(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 burnieOut);
 
-    /// @notice Emitted when WWXRP is paid out on burn.
-    /// @param from Address that burned tokens.
-    /// @param wwxrpOut WWXRP amount paid.
-    event BurnWwxrp(address indexed from, uint256 wwxrpOut);
-
     /// @notice Emitted when backing assets are deposited into reserves
     /// @param from Address that deposited
     /// @param ethAmount ETH deposited
     /// @param stethAmount stETH deposited
     /// @param burnieAmount BURNIE amount (always 0; BURNIE arrives via manual transfers or coinflip claims)
     event Deposit(address indexed from, uint256 ethAmount, uint256 stethAmount, uint256 burnieAmount);
-
-    /// @notice Emitted when a purchase rebates BURNIE from claimable reserves.
-    /// @param buyer Address that paid ETH.
-    /// @param ethValue ETH value used for rebate calculation.
-    /// @param burnieOut BURNIE paid out.
-    event BurnieRebate(address indexed buyer, uint256 ethValue, uint256 burnieOut);
 
     /// @notice Emitted when DGNRS is transferred from a reward pool
     /// @param pool Pool from which tokens were transferred
@@ -175,23 +109,6 @@ contract DegenerusStonk {
     /// @param to Destination pool
     /// @param amount Amount transferred
     event PoolRebalance(Pool indexed from, Pool indexed to, uint256 amount);
-
-    /// @notice Emitted when a DGNRS holder is rewarded for completing a quest on behalf of the contract
-    /// @param contributor The holder who made the purchase that completed the quest
-    /// @param amount DGNRS reward transferred from the Reward pool
-    /// @param newStreak The DGNRS contract's quest streak after completion
-    event QuestContributionReward(address indexed contributor, uint256 amount, uint32 newStreak);
-
-    /// @notice Emitted when tokens are locked for DGNRS actions
-    /// @param holder Address that locked tokens
-    /// @param amount Amount of tokens locked
-    /// @param level Level at which tokens were locked
-    event Locked(address indexed holder, uint256 amount, uint24 level);
-
-    /// @notice Emitted when locked tokens are released
-    /// @param holder Address that unlocked tokens
-    /// @param amount Amount of tokens unlocked
-    event Unlocked(address indexed holder, uint256 amount);
 
     // =====================================================================
     //                          ERC20 METADATA
@@ -248,37 +165,12 @@ contract DegenerusStonk {
     /// @dev Creator allocation (20%)
     uint16 private constant CREATOR_BPS = 2000;
 
-    /// @dev Base unit: 1000 BURNIE (18 decimals) per mint at priceWei.
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-
-    /// @dev BURNIE payout rate for ETH purchases (70% of value).
-    uint16 private constant BURNIE_ETH_BUY_BPS = 7000;
-
     /// @dev Non-creator pool distribution (BPS of total supply).
     uint16 private constant WHALE_POOL_BPS = 1143;
     uint16 private constant AFFILIATE_POOL_BPS = 3428;
     uint16 private constant LOOTBOX_POOL_BPS = 1143;
     uint16 private constant REWARD_POOL_BPS = 1143;
     uint16 private constant EARLYBIRD_POOL_BPS = 1143;
-
-    /// @dev Affiliate code used for DGNRS purchases
-    bytes32 private constant AFFILIATE_CODE_DGNRS = bytes32("DGNRS");
-
-    /// @dev Reward for completing a quest on behalf of the contract (0.05% of remaining Reward pool).
-    uint16 private constant QUEST_CONTRIBUTION_BPS = 5;
-
-
-    /// @notice Amount of DGNRS locked by each address for DGNRS actions
-    mapping(address => uint256) public lockedBalance;
-
-    /// @notice Level at which each address locked their tokens
-    mapping(address => uint24) public lockedLevel;
-
-    /// @notice Cumulative ETH spent this level by each address (against locked balance)
-    mapping(address => uint256) private ethSpentThisLevel;
-
-    /// @notice Cumulative BURNIE spent this level by each address
-    mapping(address => uint256) private burnieSpentThisLevel;
 
     /// @dev Game contract reference for player actions and claimable queries
     IDegenerusGamePlayer private constant game = IDegenerusGamePlayer(ContractAddresses.GAME);
@@ -288,14 +180,6 @@ contract DegenerusStonk {
     /// @dev Coinflip contract for claimable BURNIE withdrawals during burns
     IBurnieCoinflipPlayer private constant coinflip =
         IBurnieCoinflipPlayer(ContractAddresses.COINFLIP);
-
-    /// @dev WWXRP token reference for proportional burn payouts
-    IWrappedWrappedXRP private constant wwxrp =
-        IWrappedWrappedXRP(ContractAddresses.WWXRP);
-
-    /// @dev Quest contract reference for streak queries
-    IDegenerusQuestsView private constant quests =
-        IDegenerusQuestsView(ContractAddresses.QUESTS);
 
     /// @dev stETH token reference
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
@@ -422,52 +306,6 @@ contract DegenerusStonk {
     //                          PLAYER ACTIONS
     // =====================================================================
 
-    /// @notice Lock DGNRS tokens to gain DGNRS action rights for the current level
-    /// @dev Locked tokens cannot be transferred until level changes. Spending limits
-    ///      are based on locked amount. Can increase lock within same level.
-    /// @param amount Amount of DGNRS to lock (added to existing lock if same level)
-    /// @custom:reverts Insufficient If amount exceeds available (unlocked) balance
-    function lockForLevel(uint256 amount) external {
-        uint24 currentLevel = game.level();
-        uint256 currentLocked = lockedBalance[msg.sender];
-        uint24 currentLockedLevel = lockedLevel[msg.sender];
-
-        // If locked at a different level, auto-unlock first
-        if (currentLocked > 0 && currentLockedLevel != currentLevel) {
-            emit Unlocked(msg.sender, currentLocked);
-            currentLocked = 0;
-            ethSpentThisLevel[msg.sender] = 0;
-            burnieSpentThisLevel[msg.sender] = 0;
-        }
-
-        uint256 available = balanceOf[msg.sender] - currentLocked;
-        if (amount > available) revert Insufficient();
-
-        uint256 newLocked = currentLocked + amount;
-        lockedBalance[msg.sender] = newLocked;
-        lockedLevel[msg.sender] = currentLevel;
-
-        emit Locked(msg.sender, amount, currentLevel);
-    }
-
-    /// @notice Unlock DGNRS tokens after level has changed
-    /// @dev Resets spending counters. Reverts if still at the same level as lock.
-    /// @custom:reverts NoLockedTokens If caller has no locked tokens
-    /// @custom:reverts LockStillActive If current level equals locked level
-    function unlock() external {
-        uint256 locked = lockedBalance[msg.sender];
-        if (locked == 0) revert NoLockedTokens();
-
-        uint24 currentLevel = game.level();
-        if (lockedLevel[msg.sender] == currentLevel) revert LockStillActive();
-
-        lockedBalance[msg.sender] = 0;
-        ethSpentThisLevel[msg.sender] = 0;
-        burnieSpentThisLevel[msg.sender] = 0;
-
-        emit Unlocked(msg.sender, locked);
-    }
-
     /// @notice Advance the game on behalf of DGNRS
     /// @dev Restricted to DGNRS holders
     /// @custom:reverts NotHolder If caller has no DGNRS balance
@@ -475,160 +313,11 @@ contract DegenerusStonk {
         game.advanceGame();
     }
 
-    /// @notice Purchase tickets and lootboxes on behalf of DGNRS
-    /// @dev Requires locked tokens. Limited by proportional stake of locked amount per level.
-    /// @param ticketQuantity Number of tickets to purchase
-    /// @param lootBoxAmount ETH amount to spend on lootboxes
-    /// @param payKind Payment method (ETH, stETH, etc.)
-    /// @custom:reverts NoLockedTokens If caller has no locked tokens at current level
-    /// @custom:reverts ActionLimitExceeded If cumulative cost this level exceeds holder's limit
-    function gamePurchase(
-        uint256 ticketQuantity,
-        uint256 lootBoxAmount,
-        MintPaymentKind payKind
-    ) external payable {
-        uint256 priceWei = game.mintPrice();
-        uint256 ticketCost = (priceWei * ticketQuantity) / (4 * 100);
-        uint256 totalCost = ticketCost + lootBoxAmount;
-        _checkAndRecordEthSpend(msg.sender, totalCost);
-
-        // Snapshot DGNRS contract's quest streak before purchase
-        (uint32 streakBefore, , , ) = quests.playerQuestStates(address(this));
-
-        game.purchase{value: msg.value}(
-            address(0),
-            ticketQuantity,
-            lootBoxAmount,
-            AFFILIATE_CODE_DGNRS,
-            payKind
-        );
-
-        uint256 ethValue = payKind == MintPaymentKind.DirectEth
-            ? totalCost
-            : msg.value;
-        _rebateBurnieFromEthValue(ethValue);
-
-        // Reward contributor if the purchase completed a quest (streak incremented)
-        (uint32 streakAfter, , , ) = quests.playerQuestStates(address(this));
-        if (streakAfter > streakBefore) {
-            uint256 rewardAmount = (poolBalances[uint8(Pool.Reward)] * QUEST_CONTRIBUTION_BPS) / BPS_DENOM;
-            if (rewardAmount != 0) {
-                uint256 rewarded = _transferFromPoolInternal(Pool.Reward, msg.sender, rewardAmount);
-                if (rewarded != 0) {
-                    emit QuestContributionReward(msg.sender, rewarded, streakAfter);
-                }
-            }
-        }
-    }
-
-    /// @notice Purchase BURNIE tickets on behalf of DGNRS
-    /// @dev Requires locked tokens; enforces BURNIE spend limits.
-    /// @param ticketQuantity Number of tickets to purchase (scaled per game rules).
-    function gamePurchaseTicketsBurnie(uint256 ticketQuantity) external {
-        if (ticketQuantity == 0) revert Insufficient();
-        uint256 burnieCost = ticketQuantity * PRICE_COIN_UNIT;
-        _checkAndRecordBurnieSpend(msg.sender, burnieCost);
-
-        // Route through Game.purchaseCoin() - buyer is DGNRS contract (address(0) resolves to msg.sender in Game)
-        game.purchaseCoin(address(0), ticketQuantity, 0);
-    }
-
-    /// @notice Purchase a BURNIE lootbox on behalf of DGNRS
-    /// @dev Requires locked tokens; enforces BURNIE spend limits.
-    /// @param burnieAmount Amount of BURNIE to burn (18 decimals).
-    function gamePurchaseBurnieLootbox(uint256 burnieAmount) external {
-        if (burnieAmount == 0) revert Insufficient();
-        _checkAndRecordBurnieSpend(msg.sender, burnieAmount);
-        game.purchaseBurnieLootbox(address(0), burnieAmount);
-    }
-
-    /// @notice Place a Degenerette bet using ETH (or claimable ETH).
-    /// @dev Requires locked tokens; enforces ETH spend limits.
-    function gameDegeneretteBetEth(
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
-        uint8 heroQuadrant
-    ) external payable {
-        uint256 totalBet = uint256(amountPerTicket) * uint256(ticketCount);
-        _checkAndRecordEthSpend(msg.sender, totalBet);
-        game.placeFullTicketBets{value: msg.value}(
-            address(0),
-            0,
-            amountPerTicket,
-            ticketCount,
-            customTicket,
-            heroQuadrant
-        );
-    }
-
-    /// @notice Place a Degenerette bet using BURNIE.
-    /// @dev Requires locked tokens; enforces BURNIE spend limits.
-    function gameDegeneretteBetBurnie(
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
-        uint8 heroQuadrant
-    ) external {
-        uint256 totalBet = uint256(amountPerTicket) * uint256(ticketCount);
-        _checkAndRecordBurnieSpend(msg.sender, totalBet);
-        game.placeFullTicketBets(
-            address(0),
-            1,
-            amountPerTicket,
-            ticketCount,
-            customTicket,
-            heroQuadrant
-        );
-    }
-
-    /// @notice Open a lootbox on behalf of DGNRS
-    /// @dev Restricted to DGNRS holders
-    /// @param lootboxIndex Index of the lootbox to open
-    /// @custom:reverts NotHolder If caller has no DGNRS balance
-    function gameOpenLootBox(uint48 lootboxIndex) external onlyHolder {
-        game.openLootBox(address(0), lootboxIndex);
-    }
-
     /// @notice Claim whale pass on behalf of DGNRS
     /// @dev Restricted to DGNRS holders
     /// @custom:reverts NotHolder If caller has no DGNRS balance
     function gameClaimWhalePass() external onlyHolder {
         game.claimWhalePass(address(0));
-    }
-
-    /// @notice Burn BURNIE in decimator on behalf of DGNRS
-    /// @dev Requires locked tokens at current level and enforces burnie spend limits.
-    /// @param amount Amount of BURNIE to burn (18 decimals).
-    function coinDecimatorBurn(uint256 amount) external {
-        _checkAndRecordBurnieSpend(msg.sender, amount);
-        coin.decimatorBurn(address(this), amount);
-    }
-
-    /// @dev Rebate BURNIE based on ETH value, paying from balance first then claimable.
-    ///      If insufficient or RNG locked for claimables, rebate is skipped.
-    function _rebateBurnieFromEthValue(uint256 ethValue) private {
-        if (ethValue == 0) return;
-
-        uint256 priceWei = game.mintPrice();
-        if (priceWei == 0) return;
-
-        uint256 burnieValue = (ethValue * PRICE_COIN_UNIT) / priceWei;
-        uint256 burnieOut = (burnieValue * BURNIE_ETH_BUY_BPS) / BPS_DENOM;
-        if (burnieOut == 0) return;
-
-        uint256 burnieBal = coin.balanceOf(address(this));
-        if (burnieBal < burnieOut) {
-            if (game.rngLocked()) return;
-            uint256 remainder = burnieOut - burnieBal;
-            uint256 claimable = coinflip.previewClaimCoinflips(address(this));
-            if (claimable < remainder) return;
-            uint256 claimed = coinflip.claimCoinflips(address(this), remainder);
-            if (claimed < remainder) return;
-        }
-
-        if (!coin.transfer(msg.sender, burnieOut)) revert TransferFailed();
-        emit BurnieRebate(msg.sender, ethValue, burnieOut);
     }
 
     // =====================================================================
@@ -728,8 +417,7 @@ contract DegenerusStonk {
     /// @notice Burn DGNRS to claim proportional share of backing assets
     /// @dev Includes claimable ETH from game. BURNIE is paid from the contract's
     ///      balance plus coinflip claimables (withdrawn on demand). Prioritizes
-    ///      BURNIE first, then ETH over stETH for the remainder. Also pays a
-    ///      proportional share of any WWXRP held by this contract.
+    ///      BURNIE first, then ETH over stETH for the remainder.
     /// @param player Player address to burn for (address(0) defaults to msg.sender)
     /// @param amount Amount of DGNRS to burn
     /// @return ethOut ETH received
@@ -775,9 +463,6 @@ contract DegenerusStonk {
         uint256 totalBurnie = burnieBal + claimableBurnie;
         burnieOut = (totalBurnie * amount) / supplyBefore;
 
-        uint256 wwxrpBal = wwxrp.balanceOf(address(this));
-        uint256 wwxrpOut = (wwxrpBal * amount) / supplyBefore;
-
         _burnWithBalance(player, amount, bal);
 
         if (totalValueOwed > ethBal && claimableEth != 0) {
@@ -809,11 +494,6 @@ contract DegenerusStonk {
 
         if (stethOut > 0) {
             if (!steth.transfer(player, stethOut)) revert TransferFailed();
-        }
-
-        if (wwxrpOut > 0) {
-            if (!wwxrp.transfer(player, wwxrpOut)) revert TransferFailed();
-            emit BurnWwxrp(player, wwxrpOut);
         }
 
         if (ethOut > 0) {
@@ -879,136 +559,9 @@ contract DegenerusStonk {
         return burnieBal + claimableBurnie;
     }
 
-    /// @notice Get spending limits and usage for an address based on their lock
-    /// @param holder Address to check
-    /// @return locked Amount of DGNRS locked
-    /// @return lockLevel Level at which tokens are locked (0 if not locked or stale)
-    /// @return ethLimit Maximum ETH spend allowed this level
-    /// @return ethSpent ETH already spent this level
-    /// @return burnieLimit Maximum BURNIE spend allowed this level
-    /// @return burnieSpent BURNIE already spent this level
-    /// @return canUnlock Whether the holder can unlock (level has changed)
-    function getLockStatus(address holder) external view returns (
-        uint256 locked,
-        uint24 lockLevel,
-        uint256 ethLimit,
-        uint256 ethSpent,
-        uint256 burnieLimit,
-        uint256 burnieSpent,
-        bool canUnlock
-    ) {
-        locked = lockedBalance[holder];
-        lockLevel = lockedLevel[holder];
-        uint24 currentLevel = game.level();
-
-        if (locked > 0 && lockLevel == currentLevel) {
-            (ethLimit, burnieLimit) = _lockedClaimableValues(locked);
-            ethLimit *= 10;
-            burnieLimit *= 10;
-            ethSpent = ethSpentThisLevel[holder];
-            burnieSpent = burnieSpentThisLevel[holder];
-            canUnlock = false;
-        } else if (locked > 0) {
-            canUnlock = true;
-        }
-    }
-
     // =====================================================================
     //                          INTERNAL HELPERS
     // =====================================================================
-
-    /// @dev Calculate maximum ETH action limit based on locked DGNRS (10x proportional ETH value)
-    /// @param locked Amount of DGNRS locked
-    /// @return maxEth Maximum ETH amount allowed for actions
-    function _maxEthActionFromLocked(uint256 locked) private view returns (uint256 maxEth) {
-        (uint256 ethValue, ) = _lockedClaimableValues(locked);
-        unchecked {
-            return ethValue * 10;
-        }
-    }
-
-    /// @dev Calculate maximum BURNIE action limit based on locked DGNRS (10x proportional BURNIE value)
-    /// @param locked Amount of DGNRS locked
-    /// @return maxBurnie Maximum BURNIE amount allowed for actions
-    function _maxBurnieActionFromLocked(uint256 locked) private view returns (uint256 maxBurnie) {
-        (, uint256 burnieValue) = _lockedClaimableValues(locked);
-        unchecked {
-            return burnieValue * 10;
-        }
-    }
-
-    /// @dev Calculate proportional ETH and BURNIE values for a locked amount
-    /// @param locked Amount of DGNRS locked
-    /// @return ethValue Proportional share of ETH + stETH + claimable winnings
-    /// @return burnieValue Proportional share of BURNIE + claimable coinflips
-    function _lockedClaimableValues(
-        uint256 locked
-    ) private view returns (uint256 ethValue, uint256 burnieValue) {
-        uint256 supply = totalSupply;
-        if (supply == 0 || locked == 0) return (0, 0);
-
-        uint256 ethBal = address(this).balance;
-        uint256 stethBal = steth.balanceOf(address(this));
-        uint256 claimableEth = _claimableWinnings();
-        uint256 totalMoney = ethBal + stethBal + claimableEth;
-        ethValue = (totalMoney * locked) / supply;
-
-        uint256 burnieBal = coin.balanceOf(address(this));
-        uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-        uint256 totalBurnie = burnieBal + claimableBurnie;
-        burnieValue = (totalBurnie * locked) / supply;
-    }
-
-    /// @dev Transfer DGNRS from a pool to a recipient (internal, no access control)
-    /// @param pool Pool to transfer from
-    /// @param to Recipient address
-    /// @param amount Requested amount
-    /// @return transferred Actual amount transferred
-    function _transferFromPoolInternal(Pool pool, address to, uint256 amount) private returns (uint256 transferred) {
-        if (amount == 0) return 0;
-        uint8 idx = _poolIndex(pool);
-        uint256 available = poolBalances[idx];
-        if (available == 0) return 0;
-        if (amount > available) {
-            amount = available;
-        }
-        unchecked {
-            poolBalances[idx] = available - amount;
-        }
-        _transfer(address(this), to, amount);
-        emit PoolTransfer(pool, to, amount);
-        return amount;
-    }
-
-    /// @dev Check and record ETH spend based on locked balance
-    /// @param holder Address spending ETH
-    /// @param amount Amount of ETH being spent
-    function _checkAndRecordEthSpend(address holder, uint256 amount) private {
-        uint24 currentLevel = game.level();
-        uint256 locked = lockedBalance[holder];
-
-        // Must have tokens locked at current level
-        if (locked == 0 || lockedLevel[holder] != currentLevel) revert NoLockedTokens();
-
-        uint256 newTotal = ethSpentThisLevel[holder] + amount;
-        if (newTotal > _maxEthActionFromLocked(locked)) revert ActionLimitExceeded();
-        ethSpentThisLevel[holder] = newTotal;
-    }
-
-    /// @dev Check and record BURNIE spend based on locked balance
-    /// @param holder Address spending BURNIE
-    /// @param amount Amount of BURNIE being spent
-    function _checkAndRecordBurnieSpend(address holder, uint256 amount) private {
-        uint24 currentLevel = game.level();
-        uint256 locked = lockedBalance[holder];
-
-        // Must have tokens locked at current level
-        if (locked == 0 || lockedLevel[holder] != currentLevel) revert NoLockedTokens();
-
-        uint256 newTotal = burnieSpentThisLevel[holder] + amount;
-        if (newTotal > _maxBurnieActionFromLocked(locked)) revert ActionLimitExceeded();
-        burnieSpentThisLevel[holder] = newTotal;
-    }
 
     /// @dev Get claimable game winnings, accounting for dust (returns 0 if stored <= 1)
     /// @return claimable Claimable winnings minus 1 wei dust
@@ -1034,32 +587,11 @@ contract DegenerusStonk {
         uint256 bal = balanceOf[from];
         if (amount > bal) revert Insufficient();
 
-        // Enforce lock: can only transfer unlocked portion
-        uint256 locked = lockedBalance[from];
-        if (locked > 0 && lockedLevel[from] == game.level()) {
-            uint256 transferable = bal - locked;
-            if (amount > transferable) revert TokensLocked();
-        }
-
         unchecked {
             balanceOf[from] = bal - amount;
             balanceOf[to] += amount;
         }
         emit Transfer(from, to, amount);
-    }
-
-    /// @dev Reduce active lock when tokens are burned in the same level
-    function _reduceActiveLock(address holder, uint256 amount) private {
-        if (lockedLevel[holder] != game.level()) return;
-        uint256 locked = lockedBalance[holder];
-        if (locked == 0) return;
-        if (amount >= locked) {
-            lockedBalance[holder] = 0;
-        } else {
-            unchecked {
-                lockedBalance[holder] = locked - amount;
-            }
-        }
     }
 
     /// @dev Internal mint implementation
@@ -1080,7 +612,6 @@ contract DegenerusStonk {
     function _burn(address from, uint256 amount) private {
         uint256 bal = balanceOf[from];
         if (amount > bal) revert Insufficient();
-        _reduceActiveLock(from, amount);
         unchecked {
             balanceOf[from] = bal - amount;
             totalSupply -= amount;
@@ -1093,7 +624,6 @@ contract DegenerusStonk {
     /// @param amount Amount to burn
     /// @param bal Pre-fetched balance of from address (caller must ensure amount <= bal)
     function _burnWithBalance(address from, uint256 amount, uint256 bal) private {
-        _reduceActiveLock(from, amount);
         unchecked {
             balanceOf[from] = bal - amount;
             totalSupply -= amount;
