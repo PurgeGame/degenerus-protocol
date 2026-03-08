@@ -4,3 +4,5 @@ artifacts/
 .env
 forge-out/
 out/
+runs/
+*.sol.bak
