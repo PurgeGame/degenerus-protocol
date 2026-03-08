@@ -1,4 +1,8 @@
-# Degenerus Protocol Security Audit -- Final Findings Report
+# Degenerus Protocol Security Audit -- Final Findings Report (Audit-Time Snapshot)
+
+> **SUPERSEDED:** This document reflects the codebase at audit commit `e2bbf50`. Post-audit code changes resolved H-01, M-01, M-03, L-03, FX-01, and FX-02. The `refundDeityPass()` function was removed entirely. `deityBoonSlots()` was replaced with `deityBoonData()` + `DeityBoonViewer`. The Solidity version was upgraded to 0.8.34 and optimizer runs changed to 200.
+>
+> **For the current findings report reflecting the post-remediation codebase, see `audit/FINAL-FINDINGS-REPORT.md`.**
 
 **Audit Date:** February-March 2026
 **Auditor:** Claude (AI-assisted security analysis, Claude Opus 4.6)
@@ -132,12 +136,12 @@ If the ADMIN key is simultaneously lost AND Chainlink VRF infrastructure fails, 
 2. Chainlink VRF permanently fails or becomes unavailable (not a realistic concern for a deployed Chainlink network)
 
 **Impact:**
-Players cannot advance the game for up to 365 days. Winnings remain claimable; the ETH is not at risk of loss. The dual-owner model (CREATOR key OR >30% DGVE holder) partially mitigates this via `emergencyRecover`, but if both admin paths are lost simultaneously, the 365-day timeout is the only path.
+Players cannot advance the game for up to 365 days. Winnings remain claimable; the ETH is not at risk of loss. The dual-owner model (CREATOR key OR >50.1% DGVE holder) partially mitigates this via `emergencyRecover`, but if both admin paths are lost simultaneously, the 365-day timeout is the only path.
 
 **Remediation:**
 1. Document this risk in the protocol's deployment runbook and require multisig for the admin key.
 2. Consider adding a secondary emergency timeout (e.g., 90 days) guarded by a CREATOR signature alone, not requiring admin.
-3. The existing `emergencyRecover` path (CREATOR OR >30% DGVE holder) is a strong partial mitigation — ensure CREATOR key backup procedures are documented.
+3. The existing `emergencyRecover` path (CREATOR OR >50.1% DGVE holder) is a strong partial mitigation — ensure CREATOR key backup procedures are documented.
 
 ---
 

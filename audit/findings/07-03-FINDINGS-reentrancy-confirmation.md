@@ -66,7 +66,7 @@ Every `.call{value:}` site across all contracts (excluding interfaces, mocks, te
 
 | # | File | Line | Function | Recipient | CEI Correct? | Guard |
 |---|------|------|----------|-----------|--------------|-------|
-| 1 | DegenerusGame.sol | 2000 | `_payoutWithStethFallback` | Player address (arbitrary) | YES | Called AFTER `claimableWinnings[player]=1` and `claimablePool -= payout` in `_claimWinningsInternal`; also after `deityPassRefundable[buyer]=0` + pool decrements in `refundDeityPass` |
+| 1 | DegenerusGame.sol | 2000 | `_payoutWithStethFallback` | Player address (arbitrary) | YES | Called AFTER `claimableWinnings[player]=1` and `claimablePool -= payout` in `_claimWinningsInternal` **(POST-AUDIT: `refundDeityPass` removed; this site is now only reached via `_claimWinningsInternal`)** |
 | 2 | DegenerusGame.sol | 2017 | `_payoutWithStethFallback` (retry) | Player address (arbitrary) | YES | Same guard as #1 -- all state mutations occurred before `_payoutWithStethFallback` was called by the enclosing function |
 | 3 | DegenerusGame.sol | 2038 | `_payoutWithEthFallback` | Player address (arbitrary) | YES | Same guard as #1 -- all state mutations occurred before `_payoutWithEthFallback` was called |
 | 4 | GameOverModule.sol | 264 | `_sendToVault` | `ContractAddresses.VAULT` (trusted) | YES | `gameOverFinalJackpotPaid = true` and `gameOver = true` set at lines 128/126 before any distribution |
@@ -151,6 +151,8 @@ All 48 state-changing entry points have been individually assessed. No exploitab
 
 ## Part D: refundDeityPass CEI Confirmation
 
+> **POST-AUDIT UPDATE:** The `refundDeityPass()` function was removed entirely from the codebase. This entire section describes a function that no longer exists. The CEI analysis below is retained for historical reference only.
+
 ### Source: DegenerusGame.sol lines 699-731
 
 ```solidity
@@ -219,6 +221,8 @@ function refundDeityPass(address buyer) external {
 
 ## Part E: handleGameOverDrain and handleFinalSweep Confirmation
 
+> **POST-AUDIT UPDATE:** `handleFinalSweep` was substantially rewritten. The current implementation (DegenerusGameGameOverModule.sol lines 168-186) now: (1) has a `finalSwept` one-time guard, (2) sets `claimablePool = 0` to forfeit all unclaimed winnings, (3) sweeps the entire balance (not just excess above claimablePool), and (4) calls `admin.shutdownVrf()` to shut down VRF. The old description below (no state mutation guard, sends only excess) is stale.
+
 ### handleGameOverDrain (GameOverModule lines 67-148)
 
 **Guard chain:**
@@ -241,6 +245,8 @@ function refundDeityPass(address buyer) external {
 
 ### handleFinalSweep (GameOverModule lines 228-243)
 
+> **POST-AUDIT UPDATE:** This function was rewritten. The current code (lines 168-186) now has: `if (finalSwept) return;` guard, `finalSwept = true;`, `claimablePool = 0;`, `try admin.shutdownVrf() {} catch {}`, then sweeps all funds via `_sendToVault(totalFunds, stBal)`. The code block below is stale.
+
 ```solidity
 function handleFinalSweep() external {
     if (gameOverTime == 0) return;
@@ -257,6 +263,8 @@ function handleFinalSweep() external {
 ```
 
 **Observation:** This function has NO state mutation guard. It reads balances, calculates excess, and sends.
+
+> **POST-AUDIT UPDATE:** The current version now has a `finalSwept` boolean guard preventing re-execution, and zeroes `claimablePool` before sweeping. This is a stronger reentrancy posture than the original.
 
 **Reentrancy assessment:**
 - `_sendToVault` sends ETH/stETH to VAULT and DGNRS only (compile-time constant addresses)
@@ -507,15 +515,15 @@ No circular reentrancy path exists through LINK.transferAndCall. The call graph 
 | Was Phase 4-04 function enumeration complete? | **YES** | 48 state-changing entry points independently verified; 8 functions not individually listed in Phase 4-04 are all access-restricted or self-call-only (Part A) |
 | Are all ETH-sending paths CEI-safe? | **YES** | 8 ETH transfer sites enumerated, all preceded by state mutations (Part B) |
 | Can any callback function corrupt state? | **NO** | All 48 functions blocked during mid-claim callback by sentinel, msg.value=0, or access control (Part C) |
-| Is refundDeityPass CEI-correct? | **YES** | Three state variables zeroed before any interaction; pool decrements before ETH send (Part D) |
+| Is refundDeityPass CEI-correct? | **YES** | Three state variables zeroed before any interaction; pool decrements before ETH send (Part D) **(POST-AUDIT: function removed entirely)** |
 | Is handleGameOverDrain safe? | **YES** | `gameOverFinalJackpotPaid = true` set before distribution; recipients are trusted (Part E) |
-| Is handleFinalSweep safe? | **YES** | Recipients are trusted protocol contracts with non-reentrant receive() (Part E) |
+| Is handleFinalSweep safe? | **YES** | Recipients are trusted protocol contracts with non-reentrant receive() (Part E) **(POST-AUDIT: function rewritten with `finalSwept` guard and `claimablePool = 0`)** |
 
 ## XCON-05 Verdict: PASS
 
 Cross-function reentrancy from ETH callbacks is comprehensively blocked across all protocol ETH-sending paths. The CEI-only approach (no ReentrancyGuard) is correctly implemented:
 1. **claimWinnings**: sentinel pattern + pool decrement before send
-2. **refundDeityPass**: triple state zero + pool decrement before send
+2. **refundDeityPass**: triple state zero + pool decrement before send **(POST-AUDIT: function removed)**
 3. **handleGameOverDrain**: boolean flag before distribution
 4. **handleFinalSweep**: trusted recipients only
 5. **MintModule vault share**: trusted recipient only

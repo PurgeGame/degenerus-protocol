@@ -87,6 +87,8 @@ Every delegatecall site in DegenerusGame.sol is enumerated below. For each site,
 | 15 | 783 | `_openLootBoxFor(...)` (openLootBox) | YES | YES (L790) | No | Void delegatecall |
 | 16 | 799 | `_openBurnieLootBoxFor(...)` (openBurnieLootBox) | YES | YES (L806) | No | Void delegatecall |
 | 17 | 1009 | `issueDeityBoon(...)` | YES | YES (L1017) | No | Void delegatecall |
+> **POST-AUDIT UPDATE:** Site #18 `deityBoonSlots` was replaced with `deityBoonData()` (DegenerusGame.sol line 929). The new function computes all values directly in DegenerusGame's storage context without delegatecall or staticcall, resolving the XCON-F01 finding. The staticcall site no longer exists.
+
 | 18 | 985 | `deityBoonSlots(...)` | YES | `revert E()` (L991) | YES: `abi.decode(data, (uint8[3], uint8, uint48))` (L992) | **STATICCALL** -- see Section 4 |
 
 **All 4 sites: PASS** (ok is checked at every site). **Site #18 has a FINDING** -- see Section 4.
@@ -173,6 +175,8 @@ Zero deviations from this pattern across all 30 delegatecall sites.
 ---
 
 ## 4. Staticcall Site Verification: deityBoonSlots
+
+> **POST-AUDIT UPDATE:** The `deityBoonSlots` function was replaced with `deityBoonData()` (DegenerusGame.sol line 929). The new function reads all state (rngWord, usedMask, decWindowOpen, deityPassOwners) directly from Game storage without any delegatecall or staticcall. XCON-F01 is resolved -- the storage context mismatch no longer exists. The analysis below is retained for historical reference only.
 
 **Location:** DegenerusGame.sol lines 968-993
 
@@ -306,7 +310,7 @@ Three `.call{value: ...}` sites found in DegenerusGame.sol for ETH transfers:
 
 | ID | Severity | Description |
 |----|----------|-------------|
-| XCON-F01 | MEDIUM | `deityBoonSlots` staticcall reads module's storage context, returning incorrect slot types, usedMask, and availability flags. View-only impact -- no state corruption possible. |
+| XCON-F01 | MEDIUM | `deityBoonSlots` staticcall reads module's storage context, returning incorrect slot types, usedMask, and availability flags. View-only impact -- no state corruption possible. **(POST-AUDIT: RESOLVED -- function replaced with `deityBoonData()` which reads Game storage directly)** |
 
 ### Metrics
 

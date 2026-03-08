@@ -369,6 +369,8 @@ For each field, maximum value that can be written vs. field capacity:
 
 ### Finding F01: WHALE_BUNDLE_TYPE mask vs comment inconsistency
 
+> **POST-AUDIT UPDATE:** This finding has been fixed. The BitPackingLib header comment (line 16) now correctly reads `[152-153] WHALE_BUNDLE_TYPE_SHIFT - Bundle type (2 bits: 0=none, 1=10-lvl, 3=100-lvl)`, matching the actual 2-bit mask.
+
 **Severity:** INFORMATIONAL
 
 **Description:** The BitPackingLib header comment on line 16 states:
@@ -431,7 +433,7 @@ This occurs because `WhaleModule` does not inherit from `MintStreakUtils`, so th
 
 | ID | Description | Severity | Impact |
 |----|-------------|----------|--------|
-| F01 | WHALE_BUNDLE_TYPE comment says 3 bits but mask is 2 bits | INFORMATIONAL | Documentation only; 2-bit mask correct for values 0,1,3 |
+| F01 | WHALE_BUNDLE_TYPE comment says 3 bits but mask is 2 bits | INFORMATIONAL | **FIXED POST-AUDIT** -- comment now correctly says "2 bits" |
 | F02 | MINT_STREAK_LAST_COMPLETED absent from BitPackingLib header | INFORMATIONAL | Documentation gap; field correctly defined in MintStreakUtils |
 | F03 | Hardcoded shift 160 in _nukePassHolderStats | INFORMATIONAL | Matches constant; magic number maintenance risk only |
 

@@ -38,6 +38,8 @@ After exhaustive tracing of all ETH inflows (7 entry points) and outflows (8 tra
 
 ### Site 1: `_payoutWithStethFallback()` (DegenerusGame.sol:2015-2042)
 
+> **POST-AUDIT UPDATE:** `refundDeityPass()` was removed entirely from the codebase. This transfer site is now called only from `_claimWinningsInternal()`.
+
 Called from `_claimWinningsInternal()` and `refundDeityPass()`.
 
 **claimWinnings path:**
@@ -119,6 +121,9 @@ Called from `claimWinningsStethFirst()` for VAULT/DGNRS only.
 **Defense:** PayoutUtils.sol:77-93 -- whale pass claims convert to tickets, remainder credited properly.
 
 ### 6. Deity pass refund drain
+
+> **POST-AUDIT UPDATE:** `refundDeityPass()` was removed entirely from the codebase. This attack vector no longer exists.
+
 **Attempt:** Can refundDeityPass drain more than was paid?
 **Result:** INFEASIBLE. `deityPassRefundable[buyer]` is set during purchase in WhaleModule and can never exceed what was paid. It's zeroed before payout (DegenerusGame.sol:708). Double-refund impossible.
 **Defense:** DegenerusGame.sol:706-708 -- zero check and zero-before-payout.

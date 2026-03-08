@@ -37,8 +37,11 @@ advanceGame() -> _handleGameOverPath()
   +-- Subsequent calls (gameOver == true):
         delegatecall -> handleFinalSweep()
         - 30-day guard: block.timestamp < gameOverTime + 30 days -> return
+        - finalSwept guard: if already swept -> return
+        - Sets finalSwept=true, claimablePool=0 (forfeits unclaimed)
         - Shuts down VRF subscription (fire-and-forget)
-        - Sweeps (totalFunds - claimablePool) to vault(50%)/DGNRS(50%)
+        - Sweeps ALL totalFunds to vault(50%)/DGNRS(50%)
+        - After sweep: claimWinnings() reverts (finalSwept check)
 ```
 
 ---
@@ -317,12 +320,19 @@ AFTER handleGameOverDrain:
 
 ## 3. Step 2: handleFinalSweep() -- 30 Days Later
 
-### 3.1 Guard Checks (Lines 158-160)
+> **POST-AUDIT UPDATE:** `handleFinalSweep` was fundamentally rewritten after the original audit. The entire Section 3 below has been updated to reflect the current implementation (GameOverModule lines 168-186). Key changes:
+> - Added `finalSwept` idempotency guard (line 171) -- function is now one-time execution only
+> - Sets `claimablePool = 0` (line 174) -- **forfeits all unclaimed winnings**
+> - Sweeps ALL remaining `totalFunds` (not just excess above claimablePool)
+> - `_claimWinningsInternal` (DegenerusGame.sol line 1421) now checks `if (finalSwept) revert E();`, blocking all claims after the sweep
+
+### 3.1 Guard Checks (Lines 168-171)
 
 ```solidity
 function handleFinalSweep() external {
-    if (gameOverTime == 0) return;                                    // Not game-over yet
-    if (block.timestamp < uint256(gameOverTime) + 30 days) return;   // Too early
+    if (gameOverTime == 0) return;                                    // line 169: Not game-over yet
+    if (block.timestamp < uint256(gameOverTime) + 30 days) return;   // line 170: Too early
+    if (finalSwept) return;                                           // line 171: Already swept
 ```
 
 **30-day enforcement:**
@@ -331,7 +341,20 @@ function handleFinalSweep() external {
 - Cast to `uint256` prevents overflow (defensive; uint48 max ~2.8e14 is far above current timestamps ~1.7e9).
 - **PASS: Cannot be called prematurely.**
 
-### 3.2 VRF Shutdown (Line 163)
+**Idempotency:** `finalSwept` guard prevents re-execution. Unlike the previous version which could be called multiple times, this is now a one-shot operation.
+
+### 3.2 State Mutations (Lines 173-174)
+
+```solidity
+    finalSwept = true;                                                // line 173
+    claimablePool = 0;                                                // line 174
+```
+
+**Critical change from pre-audit behavior:** Setting `claimablePool = 0` forfeits all unclaimed winnings. Players who have not claimed within the 30-day window lose their claims. This is a deliberate design decision to enable full fund recovery.
+
+The `finalSwept = true` flag also serves as a claim blocker: `_claimWinningsInternal` (DegenerusGame.sol line 1421) checks `if (finalSwept) revert E();` before processing any claim.
+
+### 3.3 VRF Shutdown (Line 177)
 
 ```solidity
 try admin.shutdownVrf() {} catch {}
@@ -339,50 +362,42 @@ try admin.shutdownVrf() {} catch {}
 
 Fire-and-forget call to Admin contract. Failure does not block the sweep. This cleans up the Chainlink VRF subscription and sweeps LINK to vault.
 
-### 3.3 Available Computation (Lines 165-172)
+### 3.4 Sweep Execution (Lines 179-185)
 
 ```solidity
 uint256 ethBal = address(this).balance;
 uint256 stBal = steth.balanceOf(address(this));
 uint256 totalFunds = ethBal + stBal;
 
-uint256 available = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
-if (available == 0) return;
+if (totalFunds == 0) return;
+
+_sendToVault(totalFunds, stBal);                                      // line 185
 ```
 
-**What could make `available > 0` after a successful `handleGameOverDrain`?**
-
-1. **stETH rebasing yield:** Between drain and sweep (30+ days), stETH accrues yield. `steth.balanceOf(address(this))` increases. The yield surplus creates positive `available`.
-2. **Accidental ETH sends:** Any ETH sent to the contract via selfdestruct or the `receive()` function inflates `ethBal`. Note: `receive()` increments `futurePrizePool` but does NOT increment `claimablePool`, so these funds become available for sweep.
-3. **Partial player claims:** If players claim winnings between drain and sweep, `claimablePool` decreases and `totalFunds` decreases by the same amount, maintaining `available` at the yield/accidental level.
-
-### 3.4 Sweep Execution (Line 175)
-
-```solidity
-_sendToVault(available, stBal);
+**`_sendToVault` splits `totalFunds` 50/50:**
 ```
-
-**`_sendToVault` splits `available` 50/50:**
-```
-dgnrsAmount = available / 2         // floor
-vaultAmount = available - dgnrsAmount  // ceil (gets 1 extra wei on odd)
+dgnrsAmount = totalFunds / 2            // floor
+vaultAmount = totalFunds - dgnrsAmount  // ceil (gets 1 extra wei on odd)
 ```
 
 **Transfer priority:** stETH first (vault gets stETH up to vaultAmount, remainder as ETH; DGNRS gets remaining stETH via approve+depositSteth + ETH).
 
-### 3.5 Multiple Sweep Calls
+**Key difference from pre-audit:** The sweep now sends ALL `totalFunds`, not just the excess above `claimablePool`. Since `claimablePool` was zeroed at line 174, the distinction is moot -- all funds are now "excess."
 
-`handleFinalSweep` has NO idempotency guard (unlike `handleGameOverDrain`). It can be called multiple times:
+### 3.5 One-Time Execution
 
-- First call sweeps any yield/accidental ETH accumulated over 30+ days.
-- Subsequent calls: if more yield accrues or ETH arrives, another sweep sends it to vault/DGNRS.
-- If `available == 0`, function returns immediately (no-op).
+`handleFinalSweep` now has the `finalSwept` idempotency guard. It can only be called once:
 
-**This is harmless and correct -- it ensures no stale yield accumulates permanently.**
+- First (and only) call: zeros `claimablePool`, sweeps all remaining funds to vault/DGNRS.
+- Subsequent calls: `if (finalSwept) return;` at line 171 makes them no-ops.
+- Any stETH yield accruing after the sweep remains in the contract permanently (negligible amounts on a zero balance).
 
-### 3.6 claimablePool Preservation
+### 3.6 claimablePool Forfeiture
 
-**Critical:** `handleFinalSweep` does NOT modify `claimablePool`. Players who haven't yet claimed their `claimableWinnings` can still do so indefinitely after the sweep. The sweep only takes the surplus above `claimablePool`.
+**Critical change:** `handleFinalSweep` now sets `claimablePool = 0` and `finalSwept = true`. Players who haven't claimed within the 30-day post-gameOver window lose their winnings. After the sweep:
+- `claimWinnings()` reverts with `E()` due to the `finalSwept` check at DegenerusGame.sol line 1421
+- All funds have been sent to vault/DGNRS
+- The contract holds zero (or near-zero) ETH/stETH
 
 ---
 
@@ -403,24 +418,30 @@ After handleFinalSweep (30+ days):
 
 ### 4.2 Can Players Still Claim?
 
-**Yes.** `claimWinnings()` remains functional:
+> **POST-AUDIT UPDATE:** The answer changed from "yes, indefinitely" to "only during the 30-day window." After `handleFinalSweep` executes, `finalSwept = true` causes `_claimWinningsInternal` to revert at DegenerusGame.sol line 1421 (`if (finalSwept) revert E();`), and `claimablePool` is zeroed.
+
+**During the 30-day window (before sweep):** Yes. `claimWinnings()` remains functional:
 - `claimableWinnings[player]` is still set from deity refunds, terminal jackpot credits, and Decimator claims.
-- `claimablePool` is preserved (not modified by sweep).
+- `claimablePool` is preserved (not yet modified).
 - The contract retains `claimablePool` worth of assets to honor claims.
+
+**After the sweep:** No. `claimWinnings()` reverts because `finalSwept = true`. All unclaimed winnings are forfeited. The contract balance is zero.
 
 ### 4.3 Is Any ETH Permanently Locked?
 
-**After sweep, only `claimablePool` worth of ETH/stETH remains.** This backs active claims. Potential permanent lock scenarios:
+> **POST-AUDIT UPDATE:** The permanent lock scenario described below has been resolved. `handleFinalSweep` now sets `claimablePool = 0` and sweeps ALL remaining funds, including previously unclaimed winnings.
 
-| Scenario | Locked Amount | Assessment |
-|----------|---------------|------------|
-| All players claim | 0 (all withdrawn) | No lock |
-| Some players never claim | Residual = sum(unclaimed claimableWinnings) | Permanently locked per-player |
-| No abandon sweep mechanism | Unclaimed amounts stay forever | **No mechanism to recover truly abandoned claims** |
+**After sweep, zero ETH/stETH remains in the contract.** All funds are swept to vault/DGNRS. Potential scenarios:
 
-**Observation:** The protocol has no "unclaimed funds reclaim" mechanism beyond `handleFinalSweep`. After the sweep, unclaimed `claimableWinnings` balances remain indefinitely. These are not "locked" in the negative sense -- they are awaiting their rightful owners. But if owners lose their keys or never return, those funds are permanently inaccessible.
+| Scenario | Outcome | Assessment |
+|----------|---------|------------|
+| All players claim within 30 days | All withdrawn before sweep | No lock |
+| Some players never claim | Unclaimed winnings forfeited; swept to vault/DGNRS | **No permanent lock** |
+| All players fail to claim | All funds swept to vault/DGNRS | **No permanent lock** |
 
-**Verdict:** This is standard practice for pull-payment patterns. Not a finding.
+**Observation:** The current design trades indefinite claim availability for guaranteed fund recovery. Players have a 30-day window to claim after game-over. After that, `handleFinalSweep` forfeits unclaimed winnings and sends everything to vault/DGNRS.
+
+**Verdict:** No funds are permanently locked. The 30-day claim window is a design trade-off, not a finding.
 
 ### 4.4 Decimator Deferred Claims
 
@@ -487,13 +508,16 @@ Step 3 (after terminal jackpot + vault):
               = T_0 - A_0 - C_0
               = 0  QED
 
-Step 4 (after final sweep, 30+ days):
+Step 4 (after final sweep, 30+ days) -- POST-AUDIT UPDATE:
   yield = stETH rebasing over 30+ days
-  T_4_before = C_3 + yield
-  sweep_amount = T_4_before - C_3 = yield
-  T_4_after = T_4_before - yield = C_3
+  claims = ETH/stETH paid out via claimWinnings during the 30-day window
+  T_4_before = C_3 + yield - claims
+  C_4 = 0  (claimablePool zeroed by handleFinalSweep, line 174)
+  finalSwept = true  (line 173)
+  sweep_amount = T_4_before  (ALL remaining funds)
+  T_4_after = 0
 
-  Check: T_4_after - C_3 = 0  QED
+  Check: T_4_after = 0, C_4 = 0  =>  T_4_after >= C_4  QED
 ```
 
 **The algebra proves that every wei is accounted for.** The only residual is `claimablePool` backing player withdrawal claims.
@@ -569,10 +593,10 @@ During the 30-day waiting period:
 
 ### 7.4 Concurrent claimWinnings During Settlement
 
-Players can call `claimWinnings()` between `handleGameOverDrain` and `handleFinalSweep`:
+Players can call `claimWinnings()` between `handleGameOverDrain` and `handleFinalSweep` (during the 30-day window):
 - `claimWinnings` reduces both `claimablePool` and `totalFunds` by the same amount
-- Net effect on `available`: unchanged (both numerator and denominator decrease equally)
-- `handleFinalSweep` correctly recomputes `available` from fresh balances
+- This reduces the amount that `handleFinalSweep` will eventually sweep
+- After `handleFinalSweep` executes: `finalSwept = true` blocks any further claims (DegenerusGame.sol line 1421: `if (finalSwept) revert E();`)
 
 ### 7.5 Safety Check: nextPrizePool >= levelPrizePool[lvl] (AdvanceModule Line 357)
 
@@ -604,9 +628,10 @@ All funds are accounted for as one of:
 2. **vault/DGNRS** -- undistributed terminal jackpot remainder sent to protocol treasury
 
 After `handleFinalSweep` (30+ days later):
-- Any stETH yield surplus is swept to vault/DGNRS
-- `claimablePool` is preserved for player withdrawals
-- **No funds are permanently locked** (standard unclaimed-funds caveat applies)
+- `claimablePool` is zeroed and `finalSwept` is set (forfeiting unclaimed winnings)
+- ALL remaining funds (including unclaimed winnings and stETH yield) are swept to vault/DGNRS
+- `claimWinnings()` reverts after sweep (DegenerusGame.sol line 1421)
+- **No funds are permanently locked** -- all funds reach vault/DGNRS
 
 ### GO-F01 Double Refund: No Longer Applicable
 

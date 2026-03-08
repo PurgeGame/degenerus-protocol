@@ -1,200 +1,256 @@
-# Independent Security Audit Prompt — Degenerus Protocol
+# Independent Security Audit Prompt - Degenerus Protocol
 
-Use this prompt with a different model (Codex 5.3, GPT-4.1, Gemini, etc.) to get an independent security review that avoids same-auditor bias.
+Use this with a different model than your primary auditor (Codex 5.3, GPT-4.1, Gemini, etc.) to reduce same-auditor bias.
 
 ---
 
-## THE PROMPT
+## THE PROMPT (PASTE BELOW)
 
-You are performing a comprehensive, adversarial security audit of the Degenerus Protocol — a Solidity smart contract suite for an on-chain multi-level ticket purchasing game. Your job is to find every exploitable vulnerability, economic attack, and edge-case failure. Think like a Code4rena warden with a 1,000 ETH budget trying to break this game.
+You are an adversarial smart-contract security auditor reviewing the Degenerus Protocol. Audit like a Code4rena warden with a 1,000 ETH budget and strong MEV awareness.
+
+Your objective is to find real, exploitable vulnerabilities and meaningful economic attacks. Prefer one real bug over ten speculative claims.
+
+### Non-Negotiable Rules
+
+- Perform a blind review. Do not assume prior findings are correct.
+- Verify claims directly from source code, not comments.
+- Do not inflate severity.
+- Do not report findings without a concrete attack path.
+- If uncertain, say uncertain and lower confidence.
+- If no valid findings exist in an area, state that explicitly.
 
 ### Protocol Overview
 
-- **23 deployable contracts** (13 core + 10 delegatecall game modules sharing storage via `DegenerusGameStorage`) + 7 inlined libraries
-- Solidity 0.8.34 (ContractAddresses: ^0.8.26), viaIR enabled, optimizer runs=200
-- All contracts under 24KB (DegenerusGame largest at 19KB)
+- 23 deployable contracts (13 core + 10 delegatecall game modules sharing storage via `DegenerusGameStorage`) + 7 inlined libraries
+- Solidity 0.8.34 (`ContractAddresses`: ^0.8.26), viaIR enabled, optimizer runs=200
+- All contracts under 24KB (`DegenerusGame` largest at 19KB)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token
 - Deploy via nonce-predicted addresses patched into `ContractAddresses.sol` at compile time
 
 ### Core Mechanics
 
-- **Ticket purchasing** with price escalation curves across multiple levels
-- **Prize pool split**: 90% current level / 10% future levels
-- **VRF-based randomness** for level advancement (RNG lock state machine: request → fulfill → unlock)
-- **Jackpot system** with daily drawings
-- **Lootbox** system with EV multiplier based on activity score
-- **Whale bundles** (2.4-4 ETH), **lazy passes** (0.24 ETH+), **deity passes** (24 + T(n) ETH triangular)
-- **Degenerette** betting and resolution
-- **BurnieCoin** ERC20 with coinflip mechanics
-- **Affiliate referral** tracking and bonus points
-- **Quest streak** system with activity score
-- **DegenerusVault** for stETH yield
-- **Pull-pattern ETH/stETH withdrawals** (no push payments)
-- **Game over** is multi-step: advanceGame→VRF request→fulfill→advanceGame→gameOver=true
-- **Deity pass refund** on gameOver: flat 20 ETH/pass (levels 0-9), budget-capped, first-purchased-first-paid
+- Ticket purchasing with price escalation curves across multiple levels
+- Prize pool split: 90% current level / 10% future levels
+- VRF-based randomness for level advancement (RNG lock state machine: request -> fulfill -> unlock)
+- Jackpot system with daily drawings
+- Lootbox system with EV multiplier based on activity score
+- Whale bundles (2.4-4 ETH), lazy passes (0.24 ETH+), deity passes (24 + T(n) ETH triangular)
+- Degenerette betting and resolution
+- BurnieCoin ERC20 with coinflip mechanics
+- Affiliate referral tracking and bonus points
+- Quest streak system with activity score
+- DegenerusVault for stETH yield
+- Pull-pattern ETH/stETH withdrawals (no push payments)
+- Game over is multi-step: advanceGame -> VRF request -> fulfill -> advanceGame -> `gameOver=true`
+- Deity pass refund on gameOver: flat 20 ETH/pass (levels 0-9), budget-capped, first-purchased-first-paid
 
 ### Threat Model
 
-- **10,000 ETH whale** + coordinated Sybil group
-- **Block proposer/validator** with MEV capabilities
-- **Compromised admin** (single EOA CREATOR key)
-- **Flash loan attacker** with unlimited capital for single transactions
+- 10,000 ETH whale + coordinated Sybil group
+- Block proposer / validator with MEV capabilities
+- Compromised admin (single EOA CREATOR key)
+- Flash-loan attacker with effectively unlimited single-tx capital
 
-### Architecture (Key Files)
+### Code Scope
 
-**Start here:**
-- `contracts/DegenerusGame.sol` — main game contract, delegatecall dispatcher
-- `contracts/DegenerusGameStorage.sol` — shared storage layout for all modules
-- `contracts/lib/BitPackingLib.sol` — bit packing for storage optimization
-- `contracts/lib/PriceLookupLib.sol` — price curve lookup tables
-- `contracts/lib/ContractAddresses.sol` — compile-time address constants
+Start here:
+- `contracts/DegenerusGame.sol` - main game contract, delegatecall dispatcher
+- `contracts/storage/DegenerusGameStorage.sol` - shared storage layout for all modules
+- `contracts/libraries/BitPackingLib.sol` - bit packing for storage optimization
+- `contracts/libraries/PriceLookupLib.sol` - price curve lookup tables
+- `contracts/ContractAddresses.sol` - compile-time address constants
 
-**10 delegatecall modules (all share DegenerusGame storage):**
-- `contracts/modules/DegenerusGameMintModule.sol` — ticket purchasing, ETH splitting
-- `contracts/modules/DegenerusGameJackpotModule.sol` — jackpot drawings, daily mechanics
-- `contracts/modules/DegenerusGameEndgameModule.sol` — endgame logic
-- `contracts/modules/DegenerusGameLootboxModule.sol` — lootbox opening, EV calculation
-- `contracts/modules/DegenerusGameGameOverModule.sol` — game over distribution
-- `contracts/modules/DegenerusGameWhaleModule.sol` — whale/lazy/deity passes
-- `contracts/modules/DegenerusGameBoonModule.sol` — boon effects
-- `contracts/modules/DegenerusGameDecimatorModule.sol` — decimator mechanics
-- `contracts/modules/DegenerusGameDegeneretteModule.sol` — betting
-- `contracts/modules/DegenerusGameAdvanceModule.sol` — level advancement, VRF
+Delegatecall modules (all share `DegenerusGameStorage`):
+- `contracts/modules/DegenerusGameMintModule.sol` - ticket purchasing, ETH splitting
+- `contracts/modules/DegenerusGameJackpotModule.sol` - jackpot drawings, daily mechanics
+- `contracts/modules/DegenerusGameEndgameModule.sol` - endgame logic
+- `contracts/modules/DegenerusGameLootboxModule.sol` - lootbox opening, EV calculation
+- `contracts/modules/DegenerusGameGameOverModule.sol` - game over distribution
+- `contracts/modules/DegenerusGameWhaleModule.sol` - whale/lazy/deity passes
+- `contracts/modules/DegenerusGameBoonModule.sol` - boon effects
+- `contracts/modules/DegenerusGameDecimatorModule.sol` - decimator mechanics
+- `contracts/modules/DegenerusGameDegeneretteModule.sol` - betting
+- `contracts/modules/DegenerusGameAdvanceModule.sol` - level advancement, VRF
 
-**Supporting contracts:**
-- `contracts/BurnieCoin.sol` + `contracts/BurnieCoinflip.sol` — ERC20 + coinflip
-- `contracts/DegenerusVault.sol` — stETH vault with share math
-- `contracts/DegenerusStonk.sol` — token mechanics
-- `contracts/DegenerusDeityPass.sol` — ERC721 deity pass NFT
-- `contracts/DegenerusAdmin.sol` — admin functions, VRF wiring
+Supporting contracts:
+- `contracts/BurnieCoin.sol` + `contracts/BurnieCoinflip.sol`
+- `contracts/DegenerusVault.sol`
+- `contracts/DegenerusStonk.sol`
+- `contracts/DegenerusDeityPass.sol`
+- `contracts/DegenerusAdmin.sol`
 
-**Test infrastructure:**
-- `test/` — 1,184 Hardhat tests
-- `test/fuzz/` — Foundry invariant fuzzing harnesses
+Tests:
+- `test/` - Hardhat tests
+- `test/fuzz/` - Foundry invariant fuzzing harnesses
 
-### What to Audit
+### Required Audit Coverage
 
-Perform a BLIND audit. Do not assume any prior findings or safety conclusions. For each area below, read the actual source code and form your own opinion:
+Audit all areas below and state confidence (high/medium/low) per area:
 
-#### 1. Storage Layout and Delegatecall Safety
-- Verify storage slot assignments across all 10 modules sharing `DegenerusGameStorage`
-- Check for slot collisions, especially with `BitPackingLib` packed fields
-- Verify all 46 delegatecall sites (31 in Game + 15 cascading in modules) handle return values correctly
-- Check for function selector collisions across module boundaries
+1. Storage Layout and Delegatecall Safety
+- Validate storage-slot consistency across all 10 modules + base storage
+- Check packed-field reads/writes (`BitPackingLib`) for overlap/collision risks
+- Verify every delegatecall site handles return data and revert bubbling correctly
+- Check function-selector collision risk across dispatcher/module boundaries
 
-#### 2. ETH Accounting and Solvency
-- Trace every ETH entry point (receive, payable functions) and exit point (transfers, calls)
-- Verify the protocol can always pay out what it owes (solvency invariant)
-- Check BPS fee splits sum correctly (no ETH leaked or created)
-- Verify pull-pattern withdrawal safety
+2. ETH Accounting and Solvency
+- Trace every ETH entry and exit path
+- Verify solvency under normal + adversarial flows
+- Validate BPS splits (no value creation/leakage)
+- Verify pull-withdraw accounting and claim invariants
 
-#### 3. VRF/RNG Security
-- Analyze the RNG lock state machine for stuck states and recovery paths
-- Check VRF callback for manipulation (revert on unfavorable outcome, gas griefing)
-- Verify entropy derivation from VRF randomness
-- Check all timeout boundaries (912d, 365d, 18h, 3d, 30d)
+3. VRF / RNG Security
+- Validate RNG lock state machine (request, fulfill, unlock) for stuck states
+- Check callback manipulation vectors (revert griefing, gas griefing, timing games)
+- Verify entropy derivation and consumption
+- Check timeout boundaries: 912d, 365d, 18h, 3d, 30d
 
-#### 4. Economic Attack Vectors
-- Model Sybil attacks on ticket purchasing (cost vs. influence)
-- Analyze whale pass pricing for arbitrage opportunities
-- Check deity pass T(n) triangular pricing for manipulation
-- Verify lootbox EV calculation cannot exceed 1.0
-- Check affiliate system for circular/self-referral farming
-- Analyze vault share math for donation/inflation attacks
-- Check cross-system price arbitrage (Game pricing vs Vault shares vs DGNRS vs Degenerette)
+4. Economic Attack Vectors
+- Model Sybil purchase influence and cost
+- Analyze whale/lazy/deity pass pricing for arbitrage and griefing
+- Check deity triangular pricing `T(n)=n*(n+1)/2` for manipulation
+- Verify lootbox EV never exceeds intended caps from exploitable math paths
+- Analyze affiliate self-referral/circular farming
+- Check vault share math against donation/inflation attacks
+- Check cross-system arbitrage (Game vs Vault vs DGNRS vs Degenerette)
 
-#### 5. Access Control
-- Map every privileged function and who can call it
-- Check admin power boundaries post-deployment
-- Verify constructor-only initialization cannot be re-called
-- Check for privilege escalation paths
+5. Access Control
+- Enumerate privileged functions and effective authority
+- Verify post-deploy admin boundaries
+- Confirm initialization paths are one-time and cannot be replayed
+- Find privilege-escalation paths
 
-#### 6. Reentrancy and CEI
-- Check every external call site for reentrancy (ETH transfers, stETH operations, LINK transfers)
-- Verify checks-effects-interactions pattern at all sites
-- Check cross-function reentrancy (function A calls external, callback enters function B)
-- Check read-only reentrancy via stETH share rate
+6. Reentrancy and CEI
+- Check all external call sites (ETH/stETH/LINK/token interactions)
+- Validate checks-effects-interactions ordering
+- Check cross-function reentrancy and callback reachability
+- Include read-only reentrancy considerations (e.g., rate/share reads)
 
-#### 7. Precision and Rounding
-- Audit all division operations for division-before-multiplication chains
-- Check for zero-rounding (inputs that round to zero cost while producing non-zero output)
-- Analyze dust accumulation across purchase→split→credit→claim cycles
-- Verify vault share math ceil/floor rounding directions
+7. Precision and Rounding
+- Find div-before-mul precision loss that is exploitable
+- Check zero-rounding buy/mint/claim edge cases
+- Quantify dust accumulation across split/credit/claim cycles
+- Validate vault rounding directions (mint/redeem fairness)
 
-#### 8. Temporal and Lifecycle Edge Cases
-- Test timestamp ±15s manipulation against all timeout boundaries
-- Analyze level 0 (pre-first-purchase) state for every callable function
-- Check level boundary transitions (N→N+1) for state consistency
-- Test all functions post-gameOver for correct behavior
-- Analyze the multi-step gameOver interleaving (state between steps)
+8. Temporal and Lifecycle Edge Cases
+- Test timestamp +/-15s sensitivity around boundaries
+- Analyze level 0 pre-first-purchase behavior for all callable paths
+- Check level transitions N->N+1 for state consistency
+- Validate all post-gameOver callable behavior
+- Analyze multi-step gameOver interleaving race windows
 
-#### 9. EVM-Level
-- Check for forced ETH via selfdestruct affecting internal accounting
-- Verify no `address(this).balance` used to set pool amounts
-- Audit all `unchecked` blocks for semantic correctness (not just overflow)
-- Verify all assembly SSTORE/SLOAD against storage layout
-- Check ABI encoding for collision risk in delegatecall dispatch
+9. EVM-Level Risks
+- Forced ETH via selfdestruct and accounting impact
+- Improper dependence on `address(this).balance`
+- Semantic correctness of `unchecked` blocks
+- Assembly SLOAD/SSTORE layout correctness
+- ABI/delegatecall encoding collision risks
 
-#### 10. Cross-Contract Composition
-- Test module A→B execution sequences for state corruption
-- Verify shared storage assumptions hold across all module combinations
-- Check for state that's valid per-module but invalid in composition
+10. Cross-Contract Composition
+- Module A->B sequence integrity and state assumptions
+- Shared-storage composition safety across all module combinations
+- States valid locally but invalid globally
 
-### Output Format
+### Method Requirements
 
-Produce a C4A-format findings report:
+- Build explicit invariants before claiming solvency/economic safety.
+- For each high/medium finding, include a reproducible exploit path.
+- If a PoC cannot be executed, provide a deterministic step-by-step simulation and explain why runtime proof is missing.
+- Distinguish clearly between: confirmed exploit, plausible but unconfirmed hypothesis, and non-issue after validation.
 
-```
-## [H-01] Title (if any HIGH findings)
+### Severity Calibration
+
+- High: direct loss/theft or permanent critical lockup with practical exploit path.
+- Medium: meaningful value loss, griefing, or trust break requiring specific conditions.
+- Low: minor risk, edge-case misbehavior, limited impact.
+- QA: informational, code quality, observability, or non-exploitable concerns.
+
+### Output Format (Strict)
+
+Use this exact structure:
+
+```md
+## [H-01] Title
 
 ### Impact
+### Attack Path
+### Code References
 ### Proof of Concept
 ### Recommended Mitigation
 
-## [M-01] Title (if any MEDIUM findings)
+## [M-01] Title
 
 ### Impact
+### Attack Path
+### Code References
 ### Proof of Concept
 ### Recommended Mitigation
 
-## [L-01] Title (if any LOW findings)
+## [L-01] Title
 
 ### Description
+### Code References
 
-## [QA-01] Title (for informational/QA)
+## [QA-01] Title
 
 ### Description
+### Code References
+
+## Confidence by Area
+- Storage Layout and Delegatecall Safety: High/Medium/Low
+- ETH Accounting and Solvency: High/Medium/Low
+- VRF / RNG Security: High/Medium/Low
+- Economic Attack Vectors: High/Medium/Low
+- Access Control: High/Medium/Low
+- Reentrancy and CEI: High/Medium/Low
+- Precision and Rounding: High/Medium/Low
+- Temporal and Lifecycle Edge Cases: High/Medium/Low
+- EVM-Level Risks: High/Medium/Low
+- Cross-Contract Composition: High/Medium/Low
+
+## Coverage Gaps
+- List explicit files/functions/paths you could not fully verify
+
+## Limitations
+- State concrete limitations (time, missing runtime execution, assumptions)
 ```
+
+### Required Finding Quality Bar
 
 For each finding:
-- Include a specific code reference (file:line)
-- Write a proof of concept showing the exploit
-- Explain the economic impact (how much can be extracted, by whom)
-- Rate severity honestly (don't inflate for engagement)
+- Include specific `file:line` references
+- Explain who can exploit it and prerequisites
+- Quantify economic impact (loss range, bounded/unbounded, griefing only vs extraction)
+- Provide realistic exploitation conditions
 
-### Honesty Requirements
+### Finding Examples
 
-- If you find nothing, say so — don't manufacture findings
-- Report your confidence level for each area (high/medium/low)
-- List explicit coverage gaps (areas you couldn't fully analyze)
-- State your limitations honestly
+Good finding pattern:
+- "Unchecked refund accounting allows first-claimer over-withdrawal after gameOver" with exact function path, `file:line` references, reproducible sequence, and bounded loss estimate.
+
+Good "no issue" pattern:
+- "Potential selector collision reviewed; no collision found after selector map + dispatcher tracing" with evidence.
+
+Bad finding pattern (do not do):
+- "Possible reentrancy maybe" without reachable call graph, state impact, or exploit sequence.
 
 ### Important Context
 
-- `purchase(buyer, ticketQuantity, lootBoxAmount, affiliateCode, payKind)` — qty scaled by 100; 1 "full ticket" = quantity 400 = costs priceWei
-- Cost formula: `costWei = (priceWei * ticketQuantity) / 400`
-- MintPaymentKind: { DirectEth: 0, Claimable: 1, Combined: 2 }
-- Game level starts at 0; `purchaseInfo().lvl` = level+1 (active ticket level) during purchase phase
-- Time constants: 912 days (pre-game timeout), 365 days (post-game inactivity), 18 hours (VRF retry), 3 days (emergency stall), 30 days (final sweep)
-- Whale bundle: 2.4 ETH (levels 0-3), 4 ETH (x49/x99), qty 1-100
+- `purchase(buyer, ticketQuantity, lootBoxAmount, affiliateCode, payKind)`
+- quantity is scaled by 100; 1 full ticket = quantity 400 = priceWei
+- Cost: `costWei = (priceWei * ticketQuantity) / 400`
+- `MintPaymentKind`: { DirectEth: 0, Claimable: 1, Combined: 2 }
+- Game level starts at 0; `purchaseInfo().lvl` = level + 1 during purchase phase
+- Time constants: 912 days, 365 days, 18 hours, 3 days, 30 days
+- Whale bundle: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), qty 1-100
 - Lazy pass: 0.24 ETH flat (levels 0-2), sum-of-10-level-prices (level 3+)
-- Deity pass: 24 + T(n) ETH where T(n) = n*(n+1)/2, n = passes sold
-- Deity pass gameOver refund: flat 20 ETH/pass (levels 0-9), budget-capped, first-purchased-first-paid
+- Deity pass: `24 + T(n)` ETH where `T(n)=n*(n+1)/2`, `n=passesSold`
+- Deity pass gameOver refund: 20 ETH/pass (levels 0-9), budget-capped, first-purchased-first-paid
 
-### DO NOT
+### Do Not
 
-- Do not assume the protocol is safe because it "looks well-written"
-- Do not skip areas because they "seem standard"
-- Do not trust comments — verify against code
-- Do not anchor on any prior audit conclusions
-- Do not report false positives to appear thorough
+- Do not assume safety because code quality appears high
+- Do not skip "standard" sections
+- Do not trust comments without code verification
+- Do not anchor on prior audits
+- Do not create speculative findings to appear thorough

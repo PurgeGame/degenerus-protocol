@@ -5,6 +5,8 @@
 **Supporting Contracts:** `contracts/DegenerusGame.sol`, `contracts/modules/DegenerusGameAdvanceModule.sol`, `contracts/storage/DegenerusGameStorage.sol`
 **Date:** 2026-03-01
 
+> **POST-AUDIT UPDATE (2026-03-08):** The `onlyOwner` modifier in DegenerusAdmin.sol was changed to vault-owner-only (line 362: `if (!vault.isVaultOwner(msg.sender)) revert NotOwner();`). The CREATOR bypass was removed. The vault ownership threshold was updated from >30% to >50.1% DGVE (`balance * 1000 > supply * 501`). All references to "CREATOR or >30% DGVE" in this document should read ">50.1% DGVE holder only". Line numbers may have shifted.
+
 ---
 
 ## 1. Complete DegenerusAdmin Function Table
@@ -111,6 +113,9 @@ function emergencyRecover(
 ```
 
 **Gate:** `onlyOwner` modifier, which permits:
+
+> **POST-AUDIT UPDATE:** The `onlyOwner` modifier now only checks `vault.isVaultOwner(msg.sender)` (>50.1% DGVE). The CREATOR bypass was removed.
+
 1. `ContractAddresses.CREATOR` (deployer) -- compile-time constant, immutable
 2. Any address where `vault.isVaultOwner(msg.sender)` returns true (>30% DGVE supply)
 
@@ -184,7 +189,7 @@ Step-by-step execution:
   - The malicious coordinator would need to implement `createSubscription()` and `addConsumer()` correctly to get past earlier steps.
   - Even if LINK is sent to a malicious coordinator, it would be in a subscription context. The attacker cannot extract it unless their contract is designed to do so.
 
-**FINDING (Informational):** A vault owner (>30% DGVE) could, after a genuine 3-day stall, point the system to a malicious coordinator that steals LINK from the subscription. This is an accepted trust assumption -- a >30% DGVE holder has significant economic alignment with the protocol. See Section 6b for full analysis.
+**FINDING (Informational):** A vault owner (>30% DGVE) **(POST-AUDIT: >50.1% DGVE)** could, after a genuine 3-day stall, point the system to a malicious coordinator that steals LINK from the subscription. This is an accepted trust assumption -- a >30% DGVE holder has significant economic alignment with the protocol. See Section 6b for full analysis.
 
 ---
 
@@ -196,7 +201,7 @@ Step-by-step execution:
 function setLinkEthPriceFeed(address feed) external onlyOwner {
 ```
 
-**Gate:** `onlyOwner` (CREATOR or vault owner with >30% DGVE).
+**Gate:** `onlyOwner` (CREATOR or vault owner with >30% DGVE). **(POST-AUDIT: now >50.1% DGVE only, no CREATOR bypass)**
 
 **Additional guard:** `if (_feedHealthy(current)) revert FeedHealthy();` -- the current feed can only be replaced if it is unhealthy (stale, returning invalid data, or reverting).
 
@@ -336,7 +341,7 @@ function updateVrfCoordinatorAndSub(
 
 **Can a vault owner rotate to a malicious coordinator?**
 
-If a vault owner (>30% DGVE) has access AND a genuine 3-day stall exists, they could point the system to a malicious VRF coordinator. This would allow them to:
+If a vault owner (>30% DGVE) **(POST-AUDIT: now >50.1% DGVE)** has access AND a genuine 3-day stall exists, they could point the system to a malicious VRF coordinator. This would allow them to:
 - Control VRF randomness (submit predetermined "random" words).
 - Potentially manipulate game outcomes (jackpots, lootboxes, etc.).
 
@@ -500,7 +505,7 @@ The `catch {}` silently swallows any cancellation failure. This is intentional -
 ### Access Control Completeness
 
 - All 6 external state-changing functions have appropriate access gates.
-- `onlyOwner` gates correctly permit CREATOR and >30% DGVE vault owners.
+- `onlyOwner` gates correctly permit CREATOR and >30% DGVE vault owners. **(POST-AUDIT: now >50.1% DGVE only, no CREATOR bypass)**
 - `onTokenTransfer` correctly validates `msg.sender == LINK_TOKEN`.
 - `emergencyRecover` correctly requires `rngStalledForThreeDays` (genuine VRF failure).
 - `shutdownAndRefund` correctly requires `gameOver()` (terminal state).
@@ -509,7 +514,7 @@ The `catch {}` silently swallows any cancellation failure. This is intentional -
 
 ### Trust Assumptions
 
-The vault owner (>30% DGVE) is trusted with:
+The vault owner (>30% DGVE) **(POST-AUDIT: >50.1% DGVE)** is trusted with:
 1. Setting price feeds (affects BURNIE rewards only, not ETH flows).
 2. Rotating VRF coordinator during 3-day stalls (accepted: economic alignment).
 3. Choosing LINK sweep target after game-over (accepted: terminal state).

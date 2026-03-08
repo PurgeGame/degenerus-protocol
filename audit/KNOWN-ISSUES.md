@@ -67,6 +67,22 @@ acceptable given the alternative of permanent fund lock.
 
 ---
 
+### Historical RNG Fallback Revert With Zero VRF History
+
+**Severity:** Informational (unrealistic precondition)
+**Contract:** `DegenerusGameAdvanceModule` (`_getHistoricalRngFallback`)
+**Status:** Acknowledged — cannot occur under any realistic scenario
+
+If the game reaches a liveness-triggered game-over with VRF unavailable AND zero historical
+`rngWordByDay` entries have ever been recorded, the fallback reverts (no words to combine).
+This requires: (1) VRF never successfully fulfilled even once, AND (2) enough time passed to
+trigger liveness timeout (365 days at level 1+, 912 days at level 0). A game that ran for
+365+ days without a single successful VRF fulfill is not a realistic scenario — VRF fulfills
+on every daily advance, and the game would need hundreds of successful advances to reach a
+liveness-triggerable state.
+
+---
+
 ## Design Decisions That May Look Like Bugs
 
 ### BURNIE has multiple mint pathways

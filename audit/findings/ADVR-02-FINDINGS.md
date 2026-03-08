@@ -6,6 +6,11 @@
 **Information:** Source code + architecture docs (no prior findings)
 **Session Date:** 2026-03-05
 
+> **POST-AUDIT UPDATE (2026-03-08):** Key contract changes since this audit:
+> 1. **CREATOR daily mint gate bypass** (Path 1): The `if (caller == ContractAddresses.CREATOR) return;` bypass was removed from `_enforceDailyMintGate()`. Current bypass tiers (DegenerusGameAdvanceModule.sol lines 547-583): deity pass holder, anyone after 30 min, pass holder after 15 min, DGVE majority holder. The "CREATOR as ultimate backstop" defense no longer applies; the timed bypasses and vault owner bypass serve as the recovery mechanism instead.
+> 2. **Vault ownership threshold**: Updated from >30% to >50.1% DGVE (`balance * 1000 > supply * 501`).
+> 3. **`onlyOwner` modifier**: Now vault-owner-only, no CREATOR bypass.
+
 ## Summary
 
 **Result: No Medium+ findings discovered.**
@@ -23,6 +28,8 @@ After systematically enumerating all revert paths in advanceGame() and all recov
 ## Revert Path Analysis
 
 ### Path 1: MustMintToday() (AdvanceModule.sol, _enforceDailyMintGate)
+
+> **POST-AUDIT UPDATE:** The CREATOR bypass described below was removed. The current `_enforceDailyMintGate()` (lines 547-583) has no CREATOR reference. Bypass tiers are: (1) deity pass holder -- always bypasses, (2) anyone -- bypasses 30+ min after day boundary, (3) any pass holder -- bypasses 15+ min after day boundary, (4) DGVE majority holder -- always bypasses. The gate cannot permanently brick because tier 2 opens for ALL callers after 30 minutes.
 
 **Condition:** Caller must have minted today (ETH mint on current purchase level). CREATOR bypasses this gate.
 
@@ -177,7 +184,7 @@ advanceGame() cannot be permanently bricked. The defense-in-depth architecture p
 1. **Time-based retry** (18h): Resolves VRF fulfillment delays
 2. **Coordinator rotation** (3 days): Resolves VRF coordinator failures
 3. **Liveness guards** (365/912 days): Resolves complete game abandonment
-4. **CREATOR bypass**: Ensures at least one address can always call advanceGame
+4. **Timed bypass**: Ensures any caller can call advanceGame after 30 minutes past day boundary **(POST-AUDIT: replaces former CREATOR bypass)**
 
 The liveness guard is the ultimate backstop -- it operates independently of VRF, ADMIN, and all other external dependencies. It triggers game-over, which is a graceful termination (remaining funds distributed to ticket holders and claimable balances preserved).
 
