@@ -158,6 +158,12 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
                 _sendToVault(remaining, stBal);
             }
         }
+
+        // Burn undistributed DGNRS pool tokens so totalSupply reflects only holder wallets
+        uint256 dgnrsSelfBal = dgnrs.balanceOf(address(dgnrs));
+        if (dgnrsSelfBal != 0) {
+            dgnrs.burnForGame(address(dgnrs), dgnrsSelfBal);
+        }
     }
 
     /// @notice Final sweep of all remaining funds to vault after 30 days post-gameover.

@@ -1,7 +1,7 @@
 # Degenerus Protocol — State-Changing Function Audits
 
 **Source:** v7.0 Function-Level Exhaustive Audit (Phases 49-56)
-**Scope:** All state-changing functions across 22 contracts + 10 modules
+**Scope:** All state-changing functions across 13 core contracts + 10 delegatecall modules
 **Verdict:** All functions CORRECT (0 bugs found)
 
 ---
@@ -6325,12 +6325,15 @@ Per-category behavior:
 - `IDegenerusGame(address(this)).runDecimatorJackpot(decPool, lvl, rngWord)` -- self-call to DegenerusGame which delegatecalls DecimatorModule
 - `IDegenerusGame(address(this)).runTerminalJackpot(remaining, lvl + 1, rngWord)` -- self-call to DegenerusGame which delegatecalls JackpotModule
 - `_sendToVault(remaining, stBal)` -- private helper for any undistributed remainder
+- `dgnrs.balanceOf(address(dgnrs))` -- external view call to check DGNRS self-held pool tokens
+- `dgnrs.burnForGame(address(dgnrs), dgnrsSelfBal)` -- burns undistributed DGNRS pool tokens so totalSupply reflects only holder wallets
 
 **ETH Flow:**
 1. **Deity refunds** (level < 10 only): 20 ETH/pass credited to `claimableWinnings[owner]`, funded from `totalFunds - claimablePool` budget. These are pull-pattern credits, not actual transfers.
 2. **Decimator jackpot** (10% of available): `available / 10` sent to `runDecimatorJackpot`. Returns `decRefund` (unallocated portion). `decSpend = decPool - decRefund` added to `claimablePool`.
 3. **Terminal jackpot** (90% + decimator refund): Remainder sent to `runTerminalJackpot` (Day-5-style bucket distribution to next-level ticketholders). `claimablePool` updated internally by JackpotModule.
 4. **Vault sweep**: Any undistributed remainder (`remaining -= termPaid`) sent to vault/DGNRS via `_sendToVault`.
+5. **DGNRS pool burn**: Burns any DGNRS tokens held by the DGNRS contract itself (undistributed pool tokens). This ensures `totalSupply` reflects only holder wallets, so every remaining `burn()` gives a true proportional share of backing assets.
 
 **Invariants:**
 - `gameOverFinalJackpotPaid` prevents duplicate execution (idempotent on re-call)
@@ -10921,6 +10924,8 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ## DegenerusStonk.sol
 
+> **Note:** DGNRS was neutered to remove all active gameplay. Holders can only hold, transfer, and burn for their proportional share of accumulated ETH/stETH/BURNIE. The lock system, gameplay functions (`gamePurchase`, `gamePurchaseTicketsBurnie`, `gamePurchaseBurnieLootbox`, `gameDegeneretteBetEth`, `gameDegeneretteBetBurnie`, `gameOpenLootBox`, `coinDecimatorBurn`), BURNIE rebate logic (`_rebateBurnieFromEthValue`), quest reward logic (`_transferFromPoolInternal`), spend tracking (`_checkAndRecordEthSpend`, `_checkAndRecordBurnieSpend`, `_maxEthActionFromLocked`, `_maxBurnieActionFromLocked`, `_lockedClaimableValues`), lock management (`lockForLevel`, `unlock`, `getLockStatus`, `_reduceActiveLock`), WWXRP handling, and the `IDegenerusQuestsView` interface were all removed. The contract passively accumulates value via free tickets, AFK mode, and deity pass (all handled by the game contract without DGNRS involvement).
+
 ### `approve(address spender, uint256 amount)` [external]
 
 | Field | Value |
@@ -10955,14 +10960,14 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Parameters** | `to` (address): recipient; `amount` (uint256): transfer amount |
 | **Returns** | `bool`: always true |
 
-**State Reads:** (via `_transfer`) `balanceOf[from]`, `lockedBalance[from]`, `lockedLevel[from]`
+**State Reads:** (via `_transfer`) `balanceOf[from]`
 **State Writes:** (via `_transfer`) `balanceOf[from]`, `balanceOf[to]`
 
 **Callers:** External users/contracts
 **Callees:** `_transfer(msg.sender, to, amount)`
 
 **ETH Flow:** No
-**Invariants:** Transfer amount must not exceed unlocked balance. Zero-address recipient blocked.
+**Invariants:** Transfer amount must not exceed balance. Zero-address recipient blocked.
 **NatSpec Accuracy:** Accurate.
 **Gas Flags:** None.
 **Verdict:** CORRECT
@@ -10979,7 +10984,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Parameters** | `from` (address): source; `to` (address): destination; `amount` (uint256): transfer amount |
 | **Returns** | `bool`: always true |
 
-**State Reads:** `allowance[from][msg.sender]`, (via `_transfer`) `balanceOf[from]`, `lockedBalance[from]`, `lockedLevel[from]`
+**State Reads:** `allowance[from][msg.sender]`, (via `_transfer`) `balanceOf[from]`
 **State Writes:** `allowance[from][msg.sender]` (decremented if not max), (via `_transfer`) `balanceOf[from]`, `balanceOf[to]`
 
 **Callers:** External users/contracts, COIN contract (trusted bypass)
@@ -11003,16 +11008,16 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Parameters** | `from` (address): source; `to` (address): destination; `amount` (uint256): transfer amount |
 | **Returns** | None |
 
-**State Reads:** `balanceOf[from]`, `lockedBalance[from]`, `lockedLevel[from]`, `game.level()` (external call)
+**State Reads:** `balanceOf[from]`
 **State Writes:** `balanceOf[from]` (decremented), `balanceOf[to]` (incremented)
 
-**Callers:** `transfer`, `transferFrom`, `transferFromPool`, `_transferFromPoolInternal`
-**Callees:** `game.level()` (only if lockedBalance > 0)
+**Callers:** `transfer`, `transferFrom`, `transferFromPool`
+**Callees:** None
 
 **ETH Flow:** No
-**Invariants:** Zero-address `to` blocked. Balance must be sufficient. Locked tokens at the current level cannot be transferred -- only `bal - locked` is transferable. Uses unchecked arithmetic safe because of prior checks.
+**Invariants:** Zero-address `to` blocked. Balance must be sufficient. Uses unchecked arithmetic safe because of prior checks. No lock enforcement (lock system removed).
 **NatSpec Accuracy:** Accurate.
-**Gas Flags:** External call to `game.level()` only when `lockedBalance[from] > 0` -- good optimization. For pool transfers from `address(this)`, the lock check is harmless (contract won't have locks).
+**Gas Flags:** None.
 **Verdict:** CORRECT
 
 ---
@@ -11049,64 +11054,6 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ---
 
-### `lockForLevel(uint256 amount)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function lockForLevel(uint256 amount) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `amount` (uint256): amount of DGNRS to lock (additive) |
-| **Returns** | None |
-
-**State Reads:** `game.level()` (external), `lockedBalance[msg.sender]`, `lockedLevel[msg.sender]`, `balanceOf[msg.sender]`
-**State Writes:** `lockedBalance[msg.sender]`, `lockedLevel[msg.sender]`, `ethSpentThisLevel[msg.sender]` (reset on auto-unlock), `burnieSpentThisLevel[msg.sender]` (reset on auto-unlock)
-
-**Callers:** External holders
-**Callees:** `game.level()`
-
-**ETH Flow:** No
-**Invariants:**
-- If locked at a different level, auto-unlocks first (resets spend counters, emits Unlocked)
-- `amount` must not exceed `balanceOf - currentLocked` (unlocked portion)
-- Additive within the same level (can increase lock)
-- lockedLevel set to current game level
-- Emits Locked with the incremental `amount`, not the total locked
-
-**NatSpec Accuracy:** Accurate. Correctly documents additive behavior and auto-unlock.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `unlock()` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function unlock() external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | None |
-| **Returns** | None |
-
-**State Reads:** `lockedBalance[msg.sender]`, `lockedLevel[msg.sender]`, `game.level()` (external)
-**State Writes:** `lockedBalance[msg.sender] = 0`, `ethSpentThisLevel[msg.sender] = 0`, `burnieSpentThisLevel[msg.sender] = 0`
-
-**Callers:** External holders
-**Callees:** `game.level()`
-
-**ETH Flow:** No
-**Invariants:**
-- Must have non-zero locked balance (reverts NoLockedTokens)
-- Level must have changed (reverts LockStillActive if still at locked level)
-- Resets all spending counters
-
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
 ### `gameAdvance()` [external]
 
 | Field | Value |
@@ -11124,176 +11071,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **Callees:** `game.advanceGame()`
 
 **ETH Flow:** No
-**Invariants:** Caller must hold DGNRS tokens. Does not require locked tokens -- only holder status.
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `gamePurchase(uint256 ticketQuantity, uint256 lootBoxAmount, MintPaymentKind payKind)` [external payable]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function gamePurchase(uint256 ticketQuantity, uint256 lootBoxAmount, MintPaymentKind payKind) external payable` |
-| **Visibility** | external |
-| **Mutability** | state-changing (payable) |
-| **Parameters** | `ticketQuantity` (uint256): ticket count; `lootBoxAmount` (uint256): ETH for lootboxes; `payKind` (MintPaymentKind): payment method |
-| **Returns** | None |
-
-**State Reads:** `game.mintPrice()`, `lockedBalance[msg.sender]`, `lockedLevel[msg.sender]`, `ethSpentThisLevel[msg.sender]`, `game.level()`, `quests.playerQuestStates(address(this))`, `poolBalances[Pool.Reward]`
-**State Writes:** `ethSpentThisLevel[msg.sender]`, `poolBalances[Pool.Reward]` (if quest completed), `balanceOf` (via pool transfer on quest reward)
-
-**Callers:** External DGNRS holders with locked tokens
-**Callees:** `game.mintPrice()`, `_checkAndRecordEthSpend`, `quests.playerQuestStates`, `game.purchase{value}`, `_rebateBurnieFromEthValue`, `_transferFromPoolInternal`
-
-**ETH Flow:** msg.value forwarded to game.purchase. BURNIE rebate paid from contract's BURNIE balance.
-**Invariants:**
-- Requires locked tokens at current level
-- Ticket cost = `(priceWei * ticketQuantity) / 400` -- consistent with game's 4*100 scaling
-- Total cost (tickets + lootboxes) must not exceed ETH spend limit (10x proportional ETH value of locked tokens)
-- Uses `AFFILIATE_CODE_DGNRS` ("DGNRS") for all purchases
-- Passes `address(0)` as buyer (resolves to msg.sender in game = DGNRS contract itself)
-- BURNIE rebate uses totalCost for DirectEth, msg.value otherwise
-- Quest contribution reward: if DGNRS contract's streak increments, caller gets 0.05% of Reward pool
-
-**NatSpec Accuracy:** Mostly accurate. NatSpec says "on behalf of DGNRS" which is correct -- the purchase is for the DGNRS contract address, not the caller. The caller gets the BURNIE rebate and potential quest reward but tickets go to DGNRS contract.
-**Gas Flags:** Two external calls to `quests.playerQuestStates` (before and after). Could be avoided if quest reward is rare, but this is defensive/correct.
-**Verdict:** CORRECT
-
----
-
-### `gamePurchaseTicketsBurnie(uint256 ticketQuantity)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function gamePurchaseTicketsBurnie(uint256 ticketQuantity) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `ticketQuantity` (uint256): number of tickets to purchase |
-| **Returns** | None |
-
-**State Reads:** `lockedBalance[msg.sender]`, `lockedLevel[msg.sender]`, `burnieSpentThisLevel[msg.sender]`, `game.level()`
-**State Writes:** `burnieSpentThisLevel[msg.sender]`
-
-**Callers:** External DGNRS holders with locked tokens
-**Callees:** `_checkAndRecordBurnieSpend`, `game.purchaseCoin`
-
-**ETH Flow:** No
-**Invariants:**
-- `ticketQuantity` must be non-zero (reverts Insufficient)
-- BURNIE cost = `ticketQuantity * PRICE_COIN_UNIT` (1000 BURNIE per ticket)
-- Must not exceed BURNIE spend limit
-- Routes through `game.purchaseCoin(address(0), ticketQuantity, 0)` -- tickets only, no lootboxes
-
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `gamePurchaseBurnieLootbox(uint256 burnieAmount)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function gamePurchaseBurnieLootbox(uint256 burnieAmount) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `burnieAmount` (uint256): amount of BURNIE (18 decimals) |
-| **Returns** | None |
-
-**State Reads:** `lockedBalance[msg.sender]`, `lockedLevel[msg.sender]`, `burnieSpentThisLevel[msg.sender]`, `game.level()`
-**State Writes:** `burnieSpentThisLevel[msg.sender]`
-
-**Callers:** External DGNRS holders with locked tokens
-**Callees:** `_checkAndRecordBurnieSpend`, `game.purchaseBurnieLootbox`
-
-**ETH Flow:** No
-**Invariants:**
-- `burnieAmount` must be non-zero (reverts Insufficient)
-- Must not exceed BURNIE spend limit
-- Routes through `game.purchaseBurnieLootbox(address(0), burnieAmount)`
-
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `gameDegeneretteBetEth(uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 customSpecial)` [external payable]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function gameDegeneretteBetEth(uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 customSpecial) external payable` |
-| **Visibility** | external |
-| **Mutability** | state-changing (payable) |
-| **Parameters** | `amountPerTicket` (uint128): ETH per ticket; `ticketCount` (uint8): number of spins; `customTicket` (uint32): custom trait pack; `customSpecial` (uint8): hero quadrant |
-| **Returns** | None |
-
-**State Reads:** `lockedBalance[msg.sender]`, `lockedLevel[msg.sender]`, `ethSpentThisLevel[msg.sender]`, `game.level()`
-**State Writes:** `ethSpentThisLevel[msg.sender]`
-
-**Callers:** External DGNRS holders with locked tokens
-**Callees:** `_checkAndRecordEthSpend`, `game.placeFullTicketBets{value: msg.value}`
-
-**ETH Flow:** msg.value forwarded to game.placeFullTicketBets
-**Invariants:**
-- Total bet = `amountPerTicket * ticketCount`, must not exceed ETH spend limit
-- Currency = 0 (ETH) passed to game
-- buyer = address(0) (DGNRS contract)
-
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `gameDegeneretteBetBurnie(uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 customSpecial)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function gameDegeneretteBetBurnie(uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 customSpecial) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `amountPerTicket` (uint128): BURNIE per ticket; `ticketCount` (uint8): number of spins; `customTicket` (uint32): custom trait pack; `customSpecial` (uint8): hero quadrant |
-| **Returns** | None |
-
-**State Reads:** `lockedBalance[msg.sender]`, `lockedLevel[msg.sender]`, `burnieSpentThisLevel[msg.sender]`, `game.level()`
-**State Writes:** `burnieSpentThisLevel[msg.sender]`
-
-**Callers:** External DGNRS holders with locked tokens
-**Callees:** `_checkAndRecordBurnieSpend`, `game.placeFullTicketBets`
-
-**ETH Flow:** No
-**Invariants:**
-- Total bet = `amountPerTicket * ticketCount`, must not exceed BURNIE spend limit
-- Currency = 1 (BURNIE) passed to game
-- buyer = address(0) (DGNRS contract)
-
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `gameOpenLootBox(uint48 lootboxIndex)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function gameOpenLootBox(uint48 lootboxIndex) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `lootboxIndex` (uint48): index of lootbox to open |
-| **Returns** | None |
-
-**State Reads:** `balanceOf[msg.sender]` (via onlyHolder)
-**State Writes:** None directly
-
-**Callers:** External DGNRS holders
-**Callees:** `game.openLootBox(address(0), lootboxIndex)`
-
-**ETH Flow:** No (lootbox rewards go to DGNRS contract)
-**Invariants:** Caller must hold DGNRS tokens. Does not require locked tokens.
+**Invariants:** Caller must hold DGNRS tokens.
 **NatSpec Accuracy:** Accurate.
 **Gas Flags:** None.
 **Verdict:** CORRECT
@@ -11317,69 +11095,9 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **Callees:** `game.claimWhalePass(address(0))`
 
 **ETH Flow:** No
-**Invariants:** Caller must hold DGNRS tokens. Does not require locked tokens. Claims whale pass for DGNRS contract.
+**Invariants:** Caller must hold DGNRS tokens. Claims whale pass for DGNRS contract.
 **NatSpec Accuracy:** Accurate.
 **Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `coinDecimatorBurn(uint256 amount)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function coinDecimatorBurn(uint256 amount) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `amount` (uint256): amount of BURNIE to burn (18 decimals) |
-| **Returns** | None |
-
-**State Reads:** `lockedBalance[msg.sender]`, `lockedLevel[msg.sender]`, `burnieSpentThisLevel[msg.sender]`, `game.level()`
-**State Writes:** `burnieSpentThisLevel[msg.sender]`
-
-**Callers:** External DGNRS holders with locked tokens
-**Callees:** `_checkAndRecordBurnieSpend`, `coin.decimatorBurn(address(this), amount)`
-
-**ETH Flow:** No
-**Invariants:**
-- Must have locked tokens at current level
-- BURNIE amount must not exceed spend limit
-- Burns BURNIE from the DGNRS contract's balance (not the caller's) via `coin.decimatorBurn(address(this), amount)`
-
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `_rebateBurnieFromEthValue(uint256 ethValue)` [private]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function _rebateBurnieFromEthValue(uint256 ethValue) private` |
-| **Visibility** | private |
-| **Mutability** | state-changing |
-| **Parameters** | `ethValue` (uint256): ETH value used for rebate calculation |
-| **Returns** | None |
-
-**State Reads:** `game.mintPrice()`, `coin.balanceOf(address(this))`, `game.rngLocked()`, `coinflip.previewClaimCoinflips(address(this))`
-**State Writes:** None directly (BURNIE transfer is external)
-
-**Callers:** `gamePurchase`
-**Callees:** `game.mintPrice()`, `coin.balanceOf`, `game.rngLocked()`, `coinflip.previewClaimCoinflips`, `coinflip.claimCoinflips`, `coin.transfer`
-
-**ETH Flow:** No ETH movement. BURNIE is transferred from contract to msg.sender.
-**Invariants:**
-- Formula: `burnieValue = (ethValue * PRICE_COIN_UNIT) / priceWei`, then `burnieOut = (burnieValue * BURNIE_ETH_BUY_BPS) / BPS_DENOM`
-- Effectively: `burnieOut = (ethValue * 1000e18 * 7000) / (priceWei * 10000)` = `(ethValue * 700e18) / priceWei`
-- So for 1 ETH at priceWei, you get 700 BURNIE tokens -- 70% of the BURNIE-equivalent value
-- Pays from contract's BURNIE balance first
-- If insufficient, attempts to claim from coinflip claimables (only if RNG not locked)
-- Silently returns (no revert) if insufficient funds or RNG locked -- graceful degradation
-- Emits BurnieRebate on success
-
-**NatSpec Accuracy:** Accurate. Correctly documents fallback behavior.
-**Gas Flags:** Up to 5 external calls in worst case (mintPrice, balanceOf, rngLocked, previewClaimCoinflips, claimCoinflips + transfer). Acceptable for the functionality.
 **Verdict:** CORRECT
 
 ---
@@ -11401,10 +11119,10 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **Callees:** None
 
 **ETH Flow:** Game -> DGNRS contract (ETH deposit, stored in contract balance)
-**Invariants:** Only game contract can send ETH. Note: `ethReserve` is NOT updated -- ETH backing is tracked by `address(this).balance` at query time.
+**Invariants:** Only game contract can send ETH. ETH backing is tracked by `address(this).balance` at query time.
 **NatSpec Accuracy:** Accurate.
-**Gas Flags:** INFORMATIONAL -- `ethReserve` storage variable is declared (line 227) but never written anywhere in the contract. All ETH-related calculations use `address(this).balance` directly. The `ethReserve` variable is dead storage.
-**Verdict:** CONCERN (informational) -- `ethReserve` is declared but never used. It occupies a storage slot but is never read or written. This is not a bug but is dead code that should be removed for clarity.
+**Gas Flags:** None.
+**Verdict:** CORRECT
 
 ---
 
@@ -11442,7 +11160,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Parameters** | `pool` (Pool): source pool; `to` (address): recipient; `amount` (uint256): requested amount |
 | **Returns** | `uint256`: actual amount transferred (may be less) |
 
-**State Reads:** `poolBalances[idx]`, `ContractAddresses.GAME` (via onlyGame), `balanceOf[address(this)]`, `lockedBalance[address(this)]`
+**State Reads:** `poolBalances[idx]`, `ContractAddresses.GAME` (via onlyGame), `balanceOf[address(this)]`
 **State Writes:** `poolBalances[idx]` (decremented), `balanceOf[address(this)]` (decremented via `_transfer`), `balanceOf[to]` (incremented)
 
 **Callers:** Game contract
@@ -11503,9 +11221,9 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Returns** | None |
 
 **State Reads:** `ContractAddresses.GAME` (via onlyGame), `balanceOf[from]` (via `_burn`)
-**State Writes:** `balanceOf[from]` (decremented), `totalSupply` (decremented), `lockedBalance[from]` (via `_reduceActiveLock`)
+**State Writes:** `balanceOf[from]` (decremented), `totalSupply` (decremented)
 
-**Callers:** Game contract
+**Callers:** Game contract, `handleGameOverDrain` (burns undistributed pool tokens at game over)
 **Callees:** `_burn(from, amount)`
 
 **ETH Flow:** No
@@ -11531,7 +11249,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Returns** | `ethOut` (uint256): ETH received; `stethOut` (uint256): stETH received; `burnieOut` (uint256): BURNIE received |
 
 **State Reads:** `balanceOf[player]`, `totalSupply`, various external balances
-**State Writes:** (via `_burnFor`) `balanceOf[player]`, `totalSupply`, `lockedBalance[player]`
+**State Writes:** (via `_burnFor`) `balanceOf[player]`, `totalSupply`
 
 **Callers:** External users/operators
 **Callees:** `_requireApproved(player)` (if player != msg.sender and player != address(0)), `_burnFor(player, amount)`
@@ -11558,11 +11276,11 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Parameters** | `player` (address): address to burn from and pay out to; `amount` (uint256): DGNRS to burn |
 | **Returns** | `ethOut`, `stethOut`, `burnieOut`: amounts paid out |
 
-**State Reads:** `balanceOf[player]`, `totalSupply`, `address(this).balance`, `steth.balanceOf(address(this))`, `game.claimableWinningsOf(address(this))` (via `_claimableWinnings`), `coin.balanceOf(address(this))`, `coinflip.previewClaimCoinflips(address(this))`, `wwxrp.balanceOf(address(this))`
-**State Writes:** `balanceOf[player]`, `totalSupply`, `lockedBalance[player]` (via `_burnWithBalance` -> `_reduceActiveLock`)
+**State Reads:** `balanceOf[player]`, `totalSupply`, `address(this).balance`, `steth.balanceOf(address(this))`, `game.claimableWinningsOf(address(this))` (via `_claimableWinnings`), `coin.balanceOf(address(this))`, `coinflip.previewClaimCoinflips(address(this))`
+**State Writes:** `balanceOf[player]`, `totalSupply`
 
 **Callers:** `burn`
-**Callees:** `_claimableWinnings`, `_burnWithBalance`, `game.claimWinnings(address(0))` (conditional), `coin.transfer`, `coinflip.claimCoinflips`, `steth.transfer`, `wwxrp.transfer`
+**Callees:** `_claimableWinnings`, `_burnWithBalance`, `game.claimWinnings(address(0))` (conditional), `coin.transfer`, `coinflip.claimCoinflips`, `steth.transfer`
 
 **ETH Flow:**
 - Calculates total money = ETH balance + stETH balance + claimable ETH
@@ -11570,7 +11288,6 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 - Prefers ETH over stETH: if totalValueOwed <= ethBal, pay all in ETH; otherwise pay ethBal in ETH + remainder in stETH
 - If need more ETH than available but claimable exists, calls `game.claimWinnings` to materialize claimable ETH
 - BURNIE share: `(totalBurnie * amount) / supplyBefore` from balance + coinflip claimables
-- WWXRP share: `(wwxrpBal * amount) / supplyBefore`
 
 **Invariants:**
 - Amount must be > 0 and <= balance
@@ -11578,86 +11295,10 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 - ETH-preferential payout: ETH first, stETH only when ETH insufficient
 - BURNIE: pays from balance first, then claims from coinflip
 - Reverts Insufficient if stethOut > stethBal (can't pay full share)
-- Emits Burn and BurnWwxrp
+- Emits Burn
 
 **NatSpec Accuracy:** Accurate.
-**Gas Flags:** Multiple external calls (up to 8+ in worst case). Complex but necessary for multi-asset proportional withdrawal.
-**Verdict:** CORRECT
-
----
-
-### `_transferFromPoolInternal(Pool pool, address to, uint256 amount)` [private]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function _transferFromPoolInternal(Pool pool, address to, uint256 amount) private returns (uint256 transferred)` |
-| **Visibility** | private |
-| **Mutability** | state-changing |
-| **Parameters** | `pool` (Pool): source pool; `to` (address): recipient; `amount` (uint256): requested amount |
-| **Returns** | `uint256`: actual amount transferred |
-
-**State Reads:** `poolBalances[idx]`
-**State Writes:** `poolBalances[idx]` (decremented), `balanceOf[address(this)]`, `balanceOf[to]` (via `_transfer`)
-
-**Callers:** `gamePurchase` (quest contribution reward)
-**Callees:** `_poolIndex`, `_transfer`
-
-**ETH Flow:** No
-**Invariants:** Same logic as external `transferFromPool` but without onlyGame guard. Used for internal pool-to-player transfers (quest rewards).
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `_checkAndRecordEthSpend(address holder, uint256 amount)` [private]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function _checkAndRecordEthSpend(address holder, uint256 amount) private` |
-| **Visibility** | private |
-| **Mutability** | state-changing |
-| **Parameters** | `holder` (address): spending holder; `amount` (uint256): ETH being spent |
-| **Returns** | None |
-
-**State Reads:** `game.level()`, `lockedBalance[holder]`, `lockedLevel[holder]`, `ethSpentThisLevel[holder]`, (via `_maxEthActionFromLocked`) multiple external reads
-**State Writes:** `ethSpentThisLevel[holder]`
-
-**Callers:** `gamePurchase`, `gameDegeneretteBetEth`
-**Callees:** `game.level()`, `_maxEthActionFromLocked`
-
-**ETH Flow:** No (validation only)
-**Invariants:**
-- Holder must have locked tokens at current level (reverts NoLockedTokens)
-- Cumulative spend (previous + current) must not exceed limit (reverts ActionLimitExceeded)
-- Limit = 10x proportional ETH value of locked DGNRS
-
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `_checkAndRecordBurnieSpend(address holder, uint256 amount)` [private]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function _checkAndRecordBurnieSpend(address holder, uint256 amount) private` |
-| **Visibility** | private |
-| **Mutability** | state-changing |
-| **Parameters** | `holder` (address): spending holder; `amount` (uint256): BURNIE being spent |
-| **Returns** | None |
-
-**State Reads:** `game.level()`, `lockedBalance[holder]`, `lockedLevel[holder]`, `burnieSpentThisLevel[holder]`, (via `_maxBurnieActionFromLocked`) multiple external reads
-**State Writes:** `burnieSpentThisLevel[holder]`
-
-**Callers:** `gamePurchaseTicketsBurnie`, `gamePurchaseBurnieLootbox`, `gameDegeneretteBetBurnie`, `coinDecimatorBurn`
-**Callees:** `game.level()`, `_maxBurnieActionFromLocked`
-
-**ETH Flow:** No (validation only)
-**Invariants:** Same pattern as _checkAndRecordEthSpend but for BURNIE.
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
+**Gas Flags:** Multiple external calls (up to 6+ in worst case). Complex but necessary for multi-asset proportional withdrawal.
 **Verdict:** CORRECT
 
 ---
@@ -11697,13 +11338,13 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Returns** | None |
 
 **State Reads:** `balanceOf[from]`
-**State Writes:** `balanceOf[from]` (decremented), `totalSupply` (decremented), `lockedBalance[from]` (via `_reduceActiveLock`)
+**State Writes:** `balanceOf[from]` (decremented), `totalSupply` (decremented)
 
 **Callers:** `burnForGame`
-**Callees:** `_reduceActiveLock(from, amount)`
+**Callees:** None
 
 **ETH Flow:** No
-**Invariants:** Amount must not exceed balance. Reduces active lock proportionally. Unchecked arithmetic safe due to prior check. Emits Transfer to address(0).
+**Invariants:** Amount must not exceed balance. Unchecked arithmetic safe due to prior check. Emits Transfer to address(0).
 **NatSpec Accuracy:** Accurate.
 **Gas Flags:** None.
 **Verdict:** CORRECT
@@ -11721,42 +11362,13 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Returns** | None |
 
 **State Reads:** None (balance pre-fetched by caller)
-**State Writes:** `balanceOf[from]` (decremented), `totalSupply` (decremented), `lockedBalance[from]` (via `_reduceActiveLock`)
+**State Writes:** `balanceOf[from]` (decremented), `totalSupply` (decremented)
 
 **Callers:** `_burnFor`
-**Callees:** `_reduceActiveLock(from, amount)`
+**Callees:** None
 
 **ETH Flow:** No
 **Invariants:** Optimization of `_burn` that skips the balanceOf read (caller already has it). Caller must ensure `amount <= bal`. Unchecked arithmetic relies on this invariant.
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** None.
-**Verdict:** CORRECT
-
----
-
-### `_reduceActiveLock(address holder, uint256 amount)` [private]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function _reduceActiveLock(address holder, uint256 amount) private` |
-| **Visibility** | private |
-| **Mutability** | state-changing |
-| **Parameters** | `holder` (address): holder whose lock to reduce; `amount` (uint256): amount being burned |
-| **Returns** | None |
-
-**State Reads:** `lockedLevel[holder]`, `game.level()`, `lockedBalance[holder]`
-**State Writes:** `lockedBalance[holder]` (reduced or zeroed)
-
-**Callers:** `_burn`, `_burnWithBalance`
-**Callees:** `game.level()`
-
-**ETH Flow:** No
-**Invariants:**
-- Only reduces lock if holder is locked at current level
-- If burn amount >= locked amount, zeroes the lock
-- If burn amount < locked amount, reduces lock by burn amount
-- This prevents a burned holder from retaining action rights beyond their remaining balance
-
 **NatSpec Accuracy:** Accurate.
 **Gas Flags:** None.
 **Verdict:** CORRECT
