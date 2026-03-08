@@ -629,6 +629,8 @@ However, the `rngLockedFlag` is set during the game-over VRF request (via `_fina
 
 ### Finding FSM-F02: handleGameOverDrain Can Silently Skip Distribution If RNG Not Ready (INFORMATIONAL)
 
+> **POST-AUDIT UPDATE:** This finding has been addressed. The `_dailyIdx` parameter in `_handleGameOverPath` (AdvanceModule line 335) is now commented out as `uint48 /* _dailyIdx */`, and `handleGameOverDrain` is now called with `day` (the current computed day index) instead of the stale `_dailyIdx` value (see AdvanceModule line 374). The stale-index mismatch described below no longer applies.
+
 **Severity:** INFORMATIONAL
 **Location:** GameOverModule:133-134
 
@@ -714,5 +716,5 @@ No action required.
 | Finding | Severity | Status |
 |---------|----------|--------|
 | FSM-F01: Dual-guard coverage during game-over RNG window | INFORMATIONAL | No vulnerability -- rngLockedFlag provides coverage |
-| FSM-F02: handleGameOverDrain may skip BAF/Decimator distribution due to stale dailyIdx | LOW | Funds preserved for final sweep but jackpot selection skipped |
+| FSM-F02: handleGameOverDrain may skip BAF/Decimator distribution due to stale dailyIdx | LOW | **FIXED POST-AUDIT** -- `_dailyIdx` parameter commented out; `day` now passed instead |
 | FSM-F03: Final sweep re-execution is safe | INFORMATIONAL | By design -- handles stETH rebasing and external deposits |

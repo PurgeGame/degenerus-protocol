@@ -268,6 +268,8 @@ When a player buys a whale bundle for 4 ETH:
 
 From Phase 3b-03 MATH-05, the base composite EV at neutral activity score (100% multiplier) is approximately 99.7% of the lootbox amount (from deterministic ticket + BURNIE paths alone). The EV multiplier scales the effective amount.
 
+> **POST-AUDIT UPDATE:** The non-deity activity score max in DegenerusGameLootboxModule.sol (line 323) is `ACTIVITY_SCORE_MAX_BPS = 25_500` (255%), not 26,500 (265%) as stated below. The deity max in DegenerusGameDegeneretteModule.sol is `ACTIVITY_SCORE_MAX_BPS = 30_500` (305%). The EV values for the "non-deity max" row below are slightly overstated.
+
 | Activity Score | EV Multiplier | Lootbox at 0.40 ETH (post-presale, 4 ETH bundle) | Net EV |
 |----------------|---------------|--------------------------------------------------|--------|
 | 0% (0 BPS) | 80% | 0.40 * 0.80 = 0.32 ETH | -0.08 ETH |
@@ -332,7 +334,7 @@ EV = 10000 + (6000 * 3500) / 24500 = 10000 + 857 = 10857 BPS = 108.57%
 ```
 Marginal improvement: 114.29% - 108.57% = 5.72%. On 10 ETH cap: 0.572 ETH per level.
 
-**Case D: Player at 265% base (non-deity max minus whale bonus)**
+**Case D: Player at 265% base (non-deity max minus whale bonus)** **(POST-AUDIT: actual lootbox non-deity max is 255% / 25,500 BPS)**
 
 With +40% whale boost: total = 26,500 BPS
 ```

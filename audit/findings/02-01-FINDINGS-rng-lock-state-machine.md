@@ -13,11 +13,13 @@
 
 | File | Line | Declaration |
 |------|------|-------------|
-| `contracts/storage/DegenerusGameStorage.sol` | 241 | `bool internal rngLockedFlag;` |
-| `contracts/storage/DegenerusGameStorage.sol` | 57 | Slot map comment: `[6:7] rngLockedFlag bool Daily RNG lock (jackpot window)` |
-| `contracts/storage/DegenerusGameStorage.sol` | 178 | Misleading comment on `rngRequestTime`: "Also serves as the RNG lock flag (replaces deprecated rngLockedFlag)" -- **rngLockedFlag is NOT deprecated; both variables are actively used** |
+| `contracts/storage/DegenerusGameStorage.sol` | 230 | `bool internal rngLockedFlag;` |
+| `contracts/storage/DegenerusGameStorage.sol` | 56 | Slot map comment: `[5:6] rngLockedFlag bool Daily RNG lock (jackpot window)` |
+| `contracts/storage/DegenerusGameStorage.sol` | 177 | Comment on `rngRequestTime`: "Note: rngLockedFlag (separate bool) controls the daily RNG lock state." |
 
-**Storage location:** Slot 0, byte offset 6 (packed with other bool flags in the first slot).
+**Storage location:** Slot 1, byte offset [5:6] (packed with other bool flags and counters in the second slot).
+
+> **POST-AUDIT UPDATE (storage location and line numbers):** The original finding stated "Slot 0, byte offset 6" and declaration at line 241. Per the actual storage layout in DegenerusGameStorage.sol, `rngLockedFlag` is in **Slot 1** at byte offset [5:6], and the declaration is at **line 230**. The slot map comment is at line 56, not 57. These are corrected above.
 
 ### 1.2 SET Sites (1 location)
 
@@ -462,6 +464,8 @@ The last scenario is catastrophic but requires two independent failures (Chainli
 
 ### F1: Misleading Storage Comment on rngRequestTime (Informational)
 
+> **POST-AUDIT UPDATE:** This finding has been resolved. The comment on `rngRequestTime` (now at line 177) was corrected post-audit. It now reads: "Note: rngLockedFlag (separate bool) controls the daily RNG lock state." The misleading "replaces deprecated rngLockedFlag" wording has been removed.
+
 **Location:** `contracts/storage/DegenerusGameStorage.sol`, line 178
 **Comment:** "Also serves as the RNG lock flag (replaces deprecated rngLockedFlag)."
 **Issue:** `rngLockedFlag` is NOT deprecated -- it is actively used in 15 code locations across 5 contracts. Both `rngLockedFlag` and `rngRequestTime` coexist with distinct purposes.
@@ -491,9 +495,9 @@ The last scenario is catastrophic but requires two independent failures (Chainli
 
 | # | Category | File | Line | Function |
 |---|----------|------|------|----------|
-| 1 | DEFINE | `DegenerusGameStorage.sol` | 241 | Variable declaration |
-| 2 | COMMENT | `DegenerusGameStorage.sol` | 57 | Slot map documentation |
-| 3 | COMMENT | `DegenerusGameStorage.sol` | 178 | Misleading "replaces deprecated" comment |
+| 1 | DEFINE | `DegenerusGameStorage.sol` | 230 | Variable declaration |
+| 2 | COMMENT | `DegenerusGameStorage.sol` | 56 | Slot map documentation |
+| 3 | COMMENT | `DegenerusGameStorage.sol` | 177 | Comment on rngRequestTime (corrected post-audit) |
 | 4 | SET | `AdvanceModule.sol` | 1085 | `_finalizeRngRequest()` |
 | 5 | CLEAR | `AdvanceModule.sol` | 1148 | `updateVrfCoordinatorAndSub()` |
 | 6 | CLEAR | `AdvanceModule.sol` | 1160 | `_unlockRng()` |

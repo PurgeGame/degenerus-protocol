@@ -22,10 +22,11 @@
 
 ## Part A: claimWinnings CEI Verification
 
-### Source: `DegenerusGame.sol` lines 1420-1435
+### Source: `DegenerusGame.sol` lines 1420-1436
 
 ```solidity
 function _claimWinningsInternal(address player, bool stethFirst) private {
+    if (finalSwept) revert E();                       // CHECK: block claims after final sweep
     uint256 amount = claimableWinnings[player];       // CHECK: read balance
     if (amount <= 1) revert E();                      // CHECK: must have > 1 wei
     uint256 payout;
@@ -47,14 +48,15 @@ function _claimWinningsInternal(address player, bool stethFirst) private {
 
 | Step | What | Line | Before External Call? |
 |------|------|------|-----------------------|
-| CHECK | Read `claimableWinnings[player]` | 1421 | YES |
-| CHECK | Revert if `amount <= 1` | 1422 | YES |
-| EFFECT | `claimableWinnings[player] = 1` (sentinel) | 1425 | YES |
-| EFFECT | `claimablePool -= payout` | 1428 | YES |
-| EFFECT | `emit WinningsClaimed(...)` | 1429 | YES |
-| INTERACTION | `_payoutWithStethFallback` or `_payoutWithEthFallback` | 1431/1433 | N/A (this IS the call) |
+| CHECK | Revert if `finalSwept` | 1421 | YES |
+| CHECK | Read `claimableWinnings[player]` | 1422 | YES |
+| CHECK | Revert if `amount <= 1` | 1423 | YES |
+| EFFECT | `claimableWinnings[player] = 1` (sentinel) | 1426 | YES |
+| EFFECT | `claimablePool -= payout` | 1429 | YES |
+| EFFECT | `emit WinningsClaimed(...)` | 1430 | YES |
+| INTERACTION | `_payoutWithStethFallback` or `_payoutWithEthFallback` | 1432/1434 | N/A (this IS the call) |
 
-**Verification 1: No state writes after external call.** Confirmed. Lines 1430-1434 are the payout call and then the function ends at line 1435 with `}`. No state is written after the external call.
+**Verification 1: No state writes after external call.** Confirmed. Lines 1431-1435 are the payout call and then the function ends at line 1436 with `}`. No state is written after the external call.
 
 **Verification 2: Reentrant self-claim blocked.** If attacker's `receive()` calls `claimWinnings()` again for the same `player`:
 - `claimableWinnings[player]` is already set to 1 (sentinel)
@@ -62,7 +64,9 @@ function _claimWinningsInternal(address player, bool stethFirst) private {
 - Reverts with `E()`
 - **SAFE: Self-reentrancy into claimWinnings is blocked by the sentinel.**
 
-**Verification 3: claimablePool consistency.** `claimablePool -= payout` executes before the external call. If the attacker reenters any function that reads `claimablePool`, it will see the already-decremented value. This prevents double-counting.
+**Verification 3: finalSwept guard.** The `if (finalSwept) revert E();` check at line 1421 ensures no claims can be processed after `handleFinalSweep` has executed. This is an additional safety layer beyond the sentinel pattern.
+
+**Verification 4: claimablePool consistency.** `claimablePool -= payout` executes before the external call. If the attacker reenters any function that reads `claimablePool`, it will see the already-decremented value. This prevents double-counting.
 
 ### Entry Points
 
@@ -279,43 +283,45 @@ The `_sendToVault` function sends ETH to VAULT and DGNRS via `call{value:}`. The
 
 **Verdict: SAFE.**
 
-### handleFinalSweep (GameOverModule lines 158-176)
+### handleFinalSweep (GameOverModule lines 168-186)
+
+> **POST-AUDIT UPDATE:** `handleFinalSweep` was rewritten post-audit. The previous analysis described a stateless function with no mutation guard that could be called multiple times. The current version has a `finalSwept` idempotency guard, sets `claimablePool = 0`, and sweeps ALL remaining `totalFunds`. The reentrancy analysis below has been updated accordingly.
 
 ```solidity
 function handleFinalSweep() external {
-    if (gameOverTime == 0) return;
-    if (block.timestamp < uint256(gameOverTime) + 30 days) return;
+    if (gameOverTime == 0) return;                                    // line 169
+    if (block.timestamp < uint256(gameOverTime) + 30 days) return;   // line 170
+    if (finalSwept) return;                                           // line 171
+
+    finalSwept = true;                                                // line 173
+    claimablePool = 0;                                                // line 174
 
     // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
-    try admin.shutdownVrf() {} catch {}
+    try admin.shutdownVrf() {} catch {}                               // line 177
 
     uint256 ethBal = address(this).balance;
     uint256 stBal = steth.balanceOf(address(this));
     uint256 totalFunds = ethBal + stBal;
-    uint256 available = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
-    if (available == 0) return;
 
-    _sendToVault(available, stBal);
+    if (totalFunds == 0) return;
+
+    _sendToVault(totalFunds, stBal);                                  // line 185
 }
 ```
 
-**CEI Analysis:** This function has NO state mutations before the external call `_sendToVault`. It reads balances, calculates `available`, and sends. There is no guard against re-calling it.
+**CEI Analysis:** The current version sets `finalSwept = true` and `claimablePool = 0` BEFORE the external call `_sendToVault`. This is correct CEI.
 
-**Reentrancy concern:** If `_sendToVault` sends ETH to VAULT, and VAULT reenters `advanceGame()` which triggers `handleFinalSweep` again:
-1. The function reads `address(this).balance` again -- now lower because ETH was just sent
-2. `steth.balanceOf(address(this))` -- may be lower if stETH was transferred
-3. `available` will be recalculated with lower balances
-4. If `available > 0`, it would try to send again
+**Reentrancy concern (now resolved):** If `_sendToVault` sends ETH to VAULT, and VAULT reenters `advanceGame()` which triggers `handleFinalSweep` again:
+1. `finalSwept` is already `true` (set at line 173)
+2. The early return `if (finalSwept) return;` at line 171 fires immediately
+3. No re-execution possible
 
-However, this re-call would NOT cause fund loss beyond what is `available` (excess over `claimablePool`). Each recursive call sends less because balances decrease. The function converges to `available = 0`. Furthermore:
+Additionally:
+- `_claimWinningsInternal` (DegenerusGame.sol line 1421) checks `if (finalSwept) revert E();`, so reentrant claim attempts are also blocked
 - VAULT and DGNRS are trusted protocol contracts at fixed addresses
 - Neither has a `receive()` that calls back into DegenerusGame
-- The AdvanceModule only calls `handleFinalSweep` inside the liveness guard path, which requires `gameOver = true` and `block.timestamp >= gameOverTime + 30 days`
-- An attacker cannot directly call `handleFinalSweep` on DegenerusGame (it's only accessible via delegatecall from advanceModule during `advanceGame()`)
 
-**Theoretical risk (INFORMATIONAL):** If VAULT or DGNRS had a malicious `receive()` that called `advanceGame()`, and `advanceGame()` triggered `handleFinalSweep` again, funds could be drained incrementally. But this is a trusted-protocol-contracts scenario, not an external attacker scenario. Both VAULT and DGNRS are deployed by the protocol and their code is fixed.
-
-**Verdict: SAFE (recipients are trusted protocol contracts).**
+**Verdict: SAFE.** The `finalSwept` guard provides CEI-style reentrancy protection. Recipients are trusted protocol contracts.
 
 ---
 
@@ -465,10 +471,10 @@ All 3 reentrancy-no-eth findings involve state writes after external calls to tr
 
 | Question | Answer | Evidence |
 |----------|--------|----------|
-| Is claimWinnings safe from self-reentrancy? | **YES** | Sentinel `claimableWinnings[player] = 1` set before external call. Reentrant call sees `amount = 1`, reverts `amount <= 1`. (DegenerusGame.sol lines 1425, 1422) |
+| Is claimWinnings safe from self-reentrancy? | **YES** | `finalSwept` guard at line 1421 blocks post-sweep claims. Sentinel `claimableWinnings[player] = 1` set before external call. Reentrant call sees `amount = 1`, reverts `amount <= 1`. (DegenerusGame.sol lines 1421, 1426, 1423) |
 | Is claimWinnings safe from cross-function reentrancy? | **YES** | All 40 external functions enumerated. Access-restricted functions (20+) unreachable by attacker. Payable functions (7) require `msg.value > 0` which is 0 in callback. Claimable-spending functions (3) see sentinel of 1 wei, insufficient for any purchase. Degenerette/Decimator resolve can add NEW credits but these are legitimate winnings, not double-spends. |
 | Is handleGameOverDrain safe from self-reentrancy? | **YES** | `gameOverFinalJackpotPaid = true` set before distribution calls. Reentrant call returns immediately at line 71. Recipients are trusted protocol contracts. |
-| Is handleFinalSweep safe from reentrancy? | **YES** | No mutable state to protect (reads balances, sends excess). Recipients are trusted protocol contracts (VAULT, DGNRS). Theoretical recursive call converges to zero. |
+| Is handleFinalSweep safe from reentrancy? | **YES** | `finalSwept = true` set before external call (line 173). Reentrant call returns immediately at line 171. Additionally, `_claimWinningsInternal` checks `finalSwept` at line 1421, blocking reentrant claims. Recipients are trusted protocol contracts (VAULT, DGNRS). |
 | Are payout helpers safe from double-callback? | **YES** | All CEI mutations occur before `_payoutWithStethFallback`/`_payoutWithEthFallback` is called. Multiple callbacks within payout helpers do not provide additional attack surface. stETH transfer does not trigger recipient callbacks. |
 | Does Slither detect any ETH reentrancy? | **NO** | 0 reentrancy-eth findings. 3 reentrancy-no-eth findings, all involving trusted protocol contracts (false positives). |
 | Is refundDeityPass safe from reentrancy? | **N/A (REMOVED)** | Function removed from codebase. Storage variable `deityPassRefundable` retained for layout but unused. GO-F01 double-refund vector eliminated. |
@@ -487,7 +493,7 @@ The protocol's CEI-only reentrancy protection (without ReentrancyGuard) is corre
 
 2. **handleGameOverDrain**: `gameOverFinalJackpotPaid` flag set before distributions. `gameOver = true` blocks most game operations. All recipients are trusted protocol contracts.
 
-3. **handleFinalSweep**: Stateless sweep function. Recipients are trusted protocol contracts.
+3. **handleFinalSweep**: `finalSwept = true` and `claimablePool = 0` set before external call. Reentrant call returns at `finalSwept` guard. `_claimWinningsInternal` also checks `finalSwept`. Recipients are trusted protocol contracts.
 
 4. **Payout helpers**: No state changes within helpers; all mutations happen in callers before invoking helpers. stETH transfers do not trigger callbacks.
 
@@ -503,5 +509,5 @@ No finding was identified. The absence of `ReentrancyGuard` does not create an e
 |----------|-------------------|-----------|-----------------|
 | `_claimWinningsInternal` | `_payoutWithStethFallback`/`_payoutWithEthFallback` | Sentinel `= 1` + `claimablePool -=` | SAFE |
 | `handleGameOverDrain._sendToVault` | `call{value:}` to VAULT/DGNRS | `gameOverFinalJackpotPaid = true` + `gameOver = true` | SAFE (trusted recipients) |
-| `handleFinalSweep._sendToVault` | `call{value:}` to VAULT/DGNRS | Stateless; trusted recipients | SAFE (trusted recipients) |
+| `handleFinalSweep._sendToVault` | `call{value:}` to VAULT/DGNRS | `finalSwept = true` + `claimablePool = 0` before call | SAFE (`finalSwept` guard + trusted recipients) |
 | `refundDeityPass` | REMOVED | N/A | N/A (no longer exists) |

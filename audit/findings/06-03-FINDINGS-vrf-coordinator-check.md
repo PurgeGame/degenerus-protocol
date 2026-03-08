@@ -10,6 +10,8 @@
 - `contracts/DegenerusAdmin.sol` (VRF wiring and emergency recovery)
 - `contracts/storage/DegenerusGameStorage.sol` (storage layout)
 
+> **POST-AUDIT UPDATE (2026-03-08):** The `onlyOwner` modifier in DegenerusAdmin.sol was changed to vault-owner-only (line 362: `if (!vault.isVaultOwner(msg.sender)) revert NotOwner();`). The CREATOR bypass was removed. The vault ownership threshold was updated from >30% to >50.1% DGVE (`balance * 1000 > supply * 501`). All references to "CREATOR or >30% DGVE holder" in this document should read ">50.1% DGVE holder only". Line numbers may have shifted.
+
 ---
 
 ## 1. rawFulfillRandomWords Entry Point (DegenerusGame.sol)
@@ -207,7 +209,7 @@ This requires that rngWordByDay for the current day, yesterday, and two days ago
 
 **DegenerusAdmin.emergencyRecover()** (line 470-532):
 The ADMIN contract's `emergencyRecover()` function is the external entry point. It has ADDITIONAL gates:
-- `onlyOwner` modifier (CREATOR or 30%+ DGVE holder)
+- `onlyOwner` modifier (CREATOR or 30%+ DGVE holder) **(POST-AUDIT: now >50.1% DGVE only, no CREATOR bypass)**
 - `subscriptionId == 0` check (must be wired)
 - `gameAdmin.rngStalledForThreeDays()` check (calls DegenerusGame's view function which delegates to `_threeDayRngGap`)
 - `newCoordinator == address(0) || newKeyHash == bytes32(0)` check (non-zero required)
@@ -227,7 +229,7 @@ This function then calls `gameAdmin.updateVrfCoordinatorAndSub()` which routes t
 **Assessment:** This is an **accepted trust assumption**, not a vulnerability.
 
 **Mitigations:**
-- Requires vault ownership (>30% DGVE or CREATOR) -- highest privilege level in the protocol
+- Requires vault ownership (>30% DGVE or CREATOR) -- highest privilege level in the protocol **(POST-AUDIT: now >50.1% DGVE only)**
 - Requires a genuine 3-day VRF stall -- cannot be manufactured by the owner (Chainlink is external)
 - The 3-day window gives the community time to detect a stall and react
 - The vault owner already has broad administrative powers; controlling VRF is not a privilege escalation beyond their existing trust level

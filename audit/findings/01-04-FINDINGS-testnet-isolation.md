@@ -1,5 +1,7 @@
 # STOR-04: Testnet Isolation Verification
 
+> **POST-AUDIT UPDATE:** The `contracts-testnet/` directory was removed from the repository after this audit was completed. All references to `contracts-testnet/` paths, file contents, and diff outputs below reflect the state at audit time and no longer correspond to files on disk. The audit conclusions remain valid: mainnet source (`contracts/`) never contained testnet logic.
+
 **Requirement:** No testnet configuration (TESTNET_ETH_DIVISOR) bleeds into mainnet contract logic.
 **Date:** 2026-02-28
 **Auditor:** Automated scan + manual review

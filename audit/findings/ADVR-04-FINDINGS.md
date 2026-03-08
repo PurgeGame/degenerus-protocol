@@ -25,7 +25,7 @@ After constructing a complete reentrancy matrix covering all 8 ETH transfer site
 
 ### Site 1: _payoutWithStethFallback -- ETH send (DegenerusGame.sol:2022)
 
-**Called from:** `_claimWinningsInternal()`, `refundDeityPass()`
+**Called from:** `_claimWinningsInternal()`, `refundDeityPass()` **(POST-AUDIT: `refundDeityPass()` removed; this site is now only reached via `_claimWinningsInternal()`)**
 
 **State at call (claimWinnings path):**
 - `claimableWinnings[player] = 1` (sentinel set)
@@ -40,7 +40,7 @@ After constructing a complete reentrancy matrix covering all 8 ETH transfer site
 | advanceGame() | No relevant state modified | NO | advanceGame does not read claimableWinnings or claimablePool during processing |
 | placeFullTicketBets() | claimableWinnings[player] = 1 | NO | If using claimable: amount=1, `amount <= 1` blocks spending. If using msg.value: independent. |
 
-**State at call (refundDeityPass path):**
+**State at call (refundDeityPass path):** **(POST-AUDIT: this path no longer exists -- function removed)**
 - `deityPassRefundable[buyer] = 0` (zeroed)
 - `deityPassPaidTotal[buyer] = 0` (zeroed)
 - futurePrizePool/nextPrizePool decremented

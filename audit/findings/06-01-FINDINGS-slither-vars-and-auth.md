@@ -242,7 +242,7 @@ Legend:
 | purchaseWhaleBundle | external | D | `_resolvePlayer`; delegatecall to WhaleModule |
 | purchaseLazyPass | external | D | `_resolvePlayer`; delegatecall to WhaleModule |
 | purchaseDeityPass | external | D | `_resolvePlayer`; delegatecall to WhaleModule |
-| refundDeityPass | external | D | `_resolvePlayer` |
+| refundDeityPass | external | D | `_resolvePlayer` | **(POST-AUDIT: function removed)** |
 | onDeityPassTransfer | external | C | `msg.sender != ContractAddresses.DEITY_PASS` |
 | openLootBox | external | D | `_resolvePlayer`; delegatecall to LootboxModule |
 | openBurnieLootBox | external | D | `_resolvePlayer`; delegatecall to LootboxModule |
@@ -642,7 +642,7 @@ Slither vars-and-auth confirms:
 5. No functions that should have CREATOR checks were found without them
 
 **Remaining work for 06-02:**
-- Verify DegenerusAdmin vault owner threshold calculation (`balance * 10 > supply * 3`)
+- Verify DegenerusAdmin vault owner threshold calculation (`balance * 10 > supply * 3`) **(POST-AUDIT: formula updated to `balance * 1000 > supply * 501` (>50.1% DGVE); `onlyOwner` is now vault-owner-only, no CREATOR bypass)**
 - Verify all onlyOwner functions are safe for vault-owner execution (not just CREATOR)
 - Verify no privilege escalation path exists through vault owner takeover
 

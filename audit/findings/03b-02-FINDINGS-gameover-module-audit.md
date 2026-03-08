@@ -46,6 +46,8 @@ All paths that reach line 126 set `gameOverFinalJackpotPaid = true`. The functio
 
 ### 1.2 Deity Pass Refund Tier Trace
 
+> **POST-AUDIT UPDATE (deity pass refund tiers):** The code was significantly reworked after this audit. The original audit described two separate deity pass refund tiers: level 0 (full refund of `deityPassPaidTotal[owner]`) and levels 1-9 (fixed 20 ETH per pass). The current code has a **single** refund tier: all levels below 10 (`currentLevel < 10`) receive a fixed `DEITY_PASS_EARLY_GAMEOVER_REFUND = 20 ether` per pass purchased, budget-capped to available funds, processed FIFO by purchase order. There is no separate level-0 full-refund path and no use of `deityPassPaidTotal` for refund amounts. The two-tier analysis below reflects the code at audit time, not the current implementation.
+
 **Level 0 -- Full Refund (lines 77-97)**
 
 Conditions: `currentLevel == 0 && !jackpotPhaseFlag`
@@ -504,6 +506,8 @@ The terminal settlement fund distribution is correct for all normal operation pa
 
 ### Finding GO-F01: Potential Double Refund via refundDeityPass + handleGameOverDrain Interaction (MEDIUM)
 
+> **POST-AUDIT UPDATE:** This finding is **void**. The `refundDeityPass` function has been removed entirely from the codebase. No `refundDeityPass` function exists in `DegenerusGame.sol` or any other contract. The double-refund scenario described below can no longer occur.
+
 **Severity:** MEDIUM
 **Location:** `DegenerusGameGameOverModule.sol:82` and `DegenerusGame.sol:699-728`
 **Type:** Accounting inconsistency
@@ -577,6 +581,8 @@ The `deityPassOwners` array is bounded by `symbolId < 32` (WhaleModule:437) and 
 
 ### Finding GO-F04: Cross-Reference: FSM-F02 Stale dailyIdx Skips Distribution (LOW)
 
+> **POST-AUDIT UPDATE:** This finding has been addressed. The `_dailyIdx` parameter is now commented out in `_handleGameOverPath` (AdvanceModule line 335: `uint48 /* _dailyIdx */`), and `handleGameOverDrain` is called with the current `day` value instead of the stale entry-time `dailyIdx`. See the corresponding update on FSM-F02 in 02-04-FINDINGS.
+
 **Severity:** LOW (confirmed from Phase 2)
 **Location:** `DegenerusGameAdvanceModule.sol:357-361` -> `DegenerusGameGameOverModule.sol:133-134`
 
@@ -599,10 +605,10 @@ As documented in Phase 2 finding FSM-F02, `handleGameOverDrain` receives the old
 
 | ID | Severity | Title | Impact |
 |----|----------|-------|--------|
-| GO-F01 | MEDIUM | Potential double refund via refundDeityPass + handleGameOverDrain | Deity pass holders can receive double refund at level 0 if refundDeityPass called before game-over |
+| GO-F01 | MEDIUM | Potential double refund via refundDeityPass + handleGameOverDrain | **VOID POST-AUDIT** -- `refundDeityPass` was removed entirely from the codebase |
 | GO-F02 | INFORMATIONAL | Terminal state set before distribution calls | Safe due to EVM atomicity, no action needed |
 | GO-F03 | INFORMATIONAL | deityPassOwners bounded by 32 (symbolId), DEITY_PASS_MAX_TOTAL aligned | **RESOLVED** — constant updated to 32 |
-| GO-F04 | LOW | FSM-F02 cross-reference: stale dailyIdx skips distribution | Funds preserved for final sweep; confirmed from Phase 2 |
+| GO-F04 | LOW | FSM-F02 cross-reference: stale dailyIdx skips distribution | **FIXED POST-AUDIT** -- `_dailyIdx` param commented out; `day` passed instead |
 
 ---
 

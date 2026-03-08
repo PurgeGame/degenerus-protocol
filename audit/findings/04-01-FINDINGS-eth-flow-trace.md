@@ -209,17 +209,18 @@ if (!steth.transfer(recipient, amount)) revert E();   // line 1816: send stETH o
 
 **Entry:** `DegenerusGame.sol` claimWinnings/claimWinningsSteth -> `_claimWinningsInternal` at line 1420
 
-**Pool reduction and payout (lines 1420-1435):**
+**Pool reduction and payout (lines 1420-1436):**
 ```solidity
 function _claimWinningsInternal(address player, bool stethFirst) private {
+    if (finalSwept) revert E();                         // line 1421: blocks claims after final sweep
     uint256 amount = claimableWinnings[player];
     if (amount <= 1) revert E();
     uint256 payout;
     unchecked {
-        claimableWinnings[player] = 1;                 // line 1425: leave sentinel
-        payout = amount - 1;                            // line 1426: subtract sentinel
+        claimableWinnings[player] = 1;                 // line 1426: leave sentinel
+        payout = amount - 1;                            // line 1427: subtract sentinel
     }
-    claimablePool -= payout;                            // line 1428: CEI -- state before interaction
+    claimablePool -= payout;                            // line 1429: CEI -- state before interaction
     emit WinningsClaimed(player, msg.sender, payout);
     if (stethFirst) {
         _payoutWithEthFallback(player, payout);
@@ -356,42 +357,64 @@ Splits amount 50/50 between VAULT and DGNRS. Sends stETH first (where available)
 
 ### Outflow 5: handleFinalSweep() -> GameOverModule delegatecall
 
-**Entry:** `DegenerusGameGameOverModule.handleFinalSweep` at `GameOverModule:158`
+> **POST-AUDIT UPDATE:** `handleFinalSweep` was fundamentally rewritten after the original audit. The OLD behavior described below (preserves claimablePool, sweeps only excess, callable multiple times, no state mutation guard) no longer applies. The CURRENT behavior (GameOverModule lines 168-186):
+> - Has a `finalSwept` idempotency guard (`if (finalSwept) return;` at line 171)
+> - Sets `finalSwept = true` (line 173) and `claimablePool = 0` (line 174), **forfeiting all unclaimed winnings**
+> - Sweeps ALL remaining `totalFunds` (not just excess above claimablePool) to vault/DGNRS via `_sendToVault`
+> - One-time execution only
+> - Additionally, `_claimWinningsInternal` (DegenerusGame.sol line 1420) now has `if (finalSwept) revert E();` at line 1421, blocking all claims after the sweep
+> - VRF shutdown (`admin.shutdownVrf()`) is called via try/catch before the sweep (line 177)
+>
+> **Revised verification:** After `finalSwept = true`, `claimablePool = 0`, and `_sendToVault(totalFunds, stBal)`:
+> - All remaining contract balance is sent to vault (50%) and DGNRS (50%)
+> - `claimablePool = 0` means no claims can be honored (and `finalSwept` prevents any attempt)
+> - The contract reaches true zero terminal balance
+> - The `_sendToVault` helper (lines 192-229) splits the amount 50/50 using remainder pattern (no dust)
+>
+> **Revised verdict: PASS** -- All funds are swept. No funds permanently locked. Players must claim within the 30-day window before the sweep.
 
-**Guards (lines 159-160):**
+**Entry:** `DegenerusGameGameOverModule.handleFinalSweep` at `GameOverModule:168`
+
+~~**Guards (lines 159-160):**~~
 ```solidity
-if (gameOverTime == 0) return;
-if (block.timestamp < uint256(gameOverTime) + 30 days) return;
+// CURRENT CODE (lines 168-174):
+function handleFinalSweep() external {
+    if (gameOverTime == 0) return;                                    // line 169
+    if (block.timestamp < uint256(gameOverTime) + 30 days) return;   // line 170
+    if (finalSwept) return;                                           // line 171
+
+    finalSwept = true;                                                // line 173
+    claimablePool = 0;                                                // line 174
 ```
 
-**VRF shutdown (line 163):**
+**VRF shutdown (line 177):**
 ```solidity
 try admin.shutdownVrf() {} catch {}  // fire-and-forget; failure must not block sweep
 ```
 
-**Sweep logic (lines 165-175):**
+**Sweep logic (lines 179-185):**
 ```solidity
 uint256 ethBal = address(this).balance;
 uint256 stBal = steth.balanceOf(address(this));
 uint256 totalFunds = ethBal + stBal;
-uint256 available = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
-if (available == 0) return;
-_sendToVault(available, stBal);                        // line 175
+
+if (totalFunds == 0) return;
+
+_sendToVault(totalFunds, stBal);                       // line 185
 ```
 
 **Verification:**
-- Only sweeps `totalFunds - claimablePool` = excess above obligations.
-- `claimablePool` is NOT modified -- it remains as-is for player claims.
-- `_sendToVault` sends exactly `available` to VAULT (50%) and DGNRS (50%).
-- After sweep: `balance + stETH >= claimablePool` holds because we only sent `totalFunds - claimablePool`.
-
-**Note:** `_sendToVault` does NOT reduce any pool variables (no `claimablePool -=`, no `futurePrizePool -=`, etc.). It simply transfers ETH/stETH. This is correct because `available` represents funds not accounted for in any pool.
+- Sweeps ALL `totalFunds` (entire remaining balance), not just excess above claimablePool.
+- `claimablePool` is set to 0 -- unclaimed winnings are forfeited.
+- `finalSwept = true` prevents re-execution and blocks future `claimWinnings()` calls.
+- `_sendToVault` sends exactly `totalFunds` to VAULT (50%) and DGNRS (50%).
+- After sweep: contract holds zero ETH/stETH. True terminal state.
 
 **Dust handling:** `dgnrsAmount = amount / 2`, `vaultAmount = amount - dgnrsAmount`. Remainder pattern: no dust lost.
 
 **Note:** VRF shutdown (`admin.shutdownVrf()`) is called here with try/catch. If VRF shutdown fails, the sweep still proceeds -- LINK tokens remain in the subscription but ETH/stETH sweep is not blocked.
 
-**Verdict: PASS** -- Sweeps only excess above claimablePool. claimablePool preserved for player claims.
+**Verdict: PASS** -- All funds swept to vault/DGNRS. Players must claim within the 30-day post-gameOver window.
 
 ---
 
@@ -498,7 +521,7 @@ function _addClaimableEth(address beneficiary, uint256 weiAmount) private {
   - claimWinnings: `claimablePool -= payout`, sends `payout` (line 1428)
   - adminSwapEthForStEth: net-neutral (ETH in, stETH out, equal amounts) (line 1816)
   - handleGameOverDrain: credits to claimable have matching `claimablePool +=`; vault receives only excess (lines 107, 133)
-  - handleFinalSweep: sends only `totalFunds - claimablePool`; claimablePool unchanged (line 170)
+  - handleFinalSweep: sets `claimablePool = 0` (forfeits unclaimed), sweeps ALL `totalFunds` to vault/DGNRS; `finalSwept` blocks future claims (lines 168-185)
   - refundDeityPass: **REMOVED** -- no longer an outflow path
 - **Internal conversions** (_autoStakeExcessEth line 1009, adminStakeEthForStEth line 1825): guard `claimablePool` reserve, converting ETH->stETH without touching pool variables.
 - **Degenerette payouts**: `futurePrizePool -= ethPortion`, `claimablePool += ethPortion` -- balanced transfer between pools (lines 717-719).
@@ -554,7 +577,7 @@ receive() external payable {
 | 9 | refundDeityPass | Outflow | -- | **REMOVED** | N/A |
 | 10 | adminSwapEthForStEth (line 1806) | Outflow | none | net-neutral swap | PASS |
 | 11 | handleGameOverDrain (line 70) | Outflow | claimablePool (credits) | excess to vault | PASS |
-| 12 | handleFinalSweep (line 158) | Outflow | none (claimablePool preserved) | excess to vault | PASS |
+| 12 | handleFinalSweep (line 168) | Outflow | claimablePool zeroed; finalSwept set | ALL funds to vault/DGNRS | PASS |
 | 13 | _autoStakeExcessEth (line 1009) | Internal | none | guards claimablePool | PASS |
 | 14 | adminStakeEthForStEth (line 1825) | Internal | none | guards claimablePool | PASS |
 | 15 | degenerette _distributePayout (line 700) | Internal | futurePrizePool -> claimablePool | exact ethPortion | PASS |

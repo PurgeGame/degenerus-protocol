@@ -101,6 +101,33 @@ A compromised admin can use `emergencyRecover` to point the game at an attacker-
 
 ---
 
+## Resolved Findings (Fixed Post-Audit)
+
+The following findings were identified during the audit and have been remediated in the current codebase. They are documented here for completeness.
+
+| ID | Original Severity | Title | Resolution |
+|----|-------------------|-------|------------|
+| H-01 | HIGH | Whale Bundle Lacks Level Eligibility Guard | NatSpec updated to document "Available at any level" — code behavior was intentional |
+| M-01 | MEDIUM | Day-Index Function Mismatch in Boon Validity Checks | Both whale and lazy pass boon checks now use `_simulatedDayIndex()` |
+| M-03 | MEDIUM | `deityBoonSlots()` staticcall Reads Module Storage | Function replaced with `deityBoonData()` computing locally in Game storage; standalone `DeityBoonViewer` contract added |
+| L-03 | LOW | Whale Bundle NatSpec States 50/50 Fund Split | NatSpec updated to correctly describe 30/70 split |
+| FX-01 | HIGH (pre-fix) | Deity Affiliate Bonus Calculation Error | Fixed in commit `e2bbf50` — BPS applied directly to raw score |
+| FX-02 | MEDIUM (pre-fix) | Deity Pass Double Refund | `refundDeityPass()` function removed entirely from codebase |
+
+### Remaining Open Low Findings (Acknowledged)
+
+| ID | Title | Status |
+|----|-------|--------|
+| L-01 | No Isolated VRF Callback Gas Test | Acknowledged — testing gap, no security risk |
+| L-02 | Stale `dailyIdx` Passed to `handleGameOverDrain` | Acknowledged — architectural decision, all funds preserved |
+| L-04 | Lootbox Minimum Threshold Has No Upper Bound | Acknowledged — admin trust model |
+| L-05 | Nudges Accepted During Game-Over VRF Fallback | Acknowledged — no fund loss, documentation gap |
+| L-06 / I-22 | `_threeDayRngGap` Duplicated in Two Contracts | Acknowledged — maintenance risk, downgraded to Informational |
+
+See `findings/07-FINAL-FINDINGS-REPORT.md` for the original audit-time finding details.
+
+---
+
 ## Informational Findings
 
 ### I. Code Quality

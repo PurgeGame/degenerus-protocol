@@ -36,11 +36,13 @@ claimablePool -= claimableUsed;  // Line 1042
 
 ---
 
-### D2. DegenerusGame.sol:1428 -- `_claimWinningsInternal`
+### D2. DegenerusGame.sol:1429 -- `_claimWinningsInternal`
 
 ```solidity
-claimableWinnings[player] = 1;    // Line 1425 (sentinel)
-claimablePool -= payout;           // Line 1428
+if (finalSwept) revert E();       // Line 1421 (blocks claims after final sweep)
+// ...
+claimableWinnings[player] = 1;    // Line 1426 (sentinel)
+claimablePool -= payout;           // Line 1429
 // Then: external ETH/stETH transfer to player
 ```
 
@@ -460,7 +462,9 @@ After ALL winners claim: `claimablePool` net = `poolWei - sum(lootboxPortions)` 
 
 **Caveat -- unclaimed funds:** If some winners never claim, their share stays in `claimablePool` without a corresponding `claimableWinnings` entry. Furthermore, when the next decimator runs, `lastDecClaimRound` is overwritten (DecimatorModule line 349), making old claims impossible. The unclaimed `claimablePool` reservation persists permanently.
 
-**Invariant impact of unclaimed decimator funds:** `claimablePool` is slightly higher than `sum(claimableWinnings)`. This means the contract holds MORE backing than needed for actual claims. The invariant `balance + stETH >= claimablePool` still holds because the ETH is in the contract. However, the unclaimed portion is effectively locked forever (cannot be withdrawn by anyone, cannot be swept by `handleFinalSweep` because it is part of `claimablePool`).
+> **POST-AUDIT UPDATE:** `handleFinalSweep` was rewritten post-audit. It now sets `claimablePool = 0` and sweeps ALL remaining funds. Unclaimed decimator reservations are no longer permanently locked -- they are forfeited and swept to vault/DGNRS after the 30-day post-gameOver window. See 04-06 Section 3 for details.
+
+**Invariant impact of unclaimed decimator funds (pre-sweep):** `claimablePool` is slightly higher than `sum(claimableWinnings)`. This means the contract holds MORE backing than needed for actual claims. The invariant `balance + stETH >= claimablePool` still holds because the ETH is in the contract. During the 30-day post-gameOver claim window, the unclaimed portion stays reserved. After `handleFinalSweep` executes, `claimablePool` is zeroed and all remaining funds (including unclaimed decimator reservations) are swept to vault/DGNRS.
 
 **Severity: INFORMATIONAL.** The invariant is maintained. The locked funds issue is a minor capital efficiency concern, not a security vulnerability. In practice, the amounts are likely small relative to total pool size.
 
@@ -484,7 +488,7 @@ dust = rebuyAmount - ethSpent = rebuyAmount % ticketPrice
 - `ethSpent` -> `futurePrizePool` or `nextPrizePool` (tracked)
 - `dust` -> nowhere (untracked)
 
-**Invariant impact:** Dust strengthens the invariant. `address(this).balance` is higher than `sum(all pool variables)`. The dust accumulates over time as micro-amounts (typically < 1 ticket price per auto-rebuy event). Eventually, `_autoStakeExcessEth` will stake this dust into stETH, or `handleFinalSweep` will sweep it to vault/DGNRS (as part of `available = totalFunds - claimablePool`).
+**Invariant impact:** Dust strengthens the invariant. `address(this).balance` is higher than `sum(all pool variables)`. The dust accumulates over time as micro-amounts (typically < 1 ticket price per auto-rebuy event). Eventually, `_autoStakeExcessEth` will stake this dust into stETH, or `handleFinalSweep` will sweep it to vault/DGNRS (post-audit: sweeps ALL remaining `totalFunds` after zeroing `claimablePool`).
 
 **Severity: INFORMATIONAL.** Dust is safe. Untracked ETH makes the contract more solvent.
 
@@ -524,6 +528,6 @@ The core accounting invariant `address(this).balance + steth.balanceOf(this) >= 
 
 **Informational findings:**
 1. **Decimator unclaimed funds lock:** If decimator winners never claim before the next decimator runs, their `claimablePool` reservation persists permanently without a corresponding `claimableWinnings` entry. This is a minor capital efficiency concern (ETH locked in `claimablePool` that can never be claimed or swept). Not a security issue.
-2. **Auto-rebuy dust accumulation:** Fractional wei from auto-rebuy calculations accumulates as untracked ETH. Eventually staked or swept. Not a security issue.
+2. **Auto-rebuy dust accumulation:** Fractional wei from auto-rebuy calculations accumulates as untracked ETH. Eventually staked or swept (post-audit: `handleFinalSweep` sweeps ALL remaining funds). Not a security issue.
 3. **stETH transfer rounding (Lido 1-2 wei):** When stETH is transferred to players, 1-2 wei may be retained by the contract due to share-based rounding. This STRENGTHENS the invariant. Not a security issue.
 4. **Research inventory correction:** Research listed 5 decrement sites; actual count is 6 (MintModule.sol:658 lootbox shortfall was missing). Research listed line numbers from an older codebase revision; all line references in this document are verified against current source.

@@ -5,6 +5,8 @@
 **Auditor:** Automated source trace
 **Verdict:** PASS
 
+> **LINE NUMBER NOTE (2026-03-08):** This finding was written against the 2026-03-01 source. DegenerusGame.sol line numbers referenced below have drifted by approximately 15-23 lines (down) due to subsequent contract modifications. For example, `adminSwapEthForStEth` stBal is referenced as line 1836 but is now at line 1815; `yieldPoolView` is referenced as line 2177 but is now at line 2156. The analysis conclusions remain valid -- only line references are stale. GameOverModule.sol line 233 (`handleFinalSweep` stBal) is now at line 181 due to the function rewrite; see 04-06 for updated handleFinalSweep details.
+
 ---
 
 ## Part A: Exhaustive Search for Cached stETH Balance

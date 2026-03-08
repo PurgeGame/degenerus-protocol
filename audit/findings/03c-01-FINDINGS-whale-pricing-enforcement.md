@@ -68,6 +68,8 @@ At level 5 (passLevel=6) without a boon, the code falls through to `unitPrice = 
 
 ## Finding F02: Day-Index Function Mismatch Between Whale Boon and Lazy Pass Boon Validity
 
+> **POST-AUDIT UPDATE:** This finding has been fixed. The whale boon check (WhaleModule line 202) now uses `_simulatedDayIndex()`, consistent with the lazy pass boon check. Both boon validity checks now use the same day-index function.
+
 **Severity:** MEDIUM (inconsistent time source for equivalent operations)
 
 **Location:**
@@ -139,19 +141,21 @@ futurePrizePool += totalPrice - nextShare;      // 70% or 95% to future
 
 **Severity:** INFORMATIONAL (confirmed correct, no issue)
 
-**Location:** `DegenerusGameWhaleModule.sol` line 335
+**Location:** `DegenerusGameWhaleModule.sol` line 345
+
+> **POST-AUDIT UPDATE (correction):** The original finding quoted the level check as `> 3`, but the actual code at WhaleModule line 345 reads `if (currentLevel > 2 && currentLevel % 10 != 9 && !hasValidBoon) revert E();`. This means levels 0, 1, 2 are allowed (not 0-3). The corrected analysis below reflects the actual `> 2` threshold.
 
 **Code:**
 ```solidity
-if (currentLevel > 3 && currentLevel % 10 != 9 && !hasValidBoon) revert E();
+if (currentLevel > 2 && currentLevel % 10 != 9 && !hasValidBoon) revert E();
 ```
 
 **Analysis:** This check enforces:
-- `currentLevel <= 3` (levels 0, 1, 2, 3) -- allowed
+- `currentLevel <= 2` (levels 0, 1, 2) -- allowed
 - `currentLevel % 10 == 9` (levels 9, 19, 29, 39, 49...) -- allowed
 - `hasValidBoon == true` -- allowed at any level
 
-This correctly gates to levels 0-3 and x9 (the "lazy pass" entry points), matching the NatSpec at line 305: "Available at levels 0-3 or x9 (9, 19, 29...), or with a valid lazy pass boon."
+This gates to levels 0-2 and x9 (the "lazy pass" entry points).
 
 **Additional guards:**
 - Line 338: `if (deityPassCount[buyer] != 0) revert E();` -- deity pass holders cannot buy lazy passes
@@ -160,6 +164,8 @@ This correctly gates to levels 0-3 and x9 (the "lazy pass" entry points), matchi
 ---
 
 ## Finding F05: lazyPassBoonDiscountBps Never Assigned Non-Zero Value
+
+> **POST-AUDIT UPDATE:** This finding has been fixed. `DegenerusGameLootboxModule.sol` at line 1492 now assigns `lazyPassBoonDiscountBps[player] = bps` with non-zero values during deity boon issuance. The lazy pass boon discount tiers (10%, 25%, 50%) are now functional, matching the whale boon tier pattern. The variable is no longer dead code.
 
 **Severity:** INFORMATIONAL (dead code / placeholder for future feature)
 
@@ -315,10 +321,10 @@ if (boonTier != 0) {
 | ID | Severity | Description | Status |
 |----|----------|-------------|--------|
 | F01 | HIGH | Whale bundle lacks level eligibility guard (NatSpec says levels 0-3/x49/x99, code allows any level at 4 ETH) | Needs design confirmation |
-| F02 | MEDIUM | Day-index function mismatch: whale boon uses `_currentMintDay()`, lazy pass boon uses `_simulatedDayIndex()` | Potential 1-day window inconsistency |
+| F02 | MEDIUM | Day-index function mismatch: whale boon uses `_currentMintDay()`, lazy pass boon uses `_simulatedDayIndex()` | **FIXED POST-AUDIT** -- whale boon now uses `_simulatedDayIndex()` |
 | F03 | LOW | Whale bundle NatSpec states 50/50 fund split, code implements 30/70 (pre-game) | Documentation only |
-| F04 | INFORMATIONAL | Lazy pass level eligibility check confirmed correct (levels 0-3, x9, or boon) | PASS |
-| F05 | INFORMATIONAL | `lazyPassBoonDiscountBps` never assigned non-zero; all lazy pass boons use 10% default | Dead code / placeholder |
+| F04 | INFORMATIONAL | Lazy pass level eligibility check (corrected: `> 2`, not `> 3` as originally stated) | Levels 0-2 and x9, or with boon |
+| F05 | INFORMATIONAL | `lazyPassBoonDiscountBps` never assigned non-zero; all lazy pass boons use 10% default | **FIXED POST-AUDIT** -- LootboxModule line 1492 now assigns non-zero values |
 
 ---
 

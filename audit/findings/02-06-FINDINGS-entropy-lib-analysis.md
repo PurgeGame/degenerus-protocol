@@ -26,7 +26,9 @@ library EntropyLib {
 
 The function implements a three-operation XOR-shift on a 256-bit unsigned integer. Each operation XORs the current state with a shifted version of itself. The `unchecked` block is safe because XOR and shift cannot overflow -- they are purely bitwise operations.
 
-**NatSpec note:** The comment says "Standard xorshift64 algorithm" but this is incorrect. Standard xorshift64 uses constants (13, 7, 17) or (12, 25, 27) on a 64-bit register. This implementation uses non-standard constants (7, 9, 8) on a 256-bit register. This is a documentation inaccuracy, not a functional bug.
+**NatSpec note:** The audit originally claimed the comment says "Standard xorshift64 algorithm" but this is not what the actual NatSpec states. The actual NatSpec (line 11) reads: "XOR-shift PRNG step for deterministic entropy derivation." This is an accurate description. The library-level comment (line 7) says "XOR-shift algorithm seeded from VRF for ultimate security," which is also reasonable. The constants (7, 9, 8) are non-standard relative to published xorshift64 constants, and the register is 256 bits, but the NatSpec does not claim xorshift64 conformance.
+
+> **POST-AUDIT UPDATE (NatSpec correction):** The original finding incorrectly stated the NatSpec says "Standard xorshift64 algorithm." The actual NatSpec reads "XOR-shift PRNG step for deterministic entropy derivation" (line 11). The characterization of a documentation inaccuracy in the NatSpec was itself inaccurate. The analysis of the algorithm's properties and security remains valid.
 
 ### 1.2 Fixed Point Analysis
 
@@ -429,7 +431,7 @@ This fallback uses a previously verified VRF word (already on-chain, cannot be m
 
 **Rationale:** The non-standard shift constants (7, 9, 8) on 256-bit state lack published analysis for period guarantee or equidistribution properties. However, the security model does not depend on the PRNG being cryptographically strong -- it depends on the VRF seed being unpredictable. For a PRNG seeded with a 256-bit cryptographically random value and iterated fewer than 30 times, the xorshift properties are more than sufficient. No attacker can exploit the PRNG without first breaking the VRF seed secrecy, which is protected by Chainlink's cryptographic guarantees and the protocol's rngLockedFlag mechanism.
 
-**Informational note:** The NatSpec comment in EntropyLib.sol:12 incorrectly describes the algorithm as "Standard xorshift64." The constants (7, 9, 8) are non-standard and the register is 256 bits. This is a documentation issue, not a security issue.
+**Informational note:** The NatSpec comment in EntropyLib.sol:11 describes the algorithm as "XOR-shift PRNG step for deterministic entropy derivation," which is accurate. The original audit draft incorrectly claimed it said "Standard xorshift64" -- this has been corrected. The constants (7, 9, 8) are non-standard relative to published xorshift64 tables, and the register is 256 bits, but the NatSpec does not claim xorshift64 conformance.
 
 ---
 
@@ -474,6 +476,8 @@ This fallback uses a previously verified VRF word (already on-chain, cannot be m
 **Recommendation:** No action required. The fallback is a reasonable graceful degradation for an edge case.
 
 ### Finding 3: Informational -- NatSpec Incorrectly Describes Algorithm
+
+> **POST-AUDIT UPDATE:** This finding is **void**. The actual NatSpec (line 11) reads "XOR-shift PRNG step for deterministic entropy derivation," which is accurate. The original finding incorrectly quoted the NatSpec as saying "Standard xorshift64 algorithm." No NatSpec correction is needed.
 
 **Severity:** Informational (No Impact)
 **Location:** `EntropyLib.sol:12`

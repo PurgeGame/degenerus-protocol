@@ -5,6 +5,13 @@
 **Methodology:** Manual source code review with grep-verified enumeration
 **Requirement:** AUTH-01
 
+> **POST-AUDIT UPDATE (2026-03-08):** Several contract changes occurred after this audit was written. Key corrections:
+> 1. **Vault ownership threshold** (Section 5): The formula was updated from `balance * 10 > supply * 3` (>30%) to `balance * 1000 > supply * 501` (>50.1% DGVE). All references to ">30%" in this document should read ">50.1%".
+> 2. **`onlyOwner` modifier** (Section 4): The modifier was changed to vault-owner-only. It no longer checks `ContractAddresses.CREATOR`. The current code at DegenerusAdmin.sol line 362 is: `if (!vault.isVaultOwner(msg.sender)) revert NotOwner();`. All references to "CREATOR OR vault owner" should read "vault owner only".
+> 3. **Pattern C `_enforceDailyMintGate` CREATOR bypass** (Section 1): The `if (caller == ContractAddresses.CREATOR) return;` bypass was removed. The current bypass tiers in DegenerusGameAdvanceModule.sol lines 547-583 are: (1) deity pass holder, (2) anyone after 30 min, (3) pass holder after 15 min, (4) DGVE majority holder. No CREATOR reference exists.
+> 4. **`refundDeityPass`** (Section 2.7 in 06-05): This function was removed entirely from the codebase. All references to it as live code are stale.
+> 5. **Line numbers** may have shifted due to post-audit contract changes. Treat all line references as approximate.
+
 ---
 
 ## 1. Complete CREATOR-Gated Function Enumeration
@@ -31,6 +38,8 @@
 | DegenerusAdmin | `shutdownAndRefund()` | 543 | `onlyOwner` modifier (L351-357) | Cancel VRF subscription and sweep LINK after game-over |
 
 ### Pattern C: CREATOR Bypass (Non-Gating)
+
+> **POST-AUDIT UPDATE:** This CREATOR bypass was removed. The current `_enforceDailyMintGate()` (DegenerusGameAdvanceModule.sol lines 547-583) has no CREATOR reference. Bypass tiers are: (1) deity pass holder, (2) anyone after 30 min, (3) pass holder after 15 min, (4) DGVE majority holder via `vault.isVaultOwner(caller)`.
 
 | Contract | Function | Line | Pattern | Description |
 |----------|----------|------|---------|-------------|
@@ -110,6 +119,8 @@ These are **repeatable admin actions** but with per-player idempotency. CREATOR 
 ## 4. Deep Audit: DegenerusAdmin onlyOwner Model
 
 ### onlyOwner Modifier (L351-357)
+
+> **POST-AUDIT UPDATE:** The `onlyOwner` modifier was changed to vault-owner-only. The current code at DegenerusAdmin.sol line 362 is: `if (!vault.isVaultOwner(msg.sender)) revert NotOwner();`. The CREATOR bypass was removed. The threshold is now >50.1% DGVE (`balance * 1000 > supply * 501`), not >30%.
 
 ```solidity
 modifier onlyOwner() {
@@ -308,6 +319,8 @@ Setting `type(uint256).max` as threshold would effectively prevent lootbox RNG r
 
 ### 5a. Formula Verification
 
+> **POST-AUDIT UPDATE:** The vault ownership formula was updated. The current code at DegenerusVault.sol line 413 is: `return balance * 1000 > supply * 501;` which requires >50.1% DGVE, not >30%. The code block and analysis below reflect the pre-update state.
+
 ```solidity
 // DegenerusVault L411-414
 function _isVaultOwner(address account) private view returns (bool) {
@@ -495,8 +508,8 @@ Could a reentrancy attack bypass the self-call gate?
 |----------|--------|----------|
 | Are all CREATOR-gated functions correctly gated? | YES | 5 Pattern A functions (DegenerusAffiliate x2, Icons32Data x3) all use direct `msg.sender != ContractAddresses.CREATOR` check. No bypass path. |
 | Can a non-CREATOR bypass any CREATOR-only gate? | NO | Pattern A guards are direct equality checks against a compile-time constant. No setter, no proxy, no delegatecall indirection. |
-| Is DegenerusAdmin dual-owner model safe for all onlyOwner functions? | YES | Each function analyzed individually: emergencyRecover (3-day stall gated), shutdownAndRefund (game-over gated), setLinkEthPriceFeed (unhealthy-feed gated), swapGameEthForStEth (value-neutral), stakeGameEthToStEth (claimablePool protected), setLootboxRngThreshold (non-zero only). No fund extraction path exists. |
-| Is the vault ownership threshold resistant to manipulation? | YES | >30% of DGVE supply required. Burns are self-only and cost proportional underlying value. Overflow impossible. Refill mechanism prevents zero-supply edge case. |
+| Is DegenerusAdmin dual-owner model safe for all onlyOwner functions? | YES | Each function analyzed individually: emergencyRecover (3-day stall gated), shutdownAndRefund (game-over gated), setLinkEthPriceFeed (unhealthy-feed gated), swapGameEthForStEth (value-neutral), stakeGameEthToStEth (claimablePool protected), setLootboxRngThreshold (non-zero only). No fund extraction path exists. **(POST-AUDIT: model is now vault-owner-only, no CREATOR bypass; threshold is >50.1%)** |
+| Is the vault ownership threshold resistant to manipulation? | YES | >30% of DGVE supply required. Burns are self-only and cost proportional underlying value. Overflow impossible. Refill mechanism prevents zero-supply edge case. **(POST-AUDIT: threshold increased to >50.1%)** |
 | Is there any privilege escalation path? | NO | Pattern A functions are unreachable by non-CREATOR. Pattern B functions are individually safe for vault-owner callers. Pattern C (CREATOR bypass) is a convenience feature, not a privilege gate. Self-call gates are robust. |
 
 ### Summary of Findings by Severity
@@ -512,13 +525,13 @@ Could a reentrancy attack bypass the self-call gate?
 
 **AUTH-01: PASS**
 
-All admin-only functions are correctly gated with no privilege escalation path. The DegenerusAdmin dual-owner model (CREATOR OR >30% DGVE holder) is safe because:
+All admin-only functions are correctly gated with no privilege escalation path. The DegenerusAdmin dual-owner model (CREATOR OR >30% DGVE holder) is safe because: **(POST-AUDIT: model is now vault-owner-only at >50.1% DGVE; CREATOR bypass removed)**
 
 1. **Pattern A functions** (DegenerusAffiliate, Icons32Data) use strict CREATOR-only checks with no alternative paths. Non-CREATOR cannot call these.
 
 2. **Pattern B functions** (DegenerusAdmin) use the `onlyOwner` modifier which permits vault owners, but every function reachable by vault owners has additional preconditions (3-day stall, game-over, unhealthy feed) or is provably value-neutral (swap, stake). No function allows a vault owner to extract protocol funds.
 
-3. **The vault ownership threshold** (`balance * 10 > supply * 3`) is mathematically correct, overflow-safe, and economically resistant to manipulation. Acquiring >30% of DGVE supply requires purchasing proportional vault reserves.
+3. **The vault ownership threshold** (`balance * 10 > supply * 3`) is mathematically correct, overflow-safe, and economically resistant to manipulation. Acquiring >30% of DGVE supply requires purchasing proportional vault reserves. **(POST-AUDIT: formula updated to `balance * 1000 > supply * 501`, requiring >50.1% DGVE -- an even stronger threshold)**
 
 4. **DegenerusDeityPass** uses an independent `_contractOwner` model that is confirmed cosmetic-only, with no ability to interfere with game-critical mint/burn operations.
 

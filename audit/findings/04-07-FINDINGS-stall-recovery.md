@@ -222,19 +222,23 @@ If `_tryRequestRng` fails (VRF coordinator down), the function sets `rngRequestT
 
 ## Path 5: 30-Day Final Sweep Delay
 
+> **POST-AUDIT UPDATE:** `handleFinalSweep` was fundamentally rewritten post-audit. The description below has been updated to reflect the current implementation (GameOverModule lines 168-186). Key changes: added `finalSwept` idempotency guard, sets `claimablePool = 0` (forfeits unclaimed winnings), sweeps ALL remaining `totalFunds` (not just excess), one-time execution only. Additionally, `_claimWinningsInternal` (DegenerusGame.sol line 1421) now blocks claims after sweep via `if (finalSwept) revert E();`.
+
 ### Guard Expression
 
-**File:** `DegenerusGameGameOverModule.sol`, lines 158-160
+**File:** `DegenerusGameGameOverModule.sol`, lines 168-171
 
 ```solidity
 function handleFinalSweep() external {
-    if (gameOverTime == 0) return; // Game not over yet
-    if (block.timestamp < uint256(gameOverTime) + 30 days) return; // Too early
+    if (gameOverTime == 0) return;                                    // line 169: Game not over yet
+    if (block.timestamp < uint256(gameOverTime) + 30 days) return;   // line 170: Too early
+    if (finalSwept) return;                                           // line 171: Already swept
 ```
 
 Where:
 - `gameOverTime` = `uint48` set to `block.timestamp` when game-over occurs (line 115)
 - `30 days` = `2,592,000 seconds`
+- `finalSwept` = boolean idempotency guard
 
 ### Arithmetic Verification
 
@@ -252,24 +256,33 @@ Where:
 - It cannot be manipulated externally -- only written by delegatecall from the trusted AdvanceModule flow.
 - Validator timestamp skew: 15s vs 2,592,000s. **Premature trigger: IMPOSSIBLE.**
 
-### Sweep is Re-Enterable from advanceGame
+### One-Time Execution via finalSwept
 
-The `handleFinalSweep` is called from `_handleGameOverPath` when `gameOver == true` (lines 345-354). This means every `advanceGame()` call after game-over will attempt the sweep. The sweep is idempotent in practice: once all excess funds are swept, `available == 0` and it returns early (line 172).
+The `handleFinalSweep` is called from `_handleGameOverPath` when `gameOver == true` (lines 345-354). The `finalSwept` guard at line 171 ensures only the first call executes the sweep. Subsequent `advanceGame()` calls trigger `handleFinalSweep` but return immediately at the guard.
 
 ### Accounting Impact
 
 ```solidity
-uint256 totalFunds = ethBal + stBal;
-uint256 available = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
-if (available == 0) return;
-_sendToVault(available, stBal);
+    finalSwept = true;                                                // line 173
+    claimablePool = 0;                                                // line 174
+
+    try admin.shutdownVrf() {} catch {}                               // line 177
+
+    uint256 ethBal = address(this).balance;
+    uint256 stBal = steth.balanceOf(address(this));
+    uint256 totalFunds = ethBal + stBal;
+
+    if (totalFunds == 0) return;
+
+    _sendToVault(totalFunds, stBal);                                  // line 185
 ```
 
-1. **claimablePool preserved:** `available = totalFunds - claimablePool` (line 170) ensures only excess funds (not reserved for player claims) are swept.
-2. **Saturating subtraction:** `totalFunds > claimablePool ? ... : 0` prevents underflow if stETH rebasing caused a minor shortfall.
-3. **Distribution:** `_sendToVault` (lines 182-219) splits 50/50 between vault and DGNRS, prioritizing stETH for vault then ETH for remainder. This is standard distribution logic.
+1. **claimablePool zeroed:** `claimablePool = 0` (line 174) forfeits all unclaimed winnings. Players must claim within the 30-day post-gameOver window.
+2. **finalSwept blocks claims:** `_claimWinningsInternal` (DegenerusGame.sol line 1421) checks `if (finalSwept) revert E();` before processing any claim.
+3. **Full sweep:** ALL remaining `totalFunds` are sent to vault/DGNRS (not just excess above claimablePool).
+4. **Distribution:** `_sendToVault` (lines 192-229) splits 50/50 between vault and DGNRS, prioritizing stETH for vault then ETH for remainder.
 
-**claimablePool preservation: CORRECT.** The invariant `address(this).balance + steth.balanceOf(this) >= claimablePool` is maintained after sweep.
+**Terminal state: CORRECT.** After sweep, contract holds zero ETH/stETH. All funds have reached vault/DGNRS. No funds permanently locked.
 
 ---
 
@@ -281,7 +294,7 @@ _sendToVault(available, stBal);
 | 2 | 365-day inactivity (lvl 1+) | `ts - 365 days > lst` | AdvanceModule:338 | YES -- 31,536,000s exact | NO -- 15s skew vs 31.5M s | Same pattern; early levels get fixed 20 ETH refund | PASS |
 | 3 | 18-hour VRF retry | `elapsed >= 18 hours` | AdvanceModule:675 | YES -- 64,800s exact | N/A -- not game-over | NEUTRAL -- only re-requests VRF | PASS |
 | 4 | 3-day emergency fallback | `elapsed >= GAMEOVER_RNG_FALLBACK_DELAY` (3 days) | AdvanceModule:722 | YES -- 259,200s exact | N/A -- requires Path 1 or 2 first | NEUTRAL -- provides entropy for drain | PASS |
-| 5 | 30-day final sweep | `block.timestamp < uint256(gameOverTime) + 30 days` | GameOverModule:160 | YES -- 2,592,000s exact | NO -- 15s skew vs 2.59M s | available = total - claimablePool; excess to vault/DGNRS | PASS |
+| 5 | 30-day final sweep | `block.timestamp < uint256(gameOverTime) + 30 days` + `finalSwept` guard | GameOverModule:170-171 | YES -- 2,592,000s exact | NO -- 15s skew vs 2.59M s | claimablePool zeroed; ALL totalFunds to vault/DGNRS | PASS |
 
 ---
 
@@ -295,8 +308,8 @@ _sendToVault(available, stBal);
 4. **Same call:** `_gameOverEntropy()` attempts VRF request. If VRF works, RNG word obtained immediately.
 5. **If VRF stalled:** Returns 0, caller retries. After 3 days (Path 4), historical fallback provides entropy.
 6. **Once RNG obtained:** `handleGameOverDrain()` executes: deity pass refunds, BAF/Decimator distribution. `gameOver = true`.
-7. **Days 912 to 942:** `advanceGame()` calls route to `handleFinalSweep()` but return early (< 30 days).
-8. **Day 942+:** `handleFinalSweep()` sweeps excess to vault/DGNRS.
+7. **Days 912 to 942:** `advanceGame()` calls route to `handleFinalSweep()` but return early (< 30 days). Players can claim winnings during this window.
+8. **Day 942+:** `handleFinalSweep()` sets `finalSwept=true`, zeros `claimablePool`, sweeps ALL remaining funds to vault/DGNRS. Claims blocked thereafter.
 
 ### Critical Invariant Across All Paths
 
@@ -304,8 +317,8 @@ _sendToVault(available, stBal);
 
 This holds because:
 - `handleGameOverDrain`: adds to `claimablePool` when crediting deity pass refunds (L106-108), decimator spend (L132-134), and terminal jackpot winnings (inside JackpotModule). Calculates `available` as `totalFunds - claimablePool` before any distribution (L112).
-- `handleFinalSweep`: calculates `available = totalFunds - claimablePool` before sweeping, only sending the excess.
-- No path decrements `claimablePool` without a corresponding outflow (only `claimWinnings` in DegenerusGame.sol does that, via the pull pattern).
+- `handleFinalSweep` (post-audit rewrite): sets `claimablePool = 0` and `finalSwept = true`, then sweeps ALL remaining `totalFunds`. The invariant transitions from `balance + stETH >= claimablePool` to `0 >= 0` (trivially holds).
+- No path decrements `claimablePool` without a corresponding outflow (only `claimWinnings` in DegenerusGame.sol does that, via the pull pattern), except `handleFinalSweep` which zeroes it and sweeps all funds.
 
 ---
 
@@ -329,7 +342,7 @@ If stETH rebases down such that `totalFunds < claimablePool`, the saturating sub
 
 ### Edge Case 5: handleFinalSweep Called Multiple Times
 
-After the first sweep drains excess funds, `available` becomes 0 or near-0 on subsequent calls. The `if (available == 0) return;` guard (line 172) makes it safe to call repeatedly. **Correct.**
+The `finalSwept` guard at line 171 (`if (finalSwept) return;`) prevents re-execution. After the first sweep sets `finalSwept = true`, all subsequent calls are no-ops. **Correct.**
 
 ---
 

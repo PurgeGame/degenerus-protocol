@@ -145,6 +145,8 @@ The source file is in clean all-zeros state. No deploy is currently in progress 
 | `contracts/ContractAddresses.sol.bak` | YES | Identical to source (all-zeros) |
 | `contracts-testnet/ContractAddresses.sol.bak` | YES | Exists (out of scope for mainnet) |
 
+> **POST-AUDIT UPDATE:** The `contracts-testnet/` directory has been removed from the repository. The `contracts-testnet/ContractAddresses.sol.bak` file referenced above no longer exists.
+
 ---
 
 ## Section 5: Operational Note -- .bak Files
@@ -162,6 +164,8 @@ A `.bak` file exists in the mainnet `contracts/` directory. Its content is ident
 **Recommendation:** Delete the `.bak` file or add `cleanupBackup()` as a post-deploy step in `deploy.js`. The current `deploy.js` only calls `restoreContractAddresses()` in its `finally` block but never calls `cleanupBackup()`. This means every deploy leaves a `.bak` artifact behind.
 
 ### Testnet .bak (contracts-testnet/ContractAddresses.sol.bak)
+
+> **POST-AUDIT UPDATE:** The `contracts-testnet/` directory has been removed from the repository. This section is now void.
 
 Exists but is out of scope for mainnet security review. Same recommendation applies: add cleanup step to testnet deploy script.
 

@@ -117,7 +117,7 @@ Every function in DegenerusGame that uses `_resolvePlayer` allows an operator to
 | `purchaseWhaleBundle()` | Buy whale bundle for player | Yes | ETH from msg.value (operator pays); bundle credited to player |
 | `purchaseLazyPass()` | Buy lazy pass for player | Yes | ETH from msg.value (operator pays); pass credited to player |
 | `purchaseDeityPass()` | Buy deity pass for player | Yes | ETH from msg.value (operator pays); pass and symbol assigned to player |
-| `refundDeityPass()` | Refund player's deity pass | Yes | ETH refund sent to player via `_payoutWithStethFallback(buyer, refundAmount)` |
+| `refundDeityPass()` | Refund player's deity pass | Yes | ETH refund sent to player via `_payoutWithStethFallback(buyer, refundAmount)` | **(POST-AUDIT: function removed)** |
 | `openLootBox()` | Open player's lootbox | Yes | Lootbox rewards credited to player |
 | `openBurnieLootBox()` | Open player's BURNIE lootbox | Yes | Lootbox rewards credited to player |
 | `claimWinnings()` | Claim player's ETH winnings | Yes | ETH sent to player via `_payoutWithStethFallback(player, payout)` |
@@ -244,7 +244,7 @@ For every operator-enabled function across all five contracts, I traced whether 
 | DegenerusGame | purchaseWhaleBundle() | Nothing | Bundle | SAFE |
 | DegenerusGame | purchaseLazyPass() | Nothing | Lazy pass | SAFE |
 | DegenerusGame | purchaseDeityPass() | Nothing | Deity pass | SAFE |
-| DegenerusGame | refundDeityPass() | Nothing | ETH refund | SAFE |
+| DegenerusGame | refundDeityPass() | Nothing | ETH refund | SAFE | **(POST-AUDIT: function removed)** |
 | DegenerusGame | openLootBox() | Nothing | Lootbox rewards | SAFE |
 | DegenerusGame | openBurnieLootBox() | Nothing | Lootbox rewards | SAFE |
 | DegenerusGame | claimWinnings() | Nothing | ETH payout | SAFE |
@@ -305,7 +305,7 @@ An approved operator for a player can perform the following actions across the e
 | DegenerusGame | purchaseWhaleBundle | Buy whale bundle (ETH from operator) | Player | LOW |
 | DegenerusGame | purchaseLazyPass | Buy lazy pass (ETH from operator) | Player | LOW |
 | DegenerusGame | purchaseDeityPass | Buy deity pass (ETH from operator) | Player | LOW |
-| DegenerusGame | refundDeityPass | Refund player's deity pass | Player (ETH) | LOW |
+| DegenerusGame | refundDeityPass | Refund player's deity pass | Player (ETH) | LOW | **(POST-AUDIT: function removed)** |
 | DegenerusGame | openLootBox | Open player's pending lootbox | Player (rewards) | LOW |
 | DegenerusGame | openBurnieLootBox | Open player's BURNIE lootbox | Player (rewards) | LOW |
 | DegenerusGame | claimWinnings | Claim player's accrued ETH | Player (ETH) | LOW |

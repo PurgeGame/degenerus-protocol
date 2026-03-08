@@ -157,6 +157,8 @@ Call Site: DegenerusGame.purchaseDeityPass (line 689)
 
 ### 2.7 refundDeityPass() -- line 700
 
+> **POST-AUDIT UPDATE:** The `refundDeityPass()` function was removed entirely from the codebase. This call site no longer exists. The analysis below is retained for historical reference only.
+
 ```
 Call Site: DegenerusGame.refundDeityPass (line 700)
   Resolution: buyer = _resolvePlayer(buyer)
