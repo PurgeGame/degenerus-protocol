@@ -1,8 +1,20 @@
 # Degenerus Protocol
 
-Smart contracts for the [Degenerus Protocol](https://degener.us) — an on-chain elimination game on Ethereum.
+Smart contracts for the [Degenerus Protocol](https://degener.us).
 
-Players buy tickets to enter. Each round, a portion of players are eliminated via VRF-driven randomness. Survivors advance, ticket prices escalate, and the prize pool grows. Jackpots, lootboxes, deity boons, and mini-games layer on top. When the dust settles, the last players standing split the pot.
+## What It Is
+
+Degenerus is an on-chain gambling protocol on Ethereum. Players buy tickets, ticket ETH fills a prize pool, and when the pool hits a target the level completes and jackpots fire. Ticket prices cycle through tiers within each 100-level century. The prize pool ratchets upward each cycle. Chainlink VRF determines every outcome.
+
+Three products share one economy:
+
+- **Tickets** — straightforward lottery entries. Traits are assigned by VRF, jackpots pay trait-matched holders. Honestly -EV, provably fair.
+- **Lootboxes and passes** — longer-horizon products that fund the prize pools and receive future-level tickets in return. EV depends on activity score (how much you play) and level velocity (how fast the game progresses).
+- **Affiliate network** — three-tier referral system. Commissions are paid as BURNIE coinflip credits, not direct ETH, which filters out mercenary referral farmers.
+
+The protocol extracts zero rake after presale. Every wei of ETH that enters goes into prize pools and recirculates to players. No operator fees, no admin withdrawal function. The contracts are immutable with no upgrade path. An admin role exists with narrowly scoped powers (Emergency-only VRF coordinator rotation) but cannot access funds or modify game rules.
+
+If the game stalls for 365 consecutive days, a terminal state fires and distributes all remaining ETH to eligible ticket holders. The terminal payout math makes buying during a stall individually rational, which is what prevents the stall from lasting 365 days. Full analysis in the [game theory paper](https://degener.us/theory/).
 
 ## Quick Start
 
@@ -16,7 +28,7 @@ Requires Node.js 18+.
 ## Tests
 
 ```bash
-# Hardhat tests (1,183 tests)
+# Hardhat tests (1,241 tests)
 npx hardhat test
 
 # Foundry invariant fuzzing
@@ -57,7 +69,7 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 | DegenerusAffiliate | Referral tracking and payouts |
 | DegenerusAdmin | Admin configuration, VRF wiring |
 | DegenerusDeityPass | ERC-721 with on-chain SVG rendering |
-| DegenerusStonk | Bonding curve token mechanics |
+| DegenerusStonk | Reserve-backed burn token (ETH/stETH/BURNIE) |
 | DeityBoonViewer | Standalone deity boon slot viewer |
 | WrappedWrappedXRP | Meme wrapper contract |
 
@@ -117,7 +129,7 @@ The [`audit/`](audit/) directory contains findings from internal audit work:
 
 ### Test Coverage
 
-- **1,183 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
+- **1,241 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
 - **21 Foundry test harnesses** (10 invariant, 7 fuzz, 3 Halmos, 1 helper) — ETH solvency, supply invariants, VRF lifecycle, vault math, FSM, composition
 - **Slither** static analysis triaged (all HIGH/MEDIUM detections reviewed)
 
