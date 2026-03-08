@@ -1,5 +1,5 @@
 # Degenerus Protocol — Audit Scope
-# Solidity 0.8.26 | Hardhat + viaIR | Optimizer runs=2
+# Solidity 0.8.34 | Hardhat + viaIR | Optimizer runs=200
 
 ## In Scope — Core Deployable Contracts (22)
 contracts/BurnieCoin.sol
@@ -58,7 +58,6 @@ contracts/interfaces/IVRFCoordinator.sol
 
 ## Out of Scope
 contracts/mocks/             # Test mock contracts
-contracts-testnet/           # Testnet variants with D-scaling
 test/                        # Test suite
 scripts/                     # Deployment and simulation scripts
 node_modules/                # Third-party dependencies

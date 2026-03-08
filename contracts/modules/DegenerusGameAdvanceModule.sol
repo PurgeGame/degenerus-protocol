@@ -332,7 +332,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 lst,
         uint24 lvl,
         bool lastPurchase,
-        uint48 _dailyIdx
+        uint48 /* _dailyIdx */
     ) private returns (bool shouldReturn) {
         // Liveness guard: prevent permanent lockup if game is abandoned
         bool livenessTriggered = (lvl == 0 &&
