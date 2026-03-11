@@ -208,6 +208,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Bonus BURNIE flip credit for deity pass affiliate claims (20% of payout).
     uint16 private constant AFFILIATE_DGNRS_DEITY_BONUS_BPS = 2000;
 
+    /// @dev Max deity bonus per level, denominated in ETH (converted to BURNIE at current price).
+    uint256 private constant AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH = 5 ether;
+
     /// @dev Minimum affiliate score (approx 10 ETH of referral volume).
     uint256 private constant AFFILIATE_DGNRS_MIN_SCORE =
         10 ether;
@@ -1475,6 +1478,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (hasDeityPass && score != 0) {
             uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) /
                 10_000;
+            uint256 cap = (AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH * PRICE_COIN_UNIT) / price;
+            if (bonus > cap) {
+                bonus = cap;
+            }
             if (bonus != 0) {
                 coin.creditFlip(player, bonus);
             }

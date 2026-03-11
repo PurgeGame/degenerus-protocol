@@ -16,7 +16,7 @@ interface IDegenerusAffiliate {
     /// @param lvl Current game level (for leaderboard tracking).
     /// @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
     /// @param lootboxActivityScore Buyer's activity score in BPS for lootbox taper (0 = no taper).
-    /// @return playerRakeback Amount of rakeback to credit to the player.
+    /// @return playerKickback Amount of kickback to credit to the player.
     function payAffiliate(
         uint256 amount,
         bytes32 code,
@@ -24,7 +24,7 @@ interface IDegenerusAffiliate {
         uint24 lvl,
         bool isFreshEth,
         uint16 lootboxActivityScore
-    ) external returns (uint256 playerRakeback);
+    ) external returns (uint256 playerKickback);
 
     /// @notice Consume pending Degenerette credit for a player.
     /// @dev Access: game contract only.

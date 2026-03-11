@@ -552,9 +552,9 @@ describe("Paper Parity (Phase 46)", function () {
       expect(upline2).to.equal(400, "Upline2 = 4% of base");
     });
 
-    it("max rakeback: 25%", async function () {
-      // MAX_RAKEBACK_PCT = 25
-      expect(25).to.equal(25, "Max rakeback = 25%");
+    it("max kickback: 25%", async function () {
+      // MAX_KICKBACK_PCT = 25
+      expect(25).to.equal(25, "Max kickback = 25%");
     });
   });
 

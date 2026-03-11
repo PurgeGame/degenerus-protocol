@@ -746,9 +746,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             }
 
             // Always call affiliate - contract handles bytes32(0) by using stored code
-            uint256 lootboxRakeback;
+            uint256 lootboxKickback;
             if (lootboxFreshEth != 0) {
-                lootboxRakeback = affiliate.payAffiliate(
+                lootboxKickback = affiliate.payAffiliate(
                     _ethToBurnieValue(lootboxFreshEth, priceWei),
                     affiliateCode,
                     buyer,
@@ -758,7 +758,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 );
             }
             if (lootboxClaimableUsed != 0) {
-                lootboxRakeback += affiliate.payAffiliate(
+                lootboxKickback += affiliate.payAffiliate(
                     _ethToBurnieValue(lootboxClaimableUsed, priceWei),
                     affiliateCode,
                     buyer,
@@ -767,8 +767,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     0
                 );
             }
-            if (lootboxRakeback != 0) {
-                coin.creditFlip(buyer, lootboxRakeback);
+            if (lootboxKickback != 0) {
+                coin.creditFlip(buyer, lootboxKickback);
             }
 
             emit LootBoxBuy(buyer, day, lootBoxAmount, presale, futureShare, nextShare, vaultShare, rewardShare);
@@ -911,9 +911,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     : (freshBurnie * 3) / 2;
             }
 
-            uint256 rakeback;
+            uint256 kickback;
             if (payKind == MintPaymentKind.Combined && freshEth != 0) {
-                rakeback += affiliate.payAffiliate(
+                kickback += affiliate.payAffiliate(
                     freshBurnie,
                     affiliateCode,
                     buyer,
@@ -923,7 +923,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 );
                 uint256 recycled = costWei - freshEth;
                 if (recycled != 0) {
-                    rakeback += affiliate.payAffiliate(
+                    kickback += affiliate.payAffiliate(
                         _ethToBurnieValue(recycled, priceWei),
                         affiliateCode,
                         buyer,
@@ -933,7 +933,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     );
                 }
             } else if (payKind == MintPaymentKind.DirectEth) {
-                rakeback += affiliate.payAffiliate(
+                kickback += affiliate.payAffiliate(
                     freshBurnie,
                     affiliateCode,
                     buyer,
@@ -942,7 +942,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     0
                 );
             } else {
-                rakeback += affiliate.payAffiliate(
+                kickback += affiliate.payAffiliate(
                     _ethToBurnieValue(costWei, priceWei),
                     affiliateCode,
                     buyer,
@@ -952,7 +952,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 );
             }
 
-            bonusCredit = streakBonus + rakeback;
+            bonusCredit = streakBonus + kickback;
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
             bonusCredit += coinCost / 10;
             if (quantity >= 10 * 4 * TICKET_SCALE) {

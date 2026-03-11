@@ -153,7 +153,7 @@ async function deployWithAffiliateSetup() {
   const protocol = await deployFullProtocol();
   const { affiliate, coin, alice, bob, carol, dan, eve } = protocol;
 
-  // Alice creates affiliate code "ALICE" with 0% rakeback
+  // Alice creates affiliate code "ALICE" with 0% kickback
   const aliceCode = toBytes32("ALICE");
   await affiliate.connect(alice).createAffiliateCode(aliceCode, 0);
 
@@ -229,7 +229,7 @@ describe("AffiliateHardening", function () {
         expect(score).to.equal(MAX_COMMISSION_PER_REFERRER_PER_LEVEL);
       });
 
-      it("returns 0 rakeback once cap is fully consumed (0% rakeback code)", async function () {
+      it("returns 0 kickback once cap is fully consumed (0% kickback code)", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
@@ -240,11 +240,11 @@ describe("AffiliateHardening", function () {
         );
 
         // Second call: cap already full, should return 0
-        const rakeback = await payAffiliateAsCoinStatic(
+        const kickback = await payAffiliateAsCoinStatic(
           hre.ethers, coin, affiliate,
           eth("1"), aliceCode, bob.address, 1, true, 0
         );
-        expect(rakeback).to.equal(0n);
+        expect(kickback).to.equal(0n);
       });
 
       it("emits AffiliateEarningsRecorded with capped amount, not full scaled", async function () {
@@ -851,11 +851,11 @@ describe("AffiliateHardening", function () {
       });
 
       it("different taper scores produce different payout amounts for same input", async function () {
-        // We verify via rakeback amounts with a non-zero rakeback affiliate
+        // We verify via kickback amounts with a non-zero kickback affiliate
         const protocol = await loadFixture(deployFullProtocol);
         const { affiliate, coin, alice, bob, carol, dan, eve } = protocol;
 
-        // Create affiliate with 25% rakeback
+        // Create affiliate with 25% kickback
         const code = toBytes32("RAKE25");
         await affiliate.connect(alice).createAffiliateCode(code, 25);
 
@@ -868,21 +868,21 @@ describe("AffiliateHardening", function () {
         const lvl = 1;
 
         // Bob pays with no taper (score=0)
-        const rakebackNoTaper = await payAffiliateAsCoinStatic(
+        const kickbackNoTaper = await payAffiliateAsCoinStatic(
           hre.ethers, coin, affiliate,
           amount, code, bob.address, lvl, true, 0
         );
 
         // Carol pays with max taper (score=25500 -> 50%)
-        const rakebackMaxTaper = await payAffiliateAsCoinStatic(
+        const kickbackMaxTaper = await payAffiliateAsCoinStatic(
           hre.ethers, coin, affiliate,
           amount, code, carol.address, lvl, true, LOOTBOX_TAPER_END_SCORE
         );
 
-        // Rakeback should be different: tapered = 50% of untapered
-        expect(rakebackNoTaper).to.be.gt(0n);
-        expect(rakebackMaxTaper).to.be.gt(0n);
-        expect(rakebackMaxTaper).to.equal(rakebackNoTaper / 2n);
+        // Kickback should be different: tapered = 50% of untapered
+        expect(kickbackNoTaper).to.be.gt(0n);
+        expect(kickbackMaxTaper).to.be.gt(0n);
+        expect(kickbackMaxTaper).to.equal(kickbackNoTaper / 2n);
       });
 
       it("taper interacts correctly with commission cap (cap applied first, then taper)", async function () {
@@ -954,11 +954,11 @@ describe("AffiliateHardening", function () {
       );
 
       // Even tiny additional amount yields 0
-      const rakeback = await payAffiliateAsCoinStatic(
+      const kickback = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate,
         1n, aliceCode, bob.address, 1, true, 0
       );
-      expect(rakeback).to.equal(0n);
+      expect(kickback).to.equal(0n);
     });
 
     it("level 4+ uses 20% reward scale for fresh ETH cap calculations", async function () {
@@ -980,21 +980,21 @@ describe("AffiliateHardening", function () {
       const protocol = await loadFixture(deployFullProtocol);
       const { affiliate, coin, alice, bob } = protocol;
 
-      // Create code with 10% rakeback to observe payout differences
+      // Create code with 10% kickback to observe payout differences
       const code = toBytes32("TEST10");
       await affiliate.connect(alice).createAffiliateCode(code, 10);
       await affiliate.connect(bob).referPlayer(code);
 
       // Send enough to exceed cap: 4 ETH at 25% = 1 ETH, capped to 0.5 ETH
-      // With taper 25500: rakeback = 0.5 * 50% * 10% = 0.025 ETH
-      const rakeback = await payAffiliateAsCoinStatic(
+      // With taper 25500: kickback = 0.5 * 50% * 10% = 0.025 ETH
+      const kickback = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate,
         eth("4"), code, bob.address, 1, true, LOOTBOX_TAPER_END_SCORE
       );
 
-      // Expected: scaledAmount capped to 0.5, then tapered to 0.25, then 10% rakeback = 0.025
-      const expectedRakeback = eth("0.025");
-      expect(rakeback).to.equal(expectedRakeback);
+      // Expected: scaledAmount capped to 0.5, then tapered to 0.25, then 10% kickback = 0.025
+      const expectedKickback = eth("0.025");
+      expect(kickback).to.equal(expectedKickback);
     });
 
     it("taper at score 15000 with large amount does not lose precision", async function () {
