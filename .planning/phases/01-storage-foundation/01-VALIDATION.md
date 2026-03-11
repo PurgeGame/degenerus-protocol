@@ -49,7 +49,7 @@ created: 2026-03-11
 
 ## Wave 0 Requirements
 
-- [ ] `test/unit/StorageFoundation.t.sol` — new test file for STOR-01 through STOR-04
+- [ ] `test/fuzz/StorageFoundation.t.sol` — new test file for STOR-01 through STOR-04
   - Test: `testSlot1FieldOffsets` — verify `ticketWriteSlot`, `ticketsFullyProcessed`, `prizePoolFrozen` at expected offsets
   - Test: `testPrizePoolPackingRoundTrip` — set/get for prizePoolsPacked with boundary values (0, max uint128, mixed)
   - Test: `testPendingPoolPackingRoundTrip` — same for prizePoolPendingPacked
