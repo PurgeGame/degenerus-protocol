@@ -9,10 +9,10 @@ Requirements for v1.0 milestone. Each maps to roadmap phases.
 
 ### Storage Infrastructure
 
-- [ ] **STOR-01**: Slot 1 gets `ticketWriteSlot` (uint8), `ticketsFullyProcessed` (bool), `prizePoolFrozen` (bool) at bytes 18-20
-- [ ] **STOR-02**: `nextPrizePool` + `futurePrizePool` replaced with `prizePoolsPacked` (uint128+uint128) and `_getPrizePools()`/`_setPrizePools()` helpers
-- [ ] **STOR-03**: `prizePoolPendingPacked` added with `_getPendingPools()`/`_setPendingPools()` helpers
-- [ ] **STOR-04**: `TICKET_SLOT_BIT` constant, `_tqWriteKey()`, `_tqReadKey()` helpers added
+- [x] **STOR-01**: Slot 1 gets `ticketWriteSlot` (uint8), `ticketsFullyProcessed` (bool), `prizePoolFrozen` (bool) at bytes 18-20
+- [x] **STOR-02**: `nextPrizePool` + `futurePrizePool` replaced with `prizePoolsPacked` (uint128+uint128) and `_getPrizePools()`/`_setPrizePools()` helpers
+- [x] **STOR-03**: `prizePoolPendingPacked` added with `_getPendingPools()`/`_setPendingPools()` helpers
+- [x] **STOR-04**: `TICKET_SLOT_BIT` constant, `_tqWriteKey()`, `_tqReadKey()` helpers added
 
 ### Queue Double-Buffer
 
@@ -65,10 +65,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STOR-01 | Phase 1 | Pending |
-| STOR-02 | Phase 1 | Pending |
-| STOR-03 | Phase 1 | Pending |
-| STOR-04 | Phase 1 | Pending |
+| STOR-01 | Phase 1 | Complete |
+| STOR-02 | Phase 1 | Complete |
+| STOR-03 | Phase 1 | Complete |
+| STOR-04 | Phase 1 | Complete |
 | QUEUE-01 | Phase 2 | Pending |
 | QUEUE-02 | Phase 2 | Pending |
 | QUEUE-03 | Phase 2 | Pending |
