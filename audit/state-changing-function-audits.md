@@ -3820,7 +3820,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `_applyLootboxBoostOnPurchase(buyer, day, lootBoxAmount)` -- boost application
 - `_maybeRequestLootboxRng(lootBoxAmount)` -- lootbox RNG threshold tracking
 - `affiliate.payAffiliate(...)` -- affiliate reward distribution (called separately for fresh ETH and claimable portions)
-- `coin.creditFlip(buyer, lootboxRakeback)` -- BURNIE coinflip credit from affiliate rakeback
+- `coin.creditFlip(buyer, lootboxKickback)` -- BURNIE coinflip credit from affiliate kickback
 - `coin.notifyQuestMint(buyer, questUnits, true/false)` -- quest progress for lootbox purchases
 - `coin.notifyQuestLootBox(buyer, lootBoxAmount)` -- lootbox quest progress
 - `_awardEarlybirdDgnrs(buyer, lootboxFreshEth, purchaseLevel)` -- DGNRS earlybird rewards
@@ -4004,7 +4004,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `lootboxRngIndex` must be > 0 (reverts if 0 -- no active lootbox RNG index)
 - Virtual ETH conversion: `(burnieAmount * priceWei) / PRICE_COIN_UNIT`
 - Quest units: `burnieAmount / PRICE_COIN_UNIT` (whole ticket equivalents)
-- BURNIE lootbox has no presale mode, no boost application, no affiliate rakeback
+- BURNIE lootbox has no presale mode, no boost application, no affiliate kickback
 - Day is set only on first purchase per (index, buyer) pair
 
 **NatSpec Accuracy:** Parent function NatSpec describes "low-EV loot box" -- accurate for BURNIE path.
@@ -11717,24 +11717,24 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ## DegenerusAffiliate.sol
 
-### `createAffiliateCode(bytes32 code_, uint8 rakebackPct)` [external]
+### `createAffiliateCode(bytes32 code_, uint8 kickbackPct)` [external]
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function createAffiliateCode(bytes32 code_, uint8 rakebackPct) external` |
+| **Signature** | `function createAffiliateCode(bytes32 code_, uint8 kickbackPct) external` |
 | **Visibility** | external |
 | **Mutability** | state-changing |
-| **Parameters** | `code_` (bytes32): affiliate code to claim; `rakebackPct` (uint8): rakeback percentage (0-25) |
+| **Parameters** | `code_` (bytes32): affiliate code to claim; `kickbackPct` (uint8): kickback percentage (0-25) |
 | **Returns** | none |
 
 **State Reads:** `affiliateCode[code_].owner` (via `_createAffiliateCode`)
 **State Writes:** `affiliateCode[code_]` (via `_createAffiliateCode`)
 
 **Callers:** Any external account (no access control)
-**Callees:** `_createAffiliateCode(msg.sender, code_, rakebackPct)`
+**Callees:** `_createAffiliateCode(msg.sender, code_, kickbackPct)`
 
 **ETH Flow:** None
-**Invariants:** (1) Code cannot be bytes32(0) or REF_CODE_LOCKED; (2) Code must not already be taken; (3) rakeback <= 25
+**Invariants:** (1) Code cannot be bytes32(0) or REF_CODE_LOCKED; (2) Code must not already be taken; (3) kickback <= 25
 **NatSpec Accuracy:** Accurate. NatSpec correctly describes validation rules and permanence.
 **Gas Flags:** None
 **Verdict:** CORRECT
@@ -11817,11 +11817,11 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function payAffiliate(uint256 amount, bytes32 code, address sender, uint24 lvl, bool isFreshEth, uint16 lootboxActivityScore) external returns (uint256 playerRakeback)` |
+| **Signature** | `function payAffiliate(uint256 amount, bytes32 code, address sender, uint24 lvl, bool isFreshEth, uint16 lootboxActivityScore) external returns (uint256 playerKickback)` |
 | **Visibility** | external |
 | **Mutability** | state-changing |
 | **Parameters** | `amount` (uint256): base reward amount; `code` (bytes32): affiliate code from tx; `sender` (address): purchasing player; `lvl` (uint24): current game level; `isFreshEth` (bool): fresh vs recycled; `lootboxActivityScore` (uint16): buyer's lootbox activity score for taper |
-| **Returns** | `playerRakeback` (uint256): rakeback amount to credit to player |
+| **Returns** | `playerKickback` (uint256): kickback amount to credit to player |
 
 **State Reads:** `playerReferralCode[sender]`, `affiliateCode[code]`, `affiliateCode[storedCode]`, `affiliateCode[AFFILIATE_CODE_VAULT]` (constructed inline), `affiliateCoinEarned[lvl][affiliateAddr]`, `affiliateCommissionFromSender[lvl][affiliateAddr][sender]`, `affiliateTopByLevel[lvl]`, `playerReferralCode[affiliateAddr]` (upline1), `playerReferralCode[upline]` (upline2)
 **State Writes:** `playerReferralCode[sender]` (if resolving referral), `affiliateCoinEarned[lvl][affiliateAddr]`, `affiliateCommissionFromSender[lvl][affiliateAddr][sender]`, `affiliateTopByLevel[lvl]` (if new top), `pendingDegeneretteCredit[player]` (if Degenerette mode, via `_routeAffiliateReward`)
@@ -11836,7 +11836,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 3. `scaledAmount = (amount * rewardScaleBps) / BPS_DENOMINATOR` where rewardScaleBps is 2500/2000/500
 4. Per-referrer commission capped at 0.5 ETH BURNIE per sender per level
 5. Leaderboard tracks full untapered amount; payout uses tapered amount
-6. Rakeback = `(scaledAmount * rakebackPct) / 100` where rakebackPct <= 25
+6. Kickback = `(scaledAmount * kickbackPct) / 100` where kickbackPct <= 25
 7. Upline1 gets 20% of scaledAmount (post-taper); Upline2 gets 4% of scaledAmount (post-taper)
 8. Multi-recipient payout: weighted random winner gets combined total (preserves per-recipient EV)
 9. Quest rewards added on top of each tier's base
@@ -11851,14 +11851,14 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ---
 
-### `constructor(address[] bootstrapOwners, bytes32[] bootstrapCodes, uint8[] bootstrapRakebacks, address[] bootstrapPlayers, bytes32[] bootstrapReferralCodes)` [public]
+### `constructor(address[] bootstrapOwners, bytes32[] bootstrapCodes, uint8[] bootstrapKickbacks, address[] bootstrapPlayers, bytes32[] bootstrapReferralCodes)` [public]
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `constructor(address[] memory bootstrapOwners, bytes32[] memory bootstrapCodes, uint8[] memory bootstrapRakebacks, address[] memory bootstrapPlayers, bytes32[] memory bootstrapReferralCodes)` |
+| **Signature** | `constructor(address[] memory bootstrapOwners, bytes32[] memory bootstrapCodes, uint8[] memory bootstrapKickbacks, address[] memory bootstrapPlayers, bytes32[] memory bootstrapReferralCodes)` |
 | **Visibility** | public (constructor) |
 | **Mutability** | state-changing |
-| **Parameters** | `bootstrapOwners` (address[]): pre-registered code owners; `bootstrapCodes` (bytes32[]): codes to create; `bootstrapRakebacks` (uint8[]): rakeback percentages; `bootstrapPlayers` (address[]): players to pre-refer; `bootstrapReferralCodes` (bytes32[]): codes to assign to players |
+| **Parameters** | `bootstrapOwners` (address[]): pre-registered code owners; `bootstrapCodes` (bytes32[]): codes to create; `bootstrapKickbacks` (uint8[]): kickback percentages; `bootstrapPlayers` (address[]): players to pre-refer; `bootstrapReferralCodes` (bytes32[]): codes to assign to players |
 | **Returns** | none |
 
 **State Reads:** None initially; `affiliateCode[code].owner` via `_createAffiliateCode` and `_bootstrapReferral`
@@ -11868,7 +11868,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **Callees:** `_setReferralCode` (x2 for VAULT<->DGNRS), `_createAffiliateCode` (loop), `_bootstrapReferral` (loop)
 
 **ETH Flow:** None
-**Invariants:** (1) Array lengths must match (owners/codes/rakebacks); (2) VAULT and DGNRS codes permanently reserved; (3) VAULT refers DGNRS and vice versa; (4) All bootstrap codes validated through `_createAffiliateCode`
+**Invariants:** (1) Array lengths must match (owners/codes/kickbacks); (2) VAULT and DGNRS codes permanently reserved; (3) VAULT refers DGNRS and vice versa; (4) All bootstrap codes validated through `_createAffiliateCode`
 
 **NatSpec Accuracy:** No explicit NatSpec on constructor; contract-level NatSpec describes the system adequately.
 **Gas Flags:** None
@@ -11900,14 +11900,14 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ---
 
-### `_createAffiliateCode(address owner, bytes32 code_, uint8 rakebackPct)` [private]
+### `_createAffiliateCode(address owner, bytes32 code_, uint8 kickbackPct)` [private]
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function _createAffiliateCode(address owner, bytes32 code_, uint8 rakebackPct) private` |
+| **Signature** | `function _createAffiliateCode(address owner, bytes32 code_, uint8 kickbackPct) private` |
 | **Visibility** | private |
 | **Mutability** | state-changing |
-| **Parameters** | `owner` (address): code owner; `code_` (bytes32): code to register; `rakebackPct` (uint8): rakeback percentage |
+| **Parameters** | `owner` (address): code owner; `code_` (bytes32): code to register; `kickbackPct` (uint8): kickback percentage |
 | **Returns** | none |
 
 **State Reads:** `affiliateCode[code_].owner`
@@ -11917,7 +11917,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **Callees:** None (only emits event)
 
 **ETH Flow:** None
-**Invariants:** (1) owner != address(0); (2) code != bytes32(0) and code != REF_CODE_LOCKED; (3) rakebackPct <= 25; (4) Code must not already exist (first-come-first-served); (5) payoutMode defaults to Coinflip
+**Invariants:** (1) owner != address(0); (2) code != bytes32(0) and code != REF_CODE_LOCKED; (3) kickbackPct <= 25; (4) Code must not already exist (first-come-first-served); (5) payoutMode defaults to Coinflip
 **NatSpec Accuracy:** Dev comment "Shared code registration logic for user-created and constructor-bootstrapped codes" -- accurate.
 **Gas Flags:** None
 **Verdict:** CORRECT

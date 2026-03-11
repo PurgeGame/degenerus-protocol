@@ -143,7 +143,7 @@ function getConstructorArgs(
     return [
       affiliateBootstrap.owners,
       affiliateBootstrap.codes,
-      affiliateBootstrap.rakebacks,
+      affiliateBootstrap.kickbacks,
       affiliatePreReferrals.players,
       affiliatePreReferrals.codes,
     ];
@@ -153,13 +153,13 @@ function getConstructorArgs(
 
 /**
  * Parse optional affiliate bootstrap config from env:
- * AFFILIATE_BOOTSTRAP_JSON='[{"owner":"0x...","code":"ALICE","rakebackPct":10}]'
+ * AFFILIATE_BOOTSTRAP_JSON='[{"owner":"0x...","code":"ALICE","kickbackPct":10}]'
  * `code` may be either a 0x-prefixed bytes32 hex or a short ASCII label.
  */
 function parseAffiliateBootstrap() {
   const raw = process.env.AFFILIATE_BOOTSTRAP_JSON;
   if (!raw || raw.trim() === "") {
-    return { owners: [], codes: [], rakebacks: [] };
+    return { owners: [], codes: [], kickbacks: [] };
   }
 
   let entries;
@@ -174,7 +174,7 @@ function parseAffiliateBootstrap() {
 
   const owners = [];
   const codes = [];
-  const rakebacks = [];
+  const kickbacks = [];
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
@@ -187,14 +187,14 @@ function parseAffiliateBootstrap() {
       throw new Error(`Affiliate bootstrap entry ${i} has invalid owner`);
     }
 
-    const rakebackRaw = entry.rakebackPct ?? 0;
+    const kickbackRaw = entry.kickbackPct ?? 0;
     if (
-      !Number.isInteger(rakebackRaw) ||
-      rakebackRaw < 0 ||
-      rakebackRaw > 25
+      !Number.isInteger(kickbackRaw) ||
+      kickbackRaw < 0 ||
+      kickbackRaw > 25
     ) {
       throw new Error(
-        `Affiliate bootstrap entry ${i} has invalid rakebackPct (0-25)`
+        `Affiliate bootstrap entry ${i} has invalid kickbackPct (0-25)`
       );
     }
 
@@ -218,10 +218,10 @@ function parseAffiliateBootstrap() {
 
     owners.push(owner);
     codes.push(code);
-    rakebacks.push(rakebackRaw);
+    kickbacks.push(kickbackRaw);
   }
 
-  return { owners, codes, rakebacks };
+  return { owners, codes, kickbacks };
 }
 
 /**

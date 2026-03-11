@@ -18,12 +18,12 @@ import {
  * =============================
  * Covers:
  *  - Constructor: VAULT and DGNRS codes pre-registered, cross-referrals set
- *  - createAffiliateCode: happy path, reserved codes, duplicate, rakeback cap
+ *  - createAffiliateCode: happy path, reserved codes, duplicate, kickback cap
  *  - setAffiliatePayoutMode: owner-only, all three modes
  *  - referPlayer: happy path, self-referral, double-register, non-existent code
  *  - getReferrer: before/after referral
  *  - payAffiliate: access control (coin/game only), reward distribution,
- *                  rakeback returned, 3-tier chain
+ *                  kickback returned, 3-tier chain
  *  - consumeDegeneretteCredit: game-only, partial and full consumption
  *  - pendingDegeneretteCreditOf: Degenerette payout mode
  *  - affiliateTop / affiliateScore / affiliateBonusPointsBest
@@ -173,14 +173,14 @@ describe("DegenerusAffiliate", function () {
       );
     });
 
-    it("vault and dgnrs default rakeback is 0", async function () {
+    it("vault and dgnrs default kickback is 0", async function () {
       const { affiliate } = await loadFixture(deployFullProtocol);
       const vaultCode = hre.ethers.encodeBytes32String("VAULT");
       const dgnrsCode = hre.ethers.encodeBytes32String("DGNRS");
       const vaultInfo = await affiliate.affiliateCode(vaultCode);
       const dgnrsInfo = await affiliate.affiliateCode(dgnrsCode);
-      expect(vaultInfo.rakeback).to.equal(0);
-      expect(dgnrsInfo.rakeback).to.equal(0);
+      expect(vaultInfo.kickback).to.equal(0);
+      expect(dgnrsInfo.kickback).to.equal(0);
     });
 
     it("vault and dgnrs default payoutMode is Coinflip (0)", async function () {
@@ -226,9 +226,9 @@ describe("DegenerusAffiliate", function () {
       const infoA = await affiliateBootstrapped.affiliateCode(codeA);
       const infoB = await affiliateBootstrapped.affiliateCode(codeB);
       expect(infoA.owner).to.equal(alice.address);
-      expect(infoA.rakeback).to.equal(7);
+      expect(infoA.kickback).to.equal(7);
       expect(infoB.owner).to.equal(bob.address);
-      expect(infoB.rakeback).to.equal(12);
+      expect(infoB.kickback).to.equal(12);
     });
 
     it("reverts when bootstrap constructor arrays have mismatched lengths", async function () {
@@ -267,13 +267,13 @@ describe("DegenerusAffiliate", function () {
   // 2. createAffiliateCode
   // =========================================================================
   describe("createAffiliateCode", function () {
-    it("creates a new code with correct owner and rakeback", async function () {
+    it("creates a new code with correct owner and kickback", async function () {
       const { affiliate, alice } = await loadFixture(deployFullProtocol);
       const code = toBytes32("ALICE1");
       await affiliate.connect(alice).createAffiliateCode(code, 10);
       const info = await affiliate.affiliateCode(code);
       expect(info.owner).to.equal(alice.address);
-      expect(info.rakeback).to.equal(10);
+      expect(info.kickback).to.equal(10);
       expect(info.payoutMode).to.equal(0); // default Coinflip
     });
 
@@ -312,21 +312,21 @@ describe("DegenerusAffiliate", function () {
       ).to.be.revertedWithCustomError(affiliate, "Insufficient");
     });
 
-    it("reverts with InvalidRakeback when rakeback exceeds 25%", async function () {
+    it("reverts with InvalidKickback when kickback exceeds 25%", async function () {
       const { affiliate, alice } = await loadFixture(deployFullProtocol);
       await expect(
         affiliate.connect(alice).createAffiliateCode(toBytes32("TOOBIG"), 26)
-      ).to.be.revertedWithCustomError(affiliate, "InvalidRakeback");
+      ).to.be.revertedWithCustomError(affiliate, "InvalidKickback");
     });
 
-    it("allows maximum rakeback of 25%", async function () {
+    it("allows maximum kickback of 25%", async function () {
       const { affiliate, alice } = await loadFixture(deployFullProtocol);
       const code = toBytes32("MAX25");
       await expect(
         affiliate.connect(alice).createAffiliateCode(code, 25)
       ).to.not.be.reverted;
       const info = await affiliate.affiliateCode(code);
-      expect(info.rakeback).to.equal(25);
+      expect(info.kickback).to.equal(25);
     });
   });
 
@@ -553,18 +553,18 @@ describe("DegenerusAffiliate", function () {
       expect(evs[0].args.affiliate).to.equal(alice.address);
     });
 
-    it("returns player rakeback equal to rakebackPct% of scaled reward", async function () {
+    it("returns player kickback equal to kickbackPct% of scaled reward", async function () {
       const { affiliate, coin, alice, bob } = await loadFixture(
         deployFullProtocol
       );
       const code = toBytes32("RAKBK10");
-      // 10% rakeback
+      // 10% kickback
       await affiliate.connect(alice).createAffiliateCode(code, 10);
       await affiliate.connect(bob).referPlayer(code);
 
       // Level 1 fresh ETH: scale = 25%
       // scaledAmount = 1 ETH * 25% = 0.25 ETH (under 0.5 cap)
-      // rakeback = 0.25 ETH * 10% = 0.025 ETH
+      // kickback = 0.25 ETH * 10% = 0.025 ETH
       const staticResult = await payAffiliateAsCoinStatic(
         hre.ethers,
         coin,
@@ -1088,12 +1088,12 @@ describe("DegenerusAffiliate", function () {
       expect(affEvs.length).to.be.gte(1);
     });
 
-    it("returns 0 rakeback once cap is exhausted", async function () {
+    it("returns 0 kickback once cap is exhausted", async function () {
       const { affiliate, coin, alice, bob } = await loadFixture(
         deployFullProtocol
       );
       const code = toBytes32("CAPRK");
-      await affiliate.connect(alice).createAffiliateCode(code, 25); // max rakeback
+      await affiliate.connect(alice).createAffiliateCode(code, 25); // max kickback
       await affiliate.connect(bob).referPlayer(code);
 
       // Exhaust cap
@@ -1101,7 +1101,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers, coin, affiliate, eth(100), code, bob.address, 1, true
       );
 
-      // Second call should return 0 rakeback
+      // Second call should return 0 kickback
       const result = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(10), code, bob.address, 1, true
       );
@@ -1192,10 +1192,10 @@ describe("DegenerusAffiliate", function () {
         deployFullProtocol
       );
       const code = toBytes32("TAPER0");
-      await affiliate.connect(alice).createAffiliateCode(code, 25); // max rakeback to observe taper
+      await affiliate.connect(alice).createAffiliateCode(code, 25); // max kickback to observe taper
       await affiliate.connect(bob).referPlayer(code);
 
-      // 1 ETH fresh L1 => 0.25 scaled, 25% rakeback = 0.0625
+      // 1 ETH fresh L1 => 0.25 scaled, 25% kickback = 0.0625
       const result = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 0
       );
@@ -1226,7 +1226,7 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(bob).referPlayer(code);
 
       // At max taper: scaledAmount * 50% => 0.25 * 0.5 = 0.125
-      // rakeback = 0.125 * 25% = 0.03125
+      // kickback = 0.125 * 25% = 0.03125
       const result = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 25500
       );
@@ -1285,27 +1285,27 @@ describe("DegenerusAffiliate", function () {
       expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("0.25"));
     });
 
-    it("taper reduces rakeback proportionally", async function () {
+    it("taper reduces kickback proportionally", async function () {
       const { affiliate, coin, alice, bob } = await loadFixture(
         deployFullProtocol
       );
       const code = toBytes32("TAPRK");
-      await affiliate.connect(alice).createAffiliateCode(code, 25); // max rakeback
+      await affiliate.connect(alice).createAffiliateCode(code, 25); // max kickback
       await affiliate.connect(bob).referPlayer(code);
 
-      // No taper: 0.25 scaled * 25% rakeback = 0.0625
+      // No taper: 0.25 scaled * 25% kickback = 0.0625
       const noTaper = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 0
       );
 
-      // Max taper (50% floor): 0.25 * 50% = 0.125 * 25% rakeback = 0.03125
+      // Max taper (50% floor): 0.25 * 50% = 0.125 * 25% kickback = 0.03125
       const maxTaper = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 25500
       );
 
       expect(noTaper).to.equal(eth("0.0625"));
       expect(maxTaper).to.equal(eth("0.03125"));
-      // Max taper rakeback should be exactly half of no-taper rakeback
+      // Max taper kickback should be exactly half of no-taper kickback
       expect(maxTaper * 2n).to.equal(noTaper);
     });
 
@@ -1334,7 +1334,7 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(bob).referPlayer(code);
 
       // Recycled: 5% scale => 0.05 ETH
-      // Max taper: 0.05 * 50% = 0.025 => 25% rakeback = 0.00625
+      // Max taper: 0.05 * 50% = 0.025 => 25% kickback = 0.00625
       const result = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, false, 25500
       );
@@ -1356,7 +1356,7 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(bob).referPlayer(code);
 
       // 100 ETH fresh L1 => 25 ETH scaled, capped to 0.5 ETH, then 50% taper => 0.25 ETH
-      // Rakeback = 0.25 * 25% = 0.0625
+      // Kickback = 0.25 * 25% = 0.0625
       const result = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(100), code, bob.address, 1, true, 25500
       );

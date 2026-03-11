@@ -8,12 +8,12 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 /**
  * @title DegenerusAffiliate
  * @author Burnie Degenerus
- * @notice Multi-tier affiliate referral system with configurable rakeback.
+ * @notice Multi-tier affiliate referral system with configurable kickback.
  *
  * @dev ARCHITECTURE:
  *      - 3-tier referral: Player → Affiliate (base) → Upline1 (20%) → Upline2 (4%)
- *      - Rakeback: 0-25% of reward returned to referred player
- *      - Affiliate payouts + quest bonuses via creditFlip; rakeback returned to caller
+ *      - Kickback: 0-25% of reward returned to referred player
+ *      - Affiliate payouts + quest bonuses via creditFlip; kickback returned to caller
  *      - Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+)
  *      - Recycled ETH rewards: 5% (all levels)
  *      - Leaderboard: tracks top affiliate per level for mint trait bonus
@@ -81,7 +81,7 @@ contract DegenerusAffiliate {
     /// @notice Emitted when affiliate earnings are recorded for a level.
     /// @param level The game level.
     /// @param affiliate The affiliate receiving credit.
-    /// @param amount The scaled amount credited for leaderboard (pre-rakeback, excludes quest bonus).
+    /// @param amount The scaled amount credited for leaderboard (pre-kickback, excludes quest bonus).
     /// @param newTotal The affiliate's new total for this level.
     /// @param sender The player whose action generated the reward.
     /// @param code The referral code used.
@@ -139,8 +139,8 @@ contract DegenerusAffiliate {
     /// @notice Generic insufficient condition error (code taken, invalid referral, array length mismatch).
     error Insufficient();
 
-    /// @notice Thrown when rakeback percentage exceeds the maximum allowed (25%).
-    error InvalidRakeback();
+    /// @notice Thrown when kickback percentage exceeds the maximum allowed (25%).
+    error InvalidKickback();
 
     // =====================================================================
     //                              TYPES
@@ -162,20 +162,20 @@ contract DegenerusAffiliate {
     }
 
     /**
-     * @notice Affiliate code ownership and rakeback configuration.
+     * @notice Affiliate code ownership and kickback configuration.
      * @dev Packed into single storage slot for gas efficiency.
      *
      * STORAGE LAYOUT (32 bytes, 22 bytes used):
      * +----------------------------------------------------+
      * | [0:20]  owner     address   Code owner/recipient   |
-     * | [20:21] rakeback  uint8     Rakeback % (0-25)      |
+     * | [20:21] kickback  uint8     Kickback % (0-25)      |
      * | [21:22] mode      uint8     Payout mode (0-2)      |
      * | [22:32] unused    ---       10 bytes padding       |
      * +----------------------------------------------------+
      */
     struct AffiliateCodeInfo {
         address owner; // 20 bytes - receives affiliate rewards
-        uint8 rakeback; // 1 byte - percentage returned to referred player (0-25)
+        uint8 kickback; // 1 byte - percentage returned to referred player (0-25)
         uint8 payoutMode; // 1 byte - 0=coinflip, 1=degenerette credit, 2=50% coin (rest discarded)
     }
 
@@ -194,7 +194,7 @@ contract DegenerusAffiliate {
     /// @notice Maximum bonus points an affiliate can earn from recent earnings.
     /// @dev Applied to mint trait rolls; capped at 50 points (50%).
     uint256 private constant AFFILIATE_BONUS_MAX = 50;
-    uint8 private constant MAX_RAKEBACK_PCT = 25;
+    uint8 private constant MAX_KICKBACK_PCT = 25;
     uint16 private constant REWARD_SCALE_FRESH_L1_3_BPS = 2_500;
     uint16 private constant REWARD_SCALE_FRESH_L4P_BPS = 2_000;
     uint16 private constant REWARD_SCALE_RECYCLED_BPS = 500;
@@ -232,7 +232,7 @@ contract DegenerusAffiliate {
     /// @dev Used for leaderboard calculations and activity score bonus points.
     ///      Amounts include 18 decimal places; divide by 1 ether for whole tokens.
     ///      Direct affiliate earnings only; upline rewards are excluded for gas.
-    ///      Rakeback does not reduce the tracked score.
+    ///      Kickback does not reduce the tracked score.
     mapping(uint24 => mapping(address => uint256)) private affiliateCoinEarned;
 
     /// @notice Player's chosen referral code (or REF_CODE_LOCKED if locked).
@@ -260,24 +260,24 @@ contract DegenerusAffiliate {
     constructor(
         address[] memory bootstrapOwners,
         bytes32[] memory bootstrapCodes,
-        uint8[] memory bootstrapRakebacks,
+        uint8[] memory bootstrapKickbacks,
         address[] memory bootstrapPlayers,
         bytes32[] memory bootstrapReferralCodes
     ) {
         if (
             bootstrapOwners.length != bootstrapCodes.length ||
-            bootstrapOwners.length != bootstrapRakebacks.length ||
+            bootstrapOwners.length != bootstrapKickbacks.length ||
             bootstrapPlayers.length != bootstrapReferralCodes.length
         ) revert Insufficient();
 
         affiliateCode[AFFILIATE_CODE_VAULT] = AffiliateCodeInfo({
             owner: ContractAddresses.VAULT,
-            rakeback: 0,
+            kickback: 0,
             payoutMode: uint8(PayoutMode.Coinflip)
         });
         affiliateCode[AFFILIATE_CODE_DGNRS] = AffiliateCodeInfo({
             owner: ContractAddresses.DGNRS,
-            rakeback: 0,
+            kickback: 0,
             payoutMode: uint8(PayoutMode.Coinflip)
         });
         emit Affiliate(1, AFFILIATE_CODE_VAULT, ContractAddresses.VAULT);
@@ -293,7 +293,7 @@ contract DegenerusAffiliate {
             _createAffiliateCode(
                 bootstrapOwners[i],
                 bootstrapCodes[i],
-                bootstrapRakebacks[i]
+                bootstrapKickbacks[i]
             );
             unchecked {
                 ++i;
@@ -319,20 +319,20 @@ contract DegenerusAffiliate {
     /**
      * @notice Create a new affiliate code owned by the caller.
      * @dev Anyone can create an affiliate code. Codes are permanent and cannot be
-     *      transferred or deleted. The rakeback percentage determines how much of
+     *      transferred or deleted. The kickback percentage determines how much of
      *      the affiliate reward is returned to referred players as an incentive.
      *
      * VALIDATION:
      * - code_ != bytes32(0) (reserved for "no code")
      * - code_ != REF_CODE_LOCKED (reserved sentinel value)
      * - code_ not already taken
-     * - rakebackPct <= 25 (max 25% rakeback)
+     * - kickbackPct <= 25 (max 25% kickback)
      *
      * @param code_ The affiliate code to claim (typically a short string cast to bytes32).
-     * @param rakebackPct Percentage of rewards returned to referred players (0-25).
+     * @param kickbackPct Percentage of rewards returned to referred players (0-25).
      */
-    function createAffiliateCode(bytes32 code_, uint8 rakebackPct) external {
-        _createAffiliateCode(msg.sender, code_, rakebackPct);
+    function createAffiliateCode(bytes32 code_, uint8 kickbackPct) external {
+        _createAffiliateCode(msg.sender, code_, kickbackPct);
     }
 
     /// @notice Set payout mode for an affiliate code owned by the caller.
@@ -437,8 +437,8 @@ contract DegenerusAffiliate {
      * | 2. Apply reward percentage based on ETH type and level             |
      * | 3. Update leaderboard (full untapered amount)                      |
      * | 4. Apply lootbox activity taper if applicable                      |
-     * | 5. Calculate rakeback (returned to caller for player credit)       |
-     * | 6. Pay direct affiliate (base - rakeback)                          |
+     * | 5. Calculate kickback (returned to caller for player credit)       |
+     * | 6. Pay direct affiliate (base - kickback)                          |
      * | 7. Pay upline1 (20% of scaled amount)                              |
      * | 8. Pay upline2 (20% of upline1 share = 4%)                         |
      * | 9. Quest rewards added on top                                     |
@@ -461,7 +461,7 @@ contract DegenerusAffiliate {
      * @param lvl Current game level (for join tracking and leaderboard).
      * @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
      * @param lootboxActivityScore Buyer's activity score for lootbox taper (0 = no taper; 15000+ triggers linear taper to 50% floor at 25500).
-     * @return playerRakeback Amount of rakeback to credit to the player (caller handles minting and batching).
+     * @return playerKickback Amount of kickback to credit to the player (caller handles minting and batching).
      */
     function payAffiliate(
         uint256 amount,
@@ -470,7 +470,7 @@ contract DegenerusAffiliate {
         uint24 lvl,
         bool isFreshEth,
         uint16 lootboxActivityScore
-    ) external returns (uint256 playerRakeback) {
+    ) external returns (uint256 playerKickback) {
         // -----------------------------------------------------------------
         // ACCESS CONTROL
         // -----------------------------------------------------------------
@@ -488,7 +488,7 @@ contract DegenerusAffiliate {
         bool infoSet;
         AffiliateCodeInfo memory vaultInfo = AffiliateCodeInfo({
             owner: ContractAddresses.VAULT,
-            rakeback: 0,
+            kickback: 0,
             payoutMode: uint8(PayoutMode.Coinflip)
         });
 
@@ -542,7 +542,7 @@ contract DegenerusAffiliate {
         // REWARD CALCULATION SETUP
         // -----------------------------------------------------------------
         address affiliateAddr = info.owner;
-        uint8 rakebackPct = info.rakeback;
+        uint8 kickbackPct = info.kickback;
         uint8 payoutMode = info.payoutMode;
 
         // -----------------------------------------------------------------
@@ -608,17 +608,17 @@ contract DegenerusAffiliate {
             scaledAmount = _applyLootboxTaper(scaledAmount, lootboxActivityScore);
         }
 
-        // Calculate rakeback (returned to player) and affiliate share.
+        // Calculate kickback (returned to player) and affiliate share.
         uint256 affiliateShareBase;
-        uint256 rakebackShare;
-        if (rakebackPct == 0) {
+        uint256 kickbackShare;
+        if (kickbackPct == 0) {
             affiliateShareBase = scaledAmount;
         } else {
-            rakebackShare = (scaledAmount * uint256(rakebackPct)) / 100;
-            affiliateShareBase = scaledAmount - rakebackShare;
+            kickbackShare = (scaledAmount * uint256(kickbackPct)) / 100;
+            affiliateShareBase = scaledAmount - kickbackShare;
         }
 
-        playerRakeback = rakebackShare;
+        playerKickback = kickbackShare;
         // Upline rewards are paid out but not tracked for leaderboard scores (gas).
 
         // -----------------------------------------------------------------
@@ -700,7 +700,7 @@ contract DegenerusAffiliate {
         }
 
         emit Affiliate(amount, storedCode, sender);
-        return playerRakeback;
+        return playerKickback;
     }
 
     // =====================================================================
@@ -798,19 +798,19 @@ contract DegenerusAffiliate {
     function _createAffiliateCode(
         address owner,
         bytes32 code_,
-        uint8 rakebackPct
+        uint8 kickbackPct
     ) private {
         if (owner == address(0)) revert Zero();
         // SECURITY: Prevent reserved values from being claimed.
         if (code_ == bytes32(0) || code_ == REF_CODE_LOCKED) revert Zero();
-        // SECURITY: Cap rakeback to prevent affiliate from giving away all rewards.
-        if (rakebackPct > MAX_RAKEBACK_PCT) revert InvalidRakeback();
+        // SECURITY: Cap kickback to prevent affiliate from giving away all rewards.
+        if (kickbackPct > MAX_KICKBACK_PCT) revert InvalidKickback();
         AffiliateCodeInfo storage info = affiliateCode[code_];
         // SECURITY: First-come-first-served; codes cannot be overwritten.
         if (info.owner != address(0)) revert Insufficient();
         affiliateCode[code_] = AffiliateCodeInfo({
             owner: owner,
-            rakeback: rakebackPct,
+            kickback: kickbackPct,
             payoutMode: uint8(PayoutMode.Coinflip)
         });
         emit Affiliate(1, code_, owner); // 1 = code created
