@@ -38,33 +38,36 @@ created: 2026-03-11
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 05-01-01 | 01 | 1 | LOCK-01..06 | unit | `forge test --match-path test/fuzz/LockRemoval.t.sol -vvv` | No -- Wave 0 | ⬜ pending |
-| 05-01-02 | 01 | 1 | LOCK-01..06 | grep | `grep -n rngLockedFlag` across 4 modules | N/A | ⬜ pending |
-| 05-01-03 | 01 | 1 | SC-3 | fuzz+invariant | `forge test` | Existing suite | ⬜ pending |
-| 05-01-04 | 01 | 1 | SC-4 | snapshot | `forge snapshot --diff` | Needs baseline | ⬜ pending |
-
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+| 05-01-01 | 01 | 1 | LOCK-01 | unit | `forge test --match-test test_purchaseDuringRngLock -vvv` | W0 | pending |
+| 05-01-02 | 01 | 1 | LOCK-02 | unit | `forge test --match-test test_lootboxPurchaseDuringJackpot -vvv` | W0 | pending |
+| 05-01-03 | 01 | 1 | LOCK-03 | unit | `forge test --match-test test_openLootBoxDuringLock -vvv` | W0 | pending |
+| 05-01-04 | 01 | 1 | LOCK-04 | unit | `forge test --match-test test_openBurnieLootBoxDuringLock -vvv` | W0 | pending |
+| 05-01-05 | 01 | 1 | LOCK-05 | unit | `forge test --match-test test_degeneretteDuringJackpot -vvv` | W0 | pending |
+| 05-01-06 | 01 | 1 | LOCK-06 | unit | `forge test --match-test test_lootboxRngGate -vvv` | W0 | pending |
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `test/fuzz/LockRemoval.t.sol` — LockRemovalHarness + guard-logic tests for LOCK-01 through LOCK-06
-- [ ] Gas baseline: `forge snapshot > .gas-snapshot-pre-lock-removal` before code changes
+- [ ] `test/fuzz/LockRemoval.t.sol` — test file covering LOCK-01 through LOCK-06
+- [ ] LockRemovalHarness in same file — extends DegenerusGameStorage for storage manipulation
 
-*Existing Foundry infrastructure covers framework needs.*
+*Existing infrastructure covers framework/fixture requirements.*
 
 ---
 
 ## Manual-Only Verifications
 
-*All phase behaviors have automated verification.*
+| Behavior | Requirement | Why Manual | Test Instructions |
+|----------|-------------|------------|-------------------|
+| Grep zero rngLockedFlag in purchase paths | SC-2 | Shell command verification | `grep -c rngLockedFlag` in MintModule and LootboxModule — expect 0 |
+| Gas snapshot SSTORE reduction | SC-4 | Requires before/after comparison | `forge snapshot` and diff against baseline |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
+- [ ] All tasks have automated verify or Wave 0 dependencies
 - [ ] Sampling continuity: no 3 consecutive tasks without automated verify
 - [ ] Wave 0 covers all MISSING references
 - [ ] No watch-mode flags
