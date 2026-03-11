@@ -47,7 +47,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Write-path and read-path key migration across Storage, JackpotModule, MintModule, and DegenerusGame + buffer isolation unit tests
+- [x] 02-01-PLAN.md — Write-path and read-path key migration across Storage, JackpotModule, MintModule, and DegenerusGame + buffer isolation unit tests
 - [ ] 02-02-PLAN.md — Mid-day swap trigger path in advanceGame with MID_DAY_SWAP_THRESHOLD constant + mid-day unit tests
 
 ### Phase 3: Prize Pool Freeze
@@ -91,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-11 |
-| 2. Queue Double-Buffer | 0/2 | Planned | - |
+| 2. Queue Double-Buffer | 1/2 | In Progress | - |
 | 3. Prize Pool Freeze | 0/? | Not started | - |
 | 4. advanceGame Rewrite | 0/? | Not started | - |
 | 5. Lock Removal | 0/? | Not started | - |
