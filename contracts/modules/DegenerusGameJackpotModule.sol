@@ -394,7 +394,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 if (dailyTicketUnits != 0) {
                     // Deduct from current pool and add to next pool to back tickets
                     currentPrizePool -= dailyLootboxBudget;
-                    nextPrizePool += dailyLootboxBudget;
+                    _legacySetNextPrizePool(_legacyGetNextPrizePool() + dailyLootboxBudget);
                 }
 
                 uint8 initCarryoverSourceOffset;
@@ -417,10 +417,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 // Unified reserve slice
                 uint256 reserveSlice;
                 if (!isEarlyBirdDay && initCarryoverSourceOffset != 0) {
-                    reserveSlice = futurePrizePool / 100;
+                    reserveSlice = _legacyGetFuturePrizePool() / 100;
 
                     // Deduct immediately (upfront model)
-                    futurePrizePool -= reserveSlice;
+                    _legacySetFuturePrizePool(_legacyGetFuturePrizePool() - reserveSlice);
                 }
 
                 uint256 futureEthPool = reserveSlice;
@@ -435,7 +435,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 if (carryoverLootboxBudget != 0) {
                     futureEthPool -= carryoverLootboxBudget;
                     // Pools already deducted upfront; just add lootbox budget to nextPrizePool
-                    nextPrizePool += carryoverLootboxBudget;
+                    _legacySetNextPrizePool(_legacyGetNextPrizePool() + carryoverLootboxBudget);
                 }
 
                 // Calculate carryover ticket units (distributed in Phase 2 via payDailyJackpotCoinAndTickets)
@@ -631,10 +631,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 ethDaySlice;
         if (isEthDay) {
             uint256 poolBps = 100; // 1% from each pool every third day
-            ethDaySlice = (futurePrizePool * poolBps) / 10_000;
+            ethDaySlice = (_legacyGetFuturePrizePool() * poolBps) / 10_000;
 
             // Deduct immediately (upfront model)
-            futurePrizePool -= ethDaySlice;
+            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() - ethDaySlice);
         }
 
         uint256 ethPool = ethDaySlice;
@@ -803,11 +803,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Execute the early-bird lootbox jackpot from the unified future pool.
     function _runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) private {
         // Take 3% from unified reserve
-        uint256 reserveContribution = (futurePrizePool * 300) / 10_000; // 3%
+        uint256 reserveContribution = (_legacyGetFuturePrizePool() * 300) / 10_000; // 3%
         uint256 totalBudget = reserveContribution;
 
         // Deduct from reserve
-        futurePrizePool -= reserveContribution;
+        _legacySetFuturePrizePool(_legacyGetFuturePrizePool() - reserveContribution);
 
         if (totalBudget == 0) {
             return;
@@ -863,7 +863,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // All budget goes to nextPrizePool (like purchases during purchase phase)
         // This will be merged into currentPrizePool at next level's jackpot calculation
-        nextPrizePool += totalBudget;
+        _legacySetNextPrizePool(_legacyGetNextPrizePool() + totalBudget);
     }
 
     /// @notice Computes and applies prize pool splits at the start of a new level's jackpot phase.
@@ -885,24 +885,26 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 rngWord
     ) external {
         // Consolidate pools for this level's jackpot calculations.
-        currentPrizePool += nextPrizePool;
-        nextPrizePool = 0;
+        currentPrizePool += _legacyGetNextPrizePool();
+        _legacySetNextPrizePool(0);
 
         if ((lvl % 100) == 0) {
             uint256 keepBps = _futureKeepBps(rngWord);
-            if (keepBps < 10_000 && futurePrizePool != 0) {
-                uint256 keepWei = (futurePrizePool * keepBps) / 10_000;
-                uint256 moveWei = futurePrizePool - keepWei;
+            uint256 fp = _legacyGetFuturePrizePool();
+            if (keepBps < 10_000 && fp != 0) {
+                uint256 keepWei = (fp * keepBps) / 10_000;
+                uint256 moveWei = fp - keepWei;
                 if (moveWei != 0) {
-                    futurePrizePool = keepWei;
+                    _legacySetFuturePrizePool(keepWei);
                     currentPrizePool += moveWei;
                 }
             }
         } else if (_shouldFutureDump(rngWord)) {
-            if (futurePrizePool != 0) {
-                uint256 moveWei = (futurePrizePool * 9000) / 10_000;
+            uint256 fp = _legacyGetFuturePrizePool();
+            if (fp != 0) {
+                uint256 moveWei = (fp * 9000) / 10_000;
                 if (moveWei != 0) {
-                    futurePrizePool -= moveWei;
+                    _legacySetFuturePrizePool(fp - moveWei);
                     currentPrizePool += moveWei;
                 }
             }
@@ -921,9 +923,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalBal = address(this).balance + stBal;
         uint256 obligations = currentPrizePool +
-            nextPrizePool +
+            _legacyGetNextPrizePool() +
             claimablePool +
-            futurePrizePool;
+            _legacyGetFuturePrizePool();
 
         if (totalBal <= obligations) return;
 
@@ -946,7 +948,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 );
             if (claimableDelta != 0) claimablePool += claimableDelta;
         }
-        if (futureShare != 0) futurePrizePool += futureShare;
+        if (futureShare != 0) _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + futureShare);
     }
 
     // =========================================================================
@@ -1014,9 +1016,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         _queueTickets(player, calc.targetLevel, calc.ticketCount);
 
         if (calc.toFuture) {
-            futurePrizePool += calc.ethSpent;
+            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + calc.ethSpent);
         } else {
-            nextPrizePool += calc.ethSpent;
+            _legacySetNextPrizePool(_legacyGetNextPrizePool() + calc.ethSpent);
         }
 
         if (calc.reserved != 0) {
@@ -1087,7 +1089,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 randWord
     ) private {
         // Add lootbox budget to nextPrizePool
-        nextPrizePool += lootboxBudget;
+        _legacySetNextPrizePool(_legacyGetNextPrizePool() + lootboxBudget);
 
         // Distribute tickets to winners
         uint256 ticketUnits = _budgetToTicketUnits(lootboxBudget, lvl + 1);
@@ -1809,7 +1811,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             ethPaid = ethAmount;
 
             whalePassClaims[winner] += whalePassCount;
-            futurePrizePool += whalePassCost;
+            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + whalePassCost);
             whalePassSpent = whalePassCost;
         } else {
             // 25% too small for a whale pass — pay full amount as ETH

@@ -292,8 +292,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             nextShare = (totalPrice * 500) / 10_000;
         }
 
-        futurePrizePool += totalPrice - nextShare;
-        nextPrizePool += nextShare;
+        _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + totalPrice - nextShare);
+        _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
 
         // Lootbox: 20% of price during presale, 10% after
         uint16 whaleLootboxBps = lootboxPresaleActive ? WHALE_LOOTBOX_PRESALE_BPS : WHALE_LOOTBOX_POST_BPS;
@@ -415,14 +415,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Split actual payment into pools (future + next)
         uint256 futureShare = (totalPrice * LAZY_PASS_TO_FUTURE_BPS) / 10_000;
         if (futureShare != 0) {
-            futurePrizePool += futureShare;
+            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + futureShare);
         }
         uint256 nextShare;
         unchecked {
             nextShare = totalPrice - futureShare;
         }
         if (nextShare != 0) {
-            nextPrizePool += nextShare;
+            _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
         }
 
         // Award lootbox as a percentage of pass value (presale 20%, post 10%)
@@ -533,8 +533,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         } else {
             nextShare = (totalPrice * 500) / 10_000;
         }
-        nextPrizePool += nextShare;
-        futurePrizePool += totalPrice - nextShare;
+        _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
+        _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + totalPrice - nextShare);
 
         // Lootbox: 20% presale, 10% post
         uint16 deityLootboxBps = lootboxPresaleActive ? DEITY_LOOTBOX_PRESALE_BPS : DEITY_LOOTBOX_POST_BPS;

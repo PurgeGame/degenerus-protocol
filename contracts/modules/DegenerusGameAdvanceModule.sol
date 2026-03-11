@@ -200,7 +200,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (!lastPurchaseDay) {
                     payDailyJackpot(false, purchaseLevel, rngWord);
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
-                    if (nextPrizePool >= levelPrizePool[purchaseLevel - 1]) {
+                    if (_legacyGetNextPrizePool() >= levelPrizePool[purchaseLevel - 1]) {
                         lastPurchaseDay = true;
                         compressedJackpotFlag = (day - purchaseStartDay <= 2);
                     }
@@ -225,7 +225,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
                 // Consolidate prize pools for level transition
                 if (!poolConsolidationDone) {
-                    levelPrizePool[purchaseLevel] = nextPrizePool;
+                    levelPrizePool[purchaseLevel] = _legacyGetNextPrizePool();
                     _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);
                     _consolidatePrizePools(purchaseLevel, rngWord);
                     poolConsolidationDone = true;
@@ -356,7 +356,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // Safety: don't activate game over if nextPool requirement is already met
-        if (lvl != 0 && nextPrizePool >= levelPrizePool[lvl]) {
+        if (lvl != 0 && _legacyGetNextPrizePool() >= levelPrizePool[lvl]) {
             levelStartTime = ts;
             return false;
         }
@@ -385,7 +385,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 lvl = level;
         phaseTransitionActive = true;
         if (lvl % 100 == 0) {
-            levelPrizePool[lvl] = futurePrizePool / 3;
+            levelPrizePool[lvl] = _legacyGetFuturePrizePool() / 3;
         }
         jackpotCounter = 0;
         compressedJackpotFlag = false;
@@ -827,8 +827,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 bps = _nextToFutureBps(reachedAt - start, lvl);
         if (lvl % 10 == 9) bps += NEXT_TO_FUTURE_BPS_X9_BONUS;
 
-        uint256 nextPoolBefore = nextPrizePool;
-        uint256 futurePoolBefore = futurePrizePool;
+        uint256 nextPoolBefore = _legacyGetNextPrizePool();
+        uint256 futurePoolBefore = _legacyGetFuturePrizePool();
         uint256 lastPool = levelPrizePool[lvl - 1];
 
         // Ratio adjust: ±2% based on future/next ratio (baseline 2:1)
@@ -879,8 +879,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
 
-        nextPrizePool -= take;
-        futurePrizePool += take;
+        _legacySetNextPrizePool(nextPoolBefore - take);
+        _legacySetFuturePrizePool(futurePoolBefore + take);
     }
 
     function _drawDownFuturePrizePool(uint24 lvl) private {
@@ -888,12 +888,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if ((lvl % 100) == 0) {
             reserved = 0; // Skip extra future->next move on x00 levels
         } else {
-            reserved = (futurePrizePool * 15) / 100; // 15% on normal levels
+            reserved = (_legacyGetFuturePrizePool() * 15) / 100; // 15% on normal levels
         }
 
         if (reserved != 0) {
-            futurePrizePool -= reserved;
-            nextPrizePool += reserved;
+            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() - reserved);
+            _legacySetNextPrizePool(_legacyGetNextPrizePool() + reserved);
         }
     }
 
