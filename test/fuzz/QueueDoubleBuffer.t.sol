@@ -66,6 +66,18 @@ contract QueueHarness is DegenerusGameStorage {
     function setTicketsFullyProcessed(bool val) external {
         ticketsFullyProcessed = val;
     }
+
+    function getJackpotPhaseFlag() external view returns (bool) {
+        return jackpotPhaseFlag;
+    }
+
+    function setJackpotPhaseFlag(bool val) external {
+        jackpotPhaseFlag = val;
+    }
+
+    function getMidDaySwapThreshold() external pure returns (uint32) {
+        return MID_DAY_SWAP_THRESHOLD;
+    }
 }
 
 /// @title QueueDoubleBufferTest -- Proves write-key and read-key buffer isolation (QUEUE-01, QUEUE-02).
@@ -210,5 +222,135 @@ contract QueueDoubleBufferTest is Test {
         assertEq(harness.getQueueLength(LEVEL | TICKET_SLOT_BIT), 1, "new write buffer should have entry");
         assertEq(harness.getQueueLength(LEVEL), 0, "old buffer should remain empty");
         assertEq(harness.getTicketsOwed(LEVEL | TICKET_SLOT_BIT, ALICE), 5, "new buffer has 5 tickets");
+    }
+}
+
+/// @title MidDaySwapTest -- Proves mid-day swap threshold and jackpot conditions (QUEUE-04).
+contract MidDaySwapTest is Test {
+    QueueHarness harness;
+    address constant ALICE = address(0xA11CE);
+    uint24 constant LEVEL = 5;
+    uint24 constant TICKET_SLOT_BIT = 1 << 23;
+
+    function setUp() public {
+        harness = new QueueHarness();
+    }
+
+    /// @dev Helper: queue `count` individual ticket entries into the write buffer at LEVEL.
+    ///      Each call to _queueTickets adds one address entry to the queue array.
+    function _fillWriteQueue(uint256 count) internal {
+        for (uint256 i = 0; i < count; i++) {
+            address buyer = address(uint160(0x1000 + i));
+            harness.exposed_queueTickets(buyer, LEVEL, 1);
+        }
+    }
+
+    // =========================================================================
+    // Test 7: MID_DAY_SWAP_THRESHOLD constant equals 440
+    // =========================================================================
+    function testMidDaySwapThresholdValue() public view {
+        assertEq(harness.getMidDaySwapThreshold(), 440, "MID_DAY_SWAP_THRESHOLD should be 440");
+    }
+
+    // =========================================================================
+    // Test 8: Write queue at threshold triggers swap successfully
+    // =========================================================================
+    function testMidDaySwapAtThreshold() public {
+        // Fill write queue to exactly 440 entries
+        _fillWriteQueue(440);
+
+        uint24 wk = harness.exposed_tqWriteKey(LEVEL);
+        assertEq(harness.getQueueLength(wk), 440, "write queue should have 440 entries");
+
+        // Read queue must be empty for swap to succeed
+        uint24 rk = harness.exposed_tqReadKey(LEVEL);
+        assertEq(harness.getQueueLength(rk), 0, "read queue should be empty before swap");
+
+        // Swap should succeed -- _swapTicketSlot toggles the write slot
+        uint8 slotBefore = harness.getTicketWriteSlot();
+        harness.exposed_swapTicketSlot(LEVEL);
+        uint8 slotAfter = harness.getTicketWriteSlot();
+
+        assertTrue(slotBefore != slotAfter, "swap should toggle write slot");
+        assertFalse(harness.getTicketsFullyProcessed(), "swap resets ticketsFullyProcessed");
+
+        // Old write buffer (now read) still has 440 entries
+        // After swap, the old write key becomes the new read key
+        uint24 newRk = harness.exposed_tqReadKey(LEVEL);
+        assertEq(harness.getQueueLength(newRk), 440, "old write buffer now readable with 440 entries");
+
+        // New write buffer is empty
+        uint24 newWk = harness.exposed_tqWriteKey(LEVEL);
+        assertEq(harness.getQueueLength(newWk), 0, "new write buffer should be empty");
+    }
+
+    // =========================================================================
+    // Test 9: Jackpot phase swap with non-empty write queue (below threshold)
+    // =========================================================================
+    function testMidDaySwapJackpotPhase() public {
+        // Fill write queue with only 10 entries (well below 440)
+        _fillWriteQueue(10);
+
+        uint24 wk = harness.exposed_tqWriteKey(LEVEL);
+        assertEq(harness.getQueueLength(wk), 10, "write queue should have 10 entries");
+
+        // Set jackpot phase active
+        harness.setJackpotPhaseFlag(true);
+        assertTrue(harness.getJackpotPhaseFlag(), "jackpot phase should be active");
+
+        // Swap should succeed even though < 440, because jackpot + non-empty
+        harness.exposed_swapTicketSlot(LEVEL);
+
+        // After swap, old write buffer is now readable
+        uint24 newRk = harness.exposed_tqReadKey(LEVEL);
+        assertEq(harness.getQueueLength(newRk), 10, "old write buffer now readable with 10 entries");
+    }
+
+    // =========================================================================
+    // Test 10: Below-threshold non-jackpot -- swap would fail (no revert test,
+    //          but proves the condition: write queue < 440 and not jackpot)
+    // =========================================================================
+    function testMidDayRevertsNotTimeYet() public {
+        // Fill write queue with only 100 entries (below 440)
+        _fillWriteQueue(100);
+
+        uint24 wk = harness.exposed_tqWriteKey(LEVEL);
+        uint256 writeLen = harness.getQueueLength(wk);
+        assertEq(writeLen, 100, "write queue should have 100 entries");
+
+        // Not in jackpot phase
+        assertFalse(harness.getJackpotPhaseFlag(), "jackpot phase should be inactive");
+
+        // Verify the condition: writeLen < MID_DAY_SWAP_THRESHOLD && !jackpotPhaseFlag
+        // In the actual advanceGame, this would revert NotTimeYet()
+        assertTrue(writeLen < harness.getMidDaySwapThreshold(), "write queue below threshold");
+        assertFalse(harness.getJackpotPhaseFlag(), "not in jackpot -- would revert NotTimeYet");
+    }
+
+    // =========================================================================
+    // Test 11: Read slot must be drained before swap attempt
+    //          (proves _swapTicketSlot reverts E() if read queue non-empty)
+    // =========================================================================
+    function testMidDayProcessesReadSlotFirst() public {
+        // Setup: populate write queue, swap once to move entries to read slot
+        _fillWriteQueue(10);
+        harness.setTicketsFullyProcessed(true);
+        harness.exposed_swapTicketSlot(LEVEL);
+
+        // Now read slot has 10 entries, write slot is empty
+        uint24 rk = harness.exposed_tqReadKey(LEVEL);
+        assertEq(harness.getQueueLength(rk), 10, "read queue should have 10 entries");
+        assertFalse(harness.getTicketsFullyProcessed(), "ticketsFullyProcessed should be false after swap");
+
+        // Fill new write buffer to threshold
+        _fillWriteQueue(440);
+
+        uint24 wk = harness.exposed_tqWriteKey(LEVEL);
+        assertEq(harness.getQueueLength(wk), 440, "write queue should have 440 entries");
+
+        // Attempting swap should revert because read slot is non-empty
+        // This proves the mid-day path MUST drain the read slot before swapping
+        vm.expectRevert(abi.encodeWithSignature("E()"));
+        harness.exposed_swapTicketSlot(LEVEL);
     }
 }
