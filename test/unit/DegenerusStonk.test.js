@@ -105,10 +105,6 @@ describe("DegenerusStonk", function () {
       expect(earlybirdPool).to.be.closeTo(expected, eth("100"));
     });
 
-    it("locked balances start at 0 for all users", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
-      expect(await dgnrs.lockedBalance(alice.address)).to.equal(0n);
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -152,109 +148,7 @@ describe("DegenerusStonk", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 3. Locked tokens / transfers blocked
-  // ---------------------------------------------------------------------------
-  describe("locked token transfer restriction", function () {
-    it("locked tokens cannot be transferred", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      // Transfer tokens to alice
-      const amount = eth("10000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-
-      // Lock all tokens
-      await dgnrs.connect(alice).lockForLevel(amount);
-
-      // Attempt to transfer locked tokens should revert
-      await expect(
-        dgnrs.connect(alice).transfer(deployer.address, eth("1"))
-      ).to.be.revertedWithCustomError(dgnrs, "TokensLocked");
-    });
-
-    it("can transfer unlocked portion when partially locked", async function () {
-      const { dgnrs, deployer, alice, bob } = await loadFixture(
-        deployFullProtocol
-      );
-      const totalAmount = eth("10000");
-      const lockAmount = eth("6000");
-      const transferAmount = eth("3000"); // within unlocked portion
-
-      await dgnrs.connect(deployer).transfer(alice.address, totalAmount);
-      await dgnrs.connect(alice).lockForLevel(lockAmount);
-
-      await expect(
-        dgnrs.connect(alice).transfer(bob.address, transferAmount)
-      ).to.not.be.reverted;
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 4. lockForLevel and unlock
-  // ---------------------------------------------------------------------------
-  describe("lockForLevel", function () {
-    it("locks tokens and emits Locked event", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("5000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-
-      const tx = await dgnrs.connect(alice).lockForLevel(amount);
-      const ev = await getEvent(tx, dgnrs, "Locked");
-      expect(ev.args.holder).to.equal(alice.address);
-      expect(ev.args.amount).to.equal(amount);
-      expect(await dgnrs.lockedBalance(alice.address)).to.equal(amount);
-    });
-
-    it("reverts when trying to lock more than available balance", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        dgnrs.connect(alice).lockForLevel(eth("1"))
-      ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
-    });
-
-    it("can increase lock within same level", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("5000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-
-      await dgnrs.connect(alice).lockForLevel(eth("2000"));
-      await dgnrs.connect(alice).lockForLevel(eth("2000"));
-      expect(await dgnrs.lockedBalance(alice.address)).to.equal(eth("4000"));
-    });
-
-    it("auto-unlocks when locking at a new level", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      // Alice can only test auto-unlock behavior if level changes
-      // For now just verify the lock mechanism works at level 0
-      const amount = eth("5000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-      await dgnrs.connect(alice).lockForLevel(amount);
-      expect(await dgnrs.lockedBalance(alice.address)).to.equal(amount);
-      expect(await dgnrs.lockedLevel(alice.address)).to.equal(0n);
-    });
-  });
-
-  describe("unlock", function () {
-    it("reverts when no locked tokens", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        dgnrs.connect(alice).unlock()
-      ).to.be.revertedWithCustomError(dgnrs, "NoLockedTokens");
-    });
-
-    it("reverts when lock is still active (same level)", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("5000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-      await dgnrs.connect(alice).lockForLevel(amount);
-
-      // Still at level 0, lock is active
-      await expect(
-        dgnrs.connect(alice).unlock()
-      ).to.be.revertedWithCustomError(dgnrs, "LockStillActive");
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 5. transferFromPool (game-only)
+  // 3. transferFromPool (game-only)
   // ---------------------------------------------------------------------------
   describe("transferFromPool", function () {
     it("reverts when called by non-game address", async function () {
@@ -743,33 +637,7 @@ describe("DegenerusStonk", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 13. getLockStatus
-  // ---------------------------------------------------------------------------
-  describe("getLockStatus", function () {
-    it("returns zero locked amount for address with no lock", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
-      const [locked, lockLevel, ethLimit, ethSpent, burnieLimit, burnieSpent, canUnlock] =
-        await dgnrs.getLockStatus(alice.address);
-      expect(locked).to.equal(0n);
-      expect(canUnlock).to.be.false;
-    });
-
-    it("returns correct values after locking", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("10000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-      await dgnrs.connect(alice).lockForLevel(amount);
-
-      const [locked, lockLevel, ethLimit, ethSpent, burnieLimit, burnieSpent, canUnlock] =
-        await dgnrs.getLockStatus(alice.address);
-      expect(locked).to.equal(amount);
-      expect(lockLevel).to.equal(0n);
-      expect(canUnlock).to.be.false; // still at same level
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 14. gameAdvance (holder-only)
+  // 11. gameAdvance (holder-only)
   // ---------------------------------------------------------------------------
   describe("gameAdvance", function () {
     it("reverts when called by non-holder", async function () {
@@ -783,19 +651,6 @@ describe("DegenerusStonk", function () {
       const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
       // deployer has DGNRS tokens
       await expect(dgnrs.connect(deployer).gameAdvance()).to.not.be.reverted;
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 15. gamePurchase (requires locked tokens)
-  // ---------------------------------------------------------------------------
-  describe("gamePurchase (requires lock)", function () {
-    it("reverts when caller has no locked tokens", async function () {
-      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
-      // deployer has tokens but none locked
-      await expect(
-        dgnrs.connect(deployer).gamePurchase(400n, 0n, 0n, { value: eth("0.01") })
-      ).to.be.revertedWithCustomError(dgnrs, "NoLockedTokens");
     });
   });
 
