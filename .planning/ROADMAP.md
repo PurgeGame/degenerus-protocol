@@ -63,7 +63,7 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md — Add freeze branching to all 7 purchase-path pool addition sites + wire _swapAndFreeze/_unfreezePool into advanceGame
-- [ ] 03-02-PLAN.md — FreezeHarness + freeze lifecycle unit tests covering FREEZE-01 through FREEZE-04
+- [x] 03-02-PLAN.md — FreezeHarness + freeze lifecycle unit tests covering FREEZE-01 through FREEZE-04
 
 ### Phase 4: advanceGame Rewrite
 **Goal**: advanceGame drives the new state machine correctly — mid-day path processes the read slot and triggers a swap when qualified; daily path gates on ticketsFullyProcessed; freeze and unfreeze happen at the right points
@@ -74,7 +74,10 @@ Plans:
   2. Daily RNG request does not proceed when `ticketsFullyProcessed == false`; a test with an non-empty read slot confirms the daily path blocks at the gate
   3. `ticketsFullyProcessed` is set to true before any jackpot or phase transition logic executes; a test confirms the flag is true at the point jackpot logic fires
   4. Every break path through the `do { } while(false)` structure either calls `_unfreezePool()` or is demonstrably unreachable under freeze; no path leaves freeze permanently active
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 04-01-PLAN.md — Pre-RNG drain gate + ticketsFullyProcessed flag in AdvanceModule + AdvanceHarness with all ADV requirement tests
 
 ### Phase 5: Lock Removal
 **Goal**: rngLockedFlag no longer blocks any ticket purchase path; the full test suite passes confirming always-open purchases are live
@@ -97,5 +100,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-11 |
 | 2. Queue Double-Buffer | 2/2 | Complete   | 2026-03-11 |
 | 3. Prize Pool Freeze | 2/2 | Complete   | 2026-03-11 |
-| 4. advanceGame Rewrite | 0/? | Not started | - |
+| 4. advanceGame Rewrite | 0/1 | Not started | - |
 | 5. Lock Removal | 0/? | Not started | - |
