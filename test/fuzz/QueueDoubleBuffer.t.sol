@@ -1,0 +1,214 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity 0.8.34;
+
+import {Test} from "forge-std/Test.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+
+/// @title QueueHarness -- Exposes internal queue functions and mappings for double-buffer tests.
+contract QueueHarness is DegenerusGameStorage {
+    // --- Queue write functions ---
+    function exposed_queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
+        _queueTickets(buyer, targetLevel, quantity);
+    }
+
+    function exposed_queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
+        _queueTicketsScaled(buyer, targetLevel, quantityScaled);
+    }
+
+    function exposed_queueTicketRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
+        _queueTicketRange(buyer, startLevel, numLevels, ticketsPerLevel);
+    }
+
+    // --- Swap ---
+    function exposed_swapTicketSlot(uint24 purchaseLevel) external {
+        _swapTicketSlot(purchaseLevel);
+    }
+
+    // --- Key helpers ---
+    function exposed_tqWriteKey(uint24 lvl) external view returns (uint24) {
+        return _tqWriteKey(lvl);
+    }
+
+    function exposed_tqReadKey(uint24 lvl) external view returns (uint24) {
+        return _tqReadKey(lvl);
+    }
+
+    // --- Direct mapping inspection ---
+    function getQueueLength(uint24 key) external view returns (uint256) {
+        return ticketQueue[key].length;
+    }
+
+    function getQueueEntry(uint24 key, uint256 idx) external view returns (address) {
+        return ticketQueue[key][idx];
+    }
+
+    function getTicketsOwedPacked(uint24 key, address buyer) external view returns (uint40) {
+        return ticketsOwedPacked[key][buyer];
+    }
+
+    function getTicketsOwed(uint24 key, address buyer) external view returns (uint32) {
+        return uint32(ticketsOwedPacked[key][buyer] >> 8);
+    }
+
+    // --- State helpers ---
+    function getTicketWriteSlot() external view returns (uint8) {
+        return ticketWriteSlot;
+    }
+
+    function setTicketWriteSlot(uint8 val) external {
+        ticketWriteSlot = val;
+    }
+
+    function getTicketsFullyProcessed() external view returns (bool) {
+        return ticketsFullyProcessed;
+    }
+
+    function setTicketsFullyProcessed(bool val) external {
+        ticketsFullyProcessed = val;
+    }
+}
+
+/// @title QueueDoubleBufferTest -- Proves write-key and read-key buffer isolation (QUEUE-01, QUEUE-02).
+contract QueueDoubleBufferTest is Test {
+    QueueHarness harness;
+    address constant ALICE = address(0xA11CE);
+    address constant BOB = address(0xB0B);
+    uint24 constant LEVEL = 5;
+    uint24 constant TICKET_SLOT_BIT = 1 << 23;
+
+    function setUp() public {
+        harness = new QueueHarness();
+    }
+
+    // =========================================================================
+    // Test 1: _queueTickets routes to write buffer
+    // =========================================================================
+    function testQueueTicketsUsesWriteKey() public {
+        // Default ticketWriteSlot = 0, so writeKey = level (no bit), readKey = level | BIT
+        uint24 wk = harness.exposed_tqWriteKey(LEVEL);
+        uint24 rk = harness.exposed_tqReadKey(LEVEL);
+        assertEq(wk, LEVEL, "write key should be raw level when slot=0");
+        assertEq(rk, LEVEL | TICKET_SLOT_BIT, "read key should have bit set when slot=0");
+
+        harness.exposed_queueTickets(ALICE, LEVEL, 10);
+
+        // Write buffer has the entry
+        assertEq(harness.getQueueLength(wk), 1, "write queue should have 1 entry");
+        assertEq(harness.getQueueEntry(wk, 0), ALICE, "write queue entry should be ALICE");
+        assertEq(harness.getTicketsOwed(wk, ALICE), 10, "write buffer should have 10 tickets owed");
+
+        // Read buffer is empty
+        assertEq(harness.getQueueLength(rk), 0, "read queue should be empty");
+        assertEq(harness.getTicketsOwed(rk, ALICE), 0, "read buffer should have 0 tickets owed");
+    }
+
+    // =========================================================================
+    // Test 2: _queueTicketsScaled routes to write buffer
+    // =========================================================================
+    function testQueueTicketsScaledUsesWriteKey() public {
+        uint24 wk = harness.exposed_tqWriteKey(LEVEL);
+        uint24 rk = harness.exposed_tqReadKey(LEVEL);
+
+        // Queue 500 scaled = 5 whole tickets (TICKET_SCALE = 100)
+        harness.exposed_queueTicketsScaled(ALICE, LEVEL, 500);
+
+        // Write buffer populated
+        assertEq(harness.getQueueLength(wk), 1, "write queue should have 1 entry");
+        assertEq(harness.getTicketsOwed(wk, ALICE), 5, "write buffer should have 5 tickets");
+
+        // Read buffer empty
+        assertEq(harness.getQueueLength(rk), 0, "read queue should be empty");
+        assertEq(harness.getTicketsOwed(rk, ALICE), 0, "read buffer tickets should be 0");
+    }
+
+    // =========================================================================
+    // Test 3: _queueTicketRange routes to write buffer for all levels
+    // =========================================================================
+    function testQueueTicketRangeUsesWriteKey() public {
+        uint24 startLvl = 5;
+        uint24 numLevels = 3;
+        harness.exposed_queueTicketRange(ALICE, startLvl, numLevels, 7);
+
+        for (uint24 i = 0; i < numLevels; i++) {
+            uint24 lvl = startLvl + i;
+            uint24 wk = harness.exposed_tqWriteKey(lvl);
+            uint24 rk = harness.exposed_tqReadKey(lvl);
+
+            assertEq(harness.getQueueLength(wk), 1, "write queue should have entry");
+            assertEq(harness.getTicketsOwed(wk, ALICE), 7, "write buffer should have 7 tickets");
+            assertEq(harness.getQueueLength(rk), 0, "read queue should be empty");
+            assertEq(harness.getTicketsOwed(rk, ALICE), 0, "read buffer should be empty");
+        }
+    }
+
+    // =========================================================================
+    // Test 4: Write-read isolation across swap
+    // =========================================================================
+    function testWriteReadIsolation() public {
+        // Phase A: Queue in slot 0 (writeKey = level)
+        harness.exposed_queueTickets(ALICE, LEVEL, 10);
+
+        uint24 wkBefore = harness.exposed_tqWriteKey(LEVEL);
+        assertEq(wkBefore, LEVEL, "before swap: write key = raw level");
+
+        // Mark fully processed so swap succeeds
+        harness.setTicketsFullyProcessed(true);
+        harness.exposed_swapTicketSlot(LEVEL);
+
+        // After swap, write key flips
+        uint24 wkAfter = harness.exposed_tqWriteKey(LEVEL);
+        assertEq(wkAfter, LEVEL | TICKET_SLOT_BIT, "after swap: write key = level | BIT");
+
+        // Phase B: Queue in slot 1 (writeKey = level | BIT)
+        harness.exposed_queueTickets(BOB, LEVEL, 20);
+
+        // Old buffer (raw level) has ALICE's entry
+        assertEq(harness.getQueueLength(LEVEL), 1, "slot 0 queue should have ALICE");
+        assertEq(harness.getQueueEntry(LEVEL, 0), ALICE, "slot 0 entry is ALICE");
+        assertEq(harness.getTicketsOwed(LEVEL, ALICE), 10, "slot 0 has 10 tickets for ALICE");
+
+        // New buffer (level | BIT) has BOB's entry
+        assertEq(harness.getQueueLength(LEVEL | TICKET_SLOT_BIT), 1, "slot 1 queue should have BOB");
+        assertEq(harness.getQueueEntry(LEVEL | TICKET_SLOT_BIT, 0), BOB, "slot 1 entry is BOB");
+        assertEq(harness.getTicketsOwed(LEVEL | TICKET_SLOT_BIT, BOB), 20, "slot 1 has 20 tickets for BOB");
+
+        // Cross-buffer isolation
+        assertEq(harness.getTicketsOwed(LEVEL, BOB), 0, "BOB has no tickets in slot 0");
+        assertEq(harness.getTicketsOwed(LEVEL | TICKET_SLOT_BIT, ALICE), 0, "ALICE has no tickets in slot 1");
+    }
+
+    // =========================================================================
+    // Test 5: Swap resets ticketsFullyProcessed
+    // =========================================================================
+    function testSwapResetsFullyProcessed() public {
+        harness.setTicketsFullyProcessed(true);
+        assertTrue(harness.getTicketsFullyProcessed(), "pre-condition: fully processed");
+
+        harness.exposed_swapTicketSlot(LEVEL);
+
+        assertFalse(harness.getTicketsFullyProcessed(), "swap should reset ticketsFullyProcessed to false");
+    }
+
+    // =========================================================================
+    // Test 6: Queue after swap uses new write key
+    // =========================================================================
+    function testQueueAfterSwapUsesNewWriteKey() public {
+        // Start with slot 0
+        assertEq(harness.getTicketWriteSlot(), 0, "initial slot is 0");
+
+        // Swap to slot 1
+        harness.setTicketsFullyProcessed(true);
+        harness.exposed_swapTicketSlot(LEVEL);
+        assertEq(harness.getTicketWriteSlot(), 1, "slot should be 1 after swap");
+
+        // Write key should now include TICKET_SLOT_BIT
+        uint24 newWk = harness.exposed_tqWriteKey(LEVEL);
+        assertEq(newWk, LEVEL | TICKET_SLOT_BIT, "write key should include bit after swap");
+
+        // Queue tickets -- they should land in the new buffer
+        harness.exposed_queueTickets(ALICE, LEVEL, 5);
+        assertEq(harness.getQueueLength(LEVEL | TICKET_SLOT_BIT), 1, "new write buffer should have entry");
+        assertEq(harness.getQueueLength(LEVEL), 0, "old buffer should remain empty");
+        assertEq(harness.getTicketsOwed(LEVEL | TICKET_SLOT_BIT, ALICE), 5, "new buffer has 5 tickets");
+    }
+}
