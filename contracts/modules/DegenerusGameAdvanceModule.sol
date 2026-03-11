@@ -632,6 +632,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Cannot be called while daily RNG is locked (jackpot resolution).
     ///      VRF callback handles finalization directly - no advanceGame needed.
     function requestLootboxRng() external {
+        if (rngLockedFlag) revert RngLocked();
+
         uint48 nowTs = uint48(block.timestamp);
         uint48 currentDay = _simulatedDayIndexAt(nowTs);
 

@@ -24,6 +24,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
+    error RngLocked();
 
     // -------------------------------------------------------------------------
     // Events
@@ -464,6 +465,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     }
 
     function _purchaseDeityPass(address buyer, uint8 symbolId) private {
+        if (rngLockedFlag) revert RngLocked();
         if (gameOver) revert E();
         if (symbolId >= 32) revert E();
         if (deityBySymbol[symbolId] != address(0)) revert E();
