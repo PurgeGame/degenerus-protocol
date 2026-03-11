@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Storage Foundation** - Add Slot 1 fields, packed pool slots, and all key/swap/freeze helpers to DegenerusGameStorage (completed 2026-03-11)
 - [x] **Phase 2: Queue Double-Buffer** - Wire all queue functions to write/read key helpers; implement swap with hard drain gate (completed 2026-03-11)
-- [ ] **Phase 3: Prize Pool Freeze** - Add freeze branch to all 7 purchase-path pool addition sites; populate pending accumulators
+- [x] **Phase 3: Prize Pool Freeze** - Add freeze branch to all 7 purchase-path pool addition sites; populate pending accumulators (completed 2026-03-11)
 - [ ] **Phase 4: advanceGame Rewrite** - Rewrite daily state machine with mid-day path, drain gates, swap/freeze, and unfreeze exit points
 - [ ] **Phase 5: Lock Removal** - Remove rngLockedFlag purchase reverts and validate full integration with fuzz suite
 
@@ -59,7 +59,7 @@ Plans:
   2. An integration test exercising all 9 purchase paths under active freeze shows live pool values unchanged while pending accumulator values increase by the correct amounts
   3. `_unfreezePool()` is the only code path that clears `prizePoolFrozen`; a grep for direct `prizePoolFrozen = false` assignment returns zero results
   4. Freeze persists across all 5 jackpot draw days — a test simulating 5 sequential daily cycles with purchases between each confirms pending accumulators are not reset between draws
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 03-01-PLAN.md — Add freeze branching to all 7 purchase-path pool addition sites + wire _swapAndFreeze/_unfreezePool into advanceGame
@@ -96,6 +96,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-11 |
 | 2. Queue Double-Buffer | 2/2 | Complete   | 2026-03-11 |
-| 3. Prize Pool Freeze | 1/2 | In Progress|  |
+| 3. Prize Pool Freeze | 2/2 | Complete   | 2026-03-11 |
 | 4. advanceGame Rewrite | 0/? | Not started | - |
 | 5. Lock Removal | 0/? | Not started | - |

@@ -26,7 +26,7 @@ Requirements for v1.0 milestone. Each maps to roadmap phases.
 - [x] **FREEZE-01**: `_swapAndFreeze()` called at daily RNG request only
 - [x] **FREEZE-02**: All 9 purchase-path pool additions branch on `prizePoolFrozen`
 - [x] **FREEZE-03**: `_unfreezePool()` at correct exit points (purchase daily, phase end, transition end)
-- [ ] **FREEZE-04**: Freeze persists across all 5 jackpot days — accumulators not reset between draws
+- [x] **FREEZE-04**: Freeze persists across all 5 jackpot days — accumulators not reset between draws
 
 ### advanceGame Rewrite
 
@@ -76,7 +76,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FREEZE-01 | Phase 3 | Complete |
 | FREEZE-02 | Phase 3 | Complete |
 | FREEZE-03 | Phase 3 | Complete |
-| FREEZE-04 | Phase 3 | Pending |
+| FREEZE-04 | Phase 3 | Complete |
 | ADV-01 | Phase 4 | Pending |
 | ADV-02 | Phase 4 | Pending |
 | ADV-03 | Phase 4 | Pending |
