@@ -406,11 +406,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             uint256 futureShare = (prizeContribution * PURCHASE_TO_FUTURE_BPS) /
                 10_000;
             if (futureShare != 0) {
-                futurePrizePool += futureShare;
+                _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + futureShare);
             }
             uint256 nextShare = prizeContribution - futureShare;
             if (nextShare != 0) {
-                nextPrizePool += nextShare;
+                _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
             }
         }
 
@@ -2039,19 +2039,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Mint fees flow into nextPrizePool until target is met.
     /// @return The nextPrizePool value (ETH wei).
     function nextPrizePoolView() external view returns (uint256) {
-        return nextPrizePool;
+        return _legacyGetNextPrizePool();
     }
 
     /// @notice Get the unified future pool reserve.
     /// @return The futurePrizePool value (ETH wei).
     function futurePrizePoolView() external view returns (uint256) {
-        return futurePrizePool;
+        return _legacyGetFuturePrizePool();
     }
 
     /// @notice Get the aggregate future pool reserve.
     /// @return The futurePrizePool value (ETH wei).
     function futurePrizePoolTotalView() external view returns (uint256) {
-        return futurePrizePool;
+        return _legacyGetFuturePrizePool();
     }
 
     /// @notice Get queued future ticket rewards owed for a level.
@@ -2140,7 +2140,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Get the unified future pool (reserve for jackpots and carryover).
     /// @return The futurePrizePool value (ETH wei).
     function rewardPoolView() external view returns (uint256) {
-        return futurePrizePool;
+        return _legacyGetFuturePrizePool();
     }
 
     /// @notice Get the claimable pool (reserved for player winnings claims).
@@ -2162,9 +2162,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 totalBalance = address(this).balance +
             steth.balanceOf(address(this));
         uint256 obligations = currentPrizePool +
-            nextPrizePool +
+            _legacyGetNextPrizePool() +
             claimablePool +
-            futurePrizePool;
+            _legacyGetFuturePrizePool();
         if (totalBalance <= obligations) return 0;
         return totalBalance - obligations;
     }
@@ -2815,6 +2815,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Plain ETH transfers are routed to jackpot reserves.
     receive() external payable {
         if (gameOver) revert E();
-        futurePrizePool += msg.value;
+        _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + msg.value);
     }
 }

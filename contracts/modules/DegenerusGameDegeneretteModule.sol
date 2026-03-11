@@ -585,7 +585,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             }
 
             // Update pool and pending
-            futurePrizePool += totalBet;
+            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + totalBet);
             lootboxRngPendingEth += totalBet;
             // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
             // time, so solvency is guaranteed regardless of jackpot size
@@ -698,7 +698,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @param rngWord The RNG word for lootbox conversion (only used for ETH).
     function _distributePayout(address player, uint8 currency, uint256 payout, uint256 rngWord) private {
         if (currency == CURRENCY_ETH) {
-            uint256 pool = futurePrizePool;
+            uint256 pool = _legacyGetFuturePrizePool();
 
             // Split: 25% as ETH, 75% as lootbox
             uint256 ethPortion = payout / 4;
@@ -714,7 +714,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             }
 
             unchecked { pool -= ethPortion; }
-            futurePrizePool = pool;
+            _legacySetFuturePrizePool(pool);
             _addClaimableEth(player, ethPortion);
 
             // Convert 75% (+ any cap excess) to lootbox rewards
