@@ -256,4 +256,108 @@ contract StorageFoundationTest is Test {
             assertEq(harness.exposed_tqReadKey(levels[i]), levels[i], "slot1 readKey mismatch");
         }
     }
+
+    // =====================================================================
+    // Swap Tests
+    // =====================================================================
+
+    /// @dev Empty read queue -> swap succeeds, ticketWriteSlot toggles, ticketsFullyProcessed resets.
+    function testSwapTicketSlotSuccess() public {
+        assertEq(harness.getTicketWriteSlot(), 0);
+        harness.setTicketsFullyProcessed(true);
+
+        // Read slot for level 0, ticketWriteSlot=0 is 0|TICKET_SLOT_BIT -- empty by default
+        harness.exposed_swapTicketSlot(0);
+
+        assertEq(harness.getTicketWriteSlot(), 1, "ticketWriteSlot should toggle to 1");
+        assertFalse(harness.getTicketsFullyProcessed(), "ticketsFullyProcessed should reset");
+    }
+
+    /// @dev Read queue has entries -> revert E().
+    function testSwapTicketSlotRevertsNonEmpty() public {
+        // ticketWriteSlot=0, readKey(0) = 0|TICKET_SLOT_BIT
+        uint24 rk = 0 | TICKET_SLOT_BIT;
+        harness.pushToTicketQueue(rk, address(0xBEEF));
+
+        vm.expectRevert(DegenerusGameStorage.E.selector);
+        harness.exposed_swapTicketSlot(0);
+    }
+
+    /// @dev Two swaps return ticketWriteSlot to 0.
+    function testSwapTicketSlotDoubleToggle() public {
+        assertEq(harness.getTicketWriteSlot(), 0);
+
+        // First swap: 0 -> 1 (read slot = TICKET_SLOT_BIT|0, empty)
+        harness.exposed_swapTicketSlot(0);
+        assertEq(harness.getTicketWriteSlot(), 1);
+
+        // Second swap: 1 -> 0 (read slot = 0 (raw level), empty)
+        harness.exposed_swapTicketSlot(0);
+        assertEq(harness.getTicketWriteSlot(), 0);
+    }
+
+    // =====================================================================
+    // Freeze Tests
+    // =====================================================================
+
+    /// @dev First freeze: sets prizePoolFrozen=true, zeros pending accumulators.
+    function testSwapAndFreezeActivates() public {
+        harness.exposed_setPendingPools(100, 200);
+        assertFalse(harness.getPrizePoolFrozen());
+
+        harness.exposed_swapAndFreeze(0);
+
+        assertTrue(harness.getPrizePoolFrozen(), "prizePoolFrozen should be true");
+        (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
+        assertEq(pn, 0, "pending next should be zeroed on first freeze");
+        assertEq(pf, 0, "pending future should be zeroed on first freeze");
+    }
+
+    /// @dev Already frozen: swap succeeds, pending accumulators preserved.
+    function testSwapAndFreezeAlreadyFrozen() public {
+        harness.setPrizePoolFrozen(true);
+        harness.exposed_setPendingPools(100, 200);
+
+        harness.exposed_swapAndFreeze(0);
+
+        assertTrue(harness.getPrizePoolFrozen(), "prizePoolFrozen should remain true");
+        (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
+        assertEq(pn, 100, "pending next should be preserved on re-freeze");
+        assertEq(pf, 200, "pending future should be preserved on re-freeze");
+    }
+
+    // =====================================================================
+    // Unfreeze Tests
+    // =====================================================================
+
+    /// @dev Pending applied to live, pending zeroed, freeze cleared.
+    function testUnfreezePoolMerges() public {
+        harness.exposed_setPrizePools(1000, 2000);
+        harness.exposed_setPendingPools(100, 200);
+        harness.setPrizePoolFrozen(true);
+
+        harness.exposed_unfreezePool();
+
+        (uint128 n, uint128 f) = harness.exposed_getPrizePools();
+        assertEq(n, 1100, "live next should include pending");
+        assertEq(f, 2200, "live future should include pending");
+
+        (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
+        assertEq(pn, 0, "pending next should be zeroed after unfreeze");
+        assertEq(pf, 0, "pending future should be zeroed after unfreeze");
+
+        assertFalse(harness.getPrizePoolFrozen(), "prizePoolFrozen should be cleared");
+    }
+
+    /// @dev No-op when not frozen.
+    function testUnfreezePoolNoop() public {
+        harness.exposed_setPrizePools(1000, 2000);
+        assertFalse(harness.getPrizePoolFrozen());
+
+        harness.exposed_unfreezePool();
+
+        (uint128 n, uint128 f) = harness.exposed_getPrizePools();
+        assertEq(n, 1000, "live next should be unchanged");
+        assertEq(f, 2000, "live future should be unchanged");
+    }
 }
