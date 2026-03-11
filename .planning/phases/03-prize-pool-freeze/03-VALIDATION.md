@@ -1,5 +1,5 @@
 ---
-phase: 3
+phase: 03
 slug: prize-pool-freeze
 status: draft
 nyquist_compliant: false
@@ -7,7 +7,7 @@ wave_0_complete: false
 created: 2026-03-11
 ---
 
-# Phase 3 — Validation Strategy
+# Phase 03 — Validation Strategy
 
 > Per-phase validation contract for feedback sampling during execution.
 
@@ -38,10 +38,11 @@ created: 2026-03-11
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 03-01-01 | 01 | 1 | FREEZE-01 | unit + grep | `grep -rn '_swapAndFreeze' contracts/modules/ \| wc -l` | ❌ W0 | ⬜ pending |
-| 03-01-02 | 01 | 1 | FREEZE-02 | unit | `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" --match-test "testFrozen" -vvv` | ❌ W0 | ⬜ pending |
-| 03-01-03 | 01 | 1 | FREEZE-03 | grep + unit | `grep -n 'prizePoolFrozen = false' contracts/` | ❌ W0 | ⬜ pending |
-| 03-01-04 | 01 | 1 | FREEZE-04 | integration | `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" --match-test "testJackpotPersistence" -vvv` | ❌ W0 | ⬜ pending |
+| 03-01-01 | 01 | 1 | FREEZE-02, FREEZE-04 | unit | `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" -vvv` | No -- Wave 0 | ⬜ pending |
+| 03-02-01 | 02 | 1 | FREEZE-02 | unit | `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" --match-test "Frozen\|Unfrozen" -vvv` | ⬜ depends W0 | ⬜ pending |
+| 03-02-02 | 02 | 1 | FREEZE-01 | grep | `grep -rn '_swapAndFreeze' contracts/modules/` (expect 1 call site) | N/A | ⬜ pending |
+| 03-02-03 | 02 | 1 | FREEZE-03 | grep | `grep -n 'prizePoolFrozen = false' contracts/` (expect 0 direct assignments) | N/A | ⬜ pending |
+| 03-02-04 | 02 | 1 | FREEZE-04 | unit | `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" --match-test "Persist" -vvv` | ⬜ depends W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,19 +50,15 @@ created: 2026-03-11
 
 ## Wave 0 Requirements
 
-- [ ] `test/fuzz/PrizePoolFreeze.t.sol` — FreezeHarness + freeze lifecycle tests for FREEZE-01 through FREEZE-04
-- [ ] Extend existing QueueHarness if freeze-related internals needed
+- [ ] `test/fuzz/PrizePoolFreeze.t.sol` — FreezeHarness + freeze lifecycle tests for FREEZE-02 and FREEZE-04
 
-*Existing infrastructure covers build tooling. Only test file creation needed.*
+*Existing `test/fuzz/StorageFoundation.t.sol` StorageHarness already exposes `_swapAndFreeze`, `_unfreezePool`, `prizePoolFrozen`. Extend or reuse.*
 
 ---
 
 ## Manual-Only Verifications
 
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| _swapAndFreeze call site count | FREEZE-01 | Grep verification | `grep -rn '_swapAndFreeze' contracts/modules/` — expect exactly 1 call site |
-| No direct prizePoolFrozen = false | FREEZE-03 | Grep verification | `grep -n 'prizePoolFrozen = false' contracts/` — expect 1 result in _unfreezePool only |
+*All phase behaviors have automated verification.*
 
 ---
 
