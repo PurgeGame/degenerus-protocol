@@ -640,7 +640,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Block until today's daily RNG has been consumed and recorded.
         if (rngWordByDay[currentDay] == 0) revert E();
 
-        if (rngLockedFlag) revert E();
         if (rngRequestTime != 0) revert E();
 
         // LINK balance check

@@ -500,7 +500,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
 
         _validateMinBet(currency, amountPerTicket);
 
-        jackpotResolutionActive = rngLockedFlag && lastPurchaseDay && ((level + 1) % 5 == 0);
+        jackpotResolutionActive = lastPurchaseDay && ((level + 1) % 5 == 0);
         if (currency == CURRENCY_ETH && jackpotResolutionActive) revert E();
 
         totalBet = uint256(amountPerTicket) * uint256(ticketCount);
