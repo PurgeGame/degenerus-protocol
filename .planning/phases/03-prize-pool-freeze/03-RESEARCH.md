@@ -1,28 +1,28 @@
 # Phase 3: Prize Pool Freeze - Research
 
 **Researched:** 2026-03-11
-**Domain:** Solidity prize pool freeze/unfreeze pattern, pending accumulator branching across purchase paths
+**Domain:** Solidity prize pool freeze/unfreeze branching, pending accumulator pattern, advanceGame exit-point analysis
 **Confidence:** HIGH
 
 ## Summary
 
-Phase 3 wires the prize pool freeze mechanism into the game loop. The storage infrastructure already exists from Phase 1: `prizePoolFrozen` (bool in Slot 1), `prizePoolPendingPacked` (uint256 with uint128+uint128 packing), `_swapAndFreeze()`, `_unfreezePool()`, `_getPendingPools()`/`_setPendingPools()`. Phase 2 added the mid-day swap path (which intentionally does NOT freeze). What remains is: (1) calling `_swapAndFreeze()` from the daily RNG request site in `advanceGame`, (2) adding freeze-aware branching to all 9 purchase-path pool addition sites, (3) calling `_unfreezePool()` at the 3 correct exit points, and (4) ensuring freeze persists across all 5 jackpot draw days.
+Phase 3 wires the prize pool freeze mechanism (built in Phase 1: `_swapAndFreeze()`, `_unfreezePool()`, `prizePoolFrozen` flag, `prizePoolPendingPacked` accumulator) into the game's purchase and processing paths. The infrastructure already exists and is tested at the storage level. This phase has three concerns: (1) insert `_swapAndFreeze()` at the single daily RNG request site in `advanceGame`, (2) add freeze branching to all purchase-path pool additions so ETH goes to pending accumulators when frozen, and (3) insert `_unfreezePool()` at the correct `advanceGame` exit points.
 
-The 9 purchase-path pool addition sites are spread across 5 contracts: DegenerusGame.sol (recordMint + receive fallback), MintModule (lootbox purchase), WhaleModule (whale bundle, lazy pass, deity pass), and DegeneretteModule (degenerette bets). Each currently uses `_legacyGet/SetNextPrizePool` and `_legacyGet/SetFuturePrizePool` shims; Phase 3 replaces those with freeze-branching that routes to either `_setPrizePools()` (live) or `_setPendingPools()` (pending) based on `prizePoolFrozen`. Game-logic pool operations (jackpot payouts, pool consolidation, future drawdown, decimator, endgame) do NOT get freeze branching -- they operate on live pools.
+All purchase-path pool additions currently use `_legacySetNextPrizePool()` / `_legacySetFuturePrizePool()` shims. The freeze branch replaces each pair with a conditional: when `prizePoolFrozen`, route to `_getPendingPools()` / `_setPendingPools()`; otherwise route to `_getPrizePools()` / `_setPrizePools()`. This also completes the legacy shim migration for purchase paths. The remaining legacy calls in game-logic paths (JackpotModule, AdvanceModule, EndgameModule, DecimatorModule) do NOT need freeze branching -- they operate on live pools during processing.
 
-The 3 unfreeze exit points in `advanceGame` are: (a) after purchase-phase daily processing (`_unlockRng` when `!jackpotPhaseFlag`), (b) after 5th jackpot draw (`_endPhase()`), and (c) after phase transition completes (`_processPhaseTransition` returns true). Between jackpot days, the freeze persists -- `_unlockRng` is called but `_unfreezePool()` is NOT called, so pending accumulators keep growing across all 5 draws.
+The unfreeze points require careful analysis of `advanceGame`'s `do { } while(false)` control flow. There are exactly 3 exit points where freeze must clear: (a) purchase-phase daily processing complete (`_unlockRng` when `!jackpotPhaseFlag`), (b) jackpot phase end (after `_endPhase()`), and (c) phase transition completion (before `jackpotPhaseFlag = false`). Between jackpot days, freeze persists -- `_unlockRng` is called but `_unfreezePool()` is NOT.
 
-**Primary recommendation:** Add `_swapAndFreeze()` call at the single daily RNG request site, add freeze branching to all 9 purchase-path sites using a consistent pattern (load pending or live pools, add shares, store), add `_unfreezePool()` at exactly 3 exit points, and test with a harness that exposes freeze state and pool values.
+**Primary recommendation:** Implement as two plans: Plan 1 handles `_swapAndFreeze` insertion at the RNG request site plus all purchase-path freeze branching with unit tests; Plan 2 handles `_unfreezePool` insertion at exit points plus freeze persistence tests across 5 jackpot days.
 
 <phase_requirements>
 ## Phase Requirements
 
 | ID | Description | Research Support |
 |----|-------------|-----------------|
-| FREEZE-01 | `_swapAndFreeze()` called at daily RNG request only | Currently `advanceGame` line 177 does `rngGate()` and on `rngWord == 1` just breaks. Must add `_swapAndFreeze(purchaseLevel)` before the break at line 178. This is the ONLY call site. Mid-day path at line 165 correctly uses `_swapTicketSlot()` only. |
-| FREEZE-02 | All 9 purchase-path pool additions branch on `prizePoolFrozen` | Complete inventory below in "Purchase Path Inventory" section. Each site replaces legacy shim calls with a `if (prizePoolFrozen) { pending } else { live }` branch. |
-| FREEZE-03 | `_unfreezePool()` at correct exit points | 3 sites in advanceGame: (1) line 232 after `_unlockRng(day)` in purchase daily path, (2) line 304 after `_endPhase()` in jackpot phase end, (3) line 189 after `_unlockRng(day)` in phase transition completion. No direct `prizePoolFrozen = false` assignment outside `_unfreezePool()`. |
-| FREEZE-04 | Freeze persists across all 5 jackpot days | Line 308 `_unlockRng(day)` in between-jackpot-day path does NOT call `_unfreezePool()`. Only the 5th-draw exit (line 304) unfreezes. Pending accumulators grow across all 5 days because `_swapAndFreeze()` checks `if (!prizePoolFrozen)` before zeroing -- when already frozen (jackpot phase day 2-5), accumulators keep growing. |
+| FREEZE-01 | `_swapAndFreeze()` called at daily RNG request only | Single insertion point: AdvanceModule line 177-179 (`rngWord == 1` branch). Currently just sets `stage = STAGE_RNG_REQUESTED; break`. Must call `_swapAndFreeze(purchaseLevel)` before the break. Mid-day path (line 165) already correctly uses `_swapTicketSlot()` only -- no change needed. |
+| FREEZE-02 | All purchase-path pool additions branch on `prizePoolFrozen` | 7 purchase functions across 4 files with pool-addition sites: DegenerusGame.sol `recordMint` (lines 408-414), DegenerusGame.sol `receive()` (line 2818), MintModule `_purchaseFor` lootbox split (lines 752-756), WhaleModule `_purchaseWhaleBundle` (lines 295-296), WhaleModule `_purchaseLazyPass` (lines 417-425), WhaleModule `_purchaseDeityPass` (lines 536-537), DegeneretteModule `placeBet` (line 588). Each replaces `_legacySet*` calls with freeze-aware branching. |
+| FREEZE-03 | `_unfreezePool()` at correct exit points only; no direct `prizePoolFrozen = false` outside `_unfreezePool` | 3 insertion points in AdvanceModule: (a) after `_unlockRng(day)` at line 232 (purchase daily, `!lastPurchaseDay` path), (b) after `_endPhase()` at line 304 (jackpot phase end), (c) after `_unlockRng(day)` at line 189 (phase transition done). Between-jackpot-day `_unlockRng` at line 308 must NOT have `_unfreezePool()`. Grep verification: `prizePoolFrozen = false` must appear only inside `_unfreezePool()` in DegenerusGameStorage.sol. |
+| FREEZE-04 | Freeze persists across all 5 jackpot days; accumulators not reset between draws | `_swapAndFreeze` has `if (!prizePoolFrozen)` guard -- during jackpot phase, subsequent daily swaps skip the accumulator reset. Between-day `_unlockRng` (line 308) has no `_unfreezePool()`. Test must simulate 5 sequential daily cycles with purchases between each, verifying pending accumulators grow monotonically and live pools remain constant. |
 </phase_requirements>
 
 ## Standard Stack
@@ -42,30 +42,34 @@ forge clean && forge build
 # Run phase 3 tests
 forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" -vvv
 
-# Run all tests
+# Run all tests (including Phase 1 and 2)
 forge test
 
-# Grep verification: no direct prizePoolFrozen = false outside _unfreezePool
-grep -n 'prizePoolFrozen = false' contracts/storage/DegenerusGameStorage.sol
-# Expected: 1 result (inside _unfreezePool only)
+# Grep verification for FREEZE-01 (single call site)
+grep -rn "_swapAndFreeze" contracts/modules/
+# Expected: exactly 1 result in AdvanceModule
 
-# Grep verification: _swapAndFreeze called in exactly 1 location
-grep -rn '_swapAndFreeze' contracts/
-# Expected: definition in storage + 1 call site in AdvanceModule
+# Grep verification for FREEZE-03 (no direct freeze clear)
+grep -rn "prizePoolFrozen = false" contracts/
+# Expected: only in DegenerusGameStorage.sol _unfreezePool()
+
+# Grep verification for legacy shim elimination at purchase sites
+grep -n "_legacySet" contracts/DegenerusGame.sol contracts/modules/DegenerusGameMintModule.sol contracts/modules/DegenerusGameWhaleModule.sol contracts/modules/DegenerusGameDegeneretteModule.sol
+# Expected: 0 results after Phase 3 (purchase-path sites migrated)
 ```
 
 ## Architecture Patterns
 
-### Purchase Path Freeze Branch Pattern
+### Purchase-Path Freeze Branching Pattern
 
-Every purchase-path pool addition follows the same pattern:
+Every purchase-path pool addition follows this pattern, replacing the legacy shim pair:
 
 ```solidity
 // BEFORE (legacy shims, no freeze awareness):
 _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + futureShare);
 _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
 
-// AFTER (freeze-aware, using packed helpers):
+// AFTER (freeze-aware, packed helpers, single SLOAD+SSTORE per path):
 if (prizePoolFrozen) {
     (uint128 pNext, uint128 pFuture) = _getPendingPools();
     _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(futureShare));
@@ -75,141 +79,130 @@ if (prizePoolFrozen) {
 }
 ```
 
-Both branches: 1 SLOAD + 1 SSTORE. The pattern is identical at all 9 sites, differing only in variable names for the share amounts.
+Source: `audit/PLAN-ALWAYS-OPEN-PURCHASES.md` Section 3.
 
-### Unfreeze Site Pattern
+**Key invariant:** Both branches are 1 SLOAD + 1 SSTORE. This is a gas improvement over the legacy shim pattern (which was 2 SLOADs + 2 SSTOREs per pair).
+
+### Variant: Future-Only Additions
+
+Some purchase paths only add to `futurePrizePool` (receive fallback, degenerette bets). Pattern simplifies:
 
 ```solidity
-// At each exit point:
-_unlockRng(day);
-_unfreezePool();   // <<< add after _unlockRng at purchase daily and transition end
-                   //     add after _endPhase() at jackpot phase end
+// BEFORE:
+_legacySetFuturePrizePool(_legacyGetFuturePrizePool() + amount);
+
+// AFTER:
+if (prizePoolFrozen) {
+    (uint128 pNext, uint128 pFuture) = _getPendingPools();
+    _setPendingPools(pNext, pFuture + uint128(amount));
+} else {
+    (uint128 next, uint128 future) = _getPrizePools();
+    _setPrizePools(next, future + uint128(amount));
+}
 ```
 
-### Sites That Must NOT Get Freeze Branching
+### AdvanceGame Exit-Point Mapping
 
-Game-logic pool operations continue using `_legacyGet/Set*` shims (or direct packed helpers). These are NOT purchase revenue -- they are pool transfers, drawdowns, and consolidations:
+The `advanceGame` daily path uses a `do { } while(false)` pattern with `break` exits. Each exit corresponds to a game state transition. Complete freeze/unfreeze mapping:
 
-- `_applyTimeBasedFutureTake` -- moves ETH between next and future
-- `_consolidatePrizePools` -- merges next into current
-- `_drawDownFuturePrizePool` -- moves future into next/current
-- `payDailyJackpot` -- draws from future pool for ETH distribution
-- Jackpot lootbox budgets -- internal pool accounting
-- `_endPhase` pool transfers
-- Decimator lootbox payouts
-- Endgame settlement
-- GameOver drain
+| Line | Exit Stage | Freeze Action | Rationale |
+|------|-----------|---------------|-----------|
+| 177-179 | STAGE_RNG_REQUESTED | `_swapAndFreeze()` | Daily RNG request -- freeze starts here |
+| 185-186 | STAGE_TRANSITION_WORKING | none | Mid-transition, freeze already active |
+| 188-193 | STAGE_TRANSITION_DONE | `_unfreezePool()` | Transition complete, new purchase phase |
+| 208-209 | STAGE_FUTURE_TICKETS_WORKING | none | Still processing, freeze active |
+| 217-220 | STAGE_TICKETS_WORKING | none | Still processing, freeze active |
+| 232-234 | STAGE_PURCHASE_DAILY | `_unfreezePool()` | Purchase-phase daily done, no jackpot |
+| 277-278 | STAGE_ENTERED_JACKPOT | none | Entering jackpot -- freeze persists |
+| 293-294 | STAGE_JACKPOT_ETH_RESUME | none | Mid-payout, freeze active |
+| 304-306 | STAGE_JACKPOT_PHASE_ENDED | `_unfreezePool()` | All 5 draws done |
+| 308-310 | STAGE_JACKPOT_COIN_TICKETS | none | Between jackpot days -- freeze persists |
+| 314-315 | STAGE_JACKPOT_DAILY_STARTED | none | Mid-payout, freeze active |
 
-These operate on live pool values which is correct -- jackpot payouts use pre-freeze pool values, not inflated by concurrent purchases.
+### Anti-Patterns to Avoid
 
-## Purchase Path Inventory (All 9 Sites)
+- **Unfreezing between jackpot days:** The `_unlockRng(day)` call at line 308 unlocks RNG for the next day but must NOT unfreeze the pool. All 5 jackpot payouts must use pre-freeze pool values.
+- **Resetting pending accumulators between jackpot days:** `_swapAndFreeze` has `if (!prizePoolFrozen)` guard precisely for this -- subsequent daily swaps during jackpot phase skip the accumulator reset.
+- **Direct `prizePoolFrozen = false`:** All freeze clearing must go through `_unfreezePool()` which atomically applies pending to live pools. Direct assignment would lose accumulated revenue.
+- **Freeze branching in game-logic paths:** JackpotModule (`consolidatePrizePools`, `payDailyJackpot`), AdvanceModule (`_applyTimeBasedFutureTake`, `_drawDownFuturePrizePool`), EndgameModule, DecimatorModule all operate on live pools during processing. They do NOT need freeze branching.
 
-### Site 1: recordMint -- Ticket Purchase Pool Split
-- **File:** `DegenerusGame.sol` lines 406-414
-- **Variables:** `futureShare`, `nextShare` (derived from `prizeContribution`)
-- **Current code:** `_legacySetFuturePrizePool(... + futureShare)` + `_legacySetNextPrizePool(... + nextShare)`
-- **Notes:** Two separate shim calls that each do SLOAD+SSTORE. Freeze branch consolidates to 1 SLOAD + 1 SSTORE.
+## Purchase Path Catalog (All 7 Functions)
 
-### Site 2: ETH Receive Fallback
-- **File:** `DegenerusGame.sol` line 2818
-- **Variables:** `msg.value` goes entirely to future pool
-- **Current code:** `_legacySetFuturePrizePool(_legacyGetFuturePrizePool() + msg.value)`
-- **Notes:** Future-only addition. Freeze branch: `pFuture + uint128(msg.value)` or `future + uint128(msg.value)`.
+### 1. DegenerusGame.sol -- `recordMint` (lines 405-414)
+- **Shares:** `futureShare`, `nextShare` (derived from `prizeContribution`)
+- **Current:** `_legacySetFuturePrizePool(... + futureShare)` + `_legacySetNextPrizePool(... + nextShare)`
+- **Pattern:** Both next and future, guarded by `if (futureShare != 0)` / `if (nextShare != 0)`
+- **Note:** Consolidate both additions into single freeze branch (1 SLOAD+SSTORE vs current 2+2)
 
-### Site 3: Lootbox Purchase Pool Split
-- **File:** `DegenerusGameMintModule.sol` lines 752-756
-- **Variables:** `futureDelta` (futureShare + rewardShare), `nextShare`
-- **Current code:** Two separate legacy shim calls
-- **Notes:** Distress mode changes BPS splits but the pool addition site is the same.
+### 2. DegenerusGame.sol -- `receive()` (line 2818)
+- **Shares:** `msg.value` goes entirely to future pool
+- **Current:** `_legacySetFuturePrizePool(_legacyGetFuturePrizePool() + msg.value)`
+- **Pattern:** Future-only
 
-### Site 4: Whale Bundle Pool Split
-- **File:** `DegenerusGameWhaleModule.sol` lines 295-296
-- **Variables:** `totalPrice - nextShare` (to future), `nextShare` (to next)
-- **Current code:** Two separate legacy shim calls
+### 3. DegenerusGameMintModule.sol -- lootbox split (lines 752-756)
+- **Shares:** `futureDelta` (futureShare + rewardShare), `nextShare`
+- **Current:** Two separate legacy shim calls
+- **Pattern:** Both next and future, guarded by `if (futureDelta != 0)` / `if (nextShare != 0)`
 
-### Site 5: Lazy Pass Pool Split
-- **File:** `DegenerusGameWhaleModule.sol` lines 417-425
-- **Variables:** `futureShare`, `nextShare` (totalPrice - futureShare)
-- **Current code:** Two separate legacy shim calls with null guards
+### 4. DegenerusGameWhaleModule.sol -- `_purchaseWhaleBundle` (lines 295-296)
+- **Shares:** `totalPrice - nextShare` (to future), `nextShare` (to next)
+- **Current:** Two separate legacy shim calls, no zero guards
+- **Pattern:** Both next and future, always nonzero
 
-### Site 6: Deity Pass Pool Split
-- **File:** `DegenerusGameWhaleModule.sol` lines 536-537
-- **Variables:** `nextShare`, `totalPrice - nextShare` (to future)
-- **Current code:** Two separate legacy shim calls
+### 5. DegenerusGameWhaleModule.sol -- `_purchaseLazyPass` (lines 417-425)
+- **Shares:** `futureShare`, `nextShare` (totalPrice - futureShare)
+- **Current:** Two separate legacy shim calls with null guards
+- **Pattern:** Both next and future, guarded
 
-### Site 7: Degenerette ETH Bet
-- **File:** `DegenerusGameDegeneretteModule.sol` line 588
-- **Variables:** `totalBet` goes entirely to future pool
-- **Current code:** `_legacySetFuturePrizePool(_legacyGetFuturePrizePool() + totalBet)`
-- **Notes:** Future-only addition, like receive fallback.
+### 6. DegenerusGameWhaleModule.sol -- `_purchaseDeityPass` (lines 536-537)
+- **Shares:** `nextShare`, `totalPrice - nextShare` (to future)
+- **Current:** Two separate legacy shim calls, no zero guards
+- **Pattern:** Both next and future, always nonzero
 
-### Site 8: Degenerette Payout Return
-- **File:** `DegenerusGameDegeneretteModule.sol` lines 701-717
-- **Variables:** Losers' ETH returned to future pool
-- **Analysis needed:** This is the `_resolveBet` path. When a degenerette bet is resolved and the house wins, the ETH stays in the pool. Need to verify if this is a "purchase path" or "game logic" -- it happens during bet resolution, not purchase time.
+### 7. DegenerusGameDegeneretteModule.sol -- `placeBet` (line 588)
+- **Shares:** `totalBet` goes entirely to future pool
+- **Current:** `_legacySetFuturePrizePool(_legacyGetFuturePrizePool() + totalBet)`
+- **Pattern:** Future-only, inside `if (currency == CURRENCY_ETH)` block
 
-### Site 9: Additional whale/lootbox sites
-- **Analysis:** The PLAN lists "296-297, 419-426, 537-538" for WhaleModule (3 sites) plus DegenerusGame recordMint + receive + MintModule lootbox + DegeneretteModule = total 7. Need to identify the 8th and 9th.
-
-**CORRECTION -- Revised count from plan review:**
-
-The plan (Section 3) lists these purchase-path addition locations:
-
-| # | File | Lines | Context |
-|---|------|-------|---------|
-| 1 | DegenerusGame.sol | 411, 415 | `recordMint` ticket purchase pool split |
-| 2 | DegenerusGameMintModule.sol | 738, 741 | Lootbox purchase pool split |
-| 3 | DegenerusGameWhaleModule.sol | 296-297 | Whale bundle pool split |
-| 4 | DegenerusGameWhaleModule.sol | 419-426 | Lazy pass pool split |
-| 5 | DegenerusGameWhaleModule.sol | 537-538 | Deity pass pool split |
-| 6 | DegenerusGameDegeneretteModule.sol | 589 | Degenerette bets |
-| 7 | DegenerusGame.sol | 2820 | ETH receive fallback |
-
-That is 7 distinct sites across 4 contracts. The success criteria says "all 9 purchase paths" -- the additional 2 paths may refer to purchase entry points rather than pool addition sites. For example, `_callTicketPurchase` and `_purchaseFor` are purchase entry points (Phase 5 lock removal), and coinflip/lootbox open are purchase paths that may not directly add to pools.
-
-**Verification needed at plan time:** Confirm whether "9 purchase paths" refers to 9 entry points (including lootbox open, coinflip) or 9 pool-addition sites. The plan's Section 3 table lists 7 pool-addition sites. The integration test should exercise all purchase entry points that can produce pool additions under freeze.
+### NOT a purchase path: DegeneretteModule `_distributePayout` (lines 701-717)
+- This SUBTRACTS from `futurePrizePool` (pool redistribution for payouts). It is game logic, not purchase revenue. No freeze branching needed.
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| Freeze branch logic | Per-site custom if/else | Consistent pattern from Section 3 of plan | Must be identical at all sites for audit clarity |
-| Pool packing/unpacking | Manual bit shifts | `_getPrizePools()`/`_setPrizePools()` and `_getPendingPools()`/`_setPendingPools()` | Already built in Phase 1, tested |
-| Freeze lifecycle | Manual flag management | `_swapAndFreeze()` / `_unfreezePool()` | Single control points, already implemented in storage |
+| Freeze flag management | Manual `prizePoolFrozen = true/false` at each site | `_swapAndFreeze()` and `_unfreezePool()` from Phase 1 | Single control points; `_unfreezePool` atomically applies pending; `_swapAndFreeze` conditionally resets accumulators |
+| Prize pool reads/writes | Direct `prizePoolsPacked` bit manipulation | `_getPrizePools()` / `_setPrizePools()` / `_getPendingPools()` / `_setPendingPools()` | Encapsulated packing, type-safe uint128 returns |
+| Legacy shim replacement | New shims or partial migration | Direct packed helper calls in freeze branch | Shims were explicitly marked for removal and add unnecessary SLOAD overhead |
 
 ## Common Pitfalls
 
-### Pitfall 1: Missing an Unfreeze Site
-**What goes wrong:** If `_unfreezePool()` is not called at one of the 3 exit points, `prizePoolFrozen` stays true permanently. All future purchases go to pending accumulators that never apply.
-**Why it happens:** The `advanceGame` do-while loop has many break paths. Easy to add unfreeze at the obvious ones and miss a subtle exit.
-**How to avoid:** The 3 unfreeze sites are: (1) purchase daily after `_unlockRng`, (2) after `_endPhase()`, (3) after `_processPhaseTransition` completes. Grep for `prizePoolFrozen = false` to verify only `_unfreezePool` sets it.
-**Warning signs:** In testing, if `prizePoolFrozen` is still true after a full daily cycle completes, an unfreeze site was missed.
+### Pitfall 1: Missing an Unfreeze Point
+**What goes wrong:** If `_unfreezePool()` is omitted from an exit path, `prizePoolFrozen` stays true permanently. All subsequent purchases accumulate in pending but never apply to live pools.
+**Why it happens:** The `do { } while(false)` pattern in `advanceGame` has 11 distinct `break` exits. Only 3 need `_unfreezePool()`.
+**How to avoid:** Use the exit-point mapping table above. After implementation, grep for `_unlockRng` and verify each call site's freeze expectation.
+**Warning signs:** `prizePoolFrozen` returning true when no RNG request is pending.
 
 ### Pitfall 2: Unfreezing Between Jackpot Days
-**What goes wrong:** If `_unfreezePool()` is called at the between-jackpot-day `_unlockRng` (line 308), pending accumulators apply too early. Jackpot day 2-5 payouts use inflated pool values.
-**Why it happens:** Natural instinct to pair `_unlockRng` with `_unfreezePool` at every site.
-**How to avoid:** Only 3 unfreeze sites. The between-jackpot-day `_unlockRng` at line 308 must NOT call `_unfreezePool()`. The freeze persists until `_endPhase()` on the 5th draw.
-**Warning signs:** Pool values change between jackpot days even though no unfreeze should occur.
+**What goes wrong:** If `_unfreezePool()` is added after the between-day `_unlockRng(day)` at line 308, pending accumulators apply too early. Jackpot days 2-5 see inflated pool values.
+**Why it happens:** Natural instinct to pair every `_unlockRng` with `_unfreezePool`. The between-day call at line 308 looks identical to the purchase-daily call at line 232.
+**How to avoid:** Only unfreeze at line 232 (purchase daily), line 304 (phase end), and line 189 (transition done). Never at line 308.
+**Warning signs:** Pool values changing between jackpot draws.
 
-### Pitfall 3: Zeroing Pending Accumulators on Subsequent Jackpot Day Swaps
-**What goes wrong:** `_swapAndFreeze()` zeros `prizePoolPendingPacked` when freezing. If this runs on jackpot day 2 when already frozen, it would zero accumulators from day 1 purchases.
-**Why it happens:** Not checking `if (!prizePoolFrozen)` before zeroing.
-**How to avoid:** Already handled -- `_swapAndFreeze()` checks `if (!prizePoolFrozen)` before zeroing. When already frozen (jackpot days 2-5), it skips the zero. Verify this with a test.
+### Pitfall 3: Accumulator Reset During Jackpot Phase
+**What goes wrong:** If `_swapAndFreeze` resets `prizePoolPendingPacked = 0` on every daily swap during jackpot phase, purchases from days 1-4 are silently lost.
+**Why it happens:** Without the `if (!prizePoolFrozen)` guard, each jackpot-day swap zeros the accumulators.
+**How to avoid:** The guard is already in `_swapAndFreeze()` from Phase 1. Verify in tests that pending grows monotonically across 5 jackpot days.
 
-### Pitfall 4: Casting Overflow on uint128
-**What goes wrong:** If a share amount exceeds uint128 max (~3.4e20 ETH), the `uint128()` cast silently truncates.
-**Why it happens:** Solidity 0.8 checked arithmetic only catches overflow on arithmetic ops, not on explicit downcasts.
-**How to avoid:** Not a practical concern -- total ETH supply is ~120M ETH. The plan notes uint128 max far exceeds total ETH supply. No mitigation needed.
+### Pitfall 4: Degenerette Payout Path Confusion
+**What goes wrong:** Adding freeze branching to `_distributePayout` (DegeneretteModule line 701) which SUBTRACTS from the pool.
+**Why it happens:** Both `placeBet` (line 588, adds) and `_distributePayout` (line 701, subtracts) touch `futurePrizePool`. They look similar.
+**How to avoid:** Only bet placement at line 588 is a purchase-path addition. `_distributePayout` is game logic operating on live pools -- no freeze branch.
 
 ### Pitfall 5: Legacy Shim Calls Remaining at Purchase Sites
-**What goes wrong:** If a purchase-path site still uses `_legacySetNextPrizePool` instead of the freeze branch, purchases bypass the freeze entirely and go to live pools.
-**Why it happens:** Missing a site during the migration.
-**How to avoid:** After implementation, grep for `_legacySet` calls in purchase-path files. All purchase-path sites should use the freeze branch pattern. Game-logic sites may still use legacy shims (or be migrated to direct packed helpers).
-
-### Pitfall 6: Degenerette Bet Resolution Pool Return
-**What goes wrong:** Degenerette bet resolution (lines 701-717 in DegeneretteModule) modifies `futurePrizePool` when distributing ETH payouts/returns. If this is treated as a purchase path, freeze branching causes it to accumulate in pending when it should immediately affect live pools.
-**Why it happens:** Confusion between bet placement (purchase path) and bet resolution (game logic).
-**How to avoid:** Only the bet placement at line 588 (`_legacySetFuturePrizePool(... + totalBet)`) gets freeze branching. Bet resolution at lines 701-717 is game logic (pool redistribution) and stays on live pools.
+**What goes wrong:** If a purchase-path site still uses `_legacySetNextPrizePool` instead of the freeze branch, purchases bypass the freeze entirely.
+**Why it happens:** Missing a site during migration.
+**How to avoid:** After implementation, grep for `_legacySet` calls in the 4 purchase-path files. Should be zero results.
 
 ## Code Examples
 
@@ -225,7 +218,7 @@ if (rngWord == 1) {
 }
 ```
 
-### FREEZE-02: Purchase Path Freeze Branch (recordMint example)
+### FREEZE-02: Purchase Path Freeze Branch (recordMint)
 
 ```solidity
 // DegenerusGame.sol recordMint, replacing lines 406-414:
@@ -234,21 +227,19 @@ if (prizeContribution != 0) {
     uint256 nextShare = prizeContribution - futureShare;
     if (prizePoolFrozen) {
         (uint128 pNext, uint128 pFuture) = _getPendingPools();
-        _setPendingPools(
-            pNext + uint128(nextShare),
-            pFuture + uint128(futureShare)
-        );
+        if (nextShare != 0) pNext += uint128(nextShare);
+        if (futureShare != 0) pFuture += uint128(futureShare);
+        _setPendingPools(pNext, pFuture);
     } else {
         (uint128 next, uint128 future) = _getPrizePools();
-        _setPrizePools(
-            next + uint128(nextShare),
-            future + uint128(futureShare)
-        );
+        if (nextShare != 0) next += uint128(nextShare);
+        if (futureShare != 0) future += uint128(futureShare);
+        _setPrizePools(next, future);
     }
 }
 ```
 
-### FREEZE-02: Future-Only Freeze Branch (receive fallback example)
+### FREEZE-02: Future-Only Freeze Branch (receive fallback)
 
 ```solidity
 // DegenerusGame.sol receive():
@@ -267,19 +258,19 @@ receive() external payable {
 ### FREEZE-03: Unfreeze at 3 Exit Points
 
 ```solidity
-// Exit 1: Purchase daily (after _unlockRng, when !inJackpot)
+// Exit 1: Purchase daily (line 232 area)
 _unlockRng(day);
 _unfreezePool();                  // <<< ADD
 stage = STAGE_PURCHASE_DAILY;
 break;
 
-// Exit 2: Jackpot phase end (after _endPhase)
+// Exit 2: Jackpot phase end (line 304 area)
 _endPhase();
 _unfreezePool();                  // <<< ADD
 stage = STAGE_JACKPOT_PHASE_ENDED;
 break;
 
-// Exit 3: Phase transition complete
+// Exit 3: Phase transition complete (line 189 area)
 phaseTransitionActive = false;
 _unlockRng(day);
 _unfreezePool();                  // <<< ADD
@@ -302,25 +293,23 @@ break;
 ### Phase Requirements -> Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| FREEZE-01 | `_swapAndFreeze()` called at exactly one site (daily RNG) | unit + grep | `grep -rn '_swapAndFreeze' contracts/modules/ \| wc -l` (expect 1) | No -- Wave 0 |
-| FREEZE-02 | All 7 purchase-path sites branch on `prizePoolFrozen` | unit | `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" --match-test "testFrozen" -vvv` | No -- Wave 0 |
-| FREEZE-03 | `_unfreezePool()` is sole path to clear freeze | grep + unit | `grep -n 'prizePoolFrozen = false' contracts/` (expect 1 in _unfreezePool) | No -- Wave 0 |
-| FREEZE-04 | Freeze persists across 5 jackpot days | integration | `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" --match-test "testJackpotPersistence" -vvv` | No -- Wave 0 |
+| FREEZE-01 | `_swapAndFreeze()` at exactly one site (daily RNG) | grep | `grep -rn '_swapAndFreeze' contracts/modules/` (expect 1) | N/A -- grep |
+| FREEZE-02 | All 7 purchase-path sites branch on `prizePoolFrozen` | unit | `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" --match-test "Frozen\|Unfrozen" -vvv` | No -- Wave 0 |
+| FREEZE-03 | `_unfreezePool()` is sole path to clear freeze | grep + unit | `grep -n 'prizePoolFrozen = false' contracts/` (expect 1) | N/A -- grep |
+| FREEZE-04 | Freeze persists across 5 jackpot days | unit | `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" --match-test "Persist" -vvv` | No -- Wave 0 |
 
-### Testing Strategy: Harness-Based (Same as Phase 2)
+### Testing Strategy: Harness-Based
 
-Following Phase 2's successful pattern, use a `FreezeHarness` contract that inherits `DegenerusGameStorage` and exposes internal functions. This avoids the delegatecall + full contract deployment complexity.
+Following Phase 2's successful pattern, use a `FreezeHarness` contract that inherits `DegenerusGameStorage` and exposes internal functions. The existing `StorageHarness` in `test/fuzz/StorageFoundation.t.sol` already exposes `_swapAndFreeze`, `_unfreezePool`, `prizePoolFrozen`, and all pending/prize pool helpers. Extend or reuse this.
 
-The harness must expose:
-- `_swapAndFreeze()` / `_unfreezePool()`
-- `_getPrizePools()` / `_setPrizePools()`
-- `_getPendingPools()` / `_setPendingPools()`
-- `prizePoolFrozen` getter/setter
-- Prize pool values for assertion
+For FREEZE-02, the freeze branching pattern is identical at all 7 sites. A harness test can verify the pattern works correctly (frozen: pending changes, live unchanged; unfrozen: live changes, pending unchanged). The actual contract modifications are mechanical -- each site follows the same template.
 
-The integration test for "all 9 purchase paths" cannot use the harness alone -- it needs the actual purchase functions. However, the success criteria specifies "an integration test exercising all 9 purchase paths under active freeze." This likely needs a more comprehensive test harness or deployment. Consider whether the QueueHarness pattern can be extended, or whether this test is better deferred to Phase 4/5 when the full advanceGame rewrite is complete.
-
-**Pragmatic approach:** Test the freeze mechanism (freeze/unfreeze lifecycle, accumulator persistence, pool isolation) with the harness. Test freeze branching at each purchase site with targeted unit tests that set `prizePoolFrozen = true` and verify pool additions go to pending. Defer the full 9-path integration test to Phase 5 when lock removal enables end-to-end purchase testing.
+For FREEZE-04, simulate 5 daily cycles by:
+1. Set `prizePoolFrozen = true` via `_swapAndFreeze`
+2. Add to pending pools (simulating purchases) between each "day"
+3. Call `_swapAndFreeze` again (should NOT reset accumulators due to `if (!prizePoolFrozen)` guard)
+4. Verify pending accumulators grow monotonically
+5. Call `_unfreezePool` at end -- verify live pools increase by total accumulated pending
 
 ### Sampling Rate
 - **Per task commit:** `forge test --match-path "test/fuzz/PrizePoolFreeze.t.sol" -vvv`
@@ -328,42 +317,35 @@ The integration test for "all 9 purchase paths" cannot use the harness alone -- 
 - **Phase gate:** Full suite green before `/gsd:verify-work`
 
 ### Wave 0 Gaps
-- [ ] `test/fuzz/PrizePoolFreeze.t.sol` -- FreezeHarness + freeze lifecycle tests covering FREEZE-01 through FREEZE-04
-- [ ] Extend existing `QueueHarness` with freeze-related exposed functions if needed
+- [ ] `test/fuzz/PrizePoolFreeze.t.sol` -- FreezeHarness + freeze lifecycle tests for FREEZE-02 and FREEZE-04
 
 ## Open Questions
 
-1. **"9 purchase paths" count**
-   - What we know: The plan Section 3 table lists 7 pool-addition sites across 4 contracts. The success criteria says "all 9 purchase paths."
-   - What's unclear: Are the 9 paths counting entry points (e.g., including coinflip deposit which calls `recordCoinflipDeposit` but doesn't add to prize pools) or only pool-addition sites?
-   - Recommendation: Implement freeze branching at all 7 pool-addition sites identified. The integration test should verify all purchase entry points that result in pool additions. If additional paths are identified during implementation, add freeze branching.
+1. **"9 purchase paths" vs 7 purchase functions**
+   - What we know: The plan Section 3 table lists 7 pool-addition locations across 4 contracts. The success criteria says "all 9 purchase paths."
+   - What's unclear: Whether "9" counts distinct entry points (including e.g. lootbox open paths) or pool-addition sites.
+   - Recommendation: Implement freeze branching at all 7 pool-addition functions identified by grep. This covers every `_legacySet*` call in purchase-path files. After implementation, verify with grep that no legacy shim calls remain in the 4 purchase-path contract files.
 
-2. **Degenerette bet resolution (lines 701-717)**
-   - What we know: Bet placement (line 588) is clearly a purchase path. Bet resolution modifies `futurePrizePool` but is game logic (redistributing existing pool funds for payouts).
-   - What's unclear: Should bet resolution also branch on freeze?
-   - Recommendation: No -- bet resolution is pool redistribution, not new purchase revenue. Only bet placement at line 588 gets freeze branching.
-
-3. **Legacy shim removal timing**
-   - What we know: Phase 2 research noted ~70 legacy shim calls marked "REMOVE IN PHASE 2" but Phase 2 did not remove them (focused on queue double-buffer). Phase 3 replaces 7 purchase-path shim calls with freeze branches.
-   - What's unclear: Should remaining non-purchase legacy shim calls also be migrated in Phase 3?
-   - Recommendation: Only migrate the 7 purchase-path sites in Phase 3. Non-purchase sites (game logic) can continue using legacy shims until they are migrated in a separate effort. This keeps Phase 3 scope tight.
+2. **Legacy shim cleanup scope**
+   - What we know: Phase 3 replaces 7 purchase-path legacy shim call sites. Approximately 40+ game-logic legacy shim calls remain in JackpotModule, AdvanceModule, EndgameModule, DecimatorModule, GameOverModule.
+   - Recommendation: Only migrate purchase-path shims in Phase 3. Game-logic shim migration is mechanical and can be done in Phase 4 (advanceGame rewrite) or as separate cleanup.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Direct code analysis of `contracts/storage/DegenerusGameStorage.sol` -- all infrastructure functions verified present and correct
-- Direct code analysis of `contracts/modules/DegenerusGameAdvanceModule.sol` -- all exit paths mapped
-- Direct code analysis of `contracts/DegenerusGame.sol`, `contracts/modules/DegenerusGameMintModule.sol`, `contracts/modules/DegenerusGameWhaleModule.sol`, `contracts/modules/DegenerusGameDegeneretteModule.sol` -- all purchase-path pool additions inventoried
-- `audit/PLAN-ALWAYS-OPEN-PURCHASES.md` Section 3 -- freeze design specification
-- Phase 2 RESEARCH.md and QueueDoubleBuffer.t.sol -- testing pattern reference
+- `contracts/storage/DegenerusGameStorage.sol` lines 740-757 -- `_swapAndFreeze` and `_unfreezePool` implementations verified present
+- `contracts/modules/DegenerusGameAdvanceModule.sol` lines 121-320 -- all 11 exit points mapped from source
+- `contracts/DegenerusGame.sol`, `contracts/modules/DegenerusGameMintModule.sol`, `contracts/modules/DegenerusGameWhaleModule.sol`, `contracts/modules/DegenerusGameDegeneretteModule.sol` -- all purchase-path pool additions verified by grep
+- `audit/PLAN-ALWAYS-OPEN-PURCHASES.md` Sections 3, 4, 7, 8 -- freeze design specification
+- `test/fuzz/StorageFoundation.t.sol` -- existing harness with freeze/unfreeze exposed functions
 
 ## Metadata
 
 **Confidence breakdown:**
 - Standard stack: HIGH -- same Foundry/Solidity stack, no new dependencies
-- Architecture: HIGH -- all infrastructure functions already implemented in Phase 1, freeze pattern is well-defined in the plan
-- Pitfalls: HIGH -- all exit paths in advanceGame mapped via direct code reading, freeze edge cases documented in plan Section 8
-- Purchase path inventory: HIGH -- grep for `_legacySetNextPrizePool`/`_legacySetFuturePrizePool` is exhaustive; cross-referenced with plan Section 3
+- Architecture: HIGH -- all infrastructure functions already implemented in Phase 1; freeze pattern well-defined in plan; all exit points mapped from source code
+- Pitfalls: HIGH -- all 11 exit paths in advanceGame mapped; jackpot persistence logic verified in `_swapAndFreeze` source
+- Purchase path inventory: HIGH -- exhaustive grep of `_legacySet*` calls cross-referenced with plan Section 3
 
 **Research date:** 2026-03-11
 **Valid until:** 2026-04-11 (stable -- no external dependencies, all code in-repo)
