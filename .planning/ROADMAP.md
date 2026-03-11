@@ -59,10 +59,10 @@ Plans:
   2. An integration test exercising all 9 purchase paths under active freeze shows live pool values unchanged while pending accumulator values increase by the correct amounts
   3. `_unfreezePool()` is the only code path that clears `prizePoolFrozen`; a grep for direct `prizePoolFrozen = false` assignment returns zero results
   4. Freeze persists across all 5 jackpot draw days — a test simulating 5 sequential daily cycles with purchases between each confirms pending accumulators are not reset between draws
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 03-01-PLAN.md — Add freeze branching to all 7 purchase-path pool addition sites + wire _swapAndFreeze/_unfreezePool into advanceGame
+- [x] 03-01-PLAN.md — Add freeze branching to all 7 purchase-path pool addition sites + wire _swapAndFreeze/_unfreezePool into advanceGame
 - [ ] 03-02-PLAN.md — FreezeHarness + freeze lifecycle unit tests covering FREEZE-01 through FREEZE-04
 
 ### Phase 4: advanceGame Rewrite
@@ -96,6 +96,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-11 |
 | 2. Queue Double-Buffer | 2/2 | Complete   | 2026-03-11 |
-| 3. Prize Pool Freeze | 0/2 | Not started | - |
+| 3. Prize Pool Freeze | 1/2 | In Progress|  |
 | 4. advanceGame Rewrite | 0/? | Not started | - |
 | 5. Lock Removal | 0/? | Not started | - |
