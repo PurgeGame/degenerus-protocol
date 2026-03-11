@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Queue Double-Buffer** - Wire all queue functions to write/read key helpers; implement swap with hard drain gate (completed 2026-03-11)
 - [x] **Phase 3: Prize Pool Freeze** - Add freeze branch to all 7 purchase-path pool addition sites; populate pending accumulators (completed 2026-03-11)
 - [x] **Phase 4: advanceGame Rewrite** - Rewrite daily state machine with mid-day path, drain gates, swap/freeze, and unfreeze exit points (completed 2026-03-11)
-- [ ] **Phase 5: Lock Removal** - Remove rngLockedFlag purchase reverts and validate full integration with fuzz suite
+- [x] **Phase 5: Lock Removal** - Remove rngLockedFlag purchase reverts and validate full integration with fuzz suite (completed 2026-03-11)
 
 ## Phase Details
 
@@ -88,7 +88,7 @@ Plans:
   2. A grep for `rngLockedFlag` in MintModule and LootboxModule purchase-path functions returns zero results for the six removed sites
   3. The Foundry fuzz suite passes with tests covering purchase-during-RNG-lock, mid-day threshold trigger, and jackpot-phase multi-day freeze persistence
   4. A gas snapshot confirms at least one fewer SSTORE per purchase compared to pre-milestone baseline (from packed pool helpers)
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 05-01-PLAN.md — Remove six rngLockedFlag purchase-path guards, update NatSpec, clean error declarations, LockRemoval test suite
@@ -104,4 +104,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Queue Double-Buffer | 2/2 | Complete   | 2026-03-11 |
 | 3. Prize Pool Freeze | 2/2 | Complete   | 2026-03-11 |
 | 4. advanceGame Rewrite | 1/1 | Complete   | 2026-03-11 |
-| 5. Lock Removal | 0/1 | Not started | - |
+| 5. Lock Removal | 1/1 | Complete   | 2026-03-11 |

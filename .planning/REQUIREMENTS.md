@@ -36,12 +36,12 @@ Requirements for v1.0 milestone. Each maps to roadmap phases.
 
 ### Lock Removal
 
-- [ ] **LOCK-01**: Remove `rngLockedFlag` revert from `_callTicketPurchase` (MintModule:839)
-- [ ] **LOCK-02**: Remove `rngLockedFlag` revert from `_purchaseFor` lootbox gate (MintModule:627)
-- [ ] **LOCK-03**: Remove `rngLockedFlag` revert from `openLootBox` (LootboxModule:558)
-- [ ] **LOCK-04**: Remove `rngLockedFlag` revert from `openBurnieLootBox` (LootboxModule:641)
-- [ ] **LOCK-05**: Remove `rngLockedFlag` from `jackpotResolutionActive` in Degenerette (DegeneretteModule:504)
-- [ ] **LOCK-06**: Remove redundant `rngLockedFlag` check from lootbox RNG request gate (AdvanceModule:599)
+- [x] **LOCK-01**: Remove `rngLockedFlag` revert from `_callTicketPurchase` (MintModule:839)
+- [x] **LOCK-02**: Remove `rngLockedFlag` revert from `_purchaseFor` lootbox gate (MintModule:627)
+- [x] **LOCK-03**: Remove `rngLockedFlag` revert from `openLootBox` (LootboxModule:558)
+- [x] **LOCK-04**: Remove `rngLockedFlag` revert from `openBurnieLootBox` (LootboxModule:641)
+- [x] **LOCK-05**: Remove `rngLockedFlag` from `jackpotResolutionActive` in Degenerette (DegeneretteModule:504)
+- [x] **LOCK-06**: Remove redundant `rngLockedFlag` check from lootbox RNG request gate (AdvanceModule:599)
 
 ## v2 Requirements
 
@@ -80,12 +80,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADV-01 | Phase 4 | Complete |
 | ADV-02 | Phase 4 | Complete |
 | ADV-03 | Phase 4 | Complete |
-| LOCK-01 | Phase 5 | Pending |
-| LOCK-02 | Phase 5 | Pending |
-| LOCK-03 | Phase 5 | Pending |
-| LOCK-04 | Phase 5 | Pending |
-| LOCK-05 | Phase 5 | Pending |
-| LOCK-06 | Phase 5 | Pending |
+| LOCK-01 | Phase 5 | Complete |
+| LOCK-02 | Phase 5 | Complete |
+| LOCK-03 | Phase 5 | Complete |
+| LOCK-04 | Phase 5 | Complete |
+| LOCK-05 | Phase 5 | Complete |
+| LOCK-06 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 21 total
