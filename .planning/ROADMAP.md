@@ -77,7 +77,7 @@ Plans:
 **Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 04-01-PLAN.md — Pre-RNG drain gate + ticketsFullyProcessed flag in AdvanceModule + AdvanceHarness with all ADV requirement tests
+- [x] 04-01-PLAN.md — Pre-RNG drain gate + ticketsFullyProcessed flag in AdvanceModule + AdvanceHarness with all ADV requirement tests
 
 ### Phase 5: Lock Removal
 **Goal**: rngLockedFlag no longer blocks any ticket purchase path; the full test suite passes confirming always-open purchases are live
@@ -88,7 +88,10 @@ Plans:
   2. A grep for `rngLockedFlag` in MintModule and LootboxModule purchase-path functions returns zero results for the six removed sites
   3. The Foundry fuzz suite passes with tests covering purchase-during-RNG-lock, mid-day threshold trigger, and jackpot-phase multi-day freeze persistence
   4. A gas snapshot confirms at least one fewer SSTORE per purchase compared to pre-milestone baseline (from packed pool helpers)
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 05-01-PLAN.md — Remove six rngLockedFlag purchase-path guards, update NatSpec, clean error declarations, LockRemoval test suite
 
 ## Progress
 
@@ -101,4 +104,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Queue Double-Buffer | 2/2 | Complete   | 2026-03-11 |
 | 3. Prize Pool Freeze | 2/2 | Complete   | 2026-03-11 |
 | 4. advanceGame Rewrite | 1/1 | Complete   | 2026-03-11 |
-| 5. Lock Removal | 0/? | Not started | - |
+| 5. Lock Removal | 0/1 | Not started | - |
