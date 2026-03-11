@@ -153,6 +153,10 @@ abstract contract DegenerusGameStorage {
     ///      Max real level: 2^23 - 1 = 8,388,607 (game would take millennia).
     uint24 internal constant TICKET_SLOT_BIT = 1 << 23;
 
+    /// @dev Mid-day swap threshold: trigger _swapTicketSlot when write queue >= 440.
+    ///      Enables throughput-driven queue draining during the same day.
+    uint32 internal constant MID_DAY_SWAP_THRESHOLD = 440;
+
     /// @dev Hours before gameover liveness guard at which distress mode activates.
     uint48 internal constant DISTRESS_MODE_HOURS = 6;
 
