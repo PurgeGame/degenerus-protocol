@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-11T20:56:39.248Z"
-last_activity: 2026-03-11 — Completed 01-02 consumer migration and storage tests
+status: in-progress
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-11T21:16:16Z"
+last_activity: 2026-03-11 — Completed 02-01 queue key migration
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 100
+  total_plans: 4
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** Players can purchase tickets at any time — no downtime during RNG processing or jackpot payouts
-**Current focus:** Phase 1 — Storage Foundation
+**Current focus:** Phase 2 — Queue Double Buffer
 
 ## Current Position
 
-Phase: 1 of 5 (Storage Foundation) -- COMPLETE
-Plan: 2 of 2 in current phase (complete)
-Status: Phase 1 Complete
-Last activity: 2026-03-11 — Completed 01-02 consumer migration and storage tests
+Phase: 2 of 5 (Queue Double Buffer)
+Plan: 1 of 2 in current phase (complete)
+Status: Phase 2 In Progress
+Last activity: 2026-03-11 — Completed 02-01 queue key migration
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 75%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [██████████] 100%
 *Updated after each plan completion*
 | Phase 01 P01 | 19min | 2 tasks | 11 files |
 | Phase 01 P02 | 8min | 3 tasks | 10 files |
+| Phase 02 P01 | 5min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - [Phase 01]: prizePoolPendingPacked at Slot 16 (in-place replacement) to avoid storage slot shifts
 - [Phase 01]: error E() centralized in DegenerusGameStorage -- Solidity 0.8.34 forbids redeclaration in inheritance chain
 - [Phase 01]: Most nextPrizePool/futurePrizePool references already migrated in prior session; only 2 code-level refs remained in JackpotModule
+- [Phase 02]: Far-future and view functions use _tqWriteKey (not _tqReadKey) -- they sample future levels where purchases land
+- [Phase 02]: Module read-path verified via grep + write-buffer isolation tests (delegatecall harness too complex for unit tests)
 
 ### Pending Todos
 
@@ -79,6 +82,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T20:44:28.888Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-03-11T21:16:16Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
