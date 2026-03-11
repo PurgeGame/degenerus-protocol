@@ -148,6 +148,26 @@ abstract contract DegenerusGameStorage {
     ///      Days 1-4 use a random 6%-14% slice of remaining currentPrizePool.
     ///      Day 5 pays 100% of the remaining currentPrizePool.
 
+    /// @dev Hours before gameover liveness guard at which distress mode activates.
+    uint48 internal constant DISTRESS_MODE_HOURS = 6;
+
+    /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
+    uint48 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 912;
+
+    /// @dev True when gameover liveness guard would fire within DISTRESS_MODE_HOURS.
+    ///      Used to activate distress-mode lootbox behaviour: 100% nextpool allocation
+    ///      and 25% ticket bonus on the distress-bought portion.
+    function _isDistressMode() internal view returns (bool) {
+        if (gameOver) return false;
+        uint48 lst = levelStartTime;
+        uint48 ts = uint48(block.timestamp);
+        if (level == 0) {
+            return uint256(ts) + uint256(DISTRESS_MODE_HOURS) * 1 hours >
+                uint256(lst) + uint256(_DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days;
+        }
+        return uint256(ts) + uint256(DISTRESS_MODE_HOURS) * 1 hours > uint256(lst) + 365 days;
+    }
+
     // =========================================================================
     // SLOT 0: Level Timing, Batching, and Finite State Machine
     // =========================================================================
@@ -1384,4 +1404,13 @@ abstract contract DegenerusGameStorage {
     /// @dev Top degenerette player per level.
     ///      Packed: [96 bits: amount in 1e12 units] [160 bits: address]
     mapping(uint24 => uint256) internal topDegeneretteByLevel;
+
+    // =========================================================================
+    // Distress-Mode Lootbox Tracking
+    // =========================================================================
+
+    /// @dev ETH portion of a lootbox purchased during distress mode (final 6 hours
+    ///      before gameover liveness guard). Used at open time to apply a 25% ticket
+    ///      bonus proportional to the distress fraction of the total lootbox value.
+    mapping(uint48 => mapping(address => uint256)) internal lootboxDistressEth;
 }
