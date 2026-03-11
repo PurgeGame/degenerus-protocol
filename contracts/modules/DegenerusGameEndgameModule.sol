@@ -37,8 +37,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     // Errors
     // -------------------------------------------------------------------------
 
-    /// @notice Generic revert for invalid parameters or unauthorized access.
-    error E();
+    // error E() — inherited from DegenerusGameStorage
 
     // -------------------------------------------------------------------------
     // Events

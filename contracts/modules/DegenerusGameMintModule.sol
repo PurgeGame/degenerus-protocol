@@ -61,8 +61,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     // Errors
     // -------------------------------------------------------------------------
 
-    /// @notice Generic revert for overflow conditions.
-    error E();
+    // error E() — inherited from DegenerusGameStorage
     /// @notice BURNIE ticket purchases are blocked within 30 days of the liveness-guard timeout.
     error CoinPurchaseCutoff();
 

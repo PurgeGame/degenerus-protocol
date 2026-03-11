@@ -38,9 +38,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
         20 ether;
 
-    /// @notice Generic error for failed operations
-    /// @dev Used for transfer failures and other error conditions
-    error E();
+    // error E() — inherited from DegenerusGameStorage
 
     /// @notice Emitted when winnings are credited to a player's claimable balance
     /// @param player The player who earned the winnings

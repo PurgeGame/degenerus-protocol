@@ -32,44 +32,44 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * -----------------------------------------------------------------------------
  *
  * +-----------------------------------------------------------------------------+
- * | SLOT 0 (32 bytes) — Timing, Batching, FSM                                   |
+ * | EVM SLOT 0 (32 bytes) — Timing, FSM, Cursors, Counters, Flags              |
  * +-----------------------------------------------------------------------------+
  * | [0:6]   levelStartTime           uint48   Timestamp when level opened       |
  * | [6:12]  dailyIdx                 uint48   Monotonic day counter             |
  * | [12:18] rngRequestTime           uint48   When last VRF request was fired   |
- * | [18:22] (unused)                 uint32   Previously airdropTicketsProcessedCount |
- * | [22:26] (unused)                 uint32   Previously airdropIndex           |
- * | [26:29] level                    uint24   Current jackpot level (starts at 0) |
- * | [29:30] jackpotPhaseFlag         bool    Phase: false=PURCHASE, true=JACKPOT |
- * | [30:32] <padding>                        2 bytes unused                      |
+ * | [18:21] level                    uint24   Current jackpot level (starts at 0) |
+ * | [21:22] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT|
+ * | [22:23] jackpotCounter           uint8    Jackpots processed this level      |
+ * | [23:24] earlyBurnPercent         uint8    Previous pool % in early burn      |
+ * | [24:25] poolConsolidationDone    bool     Pool consolidation executed flag   |
+ * | [25:26] lastPurchaseDay          bool     Prize target met flag              |
+ * | [26:27] decWindowOpen            bool     Decimator window latch             |
+ * | [27:28] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
+ * | [28:29] phaseTransitionActive    bool     Level transition in progress       |
+ * | [29:30] gameOver                 bool     Terminal state flag                |
+ * | [30:31] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
+ * | [31:32] dailyEthBucketCursor     uint8    Bucket cursor for daily ETH dist   |
  * +-----------------------------------------------------------------------------+
- *   Total: 6+6+6+4+4+3+1+2 = 32 bytes ✓ (perfectly packed)
+ *   Total: 32 bytes (fully packed)
  *
  * +-----------------------------------------------------------------------------+
- * | SLOT 1 (32 bytes) — Cursors, Counters, Boolean Flags                        |
+ * | EVM SLOT 1 (32 bytes) — ETH Phase, Price, Double-Buffer Fields             |
  * +-----------------------------------------------------------------------------+
- * | [0:1]   jackpotCounter           uint8    Jackpots processed this level      |
- * | [1:2]   earlyBurnPercent         uint8    Previous pool % in early burn      |
- * | [2:3]   poolConsolidationDone    bool     Pool consolidation executed flag   |
- * | [3:4]   lastPurchaseDay          bool     Prize target met flag              |
- * | [4:5]   decWindowOpen            bool     Decimator window latch             |
- * | [5:6]   rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
- * | [6:7]   phaseTransitionActive    bool     Level transition in progress       |
- * | [7:8]   gameOver                 bool     Terminal state flag                |
- * | [8:9]   dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [9:10]  dailyEthBucketCursor     uint8    Bucket cursor for daily ETH dist   |
- * | [10:11] dailyEthPhase            uint8    0=current level, 1=carryover       |
- * | [11:12] compressedJackpotFlag    bool     Compressed jackpot phase active    |
- * | [12:18] purchaseStartDay         uint48   Day index when purchase phase began|
- * | [18:32] <padding>                        14 bytes unused                     |
+ * | [0:1]   dailyEthPhase            uint8    0=current level, 1=carryover       |
+ * | [1:2]   compressedJackpotFlag    bool     Compressed jackpot phase active    |
+ * | [2:8]   purchaseStartDay         uint48   Day index when purchase phase began|
+ * | [8:24]  price                    uint128  Current mint price in wei          |
+ * | [24:25] ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
+ * | [25:26] ticketsFullyProcessed    bool     Read slot fully drained flag       |
+ * | [26:27] prizePoolFrozen          bool     Prize pool freeze active flag      |
+ * | [27:32] <padding>                         5 bytes unused                     |
  * +-----------------------------------------------------------------------------+
- *   Total: 18 bytes (14 bytes padding)
+ *   Total: 27 bytes used (5 bytes padding)
  *
  * +-----------------------------------------------------------------------------+
- * | SLOT 2 (32 bytes) — Price                                                   |
+ * | EVM SLOT 2 (32 bytes) — Current Prize Pool                                  |
  * +-----------------------------------------------------------------------------+
- * | [0:16]  price                    uint128  Current mint price in wei         |
- * | [16:32] <padding>                         16 bytes unused                   |
+ * | [0:32]  currentPrizePool         uint256  Active prize pool for current level|
  * +-----------------------------------------------------------------------------+
  *
  * SLOTS 3+ — Full-width variables, arrays, and mappings
@@ -148,6 +148,11 @@ abstract contract DegenerusGameStorage {
     ///      Days 1-4 use a random 6%-14% slice of remaining currentPrizePool.
     ///      Day 5 pays 100% of the remaining currentPrizePool.
 
+    /// @dev Bit mask for ticket queue double-buffer key encoding.
+    ///      Set bit 23 of the uint24 level key to distinguish write/read slots.
+    ///      Max real level: 2^23 - 1 = 8,388,607 (game would take millennia).
+    uint24 internal constant TICKET_SLOT_BIT = 1 << 23;
+
     /// @dev Hours before gameover liveness guard at which distress mode activates.
     uint48 internal constant DISTRESS_MODE_HOURS = 6;
 
@@ -167,6 +172,13 @@ abstract contract DegenerusGameStorage {
         }
         return uint256(ts) + uint256(DISTRESS_MODE_HOURS) * 1 hours > uint256(lst) + 365 days;
     }
+
+    // =========================================================================
+    // Errors
+    // =========================================================================
+
+    /// @dev Gas-minimal revert signal. Matches codebase convention (DegenerusGame, modules).
+    error E();
 
     // =========================================================================
     // SLOT 0: Level Timing, Batching, and Finite State Machine
@@ -211,9 +223,9 @@ abstract contract DegenerusGameStorage {
     bool internal jackpotPhaseFlag;
 
     // =========================================================================
-    // SLOT 1: Cursors, Counters, and Boolean Flags
+    // EVM SLOT 1: ETH Phase, Price, and Double-Buffer Fields
     // =========================================================================
-    // Boolean flags pack efficiently (1 byte each in EVM). Total: 18 bytes used (14 bytes padding).
+    // Packs into EVM Slot 1: dailyEthPhase through prizePoolFrozen (27 bytes used, 5 bytes padding).
 
     /// @dev Count of jackpots processed within the current level.
     ///      Capped at 5 (JACKPOT_LEVEL_CAP in JackpotModule); triggers level
@@ -280,7 +292,7 @@ abstract contract DegenerusGameStorage {
     uint48 internal purchaseStartDay;
 
     // =========================================================================
-    // SLOT 2: Mint Price
+    // EVM SLOT 1 (continued): Mint Price
     // =========================================================================
 
     /// @dev Base price unit in wei. One unit covers 4 scaled ticket entries.
@@ -293,6 +305,28 @@ abstract contract DegenerusGameStorage {
     ///      overflow in multiplication with reasonable quantities.
     uint128 internal price =
         uint128(0.01 ether);
+
+    /// @dev Active write buffer index for ticket queue double-buffering (0 or 1).
+    ///      Toggled via XOR (`ticketWriteSlot ^= 1`) during queue slot swaps.
+    ///      Write path uses this value; read path uses the opposite.
+    ///
+    ///      SECURITY: uint8 (not bool) required for XOR toggle arithmetic.
+    ///      Only values 0 and 1 are valid; _swapTicketSlot enforces this.
+    uint8 internal ticketWriteSlot;
+
+    /// @dev True when the read slot has been fully drained (all tickets processed).
+    ///      Gate for RNG requests and jackpot logic in advanceGame daily path.
+    ///
+    ///      SECURITY: Must be set to true before any jackpot/phase logic executes.
+    ///      Reset to false on every queue slot swap.
+    bool internal ticketsFullyProcessed;
+
+    /// @dev True when purchase revenue redirects to pending accumulators.
+    ///      Set at daily RNG request time; cleared by _unfreezePool().
+    ///
+    ///      SECURITY: Persists across jackpot phase days. All 5 jackpot payouts
+    ///      use pre-freeze pool values. _unfreezePool is the single control point.
+    bool internal prizePoolFrozen;
 
     // =========================================================================
     // SLOTS 3+: Full-Width Balances and Pools
