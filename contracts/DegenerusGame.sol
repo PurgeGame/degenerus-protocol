@@ -405,12 +405,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (prizeContribution != 0) {
             uint256 futureShare = (prizeContribution * PURCHASE_TO_FUTURE_BPS) /
                 10_000;
-            if (futureShare != 0) {
-                _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + futureShare);
-            }
             uint256 nextShare = prizeContribution - futureShare;
-            if (nextShare != 0) {
-                _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
+            if (prizePoolFrozen) {
+                (uint128 pNext, uint128 pFuture) = _getPendingPools();
+                _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(futureShare));
+            } else {
+                (uint128 next, uint128 future) = _getPrizePools();
+                _setPrizePools(next + uint128(nextShare), future + uint128(futureShare));
             }
         }
 
@@ -2815,6 +2816,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Plain ETH transfers are routed to jackpot reserves.
     receive() external payable {
         if (gameOver) revert E();
-        _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + msg.value);
+        if (prizePoolFrozen) {
+            (uint128 pNext, uint128 pFuture) = _getPendingPools();
+            _setPendingPools(pNext, pFuture + uint128(msg.value));
+        } else {
+            (uint128 next, uint128 future) = _getPrizePools();
+            _setPrizePools(next, future + uint128(msg.value));
+        }
     }
 }

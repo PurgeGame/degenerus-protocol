@@ -749,11 +749,12 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             }
 
             uint256 futureDelta = futureShare + rewardShare;
-            if (futureDelta != 0) {
-                _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + futureDelta);
-            }
-            if (nextShare != 0) {
-                _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
+            if (prizePoolFrozen) {
+                (uint128 pNext, uint128 pFuture) = _getPendingPools();
+                _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(futureDelta));
+            } else {
+                (uint128 next, uint128 future) = _getPrizePools();
+                _setPrizePools(next + uint128(nextShare), future + uint128(futureDelta));
             }
             if (vaultShare != 0) {
                 (bool ok, ) = payable(ContractAddresses.VAULT).call{value: vaultShare}("");

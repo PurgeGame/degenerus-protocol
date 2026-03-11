@@ -292,8 +292,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             nextShare = (totalPrice * 500) / 10_000;
         }
 
-        _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + totalPrice - nextShare);
-        _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
+        if (prizePoolFrozen) {
+            (uint128 pNext, uint128 pFuture) = _getPendingPools();
+            _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(totalPrice - nextShare));
+        } else {
+            (uint128 next, uint128 future) = _getPrizePools();
+            _setPrizePools(next + uint128(nextShare), future + uint128(totalPrice - nextShare));
+        }
 
         // Lootbox: 20% of price during presale, 10% after
         uint16 whaleLootboxBps = lootboxPresaleActive ? WHALE_LOOTBOX_PRESALE_BPS : WHALE_LOOTBOX_POST_BPS;
@@ -414,15 +419,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Split actual payment into pools (future + next)
         uint256 futureShare = (totalPrice * LAZY_PASS_TO_FUTURE_BPS) / 10_000;
-        if (futureShare != 0) {
-            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + futureShare);
-        }
         uint256 nextShare;
         unchecked {
             nextShare = totalPrice - futureShare;
         }
-        if (nextShare != 0) {
-            _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
+        if (prizePoolFrozen) {
+            (uint128 pNext, uint128 pFuture) = _getPendingPools();
+            _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(futureShare));
+        } else {
+            (uint128 next, uint128 future) = _getPrizePools();
+            _setPrizePools(next + uint128(nextShare), future + uint128(futureShare));
         }
 
         // Award lootbox as a percentage of pass value (presale 20%, post 10%)
@@ -533,8 +539,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         } else {
             nextShare = (totalPrice * 500) / 10_000;
         }
-        _legacySetNextPrizePool(_legacyGetNextPrizePool() + nextShare);
-        _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + totalPrice - nextShare);
+        if (prizePoolFrozen) {
+            (uint128 pNext, uint128 pFuture) = _getPendingPools();
+            _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(totalPrice - nextShare));
+        } else {
+            (uint128 next, uint128 future) = _getPrizePools();
+            _setPrizePools(next + uint128(nextShare), future + uint128(totalPrice - nextShare));
+        }
 
         // Lootbox: 20% presale, 10% post
         uint16 deityLootboxBps = lootboxPresaleActive ? DEITY_LOOTBOX_PRESALE_BPS : DEITY_LOOTBOX_POST_BPS;
