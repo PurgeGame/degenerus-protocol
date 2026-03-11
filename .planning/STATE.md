@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 Phase: 4 of 5 (AdvanceGame Rewrite)
 Plan: 1 of 1 in current phase
-Status: Ready
+Status: Complete
 Last activity: 2026-03-11 — Completed 04-01 AdvanceGame rewrite (drain gate + tests)
 
 Progress: [██████████] 100%
