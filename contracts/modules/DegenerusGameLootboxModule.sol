@@ -316,6 +316,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint256 private constant LOOTBOX_SPLIT_THRESHOLD =
         0.5 ether;
 
+    /// @dev Distress-mode ticket bonus in basis points (25%).
+    uint16 private constant DISTRESS_TICKET_BONUS_BPS = 2500;
+
     // Activity score EV multiplier constants (ETH lootbox only)
     /// @dev 60% activity score = neutral 100% EV
     uint16 private constant ACTIVITY_SCORE_NEUTRAL_BPS = 6_000;
@@ -600,10 +603,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             evMultiplierBps
         );
 
+        uint256 distressEth = lootboxDistressEth[index][player];
+
         lootboxEth[index][player] = 0;
         lootboxEthBase[index][player] = 0;
         lootboxBaseLevelPacked[index][player] = 0;
         lootboxEvScorePacked[index][player] = 0;
+        if (distressEth != 0) {
+            lootboxDistressEth[index][player] = 0;
+        }
         _resolveLootboxCommon(
             player,
             day,
@@ -615,7 +623,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             true,
             true,
             true,
-            true
+            true,
+            distressEth,
+            amount
         );
     }
 
@@ -664,7 +674,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             false,
             false,
             false,
-            true
+            true,
+            0,
+            0
         );
 
         emit BurnieLootOpen(
@@ -704,7 +716,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             true,
             true,
             true,
-            false
+            false,
+            0,
+            0
         );
     }
 
@@ -818,6 +832,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param allowLazyPass Whether to roll for lazy pass award
     /// @param emitLootboxEvent Whether to emit LootBoxOpened event
     /// @param allowBoons Whether to roll for boons
+    /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
+    /// @param totalPackedEth Total packed lootbox ETH (pre-EV-scaling basis, denominator for distress fraction)
     /// @return futureTickets Number of tickets awarded for future level
     /// @return burnieAmount Total BURNIE awarded
     /// @return bonusBurnie Bonus BURNIE from presale multiplier
@@ -832,7 +848,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool allowWhalePass,
         bool allowLazyPass,
         bool emitLootboxEvent,
-        bool allowBoons
+        bool allowBoons,
+        uint256 distressEth,
+        uint256 totalPackedEth
     )
         private
         returns (
@@ -941,6 +959,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         if (futureTickets != 0) {
+            // Distress-mode ticket bonus: 25% extra on the fraction bought during distress
+            if (distressEth != 0 && totalPackedEth != 0) {
+                uint256 bonus = (uint256(futureTickets) * distressEth * DISTRESS_TICKET_BONUS_BPS)
+                    / (totalPackedEth * 10_000);
+                if (bonus != 0) {
+                    uint256 boosted = uint256(futureTickets) + bonus;
+                    if (boosted > type(uint32).max) boosted = type(uint32).max;
+                    futureTickets = uint32(boosted);
+                }
+            }
             _queueTicketsScaled(player, targetLevel, futureTickets);
         }
 

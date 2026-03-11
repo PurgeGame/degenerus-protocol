@@ -721,9 +721,24 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 lootboxPresaleMintEth += lootBoxAmount;
             }
 
-            uint256 futureBps = presale ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS : LOOTBOX_SPLIT_FUTURE_BPS;
-            uint256 nextBps = presale ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS : LOOTBOX_SPLIT_NEXT_BPS;
-            uint256 vaultBps = presale ? LOOTBOX_PRESALE_SPLIT_VAULT_BPS : 0;
+            bool distress = _isDistressMode();
+
+            // Track distress-mode portion for proportional ticket bonus at open time
+            if (distress) {
+                lootboxDistressEth[index][buyer] += boostedAmount;
+            }
+            uint256 futureBps;
+            uint256 nextBps;
+            uint256 vaultBps;
+            if (distress) {
+                futureBps = 0;
+                nextBps = 10_000;
+                vaultBps = 0;
+            } else {
+                futureBps = presale ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS : LOOTBOX_SPLIT_FUTURE_BPS;
+                nextBps = presale ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS : LOOTBOX_SPLIT_NEXT_BPS;
+                vaultBps = presale ? LOOTBOX_PRESALE_SPLIT_VAULT_BPS : 0;
+            }
 
             uint256 futureShare = (lootBoxAmount * futureBps) / 10_000;
             uint256 nextShare = (lootBoxAmount * nextBps) / 10_000;

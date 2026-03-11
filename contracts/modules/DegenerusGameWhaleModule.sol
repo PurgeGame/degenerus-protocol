@@ -771,6 +771,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
         lootboxEthTotal += lootboxAmount;
         _maybeRequestLootboxRng(lootboxAmount);
+
+        // Track distress-mode portion for proportional ticket bonus at open time
+        if (_isDistressMode()) {
+            lootboxDistressEth[index][buyer] += boostedAmount;
+        }
     }
 
     /// @dev Accumulate lootbox ETH for pending RNG request.
