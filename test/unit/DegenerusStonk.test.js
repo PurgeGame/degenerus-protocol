@@ -139,93 +139,15 @@ describe("DegenerusStonk", function () {
       ).to.be.revertedWithCustomError(dgnrs, "ZeroAddress");
     });
 
-    it("reverts when transferring more than balance", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        dgnrs.connect(alice).transfer(ZERO_ADDRESS, eth("1"))
-      ).to.be.reverted;
-    });
-
-    it("approve sets allowance and emits Approval event", async function () {
-      const { dgnrs, alice, bob } = await loadFixture(deployFullProtocol);
-      const amount = eth("500");
-      const tx = await dgnrs.connect(alice).approve(bob.address, amount);
-      const ev = await getEvent(tx, dgnrs, "Approval");
-      expect(ev.args.owner).to.equal(alice.address);
-      expect(ev.args.spender).to.equal(bob.address);
-      expect(ev.args.amount).to.equal(amount);
-      expect(await dgnrs.allowance(alice.address, bob.address)).to.equal(amount);
-    });
-
-    it("transferFrom works with sufficient allowance", async function () {
-      const { dgnrs, deployer, alice, bob } = await loadFixture(
-        deployFullProtocol
-      );
+    it("non-creator transfer reverts with Unauthorized", async function () {
+      const { dgnrs, deployer, alice, bob } = await loadFixture(deployFullProtocol);
       const amount = eth("1000");
+      // Give alice some tokens via creator
       await dgnrs.connect(deployer).transfer(alice.address, amount);
-      await dgnrs.connect(alice).approve(bob.address, amount);
-      await dgnrs.connect(bob).transferFrom(alice.address, bob.address, amount);
-      expect(await dgnrs.balanceOf(bob.address)).to.equal(amount);
-      // Allowance should be reduced
-      expect(await dgnrs.allowance(alice.address, bob.address)).to.equal(0n);
-    });
-
-    it("transferFrom reverts when allowance is insufficient", async function () {
-      const { dgnrs, deployer, alice, bob } = await loadFixture(
-        deployFullProtocol
-      );
-      const amount = eth("1000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-      // No approval given
+      // Alice cannot transfer to bob — soulbound
       await expect(
-        dgnrs.connect(bob).transferFrom(alice.address, bob.address, amount)
-      ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
-    });
-
-    it("transferFrom with max allowance does not reduce allowance", async function () {
-      const { dgnrs, deployer, alice, bob } = await loadFixture(
-        deployFullProtocol
-      );
-      const amount = eth("1000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-      await dgnrs
-        .connect(alice)
-        .approve(bob.address, hre.ethers.MaxUint256);
-      await dgnrs.connect(bob).transferFrom(alice.address, bob.address, amount);
-      expect(await dgnrs.allowance(alice.address, bob.address)).to.equal(
-        hre.ethers.MaxUint256
-      );
-    });
-
-    it("COIN contract bypasses allowance check in transferFrom", async function () {
-      const { dgnrs, coin, deployer, alice } = await loadFixture(
-        deployFullProtocol
-      );
-      const amount = eth("100");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-      const coinAddr = await coin.getAddress();
-
-      await hre.network.provider.request({
-        method: "hardhat_impersonateAccount",
-        params: [coinAddr],
-      });
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        coinAddr,
-        "0xDE0B6B3A7640000",
-      ]);
-      const coinSigner = await hre.ethers.getSigner(coinAddr);
-
-      // COIN can transferFrom without allowance
-      await expect(
-        dgnrs
-          .connect(coinSigner)
-          .transferFrom(alice.address, deployer.address, amount)
-      ).to.not.be.reverted;
-
-      await hre.network.provider.request({
-        method: "hardhat_stopImpersonatingAccount",
-        params: [coinAddr],
-      });
+        dgnrs.connect(alice).transfer(bob.address, eth("1"))
+      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
     });
   });
 

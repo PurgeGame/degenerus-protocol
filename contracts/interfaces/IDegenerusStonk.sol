@@ -47,30 +47,17 @@ interface IDegenerusStonk {
     /// @param amount Amount of DGNRS to burn
     function burnForGame(address from, uint256 amount) external;
 
-    /// @notice Approve a spender to transfer DGNRS on behalf of the caller
-    /// @param spender Address to approve as spender
-    /// @param amount Allowance amount to grant
-    /// @return success True if approval succeeded
-    function approve(address spender, uint256 amount) external returns (bool);
-
     /// @notice Get the DGNRS token balance for an address
     /// @param account Address to query balance for
     /// @return Token balance of the account
     function balanceOf(address account) external view returns (uint256);
 
-    /// @notice Transfer DGNRS tokens to a recipient
+    /// @notice Transfer DGNRS tokens to a recipient (creator-only)
+    /// @dev DGNRS is soulbound — only the creator can transfer. All other holders can only burn.
     /// @param to Recipient address
     /// @param amount Amount of DGNRS to transfer
     /// @return success True if transfer succeeded
     function transfer(address to, uint256 amount) external returns (bool);
-
-    /// @notice Transfer DGNRS from a sender using allowance
-    /// @dev Requires sufficient allowance from the sender to the caller
-    /// @param from Sender address
-    /// @param to Recipient address
-    /// @param amount Amount of DGNRS to transfer
-    /// @return success True if transfer succeeded
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
 
     /// @notice Get the total supply of DGNRS tokens
     /// @return Total number of DGNRS tokens in circulation

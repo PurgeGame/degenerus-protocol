@@ -77,12 +77,6 @@ contract DegenerusStonk {
     /// @param amount Amount of tokens transferred
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
-    /// @notice Emitted when spending allowance is granted
-    /// @param owner Token owner granting allowance
-    /// @param spender Address authorized to spend
-    /// @param amount Amount of allowance granted
-    event Approval(address indexed owner, address indexed spender, uint256 amount);
-
     /// @notice Emitted when DGNRS is burned to claim backing assets
     /// @param from Address that burned tokens
     /// @param amount Amount of DGNRS burned
@@ -132,9 +126,6 @@ contract DegenerusStonk {
 
     /// @notice Token balance for each address
     mapping(address => uint256) public balanceOf;
-
-    /// @notice Spending allowances: owner => spender => amount
-    mapping(address => mapping(address => uint256)) public allowance;
 
     // =====================================================================
     //                          POOL STATE
@@ -255,50 +246,16 @@ contract DegenerusStonk {
     //                          ERC20 FUNCTIONS
     // =====================================================================
 
-    /// @notice Approve spender to transfer tokens on behalf of msg.sender
-    /// @param spender Address to authorize
-    /// @param amount Amount to authorize
-    /// @return True on success
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        emit Approval(msg.sender, spender, amount);
-        return true;
-    }
-
-    /// @notice Transfer tokens from msg.sender to recipient
+    /// @notice Transfer tokens from creator to recipient
+    /// @dev Only the creator can transfer DGNRS. All other holders can only burn.
     /// @param to Recipient address
     /// @param amount Amount to transfer
     /// @return True on success
+    /// @custom:reverts Unauthorized If caller is not creator
     /// @custom:reverts ZeroAddress If to is zero address
     /// @custom:reverts Insufficient If sender balance is insufficient
     function transfer(address to, uint256 amount) external returns (bool) {
         _transfer(msg.sender, to, amount);
-        return true;
-    }
-
-    /// @notice Transfer tokens on behalf of another address
-    /// @dev COIN contract is trusted and bypasses allowance checks
-    /// @param from Source address
-    /// @param to Destination address
-    /// @param amount Amount to transfer
-    /// @return True on success
-    /// @custom:reverts Insufficient If allowance or balance is insufficient
-    /// @custom:reverts ZeroAddress If to or from is zero address
-    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        // BurnieCoin is a trusted spender inside the ecosystem; skip allowance checks.
-        if (msg.sender != ContractAddresses.COIN) {
-            uint256 allowed = allowance[from][msg.sender];
-            if (allowed != type(uint256).max) {
-                if (allowed < amount) revert Insufficient();
-                uint256 newAllowance;
-                unchecked {
-                    newAllowance = allowed - amount;
-                    allowance[from][msg.sender] = newAllowance;
-                }
-                emit Approval(from, msg.sender, newAllowance);
-            }
-        }
-        _transfer(from, to, amount);
         return true;
     }
 
@@ -584,6 +541,7 @@ contract DegenerusStonk {
     /// @param amount Amount to transfer
     function _transfer(address from, address to, uint256 amount) private {
         if (to == address(0)) revert ZeroAddress();
+        if (from != address(this) && from != ContractAddresses.CREATOR) revert Unauthorized();
         uint256 bal = balanceOf[from];
         if (amount > bal) revert Insufficient();
 
