@@ -585,7 +585,13 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             }
 
             // Update pool and pending
-            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + totalBet);
+            if (prizePoolFrozen) {
+                (uint128 pNext, uint128 pFuture) = _getPendingPools();
+                _setPendingPools(pNext, pFuture + uint128(totalBet));
+            } else {
+                (uint128 next, uint128 future) = _getPrizePools();
+                _setPrizePools(next, future + uint128(totalBet));
+            }
             lootboxRngPendingEth += totalBet;
             // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
             // time, so solvency is guaranteed regardless of jackpot size
