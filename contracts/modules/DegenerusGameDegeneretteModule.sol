@@ -56,8 +56,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     // Errors
     // -------------------------------------------------------------------------
 
-    /// @notice Generic error for internal failures.
-    error E();
+    // error E() — inherited from DegenerusGameStorage
 
     /// @notice Thrown when RNG word is not yet available for bet resolution.
     error RngNotReady();

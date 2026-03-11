@@ -30,7 +30,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                              ERRORS                                  |
       +======================================================================+*/
 
-    error E();
+    // error E() — inherited from DegenerusGameStorage
     error MustMintToday();
     error NotTimeYet();
     error RngNotReady();

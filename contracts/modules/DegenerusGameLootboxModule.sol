@@ -37,8 +37,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Errors
     // =========================================================================
 
-    /// @notice Generic error for invalid operations or parameters
-    error E();
+    // error E() — inherited from DegenerusGameStorage
 
     /// @notice RNG word has not been set for the requested lootbox index
     error RngNotReady();

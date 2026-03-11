@@ -102,9 +102,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  specific failure condition in the game flow.                        |
       +======================================================================+*/
 
-    /// @notice Generic guard error for failed validation checks.
-    /// @dev Used in multiple paths where specific error context isn't critical.
-    error E();
+    // error E() — inherited from DegenerusGameStorage
 
     /// @notice RNG is locked (VRF pending); nudge operations blocked.
     /// @dev reverseFlip() is only available before RNG request starts.

@@ -23,8 +23,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // Errors
     // -------------------------------------------------------------------------
 
-    /// @notice Reverts on invalid input, unauthorized access, or failed validation.
-    error E();
+    // error E() — inherited from DegenerusGameStorage
 
     // -------------------------------------------------------------------------
     // Events
