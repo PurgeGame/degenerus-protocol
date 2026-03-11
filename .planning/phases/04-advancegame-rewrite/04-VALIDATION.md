@@ -21,7 +21,7 @@ created: 2026-03-11
 | **Config file** | foundry.toml |
 | **Quick run command** | `forge test --match-contract AdvanceGameRewrite -vvv` |
 | **Full suite command** | `forge test -vvv` |
-| **Estimated runtime** | ~30 seconds |
+| **Estimated runtime** | ~15 seconds |
 
 ---
 
@@ -30,7 +30,7 @@ created: 2026-03-11
 - **After every task commit:** Run `forge test --match-contract AdvanceGameRewrite -vvv`
 - **After every plan wave:** Run `forge test -vvv`
 - **Before `/gsd:verify-work`:** Full suite must be green
-- **Max feedback latency:** 30 seconds
+- **Max feedback latency:** 15 seconds
 
 ---
 
@@ -38,10 +38,11 @@ created: 2026-03-11
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 04-01-01 | 01 | 1 | ADV-01 | unit | `forge test --match-test "test_midDay.*noFreeze" -vvv` | ❌ W0 | ⬜ pending |
-| 04-01-02 | 01 | 1 | ADV-02 | unit | `forge test --match-test "test_dailyRng.*gated" -vvv` | ❌ W0 | ⬜ pending |
-| 04-01-03 | 01 | 1 | ADV-03 | unit | `forge test --match-test "test_ticketsProcessed.*beforeJackpot" -vvv` | ❌ W0 | ⬜ pending |
-| 04-01-04 | 01 | 1 | SC-4 | unit | `forge test --match-test "test_breakPath.*freeze" -vvv` | ❌ W0 | ⬜ pending |
+| 04-01-01 | 01 | 1 | ADV-01, ADV-02, ADV-03 | unit | `forge test --match-contract AdvanceGameRewrite -vvv` | ❌ W0 | ⬜ pending |
+| 04-02-01 | 02 | 1 | ADV-01 | unit | `forge test --match-test "test_midDay.*noFreeze" -vvv` | ❌ W0 | ⬜ pending |
+| 04-02-02 | 02 | 1 | ADV-02 | unit | `forge test --match-test "test_dailyRng.*gated" -vvv` | ❌ W0 | ⬜ pending |
+| 04-02-03 | 02 | 1 | ADV-03 | unit | `forge test --match-test "test_ticketsProcessed.*beforeJackpot" -vvv` | ❌ W0 | ⬜ pending |
+| 04-02-04 | 02 | 1 | SC-4 | unit | `forge test --match-test "test_breakPath.*freeze" -vvv` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,10 +50,10 @@ created: 2026-03-11
 
 ## Wave 0 Requirements
 
-- [ ] `test/fuzz/AdvanceGameRewrite.t.sol` — AdvanceHarness + all ADV-01/02/03/SC-4 tests
-- [ ] Harness needs: exposed drain gate, freeze state inspection, ticket processing simulation
+- [ ] `test/fuzz/AdvanceGameRewrite.t.sol` — AdvanceHarness + all ADV-01/02/03/SC-4 test stubs
+- [ ] Harness needs: exposed drain gate, freeze state inspection, ticket queue population, `ticketsFullyProcessed` getter/setter
 
-*Existing infrastructure (Foundry) covers framework needs.*
+*Existing infrastructure (Foundry, forge) covers framework requirements.*
 
 ---
 
@@ -68,7 +69,7 @@ created: 2026-03-11
 - [ ] Sampling continuity: no 3 consecutive tasks without automated verify
 - [ ] Wave 0 covers all MISSING references
 - [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
+- [ ] Feedback latency < 15s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
