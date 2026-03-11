@@ -65,33 +65,33 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STOR-01 | — | Pending |
-| STOR-02 | — | Pending |
-| STOR-03 | — | Pending |
-| STOR-04 | — | Pending |
-| QUEUE-01 | — | Pending |
-| QUEUE-02 | — | Pending |
-| QUEUE-03 | — | Pending |
-| QUEUE-04 | — | Pending |
-| FREEZE-01 | — | Pending |
-| FREEZE-02 | — | Pending |
-| FREEZE-03 | — | Pending |
-| FREEZE-04 | — | Pending |
-| ADV-01 | — | Pending |
-| ADV-02 | — | Pending |
-| ADV-03 | — | Pending |
-| LOCK-01 | — | Pending |
-| LOCK-02 | — | Pending |
-| LOCK-03 | — | Pending |
-| LOCK-04 | — | Pending |
-| LOCK-05 | — | Pending |
-| LOCK-06 | — | Pending |
+| STOR-01 | Phase 1 | Pending |
+| STOR-02 | Phase 1 | Pending |
+| STOR-03 | Phase 1 | Pending |
+| STOR-04 | Phase 1 | Pending |
+| QUEUE-01 | Phase 2 | Pending |
+| QUEUE-02 | Phase 2 | Pending |
+| QUEUE-03 | Phase 2 | Pending |
+| QUEUE-04 | Phase 2 | Pending |
+| FREEZE-01 | Phase 3 | Pending |
+| FREEZE-02 | Phase 3 | Pending |
+| FREEZE-03 | Phase 3 | Pending |
+| FREEZE-04 | Phase 3 | Pending |
+| ADV-01 | Phase 4 | Pending |
+| ADV-02 | Phase 4 | Pending |
+| ADV-03 | Phase 4 | Pending |
+| LOCK-01 | Phase 5 | Pending |
+| LOCK-02 | Phase 5 | Pending |
+| LOCK-03 | Phase 5 | Pending |
+| LOCK-04 | Phase 5 | Pending |
+| LOCK-05 | Phase 5 | Pending |
+| LOCK-06 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21 ⚠️
+- Mapped to phases: 21
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-11 after initial definition*
+*Last updated: 2026-03-11 after roadmap creation — all 21 requirements mapped*
