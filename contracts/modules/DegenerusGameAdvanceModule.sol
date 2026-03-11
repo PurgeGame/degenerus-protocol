@@ -143,7 +143,32 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         _enforceDailyMintGate(caller, purchaseLevel, dailyIdx);
 
-        if (day == dailyIdx) revert NotTimeYet();
+        // --- Mid-day path: same-day queue draining ---
+        if (day == dailyIdx) {
+            // Step 1: Finish draining the read slot if not yet fully processed
+            if (!ticketsFullyProcessed) {
+                uint24 rk = _tqReadKey(purchaseLevel);
+                if (ticketQueue[rk].length > 0) {
+                    (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(purchaseLevel);
+                    if (ticketWorked || !ticketsFinished) {
+                        emit Advance(STAGE_TICKETS_WORKING, lvl);
+                        coin.creditFlip(caller, ADVANCE_BOUNTY);
+                        return;
+                    }
+                }
+                ticketsFullyProcessed = true;
+            }
+
+            // Step 2: Swap write buffer to read when threshold met or jackpot active
+            uint24 wk = _tqWriteKey(purchaseLevel);
+            if (ticketQueue[wk].length >= MID_DAY_SWAP_THRESHOLD || (inJackpot && ticketQueue[wk].length > 0)) {
+                _swapTicketSlot(purchaseLevel);
+                emit Advance(STAGE_TICKETS_WORKING, lvl);
+                coin.creditFlip(caller, ADVANCE_BOUNTY);
+                return;
+            }
+            revert NotTimeYet();
+        }
 
         uint8 stage;
         do {
