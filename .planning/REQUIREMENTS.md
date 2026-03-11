@@ -30,9 +30,9 @@ Requirements for v1.0 milestone. Each maps to roadmap phases.
 
 ### advanceGame Rewrite
 
-- [ ] **ADV-01**: Mid-day path: process read slot, trigger swap (no freeze) when qualified
-- [ ] **ADV-02**: Daily path gates RNG request behind `ticketsFullyProcessed`
-- [ ] **ADV-03**: `ticketsFullyProcessed` set before jackpot/phase logic executes
+- [x] **ADV-01**: Mid-day path: process read slot, trigger swap (no freeze) when qualified
+- [x] **ADV-02**: Daily path gates RNG request behind `ticketsFullyProcessed`
+- [x] **ADV-03**: `ticketsFullyProcessed` set before jackpot/phase logic executes
 
 ### Lock Removal
 
@@ -77,9 +77,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FREEZE-02 | Phase 3 | Complete |
 | FREEZE-03 | Phase 3 | Complete |
 | FREEZE-04 | Phase 3 | Complete |
-| ADV-01 | Phase 4 | Pending |
-| ADV-02 | Phase 4 | Pending |
-| ADV-03 | Phase 4 | Pending |
+| ADV-01 | Phase 4 | Complete |
+| ADV-02 | Phase 4 | Complete |
+| ADV-03 | Phase 4 | Complete |
 | LOCK-01 | Phase 5 | Pending |
 | LOCK-02 | Phase 5 | Pending |
 | LOCK-03 | Phase 5 | Pending |

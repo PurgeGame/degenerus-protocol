@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Storage Foundation** - Add Slot 1 fields, packed pool slots, and all key/swap/freeze helpers to DegenerusGameStorage (completed 2026-03-11)
 - [x] **Phase 2: Queue Double-Buffer** - Wire all queue functions to write/read key helpers; implement swap with hard drain gate (completed 2026-03-11)
 - [x] **Phase 3: Prize Pool Freeze** - Add freeze branch to all 7 purchase-path pool addition sites; populate pending accumulators (completed 2026-03-11)
-- [ ] **Phase 4: advanceGame Rewrite** - Rewrite daily state machine with mid-day path, drain gates, swap/freeze, and unfreeze exit points
+- [x] **Phase 4: advanceGame Rewrite** - Rewrite daily state machine with mid-day path, drain gates, swap/freeze, and unfreeze exit points (completed 2026-03-11)
 - [ ] **Phase 5: Lock Removal** - Remove rngLockedFlag purchase reverts and validate full integration with fuzz suite
 
 ## Phase Details
@@ -74,7 +74,7 @@ Plans:
   2. Daily RNG request does not proceed when `ticketsFullyProcessed == false`; a test with an non-empty read slot confirms the daily path blocks at the gate
   3. `ticketsFullyProcessed` is set to true before any jackpot or phase transition logic executes; a test confirms the flag is true at the point jackpot logic fires
   4. Every break path through the `do { } while(false)` structure either calls `_unfreezePool()` or is demonstrably unreachable under freeze; no path leaves freeze permanently active
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 04-01-PLAN.md — Pre-RNG drain gate + ticketsFullyProcessed flag in AdvanceModule + AdvanceHarness with all ADV requirement tests
@@ -100,5 +100,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-11 |
 | 2. Queue Double-Buffer | 2/2 | Complete   | 2026-03-11 |
 | 3. Prize Pool Freeze | 2/2 | Complete   | 2026-03-11 |
-| 4. advanceGame Rewrite | 0/1 | Not started | - |
+| 4. advanceGame Rewrite | 1/1 | Complete   | 2026-03-11 |
 | 5. Lock Removal | 0/? | Not started | - |
