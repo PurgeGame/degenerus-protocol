@@ -170,6 +170,20 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             revert NotTimeYet();
         }
 
+        // --- Daily drain gate: ensure read slot is fully processed before RNG ---
+        if (!ticketsFullyProcessed) {
+            uint24 rk = _tqReadKey(purchaseLevel);
+            if (ticketQueue[rk].length > 0) {
+                (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(purchaseLevel);
+                if (ticketWorked || !ticketsFinished) {
+                    emit Advance(STAGE_TICKETS_WORKING, lvl);
+                    coin.creditFlip(caller, ADVANCE_BOUNTY);
+                    return;
+                }
+            }
+            ticketsFullyProcessed = true;
+        }
+
         uint8 stage;
         do {
             // RNG: use existing word or request new one
@@ -220,6 +234,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 stage = STAGE_TICKETS_WORKING;
                 break;
             }
+            ticketsFullyProcessed = true;  // ADV-03: set before jackpot/phase logic
 
             // === PURCHASE PHASE ===
             if (!inJackpot) {
