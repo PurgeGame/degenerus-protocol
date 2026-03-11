@@ -295,7 +295,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint24 lvl
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
         uint256 entropy = rngWordCurrent;
-        address[] storage queue = ticketQueue[lvl];
+        uint24 rk = _tqReadKey(lvl);
+        address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
         if (total > type(uint32).max) revert E();
         if (total == 0) {
@@ -311,7 +312,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
         uint256 idx = ticketCursor;
         if (idx >= total) {
-            delete ticketQueue[lvl];
+            delete ticketQueue[rk];
             ticketCursor = 0;
             ticketLevel = 0;
             return (false, true, 0);
@@ -331,13 +332,13 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             uint256 baseKey = (uint256(lvl) << 224) |
                 (idx << 192) |
                 (uint256(uint160(player)) << 32);
-            uint40 packed = ticketsOwedPacked[lvl][player];
+            uint40 packed = ticketsOwedPacked[rk][player];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
             if (owed == 0) {
                 if (rem == 0) {
                     if (packed != 0) {
-                        ticketsOwedPacked[lvl][player] = 0;
+                        ticketsOwedPacked[rk][player] = 0;
                     }
                     // Charge one budget unit for skip/cleanup progress so sparse
                     // queues cannot consume unbounded work in one call.
@@ -346,14 +347,14 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     continue;
                 }
                 if (!_rollRemainder(entropy, baseKey, rem)) {
-                    ticketsOwedPacked[lvl][player] = 0;
+                    ticketsOwedPacked[rk][player] = 0;
                     unchecked { ++idx; ++used; }
                     processed = 0;
                     continue;
                 }
                 uint40 rolledPacked = uint40(1) << 8;
                 if (rolledPacked != packed) {
-                    ticketsOwedPacked[lvl][player] = rolledPacked;
+                    ticketsOwedPacked[rk][player] = rolledPacked;
                 }
                 packed = rolledPacked;
                 owed = 1;
@@ -395,7 +396,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             }
             uint40 newPacked = (uint40(remainingOwed) << 8) | uint40(rem);
             if (newPacked != packed) {
-                ticketsOwedPacked[lvl][player] = newPacked;
+                ticketsOwedPacked[rk][player] = newPacked;
             }
             unchecked {
                 processed += take;
@@ -413,7 +414,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         ticketCursor = uint32(idx);
         finished = (idx >= total);
         if (finished) {
-            delete ticketQueue[lvl];
+            delete ticketQueue[rk];
             ticketCursor = 0;
             ticketLevel = 0;
         }

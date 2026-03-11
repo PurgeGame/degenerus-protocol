@@ -2062,7 +2062,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24 lvl,
         address player
     ) external view returns (uint32) {
-        return uint32(ticketsOwedPacked[lvl][player] >> 8);
+        return uint32(ticketsOwedPacked[_tqWriteKey(lvl)][player] >> 8);
     }
 
     /// @notice Get loot box status for a player/index.
@@ -2677,7 +2677,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             word = uint256(keccak256(abi.encodePacked(word, s)));
             uint24 candidate = currentLvl + 5 + uint24(word % 95);
 
-            address[] storage queue = ticketQueue[candidate];
+            address[] storage queue = ticketQueue[_tqWriteKey(candidate)];
             uint256 len = queue.length;
             if (len != 0) {
                 uint256 idx = (word >> 32) % len;
@@ -2742,7 +2742,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function getPlayerPurchases(
         address player
     ) external view returns (uint32 tickets) {
-        tickets = uint32(ticketsOwedPacked[level][player] >> 8);
+        tickets = uint32(ticketsOwedPacked[_tqWriteKey(level)][player] >> 8);
     }
 
     /*+======================================================================+
