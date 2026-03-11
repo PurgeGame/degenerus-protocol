@@ -337,9 +337,13 @@ abstract contract DegenerusGameStorage {
     ///      Accumulated from mint fees and distributed via jackpots.
     uint256 internal currentPrizePool;
 
-    /// @dev Pre-funded prize pool for the next level.
-    ///      Allows carryover mechanics and smooth level transitions.
-    uint256 internal nextPrizePool;
+    /// @dev Packed live prize pools: [128:256] futurePrizePool | [0:128] nextPrizePool
+    ///      uint128 max ~= 3.4e20 ETH -- far exceeds total ETH supply.
+    ///      Saves 1 SSTORE on every purchase (both written together).
+    ///
+    ///      SECURITY: All access through _getPrizePools()/_setPrizePools() helpers.
+    ///      Direct reads of this variable will get corrupted data.
+    uint256 internal prizePoolsPacked;
 
     /// @dev Latest VRF random word, or 0 if a request is pending.
     ///      Written by VRF callback; consumed by game logic for randomness.
@@ -438,9 +442,13 @@ abstract contract DegenerusGameStorage {
     // Future Mint Awards
     // =========================================================================
 
-    /// @dev Unified reserve pool (formerly "future + reward").
-    ///      Funds jackpots, carryover, and time-based level splits.
-    uint256 internal futurePrizePool;
+    /// @dev Packed pending accumulators for purchase revenue during prize pool freeze.
+    ///      [128:256] futurePrizePoolPending (uint128) | [0:128] nextPrizePoolPending (uint128)
+    ///      Accumulated while prizePoolFrozen == true; applied atomically by _unfreezePool().
+    ///
+    ///      SECURITY: Zeroed at freeze start (if not already frozen) and at unfreeze.
+    ///      During multi-day jackpot phase, accumulators grow across all 5 days.
+    uint256 internal prizePoolPendingPacked;
 
     /// @dev Queue of players with tickets (purchase/burn sources) per level.
     ///      All tickets (purchases, lootbox rewards, etc.) queue here.
@@ -479,7 +487,7 @@ abstract contract DegenerusGameStorage {
     uint16 internal dailyEthWinnerCursor;
 
     /// @dev Carryover ETH pool reserved after daily phase 0 completes.
-    ///      Stored to avoid re-deducting futurePrizePool across split calls.
+    ///      Stored to avoid re-deducting the future pool across split calls.
     uint256 internal dailyCarryoverEthPool;
 
     /// @dev Remaining winner cap for carryover buckets (DAILY_ETH_MAX_WINNERS - daily winners).
@@ -668,6 +676,111 @@ abstract contract DegenerusGameStorage {
     }
 
     // =========================================================================
+    // Packed Prize Pool Helpers
+    // =========================================================================
+
+    function _setPrizePools(uint128 next, uint128 future) internal {
+        prizePoolsPacked = uint256(future) << 128 | uint256(next);
+    }
+
+    function _getPrizePools() internal view returns (uint128 next, uint128 future) {
+        uint256 packed = prizePoolsPacked;
+        next = uint128(packed);
+        future = uint128(packed >> 128);
+    }
+
+    function _setPendingPools(uint128 next, uint128 future) internal {
+        prizePoolPendingPacked = uint256(future) << 128 | uint256(next);
+    }
+
+    function _getPendingPools() internal view returns (uint128 next, uint128 future) {
+        uint256 packed = prizePoolPendingPacked;
+        next = uint128(packed);
+        future = uint128(packed >> 128);
+    }
+
+    // =========================================================================
+    // Ticket Queue Key Encoding
+    // =========================================================================
+
+    /// @dev Compute the ticket queue key for the write slot.
+    ///      Slot 0 uses raw level, slot 1 sets bit 23.
+    function _tqWriteKey(uint24 level) internal view returns (uint24) {
+        return ticketWriteSlot != 0 ? level | TICKET_SLOT_BIT : level;
+    }
+
+    /// @dev Compute the ticket queue key for the read slot (opposite of write).
+    function _tqReadKey(uint24 level) internal view returns (uint24) {
+        return ticketWriteSlot == 0 ? level | TICKET_SLOT_BIT : level;
+    }
+
+    // =========================================================================
+    // Queue Swap and Prize Pool Freeze
+    // =========================================================================
+
+    /// @dev Swap the active ticket queue buffer. Reverts if read slot is not drained.
+    ///      Resets ticketsFullyProcessed to false for the new read slot.
+    function _swapTicketSlot(uint24 purchaseLevel) internal {
+        uint24 rk = _tqReadKey(purchaseLevel);
+        if (ticketQueue[rk].length != 0) revert E();
+        ticketWriteSlot ^= 1;
+        ticketsFullyProcessed = false;
+    }
+
+    /// @dev Swap queue buffer AND activate prize pool freeze (daily RNG path only).
+    ///      If not already frozen, zeros pending accumulators.
+    ///      If already frozen (jackpot phase), accumulators keep growing.
+    function _swapAndFreeze(uint24 purchaseLevel) internal {
+        _swapTicketSlot(purchaseLevel);
+        if (!prizePoolFrozen) {
+            prizePoolFrozen = true;
+            prizePoolPendingPacked = 0;
+        }
+    }
+
+    /// @dev Apply pending accumulators to live pools and clear freeze.
+    ///      No-op if not currently frozen.
+    function _unfreezePool() internal {
+        if (!prizePoolFrozen) return;
+        (uint128 pNext, uint128 pFuture) = _getPendingPools();
+        (uint128 next, uint128 future) = _getPrizePools();
+        _setPrizePools(next + pNext, future + pFuture);
+        prizePoolPendingPacked = 0;
+        prizePoolFrozen = false;
+    }
+
+    // =========================================================================
+    // Temporary Compatibility Shims — REMOVE IN PHASE 2
+    // =========================================================================
+    // These exist solely to keep the 101 references to nextPrizePool/futurePrizePool
+    // compiling while the real migration to packed helpers happens in Phase 2.
+    // DO NOT add new call sites — use _getPrizePools/_setPrizePools directly.
+
+    /// @dev DEPRECATED — use _getPrizePools() instead. Returns the next pool component.
+    function _legacyGetNextPrizePool() internal view returns (uint256) {
+        (uint128 next, ) = _getPrizePools();
+        return uint256(next);
+    }
+
+    /// @dev DEPRECATED — use _setPrizePools() instead. Sets only the next pool component.
+    function _legacySetNextPrizePool(uint256 val) internal {
+        (, uint128 future) = _getPrizePools();
+        _setPrizePools(uint128(val), future);
+    }
+
+    /// @dev DEPRECATED — use _getPrizePools() instead. Returns the future pool component.
+    function _legacyGetFuturePrizePool() internal view returns (uint256) {
+        (, uint128 future) = _getPrizePools();
+        return uint256(future);
+    }
+
+    /// @dev DEPRECATED — use _setPrizePools() instead. Sets only the future pool component.
+    function _legacySetFuturePrizePool(uint256 val) internal {
+        (uint128 next, ) = _getPrizePools();
+        _setPrizePools(next, uint128(val));
+    }
+
+    // =========================================================================
     // Loot Box State & Presale Toggle
     // =========================================================================
 
@@ -819,8 +932,8 @@ abstract contract DegenerusGameStorage {
     /// @dev Auto-rebuy toggle and afKing mode state (packed into one slot per player).
     ///      When auto-rebuy is enabled, the remainder (after reserving take profit)
     ///      is converted to tickets for next level or next+1 (50/50) during jackpot
-    ///      award flow. ETH goes to nextPrizePool for next-level tickets or to
-    ///      futurePrizePool for next+1 tickets, and tickets are queued per level.
+    ///      award flow. ETH goes to next prize pool for next-level tickets or to
+    ///      future prize pool for next+1 tickets, and tickets are queued per level.
     mapping(address => AutoRebuyState) internal autoRebuyState;
 
     /// @dev Decimator auto-rebuy toggle (true = disabled). Default is enabled (false).
