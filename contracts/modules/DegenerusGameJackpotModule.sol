@@ -1916,7 +1916,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     function processTicketBatch(
         uint24 lvl
     ) external returns (bool finished) {
-        address[] storage queue = ticketQueue[lvl];
+        uint24 rk = _tqReadKey(lvl);
+        address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
 
         // Check if we need to switch to this level or if already complete
@@ -1928,7 +1929,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 idx = ticketCursor;
         if (idx >= total) {
             // All done for this level
-            delete ticketQueue[lvl];
+            delete ticketQueue[rk];
             ticketCursor = 0;
             ticketLevel = 0;
             return true;
@@ -1947,6 +1948,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             (uint32 writesUsed, bool advance) = _processOneTicketEntry(
                 queue[idx],
                 lvl,
+                rk,
                 writesBudget - used,
                 processed,
                 entropy,
@@ -1968,7 +1970,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         if (idx >= total) {
             // Cleanup when done
-            delete ticketQueue[lvl];
+            delete ticketQueue[rk];
             ticketCursor = 0;
             ticketLevel = 0;
             return true;
@@ -1981,6 +1983,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     function _resolveZeroOwedRemainder(
         uint40 packed,
         uint24 lvl,
+        uint24 rk,
         address player,
         uint256 entropy,
         uint256 rollSalt
@@ -1988,20 +1991,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 rem = uint8(packed);
         if (rem == 0) {
             if (packed != 0) {
-                ticketsOwedPacked[lvl][player] = 0;
+                ticketsOwedPacked[rk][player] = 0;
             }
             return (0, true);
         }
 
         bool win = _rollRemainder(entropy, rollSalt, rem);
         if (!win) {
-            ticketsOwedPacked[lvl][player] = 0;
+            ticketsOwedPacked[rk][player] = 0;
             return (0, true);
         }
 
         newPacked = uint40(1) << 8;
         if (newPacked != packed) {
-            ticketsOwedPacked[lvl][player] = newPacked;
+            ticketsOwedPacked[rk][player] = newPacked;
         }
         return (newPacked, false);
     }
@@ -2010,12 +2013,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     function _processOneTicketEntry(
         address player,
         uint24 lvl,
+        uint24 rk,
         uint32 room,
         uint32 processed,
         uint256 entropy,
         uint256 queueIdx
     ) private returns (uint32 writesUsed, bool advance) {
-        uint40 packed = ticketsOwedPacked[lvl][player];
+        uint40 packed = ticketsOwedPacked[rk][player];
         uint32 owed = uint32(packed >> 8);
         uint256 rollSalt = (uint256(lvl) << 224) |
             (queueIdx << 192) |
@@ -2027,6 +2031,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             (packed, skip) = _resolveZeroOwedRemainder(
                 packed,
                 lvl,
+                rk,
                 player,
                 entropy,
                 rollSalt
@@ -2059,7 +2064,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             baseOv +
             (take == owed ? 1 : 0);
         advance = _finalizeTicketEntry(
-            lvl,
+            rk,
             player,
             packed,
             owed,
@@ -2088,7 +2093,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Finalizes ticket entry after processing, rolling remainder dust.
     function _finalizeTicketEntry(
-        uint24 lvl,
+        uint24 rk,
         address player,
         uint40 packed,
         uint32 owed,
@@ -2109,7 +2114,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
         uint40 newPacked = (uint40(remainingOwed) << 8) | uint40(rem);
         if (newPacked != packed) {
-            ticketsOwedPacked[lvl][player] = newPacked;
+            ticketsOwedPacked[rk][player] = newPacked;
         }
         return remainingOwed == 0;
     }
@@ -2571,7 +2576,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             // Pick a random level in [lvl+5, lvl+99]
             uint24 candidate = lvl + 5 + uint24(entropy % 95);
 
-            address[] storage queue = ticketQueue[candidate];
+            address[] storage queue = ticketQueue[_tqWriteKey(candidate)];
             uint256 len = queue.length;
             if (len != 0) {
                 uint256 idx = (entropy >> 32) % len;
