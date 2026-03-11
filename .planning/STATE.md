@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-11T20:33:44.099Z"
-last_activity: 2026-03-11 — Completed 01-01 storage fields & helpers
+stopped_at: Completed 01-01-PLAN.md (full execution with shim migration)
+last_updated: "2026-03-11T20:40:30Z"
+last_activity: 2026-03-11 — Completed 01-01 storage fields, helpers, and shim migration across 11 contracts
 progress:
   total_phases: 5
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 Phase: 1 of 5 (Storage Foundation)
 Plan: 1 of 2 in current phase (complete)
 Status: Executing
-Last activity: 2026-03-11 — Completed 01-01 storage fields & helpers
+Last activity: 2026-03-11 — Completed 01-01 storage fields, helpers, and shim migration across 11 contracts
 
 Progress: [█████░░░░░] 50%
 
@@ -50,7 +50,7 @@ Progress: [█████░░░░░] 50%
 - Trend: —
 
 *Updated after each plan completion*
-| Phase 01 P01 | 5min | 2 tasks | 1 files |
+| Phase 01 P01 | 19min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -63,6 +63,7 @@ Recent decisions affecting current work:
 - [Pre-work]: uint128 packing for prize pools — saves 1 SSTORE per purchase
 - [Pre-work]: Freeze only at daily RNG, not mid-day — mid-day processing doesn't touch jackpots/payouts
 - [Phase 01]: prizePoolPendingPacked at Slot 16 (in-place replacement) to avoid storage slot shifts
+- [Phase 01]: error E() centralized in DegenerusGameStorage -- Solidity 0.8.34 forbids redeclaration in inheritance chain
 
 ### Pending Todos
 
@@ -76,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T20:33:44.097Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-03-11T20:40:30Z
+Stopped at: Completed 01-01-PLAN.md (full execution with shim migration)
 Resume file: None

@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. `prizePoolsPacked` (uint128+uint128) exists and `nextPrizePool`/`futurePrizePool` are removed from storage; all helper functions (`_getPrizePools`, `_setPrizePools`, `_getPendingPools`, `_setPendingPools`) compile cleanly
   3. `_tqWriteKey` and `_tqReadKey` produce different keys for the same input in all cases; a unit test asserts this invariant for both values of `ticketWriteSlot`
   4. `forge clean && forge build` succeeds with zero warnings about storage layout after the changes
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 01-01-PLAN.md — Add all storage fields, constants, packed pool vars, helper functions, and compatibility shims to DegenerusGameStorage.sol
@@ -86,7 +86,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Storage Foundation | 0/2 | Planned | - |
+| 1. Storage Foundation | 1/2 | In Progress|  |
 | 2. Queue Double-Buffer | 0/? | Not started | - |
 | 3. Prize Pool Freeze | 0/? | Not started | - |
 | 4. advanceGame Rewrite | 0/? | Not started | - |
