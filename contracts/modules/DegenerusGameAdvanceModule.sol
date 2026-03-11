@@ -175,6 +175,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // RNG: use existing word or request new one
             uint256 rngWord = rngGate(ts, day, purchaseLevel, lastPurchase);
             if (rngWord == 1) {
+                _swapAndFreeze(purchaseLevel);
                 stage = STAGE_RNG_REQUESTED;
                 break;
             }
@@ -187,6 +188,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
                 phaseTransitionActive = false;
                 _unlockRng(day);
+                _unfreezePool();
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
                 stage = STAGE_TRANSITION_DONE;
@@ -230,6 +232,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         compressedJackpotFlag = (day - purchaseStartDay <= 2);
                     }
                     _unlockRng(day);
+                    _unfreezePool();
                     stage = STAGE_PURCHASE_DAILY;
                     break;
                 }
@@ -302,6 +305,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _rewardTopAffiliate(lvl);
                     _runRewardJackpots(lvl, rngWord);
                     _endPhase();
+                    _unfreezePool();
                     stage = STAGE_JACKPOT_PHASE_ENDED;
                     break;
                 }
