@@ -42,8 +42,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice RNG word has not been set for the requested lootbox index
     error RngNotReady();
 
-    /// @notice Operations are blocked during RNG lock (jackpot resolution in progress)
-    error RngLocked();
 
     // =========================================================================
     // Events
@@ -546,15 +544,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @notice Open an ETH lootbox once RNG is available
-    /// @dev Blocked during RNG lock to prevent ticket manipulation during jackpots.
-    ///      Applies activity score EV multiplier with a 10 ETH cap per account per level.
+    /// @dev Applies activity score EV multiplier with a 10 ETH cap per account per level.
     /// @param player Player address to open lootbox for
     /// @param index The RNG index of the lootbox
     /// @custom:reverts E When lootbox amount is zero
     /// @custom:reverts RngNotReady When RNG word has not been set for this index
-    /// @custom:reverts RngLocked When RNG is locked during jackpot resolution
     function openLootBox(address player, uint48 index) external {
-        if (rngLockedFlag) revert RngLocked();
 
         uint256 packed = lootboxEth[index][player];
         uint256 amount = packed & ((1 << 232) - 1);
@@ -629,15 +624,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @notice Open a BURNIE lootbox once RNG is available
-    /// @dev Blocked during RNG lock to prevent ticket manipulation during jackpots.
-    ///      Converts BURNIE to ETH-equivalent value at 80% rate for resolution.
+    /// @dev Converts BURNIE to ETH-equivalent value at 80% rate for resolution.
     /// @param player Player address to open lootbox for
     /// @param index The RNG index of the lootbox
     /// @custom:reverts E When lootbox amount is zero or price is zero
     /// @custom:reverts RngNotReady When RNG word has not been set for this index
-    /// @custom:reverts RngLocked When RNG is locked during jackpot resolution
     function openBurnieLootBox(address player, uint48 index) external {
-        if (rngLockedFlag) revert RngLocked();
 
         uint256 burnieAmount = lootboxBurnie[index][player];
         if (burnieAmount == 0) revert E();

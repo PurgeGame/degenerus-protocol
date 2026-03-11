@@ -623,8 +623,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint24 purchaseLevel = level + 1;
         uint256 priceWei = price;
 
-        // Block lootbox purchases during BAF/Decimator resolution (jackpot levels)
-        if (lootBoxAmount != 0 && rngLockedFlag && lastPurchaseDay && (purchaseLevel % 5 == 0)) revert E();
+        // Block lootbox purchases on the last purchase day of jackpot levels
+        if (lootBoxAmount != 0 && lastPurchaseDay && (purchaseLevel % 5 == 0)) revert E();
         if (lootBoxAmount != 0 && lootBoxAmount < LOOTBOX_MIN) revert E();
 
         uint256 ticketCost = 0;
@@ -837,8 +837,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     ) private {
         if (quantity == 0 || quantity > type(uint32).max) revert E();
         if (gameOver) revert E();
-        if (rngLockedFlag) revert E();
-
         // Ticket routing differs by phase:
         // - purchase phase: tickets target next level
         // - jackpot phase: tickets target current level
