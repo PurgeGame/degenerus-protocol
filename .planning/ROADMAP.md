@@ -13,7 +13,7 @@ This milestone eliminates purchase downtime by implementing a double-buffered ti
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Storage Foundation** - Add Slot 1 fields, packed pool slots, and all key/swap/freeze helpers to DegenerusGameStorage (completed 2026-03-11)
-- [ ] **Phase 2: Queue Double-Buffer** - Wire all queue functions to write/read key helpers; implement swap with hard drain gate
+- [x] **Phase 2: Queue Double-Buffer** - Wire all queue functions to write/read key helpers; implement swap with hard drain gate (completed 2026-03-11)
 - [ ] **Phase 3: Prize Pool Freeze** - Add freeze branch to all 9 purchase-path pool addition sites; populate pending accumulators
 - [ ] **Phase 4: advanceGame Rewrite** - Rewrite daily state machine with mid-day path, drain gates, swap/freeze, and unfreeze exit points
 - [ ] **Phase 5: Lock Removal** - Remove rngLockedFlag purchase reverts and validate full integration with fuzz suite
@@ -44,7 +44,7 @@ Plans:
   2. Every processing function uses `_tqReadKey()` — a grep for direct mapping key access in ticket processing loops returns zero results
   3. `_swapTicketSlot()` reverts with `ReadSlotNotDrained` when the read slot contains any entries; the revert is triggered in a unit test
   4. The mid-day swap fires when write queue length reaches 440 or when jackpot phase is active and write queue is non-empty
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 02-01-PLAN.md — Write-path and read-path key migration across Storage, JackpotModule, MintModule, and DegenerusGame + buffer isolation unit tests
@@ -91,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-11 |
-| 2. Queue Double-Buffer | 1/2 | In Progress | - |
+| 2. Queue Double-Buffer | 2/2 | Complete   | 2026-03-11 |
 | 3. Prize Pool Freeze | 0/? | Not started | - |
 | 4. advanceGame Rewrite | 0/? | Not started | - |
 | 5. Lock Removal | 0/? | Not started | - |

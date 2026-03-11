@@ -19,7 +19,7 @@ Requirements for v1.0 milestone. Each maps to roadmap phases.
 - [x] **QUEUE-01**: All `_queueTickets*` functions use `_tqWriteKey()` for mapping keys
 - [x] **QUEUE-02**: All processing functions use `_tqReadKey()` for mapping keys
 - [x] **QUEUE-03**: `_swapTicketSlot()` with hard gate (revert if read slot non-empty)
-- [ ] **QUEUE-04**: Mid-day swap trigger when write queue >= 440 or jackpot phase
+- [x] **QUEUE-04**: Mid-day swap trigger when write queue >= 440 or jackpot phase
 
 ### Prize Pool Freeze
 
@@ -72,7 +72,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QUEUE-01 | Phase 2 | Complete |
 | QUEUE-02 | Phase 2 | Complete |
 | QUEUE-03 | Phase 2 | Complete |
-| QUEUE-04 | Phase 2 | Pending |
+| QUEUE-04 | Phase 2 | Complete |
 | FREEZE-01 | Phase 3 | Pending |
 | FREEZE-02 | Phase 3 | Pending |
 | FREEZE-03 | Phase 3 | Pending |
