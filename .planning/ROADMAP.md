@@ -32,8 +32,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 01-01-PLAN.md — Add all storage fields, constants, packed pool vars, helper functions, and compatibility shims to DegenerusGameStorage.sol
-- [ ] 01-02-PLAN.md — Migrate 96 consumer references to shim calls, then create unit tests for all STOR requirements plus swap/freeze/unfreeze
+- [x] 01-01-PLAN.md — Add all storage fields, constants, packed pool vars, helper functions, and compatibility shims to DegenerusGameStorage.sol
+- [x] 01-02-PLAN.md — Migrate 96 consumer references to shim calls, then create unit tests for all STOR requirements plus swap/freeze/unfreeze
 
 ### Phase 2: Queue Double-Buffer
 **Goal**: All ticket queue operations use the correct slot key; a swap function with a hard drain gate exists and is the sole entry point for slot rotation
@@ -44,7 +44,11 @@ Plans:
   2. Every processing function uses `_tqReadKey()` — a grep for direct mapping key access in ticket processing loops returns zero results
   3. `_swapTicketSlot()` reverts with `ReadSlotNotDrained` when the read slot contains any entries; the revert is triggered in a unit test
   4. The mid-day swap fires when write queue length reaches 440 or when jackpot phase is active and write queue is non-empty
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Write-path and read-path key migration across Storage, JackpotModule, MintModule, and DegenerusGame + buffer isolation unit tests
+- [ ] 02-02-PLAN.md — Mid-day swap trigger path in advanceGame with MID_DAY_SWAP_THRESHOLD constant + mid-day unit tests
 
 ### Phase 3: Prize Pool Freeze
 **Goal**: All purchase-path pool additions branch on prizePoolFrozen; ETH received during a freeze lands in pending accumulators and is applied atomically at unfreeze
@@ -87,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Storage Foundation | 2/2 | Complete   | 2026-03-11 |
-| 2. Queue Double-Buffer | 0/? | Not started | - |
+| 2. Queue Double-Buffer | 0/2 | Planned | - |
 | 3. Prize Pool Freeze | 0/? | Not started | - |
 | 4. advanceGame Rewrite | 0/? | Not started | - |
 | 5. Lock Removal | 0/? | Not started | - |
