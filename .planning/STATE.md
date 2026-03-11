@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-11T22:18:42.325Z"
-last_activity: 2026-03-11 — Completed 04-01 AdvanceGame rewrite (drain gate + tests)
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-11T22:38:36.344Z"
+last_activity: 2026-03-11 — Completed 05-01 Lock removal (rngLockedFlag guards removed)
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 7
-  completed_plans: 7
+  completed_phases: 5
+  total_plans: 8
+  completed_plans: 8
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** Players can purchase tickets at any time — no downtime during RNG processing or jackpot payouts
-**Current focus:** Phase 4 — AdvanceGame Rewrite
+**Current focus:** Phase 5 — Lock Removal (COMPLETE)
 
 ## Current Position
 
-Phase: 4 of 5 (AdvanceGame Rewrite)
+Phase: 5 of 5 (Lock Removal)
 Plan: 1 of 1 in current phase
 Status: Complete
-Last activity: 2026-03-11 — Completed 04-01 AdvanceGame rewrite (drain gate + tests)
+Last activity: 2026-03-11 — Completed 05-01 Lock removal (rngLockedFlag guards removed)
 
 Progress: [██████████] 100%
 
@@ -58,6 +58,7 @@ Progress: [██████████] 100%
 | Phase 03 P02 | 2min | 2 tasks | 1 files |
 | Phase 03 P02 | 3min | 2 tasks | 1 files |
 | Phase 04 P01 | 4min | 2 tasks | 2 files |
+| Phase 05 P01 | 4min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -84,10 +85,13 @@ Recent decisions affecting current work:
 - [Phase 03]: Pre-existing invariant test failures (12 tests) confirmed as deploy-dependent, not caused by freeze changes
 - [Phase 04]: Defensive read-slot-length check in drain gate (handles empty read slot on first daily call after mid-day drain)
 - [Phase 04]: Line 216 in-do{} ticket processing kept as defensive code with ADV-03 flag set after it
+- [Phase 05]: Bounded fuzz level to uint24.max-1 to avoid arithmetic overflow on level+1 (contract never reaches max level)
+- [Phase 05]: LOCK-02 strips rngLockedFlag from compound condition, preserving lastPurchaseDay+jackpotLevel block as business rule
+- [Phase 05]: error RngLocked() removed from LootboxModule (zero remaining usage); kept in AdvanceModule (reverseFlip still uses it)
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
@@ -97,6 +101,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T22:12:25Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-11T22:38:36.342Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
