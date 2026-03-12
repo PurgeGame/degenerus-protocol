@@ -36,9 +36,9 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 ### BURNIE Economics
 
 - [x] **BURN-01**: Document coinflip mechanics (stake, odds, payout range, bounty system, expiry)
-- [ ] **BURN-02**: Document BURNIE earning paths (lootbox bonuses, quest rewards, coinflip winnings)
-- [ ] **BURN-03**: Document BURNIE burn sinks (decimator eligibility, ticket purchases)
-- [ ] **BURN-04**: Document vault reserve mechanics and supply invariants
+- [x] **BURN-02**: Document BURNIE earning paths (lootbox bonuses, quest rewards, coinflip winnings)
+- [x] **BURN-03**: Document BURNIE burn sinks (decimator eligibility, ticket purchases)
+- [x] **BURN-04**: Document vault reserve mechanics and supply invariants
 
 ### DGNRS Tokenomics
 
@@ -122,9 +122,9 @@ None — this is a standalone analysis milestone.
 | JACK-08 | Phase 7 | Complete |
 | JACK-09 | Phase 7 | Complete |
 | BURN-01 | Phase 8 | Complete |
-| BURN-02 | Phase 8 | Pending |
-| BURN-03 | Phase 8 | Pending |
-| BURN-04 | Phase 8 | Pending |
+| BURN-02 | Phase 8 | Complete |
+| BURN-03 | Phase 8 | Complete |
+| BURN-04 | Phase 8 | Complete |
 | LEVL-01 | Phase 9 | Pending |
 | LEVL-02 | Phase 9 | Pending |
 | LEVL-03 | Phase 9 | Pending |
