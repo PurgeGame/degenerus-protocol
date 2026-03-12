@@ -163,7 +163,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         // Add all lootbox ETH to futurePrizePool once at the end
         if (totalLootbox != 0) {
-            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + totalLootbox);
+            _setFuturePrizePool(_getFuturePrizePool() + totalLootbox);
         }
     }
 
@@ -195,7 +195,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             rngWord
         );
         if (lootboxPortion != 0) {
-            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + lootboxPortion);
+            _setFuturePrizePool(_getFuturePrizePool() + lootboxPortion);
         }
     }
 
@@ -426,7 +426,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             lastDecClaimRound.rngWord
         );
         if (lootboxPortion != 0) {
-            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + lootboxPortion);
+            _setFuturePrizePool(_getFuturePrizePool() + lootboxPortion);
         }
     }
 
@@ -478,9 +478,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         }
 
         if (calc.toFuture) {
-            _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + calc.ethSpent);
+            _setFuturePrizePool(_getFuturePrizePool() + calc.ethSpent);
         } else {
-            _legacySetNextPrizePool(_legacyGetNextPrizePool() + calc.ethSpent);
+            _setNextPrizePool(_getNextPrizePool() + calc.ethSpent);
         }
         _queueTickets(beneficiary, calc.targetLevel, calc.ticketCount);
 

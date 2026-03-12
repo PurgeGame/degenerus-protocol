@@ -136,7 +136,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     /// Fires at: 5, 15, 25, 35, 45, 55, 65, 75, 85 (NOT 95)
     /// Pool: 10% of future pool (level 100 uses 30% special)
     function runRewardJackpots(uint24 lvl, uint256 rngWord) external {
-        uint256 futurePoolLocal = _legacyGetFuturePrizePool();
+        uint256 futurePoolLocal = _getFuturePrizePool();
         uint256 baseFuturePool = futurePoolLocal;
         uint24 prevMod10 = lvl % 10;
         uint24 prevMod100 = lvl % 100;
@@ -202,7 +202,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
 
         // Commit future pool update only when changed (saves an SSTORE on non-jackpot levels)
         if (futurePoolLocal != baseFuturePool) {
-            _legacySetFuturePrizePool(futurePoolLocal);
+            _setFuturePrizePool(futurePoolLocal);
         }
         if (claimableDelta != 0) {
             claimablePool += claimableDelta;
@@ -245,9 +245,9 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
             }
 
             if (calc.toFuture) {
-                _legacySetFuturePrizePool(_legacyGetFuturePrizePool() + calc.ethSpent);
+                _setFuturePrizePool(_getFuturePrizePool() + calc.ethSpent);
             } else {
-                _legacySetNextPrizePool(_legacyGetNextPrizePool() + calc.ethSpent);
+                _setNextPrizePool(_getNextPrizePool() + calc.ethSpent);
             }
 
             _queueTickets(beneficiary, calc.targetLevel, calc.ticketCount);
