@@ -4,6 +4,8 @@
 **Scope:** All state-changing functions across 13 core contracts + 10 delegatecall modules
 **Verdict:** All functions CORRECT (0 bugs found)
 
+> **Storage Note (v1.0):** `nextPrizePool` and `futurePrizePool` are now stored in a single packed `uint256` slot accessed via `_getNextPrizePool()` / `_setNextPrizePool()` / `_getFuturePrizePool()` / `_setFuturePrizePool()`. Throughout this audit, references to `nextPrizePool` and `futurePrizePool` as storage variables refer to these packed accessors. The legacy shim names `_legacyGet/Set*` have been removed; use `_get/set*` instead.
+
 ---
 
 ## DegenerusGame.sol
@@ -802,27 +804,9 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 ---
 
-### `placeFullTicketBetsFromAffiliateCredit(address, uint128, uint8, uint32, uint8)` [external]
+### ~~`placeFullTicketBetsFromAffiliateCredit(address, uint128, uint8, uint32, uint8)`~~ [REMOVED]
 
-| Field | Value |
-|-------|-------|
-| **Signature** | `function placeFullTicketBetsFromAffiliateCredit(address player, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `player` (address): Betting player (address(0) = msg.sender); `amountPerTicket` (uint128): Bet amount per ticket; `ticketCount` (uint8): Number of spins (1-10); `customTicket` (uint32): Custom packed traits; `heroQuadrant` (uint8): Hero quadrant (0-3) for payout boost, or 0xFF for no hero |
-| **Returns** | None |
-
-**State Reads:** `operatorApprovals[player][msg.sender]` (via `_resolvePlayer` inline)
-**State Writes:** None directly -- module deducts affiliate credit from storage
-
-**Callers:** External callers (players with affiliate credit)
-**Callees:** `ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(IDegenerusGameDegeneretteModule.placeFullTicketBetsFromAffiliateCredit.selector, _resolvePlayer(player), amountPerTicket, ticketCount, customTicket, heroQuadrant)`
-
-**ETH Flow:** Not payable -- no ETH accepted. Bets funded from affiliate Degenerette credit (internal accounting).
-**Invariants:** No `currency` parameter -- affiliate credit is implicitly BURNIE-denominated. All 5 parameters forwarded to module without modification.
-**NatSpec Accuracy:** CORRECT -- NatSpec omits currency (correct, since affiliate credit is fixed denomination). Documents all parameters accurately.
-**Gas Flags:** None.
-**Verdict:** CORRECT
+> **Removed in v1.0** (commit 15ad2924). Affiliate Degenerette credit was removed; this entry point had zero callers. Function stripped from DegenerusGame.sol, DegenerusGameDegeneretteModule.sol, and both interfaces.
 
 ---
 
@@ -1110,7 +1094,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **Callees:** `ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(claimDecimatorJackpot.selector, ...)`, `_revertDelegate(data)`
 
 **ETH Flow:** Credits `claimableWinnings[msg.sender]` with pro-rata share. Player must subsequently call `claimWinnings()` to withdraw ETH. Two-step pull pattern.
-**Invariants:** Only winners (matching subbucket) can claim. Only claimable once per player per level. Only the last decimator round is claimable (earlier rounds expire).
+**Invariants:** Only winners (matching subbucket) can claim. Only claimable once per player per level. Only the last decimator round is claimable (earlier rounds expire). **Reverts when `prizePoolFrozen` is true** (jackpot phase days 1-4) — enforced in the DecimatorModule to prevent prize pool corruption from lootbox/auto-rebuy writes during frozen state.
 **NatSpec Accuracy:** ACCURATE. NatSpec correctly describes caller-initiated claim and the "must be last decimator" constraint.
 **Gas Flags:** None. No return value expected (no `data.length == 0` check needed since module reverts on invalid claims).
 **Verdict:** CORRECT
@@ -2147,7 +2131,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `rngGate(ts, day, purchaseLevel, lastPurchase)` (internal)
 - `_processPhaseTransition(purchaseLevel)` (private)
 - `_unlockRng(day)` (private)
-- `_prepareFinalDayFutureTickets(lvl)` (private)
+- `_prepareFutureTickets(lvl)` (private)
 - `_runProcessTicketBatch(purchaseLevel)` (private)
 - `payDailyJackpot(isDaily, lvl, rngWord)` (internal, delegatecall to JackpotModule)
 - `_payDailyCoinJackpot(purchaseLevel, rngWord)` (private, delegatecall to JackpotModule)
@@ -3077,7 +3061,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 **Callers:**
 - `advanceGame()` (line 218)
-- `_prepareFinalDayFutureTickets()` (lines 936, 945)
+- `_prepareFutureTickets()` (lines 989, 998)
 
 **Callees:**
 - `ContractAddresses.GAME_MINT_MODULE.delegatecall(processFutureTicketBatch.selector, lvl)`
@@ -3097,24 +3081,24 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 ---
 
-### `_prepareFinalDayFutureTickets(uint24)` [private]
+### `_prepareFutureTickets(uint24)` [private]
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function _prepareFinalDayFutureTickets(uint24 lvl) private returns (bool finished)` |
+| **Signature** | `function _prepareFutureTickets(uint24 lvl) private returns (bool finished)` |
 | **Visibility** | private |
 | **Mutability** | state-changing |
-| **Parameters** | `lvl` (uint24): current jackpot level |
+| **Parameters** | `lvl` (uint24): current level (purchaseLevel or jackpot level) |
 | **Returns** | `finished` (bool): true when all target future levels fully processed |
 
 **State Reads:**
 - `ticketLevel` (resumeLevel)
 
 **State Writes:**
-- Via `_processFutureTicketBatch(...)`: ticket queue state for levels lvl+2..lvl+5
+- Via `_processFutureTicketBatch(...)`: ticket queue state for levels lvl+2..lvl+6
 
 **Callers:**
-- `advanceGame()` (line 181, on final jackpot day)
+- `advanceGame()` (line 221, every daily cycle — both purchase and jackpot phases)
 
 **Callees:**
 - `_processFutureTicketBatch(resumeLevel)` (for resume)
@@ -3123,13 +3107,14 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **ETH Flow:** None directly.
 
 **Invariants:**
-- Processes levels lvl+2..lvl+5 (4 levels)
+- Processes levels lvl+2..lvl+6 (5 levels), covering full DAILY_CARRYOVER_MAX_OFFSET reach
+- Runs every daily cycle (gated only by fresh-day state: no pending coin tickets, zero ETH pool/phase/cursors)
 - Continues in-flight level first, then scans remaining
 - Returns false if any level has work to do (multi-call resumable)
 
 **NatSpec Accuracy:** ACCURATE.
 
-**Gas Flags:** Max 4 delegatecalls per advanceGame call (usually 1 due to early return).
+**Gas Flags:** Max 5 delegatecalls per advanceGame call (usually 1 due to early return). Empty levels cost ~100 gas each (1 warm SLOAD).
 
 **Verdict:** CORRECT
 
@@ -3780,7 +3765,6 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `gameOver` -- terminal state check (defense-in-depth; also checked in `_callTicketPurchase`)
 - `level` -- current game level
 - `price` -- current ticket price in wei
-- `rngLockedFlag` -- whether VRF is pending
 - `lastPurchaseDay` -- whether this is the last purchase day
 - `claimableWinnings[buyer]` -- player's claimable balance
 - `claimablePool` -- total claimable pool
@@ -3841,7 +3825,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **Invariants:**
 - `gameOver` guard prevents purchases after game termination (defense-in-depth alongside `_callTicketPurchase` check)
 - `purchaseLevel = level + 1` (tickets target next level)
-- Lootbox purchases blocked during BAF/Decimator resolution: `rngLockedFlag && lastPurchaseDay && (purchaseLevel % 5 == 0)`
+- Lootbox purchases blocked on last purchase day of jackpot levels: `lastPurchaseDay && (purchaseLevel % 5 == 0)`
 - Minimum lootbox purchase: 0.01 ETH (`LOOTBOX_MIN`)
 - Total cost (tickets + lootbox) must be > 0
 - Lootbox payment prefers `msg.value` first, then claimable shortfall (unless `DirectEth`)
@@ -3872,7 +3856,6 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 **State Reads:**
 - `gameOver` -- terminal state check
-- `rngLockedFlag` -- VRF lock check
 - `jackpotPhaseFlag` -- current phase (purchase vs jackpot)
 - `level` -- current level
 - `price` -- current ticket price
@@ -3908,7 +3891,6 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **Invariants:**
 - `quantity` must be non-zero, <= `type(uint32).max`
 - `gameOver` must be false
-- `rngLockedFlag` must be false
 - `costWei = (priceWei * quantity) / (4 * TICKET_SCALE)` must be > 0 and >= `TICKET_MIN_BUYIN_WEI` (0.0025 ETH)
 - Target level differs by phase: `jackpotPhaseFlag ? level : level + 1`
 - Purchase boost (if available and `!payInCoin`): increases `adjustedQuantity` but cost remains same (bonus tickets)
@@ -4545,14 +4527,14 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 
 ---
 
-### `_distributeLootboxAndTickets(uint24 lvl, uint32 winningTraitsPacked, uint256 lootboxBudget, uint256 randWord)` [private]
+### `_distributeLootboxAndTickets(uint24 lvl, uint32 winningTraitsPacked, uint256 lootboxBudget, uint256 randWord, uint16 ticketConversionBps)` [private]
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function _distributeLootboxAndTickets(uint24 lvl, uint32 winningTraitsPacked, uint256 lootboxBudget, uint256 randWord) private` |
+| **Signature** | `function _distributeLootboxAndTickets(uint24 lvl, uint32 winningTraitsPacked, uint256 lootboxBudget, uint256 randWord, uint16 ticketConversionBps) private` |
 | **Visibility** | private |
 | **Mutability** | state-changing |
-| **Parameters** | `lvl` (uint24): Current level; `winningTraitsPacked` (uint32): Packed trait IDs; `lootboxBudget` (uint256): ETH to convert to tickets; `randWord` (uint256): Entropy |
+| **Parameters** | `lvl` (uint24): Current level; `winningTraitsPacked` (uint32): Packed trait IDs; `lootboxBudget` (uint256): ETH to convert to tickets; `randWord` (uint256): Entropy; `ticketConversionBps` (uint16): Fraction of budget used for ticket calculation (10000 = 100%) |
 | **Returns** | None |
 
 **State Reads:** Via `_distributeTicketJackpot`
@@ -4564,14 +4546,17 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 **Callees:** `_budgetToTicketUnits`, `_distributeTicketJackpot`
 
 **ETH Flow:**
-- `nextPrizePool += lootboxBudget` (ETH backing for tickets)
+- `nextPrizePool += lootboxBudget` (full ETH backing for tickets regardless of ticketConversionBps)
+- Ticket basis: `(lootboxBudget * ticketConversionBps) / 10_000` -- only a fraction of the budget is used for ticket unit calculation, improving ETH-per-ticket backing ratio
 - Ticket units calculated for `lvl + 1` price
 - Tickets distributed to trait winners at current level
 
 **Invariants:**
-- Lootbox budget adds to nextPrizePool (tickets are for future levels)
+- Full lootbox budget adds to nextPrizePool regardless of ticketConversionBps (tickets are for future levels)
+- ticketConversionBps controls ticket minting ratio: e.g., 5000 = 50% means tickets are 2x backed
 - Ticket units at `lvl + 1` price but winners drawn from `lvl` ticket pool
 - Uses salt 242 for entropy differentiation
+- Current call site uses 5000 (50%) for daily jackpot lootbox distribution
 
 **NatSpec Accuracy:** Minimal but correct.
 
@@ -5822,7 +5807,7 @@ Lootbox sub-routing (within `_awardJackpotTickets` and direct):
 | **Parameters** | `player` (address): player address to open lootbox for; `index` (uint48): RNG index of the lootbox |
 | **Returns** | none |
 
-**State Reads:** `rngLockedFlag`, `lootboxEth[index][player]`, `lootboxRngWordByIndex[index]`, `lootboxDay[index][player]`, `lootboxPresaleActive`, `lootboxEthBase[index][player]`, `level`, `lootboxBaseLevelPacked[index][player]`, `lootboxEvScorePacked[index][player]`, `lootboxEvBenefitUsedByLevel[player][lvl]`
+**State Reads:** `lootboxEth[index][player]`, `lootboxRngWordByIndex[index]`, `lootboxDay[index][player]`, `lootboxPresaleActive`, `lootboxEthBase[index][player]`, `level`, `lootboxBaseLevelPacked[index][player]`, `lootboxEvScorePacked[index][player]`, `lootboxEvBenefitUsedByLevel[player][lvl]`
 
 **State Writes:** `lootboxEth[index][player] = 0`, `lootboxEthBase[index][player] = 0`, `lootboxBaseLevelPacked[index][player] = 0`, `lootboxEvScorePacked[index][player] = 0`, `lootboxEvBenefitUsedByLevel[player][lvl]` (via `_applyEvMultiplierWithCap`), plus all writes from `_resolveLootboxCommon`
 
@@ -5833,7 +5818,6 @@ Lootbox sub-routing (within `_awardJackpotTickets` and direct):
 **ETH Flow:** No direct ETH transfer. ETH-equivalent value is used to calculate BURNIE rewards (via `coin.creditFlip`), ticket grants, and boon draws. The lootbox ETH was deposited during purchase and sits in the game contract balance.
 
 **Revert Conditions:**
-- `RngLocked()`: if `rngLockedFlag` is true (jackpot resolution in progress)
 - `E()`: if `amount == 0` (no lootbox at this index for this player)
 - `RngNotReady()`: if `lootboxRngWordByIndex[index] == 0` (RNG not yet fulfilled)
 
@@ -5843,7 +5827,7 @@ Lootbox sub-routing (within `_awardJackpotTickets` and direct):
 - Grace period (7 days) preserves original purchase level for target level calculation
 - `targetLevel >= currentLevel` enforced after roll
 
-**NatSpec Accuracy:** Accurate. NatSpec documents RNG lock check, EV multiplier application, and revert conditions. The `@custom:reverts` tags correctly list all three revert paths.
+**NatSpec Accuracy:** Accurate. NatSpec documents EV multiplier application and revert conditions. The `@custom:reverts` tags correctly list both revert paths.
 
 **Gas Flags:** `boonAmount` parameter in `_resolveLootboxCommon` is passed as `baseAmount` but is immediately discarded inside the function (line 850: `boonAmount;`). This is a dead parameter -- no gas cost since it's calldata forwarding, but it's misleading.
 
@@ -5861,7 +5845,7 @@ Lootbox sub-routing (within `_awardJackpotTickets` and direct):
 | **Parameters** | `player` (address): player to open BURNIE lootbox for; `index` (uint48): RNG index |
 | **Returns** | none |
 
-**State Reads:** `rngLockedFlag`, `lootboxBurnie[index][player]`, `lootboxRngWordByIndex[index]`, `price`, `level`, `lootboxDay[index][player]`
+**State Reads:** `lootboxBurnie[index][player]`, `lootboxRngWordByIndex[index]`, `price`, `level`, `lootboxDay[index][player]`
 
 **State Writes:** `lootboxBurnie[index][player] = 0`, plus all writes from `_resolveLootboxCommon`
 
@@ -5872,7 +5856,6 @@ Lootbox sub-routing (within `_awardJackpotTickets` and direct):
 **ETH Flow:** No direct ETH transfer. BURNIE amount is converted to ETH-equivalent at 80% rate: `amountEth = (burnieAmount * priceWei * 80) / (PRICE_COIN_UNIT * 100)`. This ETH-equivalent drives reward calculations but no actual ETH moves.
 
 **Revert Conditions:**
-- `RngLocked()`: if `rngLockedFlag` is true
 - `E()`: if `burnieAmount == 0` (no BURNIE lootbox)
 - `RngNotReady()`: if `lootboxRngWordByIndex[index] == 0`
 - `E()`: if `priceWei == 0` (BURNIE price not set)
@@ -6657,6 +6640,7 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 | **Returns** | none |
 
 **State Reads:**
+- `rngLockedFlag` -- blocks during RNG lock (jackpot resolution)
 - `gameOver` -- revert guard
 - `deityBySymbol[symbolId]` -- check symbol availability
 - `deityPassCount[buyer]` -- check buyer doesn't already own one
@@ -6723,6 +6707,7 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 - Tickets: 40/lvl bonus for levels between passLevel and level 10, 2/lvl standard otherwise (same rates as whale bundle but without quantity multiplier)
 
 **Invariants:**
+- `rngLockedFlag == false` (deity pass purchases blocked during jackpot resolution to prevent bucket composition changes)
 - `gameOver == false`
 - `symbolId < 32`
 - `deityBySymbol[symbolId] == address(0)` (symbol not taken)
@@ -7203,38 +7188,9 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 
 ---
 
-### `placeFullTicketBetsFromAffiliateCredit(address player, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant)` [external]
+### ~~`placeFullTicketBetsFromAffiliateCredit(address, uint128, uint8, uint32, uint8)`~~ [REMOVED]
 
-| Field | Value |
-|-------|-------|
-| **Signature** | `function placeFullTicketBetsFromAffiliateCredit(address player, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing (not payable) |
-| **Parameters** | `player` (address): player address, zero for msg.sender; `amountPerTicket` (uint128): bet amount per spin; `ticketCount` (uint8): spins 1-10; `customTicket` (uint32): packed traits; `heroQuadrant` (uint8): 0-3 or 0xFF |
-| **Returns** | none |
-
-**State Reads:**
-- `operatorApprovals[player][msg.sender]` (via `_resolvePlayer`)
-- `lootboxRngIndex`, `lootboxRngWordByIndex[index]` (via `_placeFullTicketBetsCore`)
-- `mintPacked_[player]`, `level`, `deityPassCount[player]` (via `_playerActivityScoreInternal`)
-- `degeneretteBetNonce[player]`
-
-**State Writes:**
-- `degeneretteBets[player][nonce]` = packed bet (via `_placeFullTicketBetsCore`)
-- `degeneretteBetNonce[player]` = nonce+1 (via `_placeFullTicketBetsCore`)
-- `lootboxRngPendingBurnie += totalBet`
-
-**Callers:** DegenerusGame via delegatecall (external entry point)
-**Callees:** `_resolvePlayer(player)`, `_placeFullTicketBetsCore(...)`, `affiliate.consumeDegeneretteCredit(player, totalBet)` [external], `coin.notifyQuestDegenerette(player, totalBet, false)` [external]
-
-**ETH Flow:** No ETH movement. Uses affiliate BURNIE credit (consumed via external call).
-**Invariants:**
-- `affiliate.consumeDegeneretteCredit` must return exactly `totalBet`; otherwise reverts `InvalidBet`
-- Currency is hardcoded to `CURRENCY_BURNIE` (1)
-- Not payable -- no ETH accepted
-**NatSpec Accuracy:** Accurate. States it uses "BURNIE bet currency semantics without burning wallet balance."
-**Gas Flags:** None.
-**Verdict:** CORRECT
+> **Removed in v1.0** (commit 15ad2924). See DegenerusGame.sol entry above.
 
 ---
 
@@ -7302,16 +7258,15 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function _placeFullTicketBetsCore(address player, uint8 currency, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) private returns (uint256 totalBet, bool jackpotResolutionActive)` |
+| **Signature** | `function _placeFullTicketBetsCore(address player, uint8 currency, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) private returns (uint256 totalBet)` |
 | **Visibility** | private |
 | **Mutability** | state-changing |
 | **Parameters** | `player` (address): resolved player; `currency` (uint8): currency type; `amountPerTicket` (uint128): bet per spin; `ticketCount` (uint8): spin count; `customTicket` (uint32): packed traits; `heroQuadrant` (uint8): hero quadrant |
-| **Returns** | `totalBet` (uint256): total bet amount; `jackpotResolutionActive` (bool): whether jackpot resolution is active |
+| **Returns** | `totalBet` (uint256): total bet amount |
 
 **State Reads:**
 - `lootboxRngIndex` -- current RNG batch index
 - `lootboxRngWordByIndex[index]` -- must be 0 (no RNG word yet = accepting bets)
-- `rngLockedFlag`, `lastPurchaseDay`, `level` -- for jackpot resolution detection
 - `mintPacked_[player]`, `deityPassCount[player]` -- via `_playerActivityScoreInternal`
 - `degeneretteBetNonce[player]` -- current bet nonce
 - `dailyHeroWagers[day][heroQuadrant]` -- for hero wager tracking (ETH only)
@@ -7334,7 +7289,6 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 - `amountPerTicket` must be non-zero
 - `lootboxRngIndex` must be non-zero (game initialized)
 - RNG word for current index must be 0 (bet window open)
-- ETH bets blocked during jackpot resolution (`rngLockedFlag && lastPurchaseDay && (level+1)%5==0`)
 - `totalBet` = amountPerTicket * ticketCount (no overflow risk: uint128 * uint8 fits uint256)
 - Hero wager tracking: wagerUnit scaled by 1e12, saturates at uint32 max (0xFFFFFFFF)
 - Top degenerette: stores playerScaled (totalWei/1e12) in upper 96 bits, player address in lower 160 bits
@@ -7347,14 +7301,14 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 
 ---
 
-### `_collectBetFunds(address player, uint8 currency, uint256 totalBet, uint256 ethPaid, bool jackpotResolutionActive)` [private]
+### `_collectBetFunds(address player, uint8 currency, uint256 totalBet, uint256 ethPaid)` [private]
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function _collectBetFunds(address player, uint8 currency, uint256 totalBet, uint256 ethPaid, bool jackpotResolutionActive) private` |
+| **Signature** | `function _collectBetFunds(address player, uint8 currency, uint256 totalBet, uint256 ethPaid) private` |
 | **Visibility** | private |
 | **Mutability** | state-changing |
-| **Parameters** | `player` (address): bettor; `currency` (uint8): currency type; `totalBet` (uint256): total bet; `ethPaid` (uint256): msg.value; `jackpotResolutionActive` (bool): jackpot lock |
+| **Parameters** | `player` (address): bettor; `currency` (uint8): currency type; `totalBet` (uint256): total bet; `ethPaid` (uint256): msg.value |
 | **Returns** | none |
 
 **State Reads:**
@@ -7363,7 +7317,7 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 **State Writes:**
 - `claimableWinnings[player]` -= fromClaimable (ETH shortfall)
 - `claimablePool` -= fromClaimable (ETH shortfall)
-- `futurePrizePool` += totalBet (ETH only)
+- `futurePrizePool` += totalBet (ETH only, routed through `_setPendingPools` when `prizePoolFrozen`)
 - `lootboxRngPendingEth` += totalBet (ETH only)
 - `lootboxRngPendingBurnie` += totalBet (BURNIE only)
 
@@ -7378,12 +7332,12 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 - WWXRP: tokens burned from player wallet via `wwxrp.burnForGame`
 
 **Invariants:**
-- ETH bets during jackpot resolution: double-reverts with `E()` (redundant with `_placeFullTicketBetsCore` check, defensive)
+- ETH bets during jackpot resolution: deposits routed to pending accumulators via `prizePoolFrozen` check, unfreezed after jackpot math completes. Resolution cannot occur until lootbox RNG arrives (post-resolution).
 - For claimable shortfall: requires `claimableWinnings[player] > fromClaimable` (strict greater-than). Note: this means if claimableWinnings exactly equals fromClaimable, it reverts. This is intentional -- prevents draining claimable balance to zero via degenerette bets, preserving a dust balance.
 - WWXRP bets do not update `lootboxRngPendingBurnie` or `lootboxRngPendingEth` -- WWXRP is mint/burn-based with no pool accounting.
 
 **NatSpec Accuracy:** Brief NatSpec ("Processes bet funds"). Inline comments adequate.
-**Gas Flags:** The double-check of `jackpotResolutionActive` for ETH (already checked in `_placeFullTicketBetsCore`) is redundant but defensive. Minimal gas cost.
+**Gas Flags:** None.
 **Verdict:** CORRECT -- The strict greater-than check on claimable is a design choice preventing zero-balance draining.
 
 ---
@@ -8165,7 +8119,7 @@ Returns true if ANY boon type survived the expiry checks.
 | **Parameters** | `lvl` (uint24): level to claim from (must be last decimator) |
 | **Returns** | none |
 
-**State Reads:** `gameOver`, `lastDecClaimRound` (.lvl, .totalBurn, .poolWei, .rngWord), `decBurn[lvl][msg.sender]` (DecEntry), `decBucketOffsetPacked[lvl]`, `autoRebuyState[msg.sender]`, `decimatorAutoRebuyDisabled[msg.sender]`, `level`
+**State Reads:** `prizePoolFrozen`, `gameOver`, `lastDecClaimRound` (.lvl, .totalBurn, .poolWei, .rngWord), `decBurn[lvl][msg.sender]` (DecEntry), `decBucketOffsetPacked[lvl]`, `autoRebuyState[msg.sender]`, `decimatorAutoRebuyDisabled[msg.sender]`, `level`
 
 **State Writes:** `decBurn[lvl][msg.sender].claimed = 1`, `claimableWinnings[msg.sender]` (via `_creditClaimable` or auto-rebuy), `futurePrizePool` (lootbox portion or auto-rebuy future), `nextPrizePool` (auto-rebuy next), `claimablePool` (decremented), `ticketsOwedPacked` / `ticketQueue` (auto-rebuy), `whalePassClaims[msg.sender]` (whale pass path)
 
@@ -8180,9 +8134,10 @@ Returns true if ANY boon type survived the expiry checks.
 - GameOver: `amountWei` from `lastDecClaimRound.poolWei` (pro-rata share) -> `claimableWinnings[msg.sender]` or auto-rebuy tickets
 - Normal: 50% ETH -> `claimableWinnings[msg.sender]` or auto-rebuy; 50% lootbox deducted from `claimablePool`, resolved via `_awardDecimatorLootbox`, `lootboxPortion` added to `futurePrizePool`
 
-**Access Control:** Public -- any address can call for themselves. No access restriction (self-claim only via `msg.sender`).
+**Access Control:** Public -- any address can call for themselves. No access restriction (self-claim only via `msg.sender`). **Reverts with `E()` when `prizePoolFrozen` is true** (jackpot phase days 1-4) to prevent live pool corruption.
 
 **Invariants:**
+- `prizePoolFrozen` → revert E() (blocks entire claim + auto-rebuy path during jackpot phase)
 - Must pass `_consumeDecClaim` validation (active round, not claimed, winner)
 - Self-claim only (`msg.sender` used throughout)
 - GameOver uses `lastDecClaimRound.rngWord` for auto-rebuy entropy
@@ -8192,7 +8147,7 @@ Returns true if ANY boon type survived the expiry checks.
 
 **Gas Flags:** None.
 
-**Verdict:** CORRECT
+**Verdict:** CORRECT (freeze guard added to prevent pool corruption during jackpot phase)
 
 ---
 
@@ -9567,7 +9522,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **State Writes:** `coinflipBalance[cursor][player]` (zeroed on processed days), `playerState[player].lastClaim`, `playerState[player].autoRebuyCarry`
 
 **Callers:** `settleFlipModeChange`, `_depositCoinflip`, `_claimCoinflipsTakeProfit`, `_claimCoinflipsAmount`, `_setCoinflipAutoRebuy`, `_setCoinflipAutoRebuyTakeProfit`
-**Callees:** `degenerusGame.syncAfKingLazyPassFromCoin(player)`, `degenerusGame.deityPassCountFor(player)`, `degenerusGame.level()`, `_afKingDeityBonusHalfBpsWithLevel(player, cachedLevel)`, `_recyclingBonus(carry)`, `_afKingRecyclingBonus(carry, deityBonusHalfBps)`, `_bafBracketLevel(bafLevel)`, `jackpots.recordBafFlip(player, bafLvl, winningBafCredit)`, `degenerusGame.purchaseInfo()`, `degenerusGame.gameOver()`, `wwxrp.mintPrize(player, lossCount * COINFLIP_LOSS_WWXRP_REWARD)`
+**Callees:** `degenerusGame.syncAfKingLazyPassFromCoin(player)`, `degenerusGame.deityPassCountFor(player)`, `degenerusGame.level()`, `_afKingDeityBonusHalfBpsWithLevel(player, cachedLevel)`, `_recyclingBonus(carry)`, `_afKingRecyclingBonus(carry, deityBonusHalfBps)`, `_bafBracketLevel(bafLevel)`, `jackpots.getLastBafResolvedDay()` (lazy-cached), `jackpots.recordBafFlip(player, bafLvl, winningBafCredit)`, `degenerusGame.purchaseInfo()`, `degenerusGame.gameOver()`, `wwxrp.mintPrize(player, lossCount * COINFLIP_LOSS_WWXRP_REWARD)`
 
 **ETH Flow:** No direct ETH. Mints WWXRP on losses (1 ether per loss day).
 **Invariants:**
@@ -9577,7 +9532,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 - On win: payout = stake + (stake * rewardPercent / 100). If auto-rebuy, winnings go to carry (with take-profit extraction); otherwise added to mintable.
 - Carry gets recycling bonus after each win day (base 1% or afKing enhanced).
 - On loss: stake is forfeited, carry is zeroed (if auto-rebuy), lossCount incremented for WWXRP.
-- BAF credit is recorded for all winning days via `jackpots.recordBafFlip`.
+- BAF credit is recorded for winning days via `jackpots.recordBafFlip`, but only for days after `lastBafResolvedDay` (lazy-fetched from `jackpots.getLastBafResolvedDay()`). Wins on or before the resolution day forfeit BAF credit to prevent stale autorebuy claims from dumping credit into a new leaderboard epoch.
 - Reverts `RngLocked()` if there is winning BAF credit and the game is at a BAF resolution level (purchaseLevel % 10 == 0) on last purchase day with RNG locked.
 - Auto-rebuy start day bounds the minimum claimable day (no expiry for auto-rebuy positions).
 - If `start < minClaimableDay` and auto-rebuy active, carry is zeroed (stale carry from expired days).
@@ -12452,10 +12407,13 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Modifiers** | `onlyCoin` |
 
 **State Reads:**
+- `bafEpoch[lvl]` -- current epoch for this bracket
+- `bafPlayerEpoch[lvl][player]` -- player's last-known epoch
 - `bafTotals[lvl][player]` -- current accumulated total for this player at this level
 
 **State Writes:**
-- `bafTotals[lvl][player]` -- updated with `total + amount`
+- `bafPlayerEpoch[lvl][player]` -- updated to current epoch on stale detection
+- `bafTotals[lvl][player]` -- lazily reset to 0 on epoch mismatch, then updated with `total + amount`
 - `bafTop[lvl]` -- via `_updateBafTop` (leaderboard entries)
 - `bafTopLen[lvl]` -- via `_updateBafTop` (leaderboard length)
 
@@ -12467,8 +12425,9 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **ETH Flow:** None. No ETH is sent or received.
 
 **Invariants:**
-- `bafTotals[lvl][player]` is monotonically non-decreasing (only adds, never subtracts)
-- After call, player's total equals previous total + amount
+- Epoch-based lazy reset: if `bafPlayerEpoch[lvl][player] != bafEpoch[lvl]`, player's total is zeroed and epoch synced before accumulation. This prevents stale scores from prior jackpot cycles carrying into fresh leaderboards.
+- `bafTotals[lvl][player]` is monotonically non-decreasing within an epoch (only adds, never subtracts)
+- After call, player's total equals (reset-to-zero if stale) + amount
 - If player is the VAULT address, function returns early (no state change)
 - Leaderboard remains sorted descending by score after update
 
@@ -12500,7 +12459,9 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **State Writes:**
 - `bafTop[lvl]` -- deleted via `_clearBafTop`
 - `bafTopLen[lvl]` -- deleted via `_clearBafTop`
-- Note: `bafTotals` is NOT cleared (historical data preserved)
+- `bafEpoch[lvl]` -- incremented (invalidates all player scores for this bracket via lazy reset in `recordBafFlip`)
+- `lastBafResolvedDay` -- set to `degenerusGame.currentDayView()` (used by BurnieCoinflip to gate BAF credit attribution)
+- Note: `bafTotals` is NOT cleared (lazy epoch-based reset handles staleness)
 
 **Callers:** DegenerusGame contract (via `onlyGame` modifier), specifically through JackpotModule delegatecall.
 
@@ -12510,11 +12471,12 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 - `coin.coinflipTopLastDay()` -- external call to COINFLIP for last-24h top bettor
 - `_creditOrRefund(...)` -- memory buffer write helper (pure)
 - `affiliate.affiliateTop(uint24(lvl - offset))` -- external call to Affiliate for top referrers per level
-- `_bafScore(player, lvl)` -- BAF score lookup for affiliate candidates
+- `_bafScore(player, lvl)` -- BAF score lookup for affiliate candidates (returns 0 for stale-epoch players)
 - `degenerusGame.sampleFarFutureTickets(entropy)` -- external call to Game for far-future ticket holders
 - `_bafScore(cand, lvl)` -- scoring far-future and scatter candidates
 - `degenerusGame.sampleTraitTicketsAtLevel(targetLvl, entropy)` -- external call to Game for trait ticket sampling
 - `_clearBafTop(lvl)` -- cleanup after resolution
+- `degenerusGame.currentDayView()` -- get current day index for `lastBafResolvedDay`
 
 **ETH Flow:** None directly. This function computes winners and amounts, returning them as arrays. The calling game contract (JackpotModule) handles actual ETH transfers using the returned data.
 
@@ -12545,7 +12507,7 @@ Total: 100% (10 + 10 + 5 + 10 + 5 + 40 + 20 = 100)
 
 **Invariants:**
 - Sum of all awarded amounts + returnAmountWei == poolWei (conservation of prize pool)
-- After execution, leaderboard for `lvl` is cleared (bafTop and bafTopLen deleted)
+- After execution, leaderboard for `lvl` is cleared (bafTop and bafTopLen deleted), epoch incremented (lazy-invalidates all player scores), and `lastBafResolvedDay` updated
 - Maximum 108 winners (1 + 1 + 1 + 3 + 2 + 50 + 50)
 - All unfilled slots contribute to `toReturn`
 
@@ -12663,7 +12625,7 @@ Rounding: Due to integer division, small dust amounts (< winner count) in scatte
 
 **Invariants:**
 - After execution, `bafTopLen[lvl]` == 0 and all `bafTop[lvl][i]` entries are zeroed
-- Note: `bafTotals` is NOT cleared (accumulated stakes persist beyond jackpot resolution)
+- Note: `bafTotals` is NOT cleared (accumulated stakes persist in storage), but the epoch increment in `runBafJackpot` lazy-invalidates them — `recordBafFlip` resets to 0 on next access
 - If len is already 0, only the delete of bafTopLen is skipped (no-op guard), but the loop body does not execute either
 
 **NatSpec Accuracy:** NatSpec says "Clear leaderboard state for a level after jackpot resolution." Accurate.
