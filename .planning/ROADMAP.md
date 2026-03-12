@@ -95,10 +95,11 @@ Plans:
   3. How whale bundle and lazy pass duration economics change across levels is documented
   4. Death clock (120d timeout, 365d deploy, distress mode) and terminal gameOver distribution are documented with exact timing constants and final payout formulas
   5. Activity score system and consecutive streak mechanics are documented with exact bonus calculations
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: TBD
+- [ ] 09-01-PLAN.md — Document price curve, level transition mechanics, and whale/lazy pass economics across levels
+- [ ] 09-02-PLAN.md — Document activity score system, death clock escalation, and terminal distribution
 
 ### Phase 10: Reward Systems and Modifiers
 **Goal**: A game theory agent can account for all secondary reward flows and modifier effects that adjust the core economic model
@@ -145,6 +146,6 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 6. ETH Inflows and Pool Architecture | v1.1 | 2/2 | Complete | 2026-03-12 |
 | 7. Jackpot & Distribution Mechanics | 3/3 | Complete   | 2026-03-12 | - |
 | 8. BURNIE Economics | 2/2 | Complete   | 2026-03-12 | - |
-| 9. Level Progression and Endgame | v1.1 | 0/? | Not started | - |
+| 9. Level Progression and Endgame | v1.1 | 0/2 | Not started | - |
 | 10. Reward Systems and Modifiers | v1.1 | 0/? | Not started | - |
 | 11. Parameter Reference | v1.1 | 0/? | Not started | - |
