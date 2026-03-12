@@ -209,18 +209,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 break;
             }
 
-            // On final jackpot day, process near-future ticket queues (+2..+5)
-            // before the early-bird draw to include fresh lootbox-driven tickets.
+            // Process near-future ticket queues (+2..+6) before daily draws
+            // to include fresh lootbox-driven tickets from pass purchases.
             if (
-                inJackpot &&
-                jackpotCounter == JACKPOT_LEVEL_CAP - 1 &&
                 !dailyJackpotCoinTicketsPending &&
                 dailyEthPoolBudget == 0 &&
                 dailyEthPhase == 0 &&
                 dailyEthBucketCursor == 0 &&
                 dailyEthWinnerCursor == 0
             ) {
-                if (!_prepareFinalDayFutureTickets(lvl)) {
+                if (!_prepareFutureTickets(lvl)) {
                     stage = STAGE_FUTURE_TICKETS_WORKING;
                     break;
                 }
@@ -972,16 +970,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         return abi.decode(data, (bool, bool, uint32));
     }
 
-    /// @dev Before the final jackpot-day draw, process ticket queues for levels
-    ///      lvl+2..lvl+5 (near-future lootbox levels). Uses existing ticket cursor
-    ///      state so work can resume across multiple advanceGame calls.
-    /// @param lvl Current jackpot level.
+    /// @dev Before daily draws, process ticket queues for near-future levels
+    ///      lvl+2..lvl+6. Runs every daily cycle (purchase and jackpot phases)
+    ///      so pass-driven tickets are included promptly. Uses existing ticket
+    ///      cursor state so work can resume across multiple advanceGame calls.
+    /// @param lvl Current level (purchaseLevel or jackpot level).
     /// @return finished True when all target future levels are fully processed.
-    function _prepareFinalDayFutureTickets(
+    function _prepareFutureTickets(
         uint24 lvl
     ) private returns (bool finished) {
         uint24 startLevel = lvl + 2;
-        uint24 endLevel = lvl + 5;
+        uint24 endLevel = lvl + 6;
         uint24 resumeLevel = ticketLevel;
 
         // Continue an in-flight future level first to preserve progress.
