@@ -149,5 +149,5 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 7. Jackpot & Distribution Mechanics | 3/3 | Complete   | 2026-03-12 | - |
 | 8. BURNIE Economics | 2/2 | Complete   | 2026-03-12 | - |
 | 9. Level Progression and Endgame | 2/2 | Complete   | 2026-03-12 | - |
-| 10. Reward Systems and Modifiers | v1.1 | 0/5 | Not started | - |
+| 10. Reward Systems and Modifiers | 2/5 | In Progress|  | - |
 | 11. Parameter Reference | v1.1 | 0/? | Not started | - |
