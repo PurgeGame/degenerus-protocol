@@ -114,8 +114,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         if (available == 0) {
             gameOverFinalJackpotPaid = true;
-            _legacySetNextPrizePool(0);
-            _legacySetFuturePrizePool(0);
+            _setNextPrizePool(0);
+            _setFuturePrizePool(0);
             currentPrizePool = 0;
             return;
         }
@@ -125,8 +125,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         if (rngWord == 0) return; // RNG not ready yet — don't latch, allow retry
 
         gameOverFinalJackpotPaid = true;
-        _legacySetNextPrizePool(0);
-        _legacySetFuturePrizePool(0);
+        _setNextPrizePool(0);
+        _setFuturePrizePool(0);
         currentPrizePool = 0;
 
         // remaining tracks unallocated funds.

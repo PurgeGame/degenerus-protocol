@@ -2040,19 +2040,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Mint fees flow into nextPrizePool until target is met.
     /// @return The nextPrizePool value (ETH wei).
     function nextPrizePoolView() external view returns (uint256) {
-        return _legacyGetNextPrizePool();
+        return _getNextPrizePool();
     }
 
     /// @notice Get the unified future pool reserve.
     /// @return The futurePrizePool value (ETH wei).
     function futurePrizePoolView() external view returns (uint256) {
-        return _legacyGetFuturePrizePool();
+        return _getFuturePrizePool();
     }
 
     /// @notice Get the aggregate future pool reserve.
     /// @return The futurePrizePool value (ETH wei).
     function futurePrizePoolTotalView() external view returns (uint256) {
-        return _legacyGetFuturePrizePool();
+        return _getFuturePrizePool();
     }
 
     /// @notice Get queued future ticket rewards owed for a level.
@@ -2141,7 +2141,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Get the unified future pool (reserve for jackpots and carryover).
     /// @return The futurePrizePool value (ETH wei).
     function rewardPoolView() external view returns (uint256) {
-        return _legacyGetFuturePrizePool();
+        return _getFuturePrizePool();
     }
 
     /// @notice Get the claimable pool (reserved for player winnings claims).
@@ -2163,9 +2163,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 totalBalance = address(this).balance +
             steth.balanceOf(address(this));
         uint256 obligations = currentPrizePool +
-            _legacyGetNextPrizePool() +
+            _getNextPrizePool() +
             claimablePool +
-            _legacyGetFuturePrizePool();
+            _getFuturePrizePool();
         if (totalBalance <= obligations) return 0;
         return totalBalance - obligations;
     }

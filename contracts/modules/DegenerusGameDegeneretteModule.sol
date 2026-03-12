@@ -704,7 +704,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @param rngWord The RNG word for lootbox conversion (only used for ETH).
     function _distributePayout(address player, uint8 currency, uint256 payout, uint256 rngWord) private {
         if (currency == CURRENCY_ETH) {
-            uint256 pool = _legacyGetFuturePrizePool();
+            uint256 pool = _getFuturePrizePool();
 
             // Split: 25% as ETH, 75% as lootbox
             uint256 ethPortion = payout / 4;
@@ -720,7 +720,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             }
 
             unchecked { pool -= ethPortion; }
-            _legacySetFuturePrizePool(pool);
+            _setFuturePrizePool(pool);
             _addClaimableEth(player, ethPortion);
 
             // Convert 75% (+ any cap excess) to lootbox rewards

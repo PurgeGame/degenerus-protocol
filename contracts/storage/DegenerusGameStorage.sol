@@ -757,32 +757,29 @@ abstract contract DegenerusGameStorage {
     }
 
     // =========================================================================
-    // Temporary Compatibility Shims — REMOVE IN PHASE 2
+    // Single-Component Prize Pool Accessors
     // =========================================================================
-    // These exist solely to keep the 101 references to nextPrizePool/futurePrizePool
-    // compiling while the real migration to packed helpers happens in Phase 2.
-    // DO NOT add new call sites — use _getPrizePools/_setPrizePools directly.
 
-    /// @dev DEPRECATED — use _getPrizePools() instead. Returns the next pool component.
-    function _legacyGetNextPrizePool() internal view returns (uint256) {
+    /// @dev Returns the next pool component.
+    function _getNextPrizePool() internal view returns (uint256) {
         (uint128 next, ) = _getPrizePools();
         return uint256(next);
     }
 
-    /// @dev DEPRECATED — use _setPrizePools() instead. Sets only the next pool component.
-    function _legacySetNextPrizePool(uint256 val) internal {
+    /// @dev Sets only the next pool component.
+    function _setNextPrizePool(uint256 val) internal {
         (, uint128 future) = _getPrizePools();
         _setPrizePools(uint128(val), future);
     }
 
-    /// @dev DEPRECATED — use _getPrizePools() instead. Returns the future pool component.
-    function _legacyGetFuturePrizePool() internal view returns (uint256) {
+    /// @dev Returns the future pool component.
+    function _getFuturePrizePool() internal view returns (uint256) {
         (, uint128 future) = _getPrizePools();
         return uint256(future);
     }
 
-    /// @dev DEPRECATED — use _setPrizePools() instead. Sets only the future pool component.
-    function _legacySetFuturePrizePool(uint256 val) internal {
+    /// @dev Sets only the future pool component.
+    function _setFuturePrizePool(uint256 val) internal {
         (uint128 next, ) = _getPrizePools();
         _setPrizePools(next, uint128(val));
     }
