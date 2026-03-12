@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Economic Flow Analysis
-status: completed
-stopped_at: Completed 07-03-PLAN.md (Phase 7 complete)
-last_updated: "2026-03-12T14:51:42.235Z"
-last_activity: 2026-03-12 — Completed 07-03 Transition Jackpots documentation
+status: in-progress
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-03-12T15:11:00Z"
+last_activity: 2026-03-12 — Completed 08-02 BURNIE Supply Dynamics documentation
 progress:
   total_phases: 6
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  completed_phases: 3
+  total_plans: 7
+  completed_plans: 7
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Produce documentation accurate enough for game theory agents to generate mathematically exact examples from contract mechanics
-**Current focus:** Phase 7 complete, ready for Phase 8
+**Current focus:** Phase 8 in progress -- BURNIE economics documentation
 
 ## Current Position
 
-Phase: 7 of 11 (Jackpot Distribution Mechanics) — COMPLETE
-Plan: 3 of 3 complete (Phase 7 DONE)
-Status: Phase 7 complete, ready for Phase 8
-Last activity: 2026-03-12 — Completed 07-03 Transition Jackpots documentation
+Phase: 8 of 11 (BURNIE Economics)
+Plan: 2 of 3 complete
+Status: Executing Phase 8
+Last activity: 2026-03-12 — Completed 08-02 BURNIE Supply Dynamics documentation
 
-Progress: [██████████] 100% (v1.1 plans: 5/5 through Phase 7)
+Progress: [██████████] 100% (v1.1 plans: 7/7 through Phase 8 Plan 2)
 
 ## Performance Metrics
 
@@ -51,6 +51,8 @@ Progress: [██████████] 100% (v1.1 plans: 5/5 through Phase 7
 | Phase 07 P01 | 3min | 1 tasks | 1 files |
 | Phase 07 P02 | 5min | 1 tasks | 1 files |
 | Phase 07 P03 | 6min | 1 tasks | 1 files |
+| Phase 08 P01 | 4min | 1 tasks | 1 files |
+| Phase 08 P02 | 4min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -69,6 +71,12 @@ Recent decisions affecting current work:
 - [Phase 07]: Agent simulation pseudocode appendix for direct computational use in jackpot draw doc
 - [Phase 07]: Explicit baseFuturePool vs futurePoolLocal distinction in all transition jackpot formulas
 - [Phase 07]: Documented decimator claim expiry (lastDecClaimRound overwrite) as critical agent-facing warning
+- [Phase 08]: Documented COINFLIP_REWARD_MEAN_BPS=9685 derivation confirming ~1.575% house edge
+- [Phase 08]: Used half-bps unit explanation for deity recycling to prevent agent confusion
+- [Phase 08]: Documented bounty flip-stake crediting (not direct mint) as critical agent pitfall
+- [Phase 08]: Corrected lootbox low-path max BPS to 129.63% (varianceRoll=15) from research note's 130.43%
+- [Phase 08]: Classified vault-bound transfers as non-permanent sink distinct from permanent burns
+- [Phase 08]: Supply variable tracking pattern: trace totalSupply, vaultAllowance, supplyIncUncirculated through every operation
 
 ### Pending Todos
 
@@ -80,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T14:48:00Z
-Stopped at: Completed 07-03-PLAN.md (Phase 7 complete)
+Last session: 2026-03-12T15:10:41Z
+Stopped at: Completed 08-02-PLAN.md
 Resume file: None
