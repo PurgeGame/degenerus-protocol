@@ -23,12 +23,12 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### Jackpot & Distribution Mechanics
 
-- [ ] **JACK-01**: Document daily purchase-phase future pool drip (ETH and tickets) with exact formulas and triggers
-- [ ] **JACK-02**: Document daily purchase-phase BURNIE jackpots with winner selection and payout formulas
+- [x] **JACK-01**: Document daily purchase-phase future pool drip (ETH and tickets) with exact formulas and triggers
+- [x] **JACK-02**: Document daily purchase-phase BURNIE jackpots with winner selection and payout formulas
 - [ ] **JACK-03**: Document 5-day jackpot-phase draw mechanics with daily pool slice formulas (6-14% random, 100% day 5)
 - [ ] **JACK-04**: Document trait bucket distribution and winner selection per jackpot-phase day
 - [ ] **JACK-05**: Document carryover ETH mechanics and compressed jackpot conditions
-- [ ] **JACK-06**: Document lootbox conversion ratios (50% daily, 75% reward jackpots)
+- [x] **JACK-06**: Document lootbox conversion ratios (50% daily, 75% reward jackpots)
 - [ ] **JACK-07**: Document BURNIE jackpot-phase parallel distribution and far-future allocation
 - [ ] **JACK-08**: Document BAF mechanics (every 10 levels, future pool percentages, lootbox conversion) at jackpot-phase transition
 - [ ] **JACK-09**: Document decimator mechanics (level triggers, multiplier tiers, BURNIE burn requirements) at jackpot-phase transition
@@ -112,12 +112,12 @@ None — this is a standalone analysis milestone.
 | POOL-02 | Phase 6 | Complete |
 | POOL-03 | Phase 6 | Complete |
 | POOL-04 | Phase 6 | Complete |
-| JACK-01 | Phase 7 | Pending |
-| JACK-02 | Phase 7 | Pending |
+| JACK-01 | Phase 7 | Complete |
+| JACK-02 | Phase 7 | Complete |
 | JACK-03 | Phase 7 | Pending |
 | JACK-04 | Phase 7 | Pending |
 | JACK-05 | Phase 7 | Pending |
-| JACK-06 | Phase 7 | Pending |
+| JACK-06 | Phase 7 | Complete |
 | JACK-07 | Phase 7 | Pending |
 | JACK-08 | Phase 7 | Pending |
 | JACK-09 | Phase 7 | Pending |

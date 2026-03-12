@@ -25,7 +25,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 **Milestone Goal:** Produce comprehensive economic flow documentation accurate enough for game theory agents to generate mathematically exact examples from contract mechanics.
 
 - [x] **Phase 6: ETH Inflows and Pool Architecture** - Map every ETH entry path and the pool lifecycle that routes funds to prizes
-- [ ] **Phase 7: Jackpot & Distribution Mechanics** - Document all distribution flows: purchase-phase daily drip/BURNIE jackpots, jackpot-phase 5-day draws, and transition jackpots (BAF/Decimator)
+- [x] **Phase 7: Jackpot & Distribution Mechanics** - Document all distribution flows: purchase-phase daily drip/BURNIE jackpots, jackpot-phase 5-day draws, and transition jackpots (BAF/Decimator) (completed 2026-03-12)
 - [ ] **Phase 8: BURNIE Economics** - Document the parallel BURNIE token economy (coinflip, earning, burning, vault)
 - [ ] **Phase 9: Level Progression and Endgame** - Document price curves, level length dynamics, activity scores, death clock, and terminal distribution
 - [ ] **Phase 10: Reward Systems and Modifiers** - Document DGNRS tokenomics, deity boons, affiliates, stETH yield, and quest rewards
@@ -142,7 +142,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 4. advanceGame Rewrite | v1.0 | 1/1 | Complete | 2026-03-11 |
 | 5. Lock Removal | v1.0 | 1/1 | Complete | 2026-03-11 |
 | 6. ETH Inflows and Pool Architecture | v1.1 | 2/2 | Complete | 2026-03-12 |
-| 7. Jackpot & Distribution Mechanics | v1.1 | 0/3 | Not started | - |
+| 7. Jackpot & Distribution Mechanics | 3/3 | Complete   | 2026-03-12 | - |
 | 8. BURNIE Economics | v1.1 | 0/? | Not started | - |
 | 9. Level Progression and Endgame | v1.1 | 0/? | Not started | - |
 | 10. Reward Systems and Modifiers | v1.1 | 0/? | Not started | - |
