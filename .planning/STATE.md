@@ -66,6 +66,7 @@ Recent decisions affecting current work:
 - [Phase 06]: Pool architecture documented with complete lifecycle diagram, 4 transition triggers, freeze/unfreeze mechanics, and purchase target ratchet system
 - [Phase 07]: Documented lootbox over-collateralization as explicit design property (2x backing ratio)
 - [Phase 07]: Included worked examples with concrete ETH/BURNIE numbers for agent consumption
+- [Phase 07]: Agent simulation pseudocode appendix for direct computational use in jackpot draw doc
 - [Phase 07]: Explicit baseFuturePool vs futurePoolLocal distinction in all transition jackpot formulas
 - [Phase 07]: Documented decimator claim expiry (lastDecClaimRound overwrite) as critical agent-facing warning
 
