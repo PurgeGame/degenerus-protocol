@@ -9,7 +9,6 @@ pragma solidity 0.8.34;
   +==============================================================================+*/
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
-import {IDegenerusAffiliate} from "./interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
@@ -96,8 +95,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Core game contract for jackpot resolution and player queries (constant).
     IDegenerusGame internal constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
 
-    /// @notice Affiliate program contract for referrer queries (constant).
-    IDegenerusAffiliate internal constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
 
     /*+======================================================================+
       |                            CONSTANTS                                 |
@@ -199,12 +196,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  PRIZE DISTRIBUTION:                                                 |
       |  +-----------------------------------------------------------------+ |
       |  | 10% | Top BAF bettor for this level                             | |
-      |  | 10% | Top coinflip bettor from last 24h window                  | |
+      |  |  5% | Top coinflip bettor from last 24h window                  | |
       |  |  5% | Random pick: 3rd or 4th BAF slot                          | |
-      |  | 10% | Affiliate draw (top referrers, weighted 5/3/2/0)          | |
       |  |  5% | Far-future ticket holders (3% 1st / 2% 2nd by BAF score)  | |
-      |  | 40% | Scatter 1st place (50 rounds x 4 multi-level trait tickets) | |
-      |  | 20% | Scatter 2nd place (50 rounds x 4 multi-level trait tickets) | |
+      |  |  5% | Far-future ticket holders 2nd draw (3% 1st / 2% 2nd)      | |
+      |  | 45% | Scatter 1st place (50 rounds x 4 multi-level trait tickets) | |
+      |  | 25% | Scatter 2nd place (50 rounds x 4 multi-level trait tickets) | |
       |  +-----------------------------------------------------------------+ |
       |                                                                      |
       |  ELIGIBILITY:                                                        |
@@ -240,9 +237,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
         returns (address[] memory winners, uint256[] memory amounts, uint256 winnerMask, uint256 returnAmountWei)
     {
         uint256 P = poolWei;
-        // Max distinct winners: 1 (top BAF) + 1 (top flip) + 1 (pick) + 3 (affiliate draw) + 2 (far-future) + 50 + 50 (scatter) = 108.
-        address[] memory tmpW = new address[](108);
-        uint256[] memory tmpA = new uint256[](108);
+        // Max distinct winners: 1 (top BAF) + 1 (top flip) + 1 (pick) + 4 (far-future x2) + 50 + 50 (scatter) = 107.
+        address[] memory tmpW = new address[](107);
+        uint256[] memory tmpA = new uint256[](107);
         uint256 n;
         uint256 toReturn;
         uint256 mask;
@@ -264,8 +261,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
         }
 
         {
-            // Slice A2: 10% to the top coinflip bettor from the last day window.
-            uint256 topPrize = P / 10;
+            // Slice A2: 5% to the top coinflip bettor from the last day window.
+            uint256 topPrize = P / 20;
             (address w, ) = coin.coinflipTopLastDay();
             if (_creditOrRefund(w, topPrize, tmpW, tmpA, n)) {
                 unchecked {
@@ -291,140 +288,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 }
             } else {
                 toReturn += prize;
-            }
-        }
-
-        {
-            // Slice C: affiliate achievers (past 20 levels) share 10% across four descending prizes.
-            uint256 affiliateTotal = P / 10;
-            uint256[4] memory affiliatePrizes;
-            affiliatePrizes[0] = (affiliateTotal * 5) / 10;
-            affiliatePrizes[1] = (affiliateTotal * 3) / 10;
-            affiliatePrizes[2] = affiliateTotal - affiliatePrizes[0] - affiliatePrizes[1];
-            uint256 affiliateSlice;
-            unchecked {
-                affiliateSlice = affiliatePrizes[0] + affiliatePrizes[1] + affiliatePrizes[2];
-            }
-
-            unchecked {
-                ++salt;
-            }
-            entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
-
-            address[20] memory candidates;
-            uint256[20] memory candidateScores;
-            uint8 candidateCount;
-
-            // Collect the top affiliates from each of the prior 20 levels (deduped).
-            for (uint8 offset = 1; offset <= 20; ) {
-                if (lvl <= offset) break;
-                (address player, ) = affiliate.affiliateTop(uint24(lvl - offset));
-                if (player != address(0)) {
-                    bool seen;
-                    for (uint8 i; i < candidateCount; ) {
-                        if (candidates[i] == player) {
-                            seen = true;
-                            break;
-                        }
-                        unchecked {
-                            ++i;
-                        }
-                    }
-                    if (!seen) {
-                        candidates[candidateCount] = player;
-                        candidateScores[candidateCount] = _bafScore(player, lvl);
-                        unchecked {
-                            ++candidateCount;
-                        }
-                    }
-                }
-                unchecked {
-                    ++offset;
-                }
-            }
-
-            // Shuffle candidate order to randomize draws.
-            for (uint8 i = candidateCount; i > 1; ) {
-                unchecked {
-                    ++salt;
-                }
-                entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
-                uint256 j = entropy % i;
-                uint8 idxA = i - 1;
-                address addrTmp = candidates[idxA];
-                candidates[idxA] = candidates[j];
-                candidates[j] = addrTmp;
-                uint256 scoreTmp = candidateScores[idxA];
-                candidateScores[idxA] = candidateScores[j];
-                candidateScores[j] = scoreTmp;
-                unchecked {
-                    --i;
-                }
-            }
-
-            address[4] memory affiliateWinners;
-            uint256[4] memory affiliateScores;
-            uint8 winnerCount;
-
-            for (uint8 i; i < candidateCount && winnerCount < 4; ) {
-                address cand = candidates[i];
-                if (cand != address(0)) {
-                    affiliateWinners[winnerCount] = cand;
-                    affiliateScores[winnerCount] = candidateScores[i];
-                    unchecked {
-                        ++winnerCount;
-                    }
-                }
-                unchecked {
-                    ++i;
-                }
-            }
-
-            if (winnerCount == 0) {
-                toReturn += affiliateSlice;
-            } else {
-                // Sort by BAF score so higher scores take the larger cuts (5/3/2/0%).
-                for (uint8 i; i < winnerCount; ) {
-                    uint8 bestIdx = i;
-                    for (uint8 j = i + 1; j < winnerCount; ) {
-                        if (affiliateScores[j] > affiliateScores[bestIdx]) {
-                            bestIdx = j;
-                        }
-                        unchecked {
-                            ++j;
-                        }
-                    }
-                    if (bestIdx != i) {
-                        address wTmp = affiliateWinners[i];
-                        affiliateWinners[i] = affiliateWinners[bestIdx];
-                        affiliateWinners[bestIdx] = wTmp;
-                        uint256 sTmp = affiliateScores[i];
-                        affiliateScores[i] = affiliateScores[bestIdx];
-                        affiliateScores[bestIdx] = sTmp;
-                    }
-                    unchecked {
-                        ++i;
-                    }
-                }
-
-                uint256 paid;
-                for (uint8 i; i < winnerCount; ) {
-                    uint256 prize = affiliatePrizes[i];
-                    paid += prize;
-                    if (prize != 0) {
-                        tmpW[n] = affiliateWinners[i];
-                        tmpA[n] = prize;
-                        unchecked {
-                            ++n;
-                        }
-                    }
-                    unchecked {
-                        ++i;
-                    }
-                }
-                if (paid < affiliateSlice) {
-                    toReturn += affiliateSlice - paid;
-                }
             }
         }
 
@@ -470,12 +333,54 @@ contract DegenerusJackpots is IDegenerusJackpots {
             }
         }
 
+        // Slice D2: 5% to far-future ticket holders, 2nd independent draw (3% 1st / 2% 2nd by BAF score).
+        {
+            unchecked { ++salt; }
+            entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
+            address[] memory farTickets = degenerusGame.sampleFarFutureTickets(entropy);
+
+            uint256 farFirst = (P * 3) / 100;
+            uint256 farSecond = P / 50;
+
+            address best;
+            uint256 bestScore;
+            address second;
+            uint256 secondScore;
+
+            uint256 fLen = farTickets.length;
+            for (uint256 i; i < fLen; ) {
+                address cand = farTickets[i];
+                uint256 score = _bafScore(cand, lvl);
+                if (score > bestScore || best == address(0)) {
+                    second = best;
+                    secondScore = bestScore;
+                    best = cand;
+                    bestScore = score;
+                } else if ((score > secondScore || second == address(0)) && cand != best) {
+                    second = cand;
+                    secondScore = score;
+                }
+                unchecked { ++i; }
+            }
+
+            if (_creditOrRefund(best, farFirst, tmpW, tmpA, n)) {
+                unchecked { ++n; }
+            } else {
+                toReturn += farFirst;
+            }
+            if (_creditOrRefund(second, farSecond, tmpW, tmpA, n)) {
+                unchecked { ++n; }
+            } else {
+                toReturn += farSecond;
+            }
+        }
+
         // Scatter slice: 200 total draws (4 tickets * 50 rounds). Per round, take top-2 by BAF score.
         // Game applies special ticket handling for the last BAF_SCATTER_TICKET_WINNERS scatter winners via `winnerMask`.
         {
             // Slice E: scatter tickets from trait sampler so casual participants can land smaller cuts.
-            uint256 scatterTop = (P * 2) / 5;
-            uint256 scatterSecond = P / 5;
+            uint256 scatterTop = (P * 45) / 100;
+            uint256 scatterSecond = P / 4;
             address[50] memory firstWinners;
             address[50] memory secondWinners;
             uint256 firstCount;
