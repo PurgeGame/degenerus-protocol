@@ -61,9 +61,9 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### Deity System
 
-- [ ] **DEIT-01**: Document deity pass pricing curve (base + quadratic escalation)
-- [ ] **DEIT-02**: Document all boon types with discount percentages and draw weights
-- [ ] **DEIT-03**: Document deity activity score bonuses and jackpot entry multipliers
+- [x] **DEIT-01**: Document deity pass pricing curve (base + quadratic escalation)
+- [x] **DEIT-02**: Document all boon types with discount percentages and draw weights
+- [x] **DEIT-03**: Document deity activity score bonuses and jackpot entry multipliers
 
 ### Affiliate System
 
@@ -135,9 +135,9 @@ None — this is a standalone analysis milestone.
 | DGNR-02 | Phase 10 | Complete |
 | DGNR-03 | Phase 10 | Complete |
 | DGNR-04 | Phase 10 | Complete |
-| DEIT-01 | Phase 10 | Pending |
-| DEIT-02 | Phase 10 | Pending |
-| DEIT-03 | Phase 10 | Pending |
+| DEIT-01 | Phase 10 | Complete |
+| DEIT-02 | Phase 10 | Complete |
+| DEIT-03 | Phase 10 | Complete |
 | AFFL-01 | Phase 10 | Complete |
 | AFFL-02 | Phase 10 | Complete |
 | AFFL-03 | Phase 10 | Complete |
