@@ -800,36 +800,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Place Full Ticket Degenerette bets using pending affiliate Degenerette credit.
-    /// @param player The betting player (address(0) = msg.sender).
-    /// @param amountPerTicket Bet amount per ticket.
-    /// @param ticketCount Number of spins (1-10). Each spin resolves independently.
-    /// @param customTicket Custom packed traits.
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
-    function placeFullTicketBetsFromAffiliateCredit(
-        address player,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
-        uint8 heroQuadrant
-    ) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DEGENERETTE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDegeneretteModule
-                        .placeFullTicketBetsFromAffiliateCredit
-                        .selector,
-                    _resolvePlayer(player),
-                    amountPerTicket,
-                    ticketCount,
-                    customTicket,
-                    heroQuadrant
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
     /// @notice Resolve multiple Degenerette bets once RNG is available.
     /// @param player The betting player (address(0) = msg.sender).
     /// @param betIds Bet ids for the player.
