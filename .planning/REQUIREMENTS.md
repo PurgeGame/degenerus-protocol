@@ -73,8 +73,8 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### stETH & Yield
 
-- [ ] **STETH-01**: Document stETH integration and yield accrual mechanics
-- [ ] **STETH-02**: Document how stETH yield affects pool balances and distributions
+- [x] **STETH-01**: Document stETH integration and yield accrual mechanics
+- [x] **STETH-02**: Document how stETH yield affects pool balances and distributions
 
 ### Quest Rewards
 
@@ -141,8 +141,8 @@ None — this is a standalone analysis milestone.
 | AFFL-01 | Phase 10 | Pending |
 | AFFL-02 | Phase 10 | Pending |
 | AFFL-03 | Phase 10 | Pending |
-| STETH-01 | Phase 10 | Pending |
-| STETH-02 | Phase 10 | Pending |
+| STETH-01 | Phase 10 | Complete |
+| STETH-02 | Phase 10 | Complete |
 | QRWD-01 | Phase 10 | Pending |
 | QRWD-02 | Phase 10 | Pending |
 | PARM-01 | Phase 11 | Pending |
