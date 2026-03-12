@@ -63,11 +63,12 @@ Plans:
   7. BURNIE jackpot-phase parallel distribution and far-future allocation formulas are documented
   8. BAF mechanics (every 10 levels, future pool percentages, lootbox conversion) at jackpot-phase transition are fully documented
   9. Decimator mechanics (level triggers, multiplier tiers, BURNIE burn requirements) at jackpot-phase transition are fully documented
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md — Document purchase-phase daily ETH drip and BURNIE jackpots
+- [ ] 07-02-PLAN.md — Document 5-day jackpot-phase draw sequence with trait buckets, carryover, and BURNIE parallel distribution
+- [ ] 07-03-PLAN.md — Document BAF and Decimator transition jackpot mechanics
 
 ### Phase 8: BURNIE Economics
 **Goal**: A game theory agent can model BURNIE supply dynamics including all earning paths, burn sinks, and vault mechanics
@@ -141,7 +142,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 4. advanceGame Rewrite | v1.0 | 1/1 | Complete | 2026-03-11 |
 | 5. Lock Removal | v1.0 | 1/1 | Complete | 2026-03-11 |
 | 6. ETH Inflows and Pool Architecture | v1.1 | 2/2 | Complete | 2026-03-12 |
-| 7. Jackpot & Distribution Mechanics | v1.1 | 0/? | Not started | - |
+| 7. Jackpot & Distribution Mechanics | v1.1 | 0/3 | Not started | - |
 | 8. BURNIE Economics | v1.1 | 0/? | Not started | - |
 | 9. Level Progression and Endgame | v1.1 | 0/? | Not started | - |
 | 10. Reward Systems and Modifiers | v1.1 | 0/? | Not started | - |
