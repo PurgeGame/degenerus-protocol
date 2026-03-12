@@ -24,7 +24,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
 **Milestone Goal:** Produce comprehensive economic flow documentation accurate enough for game theory agents to generate mathematically exact examples from contract mechanics.
 
-- [ ] **Phase 6: ETH Inflows and Pool Architecture** - Map every ETH entry path and the pool lifecycle that routes funds to prizes
+- [x] **Phase 6: ETH Inflows and Pool Architecture** - Map every ETH entry path and the pool lifecycle that routes funds to prizes
 - [ ] **Phase 7: Jackpot & Distribution Mechanics** - Document all distribution flows: purchase-phase daily drip/BURNIE jackpots, jackpot-phase 5-day draws, and transition jackpots (BAF/Decimator)
 - [ ] **Phase 8: BURNIE Economics** - Document the parallel BURNIE token economy (coinflip, earning, burning, vault)
 - [ ] **Phase 9: Level Progression and Endgame** - Document price curves, level length dynamics, activity scores, death clock, and terminal distribution
@@ -46,8 +46,8 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Document all ETH purchase paths with exact cost formulas and presale differences
-- [ ] 06-02-PLAN.md — Document pool storage, lifecycle transitions, freeze/unfreeze, and purchase targets
+- [x] 06-01-PLAN.md — Document all ETH purchase paths with exact cost formulas and presale differences
+- [x] 06-02-PLAN.md — Document pool storage, lifecycle transitions, freeze/unfreeze, and purchase targets
 
 ### Phase 7: Jackpot & Distribution Mechanics
 **Goal**: A game theory agent can compute expected payouts across all distribution events — daily purchase-phase drip, jackpot-phase 5-day draws, and transition jackpots (BAF/Decimator)
@@ -140,7 +140,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 3. Prize Pool Freeze | v1.0 | 2/2 | Complete | 2026-03-11 |
 | 4. advanceGame Rewrite | v1.0 | 1/1 | Complete | 2026-03-11 |
 | 5. Lock Removal | v1.0 | 1/1 | Complete | 2026-03-11 |
-| 6. ETH Inflows and Pool Architecture | v1.1 | 0/2 | Planned | - |
+| 6. ETH Inflows and Pool Architecture | v1.1 | 2/2 | Complete | 2026-03-12 |
 | 7. Jackpot & Distribution Mechanics | v1.1 | 0/? | Not started | - |
 | 8. BURNIE Economics | v1.1 | 0/? | Not started | - |
 | 9. Level Progression and Endgame | v1.1 | 0/? | Not started | - |
