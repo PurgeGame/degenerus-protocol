@@ -442,6 +442,8 @@ contract BurnieCoinflip {
         uint256 takeProfit = rebuyActive ? state.autoRebuyStop : 0;
         uint256 carry;
         uint256 winningBafCredit;
+        uint48 bafResolvedDay;
+        bool bafResolvedDayCached;
         uint256 lossCount;
         bool afKingActive = rebuyActive && afKingMode;
         bool hasDeityPass = afKingActive && game.deityPassCountFor(player) != 0;
@@ -530,7 +532,13 @@ contract BurnieCoinflip {
                     uint256 payout = stake +
                         (stake * uint256(rewardPercent)) /
                         100;
-                    winningBafCredit += payout;
+                    if (!bafResolvedDayCached) {
+                        bafResolvedDay = jackpots.getLastBafResolvedDay();
+                        bafResolvedDayCached = true;
+                    }
+                    if (cursor > bafResolvedDay) {
+                        winningBafCredit += payout;
+                    }
                     if (rebuyActive) {
                         if (takeProfit != 0) {
                             uint256 reserved = (payout / takeProfit) *

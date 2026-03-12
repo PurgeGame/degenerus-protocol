@@ -132,6 +132,15 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Current length of bafTop array for each level (0-4).
     mapping(uint24 => uint8) internal bafTopLen;
 
+    /// @notice Epoch counter per BAF bracket, incremented on jackpot resolution.
+    mapping(uint24 => uint256) internal bafEpoch;
+
+    /// @notice Player's last-known epoch per BAF bracket (for lazy reset).
+    mapping(uint24 => mapping(address => uint256)) internal bafPlayerEpoch;
+
+    /// @notice Day index of the most recent BAF jackpot resolution (any bracket).
+    uint48 internal lastBafResolvedDay;
+
     /*+======================================================================+
       |                      MODIFIERS & ACCESS CONTROL                      |
       +======================================================================+
@@ -167,16 +176,18 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @custom:access Restricted to coin contract via onlyCoin modifier.
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external override onlyCoin {
         if (player == ContractAddresses.VAULT) return;
-        // Accumulate total (unchecked safe: reasonable values won't overflow uint256)
-        uint256 total = bafTotals[lvl][player];
-        unchecked {
-            total += amount;
+
+        uint256 currentEpoch = bafEpoch[lvl];
+        if (bafPlayerEpoch[lvl][player] != currentEpoch) {
+            bafPlayerEpoch[lvl][player] = currentEpoch;
+            bafTotals[lvl][player] = 0;
         }
+
+        uint256 total = bafTotals[lvl][player];
+        unchecked { total += amount; }
         bafTotals[lvl][player] = total;
 
-        // Update top-4 leaderboard with new total
         _updateBafTop(lvl, player, total);
-
         emit BafFlipRecorded(player, lvl, amount, total);
     }
 
@@ -608,6 +619,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
         // Clean up leaderboard state for this level
         _clearBafTop(lvl);
+        unchecked { ++bafEpoch[lvl]; }
+        lastBafResolvedDay = degenerusGame.currentDayView();
         return (winners, amounts, winnerMask, toReturn);
     }
 
@@ -652,6 +665,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param lvl Level number.
     /// @return Accumulated coinflip total (0 if player not in this level).
     function _bafScore(address player, uint24 lvl) private view returns (uint256) {
+        if (bafPlayerEpoch[lvl][player] != bafEpoch[lvl]) return 0;
         return bafTotals[lvl][player];
     }
 
@@ -757,5 +771,14 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 ++i;
             }
         }
+    }
+
+    /*+======================================================================+
+      |                         VIEW FUNCTIONS                               |
+      +======================================================================+*/
+
+    /// @notice Day index of the most recent BAF jackpot resolution.
+    function getLastBafResolvedDay() external view returns (uint48) {
+        return lastBafResolvedDay;
     }
 }

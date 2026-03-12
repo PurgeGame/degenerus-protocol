@@ -27,4 +27,7 @@ interface IDegenerusJackpots {
     /// @param lvl The current game level.
     /// @param amount The amount deposited (for leaderboard ranking).
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external;
+
+    /// @notice Day index of the most recent BAF jackpot resolution.
+    function getLastBafResolvedDay() external view returns (uint48);
 }
