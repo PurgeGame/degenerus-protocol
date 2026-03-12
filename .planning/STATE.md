@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Produce documentation accurate enough for game theory agents to generate mathematically exact examples from contract mechanics
-**Current focus:** Phase 8 in progress -- BURNIE economics documentation
+**Current focus:** Phase 8 complete, ready for Phase 9
 
 ## Current Position
 
-Phase: 8 of 11 (BURNIE Economics)
-Plan: 2 of 3 complete
-Status: Executing Phase 8
+Phase: 8 of 11 (BURNIE Economics) -- COMPLETE
+Plan: 2 of 2 complete (Phase 8 DONE)
+Status: Phase 8 complete, ready for Phase 9
 Last activity: 2026-03-12 — Completed 08-02 BURNIE Supply Dynamics documentation
 
 Progress: [██████████] 100% (v1.1 plans: 7/7 through Phase 8 Plan 2)
