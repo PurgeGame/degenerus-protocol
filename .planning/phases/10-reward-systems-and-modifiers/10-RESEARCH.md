@@ -23,7 +23,7 @@ The DGNRS token (DegenerusStonk.sol) has a fixed 1 trillion supply split across 
 | DGNR-04 | Document soulbound mechanics | _transfer: only address(this) or CREATOR can transfer; all others can only burn; transferFromPool is game-only |
 | DEIT-01 | Document deity pass pricing curve | DEITY_PASS_BASE=24 ETH, quadratic T(n)=n*(n+1)/2, discount boons tier 1/2/3 = 10/25/50% |
 | DEIT-02 | Document all boon types with weights | 31 boon types across 10 categories; total weight 1298 (with decimator) or 1248 (without); -40 if deity pass unavailable |
-| DEIT-03 | Document deity activity score bonuses | DEITY_PASS_ACTIVITY_BONUS_BPS=8000 (+80%); replaces streak/count with floor 50/25; virtual deity-equivalent count for DGNRS/VAULT |
+| DEIT-03 | Document deity pass multipliers (activity score + jackpot entries) | DEITY_PASS_ACTIVITY_BONUS_BPS=8000 (+80%); replaces streak/count with floor 50/25; virtual deity-equivalent count for DGNRS/VAULT; jackpot virtual entries: floor(2% of bucket tickets), minimum 2, per JackpotModule lines 2274+2327 |
 | AFFL-01 | Document affiliate reward structure | 3-tier: direct 25/20/5%, upline1 20% of scaled, upline2 4% of scaled; kickback 0-25%; payout modes coinflip/degenerette/split |
 | AFFL-02 | Document affiliate tier and bonus system | Per-referrer cap 0.5 ETH/level; lootbox taper 15000-25500 score; bonus points 1%/ETH summed over prev 5 levels, cap 50 |
 | AFFL-03 | Document top affiliate endgame rewards | claimAffiliateDgnrs: 5% of affiliate pool per level; proportional to score/levelPrizePool; deity bonus 20% of score as BURNIE flip credit, cap 5 ETH |
