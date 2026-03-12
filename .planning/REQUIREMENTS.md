@@ -83,9 +83,9 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### Parameter Reference
 
-- [ ] **PARM-01**: Master table of all BPS constants with values, purposes, and contract locations
-- [ ] **PARM-02**: Master table of all ETH thresholds, caps, and pricing constants
-- [ ] **PARM-03**: Master table of all timing constants (timeouts, windows, durations)
+- [x] **PARM-01**: Master table of all BPS constants with values, purposes, and contract locations
+- [x] **PARM-02**: Master table of all ETH thresholds, caps, and pricing constants
+- [x] **PARM-03**: Master table of all timing constants (timeouts, windows, durations)
 
 ## Future Requirements
 
@@ -145,9 +145,9 @@ None — this is a standalone analysis milestone.
 | STETH-02 | Phase 10 | Complete |
 | QRWD-01 | Phase 10 | Complete |
 | QRWD-02 | Phase 10 | Complete |
-| PARM-01 | Phase 11 | Pending |
-| PARM-02 | Phase 11 | Pending |
-| PARM-03 | Phase 11 | Pending |
+| PARM-01 | Phase 11 | Complete |
+| PARM-02 | Phase 11 | Complete |
+| PARM-03 | Phase 11 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 44 total

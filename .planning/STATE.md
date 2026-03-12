@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Economic Flow Analysis
 status: executing
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-03-12T16:19:13.815Z"
-last_activity: 2026-03-12 — Completed 10-03 Affiliate System documentation
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-03-12T16:41:33.000Z"
+last_activity: 2026-03-12 — Completed 11-01 Parameter Reference documentation
 progress:
   total_phases: 6
-  completed_phases: 5
-  total_plans: 14
-  completed_plans: 14
+  completed_phases: 6
+  total_plans: 15
+  completed_plans: 15
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Produce documentation accurate enough for game theory agents to generate mathematically exact examples from contract mechanics
-**Current focus:** Phase 10 -- Reward Systems and Modifiers
+**Current focus:** Phase 11 -- Parameter Reference (FINAL)
 
 ## Current Position
 
-Phase: 10 of 11 (Reward Systems and Modifiers)
-Plan: 3 of 5 complete
-Status: Phase 10 in progress
-Last activity: 2026-03-12 — Completed 10-03 Affiliate System documentation
+Phase: 11 of 11 (Parameter Reference)
+Plan: 1 of 1 complete
+Status: v1.1 milestone COMPLETE
+Last activity: 2026-03-12 — Completed 11-01 Parameter Reference documentation
 
-Progress: [██████████] 100% (v1.1 plans: 14/14 through Phase 10 Plan 5)
+Progress: [██████████] 100% (v1.1 plans: 15/15 through Phase 11 Plan 1)
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [██████████] 100% (v1.1 plans: 14/14 through Phase
 | Phase 10 P03 | 3min | 1 tasks | 1 files |
 | Phase 10 P05 | 2min | 1 tasks | 1 files |
 | Phase 10 P02 | 4min | 1 tasks | 1 files |
+| Phase 11 P01 | 4min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,9 @@ Recent decisions affecting current work:
 - [Phase 10]: Corrected cumulative deity pass price from research (18,264 ETH -> 6,224 ETH) after formula verification
 - [Phase 10]: Documented deity boon overwrite-as-downgrade pitfall for agent strategic modeling
 - [Phase 10]: Included 3-scenario boon probability columns (all/no-dec/no-dec-no-deity) for complete agent coverage
+- [Phase 11]: Separated BURNIE-denominated constants from ETH constants to prevent ether-suffix unit confusion
+- [Phase 11]: PPM constants in dedicated subsections with explicit scale notes
+- [Phase 11]: Included 3-scenario deity boon probability columns in parameter reference
 
 ### Pending Todos
 
@@ -112,6 +116,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T16:15:22.957Z
-Stopped at: Completed 10-02-PLAN.md
+Last session: 2026-03-12T16:41:33.000Z
+Stopped at: Completed 11-01-PLAN.md
 Resume file: None
