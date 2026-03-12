@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Economic Flow Analysis
-status: ready_to_plan
-stopped_at: Roadmap created, ready to plan Phase 6
-last_updated: "2026-03-12T00:00:00.000Z"
-last_activity: 2026-03-12 — Roadmap created for v1.1 (6 phases, 42 requirements)
+status: planning
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-12T14:13:54.194Z"
+last_activity: 2026-03-12 — Roadmap created for v1.1
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 50
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-12)
 ## Current Position
 
 Phase: 6 of 11 (ETH Inflows and Pool Architecture) — first phase of v1.1
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-12 — Roadmap created for v1.1
+Plan: 1 of 2 complete
+Status: Executing
+Last activity: 2026-03-12 — Completed 06-01 ETH Inflows documentation
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ Progress: [░░░░░░░░░░] 0%
 | v1.0 phases 1-5 | 8 | ~2h | ~15m |
 
 *Updated after each plan completion*
+| Phase 06 P01 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -57,6 +58,7 @@ Recent decisions affecting current work:
 - v1.1 is analysis-only: no code changes, output is documentation in audit/ directory
 - Phase deliverables are reference documents for game theory agent consumption
 - Parameter reference (Phase 11) is final phase, consolidating all prior work
+- [Phase 06]: Structured ETH inflow doc by purchase type (9 sections) with constant cross-reference table for agent consumption
 
 ### Pending Todos
 
@@ -68,6 +70,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: Roadmap created for v1.1, ready to plan Phase 6
+Last session: 2026-03-12T14:13:54.193Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None

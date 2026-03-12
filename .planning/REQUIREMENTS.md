@@ -9,10 +9,10 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### ETH Inflows
 
-- [ ] **INFLOW-01**: Document every ETH purchase path with exact cost formulas (tickets, lootboxes, whale bundles, lazy pass, deity pass)
-- [ ] **INFLOW-02**: Document BURNIE-to-ticket conversion path with virtual ETH formulas
-- [ ] **INFLOW-03**: Document degenerette wager inflows with min bets and pool caps
-- [ ] **INFLOW-04**: Document presale vs post-presale economic differences
+- [x] **INFLOW-01**: Document every ETH purchase path with exact cost formulas (tickets, lootboxes, whale bundles, lazy pass, deity pass)
+- [x] **INFLOW-02**: Document BURNIE-to-ticket conversion path with virtual ETH formulas
+- [x] **INFLOW-03**: Document degenerette wager inflows with min bets and pool caps
+- [x] **INFLOW-04**: Document presale vs post-presale economic differences
 
 ### Pool Architecture
 
@@ -104,10 +104,10 @@ None — this is a standalone analysis milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFLOW-01 | Phase 6 | Pending |
-| INFLOW-02 | Phase 6 | Pending |
-| INFLOW-03 | Phase 6 | Pending |
-| INFLOW-04 | Phase 6 | Pending |
+| INFLOW-01 | Phase 6 | Complete |
+| INFLOW-02 | Phase 6 | Complete |
+| INFLOW-03 | Phase 6 | Complete |
+| INFLOW-04 | Phase 6 | Complete |
 | POOL-01 | Phase 6 | Pending |
 | POOL-02 | Phase 6 | Pending |
 | POOL-03 | Phase 6 | Pending |
