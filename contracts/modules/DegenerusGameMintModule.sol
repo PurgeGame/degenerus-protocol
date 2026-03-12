@@ -112,8 +112,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
     /// @dev BURNIE ticket purchases are blocked this long after levelStartTime.
     ///      Prevents cheap positioning in the 30-day window before the liveness guard fires.
-    uint256 private constant COIN_PURCHASE_CUTOFF = 335 days; // 365 - 30
-    uint256 private constant COIN_PURCHASE_CUTOFF_LVL0 = 882 days; // 912 - 30
+    uint256 private constant COIN_PURCHASE_CUTOFF = 90 days; // 120 - 30
+    uint256 private constant COIN_PURCHASE_CUTOFF_LVL0 = 335 days; // 365 - 30
 
     /// @dev Number of daily jackpots per level (must match AdvanceModule).
     uint8 private constant JACKPOT_LEVEL_CAP = 5;

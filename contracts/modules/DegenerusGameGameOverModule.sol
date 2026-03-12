@@ -51,7 +51,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     );
 
     /// @notice Process game over by distributing remaining funds via jackpots.
-    /// @dev Called when liveness guards trigger (2.5yr deploy timeout or 365-day inactivity).
+    /// @dev Called when liveness guards trigger (1yr deploy timeout or 120-day inactivity).
     ///      Sets terminal gameOver flag.
     ///
     ///      Distribution logic:

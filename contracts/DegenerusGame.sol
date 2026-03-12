@@ -24,7 +24,7 @@ pragma solidity 0.8.34;
  *      - RNG lock prevents state manipulation during VRF callback window
  *      - Access control via msg.sender checks
  *      - Delegatecall modules use constant addresses from ContractAddresses
- *      - 18h VRF timeout, 3-day stall detection, 365-day inactivity guard
+ *      - 18h VRF timeout, 3-day stall detection, 120-day inactivity guard
  */
 
 import {IDegenerusCoin} from "./interfaces/IDegenerusCoin.sol";
@@ -182,7 +182,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @dev Deploy idle timeout in days (for efficient day-index comparison).
-    uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 912; // 2.5 years
+    uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // 1 year
 
     /// @dev Minimum take profit for afKing ETH auto-rebuy (5 ETH).
     uint256 private constant AFKING_KEEP_MIN_ETH =
@@ -301,7 +301,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      to move through states and process batched operations.
     ///
     ///      FLOW OVERVIEW:
-    ///      1. Check liveness guards (2.5yr deploy timeout, 365-day inactivity)
+    ///      1. Check liveness guards (1yr deploy timeout, 120-day inactivity)
     ///      2. Apply tiered daily gate (deity > anyone after 30min > pass after 15min > DGVE majority)
     ///      3. Process transition housekeeping during jackpot→purchase transition
     ///      4. Gate on RNG readiness (request new VRF if needed)
@@ -2222,7 +2222,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return compressedJackpotFlag;
     }
 
-    /// @dev True when gameover would trigger within ~10 days.
+    /// @dev True when gameover would trigger within ~5 days.
     ///      Used to allow decimator burns near liveness timeout.
     function _isGameoverImminent() private view returns (bool) {
         if (gameOver) return false;
@@ -2234,7 +2234,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 uint256(ts) + 10 days >
                 uint256(lst) + uint256(DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days;
         }
-        return uint256(ts) + 10 days > uint256(lst) + 365 days;
+        return uint256(ts) + 5 days > uint256(lst) + 120 days;
     }
 
     /// @dev Returns the active ticket level for direct ticket purchases.
