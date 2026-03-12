@@ -27,7 +27,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 - [x] **Phase 6: ETH Inflows and Pool Architecture** - Map every ETH entry path and the pool lifecycle that routes funds to prizes
 - [x] **Phase 7: Jackpot & Distribution Mechanics** - Document all distribution flows: purchase-phase daily drip/BURNIE jackpots, jackpot-phase 5-day draws, and transition jackpots (BAF/Decimator) (completed 2026-03-12)
 - [x] **Phase 8: BURNIE Economics** - Document the parallel BURNIE token economy (coinflip, earning, burning, vault) (completed 2026-03-12)
-- [ ] **Phase 9: Level Progression and Endgame** - Document price curves, level length dynamics, activity scores, death clock, and terminal distribution
+- [x] **Phase 9: Level Progression and Endgame** - Document price curves, level length dynamics, activity scores, death clock, and terminal distribution (completed 2026-03-12)
 - [ ] **Phase 10: Reward Systems and Modifiers** - Document DGNRS tokenomics, deity boons, affiliates, stETH yield, and quest rewards
 - [ ] **Phase 11: Parameter Reference** - Consolidate every constant, threshold, and BPS value into master lookup tables
 
@@ -146,6 +146,6 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 6. ETH Inflows and Pool Architecture | v1.1 | 2/2 | Complete | 2026-03-12 |
 | 7. Jackpot & Distribution Mechanics | 3/3 | Complete   | 2026-03-12 | - |
 | 8. BURNIE Economics | 2/2 | Complete   | 2026-03-12 | - |
-| 9. Level Progression and Endgame | 1/2 | In Progress|  | - |
+| 9. Level Progression and Endgame | 2/2 | Complete   | 2026-03-12 | - |
 | 10. Reward Systems and Modifiers | v1.1 | 0/? | Not started | - |
 | 11. Parameter Reference | v1.1 | 0/? | Not started | - |

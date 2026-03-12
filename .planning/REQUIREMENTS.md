@@ -52,12 +52,12 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 - [x] **LEVL-01**: Document price curve across all level ranges with exact values
 - [x] **LEVL-02**: Document level length (120d) effects on pool accumulation dynamics
 - [x] **LEVL-03**: Document how whale bundle and lazy pass duration economics change across levels
-- [ ] **LEVL-04**: Document activity score system and consecutive streak mechanics
+- [x] **LEVL-04**: Document activity score system and consecutive streak mechanics
 
 ### Endgame & Death Clock
 
-- [ ] **END-01**: Document death clock (120d timeout, 365d deploy, distress mode, terminal gameOver)
-- [ ] **END-02**: Document final distribution when gameOver triggers
+- [x] **END-01**: Document death clock (120d timeout, 365d deploy, distress mode, terminal gameOver)
+- [x] **END-02**: Document final distribution when gameOver triggers
 
 ### Deity System
 
@@ -128,9 +128,9 @@ None — this is a standalone analysis milestone.
 | LEVL-01 | Phase 9 | Complete |
 | LEVL-02 | Phase 9 | Complete |
 | LEVL-03 | Phase 9 | Complete |
-| LEVL-04 | Phase 9 | Pending |
-| END-01 | Phase 9 | Pending |
-| END-02 | Phase 9 | Pending |
+| LEVL-04 | Phase 9 | Complete |
+| END-01 | Phase 9 | Complete |
+| END-02 | Phase 9 | Complete |
 | DGNR-01 | Phase 10 | Pending |
 | DGNR-02 | Phase 10 | Pending |
 | DGNR-03 | Phase 10 | Pending |
