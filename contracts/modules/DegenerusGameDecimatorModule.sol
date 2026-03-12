@@ -413,6 +413,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @custom:reverts DecAlreadyClaimed When caller has already claimed for this level.
     /// @custom:reverts DecNotWinner When caller's subbucket did not win.
     function claimDecimatorJackpot(uint24 lvl) external {
+        // Block claims while prize pools are frozen (jackpot phase days 1-4).
+        // This path writes to futurePrizePool (lootbox portion) and
+        // next/futurePrizePool (auto-rebuy) — allowing it during freeze would
+        // corrupt the snapshot that advanceGame/runRewardJackpots operates on.
+        if (prizePoolFrozen) revert E();
+
         uint256 amountWei = _consumeDecClaim(msg.sender, lvl);
 
         if (gameOver) {
