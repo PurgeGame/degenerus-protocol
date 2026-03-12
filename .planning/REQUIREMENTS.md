@@ -78,8 +78,8 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### Quest Rewards
 
-- [ ] **QRWD-01**: Document quest reward types, BURNIE amounts, and trigger conditions
-- [ ] **QRWD-02**: Document quest cooldowns and per-player limits
+- [x] **QRWD-01**: Document quest reward types, BURNIE amounts, and trigger conditions
+- [x] **QRWD-02**: Document quest cooldowns and per-player limits
 
 ### Parameter Reference
 
@@ -143,8 +143,8 @@ None — this is a standalone analysis milestone.
 | AFFL-03 | Phase 10 | Complete |
 | STETH-01 | Phase 10 | Complete |
 | STETH-02 | Phase 10 | Complete |
-| QRWD-01 | Phase 10 | Pending |
-| QRWD-02 | Phase 10 | Pending |
+| QRWD-01 | Phase 10 | Complete |
+| QRWD-02 | Phase 10 | Complete |
 | PARM-01 | Phase 11 | Pending |
 | PARM-02 | Phase 11 | Pending |
 | PARM-03 | Phase 11 | Pending |

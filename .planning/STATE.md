@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Economic Flow Analysis
 status: executing
-stopped_at: Completed 10-03-PLAN.md
-last_updated: "2026-03-12T16:13:44.471Z"
+stopped_at: Completed 10-05-PLAN.md
+last_updated: "2026-03-12T16:14:10.110Z"
 last_activity: 2026-03-12 — Completed 10-03 Affiliate System documentation
 progress:
   total_phases: 6
@@ -58,6 +58,7 @@ Progress: [████████░░] 79% (v1.1 plans: 11/14 through Phase 
 | Phase 10 P04 | 2min | 1 tasks | 1 files |
 | Phase 10 P01 | 3min | 1 tasks | 1 files |
 | Phase 10 P03 | 3min | 1 tasks | 1 files |
+| Phase 10 P05 | 2min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,9 @@ Recent decisions affecting current work:
 - [Phase 10]: Included whale bundle quantity loop decay as explicit pitfall for agent consumption
 - [Phase 10]: Documented claimAffiliateDgnrs 5% as non-reserved per-level share with sequential depletion warning
 - [Phase 10]: Documented weighted random lottery with EV-equivalence proof showing P(win_i) = amount_i / totalAmount
+- [Phase 10]: Documented slot 0 prerequisite as CRITICAL PITFALL forcing daily ETH purchase before bonus quest
+- [Phase 10]: Documented combo completion enabling 300 BURNIE single-transaction rewards
+- [Phase 10]: Included full _questTargetValue and _canRollDecimatorQuest Solidity for agent cross-reference
 
 ### Pending Todos
 
@@ -104,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T16:13:39.084Z
-Stopped at: Completed 10-03-PLAN.md
+Last session: 2026-03-12T16:14:10.109Z
+Stopped at: Completed 10-05-PLAN.md
 Resume file: None
