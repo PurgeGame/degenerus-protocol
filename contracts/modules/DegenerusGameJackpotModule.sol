@@ -271,9 +271,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      EARLY-BURN PATH (isDaily=false):
     ///      - Triggered during purchase phase when early burns occur.
     ///      - Rolls random (non-burn-weighted) winning traits and runs trait-based jackpot.
-    ///      - Every 3rd purchase day (day 3, 6, 9, ...): adds a 1% futurePrizePool ETH slice
+    ///      - Every purchase day (except day 1): adds a 1% futurePrizePool ETH slice
     ///        with 75% converted to lootbox tickets and remainder distributed as ETH.
-    ///      - On non-ETH days: BURNIE-only distribution via _executeJackpot.
+    ///      - Day 1 of each level: BURNIE-only distribution via _executeJackpot.
     ///      - Rolls daily quest at the end.
     ///
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
@@ -625,12 +625,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 1;
             if (questDay > startDay) {
                 uint48 daysSince = questDay - startDay;
-                isEthDay = (daysSince % 3) == 2 && lvl != 1; // ETH jackpot on purchase days 3, 6, 9…
+                isEthDay = daysSince > 0 && lvl > 1; // daily 1% drip from futurePrizePool
             }
         }
         uint256 ethDaySlice;
         if (isEthDay) {
-            uint256 poolBps = 100; // 1% from each pool every third day
+            uint256 poolBps = 100; // 1% daily drip from futurePool
             ethDaySlice = (_getFuturePrizePool() * poolBps) / 10_000;
 
             // Deduct immediately (upfront model)
@@ -657,7 +657,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             })
         );
 
-        // Pools already deducted upfront on isEthDay; no additional deduction needed
+        // Pools already deducted upfront; no additional deduction needed
         if (lootboxBudget != 0) {
             _distributeLootboxAndTickets(
                 lvl,

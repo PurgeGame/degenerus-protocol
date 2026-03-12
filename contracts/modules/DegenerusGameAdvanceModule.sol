@@ -88,7 +88,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                           CONSTANTS                                  |
       +======================================================================+*/
 
-    uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 912;
+    uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365;
     uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 3 days;
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
@@ -379,7 +379,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Liveness guard: prevent permanent lockup if game is abandoned
         bool livenessTriggered = (lvl == 0 &&
             ts - lst > uint256(DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days) ||
-            (lvl != 0 && ts - 365 days > lst);
+            (lvl != 0 && ts - 120 days > lst);
 
         if (!livenessTriggered) return false;
 

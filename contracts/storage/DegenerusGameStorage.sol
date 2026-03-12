@@ -161,7 +161,7 @@ abstract contract DegenerusGameStorage {
     uint48 internal constant DISTRESS_MODE_HOURS = 6;
 
     /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
-    uint48 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 912;
+    uint48 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 365;
 
     /// @dev True when gameover liveness guard would fire within DISTRESS_MODE_HOURS.
     ///      Used to activate distress-mode lootbox behaviour: 100% nextpool allocation
@@ -174,7 +174,7 @@ abstract contract DegenerusGameStorage {
             return uint256(ts) + uint256(DISTRESS_MODE_HOURS) * 1 hours >
                 uint256(lst) + uint256(_DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days;
         }
-        return uint256(ts) + uint256(DISTRESS_MODE_HOURS) * 1 hours > uint256(lst) + 365 days;
+        return uint256(ts) + uint256(DISTRESS_MODE_HOURS) * 1 hours > uint256(lst) + 120 days;
     }
 
     // =========================================================================
