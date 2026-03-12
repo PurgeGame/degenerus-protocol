@@ -397,36 +397,6 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     }
 
     /// @notice Places Full Ticket bets using pending affiliate Degenerette credit.
-    /// @dev Uses BURNIE bet currency semantics without burning wallet balance.
-    /// @param player The player address (use zero address for msg.sender).
-    /// @param amountPerTicket Bet amount per ticket.
-    /// @param ticketCount Number of spins (1..MAX_SPINS_PER_BET).
-    /// @param customTicket Custom packed traits.
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
-    function placeFullTicketBetsFromAffiliateCredit(
-        address player,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
-        uint8 heroQuadrant
-    ) external {
-        player = _resolvePlayer(player);
-        (uint256 totalBet, ) = _placeFullTicketBetsCore(
-            player,
-            CURRENCY_BURNIE,
-            amountPerTicket,
-            ticketCount,
-            customTicket,
-            heroQuadrant
-        );
-
-        uint256 consumed = affiliate.consumeDegeneretteCredit(player, totalBet);
-        if (consumed != totalBet) revert InvalidBet();
-
-        lootboxRngPendingBurnie += totalBet;
-        coin.notifyQuestDegenerette(player, totalBet, false);
-    }
-
     /// @notice Resolves one or more pending bets for a player.
     /// @dev Requires RNG word to be available. Processes wins by minting tokens or crediting ETH.
     /// @param player The player address (use zero address for msg.sender).
@@ -458,7 +428,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
         uint32 customTicket,
         uint8 heroQuadrant
     ) private {
-        (uint256 totalBet, bool jackpotResolutionActive) = _placeFullTicketBetsCore(
+        uint256 totalBet = _placeFullTicketBetsCore(
             player,
             currency,
             amountPerTicket,
@@ -471,8 +441,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             player,
             currency,
             totalBet,
-            msg.value,
-            jackpotResolutionActive
+            msg.value
         );
 
         // Quest progress for Degenerette bets (slot 1 only).
@@ -490,7 +459,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
         uint8 ticketCount,
         uint32 customTicket,
         uint8 heroQuadrant
-    ) private returns (uint256 totalBet, bool jackpotResolutionActive) {
+    ) private returns (uint256 totalBet) {
         if (ticketCount == 0 || ticketCount > MAX_SPINS_PER_BET) revert InvalidBet();
         if (amountPerTicket == 0) revert InvalidBet();
 
@@ -499,9 +468,6 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
         if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();
 
         _validateMinBet(currency, amountPerTicket);
-
-        jackpotResolutionActive = lastPurchaseDay && ((level + 1) % 5 == 0);
-        if (currency == CURRENCY_ETH && jackpotResolutionActive) revert E();
 
         totalBet = uint256(amountPerTicket) * uint256(ticketCount);
         uint16 activityScore = uint16(_playerActivityScoreInternal(player));
@@ -569,12 +535,9 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
         address player,
         uint8 currency,
         uint256 totalBet,
-        uint256 ethPaid,
-        bool jackpotResolutionActive
+        uint256 ethPaid
     ) private {
         if (currency == CURRENCY_ETH) {
-            if (jackpotResolutionActive) revert E();
-
             // Check ETH payment covers bet, or pull from claimable
             if (ethPaid > totalBet) revert InvalidBet();
             if (ethPaid < totalBet) {
@@ -704,6 +667,11 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @param rngWord The RNG word for lootbox conversion (only used for ETH).
     function _distributePayout(address player, uint8 currency, uint256 payout, uint256 rngWord) private {
         if (currency == CURRENCY_ETH) {
+            // Block ETH payouts while prize pools are frozen (jackpot math in progress).
+            // Payouts drain the live futurePrizePool — allowing this during freeze would
+            // corrupt the snapshot that advanceGame/runRewardJackpots is operating on.
+            if (prizePoolFrozen) revert E();
+
             uint256 pool = _getFuturePrizePool();
 
             // Split: 25% as ETH, 75% as lootbox

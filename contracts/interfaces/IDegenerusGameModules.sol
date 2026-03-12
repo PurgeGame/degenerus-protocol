@@ -380,18 +380,6 @@ interface IDegenerusGameDegeneretteModule {
 
     /// @notice Places a Full Ticket Degenerette bet using pending affiliate Degenerette credit.
     /// @param player The player address (use zero address for msg.sender)
-    /// @param amountPerTicket Bet amount per ticket (BURNIE units)
-    /// @param ticketCount Number of spins (1..10). Each spin resolves independently.
-    /// @param customTicket Custom packed traits
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
-    function placeFullTicketBetsFromAffiliateCredit(
-        address player,
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
-        uint8 heroQuadrant
-    ) external;
-
     /// @notice Resolves one or more pending bets for a player
     /// @param player The player address (use zero address for msg.sender)
     /// @param betIds Array of bet IDs to resolve
