@@ -43,11 +43,11 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
   3. Per-purchase-type pool split ratios are documented with exact BPS values that match contract constants
   4. Freeze/unfreeze behavior during jackpot phase is documented showing how pending accumulators interact with packed storage
   5. Presale vs post-presale economic differences are enumerated with the exact conditionals that gate them
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — Document all ETH purchase paths with exact cost formulas and presale differences
+- [ ] 06-02-PLAN.md — Document pool storage, lifecycle transitions, freeze/unfreeze, and purchase targets
 
 ### Phase 7: Jackpot & Distribution Mechanics
 **Goal**: A game theory agent can compute expected payouts across all distribution events — daily purchase-phase drip, jackpot-phase 5-day draws, and transition jackpots (BAF/Decimator)
@@ -140,7 +140,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 3. Prize Pool Freeze | v1.0 | 2/2 | Complete | 2026-03-11 |
 | 4. advanceGame Rewrite | v1.0 | 1/1 | Complete | 2026-03-11 |
 | 5. Lock Removal | v1.0 | 1/1 | Complete | 2026-03-11 |
-| 6. ETH Inflows and Pool Architecture | v1.1 | 0/? | Not started | - |
+| 6. ETH Inflows and Pool Architecture | v1.1 | 0/2 | Planned | - |
 | 7. Jackpot & Distribution Mechanics | v1.1 | 0/? | Not started | - |
 | 8. BURNIE Economics | v1.1 | 0/? | Not started | - |
 | 9. Level Progression and Endgame | v1.1 | 0/? | Not started | - |
