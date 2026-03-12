@@ -150,4 +150,4 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 8. BURNIE Economics | 2/2 | Complete   | 2026-03-12 | - |
 | 9. Level Progression and Endgame | 2/2 | Complete   | 2026-03-12 | - |
 | 10. Reward Systems and Modifiers | 5/5 | Complete    | 2026-03-12 | - |
-| 11. Parameter Reference | 1/1 | Complete   | 2026-03-12 | - |
+| 11. Parameter Reference | 1/1 | Complete    | 2026-03-12 | - |
