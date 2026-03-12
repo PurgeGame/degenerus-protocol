@@ -146,6 +146,6 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 6. ETH Inflows and Pool Architecture | v1.1 | 2/2 | Complete | 2026-03-12 |
 | 7. Jackpot & Distribution Mechanics | 3/3 | Complete   | 2026-03-12 | - |
 | 8. BURNIE Economics | 2/2 | Complete   | 2026-03-12 | - |
-| 9. Level Progression and Endgame | v1.1 | 0/2 | Not started | - |
+| 9. Level Progression and Endgame | 1/2 | In Progress|  | - |
 | 10. Reward Systems and Modifiers | v1.1 | 0/? | Not started | - |
 | 11. Parameter Reference | v1.1 | 0/? | Not started | - |

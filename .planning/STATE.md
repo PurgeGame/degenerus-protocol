@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Economic Flow Analysis
-status: completed
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-03-12T15:16:22.795Z"
-last_activity: 2026-03-12 — Completed 08-02 BURNIE Supply Dynamics documentation
+status: in_progress
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-03-12T15:39:00Z"
+last_activity: 2026-03-12 — Completed 09-01 Level Progression documentation
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_plans: 9
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** Produce documentation accurate enough for game theory agents to generate mathematically exact examples from contract mechanics
-**Current focus:** Phase 8 complete, ready for Phase 9
+**Current focus:** Phase 9 -- Level Progression and Endgame
 
 ## Current Position
 
-Phase: 8 of 11 (BURNIE Economics) -- COMPLETE
-Plan: 2 of 2 complete (Phase 8 DONE)
-Status: Phase 8 complete, ready for Phase 9
-Last activity: 2026-03-12 — Completed 08-02 BURNIE Supply Dynamics documentation
+Phase: 9 of 11 (Level Progression and Endgame)
+Plan: 1 of 3 complete
+Status: Phase 9 in progress
+Last activity: 2026-03-12 — Completed 09-01 Level Progression documentation
 
-Progress: [██████████] 100% (v1.1 plans: 7/7 through Phase 8 Plan 2)
+Progress: [█████████░] 89% (v1.1 plans: 8/9 through Phase 9 Plan 1)
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [██████████] 100% (v1.1 plans: 7/7 through Phase 8
 | Phase 07 P03 | 6min | 1 tasks | 1 files |
 | Phase 08 P01 | 4min | 1 tasks | 1 files |
 | Phase 08 P02 | 4min | 1 tasks | 1 files |
+| Phase 09 P01 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,9 @@ Recent decisions affecting current work:
 - [Phase 08]: Corrected lootbox low-path max BPS to 129.63% (varianceRoll=15) from research note's 130.43%
 - [Phase 08]: Classified vault-bound transfers as non-permanent sink distinct from permanent burns
 - [Phase 08]: Supply variable tracking pattern: trace totalSupply, vaultAllowance, supplyIncUncirculated through every operation
+- [Phase 09]: Corrected research lazy pass cost at level 0 from 0.15 ETH to 0.18 ETH after verifying PriceLookupLib
+- [Phase 09]: Documented 11-day elapsed offset in _applyTimeBasedFutureTake omitted from research notes
+- [Phase 09]: Century-boundary lazy pass cost spike documented as explicit agent pitfall
 
 ### Pending Todos
 
@@ -88,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T15:10:41Z
-Stopped at: Completed 08-02-PLAN.md
+Last session: 2026-03-12T15:35:02Z
+Stopped at: Completed 09-01-PLAN.md
 Resume file: None
