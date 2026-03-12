@@ -26,14 +26,31 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 
 ### Active
 
-(None — next milestone not yet planned)
+- [ ] Complete ETH flow analysis — every path ETH enters and exits prize pools with exact formulas
+- [ ] Complete BURNIE flow analysis — burn mechanics, costs, rewards, and economic effects
+- [ ] Purchase type breakdown — tickets, lootboxes, whale bundles, degenerettes, passes and their distinct pool splits
+- [ ] Level length dynamics — how level duration affects accumulation, payouts, and player economics
+- [ ] Jackpot phase mechanics — draw days, pool distributions, winner selection economics
+- [ ] Death clock and endgame flows — terminal conditions and final distributions
+- [ ] Parameter reference — every constant, percentage, threshold with exact values from contracts
+
+## Current Milestone: v1.1 Economic Flow Analysis
+
+**Goal:** Produce comprehensive economic flow documentation accurate enough for game theory agents to generate mathematically exact examples from contract mechanics.
+
+**Target deliverables:**
+- Complete ETH and BURNIE flow maps with exact formulas
+- Purchase type economics (tickets, lootboxes, whale bundles, degenerettes, passes)
+- Level length and phase transition dynamics
+- Jackpot distribution mechanics
+- Parameter reference with all constants and thresholds
 
 ### Out of Scope
 
-- New game mechanics — infrastructure-only focus
-- Frontend changes — contract-level only
-- Token (DGNRS) changes — already soulbound, separate concern
-- Gas optimization beyond packed pools — separate effort
+- Code changes — analysis-only milestone, no contract modifications
+- Frontend changes — contract-level analysis only
+- Token (DGNRS) tokenomics — separate concern from game economics
+- Gas optimization — separate effort
 - Legacy shim removal (54 call sites) — functional, cosmetic debt
 
 ## Context
@@ -66,4 +83,4 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 | LOCK-02 preserves lastPurchaseDay+jackpotLevel block | Business rule independent of rngLockedFlag | ✓ Good — correct separation of concerns |
 
 ---
-*Last updated: 2026-03-11 after v1.0 milestone completion*
+*Last updated: 2026-03-12 after v1.1 milestone start*
