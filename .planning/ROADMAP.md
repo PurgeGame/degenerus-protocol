@@ -128,10 +128,10 @@ Plans:
   1. A master table of all BPS constants includes the constant name, exact value, purpose description, and contract file + line number for every basis point split in the protocol
   2. A master table of all ETH thresholds, caps, and pricing constants includes exact wei/ETH values verified against contract source
   3. A master table of all timing constants (timeouts, windows, durations) includes exact values in seconds/days with their contract locations
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 11-01: TBD
+- [ ] 11-01-PLAN.md — Consolidate all protocol constants into master parameter reference with BPS, ETH, timing, and operational tables
 
 ## Progress
 
@@ -150,4 +150,4 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 8. BURNIE Economics | 2/2 | Complete   | 2026-03-12 | - |
 | 9. Level Progression and Endgame | 2/2 | Complete   | 2026-03-12 | - |
 | 10. Reward Systems and Modifiers | 5/5 | Complete    | 2026-03-12 | - |
-| 11. Parameter Reference | v1.1 | 0/? | Not started | - |
+| 11. Parameter Reference | v1.1 | 0/1 | Not started | - |
