@@ -49,9 +49,9 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### Level Progression
 
-- [ ] **LEVL-01**: Document price curve across all level ranges with exact values
-- [ ] **LEVL-02**: Document level length (120d) effects on pool accumulation dynamics
-- [ ] **LEVL-03**: Document how whale bundle and lazy pass duration economics change across levels
+- [x] **LEVL-01**: Document price curve across all level ranges with exact values
+- [x] **LEVL-02**: Document level length (120d) effects on pool accumulation dynamics
+- [x] **LEVL-03**: Document how whale bundle and lazy pass duration economics change across levels
 - [ ] **LEVL-04**: Document activity score system and consecutive streak mechanics
 
 ### Endgame & Death Clock
@@ -125,9 +125,9 @@ None — this is a standalone analysis milestone.
 | BURN-02 | Phase 8 | Complete |
 | BURN-03 | Phase 8 | Complete |
 | BURN-04 | Phase 8 | Complete |
-| LEVL-01 | Phase 9 | Pending |
-| LEVL-02 | Phase 9 | Pending |
-| LEVL-03 | Phase 9 | Pending |
+| LEVL-01 | Phase 9 | Complete |
+| LEVL-02 | Phase 9 | Complete |
+| LEVL-03 | Phase 9 | Complete |
 | LEVL-04 | Phase 9 | Pending |
 | END-01 | Phase 9 | Pending |
 | END-02 | Phase 9 | Pending |
