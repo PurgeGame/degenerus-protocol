@@ -111,12 +111,14 @@ Plans:
   3. Affiliate referral reward structure (ETH and DGNRS flows), tier system with bonus calculations, and top affiliate endgame rewards are fully documented
   4. stETH integration mechanics and how yield accrual affects pool balances and distributions are documented
   5. Quest reward types, BURNIE amounts, trigger conditions, cooldowns, and per-player limits are documented with exact values
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 10-01: TBD
-- [ ] 10-02: TBD
-- [ ] 10-03: TBD
+- [ ] 10-01-PLAN.md — Document DGNRS tokenomics (supply distribution, earlybird curve, per-purchase rewards, soulbound mechanics)
+- [ ] 10-02-PLAN.md — Document deity pass system (pricing curve, boon types and weights, activity score bonuses)
+- [ ] 10-03-PLAN.md — Document affiliate system (3-tier referral, taper, kickback, per-level DGNRS claims)
+- [ ] 10-04-PLAN.md — Document stETH yield integration (admin staking, yield surplus formula, payout ordering)
+- [ ] 10-05-PLAN.md — Document quest reward system (types, targets, slot mechanics, streak system)
 
 ### Phase 11: Parameter Reference
 **Goal**: Any constant, threshold, or BPS value in the protocol can be looked up in a single reference document with its exact value, purpose, and contract location
@@ -147,5 +149,5 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 7. Jackpot & Distribution Mechanics | 3/3 | Complete   | 2026-03-12 | - |
 | 8. BURNIE Economics | 2/2 | Complete   | 2026-03-12 | - |
 | 9. Level Progression and Endgame | 2/2 | Complete   | 2026-03-12 | - |
-| 10. Reward Systems and Modifiers | v1.1 | 0/? | Not started | - |
+| 10. Reward Systems and Modifiers | v1.1 | 0/5 | Not started | - |
 | 11. Parameter Reference | v1.1 | 0/? | Not started | - |
