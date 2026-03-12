@@ -21,13 +21,17 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 - [ ] **POOL-03**: Document freeze/unfreeze mechanics and pending accumulator behavior during jackpot phase
 - [ ] **POOL-04**: Document purchase target calculation and how it drives level advancement
 
-### Jackpot Distribution
+### Jackpot & Distribution Mechanics
 
-- [ ] **JACK-01**: Document 5-day draw mechanics with daily pool slice formulas (6-14% random, 100% day 5)
-- [ ] **JACK-02**: Document trait bucket distribution and winner selection per day
-- [ ] **JACK-03**: Document carryover ETH mechanics and compressed jackpot conditions
-- [ ] **JACK-04**: Document lootbox conversion ratios (50% daily, 75% reward jackpots)
-- [ ] **JACK-05**: Document BURNIE jackpot parallel distribution and far-future allocation
+- [ ] **JACK-01**: Document daily purchase-phase future pool drip (ETH and tickets) with exact formulas and triggers
+- [ ] **JACK-02**: Document daily purchase-phase BURNIE jackpots with winner selection and payout formulas
+- [ ] **JACK-03**: Document 5-day jackpot-phase draw mechanics with daily pool slice formulas (6-14% random, 100% day 5)
+- [ ] **JACK-04**: Document trait bucket distribution and winner selection per jackpot-phase day
+- [ ] **JACK-05**: Document carryover ETH mechanics and compressed jackpot conditions
+- [ ] **JACK-06**: Document lootbox conversion ratios (50% daily, 75% reward jackpots)
+- [ ] **JACK-07**: Document BURNIE jackpot-phase parallel distribution and far-future allocation
+- [ ] **JACK-08**: Document BAF mechanics (every 10 levels, future pool percentages, lootbox conversion) at jackpot-phase transition
+- [ ] **JACK-09**: Document decimator mechanics (level triggers, multiplier tiers, BURNIE burn requirements) at jackpot-phase transition
 
 ### BURNIE Economics
 
@@ -52,10 +56,8 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### Endgame & Death Clock
 
-- [ ] **END-01**: Document BAF mechanics (every 10 levels, future pool percentages, lootbox conversion)
-- [ ] **END-02**: Document decimator mechanics (level triggers, multiplier tiers, BURNIE burn requirements)
-- [ ] **END-03**: Document death clock (120d timeout, 365d deploy, distress mode, terminal gameOver)
-- [ ] **END-04**: Document final distribution when gameOver triggers
+- [ ] **END-01**: Document death clock (120d timeout, 365d deploy, distress mode, terminal gameOver)
+- [ ] **END-02**: Document final distribution when gameOver triggers
 
 ### Deity System
 
@@ -102,54 +104,56 @@ None — this is a standalone analysis milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFLOW-01 | — | Pending |
-| INFLOW-02 | — | Pending |
-| INFLOW-03 | — | Pending |
-| INFLOW-04 | — | Pending |
-| POOL-01 | — | Pending |
-| POOL-02 | — | Pending |
-| POOL-03 | — | Pending |
-| POOL-04 | — | Pending |
-| JACK-01 | — | Pending |
-| JACK-02 | — | Pending |
-| JACK-03 | — | Pending |
-| JACK-04 | — | Pending |
-| JACK-05 | — | Pending |
-| BURN-01 | — | Pending |
-| BURN-02 | — | Pending |
-| BURN-03 | — | Pending |
-| BURN-04 | — | Pending |
-| DGNR-01 | — | Pending |
-| DGNR-02 | — | Pending |
-| DGNR-03 | — | Pending |
-| DGNR-04 | — | Pending |
-| LEVL-01 | — | Pending |
-| LEVL-02 | — | Pending |
-| LEVL-03 | — | Pending |
-| LEVL-04 | — | Pending |
-| END-01 | — | Pending |
-| END-02 | — | Pending |
-| END-03 | — | Pending |
-| END-04 | — | Pending |
-| DEIT-01 | — | Pending |
-| DEIT-02 | — | Pending |
-| DEIT-03 | — | Pending |
-| AFFL-01 | — | Pending |
-| AFFL-02 | — | Pending |
-| AFFL-03 | — | Pending |
-| STETH-01 | — | Pending |
-| STETH-02 | — | Pending |
-| QRWD-01 | — | Pending |
-| QRWD-02 | — | Pending |
-| PARM-01 | — | Pending |
-| PARM-02 | — | Pending |
-| PARM-03 | — | Pending |
+| INFLOW-01 | Phase 6 | Pending |
+| INFLOW-02 | Phase 6 | Pending |
+| INFLOW-03 | Phase 6 | Pending |
+| INFLOW-04 | Phase 6 | Pending |
+| POOL-01 | Phase 6 | Pending |
+| POOL-02 | Phase 6 | Pending |
+| POOL-03 | Phase 6 | Pending |
+| POOL-04 | Phase 6 | Pending |
+| JACK-01 | Phase 7 | Pending |
+| JACK-02 | Phase 7 | Pending |
+| JACK-03 | Phase 7 | Pending |
+| JACK-04 | Phase 7 | Pending |
+| JACK-05 | Phase 7 | Pending |
+| JACK-06 | Phase 7 | Pending |
+| JACK-07 | Phase 7 | Pending |
+| JACK-08 | Phase 7 | Pending |
+| JACK-09 | Phase 7 | Pending |
+| BURN-01 | Phase 8 | Pending |
+| BURN-02 | Phase 8 | Pending |
+| BURN-03 | Phase 8 | Pending |
+| BURN-04 | Phase 8 | Pending |
+| LEVL-01 | Phase 9 | Pending |
+| LEVL-02 | Phase 9 | Pending |
+| LEVL-03 | Phase 9 | Pending |
+| LEVL-04 | Phase 9 | Pending |
+| END-01 | Phase 9 | Pending |
+| END-02 | Phase 9 | Pending |
+| DGNR-01 | Phase 10 | Pending |
+| DGNR-02 | Phase 10 | Pending |
+| DGNR-03 | Phase 10 | Pending |
+| DGNR-04 | Phase 10 | Pending |
+| DEIT-01 | Phase 10 | Pending |
+| DEIT-02 | Phase 10 | Pending |
+| DEIT-03 | Phase 10 | Pending |
+| AFFL-01 | Phase 10 | Pending |
+| AFFL-02 | Phase 10 | Pending |
+| AFFL-03 | Phase 10 | Pending |
+| STETH-01 | Phase 10 | Pending |
+| STETH-02 | Phase 10 | Pending |
+| QRWD-01 | Phase 10 | Pending |
+| QRWD-02 | Phase 10 | Pending |
+| PARM-01 | Phase 11 | Pending |
+| PARM-02 | Phase 11 | Pending |
+| PARM-03 | Phase 11 | Pending |
 
 **Coverage:**
-- v1.1 requirements: 42 total
-- Mapped to phases: 0
-- Unmapped: 42 (pending roadmap creation)
+- v1.1 requirements: 44 total
+- Mapped to phases: 44
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-12*
-*Last updated: 2026-03-12 after initial definition*
+*Last updated: 2026-03-12 after roadmap creation*
