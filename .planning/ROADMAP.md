@@ -79,10 +79,11 @@ Plans:
   2. All BURNIE earning paths (lootbox bonuses, quest rewards, coinflip winnings) are enumerated with exact amounts verified against contract source
   3. All BURNIE burn sinks (decimator eligibility, ticket purchases) are documented with exact burn amounts and conditions
   4. Vault reserve mechanics and supply invariants are documented showing how the vault constrains total circulating BURNIE
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD
+- [ ] 08-01-PLAN.md — Document BurnieCoinflip mechanics (stake, odds, payout tiers, bounty, recycling, claim windows, boons)
+- [ ] 08-02-PLAN.md — Document BURNIE supply dynamics (earning paths, burn sinks, vault reserve invariant)
 
 ### Phase 9: Level Progression and Endgame
 **Goal**: A game theory agent can simulate level transitions, price changes, and terminal game conditions across the full game lifespan
@@ -143,7 +144,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11
 | 5. Lock Removal | v1.0 | 1/1 | Complete | 2026-03-11 |
 | 6. ETH Inflows and Pool Architecture | v1.1 | 2/2 | Complete | 2026-03-12 |
 | 7. Jackpot & Distribution Mechanics | 3/3 | Complete   | 2026-03-12 | - |
-| 8. BURNIE Economics | v1.1 | 0/? | Not started | - |
+| 8. BURNIE Economics | v1.1 | 0/2 | Not started | - |
 | 9. Level Progression and Endgame | v1.1 | 0/? | Not started | - |
 | 10. Reward Systems and Modifiers | v1.1 | 0/? | Not started | - |
 | 11. Parameter Reference | v1.1 | 0/? | Not started | - |
