@@ -16,10 +16,10 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### Pool Architecture
 
-- [ ] **POOL-01**: Map complete pool lifecycle (future → next → current → claimable) with transition triggers
-- [ ] **POOL-02**: Document per-purchase-type pool split ratios with exact BPS values
-- [ ] **POOL-03**: Document freeze/unfreeze mechanics and pending accumulator behavior during jackpot phase
-- [ ] **POOL-04**: Document purchase target calculation and how it drives level advancement
+- [x] **POOL-01**: Map complete pool lifecycle (future → next → current → claimable) with transition triggers
+- [x] **POOL-02**: Document per-purchase-type pool split ratios with exact BPS values
+- [x] **POOL-03**: Document freeze/unfreeze mechanics and pending accumulator behavior during jackpot phase
+- [x] **POOL-04**: Document purchase target calculation and how it drives level advancement
 
 ### Jackpot & Distribution Mechanics
 
@@ -108,10 +108,10 @@ None — this is a standalone analysis milestone.
 | INFLOW-02 | Phase 6 | Complete |
 | INFLOW-03 | Phase 6 | Complete |
 | INFLOW-04 | Phase 6 | Complete |
-| POOL-01 | Phase 6 | Pending |
-| POOL-02 | Phase 6 | Pending |
-| POOL-03 | Phase 6 | Pending |
-| POOL-04 | Phase 6 | Pending |
+| POOL-01 | Phase 6 | Complete |
+| POOL-02 | Phase 6 | Complete |
+| POOL-03 | Phase 6 | Complete |
+| POOL-04 | Phase 6 | Complete |
 | JACK-01 | Phase 7 | Pending |
 | JACK-02 | Phase 7 | Pending |
 | JACK-03 | Phase 7 | Pending |
