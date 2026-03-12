@@ -42,10 +42,10 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### DGNRS Tokenomics
 
-- [ ] **DGNR-01**: Document initial supply distribution (creator, whale, affiliate, lootbox, reward, earlybird pools)
-- [ ] **DGNR-02**: Document earlybird reward schedule and level-gated distribution
-- [ ] **DGNR-03**: Document affiliate DGNRS distribution per level
-- [ ] **DGNR-04**: Document soulbound mechanics and transfer restrictions
+- [x] **DGNR-01**: Document initial supply distribution (creator, whale, affiliate, lootbox, reward, earlybird pools)
+- [x] **DGNR-02**: Document earlybird reward schedule and level-gated distribution
+- [x] **DGNR-03**: Document affiliate DGNRS distribution per level
+- [x] **DGNR-04**: Document soulbound mechanics and transfer restrictions
 
 ### Level Progression
 
@@ -131,10 +131,10 @@ None — this is a standalone analysis milestone.
 | LEVL-04 | Phase 9 | Complete |
 | END-01 | Phase 9 | Complete |
 | END-02 | Phase 9 | Complete |
-| DGNR-01 | Phase 10 | Pending |
-| DGNR-02 | Phase 10 | Pending |
-| DGNR-03 | Phase 10 | Pending |
-| DGNR-04 | Phase 10 | Pending |
+| DGNR-01 | Phase 10 | Complete |
+| DGNR-02 | Phase 10 | Complete |
+| DGNR-03 | Phase 10 | Complete |
+| DGNR-04 | Phase 10 | Complete |
 | DEIT-01 | Phase 10 | Pending |
 | DEIT-02 | Phase 10 | Pending |
 | DEIT-03 | Phase 10 | Pending |
