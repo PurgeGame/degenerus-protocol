@@ -2,7 +2,7 @@
 
 ## What This Is
 
-The Degenerus Protocol is an on-chain game (Solidity 0.8.34, Foundry + Hardhat) where players buy tickets, compete in purchase/jackpot phases, and win ETH prizes. This audit repo holds the contract source for review and modification. v1.0 shipped always-open purchases — players can now buy tickets at any time, even during RNG processing and jackpot payouts.
+The Degenerus Protocol is an on-chain game (Solidity 0.8.34, Foundry + Hardhat) where players buy tickets, compete in purchase/jackpot phases, and win ETH prizes. This audit repo holds the contract source for review and modification. v1.0 shipped always-open purchases. v1.1 produced comprehensive economic flow documentation — 13 reference documents covering every ETH/BURNIE flow, jackpot mechanic, reward system, and protocol constant with exact formulas verified against contract source.
 
 ## Core Value
 
@@ -12,44 +12,32 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 
 ### Validated
 
-- Existing game loop: purchase phase, jackpot phase, endgame — all working
-- Ticket queue system (single-buffer) — working
-- VRF-based RNG — working
-- Prize pool split logic — working
-- Lootbox, whale bundle, degenerette purchase paths — working
+- ✓ Existing game loop: purchase phase, jackpot phase, endgame — all working
+- ✓ Ticket queue system (single-buffer) — working
+- ✓ VRF-based RNG — working
+- ✓ Prize pool split logic — working
+- ✓ Lootbox, whale bundle, degenerette purchase paths — working
 - ✓ Double-buffer ticket queues with bit-23 key encoding — v1.0
 - ✓ Prize pool freeze/unfreeze with pending accumulators — v1.0
 - ✓ Mid-day advanceGame path (swap only, no freeze) — v1.0
 - ✓ Packed prize pool storage (uint128+uint128) — v1.0
 - ✓ Remove rngLockedFlag purchase blocks — v1.0
 - ✓ Revised advanceGame flow with drain gates — v1.0
+- ✓ Complete ETH flow analysis with exact formulas for all 9 purchase paths — v1.1
+- ✓ Complete BURNIE flow analysis with coinflip, earning, burning, vault mechanics — v1.1
+- ✓ Purchase type breakdown with pool split tables for all conditions — v1.1
+- ✓ Level length dynamics with price curves and pass economics — v1.1
+- ✓ Jackpot phase mechanics with 5-day draws, trait buckets, BAF/Decimator — v1.1
+- ✓ Death clock and endgame flows with terminal distribution formulas — v1.1
+- ✓ Parameter reference with ~200+ constants, values, units, and locations — v1.1
 
 ### Active
 
-- [ ] Complete ETH flow analysis — every path ETH enters and exits prize pools with exact formulas
-- [ ] Complete BURNIE flow analysis — burn mechanics, costs, rewards, and economic effects
-- [ ] Purchase type breakdown — tickets, lootboxes, whale bundles, degenerettes, passes and their distinct pool splits
-- [ ] Level length dynamics — how level duration affects accumulation, payouts, and player economics
-- [ ] Jackpot phase mechanics — draw days, pool distributions, winner selection economics
-- [ ] Death clock and endgame flows — terminal conditions and final distributions
-- [ ] Parameter reference — every constant, percentage, threshold with exact values from contracts
-
-## Current Milestone: v1.1 Economic Flow Analysis
-
-**Goal:** Produce comprehensive economic flow documentation accurate enough for game theory agents to generate mathematically exact examples from contract mechanics.
-
-**Target deliverables:**
-- Complete ETH and BURNIE flow maps with exact formulas
-- Purchase type economics (tickets, lootboxes, whale bundles, degenerettes, passes)
-- Level length and phase transition dynamics
-- Jackpot distribution mechanics
-- Parameter reference with all constants and thresholds
+(None — next milestone not yet defined)
 
 ### Out of Scope
 
-- Code changes — analysis-only milestone, no contract modifications
 - Frontend changes — contract-level analysis only
-- Token (DGNRS) tokenomics — separate concern from game economics
 - Gas optimization — separate effort
 - Legacy shim removal (54 call sites) — functional, cosmetic debt
 
@@ -62,6 +50,7 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 - Jackpot phase keeps freeze active across all 5 draw days
 - 54 legacy shim call sites remain in non-purchase modules (marked DEPRECATED, functional)
 - 12 pre-existing deploy-dependent test failures (predate v1.0)
+- v1.1 output: 13 reference documents in `audit/v1.1-*.md` (8,511 lines total) — designed for game theory agent consumption with exact Solidity expressions, worked examples, and simulation pseudocode
 
 ## Constraints
 
@@ -81,6 +70,9 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 | prizePoolPendingPacked at Slot 16 (in-place replacement) | Avoids storage slot shifts across all modules | ✓ Good — zero layout disruption |
 | Building-block test harnesses over full AdvanceModule harness | delegatecall + coin + VRF dependencies too complex for unit tests | ✓ Good — 66 focused tests with clean isolation |
 | LOCK-02 preserves lastPurchaseDay+jackpotLevel block | Business rule independent of rngLockedFlag | ✓ Good — correct separation of concerns |
+| v1.1 docs structured by purchase type, not contract file | Agent consumption prioritizes economic flow over code layout | ✓ Good — 13 focused reference docs |
+| Worked examples + simulation pseudocode in jackpot docs | Game theory agents need computable examples, not just formulas | ✓ Good — directly consumable |
+| Separated BURNIE-denominated from ETH constants in parameter ref | Prevents ether-suffix unit confusion for agent consumers | ✓ Good — clear unit boundaries |
 
 ---
-*Last updated: 2026-03-12 after v1.1 milestone start*
+*Last updated: 2026-03-12 after v1.1 milestone*
