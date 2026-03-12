@@ -49,6 +49,8 @@ Progress: [██████████] 100% (v1.1 plans: 5/5 through Phase 7
 | Phase 06 P01 | 3min | 1 tasks | 1 files |
 | Phase 06 P02 | 6min | 1 tasks | 1 files |
 | Phase 07 P01 | 3min | 1 tasks | 1 files |
+| Phase 07 P02 | 5min | 1 tasks | 1 files |
+| Phase 07 P03 | 6min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -64,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 06]: Pool architecture documented with complete lifecycle diagram, 4 transition triggers, freeze/unfreeze mechanics, and purchase target ratchet system
 - [Phase 07]: Documented lootbox over-collateralization as explicit design property (2x backing ratio)
 - [Phase 07]: Included worked examples with concrete ETH/BURNIE numbers for agent consumption
+- [Phase 07]: Explicit baseFuturePool vs futurePoolLocal distinction in all transition jackpot formulas
+- [Phase 07]: Documented decimator claim expiry (lastDecClaimRound overwrite) as critical agent-facing warning
 
 ### Pending Todos
 
@@ -75,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T14:46:00Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-03-12T14:48:00Z
+Stopped at: Completed 07-03-PLAN.md (Phase 7 complete)
 Resume file: None
