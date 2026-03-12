@@ -67,9 +67,9 @@ Requirements for economic flow analysis milestone. Each maps to roadmap phases.
 
 ### Affiliate System
 
-- [ ] **AFFL-01**: Document affiliate referral reward structure and ETH/DGNRS flows
-- [ ] **AFFL-02**: Document affiliate tier system and bonus calculations
-- [ ] **AFFL-03**: Document top affiliate endgame rewards per level
+- [x] **AFFL-01**: Document affiliate referral reward structure and ETH/DGNRS flows
+- [x] **AFFL-02**: Document affiliate tier system and bonus calculations
+- [x] **AFFL-03**: Document top affiliate endgame rewards per level
 
 ### stETH & Yield
 
@@ -138,9 +138,9 @@ None — this is a standalone analysis milestone.
 | DEIT-01 | Phase 10 | Pending |
 | DEIT-02 | Phase 10 | Pending |
 | DEIT-03 | Phase 10 | Pending |
-| AFFL-01 | Phase 10 | Pending |
-| AFFL-02 | Phase 10 | Pending |
-| AFFL-03 | Phase 10 | Pending |
+| AFFL-01 | Phase 10 | Complete |
+| AFFL-02 | Phase 10 | Complete |
+| AFFL-03 | Phase 10 | Complete |
 | STETH-01 | Phase 10 | Complete |
 | STETH-02 | Phase 10 | Complete |
 | QRWD-01 | Phase 10 | Pending |
