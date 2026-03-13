@@ -42,8 +42,8 @@ Merged into live pools atomically by `_unfreezePool()`.
 Snapshot of nextPrizePool at each level transition. Serves as the ratchet target for level advancement.
 
 - `levelPrizePool[0]` = `BOOTSTRAP_PRIZE_POOL` = 50 ether (set in constructor, `DegenerusGame.sol:258`)
-- `levelPrizePool[N]` = snapshot of `_getNextPrizePool()` at level N transition (`AdvanceModule:269`)
-- **x00 levels:** `levelPrizePool[lvl]` = `_getFuturePrizePool() / 3` (set in `_endPhase()`, `AdvanceModule:430`)
+- `levelPrizePool[N]` = snapshot of `_getNextPrizePool()` at level N transition (`AdvanceModule:281`)
+- **x00 levels:** `levelPrizePool[lvl]` = `_getFuturePrizePool() / 3` (set in `_endPhase()`, `AdvanceModule:442`)
 
 ### Helper Functions (DegenerusGameStorage)
 
@@ -131,11 +131,11 @@ function _drawDownFuturePrizePool(uint24 lvl) private {
 
 ### 3b. next -> future (time-based skim at level completion)
 
-**Function:** `_applyTimeBasedFutureTake(reachedAt, lvl, rngWord)` in DegenerusGameAdvanceModule (line 862)
-**Called when:** `lastPurchaseDay` becomes true, before consolidation (line 270)
+**Function:** `_applyTimeBasedFutureTake(reachedAt, lvl, rngWord)` in DegenerusGameAdvanceModule (line 876)
+**Called when:** `lastPurchaseDay` becomes true, before consolidation (line 282)
 **Purpose:** Skim portion of nextPrizePool into futurePrizePool to ensure long-term sustainability
 
-**BPS calculation** via `_nextToFutureBps(elapsed, lvl)` (line 834):
+**BPS calculation** via `_nextToFutureBps(elapsed, lvl)` (line 846):
 
 | Elapsed (since levelStartTime + 11 days) | Base BPS | Formula |
 |------------------------------------------|----------|---------|
@@ -155,7 +155,7 @@ Where `lvlBonus = (lvl % 100) / 10 * 100` (e.g., level 45 -> +400 BPS)
 
 **Adjustments applied after base BPS:**
 
-1. **x9 bonus:** `if (lvl % 10 == 9) bps += 200` (line 871)
+1. **x9 bonus:** `if (lvl % 10 == 9) bps += 200` (line 885)
 2. **Ratio adjustment** (+-200 BPS): Compares `futurePool / nextPool` ratio to 2:1 baseline
    - Below 2:1: `bps += 200 - ratioPct` (skim more to build future)
    - Above 2:1: `bps -= min(penalty, 200)` (skim less, future is healthy)
@@ -181,8 +181,8 @@ yieldAccumulator += insuranceSkim;
 
 ### 3c. next -> current (consolidation at jackpot phase start)
 
-**Function:** `consolidatePrizePools(lvl, rngWord)` in DegenerusGameJackpotModule (line 884)
-**Called via:** `_consolidatePrizePools()` delegatecall in AdvanceModule (line 492)
+**Function:** `consolidatePrizePools(lvl, rngWord)` in DegenerusGameJackpotModule (line 901)
+**Called via:** `_consolidatePrizePools()` delegatecall in AdvanceModule (line 504)
 **Trigger:** `lastPurchaseDay` was set, time-based skim completed, entering jackpot phase
 
 ```solidity
@@ -220,20 +220,20 @@ else if (_shouldFutureDump(rngWord)) {
 }
 ```
 
-**x00 level `_futureKeepBps` mechanic** (line 1291):
+**x00 level `_futureKeepBps` mechanic** (line 1315):
 - Rolls 5 pseudo-random dice, each 0-3 (max total = 15)
 - `keepBps = (total * 10_000) / 15`
 - Range: 0% keep (all future to current) to 100% keep (no transfer)
 - Average: ~50% of future moves to current on x00 levels
 
-**Rare dump `_shouldFutureDump`** (line 1309):
+**Rare dump `_shouldFutureDump`** (line 1333):
 - `FUTURE_DUMP_ODDS` = 1,000,000,000,000,000 (1e15)
 - Probability: 1 in 1 quadrillion per level transition
 - Effect: 90% of futurePrizePool dumps into currentPrizePool
 
 ### 3d. current -> claimable (daily jackpot payouts)
 
-**Function:** `payDailyJackpot(isDaily, lvl, randWord)` in DegenerusGameJackpotModule (line 325)
+**Function:** `payDailyJackpot(isDaily, lvl, randWord)` in DegenerusGameJackpotModule (line 332)
 **Called from:** `advanceGame()` in AdvanceModule during jackpot phase
 **Duration:** 5 logical days (3 physical days if compressed)
 
@@ -243,7 +243,7 @@ uint16 dailyBps = _dailyCurrentPoolBps(counter, randWord);
 uint256 budget = (currentPrizePool * dailyBps) / 10_000;
 ```
 
-**`_dailyCurrentPoolBps` logic** (line 2687):
+**`_dailyCurrentPoolBps` logic** (line 2723):
 
 | Counter (jackpotCounter) | BPS Range | Behavior |
 |--------------------------|-----------|----------|
@@ -293,7 +293,7 @@ Where `JACKPOT_LEVEL_CAP` = 5, `DAILY_CURRENT_BPS_MIN` = 600, `DAILY_CURRENT_BPS
 
 ### 5a. Freeze Activation
 
-**Function:** `_swapAndFreeze(purchaseLevel)` in DegenerusGameStorage (line 740)
+**Function:** `_swapAndFreeze(purchaseLevel)` in DegenerusGameStorage (line 742)
 **Trigger:** `advanceGame()` requests daily RNG (day boundary crossed)
 
 ```solidity
@@ -327,7 +327,7 @@ During freeze, all ETH deposits accumulate in `prizePoolPendingPacked` instead o
 
 ### 5c. Unfreeze Triggers
 
-**Function:** `_unfreezePool()` in DegenerusGameStorage (line 750)
+**Function:** `_unfreezePool()` in DegenerusGameStorage (line 752)
 
 ```solidity
 function _unfreezePool() internal {
@@ -345,7 +345,7 @@ function _unfreezePool() internal {
 | Scenario | Where Called | Context |
 |----------|-------------|---------|
 | Daily RNG resolves (purchase phase, non-jackpot) | `advanceGame()` after `_unlockRng(day)` | Single-day freeze for RNG processing |
-| After jackpot phase ends (day 5 complete) | `advanceGame()` at `_endPhase()` -> `_unfreezePool()` (line 321) | Pool frozen for entire 5-day jackpot |
+| After jackpot phase ends (day 5 complete) | `advanceGame()` at `_endPhase()` -> `_unfreezePool()` (lines 332-333) | Pool frozen for entire 5-day jackpot |
 | Phase transition completes (jackpot -> purchase) | In transition path | Restores normal pool operations |
 
 ### 5d. During 5-Day Jackpot Phase
@@ -372,14 +372,14 @@ The purchase target for advancing from level N to level N+1 is `levelPrizePool[N
 | Level | Target Source | Value |
 |-------|-------------|-------|
 | 0 -> 1 | Constructor | `BOOTSTRAP_PRIZE_POOL` = 50 ether |
-| N -> N+1 (normal) | Snapshot at level N transition | `levelPrizePool[N]` = `_getNextPrizePool()` at transition (AdvanceModule:269) |
-| x00 -> x01 (after century level) | `_endPhase()` | `levelPrizePool[x00]` = `_getFuturePrizePool() / 3` (AdvanceModule:430) |
+| N -> N+1 (normal) | Snapshot at level N transition | `levelPrizePool[N]` = `_getNextPrizePool()` at transition (AdvanceModule:281) |
+| x00 -> x01 (after century level) | `_endPhase()` | `levelPrizePool[x00]` = `_getFuturePrizePool() / 3` (AdvanceModule:442) |
 
 **Ratchet property:** Each level's target is the pool size achieved at the previous level transition. If the game grows, targets increase. If levels are reached quickly (less ETH accumulated), targets decrease. The x00 override ties targets to the future pool, creating a different growth dynamic at century boundaries.
 
 ### 6b. Target Check
 
-In `advanceGame()` during purchase phase (AdvanceModule:243):
+In `advanceGame()` during purchase phase (AdvanceModule:253):
 
 ```solidity
 if (_getNextPrizePool() >= levelPrizePool[purchaseLevel - 1]) {
@@ -399,7 +399,7 @@ When `lastPurchaseDay` becomes true:
    ```
    Three-value system: `0` = normal (5 physical days), `1` = compressed (5 logical days in 3 physical days, counter advances by 2), `2` = turbo (all 5 logical days in 1 physical day, counter jumps to `JACKPOT_LEVEL_CAP`). Reset to `0` at `_endPhase()` (AdvanceModule:445).
 
-2. **Level prize pool snapshot** (AdvanceModule:269):
+2. **Level prize pool snapshot** (AdvanceModule:281):
    ```solidity
    levelPrizePool[purchaseLevel] = _getNextPrizePool();
    ```
@@ -472,7 +472,7 @@ During distress mode, lootbox ETH splits override to:
 
 ## Appendix: Yield Surplus Distribution
 
-At consolidation time, `_distributeYieldSurplus(rngWord)` (JackpotModule:923) checks for stETH appreciation:
+At consolidation time, `_distributeYieldSurplus(rngWord)` (JackpotModule:945) checks for stETH appreciation:
 
 ```solidity
 uint256 totalBal = address(this).balance + steth.balanceOf(address(this));
