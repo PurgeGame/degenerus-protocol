@@ -461,10 +461,10 @@ At consolidation time, `_distributeYieldSurplus(rngWord)` (JackpotModule:923) ch
 
 ```solidity
 uint256 totalBal = address(this).balance + steth.balanceOf(address(this));
-uint256 obligations = currentPrizePool + _getNextPrizePool() + claimablePool + _getFuturePrizePool();
+uint256 obligations = currentPrizePool + _getNextPrizePool() + claimablePool + _getFuturePrizePool() + yieldAccumulator;
 if (totalBal <= obligations) return;
 uint256 yieldPool = totalBal - obligations;
-// 20% DGNRS claimable, 20% vault claimable, 40% future pool, ~20% buffer
+// 23% DGNRS claimable, 23% vault claimable, 46% yield accumulator, ~8% buffer
 ```
 
-This is an additional inflow to futurePrizePool from stETH yield, separate from purchase-driven pool splits.
+This is an additional inflow to the yield accumulator (and indirectly to futurePool via x00 dumps) from stETH yield, separate from purchase-driven pool splits.
