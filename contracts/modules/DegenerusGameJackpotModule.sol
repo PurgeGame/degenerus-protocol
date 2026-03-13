@@ -354,17 +354,25 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             if (!isResuming) {
                 uint8 counter = jackpotCounter;
                 uint8 counterStep = 1;
-                // Compressed jackpot: advance counter by 2 on non-final days
-                // so 5 logical days complete in 3 physical days.
-                if (compressedJackpotFlag && counter < JACKPOT_LEVEL_CAP - 1) {
+                // Turbo (flag=2): all 5 logical days in 1 physical day.
+                // Compressed (flag=1): 5 logical days in 3 physical days.
+                if (compressedJackpotFlag == 2 && counter == 0) {
+                    counterStep = JACKPOT_LEVEL_CAP;
+                } else if (compressedJackpotFlag == 1 && counter > 0 && counter < JACKPOT_LEVEL_CAP - 1) {
                     counterStep = 2;
                 }
+                bool isFinalPhysicalDay = (counter + counterStep >= JACKPOT_LEVEL_CAP);
                 bool isEarlyBirdDay = (counter == 0);
                 uint256 poolSnapshot = currentPrizePool;
-                uint16 dailyBps = _dailyCurrentPoolBps(counter, randWord);
-                // Double BPS on compressed days to combine two days' payouts.
-                if (counterStep == 2) {
-                    dailyBps *= 2;
+                uint16 dailyBps;
+                if (isFinalPhysicalDay) {
+                    dailyBps = 10_000; // Final physical day: 100% of remaining pool
+                } else {
+                    dailyBps = _dailyCurrentPoolBps(counter, randWord);
+                    // Double BPS on compressed days to combine two days' payouts.
+                    if (counterStep == 2) {
+                        dailyBps *= 2;
+                    }
                 }
                 uint256 budget = (poolSnapshot * dailyBps) / 10_000;
 
@@ -467,11 +475,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 .unpackWinningTraits(winningTraitsPacked);
             uint16 unitsBudget = DAILY_JACKPOT_UNITS_SAFE;
             (
-                ,
+                uint8 counterStep_,
                 ,
                 ,
                 uint8 carryoverSourceOffset
             ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
+            bool isFinalPhysicalDay_ = (jackpotCounter + counterStep_ >= JACKPOT_LEVEL_CAP);
 
             // Phase 0: current level daily ETH distribution
             if (dailyEthPhase == 0) {
@@ -485,9 +494,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             DAILY_JACKPOT_SCALE_MAX_BPS
                         );
 
-                    // Day 5 uses weighted shares (60/13/13/13) for the big payout;
-                    // days 1-4 use equal shares (20/20/20/20).
-                    uint64 sharesPacked = (jackpotCounter == JACKPOT_LEVEL_CAP - 1)
+                    // Final physical day uses weighted shares (60/13/13/13) for the big payout;
+                    // other days use equal shares (20/20/20/20).
+                    uint64 sharesPacked = isFinalPhysicalDay_
                         ? FINAL_DAY_SHARES_PACKED
                         : DAILY_JACKPOT_SHARES_PACKED;
                     uint16[4] memory shareBpsDaily = JackpotBucketLib
@@ -573,7 +582,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             DAILY_JACKPOT_SCALE_MAX_BPS
                         );
 
-                    uint64 carrySharesPacked = (jackpotCounter == JACKPOT_LEVEL_CAP - 1)
+                    uint64 carrySharesPacked = isFinalPhysicalDay_
                         ? FINAL_DAY_SHARES_PACKED
                         : DAILY_JACKPOT_SHARES_PACKED;
                     uint16[4] memory shareBpsNext = JackpotBucketLib

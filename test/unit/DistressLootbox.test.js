@@ -18,8 +18,8 @@ import {
 
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
-// 912 days in seconds (deploy idle timeout for level 0)
-const DEPLOY_TIMEOUT_SECONDS = 912 * 86400;
+// 365 days in seconds (deploy idle timeout for level 0, per _DEPLOY_IDLE_TIMEOUT_DAYS)
+const DEPLOY_TIMEOUT_SECONDS = 365 * 86400;
 // 6 hours in seconds (distress mode window)
 const DISTRESS_HOURS_SECONDS = 6 * 3600;
 

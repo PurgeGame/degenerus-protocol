@@ -124,6 +124,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 day = _simulatedDayIndexAt(ts);
         bool inJackpot = jackpotPhaseFlag;
         uint24 lvl = level;
+        // Turbo: if target already met on day ≤1, flag now so _requestRng
+        // does the level pre-increment (matching normal lastPurchaseDay flow).
+        if (!inJackpot && !lastPurchaseDay) {
+            uint48 purchaseDays = day - purchaseStartDay;
+            if (purchaseDays <= 1 && _getNextPrizePool() >= levelPrizePool[lvl]) {
+                lastPurchaseDay = true;
+                compressedJackpotFlag = 2;
+            }
+        }
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
         // Level already incremented at RNG request when lastPurchase=true
         uint24 purchaseLevel = (lastPurchase && rngLockedFlag) ? lvl : lvl + 1;
@@ -242,7 +251,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
                     if (_getNextPrizePool() >= levelPrizePool[purchaseLevel - 1]) {
                         lastPurchaseDay = true;
-                        compressedJackpotFlag = (day - purchaseStartDay <= 2);
+                        if (day - purchaseStartDay <= 2) {
+                            compressedJackpotFlag = 1;
+                        }
                     }
                     _unlockRng(day);
                     _unfreezePool();
@@ -430,7 +441,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             levelPrizePool[lvl] = _getFuturePrizePool() / 3;
         }
         jackpotCounter = 0;
-        compressedJackpotFlag = false;
+        compressedJackpotFlag = 0;
     }
 
     /*+================================================================================================================+

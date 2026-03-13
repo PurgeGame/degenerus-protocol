@@ -201,7 +201,11 @@ describe("Economic Adversarial Suite", function () {
     await game.connect(deployer).advanceGame();
     const requestId = await getLastVRFRequestId(mockVRF);
     await mockVRF.fulfillRandomWords(requestId, rngWord);
-    await game.connect(deployer).advanceGame();
+    // Drive the daily cycle to completion (unfreeze prize pool)
+    for (let i = 0; i < 30; i++) {
+      await game.connect(deployer).advanceGame();
+      if (!(await game.rngLocked())) break;
+    }
 
     expect(await game.lootboxRngWord(lootboxIndex)).to.not.equal(0n);
 

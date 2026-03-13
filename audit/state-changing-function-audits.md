@@ -11713,7 +11713,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **Callees:** None
 
 **ETH Flow:** None
-**Invariants:** Only the code owner can change payout mode; mode is one of {Coinflip=0, Degenerette=1, SplitCoinflipCoin=2}
+**Invariants:** Only the code owner can change payout mode; mode is one of {Coinflip=0, Degenerette=1, NitMode=2}
 **NatSpec Accuracy:** Accurate.
 **Gas Flags:** Event emitted even when mode is unchanged (no-op write skipped, but event always fires). Minor gas waste on redundant calls; informational only.
 **Verdict:** CORRECT
@@ -11917,18 +11917,18 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **State Writes:** `pendingDegeneretteCredit[player]` (Degenerette mode only)
 
 **Callers:** `payAffiliate`
-**Callees:** `coin.creditCoin(player, coinAmount)` (SplitCoinflipCoin mode), `coin.creditFlip(player, amount)` (Coinflip mode)
+**Callees:** `coin.creditCoin(player, coinAmount)` (NitMode), `coin.creditFlip(player, amount)` (Coinflip mode)
 
 **ETH Flow:** No ETH transferred. Routes BURNIE-denominated rewards through:
 - **Coinflip (mode 0):** `coin.creditFlip(player, amount)` -- full amount as FLIP credit
 - **Degenerette (mode 1):** stores in `pendingDegeneretteCredit[player]` -- full amount
-- **SplitCoinflipCoin (mode 2):** `coin.creditCoin(player, amount >> 1)` -- 50% as COIN; remaining 50% is discarded (not credited anywhere)
+- **NitMode (mode 2):** `coin.creditCoin(player, amount >> 1)` -- 50% as COIN; remaining 50% is discarded (not credited anywhere)
 
-**Invariants:** (1) No-op for address(0) or amount=0; (2) SplitCoinflipCoin intentionally discards 50% (deflationary); (3) `amount >> 1` is equivalent to `amount / 2` (rounds down for odd amounts)
+**Invariants:** (1) No-op for address(0) or amount=0; (2) NitMode intentionally discards 50% (deflationary); (3) `amount >> 1` is equivalent to `amount / 2` (rounds down for odd amounts)
 
 **NatSpec Accuracy:** Dev comment says "Route affiliate rewards by code-configured payout mode" and "Amounts are already BURNIE-denominated" -- accurate. The event NatSpec for PayoutMode says mode 2 = "50% coin (rest discarded)" which matches the code.
 
-**Gas Flags:** For SplitCoinflipCoin, the discarded 50% is never minted/burned, just never credited. This is the intended deflationary mechanic.
+**Gas Flags:** For NitMode, the discarded 50% is never minted/burned, just never credited. This is the intended deflationary mechanic.
 **Verdict:** CORRECT
 
 ---

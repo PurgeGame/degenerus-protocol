@@ -240,7 +240,7 @@ describe("5 Level Simulation with Player Strategies", function () {
 
           console.log(`\n${"*".repeat(70)}`);
           console.log(`LEVEL TRANSITION: ${currentLevel} -> ${newLevel} on day ${currentDay}`);
-          const compressed = await contracts.game.isCompressedJackpot();
+          const compressed = await contracts.game.jackpotCompressionTier();
           const stateStr = newGameOver ? 'GAMEOVER' : newInJackpotPhase ? (compressed ? 'JACKPOT (COMPRESSED)' : 'JACKPOT') : 'PURCHASE';
           console.log(`  New State: ${stateStr}`);
           console.log(`  New Mint Price: ${ethers.formatEther(newPrice)} ETH`);
@@ -261,7 +261,7 @@ describe("5 Level Simulation with Player Strategies", function () {
         const pool = await contracts.game.nextPrizePoolView();
         const target = await contracts.game.prizePoolTargetView();
         const rngFulfilled = await contracts.game.isRngFulfilled();
-        const compressedNow = await contracts.game.isCompressedJackpot();
+        const compressedNow = await contracts.game.jackpotCompressionTier();
         const stateLabel = gameOverNow ? "GAMEOVER" : inJackpotPhaseNow ? (compressedNow ? "JACKPOT (COMPRESSED)" : "JACKPOT") : "PURCHASE";
         console.log(`Day ${currentDay}: Level ${level}, State ${stateLabel}, Pool ${ethers.formatEther(pool)}/${ethers.formatEther(target)} ETH, rngLocked=${rngLocked}, rngFulfilled=${rngFulfilled}`);
       }

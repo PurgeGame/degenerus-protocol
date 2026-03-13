@@ -184,7 +184,7 @@ contract DegenerusAffiliate {
     enum PayoutMode {
         Coinflip,
         Degenerette,
-        SplitCoinflipCoin
+        NitMode
     }
 
     // =====================================================================
@@ -841,7 +841,7 @@ contract DegenerusAffiliate {
             emit DegeneretteCreditUpdated(player, true, amount, newBalance);
             return;
         }
-        if (modeRaw == uint8(PayoutMode.SplitCoinflipCoin)) {
+        if (modeRaw == uint8(PayoutMode.NitMode)) {
             uint256 coinAmount = amount >> 1;
             coin.creditCoin(player, coinAmount);
             return;

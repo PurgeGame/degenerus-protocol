@@ -162,7 +162,7 @@ describe("2 Level Detailed Simulation", function () {
       const yieldPool = await contracts.game.yieldPoolView();
       const rngLocked = await contracts.game.rngLocked();
       const rngFulfilled = await contracts.game.isRngFulfilled();
-      const compressedJackpot = await contracts.game.isCompressedJackpot();
+      const compressedJackpot = await contracts.game.jackpotCompressionTier();
 
       let currentLevelTickets = 0n;
       let futureLevelTickets = 0n;

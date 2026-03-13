@@ -342,7 +342,7 @@ describe("DegenerusAffiliate", function () {
       expect(await affiliate.affiliatePayoutMode(code)).to.equal(1n);
     });
 
-    it("owner can set payout mode to SplitCoinflipCoin (2)", async function () {
+    it("owner can set payout mode to NitMode (2)", async function () {
       const { affiliate, alice } = await loadFixture(deployFullProtocol);
       const code = toBytes32("PMTEST2");
       await affiliate.connect(alice).createAffiliateCode(code, 0);
