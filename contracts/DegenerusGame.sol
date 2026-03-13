@@ -2217,8 +2217,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return decWindowOpen || _isGameoverImminent();
     }
 
-    /// @notice Check if the current jackpot phase is compressed (3 days instead of 5).
-    function isCompressedJackpot() external view returns (bool) {
+    /// @notice Jackpot compression tier: 0=normal, 1=compressed (3d), 2=turbo (1d).
+    function jackpotCompressionTier() external view returns (uint8) {
         return compressedJackpotFlag;
     }
 

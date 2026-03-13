@@ -684,7 +684,7 @@ describe("SecurityEconHardening", function () {
   describe("ECON-04: Compressed jackpot mechanism", function () {
     it("compressedJackpotFlag is exposed and starts false", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.isCompressedJackpot()).to.equal(false);
+      expect(await game.jackpotCompressionTier()).to.equal(0);
     });
 
     it("compressed jackpot design: counter steps by 2 when flag is set", async function () {

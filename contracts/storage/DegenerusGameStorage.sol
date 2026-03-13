@@ -56,7 +56,7 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | EVM SLOT 1 (32 bytes) — ETH Phase, Price, Double-Buffer Fields             |
  * +-----------------------------------------------------------------------------+
  * | [0:1]   dailyEthPhase            uint8    0=current level, 1=carryover       |
- * | [1:2]   compressedJackpotFlag    bool     Compressed jackpot phase active    |
+ * | [1:2]   compressedJackpotFlag    uint8    0=normal, 1=compressed (3d), 2=turbo (1d) |
  * | [2:8]   purchaseStartDay         uint48   Day index when purchase phase began|
  * | [8:24]  price                    uint128  Current mint price in wei          |
  * | [24:25] ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
@@ -284,10 +284,12 @@ abstract contract DegenerusGameStorage {
     ///      0 = current level, 1 = carryover.
     uint8 internal dailyEthPhase;
 
-    /// @dev True when jackpot phase is compressed (3 days instead of 5).
-    ///      Set when purchase-phase target is met within the first 2 daily advances,
-    ///      signaling high player interest. Cleared at phase end.
-    bool internal compressedJackpotFlag;
+    /// @dev Jackpot compression tier: 0=normal (5d), 1=compressed (3d), 2=turbo (1d).
+    ///      Set when purchase-phase target is met quickly, signaling high player interest.
+    ///      Turbo (2): target met within 1 day — entire jackpot in 1 physical day.
+    ///      Compressed (1): target met within 2 days — 5 logical days in 3 physical.
+    ///      Cleared at phase end.
+    uint8 internal compressedJackpotFlag;
 
     /// @dev Game day index when the current purchase phase opened.
     ///      Used to determine whether the purchase target was met quickly enough

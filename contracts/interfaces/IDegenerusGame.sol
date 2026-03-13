@@ -44,8 +44,8 @@ interface IDegenerusGame {
     /// @notice Check if the current jackpot phase is compressed (3 days instead of 5).
     /// @dev Compressed mode activates when the purchase-phase target is met within the
     ///      first 2 daily advances, signaling high player interest.
-    /// @return True if jackpot phase is compressed.
-    function isCompressedJackpot() external view returns (bool);
+    /// @return Compression tier: 0=normal, 1=compressed (3d), 2=turbo (1d).
+    function jackpotCompressionTier() external view returns (uint8);
 
     /// @notice Get comprehensive purchase information in a single call.
     /// @dev Gas-optimized batch query for UI display.
