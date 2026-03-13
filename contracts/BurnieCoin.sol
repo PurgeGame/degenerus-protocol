@@ -4,27 +4,22 @@ pragma solidity 0.8.34;
 /**
  * @title BurnieCoin
  * @author Burnie Degenerus
- * @notice ERC20 in-game token (BURNIE, 18 decimals) with integrated coinflip wagering and quest rewards.
+ * @notice ERC20 in-game token (BURNIE, 18 decimals) with minting, burning, and supply management.
  *
  * @dev ARCHITECTURE:
  *      - ERC20 standard with game contract transfer bypass
- *      - Coinflip: Daily stake windows with VRF-based 50/50 outcomes, 50-150% bonus on wins
- *      - Quest integration: Bonus flip credits for gameplay actions
+ *      - Mint/burn interface for game contract, coinflip contract, and vault
+ *      - Flip credit accounting: credits denominated in BURNIE, delegated to BurnieCoinflip.sol
  *      - Decimator burns: Burn-to-participate for decimator jackpot eligibility
- *      - Bounty: 1000 BURNIE/window accumulator; half removed each window (paid on win)
+ *      - Quest integration: Daily quest rolls, streak tracking, slot rewards
  *      - Vault escrow: 2M BURNIE virtual reserve, minted only on ContractAddresses.VAULT withdrawal
  *
  * @dev CRITICAL INVARIANTS:
  *      - totalSupply + vaultAllowance = supplyIncUncirculated
- *      - coinflipBalance[day][player] immutable after settlement (day <= flipsClaimableDay)
- *      - Only one bountyOwedTo address at a time
  *
  * @dev SECURITY:
  *      - Access control: onlyDegenerusGameContract, onlyFlipCreditors, onlyVault, onlyAdmin
  *      - CEI pattern: burns before external calls
- *      - RNG lock prevents stake manipulation during VRF callback
- *      - MIN threshold (1,000 BURNIE) prevents dust spam
- *      - 90-day auto-expiry on unclaimed coinflips (30-day window for first claim)
  */
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";

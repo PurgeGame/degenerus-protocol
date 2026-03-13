@@ -391,13 +391,28 @@ if (prizePoolFrozen) {
 
 **Split:** 100% future, 0% next. ETH wagers go entirely to the future pool.
 
-### Payout Cap
+### Payout Split and Cap
+
+ETH degenerette payouts are split 25% ETH / 75% lootbox. The 10% cap applies only to the ETH portion; excess above the cap is added to the lootbox portion.
 
 ```solidity
-ETH_WIN_CAP_BPS = 1000              // (DegeneretteModule.sol:223)
+// DegeneretteModule.sol:678-688
+uint256 ethPortion = payout / 4;           // 25% as direct ETH
+uint256 lootboxPortion = payout - ethPortion; // 75% as lootbox rewards
+
+// Cap ETH portion at 10% of futurePool; excess rolls into lootbox
 uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
-// Maximum payout = 10% of futurePool at resolution time
+// ETH_WIN_CAP_BPS = 1000                  (DegeneretteModule.sol:223)
+if (ethPortion > maxEth) {
+    lootboxPortion += ethPortion - maxEth;
+    ethPortion = maxEth;
+}
 ```
+
+**Key details:**
+- The ETH portion (25%) is capped at 10% of `futurePrizePool` at resolution time
+- Any excess above the cap is added to the lootbox portion (75% + overflow)
+- Only the ETH portion is deducted from `futurePrizePool`; the lootbox portion is resolved via `_resolveLootboxDirect` without touching pools
 
 ### Non-ETH Wagers
 

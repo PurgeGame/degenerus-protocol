@@ -105,9 +105,9 @@ Packing layout (both packed slots use identical encoding):
 
 ### 3a. future -> next (drawdown at new level start)
 
-**Function:** `_drawDownFuturePrizePool(lvl)` in DegenerusGameAdvanceModule (line 929)
-**Called when:** Jackpot phase ends, new level begins (`_endPhase()` -> `_unfreezePool()` -> level increment -> `_drawDownFuturePrizePool()`)
-**Location in flow:** `advanceGame()` line 290: `_drawDownFuturePrizePool(lvl)`
+**Function:** `_drawDownFuturePrizePool(lvl)` in DegenerusGameAdvanceModule (line 948)
+**Called when:** Purchase phase -> jackpot phase transition completes (AdvanceModule:302). The actual causal chain is: `lastPurchaseDay` triggers -> level pre-incremented at RNG request time (`_finalizeRngRequest`, AdvanceModule:1179) -> next `advanceGame()` call processes consolidation -> enters jackpot phase -> `_drawDownFuturePrizePool(lvl)` runs after `levelStartTime` is set (AdvanceModule:301-302). Note: drawdown fires at the START of the jackpot phase (transition into jackpot), not at the end when `_endPhase()` runs.
+**Location in flow:** `advanceGame()` line 302: `_drawDownFuturePrizePool(lvl)`
 
 ```solidity
 function _drawDownFuturePrizePool(uint24 lvl) private {
@@ -186,6 +186,15 @@ yieldAccumulator += insuranceSkim;
 **Trigger:** `lastPurchaseDay` was set, time-based skim completed, entering jackpot phase
 
 ```solidity
+// Step 0 (x00 only): Dump 50% of yieldAccumulator into futurePool BEFORE keep-roll
+// JackpotModule:902-908
+if ((lvl % 100) == 0) {
+    uint256 acc = yieldAccumulator;
+    uint256 half = acc >> 1;
+    _setFuturePrizePool(_getFuturePrizePool() + half);
+    yieldAccumulator = acc - half; // rounds in favor of retention
+}
+
 // Step 1: Move ALL of next into current
 currentPrizePool += _getNextPrizePool();
 _setNextPrizePool(0);
@@ -243,11 +252,13 @@ uint256 budget = (currentPrizePool * dailyBps) / 10_000;
 
 Where `JACKPOT_LEVEL_CAP` = 5, `DAILY_CURRENT_BPS_MIN` = 600, `DAILY_CURRENT_BPS_MAX` = 1400.
 
-**Compressed jackpot:** When `compressedJackpotFlag` is true (level reached target in <= 2 days), counter advances by 2 per physical day and `dailyBps *= 2`, combining two logical days' payouts into one physical day. Result: 5 logical days complete in 3 physical days.
+**Compressed/turbo jackpot:** See Section 6b for the three-value `compressedJackpotFlag` system. When `compressedJackpotFlag = 1` (compressed), counter advances by 2 per physical day and `dailyBps *= 2`. When `compressedJackpotFlag = 2` (turbo), all 5 logical days fire in 1 physical day.
 
 **Budget allocation per day:**
 - 80% of budget -> ETH jackpot for trait-matched ticket holders
 - 20% of budget -> lootbox ticket budget (converted to ticket units, backed by moving ETH from current to next pool)
+
+**Zero-fallback:** The 20% lootbox portion passes through `_validateTicketBudget()` (JackpotModule:1086), which returns 0 if no trait tickets exist at the current level for the winning traits. When the lootbox budget is zeroed, the full 100% of the daily budget goes to the ETH jackpot instead.
 
 **Winners:** ETH credited to `claimableWinnings[player]`, aggregate tracked in `claimablePool`.
 
@@ -378,11 +389,15 @@ if (_getNextPrizePool() >= levelPrizePool[purchaseLevel - 1]) {
 
 When `lastPurchaseDay` becomes true:
 
-1. **Compressed jackpot flag** check (AdvanceModule:244):
+1. **Compressed jackpot flag** check (AdvanceModule:131-134, 255-257):
    ```solidity
-   compressedJackpotFlag = (day - purchaseStartDay <= 2);
+   // Turbo: target met on day 0 or 1 (checked at top of advanceGame)
+   compressedJackpotFlag = 2;   // 5 logical days in 1 physical day
+
+   // Compressed: target met on day 2 (checked in purchase phase branch)
+   compressedJackpotFlag = 1;   // 5 logical days in 3 physical days
    ```
-   If level reached target in 2 days or fewer, jackpot phase runs compressed (5 logical days in 3 physical days).
+   Three-value system: `0` = normal (5 physical days), `1` = compressed (5 logical days in 3 physical days, counter advances by 2), `2` = turbo (all 5 logical days in 1 physical day, counter jumps to `JACKPOT_LEVEL_CAP`). Reset to `0` at `_endPhase()` (AdvanceModule:445).
 
 2. **Level prize pool snapshot** (AdvanceModule:269):
    ```solidity

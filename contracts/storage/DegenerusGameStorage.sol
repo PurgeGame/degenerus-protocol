@@ -796,7 +796,7 @@ abstract contract DegenerusGameStorage {
     mapping(uint48 => mapping(address => uint256)) internal lootboxEth;
 
     /// @dev Presale mode toggle (starts true, one-way: can only be turned off).
-    ///      When true: loot boxes give 2x BURNIE, presale lootbox splits active.
+    ///      When true: loot boxes give 62% bonus BURNIE, presale lootbox splits active.
     ///      When false: normal loot box rewards.
     ///      Auto-ends at the first phase transition where 200 ETH mint-lootbox cap is met or level >= 3.
     bool internal lootboxPresaleActive = true;

@@ -914,7 +914,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         day = _simulatedDayIndex();
         usedMask = deityBoonDay[deity] == day ? deityBoonUsedMask[deity] : 0;
         decimatorOpen = decWindowOpen;
-        deityPassAvailable = deityPassOwners.length < 24;
+        deityPassAvailable = deityPassOwners.length < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
         uint256 rngWord = rngWordByDay[day];
         if (rngWord == 0) rngWord = rngWordCurrent;
         if (rngWord == 0) rngWord = uint256(keccak256(abi.encodePacked(day, address(this))));
