@@ -117,6 +117,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             _setNextPrizePool(0);
             _setFuturePrizePool(0);
             currentPrizePool = 0;
+            yieldAccumulator = 0;
             return;
         }
 
@@ -128,6 +129,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         _setNextPrizePool(0);
         _setFuturePrizePool(0);
         currentPrizePool = 0;
+        yieldAccumulator = 0;
 
         // remaining tracks unallocated funds.
         uint256 remaining = available;

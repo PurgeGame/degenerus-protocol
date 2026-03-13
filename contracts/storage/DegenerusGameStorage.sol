@@ -1566,4 +1566,14 @@ abstract contract DegenerusGameStorage {
     ///      before gameover liveness guard). Used at open time to apply a 25% ticket
     ///      bonus proportional to the distress fraction of the total lootbox value.
     mapping(uint48 => mapping(address => uint256)) internal lootboxDistressEth;
+
+    // =========================================================================
+    // Segregated Yield Accumulator
+    // =========================================================================
+
+    /// @dev Segregated stETH yield accumulator.
+    ///      Collects 46% of yield surplus each level transition.
+    ///      x00 milestones: 50% to currentPrizePool, 50% retained as terminal insurance.
+    ///      INVARIANT: counted as obligation in yield surplus calculation.
+    uint256 internal yieldAccumulator;
 }

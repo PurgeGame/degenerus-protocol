@@ -63,7 +63,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Emitted when daily jackpot Phase 1 (carryover) begins, indicating the
     ///      source level whose trait pool is used for winner selection.
-    event DailyCarryoverStarted(uint24 indexed jackpotLevel, uint24 carryoverSourceLevel);
+    event DailyCarryoverStarted(
+        uint24 indexed jackpotLevel,
+        uint24 carryoverSourceLevel
+    );
 
     /// @dev Emitted when a far-future ticket holder (5-99 levels ahead) wins the daily BURNIE jackpot.
     ///      These winners are drawn from ticketQueue (traits not yet assigned).
@@ -291,7 +294,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) external returns (uint256 paidWei) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
 
-        uint32 winningTraitsPacked = _rollWinningTraits(targetLvl, rngWord, true);
+        uint32 winningTraitsPacked = _rollWinningTraits(
+            targetLvl,
+            rngWord,
+            true
+        );
         uint256 entropy = rngWord ^ (uint256(targetLvl) << 192);
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
@@ -343,11 +350,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 lvl = lastDailyJackpotLevel;
             } else {
                 // Fresh start: compute and store winning traits
-                winningTraitsPacked = _rollWinningTraits(
-                    lvl,
-                    randWord,
-                    true
-                );
+                winningTraitsPacked = _rollWinningTraits(lvl, randWord, true);
                 _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
             }
             // Initialize daily budgets and storage on fresh start
@@ -358,10 +361,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 // Compressed (flag=1): 5 logical days in 3 physical days.
                 if (compressedJackpotFlag == 2 && counter == 0) {
                     counterStep = JACKPOT_LEVEL_CAP;
-                } else if (compressedJackpotFlag == 1 && counter > 0 && counter < JACKPOT_LEVEL_CAP - 1) {
+                } else if (
+                    compressedJackpotFlag == 1 &&
+                    counter > 0 &&
+                    counter < JACKPOT_LEVEL_CAP - 1
+                ) {
                     counterStep = 2;
                 }
-                bool isFinalPhysicalDay = (counter + counterStep >= JACKPOT_LEVEL_CAP);
+                bool isFinalPhysicalDay = (counter + counterStep >=
+                    JACKPOT_LEVEL_CAP);
                 bool isEarlyBirdDay = (counter == 0);
                 uint256 poolSnapshot = currentPrizePool;
                 uint16 dailyBps;
@@ -443,7 +451,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 if (carryoverLootboxBudget != 0) {
                     futureEthPool -= carryoverLootboxBudget;
                     // Pools already deducted upfront; just add lootbox budget to nextPrizePool
-                    _setNextPrizePool(_getNextPrizePool() + carryoverLootboxBudget);
+                    _setNextPrizePool(
+                        _getNextPrizePool() + carryoverLootboxBudget
+                    );
                 }
 
                 // Calculate carryover ticket units (distributed in Phase 2 via payDailyJackpotCoinAndTickets)
@@ -480,7 +490,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 ,
                 uint8 carryoverSourceOffset
             ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
-            bool isFinalPhysicalDay_ = (jackpotCounter + counterStep_ >= JACKPOT_LEVEL_CAP);
+            bool isFinalPhysicalDay_ = (jackpotCounter + counterStep_ >=
+                JACKPOT_LEVEL_CAP);
 
             // Phase 0: current level daily ETH distribution
             if (dailyEthPhase == 0) {
@@ -591,18 +602,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             uint8(entropyNext & 3)
                         );
 
-                    (
-                        ,
-                        bool carryComplete
-                    ) = _processDailyEthChunk(
-                            carryoverSourceLevel,
-                            carryPool,
-                            entropyNext,
-                            traitIdsDaily,
-                            shareBpsNext,
-                            bucketCountsNext,
-                            unitsBudget
-                        );
+                    (, bool carryComplete) = _processDailyEthChunk(
+                        carryoverSourceLevel,
+                        carryPool,
+                        entropyNext,
+                        traitIdsDaily,
+                        shareBpsNext,
+                        bucketCountsNext,
+                        unitsBudget
+                    );
                     if (!carryComplete) {
                         return;
                     }
@@ -890,10 +898,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///
     /// @param lvl Current game level.
     /// @param rngWord VRF entropy for percentage rolls.
-    function consolidatePrizePools(
-        uint24 lvl,
-        uint256 rngWord
-    ) external {
+    function consolidatePrizePools(uint24 lvl, uint256 rngWord) external {
         // Consolidate pools for this level's jackpot calculations.
         currentPrizePool += _getNextPrizePool();
         _setNextPrizePool(0);
@@ -909,6 +914,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     currentPrizePool += moveWei;
                 }
             }
+            // Yield accumulator x00 distribution: 50% to current, 50% retained
+            uint256 acc = yieldAccumulator;
+
+            uint256 half = acc >> 1;
+
+            currentPrizePool += half;
+            yieldAccumulator = acc - half; // rounds in favor of retention
         } else if (_shouldFutureDump(rngWord)) {
             uint256 fp = _getFuturePrizePool();
             if (fp != 0) {
@@ -928,20 +940,21 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Distributes yield surplus (stETH appreciation) to stakeholders.
-    ///      23% DGNRS claimable, 23% vault claimable, 46% future pool.
+    ///      23% DGNRS claimable, 23% vault claimable, 46% yield accumulator (~8% buffer).
     function _distributeYieldSurplus(uint256 rngWord) private {
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalBal = address(this).balance + stBal;
         uint256 obligations = currentPrizePool +
             _getNextPrizePool() +
             claimablePool +
-            _getFuturePrizePool();
+            _getFuturePrizePool() +
+            yieldAccumulator;
 
         if (totalBal <= obligations) return;
 
         uint256 yieldPool = totalBal - obligations;
         uint256 stakeholderShare = (yieldPool * 2300) / 10_000; // 23% each for DGNRS and Vault
-        uint256 futureShare = (yieldPool * 4600) / 10_000; // 46% to future prize pool (~8% buffer left unextracted)
+        uint256 accumulatorShare = (yieldPool * 4600) / 10_000; // 46% to yield accumulator (~8% buffer left unextracted)
 
         uint256 claimableDelta;
         if (stakeholderShare != 0) {
@@ -958,7 +971,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 );
             if (claimableDelta != 0) claimablePool += claimableDelta;
         }
-        if (futureShare != 0) _setFuturePrizePool(_getFuturePrizePool() + futureShare);
+        if (accumulatorShare != 0) yieldAccumulator += accumulatorShare;
     }
 
     // =========================================================================
@@ -985,7 +998,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (!gameOver) {
             AutoRebuyState memory state = autoRebuyState[beneficiary];
             if (state.autoRebuyEnabled) {
-                return _processAutoRebuy(beneficiary, weiAmount, entropy, state);
+                return
+                    _processAutoRebuy(beneficiary, weiAmount, entropy, state);
             }
         }
 
@@ -1382,8 +1396,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Daily Jackpot ETH — Chunked Distribution
     // =========================================================================
 
-
-
     /// @dev Winner unit cost (auto-rebuy counts as 3x).
     function _winnerUnits(address winner) private view returns (uint8 units) {
         if (winner == address(0)) return 0;
@@ -1471,7 +1483,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             if (totalCount > MAX_BUCKET_WINNERS)
                 totalCount = MAX_BUCKET_WINNERS;
 
-            (address[] memory winners, uint256[] memory ticketIndexes) = _randTraitTicketWithIndices(
+            (
+                address[] memory winners,
+                uint256[] memory ticketIndexes
+            ) = _randTraitTicketWithIndices(
                     traitBurnTicket[lvl],
                     entropyState,
                     traitIds[traitIdx],
@@ -1668,7 +1683,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         entropyState = EntropyLib.entropyStep(
             entropyState ^ (uint256(traitIdx) << 64) ^ traitShare
         );
-        (address[] memory winners, uint256[] memory ticketIndexes) = _randTraitTicketWithIndices(
+        (
+            address[] memory winners,
+            uint256[] memory ticketIndexes
+        ) = _randTraitTicketWithIndices(
                 traitBurnTicket[lvl],
                 entropyState,
                 traitId,
@@ -1927,9 +1945,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///
     /// @param lvl Level whose tickets should be processed.
     /// @return finished True if all tickets for this level have been fully processed.
-    function processTicketBatch(
-        uint24 lvl
-    ) external returns (bool finished) {
+    function processTicketBatch(uint24 lvl) external returns (bool finished) {
         uint24 rk = _tqReadKey(lvl);
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
@@ -2102,7 +2118,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             (queueIdx << 192) |
             (uint256(uint160(player)) << 32);
         _raritySymbolBatch(player, baseKey, processed, take, entropy);
-        emit TraitsGenerated(player, lvl, uint32(queueIdx), processed, take, entropy);
+        emit TraitsGenerated(
+            player,
+            lvl,
+            uint32(queueIdx),
+            processed,
+            take,
+            entropy
+        );
     }
 
     /// @dev Finalizes ticket entry after processing, rolling remainder dust.
@@ -2325,10 +2348,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     )
         private
         view
-        returns (
-            address[] memory winners,
-            uint256[] memory ticketIndexes
-        )
+        returns (address[] memory winners, uint256[] memory ticketIndexes)
     {
         address[] storage holders = traitBurnTicket_[trait];
         uint256 len = holders.length;
@@ -2417,11 +2437,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
         if (!valid) {
             bool useBurn = jackpotPhaseFlag;
-            winningTraitsPacked = _rollWinningTraits(
-                lvl,
-                randWord,
-                useBurn
-            );
+            winningTraitsPacked = _rollWinningTraits(lvl, randWord, useBurn);
             _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
         }
 
@@ -2598,11 +2614,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 if (winner != address(0)) {
                     winners[found] = winner;
                     winnerLevels[found] = candidate;
-                    unchecked { ++found; }
+                    unchecked {
+                        ++found;
+                    }
                 }
             }
 
-            unchecked { ++s; }
+            unchecked {
+                ++s;
+            }
         }
 
         if (found == 0) return;
@@ -2625,21 +2645,27 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
             batchPlayers[batchCount] = winners[i];
             batchAmounts[batchCount] = perWinner;
-            unchecked { ++batchCount; }
+            unchecked {
+                ++batchCount;
+            }
 
             if (batchCount == 3) {
                 coin.creditFlipBatch(batchPlayers, batchAmounts);
                 batchCount = 0;
             }
 
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         if (batchCount != 0) {
             for (uint256 j = batchCount; j < 3; ) {
                 batchPlayers[j] = address(0);
                 batchAmounts[j] = 0;
-                unchecked { ++j; }
+                unchecked {
+                    ++j;
+                }
             }
             coin.creditFlipBatch(batchPlayers, batchAmounts);
         }
@@ -2701,7 +2727,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint16 range = DAILY_CURRENT_BPS_MAX - DAILY_CURRENT_BPS_MIN + 1;
         uint256 seed = uint256(
-            keccak256(abi.encodePacked(randWord, DAILY_CURRENT_BPS_TAG, counter))
+            keccak256(
+                abi.encodePacked(randWord, DAILY_CURRENT_BPS_TAG, counter)
+            )
         );
         return uint16(DAILY_CURRENT_BPS_MIN + (seed % range));
     }
@@ -2770,7 +2798,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // Probe all offsets in [1..highestEligible] starting from a random point.
         for (uint8 i; i < highestEligible; ) {
-            uint8 candidate = uint8(((startOffset - 1 + i) % highestEligible) + 1);
+            uint8 candidate = uint8(
+                ((startOffset - 1 + i) % highestEligible) + 1
+            );
             if (
                 _hasActualTraitTickets(
                     lvl + uint24(candidate),

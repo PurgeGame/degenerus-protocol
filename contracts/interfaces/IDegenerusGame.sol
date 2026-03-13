@@ -161,6 +161,10 @@ interface IDegenerusGame {
     /// @return Total future prize pool amount in wei.
     function futurePrizePoolTotalView() external view returns (uint256);
 
+    /// @notice Get the yield accumulator balance (segregated stETH yield reserve).
+    /// @return The yield accumulator balance (ETH wei).
+    function yieldAccumulatorView() external view returns (uint256);
+
     /// @notice Get the number of tickets owed to a player for a specific level.
     /// @param lvl The level to query.
     /// @param player The player to query.

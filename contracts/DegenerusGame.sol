@@ -1795,17 +1795,23 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Admin-only stake of game-held ETH into stETH via Lido.
     /// @dev Used to earn yield on excess ETH held by the game.
-    ///      SECURITY: Cannot stake ETH reserved for player claims (claimablePool).
+    ///      SECURITY: Must retain ETH to cover player claims, excluding vault/DGNRS
+    ///      claimable (those addresses accept stETH payouts natively).
     /// @param amount ETH amount to stake.
     /// @custom:reverts E If caller is not ADMIN, amount is zero, insufficient ETH,
-    ///                   or staking would dip into claimablePool reserve.
+    ///                   or staking would dip into player-claim ETH reserve.
     function adminStakeEthForStEth(uint256 amount) external {
         if (msg.sender != ContractAddresses.ADMIN) revert E();
         if (amount == 0) revert E();
 
         uint256 ethBal = address(this).balance;
         if (ethBal < amount) revert E();
-        uint256 reserve = claimablePool;
+        // Vault and DGNRS claimable can be settled in stETH, so exclude from ETH reserve
+        uint256 stethSettleable = claimableWinnings[ContractAddresses.VAULT]
+            + claimableWinnings[ContractAddresses.DGNRS];
+        uint256 reserve = claimablePool > stethSettleable
+            ? claimablePool - stethSettleable
+            : 0;
         if (ethBal <= reserve) revert E();
         uint256 stakeable = ethBal - reserve;
         if (amount > stakeable) revert E();
@@ -2135,9 +2141,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 obligations = currentPrizePool +
             _getNextPrizePool() +
             claimablePool +
-            _getFuturePrizePool();
+            _getFuturePrizePool() +
+            yieldAccumulator;
         if (totalBalance <= obligations) return 0;
         return totalBalance - obligations;
+    }
+
+    /// @notice Get the yield accumulator balance (segregated stETH yield reserve).
+    /// @return The yield accumulator balance (ETH wei).
+    function yieldAccumulatorView() external view returns (uint256) {
+        return yieldAccumulator;
     }
 
     /// @notice Get the current mint price in wei.
