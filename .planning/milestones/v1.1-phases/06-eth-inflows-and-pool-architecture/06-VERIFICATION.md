@@ -151,7 +151,7 @@ The following spot-checks were performed directly against contract source. All v
 | `payDailyJackpot` | JackpotModule.sol:325 | line 325 | EXACT |
 | `_isDistressMode` | DegenerusGameStorage.sol:169 | line 169 | EXACT |
 | `_futureKeepBps` dice mechanic | 5 dice, 0-3 each, max=15 | JackpotModule.sol:1291 — uses `% 4` (range 0-3) over 5 iterations, divisor 15 | EXACT |
-| `_distributeYieldSurplus` | JackpotModule.sol:923, 23%/23%/46% | line 923; `(yieldPool * 2300) / 10_000` (×2) + `(yieldPool * 4600) / 10_000` | EXACT |
+| `_distributeYieldSurplus` | JackpotModule.sol:923, 20%/20%/40% | line 923; `(yieldPool * 2000) / 10_000` (×2) + `(yieldPool * 4000) / 10_000` | EXACT |
 | Presale toggle `lootboxPresaleActive = true` | DegenerusGameStorage.sol:800 | line 800 | EXACT |
 | Presale auto-end `lvl >= 3 \|\| lootboxPresaleMintEth >= 200 ether` | AdvanceModule.sol:275 | line 275 (verbatim) | EXACT |
 | Whale bundle pool split (level 0: 3000/10000 next) | WhaleModule.sol:291 | `nextShare = (totalPrice * 3000) / 10_000` | EXACT |

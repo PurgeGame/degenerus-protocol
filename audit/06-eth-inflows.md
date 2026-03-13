@@ -435,7 +435,7 @@ if (lootboxPresaleActive && (lvl >= 3 || lootboxPresaleMintEth >= LOOTBOX_PRESAL
 // LOOTBOX_PRESALE_ETH_CAP = 200 ether         (AdvanceModule.sol:110)
 ```
 
-**Source:** `contracts/modules/DegenerusGameAdvanceModule.sol` line 275
+**Source:** `contracts/modules/DegenerusGameAdvanceModule.sol` line 287
 
 ### Auto-End Conditions (OR)
 
