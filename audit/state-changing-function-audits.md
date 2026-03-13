@@ -2151,7 +2151,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - ETH is moved indirectly through delegatecall sub-modules:
   - `payDailyJackpot` -> currentPrizePool/futurePrizePool -> claimableWinnings (player credits)
   - `_consolidatePrizePools` -> nextPrizePool -> currentPrizePool, futurePrizePool adjustments
-  - `_applyTimeBasedFutureTake` -> nextPrizePool -> futurePrizePool (time-based skim)
+  - `_applyTimeBasedFutureTake` -> nextPrizePool -> futurePrizePool (time-based skim) + yieldAccumulator (1% insurance)
   - `_drawDownFuturePrizePool` -> futurePrizePool -> nextPrizePool (15% release)
   - `_autoStakeExcessEth` (via _processPhaseTransition) -> excess ETH -> stETH via Lido
 
@@ -2981,8 +2981,9 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `levelPrizePool[lvl - 1]` (previous level target for growth adjustment)
 
 **State Writes:**
-- `nextPrizePool -= take` (reduces next pool)
+- `nextPrizePool -= (take + insuranceSkim)` (reduces next pool)
 - `futurePrizePool += take` (increases future pool)
+- `yieldAccumulator += insuranceSkim` (1% of nextPool to terminal insurance)
 
 **Callers:**
 - `advanceGame()` (line 228, during pool consolidation on lastPurchaseDay)
@@ -2992,10 +2993,12 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 **ETH Flow:**
 - **nextPrizePool -> futurePrizePool**: Skims a time-adjusted percentage of the next pool into the future pool.
-- BPS adjusted by: time curve, x9 bonus, ratio adjustment, growth adjustment, random variance.
+- **nextPrizePool -> yieldAccumulator**: 1% insurance skim (`INSURANCE_SKIM_BPS = 100`) always applied.
+- BPS adjusted by: time curve (lvlBonus included in all branches), x9 bonus, ratio adjustment, growth adjustment, random variance.
 
 **Invariants:**
-- `take` can never exceed `nextPoolBefore` (capped at line 867)
+- `take + insuranceSkim` can never exceed `nextPoolBefore` (overflow guard reduces `take` if needed)
+- Insurance skim has priority over future-take
 - Variance is bounded and cannot exceed the take amount
 - BPS is capped at 10000 (line 853)
 - Division by `nextPoolBefore` is safe in context (prize target met implies > 0)
@@ -4296,7 +4299,7 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 2. x00 levels: `futurePrizePool -> currentPrizePool` by 5-dice keep roll (0-100% stays in future, remainder moves to current)
 3. Non-x00 levels: 1-in-1e15 chance to move 90% of `futurePrizePool -> currentPrizePool`
 4. `_creditDgnrsCoinflip`: credits BURNIE coin proportional to prize pool (no ETH movement)
-5. `_distributeYieldSurplus`: distributes stETH yield surplus (23% DGNRS, 23% vault, 46% future)
+5. `_distributeYieldSurplus`: distributes stETH yield surplus (23% DGNRS, 23% vault, 46% accumulator)
 
 **Pool Consolidation Flow:**
 
@@ -4307,7 +4310,7 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 | 2b | futurePrizePool | currentPrizePool | Non-x00 (1e-15 odds) | 90% of futurePrizePool |
 | 3 | Yield surplus | claimablePool (VAULT) | Always (if surplus exists) | 23% of yield |
 | 4 | Yield surplus | claimablePool (DGNRS) | Always (if surplus exists) | 23% of yield |
-| 5 | Yield surplus | futurePrizePool | Always (if surplus exists) | 46% of yield |
+| 5 | Yield surplus | yieldAccumulator | Always (if surplus exists) | 46% of yield |
 
 **Invariants:**
 - `nextPrizePool` is always zeroed
@@ -4424,7 +4427,7 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 - Compute yield surplus: `totalBal - obligations` where `totalBal = ETH balance + stETH balance`, `obligations = currentPrizePool + nextPrizePool + claimablePool + futurePrizePool`
 - 23% to VAULT claimable: `(yieldPool * 2300) / 10000`
 - 23% to DGNRS claimable: `(yieldPool * 2300) / 10000`
-- 46% to futurePrizePool: `(yieldPool * 4600) / 10000`
+- 46% to yieldAccumulator: `(yieldPool * 4600) / 10000`
 - ~8% unextracted buffer: `10000 - (2300 + 2300 + 4600) = 800 bps`
 
 **Percentage Verification:** 2300 + 2300 + 4600 = 9200 bps. 10000 - 9200 = 800 bps (8%) left unextracted as buffer. This matches the NatSpec comment "~8% buffer left unextracted". VERIFIED.
@@ -4435,7 +4438,7 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 - `futurePrizePool += futureShare` only if `futureShare != 0`
 - Auto-rebuy may route stakeholder shares to tickets instead of claimable
 
-**NatSpec Accuracy:** CORRECT. Comments state "23% each for DGNRS and Vault" and "46% to future prize pool (~8% buffer left unextracted)".
+**NatSpec Accuracy:** CORRECT. Comments state "23% each for DGNRS and Vault" and "46% to yield accumulator (~8% buffer left unextracted)".
 
 **Gas Flags:** Two external calls to `_addClaimableEth` (which may trigger auto-rebuy with further external calls). stETH `balanceOf` is an external call. All necessary.
 
@@ -5465,13 +5468,13 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 
 | Trigger | Source Pool | Amount | Destination |
 |---------|-----------|--------|-------------|
-| BAF (lvl % 10 == 0) | futurePrizePool | 10-25% of base | Winners via _runBafJackpot (split: claimable ETH + lootbox tickets) |
+| BAF (lvl % 10 == 0) | futurePrizePool | 10-20% of base | Winners via _runBafJackpot (split: claimable ETH + lootbox tickets) |
 | Decimator (lvl % 100 == 0) | futurePrizePool | 30% of base | Winners via runDecimatorJackpot (deferred claims in claimablePool) |
 | Decimator (lvl % 10 == 5, not x95) | futurePrizePool | 10% of current local | Winners via runDecimatorJackpot (deferred claims in claimablePool) |
 
 BAF pool percentages by level:
 - Level x00 (100, 200...): 20% of base future pool
-- Level 50: 25% of base future pool
+- Level 50: 20% of base future pool
 - All other x0 levels (10, 20, 30, 40, 60, 70, 80, 90): 10% of base future pool
 
 Decimator pool percentages:
