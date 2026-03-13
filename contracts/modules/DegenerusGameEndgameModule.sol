@@ -28,7 +28,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *
  * ```
  * runRewardJackpots()
- *     +- BAF (every 10 levels): 10-25% of future pool (level 100 uses 20%)
+ *     +- BAF (every 10 levels): 10-20% of future pool (level 100 uses 20%)
  *     +- Decimator (levels 5,15,25...85): 10% of future pool (level 100 uses 30%)
  * ```
  */

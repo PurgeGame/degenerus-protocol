@@ -24,7 +24,7 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
  *      - Fixed contract addresses at deploy (no re-pointing)
  */
 
-/// @notice Interface for crediting FLIP tokens to players via the coin contract.
+/// @notice Interface for crediting coinflip credits to players via the coin contract.
 /// @dev Called to distribute affiliate rewards.
 interface IDegenerusCoinAffiliate {
     /// @notice Credit BURNIE directly to a player's wallet balance.
