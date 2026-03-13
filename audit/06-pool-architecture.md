@@ -140,7 +140,7 @@ function _drawDownFuturePrizePool(uint24 lvl) private {
 | Elapsed (since levelStartTime + 11 days) | Base BPS | Formula |
 |------------------------------------------|----------|---------|
 | <= 1 day | 3000 + lvlBonus | `NEXT_TO_FUTURE_BPS_FAST + lvlBonus` |
-| 1-14 days | 3000 -> 1300 (linear decay) | `3000 - ((3000 - 1300) * elapsedAfterDay) / 13 days` |
+| 1-14 days | (3000 + lvlBonus) -> 1300 (linear decay) | `(3000 + lvlBonus) - ((3000 + lvlBonus - 1300) * elapsedAfterDay) / 13 days` |
 | 14-28 days | 1300 -> (3000 + lvlBonus) (ramp up) | `1300 + ((3000 + lvlBonus - 1300) * elapsedAfterMin) / 14 days` |
 | > 28 days | 3000 + lvlBonus + weekly step | `3000 + lvlBonus + weeks * 100` |
 
@@ -169,9 +169,15 @@ Where `lvlBonus = (lvl % 100) / 10 * 100` (e.g., level 45 -> +400 BPS)
 **Final operation:**
 ```solidity
 uint256 take = (nextPoolBefore * bps) / 10_000;
-_setNextPrizePool(nextPoolBefore - take);
+// ... variance applied to take ...
+uint256 insuranceSkim = (nextPoolBefore * 100) / 10_000; // 1% -> yieldAccumulator
+if (take + insuranceSkim > nextPoolBefore) take = nextPoolBefore - insuranceSkim;
+_setNextPrizePool(nextPoolBefore - take - insuranceSkim);
 _setFuturePrizePool(futurePoolBefore + take);
+yieldAccumulator += insuranceSkim;
 ```
+
+**Insurance skim:** 1% of nextPool (`INSURANCE_SKIM_BPS = 100`) is routed to `yieldAccumulator` at every level transition, giving the terminal insurance fund a second funding source beyond stETH yield surplus. The skim has priority over the future-take if both would exceed nextPool.
 
 ### 3c. next -> current (consolidation at jackpot phase start)
 
@@ -458,7 +464,7 @@ uint256 totalBal = address(this).balance + steth.balanceOf(address(this));
 uint256 obligations = currentPrizePool + _getNextPrizePool() + claimablePool + _getFuturePrizePool();
 if (totalBal <= obligations) return;
 uint256 yieldPool = totalBal - obligations;
-// 23% DGNRS claimable, 23% vault claimable, 46% future pool, ~8% buffer
+// 20% DGNRS claimable, 20% vault claimable, 40% future pool, ~20% buffer
 ```
 
 This is an additional inflow to futurePrizePool from stETH yield, separate from purchase-driven pool splits.

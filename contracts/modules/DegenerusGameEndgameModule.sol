@@ -128,7 +128,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     /// | Level         | Pool Source    | Pool Size       |
     /// |---------------|----------------|-----------------|
     /// | 10, 20, 30... | future pool    | 10%             |
-    /// | 50            | future pool    | 25%             |
+    /// | 50            | future pool    | 20%             |
     /// | 100           | future pool    | 20% special     |
     ///
     /// ## Decimator Trigger Schedule
@@ -147,7 +147,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         // ---------------------------------------------------------------------
 
         if (prevMod10 == 0) {
-            uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 25 : 10);
+            uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
             uint256 bafPoolWei = (baseFuturePool * bafPct) / 100;
 
             // Pull the full BAF pool out first; refunds/lootbox recycle back in after resolution.

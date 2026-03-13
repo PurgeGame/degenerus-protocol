@@ -104,6 +104,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint16 private constant NEXT_TO_FUTURE_BPS_X9_BONUS = 200;
     uint16 private constant NEXT_SKIM_VARIANCE_BPS = 1000;
     uint16 private constant NEXT_SKIM_VARIANCE_MIN_BPS = 1000;
+    uint16 private constant INSURANCE_SKIM_BPS = 100; // 1% of nextPool -> yieldAccumulator
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
 
     /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH, unscaled).
@@ -852,8 +853,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             bps = NEXT_TO_FUTURE_BPS_FAST + lvlBonus;
         } else if (elapsed <= 14 days) {
             uint256 elapsedAfterDay = elapsed - 1 days;
-            uint256 delta = NEXT_TO_FUTURE_BPS_FAST - NEXT_TO_FUTURE_BPS_MIN;
-            bps = NEXT_TO_FUTURE_BPS_FAST - (delta * elapsedAfterDay) / 13 days;
+            uint256 delta = NEXT_TO_FUTURE_BPS_FAST +
+                lvlBonus -
+                NEXT_TO_FUTURE_BPS_MIN;
+            bps = NEXT_TO_FUTURE_BPS_FAST + lvlBonus - (delta * elapsedAfterDay) / 13 days;
         } else if (elapsed <= 28 days) {
             uint256 elapsedAfterMin = elapsed - 14 days;
             uint256 delta = NEXT_TO_FUTURE_BPS_FAST +
@@ -933,8 +936,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
 
-        _setNextPrizePool(nextPoolBefore - take);
+        uint256 insuranceSkim = (nextPoolBefore * INSURANCE_SKIM_BPS) / 10_000;
+        if (take + insuranceSkim > nextPoolBefore) {
+            take = nextPoolBefore - insuranceSkim;
+        }
+        _setNextPrizePool(nextPoolBefore - take - insuranceSkim);
         _setFuturePrizePool(futurePoolBefore + take);
+        yieldAccumulator += insuranceSkim;
     }
 
     function _drawDownFuturePrizePool(uint24 lvl) private {
