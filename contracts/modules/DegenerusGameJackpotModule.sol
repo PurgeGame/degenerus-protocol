@@ -899,6 +899,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param lvl Current game level.
     /// @param rngWord VRF entropy for percentage rolls.
     function consolidatePrizePools(uint24 lvl, uint256 rngWord) external {
+        // x00 yield accumulator dump: 50% into futurePool before keep-roll, 50% retained
+        if ((lvl % 100) == 0) {
+            uint256 acc = yieldAccumulator;
+            uint256 half = acc >> 1;
+            _setFuturePrizePool(_getFuturePrizePool() + half);
+            yieldAccumulator = acc - half; // rounds in favor of retention
+        }
+
         // Consolidate pools for this level's jackpot calculations.
         currentPrizePool += _getNextPrizePool();
         _setNextPrizePool(0);
@@ -914,13 +922,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     currentPrizePool += moveWei;
                 }
             }
-            // Yield accumulator x00 distribution: 50% to current, 50% retained
-            uint256 acc = yieldAccumulator;
-
-            uint256 half = acc >> 1;
-
-            currentPrizePool += half;
-            yieldAccumulator = acc - half; // rounds in favor of retention
         } else if (_shouldFutureDump(rngWord)) {
             uint256 fp = _getFuturePrizePool();
             if (fp != 0) {
