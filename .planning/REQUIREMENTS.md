@@ -25,7 +25,7 @@ Requirements for RNG security audit. Each maps to roadmap phases.
 
 - [x] **DELTA-01**: All 8 attack scenarios from v1.0 audit re-verified against current contract code
 - [x] **DELTA-02**: Every changed line in the 8 modified contract files assessed for RNG impact
-- [ ] **DELTA-03**: New attack surfaces from `lastLootboxRngWord`, `midDayTicketRngPending`, and coinflip lock changes identified and analyzed
+- [x] **DELTA-03**: New attack surfaces from `lastLootboxRngWord`, `midDayTicketRngPending`, and coinflip lock changes identified and analyzed
 - [x] **DELTA-04**: Prior FIX-1 (`claimDecimatorJackpot` freeze guard) confirmed still present and correct
 
 ### Manipulation Window Analysis
@@ -69,7 +69,7 @@ None — audit milestone produces analysis documents, not code.
 | RFN-04 | Phase 12 | Complete |
 | DELTA-01 | Phase 13 | Complete |
 | DELTA-02 | Phase 13 | Complete |
-| DELTA-03 | Phase 13 | Pending |
+| DELTA-03 | Phase 13 | Complete |
 | DELTA-04 | Phase 13 | Complete |
 | WINDOW-01 | Phase 14 | Pending |
 | WINDOW-02 | Phase 14 | Pending |
