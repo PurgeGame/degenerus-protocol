@@ -59,32 +59,32 @@ None — audit milestone produces analysis documents, not code.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RVAR-01 | — | Pending |
-| RVAR-02 | — | Pending |
-| RVAR-03 | — | Pending |
-| RVAR-04 | — | Pending |
-| RFN-01 | — | Pending |
-| RFN-02 | — | Pending |
-| RFN-03 | — | Pending |
-| RFN-04 | — | Pending |
-| DELTA-01 | — | Pending |
-| DELTA-02 | — | Pending |
-| DELTA-03 | — | Pending |
-| DELTA-04 | — | Pending |
-| WINDOW-01 | — | Pending |
-| WINDOW-02 | — | Pending |
-| WINDOW-03 | — | Pending |
-| WINDOW-04 | — | Pending |
-| TICKET-01 | — | Pending |
-| TICKET-02 | — | Pending |
-| TICKET-03 | — | Pending |
-| TICKET-04 | — | Pending |
+| RVAR-01 | Phase 12 | Pending |
+| RVAR-02 | Phase 12 | Pending |
+| RVAR-03 | Phase 12 | Pending |
+| RVAR-04 | Phase 12 | Pending |
+| RFN-01 | Phase 12 | Pending |
+| RFN-02 | Phase 12 | Pending |
+| RFN-03 | Phase 12 | Pending |
+| RFN-04 | Phase 12 | Pending |
+| DELTA-01 | Phase 13 | Pending |
+| DELTA-02 | Phase 13 | Pending |
+| DELTA-03 | Phase 13 | Pending |
+| DELTA-04 | Phase 13 | Pending |
+| WINDOW-01 | Phase 14 | Pending |
+| WINDOW-02 | Phase 14 | Pending |
+| WINDOW-03 | Phase 14 | Pending |
+| WINDOW-04 | Phase 14 | Pending |
+| TICKET-01 | Phase 15 | Pending |
+| TICKET-02 | Phase 15 | Pending |
+| TICKET-03 | Phase 15 | Pending |
+| TICKET-04 | Phase 15 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20 ⚠️
+- Mapped to phases: 20
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-14*
-*Last updated: 2026-03-14 after initial definition*
+*Last updated: 2026-03-14 after roadmap creation*
