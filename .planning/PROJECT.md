@@ -33,7 +33,16 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 
 ### Active
 
-(None — next milestone not yet defined)
+## Current Milestone: v1.2 RNG Security Audit
+
+**Goal:** Exhaustive audit of every variable and function touching RNG — confirm no manipulation window exists between RNG arrival and consumption, with delta focus on changes since v1.0 audit.
+
+**Target features:**
+- Complete inventory of all RNG-touching variables and functions
+- Adversarial analysis of manipulation windows (RNG known → RNG consumed)
+- Delta verification against v1.0 audit findings for 8 changed contract files
+- Deep focus on ticket creation flows and mid-day RNG processing
+- Verification of new `lastLootboxRngWord` and `midDayTicketRngPending` state variables
 
 ### Out of Scope
 
@@ -75,4 +84,4 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 | Separated BURNIE-denominated from ETH constants in parameter ref | Prevents ether-suffix unit confusion for agent consumers | ✓ Good — clear unit boundaries |
 
 ---
-*Last updated: 2026-03-12 after v1.1 milestone*
+*Last updated: 2026-03-14 after v1.2 milestone start*

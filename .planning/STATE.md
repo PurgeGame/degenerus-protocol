@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: none
-status: between_milestones
-stopped_at: v1.1 milestone completed and archived
-last_updated: "2026-03-12T19:00:00.000Z"
-last_activity: 2026-03-12 — Completed v1.1 Economic Flow Analysis milestone
+milestone: v1.2
+milestone_name: RNG Security Audit
+status: defining_requirements
+stopped_at: null
+last_updated: "2026-03-14T00:00:00.000Z"
+last_activity: 2026-03-14 — Milestone v1.2 started
 progress:
   total_phases: 0
   completed_phases: 0
@@ -18,16 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-12)
+See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Players can purchase tickets at any time — no downtime during RNG processing or jackpot payouts
-**Current focus:** Planning next milestone
+**Current focus:** v1.2 RNG Security Audit
 
 ## Current Position
 
-Status: Between milestones
-Last milestone: v1.1 Economic Flow Analysis (shipped 2026-03-12)
-Next: `/gsd:new-milestone` to start next cycle
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-14 — Milestone v1.2 started
 
 ## Performance Metrics
 
