@@ -868,6 +868,29 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         }
         uint32 adjustedQty32 = uint32(adjustedQuantity);
 
+        // x00 century bonus: up to 2x tickets scaling with activity score, 10 ETH cap per player.
+        if (targetLevel % 100 == 0) {
+            uint256 score = IDegenerusGame(address(this)).playerActivityScore(buyer);
+            if (score != 0) {
+                if (score > 30_500) score = 30_500;
+                uint256 bonusQty = (uint256(adjustedQty32) * score) / 30_500;
+
+                // Per-player 10 ETH cap across multiple purchases at this x00 level
+                if (bonusQty != 0) {
+                    uint256 maxBonus = (10 ether) / (priceWei >> 2);
+                    uint256 used = centuryBonusLevel == targetLevel
+                        ? centuryBonusUsed[buyer] : 0;
+                    uint256 remaining = maxBonus > used ? maxBonus - used : 0;
+                    if (bonusQty > remaining) bonusQty = remaining;
+                    if (bonusQty != 0) {
+                        centuryBonusLevel = targetLevel;
+                        centuryBonusUsed[buyer] = used + bonusQty;
+                        adjustedQty32 += uint32(bonusQty);
+                    }
+                }
+            }
+        }
+
         uint256 bonusCredit;
         if (payInCoin) {
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
@@ -973,7 +996,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 bonusCredit += (quantity * PRICE_COIN_UNIT) / (40 * TICKET_SCALE);
             }
             if (lastPurchaseDay && (targetLevel % 100) > 90) {
-                bonusCredit += coinCost / 5;
+                bonusCredit += coinCost / 10;
             }
 
         }
