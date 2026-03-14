@@ -58,7 +58,7 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
   5. Every external/public entry point that can modify RNG-dependent state is identified with a call graph to RNG state mutations, and guard conditions (`rngLockedFlag`, `prizePoolFrozen`) are catalogued
 **Plans**: 3 plans
 Plans:
-- [ ] 12-01-PLAN.md -- RNG storage variable inventory (direct entropy + influencing vars + lifecycle traces)
+- [x] 12-01-PLAN.md -- RNG storage variable inventory (direct entropy + influencing vars + lifecycle traces)
 - [ ] 12-02-PLAN.md -- RNG function inventory (function catalogue + entry points + guard analysis)
 - [ ] 12-03-PLAN.md -- RNG data flow diagrams and call graphs (VRF callback flows + entry point call graphs)
 
@@ -112,7 +112,7 @@ Plans:
 | 9. Level Progression and Endgame | v1.1 | 2/2 | Complete | 2026-03-12 |
 | 10. Reward Systems and Modifiers | v1.1 | 5/5 | Complete | 2026-03-12 |
 | 11. Parameter Reference | v1.1 | 1/1 | Complete | 2026-03-12 |
-| 12. RNG State & Function Inventory | v1.2 | 0/3 | Planning | - |
+| 12. RNG State & Function Inventory | 2/3 | In Progress|  | - |
 | 13. Delta Verification | v1.2 | 0/? | Not started | - |
 | 14. Manipulation Window Analysis | v1.2 | 0/? | Not started | - |
 | 15. Ticket Creation & Mid-Day RNG | v1.2 | 0/? | Not started | - |
