@@ -42,7 +42,7 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 - [x] **Phase 12: RNG State & Function Inventory** - Catalogue every variable, function, and data flow that touches VRF entropy (completed 2026-03-14)
 - [x] **Phase 13: Delta Verification** - Verify v1.0 audit findings still hold against 8 changed contract files and new state variables (completed 2026-03-14)
 - [x] **Phase 14: Manipulation Window Analysis** - Adversarial analysis of every window between RNG arrival and consumption (completed 2026-03-14)
-- [ ] **Phase 15: Ticket Creation & Mid-Day RNG Deep-Dive** - Focused trace of ticket/lootbox/coinflip flows for manipulation resistance
+- [x] **Phase 15: Ticket Creation & Mid-Day RNG Deep-Dive** - Focused trace of ticket/lootbox/coinflip flows for manipulation resistance (completed 2026-03-14)
 
 ## Phase Details
 
@@ -125,4 +125,4 @@ Plans:
 | 12. RNG State & Function Inventory | v1.2 | 3/3 | Complete | 2026-03-14 |
 | 13. Delta Verification | v1.2 | 3/3 | Complete | 2026-03-14 |
 | 14. Manipulation Window Analysis | v1.2 | 2/2 | Complete | 2026-03-14 |
-| 15. Ticket Creation & Mid-Day RNG | 1/2 | In Progress|  | - |
+| 15. Ticket Creation & Mid-Day RNG | 2/2 | Complete   | 2026-03-14 | - |

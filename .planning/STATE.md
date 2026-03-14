@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: RNG Security Audit
-status: in-progress
-stopped_at: Completed 15-01-PLAN.md
-last_updated: "2026-03-14T19:00:15Z"
-last_activity: 2026-03-14 -- Completed 15-01 Ticket Creation End-to-End Trace and RNG Observability
+status: completed
+stopped_at: Completed 15-02-PLAN.md -- Phase 15 complete, milestone v1.2 complete
+last_updated: "2026-03-14T19:05:27Z"
+last_activity: 2026-03-14 -- Completed 15-02 Mid-Day RNG Flow and Coinflip Lock Timing
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 10
-  completed_plans: 9
+  completed_plans: 10
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Players can purchase tickets at any time -- no downtime during RNG processing or jackpot payouts
-**Current focus:** v1.2 RNG Security Audit -- Phase 15 in progress, ticket creation and mid-day RNG deep dive
+**Current focus:** v1.2 RNG Security Audit -- COMPLETE
 
 ## Current Position
 
-Phase: 15 of 15 (Ticket Creation & Mid-Day RNG) -- IN PROGRESS
-Plan: 1 of 2 in current phase -- COMPLETE
-Status: Plan 15-01 complete, Plan 15-02 remaining
-Last activity: 2026-03-14 -- Completed 15-01 Ticket Creation End-to-End Trace and RNG Observability
+Phase: 15 of 15 (Ticket Creation & Mid-Day RNG) -- COMPLETE
+Plan: 2 of 2 in current phase -- COMPLETE
+Status: All phases and plans complete. Milestone v1.2 finished.
+Last activity: 2026-03-14 -- Completed 15-02 Mid-Day RNG Flow and Coinflip Lock Timing
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ Progress: [█████████░] 90%
 | Phase 14 P01 | 6min | 2 tasks | 1 files |
 | Phase 14 P02 | 5min | 2 tasks | 1 files |
 | Phase 15 P01 | 3min | 2 tasks | 1 files |
+| Phase 15 P02 | 3min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ Progress: [█████████░] 90%
 - 15-01: lastLootboxRngWord observability verdict SAFE -- frozen read buffer prevents exploitation regardless of entropy visibility
 - 15-01: VRF_MIDDAY_CONFIRMATIONS=3 asymmetry classified as design tradeoff, not vulnerability
 - 15-01: Trait assignment determinism acknowledged as by-design for verification, not a weakness
+- 15-02: Mid-day RNG flow verdict SAFE -- structural isolation (buffer swap before VRF) and VRF unpredictability provide equivalent resistance to daily flow
+- 15-02: Coinflip lock alignment verdict ALIGNED WITH ACCEPTABLE GAPS -- 3 gaps identified, all assessed safe
+- 15-02: Deposit vs claim lock two-tier design is intentionally narrow to avoid UX friction while maintaining security
 
 ### Pending Todos
 
@@ -91,6 +95,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T19:00:15Z
-Stopped at: Completed 15-01-PLAN.md
+Last session: 2026-03-14T19:05:27Z
+Stopped at: Completed 15-02-PLAN.md -- Phase 15 complete, milestone v1.2 complete
 Resume file: None
