@@ -59,8 +59,8 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 **Plans**: 3 plans
 Plans:
 - [x] 12-01-PLAN.md -- RNG storage variable inventory (direct entropy + influencing vars + lifecycle traces)
-- [ ] 12-02-PLAN.md -- RNG function inventory (function catalogue + entry points + guard analysis)
-- [ ] 12-03-PLAN.md -- RNG data flow diagrams and call graphs (VRF callback flows + entry point call graphs)
+- [x] 12-02-PLAN.md -- RNG function inventory (function catalogue + entry points + guard analysis)
+- [x] 12-03-PLAN.md -- RNG data flow diagrams and call graphs (VRF callback flows + entry point call graphs)
 
 ### Phase 13: Delta Verification
 **Goal**: Every v1.0 audit finding re-verified against current code, every changed line in 8 modified contracts assessed for RNG impact, and new attack surfaces from added state variables identified
@@ -71,7 +71,11 @@ Plans:
   2. Every changed line in the 8 modified contract files has an RNG-impact assessment (NO IMPACT / NEW SURFACE / MODIFIED SURFACE) with reasoning
   3. New attack surfaces from `lastLootboxRngWord`, `midDayTicketRngPending`, and coinflip lock changes are explicitly identified and analyzed
   4. FIX-1 (`claimDecimatorJackpot` freeze guard) is confirmed still present with exact code reference
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 13-01-PLAN.md -- Re-verify 8 v1.0 attack scenarios + confirm FIX-1
+- [ ] 13-02-PLAN.md -- RNG-impact assessment of every changed line in 11 contract files
+- [ ] 13-03-PLAN.md -- New attack surface analysis for lastLootboxRngWord, midDayTicketRngPending, coinflip lock changes
 
 ### Phase 14: Manipulation Window Analysis
 **Goal**: For every point where RNG is consumed, a complete adversarial analysis of what state can change between VRF arrival and consumption, with verdicts
@@ -112,7 +116,7 @@ Plans:
 | 9. Level Progression and Endgame | v1.1 | 2/2 | Complete | 2026-03-12 |
 | 10. Reward Systems and Modifiers | v1.1 | 5/5 | Complete | 2026-03-12 |
 | 11. Parameter Reference | v1.1 | 1/1 | Complete | 2026-03-12 |
-| 12. RNG State & Function Inventory | 3/3 | Complete    | 2026-03-14 | - |
-| 13. Delta Verification | v1.2 | 0/? | Not started | - |
+| 12. RNG State & Function Inventory | v1.2 | 3/3 | Complete | 2026-03-14 |
+| 13. Delta Verification | v1.2 | 0/3 | Not started | - |
 | 14. Manipulation Window Analysis | v1.2 | 0/? | Not started | - |
 | 15. Ticket Creation & Mid-Day RNG | v1.2 | 0/? | Not started | - |
