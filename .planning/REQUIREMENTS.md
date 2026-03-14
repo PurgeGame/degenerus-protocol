@@ -32,8 +32,8 @@ Requirements for RNG security audit. Each maps to roadmap phases.
 
 - [x] **WINDOW-01**: For each RNG consumption point, complete enumeration of state that can change between VRF callback and consumption
 - [x] **WINDOW-02**: Adversarial timeline for block builder + VRF front-running covering both daily and mid-day paths
-- [ ] **WINDOW-03**: Inter-block manipulation windows — what can change between `advanceGame` calls during the 5-day jackpot sequence
-- [ ] **WINDOW-04**: Verdict table: each manipulation window rated (BLOCKED / SAFE BY DESIGN / EXPLOITABLE) with evidence
+- [x] **WINDOW-03**: Inter-block manipulation windows — what can change between `advanceGame` calls during the 5-day jackpot sequence
+- [x] **WINDOW-04**: Verdict table: each manipulation window rated (BLOCKED / SAFE BY DESIGN / EXPLOITABLE) with evidence
 
 ### Ticket Creation & Mid-Day RNG
 
@@ -73,8 +73,8 @@ None — audit milestone produces analysis documents, not code.
 | DELTA-04 | Phase 13 | Complete |
 | WINDOW-01 | Phase 14 | Complete |
 | WINDOW-02 | Phase 14 | Complete |
-| WINDOW-03 | Phase 14 | Pending |
-| WINDOW-04 | Phase 14 | Pending |
+| WINDOW-03 | Phase 14 | Complete |
+| WINDOW-04 | Phase 14 | Complete |
 | TICKET-01 | Phase 15 | Pending |
 | TICKET-02 | Phase 15 | Pending |
 | TICKET-03 | Phase 15 | Pending |
