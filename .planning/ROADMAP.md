@@ -73,9 +73,9 @@ Plans:
   4. FIX-1 (`claimDecimatorJackpot` freeze guard) is confirmed still present with exact code reference
 **Plans**: 3 plans
 Plans:
-- [ ] 13-01-PLAN.md -- Re-verify 8 v1.0 attack scenarios + confirm FIX-1
-- [ ] 13-02-PLAN.md -- RNG-impact assessment of every changed line in 11 contract files
-- [ ] 13-03-PLAN.md -- New attack surface analysis for lastLootboxRngWord, midDayTicketRngPending, coinflip lock changes
+- [x] 13-01-PLAN.md -- Re-verify 8 v1.0 attack scenarios + confirm FIX-1
+- [x] 13-02-PLAN.md -- RNG-impact assessment of every changed line in 11 contract files
+- [x] 13-03-PLAN.md -- New attack surface analysis for lastLootboxRngWord, midDayTicketRngPending, coinflip lock changes
 
 ### Phase 14: Manipulation Window Analysis
 **Goal**: For every point where RNG is consumed, a complete adversarial analysis of what state can change between VRF arrival and consumption, with verdicts
@@ -86,7 +86,10 @@ Plans:
   2. An adversarial timeline covers block builder + VRF front-running scenarios for both daily advanceGame and mid-day lootbox paths
   3. Inter-block manipulation windows during the 5-day jackpot draw sequence are analyzed (what can change between advanceGame calls)
   4. A verdict table rates each identified manipulation window as BLOCKED / SAFE BY DESIGN / EXPLOITABLE with supporting evidence
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 14-01-PLAN.md -- Per-consumption-point window analysis (D1-D9, L1-L8) and block builder adversarial timeline
+- [ ] 14-02-PLAN.md -- Inter-block jackpot sequence analysis and consolidated verdict table
 
 ### Phase 15: Ticket Creation & Mid-Day RNG Deep-Dive
 **Goal**: Focused end-to-end trace of ticket creation and mid-day RNG flows, verifying manipulation resistance at every step including coinflip lock timing
@@ -117,6 +120,6 @@ Plans:
 | 10. Reward Systems and Modifiers | v1.1 | 5/5 | Complete | 2026-03-12 |
 | 11. Parameter Reference | v1.1 | 1/1 | Complete | 2026-03-12 |
 | 12. RNG State & Function Inventory | v1.2 | 3/3 | Complete | 2026-03-14 |
-| 13. Delta Verification | 3/3 | Complete    | 2026-03-14 | - |
-| 14. Manipulation Window Analysis | v1.2 | 0/? | Not started | - |
+| 13. Delta Verification | v1.2 | 3/3 | Complete | 2026-03-14 |
+| 14. Manipulation Window Analysis | v1.2 | 0/2 | Not started | - |
 | 15. Ticket Creation & Mid-Day RNG | v1.2 | 0/? | Not started | - |
