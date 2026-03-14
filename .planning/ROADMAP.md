@@ -39,7 +39,7 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 
 **Milestone Goal:** Exhaustive audit of every variable and function touching RNG -- confirm no manipulation window exists between RNG arrival and consumption, with delta focus on changes since v1.0 audit.
 
-- [ ] **Phase 12: RNG State & Function Inventory** - Catalogue every variable, function, and data flow that touches VRF entropy
+- [x] **Phase 12: RNG State & Function Inventory** - Catalogue every variable, function, and data flow that touches VRF entropy (completed 2026-03-14)
 - [ ] **Phase 13: Delta Verification** - Verify v1.0 audit findings still hold against 8 changed contract files and new state variables
 - [ ] **Phase 14: Manipulation Window Analysis** - Adversarial analysis of every window between RNG arrival and consumption
 - [ ] **Phase 15: Ticket Creation & Mid-Day RNG Deep-Dive** - Focused trace of ticket/lootbox/coinflip flows for manipulation resistance
@@ -112,7 +112,7 @@ Plans:
 | 9. Level Progression and Endgame | v1.1 | 2/2 | Complete | 2026-03-12 |
 | 10. Reward Systems and Modifiers | v1.1 | 5/5 | Complete | 2026-03-12 |
 | 11. Parameter Reference | v1.1 | 1/1 | Complete | 2026-03-12 |
-| 12. RNG State & Function Inventory | 2/3 | In Progress|  | - |
+| 12. RNG State & Function Inventory | 3/3 | Complete   | 2026-03-14 | - |
 | 13. Delta Verification | v1.2 | 0/? | Not started | - |
 | 14. Manipulation Window Analysis | v1.2 | 0/? | Not started | - |
 | 15. Ticket Creation & Mid-Day RNG | v1.2 | 0/? | Not started | - |
