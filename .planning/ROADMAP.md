@@ -88,7 +88,7 @@ Plans:
   4. A verdict table rates each identified manipulation window as BLOCKED / SAFE BY DESIGN / EXPLOITABLE with supporting evidence
 **Plans**: 2 plans
 Plans:
-- [ ] 14-01-PLAN.md -- Per-consumption-point window analysis (D1-D9, L1-L8) and block builder adversarial timeline
+- [x] 14-01-PLAN.md -- Per-consumption-point window analysis (D1-D9, L1-L8) and block builder adversarial timeline
 - [ ] 14-02-PLAN.md -- Inter-block jackpot sequence analysis and consolidated verdict table
 
 ### Phase 15: Ticket Creation & Mid-Day RNG Deep-Dive
@@ -121,5 +121,5 @@ Plans:
 | 11. Parameter Reference | v1.1 | 1/1 | Complete | 2026-03-12 |
 | 12. RNG State & Function Inventory | v1.2 | 3/3 | Complete | 2026-03-14 |
 | 13. Delta Verification | v1.2 | 3/3 | Complete | 2026-03-14 |
-| 14. Manipulation Window Analysis | v1.2 | 0/2 | Not started | - |
+| 14. Manipulation Window Analysis | v1.2 | 1/2 | In progress | - |
 | 15. Ticket Creation & Mid-Day RNG | v1.2 | 0/? | Not started | - |
