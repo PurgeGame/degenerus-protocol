@@ -110,17 +110,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH, unscaled).
     uint256 private constant LOOTBOX_PRESALE_ETH_CAP = 200 ether;
 
-    /// @dev BURNIE bounty for eligible advanceGame calls (500 BURNIE flip credit).
-    uint256 private constant ADVANCE_BOUNTY = PRICE_COIN_UNIT >> 1;
+    /// @dev ETH-equivalent target for advanceGame bounty (~0.01 ETH worth of BURNIE).
+    uint256 private constant ADVANCE_BOUNTY_ETH = 0.01 ether;
 
     /// @dev Vault contract for DGVE ownership check (advanceGame mint-gate bypass).
     IDegenerusVaultOwner private constant vault =
         IDegenerusVaultOwner(ContractAddresses.VAULT);
 
     /// @notice Advance game state. Called daily to process jackpots, mints, and phase transitions.
-    ///         Caller receives ADVANCE_BOUNTY (500 BURNIE) as flip credit.
+    ///         Caller receives ~0.01 ETH worth of BURNIE as flip credit.
     function advanceGame() external {
         address caller = msg.sender;
+        uint256 advanceBounty = (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price;
         uint48 ts = uint48(block.timestamp);
         uint48 day = _simulatedDayIndexAt(ts);
         bool inJackpot = jackpotPhaseFlag;
@@ -157,27 +158,55 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (day == dailyIdx) {
             // Step 1: Finish draining the read slot if not yet fully processed
             if (!ticketsFullyProcessed) {
+                // If mid-day ticket swap is pending, wait for VRF word before processing
+                if (midDayTicketRngPending) {
+                    uint256 word = lootboxRngWordByIndex[lootboxRngIndex - 1];
+                    if (word == 0) revert NotTimeYet();
+                    // VRF word arrived — update entropy source before processing tickets
+                    lastLootboxRngWord = word;
+                }
+
                 uint24 rk = _tqReadKey(purchaseLevel);
                 if (ticketQueue[rk].length > 0) {
                     (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(purchaseLevel);
                     if (ticketWorked || !ticketsFinished) {
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
-                        coin.creditFlip(caller, ADVANCE_BOUNTY);
+                        coin.creditFlip(caller, advanceBounty);
                         return;
                     }
                 }
                 ticketsFullyProcessed = true;
             }
 
-            // Step 2: Swap write buffer to read when threshold met or jackpot active
-            uint24 wk = _tqWriteKey(purchaseLevel);
-            if (ticketQueue[wk].length >= MID_DAY_SWAP_THRESHOLD || (inJackpot && ticketQueue[wk].length > 0)) {
-                _swapTicketSlot(purchaseLevel);
-                emit Advance(STAGE_TICKETS_WORKING, lvl);
-                coin.creditFlip(caller, ADVANCE_BOUNTY);
-                return;
+            // Clear mid-day ticket flag after drain completes
+            if (midDayTicketRngPending) {
+                midDayTicketRngPending = false;
+            }
+
+            // Swap write buffer during jackpot phase only (daily VRF word is active)
+            if (inJackpot) {
+                uint24 wk = _tqWriteKey(purchaseLevel);
+                if (ticketQueue[wk].length > 0) {
+                    _swapTicketSlot(purchaseLevel);
+                    emit Advance(STAGE_TICKETS_WORKING, lvl);
+                    coin.creditFlip(caller, advanceBounty);
+                    return;
+                }
             }
             revert NotTimeYet();
+        }
+
+        // Escalate bounty if daily processing is stalled (new-day path only).
+        // 2x after 1 hour past jackpot reset, 3x after 2 hours, capped at 3x.
+        {
+            uint256 dayStart = (uint256(day - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY)
+                * 1 days + 82_620;
+            uint256 elapsed = ts - dayStart;
+            if (elapsed >= 2 hours) {
+                advanceBounty *= 3;
+            } else if (elapsed >= 1 hours) {
+                advanceBounty *= 2;
+            }
         }
 
         // --- Daily drain gate: ensure read slot is fully processed before RNG ---
@@ -187,7 +216,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(purchaseLevel);
                 if (ticketWorked || !ticketsFinished) {
                     emit Advance(STAGE_TICKETS_WORKING, lvl);
-                    coin.creditFlip(caller, ADVANCE_BOUNTY);
+                    coin.creditFlip(caller, advanceBounty);
                     return;
                 }
             }
@@ -345,7 +374,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         } while (false);
 
         emit Advance(stage, lvl);
-        coin.creditFlip(caller, ADVANCE_BOUNTY);
+        coin.creditFlip(caller, advanceBounty);
     }
 
     /*+========================================================================================+
@@ -676,6 +705,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (threshold != 0 && totalEthEquivalent < threshold) revert E();
         }
 
+        // Freeze ticket buffer: swap write→read so tickets purchased after
+        // VRF delivery can't be resolved by this word.
+        {
+            uint24 purchaseLevel_ = level + 1;
+            uint24 wk = _tqWriteKey(purchaseLevel_);
+            if (ticketQueue[wk].length > 0 && ticketsFullyProcessed) {
+                _swapTicketSlot(purchaseLevel_);
+                midDayTicketRngPending = true;
+            }
+        }
+
         // VRF request (reverts on failure)
         uint256 id = vrfCoordinator.requestRandomWords(
             VRFRandomWordsRequest({
@@ -746,6 +786,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 index = lootboxRngRequestIndexById[vrfRequestId];
         if (index == 0) return;
         lootboxRngWordByIndex[index] = rngWord;
+        lastLootboxRngWord = rngWord;
         emit LootboxRngApplied(index, rngWord, vrfRequestId);
     }
 

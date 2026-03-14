@@ -253,7 +253,8 @@ contract BurnieCoinflip {
         PlayerCoinflipState storage state = playerState[caller];
         if (amount != 0) {
             if (amount < MIN) revert AmountLTMin();
-            // Prevent deposits during critical RNG resolution phase
+            // Block deposits during BAF jackpot resolution to prevent
+            // auto-claim from updating the BAF leaderboard mid-resolution.
             if (_coinflipLockedDuringTransition()) revert CoinflipLocked();
         }
 
@@ -326,7 +327,8 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     /// @notice Claim coinflip winnings (exact amount).
-    /// @dev Blocked during RNG lock to prevent BAF credit manipulation during jackpots.
+    /// @dev Blocked during RNG lock to prevent auto-rebuy carry extraction
+    ///      when the VRF word (and thus win/loss outcome) is already known.
     function claimCoinflips(
         address player,
         uint256 amount
@@ -336,7 +338,8 @@ contract BurnieCoinflip {
     }
 
     /// @notice Claim coinflip winnings (take profit multiples).
-    /// @dev Blocked during RNG lock to prevent BAF credit manipulation during jackpots.
+    /// @dev Blocked during RNG lock to prevent auto-rebuy carry extraction
+    ///      when the VRF word (and thus win/loss outcome) is already known.
     function claimCoinflipsTakeProfit(
         address player,
         uint256 multiples
@@ -346,7 +349,7 @@ contract BurnieCoinflip {
     }
 
     /// @notice Claim coinflip winnings via BurnieCoin to cover token transfers/burns.
-    /// @dev Access: BurnieCoin only. Blocked during RNG lock.
+    /// @dev Access: BurnieCoin only. Blocked during RNG lock to prevent carry extraction.
     function claimCoinflipsFromBurnie(
         address player,
         uint256 amount
@@ -356,7 +359,7 @@ contract BurnieCoinflip {
     }
 
     /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
-    /// @dev Access: BurnieCoin only. Blocked during RNG lock.
+    /// @dev Access: BurnieCoin only. Blocked during RNG lock to prevent carry extraction.
     function consumeCoinflipsForBurn(
         address player,
         uint256 amount
@@ -720,6 +723,7 @@ contract BurnieCoinflip {
     }
 
     /// @dev Internal auto-rebuy configuration.
+    ///      Blocked during RNG lock — toggling off would extract carry before a known loss.
     function _setCoinflipAutoRebuy(
         address player,
         bool enabled,
@@ -773,6 +777,7 @@ contract BurnieCoinflip {
     }
 
     /// @dev Internal auto-rebuy take profit configuration.
+    ///      Blocked during RNG lock — changing take-profit could extract carry before a known loss.
     function _setCoinflipAutoRebuyTakeProfit(
         address player,
         uint256 takeProfit
@@ -1021,8 +1026,9 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     /// @dev Check if coinflip deposits are locked during BAF resolution levels.
-    ///      Only blocks at levels where BAF jackpot fires (every 10th) to prevent
-    ///      front-running the BAF leaderboard between VRF request and fulfillment.
+    ///      Only blocks at levels where BAF jackpot fires (every 10th). Deposits
+    ///      trigger auto-claim which records BAF leaderboard credit — must block
+    ///      to prevent front-running the leaderboard between VRF request and fulfillment.
     function _coinflipLockedDuringTransition()
         private
         view
