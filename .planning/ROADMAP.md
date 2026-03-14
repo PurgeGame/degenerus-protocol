@@ -117,6 +117,6 @@ Plans:
 | 10. Reward Systems and Modifiers | v1.1 | 5/5 | Complete | 2026-03-12 |
 | 11. Parameter Reference | v1.1 | 1/1 | Complete | 2026-03-12 |
 | 12. RNG State & Function Inventory | v1.2 | 3/3 | Complete | 2026-03-14 |
-| 13. Delta Verification | 3/3 | Complete   | 2026-03-14 | - |
+| 13. Delta Verification | 3/3 | Complete    | 2026-03-14 | - |
 | 14. Manipulation Window Analysis | v1.2 | 0/? | Not started | - |
 | 15. Ticket Creation & Mid-Day RNG | v1.2 | 0/? | Not started | - |
