@@ -209,8 +209,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint24 frozenUntilLevel = uint24((prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24);
         uint24 levelCount = uint24((prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24);
 
-        // Bundle covers 100 levels starting from current level (levels 0-3 start at 1)
-        uint24 ticketStartLevel = passLevel <= 4 ? 1 : passLevel;
+        // Bundle covers 100 levels starting from current level
+        uint24 ticketStartLevel = passLevel;
 
         // Calculate freeze extension and stat boost (delta-based, no double dipping)
         uint24 targetFrozenLevel = ticketStartLevel + 99;

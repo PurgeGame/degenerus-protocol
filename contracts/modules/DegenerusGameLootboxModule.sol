@@ -305,10 +305,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_PRESALE_BURNIE_BONUS_BPS = 6_200;
     /// @dev Whale pass price (200 tickets over levels 10-109)
     uint256 private constant LOOTBOX_WHALE_PASS_PRICE =
-        4.35 ether;
+        4.50 ether;
     /// @dev Half whale pass price (100 tickets over levels 10-109)
     uint256 private constant HALF_WHALE_PASS_PRICE =
-        2.175 ether;
+        2.25 ether;
     /// @dev Threshold above which lootbox is split into two rolls (0.5 ETH scaled)
     uint256 private constant LOOTBOX_SPLIT_THRESHOLD =
         0.5 ether;
@@ -351,113 +351,113 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint8 private constant DEITY_DAILY_BOON_COUNT = 3;
 
     /// @dev Boon type: 5% coinflip bonus
-    uint8 private constant DEITY_BOON_COINFLIP_5 = 1;
+    uint8 private constant BOON_COINFLIP_5 = 1;
     /// @dev Boon type: 10% coinflip bonus
-    uint8 private constant DEITY_BOON_COINFLIP_10 = 2;
+    uint8 private constant BOON_COINFLIP_10 = 2;
     /// @dev Boon type: 25% coinflip bonus
-    uint8 private constant DEITY_BOON_COINFLIP_25 = 3;
+    uint8 private constant BOON_COINFLIP_25 = 3;
     /// @dev Boon type: 5% lootbox boost
-    uint8 private constant DEITY_BOON_LOOTBOX_5 = 5;
+    uint8 private constant BOON_LOOTBOX_5 = 5;
     /// @dev Boon type: 15% lootbox boost
-    uint8 private constant DEITY_BOON_LOOTBOX_15 = 6;
+    uint8 private constant BOON_LOOTBOX_15 = 6;
     /// @dev Boon type: 5% purchase boost
-    uint8 private constant DEITY_BOON_PURCHASE_5 = 7;
+    uint8 private constant BOON_PURCHASE_5 = 7;
     /// @dev Boon type: 15% purchase boost
-    uint8 private constant DEITY_BOON_PURCHASE_15 = 8;
+    uint8 private constant BOON_PURCHASE_15 = 8;
     /// @dev Boon type: 25% purchase boost
-    uint8 private constant DEITY_BOON_PURCHASE_25 = 9;
+    uint8 private constant BOON_PURCHASE_25 = 9;
     /// @dev Boon type: 10% decimator boost
-    uint8 private constant DEITY_BOON_DECIMATOR_10 = 13;
+    uint8 private constant BOON_DECIMATOR_10 = 13;
     /// @dev Boon type: 25% decimator boost
-    uint8 private constant DEITY_BOON_DECIMATOR_25 = 14;
+    uint8 private constant BOON_DECIMATOR_25 = 14;
     /// @dev Boon type: 50% decimator boost
-    uint8 private constant DEITY_BOON_DECIMATOR_50 = 15;
+    uint8 private constant BOON_DECIMATOR_50 = 15;
     /// @dev Boon type: 10% whale discount
-    uint8 private constant DEITY_BOON_WHALE_10 = 16;
+    uint8 private constant BOON_WHALE_10 = 16;
     /// @dev Boon type: 10 point activity bonus
-    uint8 private constant DEITY_BOON_ACTIVITY_10 = 17;
+    uint8 private constant BOON_ACTIVITY_10 = 17;
     /// @dev Boon type: 25 point activity bonus
-    uint8 private constant DEITY_BOON_ACTIVITY_25 = 18;
+    uint8 private constant BOON_ACTIVITY_25 = 18;
     /// @dev Boon type: 50 point activity bonus
-    uint8 private constant DEITY_BOON_ACTIVITY_50 = 19;
+    uint8 private constant BOON_ACTIVITY_50 = 19;
     /// @dev Boon type: 25% lootbox boost
-    uint8 private constant DEITY_BOON_LOOTBOX_25 = 22;
+    uint8 private constant BOON_LOOTBOX_25 = 22;
     /// @dev Boon type: 25% whale discount
-    uint8 private constant DEITY_BOON_WHALE_25 = 23;
+    uint8 private constant BOON_WHALE_25 = 23;
     /// @dev Boon type: 50% whale discount
-    uint8 private constant DEITY_BOON_WHALE_50 = 24;
+    uint8 private constant BOON_WHALE_50 = 24;
     /// @dev Boon type: 10% deity pass discount
-    uint8 private constant DEITY_BOON_DEITY_PASS_10 = 25;
+    uint8 private constant BOON_DEITY_PASS_10 = 25;
     /// @dev Boon type: 25% deity pass discount
-    uint8 private constant DEITY_BOON_DEITY_PASS_25 = 26;
+    uint8 private constant BOON_DEITY_PASS_25 = 26;
     /// @dev Boon type: 50% deity pass discount
-    uint8 private constant DEITY_BOON_DEITY_PASS_50 = 27;
+    uint8 private constant BOON_DEITY_PASS_50 = 27;
     /// @dev Boon type: whale pass award
-    uint8 private constant DEITY_BOON_WHALE_PASS = 28;
+    uint8 private constant BOON_WHALE_PASS = 28;
     /// @dev Boon type: 10% lazy pass discount
-    uint8 private constant DEITY_BOON_LAZY_PASS_10 = 29;
+    uint8 private constant BOON_LAZY_PASS_10 = 29;
     /// @dev Boon type: 25% lazy pass discount
-    uint8 private constant DEITY_BOON_LAZY_PASS_25 = 30;
+    uint8 private constant BOON_LAZY_PASS_25 = 30;
     /// @dev Boon type: 50% lazy pass discount
-    uint8 private constant DEITY_BOON_LAZY_PASS_50 = 31;
+    uint8 private constant BOON_LAZY_PASS_50 = 31;
 
     // Deity boon weights (used for weighted random selection)
     /// @dev Weight for 5% coinflip boon
-    uint16 private constant DEITY_BOON_WEIGHT_COINFLIP_5 = 200;
+    uint16 private constant BOON_WEIGHT_COINFLIP_5 = 200;
     /// @dev Weight for 10% coinflip boon
-    uint16 private constant DEITY_BOON_WEIGHT_COINFLIP_10 = 40;
+    uint16 private constant BOON_WEIGHT_COINFLIP_10 = 40;
     /// @dev Weight for 25% coinflip boon
-    uint16 private constant DEITY_BOON_WEIGHT_COINFLIP_25 = 8;
+    uint16 private constant BOON_WEIGHT_COINFLIP_25 = 8;
     /// @dev Weight for 5% lootbox boost boon
-    uint16 private constant DEITY_BOON_WEIGHT_LOOTBOX_5 = 200;
+    uint16 private constant BOON_WEIGHT_LOOTBOX_5 = 200;
     /// @dev Weight for 15% lootbox boost boon
-    uint16 private constant DEITY_BOON_WEIGHT_LOOTBOX_15 = 30;
+    uint16 private constant BOON_WEIGHT_LOOTBOX_15 = 30;
     /// @dev Weight for 25% lootbox boost boon
-    uint16 private constant DEITY_BOON_WEIGHT_LOOTBOX_25 = 8;
+    uint16 private constant BOON_WEIGHT_LOOTBOX_25 = 8;
     /// @dev Weight for 5% purchase boost boon
-    uint16 private constant DEITY_BOON_WEIGHT_PURCHASE_5 = 400;
+    uint16 private constant BOON_WEIGHT_PURCHASE_5 = 400;
     /// @dev Weight for 15% purchase boost boon
-    uint16 private constant DEITY_BOON_WEIGHT_PURCHASE_15 = 80;
+    uint16 private constant BOON_WEIGHT_PURCHASE_15 = 80;
     /// @dev Weight for 25% purchase boost boon
-    uint16 private constant DEITY_BOON_WEIGHT_PURCHASE_25 = 16;
+    uint16 private constant BOON_WEIGHT_PURCHASE_25 = 16;
     /// @dev Weight for 10% decimator boost boon
-    uint16 private constant DEITY_BOON_WEIGHT_DECIMATOR_10 = 40;
+    uint16 private constant BOON_WEIGHT_DECIMATOR_10 = 40;
     /// @dev Weight for 25% decimator boost boon
-    uint16 private constant DEITY_BOON_WEIGHT_DECIMATOR_25 = 8;
+    uint16 private constant BOON_WEIGHT_DECIMATOR_25 = 8;
     /// @dev Weight for 50% decimator boost boon
-    uint16 private constant DEITY_BOON_WEIGHT_DECIMATOR_50 = 2;
+    uint16 private constant BOON_WEIGHT_DECIMATOR_50 = 2;
     /// @dev Weight for 10% whale boon
-    uint16 private constant DEITY_BOON_WEIGHT_WHALE_10 = 28;
+    uint16 private constant BOON_WEIGHT_WHALE_10 = 28;
     /// @dev Weight for 25% whale boon
-    uint16 private constant DEITY_BOON_WEIGHT_WHALE_25 = 10;
+    uint16 private constant BOON_WEIGHT_WHALE_25 = 10;
     /// @dev Weight for 50% whale boon
-    uint16 private constant DEITY_BOON_WEIGHT_WHALE_50 = 2;
+    uint16 private constant BOON_WEIGHT_WHALE_50 = 2;
     /// @dev Weight for 10% deity pass discount boon
-    uint16 private constant DEITY_BOON_WEIGHT_DEITY_PASS_10 = 28;
+    uint16 private constant BOON_WEIGHT_DEITY_PASS_10 = 28;
     /// @dev Weight for 25% deity pass discount boon
-    uint16 private constant DEITY_BOON_WEIGHT_DEITY_PASS_25 = 10;
+    uint16 private constant BOON_WEIGHT_DEITY_PASS_25 = 10;
     /// @dev Weight for 50% deity pass discount boon
-    uint16 private constant DEITY_BOON_WEIGHT_DEITY_PASS_50 = 2;
+    uint16 private constant BOON_WEIGHT_DEITY_PASS_50 = 2;
     /// @dev Weight for 10 point activity boon
-    uint16 private constant DEITY_BOON_WEIGHT_ACTIVITY_10 = 100;
+    uint16 private constant BOON_WEIGHT_ACTIVITY_10 = 100;
     /// @dev Weight for 25 point activity boon
-    uint16 private constant DEITY_BOON_WEIGHT_ACTIVITY_25 = 30;
+    uint16 private constant BOON_WEIGHT_ACTIVITY_25 = 30;
     /// @dev Weight for 50 point activity boon
-    uint16 private constant DEITY_BOON_WEIGHT_ACTIVITY_50 = 8;
+    uint16 private constant BOON_WEIGHT_ACTIVITY_50 = 8;
     /// @dev Weight for whale pass award
-    uint16 private constant DEITY_BOON_WEIGHT_WHALE_PASS = 8;
+    uint16 private constant BOON_WEIGHT_WHALE_PASS = 8;
     /// @dev Weight for 10% lazy pass discount boon
-    uint16 private constant DEITY_BOON_WEIGHT_LAZY_PASS_10 = 30;
+    uint16 private constant BOON_WEIGHT_LAZY_PASS_10 = 30;
     /// @dev Weight for 25% lazy pass discount boon
-    uint16 private constant DEITY_BOON_WEIGHT_LAZY_PASS_25 = 8;
+    uint16 private constant BOON_WEIGHT_LAZY_PASS_25 = 8;
     /// @dev Weight for 50% lazy pass discount boon
-    uint16 private constant DEITY_BOON_WEIGHT_LAZY_PASS_50 = 2;
+    uint16 private constant BOON_WEIGHT_LAZY_PASS_50 = 2;
     /// @dev Combined weight of deity pass discount boons (10% + 25% + 50%)
-    uint16 private constant DEITY_BOON_WEIGHT_DEITY_PASS_ALL = 40;
+    uint16 private constant BOON_WEIGHT_DEITY_PASS_ALL = 40;
     /// @dev Total weight sum when decimator boons are allowed
-    uint16 private constant DEITY_BOON_WEIGHT_TOTAL = 1298;
+    uint16 private constant BOON_WEIGHT_TOTAL = 1298;
     /// @dev Total weight sum when decimator boons are not allowed
-    uint16 private constant DEITY_BOON_WEIGHT_TOTAL_NO_DECIMATOR = 1248;
+    uint16 private constant BOON_WEIGHT_TOTAL_NO_DECIMATOR = 1248;
 
     // =========================================================================
     // Lootbox Opening Functions
@@ -1081,10 +1081,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) private returns (uint24 ticketStartLevel) {
         uint24 passLevel = level + 1;
 
-        // Tickets always start at x1 (next 50-level boundary + 1)
-        ticketStartLevel = passLevel <= 4
-            ? 1
-            : uint24(((passLevel + 1) / 50) * 50 + 1);
+        ticketStartLevel = passLevel;
 
         _applyWhalePassStats(player, ticketStartLevel);
 
@@ -1126,12 +1123,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             priceWei
         );
 
-        totalWeight += DEITY_BOON_WEIGHT_COINFLIP_5;
-        weightedMax += DEITY_BOON_WEIGHT_COINFLIP_5 * coinflipMax5;
-        totalWeight += DEITY_BOON_WEIGHT_COINFLIP_10;
-        weightedMax += DEITY_BOON_WEIGHT_COINFLIP_10 * coinflipMax10;
-        totalWeight += DEITY_BOON_WEIGHT_COINFLIP_25;
-        weightedMax += DEITY_BOON_WEIGHT_COINFLIP_25 * coinflipMax25;
+        totalWeight += BOON_WEIGHT_COINFLIP_5;
+        weightedMax += BOON_WEIGHT_COINFLIP_5 * coinflipMax5;
+        totalWeight += BOON_WEIGHT_COINFLIP_10;
+        weightedMax += BOON_WEIGHT_COINFLIP_10 * coinflipMax10;
+        totalWeight += BOON_WEIGHT_COINFLIP_25;
+        weightedMax += BOON_WEIGHT_COINFLIP_25 * coinflipMax25;
 
         // Lootbox boost boons (max 10 ETH)
         uint256 boostCap = 10 ether;
@@ -1139,24 +1136,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 lootboxMax15 = (boostCap * LOOTBOX_BOOST_15_BONUS_BPS) / 10_000;
         uint256 lootboxMax25 = (boostCap * LOOTBOX_BOOST_25_BONUS_BPS) / 10_000;
 
-        totalWeight += DEITY_BOON_WEIGHT_LOOTBOX_5;
-        weightedMax += DEITY_BOON_WEIGHT_LOOTBOX_5 * lootboxMax5;
-        totalWeight += DEITY_BOON_WEIGHT_LOOTBOX_15;
-        weightedMax += DEITY_BOON_WEIGHT_LOOTBOX_15 * lootboxMax15;
-        totalWeight += DEITY_BOON_WEIGHT_LOOTBOX_25;
-        weightedMax += DEITY_BOON_WEIGHT_LOOTBOX_25 * lootboxMax25;
+        totalWeight += BOON_WEIGHT_LOOTBOX_5;
+        weightedMax += BOON_WEIGHT_LOOTBOX_5 * lootboxMax5;
+        totalWeight += BOON_WEIGHT_LOOTBOX_15;
+        weightedMax += BOON_WEIGHT_LOOTBOX_15 * lootboxMax15;
+        totalWeight += BOON_WEIGHT_LOOTBOX_25;
+        weightedMax += BOON_WEIGHT_LOOTBOX_25 * lootboxMax25;
 
         // Purchase boost boons (max 10 ETH)
         uint256 purchaseMax5 = (boostCap * LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS) / 10_000;
         uint256 purchaseMax15 = (boostCap * LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS) / 10_000;
         uint256 purchaseMax25 = (boostCap * LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS) / 10_000;
 
-        totalWeight += DEITY_BOON_WEIGHT_PURCHASE_5;
-        weightedMax += DEITY_BOON_WEIGHT_PURCHASE_5 * purchaseMax5;
-        totalWeight += DEITY_BOON_WEIGHT_PURCHASE_15;
-        weightedMax += DEITY_BOON_WEIGHT_PURCHASE_15 * purchaseMax15;
-        totalWeight += DEITY_BOON_WEIGHT_PURCHASE_25;
-        weightedMax += DEITY_BOON_WEIGHT_PURCHASE_25 * purchaseMax25;
+        totalWeight += BOON_WEIGHT_PURCHASE_5;
+        weightedMax += BOON_WEIGHT_PURCHASE_5 * purchaseMax5;
+        totalWeight += BOON_WEIGHT_PURCHASE_15;
+        weightedMax += BOON_WEIGHT_PURCHASE_15 * purchaseMax15;
+        totalWeight += BOON_WEIGHT_PURCHASE_25;
+        weightedMax += BOON_WEIGHT_PURCHASE_25 * purchaseMax25;
 
         if (decimatorAllowed) {
             uint256 decMax10 = _burnieToEthValue(
@@ -1171,24 +1168,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 (DECIMATOR_BOON_CAP * LOOTBOX_DECIMATOR_50_BONUS_BPS) / 10_000,
                 priceWei
             );
-            totalWeight += DEITY_BOON_WEIGHT_DECIMATOR_10;
-            weightedMax += DEITY_BOON_WEIGHT_DECIMATOR_10 * decMax10;
-            totalWeight += DEITY_BOON_WEIGHT_DECIMATOR_25;
-            weightedMax += DEITY_BOON_WEIGHT_DECIMATOR_25 * decMax25;
-            totalWeight += DEITY_BOON_WEIGHT_DECIMATOR_50;
-            weightedMax += DEITY_BOON_WEIGHT_DECIMATOR_50 * decMax50;
+            totalWeight += BOON_WEIGHT_DECIMATOR_10;
+            weightedMax += BOON_WEIGHT_DECIMATOR_10 * decMax10;
+            totalWeight += BOON_WEIGHT_DECIMATOR_25;
+            weightedMax += BOON_WEIGHT_DECIMATOR_25 * decMax25;
+            totalWeight += BOON_WEIGHT_DECIMATOR_50;
+            weightedMax += BOON_WEIGHT_DECIMATOR_50 * decMax50;
         }
 
         // Whale discount boons (10/25/50% off standard price)
         uint256 whaleMax10 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS) / 10_000;
         uint256 whaleMax25 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS) / 10_000;
         uint256 whaleMax50 = (WHALE_BUNDLE_STANDARD_PRICE * LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS) / 10_000;
-        totalWeight += DEITY_BOON_WEIGHT_WHALE_10;
-        weightedMax += DEITY_BOON_WEIGHT_WHALE_10 * whaleMax10;
-        totalWeight += DEITY_BOON_WEIGHT_WHALE_25;
-        weightedMax += DEITY_BOON_WEIGHT_WHALE_25 * whaleMax25;
-        totalWeight += DEITY_BOON_WEIGHT_WHALE_50;
-        weightedMax += DEITY_BOON_WEIGHT_WHALE_50 * whaleMax50;
+        totalWeight += BOON_WEIGHT_WHALE_10;
+        weightedMax += BOON_WEIGHT_WHALE_10 * whaleMax10;
+        totalWeight += BOON_WEIGHT_WHALE_25;
+        weightedMax += BOON_WEIGHT_WHALE_25 * whaleMax25;
+        totalWeight += BOON_WEIGHT_WHALE_50;
+        weightedMax += BOON_WEIGHT_WHALE_50 * whaleMax50;
 
         // Deity pass discount boons (if eligible)
         if (deityEligible) {
@@ -1197,34 +1194,34 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 deityMax10 = (deityPrice * 1000) / 10_000;
             uint256 deityMax25 = (deityPrice * 2500) / 10_000;
             uint256 deityMax50 = (deityPrice * 5000) / 10_000;
-            totalWeight += DEITY_BOON_WEIGHT_DEITY_PASS_10;
-            weightedMax += DEITY_BOON_WEIGHT_DEITY_PASS_10 * deityMax10;
-            totalWeight += DEITY_BOON_WEIGHT_DEITY_PASS_25;
-            weightedMax += DEITY_BOON_WEIGHT_DEITY_PASS_25 * deityMax25;
-            totalWeight += DEITY_BOON_WEIGHT_DEITY_PASS_50;
-            weightedMax += DEITY_BOON_WEIGHT_DEITY_PASS_50 * deityMax50;
+            totalWeight += BOON_WEIGHT_DEITY_PASS_10;
+            weightedMax += BOON_WEIGHT_DEITY_PASS_10 * deityMax10;
+            totalWeight += BOON_WEIGHT_DEITY_PASS_25;
+            weightedMax += BOON_WEIGHT_DEITY_PASS_25 * deityMax25;
+            totalWeight += BOON_WEIGHT_DEITY_PASS_50;
+            weightedMax += BOON_WEIGHT_DEITY_PASS_50 * deityMax50;
         }
 
         // Activity boons (value assumed 0 for EV budgeting)
-        totalWeight += DEITY_BOON_WEIGHT_ACTIVITY_10;
-        totalWeight += DEITY_BOON_WEIGHT_ACTIVITY_25;
-        totalWeight += DEITY_BOON_WEIGHT_ACTIVITY_50;
+        totalWeight += BOON_WEIGHT_ACTIVITY_10;
+        totalWeight += BOON_WEIGHT_ACTIVITY_25;
+        totalWeight += BOON_WEIGHT_ACTIVITY_50;
 
         // Pass awards (lootbox-only unless enabled)
         if (allowWhalePass) {
-            totalWeight += DEITY_BOON_WEIGHT_WHALE_PASS;
-            weightedMax += DEITY_BOON_WEIGHT_WHALE_PASS * LOOTBOX_WHALE_PASS_PRICE;
+            totalWeight += BOON_WEIGHT_WHALE_PASS;
+            weightedMax += BOON_WEIGHT_WHALE_PASS * LOOTBOX_WHALE_PASS_PRICE;
         }
         if (allowLazyPass && lazyPassValue != 0) {
             uint256 lpMax10 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS) / 10_000;
             uint256 lpMax25 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS) / 10_000;
             uint256 lpMax50 = (lazyPassValue * LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS) / 10_000;
-            totalWeight += DEITY_BOON_WEIGHT_LAZY_PASS_10;
-            weightedMax += DEITY_BOON_WEIGHT_LAZY_PASS_10 * lpMax10;
-            totalWeight += DEITY_BOON_WEIGHT_LAZY_PASS_25;
-            weightedMax += DEITY_BOON_WEIGHT_LAZY_PASS_25 * lpMax25;
-            totalWeight += DEITY_BOON_WEIGHT_LAZY_PASS_50;
-            weightedMax += DEITY_BOON_WEIGHT_LAZY_PASS_50 * lpMax50;
+            totalWeight += BOON_WEIGHT_LAZY_PASS_10;
+            weightedMax += BOON_WEIGHT_LAZY_PASS_10 * lpMax10;
+            totalWeight += BOON_WEIGHT_LAZY_PASS_25;
+            weightedMax += BOON_WEIGHT_LAZY_PASS_25 * lpMax25;
+            totalWeight += BOON_WEIGHT_LAZY_PASS_50;
+            weightedMax += BOON_WEIGHT_LAZY_PASS_50 * lpMax50;
         }
 
         if (totalWeight == 0) return (0, 0);
@@ -1240,63 +1237,63 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool allowLazyPass
     ) private pure returns (uint8 boonType) {
         uint256 cursor = 0;
-        cursor += DEITY_BOON_WEIGHT_COINFLIP_5;
-        if (roll < cursor) return DEITY_BOON_COINFLIP_5;
-        cursor += DEITY_BOON_WEIGHT_COINFLIP_10;
-        if (roll < cursor) return DEITY_BOON_COINFLIP_10;
-        cursor += DEITY_BOON_WEIGHT_COINFLIP_25;
-        if (roll < cursor) return DEITY_BOON_COINFLIP_25;
-        cursor += DEITY_BOON_WEIGHT_LOOTBOX_5;
-        if (roll < cursor) return DEITY_BOON_LOOTBOX_5;
-        cursor += DEITY_BOON_WEIGHT_LOOTBOX_15;
-        if (roll < cursor) return DEITY_BOON_LOOTBOX_15;
-        cursor += DEITY_BOON_WEIGHT_LOOTBOX_25;
-        if (roll < cursor) return DEITY_BOON_LOOTBOX_25;
-        cursor += DEITY_BOON_WEIGHT_PURCHASE_5;
-        if (roll < cursor) return DEITY_BOON_PURCHASE_5;
-        cursor += DEITY_BOON_WEIGHT_PURCHASE_15;
-        if (roll < cursor) return DEITY_BOON_PURCHASE_15;
-        cursor += DEITY_BOON_WEIGHT_PURCHASE_25;
-        if (roll < cursor) return DEITY_BOON_PURCHASE_25;
+        cursor += BOON_WEIGHT_COINFLIP_5;
+        if (roll < cursor) return BOON_COINFLIP_5;
+        cursor += BOON_WEIGHT_COINFLIP_10;
+        if (roll < cursor) return BOON_COINFLIP_10;
+        cursor += BOON_WEIGHT_COINFLIP_25;
+        if (roll < cursor) return BOON_COINFLIP_25;
+        cursor += BOON_WEIGHT_LOOTBOX_5;
+        if (roll < cursor) return BOON_LOOTBOX_5;
+        cursor += BOON_WEIGHT_LOOTBOX_15;
+        if (roll < cursor) return BOON_LOOTBOX_15;
+        cursor += BOON_WEIGHT_LOOTBOX_25;
+        if (roll < cursor) return BOON_LOOTBOX_25;
+        cursor += BOON_WEIGHT_PURCHASE_5;
+        if (roll < cursor) return BOON_PURCHASE_5;
+        cursor += BOON_WEIGHT_PURCHASE_15;
+        if (roll < cursor) return BOON_PURCHASE_15;
+        cursor += BOON_WEIGHT_PURCHASE_25;
+        if (roll < cursor) return BOON_PURCHASE_25;
         if (decimatorAllowed) {
-            cursor += DEITY_BOON_WEIGHT_DECIMATOR_10;
-            if (roll < cursor) return DEITY_BOON_DECIMATOR_10;
-            cursor += DEITY_BOON_WEIGHT_DECIMATOR_25;
-            if (roll < cursor) return DEITY_BOON_DECIMATOR_25;
-            cursor += DEITY_BOON_WEIGHT_DECIMATOR_50;
-            if (roll < cursor) return DEITY_BOON_DECIMATOR_50;
+            cursor += BOON_WEIGHT_DECIMATOR_10;
+            if (roll < cursor) return BOON_DECIMATOR_10;
+            cursor += BOON_WEIGHT_DECIMATOR_25;
+            if (roll < cursor) return BOON_DECIMATOR_25;
+            cursor += BOON_WEIGHT_DECIMATOR_50;
+            if (roll < cursor) return BOON_DECIMATOR_50;
         }
-        cursor += DEITY_BOON_WEIGHT_WHALE_10;
-        if (roll < cursor) return DEITY_BOON_WHALE_10;
-        cursor += DEITY_BOON_WEIGHT_WHALE_25;
-        if (roll < cursor) return DEITY_BOON_WHALE_25;
-        cursor += DEITY_BOON_WEIGHT_WHALE_50;
-        if (roll < cursor) return DEITY_BOON_WHALE_50;
+        cursor += BOON_WEIGHT_WHALE_10;
+        if (roll < cursor) return BOON_WHALE_10;
+        cursor += BOON_WEIGHT_WHALE_25;
+        if (roll < cursor) return BOON_WHALE_25;
+        cursor += BOON_WEIGHT_WHALE_50;
+        if (roll < cursor) return BOON_WHALE_50;
         if (deityEligible) {
-            cursor += DEITY_BOON_WEIGHT_DEITY_PASS_10;
-            if (roll < cursor) return DEITY_BOON_DEITY_PASS_10;
-            cursor += DEITY_BOON_WEIGHT_DEITY_PASS_25;
-            if (roll < cursor) return DEITY_BOON_DEITY_PASS_25;
-            cursor += DEITY_BOON_WEIGHT_DEITY_PASS_50;
-            if (roll < cursor) return DEITY_BOON_DEITY_PASS_50;
+            cursor += BOON_WEIGHT_DEITY_PASS_10;
+            if (roll < cursor) return BOON_DEITY_PASS_10;
+            cursor += BOON_WEIGHT_DEITY_PASS_25;
+            if (roll < cursor) return BOON_DEITY_PASS_25;
+            cursor += BOON_WEIGHT_DEITY_PASS_50;
+            if (roll < cursor) return BOON_DEITY_PASS_50;
         }
-        cursor += DEITY_BOON_WEIGHT_ACTIVITY_10;
-        if (roll < cursor) return DEITY_BOON_ACTIVITY_10;
-        cursor += DEITY_BOON_WEIGHT_ACTIVITY_25;
-        if (roll < cursor) return DEITY_BOON_ACTIVITY_25;
-        cursor += DEITY_BOON_WEIGHT_ACTIVITY_50;
-        if (roll < cursor) return DEITY_BOON_ACTIVITY_50;
+        cursor += BOON_WEIGHT_ACTIVITY_10;
+        if (roll < cursor) return BOON_ACTIVITY_10;
+        cursor += BOON_WEIGHT_ACTIVITY_25;
+        if (roll < cursor) return BOON_ACTIVITY_25;
+        cursor += BOON_WEIGHT_ACTIVITY_50;
+        if (roll < cursor) return BOON_ACTIVITY_50;
         if (allowWhalePass) {
-            cursor += DEITY_BOON_WEIGHT_WHALE_PASS;
-            if (roll < cursor) return DEITY_BOON_WHALE_PASS;
+            cursor += BOON_WEIGHT_WHALE_PASS;
+            if (roll < cursor) return BOON_WHALE_PASS;
         }
         if (allowLazyPass) {
-            cursor += DEITY_BOON_WEIGHT_LAZY_PASS_10;
-            if (roll < cursor) return DEITY_BOON_LAZY_PASS_10;
-            cursor += DEITY_BOON_WEIGHT_LAZY_PASS_25;
-            if (roll < cursor) return DEITY_BOON_LAZY_PASS_25;
-            cursor += DEITY_BOON_WEIGHT_LAZY_PASS_50;
-            if (roll < cursor) return DEITY_BOON_LAZY_PASS_50;
+            cursor += BOON_WEIGHT_LAZY_PASS_10;
+            if (roll < cursor) return BOON_LAZY_PASS_10;
+            cursor += BOON_WEIGHT_LAZY_PASS_25;
+            if (roll < cursor) return BOON_LAZY_PASS_25;
+            cursor += BOON_WEIGHT_LAZY_PASS_50;
+            if (roll < cursor) return BOON_LAZY_PASS_50;
         }
     }
 
@@ -1321,26 +1318,26 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev Map a boon type to its category.
     function _boonCategory(uint8 boonType) private pure returns (uint8 category) {
-        if (boonType <= DEITY_BOON_COINFLIP_25) return BOON_CAT_COINFLIP;
-        if (boonType == DEITY_BOON_LOOTBOX_5 || boonType == DEITY_BOON_LOOTBOX_15 || boonType == DEITY_BOON_LOOTBOX_25) {
+        if (boonType <= BOON_COINFLIP_25) return BOON_CAT_COINFLIP;
+        if (boonType == BOON_LOOTBOX_5 || boonType == BOON_LOOTBOX_15 || boonType == BOON_LOOTBOX_25) {
             return BOON_CAT_LOOTBOX;
         }
-        if (boonType == DEITY_BOON_PURCHASE_5 || boonType == DEITY_BOON_PURCHASE_15 || boonType == DEITY_BOON_PURCHASE_25) {
+        if (boonType == BOON_PURCHASE_5 || boonType == BOON_PURCHASE_15 || boonType == BOON_PURCHASE_25) {
             return BOON_CAT_PURCHASE;
         }
-        if (boonType == DEITY_BOON_DECIMATOR_10 || boonType == DEITY_BOON_DECIMATOR_25 || boonType == DEITY_BOON_DECIMATOR_50) {
+        if (boonType == BOON_DECIMATOR_10 || boonType == BOON_DECIMATOR_25 || boonType == BOON_DECIMATOR_50) {
             return BOON_CAT_DECIMATOR;
         }
-        if (boonType == DEITY_BOON_WHALE_10 || boonType == DEITY_BOON_WHALE_25 || boonType == DEITY_BOON_WHALE_50) {
+        if (boonType == BOON_WHALE_10 || boonType == BOON_WHALE_25 || boonType == BOON_WHALE_50) {
             return BOON_CAT_WHALE;
         }
-        if (boonType == DEITY_BOON_ACTIVITY_10 || boonType == DEITY_BOON_ACTIVITY_25 || boonType == DEITY_BOON_ACTIVITY_50) {
+        if (boonType == BOON_ACTIVITY_10 || boonType == BOON_ACTIVITY_25 || boonType == BOON_ACTIVITY_50) {
             return BOON_CAT_ACTIVITY;
         }
-        if (boonType == DEITY_BOON_WHALE_PASS) {
+        if (boonType == BOON_WHALE_PASS) {
             return BOON_CAT_WHALE_PASS;
         }
-        if (boonType == DEITY_BOON_LAZY_PASS_10 || boonType == DEITY_BOON_LAZY_PASS_25 || boonType == DEITY_BOON_LAZY_PASS_50) {
+        if (boonType == BOON_LAZY_PASS_10 || boonType == BOON_LAZY_PASS_25 || boonType == BOON_LAZY_PASS_50) {
             return BOON_CAT_LAZY_PASS;
         }
         return BOON_CAT_DEITY_PASS;
@@ -1358,10 +1355,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool isDeity
     ) private {
         // Coinflip boons (types 1-3)
-        if (boonType <= DEITY_BOON_COINFLIP_25) {
-            uint16 bps = boonType == DEITY_BOON_COINFLIP_25
+        if (boonType <= BOON_COINFLIP_25) {
+            uint16 bps = boonType == BOON_COINFLIP_25
                 ? LOOTBOX_COINFLIP_25_BONUS_BPS
-                : (boonType == DEITY_BOON_COINFLIP_10 ? LOOTBOX_COINFLIP_10_BONUS_BPS : LOOTBOX_BOON_BONUS_BPS);
+                : (boonType == BOON_COINFLIP_10 ? LOOTBOX_COINFLIP_10_BONUS_BPS : LOOTBOX_BOON_BONUS_BPS);
             if (isDeity || bps > coinflipBoonBps[player]) {
                 coinflipBoonBps[player] = bps;
             }
@@ -1372,13 +1369,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Lootbox boost boons (types 5, 6, 22)
-        if (boonType == DEITY_BOON_LOOTBOX_5 || boonType == DEITY_BOON_LOOTBOX_15 || boonType == DEITY_BOON_LOOTBOX_25) {
+        if (boonType == BOON_LOOTBOX_5 || boonType == BOON_LOOTBOX_15 || boonType == BOON_LOOTBOX_25) {
             if (isDeity) {
-                if (boonType == DEITY_BOON_LOOTBOX_25) {
+                if (boonType == BOON_LOOTBOX_25) {
                     lootboxBoon25Active[player] = true;
                     lootboxBoon25Day[player] = currentDay;
                     deityLootboxBoon25Day[player] = day;
-                } else if (boonType == DEITY_BOON_LOOTBOX_15) {
+                } else if (boonType == BOON_LOOTBOX_15) {
                     lootboxBoon15Active[player] = true;
                     lootboxBoon15Day[player] = currentDay;
                     deityLootboxBoon15Day[player] = day;
@@ -1388,9 +1385,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     deityLootboxBoon5Day[player] = day;
                 }
             } else {
-                uint16 selectedBps = boonType == DEITY_BOON_LOOTBOX_25
+                uint16 selectedBps = boonType == BOON_LOOTBOX_25
                     ? LOOTBOX_BOOST_25_BONUS_BPS
-                    : (boonType == DEITY_BOON_LOOTBOX_15 ? LOOTBOX_BOOST_15_BONUS_BPS : LOOTBOX_BOOST_5_BONUS_BPS);
+                    : (boonType == BOON_LOOTBOX_15 ? LOOTBOX_BOOST_15_BONUS_BPS : LOOTBOX_BOOST_5_BONUS_BPS);
                 uint16 currentBps = lootboxBoon25Active[player]
                     ? LOOTBOX_BOOST_25_BONUS_BPS
                     : (lootboxBoon15Active[player]
@@ -1418,10 +1415,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Purchase boost boons (types 7, 8, 9)
-        if (boonType == DEITY_BOON_PURCHASE_5 || boonType == DEITY_BOON_PURCHASE_15 || boonType == DEITY_BOON_PURCHASE_25) {
-            uint16 bps = boonType == DEITY_BOON_PURCHASE_25
+        if (boonType == BOON_PURCHASE_5 || boonType == BOON_PURCHASE_15 || boonType == BOON_PURCHASE_25) {
+            uint16 bps = boonType == BOON_PURCHASE_25
                 ? LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
-                : (boonType == DEITY_BOON_PURCHASE_15 ? LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS : LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS);
+                : (boonType == BOON_PURCHASE_15 ? LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS : LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS);
             if (isDeity || bps > purchaseBoostBps[player]) {
                 purchaseBoostBps[player] = bps;
             }
@@ -1436,10 +1433,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Decimator boost boons (types 13, 14, 15)
-        if (boonType == DEITY_BOON_DECIMATOR_10 || boonType == DEITY_BOON_DECIMATOR_25 || boonType == DEITY_BOON_DECIMATOR_50) {
-            uint16 bps = boonType == DEITY_BOON_DECIMATOR_50
+        if (boonType == BOON_DECIMATOR_10 || boonType == BOON_DECIMATOR_25 || boonType == BOON_DECIMATOR_50) {
+            uint16 bps = boonType == BOON_DECIMATOR_50
                 ? LOOTBOX_DECIMATOR_50_BONUS_BPS
-                : (boonType == DEITY_BOON_DECIMATOR_25 ? LOOTBOX_DECIMATOR_25_BONUS_BPS : LOOTBOX_DECIMATOR_10_BONUS_BPS);
+                : (boonType == BOON_DECIMATOR_25 ? LOOTBOX_DECIMATOR_25_BONUS_BPS : LOOTBOX_DECIMATOR_10_BONUS_BPS);
             if (isDeity || bps > decimatorBoostBps[player]) {
                 decimatorBoostBps[player] = bps;
             }
@@ -1449,10 +1446,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Whale discount boons (types 16, 23, 24)
-        if (boonType == DEITY_BOON_WHALE_10 || boonType == DEITY_BOON_WHALE_25 || boonType == DEITY_BOON_WHALE_50) {
-            uint16 bps = boonType == DEITY_BOON_WHALE_50
+        if (boonType == BOON_WHALE_10 || boonType == BOON_WHALE_25 || boonType == BOON_WHALE_50) {
+            uint16 bps = boonType == BOON_WHALE_50
                 ? LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS
-                : (boonType == DEITY_BOON_WHALE_25 ? LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS : LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS);
+                : (boonType == BOON_WHALE_25 ? LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS : LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS);
             if (isDeity || bps > whaleBoonDiscountBps[player]) {
                 whaleBoonDiscountBps[player] = bps;
             }
@@ -1463,10 +1460,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Activity boons (types 17, 18, 19)
-        if (boonType == DEITY_BOON_ACTIVITY_10 || boonType == DEITY_BOON_ACTIVITY_25 || boonType == DEITY_BOON_ACTIVITY_50) {
-            uint24 amt = boonType == DEITY_BOON_ACTIVITY_50
+        if (boonType == BOON_ACTIVITY_10 || boonType == BOON_ACTIVITY_25 || boonType == BOON_ACTIVITY_50) {
+            uint24 amt = boonType == BOON_ACTIVITY_50
                 ? LOOTBOX_ACTIVITY_BOON_50_BONUS
-                : (boonType == DEITY_BOON_ACTIVITY_25 ? LOOTBOX_ACTIVITY_BOON_25_BONUS : LOOTBOX_ACTIVITY_BOON_10_BONUS);
+                : (boonType == BOON_ACTIVITY_25 ? LOOTBOX_ACTIVITY_BOON_25_BONUS : LOOTBOX_ACTIVITY_BOON_10_BONUS);
             if (isDeity || amt > activityBoonPending[player]) {
                 activityBoonPending[player] = amt;
             }
@@ -1477,10 +1474,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Deity pass discount boons (types 25, 26, 27)
-        if (boonType == DEITY_BOON_DEITY_PASS_10 || boonType == DEITY_BOON_DEITY_PASS_25 || boonType == DEITY_BOON_DEITY_PASS_50) {
-            uint8 tier = boonType == DEITY_BOON_DEITY_PASS_50
+        if (boonType == BOON_DEITY_PASS_10 || boonType == BOON_DEITY_PASS_25 || boonType == BOON_DEITY_PASS_50) {
+            uint8 tier = boonType == BOON_DEITY_PASS_50
                 ? DEITY_PASS_BOON_TIER_50
-                : (boonType == DEITY_BOON_DEITY_PASS_25 ? DEITY_PASS_BOON_TIER_25 : DEITY_PASS_BOON_TIER_10);
+                : (boonType == BOON_DEITY_PASS_25 ? DEITY_PASS_BOON_TIER_25 : DEITY_PASS_BOON_TIER_10);
             if (isDeity || tier > deityPassBoonTier[player]) {
                 deityPassBoonTier[player] = tier;
             }
@@ -1494,7 +1491,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Whale pass (type 28)
-        if (boonType == DEITY_BOON_WHALE_PASS) {
+        if (boonType == BOON_WHALE_PASS) {
             uint24 startLevel = _activateWhalePass(player);
             if (!isDeity) {
                 emit LootBoxWhalePassJackpot(player, day, originalAmount, startLevel, WHALE_PASS_TICKETS_PER_LEVEL, 0, 0);
@@ -1503,10 +1500,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Lazy pass discount boons (types 29, 30, 31)
-        if (boonType == DEITY_BOON_LAZY_PASS_10 || boonType == DEITY_BOON_LAZY_PASS_25 || boonType == DEITY_BOON_LAZY_PASS_50) {
-            uint16 bps = boonType == DEITY_BOON_LAZY_PASS_50
+        if (boonType == BOON_LAZY_PASS_10 || boonType == BOON_LAZY_PASS_25 || boonType == BOON_LAZY_PASS_50) {
+            uint16 bps = boonType == BOON_LAZY_PASS_50
                 ? LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS
-                : (boonType == DEITY_BOON_LAZY_PASS_25 ? LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS : LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS);
+                : (boonType == BOON_LAZY_PASS_25 ? LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS : LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS);
             if (isDeity || bps > lazyPassBoonDiscountBps[player]) {
                 lazyPassBoonDiscountBps[player] = bps;
             }
@@ -1772,9 +1769,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) private view returns (uint8 boonType) {
         uint256 seed = uint256(keccak256(abi.encode(_deityDailySeed(day), deity, day, slot)));
         uint256 total = decimatorAllowed
-            ? DEITY_BOON_WEIGHT_TOTAL
-            : DEITY_BOON_WEIGHT_TOTAL_NO_DECIMATOR;
-        if (!deityPassAvailable) total -= DEITY_BOON_WEIGHT_DEITY_PASS_ALL;
+            ? BOON_WEIGHT_TOTAL
+            : BOON_WEIGHT_TOTAL_NO_DECIMATOR;
+        if (!deityPassAvailable) total -= BOON_WEIGHT_DEITY_PASS_ALL;
         uint256 roll = seed % total;
         return _boonFromRoll(roll, decimatorAllowed, deityPassAvailable, true, true);
     }

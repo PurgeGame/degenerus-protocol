@@ -15,7 +15,7 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
 
     /// @dev Half whale pass price unit (each half-pass = 1 ticket/level for 100 levels).
     uint256 internal constant HALF_WHALE_PASS_PRICE =
-        2.175 ether;
+        2.25 ether;
 
     struct AutoRebuyCalc {
         bool toFuture;

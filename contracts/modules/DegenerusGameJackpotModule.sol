@@ -1972,7 +1972,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         uint32 used;
-        uint256 entropy = rngWordCurrent;
+        uint256 entropy = lastLootboxRngWord;
         uint32 processed;
 
         while (idx < total && used < writesBudget) {
