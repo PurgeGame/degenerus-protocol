@@ -89,7 +89,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 14-01-PLAN.md -- Per-consumption-point window analysis (D1-D9, L1-L8) and block builder adversarial timeline
-- [ ] 14-02-PLAN.md -- Inter-block jackpot sequence analysis and consolidated verdict table
+- [x] 14-02-PLAN.md -- Inter-block jackpot sequence analysis and consolidated verdict table
 
 ### Phase 15: Ticket Creation & Mid-Day RNG Deep-Dive
 **Goal**: Focused end-to-end trace of ticket creation and mid-day RNG flows, verifying manipulation resistance at every step including coinflip lock timing
@@ -100,7 +100,10 @@ Plans:
   2. The mid-day `requestLootboxRng` to buffer swap to `processTicketBatch` flow is verified for manipulation resistance with explicit reasoning
   3. Analysis confirms whether any trait or outcome can be influenced when `lastLootboxRngWord` value is known (e.g., from a prior block), with SAFE/EXPLOITABLE verdict
   4. Coinflip lock timing (`_coinflipLockedDuringTransition` windows) is verified to align with RNG-sensitive periods, with gap analysis if misaligned
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 15-01-PLAN.md -- Ticket creation end-to-end trace and lastLootboxRngWord observability analysis
+- [ ] 15-02-PLAN.md -- Mid-day RNG flow manipulation resistance and coinflip lock timing gap analysis
 
 ## Progress
 
@@ -121,5 +124,5 @@ Plans:
 | 11. Parameter Reference | v1.1 | 1/1 | Complete | 2026-03-12 |
 | 12. RNG State & Function Inventory | v1.2 | 3/3 | Complete | 2026-03-14 |
 | 13. Delta Verification | v1.2 | 3/3 | Complete | 2026-03-14 |
-| 14. Manipulation Window Analysis | 2/2 | Complete    | 2026-03-14 | - |
-| 15. Ticket Creation & Mid-Day RNG | v1.2 | 0/? | Not started | - |
+| 14. Manipulation Window Analysis | v1.2 | 2/2 | Complete | 2026-03-14 |
+| 15. Ticket Creation & Mid-Day RNG | v1.2 | 0/2 | Not started | - |
