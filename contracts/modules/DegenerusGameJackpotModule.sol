@@ -2460,23 +2460,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @dev Pick a random target level in [lvl, lvl+4] that has winners for the packed traits.
-    ///      Falls back to 0 (skip) if none of the five levels has eligible tickets.
+    /// @dev Pick one random level in [lvl, lvl+4] — pure 1-in-5 chance per level.
+    ///      Returns 0 (skip) if the chosen level has no eligible trait tickets.
     function _selectDailyCoinTargetLevel(
         uint24 lvl,
         uint32 winningTraitsPacked,
         uint256 entropy
     ) private view returns (uint24 targetLevel) {
-        uint8 startOffset = uint8(entropy % 5);
-        for (uint8 i; i < 5; ) {
-            uint8 offset = uint8((startOffset + i) % 5);
-            uint24 candidate = lvl + uint24(offset);
-            if (_hasTraitTickets(candidate, winningTraitsPacked)) {
-                return candidate;
-            }
-            unchecked {
-                ++i;
-            }
+        uint24 candidate = lvl + uint24(entropy % 5);
+        if (_hasTraitTickets(candidate, winningTraitsPacked)) {
+            return candidate;
         }
         return 0;
     }
