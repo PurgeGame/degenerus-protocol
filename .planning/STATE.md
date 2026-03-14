@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: RNG Security Audit
-status: completed
-stopped_at: Completed 13-03-PLAN.md
-last_updated: "2026-03-14T18:11:32.111Z"
-last_activity: 2026-03-14 -- Completed 13-03 New Attack Surface Analysis
+status: in-progress
+stopped_at: Completed 14-01-PLAN.md
+last_updated: "2026-03-14T18:30:36Z"
+last_activity: 2026-03-14 -- Completed 14-01 Manipulation Window Analysis
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 8
+  completed_plans: 7
+  percent: 87
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Players can purchase tickets at any time -- no downtime during RNG processing or jackpot payouts
-**Current focus:** v1.2 RNG Security Audit -- Phase 13 complete, ready for Phase 14
+**Current focus:** v1.2 RNG Security Audit -- Phase 14 in progress, Plan 01 complete
 
 ## Current Position
 
-Phase: 13 of 15 (Delta Verification) -- COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase 13 complete, all 3 plans finished
-Last activity: 2026-03-14 -- Completed 13-03 New Attack Surface Analysis
+Phase: 14 of 15 (Manipulation Window Analysis) -- IN PROGRESS
+Plan: 1 of 2 in current phase
+Status: 14-01 complete, 14-02 remaining
+Last activity: 2026-03-14 -- Completed 14-01 Manipulation Window Analysis
 
-Progress: [██████████] 100%
+Progress: [████████░░] 87%
 
 ## Performance Metrics
 
@@ -43,6 +43,7 @@ Progress: [██████████] 100%
 | Phase 12 P03 | 4min | 2 tasks | 1 files |
 | Phase 13 P01 | 3min | 2 tasks | 1 files |
 | Phase 13 P03 | 5min | 2 tasks | 1 files |
+| Phase 14 P01 | 6min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,9 @@ Progress: [██████████] 100%
 - 13-03: midDayTicketRngPending liveness risk (VRF timeout) is DoS not manipulation -- admin VRF rotation clears stuck state
 - 13-03: Coinflip deposits during jackpot phase gap safe -- BURNIE-only, no pool/RNG interaction
 - 13-03: All 10 attack vectors across 4 surfaces assessed SAFE -- no Phase 14 escalations needed
+- 14-01: D6/D7 assessed SAFE BY DESIGN rather than BLOCKED -- co-state changes irrelevant to winner selection or intentional design features
+- 14-01: Block builder self-front-running on lootbox path non-exploitable -- per-player entropy deterministic, deposits immutable per index
+- 14-01: All 17 verdicts rely on structural protections (locks, double-buffer, per-player entropy) not VRF unpredictability alone
 
 ### Pending Todos
 
@@ -78,6 +82,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T18:08:03.550Z
-Stopped at: Completed 13-03-PLAN.md
+Last session: 2026-03-14T18:30:36Z
+Stopped at: Completed 14-01-PLAN.md
 Resume file: None
