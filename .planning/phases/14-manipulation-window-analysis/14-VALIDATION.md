@@ -19,8 +19,8 @@ created: 2026-03-14
 |----------|-------|
 | **Framework** | Manual document review (audit phase — no code output) |
 | **Config file** | none |
-| **Quick run command** | `grep -c "BLOCKED\|SAFE BY DESIGN\|EXPLOITABLE" audit/v1.1-manipulation-windows.md` |
-| **Full suite command** | `grep -c "WINDOW-0" audit/v1.1-manipulation-windows.md` |
+| **Quick run command** | `grep -c "BLOCKED\|SAFE BY DESIGN\|EXPLOITABLE" audit/v1.2-manipulation-windows.md` |
+| **Full suite command** | `grep -c "WINDOW-0" audit/v1.2-manipulation-windows.md` |
 | **Estimated runtime** | ~1 second |
 
 ---
@@ -38,11 +38,11 @@ created: 2026-03-14
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 14-01-01 | 01 | 1 | WINDOW-01 | manual | `grep "consumption point" audit/v1.1-manipulation-windows.md` | N/A W0 | pending |
-| 14-01-02 | 01 | 1 | WINDOW-01 | manual | `grep "co-state" audit/v1.1-manipulation-windows.md` | N/A W0 | pending |
-| 14-02-01 | 02 | 1 | WINDOW-02 | manual | `grep -i "block builder\|front-running" audit/v1.1-manipulation-windows.md` | N/A W0 | pending |
-| 14-02-02 | 02 | 1 | WINDOW-03 | manual | `grep -i "inter-block\|jackpot draw" audit/v1.1-manipulation-windows.md` | N/A W0 | pending |
-| 14-03-01 | 03 | 2 | WINDOW-04 | manual | `grep -c "BLOCKED\|SAFE BY DESIGN\|EXPLOITABLE" audit/v1.1-manipulation-windows.md` | N/A W0 | pending |
+| 14-01-01 | 01 | 1 | WINDOW-01 | manual | `grep "consumption point" audit/v1.2-manipulation-windows.md` | N/A W0 | pending |
+| 14-01-02 | 01 | 1 | WINDOW-01 | manual | `grep "co-state" audit/v1.2-manipulation-windows.md` | N/A W0 | pending |
+| 14-02-01 | 02 | 1 | WINDOW-02 | manual | `grep -i "block builder\|front-running" audit/v1.2-manipulation-windows.md` | N/A W0 | pending |
+| 14-02-02 | 02 | 1 | WINDOW-03 | manual | `grep -i "inter-block\|jackpot draw" audit/v1.2-manipulation-windows.md` | N/A W0 | pending |
+| 14-02-02b | 02 | 2 | WINDOW-04 | manual | `grep -c "BLOCKED\|SAFE BY DESIGN\|EXPLOITABLE" audit/v1.2-manipulation-windows.md` | N/A W0 | pending |
 
 *Status: pending · green · red · flaky*
 
