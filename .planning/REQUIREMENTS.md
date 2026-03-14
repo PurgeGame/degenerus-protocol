@@ -37,9 +37,9 @@ Requirements for RNG security audit. Each maps to roadmap phases.
 
 ### Ticket Creation & Mid-Day RNG
 
-- [ ] **TICKET-01**: Full trace of ticket creation → buffer assignment → trait assignment with entropy source at each step
+- [x] **TICKET-01**: Full trace of ticket creation → buffer assignment → trait assignment with entropy source at each step
 - [ ] **TICKET-02**: Mid-day `requestLootboxRng` → buffer swap → `processTicketBatch` flow verified for manipulation resistance
-- [ ] **TICKET-03**: Verify no trait/outcome can be influenced when `lastLootboxRngWord` value is known (e.g., from prior block)
+- [x] **TICKET-03**: Verify no trait/outcome can be influenced when `lastLootboxRngWord` value is known (e.g., from prior block)
 - [ ] **TICKET-04**: Coinflip lock timing verified — `_coinflipLockedDuringTransition` windows align with RNG-sensitive periods
 
 ## Future Requirements
@@ -75,9 +75,9 @@ None — audit milestone produces analysis documents, not code.
 | WINDOW-02 | Phase 14 | Complete |
 | WINDOW-03 | Phase 14 | Complete |
 | WINDOW-04 | Phase 14 | Complete |
-| TICKET-01 | Phase 15 | Pending |
+| TICKET-01 | Phase 15 | Complete |
 | TICKET-02 | Phase 15 | Pending |
-| TICKET-03 | Phase 15 | Pending |
+| TICKET-03 | Phase 15 | Complete |
 | TICKET-04 | Phase 15 | Pending |
 
 **Coverage:**

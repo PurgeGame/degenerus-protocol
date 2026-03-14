@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: RNG Security Audit
-status: completed
-stopped_at: Completed 14-02-PLAN.md
-last_updated: "2026-03-14T18:43:51.598Z"
-last_activity: 2026-03-14 -- Completed 14-02 Inter-Block Jackpot Sequence and Consolidated Verdicts
+status: in-progress
+stopped_at: Completed 15-01-PLAN.md
+last_updated: "2026-03-14T19:00:15Z"
+last_activity: 2026-03-14 -- Completed 15-01 Ticket Creation End-to-End Trace and RNG Observability
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 10
+  completed_plans: 9
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Players can purchase tickets at any time -- no downtime during RNG processing or jackpot payouts
-**Current focus:** v1.2 RNG Security Audit -- Phase 14 complete, ready for Phase 15 final report
+**Current focus:** v1.2 RNG Security Audit -- Phase 15 in progress, ticket creation and mid-day RNG deep dive
 
 ## Current Position
 
-Phase: 14 of 15 (Manipulation Window Analysis) -- COMPLETE
-Plan: 2 of 2 in current phase -- COMPLETE
-Status: All Phase 14 plans complete
-Last activity: 2026-03-14 -- Completed 14-02 Inter-Block Jackpot Sequence and Consolidated Verdicts
+Phase: 15 of 15 (Ticket Creation & Mid-Day RNG) -- IN PROGRESS
+Plan: 1 of 2 in current phase -- COMPLETE
+Status: Plan 15-01 complete, Plan 15-02 remaining
+Last activity: 2026-03-14 -- Completed 15-01 Ticket Creation End-to-End Trace and RNG Observability
 
-Progress: [██████████] 100%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -45,6 +45,7 @@ Progress: [██████████] 100%
 | Phase 13 P03 | 5min | 2 tasks | 1 files |
 | Phase 14 P01 | 6min | 2 tasks | 1 files |
 | Phase 14 P02 | 5min | 2 tasks | 1 files |
+| Phase 15 P01 | 3min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,9 @@ Progress: [██████████] 100%
 - 14-02: reverseFlip during jackpot gap SAFE BY DESIGN -- blind offset on unknown VRF preserves uniform distribution
 - 14-02: processTicketBatch during jackpot uses piggybacked daily VRF word set atomically in same advanceGame tx
 - 14-02: Compressed jackpot modes reduce inter-block gaps from 4 to 0-2, proportionally shrinking attack surface
+- 15-01: lastLootboxRngWord observability verdict SAFE -- frozen read buffer prevents exploitation regardless of entropy visibility
+- 15-01: VRF_MIDDAY_CONFIRMATIONS=3 asymmetry classified as design tradeoff, not vulnerability
+- 15-01: Trait assignment determinism acknowledged as by-design for verification, not a weakness
 
 ### Pending Todos
 
@@ -87,6 +91,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T18:38:47Z
-Stopped at: Completed 14-02-PLAN.md
+Last session: 2026-03-14T19:00:15Z
+Stopped at: Completed 15-01-PLAN.md
 Resume file: None
