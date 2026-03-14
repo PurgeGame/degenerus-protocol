@@ -1585,4 +1585,16 @@ abstract contract DegenerusGameStorage {
     ///      x00 milestones: 50% to currentPrizePool, 50% retained as terminal insurance.
     ///      INVARIANT: counted as obligation in yield surplus calculation.
     uint256 internal yieldAccumulator;
+
+    // =========================================================================
+    // Century (x00) Ticket Bonus Tracking
+    // =========================================================================
+
+    /// @dev The x00 level the centuryBonusUsed mapping applies to.
+    ///      When targetLevel differs, all per-player values are stale (treated as 0).
+    uint24 internal centuryBonusLevel;
+
+    /// @dev Bonus entries awarded per player at the current x00 level.
+    ///      Used to enforce the 10 ETH cap across multiple purchases.
+    mapping(address => uint256) internal centuryBonusUsed;
 }
