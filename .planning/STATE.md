@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: RNG Security Audit
-status: ready_to_plan
-stopped_at: null
-last_updated: "2026-03-14T00:00:00.000Z"
-last_activity: 2026-03-14 — Roadmap created, 4 phases (12-15), 20 requirements mapped
+status: executing
+stopped_at: "Completed 12-02-PLAN.md"
+last_updated: "2026-03-14T17:31:58Z"
+last_activity: 2026-03-14 — Completed 12-02 RNG Function Catalogue
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 2
+  percent: 17
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** Players can purchase tickets at any time -- no downtime during RNG processing or jackpot payouts
-**Current focus:** v1.2 RNG Security Audit -- Phase 12 ready to plan
+**Current focus:** v1.2 RNG Security Audit -- Phase 12 executing
 
 ## Current Position
 
 Phase: 12 of 15 (RNG State & Function Inventory)
-Plan: 0 of ? in current phase (plans TBD)
-Status: Ready to plan
-Last activity: 2026-03-14 -- Roadmap created
+Plan: 2 of 3 in current phase (plans 01-02 complete)
+Status: Executing
+Last activity: 2026-03-14 -- Completed 12-02 RNG Function Catalogue
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [==░░░░░░░░] 17%
 
 ## Performance Metrics
 
@@ -45,7 +45,11 @@ Progress: [░░░░░░░░░░] 0%
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
+- 12-01: Included lastDecClaimRound.rngWord as additional direct RNG variable (struct field holding VRF copy)
+- 12-01: Organized RNG-influencing variables into 6 subcategories for clarity
+- 12-01: Documented readKey/writeKey double-buffer encoding explicitly for downstream analysis
+- 12-02: Catalogued BurnieCoinflip guards as external-call pattern (reads rngLockedFlag via view function)
+- 12-02: Counted 19 rngLockedFlag check sites vs v1.0 audit's 3 -- gap due to v1.0 scoping only to changed code
 
 ### Pending Todos
 
@@ -58,5 +62,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-14
-Stopped at: Roadmap created for v1.2 -- ready to plan Phase 12
+Stopped at: Completed 12-02-PLAN.md
 Resume file: None

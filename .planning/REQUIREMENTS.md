@@ -9,17 +9,17 @@ Requirements for RNG security audit. Each maps to roadmap phases.
 
 ### RNG Variable Inventory
 
-- [ ] **RVAR-01**: Every storage variable that holds a VRF word or derived entropy is catalogued with slot, type, and lifecycle
-- [ ] **RVAR-02**: Every storage variable that influences RNG outcome selection (bucket composition, ticket counts, queue indices) is catalogued
+- [x] **RVAR-01**: Every storage variable that holds a VRF word or derived entropy is catalogued with slot, type, and lifecycle
+- [x] **RVAR-02**: Every storage variable that influences RNG outcome selection (bucket composition, ticket counts, queue indices) is catalogued
 - [ ] **RVAR-03**: Data flow diagram from VRF callback → `rngWordCurrent` / `lootboxRngWordByIndex` → every downstream consumer
 - [ ] **RVAR-04**: `lastLootboxRngWord` and `midDayTicketRngPending` fully traced — who writes, who reads, when
 
 ### RNG Function Inventory
 
-- [ ] **RFN-01**: Every function that reads or writes RNG state is catalogued with access pattern (read/write/gate)
-- [ ] **RFN-02**: Every external/public entry point that can modify RNG-dependent state is identified
+- [x] **RFN-01**: Every function that reads or writes RNG state is catalogued with access pattern (read/write/gate)
+- [x] **RFN-02**: Every external/public entry point that can modify RNG-dependent state is identified
 - [ ] **RFN-03**: Call graph from each external entry point to RNG state mutations
-- [ ] **RFN-04**: Guard analysis — which functions check `rngLockedFlag`, `prizePoolFrozen`, or other RNG-gating conditions
+- [x] **RFN-04**: Guard analysis — which functions check `rngLockedFlag`, `prizePoolFrozen`, or other RNG-gating conditions
 
 ### Delta Verification
 
@@ -63,10 +63,10 @@ None — audit milestone produces analysis documents, not code.
 | RVAR-02 | Phase 12 | Pending |
 | RVAR-03 | Phase 12 | Pending |
 | RVAR-04 | Phase 12 | Pending |
-| RFN-01 | Phase 12 | Pending |
-| RFN-02 | Phase 12 | Pending |
+| RFN-01 | Phase 12 | Complete |
+| RFN-02 | Phase 12 | Complete |
 | RFN-03 | Phase 12 | Pending |
-| RFN-04 | Phase 12 | Pending |
+| RFN-04 | Phase 12 | Complete |
 | DELTA-01 | Phase 13 | Pending |
 | DELTA-02 | Phase 13 | Pending |
 | DELTA-03 | Phase 13 | Pending |
