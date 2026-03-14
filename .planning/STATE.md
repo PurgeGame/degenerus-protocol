@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: RNG Security Audit
-status: in_progress
-stopped_at: Completed 13-02-PLAN.md
-last_updated: "2026-03-14T17:59:13Z"
+status: completed
+stopped_at: Completed 13-01-PLAN.md
+last_updated: "2026-03-14T18:00:55.270Z"
 last_activity: 2026-03-14 -- Completed 13-02 Delta RNG Impact Assessment
 progress:
   total_phases: 4
@@ -41,6 +41,7 @@ Progress: [████████░░] 83%
 | v1.0 Always-Open Purchases | 5 | 8 | ~2h | ~15m |
 | v1.1 Economic Flow Analysis | 6 | 15 | ~1h | ~4m |
 | Phase 12 P03 | 4min | 2 tasks | 1 files |
+| Phase 13 P01 | 3min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -55,6 +56,9 @@ Progress: [████████░░] 83%
 - 12-03: Identified piggyback pattern: daily VRF finalization also writes to pending lootbox index via _finalizeLootboxRng
 - 12-03: Classified 27 entry points into 4 RNG roles: 3 producers, 6 consumers, 7+ influencers, 2 guards
 - [Phase 12]: Documented stale-word recycling path (cross-day VRF word routed to lootbox index then fresh daily request)
+- 13-01: All 8 v1.0 attack verdicts confirmed unchanged -- no regressions in current code
+- 13-01: FIX-1 freeze guard confirmed at DecimatorModule:420 before any state mutation
+- 13-01: Spot-checked 4 pool mutation entries from v1.0 exhaustive table -- all routing patterns intact
 - 13-02: Grouped 53 NO IMPACT accessor refactors separately from substantive changes to reduce noise
 - 13-02: Classified rngLockedFlag removals as MODIFIED SURFACE (altering existing guard paths)
 - 13-02: Categorized findings into 4 groups: lock removal (7), freeze routing (7), double-buffer (12), new infrastructure (9)
@@ -69,6 +73,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-14T17:59:13Z
-Stopped at: Completed 13-02-PLAN.md
+Last session: 2026-03-14T18:00:55.268Z
+Stopped at: Completed 13-01-PLAN.md
 Resume file: None
