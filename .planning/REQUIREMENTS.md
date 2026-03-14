@@ -12,7 +12,7 @@ Requirements for RNG security audit. Each maps to roadmap phases.
 - [x] **RVAR-01**: Every storage variable that holds a VRF word or derived entropy is catalogued with slot, type, and lifecycle
 - [x] **RVAR-02**: Every storage variable that influences RNG outcome selection (bucket composition, ticket counts, queue indices) is catalogued
 - [ ] **RVAR-03**: Data flow diagram from VRF callback → `rngWordCurrent` / `lootboxRngWordByIndex` → every downstream consumer
-- [ ] **RVAR-04**: `lastLootboxRngWord` and `midDayTicketRngPending` fully traced — who writes, who reads, when
+- [x] **RVAR-04**: `lastLootboxRngWord` and `midDayTicketRngPending` fully traced — who writes, who reads, when
 
 ### RNG Function Inventory
 
@@ -59,10 +59,10 @@ None — audit milestone produces analysis documents, not code.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RVAR-01 | Phase 12 | Pending |
-| RVAR-02 | Phase 12 | Pending |
+| RVAR-01 | Phase 12 | Complete |
+| RVAR-02 | Phase 12 | Complete |
 | RVAR-03 | Phase 12 | Pending |
-| RVAR-04 | Phase 12 | Pending |
+| RVAR-04 | Phase 12 | Complete |
 | RFN-01 | Phase 12 | Complete |
 | RFN-02 | Phase 12 | Complete |
 | RFN-03 | Phase 12 | Pending |
