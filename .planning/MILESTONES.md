@@ -1,5 +1,23 @@
 # Milestones
 
+## v1.2 RNG Security Audit (Shipped: 2026-03-14)
+
+**Phases completed:** 4 phases, 10 plans
+
+**Key accomplishments:**
+- Catalogued 9 direct + 22 influencing RNG variables with EVM slots, types, and full lifecycle traces including state machine diagrams
+- Catalogued 60+ RNG-touching functions across all modules — 27 entry points, 7 guard types (19 rngLockedFlag sites, 11 prizePoolFrozen sites)
+- Re-verified all 8 v1.0 attack scenarios (all PASS, no regressions) and confirmed FIX-1 freeze guard at DecimatorModule:420
+- Analyzed 13 manipulation windows across daily and lootbox VRF paths — 0 exploitable (4 BLOCKED, 9 SAFE BY DESIGN)
+- Traced ticket creation end-to-end and verified mid-day RNG flow manipulation resistance with coinflip lock timing alignment
+
+**Stats:** 8 audit documents, 3,502 lines, 40 commits in ~2 hours
+**Output:** `audit/v1.2-*.md` (8 files)
+**Git range:** 29ef8701..eb0b2bfe
+**Audit:** 20/20 requirements satisfied, 39/39 must-have truths verified (PASSED — 0 gaps)
+
+---
+
 ## v1.1 Economic Flow Analysis (Shipped: 2026-03-12)
 
 **Phases completed:** 6 phases, 15 plans, 0 tasks
