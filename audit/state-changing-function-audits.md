@@ -11699,30 +11699,6 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ---
 
-### `setAffiliatePayoutMode(bytes32 code_, PayoutMode mode)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function setAffiliatePayoutMode(bytes32 code_, PayoutMode mode) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `code_` (bytes32): affiliate code to configure; `mode` (PayoutMode): routing mode enum |
-| **Returns** | none |
-
-**State Reads:** `affiliateCode[code_].owner`, `affiliateCode[code_].payoutMode`
-**State Writes:** `affiliateCode[code_].payoutMode` (only if changed)
-
-**Callers:** Any external account, but only code owner succeeds
-**Callees:** None
-
-**ETH Flow:** None
-**Invariants:** Only the code owner can change payout mode; mode is one of {Coinflip=0, Degenerette=1, NitMode=2}
-**NatSpec Accuracy:** Accurate.
-**Gas Flags:** Event emitted even when mode is unchanged (no-op write skipped, but event always fires). Minor gas waste on redundant calls; informational only.
-**Verdict:** CORRECT
-
----
-
 ### `referPlayer(bytes32 code_)` [external]
 
 | Field | Value |
@@ -11747,30 +11723,6 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ---
 
-### `consumeDegeneretteCredit(address player, uint256 amount)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function consumeDegeneretteCredit(address player, uint256 amount) external returns (uint256 consumed)` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `player` (address): player address; `amount` (uint256): amount requested to consume |
-| **Returns** | `consumed` (uint256): amount actually consumed |
-
-**State Reads:** `pendingDegeneretteCredit[player]`
-**State Writes:** `pendingDegeneretteCredit[player]`
-
-**Callers:** DegenerusGame contract only (onlyGame check via `msg.sender != ContractAddresses.GAME`)
-**Callees:** None
-
-**ETH Flow:** None
-**Invariants:** (1) Only GAME can call; (2) consumed <= balance; (3) consumed <= amount; (4) newBalance = balance - consumed; (5) Returns 0 for address(0) or amount=0 or balance=0
-**NatSpec Accuracy:** Accurate. NatSpec correctly states game-only access.
-**Gas Flags:** None. `unchecked` block is safe since `consumed <= balance` is guaranteed.
-**Verdict:** CORRECT
-
----
-
 ### `payAffiliate(uint256 amount, bytes32 code, address sender, uint24 lvl, bool isFreshEth, uint16 lootboxActivityScore)` [external]
 
 | Field | Value |
@@ -11782,12 +11734,12 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 | **Returns** | `playerKickback` (uint256): kickback amount to credit to player |
 
 **State Reads:** `playerReferralCode[sender]`, `affiliateCode[code]`, `affiliateCode[storedCode]`, `affiliateCode[AFFILIATE_CODE_VAULT]` (constructed inline), `affiliateCoinEarned[lvl][affiliateAddr]`, `affiliateCommissionFromSender[lvl][affiliateAddr][sender]`, `affiliateTopByLevel[lvl]`, `playerReferralCode[affiliateAddr]` (upline1), `playerReferralCode[upline]` (upline2)
-**State Writes:** `playerReferralCode[sender]` (if resolving referral), `affiliateCoinEarned[lvl][affiliateAddr]`, `affiliateCommissionFromSender[lvl][affiliateAddr][sender]`, `affiliateTopByLevel[lvl]` (if new top), `pendingDegeneretteCredit[player]` (if Degenerette mode, via `_routeAffiliateReward`)
+**State Writes:** `playerReferralCode[sender]` (if resolving referral), `affiliateCoinEarned[lvl][affiliateAddr]`, `affiliateCommissionFromSender[lvl][affiliateAddr][sender]`, `affiliateTopByLevel[lvl]` (if new top)
 
 **Callers:** COIN or GAME contracts only (`msg.sender != ContractAddresses.COIN && msg.sender != ContractAddresses.GAME`)
 **Callees:** `_setReferralCode`, `_vaultReferralMutable`, `_updateTopAffiliate`, `_applyLootboxTaper`, `_referrerAddress` (x2, for upline1 and upline2), `coin.affiliateQuestReward` (x1-3), `_rollWeightedAffiliateWinner`, `_routeAffiliateReward`
 
-**ETH Flow:** No direct ETH movement. Rewards are BURNIE-denominated FLIP/COIN credits or degenerette credit storage. No `msg.value` or ETH transfers.
+**ETH Flow:** No direct ETH movement. Rewards are BURNIE-denominated FLIP credits. No `msg.value` or ETH transfers.
 **Invariants:**
 1. Only COIN or GAME can call
 2. Referral resolution: unset slots resolve to VAULT (locked) on first purchase; VAULT/LOCKED referrals mutable during presale only
@@ -11875,7 +11827,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **Callees:** None (only emits event)
 
 **ETH Flow:** None
-**Invariants:** (1) owner != address(0); (2) code != bytes32(0) and code != REF_CODE_LOCKED; (3) kickbackPct <= 25; (4) Code must not already exist (first-come-first-served); (5) payoutMode defaults to Coinflip
+**Invariants:** (1) owner != address(0); (2) code != bytes32(0) and code != REF_CODE_LOCKED; (3) kickbackPct <= 25; (4) Code must not already exist (first-come-first-served)
 **NatSpec Accuracy:** Dev comment "Shared code registration logic for user-created and constructor-bootstrapped codes" -- accurate.
 **Gas Flags:** None
 **Verdict:** CORRECT
@@ -11906,32 +11858,27 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ---
 
-### `_routeAffiliateReward(address player, uint256 amount, uint8 modeRaw)` [private]
+### `_routeAffiliateReward(address player, uint256 amount)` [private]
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function _routeAffiliateReward(address player, uint256 amount, uint8 modeRaw) private` |
+| **Signature** | `function _routeAffiliateReward(address player, uint256 amount) private` |
 | **Visibility** | private |
 | **Mutability** | state-changing |
-| **Parameters** | `player` (address): reward recipient; `amount` (uint256): reward amount; `modeRaw` (uint8): payout mode |
+| **Parameters** | `player` (address): reward recipient; `amount` (uint256): reward amount |
 | **Returns** | none |
 
-**State Reads:** `pendingDegeneretteCredit[player]` (Degenerette mode only)
-**State Writes:** `pendingDegeneretteCredit[player]` (Degenerette mode only)
+**State Reads:** None
+**State Writes:** None (delegates to external call)
 
 **Callers:** `payAffiliate`
-**Callees:** `coin.creditCoin(player, coinAmount)` (NitMode), `coin.creditFlip(player, amount)` (Coinflip mode)
+**Callees:** `coin.creditFlip(player, amount)`
 
-**ETH Flow:** No ETH transferred. Routes BURNIE-denominated rewards through:
-- **Coinflip (mode 0):** `coin.creditFlip(player, amount)` -- full amount as FLIP credit
-- **Degenerette (mode 1):** stores in `pendingDegeneretteCredit[player]` -- full amount
-- **NitMode (mode 2):** `coin.creditCoin(player, amount >> 1)` -- 50% as COIN; remaining 50% is discarded (not credited anywhere)
+**ETH Flow:** No ETH transferred. Credits full BURNIE-denominated reward as coinflip stakes via `coin.creditFlip(player, amount)`.
 
-**Invariants:** (1) No-op for address(0) or amount=0; (2) NitMode intentionally discards 50% (deflationary); (3) `amount >> 1` is equivalent to `amount / 2` (rounds down for odd amounts)
-
-**NatSpec Accuracy:** Dev comment says "Route affiliate rewards by code-configured payout mode" and "Amounts are already BURNIE-denominated" -- accurate. The event NatSpec for PayoutMode says mode 2 = "50% coin (rest discarded)" which matches the code.
-
-**Gas Flags:** For NitMode, the discarded 50% is never minted/burned, just never credited. This is the intended deflationary mechanic.
+**Invariants:** (1) No-op for address(0) or amount=0
+**NatSpec Accuracy:** Accurate.
+**Gas Flags:** None
 **Verdict:** CORRECT
 
 ---

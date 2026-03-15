@@ -104,26 +104,6 @@ contract DegenerusAffiliate {
         address indexed player,
         uint96 score
     );
-    /// @notice Emitted when an affiliate code updates its payout mode.
-    /// @param owner Owner of the affiliate code.
-    /// @param code Affiliate code.
-    /// @param mode New payout mode (0=coinflip, 1=degenerette credit, 2=50% coin, 50% discarded).
-    event AffiliatePayoutModeUpdated(
-        address indexed owner,
-        bytes32 indexed code,
-        uint8 mode
-    );
-    /// @notice Emitted when pending Degenerette credit changes.
-    /// @param player Player whose credit changed.
-    /// @param credited True if credit was added, false if consumed.
-    /// @param amount Delta amount.
-    /// @param newBalance Updated pending credit balance.
-    event DegeneretteCreditUpdated(
-        address indexed player,
-        bool credited,
-        uint256 amount,
-        uint256 newBalance
-    );
 
     // =====================================================================
     //                              ERRORS
@@ -165,26 +145,16 @@ contract DegenerusAffiliate {
      * @notice Affiliate code ownership and kickback configuration.
      * @dev Packed into single storage slot for gas efficiency.
      *
-     * STORAGE LAYOUT (32 bytes, 22 bytes used):
+     * STORAGE LAYOUT (32 bytes, 21 bytes used):
      * +----------------------------------------------------+
      * | [0:20]  owner     address   Code owner/recipient   |
      * | [20:21] kickback  uint8     Kickback % (0-25)      |
-     * | [21:22] mode      uint8     Payout mode (0-2)      |
-     * | [22:32] unused    ---       10 bytes padding       |
+     * | [21:32] unused    ---       11 bytes padding       |
      * +----------------------------------------------------+
      */
     struct AffiliateCodeInfo {
         address owner; // 20 bytes - receives affiliate rewards
         uint8 kickback; // 1 byte - percentage returned to referred player (0-25)
-        uint8 payoutMode; // 1 byte - 0=coinflip, 1=degenerette credit, 2=50% coin (rest discarded)
-    }
-
-    /// @notice Affiliate payout routing mode.
-    /// @dev 0=coinflip credit (default), 1=degenerette credit bucket, 2=50% coin (remaining 50% discarded).
-    enum PayoutMode {
-        Coinflip,
-        Degenerette,
-        NitMode
     }
 
     // =====================================================================
@@ -199,9 +169,9 @@ contract DegenerusAffiliate {
     uint16 private constant REWARD_SCALE_FRESH_L4P_BPS = 2_000;
     uint16 private constant REWARD_SCALE_RECYCLED_BPS = 500;
     uint16 private constant BPS_DENOMINATOR = 10_000;
-    uint16 private constant LOOTBOX_TAPER_START_SCORE = 15_000;
+    uint16 private constant LOOTBOX_TAPER_START_SCORE = 10_000;
     uint16 private constant LOOTBOX_TAPER_END_SCORE = 25_500;
-    uint16 private constant LOOTBOX_TAPER_MIN_BPS = 5_000;
+    uint16 private constant LOOTBOX_TAPER_MIN_BPS = 2_500;
     /// @notice Max BURNIE commission an affiliate can earn from a single sender per level.
     /// @dev At 25% fresh ETH rate (levels 0-3), caps after 2.0 ETH spend; at 20% (levels 4+), caps after 2.5 ETH.
     uint256 private constant MAX_COMMISSION_PER_REFERRER_PER_LEVEL = 0.5 ether;
@@ -240,9 +210,6 @@ contract DegenerusAffiliate {
     ///      bytes32(0) = not yet set, REF_CODE_LOCKED = permanently locked.
     mapping(address => bytes32) private playerReferralCode;
 
-    /// @notice Pending Degenerette credit balances by player.
-    mapping(address => uint256) private pendingDegeneretteCredit;
-
     /// @notice Top affiliate per game level for bonus calculations.
     /// @dev Private storage; use affiliateTop() view to read.
     ///      Updated in _updateTopAffiliate() when affiliate exceeds current top.
@@ -272,13 +239,11 @@ contract DegenerusAffiliate {
 
         affiliateCode[AFFILIATE_CODE_VAULT] = AffiliateCodeInfo({
             owner: ContractAddresses.VAULT,
-            kickback: 0,
-            payoutMode: uint8(PayoutMode.Coinflip)
+            kickback: 0
         });
         affiliateCode[AFFILIATE_CODE_DGNRS] = AffiliateCodeInfo({
             owner: ContractAddresses.DGNRS,
-            kickback: 0,
-            payoutMode: uint8(PayoutMode.Coinflip)
+            kickback: 0
         });
         emit Affiliate(1, AFFILIATE_CODE_VAULT, ContractAddresses.VAULT);
         emit Affiliate(1, AFFILIATE_CODE_DGNRS, ContractAddresses.DGNRS);
@@ -333,56 +298,6 @@ contract DegenerusAffiliate {
      */
     function createAffiliateCode(bytes32 code_, uint8 kickbackPct) external {
         _createAffiliateCode(msg.sender, code_, kickbackPct);
-    }
-
-    /// @notice Set payout mode for an affiliate code owned by the caller.
-    /// @param code_ Affiliate code to configure.
-    /// @param mode Routing mode.
-    function setAffiliatePayoutMode(bytes32 code_, PayoutMode mode) external {
-        AffiliateCodeInfo storage info = affiliateCode[code_];
-        if (info.owner != msg.sender) revert Insufficient();
-        uint8 modeRaw = uint8(mode);
-        if (info.payoutMode != modeRaw) {
-            info.payoutMode = modeRaw;
-        }
-        emit AffiliatePayoutModeUpdated(msg.sender, code_, modeRaw);
-    }
-
-    /// @notice Get payout mode for an affiliate code.
-    /// @param code_ Affiliate code to query.
-    /// @return mode Current payout mode.
-    function affiliatePayoutMode(bytes32 code_) external view returns (PayoutMode mode) {
-        return PayoutMode(affiliateCode[code_].payoutMode);
-    }
-
-    /// @notice View pending Degenerette credit balance for a player.
-    /// @param player Address to query.
-    /// @return amount Pending credit amount (18 decimals).
-    function pendingDegeneretteCreditOf(address player) external view returns (uint256 amount) {
-        return pendingDegeneretteCredit[player];
-    }
-
-    /// @notice Consume pending Degenerette credit for a player.
-    /// @dev Access: game contract only.
-    /// @param player Player address.
-    /// @param amount Amount requested to consume.
-    /// @return consumed Amount consumed.
-    function consumeDegeneretteCredit(
-        address player,
-        uint256 amount
-    ) external returns (uint256 consumed) {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyAuthorized();
-        if (player == address(0) || amount == 0) return 0;
-        uint256 balance = pendingDegeneretteCredit[player];
-        if (balance == 0) return 0;
-
-        consumed = amount <= balance ? amount : balance;
-        uint256 newBalance;
-        unchecked {
-            newBalance = balance - consumed;
-        }
-        pendingDegeneretteCredit[player] = newBalance;
-        emit DegeneretteCreditUpdated(player, false, consumed, newBalance);
     }
 
     /**
@@ -450,9 +365,9 @@ contract DegenerusAffiliate {
      * - Recycled ETH (all levels): 5% (REWARD_SCALE_RECYCLED_BPS = 500)
      *
      * LOOTBOX TAPER (fresh ETH only):
-     * - Activity score < 15,000: no taper (100% payout)
-     * - Activity score 15,000-25,500: linear taper from 100% to 50%
-     * - Activity score >= 25,500: 50% payout floor (LOOTBOX_TAPER_MIN_BPS = 5000)
+     * - Activity score < 10,000: no taper (100% payout)
+     * - Activity score 10,000-25,500: linear taper from 100% to 25%
+     * - Activity score >= 25,500: 25% payout floor (LOOTBOX_TAPER_MIN_BPS = 2500)
      * - Leaderboard tracking always uses full untapered amount.
      *
      * @param amount Base reward amount (18 decimals).
@@ -488,8 +403,7 @@ contract DegenerusAffiliate {
         bool infoSet;
         AffiliateCodeInfo memory vaultInfo = AffiliateCodeInfo({
             owner: ContractAddresses.VAULT,
-            kickback: 0,
-            payoutMode: uint8(PayoutMode.Coinflip)
+            kickback: 0
         });
 
         if (storedCode == bytes32(0)) {
@@ -543,7 +457,6 @@ contract DegenerusAffiliate {
         // -----------------------------------------------------------------
         address affiliateAddr = info.owner;
         uint8 kickbackPct = info.kickback;
-        uint8 payoutMode = info.payoutMode;
 
         // -----------------------------------------------------------------
         // REWARD CALCULATION
@@ -676,7 +589,7 @@ contract DegenerusAffiliate {
         // the combined amount. This preserves each recipient's EV:
         // P(win_i) = amount_i / totalAmount.
         if (cursor == 1) {
-            _routeAffiliateReward(players[0], amounts[0], payoutMode);
+            _routeAffiliateReward(players[0], amounts[0]);
         } else {
             uint256 totalAmount;
             for (uint256 i; i < cursor; ) {
@@ -695,7 +608,7 @@ contract DegenerusAffiliate {
                     sender,
                     storedCode
                 );
-                _routeAffiliateReward(winner, totalAmount, payoutMode);
+                _routeAffiliateReward(winner, totalAmount);
             }
         }
 
@@ -810,8 +723,7 @@ contract DegenerusAffiliate {
         if (info.owner != address(0)) revert Insufficient();
         affiliateCode[code_] = AffiliateCodeInfo({
             owner: owner,
-            kickback: kickbackPct,
-            payoutMode: uint8(PayoutMode.Coinflip)
+            kickback: kickbackPct
         });
         emit Affiliate(1, code_, owner); // 1 = code created
     }
@@ -827,26 +739,13 @@ contract DegenerusAffiliate {
         emit Affiliate(0, code_, player); // 0 = player referred
     }
 
-    /// @dev Route affiliate rewards by code-configured payout mode.
+    /// @dev Route affiliate rewards as coinflip credit.
     ///      Amounts are already BURNIE-denominated (MintModule converts via _ethToBurnieValue).
     function _routeAffiliateReward(
         address player,
-        uint256 amount,
-        uint8 modeRaw
+        uint256 amount
     ) private {
         if (player == address(0) || amount == 0) return;
-        if (modeRaw == uint8(PayoutMode.Degenerette)) {
-            uint256 newBalance = pendingDegeneretteCredit[player] + amount;
-            pendingDegeneretteCredit[player] = newBalance;
-            emit DegeneretteCreditUpdated(player, true, amount, newBalance);
-            return;
-        }
-        if (modeRaw == uint8(PayoutMode.NitMode)) {
-            uint256 coinAmount = amount >> 1;
-            coin.creditCoin(player, coinAmount);
-            return;
-        }
-        // Default mode: coinflip (modeRaw=0 or unknown).
         coin.creditFlip(player, amount);
     }
 
@@ -883,7 +782,7 @@ contract DegenerusAffiliate {
     }
 
     /// @dev Reduce affiliate payout for high-activity lootbox buyers.
-    ///      Linear taper: 100% at score 15000 → 50% at score 25500+.
+    ///      Linear taper: 100% at score 10000 → 25% at score 25500+.
     function _applyLootboxTaper(uint256 amt, uint16 score) private pure returns (uint256) {
         if (score >= LOOTBOX_TAPER_END_SCORE) {
             return (amt * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
