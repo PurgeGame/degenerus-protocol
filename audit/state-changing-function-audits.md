@@ -2144,7 +2144,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `_rewardTopAffiliate(lvl)` (private, delegatecall to EndgameModule)
 - `_runRewardJackpots(lvl, rngWord)` (private, delegatecall to EndgameModule)
 - `_endPhase()` (private)
-- `coin.creditFlip(caller, ADVANCE_BOUNTY)` (external call to DegenerusCoin)
+- `coin.creditFlip(caller, advanceBounty)` (external call to DegenerusCoin, ~0.01 ETH worth of BURNIE)
 
 **ETH Flow:**
 - No direct ETH transfers in `advanceGame` itself.
@@ -2163,11 +2163,12 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `poolConsolidationDone` prevents double consolidation
 - Level increment happens at RNG request time (not at advance time) to prevent manipulation
 - `jackpotCounter` caps at `JACKPOT_LEVEL_CAP = 5` before triggering phase end
-- ADVANCE_BOUNTY (500 BURNIE flip credit) always awarded to caller after processing
+- advanceBounty (~0.01 ETH worth of BURNIE flip credit, computed as `(ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price`) always awarded to caller after processing
+- Bounty escalation on new-day path only (not mid-day): 2x after 1 hour past jackpot reset time, 3x after 2 hours, capped at 3x. Mid-day calls (ticket draining, buffer swaps) use the base 1x bounty. This incentivizes callers to unstick stalled daily processing.
 
 **NatSpec Accuracy:**
 - Line 118-119: NatSpec says "Called daily to process jackpots, mints, and phase transitions" -- ACCURATE. It is the daily tick function.
-- NatSpec says "Caller receives ADVANCE_BOUNTY (500 BURNIE) as flip credit" -- ACCURATE. `coin.creditFlip(caller, ADVANCE_BOUNTY)` always runs at line 293.
+- NatSpec says "Caller receives ~0.01 ETH worth of BURNIE as flip credit" -- ACCURATE. `coin.creditFlip(caller, advanceBounty)` where `advanceBounty = (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price`, escalated 2-3x on new-day paths if processing is stalled 1-2+ hours past reset.
 
 **Gas Flags:**
 - The `do { ... } while(false)` pattern is a clean single-pass state machine with `break` for early exits. No wasted iteration.
@@ -4909,7 +4910,7 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 **ETH Flow:**
 - **COIN path** (`payCoin=true`): Calls `_creditJackpot(true, ...)` -> `coin.creditFlip(beneficiary, amount)` for each winner. Returns `(entropyState, 0, 0, 0)` -- no ETH liability.
 - **ETH path** (`payCoin=false`):
-  - **Solo bucket** (`winnerCount == 1`): Calls `_processSoloBucketWinner` which does 75/25 split: 75% ETH to claimable, 25% as whale passes. If 25% < HALF_WHALE_PASS_PRICE (2.175 ETH), pays 100% as ETH.
+  - **Solo bucket** (`winnerCount == 1`): Calls `_processSoloBucketWinner` which does 75/25 split: 75% ETH to claimable, 25% as whale passes. If 25% < HALF_WHALE_PASS_PRICE (2.25 ETH), pays 100% as ETH.
   - **Multi-winner bucket**: Calls `_addClaimableEth(w, perWinner, entropyState)` for each winner.
 - DGNRS reward: First solo bucket winner gets `dgnrs.transferFromPool(Pool.Reward, w, dgnrsReward)`.
 
@@ -4985,7 +4986,7 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
   - `whalePassSpent = whalePassCount * HALF_WHALE_PASS_PRICE` moved to `futurePrizePool`.
   - `ethAmount = perWinner - whalePassSpent` credited as claimable ETH.
   - Difference from multi-winner: solo gets whale passes, multi-winner gets pure ETH.
-- **Full ETH path** (when `quarterAmount < HALF_WHALE_PASS_PRICE`, i.e., `perWinner < 4 * 2.175 = 8.7 ETH`):
+- **Full ETH path** (when `quarterAmount < HALF_WHALE_PASS_PRICE`, i.e., `perWinner < 4 * 2.25 = 9.0 ETH`):
   - Full `perWinner` credited as claimable ETH.
 
 **Invariants:**
@@ -6261,7 +6262,7 @@ Per-category behavior:
 **ETH Flow:** No direct ETH movement. Awards tickets (future value) across 100 levels.
 
 **Invariants:**
-- Start level calculation: if passLevel <= 4, starts at level 1; otherwise starts at next 50-level boundary + 1: `((passLevel + 1) / 50) * 50 + 1`. At passLevel=5: `(6/50)*50+1 = 1`. At passLevel=50: `(51/50)*50+1 = 51`. At passLevel=51: `(52/50)*50+1 = 51`. Correct snapping to 50-level boundaries.
+- Start level calculation: `ticketStartLevel = passLevel`. Always starts at the player's current level with no special casing or boundary snapping.
 - Bonus tickets: 40/level for levels within [passLevel, 10] (WHALE_PASS_BONUS_END_LEVEL), 2/level for the rest. The `isBonus` check requires `lvl >= passLevel AND lvl <= 10`. If ticketStartLevel > 10 or passLevel > 10, no bonus levels.
 - Loop iterates exactly 100 times with unchecked increment for gas efficiency.
 - Uses `_queueTickets` (unscaled) not `_queueTicketsScaled` -- passes whole ticket counts directly.
@@ -6532,7 +6533,7 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 - levelsToAdd is delta-based: overlapping whale bundles do not double-count levels
 
 **NatSpec Accuracy:**
-- NatSpec says "Available at any level. Tickets always start at x1." -- ACCURATE. `ticketStartLevel = passLevel <= 4 ? 1 : passLevel` confirms tickets start at level 1 for early purchases.
+- NatSpec says "Available at any level. Tickets always start at current level." -- ACCURATE. `ticketStartLevel = passLevel` confirms tickets always start at the player's current level.
 - NatSpec says "Boosts levelCount by delta" -- ACCURATE. levelsToAdd is capped at deltaFreeze.
 - NatSpec says "40 x quantity bonus tickets/lvl for levels passLevel-10" -- ACCURATE. Loop checks `isBonus = (lvl >= passLevel && lvl <= WHALE_BONUS_END_LEVEL)`.
 - NatSpec says "Price: 2.4 ETH at levels 0-3" -- SLIGHTLY IMPRECISE: code uses `passLevel <= 4` which is `level + 1 <= 4`, meaning `level <= 3`, so levels 0-3 is correct. ACCURATE.
@@ -6704,9 +6705,8 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 - Boon expiry: lootbox-rolled = `stampDay + DEITY_PASS_BOON_EXPIRY_DAYS (4)`, deity-granted = same day only (`deityDay != currentDay -> expired`). Boon consumed regardless of expiry. CORRECT.
 
 **Ticket Queuing Logic:**
-- `ticketStartLevel = passLevel <= 4 ? 1 : uint24(((passLevel + 1) / 50) * 50 + 1)`
-- For early levels (passLevel <= 4): starts at level 1, covers 1-100
-- For later levels: rounds down to nearest x50+1 boundary. E.g., passLevel=5 -> (6/50)*50+1 = 1; passLevel=50 -> (51/50)*50+1 = 51; passLevel=99 -> (100/50)*50+1 = 51; passLevel=100 -> (101/50)*50+1 = 101
+- `ticketStartLevel = passLevel`
+- Always starts at the player's current level with no special casing or boundary snapping. Covers passLevel to passLevel+99.
 - Tickets: 40/lvl bonus for levels between passLevel and level 10, 2/lvl standard otherwise (same rates as whale bundle but without quantity multiplier)
 
 **Invariants:**
@@ -8386,7 +8386,7 @@ Returns true if ANY boon type survived the expiry checks.
 - `amount <= LOOTBOX_CLAIM_THRESHOLD`: delegatecall to `GAME_LOOTBOX_MODULE.resolveLootboxDirect(winner, amount, rngWord)`
 
 **ETH Flow:**
-- Large amounts (> 5 ETH): converted to whale pass claims (half-passes at 2.175 ETH each), remainder -> `claimableWinnings[winner]`
+- Large amounts (> 5 ETH): converted to whale pass claims (half-passes at 2.25 ETH each), remainder -> `claimableWinnings[winner]`
 - Small amounts (<= 5 ETH): resolved via LootboxModule delegatecall (lootbox rolls determine outcome)
 
 **Invariants:**
@@ -8437,7 +8437,7 @@ Returns true if ANY boon type survived the expiry checks.
 
 **Callers (in DecimatorModule):** `_awardDecimatorLootbox` (for amounts > 5 ETH)
 
-**ETH Flow:** Converts ETH to whale pass half-passes (2.175 ETH each), remainder credited to claimable. `claimablePool` incremented by remainder to maintain solvency invariant.
+**ETH Flow:** Converts ETH to whale pass half-passes (2.25 ETH each), remainder credited to claimable. `claimablePool` incremented by remainder to maintain solvency invariant.
 
 **Verdict:** CORRECT (in DecimatorModule context)
 
@@ -8567,7 +8567,7 @@ This function does NOT increment `claimablePool`. The aggregate pool tracking is
 
 **ETH Flow:**
 - Converts large ETH payouts into deferred whale pass claims
-- Division: `amount / HALF_WHALE_PASS_PRICE (2.175 ETH)` = number of half-passes
+- Division: `amount / HALF_WHALE_PASS_PRICE (2.25 ETH)` = number of half-passes
 - Remainder: `amount - (fullHalfPasses * HALF_WHALE_PASS_PRICE)` goes to claimable balance
 - `whalePassClaims` is a count, not ETH -- represents tickets/levels to be claimed later
 - `claimablePool` is incremented for remainder only (the whale pass portion is handled separately when claims are redeemed)
@@ -8577,7 +8577,7 @@ This function does NOT increment `claimablePool`. The aggregate pool tracking is
 2. `fullHalfPasses * HALF_WHALE_PASS_PRICE + remainder == amount` always holds (integer division identity)
 3. No ETH is lost: every wei goes to either whale pass claims or claimable remainder
 4. `claimablePool` is incremented in sync with `claimableWinnings` for the remainder (unlike `_creditClaimable` which leaves pool tracking to callers)
-5. `whalePassClaims` increment is checked (no unchecked) -- safe since half-pass count is bounded by `amount / 2.175 ETH`, and `amount` is bounded by protocol ETH
+5. `whalePassClaims` increment is checked (no unchecked) -- safe since half-pass count is bounded by `amount / 2.25 ETH`, and `amount` is bounded by protocol ETH
 
 **NatSpec Accuracy:**
 - `@dev` says "Queue deferred whale pass claims for large payouts" -- CORRECT
