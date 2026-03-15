@@ -26,16 +26,6 @@ interface IDegenerusAffiliate {
         uint16 lootboxActivityScore
     ) external returns (uint256 playerKickback);
 
-    /// @notice Consume pending Degenerette credit for a player.
-    /// @dev Access: game contract only.
-    /// @param player Player address.
-    /// @param amount Amount to consume.
-    /// @return consumed Amount consumed.
-    function consumeDegeneretteCredit(
-        address player,
-        uint256 amount
-    ) external returns (uint256 consumed);
-
     /// @notice Get the top affiliate for a given game level.
     /// @dev Returns the affiliate with the highest earnings for that level.
     ///      Used for affiliate trophies and jackpot selections.
