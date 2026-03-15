@@ -2,7 +2,7 @@
 
 ## What This Is
 
-The Degenerus Protocol is an on-chain game (Solidity 0.8.34, Foundry + Hardhat) where players buy tickets, compete in purchase/jackpot phases, and win ETH prizes. This audit repo holds the contract source for review and modification. v1.0 shipped always-open purchases. v1.1 produced comprehensive economic flow documentation — 13 reference documents covering every ETH/BURNIE flow, jackpot mechanic, reward system, and protocol constant with exact formulas verified against contract source.
+The Degenerus Protocol is an on-chain game (Solidity 0.8.34, Foundry + Hardhat) where players buy tickets, compete in purchase/jackpot phases, and win ETH prizes. This audit repo holds the contract source for review and modification. v1.0 shipped always-open purchases. v1.1 produced comprehensive economic flow documentation. v1.2 completed an exhaustive RNG security audit confirming no manipulation windows exist between VRF arrival and consumption.
 
 ## Core Value
 
@@ -30,19 +30,15 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 - ✓ Jackpot phase mechanics with 5-day draws, trait buckets, BAF/Decimator — v1.1
 - ✓ Death clock and endgame flows with terminal distribution formulas — v1.1
 - ✓ Parameter reference with ~200+ constants, values, units, and locations — v1.1
+- ✓ Complete RNG variable inventory (9 direct + 22 influencing) with EVM slots, types, lifecycle traces — v1.2
+- ✓ RNG function catalogue (60+ functions, 27 entry points, 7 guard types) — v1.2
+- ✓ All 8 v1.0 attack scenarios re-verified (all PASS, no regressions) — v1.2
+- ✓ 13 manipulation windows analyzed (4 BLOCKED, 9 SAFE BY DESIGN, 0 EXPLOITABLE) — v1.2
+- ✓ Ticket creation and mid-day RNG flows verified manipulation-resistant — v1.2
 
 ### Active
 
-## Current Milestone: v1.2 RNG Security Audit
-
-**Goal:** Exhaustive audit of every variable and function touching RNG — confirm no manipulation window exists between RNG arrival and consumption, with delta focus on changes since v1.0 audit.
-
-**Target features:**
-- Complete inventory of all RNG-touching variables and functions
-- Adversarial analysis of manipulation windows (RNG known → RNG consumed)
-- Delta verification against v1.0 audit findings for 8 changed contract files
-- Deep focus on ticket creation flows and mid-day RNG processing
-- Verification of new `lastLootboxRngWord` and `midDayTicketRngPending` state variables
+(None — next milestone not yet defined)
 
 ### Out of Scope
 
@@ -59,7 +55,8 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 - Jackpot phase keeps freeze active across all 5 draw days
 - 54 legacy shim call sites remain in non-purchase modules (marked DEPRECATED, functional)
 - 12 pre-existing deploy-dependent test failures (predate v1.0)
-- v1.1 output: 13 reference documents in `audit/v1.1-*.md` (8,511 lines total) — designed for game theory agent consumption with exact Solidity expressions, worked examples, and simulation pseudocode
+- v1.1 output: 13 reference documents in `audit/v1.1-*.md` (8,511 lines)
+- v1.2 output: 8 RNG audit documents in `audit/v1.2-*.md` (3,502 lines) — 0 exploitable windows, all attack scenarios PASS
 
 ## Constraints
 
@@ -82,6 +79,9 @@ Players can purchase tickets at any time — no downtime during RNG processing o
 | v1.1 docs structured by purchase type, not contract file | Agent consumption prioritizes economic flow over code layout | ✓ Good — 13 focused reference docs |
 | Worked examples + simulation pseudocode in jackpot docs | Game theory agents need computable examples, not just formulas | ✓ Good — directly consumable |
 | Separated BURNIE-denominated from ETH constants in parameter ref | Prevents ether-suffix unit confusion for agent consumers | ✓ Good — clear unit boundaries |
+| 8-field template per RNG consumption point | Consistent analysis structure across 17 points enables comparison | ✓ Good — enabled clean verdict consolidation |
+| Separate daily vs lootbox adversarial timelines | Different temporal models (two-phase commit vs direct-finalize) | ✓ Good — distinct threat models documented |
+| Frozen read buffer as structural commit-reveal for ticket RNG | Security based on buffer isolation, not entropy secrecy | ✓ Good — robust against known-entropy scenarios |
 
 ---
-*Last updated: 2026-03-14 after v1.2 milestone start*
+*Last updated: 2026-03-14 after v1.2 milestone completion*

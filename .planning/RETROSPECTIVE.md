@@ -84,6 +84,46 @@
 
 ---
 
+## Milestone: v1.2 — RNG Security Audit
+
+**Shipped:** 2026-03-14
+**Phases:** 4 | **Plans:** 10
+
+### What Was Built
+- 8 RNG audit documents (3,502 lines) covering every VRF-related variable, function, and manipulation window
+- Complete inventory: 9 direct RNG variables, 22 influencing variables, 60+ functions, 27 entry points, 7 guard types
+- Delta verification: all 8 v1.0 attack scenarios re-verified (all PASS), 88 hunks across 11 files assessed
+- Adversarial analysis: 13 manipulation windows analyzed — 4 BLOCKED, 9 SAFE BY DESIGN, 0 EXPLOITABLE
+- Deep-dive: ticket creation end-to-end trace, mid-day RNG flow, coinflip lock timing alignment
+
+### What Worked
+- Foundation-first phase ordering (inventory → delta → windows → deep-dive) meant each phase consumed the previous as input with zero backtracking
+- 8-field per-consumption-point template created consistent analysis structure across all 17 RNG points — enabled clean verdict consolidation
+- Auto-chain execution across all 10 plans — 4 phases completed in ~2 hours with no manual intervention between plans
+- Phase 12's cross-reference matrix (27 entry points x variables) directly fed Phase 14's window analysis without re-reading contracts
+
+### What Was Inefficient
+- Summary one-liner extraction still returning null from CLI tooling (third milestone with this issue)
+- Phase 15 ROADMAP plan checkboxes still showing `[ ]` despite completed plans (same cosmetic issue as v1.1)
+- Integration checker flagged cosmetic "findings" (missing advisory labels, conservative variable counts) that were noise, not substance
+
+### Patterns Established
+- Adversarial analysis template: per-consumption-point window → block builder timeline → inter-block gaps → consolidated verdict table
+- "Structural commit-reveal" framing for buffer-based RNG isolation — security argument based on buffer isolation, not entropy secrecy
+- Three-source requirement verification: VERIFICATION.md + SUMMARY frontmatter + REQUIREMENTS.md traceability
+
+### Key Lessons
+1. Audit documentation phases execute fastest of all milestone types (~3-5min per plan avg) — inventory and analysis are parallel-friendly
+2. Integration checker severity calibration needs work — "cosmetic" findings create noise that the user has to manually dismiss
+3. For RNG security specifically, structural protections (locks, buffers, atomic operations) are more convincing than probabilistic arguments — lead with mechanism, not math
+
+### Cost Observations
+- Model mix: 100% opus (quality profile)
+- Sessions: ~4 (planning + 2 execution + audit/completion)
+- Notable: 10 plans in ~2 hours; research was the bottleneck for Phases 14-15
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -92,6 +132,7 @@
 |-----------|--------|-------|------------|
 | v1.0 | 5 | 8 | Bottom-up phase ordering with harness-per-phase testing |
 | v1.1 | 6 | 15 | Research-then-document pattern, auto-chain execution for independent plans |
+| v1.2 | 4 | 10 | Foundation-first audit ordering, 8-field per-consumption-point template |
 
 ### Cumulative Quality
 
@@ -99,9 +140,11 @@
 |-----------|--------|-------------|-----------------|
 | v1.0 | 66 tests, +1,921 LOC | 8/8 requirements | 54 legacy shims |
 | v1.1 | 13 docs, 8,511 lines | 44/44 reqs, 51/51 truths | 3 readability + 8 cosmetic |
+| v1.2 | 8 docs, 3,502 lines | 20/20 reqs, 39/39 truths | 0 |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. Storage-first in delegatecall architectures — validated by zero compilation failures across 5 phases
-2. The documentation pass is itself a verification step — formula errors caught during v1.1 write-up, counting errors caught during v1.0 planning
-3. Summary one-liner extraction from CLI still broken — needs investigation before v1.2
+1. Storage-first / foundation-first ordering pays off across all milestone types — code (v1.0), docs (v1.1), and audit (v1.2) all benefited
+2. The documentation pass is itself a verification step — formula errors caught during v1.1 write-up, counting errors during v1.0 planning, code references verified during v1.2 audit
+3. Summary one-liner extraction from CLI still broken — 3 milestones running, still returns null
+4. Integration checker cosmetic findings are noise — user dismissed all non-substantive findings in v1.2; calibrate severity threshold
