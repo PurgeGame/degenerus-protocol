@@ -18,14 +18,20 @@
 
 **Requirements:** DELTA-01, DELTA-02, DELTA-03, DELTA-04, DELTA-05, DELTA-06, DELTA-07, DELTA-08
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 19-01-PLAN.md — Core contract audit: sDGNRS + DGNRS line-by-line review + supply invariant proof
+- [ ] 19-02-PLAN.md — Consumer callsite audit + reward math + BPS verification + consolidated report
+
 **Success Criteria:**
 1. StakedDegenerusStonk.sol reviewed line-by-line: reentrancy, access control, reserve math, burn accounting
 2. DegenerusStonk.sol reviewed: ERC20 compliance, allowance edge cases, burn delegation, unwrapTo auth
 3. Supply invariant verified: DGNRS.totalSupply + unwrapped sDGNRS == sDGNRS.balanceOf(DGNRS wrapper)
-4. Every game→sDGNRS callsite audited for correct Pool enum, address, and return value handling
+4. Every game->sDGNRS callsite audited for correct Pool enum, address, and return value handling
 5. payCoinflipBountyDgnrs threshold gating verified (min bet 50k, min pool 20k, BPS=20)
 6. Degenerette reward math verified (cappedBet, tier BPS, pool percentage)
-7. Earlybird→Lootbox dump verified (was Reward), no Reward pool reference remains
+7. Earlybird->Lootbox dump verified (was Reward), no Reward pool reference remains
 8. Written audit report with findings and severity ratings
 
 ## Phase 20: Correctness Verification — Docs, Comments, Tests
