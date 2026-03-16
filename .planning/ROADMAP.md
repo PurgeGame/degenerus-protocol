@@ -4,6 +4,14 @@
 **Phases:** 19-23 (continuing from v1.2 phase 18)
 **Requirements:** 27
 
+- [ ] **Phase 19: Delta Security Audit — sDGNRS/DGNRS Split**
+- [ ] **Phase 20: Correctness Verification — Docs, Comments, Tests**
+- [ ] **Phase 21: Novel Attack Surface — Deep Creative Analysis**
+- [ ] **Phase 22: Warden Simulation + Regression Check**
+- [ ] **Phase 23: Gas Optimization — Dead Code Removal**
+
+---
+
 ## Phase 19: Delta Security Audit — sDGNRS/DGNRS Split
 
 **Goal:** Adversarial security review of all code changed in the sDGNRS/DGNRS split.
