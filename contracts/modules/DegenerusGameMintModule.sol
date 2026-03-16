@@ -841,6 +841,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         // - purchase phase: tickets target next level
         // - jackpot phase: tickets target current level
         uint24 targetLevel = jackpotPhaseFlag ? level : level + 1;
+        // Affiliate scores always route to level + 1 so they freeze at
+        // level transition and can be claimed against a fixed snapshot.
+        uint24 affiliateLevel = level + 1;
 
         uint256 priceWei = price;
         uint256 costWei = (priceWei * quantity) / (4 * TICKET_SCALE);
@@ -954,7 +957,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     freshBurnie,
                     affiliateCode,
                     buyer,
-                    targetLevel,
+                    affiliateLevel,
                     true,
                     0
                 );
@@ -964,7 +967,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                         _ethToBurnieValue(recycled, priceWei),
                         affiliateCode,
                         buyer,
-                        targetLevel,
+                        affiliateLevel,
                         false,
                         0
                     );
@@ -974,7 +977,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     freshBurnie,
                     affiliateCode,
                     buyer,
-                    targetLevel,
+                    affiliateLevel,
                     true,
                     0
                 );
@@ -983,7 +986,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     _ethToBurnieValue(costWei, priceWei),
                     affiliateCode,
                     buyer,
-                    targetLevel,
+                    affiliateLevel,
                     false,
                     0
                 );

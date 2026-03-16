@@ -94,28 +94,46 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
 
     /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;
+
+    /// @notice Max share of affiliate DGNRS pool segregated per level for claims (5%).
+    uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 500;
+
     uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
 
     // -------------------------------------------------------------------------
     // Main Entry Point
     // -------------------------------------------------------------------------
 
-    /// @notice Award DGNRS reward to the top affiliate of a level.
+    /// @notice Award DGNRS reward to the top affiliate of a level and segregate
+    ///         the per-level claim allocation.
     /// @dev Callable during level transition; guarded by a per-level paid flag.
-    /// @param lvl The level to reward.
+    ///      After the 1% top-affiliate draw, snapshots 5% of the remaining affiliate
+    ///      pool into levelDgnrsAllocation[lvl]. Affiliate scores always route to
+    ///      level + 1 during gameplay, so at transition time (when level becomes lvl),
+    ///      all scores at index lvl are frozen — new scores go to lvl + 1.
+    ///      Claims read levelDgnrsAllocation[currLevel] directly.
+    ///      Unclaimed tokens are never physically moved — they remain in the pool
+    ///      and naturally roll into the next level's snapshot.
+    /// @param lvl The level to reward (the NEW level after increment).
     function rewardTopAffiliate(uint24 lvl) external {
         (address top, ) = affiliate.affiliateTop(lvl);
-        if (top == address(0)) return;
 
-        uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate);
-        uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) /
-            10_000;
-        uint256 paid = dgnrs.transferFromPool(
-            IDegenerusStonk.Pool.Affiliate,
-            top,
-            dgnrsReward
-        );
-        emit AffiliateDgnrsReward(top, lvl, paid);
+        if (top != address(0)) {
+            uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate);
+            uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) /
+                10_000;
+            uint256 paid = dgnrs.transferFromPool(
+                IDegenerusStonk.Pool.Affiliate,
+                top,
+                dgnrsReward
+            );
+            emit AffiliateDgnrsReward(top, lvl, paid);
+        }
+
+        // Segregate 5% of remaining affiliate pool for per-affiliate claims.
+        // Scores at index lvl are frozen (new scores go to lvl + 1).
+        uint256 remainingPool = dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate);
+        levelDgnrsAllocation[lvl] = (remainingPool * AFFILIATE_DGNRS_LEVEL_BPS) / 10_000;
     }
 
     /// @notice Run reward jackpots (BAF/Decimator) during the level transition RNG period.

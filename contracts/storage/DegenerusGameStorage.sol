@@ -1018,6 +1018,14 @@ abstract contract DegenerusGameStorage {
     mapping(uint24 => mapping(address => bool))
         internal affiliateDgnrsClaimedBy;
 
+    /// @dev Segregated DGNRS allocation per level (5% of affiliate pool at transition time).
+    ///      Set during level transition in rewardTopAffiliate. Claims draw against this
+    ///      fixed amount instead of the live pool balance, eliminating first-mover advantage.
+    mapping(uint24 => uint256) internal levelDgnrsAllocation;
+
+    /// @dev Cumulative DGNRS claimed per level from the segregated allocation.
+    mapping(uint24 => uint256) internal levelDgnrsClaimed;
+
     // =========================================================================
     // Special Perk Expected Count
     // =========================================================================
