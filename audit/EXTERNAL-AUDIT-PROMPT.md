@@ -40,6 +40,7 @@ Your objective is to find real, exploitable vulnerabilities and meaningful econo
 - Affiliate referral tracking and bonus points
 - Quest streak system with activity score
 - DegenerusVault for stETH yield
+- Dual token: StakedDegenerusStonk (sDGNRS, soulbound, holds reserves) + DegenerusStonk (DGNRS, transferable wrapper)
 - Pull-pattern ETH/stETH withdrawals (no push payments)
 - Game over is multi-step: advanceGame -> VRF request -> fulfill -> advanceGame -> `gameOver=true`
 - Deity pass refund on gameOver: flat 20 ETH/pass (levels 0-9), budget-capped, first-purchased-first-paid
@@ -75,7 +76,8 @@ Delegatecall modules (all share `DegenerusGameStorage`):
 Supporting contracts:
 - `contracts/BurnieCoin.sol` + `contracts/BurnieCoinflip.sol`
 - `contracts/DegenerusVault.sol`
-- `contracts/DegenerusStonk.sol`
+- `contracts/StakedDegenerusStonk.sol` (sDGNRS -- soulbound, holds all reserves and pools)
+- `contracts/DegenerusStonk.sol` (DGNRS -- transferable ERC20 wrapper)
 - `contracts/DegenerusDeityPass.sol`
 - `contracts/DegenerusAdmin.sol`
 
