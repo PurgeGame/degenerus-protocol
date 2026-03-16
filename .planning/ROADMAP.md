@@ -21,7 +21,7 @@
 **Plans:** 2 plans
 
 Plans:
-- [ ] 19-01-PLAN.md — Core contract audit: sDGNRS + DGNRS line-by-line review + supply invariant proof
+- [x] 19-01-PLAN.md — Core contract audit: sDGNRS + DGNRS line-by-line review + supply invariant proof (2/2 tasks, DELTA-01/02/03 PASS)
 - [ ] 19-02-PLAN.md — Consumer callsite audit + reward math + BPS verification + consolidated report
 
 **Success Criteria:**
