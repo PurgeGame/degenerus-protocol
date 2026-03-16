@@ -18,8 +18,8 @@
 
 ### Correctness — Docs, Comments, Tests
 
-- [ ] **CORR-01**: All NatDoc comments match implementation across changed contracts
-- [ ] **CORR-02**: All 10 audit docs verified against current code (no stale refs)
+- [x] **CORR-01**: All NatDoc comments match implementation across changed contracts
+- [x] **CORR-02**: All 10 audit docs verified against current code (no stale refs)
 - [ ] **CORR-03**: Test coverage for new/changed functions (sDGNRS, DGNRS, bounty, degenerette)
 - [ ] **CORR-04**: Fuzz test compilation and correctness for changed contracts
 
@@ -65,8 +65,8 @@
 | DELTA-06 | Phase 19 | Complete |
 | DELTA-07 | Phase 19 | Complete |
 | DELTA-08 | Phase 19 | Complete |
-| CORR-01 | Phase 20 | Pending |
-| CORR-02 | Phase 20 | Pending |
+| CORR-01 | Phase 20 | Complete |
+| CORR-02 | Phase 20 | Complete |
 | CORR-03 | Phase 20 | Pending |
 | CORR-04 | Phase 20 | Pending |
 | NOVEL-01 | Phase 21 | Pending |
