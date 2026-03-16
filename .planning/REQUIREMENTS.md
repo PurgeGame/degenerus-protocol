@@ -10,11 +10,11 @@
 - [x] **DELTA-01**: StakedDegenerusStonk reviewed for reentrancy, access control, reserve accounting
 - [x] **DELTA-02**: DegenerusStonk wrapper reviewed for ERC20 edge cases, burn delegation, unwrapTo
 - [x] **DELTA-03**: Cross-contract interaction between DGNRS↔sDGNRS verified (supply sync, burn-through)
-- [ ] **DELTA-04**: All game→sDGNRS callsites verified (pool transfers, deposits, burnRemainingPools)
-- [ ] **DELTA-05**: payCoinflipBountyDgnrs 3-arg gating logic verified
-- [ ] **DELTA-06**: Degenerette DGNRS reward math (6/7/8 match tiers) verified
-- [ ] **DELTA-07**: Earlybird→Lootbox pool dump verified (was Reward)
-- [ ] **DELTA-08**: Pool BPS rebalance impact on all downstream consumers verified
+- [x] **DELTA-04**: All game→sDGNRS callsites verified (pool transfers, deposits, burnRemainingPools)
+- [x] **DELTA-05**: payCoinflipBountyDgnrs 3-arg gating logic verified
+- [x] **DELTA-06**: Degenerette DGNRS reward math (6/7/8 match tiers) verified
+- [x] **DELTA-07**: Earlybird→Lootbox pool dump verified (was Reward)
+- [x] **DELTA-08**: Pool BPS rebalance impact on all downstream consumers verified
 
 ### Correctness — Docs, Comments, Tests
 
@@ -60,11 +60,11 @@
 | DELTA-01 | Phase 19 | Complete (19-01) |
 | DELTA-02 | Phase 19 | Complete (19-01) |
 | DELTA-03 | Phase 19 | Complete (19-01) |
-| DELTA-04 | Phase 19 | Pending |
-| DELTA-05 | Phase 19 | Pending |
-| DELTA-06 | Phase 19 | Pending |
-| DELTA-07 | Phase 19 | Pending |
-| DELTA-08 | Phase 19 | Pending |
+| DELTA-04 | Phase 19 | Complete |
+| DELTA-05 | Phase 19 | Complete |
+| DELTA-06 | Phase 19 | Complete |
+| DELTA-07 | Phase 19 | Complete |
+| DELTA-08 | Phase 19 | Complete |
 | CORR-01 | Phase 20 | Pending |
 | CORR-02 | Phase 20 | Pending |
 | CORR-03 | Phase 20 | Pending |
