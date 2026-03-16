@@ -226,6 +226,31 @@ describe("DegenerusStonk", function () {
         params: [gameAddr],
       });
     });
+
+    it("reverts when recipient is zero address", async function () {
+      const { sdgnrs, game } = await loadFixture(deployFullProtocol);
+      const gameAddr = await game.getAddress();
+      await hre.network.provider.request({
+        method: "hardhat_impersonateAccount",
+        params: [gameAddr],
+      });
+      await hre.ethers.provider.send("hardhat_setBalance", [
+        gameAddr,
+        "0xDE0B6B3A7640000",
+      ]);
+      const gameSigner = await hre.ethers.getSigner(gameAddr);
+
+      await expect(
+        sdgnrs
+          .connect(gameSigner)
+          .transferFromPool(Pool.Whale, ZERO_ADDRESS, eth("100"))
+      ).to.be.revertedWithCustomError(sdgnrs, "ZeroAddress");
+
+      await hre.network.provider.request({
+        method: "hardhat_stopImpersonatingAccount",
+        params: [gameAddr],
+      });
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -389,6 +414,37 @@ describe("DegenerusStonk", function () {
         params: [gameAddr],
       });
     });
+
+    it("depositSteth with zero amount succeeds as no-op", async function () {
+      const { sdgnrs, game, mockStETH, deployer } = await loadFixture(
+        deployFullProtocol
+      );
+      const gameAddr = await game.getAddress();
+      const sdgnrsAddr = await sdgnrs.getAddress();
+
+      await hre.network.provider.request({
+        method: "hardhat_impersonateAccount",
+        params: [gameAddr],
+      });
+      await hre.ethers.provider.send("hardhat_setBalance", [
+        gameAddr,
+        "0xDE0B6B3A7640000",
+      ]);
+      const gameSigner = await hre.ethers.getSigner(gameAddr);
+
+      // Approve 0 stETH (mockStETH.transferFrom(game, sdgnrs, 0) should succeed)
+      await mockStETH.connect(gameSigner).approve(sdgnrsAddr, 0n);
+
+      const tx = await sdgnrs.connect(gameSigner).depositSteth(0n);
+      const ev = await getEvent(tx, sdgnrs, "Deposit");
+      // Zero amount emitted — no-op deposit
+      expect(ev.args.stethAmount).to.equal(0n);
+
+      await hre.network.provider.request({
+        method: "hardhat_stopImpersonatingAccount",
+        params: [gameAddr],
+      });
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -524,6 +580,48 @@ describe("DegenerusStonk", function () {
       await sdgnrs.connect(alice).burn(amount);
       expect(await sdgnrs.totalSupply()).to.equal(supplyBefore - amount);
     });
+
+    it("burn with stETH backing pays stETH proportionally", async function () {
+      const { sdgnrs, game, mockStETH, deployer, alice } = await loadFixture(deployFullProtocol);
+      const sdgnrsAmount = eth("100000");
+      await giveSDGNRS(sdgnrs, game, alice.address, sdgnrsAmount);
+
+      // Deposit stETH into sDGNRS via game
+      const gameAddr = await game.getAddress();
+      const sdgnrsAddr = await sdgnrs.getAddress();
+      await mockStETH.connect(deployer).mint(gameAddr, eth("10"));
+      await hre.network.provider.request({
+        method: "hardhat_impersonateAccount",
+        params: [gameAddr],
+      });
+      await hre.ethers.provider.send("hardhat_setBalance", [
+        gameAddr,
+        "0xDE0B6B3A7640000",
+      ]);
+      const gameSigner = await hre.ethers.getSigner(gameAddr);
+      await mockStETH.connect(gameSigner).approve(sdgnrsAddr, eth("10"));
+      await sdgnrs.connect(gameSigner).depositSteth(eth("10"));
+      await hre.network.provider.request({
+        method: "hardhat_stopImpersonatingAccount",
+        params: [gameAddr],
+      });
+
+      // Preview should show stETH output
+      const [, stethPreview] = await sdgnrs.previewBurn(sdgnrsAmount);
+      expect(stethPreview).to.be.gt(0n);
+
+      // Burn and verify stETH received
+      const stethBefore = await mockStETH.balanceOf(alice.address);
+      const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
+      const ev = await getEvent(tx, sdgnrs, "Burn");
+      expect(ev.args.stethOut).to.be.gt(0n);
+      const stethAfter = await mockStETH.balanceOf(alice.address);
+      expect(stethAfter - stethBefore).to.equal(ev.args.stethOut);
+    });
+
+    // BURNIE burn path not testable without fixture modification — fixture does not
+    // deposit BURNIE into sDGNRS. BURNIE backing arrives via manual transfers or
+    // coinflip claimables which require game state the unit test fixture does not set up.
   });
 
   // ---------------------------------------------------------------------------

@@ -159,6 +159,32 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       expect(ev.args.spender).to.equal(alice.address);
       expect(ev.args.amount).to.equal(eth("500"));
     });
+
+    // Coverage gap: DELTA-L-01 — transfer to self
+    it("transfer to self does not change balance (DELTA-L-01)", async function () {
+      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
+      const balBefore = await dgnrs.balanceOf(deployer.address);
+      const amount = eth("1000");
+
+      const tx = await dgnrs.connect(deployer).transfer(deployer.address, amount);
+      // Balance unchanged — tokens debited then credited to same address
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(balBefore);
+      // Transfer event still emitted
+      const ev = await getEvent(tx, dgnrs, "Transfer");
+      expect(ev.args.from).to.equal(deployer.address);
+      expect(ev.args.to).to.equal(deployer.address);
+      expect(ev.args.amount).to.equal(amount);
+    });
+
+    it("transferFrom to self does not change balance", async function () {
+      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      const balBefore = await dgnrs.balanceOf(deployer.address);
+      const amount = eth("500");
+      await dgnrs.connect(deployer).approve(alice.address, amount);
+
+      await dgnrs.connect(alice).transferFrom(deployer.address, deployer.address, amount);
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(balBefore);
+    });
   });
 
   // ===========================================================================
@@ -210,6 +236,13 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       const bal = await dgnrs.balanceOf(deployer.address);
       await expect(
         dgnrs.connect(deployer).unwrapTo(deployer.address, bal + 1n)
+      ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
+    });
+
+    it("reverts on zero amount", async function () {
+      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      await expect(
+        dgnrs.connect(deployer).unwrapTo(alice.address, 0n)
       ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
     });
   });
@@ -280,6 +313,40 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       expect(ev.args.from).to.equal(deployer.address);
       expect(ev.args.amount).to.equal(eth("1000"));
     });
+
+    it("burn with stETH backing forwards stETH proportionally", async function () {
+      const { dgnrs, sdgnrs, game, mockStETH, deployer, alice } = await loadFixture(deployFullProtocol);
+      const amount = eth("100000");
+      await dgnrs.connect(deployer).transfer(alice.address, amount);
+
+      // Deposit stETH into sDGNRS via game
+      const gameAddr = await game.getAddress();
+      const sdgnrsAddr = await sdgnrs.getAddress();
+      await mockStETH.connect(deployer).mint(gameAddr, eth("10"));
+      await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [gameAddr] });
+      await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0xDE0B6B3A7640000"]);
+      const gameSigner = await hre.ethers.getSigner(gameAddr);
+      await mockStETH.connect(gameSigner).approve(sdgnrsAddr, eth("10"));
+      await sdgnrs.connect(gameSigner).depositSteth(eth("10"));
+      await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
+
+      // Preview should show stETH output
+      const [, stethPreview] = await dgnrs.previewBurn(amount);
+      expect(stethPreview).to.be.gt(0n);
+
+      // Burn and verify stETH forwarded
+      const stethBefore = await mockStETH.balanceOf(alice.address);
+      const tx = await dgnrs.connect(alice).burn(amount);
+      const ev = await getEvent(tx, dgnrs, "BurnThrough");
+      expect(ev.args.stethOut).to.be.gt(0n);
+      const stethAfter = await mockStETH.balanceOf(alice.address);
+      expect(stethAfter - stethBefore).to.equal(ev.args.stethOut);
+    });
+
+    // BURNIE burn path not testable without fixture modification — fixture deploys
+    // BURNIE (COIN contract) but no BURNIE is deposited/transferred to sDGNRS.
+    // BURNIE backing arrives via manual transfers or coinflip claimables which
+    // require game state that the unit test fixture does not set up.
   });
 
   // ===========================================================================
