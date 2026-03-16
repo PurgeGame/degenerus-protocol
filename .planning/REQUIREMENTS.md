@@ -20,8 +20,8 @@
 
 - [x] **CORR-01**: All NatDoc comments match implementation across changed contracts
 - [x] **CORR-02**: All 10 audit docs verified against current code (no stale refs)
-- [ ] **CORR-03**: Test coverage for new/changed functions (sDGNRS, DGNRS, bounty, degenerette)
-- [ ] **CORR-04**: Fuzz test compilation and correctness for changed contracts
+- [x] **CORR-03**: Test coverage for new/changed functions (sDGNRS, DGNRS, bounty, degenerette)
+- [x] **CORR-04**: Fuzz test compilation and correctness for changed contracts
 
 ### Novel — Creative Attack Surface
 
@@ -67,8 +67,8 @@
 | DELTA-08 | Phase 19 | Complete |
 | CORR-01 | Phase 20 | Complete |
 | CORR-02 | Phase 20 | Complete |
-| CORR-03 | Phase 20 | Pending |
-| CORR-04 | Phase 20 | Pending |
+| CORR-03 | Phase 20 | Complete |
+| CORR-04 | Phase 20 | Complete |
 | NOVEL-01 | Phase 21 | Pending |
 | NOVEL-02 | Phase 21 | Pending |
 | NOVEL-03 | Phase 21 | Pending |
