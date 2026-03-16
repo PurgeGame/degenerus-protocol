@@ -1083,7 +1083,7 @@ abstract contract DegenerusGameStorage {
         if (purchaseWei == 0) return;
         if (buyer == address(0)) return;
         if (currentLevel >= EARLYBIRD_END_LEVEL) {
-            // One-shot: dump remaining earlybird pool into reward pool
+            // One-shot: dump remaining earlybird pool into lootbox pool
             if (earlybirdDgnrsPoolStart != type(uint256).max) {
                 earlybirdDgnrsPoolStart = type(uint256).max;
                 IStakedDegenerusStonk dgnrsContract = IStakedDegenerusStonk(

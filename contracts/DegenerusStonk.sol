@@ -26,18 +26,26 @@ contract DegenerusStonk {
     //                              ERRORS
     // =====================================================================
 
+    /// @notice Thrown when caller is not authorized for the operation
     error Unauthorized();
+    /// @notice Thrown when balance or allowance is insufficient
     error Insufficient();
+    /// @notice Thrown when a zero address is provided where a valid address is required
     error ZeroAddress();
+    /// @notice Thrown when an ETH or token transfer fails
     error TransferFailed();
 
     // =====================================================================
     //                              EVENTS
     // =====================================================================
 
+    /// @notice Emitted on every token transfer (including mint and burn)
     event Transfer(address indexed from, address indexed to, uint256 amount);
+    /// @notice Emitted when an allowance is set via approve
     event Approval(address indexed owner, address indexed spender, uint256 amount);
+    /// @notice Emitted when DGNRS is burned through to sDGNRS for ETH + stETH + BURNIE
     event BurnThrough(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    /// @notice Emitted when creator unwraps DGNRS back to soulbound sDGNRS
     event UnwrapTo(address indexed recipient, uint256 amount);
 
     // =====================================================================
@@ -76,16 +84,32 @@ contract DegenerusStonk {
         emit Transfer(address(0), ContractAddresses.CREATOR, deposited);
     }
 
+    /// @notice Accepts ETH from sDGNRS during burn-through; no other use
+    /// @dev Anyone can send ETH here but it is permanently locked (no sweep function). See DELTA-I-02.
     receive() external payable {}
 
     // =====================================================================
     //                          ERC20 FUNCTIONS
     // =====================================================================
 
+    /// @notice Transfer DGNRS tokens to a recipient
+    /// @param to Recipient address
+    /// @param amount Amount of DGNRS to transfer (18 decimals)
+    /// @return True on success
+    /// @custom:reverts ZeroAddress if to is address(0)
+    /// @custom:reverts Insufficient if sender balance < amount
     function transfer(address to, uint256 amount) external returns (bool) {
         return _transfer(msg.sender, to, amount);
     }
 
+    /// @notice Transfer DGNRS tokens from one address to another (requires prior allowance)
+    /// @param from Source address
+    /// @param to Destination address
+    /// @param amount Amount of DGNRS to transfer (18 decimals)
+    /// @return True on success
+    /// @custom:reverts Insufficient if amount exceeds allowance (unless max uint256 approval)
+    /// @custom:reverts ZeroAddress if to is address(0)
+    /// @custom:reverts Insufficient if from balance < amount
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         uint256 allowed = allowance[from][msg.sender];
         if (allowed != type(uint256).max) {
@@ -97,6 +121,10 @@ contract DegenerusStonk {
         return _transfer(from, to, amount);
     }
 
+    /// @notice Approve a spender to transfer DGNRS tokens on behalf of msg.sender
+    /// @param spender Address authorized to spend
+    /// @param amount Allowance amount (use type(uint256).max for unlimited)
+    /// @return True on success
     function approve(address spender, uint256 amount) external returns (bool) {
         allowance[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
@@ -145,6 +173,12 @@ contract DegenerusStonk {
     //                          VIEW FUNCTIONS
     // =====================================================================
 
+    /// @notice Preview ETH, stETH, and BURNIE output for burning a given amount of DGNRS
+    /// @dev Delegates to sDGNRS.previewBurn; does not modify state
+    /// @param amount Amount of DGNRS to simulate burning (18 decimals)
+    /// @return ethOut ETH that would be received
+    /// @return stethOut stETH that would be received
+    /// @return burnieOut BURNIE that would be received
     function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         return stonk.previewBurn(amount);
     }
