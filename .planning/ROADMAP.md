@@ -22,7 +22,7 @@
 
 Plans:
 - [x] 19-01-PLAN.md — Core contract audit: sDGNRS + DGNRS line-by-line review + supply invariant proof (2/2 tasks, DELTA-01/02/03 PASS)
-- [ ] 19-02-PLAN.md — Consumer callsite audit + reward math + BPS verification + consolidated report
+- [x] 19-02-PLAN.md — Consumer callsite audit + reward math + BPS verification + consolidated report
 
 **Success Criteria:**
 1. StakedDegenerusStonk.sol reviewed line-by-line: reentrancy, access control, reserve math, burn accounting
@@ -39,6 +39,13 @@ Plans:
 **Goal:** Ensure all documentation, NatDoc comments, and test coverage are accurate and complete.
 
 **Requirements:** CORR-01, CORR-02, CORR-03, CORR-04
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 20-01-PLAN.md — NatDoc fixes for DegenerusStonk.sol + stale comment fix + parameter reference + KNOWN-ISSUES + EXTERNAL-AUDIT-PROMPT corrections
+- [ ] 20-02-PLAN.md — Add StakedDegenerusStonk.sol section to state-changing-function-audits.md + update FINAL-FINDINGS-REPORT.md with v2.0 delta findings
+- [ ] 20-03-PLAN.md — Test coverage gap analysis + edge case tests + fuzz test compilation verification
 
 **Success Criteria:**
 1. Every NatDoc comment in changed contracts matches the actual implementation
