@@ -215,6 +215,11 @@ contract DegenerusAffiliate {
     ///      Updated in _updateTopAffiliate() when affiliate exceeds current top.
     mapping(uint24 => PlayerScore) private affiliateTopByLevel;
 
+    /// @notice Total affiliate score across all affiliates for a level.
+    /// @dev Running sum updated in payAffiliate; used as the exact denominator
+    ///      for score-proportional DGNRS claim distribution.
+    mapping(uint24 => uint256) private _totalAffiliateScore;
+
     /// @notice Commission earned by affiliate from specific sender per level.
     /// @dev Tracks cumulative BURNIE earned: level → affiliate → sender → amount.
     ///      Used to enforce MAX_COMMISSION_PER_REFERRER_PER_LEVEL cap.
@@ -505,6 +510,7 @@ contract DegenerusAffiliate {
         // Update leaderboard tracking (full amount, before any lootbox taper).
         uint256 newTotal = earned[affiliateAddr] + scaledAmount;
         earned[affiliateAddr] = newTotal;
+        _totalAffiliateScore[lvl] += scaledAmount;
         emit AffiliateEarningsRecorded(
             lvl,
             affiliateAddr,
@@ -642,6 +648,17 @@ contract DegenerusAffiliate {
      */
     function affiliateScore(uint24 lvl, address player) external view returns (uint256 score) {
         return affiliateCoinEarned[lvl][player];
+    }
+
+    /**
+     * @notice Get the total affiliate score across all affiliates for a level.
+     * @dev Sum of all affiliateCoinEarned for this level. Used as the exact
+     *      denominator for score-proportional DGNRS claim distribution.
+     * @param lvl The game level to query.
+     * @return total The total affiliate score (18 decimals).
+     */
+    function totalAffiliateScore(uint24 lvl) external view returns (uint256 total) {
+        return _totalAffiliateScore[lvl];
     }
 
     /**

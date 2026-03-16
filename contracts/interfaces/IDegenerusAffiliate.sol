@@ -41,6 +41,11 @@ interface IDegenerusAffiliate {
     /// @return score The base affiliate score (18 decimals).
     function affiliateScore(uint24 lvl, address player) external view returns (uint256 score);
 
+    /// @notice Get the total affiliate score across all affiliates for a level.
+    /// @param lvl The game level to query.
+    /// @return total The total affiliate score (18 decimals).
+    function totalAffiliateScore(uint24 lvl) external view returns (uint256 total);
+
     /// @notice Calculate the affiliate bonus points for a player.
     /// @dev Sums the player's affiliate scores for the previous 5 levels.
     ///      Awards 1 point (1%) per 1 ETH of summed score, capped at 50.

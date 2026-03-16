@@ -197,9 +197,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Share of ticket purchases routed to future prize pool (10%).
     uint16 private constant PURCHASE_TO_FUTURE_BPS = 1000;
 
-    /// @dev Max share of affiliate DGNRS pool distributed per level (5%).
-    uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 500;
-
     /// @dev DGNRS bounty share for biggest flip payout (0.5% of reward pool).
     uint16 private constant COINFLIP_BOUNTY_DGNRS_BPS = 50;
 
@@ -1407,34 +1404,33 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Claim DGNRS affiliate rewards for the previous level.
+    /// @notice Claim DGNRS affiliate rewards for the current level.
     /// @dev Requires a minimum affiliate score and allows one claim per level.
-    ///      Uses the per-level prize pool snapshot (levelPrizePool) as an approximate
-    ///      denominator and pays a proportional share of 5% of the remaining
-    ///      affiliate DGNRS pool.
+    ///      Draws from a segregated allocation (5% of the affiliate pool snapshotted
+    ///      at level transition). All claimants for the same level share a fixed pot,
+    ///      eliminating first-mover advantage. Uses totalAffiliateScore as the exact
+    ///      denominator for score-proportional distribution.
+    ///      Affiliate scores always route to level + 1 during gameplay, so at
+    ///      transition time all scores for currLevel are frozen and immutable.
     /// @param player Affiliate address to claim for (address(0) = msg.sender).
     function claimAffiliateDgnrs(address player) external {
         player = _resolvePlayer(player);
 
         uint24 currLevel = level;
-        if (currLevel <= 1) revert E();
-        uint24 prevLevel = currLevel - 1;
+        if (currLevel == 0) revert E();
 
-        if (affiliateDgnrsClaimedBy[prevLevel][player]) revert E();
+        if (affiliateDgnrsClaimedBy[currLevel][player]) revert E();
 
-        uint256 score = affiliate.affiliateScore(prevLevel, player);
+        uint256 score = affiliate.affiliateScore(currLevel, player);
         bool hasDeityPass = deityPassCount[player] != 0;
         if (!hasDeityPass && score < AFFILIATE_DGNRS_MIN_SCORE) revert E();
 
-        uint256 denominator = levelPrizePool[prevLevel];
-        if (denominator == 0) {
-            denominator = BOOTSTRAP_PRIZE_POOL;
-        }
+        uint256 denominator = affiliate.totalAffiliateScore(currLevel);
+        if (denominator == 0) revert E();
 
-        uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate);
-        uint256 levelShare = (poolBalance * AFFILIATE_DGNRS_LEVEL_BPS) / 10_000;
-        if (levelShare == 0) revert E();
-        uint256 reward = (levelShare * score) / denominator;
+        uint256 allocation = levelDgnrsAllocation[currLevel];
+        if (allocation == 0) revert E();
+        uint256 reward = (allocation * score) / denominator;
         if (reward == 0) revert E();
 
         uint256 paid = dgnrs.transferFromPool(
@@ -1443,6 +1439,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             reward
         );
         if (paid == 0) revert E();
+
+        levelDgnrsClaimed[currLevel] += paid;
 
         if (hasDeityPass && score != 0) {
             uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) /
@@ -1456,8 +1454,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             }
         }
 
-        affiliateDgnrsClaimedBy[prevLevel][player] = true;
-        emit AffiliateDgnrsClaimed(player, prevLevel, msg.sender, score, paid);
+        affiliateDgnrsClaimedBy[currLevel][player] = true;
+        emit AffiliateDgnrsClaimed(player, currLevel, msg.sender, score, paid);
     }
 
     /*+======================================================================+
