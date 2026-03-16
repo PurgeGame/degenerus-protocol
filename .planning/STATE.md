@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: completed
-last_updated: "2026-03-16T23:12:56.800Z"
-last_activity: 2026-03-16 — Completed 20-02 (audit doc completeness)
+last_updated: "2026-03-16T23:33:56.568Z"
+last_activity: 2026-03-16 — Completed 20-03 (test coverage gaps + fuzz verification)
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # State
@@ -17,9 +17,9 @@ progress:
 ## Current Position
 
 Phase: 20 (Correctness Verification)
-Plan: 02 of 3 -- COMPLETE
-Status: Plan 20-02 complete. sDGNRS section in state-changing-function-audits.md + FINAL-FINDINGS-REPORT.md v2.0 integration.
-Last activity: 2026-03-16 — Completed 20-02 (audit doc completeness)
+Plan: 03 of 3 -- COMPLETE
+Status: Phase 20 complete. All 3 plans executed: NatDoc+comments, audit doc completeness, test coverage+fuzz verification.
+Last activity: 2026-03-16 — Completed 20-03 (test coverage gaps + fuzz verification)
 
 ## Project Reference
 
@@ -40,6 +40,7 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - No Phase 19 findings warrant KNOWN-ISSUES.md modification (deferred to Phase 20)
 - 20-01: Fixed 3 additional COINFLIP line references plan marked as correct (off-by-one in reference file)
 - 20-02: sDGNRS section placed before DGNRS in function audits (underlying before wrapper); all 14 verdicts CORRECT per Phase 19 verification
+- 20-03: BURNIE burn path documented as untestable without fixture modification; DGNRS self-transfer validates DELTA-L-01; depositSteth(0) confirmed as no-op
 
 ## Accumulated Context
 
@@ -54,3 +55,4 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - Full test suite: 1065 passing, 26 pre-existing failures (affiliate/RNG/economic -- unrelated to scope). No regression.
 - 20-01: DegenerusStonk.sol now has 16 @notice NatDoc tags (full coverage). Stale earlybird comment fixed. 10 parameter reference line numbers corrected. DELTA-L-01 in KNOWN-ISSUES. sDGNRS in external audit scope.
 - 20-02: state-changing-function-audits.md now has complete sDGNRS section (14 entries). FINAL-FINDINGS-REPORT.md updated with v2.0 delta findings (1L+4I), DELTA-01-08 coverage matrix, sDGNRS in scope, 62 plans/68 requirements.
+- 20-03: 7 new edge case tests added (self-transfer, zero-address, zero-amount, stETH burn). Focused tests: 80 passing. Full suite: 1074 passing, 24 pre-existing failures, 0 new regressions. Fuzz tests compile clean. CORR-03+CORR-04 satisfied. Phase 20 complete.
