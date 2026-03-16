@@ -121,7 +121,7 @@ sDGNRS.receive()                           [onlyGame -- ETH deposits]
 ### Pitfall 4: Donation Attack on sDGNRS Burn Value
 **What goes wrong:** An attacker donates ETH directly to the game contract (via `receive()` which adds to `futurePrizePool`), then claims this inflated the sDGNRS reserves.
 **Why it happens:** sDGNRS reserves come from `address(this).balance` + stETH + claimableWinnings. If someone donates ETH to the sDGNRS contract directly, it increases `address(this).balance`.
-**How to avoid:** sDGNRS's `receive()` is `onlyGame` -- direct ETH sends to sDGNRS revert unless from the game contract. However, `selfdestruct` can force ETH into any contract without calling `receive()`. Verify whether forced ETH changes burn payout calculations.
+**How to avoid:** sDGNRS's `receive()` is `onlyGame` -- direct ETH sends to sDGNRS revert unless from the game contract. However, `selfdestruct` (or post-Cancun, create+selfdestruct in same tx per EIP-6780) can force ETH into any contract without calling `receive()`. Verify whether forced ETH changes burn payout calculations.
 **Warning signs:** `address(this).balance` in burn calculation includes force-sent ETH.
 
 ### Pitfall 5: Game-Over Timing Window Between burnRemainingPools and User Burns
@@ -180,6 +180,29 @@ function burnRemainingPools() external onlyGame {
 ```
 **Attack surface:** After this call, `totalSupply` decreases but reserves (ETH, stETH, BURNIE) remain unchanged. Each remaining token is now worth MORE backing. This is intentional -- but creates an incentive to burn BEFORE gameOver if you anticipate the pool burn will happen. Timing analysis needed for NOVEL-11.
 
+#### handleGameOverDrain State Transitions (GameOverModule.sol:68-164)
+```solidity
+// Key state transitions in handleGameOverDrain:
+// Line 69:  if (gameOverFinalJackpotPaid) return;  -- idempotency guard
+// Line 112: gameOver = true;                        -- terminal flag
+// Line 113: gameOverTime = uint48(block.timestamp); -- sweep timer start
+// Line 126: if (rngWord == 0) return;               -- RNG not ready, allow retry
+// Line 128: gameOverFinalJackpotPaid = true;         -- latch final jackpot
+// Line 163: dgnrs.burnRemainingPools();              -- pool token burn
+```
+**Attack surface:** Between line 112 (`gameOver = true`) and line 163 (`burnRemainingPools`), the gameOver flag is set but pools are not yet burned. However, this is within a SINGLE transaction -- no external observer can act between these lines. The real race is between the gameOver tx and concurrent user burn txs in the same block.
+
+#### handleFinalSweep (GameOverModule.sol:171-189)
+```solidity
+// Line 172: if (gameOverTime == 0) return;
+// Line 173: if (block.timestamp < uint256(gameOverTime) + 30 days) return;
+// Line 174: if (finalSwept) return;
+// Line 176: finalSwept = true;
+// Line 177: claimablePool = 0;  -- FORFEITS all unclaimed winnings
+// Line 188: _sendToVault(totalFunds, stBal);  -- 50% vault, 50% sDGNRS
+```
+**Attack surface:** Line 177 zeroes `claimablePool`, forfeiting unclaimed winnings. This is the window where sDGNRS burn value changes dramatically -- reserves include ETH that was previously earmarked for claimablePool. After sweep, sDGNRS gets 50% of remaining funds as deposit, increasing per-token burn value.
+
 ## State of the Art
 
 | Old Approach | Current Approach | When Changed | Impact |
@@ -201,7 +224,7 @@ function burnRemainingPools() external onlyGame {
 | Sandwich on DGNRS transfer | Front-run DGNRS trade, manipulate price, back-run | APPLICABLE if DGNRS trades on DEX |
 | MEV on burn timing | Front-run burn to extract value | Needs analysis -- burn payouts are proportional, so front-running another burner extracts from reserves |
 | DGNRS as collateral | Use DGNRS in lending protocol, borrow against it, burn for underlying | Composition risk if DGNRS listed on Aave/Compound |
-| Selfdestruct ETH injection | Force ETH into sDGNRS to inflate reserves, burn to extract | Likely EXPLOITABLE (address(this).balance includes force-sent ETH) |
+| Selfdestruct ETH injection | Force ETH into sDGNRS to inflate reserves, burn to extract | Needs analysis -- EIP-6780 still allows force-send via create+selfdestruct in same tx; `address(this).balance` includes it |
 
 ### Category 2: Composition Attacks (NOVEL-02)
 | Vector | Mechanism | Likely Verdict |
@@ -258,6 +281,7 @@ function burnRemainingPools() external onlyGame {
 | User burn vs handleFinalSweep | User + 30-day sweep tx | Between gameOver and sweep (30 day window) |
 | Multiple concurrent user burns | Two burners in same block | Both read same totalSupply; state updates are sequential per tx |
 | handleGameOverDrain retry | RNG not ready (line 126 returns) | Between gameOver flag and RNG availability |
+| handleGameOverDrain partial completion | gameOver=true but gameOverFinalJackpotPaid=false (RNG not ready) | User burns see gameOver=true but pools not yet burned |
 
 ### Category 9: DGNRS as Attack Amplifier (NOVEL-12)
 | Pre-Split (Soulbound) | Post-Split (Transferable DGNRS) | New Attack Surface |
@@ -301,9 +325,9 @@ None -- this phase is primarily analysis/documentation, not code implementation.
 ## Open Questions
 
 1. **selfdestruct ETH injection into sDGNRS**
-   - What we know: `receive()` is `onlyGame`, but `selfdestruct(target)` bypasses `receive()` and force-sends ETH. Post-Cancun, `selfdestruct` only works in the creation transaction, but older contracts could still self-destruct to target sDGNRS.
-   - What's unclear: Does the burn formula's use of `address(this).balance` include force-sent ETH? If yes, does this create extractable value or just donate to all holders proportionally?
-   - Recommendation: Analyze in NOVEL-01. If force-sent ETH inflates reserves, it benefits ALL token holders proportionally (not just the attacker), so it's likely a donation, not an exploit. But verify.
+   - What we know: `receive()` is `onlyGame`, but forced ETH delivery bypasses `receive()`. Post-Cancun (EIP-6780, March 2024), `selfdestruct` only deletes contract state when called in the creation transaction, but it STILL transfers remaining ETH to the target address regardless. An attacker can deploy a factory contract that creates a child with ETH via `new{value: X}(target)`, then the child selfdestructs to force-send ETH to sDGNRS -- all in one transaction.
+   - What's unclear: Does the burn formula's use of `address(this).balance` include force-sent ETH? Yes, it must -- `address(this).balance` reflects all ETH held by the contract regardless of how it arrived. The key question is whether this creates extractable value or just donates to all holders proportionally.
+   - Recommendation: Analyze in NOVEL-01. If an attacker holds X% of sDGNRS supply and force-sends Y ETH to sDGNRS, they can burn to claim X% of Y -- meaning they get back X% of what they sent, losing (1-X%) * Y. This is a net loss for any attacker holding less than 100% of supply. Likely a donation, not an exploit. But verify the math rigorously, including DGNRS burn-through interactions.
 
 2. **stETH rebase magnitude vs burn payout branch condition**
    - What we know: stETH rebases daily, changing `steth.balanceOf(address(this))`. The burn function has a branch: if `totalValueOwed <= ethBal`, payout is pure ETH; otherwise it includes stETH.
@@ -312,13 +336,18 @@ None -- this phase is primarily analysis/documentation, not code implementation.
 
 3. **DGNRS burn-through: intermediate DGNRS contract balance**
    - What we know: During burn-through, sDGNRS sends ETH/stETH/BURNIE to the DGNRS contract, which then forwards to the user. Between receipt and forwarding, the DGNRS contract temporarily holds these assets.
-   - What's unclear: Can another transaction in the same block access these intermediate balances? (No -- they're in the same transaction, so only the forwarding code can access them.)
+   - What's unclear: Can another transaction in the same block access these intermediate balances? (No -- they are within the same EVM execution context / transaction, so only the forwarding code can access them.)
    - Recommendation: Confirm atomicity in NOVEL-02. This is likely a non-issue due to EVM transaction atomicity.
 
 4. **Post-gameOver burn value increase**
    - What we know: `burnRemainingPools()` reduces totalSupply by burning undistributed pool tokens but does NOT reduce reserves. This means each remaining token's burn value increases.
    - What's unclear: Is this intentional? Can users who anticipate gameOver front-run it to accumulate DGNRS cheaply, then burn post-gameOver for enhanced value?
-   - Recommendation: Analyze in NOVEL-11. This seems intentional (remaining holders get proportionally more), but the timing dynamics with the 30-day sweep need scrutiny.
+   - Recommendation: Analyze in NOVEL-11. This seems intentional (remaining holders get proportionally more), but the timing dynamics with the 30-day sweep need scrutiny. Key question: does `handleGameOverDrain` partial execution (gameOver=true but gameOverFinalJackpotPaid=false because RNG not ready) create a window where burns see gameOver but pools are not yet burned?
+
+5. **claimWinnings mid-burn ETH balance change**
+   - What we know: Inside sDGNRS.burn(), if `totalValueOwed > ethBal`, it calls `game.claimWinnings(address(0))` which sends ETH to sDGNRS's `receive()`. After this call, `ethBal` is re-read (line 407: `ethBal = address(this).balance`). The payout calculation used `totalMoney` which included `claimableEth`, so the claimed ETH is already accounted for.
+   - What's unclear: Can the claimWinnings call change stETH balance too? (Yes, if `_payoutWithStethFallback` triggers stETH transfer.) If so, the re-read of `stethBal` at line 408 accounts for this.
+   - Recommendation: Trace in NOVEL-02 whether the stETH balance can change during the claimWinnings call path and whether this creates any accounting discrepancy.
 
 ## Sources
 
@@ -332,15 +361,19 @@ None -- this phase is primarily analysis/documentation, not code implementation.
 - FINAL-FINDINGS-REPORT.md -- 62 plans, 68 requirements, all PASS
 - KNOWN-ISSUES.md -- M-02, DELTA-L-01, design decisions
 - v1.1-ECONOMICS-PRIMER.md -- full economic model reference
+- v1.2-delta-new-attack-surfaces.md -- 10 attack vectors across 4 surfaces, all SAFE
 
 ### Secondary (MEDIUM confidence)
-- Lido stETH integration guide (docs.lido.fi) -- stETH rebasing mechanics, 1-2 wei rounding behavior
-- OpenZeppelin ERC-4626 inflation attack analysis -- donation attack patterns applicable to proportional burn-redeem
-- Balancer rounding error exploit (Nov 2025, $128M) -- demonstrates impact of precision loss in proportional calculations
+- [Lido stETH integration guide](https://docs.lido.fi/guides/lido-tokens-integration-guide/) -- stETH rebasing mechanics, 1-2 wei rounding behavior, shares vs balance distinction
+- [OpenZeppelin ERC-4626 inflation attack analysis](https://www.openzeppelin.com/news/a-novel-defense-against-erc4626-inflation-attacks) -- donation attack patterns applicable to proportional burn-redeem
+- [Balancer rounding error exploit analysis (Nov 2025, $128M)](https://research.checkpoint.com/2025/how-an-attacker-drained-128m-from-balancer-through-rounding-error-exploitation/) -- precision loss in proportional calculations
+- [EIP-6780: SELFDESTRUCT only in same transaction](https://eips.ethereum.org/EIPS/eip-6780) -- post-Cancun selfdestruct behavior, force-send ETH still works
+- [Lido stETH rounding issue #796](https://github.com/lidofinance/lido-dao/issues/796) -- share steal via transferSharesFrom rounding
 
 ### Tertiary (LOW confidence)
-- General DeFi flash loan attack patterns -- need verification against specific sDGNRS deposit restrictions
-- MEV sandwich attack statistics (51% of MEV volume) -- applicable to DGNRS if DEX-listed, but DEX listing is not confirmed
+- [General DeFi flash loan attack patterns](https://hacken.io/discover/flash-loan-attacks/) -- need verification against specific sDGNRS deposit restrictions
+- [MEV sandwich attack landscape 2025](https://smartcontractshacking.com/attacks/frontrunning-attacks) -- applicable to DGNRS if DEX-listed, but DEX listing is not confirmed
+- [Vault inflation attack patterns](https://medium.com/@vinicaboy/vault-inflation-attack-a-well-known-yet-persistent-threat-part-one-deecd79c9267) -- donation attack mechanics for proportional share systems
 
 ## Metadata
 
