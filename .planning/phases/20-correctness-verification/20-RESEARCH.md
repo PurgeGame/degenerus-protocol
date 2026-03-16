@@ -10,7 +10,7 @@ This phase is a correctness sweep across documentation, NatDoc comments, test co
 
 Phase 19 completed the adversarial security audit of the split with a SOUND rating (0 Critical/High/Medium, 1 Low, 4 Informational). The current phase addresses the "documentation debt" accumulated during the split: stale comments, missing NatDoc on DGNRS ERC20 functions, line number drift in the parameter reference, and the need for a StakedDegenerusStonk section in the state-changing-function-audits.md. Test-wise, DGNRSLiquid.test.js (38 tests) and DegenerusStonk.test.js (37 tests) already exist with strong coverage. The primary test gap is ensuring all DGNRS wrapper functions are covered (some ERC20 functions may lack NatDoc but are tested).
 
-The research identified several concrete findings: (1) DegenerusStonk.sol has 6 external functions without NatDoc comments (transfer, transferFrom, approve, receive, previewBurn, plus error/event declarations missing NatDoc), (2) the parameter reference has minor line number discrepancies from the split (e.g., `CREATOR_BPS` documented at line 153, actual at 155; `AFFILIATE_DGNRS_LEVEL_BPS` documented in `DegenerusGame.sol:201` but actually in `EndgameModule.sol:99`), (3) the stale earlybird comment at DegenerusGameStorage.sol:1086 flagged by DELTA-I-04 has not been fixed, (4) state-changing-function-audits.md has a DegenerusStonk.sol section but no StakedDegenerusStonk.sol section.
+The research identified several concrete findings: (1) DegenerusStonk.sol has 6 external functions without NatDoc comments (transfer, transferFrom, approve, receive, previewBurn, plus error/event declarations missing NatDoc), (2) the parameter reference has minor line number discrepancies from the split (e.g., `CREATOR_BPS` documented at line 153, actual at 155; `AFFILIATE_DGNRS_LEVEL_BPS` documented in `DegenerusGame.sol:201` but actually in `EndgameModule.sol:99`), (3) the stale earlybird comment at DegenerusGameStorage.sol:1086 flagged by DELTA-I-04 has not been fixed, (4) state-changing-function-audits.md has a DegenerusStonk.sol section but no StakedDegenerusStonk.sol section, (5) EXTERNAL-AUDIT-PROMPT.md lists `DegenerusStonk.sol` in supporting contracts but omits `StakedDegenerusStonk.sol`, (6) FINAL-FINDINGS-REPORT.md does not reference the v2.0 delta findings.
 
 **Primary recommendation:** Structure the phase as three sequential plans: (1) NatDoc + stale comment fixes in contracts, (2) audit doc verification sweep across all 30 audit docs, (3) test coverage gap analysis and any new tests needed.
 
@@ -20,7 +20,7 @@ The research identified several concrete findings: (1) DegenerusStonk.sol has 6 
 | ID | Description | Research Support |
 |----|-------------|-----------------|
 | CORR-01 | All NatDoc comments match implementation across changed contracts | Concrete gaps identified: 6 undocumented external functions in DegenerusStonk.sol, 1 stale comment (line 1086 DegenerusGameStorage.sol). StakedDegenerusStonk.sol is fully documented. IStakedDegenerusStonk.sol is fully documented. |
-| CORR-02 | All 10 audit docs verified against current code (no stale refs) | Specific stale refs identified: parameter reference line numbers (CREATOR_BPS 153->155, AFFILIATE_DGNRS_LEVEL_BPS wrong file), state-changing-function-audits.md missing sDGNRS section. Full audit doc inventory of 30 files ready for sweep. |
+| CORR-02 | All 10 audit docs verified against current code (no stale refs) | Specific stale refs identified: parameter reference line numbers (CREATOR_BPS 153->155, AFFILIATE_DGNRS_LEVEL_BPS wrong file), state-changing-function-audits.md missing sDGNRS section, EXTERNAL-AUDIT-PROMPT.md missing sDGNRS in scope, FINAL-FINDINGS-REPORT.md missing v2.0 findings, KNOWN-ISSUES.md missing DELTA-L-01. Full audit doc inventory of 30 files ready for sweep. |
 | CORR-03 | Test coverage for new/changed functions (sDGNRS, DGNRS, bounty, degenerette) | Existing coverage: DGNRSLiquid.test.js (38 tests), DegenerusStonk.test.js (37 tests). Tests cover: constructor, ERC20, unwrapTo, burn, previewBurn, soulbound enforcement, pool operations, supply accounting. Potential gap: no dedicated test for `resolveCoinflips`, `gameClaimWhalePass` internals, `burnieReserve` with actual BURNIE backing. |
 | CORR-04 | Fuzz test compilation and correctness for changed contracts | Foundry compiles cleanly (warnings only, no errors). Fuzz tests reference correct contract names (StakedDegenerusStonk, DegenerusStonk). DeployCanary.t.sol verifies all 23 addresses including SDGNRS and DGNRS. AffiliateDgnrsClaim.t.sol imports StakedDegenerusStonk correctly. |
 </phase_requirements>
@@ -88,14 +88,14 @@ The success criteria mentions "10 audit docs" -- this likely refers to the 10 do
 
 **High-priority (directly reference DGNRS architecture):**
 1. `v1.1-dgnrs-tokenomics.md` -- Already updated to dual-contract architecture
-2. `v1.1-parameter-reference.md` -- Line numbers may be stale
+2. `v1.1-parameter-reference.md` -- Line numbers confirmed stale
 3. `state-changing-function-audits.md` -- Has DegenerusStonk.sol section, MISSING StakedDegenerusStonk.sol section
 4. `v2.0-delta-core-contracts.md` -- New, from Phase 19
 5. `v2.0-delta-consumer-callsites.md` -- New, from Phase 19
 6. `v2.0-delta-findings-consolidated.md` -- New, from Phase 19
 7. `KNOWN-ISSUES.md` -- Needs DELTA-L-01 addition per Phase 19 recommendation
-8. `FINAL-FINDINGS-REPORT.md` -- May need update to reference v2.0 findings
-9. `EXTERNAL-AUDIT-PROMPT.md` -- Must reference current architecture
+8. `FINAL-FINDINGS-REPORT.md` -- Does not reference v2.0 delta findings
+9. `EXTERNAL-AUDIT-PROMPT.md` -- Lists DegenerusStonk.sol but omits StakedDegenerusStonk.sol
 
 **Medium-priority (may have indirect refs):**
 10. `v1.1-affiliate-system.md` -- References DGNRS pool operations
@@ -117,6 +117,8 @@ The success criteria mentions "10 audit docs" -- this likely refers to the 10 do
 | `v1.1-parameter-reference.md:59` | Wrong file reference | `AFFILIATE_DGNRS_LEVEL_BPS` documented at `DegenerusGame.sol:201`, actual is `DegenerusGameEndgameModule.sol:99` |
 | `state-changing-function-audits.md` | Missing section | No `StakedDegenerusStonk.sol` section (the 13K-line doc covers DegenerusStonk.sol but not sDGNRS) |
 | `KNOWN-ISSUES.md` | Missing finding | DELTA-L-01 (transfer-to-self lock) recommended for addition per Phase 19 consolidated report |
+| `EXTERNAL-AUDIT-PROMPT.md:78` | Missing contract | Lists `DegenerusStonk.sol` in supporting contracts but omits `StakedDegenerusStonk.sol` |
+| `FINAL-FINDINGS-REPORT.md` | Missing v2.0 coverage | References 7-phase/57-plan v1.0-v1.2 audit only; does not mention v2.0 delta findings (1 Low + 4 Info) |
 
 ### Test Coverage Inventory
 
@@ -204,6 +206,12 @@ The success criteria mentions "10 audit docs" -- this likely refers to the 10 do
 **How to avoid:** Audit docs should always clarify: "the variable `dgnrs` in game contracts refers to the sDGNRS contract (StakedDegenerusStonk), NOT the DGNRS wrapper (DegenerusStonk)."
 **Warning signs:** Docs that say `dgnrs.poolBalance()` without clarifying which contract.
 
+### Pitfall 6: EXTERNAL-AUDIT-PROMPT.md Scope Gap
+**What goes wrong:** The external audit prompt sent to C4A wardens lists `DegenerusStonk.sol` in the supporting contracts section but does not list `StakedDegenerusStonk.sol`. A warden following the prompt's scope guidance might skip the most important contract.
+**Why it happens:** The prompt was written before the split and only partially updated.
+**How to avoid:** Add `StakedDegenerusStonk.sol` to the supporting contracts list in the prompt. Consider adding it alongside DegenerusStonk.sol with a note explaining the dual-contract architecture.
+**Warning signs:** External auditors asking which contract holds the reserves and pools.
+
 ## Code Examples
 
 ### NatDoc Format for Missing DGNRS Functions
@@ -274,11 +282,13 @@ function previewBurn(uint256 amount) external view returns (...) {
 | Phase 19 State | Phase 20 Requirement | Gap |
 |----------------|---------------------|-----|
 | sDGNRS fully NatDoc documented | CORR-01 verified | Already complete |
-| DGNRS has 6 undocumented functions | CORR-01 fix needed | Add NatDoc to 6 functions |
+| DGNRS has 6 undocumented functions | CORR-01 fix needed | Add NatDoc to 6 functions + error declarations |
 | Stale earlybird comment (DELTA-I-04) | CORR-01 fix needed | Fix line 1086 |
 | Parameter reference has line drift | CORR-02 fix needed | Verify all line numbers |
-| state-changing-function-audits missing sDGNRS | CORR-02 addition needed | Add sDGNRS section |
+| state-changing-function-audits missing sDGNRS | CORR-02 addition needed | Add sDGNRS section (~13 functions) |
 | KNOWN-ISSUES.md missing DELTA-L-01 | CORR-02 addition needed | Add DELTA-L-01 |
+| EXTERNAL-AUDIT-PROMPT.md missing sDGNRS | CORR-02 fix needed | Add StakedDegenerusStonk.sol to scope |
+| FINAL-FINDINGS-REPORT.md stale | CORR-02 update needed | Reference v2.0 delta findings |
 | DGNRSLiquid.test.js: 38 tests | CORR-03 verified | Already strong, minor gaps |
 | DegenerusStonk.test.js: 37 tests | CORR-03 verified | Already strong, minor gaps |
 | Foundry fuzz tests compile clean | CORR-04 verified | Already passing |
@@ -336,6 +346,8 @@ None -- existing test infrastructure covers all phase requirements. CORR-01 and 
 - `audit/v1.1-parameter-reference.md` -- line number discrepancies verified against actual code
 - `audit/state-changing-function-audits.md` -- confirmed missing sDGNRS section
 - `audit/KNOWN-ISSUES.md` -- confirmed no DELTA-L-01 entry
+- `audit/EXTERNAL-AUDIT-PROMPT.md` -- confirmed missing StakedDegenerusStonk.sol from scope
+- `audit/FINAL-FINDINGS-REPORT.md` -- confirmed no v2.0 findings reference
 - `audit/v2.0-delta-findings-consolidated.md` -- Phase 19 findings and recommendations
 - `test/unit/DGNRSLiquid.test.js` -- 38 tests, coverage inventory complete
 - `test/unit/DegenerusStonk.test.js` -- 37 tests, coverage inventory complete
