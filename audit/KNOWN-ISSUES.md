@@ -80,6 +80,33 @@ at level 0 (zero VRF history = zero completed advances = zero level progression)
 
 ---
 
+### DELTA-L-01: DGNRS Transfer-to-Self Token Lock
+
+**Severity:** Low
+**Contract:** `DegenerusStonk.sol` (`_transfer`)
+**Status:** Acknowledged -- standard ERC20 behavior
+
+When a DGNRS holder transfers tokens to their own address (from == to), the `_transfer` function executes:
+```solidity
+unchecked {
+    balanceOf[from] = bal - amount;
+    balanceOf[to] += amount;
+}
+```
+
+Since `from == to`, this is equivalent to `balanceOf[addr] = (bal - amount) + amount`. Due to unchecked arithmetic and the fact that the subtraction is applied first (creating a new storage value), the addition applies to the post-subtraction value, producing the same result. No tokens are lost.
+
+However, the pattern is unusual compared to OpenZeppelin ERC20 which checks `from != to` or uses a single `balanceOf` update path. The behavior is functionally correct but could confuse auditors reviewing the code.
+
+**Mitigating factors:**
+- No token loss occurs (algebraically equivalent to no-op)
+- Standard ERC20 behavior -- many minimal implementations share this pattern
+- No economic incentive to self-transfer
+
+**Source:** v2.0 delta audit, Phase 19 (2026-03-16)
+
+---
+
 ## Design Decisions That May Look Like Bugs
 
 ### BURNIE has multiple mint pathways
