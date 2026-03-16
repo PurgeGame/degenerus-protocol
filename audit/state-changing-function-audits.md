@@ -10882,6 +10882,389 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ---
 
+## StakedDegenerusStonk.sol
+
+> **Note:** sDGNRS is the soulbound core token. It holds all reserves (ETH, stETH, BURNIE) and manages 5 pools (Whale, Affiliate, Lootbox, Reward, Earlybird). Only the DGNRS wrapper contract and the game contract can trigger pool transfers. Players cannot transfer sDGNRS -- they must use the DGNRS wrapper for liquid operations. Burns go through DGNRS which delegates to sDGNRS.burn(). The contract has 13 external/public functions plus a `receive()` fallback. All pool-spending functions are restricted via the `onlyGame` modifier. The wrapper transfer function is restricted to the DGNRS contract. View functions and player action helpers are permissionless.
+
+### `receive()` [external payable]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `receive() external payable` |
+| **Visibility** | external |
+| **Mutability** | payable |
+| **Parameters** | None (receives ETH via msg.value) |
+| **Returns** | None |
+
+**State Reads:** `ContractAddresses.GAME` (via `onlyGame` modifier, line 182)
+**State Writes:** None (ETH held in contract balance implicitly)
+
+**Callers:** DegenerusGame contract (ETH distributions to sDGNRS reserves)
+**Callees:** None
+
+**ETH Flow:** YES -- receives ETH from the game contract into sDGNRS reserves. ETH is tracked via `address(this).balance` at burn time.
+**Invariants:** Only the game contract can deposit ETH (enforced by `onlyGame` modifier at line 282). Emits `Deposit(msg.sender, msg.value, 0, 0)` at line 283.
+**NatSpec Accuracy:** Accurate. Documents game-only restriction and reserve accounting.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `wrapperTransferTo(address to, uint256 amount)` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function wrapperTransferTo(address to, uint256 amount) external` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | `to` (address): recipient of sDGNRS; `amount` (uint256): amount to transfer |
+| **Returns** | None |
+
+**State Reads:** `balanceOf[ContractAddresses.DGNRS]` (line 245)
+**State Writes:** `balanceOf[ContractAddresses.DGNRS]` (decremented, line 248), `balanceOf[to]` (incremented, line 249)
+
+**Callers:** DegenerusStonk (DGNRS wrapper) only -- enforced by `msg.sender != ContractAddresses.DGNRS` check at line 243
+**Callees:** None
+
+**ETH Flow:** No
+**Invariants:** Only the DGNRS wrapper can call. `to` must not be `address(0)` (line 244). `amount` must not exceed DGNRS wrapper's sDGNRS balance (line 246). Uses unchecked arithmetic safe due to prior balance check and totalSupply bound. `totalSupply` unchanged (transfer, not mint/burn). Emits `Transfer(ContractAddresses.DGNRS, to, amount)`.
+**NatSpec Accuracy:** Accurate. Documents wrapper-only restriction, zero-address check, and insufficient balance revert.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `gameAdvance()` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function gameAdvance() external` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | None |
+| **Returns** | None |
+
+**State Reads:** None
+**State Writes:** None directly (delegates to game)
+
+**Callers:** Any (permissionless)
+**Callees:** `game.advanceGame()` (line 260)
+
+**ETH Flow:** No
+**Invariants:** Permissionless helper -- anyone can advance the game on sDGNRS's behalf. The game contract handles its own authorization and state transitions.
+**NatSpec Accuracy:** Accurate.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `gameClaimWhalePass()` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function gameClaimWhalePass() external` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | None |
+| **Returns** | None |
+
+**State Reads:** None
+**State Writes:** None directly (delegates to game)
+
+**Callers:** Any (permissionless)
+**Callees:** `game.claimWhalePass(address(0))` (line 265)
+
+**ETH Flow:** No
+**Invariants:** Permissionless helper -- anyone can claim whale pass for sDGNRS. Passes `address(0)` which the game resolves to `msg.sender` (= sDGNRS address).
+**NatSpec Accuracy:** Accurate.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `resolveCoinflips()` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function resolveCoinflips() external` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | None |
+| **Returns** | None |
+
+**State Reads:** None
+**State Writes:** None directly (delegates to coinflip contract)
+
+**Callers:** Any (permissionless)
+**Callees:** `coinflip.claimCoinflips(address(0), 0)` (line 272)
+
+**ETH Flow:** No
+**Invariants:** Permissionless helper -- advances the flip cursor, compounds auto-rebuy carry, records BAF score. Passes `amount = 0` so no BURNIE is withdrawn -- keeps all BURNIE in the flip system. The `address(0)` resolves to sDGNRS in the coinflip contract.
+**NatSpec Accuracy:** Accurate. Documents that no BURNIE is claimed out.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `depositSteth(uint256 amount)` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function depositSteth(uint256 amount) external` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | `amount` (uint256): stETH amount to deposit |
+| **Returns** | None |
+
+**State Reads:** `ContractAddresses.GAME` (via `onlyGame` modifier, line 182)
+**State Writes:** None (stETH tracked by external stETH contract's balanceOf)
+
+**Callers:** DegenerusGame contract only (enforced by `onlyGame` modifier at line 291)
+**Callees:** `steth.transferFrom(msg.sender, address(this), amount)` (line 292)
+
+**ETH Flow:** No (stETH only). stETH transferred from game contract to sDGNRS reserves.
+**Invariants:** Only game contract can deposit stETH. Reverts with `TransferFailed()` if `steth.transferFrom` returns false (line 292). Game must have approved sDGNRS for stETH spending. Emits `Deposit(msg.sender, 0, amount, 0)` at line 293.
+**NatSpec Accuracy:** Accurate. Documents game-only restriction and transfer failure revert.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `poolBalance(Pool pool)` [external view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function poolBalance(Pool pool) external view returns (uint256)` |
+| **Visibility** | external |
+| **Mutability** | view |
+| **Parameters** | `pool` (Pool): pool identifier enum |
+| **Returns** | `uint256`: remaining balance in the specified pool |
+
+**State Reads:** `poolBalances[_poolIndex(pool)]` (line 304)
+**State Writes:** None (view function)
+
+**Callers:** Any (permissionless view). Used by game contracts, DGNRS wrapper, and external queries.
+**Callees:** `_poolIndex(pool)` (line 304)
+
+**ETH Flow:** No
+**Invariants:** Read-only. Returns the current balance for the given Pool enum value. Pool enum: Whale=0, Affiliate=1, Lootbox=2, Reward=3, Earlybird=4.
+**NatSpec Accuracy:** Accurate.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `transferFromPool(Pool pool, address to, uint256 amount)` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function transferFromPool(Pool pool, address to, uint256 amount) external returns (uint256 transferred)` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | `pool` (Pool): source pool; `to` (address): recipient; `amount` (uint256): requested amount |
+| **Returns** | `uint256`: actual amount transferred (may be less than requested if pool depleted) |
+
+**State Reads:** `poolBalances[idx]` (line 319), `ContractAddresses.GAME` (via `onlyGame` modifier), `balanceOf[address(this)]` (line 326), `balanceOf[to]` (line 327)
+**State Writes:** `poolBalances[idx]` (decremented, line 325), `balanceOf[address(this)]` (decremented, line 326), `balanceOf[to]` (incremented, line 327)
+
+**Callers:** DegenerusGame contract only (enforced by `onlyGame` modifier at line 315)
+**Callees:** `_poolIndex(pool)` (line 318)
+
+**ETH Flow:** No (sDGNRS token transfer, not ETH)
+**Invariants:**
+- Only game can call
+- Zero-address `to` reverts with `ZeroAddress()` (line 317)
+- Returns 0 immediately for zero amount (line 316) or empty pool (line 320)
+- Graceful degradation: if pool has less than requested, caps to available amount (lines 321-322)
+- Uses unchecked arithmetic (lines 324-328) safe due to: `amount <= available` (subtraction), `balanceOf[address(this)] >= sum(poolBalances)` (see reserve accounting proof in v2.0-delta-core-contracts.md), and `balanceOf[to] + amount <= totalSupply` (addition)
+- `totalSupply` unchanged (transfer, not burn)
+- Emits `Transfer(address(this), to, amount)` and `PoolTransfer(pool, to, amount)`
+
+**NatSpec Accuracy:** Accurate. Correctly documents partial-fill behavior and game-only restriction.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `transferBetweenPools(Pool from, Pool to, uint256 amount)` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function transferBetweenPools(Pool from, Pool to, uint256 amount) external returns (uint256 transferred)` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | `from` (Pool): source pool; `to` (Pool): destination pool; `amount` (uint256): requested amount |
+| **Returns** | `uint256`: actual amount transferred (may be less if source pool has insufficient balance) |
+
+**State Reads:** `poolBalances[fromIdx]` (line 344), `ContractAddresses.GAME` (via `onlyGame` modifier)
+**State Writes:** `poolBalances[fromIdx]` (decremented, line 350), `poolBalances[toIdx]` (incremented, line 352)
+
+**Callers:** DegenerusGame contract only (enforced by `onlyGame` modifier at line 340)
+**Callees:** `_poolIndex(from)` (line 342), `_poolIndex(to)` (line 343)
+
+**ETH Flow:** No
+**Invariants:**
+- Only game can call
+- No actual token movement -- internal pool accounting rebalance only
+- `balanceOf[address(this)]` unchanged (tokens stay in contract)
+- Returns 0 for zero amount (line 341) or empty source pool (line 345)
+- Graceful degradation: caps to available if amount exceeds source pool (lines 346-347)
+- `poolBalances[fromIdx]` subtraction is unchecked (line 350) but safe due to `amount <= available` guard
+- `poolBalances[toIdx]` addition is CHECKED (line 352, outside unchecked block)
+- Sum of all pool balances unchanged
+- Emits `PoolRebalance(from, to, amount)`
+
+**NatSpec Accuracy:** Accurate. Correctly notes no token movement, just pool rebalancing.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `burnRemainingPools()` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function burnRemainingPools() external` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | None |
+| **Returns** | None |
+
+**State Reads:** `balanceOf[address(this)]` (line 360), `ContractAddresses.GAME` (via `onlyGame` modifier)
+**State Writes:** `balanceOf[address(this)]` (set to 0, line 363), `totalSupply` (decremented by bal, line 364)
+
+**Callers:** DegenerusGame contract only (enforced by `onlyGame` modifier at line 359). Called during game over via DegenerusGameGameOverModule (line 163).
+**Callees:** None
+
+**ETH Flow:** No
+**Invariants:**
+- Only game can call
+- No-op if `balanceOf[address(this)] == 0` (line 361)
+- Burns ALL remaining pool tokens (entire contract balance), not individual pools
+- `totalSupply` decreases by exact amount burned
+- `poolBalances[]` array is NOT zeroed (individual entries retain stale values) -- see DELTA-I-01. This is safe because `burnRemainingPools` is only called during game over, and all `transferFromPool` callers revert after `gameOver = true`
+- Uses unchecked arithmetic (lines 362-365): `balanceOf` set to literal 0 (safe), `totalSupply -= bal` safe because `bal <= totalSupply` always
+- Emits `Transfer(address(this), address(0), bal)`
+
+**NatSpec Accuracy:** Accurate. Documents game-only restriction and terminal burn behavior.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `burn(uint256 amount)` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut)` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | `amount` (uint256): sDGNRS amount to burn |
+| **Returns** | `ethOut` (uint256): ETH received; `stethOut` (uint256): stETH received; `burnieOut` (uint256): BURNIE received |
+
+**State Reads:** `balanceOf[msg.sender]` (line 383), `totalSupply` (line 385), `address(this).balance` (line 387), `steth.balanceOf(address(this))` (line 388), `game.claimableWinningsOf(address(this))` via `_claimableWinnings()` (line 389), `coin.balanceOf(address(this))` (line 393), `coinflip.previewClaimCoinflips(address(this))` (line 394)
+**State Writes:** `balanceOf[msg.sender]` (decremented, line 399), `totalSupply` (decremented, line 400)
+
+**Callers:** DegenerusStonk (DGNRS wrapper via burn-through) or any direct sDGNRS holder. Public function -- no access restriction. This is intentional: both DGNRS burn-through and direct sDGNRS holders use this.
+**Callees:** `_claimableWinnings()` (line 389), `game.claimWinnings(address(0))` (line 405, conditional), `coin.transfer(player, payBal)` (line 423), `coinflip.claimCoinflips(address(0), remainingBurnie)` (line 426), `coin.transfer(player, remainingBurnie)` (line 427), `steth.transfer(player, stethOut)` (line 432), `player.call{value: ethOut}("")` (line 436)
+
+**ETH Flow:** YES -- sends proportional ETH to burner. Calculates `totalValueOwed = (totalMoney * amount) / supplyBefore` where `totalMoney = ethBal + stethBal + claimableEth`. ETH-preferential payout: if `totalValueOwed <= ethBal`, pay all in ETH; otherwise pay `ethBal` in ETH + remainder in stETH. If more ETH needed and claimable exists, calls `game.claimWinnings` to materialize claimable ETH first.
+**Invariants:**
+- Amount must be > 0 and <= balance (line 384)
+- CEI pattern: state changes (balance and supply deduction at lines 399-400) committed BEFORE all external calls
+- 5 categories of external calls, all verified SAFE against reentrancy (see v2.0-delta-core-contracts.md reentrancy analysis)
+- Proportional payout: `amount/totalSupply * reserve` for each asset
+- BURNIE: pays from existing balance first, then claims from coinflip if needed
+- Reverts with `Insufficient()` if stETH portion exceeds stETH balance (line 415)
+- Emits `Transfer(player, address(0), amount)` and `Burn(player, amount, ethOut, stethOut, burnieOut)`
+
+**NatSpec Accuracy:** Accurate. Documents proportional share, multi-asset payout, and ETH-preferential logic.
+**Gas Flags:** Up to 7 external calls in worst case (claimWinnings + 2x coin.transfer + claimCoinflips + steth.transfer + ETH send + claimableWinnings view). Complex but necessary for multi-asset proportional redemption.
+**Verdict:** CORRECT
+
+---
+
+### `previewBurn(uint256 amount)` [external view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut)` |
+| **Visibility** | external |
+| **Mutability** | view |
+| **Parameters** | `amount` (uint256): sDGNRS amount to simulate burning |
+| **Returns** | `ethOut` (uint256): ETH that would be received; `stethOut` (uint256): stETH that would be received; `burnieOut` (uint256): BURNIE that would be received |
+
+**State Reads:** `totalSupply` (line 455), `address(this).balance` (line 458), `steth.balanceOf(address(this))` (line 459), `game.claimableWinningsOf(address(this))` via `_claimableWinnings()` (line 460), `coin.balanceOf(address(this))` (line 472), `coinflip.previewClaimCoinflips(address(this))` (line 473)
+**State Writes:** None (view function)
+
+**Callers:** Any (permissionless view). DGNRS wrapper delegates `previewBurn` to sDGNRS. Also used by frontends and integrators.
+**Callees:** `_claimableWinnings()` (line 460)
+
+**ETH Flow:** No (view only)
+**Invariants:** Returns (0, 0, 0) if `amount == 0 || amount > totalSupply` (line 456). Uses `ethAvailable = ethBal + claimableEth` for the ETH-preferential split (lines 464-470), which differs slightly from `burn()` which may or may not call `claimWinnings` depending on actual ETH balance. See DELTA-I-03 for the minor discrepancy -- by design.
+**NatSpec Accuracy:** Accurate. Documents ETH-preferential logic and BURNIE coinflip inclusion.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `burnieReserve()` [external view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function burnieReserve() external view returns (uint256)` |
+| **Visibility** | external |
+| **Mutability** | view |
+| **Parameters** | None |
+| **Returns** | `uint256`: total BURNIE backing (balance + claimable coinflips) |
+
+**State Reads:** `coin.balanceOf(address(this))` (line 482), `coinflip.previewClaimCoinflips(address(this))` (line 483)
+**State Writes:** None (view function)
+
+**Callers:** Any (permissionless view). Used for reserve transparency and burn preview calculations.
+**Callees:** None (only external view calls to coin and coinflip contracts)
+
+**ETH Flow:** No
+**Invariants:** Returns `burnieBal + claimableBurnie` -- the total BURNIE that would be available if all coinflip claims were materialized. Read-only, no state mutation.
+**NatSpec Accuracy:** Accurate. Documents that return includes claimable coinflip backing.
+**Gas Flags:** None.
+**Verdict:** CORRECT
+
+---
+
+### `constructor()` [constructor]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `constructor()` |
+| **Visibility** | public (constructor) |
+| **Mutability** | state-changing |
+| **Parameters** | None |
+| **Returns** | N/A |
+
+**State Reads:** Constants: `INITIAL_SUPPLY` (1T * 1e18), `CREATOR_BPS` (2000), `BPS_DENOM` (10000), `WHALE_POOL_BPS` (1000), `AFFILIATE_POOL_BPS` (3500), `LOOTBOX_POOL_BPS` (2000), `REWARD_POOL_BPS` (500), `EARLYBIRD_POOL_BPS` (1000), `ContractAddresses.DGNRS`, `ContractAddresses.GAME`
+**State Writes:** `totalSupply` (via `_mint`, lines 212-213), `balanceOf[ContractAddresses.DGNRS]` (creator allocation, line 212), `balanceOf[address(this)]` (pool total, line 213), `poolBalances[0..4]` (lines 215-219)
+
+**Callers:** Deployment only
+**Callees:** `_mint(ContractAddresses.DGNRS, creatorAmount)` (line 212), `_mint(address(this), poolTotal)` (line 213), `game.claimWhalePass(address(0))` (line 221), `game.setAfKingMode(address(0), true, 10 ether, 0)` (lines 222-227)
+
+**ETH Flow:** No
+**Invariants:**
+- Total supply = INITIAL_SUPPLY = 1,000,000,000,000 * 1e18
+- Creator allocation (20%) minted to DGNRS wrapper address
+- Remaining 80% split: Whale=1000 BPS, Affiliate=3500 BPS, Lootbox=2000 BPS, Reward=500 BPS, Earlybird=1000 BPS
+- BPS sum = 10,000 (exactly 100%), so dust = 0 in practice. Dust handling (lines 202-208) routes any remainder to Lootbox pool
+- Pool balances set to match minted amounts (lines 215-219)
+- Claims whale pass and enables AFK mode for sDGNRS in the game contract
+- All BPS calculations are exact (INITIAL_SUPPLY * BPS / 10000 produces no remainder for these values)
+
+**NatSpec Accuracy:** Accurate. Documents supply distribution, pool allocation, and whale pass setup.
+**Gas Flags:** Two cross-contract calls during deployment (claimWhalePass, setAfKingMode). One-time cost.
+**Verdict:** CORRECT
+
+
+---
+
 ## DegenerusStonk.sol
 
 > **Note:** DGNRS was neutered to remove all active gameplay. Holders can only hold, transfer, and burn for their proportional share of accumulated ETH/stETH/BURNIE. The lock system, gameplay functions (`gamePurchase`, `gamePurchaseTicketsBurnie`, `gamePurchaseBurnieLootbox`, `gameDegeneretteBetEth`, `gameDegeneretteBetBurnie`, `gameOpenLootBox`, `coinDecimatorBurn`), BURNIE rebate logic (`_rebateBurnieFromEthValue`), quest reward logic (`_transferFromPoolInternal`), spend tracking (`_checkAndRecordEthSpend`, `_checkAndRecordBurnieSpend`, `_maxEthActionFromLocked`, `_maxBurnieActionFromLocked`, `_lockedClaimableValues`), lock management (`lockForLevel`, `unlock`, `getLockStatus`, `_reduceActiveLock`), WWXRP handling, and the `IDegenerusQuestsView` interface were all removed. The contract passively accumulates value via free tickets, AFK mode, and deity pass (all handled by the game contract without DGNRS involvement).
