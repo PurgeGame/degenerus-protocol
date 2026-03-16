@@ -30,7 +30,7 @@ pragma solidity 0.8.34;
 import {IDegenerusCoin} from "./interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "./interfaces/IBurnieCoinflip.sol";
 import {IDegenerusAffiliate} from "./interfaces/IDegenerusAffiliate.sol";
-import {IDegenerusStonk} from "./interfaces/IDegenerusStonk.sol";
+import {IStakedDegenerusStonk} from "./interfaces/IStakedDegenerusStonk.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {
     IDegenerusGameAdvanceModule,
@@ -44,7 +44,9 @@ import {
     IDegenerusGameDegeneretteModule
 } from "./interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
-import {DegenerusGameMintStreakUtils} from "./modules/DegenerusGameMintStreakUtils.sol";
+import {
+    DegenerusGameMintStreakUtils
+} from "./modules/DegenerusGameMintStreakUtils.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 
@@ -166,9 +168,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     IDegenerusAffiliate internal constant affiliate =
         IDegenerusAffiliate(ContractAddresses.AFFILIATE);
 
-    /// @notice DGNRS token contract for affiliate pool rewards.
-    IDegenerusStonk internal constant dgnrs =
-        IDegenerusStonk(ContractAddresses.DGNRS);
+    /// @notice sDGNRS token contract for affiliate pool rewards.
+    IStakedDegenerusStonk internal constant dgnrs =
+        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     /// @notice Quest module view interface for streak lookups.
     IDegenerusQuestView internal constant questView =
@@ -185,8 +187,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // 1 year
 
     /// @dev Minimum take profit for afKing ETH auto-rebuy (5 ETH).
-    uint256 private constant AFKING_KEEP_MIN_ETH =
-        5 ether;
+    uint256 private constant AFKING_KEEP_MIN_ETH = 5 ether;
 
     /// @dev Minimum take profit for afKing coin auto-rebuy (20,000 BURNIE).
     uint256 private constant AFKING_KEEP_MIN_COIN = 20_000 ether;
@@ -197,8 +198,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Share of ticket purchases routed to future prize pool (10%).
     uint16 private constant PURCHASE_TO_FUTURE_BPS = 1000;
 
-    /// @dev DGNRS bounty share for biggest flip payout (0.5% of reward pool).
-    uint16 private constant COINFLIP_BOUNTY_DGNRS_BPS = 50;
+    /// @dev DGNRS bounty share for biggest flip payout (0.2% of reward pool).
+    uint16 private constant COINFLIP_BOUNTY_DGNRS_BPS = 20;
+    uint256 private constant COINFLIP_BOUNTY_DGNRS_MIN_BET = 50_000 ether;
+    uint256 private constant COINFLIP_BOUNTY_DGNRS_MIN_POOL = 20_000 ether;
 
     /// @dev Bonus BURNIE flip credit for deity pass affiliate claims (20% of payout).
     uint16 private constant AFFILIATE_DGNRS_DEITY_BONUS_BPS = 2000;
@@ -207,8 +210,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     uint256 private constant AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH = 5 ether;
 
     /// @dev Minimum affiliate score (approx 10 ETH of referral volume).
-    uint256 private constant AFFILIATE_DGNRS_MIN_SCORE =
-        10 ether;
+    uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10 ether;
 
     /// @dev Deity pass activity score bonus (80%).
     uint16 private constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8000;
@@ -254,13 +256,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         levelStartTime = uint48(block.timestamp);
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
         // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners)
-        deityPassCount[ContractAddresses.DGNRS] = 1;
+        deityPassCount[ContractAddresses.SDGNRS] = 1;
         deityPassCount[ContractAddresses.VAULT] = 1;
         // Pre-queue vault perpetual tickets for levels 1-100 (advance module handles 101+)
         for (uint24 i = 1; i <= 100; ) {
-            _queueTickets(ContractAddresses.DGNRS, i, 16);
+            _queueTickets(ContractAddresses.SDGNRS, i, 16);
             _queueTickets(ContractAddresses.VAULT, i, 16);
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -405,10 +409,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             uint256 nextShare = prizeContribution - futureShare;
             if (prizePoolFrozen) {
                 (uint128 pNext, uint128 pFuture) = _getPendingPools();
-                _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(futureShare));
+                _setPendingPools(
+                    pNext + uint128(nextShare),
+                    pFuture + uint128(futureShare)
+                );
             } else {
                 (uint128 next, uint128 future) = _getPrizePools();
-                _setPrizePools(next + uint128(nextShare), future + uint128(futureShare));
+                _setPrizePools(
+                    next + uint128(nextShare),
+                    future + uint128(futureShare)
+                );
             }
         }
 
@@ -451,17 +461,29 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Pays a share of the remaining DGNRS reward pool.
     /// @param player Recipient of the DGNRS bounty.
     /// @custom:reverts E If caller is not COIN or COINFLIP contract.
-    function payCoinflipBountyDgnrs(address player) external {
+    function payCoinflipBountyDgnrs(
+        address player,
+        uint256 winningBet,
+        uint256 bountyPool
+    ) external {
         if (
             msg.sender != ContractAddresses.COIN &&
             msg.sender != ContractAddresses.COINFLIP
         ) revert E();
         if (player == address(0)) return;
-        uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Reward);
+        if (winningBet < COINFLIP_BOUNTY_DGNRS_MIN_BET) return;
+        if (bountyPool < COINFLIP_BOUNTY_DGNRS_MIN_POOL) return;
+        uint256 poolBalance = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Reward
+        );
         if (poolBalance == 0) return;
         uint256 payout = (poolBalance * COINFLIP_BOUNTY_DGNRS_BPS) / 10_000;
         if (payout == 0) return;
-        dgnrs.transferFromPool(IDegenerusStonk.Pool.Reward, player, payout);
+        dgnrs.transferFromPool(
+            IStakedDegenerusStonk.Pool.Reward,
+            player,
+            payout
+        );
     }
 
     /*+======================================================================+
@@ -681,10 +703,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Purchase a deity pass for a specific symbol (0-31).
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
     /// @param symbolId Symbol to claim (0-31: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23, Q3 Dice 24-31).
-    function purchaseDeityPass(
-        address buyer,
-        uint8 symbolId
-    ) external payable {
+    function purchaseDeityPass(address buyer, uint8 symbolId) external payable {
         buyer = _resolvePlayer(buyer);
         _purchaseDeityPassFor(buyer, symbolId);
     }
@@ -832,9 +851,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameBoonModule
-                        .consumeCoinflipBoon
-                        .selector,
+                    IDegenerusGameBoonModule.consumeCoinflipBoon.selector,
                     player
                 )
             );
@@ -855,9 +872,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameBoonModule
-                        .consumeDecimatorBoost
-                        .selector,
+                    IDegenerusGameBoonModule.consumeDecimatorBoost.selector,
                     player
                 )
             );
@@ -878,9 +893,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameBoonModule
-                        .consumePurchaseBoost
-                        .selector,
+                    IDegenerusGameBoonModule.consumePurchaseBoost.selector,
                     player
                 )
             );
@@ -914,7 +927,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         deityPassAvailable = deityPassOwners.length < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
         uint256 rngWord = rngWordByDay[day];
         if (rngWord == 0) rngWord = rngWordCurrent;
-        if (rngWord == 0) rngWord = uint256(keccak256(abi.encodePacked(day, address(this))));
+        if (rngWord == 0)
+            rngWord = uint256(keccak256(abi.encodePacked(day, address(this))));
         dailySeed = rngWord;
     }
 
@@ -1237,7 +1251,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param player Address to claim for.
     /// @param lvl Level to claim from.
     /// @return amountWei Pro-rata payout amount.
-    function consumeDecClaim(address player, uint24 lvl) external returns (uint256 amountWei) {
+    function consumeDecClaim(
+        address player,
+        uint24 lvl
+    ) external returns (uint256 amountWei) {
         if (msg.sender != address(this)) revert E();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
@@ -1260,7 +1277,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_DECIMATOR_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule.claimDecimatorJackpot.selector,
+                    IDegenerusGameDecimatorModule
+                        .claimDecimatorJackpot
+                        .selector,
                     lvl
                 )
             );
@@ -1296,7 +1315,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, denom);
         if (sub != winningSub) return (0, false);
 
-        amountWei = (lastDecClaimRound.poolWei * uint256(entryBurn)) / totalBurn;
+        amountWei =
+            (lastDecClaimRound.poolWei * uint256(entryBurn)) /
+            totalBurn;
         winner = amountWei != 0;
     }
 
@@ -1304,7 +1325,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param packed Packed winning subbuckets.
     /// @param denom Denominator to unpack (2-12).
     /// @return Winning subbucket for this denom.
-    function _unpackDecWinningSubbucket(uint64 packed, uint8 denom) private pure returns (uint8) {
+    function _unpackDecWinningSubbucket(
+        uint64 packed,
+        uint8 denom
+    ) private pure returns (uint8) {
         if (denom < 2) return 0;
         uint8 shift = (denom - 2) << 2;
         return uint8((packed >> shift) & 0xF);
@@ -1381,7 +1405,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         address player = msg.sender;
         if (
             player != ContractAddresses.VAULT &&
-            player != ContractAddresses.DGNRS
+            player != ContractAddresses.SDGNRS
         ) revert E();
         _claimWinningsInternal(player, true);
     }
@@ -1434,7 +1458,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (reward == 0) revert E();
 
         uint256 paid = dgnrs.transferFromPool(
-            IDegenerusStonk.Pool.Affiliate,
+            IStakedDegenerusStonk.Pool.Affiliate,
             player,
             reward
         );
@@ -1443,9 +1467,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         levelDgnrsClaimed[currLevel] += paid;
 
         if (hasDeityPass && score != 0) {
-            uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) /
-                10_000;
-            uint256 cap = (AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH * PRICE_COIN_UNIT) / price;
+            uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) / 10_000;
+            uint256 cap = (AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH *
+                PRICE_COIN_UNIT) / price;
             if (bonus > cap) {
                 bonus = cap;
             }
@@ -1469,10 +1493,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     event DecimatorAutoRebuyToggled(address indexed player, bool enabled);
 
     /// @notice Emitted when a player sets the auto-rebuy take profit.
-    event AutoRebuyTakeProfitSet(
-        address indexed player,
-        uint256 takeProfit
-    );
+    event AutoRebuyTakeProfitSet(address indexed player, uint256 takeProfit);
 
     /// @notice Emitted when a player toggles afKing mode on or off.
     event AfKingModeToggled(address indexed player, bool enabled);
@@ -1499,7 +1520,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param enabled True to enable auto-rebuy for decimator claims, false to disable.
     function setDecimatorAutoRebuy(address player, bool enabled) external {
         player = _resolvePlayer(player);
-        if (player == ContractAddresses.DGNRS) revert E();
+        if (player == ContractAddresses.SDGNRS) revert E();
         if (rngLockedFlag) revert RngLocked();
         bool disabled = !enabled;
         if (decimatorAutoRebuyDisabled[player] != disabled) {
@@ -1805,8 +1826,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 ethBal = address(this).balance;
         if (ethBal < amount) revert E();
         // Vault and DGNRS claimable can be settled in stETH, so exclude from ETH reserve
-        uint256 stethSettleable = claimableWinnings[ContractAddresses.VAULT]
-            + claimableWinnings[ContractAddresses.DGNRS];
+        uint256 stethSettleable = claimableWinnings[ContractAddresses.VAULT] +
+            claimableWinnings[ContractAddresses.SDGNRS];
         uint256 reserve = claimablePool > stethSettleable
             ? claimablePool - stethSettleable
             : 0;
@@ -1930,8 +1951,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     function _transferSteth(address to, uint256 amount) private {
         if (amount == 0) return;
-        if (to == ContractAddresses.DGNRS) {
-            if (!steth.approve(ContractAddresses.DGNRS, amount)) revert E();
+        if (to == ContractAddresses.SDGNRS) {
+            if (!steth.approve(ContractAddresses.SDGNRS, amount)) revert E();
             dgnrs.depositSteth(amount);
             return;
         }
@@ -2219,7 +2240,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return lvl Current game level.
     function decWindow() external view returns (bool on, uint24 lvl) {
         lvl = level;
-        on = (decWindowOpen || _isGameoverImminent()) && !(lastPurchaseDay && rngLockedFlag);
+        on =
+            (decWindowOpen || _isGameoverImminent()) &&
+            !(lastPurchaseDay && rngLockedFlag);
     }
 
     /// @notice Raw check of decimator window flag (ignores RNG lock).
@@ -2280,9 +2303,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         )
     {
         inJackpotPhase = jackpotPhaseFlag;
-        lastPurchaseDay_ =
-            (!inJackpotPhase) &&
-            lastPurchaseDay;
+        lastPurchaseDay_ = (!inJackpotPhase) && lastPurchaseDay;
         lvl = _activeTicketLevel();
         rngLocked_ = rngLockedFlag;
         priceWei = price;
@@ -2619,11 +2640,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function sampleTraitTicketsAtLevel(
         uint24 targetLvl,
         uint256 entropy
-    )
-        external
-        view
-        returns (uint8 traitSel, address[] memory tickets)
-    {
+    ) external view returns (uint8 traitSel, address[] memory tickets) {
         traitSel = uint8(entropy >> 24);
         address[] storage arr = traitBurnTicket[targetLvl][traitSel];
         uint256 len = arr.length;
@@ -2666,16 +2683,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 address winner = queue[idx];
                 if (winner != address(0)) {
                     tmp[found] = winner;
-                    unchecked { ++found; }
+                    unchecked {
+                        ++found;
+                    }
                 }
             }
-            unchecked { ++s; }
+            unchecked {
+                ++s;
+            }
         }
 
         tickets = new address[](found);
         for (uint8 i; i < found; ) {
             tickets[i] = tmp[i];
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -2736,7 +2759,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param quadrant Quadrant (0-3).
     /// @param symbol Symbol index within quadrant (0-7).
     /// @return wagerUnits Amount wagered in 1e12 wei units.
-    function getDailyHeroWager(uint48 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits) {
+    function getDailyHeroWager(
+        uint48 day,
+        uint8 quadrant,
+        uint8 symbol
+    ) external view returns (uint256 wagerUnits) {
         if (quadrant >= 4 || symbol >= 8) return 0;
         uint256 packed = dailyHeroWagers[day][quadrant];
         wagerUnits = (packed >> (uint256(symbol) * 32)) & 0xFFFFFFFF;
@@ -2747,7 +2774,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return winQuadrant The winning quadrant.
     /// @return winSymbol The winning symbol within that quadrant.
     /// @return winAmount The wagered units for the winner.
-    function getDailyHeroWinner(uint48 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount) {
+    function getDailyHeroWinner(
+        uint48 day
+    )
+        external
+        view
+        returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount)
+    {
         for (uint8 q = 0; q < 4; ++q) {
             uint256 packed = dailyHeroWagers[day][q];
             for (uint8 s = 0; s < 8; ++s) {
@@ -2765,7 +2798,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param player The player address.
     /// @param lvl The level to query.
     /// @return weiAmount Total ETH wagered in wei.
-    function getPlayerDegeneretteWager(address player, uint24 lvl) external view returns (uint256 weiAmount) {
+    function getPlayerDegeneretteWager(
+        address player,
+        uint24 lvl
+    ) external view returns (uint256 weiAmount) {
         weiAmount = playerDegeneretteEthWagered[player][lvl];
     }
 
@@ -2773,7 +2809,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param lvl The level to query.
     /// @return topPlayer The address of the top wagerer.
     /// @return amountUnits The wagered amount in 1e12 wei units.
-    function getTopDegenerette(uint24 lvl) external view returns (address topPlayer, uint256 amountUnits) {
+    function getTopDegenerette(
+        uint24 lvl
+    ) external view returns (address topPlayer, uint256 amountUnits) {
         uint256 packed = topDegeneretteByLevel[lvl];
         topPlayer = address(uint160(packed));
         amountUnits = packed >> 160;

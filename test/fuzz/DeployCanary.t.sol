@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title DeployCanary -- Validates all 22+5 addresses match patched constants
+/// @title DeployCanary -- Validates all 23+5 addresses match patched constants
 /// @notice If any assertion fails, the nonce prediction or deploy order is wrong.
 contract DeployCanary is DeployProtocol {
     function setUp() public {
@@ -13,7 +13,7 @@ contract DeployCanary is DeployProtocol {
 
     /// @notice Every deployed contract address must match its ContractAddresses constant
     function test_allAddressesMatch() public view {
-        // Protocol contracts (22)
+        // Protocol contracts (23)
         assertEq(address(icons32), ContractAddresses.ICONS_32, "ICONS_32 mismatch");
         assertEq(address(mintModule), ContractAddresses.GAME_MINT_MODULE, "GAME_MINT_MODULE mismatch");
         assertEq(address(advanceModule), ContractAddresses.GAME_ADVANCE_MODULE, "GAME_ADVANCE_MODULE mismatch");
@@ -34,6 +34,7 @@ contract DeployCanary is DeployProtocol {
         assertEq(address(quests), ContractAddresses.QUESTS, "QUESTS mismatch");
         assertEq(address(deityPass), ContractAddresses.DEITY_PASS, "DEITY_PASS mismatch");
         assertEq(address(vault), ContractAddresses.VAULT, "VAULT mismatch");
+        assertEq(address(sdgnrs), ContractAddresses.SDGNRS, "SDGNRS mismatch");
         assertEq(address(dgnrs), ContractAddresses.DGNRS, "DGNRS mismatch");
         assertEq(address(admin), ContractAddresses.ADMIN, "ADMIN mismatch");
 
@@ -56,7 +57,7 @@ contract DeployCanary is DeployProtocol {
         assertTrue(address(game).code.length > 0, "Game not deployed");
         assertTrue(address(coin).code.length > 0, "Coin not deployed");
         assertTrue(address(vault).code.length > 0, "Vault not deployed");
-        assertTrue(address(dgnrs).code.length > 0, "DGNRS not deployed");
+        assertTrue(address(sdgnrs).code.length > 0, "SDGNRS not deployed");
         assertTrue(address(admin).code.length > 0, "Admin not deployed");
         assertTrue(address(coinflip).code.length > 0, "Coinflip not deployed");
     }

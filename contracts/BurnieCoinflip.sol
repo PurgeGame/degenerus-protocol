@@ -867,7 +867,7 @@ contract BurnieCoinflip {
                 // Credit as flip stake, not direct mint
                 _addDailyFlip(to, slice, 0, false, false);
                 emit BountyPaid(to, slice);
-                game.payCoinflipBountyDgnrs(to);
+                game.payCoinflipBountyDgnrs(to, slice, currentBounty_);
                 bountyPaid = uint128(slice);
             }
             // Clear bounty owner regardless of win/loss

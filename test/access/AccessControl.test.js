@@ -210,28 +210,28 @@ describe("AccessControl", function () {
 
   describe("DegenerusStonk (DGNRS)", function () {
     it("depositSteth: reverts when called by alice (onlyGame → Unauthorized)", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        dgnrs.connect(alice).depositSteth(eth("1"))
-      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
+        sdgnrs.connect(alice).depositSteth(eth("1"))
+      ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
     it("transferFromPool: reverts when called by alice (onlyGame → Unauthorized)", async function () {
-      const { dgnrs, alice, bob } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, alice, bob } = await loadFixture(deployFullProtocol);
 
       // Pool enum: 0 = first pool (e.g. AFFILIATE)
       await expect(
-        dgnrs.connect(alice).transferFromPool(0, bob.address, eth("1"))
-      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
+        sdgnrs.connect(alice).transferFromPool(0, bob.address, eth("1"))
+      ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
-    it("burnForGame: reverts when called by alice (onlyGame → Unauthorized)", async function () {
-      const { dgnrs, alice, bob } = await loadFixture(deployFullProtocol);
+    it("burnRemainingPools: reverts when called by alice (onlyGame → Unauthorized)", async function () {
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        dgnrs.connect(alice).burnForGame(bob.address, eth("100"))
-      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
+        sdgnrs.connect(alice).burnRemainingPools()
+      ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
   });
 

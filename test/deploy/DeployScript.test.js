@@ -12,7 +12,7 @@ describe("Deploy Pipeline", function () {
     restoreAddresses();
   });
 
-  it("deploys all 22 contracts at predicted addresses", async function () {
+  it("deploys all 23 contracts at predicted addresses", async function () {
     const f = await loadFixture(deployFullProtocol);
     expect(f.deployedAddrs.size).to.equal(DEPLOY_ORDER.length);
 
@@ -25,10 +25,10 @@ describe("Deploy Pipeline", function () {
     }
   });
 
-  it("deployer nonce advances by exactly 22 protocol contracts", async function () {
+  it("deployer nonce advances by exactly 23 protocol contracts", async function () {
     const f = await loadFixture(deployFullProtocol);
     const endNonce = await f.deployer.getNonce();
-    // startingNonce was captured AFTER mock deploys, so delta = 22
+    // startingNonce was captured AFTER mock deploys, so delta = 23
     expect(endNonce - f.startingNonce).to.equal(DEPLOY_ORDER.length);
   });
 
@@ -67,12 +67,19 @@ describe("Deploy Pipeline", function () {
       );
     });
 
-    it("DegenerusStonk: creator receives 20% allocation", async function () {
+    it("StakedDegenerusStonk: DGNRS contract holds creator's 20% as sDGNRS", async function () {
       const f = await loadFixture(deployFullProtocol);
-      const totalSupply = await f.dgnrs.totalSupply();
-      const creatorBal = await f.dgnrs.balanceOf(f.deployer.address);
-      // Creator gets 20% (2000 bps of 10000)
-      expect(creatorBal).to.equal((totalSupply * 2000n) / 10000n);
+      const totalSupply = await f.sdgnrs.totalSupply();
+      const dgnrsAddr = await f.dgnrs.getAddress();
+      const wrapperBal = await f.sdgnrs.balanceOf(dgnrsAddr);
+      expect(wrapperBal).to.equal((totalSupply * 2000n) / 10000n);
+    });
+
+    it("DegenerusStonk: creator holds 20% as DGNRS", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      const totalSupply = await f.sdgnrs.totalSupply();
+      const creatorDgnrs = await f.dgnrs.balanceOf(f.deployer.address);
+      expect(creatorDgnrs).to.equal((totalSupply * 2000n) / 10000n);
     });
 
     it("DegenerusDeityPass: owner is deployer", async function () {

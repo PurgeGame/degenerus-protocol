@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
-import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
+import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
@@ -85,8 +85,8 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         IDegenerusAffiliate(ContractAddresses.AFFILIATE);
     IDegenerusJackpots internal constant jackpots =
         IDegenerusJackpots(ContractAddresses.JACKPOTS);
-    IDegenerusStonk internal constant dgnrs =
-        IDegenerusStonk(ContractAddresses.DGNRS);
+    IStakedDegenerusStonk internal constant dgnrs =
+        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     // -------------------------------------------------------------------------
     // Constants
@@ -119,11 +119,11 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         (address top, ) = affiliate.affiliateTop(lvl);
 
         if (top != address(0)) {
-            uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate);
+            uint256 poolBalance = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
             uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) /
                 10_000;
             uint256 paid = dgnrs.transferFromPool(
-                IDegenerusStonk.Pool.Affiliate,
+                IStakedDegenerusStonk.Pool.Affiliate,
                 top,
                 dgnrsReward
             );
@@ -132,7 +132,7 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
 
         // Segregate 5% of remaining affiliate pool for per-affiliate claims.
         // Scores at index lvl are frozen (new scores go to lvl + 1).
-        uint256 remainingPool = dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate);
+        uint256 remainingPool = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
         levelDgnrsAllocation[lvl] = (remainingPool * AFFILIATE_DGNRS_LEVEL_BPS) / 10_000;
     }
 

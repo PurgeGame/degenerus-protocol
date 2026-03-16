@@ -24,7 +24,7 @@ async function main() {
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Network:  ${network}`);
   console.log(`Nonce:    ${startingNonce}`);
-  console.log(`Deploying ${DEPLOY_ORDER.length} contracts...\n`);
+  console.log(`Deploying ${DEPLOY_ORDER.length} contracts (including DGNRS liquid wrapper)...\n`);
 
   // 1. Predict all addresses
   const predicted = predictAddresses(deployer.address, startingNonce);

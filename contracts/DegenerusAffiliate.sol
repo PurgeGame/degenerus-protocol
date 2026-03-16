@@ -247,16 +247,16 @@ contract DegenerusAffiliate {
             kickback: 0
         });
         affiliateCode[AFFILIATE_CODE_DGNRS] = AffiliateCodeInfo({
-            owner: ContractAddresses.DGNRS,
+            owner: ContractAddresses.SDGNRS,
             kickback: 0
         });
         emit Affiliate(1, AFFILIATE_CODE_VAULT, ContractAddresses.VAULT);
-        emit Affiliate(1, AFFILIATE_CODE_DGNRS, ContractAddresses.DGNRS);
+        emit Affiliate(1, AFFILIATE_CODE_DGNRS, ContractAddresses.SDGNRS);
 
         _setReferralCode(ContractAddresses.VAULT, AFFILIATE_CODE_DGNRS);
-        _setReferralCode(ContractAddresses.DGNRS, AFFILIATE_CODE_VAULT);
+        _setReferralCode(ContractAddresses.SDGNRS, AFFILIATE_CODE_VAULT);
         emit Affiliate(0, AFFILIATE_CODE_DGNRS, ContractAddresses.VAULT);
-        emit Affiliate(0, AFFILIATE_CODE_VAULT, ContractAddresses.DGNRS);
+        emit Affiliate(0, AFFILIATE_CODE_VAULT, ContractAddresses.SDGNRS);
 
         uint256 len = bootstrapOwners.length;
         for (uint256 i; i < len; ) {

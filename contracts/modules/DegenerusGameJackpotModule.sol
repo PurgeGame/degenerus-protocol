@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import {
     IDegenerusCoinModule
 } from "../interfaces/DegenerusGameModuleInterfaces.sol";
-import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
+import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
@@ -94,8 +94,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     IDegenerusCoinModule internal constant coin =
         IDegenerusCoinModule(ContractAddresses.COIN);
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
-    IDegenerusStonk internal constant dgnrs =
-        IDegenerusStonk(ContractAddresses.DGNRS);
+    IStakedDegenerusStonk internal constant dgnrs =
+        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     // -------------------------------------------------------------------------
     // Constants — Timing & Thresholds
@@ -321,8 +321,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             entropy,
             traitIds,
             shareBps,
-            bucketCounts,
-            0
+            bucketCounts
         );
     }
 
@@ -792,7 +791,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param lvl Current level.
     /// @param rngWord VRF random word.
     function awardFinalDayDgnrsReward(uint24 lvl, uint256 rngWord) external {
-        uint256 dgnrsPool = dgnrs.poolBalance(IDegenerusStonk.Pool.Reward);
+        uint256 dgnrsPool = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Reward);
         uint256 reward = (dgnrsPool * FINAL_DAY_DGNRS_BPS) / 10_000;
         if (reward == 0) return;
 
@@ -811,7 +810,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
         if (winners.length > 0 && winners[0] != address(0)) {
             dgnrs.transferFromPool(
-                IDegenerusStonk.Pool.Reward,
+                IStakedDegenerusStonk.Pool.Reward,
                 winners[0],
                 reward
             );
@@ -966,7 +965,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     rngWord
                 ) +
                 _addClaimableEth(
-                    ContractAddresses.DGNRS,
+                    ContractAddresses.SDGNRS,
                     stakeholderShare,
                     rngWord
                 );
@@ -1388,8 +1387,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 jp.entropy,
                 traitIds,
                 shareBps,
-                bucketCounts,
-                0
+                bucketCounts
             );
     }
 
@@ -1558,8 +1556,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 entropy,
         uint8[4] memory traitIds,
         uint16[4] memory shareBps,
-        uint16[4] memory bucketCounts,
-        uint256 dgnrsReward
+        uint16[4] memory bucketCounts
     ) private returns (uint256 totalPaidEth) {
         JackpotEthCtx memory ctx;
         ctx.entropyState = entropy;
@@ -1567,7 +1564,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint256 unit = PriceLookupLib.priceForLevel(lvl + 1) >> 2;
         uint8 remainderIdx = JackpotBucketLib.soloBucketIndex(entropy);
-        uint8 soloIdx = dgnrsReward != 0 ? remainderIdx : 0;
         uint256[4] memory shares = JackpotBucketLib.bucketShares(
             ethPool,
             shareBps,
@@ -1582,8 +1578,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 traitIdx,
                 traitIds,
                 shares,
-                bucketCounts,
-                (dgnrsReward != 0 && traitIdx == soloIdx) ? dgnrsReward : 0
+                bucketCounts
             );
             unchecked {
                 ++traitIdx;
@@ -1602,8 +1597,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 traitIdx,
         uint8[4] memory traitIds,
         uint256[4] memory shares,
-        uint16[4] memory bucketCounts,
-        uint256 bucketDgnrsReward
+        uint16[4] memory bucketCounts
     ) private {
         uint256 share = shares[traitIdx];
 
@@ -1619,8 +1613,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 traitIdx,
                 share,
                 ctx.entropyState,
-                bucketCounts[traitIdx],
-                bucketDgnrsReward
+                bucketCounts[traitIdx]
             );
 
         ctx.entropyState = newEntropyState;
@@ -1646,7 +1639,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param traitShare Total ETH/COIN allocated to this bucket.
     /// @param entropy Current entropy state.
     /// @param winnerCount Number of winners to select.
-    /// @param dgnrsReward DGNRS reward for the solo bucket winner (day-5 only).
     /// @return entropyState Updated entropy after selection.
     /// @return ethDelta ETH credited to claimable balances.
     /// @return liabilityDelta Total claimable liability added.
@@ -1658,8 +1650,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 traitIdx,
         uint256 traitShare,
         uint256 entropy,
-        uint16 winnerCount,
-        uint256 dgnrsReward
+        uint16 winnerCount
     )
         private
         returns (
@@ -1722,8 +1713,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // Special handling for solo bucket (winnerCount == 1)
         bool isSoloBucket = (winnerCount == 1);
-        bool payDgnrsReward = (!payCoin && isSoloBucket && dgnrsReward != 0);
-        bool dgnrsPaid;
 
         uint256 totalPayout;
         uint256 totalWhalePassSpent;
@@ -1731,14 +1720,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         for (uint256 i; i < len; ) {
             address w = winners[i];
             if (w != address(0)) {
-                if (payDgnrsReward && !dgnrsPaid) {
-                    dgnrs.transferFromPool(
-                        IDegenerusStonk.Pool.Reward,
-                        w,
-                        dgnrsReward
-                    );
-                    dgnrsPaid = true;
-                }
                 if (isSoloBucket) {
                     (
                         uint256 claimDelta,
@@ -2408,7 +2389,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (priceWei == 0) return;
         uint256 coinAmount = (prizePoolWei * PRICE_COIN_UNIT) / (priceWei * 20);
         if (coinAmount == 0) return;
-        coin.creditFlip(ContractAddresses.DGNRS, coinAmount);
+        coin.creditFlip(ContractAddresses.SDGNRS, coinAmount);
     }
 
     /// @notice Pays daily BURNIE jackpot to random ticket holders.

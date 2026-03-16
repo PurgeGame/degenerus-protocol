@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
+import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 
 import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
@@ -177,8 +177,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Reference to the BURNIE coin contract
     IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
 
-    /// @notice Reference to the DGNRS token contract
-    IDegenerusStonk internal constant dgnrs = IDegenerusStonk(ContractAddresses.DGNRS);
+    /// @notice Reference to the sDGNRS token contract
+    IStakedDegenerusStonk internal constant dgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     /// @notice Reference to the WWXRP token contract
     IWrappedWrappedXRP internal constant wwxrp = IWrappedWrappedXRP(ContractAddresses.WWXRP);
@@ -1690,7 +1690,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             ppm = LOOTBOX_DGNRS_POOL_MEGA_PPM;
         }
 
-        uint256 poolBalance = dgnrs.poolBalance(IDegenerusStonk.Pool.Lootbox);
+        uint256 poolBalance = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Lootbox);
         uint256 unit = 1 ether;
 
         if (poolBalance == 0 || ppm == 0 || unit == 0) return 0;
@@ -1708,7 +1708,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function _creditDgnrsReward(address player, uint256 amount) private returns (uint256 paid) {
         if (amount == 0) return 0;
         paid = dgnrs.transferFromPool(
-            IDegenerusStonk.Pool.Lootbox,
+            IStakedDegenerusStonk.Pool.Lootbox,
             player,
             amount
         );

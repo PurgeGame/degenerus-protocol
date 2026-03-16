@@ -254,7 +254,9 @@ interface IDegenerusGame {
     /// @notice Pay DGNRS bounty for biggest flip record holder.
     /// @dev Called by COIN contract when bounty is paid.
     /// @param player Player receiving the bounty payout.
-    function payCoinflipBountyDgnrs(address player) external;
+    /// @param winningBet BURNIE value of the winning flip (must meet minimum bet threshold).
+    /// @param bountyPool BURNIE value of the bounty pool (must meet minimum pool threshold).
+    function payCoinflipBountyDgnrs(address player, uint256 winningBet, uint256 bountyPool) external;
 
     /// @notice Check if RNG is currently locked (VRF request pending).
     /// @return True if RNG is locked, false otherwise.

@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {DegenerusStonk} from "../../contracts/DegenerusStonk.sol";
+import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 
 /// @title AffiliateDgnrsClaim -- Tests for segregated affiliate DGNRS claim system
 /// @notice Validates proportional distribution, claim window, and edge cases.
@@ -205,14 +205,14 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         assertTrue(aliceScore > 10 ether, "Alice above min");
         assertTrue(bobScore > 10 ether, "Bob above min");
 
-        uint256 aliceBefore = dgnrs.balanceOf(alice);
-        uint256 bobBefore   = dgnrs.balanceOf(bob);
+        uint256 aliceBefore = sdgnrs.balanceOf(alice);
+        uint256 bobBefore   = sdgnrs.balanceOf(bob);
 
         _claimDgnrs(alice);
         _claimDgnrs(bob);
 
-        uint256 aliceReward = dgnrs.balanceOf(alice) - aliceBefore;
-        uint256 bobReward   = dgnrs.balanceOf(bob) - bobBefore;
+        uint256 aliceReward = sdgnrs.balanceOf(alice) - aliceBefore;
+        uint256 bobReward   = sdgnrs.balanceOf(bob) - bobBefore;
 
         assertTrue(aliceReward > 0 && bobReward > 0, "Both got rewards");
 
@@ -234,13 +234,13 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         uint256 bobScore   = affiliate.affiliateScore(lvl, bob);
 
         // Bob claims FIRST
-        uint256 bobBefore = dgnrs.balanceOf(bob);
+        uint256 bobBefore = sdgnrs.balanceOf(bob);
         _claimDgnrs(bob);
-        uint256 bobReward = dgnrs.balanceOf(bob) - bobBefore;
+        uint256 bobReward = sdgnrs.balanceOf(bob) - bobBefore;
 
-        uint256 aliceBefore = dgnrs.balanceOf(alice);
+        uint256 aliceBefore = sdgnrs.balanceOf(alice);
         _claimDgnrs(alice);
-        uint256 aliceReward = dgnrs.balanceOf(alice) - aliceBefore;
+        uint256 aliceReward = sdgnrs.balanceOf(alice) - aliceBefore;
 
         assertTrue(aliceReward > 0 && bobReward > 0, "Both got rewards");
 
@@ -258,20 +258,20 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     function test_totalClaimsMatchPoolDelta() public {
         uint24 lvl = _buildScoresAndSetupClaim(CODE_ALICE, 30, CODE_BOB, 25);
 
-        uint256 poolBefore = dgnrs.poolBalance(DegenerusStonk.Pool.Affiliate);
+        uint256 poolBefore = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Affiliate);
 
         uint256 bal;
         uint256 totalClaimed;
 
-        bal = dgnrs.balanceOf(alice);
+        bal = sdgnrs.balanceOf(alice);
         _claimDgnrs(alice);
-        totalClaimed += dgnrs.balanceOf(alice) - bal;
+        totalClaimed += sdgnrs.balanceOf(alice) - bal;
 
-        bal = dgnrs.balanceOf(bob);
+        bal = sdgnrs.balanceOf(bob);
         _claimDgnrs(bob);
-        totalClaimed += dgnrs.balanceOf(bob) - bal;
+        totalClaimed += sdgnrs.balanceOf(bob) - bal;
 
-        uint256 poolAfter = dgnrs.poolBalance(DegenerusStonk.Pool.Affiliate);
+        uint256 poolAfter = sdgnrs.poolBalance(StakedDegenerusStonk.Pool.Affiliate);
         assertEq(totalClaimed, poolBefore - poolAfter, "Claims match pool delta");
     }
 
@@ -286,13 +286,13 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         uint256 bal;
         uint256 totalClaimed;
 
-        bal = dgnrs.balanceOf(alice);
+        bal = sdgnrs.balanceOf(alice);
         _claimDgnrs(alice);
-        totalClaimed += dgnrs.balanceOf(alice) - bal;
+        totalClaimed += sdgnrs.balanceOf(alice) - bal;
 
-        bal = dgnrs.balanceOf(bob);
+        bal = sdgnrs.balanceOf(bob);
         _claimDgnrs(bob);
-        totalClaimed += dgnrs.balanceOf(bob) - bal;
+        totalClaimed += sdgnrs.balanceOf(bob) - bal;
 
         assertTrue(totalClaimed <= smallAllocation, "Total claimed <= allocation");
         // With exact denominator, total should be close to allocation
@@ -306,15 +306,15 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
         assertEq(_getClaimed(lvl), 0, "Nothing claimed initially");
 
-        uint256 bal = dgnrs.balanceOf(alice);
+        uint256 bal = sdgnrs.balanceOf(alice);
         _claimDgnrs(alice);
-        uint256 alicePaid = dgnrs.balanceOf(alice) - bal;
+        uint256 alicePaid = sdgnrs.balanceOf(alice) - bal;
 
         assertEq(_getClaimed(lvl), alicePaid, "Claimed = alice's reward");
 
-        bal = dgnrs.balanceOf(bob);
+        bal = sdgnrs.balanceOf(bob);
         _claimDgnrs(bob);
-        uint256 bobPaid = dgnrs.balanceOf(bob) - bal;
+        uint256 bobPaid = sdgnrs.balanceOf(bob) - bal;
 
         assertEq(_getClaimed(lvl), alicePaid + bobPaid, "Claimed = alice + bob");
     }
@@ -331,9 +331,9 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setAllocation(1, 500_000 ether);
 
         // Alice can claim at level 1
-        uint256 before = dgnrs.balanceOf(alice);
+        uint256 before = sdgnrs.balanceOf(alice);
         _claimDgnrs(alice);
-        assertTrue(dgnrs.balanceOf(alice) - before > 0, "Claimed at level 1");
+        assertTrue(sdgnrs.balanceOf(alice) - before > 0, "Claimed at level 1");
 
         // Move to level 2 — Alice's level-1 scores are no longer accessible
         _setLevel(2);
@@ -370,17 +370,17 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
         assertEq(total, aScore + bScore + cScore, "Total = sum (no other affiliates)");
 
-        uint256 aBefore = dgnrs.balanceOf(alice);
-        uint256 bBefore = dgnrs.balanceOf(bob);
-        uint256 cBefore = dgnrs.balanceOf(carol);
+        uint256 aBefore = sdgnrs.balanceOf(alice);
+        uint256 bBefore = sdgnrs.balanceOf(bob);
+        uint256 cBefore = sdgnrs.balanceOf(carol);
 
         _claimDgnrs(alice);
         _claimDgnrs(bob);
         _claimDgnrs(carol);
 
-        uint256 aReward = dgnrs.balanceOf(alice) - aBefore;
-        uint256 bReward = dgnrs.balanceOf(bob) - bBefore;
-        uint256 cReward = dgnrs.balanceOf(carol) - cBefore;
+        uint256 aReward = sdgnrs.balanceOf(alice) - aBefore;
+        uint256 bReward = sdgnrs.balanceOf(bob) - bBefore;
+        uint256 cReward = sdgnrs.balanceOf(carol) - cBefore;
 
         // Alice/Bob ratio
         assertApproxEqRel(

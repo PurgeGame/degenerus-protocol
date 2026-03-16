@@ -94,7 +94,7 @@ async function main() {
     console.log("");
 
     // =========================================================================
-    // Phase 4: Deploy all 22 protocol contracts
+    // Phase 4: Deploy all 23 protocol contracts
     // =========================================================================
     console.log(`Phase 4: Deploying ${DEPLOY_ORDER.length} protocol contracts...`);
 
@@ -273,6 +273,7 @@ async function main() {
     console.log(`    Coin:     ${deployedAddrs.get("COIN")}`);
     console.log(`    Coinflip: ${deployedAddrs.get("COINFLIP")}`);
     console.log(`    Vault:    ${deployedAddrs.get("VAULT")}`);
+    console.log(`    SDGNRS:   ${deployedAddrs.get("SDGNRS")}`);
     console.log(`    DGNRS:    ${deployedAddrs.get("DGNRS")}`);
     console.log(`    Admin:    ${deployedAddrs.get("ADMIN")}`);
     console.log(`    MockVRF:  ${mocks.VRF_COORDINATOR}`);

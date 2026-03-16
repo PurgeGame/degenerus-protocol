@@ -18,12 +18,22 @@ const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
 // Distribution constants from contract
 const INITIAL_SUPPLY = 1_000_000_000_000n * eth("1"); // 1 trillion
 const CREATOR_BPS = 2000n; // 20%
-const WHALE_POOL_BPS = 1143n;
-const AFFILIATE_POOL_BPS = 3428n;
-const LOOTBOX_POOL_BPS = 1143n;
-const REWARD_POOL_BPS = 1143n;
-const EARLYBIRD_POOL_BPS = 1143n;
+const WHALE_POOL_BPS = 1000n;
+const AFFILIATE_POOL_BPS = 3500n;
+const LOOTBOX_POOL_BPS = 2000n;
+const REWARD_POOL_BPS = 500n;
+const EARLYBIRD_POOL_BPS = 1000n;
 const BPS_DENOM = 10_000n;
+
+// Helper: give a player sDGNRS from the Reward pool via game impersonation
+async function giveSDGNRS(sdgnrs, game, recipient, amount) {
+  const gameAddr = await game.getAddress();
+  await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [gameAddr] });
+  await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0xDE0B6B3A7640000"]);
+  const gameSigner = await hre.ethers.getSigner(gameAddr);
+  await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
+  await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
+}
 
 describe("DegenerusStonk", function () {
   after(() => restoreAddresses());
@@ -32,27 +42,37 @@ describe("DegenerusStonk", function () {
   // 1. Constructor / Initial State
   // ---------------------------------------------------------------------------
   describe("Initial state", function () {
-    it("token name is 'Degenerus Stonk'", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      expect(await dgnrs.name()).to.equal("Degenerus Stonk");
+    it("token name is 'Staked Degenerus Stonk'", async function () {
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      expect(await sdgnrs.name()).to.equal("Staked Degenerus Stonk");
     });
 
-    it("token symbol is 'DGNRS'", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      expect(await dgnrs.symbol()).to.equal("DGNRS");
+    it("token symbol is 'sDGNRS'", async function () {
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      expect(await sdgnrs.symbol()).to.equal("sDGNRS");
     });
 
     it("token decimals is 18", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      expect(await dgnrs.decimals()).to.equal(18n);
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      expect(await sdgnrs.decimals()).to.equal(18n);
     });
 
     it("total supply equals INITIAL_SUPPLY", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      expect(await dgnrs.totalSupply()).to.equal(INITIAL_SUPPLY);
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      expect(await sdgnrs.totalSupply()).to.equal(INITIAL_SUPPLY);
     });
 
-    it("creator receives 20% of initial supply", async function () {
+    it("DGNRS contract holds creator's 20% of sDGNRS supply", async function () {
+      const { sdgnrs, dgnrs } = await loadFixture(deployFullProtocol);
+      const expectedCreator = (INITIAL_SUPPLY * CREATOR_BPS) / BPS_DENOM;
+      const dgnrsAddr = await dgnrs.getAddress();
+      expect(await sdgnrs.balanceOf(dgnrsAddr)).to.be.closeTo(
+        expectedCreator,
+        eth("1")
+      );
+    });
+
+    it("creator holds 20% as DGNRS tokens", async function () {
       const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
       const expectedCreator = (INITIAL_SUPPLY * CREATOR_BPS) / BPS_DENOM;
       expect(await dgnrs.balanceOf(deployer.address)).to.be.closeTo(
@@ -62,45 +82,45 @@ describe("DegenerusStonk", function () {
     });
 
     it("contract holds the pool allocations (80% total)", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      const dgnrsAddr = await dgnrs.getAddress();
-      const contractBal = await dgnrs.balanceOf(dgnrsAddr);
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      const sdgnrsAddr = await sdgnrs.getAddress();
+      const contractBal = await sdgnrs.balanceOf(sdgnrsAddr);
       const expectedPool =
         INITIAL_SUPPLY - (INITIAL_SUPPLY * CREATOR_BPS) / BPS_DENOM;
       expect(contractBal).to.be.closeTo(expectedPool, eth("1"));
     });
 
     it("Whale pool balance is correct (~11.43% of total)", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      const whalePool = await dgnrs.poolBalance(Pool.Whale);
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      const whalePool = await sdgnrs.poolBalance(Pool.Whale);
       const expected = (INITIAL_SUPPLY * WHALE_POOL_BPS) / BPS_DENOM;
       expect(whalePool).to.be.closeTo(expected, eth("100"));
     });
 
     it("Affiliate pool balance is correct (~34.28% of total)", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      const affiliatePool = await dgnrs.poolBalance(Pool.Affiliate);
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      const affiliatePool = await sdgnrs.poolBalance(Pool.Affiliate);
       const expected = (INITIAL_SUPPLY * AFFILIATE_POOL_BPS) / BPS_DENOM;
       expect(affiliatePool).to.be.closeTo(expected, eth("100"));
     });
 
     it("Lootbox pool balance is correct (~11.43%)", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      const lootboxPool = await dgnrs.poolBalance(Pool.Lootbox);
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      const lootboxPool = await sdgnrs.poolBalance(Pool.Lootbox);
       const expected = (INITIAL_SUPPLY * LOOTBOX_POOL_BPS) / BPS_DENOM;
       expect(lootboxPool).to.be.closeTo(expected, eth("100"));
     });
 
     it("Reward pool balance is correct (~11.43%)", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      const rewardPool = await dgnrs.poolBalance(Pool.Reward);
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      const rewardPool = await sdgnrs.poolBalance(Pool.Reward);
       const expected = (INITIAL_SUPPLY * REWARD_POOL_BPS) / BPS_DENOM;
       expect(rewardPool).to.be.closeTo(expected, eth("100"));
     });
 
     it("Earlybird pool balance is correct (~11.43%)", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      const earlybirdPool = await dgnrs.poolBalance(Pool.Earlybird);
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      const earlybirdPool = await sdgnrs.poolBalance(Pool.Earlybird);
       const expected = (INITIAL_SUPPLY * EARLYBIRD_POOL_BPS) / BPS_DENOM;
       expect(earlybirdPool).to.be.closeTo(expected, eth("100"));
     });
@@ -108,60 +128,20 @@ describe("DegenerusStonk", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 2. ERC20 Standard Functions
-  // ---------------------------------------------------------------------------
-  describe("ERC20 basics", function () {
-    it("transfer works between accounts", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("1000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-      expect(await dgnrs.balanceOf(alice.address)).to.equal(amount);
-    });
-
-    it("Transfer event is emitted on transfer", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("1000");
-      const tx = await dgnrs.connect(deployer).transfer(alice.address, amount);
-      const ev = await getEvent(tx, dgnrs, "Transfer");
-      expect(ev.args.from).to.equal(deployer.address);
-      expect(ev.args.to).to.equal(alice.address);
-      expect(ev.args.amount).to.equal(amount);
-    });
-
-    it("reverts on transfer to zero address", async function () {
-      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
-      await expect(
-        dgnrs.connect(deployer).transfer(ZERO_ADDRESS, eth("1"))
-      ).to.be.revertedWithCustomError(dgnrs, "ZeroAddress");
-    });
-
-    it("non-creator transfer reverts with Unauthorized", async function () {
-      const { dgnrs, deployer, alice, bob } = await loadFixture(deployFullProtocol);
-      const amount = eth("1000");
-      // Give alice some tokens via creator
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-      // Alice cannot transfer to bob — soulbound
-      await expect(
-        dgnrs.connect(alice).transfer(bob.address, eth("1"))
-      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 3. transferFromPool (game-only)
+  // 2. transferFromPool (game-only)
   // ---------------------------------------------------------------------------
   describe("transferFromPool", function () {
     it("reverts when called by non-game address", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs
+        sdgnrs
           .connect(alice)
           .transferFromPool(Pool.Reward, alice.address, eth("100"))
-      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
+      ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
     it("game contract can transfer from pool to recipient", async function () {
-      const { dgnrs, game, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
 
       await hre.network.provider.request({
@@ -174,20 +154,20 @@ describe("DegenerusStonk", function () {
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
-      const poolBefore = await dgnrs.poolBalance(Pool.Reward);
+      const poolBefore = await sdgnrs.poolBalance(Pool.Reward);
       const amount = eth("100");
-      const tx = await dgnrs
+      const tx = await sdgnrs
         .connect(gameSigner)
         .transferFromPool(Pool.Reward, alice.address, amount);
 
-      const ev = await getEvent(tx, dgnrs, "PoolTransfer");
+      const ev = await getEvent(tx, sdgnrs, "PoolTransfer");
       expect(ev.args.pool).to.equal(BigInt(Pool.Reward));
       expect(ev.args.to).to.equal(alice.address);
       expect(ev.args.amount).to.equal(amount);
 
-      const poolAfter = await dgnrs.poolBalance(Pool.Reward);
+      const poolAfter = await sdgnrs.poolBalance(Pool.Reward);
       expect(poolAfter).to.equal(poolBefore - amount);
-      expect(await dgnrs.balanceOf(alice.address)).to.equal(amount);
+      expect(await sdgnrs.balanceOf(alice.address)).to.equal(amount);
 
       await hre.network.provider.request({
         method: "hardhat_stopImpersonatingAccount",
@@ -196,7 +176,7 @@ describe("DegenerusStonk", function () {
     });
 
     it("transfers only available amount when requested exceeds pool", async function () {
-      const { dgnrs, game, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
       await hre.network.provider.request({
         method: "hardhat_impersonateAccount",
@@ -208,12 +188,12 @@ describe("DegenerusStonk", function () {
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
-      const poolBal = await dgnrs.poolBalance(Pool.Reward);
+      const poolBal = await sdgnrs.poolBalance(Pool.Reward);
       // Request more than available
-      const tx = await dgnrs
+      const tx = await sdgnrs
         .connect(gameSigner)
         .transferFromPool(Pool.Reward, alice.address, poolBal * 2n);
-      const ev = await getEvent(tx, dgnrs, "PoolTransfer");
+      const ev = await getEvent(tx, sdgnrs, "PoolTransfer");
       // Should transfer only the available amount
       expect(ev.args.amount).to.equal(poolBal);
 
@@ -224,7 +204,7 @@ describe("DegenerusStonk", function () {
     });
 
     it("returns 0 when amount is 0", async function () {
-      const { dgnrs, game, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
       await hre.network.provider.request({
         method: "hardhat_impersonateAccount",
@@ -236,7 +216,7 @@ describe("DegenerusStonk", function () {
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
-      const transferred = await dgnrs
+      const transferred = await sdgnrs
         .connect(gameSigner)
         .transferFromPool.staticCall(Pool.Reward, alice.address, 0n);
       expect(transferred).to.equal(0n);
@@ -253,16 +233,16 @@ describe("DegenerusStonk", function () {
   // ---------------------------------------------------------------------------
   describe("transferBetweenPools", function () {
     it("reverts when called by non-game address", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs
+        sdgnrs
           .connect(alice)
           .transferBetweenPools(Pool.Earlybird, Pool.Reward, eth("100"))
-      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
+      ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
     it("game can move tokens between pools", async function () {
-      const { dgnrs, game } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, game } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
       await hre.network.provider.request({
         method: "hardhat_impersonateAccount",
@@ -274,22 +254,22 @@ describe("DegenerusStonk", function () {
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
-      const earlybirdBefore = await dgnrs.poolBalance(Pool.Earlybird);
-      const rewardBefore = await dgnrs.poolBalance(Pool.Reward);
+      const earlybirdBefore = await sdgnrs.poolBalance(Pool.Earlybird);
+      const rewardBefore = await sdgnrs.poolBalance(Pool.Reward);
       const amount = eth("1000");
 
-      const tx = await dgnrs
+      const tx = await sdgnrs
         .connect(gameSigner)
         .transferBetweenPools(Pool.Earlybird, Pool.Reward, amount);
-      const ev = await getEvent(tx, dgnrs, "PoolRebalance");
+      const ev = await getEvent(tx, sdgnrs, "PoolRebalance");
       expect(ev.args.from).to.equal(BigInt(Pool.Earlybird));
       expect(ev.args.to).to.equal(BigInt(Pool.Reward));
       expect(ev.args.amount).to.equal(amount);
 
-      expect(await dgnrs.poolBalance(Pool.Earlybird)).to.equal(
+      expect(await sdgnrs.poolBalance(Pool.Earlybird)).to.equal(
         earlybirdBefore - amount
       );
-      expect(await dgnrs.poolBalance(Pool.Reward)).to.equal(
+      expect(await sdgnrs.poolBalance(Pool.Reward)).to.equal(
         rewardBefore + amount
       );
 
@@ -300,7 +280,7 @@ describe("DegenerusStonk", function () {
     });
 
     it("total supply is unchanged after transferBetweenPools (no minting/burning)", async function () {
-      const { dgnrs, game } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, game } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
       await hre.network.provider.request({
         method: "hardhat_impersonateAccount",
@@ -312,11 +292,11 @@ describe("DegenerusStonk", function () {
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
-      const supplyBefore = await dgnrs.totalSupply();
-      await dgnrs
+      const supplyBefore = await sdgnrs.totalSupply();
+      await sdgnrs
         .connect(gameSigner)
         .transferBetweenPools(Pool.Earlybird, Pool.Reward, eth("1000"));
-      expect(await dgnrs.totalSupply()).to.equal(supplyBefore);
+      expect(await sdgnrs.totalSupply()).to.equal(supplyBefore);
 
       await hre.network.provider.request({
         method: "hardhat_stopImpersonatingAccount",
@@ -326,25 +306,19 @@ describe("DegenerusStonk", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 7. burnForGame (game-only)
+  // 7. burnRemainingPools (game-only, game over)
   // ---------------------------------------------------------------------------
 
-  describe("burnForGame", function () {
+  describe("burnRemainingPools", function () {
     it("reverts when called by non-game address", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs.connect(alice).burnForGame(alice.address, eth("100"))
-      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
+        sdgnrs.connect(alice).burnRemainingPools()
+      ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
-    it("game can burn tokens from an address", async function () {
-      const { dgnrs, game, deployer, alice } = await loadFixture(
-        deployFullProtocol
-      );
-      // Give alice some tokens
-      const amount = eth("1000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-
+    it("game can burn remaining pool tokens", async function () {
+      const { sdgnrs, game } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
       await hre.network.provider.request({
         method: "hardhat_impersonateAccount",
@@ -356,10 +330,14 @@ describe("DegenerusStonk", function () {
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
-      const supplyBefore = await dgnrs.totalSupply();
-      await dgnrs.connect(gameSigner).burnForGame(alice.address, amount);
-      expect(await dgnrs.balanceOf(alice.address)).to.equal(0n);
-      expect(await dgnrs.totalSupply()).to.equal(supplyBefore - amount);
+      const sdgnrsAddr = await sdgnrs.getAddress();
+      const poolBal = await sdgnrs.balanceOf(sdgnrsAddr);
+      expect(poolBal).to.be.gt(0n);
+      const supplyBefore = await sdgnrs.totalSupply();
+
+      await sdgnrs.connect(gameSigner).burnRemainingPools();
+      expect(await sdgnrs.balanceOf(sdgnrsAddr)).to.equal(0n);
+      expect(await sdgnrs.totalSupply()).to.equal(supplyBefore - poolBal);
 
       await hre.network.provider.request({
         method: "hardhat_stopImpersonatingAccount",
@@ -373,18 +351,18 @@ describe("DegenerusStonk", function () {
   // ---------------------------------------------------------------------------
   describe("depositSteth", function () {
     it("reverts when called by non-game address", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs.connect(alice).depositSteth(eth("1"))
-      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
+        sdgnrs.connect(alice).depositSteth(eth("1"))
+      ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
     it("game can deposit stETH", async function () {
-      const { dgnrs, game, mockStETH, deployer } = await loadFixture(
+      const { sdgnrs, game, mockStETH, deployer } = await loadFixture(
         deployFullProtocol
       );
       const gameAddr = await game.getAddress();
-      const dgnrsAddr = await dgnrs.getAddress();
+      const sdgnrsAddr = await sdgnrs.getAddress();
 
       // Mint stETH to game
       await mockStETH.connect(deployer).mint(gameAddr, eth("5"));
@@ -399,11 +377,11 @@ describe("DegenerusStonk", function () {
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
-      // Approve dgnrs to pull stETH
-      await mockStETH.connect(gameSigner).approve(dgnrsAddr, eth("5"));
+      // Approve sdgnrs to pull stETH
+      await mockStETH.connect(gameSigner).approve(sdgnrsAddr, eth("5"));
 
-      const tx = await dgnrs.connect(gameSigner).depositSteth(eth("5"));
-      const ev = await getEvent(tx, dgnrs, "Deposit");
+      const tx = await sdgnrs.connect(gameSigner).depositSteth(eth("5"));
+      const ev = await getEvent(tx, sdgnrs, "Deposit");
       expect(ev.args.stethAmount).to.equal(eth("5"));
 
       await hre.network.provider.request({
@@ -418,17 +396,17 @@ describe("DegenerusStonk", function () {
   // ---------------------------------------------------------------------------
   describe("receive (ETH deposit)", function () {
     it("reverts when ETH sent by non-game address", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
-      const dgnrsAddr = await dgnrs.getAddress();
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
+      const sdgnrsAddr = await sdgnrs.getAddress();
       await expect(
-        alice.sendTransaction({ to: dgnrsAddr, value: eth("1") })
-      ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
+        alice.sendTransaction({ to: sdgnrsAddr, value: eth("1") })
+      ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
-    it("game can send ETH to dgnrs contract", async function () {
-      const { dgnrs, game } = await loadFixture(deployFullProtocol);
+    it("game can send ETH to sdgnrs contract", async function () {
+      const { sdgnrs, game } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
-      const dgnrsAddr = await dgnrs.getAddress();
+      const sdgnrsAddr = await sdgnrs.getAddress();
 
       await hre.network.provider.request({
         method: "hardhat_impersonateAccount",
@@ -441,10 +419,10 @@ describe("DegenerusStonk", function () {
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
       const tx = await gameSigner.sendTransaction({
-        to: dgnrsAddr,
+        to: sdgnrsAddr,
         value: eth("1"),
       });
-      const ev = await getEvent(tx, dgnrs, "Deposit");
+      const ev = await getEvent(tx, sdgnrs, "Deposit");
       expect(ev.args.ethAmount).to.equal(eth("1"));
 
       await hre.network.provider.request({
@@ -459,58 +437,40 @@ describe("DegenerusStonk", function () {
   // ---------------------------------------------------------------------------
   describe("burn", function () {
     it("reverts when amount is zero", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs.connect(alice).burn(ZERO_ADDRESS, 0n)
-      ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
+        sdgnrs.connect(alice).burn(0n)
+      ).to.be.revertedWithCustomError(sdgnrs, "Insufficient");
     });
 
     it("reverts when amount exceeds balance", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       // Alice has no tokens
       await expect(
-        dgnrs.connect(alice).burn(ZERO_ADDRESS, eth("1"))
-      ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
+        sdgnrs.connect(alice).burn(eth("1"))
+      ).to.be.revertedWithCustomError(sdgnrs, "Insufficient");
     });
 
-    it("reverts when non-approved caller tries to burn for another player", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        dgnrs.connect(alice).burn(deployer.address, eth("1"))
-      ).to.be.revertedWithCustomError(dgnrs, "NotApproved");
-    });
-
-    it("approved operator can burn on behalf of player", async function () {
-      const { dgnrs, game, deployer, alice } = await loadFixture(
-        deployFullProtocol
-      );
-      // Transfer tokens to alice
+    it("burn is player-only — no third-party burn", async function () {
+      const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("1000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
+      await giveSDGNRS(sdgnrs, game, alice.address, amount);
 
-      // Approve bob as operator for alice
-      await game.connect(alice).setOperatorApproval(deployer.address, true);
-
-      // deployer burns on alice's behalf
-      const tx = await dgnrs
-        .connect(deployer)
-        .burn(alice.address, amount);
-      const ev = await getEvent(tx, dgnrs, "Burn");
+      // Alice burns her own sDGNRS
+      const tx = await sdgnrs.connect(alice).burn(amount);
+      const ev = await getEvent(tx, sdgnrs, "Burn");
       expect(ev.args.from).to.equal(alice.address);
       expect(ev.args.amount).to.equal(amount);
     });
 
     it("burn with ETH backing pays ETH proportionally", async function () {
-      const { dgnrs, game, deployer, alice } = await loadFixture(
-        deployFullProtocol
-      );
-      // Give alice some DGNRS
-      const dgnrsAmount = eth("100000"); // 100k DGNRS
-      await dgnrs.connect(deployer).transfer(alice.address, dgnrsAmount);
+      const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
+      const sdgnrsAmount = eth("100000"); // 100k sDGNRS
+      await giveSDGNRS(sdgnrs, game, alice.address, sdgnrsAmount);
 
       // Add ETH to DGNRS contract via game impersonation
       const gameAddr = await game.getAddress();
-      const dgnrsAddr = await dgnrs.getAddress();
+      const sdgnrsAddr = await sdgnrs.getAddress();
       await hre.network.provider.request({
         method: "hardhat_impersonateAccount",
         params: [gameAddr],
@@ -520,49 +480,49 @@ describe("DegenerusStonk", function () {
         "0x56BC75E2D63100000", // 100 ETH
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
-      await gameSigner.sendTransaction({ to: dgnrsAddr, value: eth("10") });
+      await gameSigner.sendTransaction({ to: sdgnrsAddr, value: eth("10") });
       await hre.network.provider.request({
         method: "hardhat_stopImpersonatingAccount",
         params: [gameAddr],
       });
 
       // Preview before burn
-      const [ethOut, stethOut, burnieOut] = await dgnrs.previewBurn(dgnrsAmount);
+      const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(sdgnrsAmount);
 
       // Burn
       const balBefore = await hre.ethers.provider.getBalance(alice.address);
-      const tx = await dgnrs.connect(alice).burn(ZERO_ADDRESS, dgnrsAmount);
+      const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
       const receipt = await tx.wait();
       const gasUsed = receipt.gasUsed * receipt.gasPrice;
       const balAfter = await hre.ethers.provider.getBalance(alice.address);
 
-      const ev = await getEvent(tx, dgnrs, "Burn");
+      const ev = await getEvent(tx, sdgnrs, "Burn");
       expect(ev.args.from).to.equal(alice.address);
-      expect(ev.args.amount).to.equal(dgnrsAmount);
+      expect(ev.args.amount).to.equal(sdgnrsAmount);
       expect(ev.args.ethOut).to.be.gt(0n);
       // Verify ETH was actually received
       expect(balAfter + gasUsed - balBefore).to.equal(ev.args.ethOut);
     });
 
     it("Burn event emitted with correct fields", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("1000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
+      await giveSDGNRS(sdgnrs, game, alice.address, amount);
 
-      const tx = await dgnrs.connect(alice).burn(ZERO_ADDRESS, amount);
-      const ev = await getEvent(tx, dgnrs, "Burn");
+      const tx = await sdgnrs.connect(alice).burn(amount);
+      const ev = await getEvent(tx, sdgnrs, "Burn");
       expect(ev.args.from).to.equal(alice.address);
       expect(ev.args.amount).to.equal(amount);
     });
 
     it("total supply decreases after burn", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("1000");
-      await dgnrs.connect(deployer).transfer(alice.address, amount);
-      const supplyBefore = await dgnrs.totalSupply();
+      await giveSDGNRS(sdgnrs, game, alice.address, amount);
+      const supplyBefore = await sdgnrs.totalSupply();
 
-      await dgnrs.connect(alice).burn(ZERO_ADDRESS, amount);
-      expect(await dgnrs.totalSupply()).to.equal(supplyBefore - amount);
+      await sdgnrs.connect(alice).burn(amount);
+      expect(await sdgnrs.totalSupply()).to.equal(supplyBefore - amount);
     });
   });
 
@@ -571,16 +531,16 @@ describe("DegenerusStonk", function () {
   // ---------------------------------------------------------------------------
   describe("previewBurn", function () {
     it("returns zeros when amount is 0", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      const [ethOut, stethOut, burnieOut] = await dgnrs.previewBurn(0n);
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(0n);
       expect(ethOut).to.equal(0n);
       expect(stethOut).to.equal(0n);
       expect(burnieOut).to.equal(0n);
     });
 
     it("returns zeros when amount exceeds total supply", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      const [ethOut, stethOut, burnieOut] = await dgnrs.previewBurn(
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(
         INITIAL_SUPPLY * 2n
       );
       expect(ethOut).to.equal(0n);
@@ -589,9 +549,9 @@ describe("DegenerusStonk", function () {
     });
 
     it("proportional preview when ETH exists", async function () {
-      const { dgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      const { sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
-      const dgnrsAddr = await dgnrs.getAddress();
+      const sdgnrsAddr = await sdgnrs.getAddress();
       await hre.network.provider.request({
         method: "hardhat_impersonateAccount",
         params: [gameAddr],
@@ -602,7 +562,7 @@ describe("DegenerusStonk", function () {
         "0x3635C9ADC5DEA00000",
       ]);
       const gameSigner = await hre.ethers.getSigner(gameAddr);
-      await gameSigner.sendTransaction({ to: dgnrsAddr, value: eth("100") });
+      await gameSigner.sendTransaction({ to: sdgnrsAddr, value: eth("100") });
       await hre.network.provider.request({
         method: "hardhat_stopImpersonatingAccount",
         params: [gameAddr],
@@ -610,28 +570,19 @@ describe("DegenerusStonk", function () {
 
       // Preview for 1% of supply
       const onePercent = INITIAL_SUPPLY / 100n;
-      const [ethOut, stethOut, burnieOut] = await dgnrs.previewBurn(onePercent);
+      const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(onePercent);
       // 1% of 100 ETH = 1 ETH
       expect(ethOut).to.be.closeTo(eth("1"), eth("0.01"));
     });
   });
 
   // ---------------------------------------------------------------------------
-  // 12. totalBacking and burnieReserve
+  // 12. burnieReserve
   // ---------------------------------------------------------------------------
-  describe("totalBacking", function () {
-    it("returns 0 initially (no ETH/stETH/BURNIE backing)", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      // Initially no backing (all DGNRS is just distributed, no ETH backing)
-      const backing = await dgnrs.totalBacking();
-      expect(backing).to.be.gte(0n);
-    });
-  });
-
   describe("burnieReserve", function () {
     it("returns 0 initially when no BURNIE deposited", async function () {
-      const { dgnrs } = await loadFixture(deployFullProtocol);
-      const reserve = await dgnrs.burnieReserve();
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      const reserve = await sdgnrs.burnieReserve();
       expect(reserve).to.be.gte(0n);
     });
   });
@@ -640,17 +591,9 @@ describe("DegenerusStonk", function () {
   // 11. gameAdvance (holder-only)
   // ---------------------------------------------------------------------------
   describe("gameAdvance", function () {
-    it("reverts when called by non-holder", async function () {
-      const { dgnrs, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        dgnrs.connect(alice).gameAdvance()
-      ).to.be.revertedWithCustomError(dgnrs, "NotHolder");
-    });
-
-    it("holder can call gameAdvance", async function () {
-      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
-      // deployer has DGNRS tokens
-      await expect(dgnrs.connect(deployer).gameAdvance()).to.not.be.reverted;
+    it("anyone can call gameAdvance", async function () {
+      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
+      await expect(sdgnrs.connect(alice).gameAdvance()).to.not.be.reverted;
     });
   });
 

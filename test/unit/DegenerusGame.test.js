@@ -89,13 +89,13 @@ describe("DegenerusGame", function () {
       expect(await game.level()).to.equal(0n);
     });
 
-    it("tickets are pre-queued for vault and dgnrs (levels 1-100)", async function () {
-      const { game, vault, dgnrs } = await loadFixture(deployFullProtocol);
+    it("tickets are pre-queued for vault and sdgnrs (levels 1-100)", async function () {
+      const { game, vault, sdgnrs } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      const dgnrsAddr = await dgnrs.getAddress();
-      // Tickets owed at level 1 should be 16 for vault and dgnrs
+      const sdgnrsAddr = await sdgnrs.getAddress();
+      // Tickets owed at level 1 should be 16 for vault and sdgnrs
       expect(await game.ticketsOwedView(1, vaultAddr)).to.equal(16n);
-      expect(await game.ticketsOwedView(1, dgnrsAddr)).to.equal(16n);
+      expect(await game.ticketsOwedView(1, sdgnrsAddr)).to.equal(16n);
     });
 
     it("purchaseInfo returns consistent initial state", async function () {
@@ -490,7 +490,7 @@ describe("DegenerusGame", function () {
     it("reverts when called by unauthorized address", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).payCoinflipBountyDgnrs(alice.address)
+        game.connect(alice).payCoinflipBountyDgnrs(alice.address, 0, 0)
       ).to.be.reverted;
     });
   });
