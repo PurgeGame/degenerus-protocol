@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
+import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
@@ -228,6 +229,14 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     uint16 private constant WHALE_PASS_STREAK_FLOOR_POINTS = 50;
     /// @dev Whale pass minimum mint count points while frozen (1 point = 1%).
     uint16 private constant WHALE_PASS_MINT_COUNT_FLOOR_POINTS = 25;
+
+    /// @dev sDGNRS contract reference for degenerette DGNRS rewards
+    IStakedDegenerusStonk private constant sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+
+    /// @dev Degenerette DGNRS reward BPS (per ETH wagered, % of remaining Reward pool)
+    uint16 private constant DEGEN_DGNRS_6_BPS = 400;   // 4% per ETH
+    uint16 private constant DEGEN_DGNRS_7_BPS = 800;   // 8% per ETH
+    uint16 private constant DEGEN_DGNRS_8_BPS = 1500;  // 15% per ETH
 
     /// @dev Currency type identifier for ETH.
     uint8 private constant CURRENCY_ETH = 0;
@@ -644,6 +653,11 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
                     ? rngWord
                     : uint256(keccak256(abi.encodePacked(rngWord, index, spinIdx, bytes1(0x4c)))); // 'L'
                 _distributePayout(player, currency, payout, lootboxWord);
+            }
+
+            // Award sDGNRS from Reward pool on 6+ match ETH bets
+            if (currency == CURRENCY_ETH && matches >= 6) {
+                _awardDegeneretteDgnrs(player, amountPerTicket, matches);
             }
 
             unchecked {
@@ -1145,5 +1159,23 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
         if (weiAmount == 0) return;
         claimablePool += weiAmount;
         _creditClaimable(beneficiary, weiAmount);
+    }
+
+    /// @dev Award sDGNRS from Reward pool on 6+ match Degenerette ETH bets.
+    ///      Reward scales by bet size (capped at 1 ETH) and match tier.
+    function _awardDegeneretteDgnrs(address player, uint256 betWei, uint8 matchCount) private {
+        uint256 bps;
+        if (matchCount == 6) bps = DEGEN_DGNRS_6_BPS;
+        else if (matchCount == 7) bps = DEGEN_DGNRS_7_BPS;
+        else bps = DEGEN_DGNRS_8_BPS;
+
+        uint256 poolBalance = sdgnrs.poolBalance(IStakedDegenerusStonk.Pool.Reward);
+        if (poolBalance == 0) return;
+
+        uint256 cappedBet = betWei > 1 ether ? 1 ether : betWei;
+        uint256 reward = (poolBalance * bps * cappedBet) / (10_000 * 1 ether);
+        if (reward == 0) return;
+
+        sdgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Reward, player, reward);
     }
 }

@@ -23,9 +23,9 @@ let _patchedVrfKeyHash = null;
  *
  * Flow:
  *   1. Deploy mock contracts (VRF, stETH, LINK, wXRP)
- *   2. Predict addresses for the 22 protocol contracts
+ *   2. Predict addresses for the 23 protocol contracts
  *   3. Patch ContractAddresses.sol + recompile (once per test run)
- *   4. Deploy all 22 protocol contracts in order
+ *   4. Deploy all 23 protocol contracts in order
  *   5. Verify deployed addresses match predictions
  */
 export async function deployFullProtocol() {
@@ -73,7 +73,7 @@ export async function deployFullProtocol() {
     _patchedVrfKeyHash = vrfKeyHash;
   }
 
-  // --- Phase 4: Deploy all 22 protocol contracts ---
+  // --- Phase 4: Deploy all 23 protocol contracts ---
   const contracts = {};
   const deployedAddrs = new Map();
 
@@ -124,6 +124,7 @@ export async function deployFullProtocol() {
     quests: contracts.QUESTS,
     deityPass: contracts.DEITY_PASS,
     vault: contracts.VAULT,
+    sdgnrs: contracts.SDGNRS,
     dgnrs: contracts.DGNRS,
     admin: contracts.ADMIN,
 

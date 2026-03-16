@@ -10,8 +10,9 @@ const JACKPOT_RESET_TIME = 82620n;
  *
  * Constraints:
  *  - COIN (N+11) before VAULT (N+19): vault reads vaultMintAllowance()
- *  - GAME (N+13) + modules (N+1..10) before DGNRS (N+20): stonk calls claimWhalePass/setAfKingMode
- *  - GAME (N+13) before ADMIN (N+21): admin calls wireVrf()
+ *  - GAME (N+13) + modules (N+1..10) before SDGNRS (N+20): stonk calls claimWhalePass/setAfKingMode
+ *  - SDGNRS (N+20) before DGNRS (N+21): DGNRS reads SDGNRS balance
+ *  - GAME (N+13) before ADMIN (N+22): admin calls wireVrf()
  */
 export const DEPLOY_ORDER = [
   "ICONS_32",              // N+0:  Icons32Data
@@ -34,8 +35,9 @@ export const DEPLOY_ORDER = [
   "QUESTS",                // N+17: DegenerusQuests
   "DEITY_PASS",            // N+18: DegenerusDeityPass
   "VAULT",                 // N+19: DegenerusVault (calls COIN)
-  "DGNRS",                 // N+20: DegenerusStonk (calls GAME)
-  "ADMIN",                 // N+21: DegenerusAdmin (calls VRF + GAME)
+  "SDGNRS",                // N+20: StakedDegenerusStonk (calls GAME, mints to DGNRS)
+  "DGNRS",                 // N+21: DegenerusStonk (reads SDGNRS balance)
+  "ADMIN",                 // N+22: DegenerusAdmin (calls VRF + GAME)
 ];
 
 /**
@@ -62,6 +64,7 @@ export const KEY_TO_CONTRACT = {
   QUESTS: "DegenerusQuests",
   DEITY_PASS: "DegenerusDeityPass",
   VAULT: "DegenerusVault",
+  SDGNRS: "StakedDegenerusStonk",
   DGNRS: "DegenerusStonk",
   ADMIN: "DegenerusAdmin",
 };

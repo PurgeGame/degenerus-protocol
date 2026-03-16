@@ -2,7 +2,7 @@
 pragma solidity 0.8.34;
 
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
+import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -27,8 +27,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @notice stETH token contract for liquid staking rewards
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
-    /// @notice DGNRS token contract for fund deposits
-    IDegenerusStonk internal constant dgnrs = IDegenerusStonk(ContractAddresses.DGNRS);
+    /// @notice sDGNRS token contract for fund deposits
+    IStakedDegenerusStonk internal constant dgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     /// @notice Admin contract for VRF shutdown
     IDegenerusAdminShutdown private constant admin =
@@ -159,11 +159,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             }
         }
 
-        // Burn undistributed DGNRS pool tokens so totalSupply reflects only holder wallets
-        uint256 dgnrsSelfBal = dgnrs.balanceOf(address(dgnrs));
-        if (dgnrsSelfBal != 0) {
-            dgnrs.burnForGame(address(dgnrs), dgnrsSelfBal);
-        }
+        // Burn undistributed sDGNRS pool tokens so totalSupply reflects only holder wallets
+        dgnrs.burnRemainingPools();
     }
 
     /// @notice Final sweep of all remaining funds to vault after 30 days post-gameover.
@@ -218,16 +215,16 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         if (dgnrsAmount != 0) {
             if (dgnrsAmount <= stethBal) {
-                if (!steth.approve(ContractAddresses.DGNRS, dgnrsAmount)) revert E();
+                if (!steth.approve(ContractAddresses.SDGNRS, dgnrsAmount)) revert E();
                 dgnrs.depositSteth(dgnrsAmount);
             } else {
                 if (stethBal != 0) {
-                    if (!steth.approve(ContractAddresses.DGNRS, stethBal)) revert E();
+                    if (!steth.approve(ContractAddresses.SDGNRS, stethBal)) revert E();
                     dgnrs.depositSteth(stethBal);
                 }
                 uint256 ethAmount = dgnrsAmount - stethBal;
                 if (ethAmount != 0) {
-                    (bool ok, ) = payable(ContractAddresses.DGNRS).call{value: ethAmount}("");
+                    (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: ethAmount}("");
                     if (!ok) revert E();
                 }
             }

@@ -26,8 +26,9 @@ library ContractAddresses {
     address internal constant JACKPOTS = address(0xe8dc788818033232EF9772CB2e6622F1Ec8bc840);
     address internal constant QUESTS = address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
     address internal constant GAME = address(0x3381cD18e2Fb4dB236BF0525938AB6E43Db0440f);
-    address internal constant DGNRS = address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
-    address internal constant ADMIN = address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
+    address internal constant SDGNRS = address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
+    address internal constant DGNRS = address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
+    address internal constant ADMIN = address(0x886D6d1eB8D415b00052828CD6d5B321f072073d);
     address internal constant DEITY_PASS = address(0x27cc01A4676C73fe8b6d0933Ac991BfF1D77C4da);
     address internal constant WWXRP = address(0x756e0562323ADcDA4430d6cb456d9151f605290B);
     address internal constant STETH_TOKEN = address(0x2e234DAe75C793f67A35089C9d99245E1C58470b);

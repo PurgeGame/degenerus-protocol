@@ -25,6 +25,7 @@ import {DegenerusJackpots} from "../../../contracts/DegenerusJackpots.sol";
 import {DegenerusQuests} from "../../../contracts/DegenerusQuests.sol";
 import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
 import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
+import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol";
 import {DegenerusStonk} from "../../../contracts/DegenerusStonk.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
 
@@ -36,7 +37,7 @@ import {MockWXRP} from "../../../contracts/mocks/MockWXRP.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 5 mocks + 22 protocol contracts in setUp().
+/// @notice Deploys all 5 mocks + 23 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 /// @dev Address correctness depends on patchForFoundry.js having patched
 ///      ContractAddresses.sol before forge build.
@@ -69,6 +70,7 @@ abstract contract DeployProtocol is Test {
     DegenerusQuests public quests;
     DegenerusDeityPass public deityPass;
     DegenerusVault public vault;
+    StakedDegenerusStonk public sdgnrs;
     DegenerusStonk public dgnrs;
     DegenerusAdmin public admin;
 
@@ -79,13 +81,13 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 5 mocks (nonces 1-5) ---
+        // Then 23 protocol contracts (nonces 6-28) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
         mockWXRP = new MockWXRP();                    // nonce 4
         mockFeed = new MockLinkEthFeed(int256(0.004 ether)); // nonce 5
 
-        // --- Deploy 22 protocol contracts (nonces 6-27) ---
         // Order matches DEPLOY_ORDER in predictAddresses.js
 
         icons32 = new Icons32Data();                   // N+0 = nonce 6
@@ -130,9 +132,13 @@ abstract contract DeployProtocol is Test {
         vault = new DegenerusVault();                  // N+19 = nonce 25
 
         // Stonk constructor calls GAME.claimWhalePass() + GAME.setAfKingMode()
-        dgnrs = new DegenerusStonk();                  // N+20 = nonce 26
+        // Mints creator's 20% to DGNRS address
+        sdgnrs = new StakedDegenerusStonk();           // N+20 = nonce 26
+
+        // DGNRS reads its sDGNRS balance and mints DGNRS to CREATOR
+        dgnrs = new DegenerusStonk();                  // N+21 = nonce 27
 
         // Admin constructor calls VRF.createSubscription() + GAME.wireVrf()
-        admin = new DegenerusAdmin();                  // N+21 = nonce 27
+        admin = new DegenerusAdmin();                  // N+22 = nonce 28
     }
 }

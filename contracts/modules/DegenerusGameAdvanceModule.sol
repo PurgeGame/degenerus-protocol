@@ -1106,7 +1106,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ) private returns (bool finished) {
         // Vault perpetual tickets: 16 generic tickets per level for DGNRS and VAULT
         uint24 targetLevel = purchaseLevel + 99;
-        _queueTickets(ContractAddresses.DGNRS, targetLevel, VAULT_PERPETUAL_TICKETS);
+        _queueTickets(ContractAddresses.SDGNRS, targetLevel, VAULT_PERPETUAL_TICKETS);
         _queueTickets(ContractAddresses.VAULT, targetLevel, VAULT_PERPETUAL_TICKETS);
 
         // Auto-stake all non-claimable ETH into stETH for yield generation.

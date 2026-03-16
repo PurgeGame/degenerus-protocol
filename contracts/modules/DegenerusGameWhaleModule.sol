@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
+import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
@@ -61,8 +61,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Affiliate contract for referral tracking.
     IDegenerusAffiliate internal constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
 
-    /// @dev DGNRS token contract for pool rewards.
-    IDegenerusStonk internal constant dgnrs = IDegenerusStonk(ContractAddresses.DGNRS);
+    /// @dev sDGNRS token contract for pool rewards.
+    IStakedDegenerusStonk internal constant dgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
 
     // -------------------------------------------------------------------------
@@ -631,20 +631,20 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         address upline,
         address upline2
     ) private {
-        uint256 whaleReserve = dgnrs.poolBalance(IDegenerusStonk.Pool.Whale);
+        uint256 whaleReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Whale);
         if (whaleReserve != 0) {
             uint256 minterShare = (whaleReserve * DGNRS_WHALE_MINTER_PPM) /
                 DGNRS_WHALE_REWARD_PPM_SCALE;
             if (minterShare != 0) {
                 dgnrs.transferFromPool(
-                    IDegenerusStonk.Pool.Whale,
+                    IStakedDegenerusStonk.Pool.Whale,
                     buyer,
                     minterShare
                 );
             }
         }
 
-        uint256 affiliateReserve = dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate);
+        uint256 affiliateReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
         if (affiliateReserve == 0) return;
 
         if (affiliateAddr != address(0)) {
@@ -653,7 +653,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 DGNRS_WHALE_REWARD_PPM_SCALE;
             if (affiliateShare != 0) {
                 dgnrs.transferFromPool(
-                    IDegenerusStonk.Pool.Affiliate,
+                    IStakedDegenerusStonk.Pool.Affiliate,
                     affiliateAddr,
                     affiliateShare
                 );
@@ -664,7 +664,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             DGNRS_WHALE_REWARD_PPM_SCALE;
         if (upline != address(0) && uplineShare != 0) {
             dgnrs.transferFromPool(
-                IDegenerusStonk.Pool.Affiliate,
+                IStakedDegenerusStonk.Pool.Affiliate,
                 upline,
                 uplineShare
             );
@@ -672,7 +672,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 upline2Share = uplineShare / 2;
         if (upline2 != address(0) && upline2Share != 0) {
             dgnrs.transferFromPool(
-                IDegenerusStonk.Pool.Affiliate,
+                IStakedDegenerusStonk.Pool.Affiliate,
                 upline2,
                 upline2Share
             );
@@ -691,12 +691,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         address upline,
         address upline2
     ) private returns (uint96 buyerDgnrs) {
-        uint256 whaleReserve = dgnrs.poolBalance(IDegenerusStonk.Pool.Whale);
+        uint256 whaleReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Whale);
         if (whaleReserve != 0) {
             uint256 totalReward = (whaleReserve * DEITY_WHALE_POOL_BPS) / 10_000;
             if (totalReward != 0) {
                 uint256 paid = dgnrs.transferFromPool(
-                    IDegenerusStonk.Pool.Whale,
+                    IStakedDegenerusStonk.Pool.Whale,
                     buyer,
                     totalReward
                 );
@@ -706,7 +706,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        uint256 affiliateReserve = dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate);
+        uint256 affiliateReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
         if (affiliateReserve == 0) return buyerDgnrs;
 
         if (affiliateAddr != address(0)) {
@@ -715,7 +715,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 DGNRS_WHALE_REWARD_PPM_SCALE;
             if (affiliateShare != 0) {
                 dgnrs.transferFromPool(
-                    IDegenerusStonk.Pool.Affiliate,
+                    IStakedDegenerusStonk.Pool.Affiliate,
                     affiliateAddr,
                     affiliateShare
                 );
@@ -726,7 +726,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             DGNRS_WHALE_REWARD_PPM_SCALE;
         if (upline != address(0) && uplineShare != 0) {
             dgnrs.transferFromPool(
-                IDegenerusStonk.Pool.Affiliate,
+                IStakedDegenerusStonk.Pool.Affiliate,
                 upline,
                 uplineShare
             );
@@ -734,7 +734,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 upline2Share = uplineShare / 2;
         if (upline2 != address(0) && upline2Share != 0) {
             dgnrs.transferFromPool(
-                IDegenerusStonk.Pool.Affiliate,
+                IStakedDegenerusStonk.Pool.Affiliate,
                 upline2,
                 upline2Share
             );

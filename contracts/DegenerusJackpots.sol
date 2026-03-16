@@ -172,7 +172,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param amount Raw coinflip stake amount.
     /// @custom:access Restricted to coin contract via onlyCoin modifier.
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external override onlyCoin {
-        if (player == ContractAddresses.VAULT) return;
+        if (player == ContractAddresses.VAULT || player == ContractAddresses.SDGNRS) return;
 
         uint256 currentEpoch = bafEpoch[lvl];
         if (bafPlayerEpoch[lvl][player] != currentEpoch) {

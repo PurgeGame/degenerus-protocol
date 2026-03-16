@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {IVRFCoordinator} from "../interfaces/IVRFCoordinator.sol";
-import {IDegenerusStonk} from "../interfaces/IDegenerusStonk.sol";
+import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 
@@ -1086,16 +1086,16 @@ abstract contract DegenerusGameStorage {
             // One-shot: dump remaining earlybird pool into reward pool
             if (earlybirdDgnrsPoolStart != type(uint256).max) {
                 earlybirdDgnrsPoolStart = type(uint256).max;
-                IDegenerusStonk dgnrsContract = IDegenerusStonk(
-                    ContractAddresses.DGNRS
+                IStakedDegenerusStonk dgnrsContract = IStakedDegenerusStonk(
+                    ContractAddresses.SDGNRS
                 );
                 uint256 earlybirdRemaining = dgnrsContract.poolBalance(
-                    IDegenerusStonk.Pool.Earlybird
+                    IStakedDegenerusStonk.Pool.Earlybird
                 );
                 if (earlybirdRemaining != 0) {
                     dgnrsContract.transferBetweenPools(
-                        IDegenerusStonk.Pool.Earlybird,
-                        IDegenerusStonk.Pool.Reward,
+                        IStakedDegenerusStonk.Pool.Earlybird,
+                        IStakedDegenerusStonk.Pool.Lootbox,
                         earlybirdRemaining
                     );
                 }
@@ -1105,8 +1105,8 @@ abstract contract DegenerusGameStorage {
 
         uint256 poolStart = earlybirdDgnrsPoolStart;
         if (poolStart == 0) {
-            uint256 poolBalance = IDegenerusStonk(ContractAddresses.DGNRS)
-                .poolBalance(IDegenerusStonk.Pool.Earlybird);
+            uint256 poolBalance = IStakedDegenerusStonk(ContractAddresses.SDGNRS)
+                .poolBalance(IStakedDegenerusStonk.Pool.Earlybird);
             if (poolBalance == 0) return;
             poolStart = poolBalance;
             earlybirdDgnrsPoolStart = poolBalance;
@@ -1130,8 +1130,8 @@ abstract contract DegenerusGameStorage {
         earlybirdEthIn = nextEthIn;
         if (payout == 0) return;
 
-        IDegenerusStonk(ContractAddresses.DGNRS).transferFromPool(
-            IDegenerusStonk.Pool.Earlybird,
+        IStakedDegenerusStonk(ContractAddresses.SDGNRS).transferFromPool(
+            IStakedDegenerusStonk.Pool.Earlybird,
             buyer,
             payout
         );

@@ -52,7 +52,7 @@ export function patchForFoundry() {
     mockAddrs[mockNames[i]] = addr;
   }
 
-  // Predict 22 protocol addresses starting at PROTOCOL_START_NONCE
+  // Predict protocol addresses starting at PROTOCOL_START_NONCE
   const predicted = predictAddresses(
     FOUNDRY_TEST_CONTRACT,
     PROTOCOL_START_NONCE
