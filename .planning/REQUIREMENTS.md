@@ -7,9 +7,9 @@
 
 ### Delta — sDGNRS/DGNRS Split Audit
 
-- [ ] **DELTA-01**: StakedDegenerusStonk reviewed for reentrancy, access control, reserve accounting
-- [ ] **DELTA-02**: DegenerusStonk wrapper reviewed for ERC20 edge cases, burn delegation, unwrapTo
-- [ ] **DELTA-03**: Cross-contract interaction between DGNRS↔sDGNRS verified (supply sync, burn-through)
+- [x] **DELTA-01**: StakedDegenerusStonk reviewed for reentrancy, access control, reserve accounting
+- [x] **DELTA-02**: DegenerusStonk wrapper reviewed for ERC20 edge cases, burn delegation, unwrapTo
+- [x] **DELTA-03**: Cross-contract interaction between DGNRS↔sDGNRS verified (supply sync, burn-through)
 - [ ] **DELTA-04**: All game→sDGNRS callsites verified (pool transfers, deposits, burnRemainingPools)
 - [ ] **DELTA-05**: payCoinflipBountyDgnrs 3-arg gating logic verified
 - [ ] **DELTA-06**: Degenerette DGNRS reward math (6/7/8 match tiers) verified
@@ -57,9 +57,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DELTA-01 | Phase 19 | Pending |
-| DELTA-02 | Phase 19 | Pending |
-| DELTA-03 | Phase 19 | Pending |
+| DELTA-01 | Phase 19 | Complete (19-01) |
+| DELTA-02 | Phase 19 | Complete (19-01) |
+| DELTA-03 | Phase 19 | Complete (19-01) |
 | DELTA-04 | Phase 19 | Pending |
 | DELTA-05 | Phase 19 | Pending |
 | DELTA-06 | Phase 19 | Pending |
