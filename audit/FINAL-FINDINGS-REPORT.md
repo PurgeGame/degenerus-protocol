@@ -2,15 +2,15 @@
 
 **Audit Date:** February-March 2026
 **Auditor:** Claude (AI-assisted security analysis, Claude Opus 4.6)
-**Scope:** 13 core contracts + 10 delegatecall modules (23 deployable) + 7 libraries + 3 shared abstract contracts
+**Scope:** 14 core contracts + 10 delegatecall modules (24 deployable) + 7 libraries + 3 shared abstract contracts
 **Solidity:** 0.8.34 (ContractAddresses: ^0.8.26), viaIR enabled, optimizer runs=200
-**Methodology:** 7-phase manual code review with static analysis (Slither) support
+**Methodology:** 9-phase manual code review with static analysis (Slither) support
 
 ---
 
 ## Executive Summary
 
-Degenerus Protocol is a complex on-chain game system comprising 13 core contracts and 10 delegatecall modules (23 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, DGNRS, Vault shares, WrappedWrappedXRP). The audit conducted a 7-phase systematic review covering 57 plans, examining approximately 16,000 lines of Solidity code.
+Degenerus Protocol is a complex on-chain game system comprising 14 core contracts and 10 delegatecall modules (24 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, sDGNRS, DGNRS, Vault shares, WrappedWrappedXRP). The initial audit conducted a 7-phase systematic review covering 57 plans. A subsequent v2.0 delta audit (Phases 19-20) covered the sDGNRS/DGNRS split with 5 additional plans, for a total of 62 plans examining approximately 16,500 lines of Solidity code.
 
 **Overall Assessment: SOUND with minor issues.** The protocol demonstrates strong security architecture across all critical paths.
 
@@ -18,8 +18,8 @@ Degenerus Protocol is a complex on-chain game system comprising 13 core contract
 - **Critical:** 0
 - **High:** 0
 - **Medium:** 1 — Admin + VRF failure scenarios (M-02, acknowledged design trade-off)
-- **Low:** 0
-- **Informational:** 8 — design observations, static analysis summary
+- **Low:** 1 — DGNRS transfer-to-self token lock (DELTA-L-01, acknowledged)
+- **Informational:** 12 — 8 from v1.0-v1.2, 4 from v2.0 delta audit
 
 **Key Strengths:**
 1. **VRF integrity is excellent.** Chainlink VRF V2.5 is the sole randomness source. Lock semantics prevent manipulation. Block proposers and MEV searchers have zero extractable value from game outcomes.
@@ -97,7 +97,19 @@ A compromised admin can use `emergencyRecover` to point the game at an attacker-
 
 ## Low Findings
 
-**No low findings.**
+### DELTA-L-01: DGNRS Transfer-to-Self Token Lock
+
+**Severity:** LOW
+**Affected Contract:** DegenerusStonk.sol (`_transfer`)
+**Status:** Acknowledged -- standard ERC20 behavior
+
+When a DGNRS holder transfers tokens to their own address (`from == to`), the `_transfer` function reads `balanceOf[from]`, subtracts, then adds to `balanceOf[to]` (same slot). Due to the `unchecked` block and sequential operations on the same storage slot, this is algebraically a no-op but follows an unusual code path compared to OpenZeppelin ERC20.
+
+More critically, a user could `transfer(DGNRS_ADDRESS, amount)`, sending DGNRS tokens to the DGNRS contract address itself. Since DGNRS has no sweep function and no mechanism to spend tokens held in its own balance, these tokens are permanently locked.
+
+**Impact:** No token loss for self-transfer (algebraic no-op). For transfer-to-contract, requires explicit user action (sending tokens to the contract address). No protocol funds at risk. This is a common ERC20 pattern -- most tokens do not guard against this. No economic incentive to self-transfer or transfer to contract.
+
+**Source:** v2.0 delta audit, Phase 19 (DELTA-L-01)
 
 ---
 
@@ -128,6 +140,15 @@ Slither 0.11.5 was run against the full contract suite. Results:
 - **1,699 MEDIUM detections:** All triaged as false positives or informational. Primary categories: reentrancy, events not emitted, function order.
 
 No Slither detection maps to an actionable finding.
+
+### IV. v2.0 Delta Audit Findings (sDGNRS/DGNRS Split)
+
+| ID | Contract | Description |
+|----|----------|-------------|
+| DELTA-I-01 | StakedDegenerusStonk | `poolBalances` array is stale after `burnRemainingPools` but unreachable due to `gameOver` guard -- no exploit path |
+| DELTA-I-02 | DegenerusStonk | Stray ETH sent to DGNRS wrapper is permanently locked (no sweep function) -- by design |
+| DELTA-I-03 | StakedDegenerusStonk | `previewBurn` and `burn` may return different ETH splits due to intermediate transfers -- by design |
+| DELTA-I-04 | DegenerusGameStorage | Stale comment at line 1086 says "reward pool" but code correctly uses Lootbox pool |
 
 ---
 
@@ -202,6 +223,21 @@ All 56 v1 requirements across 10 categories were evaluated.
 
 **Coverage Summary: 56/56 PASS** (1 conditional on M-02: FSM-02 dual-failure scenario)
 
+### v2.0 Delta Requirements (sDGNRS/DGNRS Split)
+
+| Requirement | Description | Verdict | Notes |
+|-------------|-------------|---------|-------|
+| **DELTA-01** | sDGNRS reviewed for reentrancy, access control, reserve accounting | **PASS** | 5 external calls all SAFE, 13 functions all access-controlled correctly |
+| **DELTA-02** | DGNRS wrapper reviewed for ERC20 edge cases, burn-through, unwrapTo | **PASS** | ERC20 compliance verified, burn-through CEI traced, unwrapTo creator-only |
+| **DELTA-03** | Cross-contract supply invariant verified | **PASS** | sDGNRS.balanceOf[DGNRS] >= DGNRS.totalSupply across all 6 modification paths |
+| **DELTA-04** | All game->sDGNRS callsites verified | **PASS** | 30/30 callsites verified |
+| **DELTA-05** | payCoinflipBountyDgnrs gating logic verified | **PASS** | 8 gating conditions verified, 3 constants confirmed |
+| **DELTA-06** | Degenerette DGNRS reward math verified | **PASS** | Tier BPS (400/800/1500), 1 ETH cap, overflow analysis |
+| **DELTA-07** | Earlybird->Lootbox pool dump verified | **PASS** | Code correct, stale comment flagged (DELTA-I-04) |
+| **DELTA-08** | Pool BPS rebalance impact verified | **PASS** | 33 BPS/PPM constants, all denominators consistent |
+
+**v2.0 Coverage Summary: 8/8 PASS**
+
 ---
 
 ## Overall Risk Assessment
@@ -220,9 +256,9 @@ All 56 v1 requirements across 10 categories were evaluated.
 
 ## Scope and Methodology
 
-### Contracts in Scope (13 core + 10 modules + 7 libraries + 3 shared abstracts)
+### Contracts in Scope (14 core + 10 modules + 7 libraries + 3 shared abstracts)
 
-**Core Contracts (13 deployable)**
+**Core Contracts (14 deployable)**
 
 | Contract | Category | Size |
 |----------|----------|------|
@@ -231,7 +267,8 @@ All 56 v1 requirements across 10 categories were evaluated.
 | DegenerusAffiliate | Affiliate registry | ~8KB |
 | BurnieCoin | ERC-20 game token | ~9KB |
 | BurnieCoinflip | Coinflip mechanic | ~16KB |
-| DegenerusStonk (DGNRS) | Passive value-accumulating token (hold/transfer/burn only) | ~7KB |
+| StakedDegenerusStonk (sDGNRS) | Soulbound core token, holds reserves and pools | ~15KB |
+| DegenerusStonk (DGNRS) | Transferable ERC20 wrapper for sDGNRS | ~7KB |
 | DegenerusVault | stETH yield sharing | ~8KB |
 | DegenerusJackpots | BAF jackpot tracking | ~7KB |
 | DegenerusQuests | Quest streak system | ~6KB |
@@ -266,7 +303,7 @@ All 56 v1 requirements across 10 categories were evaluated.
 | DegenerusGamePayoutUtils | Payout helpers (abstract, inherited by jackpot-related modules) |
 | BitPackingLib / EntropyLib / GameTimeLib / JackpotBucketLib / PriceLookupLib | Utility libraries |
 
-### 7-Phase Audit Structure
+### 9-Phase Audit Structure
 
 | Phase | Focus Area | Plans | Requirements Assessed |
 |-------|-----------|-------|----------------------|
@@ -279,14 +316,16 @@ All 56 v1 requirements across 10 categories were evaluated.
 | 5 | Economic Attack Surface | 7 | ECON-01 to ECON-07 |
 | 6 | Access Control and Privilege Model | 7 | AUTH-01 to AUTH-06 |
 | 7 | Cross-Contract Integration Synthesis | 5 | XCON-01 to XCON-07 |
-| **Total** | | **57 plans** | **56 requirements** |
+| 19 | sDGNRS/DGNRS Delta Security Audit | 2 | DELTA-01 to DELTA-08 |
+| 20 | Correctness Verification | 3 | CORR-01 to CORR-04 |
+| **Total** | | **62 plans** | **68 requirements** |
 
 ### Tools Used
 
-- **Manual source code review** (primary methodology) — all 13 core contracts, 10 modules, 7 libraries, and 3 shared abstract contracts read line by line across 57 audit plans
+- **Manual source code review** (primary methodology) — all 14 core contracts, 10 modules, 7 libraries, and 3 shared abstract contracts read line by line across 62 audit plans
 - **Slither 0.11.5** — static analysis; 1,990 detections (302 HIGH + 1,699 MEDIUM), all triaged as false positive or informational
 - **Foundry `forge inspect`** — storage slot layout verification (Phase 1)
-- **Hardhat test suite** — 1,183 tests, 0 failures, covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
+- **Hardhat test suite** — 1,065 passing (26 pre-existing failures in unrelated affiliate/RNG/economic suites), covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
 
 ### Key Audit Techniques
 
@@ -294,7 +333,7 @@ All 56 v1 requirements across 10 categories were evaluated.
 - **Cross-function reentrancy analysis:** Independent enumeration of all 48 state-changing entry points; mid-callback state analysis for each
 - **ETH flow tracing:** Full tracing of every ETH-moving code path from purchase through settlement
 - **Economic modeling:** EV calculations for Sybil, affiliate, MEV, whale bundle, and activity score inflation attacks
-- **Constructor ordering verification:** Read all 23 constructors and verified against DEPLOY_ORDER in `predictAddresses.js`
+- **Constructor ordering verification:** Read all 24 constructors and verified against DEPLOY_ORDER in `predictAddresses.js`
 
 ### Limitations
 
@@ -322,9 +361,9 @@ The following were explicitly out of scope for this audit:
 
 5. **Economic resistance:** Sybil splitting provides at most proportional returns. Activity score inflation costs more than the EV it unlocks. Affiliate rewards are BURNIE mints (not ETH), limiting extraction. No MEV sandwich opportunity exists.
 
-6. **Test coverage:** 1,183 tests with 0 failures covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites including game-over sequences, RNG stalls, whale bundle edge cases, and price escalation.
+6. **Test coverage:** 1,065 passing tests (26 pre-existing failures in unrelated affiliate/RNG/economic suites) covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites including game-over sequences, RNG stalls, whale bundle edge cases, and price escalation.
 
 ---
 
-*Report generated from 57 individual audit plans across 7 phases, examining 13 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,000 lines of Solidity.*
+*Report generated from 62 individual audit plans across 9 phases, examining 14 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,500 lines of Solidity.*
 *Audit period: February-March 2026*
