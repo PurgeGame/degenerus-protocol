@@ -215,37 +215,39 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 ---
 
-### `payCoinflipBountyDgnrs(address)` [external]
+### `payCoinflipBountyDgnrs(address, uint256, uint256)` [external]
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function payCoinflipBountyDgnrs(address player) external` |
+| **Signature** | `function payCoinflipBountyDgnrs(address player, uint256 winningBet, uint256 bountyPool) external` |
 | **Visibility** | external |
 | **Mutability** | state-changing |
-| **Parameters** | `player` (address): recipient of DGNRS bounty |
+| **Parameters** | `player` (address): recipient of sDGNRS bounty; `winningBet` (uint256): BURNIE value of the winning flip; `bountyPool` (uint256): BURNIE value of the bounty pool |
 | **Returns** | (none) |
 
-**State Reads:** None directly (reads from external DGNRS contract).
+**State Reads:** None directly (reads from external sDGNRS contract).
 
-**State Writes:** None directly (writes occur in DGNRS contract via `transferFromPool`).
+**State Writes:** None directly (writes occur in sDGNRS contract via `transferFromPool`).
 
 **Callers:** COIN or COINFLIP contract only (access-controlled by `msg.sender` check).
 
 **Callees:**
-- `dgnrs.poolBalance(IDegenerusStonk.Pool.Reward)` -- reads Reward pool balance from DGNRS contract
-- `dgnrs.transferFromPool(IDegenerusStonk.Pool.Reward, player, payout)` -- transfers DGNRS tokens from Reward pool to player
+- `dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Reward)` -- reads Reward pool balance from sDGNRS contract
+- `dgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Reward, player, payout)` -- transfers sDGNRS tokens from Reward pool to player
 
-**ETH Flow:** None. This is a DGNRS token transfer, not ETH.
+**ETH Flow:** None. This is an sDGNRS token transfer, not ETH.
 
 **Invariants:**
-- Payout = `(poolBalance * COINFLIP_BOUNTY_DGNRS_BPS) / 10_000` where `COINFLIP_BOUNTY_DGNRS_BPS = 50` (0.5% of Reward pool)
+- Payout = `(poolBalance * COINFLIP_BOUNTY_DGNRS_BPS) / 10_000` where `COINFLIP_BOUNTY_DGNRS_BPS = 20` (0.2% of Reward pool)
+- `winningBet < COINFLIP_BOUNTY_DGNRS_MIN_BET` (50,000 BURNIE) -> early return
+- `bountyPool < COINFLIP_BOUNTY_DGNRS_MIN_POOL` (20,000 BURNIE) -> early return
 - Zero-address player -> early return (no-op)
 - Zero pool balance -> early return
 - Zero payout (rounding) -> early return
 
-**NatSpec Accuracy:** ACCURATE. "Pay DGNRS bounty for the biggest flip record holder" matches; access control documented.
+**NatSpec Accuracy:** ACCURATE. "Pay DGNRS bounty for the biggest flip record holder" matches; access control and threshold params documented.
 
-**Gas Flags:** None. Three sequential early-return guards are efficient.
+**Gas Flags:** None. Five sequential early-return guards are efficient.
 
 **Verdict:** CORRECT
 
@@ -1135,10 +1137,10 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 | **Parameters** | none |
 | **Returns** | none |
 
-**State Reads:** None directly (access check uses compile-time constants `ContractAddresses.VAULT`, `ContractAddresses.DGNRS`)
+**State Reads:** None directly (access check uses compile-time constants `ContractAddresses.VAULT`, `ContractAddresses.SDGNRS`)
 **State Writes:** None directly (delegates to `_claimWinningsInternal`)
 
-**Callers:** Only VAULT or DGNRS contracts. Access enforced inline: `player != ContractAddresses.VAULT && player != ContractAddresses.DGNRS` reverts E().
+**Callers:** Only VAULT or SDGNRS contracts. Access enforced inline: `player != ContractAddresses.VAULT && player != ContractAddresses.SDGNRS` reverts E().
 **Callees:** `_claimWinningsInternal(msg.sender, true)`
 
 **ETH Flow:** Triggers payout to msg.sender via `_claimWinningsInternal` with `stethFirst=true` (stETH preferred, ETH fallback). Used by VAULT/DGNRS to receive stETH (for yield).
@@ -1205,7 +1207,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **State Writes:** `affiliateDgnrsClaimedBy[prevLevel][player]` (set to true)
 
 **Callers:** Any external caller. Supports operator-approved claims via `_resolvePlayer`.
-**Callees:** `_resolvePlayer(player)`, `affiliate.affiliateScore(prevLevel, player)`, `dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate)`, `dgnrs.transferFromPool(Affiliate, player, reward)`, `coin.creditFlip(player, bonus)` (if deity pass holder with nonzero score)
+**Callees:** `_resolvePlayer(player)`, `affiliate.affiliateScore(prevLevel, player)`, `dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate)`, `dgnrs.transferFromPool(Affiliate, player, reward)`, `coin.creditFlip(player, bonus)` (if deity pass holder with nonzero score)
 
 **ETH Flow:** No ETH movement. Transfers DGNRS tokens from the Affiliate pool to the player. Optionally credits BURNIE flip via `coin.creditFlip` for deity pass holders.
 
@@ -1346,7 +1348,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **ETH Flow:** None.
 
 **Invariants:**
-- DGNRS contract cannot toggle this setting (`revert E()` if `player == ContractAddresses.DGNRS`)
+- SDGNRS contract cannot toggle this setting (`revert E()` if `player == ContractAddresses.SDGNRS`)
 - Cannot modify during RNG lock (`revert RngLocked()`)
 - Default is enabled (mapping defaults to `false`, and `!false` = enabled)
 
@@ -1952,8 +1954,8 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `adminSwapEthForStEth` does NOT use this -- it calls `steth.transfer` directly
 
 **Callees:**
-- `steth.approve(ContractAddresses.DGNRS, amount)` -- approve DGNRS to pull stETH (DGNRS path only)
-- `dgnrs.depositSteth(amount)` -- deposit stETH into DGNRS reserves (DGNRS path only)
+- `steth.approve(ContractAddresses.SDGNRS, amount)` -- approve sDGNRS to pull stETH (sDGNRS path only)
+- `dgnrs.depositSteth(amount)` -- deposit stETH into sDGNRS reserves (sDGNRS path only)
 - `steth.transfer(to, amount)` -- direct stETH transfer (non-DGNRS path)
 
 **ETH Flow:**
@@ -3184,7 +3186,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `advanceGame()` (line 158)
 
 **Callees:**
-- `_queueTickets(ContractAddresses.DGNRS, targetLevel, VAULT_PERPETUAL_TICKETS)`
+- `_queueTickets(ContractAddresses.SDGNRS, targetLevel, VAULT_PERPETUAL_TICKETS)`
 - `_queueTickets(ContractAddresses.VAULT, targetLevel, VAULT_PERPETUAL_TICKETS)`
 - `_autoStakeExcessEth()` (private)
 
@@ -5387,7 +5389,7 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 **Invariants:**
 - No-op if `price == 0` (division by zero protection).
 - No-op if `coinAmount == 0` (small prize pools).
-- Credits go to `ContractAddresses.DGNRS` address.
+- Credits go to `ContractAddresses.SDGNRS` address.
 
 **NatSpec Accuracy:** No NatSpec. Function name is self-documenting.
 
@@ -5419,8 +5421,8 @@ The daily jackpot is split into multiple advanceGame calls to stay under 15M gas
 
 **Callees:**
 - `affiliate.affiliateTop(lvl)` -- external call to get top affiliate address and score for the level
-- `dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate)` -- external call to get DGNRS affiliate pool balance
-- `dgnrs.transferFromPool(IDegenerusStonk.Pool.Affiliate, top, dgnrsReward)` -- external call to transfer DGNRS reward
+- `dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate)` -- external call to get sDGNRS affiliate pool balance
+- `dgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Affiliate, top, dgnrsReward)` -- external call to transfer sDGNRS reward
 
 **ETH Flow:** No ETH movement. This function exclusively moves DGNRS tokens from the Affiliate pool to the top affiliate address.
 
@@ -6220,7 +6222,7 @@ Per-category behavior:
 **Callers:** `_resolveLootboxRoll` (DGNRS path, 10% chance)
 
 **Callees:**
-- `dgnrs.transferFromPool(IDegenerusStonk.Pool.Lootbox, player, amount)` -- external call to DGNRS contract, transfers tokens from Lootbox pool to player
+- `dgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Lootbox, player, amount)` -- external call to sDGNRS contract, transfers tokens from Lootbox pool to player
 
 **ETH Flow:** No ETH movement. Transfers DGNRS tokens (ERC20-like) from pool to player.
 
@@ -6313,7 +6315,7 @@ Per-category behavior:
 - `IDegenerusGame(address(this)).runTerminalJackpot(remaining, lvl + 1, rngWord)` -- self-call to DegenerusGame which delegatecalls JackpotModule
 - `_sendToVault(remaining, stBal)` -- private helper for any undistributed remainder
 - `dgnrs.balanceOf(address(dgnrs))` -- external view call to check DGNRS self-held pool tokens
-- `dgnrs.burnForGame(address(dgnrs), dgnrsSelfBal)` -- burns undistributed DGNRS pool tokens so totalSupply reflects only holder wallets
+- `dgnrs.burnRemainingPools()` -- burns undistributed sDGNRS pool tokens so totalSupply reflects only holder wallets
 
 **ETH Flow:**
 1. **Deity refunds** (level < 10 only): 20 ETH/pass credited to `claimableWinnings[owner]`, funded from `totalFunds - claimablePool` budget. These are pull-pattern credits, not actual transfers.
@@ -6419,10 +6421,10 @@ Per-category behavior:
 
 **Callees:**
 - `steth.transfer(ContractAddresses.VAULT, ...)` -- transfer stETH to Vault
-- `steth.approve(ContractAddresses.DGNRS, ...)` -- approve DGNRS to pull stETH
-- `dgnrs.depositSteth(...)` -- deposit stETH into DGNRS contract
+- `steth.approve(ContractAddresses.SDGNRS, ...)` -- approve sDGNRS to pull stETH
+- `dgnrs.depositSteth(...)` -- deposit stETH into sDGNRS contract
 - `payable(ContractAddresses.VAULT).call{value: ethAmount}("")` -- send raw ETH to Vault
-- `payable(ContractAddresses.DGNRS).call{value: ethAmount}("")` -- send raw ETH to DGNRS
+- `payable(ContractAddresses.SDGNRS).call{value: ethAmount}("")` -- send raw ETH to sDGNRS
 
 **ETH Flow:**
 Split `amount` 50/50 between Vault and DGNRS, prioritizing stETH transfers:
@@ -6823,8 +6825,8 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 | **Returns** | none |
 
 **State Reads:**
-- `dgnrs.poolBalance(IDegenerusStonk.Pool.Whale)` -- external: whale pool DGNRS balance
-- `dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate)` -- external: affiliate pool DGNRS balance
+- `dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Whale)` -- external: whale pool sDGNRS balance
+- `dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate)` -- external: affiliate pool sDGNRS balance
 
 **State Writes:**
 - `dgnrs.transferFromPool(Pool.Whale, buyer, minterShare)` -- external: 1% of whale pool to buyer
@@ -6879,8 +6881,8 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 | **Returns** | `buyerDgnrs` (uint96): DGNRS amount transferred to buyer (capped at uint96 max) |
 
 **State Reads:**
-- `dgnrs.poolBalance(IDegenerusStonk.Pool.Whale)` -- external: whale pool balance
-- `dgnrs.poolBalance(IDegenerusStonk.Pool.Affiliate)` -- external: affiliate pool balance
+- `dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Whale)` -- external: whale pool balance
+- `dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate)` -- external: affiliate pool balance
 
 **State Writes:**
 - `dgnrs.transferFromPool(Pool.Whale, buyer, totalReward)` -- external: 5% of whale pool to buyer
@@ -9692,7 +9694,7 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **State Writes:** `coinflipDayResult[epoch]`, `flipsClaimableDay`, `currentBounty`, `bountyOwedTo`
 
 **Callers:** DegenerusGame contract (during advanceGame via AdvanceModule)
-**Callees:** `degenerusGame.lootboxPresaleActiveFlag()`, `degenerusGame.lastPurchaseDayFlipTotals()`, `_coinflipTargetEvBps(prevTotal, currentTotal)`, `_applyEvToRewardPercent(rewardPercent, evBps)`, `_addDailyFlip(to, slice, 0, false, false)` (for bounty payout), `degenerusGame.payCoinflipBountyDgnrs(to)`
+**Callees:** `degenerusGame.lootboxPresaleActiveFlag()`, `degenerusGame.lastPurchaseDayFlipTotals()`, `_coinflipTargetEvBps(prevTotal, currentTotal)`, `_applyEvToRewardPercent(rewardPercent, evBps)`, `_addDailyFlip(to, slice, 0, false, false)` (for bounty payout), `degenerusGame.payCoinflipBountyDgnrs(to, slice, currentBounty_)`
 
 **ETH Flow:** No direct ETH. Bounty payout is credited as flip stake (not ETH).
 **Invariants:**
