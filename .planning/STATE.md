@@ -2,24 +2,24 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: completed
-last_updated: "2026-03-16T22:40:29.843Z"
-last_activity: 2026-03-16 — Completed 19-02 (consumer callsites + consolidated report)
+status: in_progress
+last_updated: "2026-03-16T23:11:00Z"
+last_activity: 2026-03-16 — Completed 20-01 (correctness fixes)
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 5
+  completed_plans: 3
 ---
 
 # State
 
 ## Current Position
 
-Phase: 19 (Delta Security Audit)
-Plan: 02 of 2 -- COMPLETE
-Status: Phase 19 complete. All 8 DELTA requirements PASS.
-Last activity: 2026-03-16 — Completed 19-02 (consumer callsites + consolidated report)
+Phase: 20 (Correctness Verification)
+Plan: 01 of 3
+Status: Plan 20-01 complete. NatDoc + parameter fixes + KNOWN-ISSUES + audit scope.
+Last activity: 2026-03-16 — Completed 20-01 (correctness fixes)
 
 ## Project Reference
 
@@ -38,6 +38,7 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - 26 pre-existing test failures in affiliate/RNG/economic suites documented as out-of-scope
 - Prior v1.0-v1.2 SOUND assessment still holds after sDGNRS/DGNRS split
 - No Phase 19 findings warrant KNOWN-ISSUES.md modification (deferred to Phase 20)
+- 20-01: Fixed 3 additional COINFLIP line references plan marked as correct (off-by-one in reference file)
 
 ## Accumulated Context
 
@@ -50,3 +51,4 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - 19-02: Consumer callsites audit PASS (DELTA-04 through DELTA-08). 30/30 callsites verified. 1 Info finding.
 - Phase 19 consolidated: SOUND. 0 Critical/High/Medium, 1 Low, 4 Informational. All 8 DELTA requirements PASS.
 - Full test suite: 1065 passing, 26 pre-existing failures (affiliate/RNG/economic -- unrelated to scope). No regression.
+- 20-01: DegenerusStonk.sol now has 16 @notice NatDoc tags (full coverage). Stale earlybird comment fixed. 10 parameter reference line numbers corrected. DELTA-L-01 in KNOWN-ISSUES. sDGNRS in external audit scope.
