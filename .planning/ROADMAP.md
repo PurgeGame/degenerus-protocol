@@ -73,7 +73,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 24. Core Governance Security Audit | v2.1 | 0/8 | Planned | - |
+| 24. Core Governance Security Audit | 1/8 | In Progress|  | - |
 | 25. Audit Doc Sync | v2.1 | 0/7 | Not started | - |
 
 ---
