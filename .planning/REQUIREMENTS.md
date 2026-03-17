@@ -36,12 +36,12 @@ Requirements for VRF governance security audit and doc sync.
 
 ### War-Game Scenarios
 
-- [ ] **WAR-01**: Compromised admin key scenario — admin proposes malicious coordinator, community can reject via threshold decay, admin cannot self-approve without sDGNRS
-- [ ] **WAR-02**: Colluding voter cartel at low threshold — day 6 (5% threshold) with minimal sDGNRS holders, practical exploitability assessed
-- [ ] **WAR-03**: VRF oscillation attack — stall → governance active → VRF recovers → proposals invalidated → repeat, assess DoS potential
-- [ ] **WAR-04**: Creator unwrapTo timing attack — attempt vote-stacking via DGNRS→sDGNRS conversion at exact 20h boundary
-- [ ] **WAR-05**: Post-execute governance loop — `lastVrfProcessedTimestamp` not reset after swap, can new proposals be created immediately?
-- [ ] **WAR-06**: Admin spam-propose gas griefing — no per-proposer cooldown, assess `_voidAllActive` gas with many proposals
+- [x] **WAR-01**: Compromised admin key scenario — admin proposes malicious coordinator, community can reject via threshold decay, admin cannot self-approve without sDGNRS
+- [x] **WAR-02**: Colluding voter cartel at low threshold — day 6 (5% threshold) with minimal sDGNRS holders, practical exploitability assessed
+- [x] **WAR-03**: VRF oscillation attack — stall → governance active → VRF recovers → proposals invalidated → repeat, assess DoS potential
+- [x] **WAR-04**: Creator unwrapTo timing attack — attempt vote-stacking via DGNRS→sDGNRS conversion at exact 20h boundary
+- [x] **WAR-05**: Post-execute governance loop — `lastVrfProcessedTimestamp` not reset after swap, can new proposals be created immediately?
+- [x] **WAR-06**: Admin spam-propose gas griefing — no per-proposer cooldown, assess `_voidAllActive` gas with many proposals
 
 ### M-02 Closure
 
@@ -97,12 +97,12 @@ Deferred to future milestone.
 | VOTE-01 | Phase 24 | Complete |
 | VOTE-02 | Phase 24 | Complete |
 | VOTE-03 | Phase 24 | Complete |
-| WAR-01 | Phase 24 | Pending |
-| WAR-02 | Phase 24 | Pending |
-| WAR-03 | Phase 24 | Pending |
-| WAR-04 | Phase 24 | Pending |
-| WAR-05 | Phase 24 | Pending |
-| WAR-06 | Phase 24 | Pending |
+| WAR-01 | Phase 24 | Complete |
+| WAR-02 | Phase 24 | Complete |
+| WAR-03 | Phase 24 | Complete |
+| WAR-04 | Phase 24 | Complete |
+| WAR-05 | Phase 24 | Complete |
+| WAR-06 | Phase 24 | Complete |
 | M02-01 | Phase 24 | Pending |
 | M02-02 | Phase 24 | Pending |
 | DOCS-01 | Phase 25 | Pending |
