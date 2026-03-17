@@ -243,7 +243,7 @@ Bad finding pattern (do not do):
 - Cost: `costWei = (priceWei * ticketQuantity) / 400`
 - `MintPaymentKind`: { DirectEth: 0, Claimable: 1, Combined: 2 }
 - Game level starts at 0; `purchaseInfo().lvl` = level + 1 during purchase phase
-- Time constants: 912 days, 365 days, 18 hours, 3 days, 30 days
+- Time constants: 912 days, 365 days, 12 hours (VRF retry, was 18h pre-v2.1), 3 days, 30 days, 20 hours (admin governance threshold), 7 days (community governance threshold), 168 hours (proposal lifetime)
 - Whale bundle: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), qty 1-100
 - Lazy pass: 0.24 ETH flat (levels 0-2), sum-of-10-level-prices (level 3+)
 - Deity pass: `24 + T(n)` ETH where `T(n)=n*(n+1)/2`, `n=passesSold`
