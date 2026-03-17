@@ -363,6 +363,7 @@ contract StakedDegenerusStonk {
             balanceOf[address(this)] = 0;
             totalSupply -= bal;
         }
+        delete poolBalances;
         emit Transfer(address(this), address(0), bal);
     }
 

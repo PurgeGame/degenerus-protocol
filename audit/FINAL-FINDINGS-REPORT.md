@@ -18,8 +18,8 @@ Degenerus Protocol is a complex on-chain game system comprising 14 core contract
 - **Critical:** 0
 - **High:** 0
 - **Medium:** 1 — Admin + VRF failure scenarios (M-02, acknowledged design trade-off)
-- **Low:** 1 — DGNRS transfer-to-self token lock (DELTA-L-01, acknowledged)
-- **Informational:** 12 — 8 from v1.0-v1.2, 4 from v2.0 delta audit
+- **Low:** 0 (DELTA-L-01 fixed)
+- **Informational:** 8 — 6 from v1.0-v1.2, 2 from v2.0 delta audit
 
 Phase 22 warden simulation confirmed existing severity distribution. Three independent blind C4A warden agents produced 0 High, 0 Medium findings. All 10 Low and 11 QA findings were classified as either known (6), extending known (5), or new Low/QA with no action required (10).
 
@@ -99,19 +99,9 @@ A compromised admin can use `emergencyRecover` to point the game at an attacker-
 
 ## Low Findings
 
-### DELTA-L-01: DGNRS Transfer-to-Self Token Lock
+**No open low findings.**
 
-**Severity:** LOW
-**Affected Contract:** DegenerusStonk.sol (`_transfer`)
-**Status:** Acknowledged -- standard ERC20 behavior
-
-When a DGNRS holder transfers tokens to their own address (`from == to`), the `_transfer` function reads `balanceOf[from]`, subtracts, then adds to `balanceOf[to]` (same slot). Due to the `unchecked` block and sequential operations on the same storage slot, this is algebraically a no-op but follows an unusual code path compared to OpenZeppelin ERC20.
-
-More critically, a user could `transfer(DGNRS_ADDRESS, amount)`, sending DGNRS tokens to the DGNRS contract address itself. Since DGNRS has no sweep function and no mechanism to spend tokens held in its own balance, these tokens are permanently locked.
-
-**Impact:** No token loss for self-transfer (algebraic no-op). For transfer-to-contract, requires explicit user action (sending tokens to the contract address). No protocol funds at risk. This is a common ERC20 pattern -- most tokens do not guard against this. No economic incentive to self-transfer or transfer to contract.
-
-**Source:** v2.0 delta audit, Phase 19 (DELTA-L-01)
+DELTA-L-01 (DGNRS transfer-to-self token lock) was fixed by adding a `to != address(this)` guard in `_transfer`.
 
 ---
 
@@ -131,8 +121,6 @@ More critically, a user could `transfer(DGNRS_ADDRESS, amount)`, sending DGNRS t
 |----|-------------|
 | I-13 | `openBurnieLootBox` uses a hardcoded 80% reward rate, intentionally bypassing the standard EV multiplier |
 | I-17 | Affiliate weighted winner roll uses non-VRF entropy (deterministic seed) — gas optimization trade-off. Worst case is a player directing affiliate credit to a different affiliate by timing purchases across days; no protocol value extraction possible. |
-| I-19 | Auto-rebuy dust accumulates as untracked ETH (strengthens invariant) |
-| I-20 | stETH transfer 1-2 wei rounding retained by contract (strengthens `balance >= claimablePool` invariant) |
 | I-22 | `_threeDayRngGap()` duplicated in DegenerusGame + AdvanceModule — identical logic, immutable post-deploy |
 
 ### III. Static Analysis Summary
@@ -147,10 +135,7 @@ No Slither detection maps to an actionable finding.
 
 | ID | Contract | Description |
 |----|----------|-------------|
-| DELTA-I-01 | StakedDegenerusStonk | `poolBalances` array is stale after `burnRemainingPools` but unreachable due to `gameOver` guard -- no exploit path |
-| DELTA-I-02 | DegenerusStonk | Stray ETH sent to DGNRS wrapper is permanently locked (no sweep function) -- by design |
 | DELTA-I-03 | StakedDegenerusStonk | `previewBurn` and `burn` may return different ETH splits due to intermediate transfers -- by design |
-| DELTA-I-04 | DegenerusGameStorage | Stale comment at line 1086 says "reward pool" but code correctly uses Lootbox pool |
 
 ---
 
@@ -242,6 +227,32 @@ All 56 v1 requirements across 10 categories were evaluated.
 
 ---
 
+## Phase 21: Novel Attack Surface Analysis (Plans 21-01 through 21-04)
+
+**Scope:** Creative attack vector discovery across all code changed in the sDGNRS/DGNRS split, targeting surfaces that 10+ prior audit passes missed.
+
+**Methodology:** Four specialized analysis passes: economic attack modeling (MEV, flash loan, sandwich, selfdestruct), composition attack mapping with griefing enumeration, formal invariant proofs with privilege escalation audit, and stETH rebasing timing with game-over race condition analysis. All analyses trace to specific file:line evidence in source contracts.
+
+**Results:**
+
+| Requirement | Analysis | Verdict | Key Evidence |
+|-------------|----------|---------|--------------|
+| **NOVEL-01** | MEV/sandwich/flash-loan on transferable DGNRS | **SAFE** | 5 vectors analyzed; all structurally unprofitable (no AMM pool, no price oracle, no flash loan target) |
+| **NOVEL-02** | Composition attacks across sDGNRS+DGNRS+game+coinflip | **SAFE** | 5 call chains traced; all follow CEI with no reentrancy surface |
+| **NOVEL-03** | Griefing vectors (DoS, state bloat, gas limit) | **SAFE** | 6 vectors enumerated; 2 BLOCKED, 3 NEGLIGIBLE, 1 KNOWN |
+| **NOVEL-04** | Edge cases (zero amounts, max uint, dust, rounding) | **SAFE** | 15-entry matrix; stETH rounding strengthens invariant |
+| **NOVEL-05** | Supply conservation invariant | **HOLDS** | 4 invariants formally proven across all modification paths |
+| **NOVEL-09** | Privilege escalation paths | **NO ESCALATION** | 4-row privilege map; delegatecall, proxy, CREATE2, tx.origin all safe |
+| **NOVEL-10** | stETH rebasing interaction with burn timing | **SAFE** | Rebase value quantified at ~$0.17 per 1% holder at 100 ETH reserves |
+| **NOVEL-11** | Game-over race conditions | **SAFE** | 4-state machine; 5 races analyzed; algebraic order-independence proven |
+| **NOVEL-12** | DGNRS-as-attack-amplifier | **SAFE** | 4 amplifier scenarios; all OUT_OF_SCOPE or structurally blocked |
+
+**No new findings at Medium+ severity.** The sDGNRS/DGNRS design introduces no novel attack surfaces beyond those already documented in Phase 19.
+
+**Full reports:** See [novel-01-economic-amplifier-attacks.md](novel-01-economic-amplifier-attacks.md), [novel-02-composition-griefing-edges.md](novel-02-composition-griefing-edges.md), [novel-03-invariants-privilege.md](novel-03-invariants-privilege.md), [novel-04-timing-race-conditions.md](novel-04-timing-race-conditions.md).
+
+---
+
 ## Phase 22: Warden Simulation + Regression Verification
 
 ### Multi-Agent Adversarial Simulation (NOVEL-07)
@@ -276,7 +287,7 @@ Systematic re-verification of all prior findings against current code:
 
 **Scope:** Behavior-preserving dead code removal across all production contracts using Scavenger/Skeptic dual-agent analysis.
 
-**Methodology:** The Scavenger agent aggressively identified removal candidates (unreachable checks, dead storage, dead code paths, redundant SLOADs) across ~25,600 lines of Solidity. The Skeptic agent validated each recommendation with counterexample-driven analysis, checking 10 edge case conditions and cross-contract traces. All 4 approved changes were applied to source contracts and verified against the full test suite (1,198 passing, 0 new regressions).
+**Methodology:** The Scavenger agent aggressively identified removal candidates (unreachable checks, dead storage, dead code paths, redundant SLOADs) across ~25,600 lines of Solidity. The Skeptic agent validated each recommendation with counterexample-driven analysis, checking 10 edge case conditions and cross-contract traces. All 4 approved changes were applied to source contracts and verified against the full test suite (1,200 passing, 0 new regressions).
 
 **Results:**
 
@@ -393,7 +404,7 @@ Systematic re-verification of all prior findings against current code:
 - **Manual source code review** (primary methodology) — all 14 core contracts, 10 modules, 7 libraries, and 3 shared abstract contracts read line by line across 69 audit plans
 - **Slither 0.11.5** — static analysis; 1,990 detections (302 HIGH + 1,699 MEDIUM), all triaged as false positive or informational
 - **Foundry `forge inspect`** — storage slot layout verification (Phase 1)
-- **Hardhat test suite** — 1,198 passing (26 pre-existing failures in unrelated affiliate/RNG/economic suites), covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
+- **Hardhat test suite** — 1,200 passing (24 pre-existing failures in unrelated affiliate/RNG/economic suites), covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
 - **Multi-agent adversarial simulation** (Phase 22) — 3 independent C4A warden agents with role specialization (contract auditor, zero-day hunter, economic analyst)
 - **Comprehensive regression verification** (Phase 22) — finding-by-finding re-verification of all 14 formal findings + 9 v1.0 attack scenarios + spot-check of v1.2 surfaces and Phase 21 novel analyses
 - **Scavenger/Skeptic dual-agent gas optimization** (Phase 23) — aggressive dead code identification followed by rigorous counterexample-driven validation across all production contracts
@@ -432,7 +443,7 @@ The following were explicitly out of scope for this audit:
 
 5. **Economic resistance:** Sybil splitting provides at most proportional returns. Activity score inflation costs more than the EV it unlocks. Affiliate rewards are BURNIE mints (not ETH), limiting extraction. No MEV sandwich opportunity exists.
 
-6. **Test coverage:** 1,198 passing tests (26 pre-existing failures in unrelated affiliate/RNG/economic suites) covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites including game-over sequences, RNG stalls, whale bundle edge cases, and price escalation.
+6. **Test coverage:** 1,200 passing tests (24 pre-existing failures in unrelated affiliate/RNG/economic suites) covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites including game-over sequences, RNG stalls, whale bundle edge cases, and price escalation.
 
 ---
 

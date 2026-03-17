@@ -84,9 +84,11 @@ contract DegenerusStonk {
         emit Transfer(address(0), ContractAddresses.CREATOR, deposited);
     }
 
-    /// @notice Accepts ETH from sDGNRS during burn-through; no other use
-    /// @dev Anyone can send ETH here but it is permanently locked (no sweep function). See DELTA-I-02.
-    receive() external payable {}
+    /// @notice Accepts ETH from sDGNRS during burn-through
+    /// @custom:reverts Unauthorized if sender is not sDGNRS
+    receive() external payable {
+        if (msg.sender != address(stonk)) revert Unauthorized();
+    }
 
     // =====================================================================
     //                          ERC20 FUNCTIONS
@@ -189,6 +191,7 @@ contract DegenerusStonk {
 
     function _transfer(address from, address to, uint256 amount) private returns (bool) {
         if (to == address(0)) revert ZeroAddress();
+        if (to == address(this)) revert Unauthorized();
         uint256 bal = balanceOf[from];
         if (amount > bal) revert Insufficient();
         unchecked {
