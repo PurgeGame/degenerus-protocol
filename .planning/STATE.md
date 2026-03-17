@@ -3,27 +3,27 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 24-08-PLAN.md
-last_updated: "2026-03-17T22:55:57.980Z"
-last_activity: 2026-03-17 -- Completed 24-08 (M-02 mitigation verification and severity re-assessment)
+stopped_at: Completed 25-02-PLAN.md
+last_updated: "2026-03-17T23:27:50.127Z"
+last_activity: 2026-03-17 -- Completed 25-02 (state-changing function audits updated for governance)
 progress:
   total_phases: 2
   completed_phases: 1
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_plans: 12
+  completed_plans: 11
+  percent: 92
 ---
 
 # State
 
 ## Current Position
 
-Phase: 24 of 25 (Core Governance Security Audit)
-Plan: 8 of 8 in current phase (PHASE COMPLETE)
+Phase: 25 of 25 (Audit Doc Sync)
+Plan: 2 of 4 in current phase
 Status: Executing
-Last activity: 2026-03-17 -- Completed 24-08 (M-02 mitigation verification and severity re-assessment)
+Last activity: 2026-03-17 -- Completed 25-02 (state-changing function audits updated for governance)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 92%
 
 ## Project Reference
 
@@ -60,6 +60,8 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 24-07]: WAR-06 KNOWN-ISSUE (Low) -- Admin spam-propose can bloat _voidAllActive gas cost. Per-proposer cooldown recommended.
 - [Phase 24-08]: M02-01 PASS: emergencyRecover fully removed; governance replaces single-admin authority with community-governed propose/vote/execute flow
 - [Phase 24-08]: M02-02 Severity downgraded Medium to Low: 3 prerequisites vs 2, 7-day defense window, soulbound sDGNRS, single reject voter blocks
+- [Phase 25]: [Phase 25-02]: DOCS-03 COMPLETE -- Added 9 governance function audit entries (propose, vote, _executeSwap, _voidAllActive, anyProposalActive, circulatingSupply, threshold, canExecute, unwrapTo), marked emergencyRecover REMOVED, updated updateVrfCoordinatorAndSub/rngGate/_handleGameOverPath/wireVrf for v2.1
+- [Phase 25]: [Phase 25-01]: DOCS-01, DOCS-02 COMPLETE -- FINAL-FINDINGS-REPORT.md and KNOWN-ISSUES.md updated for v2.1 governance. M-02 downgraded to Low, 5 new findings added, severity distribution updated (Medium:2, Low:4), v2.1 requirements table added (26/26), zero stale emergencyRecover refs
 
 ## Accumulated Context
 
@@ -74,6 +76,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-17T22:49:45.137Z
-Stopped at: Completed 24-08-PLAN.md
+Last session: 2026-03-17T23:27:32.854Z
+Stopped at: Completed 25-02-PLAN.md
 Resume file: None
