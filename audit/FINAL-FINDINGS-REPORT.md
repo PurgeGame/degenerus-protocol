@@ -4,22 +4,22 @@
 **Auditor:** Claude (AI-assisted security analysis, Claude Opus 4.6)
 **Scope:** 14 core contracts + 10 delegatecall modules (24 deployable) + 7 libraries + 3 shared abstract contracts
 **Solidity:** 0.8.34 (ContractAddresses: ^0.8.26), viaIR enabled, optimizer runs=200
-**Methodology:** 13-phase manual code review with static analysis (Slither) support, multi-agent adversarial simulation, and dual-agent gas optimization
+**Methodology:** 15-phase manual code review with static analysis (Slither) support, multi-agent adversarial simulation, and dual-agent gas optimization
 
 ---
 
 ## Executive Summary
 
-Degenerus Protocol is a complex on-chain game system comprising 14 core contracts and 10 delegatecall modules (24 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, sDGNRS, DGNRS, Vault shares, WrappedWrappedXRP). The initial audit conducted a 7-phase systematic review covering 57 plans. A subsequent v2.0 delta audit (Phases 19-21) covered the sDGNRS/DGNRS split and novel attack surface analysis with 9 additional plans. Phase 22 added multi-agent adversarial warden simulation (3 independent agents) plus comprehensive regression verification. Phase 23 performed a Scavenger/Skeptic dual-agent gas optimization audit across ~25,600 lines, identifying 21 dead code candidates and applying 4 behavior-preserving removals that saved 96 bytes of bytecode and ~19,200 deployment gas with zero test regressions, for a total of 72 plans examining approximately 16,500 lines of Solidity code.
+Degenerus Protocol is a complex on-chain game system comprising 14 core contracts and 10 delegatecall modules (24 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, sDGNRS, DGNRS, Vault shares, WrappedWrappedXRP). The initial audit conducted a 7-phase systematic review covering 57 plans. A subsequent v2.0 delta audit (Phases 19-21) covered the sDGNRS/DGNRS split and novel attack surface analysis with 9 additional plans. Phase 22 added multi-agent adversarial warden simulation (3 independent agents) plus comprehensive regression verification. Phase 23 performed a Scavenger/Skeptic dual-agent gas optimization audit across ~25,600 lines, identifying 21 dead code candidates and applying 4 behavior-preserving removals that saved 96 bytes of bytecode and ~19,200 deployment gas with zero test regressions, for a total of 72 plans. Phase 24 conducted a comprehensive governance security audit of the new VRF coordinator rotation mechanism (propose/vote/execute) across 8 plans, covering storage layout, access control, vote arithmetic, reentrancy, cross-contract interactions, and adversarial war-game scenarios. Phase 25 synchronized all audit documentation with governance changes across 4 plans, for a total of 87 plans examining approximately 16,500 lines of Solidity code.
 
 **Overall Assessment: SOUND with minor issues.** The protocol demonstrates strong security architecture across all critical paths.
 
 **Severity Distribution:**
 - **Critical:** 0
 - **High:** 0
-- **Medium:** 1 — Admin + VRF failure scenarios (M-02, acknowledged design trade-off)
-- **Low:** 0 (DELTA-L-01 fixed)
-- **Informational:** 8 — 6 from v1.0-v1.2, 2 from v2.0 delta audit
+- **Medium:** 2 -- WAR-01 (compromised admin key + community absence), WAR-02 (colluding voter cartel at low threshold)
+- **Low:** 4 -- M-02 (downgraded from Medium, governance mitigation), GOV-07 (_executeSwap CEI violation), VOTE-03 (uint8 activeProposalCount overflow), WAR-06 (admin spam-propose gas griefing)
+- **Informational:** 12+ -- 6 from v1.0-v1.2, 2 from v2.0 delta audit, 4+ from v2.1 governance audit (XCON-03 boundary window, WAR-03 VRF oscillation, WAR-04 unwrapTo timing, WAR-05 post-execute loop)
 
 Phase 22 warden simulation confirmed existing severity distribution. Three independent blind C4A warden agents produced 0 High, 0 Medium findings. All 10 Low and 11 QA findings were classified as either known (6), extending known (5), or new Low/QA with no action required (10).
 
@@ -31,7 +31,7 @@ Phase 22 warden simulation confirmed existing severity distribution. Three indep
 5. **Economic design is robust.** Sybil attacks, activity score inflation, affiliate extraction, and all MEV vectors are structurally unprofitable by design.
 
 **Areas Requiring Attention:**
-- Admin + VRF failure creates either a 365-day recovery wait (absent admin) or potential RNG manipulation (hostile admin). See M-02 for full analysis. Admin is a >50.1% DGVE holder. LINK subscription top-up is permissionless.
+- VRF coordinator rotation is now governed by community propose/vote/execute (replacing the original single-admin recovery function). Two residual medium-severity scenarios remain: a compromised admin key combined with 7-day community absence (WAR-01), and a 5% sDGNRS cartel at day-6 threshold decay (WAR-02). Both require specific preconditions and have structural defenses (soulbound sDGNRS, single reject voter blocks). See M-02 (downgraded), WAR-01, and WAR-02 for full analysis.
 
 ---
 
@@ -63,45 +63,119 @@ The protocol has no code path that allows unauthorized extraction of ETH or toke
 
 ## Medium Findings
 
-### M-02: Admin + VRF Failure Scenarios
+### M-02: VRF Coordinator Swap Security (Downgraded to Low)
 
-**Severity:** MEDIUM
+**Original Severity:** MEDIUM (v1.0-v2.0)
+**Revised Severity:** LOW (v2.1, governance mitigation)
 **Affected Contract:** DegenerusGame / DegenerusAdmin
 **Requirement:** FSM-02 (stuck state recovery)
 
 **Description:**
-When Chainlink VRF fails for 3+ consecutive days, the admin (any address holding >50.1% DGVE) gains the ability to call `emergencyRecover`, which migrates the game to a new VRF coordinator. This creates two distinct failure scenarios depending on whether the admin is absent or hostile:
+When Chainlink VRF stalls, the admin (any address holding >50.1% DGVE) can propose a VRF coordinator rotation via the governance mechanism (propose/vote/execute). This replaces the original single-admin recovery call, adding community oversight via sDGNRS-weighted voting.
 
-**Scenario A — Admin absent + VRF failure (availability):**
-If the admin key is lost, DGVE is fragmented below the >50.1% threshold with no coordination path, or remaining holders cannot consolidate to a single address, then `emergencyRecover` cannot be called. The only recovery is the 365-day inactivity timeout. Winnings remain claimable throughout; no fund loss risk.
+**v2.1 Governance Flow:**
+1. After 20 hours of VRF stall, admin can call `propose(newCoordinator, newKeyHash)`
+2. After 7 days of VRF stall, any address holding >= 0.5% of circulating sDGNRS can propose
+3. sDGNRS holders vote with time-decaying threshold (60% at 0h -> 5% at 144h -> expired at 168h)
+4. Execution requires approveWeight > rejectWeight AND approveWeight * BPS >= threshold * circulatingSnapshot
+5. A single reject voter can block any proposal that does not meet the threshold
 
-**Scenario B — Hostile admin + VRF failure (integrity):**
-A compromised admin can use `emergencyRecover` to point the game at an attacker-controlled VRF coordinator contract. This coordinator can return chosen random words, giving the attacker control over jackpot winners, lootbox outcomes, and all other RNG-dependent mechanics. This is the more severe scenario — it is an integrity violation, not just an availability issue.
+**Original scenario (v1.0-v2.0):** Admin could unilaterally swap the VRF coordinator after 3 days of VRF stall, with no community input required.
 
-**Clarification on LINK subscription exhaustion:** This is NOT a contributing factor to either scenario. Anyone can donate LINK to the VRF subscription via `LINK.transferAndCall(adminAddr, amount, "0x")` and the protocol incentivizes this with above-par BURNIE rewards when the subscription balance is low. Subscription exhaustion can be resolved by any participant.
+**Why downgraded to Low:**
+1. Three prerequisites required (was two): VRF stall + admin key compromised + community absent for 7 days
+2. 7-day defense window for community response (was immediate after 3-day stall)
+3. Soulbound sDGNRS prevents vote weight acquisition via market purchase
+4. A single reject voter with sufficient sDGNRS blocks the malicious proposal
 
-**Both scenarios require:**
-1. Chainlink VRF stalled for 3+ consecutive days — this means Chainlink itself must be down, not that nobody called `advanceGame`. The `advanceGame` function is permissionless and requests VRF automatically; anyone with pending jackpot winnings has direct economic incentive to call it. A 3-day stall means 3 consecutive days where Chainlink's coordinator fails to fulfill a valid request, which has no precedent on mainnet.
-2. Plus either: admin key lost / DGVE fragmented (Scenario A), or admin key compromised (Scenario B)
+**Residual risk:** See WAR-01 (compromised admin + community absence, Medium) and WAR-02 (colluding cartel, Medium) for governance-specific attack scenarios that replace M-02's original threat model.
 
-**Mitigating factors:**
-- The 3-day VRF stall requirement means a hostile admin cannot act opportunistically — Chainlink must genuinely be down for 3 days first
-- All `emergencyRecover` calls emit `EmergencyRecovered` events visible on-chain, making coordinator swaps publicly detectable
-- The admin is neutered during normal VRF operation — no admin function can influence RNG outcomes while Chainlink is operational
+**Status:** Mitigated by v2.1 governance. Downgraded from Medium to Low. The original single-admin attack vector is eliminated; residual risk is governance-level (WAR-01, WAR-02).
 
-**Status:** Acknowledged design trade-off. The 3-day VRF fallback is necessary to prevent the game from dying permanently if Chainlink goes down. The trust assumption on the admin during VRF failure is considered acceptable given the alternative (no recovery path at all). Coordinator swaps emit `EmergencyRecovered` events on-chain for public detection.
+**GAMEOVER RNG fallback (dead VRF, no admin):** When GAMEOVER triggers with a dead VRF coordinator and no admin to propose a rotation, the game needs entropy to finalize the drain. After a 3-day wait, `_getHistoricalRngFallback` combines up to 5 early historical VRF words (committed on-chain, non-manipulable) with `currentDay` and `block.prevrandao`. This provides unpredictability to non-validators at the cost of 1-bit validator influence (propose or skip their slot). This is the strongest fallback available without an external oracle.
 
-**Incentive note:** The game is designed for infinite play — a rational admin with >50.1% DGVE is economically better off letting the game run as designed and collecting ongoing value from their governance position than executing a one-time RNG manipulation. However, a >50.1% DGVE holder with sufficiently high time preference may value a one-time RNG extraction over the ongoing value of their governance position.
+---
 
-**GAMEOVER RNG fallback (dead VRF, no admin):** When GAMEOVER triggers with a dead VRF coordinator and no admin to call `emergencyRecover`, the game needs entropy to finalize the drain. After a 3-day wait, `_getHistoricalRngFallback` combines up to 5 early historical VRF words (committed on-chain, non-manipulable) with `currentDay` and `block.prevrandao`. This provides unpredictability to non-validators at the cost of 1-bit validator influence (propose or skip their slot). This is the strongest fallback available without an external oracle. The context is disaster recovery — VRF has been dead for 3+ days and the game has been inactive long enough to trigger GAMEOVER (365 days) — so the trade-off is acceptable given the alternative of permanent fund lock.
+## Medium Findings (v2.1 Governance)
+
+### WAR-01: Compromised Admin Key + Community Absence
+
+**Severity:** MEDIUM
+**Affected Contract:** DegenerusAdmin
+**Source:** Phase 24-07 (war-game scenario analysis)
+
+**Description:**
+A compromised admin key holder can propose a malicious VRF coordinator. If the sDGNRS community does not vote to reject within 7 days, the proposal executes via threshold decay (5% at day 6, expired at day 7). The DGVE/sDGNRS separation is the primary defense -- the admin holds DGVE (governance token for admin actions) but cannot acquire sDGNRS voting weight via market purchase (soulbound).
+
+**Preconditions:** VRF stalled 20+ hours + admin key compromised + community absent for full proposal lifetime (up to 168 hours).
+
+**Mitigation:** Soulbound sDGNRS, threshold decay requires waiting, single reject voter blocks.
+
+**Status:** Known issue -- documented as residual governance risk.
+
+### WAR-02: Colluding Voter Cartel at Low Threshold
+
+**Severity:** MEDIUM
+**Affected Contract:** DegenerusAdmin
+**Source:** Phase 24-07 (war-game scenario analysis)
+
+**Description:**
+At day 6 of a proposal's lifetime, the threshold decays to 5% (500 BPS). A cartel holding >= 5% of circulating sDGNRS could approve a malicious coordinator swap if no opposing voter appears. Feasibility depends on sDGNRS concentration -- with few holders, collusion is easier.
+
+**Preconditions:** VRF stalled 20+ hours + proposal alive for 144+ hours + cartel controls >= 5% circulating sDGNRS + no reject voter.
+
+**Mitigation:** Single reject voter with sufficient weight blocks. Soulbound sDGNRS prevents rapid accumulation.
+
+**Status:** Known issue -- documented as residual governance risk.
 
 ---
 
 ## Low Findings
 
-**No open low findings.**
+### M-02 (Downgraded)
+
+See [M-02: VRF Coordinator Swap Security](#m-02-vrf-coordinator-swap-security-downgraded-to-low) above. Originally Medium, downgraded to Low in v2.1 due to governance mitigation.
 
 DELTA-L-01 (DGNRS transfer-to-self token lock) was fixed by adding a `to != address(this)` guard in `_transfer`.
+
+### GOV-07: _executeSwap CEI Violation
+
+**Severity:** LOW
+**Affected Contract:** DegenerusAdmin
+**Source:** Phase 24-04
+
+**Description:**
+`_executeSwap` has a theoretical CEI violation -- the external call to `gameAdmin.updateVrfCoordinatorAndSub()` occurs before `_voidAllActive()` completes state cleanup. A malicious VRF coordinator could theoretically trigger reentrancy to interact with sibling proposals still in Active state. However, exploiting this requires pre-existing governance control (the attacker already controls the coordinator being swapped to).
+
+**Recommended fix:** Move `_voidAllActive` before external calls.
+
+**Status:** Known issue -- requires pre-existing governance control to exploit.
+
+### VOTE-03: uint8 activeProposalCount Overflow
+
+**Severity:** LOW
+**Affected Contract:** DegenerusAdmin
+**Source:** Phase 24-05
+
+**Description:**
+`activeProposalCount` is uint8, incremented with `unchecked`. At 256 proposals, it wraps to 0, causing `anyProposalActive()` to return false. This unpauses the death clock in `_handleGameOverPath()`. Cost to exploit is ~$3,000 (256 proposals at ~$12 gas each).
+
+**Recommended fix:** `require(activeProposalCount < 255)` before increment.
+
+**Status:** Known issue -- low likelihood due to cost and VRF stall requirement.
+
+### WAR-06: Admin Spam-Propose Gas Griefing
+
+**Severity:** LOW
+**Affected Contract:** DegenerusAdmin
+**Source:** Phase 24-07
+
+**Description:**
+No per-proposer cooldown exists. An admin can create many proposals, bloating the `_voidAllActive` loop gas cost when any proposal executes. The gas cost scales linearly with active proposal count.
+
+**Recommended fix:** Per-proposer cooldown or max active proposals.
+
+**Status:** Known issue -- admin self-griefs by increasing own execution cost.
 
 ---
 
@@ -112,7 +186,7 @@ DELTA-L-01 (DGNRS transfer-to-self token lock) was fixed by adding a `to != addr
 | ID | Contract | Description |
 |----|----------|-------------|
 | I-03 | EntropyLib | Non-standard xorshift constants (7, 9, 8) vs. common published constants — not exploitable, intentional |
-| I-09 | DegenerusAdmin | `wireVrf()` lacks explicit re-initialization guard — intentional, `emergencyRecover` reuses this path |
+| I-09 | DegenerusAdmin | `wireVrf()` lacks explicit re-initialization guard -- deployment-only function; governance coordinator rotation uses updateVrfCoordinatorAndSub (not wireVrf) |
 | I-10 | DegenerusAdmin | `wireVrf()` lacks zero-address parameter check for coordinator |
 
 ### II. Design Observations
@@ -121,7 +195,7 @@ DELTA-L-01 (DGNRS transfer-to-self token lock) was fixed by adding a `to != addr
 |----|-------------|
 | I-13 | `openBurnieLootBox` uses a hardcoded 80% reward rate, intentionally bypassing the standard EV multiplier |
 | I-17 | Affiliate weighted winner roll uses non-VRF entropy (deterministic seed) — gas optimization trade-off. Worst case is a player directing affiliate credit to a different affiliate by timing purchases across days; no protocol value extraction possible. |
-| I-22 | `_threeDayRngGap()` duplicated in DegenerusGame + AdvanceModule — identical logic, immutable post-deploy |
+| I-22 | ~~`_threeDayRngGap()` duplicated in DegenerusGame + AdvanceModule~~ **RESOLVED in v2.1** -- _threeDayRngGap removed from AdvanceModule; only exists in DegenerusGame.sol for rngStalledForThreeDays() monitoring view |
 
 ### III. Static Analysis Summary
 
@@ -141,7 +215,7 @@ No Slither detection maps to an actionable finding.
 
 ## Requirement Coverage Matrix
 
-All 56 v1 requirements across 10 categories were evaluated.
+All 56 v1.0 requirements across 10 categories were evaluated.
 
 | Requirement | Description | Verdict | Notes |
 |-------------|-------------|---------|-------|
@@ -154,13 +228,13 @@ All 56 v1 requirements across 10 categories were evaluated.
 | **RNG-03** | VRF request/fulfill atomicity: no concurrent requests | **PASS** | `rngLockedFlag` prevents concurrent requests |
 | **RNG-04** | Block proposer cannot manipulate VRF outcomes | **PASS** | VRF preimage hidden until commit; no block-level seed mixing |
 | **RNG-05** | MEV searcher cannot extract value from VRF outcomes | **PASS** | No sandwich opportunity; VRF fulfill is atomic |
-| **RNG-06** | VRF retry (18h timeout) cannot be exploited | **PASS** | Window allows no advantaged state changes; `rngLockedFlag` holds |
+| **RNG-06** | VRF retry (12h timeout) cannot be exploited | **PASS** | Window allows no advantaged state changes; `rngLockedFlag` holds |
 | **RNG-07** | EntropyLib XOR mixing does not introduce bias | **PASS** | XOR with prime constants provides uniform distribution |
 | **RNG-08** | Lootbox RNG threshold parameter cannot break randomness | **PASS** | Parameter affects lootbox open eligibility, not randomness quality |
 | **RNG-09** | `rawFulfillRandomWords` access restricted to VRF coordinator | **PASS** | Inline `msg.sender != address(vrfCoordinator)` guard |
 | **RNG-10** | VRF key hash and subscription ID correctly configured | **PASS** | wireVrf() sets both; admin-guarded configuration |
 | **FSM-01** | All FSM state transitions are complete and correct | **PASS** | Full FSM graph verified; no orphaned states |
-| **FSM-02** | Stuck states have recovery paths | **PASS** (conditional) | Recovery paths exist; M-02 documents dual-failure scenario |
+| **FSM-02** | Stuck states have recovery paths | **PASS** (conditional) | Recovery paths exist; M-02 downgraded to Low in v2.1 (governance mitigation) |
 | **FSM-03** | Game-over state is terminal and correctly entered | **PASS** | `gameOver = true` is one-way; all terminal conditions verified |
 | **MATH-01** | No integer overflow in ticket pricing formula | **PASS** | Solidity 0.8+ overflow protection; price formula uses safe multiplication |
 | **MATH-02** | No integer underflow in pool accounting | **PASS** | All subtraction paths check sufficient balance first |
@@ -224,6 +298,39 @@ All 56 v1 requirements across 10 categories were evaluated.
 | **DELTA-08** | Pool BPS rebalance impact verified | **PASS** | 33 BPS/PPM constants, all denominators consistent |
 
 **v2.0 Coverage Summary: 8/8 PASS**
+
+### v2.1 Governance Requirements
+
+| Requirement | Description | Verdict | Notes |
+|-------------|-------------|---------|-------|
+| **GOV-01** | Storage layout verified -- lastVrfProcessedTimestamp at slot 114, no collisions | **PASS** | Compiler JSON verified |
+| **GOV-02** | propose() access control verified -- admin (DGVE >50.1%, 20h) and community (0.5% sDGNRS, 7d) | **PASS** | Both paths correctly gated |
+| **GOV-03** | vote() arithmetic verified -- changeable votes subtract-before-add, no double-counting | **PASS** | Depends on VOTE-01 (sDGNRS soulbound) |
+| **GOV-04** | Threshold decay verified -- 8-step schedule matches spec | **PASS** | Boundary analysis clean |
+| **GOV-05** | Execute condition verified -- overflow-safe, circulatingSnapshot==0 not exploitable | **PASS** | Max 1e31 vs uint256 1.15e77 |
+| **GOV-06** | Kill condition verified -- symmetric with execute, mutual exclusion proven | **PASS** | Strict inequality contradiction |
+| **GOV-07** | _executeSwap CEI -- theoretical reentrancy via malicious coordinator | **KNOWN-ISSUE (Low)** | Requires pre-existing governance control |
+| **GOV-08** | _voidAllActive boundaries correct, idempotent | **PASS** | 1-indexed, <= condition, hard-set to 0 |
+| **GOV-09** | Proposal expiry -- lazy expiry reverts roll back, protective behavior | **PASS (INFO)** | activeProposalCount stays inflated |
+| **GOV-10** | circulatingSupply correctly excludes pools and wrapper | **PASS** | Underflow impossible |
+| **XCON-01** | lastVrfProcessedTimestamp write paths exhaustive | **PASS** | Only _applyDailyRng and wireVrf |
+| **XCON-02** | Death clock pause via anyProposalActive() correct | **PASS** | try/catch defensive |
+| **XCON-03** | unwrapTo stall guard boundary at exactly 20h | **PASS (INFO)** | 1-second window, not exploitable |
+| **XCON-04** | _threeDayRngGap removal from governance paths verified | **PASS (INFO)** | Retained in Game monitoring |
+| **XCON-05** | VRF retry timeout 18h->12h, no downstream breakage | **PASS** | Two retries before 20h governance |
+| **VOTE-01** | sDGNRS supply frozen during VRF stall proven | **PASS** | All mutation paths blocked |
+| **VOTE-02** | circulatingSnapshot immutable post-creation | **PASS** | Single write in propose() |
+| **VOTE-03** | uint8 activeProposalCount overflow at 256 | **KNOWN-ISSUE (Low)** | ~$3,000 cost |
+| **WAR-01** | Compromised admin key scenario | **KNOWN-ISSUE (Medium)** | DGVE/sDGNRS separation defends |
+| **WAR-02** | Colluding voter cartel at low threshold | **KNOWN-ISSUE (Medium)** | Single reject voter blocks |
+| **WAR-03** | VRF oscillation attack | **PASS (Low)** | Auto-invalidation + death clock pause |
+| **WAR-04** | Creator unwrapTo timing attack | **PASS (INFO)** | 1-second boundary not exploitable |
+| **WAR-05** | Post-execute governance loop | **PASS (INFO)** | Intentional design |
+| **WAR-06** | Admin spam-propose gas griefing | **KNOWN-ISSUE (Low)** | Per-proposer cooldown recommended |
+| **M02-01** | Single-admin recovery removed, governance replaces it | **PASS** | Fully verified |
+| **M02-02** | M-02 severity downgraded Medium to Low | **PASS** | 3 prerequisites, 7-day defense |
+
+**v2.1 Coverage Summary: 26/26 assessed** (3 KNOWN-ISSUE at stated severities)
 
 ---
 
@@ -379,7 +486,7 @@ Systematic re-verification of all prior findings against current code:
 | DegenerusGamePayoutUtils | Payout helpers (abstract, inherited by jackpot-related modules) |
 | BitPackingLib / EntropyLib / GameTimeLib / JackpotBucketLib / PriceLookupLib | Utility libraries |
 
-### 13-Phase Audit Structure
+### 15-Phase Audit Structure
 
 | Phase | Focus Area | Plans | Requirements Assessed |
 |-------|-----------|-------|----------------------|
@@ -397,11 +504,13 @@ Systematic re-verification of all prior findings against current code:
 | 21 | Novel Attack Surface Analysis | 4 | NOVEL-01, 02, 03, 04, 05, 09, 10, 11, 12 |
 | 22 | Warden Simulation + Regression Check | 3 | NOVEL-07, NOVEL-08 |
 | 23 | Gas Optimization -- Dead Code Removal | 3 | GAS-01, GAS-02, GAS-03, GAS-04 |
-| **Total** | | **72 plans** | **83 requirements** |
+| 24 | Core Governance Security Audit | 8 | GOV-01 to GOV-10, XCON-01 to XCON-05, VOTE-01 to VOTE-03, WAR-01 to WAR-06, M02-01, M02-02 |
+| 25 | Audit Doc Sync | 4 | DOCS-01 to DOCS-07 |
+| **Total** | | **87 plans** | **90 requirements** |
 
 ### Tools Used
 
-- **Manual source code review** (primary methodology) — all 14 core contracts, 10 modules, 7 libraries, and 3 shared abstract contracts read line by line across 69 audit plans
+- **Manual source code review** (primary methodology) — all 14 core contracts, 10 modules, 7 libraries, and 3 shared abstract contracts read line by line across 83 audit plans
 - **Slither 0.11.5** — static analysis; 1,990 detections (302 HIGH + 1,699 MEDIUM), all triaged as false positive or informational
 - **Foundry `forge inspect`** — storage slot layout verification (Phase 1)
 - **Hardhat test suite** — 1,200 passing (24 pre-existing failures in unrelated affiliate/RNG/economic suites), covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
@@ -447,5 +556,5 @@ The following were explicitly out of scope for this audit:
 
 ---
 
-*Report generated from 72 individual audit plans across 13 phases, examining 14 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,500 lines of Solidity.*
+*Report generated from 87 individual audit plans across 15 phases, examining 14 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,500 lines of Solidity.*
 *Audit period: February-March 2026*
