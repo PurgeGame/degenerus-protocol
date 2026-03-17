@@ -4,7 +4,7 @@ milestone: v2.1
 milestone_name: milestone
 status: executing
 stopped_at: Completed 24-04-PLAN.md
-last_updated: "2026-03-17T19:28:00Z"
+last_updated: "2026-03-17T19:29:50.427Z"
 last_activity: 2026-03-17 -- Completed 24-04 (GOV-07 _executeSwap CEI/reentrancy, GOV-08 _voidAllActive correctness)
 progress:
   total_phases: 2
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 24 of 25 (Core Governance Security Audit)
-Plan: 2 of 8 in current phase
+Plan: 4 of 8 in current phase
 Status: Executing
-Last activity: 2026-03-17 -- Completed 24-02 (GOV-02 propose access control, GOV-03 vote arithmetic)
+Last activity: 2026-03-17 -- Completed 24-04 (GOV-07 _executeSwap CEI/reentrancy, GOV-08 _voidAllActive correctness)
 
-Progress: [██░░░░░░░░] 25%
+Progress: [████░░░░░░] 38%
 
 ## Project Reference
 
@@ -37,6 +37,10 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 24-01]: GOV-01 PASS -- No slot collision for lastVrfProcessedTimestamp (slot 114, offset 0, sole occupant). All 5 contracts verified via compiler storageLayout JSON.
 - [Phase 24-02]: GOV-02 PASS -- propose() admin path (>50.1% DGVE + 20h stall) and community path (0.5% sDGNRS + 7d stall) correctly gated. circulatingSupply() double-call safe.
 - [Phase 24-02]: GOV-03 PASS (conditional on VOTE-01) -- vote() subtract-before-add arithmetic correct. sDGNRS soulbound invariant critical dependency.
+- [Phase 24-04]: GOV-07 KNOWN-ISSUE (Low) -- _executeSwap CEI violation allows theoretical sibling-proposal reentrancy via malicious coordinator, but requires pre-existing governance control. Recommended fix: move _voidAllActive before external calls.
+- [Phase 24-04]: GOV-08 PASS -- _voidAllActive loop boundaries correct (1-indexed, <= condition), hard-set activeProposalCount=0 robust, idempotent under reentrancy.
+- [Phase 24-04]: GOV-07 KNOWN-ISSUE (Low) -- _executeSwap CEI violation allows theoretical sibling-proposal reentrancy via malicious coordinator, but requires pre-existing governance control
+- [Phase 24-04]: GOV-08 PASS -- _voidAllActive loop boundaries correct, hard-set activeProposalCount=0 robust, idempotent under reentrancy
 
 ## Accumulated Context
 
@@ -50,6 +54,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-17T19:27:06Z
-Stopped at: Completed 24-02-PLAN.md
+Last session: 2026-03-17T19:29:45.043Z
+Stopped at: Completed 24-04-PLAN.md
 Resume file: None
