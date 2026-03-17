@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: in-progress
-last_updated: "2026-03-17T00:10:35.000Z"
+status: completed
+last_updated: "2026-03-17T00:12:53.594Z"
 last_activity: 2026-03-17 — Completed 21-03 (invariants and privilege escalation)
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
   completed_plans: 9
 ---
@@ -44,6 +44,7 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - 21-01: All 9 economic/amplifier attack vectors SAFE or OUT_OF_SCOPE; proportional burn-redeem formula is the fundamental defense
 - 21-03: Backing solvency invariant uses Insufficient() revert as backstop -- worst case is reverted burn, never overpayment; game contract is trust anchor for privilege model
 - [Phase 21]: 21-04: stETH rebase timing SAFE (<$2 extractable for 10% holder); all 5 game-over race conditions SAFE/INFORMATIONAL
+- [Phase 21]: Backing solvency invariant uses Insufficient() revert as backstop; game contract is trust anchor for privilege model
 
 ## Accumulated Context
 
@@ -60,4 +61,5 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - 20-02: state-changing-function-audits.md now has complete sDGNRS section (14 entries). FINAL-FINDINGS-REPORT.md updated with v2.0 delta findings (1L+4I), DELTA-01-08 coverage matrix, sDGNRS in scope, 62 plans/68 requirements.
 - 20-03: 7 new edge case tests added (self-transfer, zero-address, zero-amount, stETH burn). Focused tests: 80 passing. Full suite: 1074 passing, 24 pre-existing failures, 0 new regressions. Fuzz tests compile clean. CORR-03+CORR-04 satisfied. Phase 20 complete.
 - 21-01: NOVEL-01 (5 economic vectors) + NOVEL-12 (4 amplifier scenarios) analyzed. Flash loan blocked by onlyGame. Selfdestruct ETH = donation. MEV sandwich on burns = order-independent. Flash loan DGNRS = self-defeating (burn destroys repayment). Accumulation = intended arbitrage. 479-line report with 60+ file:line citations.
+- 21-03: NOVEL-05 (4 invariants) + NOVEL-09 (privilege escalation) analyzed. Supply conservation proven across 6 paths. Cross-contract supply invariant proven across 6 paths. Backing solvency proven with Insufficient() revert backstop. Pool balance consistency proven pre-gameOver. Complete privilege map: GAME, DGNRS, CREATOR, public. 4 escalation vectors (delegatecall, proxy, CREATE2, tx.origin) all NO ESCALATION. 602-line report.
 - 21-04: NOVEL-10 (stETH rebasing) + NOVEL-11 (game-over races) analyzed. Rebase extractable value <$2/burn at 10% holder. previewBurn discrepancy = by design (DELTA-I-03). Branch flipping = composition not value. 4-state game-over machine documented. 5 race conditions analyzed: concurrent burns proven order-independent (algebraic proof). Pending RNG window = INFORMATIONAL. 539-line report.
