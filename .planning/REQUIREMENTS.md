@@ -52,7 +52,7 @@ Requirements for VRF governance security audit and doc sync.
 
 - [ ] **DOCS-01**: FINAL-FINDINGS-REPORT.md updated — M-02 status changed, governance findings added, plan/phase counts updated
 - [ ] **DOCS-02**: KNOWN-ISSUES.md updated — `emergencyRecover` references replaced, governance-specific known issues added
-- [ ] **DOCS-03**: state-changing-function-audits.md updated — ~8 new entries (governance functions), ~7 updated entries (modified functions), ~5 verified-unchanged
+- [x] **DOCS-03**: state-changing-function-audits.md updated — ~8 new entries (governance functions), ~7 updated entries (modified functions), ~5 verified-unchanged
 - [ ] **DOCS-04**: parameter-reference.md updated — governance constants added (thresholds, timeouts, BPS values)
 - [ ] **DOCS-05**: Tier 2 reference docs updated — economic flow, VRF lifecycle, admin function references corrected
 - [ ] **DOCS-06**: Tier 3 footnotes added — minor references in delta audit docs, warden reports updated
@@ -107,7 +107,7 @@ Deferred to future milestone.
 | M02-02 | Phase 24 | Complete |
 | DOCS-01 | Phase 25 | Pending |
 | DOCS-02 | Phase 25 | Pending |
-| DOCS-03 | Phase 25 | Pending |
+| DOCS-03 | Phase 25 | Complete |
 | DOCS-04 | Phase 25 | Pending |
 | DOCS-05 | Phase 25 | Pending |
 | DOCS-06 | Phase 25 | Pending |
