@@ -26,9 +26,9 @@
 ### Novel — Creative Attack Surface
 
 - [x] **NOVEL-01**: Economic attack modeling on new DGNRS liquidity (MEV, sandwich, flash loan)
-- [ ] **NOVEL-02**: Composition attacks across sDGNRS+DGNRS+game+coinflip interaction chains
-- [ ] **NOVEL-03**: Griefing vectors (DoS, state bloat, gas limit) on new entry points
-- [ ] **NOVEL-04**: Edge case enumeration (zero amounts, max uint, dust, rounding)
+- [x] **NOVEL-02**: Composition attacks across sDGNRS+DGNRS+game+coinflip interaction chains
+- [x] **NOVEL-03**: Griefing vectors (DoS, state bloat, gas limit) on new entry points
+- [x] **NOVEL-04**: Edge case enumeration (zero amounts, max uint, dust, rounding)
 - [x] **NOVEL-05**: Invariant analysis (supply conservation, backing >= obligations)
 - [ ] **NOVEL-07**: Multi-agent adversarial simulation (3+ independent auditors cross-referencing findings)
 - [ ] **NOVEL-08**: Regression check — diff every prior audit finding against current code
@@ -70,9 +70,9 @@
 | CORR-03 | Phase 20 | Complete |
 | CORR-04 | Phase 20 | Complete |
 | NOVEL-01 | Phase 21 | Complete |
-| NOVEL-02 | Phase 21 | Pending |
-| NOVEL-03 | Phase 21 | Pending |
-| NOVEL-04 | Phase 21 | Pending |
+| NOVEL-02 | Phase 21 | Complete |
+| NOVEL-03 | Phase 21 | Complete |
+| NOVEL-04 | Phase 21 | Complete |
 | NOVEL-05 | Phase 21 | Complete |
 | NOVEL-07 | Phase 22 | Pending |
 | NOVEL-08 | Phase 22 | Pending |
