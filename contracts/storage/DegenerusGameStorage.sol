@@ -433,18 +433,6 @@ abstract contract DegenerusGameStorage {
     mapping(uint48 => uint256) internal rngWordByDay;
 
     // =========================================================================
-    // Coinflip Statistics (Last Purchase Day)
-    // =========================================================================
-
-    /// @dev Total coinflip deposits during lastPurchaseDay = true (current level).
-    ///      Used to adjust coinflip payout based on flip activity.
-    uint256 internal lastPurchaseDayFlipTotal;
-
-    /// @dev Previous level's lastPurchaseDay coinflip deposits.
-    ///      Compared with current to detect activity trends for payout tuning.
-    uint256 internal lastPurchaseDayFlipTotalPrev;
-
-    // =========================================================================
     // Future Mint Awards
     // =========================================================================
 
@@ -1435,9 +1423,6 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Day when deity-granted purchase boost was issued.
     mapping(address => uint48) internal deityPurchaseBoostDay;
-
-    /// @dev Deprecated. Use deityPurchaseBoostDay.
-    mapping(address => uint48) internal _deprecated_deityTicketBoostDay;
 
     /// @dev Day when deity-granted decimator boost was issued.
     mapping(address => uint48) internal deityDecimatorBoostDay;

@@ -427,21 +427,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         _awardEarlybirdDgnrs(player, earlybirdEth, lvl);
     }
 
-    /// @notice Track coinflip deposits for payout tuning on last purchase day.
-    /// @dev Access: COIN or COINFLIP contract only.
-    ///      Coinflip activity on last purchase day affects coinflip payout.
-    /// @param amount The wei amount deposited to coinflip.
-    /// @custom:reverts E If caller is not COIN or COINFLIP contract.
-    function recordCoinflipDeposit(uint256 amount) external {
-        if (
-            msg.sender != ContractAddresses.COIN &&
-            msg.sender != ContractAddresses.COINFLIP
-        ) revert E();
-        if (!jackpotPhaseFlag && lastPurchaseDay) {
-            lastPurchaseDayFlipTotal += amount;
-        }
-    }
-
     /// @notice Record mint streak completion after a 1x price ETH quest completes.
     /// @dev Access: COIN contract only.
     /// @param player The player who completed the quest.
@@ -2291,17 +2276,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Return last-purchase-day coinflip totals for payout tuning.
-    /// @return prevTotal Previous level's lastPurchaseDay coinflip deposits.
-    /// @return currentTotal Current level's lastPurchaseDay coinflip deposits.
-    function lastPurchaseDayFlipTotals()
-        external
-        view
-        returns (uint256 prevTotal, uint256 currentTotal)
-    {
-        prevTotal = lastPurchaseDayFlipTotalPrev;
-        currentTotal = lastPurchaseDayFlipTotal;
-    }
-
     /*+======================================================================+
       |                   VIEW: PLAYER MINT STATISTICS                       |
       +======================================================================+

@@ -187,14 +187,6 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(game, "E");
     });
 
-    it("recordCoinflipDeposit: reverts when called by alice (only COIN or COINFLIP)", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        game.connect(alice).recordCoinflipDeposit(eth("100"))
-      ).to.be.revertedWithCustomError(game, "E");
-    });
-
     it("recordMintQuestStreak: reverts when called by alice (only COIN)", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 

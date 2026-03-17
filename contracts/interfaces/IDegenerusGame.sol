@@ -64,14 +64,6 @@ interface IDegenerusGame {
     /// @return word VRF word (0 if not ready).
     function lootboxRngWord(uint48 lootboxIndex) external view returns (uint256 word);
 
-    /// @notice Return last-purchase-day coinflip totals for payout tuning.
-    /// @return prevTotal Previous level's lastPurchaseDay coinflip deposits.
-    /// @return currentTotal Current level's lastPurchaseDay coinflip deposits.
-    function lastPurchaseDayFlipTotals()
-        external
-        view
-        returns (uint256 prevTotal, uint256 currentTotal);
-
     /// @notice Get the number of levels a player has minted with fresh ETH.
     /// @param player The player to query.
     /// @return Number of levels with ETH mints.
@@ -240,11 +232,6 @@ interface IDegenerusGame {
     /// @return amountWei Claimable amount (0 if not winner, already claimed, or expired).
     /// @return winner True if player is a winner for this level.
     function decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner);
-
-    /// @notice Record a coinflip deposit for tracking.
-    /// @dev Called by COIN contract when players deposit into coinflip pool.
-    /// @param amount Amount deposited in wei.
-    function recordCoinflipDeposit(uint256 amount) external;
 
     /// @notice Record mint streak completion after a 1x price ETH quest completes.
     /// @dev Called by COIN contract.
