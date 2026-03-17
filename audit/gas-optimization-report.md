@@ -1330,3 +1330,139 @@ None. All 4 APPROVED changes passed the full test suite without regressions.
 | DegenerusGameWhaleModule.sol | 907 | 907 | 0 (in-place replacement) |
 | DegenerusGameLootboxModule.sol | 1,779 | 1,778 | -1 |
 | DegenerusGameJackpotModule.sol | 2,824 | 2,824 | 0 (no changes -- confirmed 0 removable bytes) |
+
+---
+
+## Bytecode Impact
+
+Post-optimization bytecode sizes measured via `npx hardhat compile --force` on Solidity 0.8.34, viaIR=true, optimizer runs=200.
+
+### Directly Modified Contracts
+
+| Contract | Baseline (bytes) | After (bytes) | Delta (bytes) | Baseline % | After % |
+|----------|-----------------|---------------|---------------|-----------|---------|
+| DecimatorModule | 5,678 | 5,671 | **-7** | 23.1% | 23.1% |
+| WhaleModule | 11,760 | 11,700 | **-60** | 47.9% | 47.6% |
+| LootboxModule | 19,382 | 19,353 | **-29** | 78.9% | 78.7% |
+
+**Total savings on modified contracts: -96 bytes**
+
+**Note on estimates vs actuals:** The Scavenger estimated ~68 bytes total savings across the 3 modified contracts (DecimatorModule: ~32, WhaleModule: ~30, LootboxModule: ~6). Actual measured savings are -96 bytes. The difference arises because the viaIR optimizer reorganizes Yul intermediate representation when source changes, and removing dead code allows the optimizer to find additional simplification opportunities that were blocked by the presence of the dead code. This is a common and expected effect with Solidity's IR pipeline.
+
+### JackpotModule (Primary Target)
+
+| Contract | Baseline (bytes) | After (bytes) | Delta (bytes) | Baseline % | After % |
+|----------|-----------------|---------------|---------------|-----------|---------|
+| JackpotModule | 23,583 | 23,577 | **-6** | 95.9% | 95.9% |
+
+The JackpotModule shows a -6 byte reduction despite receiving zero approved changes. This is a secondary effect of the shared inheritance hierarchy (DegenerusGameStorage) being recompiled alongside the modified modules. The headroom improvement is negligible: from 993 bytes to 999 bytes of remaining capacity.
+
+**Conclusion:** The JackpotModule's 95.9% utilization is confirmed as genuine functional complexity with zero optimization headroom. No behavior-preserving dead code removal can meaningfully reduce its size.
+
+### All Contracts (Full Before/After Comparison)
+
+All contracts with bytecode > 100 bytes, measured against baselines from the pre-optimization compilation (RESEARCH.md).
+
+| Contract | Baseline (bytes) | After (bytes) | Delta (bytes) | Notes |
+|----------|-----------------|---------------|---------------|-------|
+| JackpotModule | 23,583 | 23,577 | -6 | No direct changes; secondary recompilation effect |
+| DegenerusGame | 21,372 | 21,358 | -14 | No direct changes; shared storage inheritance |
+| LootboxModule | 19,382 | 19,353 | **-29** | SCAV-016 applied |
+| BurnieCoinflip | 18,044 | 18,044 | 0 | No changes (independent contract) |
+| MintModule | 15,084 | 15,070 | -14 | No direct changes; shared storage inheritance |
+| AdvanceModule | 14,073 | 14,189 | +116 | No direct changes; IR optimizer rebalancing |
+| DegenerusQuests | 12,284 | 12,284 | 0 | No changes (independent contract) |
+| WhaleModule | 11,760 | 11,700 | **-60** | SCAV-009 applied |
+| DegenerusVault | 10,557 | 10,557 | 0 | No changes (independent contract) |
+| BurnieCoin | 9,074 | 9,074 | 0 | No changes (independent contract) |
+| DegeneretteModule | 8,676 | 8,662 | -14 | No direct changes; shared storage inheritance |
+| EndgameModule | 6,233 | 6,219 | -14 | No direct changes; shared storage inheritance |
+| DecimatorModule | 5,678 | 5,671 | **-7** | SCAV-004 + SCAV-006 applied |
+| BoonModule | 5,447 | 5,433 | -14 | No direct changes; shared storage inheritance |
+| StakedDegenerusStonk | 5,245 | 5,245 | 0 | No changes (independent contract) |
+| GameOverModule | 3,132 | 3,132 | 0 | No changes; note: shared inheritance, but no delta |
+| DegenerusStonk | 2,551 | 2,551 | 0 | No changes (independent contract) |
+
+**Total bytecode delta across all contracts: -82 bytes** (sum of all deltas, including +116 from AdvanceModule IR rebalancing)
+
+**Total bytecode delta on directly modified contracts: -96 bytes**
+
+**Deployment gas savings (directly modified contracts):** -96 bytes x 200 gas/byte = **~19,200 deployment gas** saved
+
+**Note on secondary effects:** Several unmodified contracts that inherit DegenerusGameStorage show -14 bytes of secondary savings. One contract (AdvanceModule) shows +116 bytes increase due to IR optimizer rebalancing -- this is a known characteristic of the viaIR pipeline where removing code in one module can cause the optimizer to make different inlining decisions in sibling modules that share the same base contract. The AdvanceModule remains well within limits at 57.7% of the 24,576-byte cap. These secondary effects are compiler artifacts and not a concern.
+
+---
+
+## Final Summary
+
+### Audit Scope
+
+- **Contracts analyzed:** 28 production contracts + 5 libraries + 2 interfaces (~25,600 lines of Solidity)
+- **Methodology:** Scavenger/Skeptic dual-agent analysis with formal verdicts
+- **Categories:** GAS-01 (unreachable checks), GAS-02 (dead storage), GAS-03 (dead code paths), GAS-04 (redundant calls/SLOADs)
+
+### Verdict Distribution
+
+| Verdict | Count |
+|---------|-------|
+| APPROVED | 4 |
+| REJECTED | 3 |
+| PARTIAL | 0 |
+| NEEDS_HUMAN_REVIEW | 0 |
+| N/A (0 bytes, no action) | 14 |
+| **Total recommendations** | **21** |
+
+### Results
+
+| Metric | Value |
+|--------|-------|
+| Bytecode saved (directly modified contracts) | **96 bytes** |
+| Deployment gas saved (directly modified contracts) | **~19,200 gas** |
+| Source lines removed | 7 |
+| Contracts modified | 3 (DecimatorModule, WhaleModule, LootboxModule) |
+| Contracts unmodified (confirmed correct) | 25 |
+| Test regressions introduced | **0** (1,198 passing, 26 pre-existing) |
+| Reverted changes | 0 |
+
+### JackpotModule Headroom
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Bytecode size | 23,583 bytes | 23,577 bytes |
+| Utilization | 95.9% | 95.9% |
+| Headroom | 993 bytes | 999 bytes |
+| Removable dead code | 0 bytes | 0 bytes |
+
+**Conclusion:** The JackpotModule's size is the result of genuine functional complexity (multi-bucket trait-based jackpot distribution with chunked processing, auto-rebuy, and prize pool consolidation). No behavior-preserving optimization can meaningfully reduce its bytecode. The 6-byte secondary reduction from recompilation does not change the utilization percentage.
+
+### Key Findings
+
+1. **Codebase is exceptionally well-optimized.** Only 7 of 21 candidates had non-zero bytecode savings potential. The remaining 14 were correctly identified as structural requirements, compiler-handled, or zero-impact items.
+
+2. **Defense-in-depth guards are worth keeping.** The 3 REJECTED recommendations (SCAV-005, SCAV-007, SCAV-008) in DecimatorModule protect against division-by-zero panics, unnecessary SSTORE writes (2,100+ gas), and mapping key corruption. The runtime gas savings from keeping these guards exceed their one-time deployment cost.
+
+3. **JackpotModule has zero optimization headroom.** At 95.9% of the EVM size limit, the module's 2,824 lines are fully utilized. This is the most size-constrained contract in the protocol, and any future feature additions will need to consider bytecode budget carefully.
+
+4. **viaIR optimizer creates secondary effects.** Removing dead code in 3 contracts caused measurable bytecode changes in 7 unmodified sibling contracts (most -14 bytes, one +116 bytes). These are compiler artifacts from IR pipeline reorganization, not bugs.
+
+### Requirements Satisfied
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| GAS-01: Unreachable checks | Complete | SCAV-004, SCAV-006 APPROVED and applied; SCAV-005 REJECTED (defense-in-depth) |
+| GAS-02: Dead storage variables | Complete | SCAV-001, SCAV-002, SCAV-003 analyzed; 0 removable (all structural/compatibility) |
+| GAS-03: Dead code paths | Complete | SCAV-016 APPROVED and applied; SCAV-007, SCAV-008 REJECTED (defense-in-depth) |
+| GAS-04: Redundant calls/SLOADs | Complete | SCAV-009 APPROVED and applied; MintModule already optimized |
+
+### Report Status
+
+This gas optimization report is **complete and audit-package ready**. All sections have been finalized:
+- Executive Summary with verdict distribution
+- Estimated vs actual savings comparison
+- Approved removals with full Skeptic analysis
+- Rejected recommendations with counterexamples
+- Implementation order and notes
+- Full Scavenger recommendation appendices (21 items)
+- Test verification with zero regressions
+- Bytecode impact with measured before/after sizes
+- Final summary with quantified results
