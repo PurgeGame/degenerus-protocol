@@ -32,19 +32,19 @@
   3. All cross-contract interaction paths between DegenerusAdmin, AdvanceModule, GameStorage, Game, and DegenerusStonk are traced and verified -- no manipulation vector exists for `lastVrfProcessedTimestamp`, death clock, unwrapTo stall, or VRF retry timeout
   4. All six war-game scenarios (compromised admin, colluding cartel, VRF oscillation, unwrapTo timing attack, post-execute governance loop, admin spam-propose) have written assessments with exploit feasibility and severity ratings
   5. M-02 (admin key compromise + VRF death = RNG control) is verified as mitigated by governance, with explicit residual risk documentation
-**Plans**: TBD
+**Plans**: 8 plans
 
 **Constraint**: Self-audit confirmation bias (CP-01) -- this codebase was written by the same team auditing it. Phase 24 plans must apply adversarial persona protocol: assume the code is wrong, attempt to break it before concluding it is correct.
 
 Plans:
-- [ ] 24-01: TBD
-- [ ] 24-02: TBD
-- [ ] 24-03: TBD
-- [ ] 24-04: TBD
-- [ ] 24-05: TBD
-- [ ] 24-06: TBD
-- [ ] 24-07: TBD
-- [ ] 24-08: TBD
+- [ ] 24-01-PLAN.md -- Storage layout verification (GOV-01)
+- [ ] 24-02-PLAN.md -- Propose access control + vote arithmetic (GOV-02, GOV-03)
+- [ ] 24-03-PLAN.md -- Threshold decay + execute/kill conditions (GOV-04, GOV-05, GOV-06)
+- [ ] 24-04-PLAN.md -- _executeSwap CEI + _voidAllActive (GOV-07, GOV-08)
+- [ ] 24-05-PLAN.md -- Expiry + circulatingSupply + vote integrity (GOV-09, GOV-10, VOTE-01, VOTE-02, VOTE-03)
+- [ ] 24-06-PLAN.md -- Cross-contract interaction traces (XCON-01, XCON-02, XCON-03, XCON-04, XCON-05)
+- [ ] 24-07-PLAN.md -- War-game scenarios (WAR-01, WAR-02, WAR-03, WAR-04, WAR-05, WAR-06)
+- [ ] 24-08-PLAN.md -- M-02 closure verification (M02-01, M02-02)
 
 ### Phase 25: Audit Doc Sync
 **Goal**: Every audit document accurately reflects the current codebase -- no stale references to `emergencyRecover`, old VRF timeouts, or pre-governance security model remain, and all governance findings from Phase 24 are integrated
@@ -73,7 +73,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 24. Core Governance Security Audit | v2.1 | 0/8 | Not started | - |
+| 24. Core Governance Security Audit | v2.1 | 0/8 | Planned | - |
 | 25. Audit Doc Sync | v2.1 | 0/7 | Not started | - |
 
 ---
