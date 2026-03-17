@@ -23,7 +23,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ### Active
 
-See current milestone.
+See current milestone: v2.1 — VRF Governance Audit + Doc Sync
 
 ### Out of Scope
 
@@ -38,6 +38,7 @@ See current milestone.
 - All contracts use immutable `ContractAddresses` library (addresses baked at compile time)
 - VRF via Chainlink VRF v2 for randomness
 - Recent major change: DegenerusStonk split into StakedDegenerusStonk (soulbound, holds reserves) + DegenerusStonk (transferable ERC20 wrapper)
+- VRF governance: emergencyRecover replaced with sDGNRS-holder propose/vote/execute (M-02 mitigation). Touches DegenerusAdmin, AdvanceModule, GameStorage, Game, DegenerusStonk.
 
 ## Constraints
 
@@ -53,6 +54,19 @@ See current milestone.
 | Pool BPS rebalance (Whale 10%, Affiliate 35%, Lootbox 20%, Reward 5%, Earlybird 10%) | Better distribution alignment with game mechanics | — Pending audit |
 | Coinflip bounty DGNRS gating (min 50k bet, 20k pool) | Prevent dust-amount bounty claims draining reward pool | — Pending audit |
 | burnRemainingPools replacing burnForGame | Cleaner game-over cleanup, removes per-address burn authority | — Pending audit |
+| Replace emergencyRecover with sDGNRS governance | M-02 mitigation: compromised admin key can no longer unilaterally control RNG | — Pending audit |
+| VRF retry timeout 18h → 12h | Faster recovery from stale VRF requests | — Pending audit |
+| unwrapTo blocked during VRF stall | Prevents creator vote-stacking via DGNRS→sDGNRS conversion during governance | — Pending audit |
+
+## Current Milestone: v2.1 VRF Governance Audit
+
+**Goal:** Thorough security audit of the new VRF governance system + update all prior audit docs to account for the changes.
+
+**Target features:**
+- Adversarial security audit of propose/vote/execute governance flow
+- War-game scenarios: compromised admin, colluding voters, VRF oscillation
+- Explicit M-02 closure verification
+- Audit doc sync: findings report, function audits, known issues, parameter reference
 
 ---
-*Last updated: 2026-03-16 after sDGNRS/DGNRS split and doc sync*
+*Last updated: 2026-03-17 after VRF governance implementation*
