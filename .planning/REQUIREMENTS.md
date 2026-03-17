@@ -45,8 +45,8 @@ Requirements for VRF governance security audit and doc sync.
 
 ### M-02 Closure
 
-- [ ] **M02-01**: Original M-02 attack scenario (admin key compromise + VRF death = RNG control) verified as mitigated by governance
-- [ ] **M02-02**: Severity re-assessment — M-02 downgraded from Medium with explicit rationale documenting residual risk (if any)
+- [x] **M02-01**: Original M-02 attack scenario (admin key compromise + VRF death = RNG control) verified as mitigated by governance
+- [x] **M02-02**: Severity re-assessment — M-02 downgraded from Medium with explicit rationale documenting residual risk (if any)
 
 ### Audit Doc Sync
 
@@ -103,8 +103,8 @@ Deferred to future milestone.
 | WAR-04 | Phase 24 | Complete |
 | WAR-05 | Phase 24 | Complete |
 | WAR-06 | Phase 24 | Complete |
-| M02-01 | Phase 24 | Pending |
-| M02-02 | Phase 24 | Pending |
+| M02-01 | Phase 24 | Complete |
+| M02-02 | Phase 24 | Complete |
 | DOCS-01 | Phase 25 | Pending |
 | DOCS-02 | Phase 25 | Pending |
 | DOCS-03 | Phase 25 | Pending |
