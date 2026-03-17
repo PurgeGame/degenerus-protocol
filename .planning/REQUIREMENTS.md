@@ -39,10 +39,10 @@
 
 ### Gas — Dead Code and Optimization
 
-- [ ] **GAS-01**: Remove unreachable checks (guards on variables that can never be zero/overflow)
-- [ ] **GAS-02**: Remove dead storage variables and unused state from all contracts
-- [ ] **GAS-03**: Remove dead code paths and unreachable branches
-- [ ] **GAS-04**: Identify redundant external calls and storage reads that can be cached
+- [x] **GAS-01**: Remove unreachable checks (guards on variables that can never be zero/overflow)
+- [x] **GAS-02**: Remove dead storage variables and unused state from all contracts
+- [x] **GAS-03**: Remove dead code paths and unreachable branches
+- [x] **GAS-04**: Identify redundant external calls and storage reads that can be cached
 
 ## Out of Scope
 
@@ -80,10 +80,10 @@
 | NOVEL-10 | Phase 21 | Complete |
 | NOVEL-11 | Phase 21 | Complete |
 | NOVEL-12 | Phase 21 | Complete |
-| GAS-01 | Phase 23 | Pending |
-| GAS-02 | Phase 23 | Pending |
-| GAS-03 | Phase 23 | Pending |
-| GAS-04 | Phase 23 | Pending |
+| GAS-01 | Phase 23 | Complete |
+| GAS-02 | Phase 23 | Complete |
+| GAS-03 | Phase 23 | Complete |
+| GAS-04 | Phase 23 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 27 total
