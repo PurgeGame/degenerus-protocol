@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 25-01-PLAN.md
-last_updated: "2026-03-17T23:27:58.323Z"
-last_activity: 2026-03-17 -- Completed 25-02 (state-changing function audits updated for governance)
+stopped_at: Completed 25-03-PLAN.md
+last_updated: "2026-03-17T23:28:27.544Z"
+last_activity: 2026-03-17 -- Completed 25-03 (Tier 2/2b/3 audit doc sync with governance constants and historical annotations)
 progress:
   total_phases: 2
   completed_phases: 1
@@ -62,6 +62,7 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 24-08]: M02-02 Severity downgraded Medium to Low: 3 prerequisites vs 2, 7-day defense window, soulbound sDGNRS, single reject voter blocks
 - [Phase 25]: [Phase 25-02]: DOCS-03 COMPLETE -- Added 9 governance function audit entries (propose, vote, _executeSwap, _voidAllActive, anyProposalActive, circulatingSupply, threshold, canExecute, unwrapTo), marked emergencyRecover REMOVED, updated updateVrfCoordinatorAndSub/rngGate/_handleGameOverPath/wireVrf for v2.1
 - [Phase 25]: [Phase 25-01]: DOCS-01, DOCS-02 COMPLETE -- FINAL-FINDINGS-REPORT.md and KNOWN-ISSUES.md updated for v2.1 governance. M-02 downgraded to Low, 5 new findings added, severity distribution updated (Medium:2, Low:4), v2.1 requirements table added (26/26), zero stale emergencyRecover refs
+- [Phase 25-03]: DOCS-04, DOCS-05, DOCS-06 COMPLETE -- parameter-reference.md gains governance constants section (8 constants + decay schedule), RNG docs annotated for v2.1 _threeDayRngGap removal and 12h VRF retry, EXTERNAL-AUDIT-PROMPT.md time constants updated, 3 Tier 3 historical docs annotated preserving traceability
 
 ## Accumulated Context
 
@@ -76,6 +77,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-17T23:27:58.322Z
-Stopped at: Completed 25-01-PLAN.md
+Last session: 2026-03-17T23:28:27.543Z
+Stopped at: Completed 25-03-PLAN.md
 Resume file: None
