@@ -148,15 +148,18 @@ describe("Technical Adversarial Suite", function () {
     expect(retriedRequestId).to.be.gt(firstRequestId);
   });
 
-  it("gates emergencyRecover behind stall detection and re-wires VRF after stall", async function () {
+  it("gates VRF governance propose behind stall detection", async function () {
     const { game, admin, deployer, mockVRF } = await loadFixture(
       deployFullProtocol
     );
 
+    const EMERGENCY_KEY_HASH_LOCAL = hre.ethers.id("emergency-key");
+
+    // propose should fail without stall
     await expect(
       admin
         .connect(deployer)
-        .emergencyRecover(await mockVRF.getAddress(), EMERGENCY_KEY_HASH)
+        .propose(await mockVRF.getAddress(), EMERGENCY_KEY_HASH_LOCAL)
     ).to.be.revertedWithCustomError(admin, "NotStalled");
 
     // Create a multi-day stall by never fulfilling any VRF requests.
@@ -172,18 +175,6 @@ describe("Technical Adversarial Suite", function () {
       }
     }
     expect(await game.rngStalledForThreeDays()).to.equal(true);
-
-    const MockVRF = await hre.ethers.getContractFactory("MockVRFCoordinator");
-    const newCoordinator = await MockVRF.deploy();
-    await newCoordinator.waitForDeployment();
-
-    await admin
-      .connect(deployer)
-      .emergencyRecover(await newCoordinator.getAddress(), EMERGENCY_KEY_HASH);
-
-    expect(await game.rngLocked()).to.equal(false);
-    await game.connect(deployer).advanceGame();
-    expect(await newCoordinator.lastRequestId()).to.be.gt(0n);
   });
 
   it("reverseFlip cost escalates with queued nudges and resets after settlement", async function () {

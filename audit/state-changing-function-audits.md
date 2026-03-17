@@ -566,30 +566,6 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 ---
 
-### `onDeityPassTransfer(address, address, uint8)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function onDeityPassTransfer(address from, address to, uint8) external` |
-| **Visibility** | external |
-| **Mutability** | state-changing (NOT payable) |
-| **Parameters** | `from` (address): sender of the deity pass; `to` (address): receiver of the deity pass; `uint8` (unnamed): token symbol ID (unused in Game, forwarded context only) |
-| **Returns** | none |
-
-**State Reads:** none directly (reads ContractAddresses.DEITY_PASS for access control)
-**State Writes:** none directly (all via WhaleModule delegatecall -- updates deity storage, nukes sender stats)
-
-**Callers:** DegenerusDeityPass ERC721 contract (on transfer hook)
-**Callees:** access check `msg.sender != ContractAddresses.DEITY_PASS` -> `ContractAddresses.GAME_WHALE_MODULE.delegatecall(IDegenerusGameWhaleModule.handleDeityPassTransfer.selector, from, to)` -> `_revertDelegate(data)` on failure
-
-**ETH Flow:** None. Transfer callback, no ETH involved.
-**Invariants:** Only callable by the DEITY_PASS ERC721 contract (enforced by `if (msg.sender != ContractAddresses.DEITY_PASS) revert E()`). The third parameter (symbolId) is received but not passed to the WhaleModule -- the module identifies the symbol from `deityPassSymbol[from]` storage. This is correct behavior: the module reads the symbol from the canonical storage mapping rather than trusting the callback parameter.
-**NatSpec Accuracy:** ACCURATE. Documents BURNIE burn cost, stat nuking, and access control. Notes the 5 ETH BURNIE burn from sender.
-**Gas Flags:** The unnamed `uint8` parameter is accepted but unused in the delegatecall encoding. This is intentional -- the ERC721 provides it, but the WhaleModule identifies the symbol from storage. Minimal gas overhead (1 word ABI decode).
-**Verdict:** CORRECT
-
----
-
 ### `recordMint(address, uint24, uint256, uint32, MintPaymentKind)` [external payable]
 
 | Field | Value |
@@ -6737,83 +6713,6 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 
 ---
 
-### `handleDeityPassTransfer(address from, address to)` [external] + `_handleDeityPassTransfer` [private]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function handleDeityPassTransfer(address from, address to) external` |
-| **Visibility** | external (wrapper) / private (implementation) |
-| **Mutability** | state-changing (not payable) |
-| **Parameters** | `from` (address): current deity pass holder; `to` (address): receiving address |
-| **Returns** | none |
-
-**State Reads:**
-- `level` -- must be > 0 (no pre-game transfers)
-- `deityPassCount[from]` -- must be > 0 (sender must own pass)
-- `deityPassCount[to]` -- must be 0 (receiver must not own pass)
-- `price` -- current game price for BURNIE burn calculation
-- `deityPassSymbol[from]` -- symbol ID to transfer
-- `deityPassOwners` (full array) -- linear scan to find and replace sender
-- `deityPassPurchasedCount[from]` -- transferred to receiver
-- `deityPassPaidTotal[from]` -- transferred to receiver
-- `mintPacked_[from]` (via `_nukePassHolderStats`) -- sender's packed mint data
-
-**State Writes:**
-- External: `IDegenerusCoin(COIN).burnCoin(from, burnAmount)` -- burns 5 ETH worth of BURNIE from sender
-- `deityBySymbol[symbolId] = to` -- rebind symbol to receiver
-- `deityPassSymbol[to] = symbolId` -- assign symbol to receiver
-- `deityPassSymbol[from]` -- deleted
-- `deityPassCount[to] = 1` -- receiver now has pass
-- `deityPassCount[from] = 0` -- sender no longer has pass
-- `deityPassPurchasedCount[to] = deityPassPurchasedCount[from]` -- transfer purchase history
-- `deityPassPurchasedCount[from] = 0` -- clear sender's history
-- `deityPassPaidTotal[to] = deityPassPaidTotal[from]` -- transfer payment history
-- `deityPassPaidTotal[from] = 0` -- clear sender's payment history
-- `deityPassOwners[i] = to` -- replace sender with receiver in owners array
-- `mintPacked_[from]` (via `_nukePassHolderStats`) -- zeros LEVEL_COUNT, LEVEL_STREAK, LAST_LEVEL, MINT_STREAK_LAST_COMPLETED
-- External: `IDegenerusQuestsReset(QUESTS).resetQuestStreak(from)` -- resets quest streak
-
-**Callers:**
-- DegenerusGame's `onDeityPassTransfer` callback (triggered by ERC721 transfer event on DeityPass contract)
-
-**Callees:**
-- `IDegenerusCoin(ContractAddresses.COIN).burnCoin(from, burnAmount)` -- external: burns BURNIE from sender
-- `_nukePassHolderStats(from)` -- zeros sender's mint stats and quest streak
-- `IDegenerusQuestsReset(ContractAddresses.QUESTS).resetQuestStreak(from)` -- external: resets quest streak
-
-**ETH Flow:**
-- No direct ETH movement. The BURNIE burn is a token operation, not ETH.
-- `burnAmount = (DEITY_TRANSFER_ETH_COST * PRICE_COIN_UNIT) / price`
-- At default price 0.01 ETH: `(5 ether * 1000 ether) / 0.01 ether = 500,000 ether` BURNIE tokens burned
-- The burn cost scales inversely with price: higher price = fewer BURNIE needed
-
-**Invariants:**
-- `level > 0` (transfers only allowed after game starts)
-- `deityPassCount[from] > 0` (sender must own pass)
-- `deityPassCount[to] == 0` (receiver must not already own pass)
-- After transfer: `deityPassCount[from] == 0 && deityPassCount[to] == 1`
-- After transfer: `deityBySymbol[symbolId] == to`
-- deityPassOwners array length unchanged (replacement, not push/pop)
-- Sender's mint stats are zeroed (punishment for transfer)
-- Sender's quest streak is reset (punishment for transfer)
-
-**NatSpec Accuracy:**
-- NatSpec says "Burns 5 ETH worth of BURNIE from sender" -- ACCURATE. `DEITY_TRANSFER_ETH_COST = 5 ether`, formula converts to BURNIE equivalent.
-- NatSpec says "Nukes sender's mint stats and quest streak" -- ACCURATE. `_nukePassHolderStats` zeros 4 packed fields + calls `resetQuestStreak`.
-- NatSpec says "Called via delegatecall from game's onDeityPassTransfer" -- ACCURATE.
-
-**Gas Flags:**
-- Linear scan of `deityPassOwners` array (line 584-590) to find `from`. Max 32 entries (one per symbol), so O(32) worst case. Acceptable for a max-32 array.
-- The `burnCoin` external call could revert if sender lacks sufficient BURNIE balance, which would revert the entire transfer. This is intentional -- the burn is a mandatory cost.
-
-**Edge Cases:**
-- If `from == to`: Would pass all checks (deityPassCount[from] > 0, deityPassCount[to] == 0 only if from != to). Since `deityPassCount[to] != 0` check uses `to` and the sender has count 1, this would revert at `deityPassCount[to] != 0`. CORRECT -- self-transfer is prevented.
-- The function is non-payable, so no ETH can be accidentally sent.
-
-**Verdict:** CORRECT
-
----
-
 ### `_rewardWhaleBundleDgnrs(address buyer, address affiliateAddr, address upline, address upline2)` [private]
 
 | Field | Value |
@@ -7119,49 +7018,6 @@ The stETH-first priority means: vault gets stETH first, DGNRS gets whatever stET
 **Verdict:** CORRECT
 
 ---
-
-### `_nukePassHolderStats(address player)` [private]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function _nukePassHolderStats(address player) private` |
-| **Visibility** | private |
-| **Mutability** | state-changing |
-| **Parameters** | `player` (address): player whose stats to zero |
-| **Returns** | none |
-
-**State Reads:**
-- `mintPacked_[player]` -- current packed mint data
-
-**State Writes:**
-- `mintPacked_[player]` -- zeros 4 fields:
-  - LEVEL_COUNT (bits 24-47) -> 0
-  - LEVEL_STREAK (bits 48-71) -> 0
-  - LAST_LEVEL (bits 0-23) -> 0
-  - MINT_STREAK_LAST_COMPLETED (bits 160-183) -> 0
-- External: `IDegenerusQuestsReset(ContractAddresses.QUESTS).resetQuestStreak(player)` -- resets quest streak
-
-**Callers:**
-- `_handleDeityPassTransfer` -- penalty for transferring deity pass
-
-**Callees:**
-- `BitPackingLib.setPacked()` -- 4 calls to zero fields
-- `IDegenerusQuestsReset(ContractAddresses.QUESTS).resetQuestStreak(player)` -- external: quest streak reset
-
-**ETH Flow:** None
-
-**Invariants:**
-- Only zeros specific stat fields; preserves other packed fields (FROZEN_UNTIL_LEVEL, WHALE_BUNDLE_TYPE, DAY, LEVEL_UNITS_LEVEL, LEVEL_UNITS)
-- Quest streak reset is an external call to the Quests contract, which also runs in the game's delegatecall context (the call originates from the game address)
-
-**NatSpec Accuracy:**
-- NatSpec says "Zero mint stats and quest streak" -- ACCURATE. Four packed fields zeroed plus external quest reset.
-
-**Gas Flags:**
-- Uses `BitPackingLib.setPacked` four times sequentially on the same `data` variable. Could potentially be optimized with a single bitmask operation, but the current approach is clear and correct.
-
-**Verdict:** CORRECT
-
 
 ---
 
@@ -12316,30 +12172,6 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 **NatSpec Accuracy:** NatSpec says COIN or COINFLIP only -- matches modifier. States entropy usage for two slots -- accurate. Says `rolled` always true -- correct. Says `highDifficulty` always false -- correct (difficulty feature removed).
 **Gas Flags:** None -- thin wrapper delegating to private function.
 **Verdict:** CORRECT
-
----
-
-### `resetQuestStreak(address player)` [external]
-
-| Field | Value |
-|-------|-------|
-| **Signature** | `function resetQuestStreak(address player) external onlyGame` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | `player` (address): player whose streak to reset |
-| **Returns** | None |
-
-**State Reads:** `questPlayerState[player]`
-**State Writes:** `questPlayerState[player].streak = 0`, `questPlayerState[player].baseStreak = 0`
-
-**Callers:** DegenerusGame contract (external, via onlyGame gate)
-**Callees:** None
-
-**ETH Flow:** None
-**Invariants:** Only GAME contract can reset streaks. Does not emit an event.
-**NatSpec Accuracy:** No NatSpec provided for this function. Missing documentation.
-**Gas Flags:** No event emitted on streak reset -- intentional for gas savings but inconsistent with `_questSyncState` which emits `QuestStreakReset`.
-**Verdict:** CONCERN (informational) -- No NatSpec and no event emission. The `_questSyncState` function emits `QuestStreakReset` when streak goes to 0, but this explicit reset path does not. Off-chain indexers tracking streak resets may miss game-initiated resets. Functionally correct.
 
 ---
 

@@ -78,13 +78,13 @@ describe("Coercion Attacker: Admin Key Compromise", function () {
   // FINDING 2: Emergency VRF Recovery -- The Highest Impact Attack Vector
   // =========================================================================
 
-  describe("Emergency VRF Recovery Attack Path", function () {
-    it("emergencyRecover requires 3-day VRF stall -- cannot be called instantly", async function () {
+  describe("VRF Governance Attack Path", function () {
+    it("propose requires VRF stall -- cannot be called instantly", async function () {
       const { deployer, admin } = await loadFixture(deployFixture);
 
-      // Try emergency recovery immediately -- should revert (not stalled)
+      // Try proposing immediately -- should revert (not stalled)
       await expect(
-        admin.emergencyRecover(
+        admin.propose(
           deployer.address, // fake coordinator
           "0xabababababababababababababababababababababababababababababababab"
         )

@@ -15,6 +15,11 @@ interface IERC20Minimal {
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
+/// @dev Game interface for VRF liveness check (unwrap guard).
+interface IDegenerusGame {
+    function lastVrfProcessed() external view returns (uint48);
+}
+
 /**
  * @title DegenerusStonk (DGNRS)
  * @notice Transferable ERC20 — the liquid face of the DGNRS token
@@ -137,10 +142,14 @@ contract DegenerusStonk {
     //                          UNWRAP (Creator Only)
     // =====================================================================
 
-    /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound
+    /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound.
+    /// @dev Blocked during VRF stall (>20h) to prevent creator vote-stacking via DGNRS→sDGNRS conversion.
     function unwrapTo(address recipient, uint256 amount) external {
         if (msg.sender != ContractAddresses.CREATOR) revert Unauthorized();
         if (recipient == address(0)) revert ZeroAddress();
+        // Block unwrap during VRF stall (prevents creator vote-stacking)
+        if (block.timestamp - IDegenerusGame(ContractAddresses.GAME).lastVrfProcessed() > 20 hours)
+            revert Unauthorized();
         _burn(msg.sender, amount);
         stonk.wrapperTransferTo(recipient, amount);
         emit UnwrapTo(recipient, amount);

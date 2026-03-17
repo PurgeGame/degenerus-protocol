@@ -12,7 +12,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  * -----------------------------------------------------------------------------
  * This contract serves as the single point of authority for:
  *   1. VRF subscription ownership and management
- *   2. Emergency recovery during VRF failures
+ *   2. sDGNRS-holder governance for emergency VRF coordinator swaps
  *   3. LINK token donation handling with reward multipliers
  *   4. LINK/ETH price feed management for reward valuation
  *
@@ -29,9 +29,16 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  *   1. Created atomically during constructor call
  *   2. Consumer (Game contract) added automatically during construction
  *   3. LINK funding via onTokenTransfer (ERC-677)
- *   4. Emergency recovery if stalled 3+ days (see emergencyRecover)
+ *   4. Governed VRF swap via propose/vote/execute (M-02 mitigation)
  *   5. Shutdown after GAME-over with LINK refund
  *
+ * GOVERNANCE (M-02 Mitigation):
+ *   - Admin path: DGVE holder proposes after 20h VRF stall
+ *   - Community path: 0.5%+ sDGNRS holder proposes after 7d VRF stall
+ *   - Approval voting with decaying threshold (60% → 5% over 7 days)
+ *   - Changeable votes, approval voting across proposals
+ *   - Auto-invalidation on VRF recovery (stall re-check in every vote)
+ *   - Death clock pauses while any proposal is active
  */
 
 // =============================================================================
@@ -39,29 +46,10 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 // =============================================================================
 
 /// @dev Minimal VRF coordinator surface for subscription management.
-///      Only the functions needed for admin operations are included.
 interface IVRFCoordinatorV2_5Owner {
-    /// @notice Add a consumer contract to a VRF subscription.
-    /// @param subId The subscription ID to add the consumer to.
-    /// @param consumer The address of the consumer contract.
     function addConsumer(uint256 subId, address consumer) external;
-
-    /// @notice Cancel a VRF subscription and refund remaining LINK.
-    /// @param subId The subscription ID to cancel.
-    /// @param to The address to receive the LINK refund.
     function cancelSubscription(uint256 subId, address to) external;
-
-    /// @notice Create a new VRF subscription.
-    /// @return subId The newly created subscription ID.
     function createSubscription() external returns (uint256 subId);
-
-    /// @notice Get subscription details including balance and consumers.
-    /// @param subId The subscription ID to query.
-    /// @return balance LINK balance in the subscription.
-    /// @return nativeBalance Native token balance (if applicable).
-    /// @return reqCount Number of requests made.
-    /// @return owner The subscription owner.
-    /// @return consumers Array of consumer addresses.
     function getSubscription(
         uint256 subId
     )
@@ -76,56 +64,27 @@ interface IVRFCoordinatorV2_5Owner {
         );
 }
 
-/// @dev Game contract admin interface (VRF + liquidity).
+/// @dev Game contract admin interface (VRF + liquidity + liveness).
 interface IDegenerusGameAdmin {
-    /// @notice Check if RNG has been stalled for 3+ days (enables emergency recovery).
-    function rngStalledForThreeDays() external view returns (bool);
-
-    /// @notice Current game phase (false=purchase, true=jackpot).
+    function lastVrfProcessed() external view returns (uint48);
     function jackpotPhase() external view returns (bool);
-
-    /// @notice Terminal gameover flag.
     function gameOver() external view returns (bool);
-
-    /// @notice Emergency update of VRF configuration during recovery.
-    /// @param newCoordinator New VRF coordinator address.
-    /// @param newSubId New subscription ID.
-    /// @param newKeyHash New key hash for the coordinator.
     function updateVrfCoordinatorAndSub(
         address newCoordinator,
         uint256 newSubId,
         bytes32 newKeyHash
     ) external;
-
-    /// @notice Initial VRF wiring during setup.
     function wireVrf(
         address coordinator_,
         uint256 subId,
         bytes32 keyHash_
     ) external;
-
-    /// @notice Swap owner ETH for GAME-held stETH (1:1 exchange).
-    /// @param recipient Address to receive the stETH.
-    /// @param amount Amount of ETH/stETH to swap.
     function adminSwapEthForStEth(
         address recipient,
         uint256 amount
     ) external payable;
-
-    /// @notice Stake GAME-held ETH into stETH via Lido.
-    /// @param amount Amount of ETH to stake.
     function adminStakeEthForStEth(uint256 amount) external;
-
-    /// @notice Update lootbox RNG request threshold (wei).
-    /// @param newThreshold New threshold in wei.
     function setLootboxRngThreshold(uint256 newThreshold) external;
-
-    /// @notice Current ticket purchase info including live price.
-    /// @return lvl Active ticket level (level+1 during purchase phase, level during jackpot phase; NOT the 0-indexed game level).
-    /// @return qty Tickets sold at current level.
-    /// @return cap Total tickets per level.
-    /// @return jackpotWei Jackpot size in wei.
-    /// @return priceWei Current ticket price in wei.
     function purchaseInfo()
         external
         view
@@ -141,21 +100,10 @@ interface IDegenerusGameAdmin {
 /// @dev LINK token interface (ERC-677 with transferAndCall).
 interface ILinkTokenLike {
     function balanceOf(address account) external view returns (uint256);
-
-    /// @notice Standard ERC20 transfer.
-    /// @param to Recipient address.
-    /// @param value Amount of LINK to transfer.
-    /// @return success True if transfer succeeded.
     function transfer(
         address to,
         uint256 value
     ) external returns (bool success);
-
-    /// @notice ERC-677 transfer with callback to recipient.
-    /// @param to Recipient address (must implement onTokenTransfer).
-    /// @param value Amount of LINK to transfer.
-    /// @param data Additional data passed to the callback.
-    /// @return success True if transfer and callback succeeded.
     function transferAndCall(
         address to,
         uint256 value,
@@ -165,20 +113,11 @@ interface ILinkTokenLike {
 
 /// @dev Coin contract interface for LINK donation flip credits.
 interface IDegenerusCoinLinkReward {
-    /// @notice Credit flip stake to a player for LINK donation.
-    /// @param player Address to credit.
-    /// @param amount Amount of BURNIE to credit as flip stake (18 decimals).
     function creditLinkReward(address player, uint256 amount) external;
 }
 
 /// @dev Chainlink price feed interface (AggregatorV3).
 interface IAggregatorV3 {
-    /// @notice Get latest price data.
-    /// @return roundId The round ID.
-    /// @return answer The price (sign and decimals vary by feed).
-    /// @return startedAt Timestamp when round started.
-    /// @return updatedAt Timestamp when answer was updated.
-    /// @return answeredInRound The round ID in which the answer was computed.
     function latestRoundData()
         external
         view
@@ -189,119 +128,107 @@ interface IAggregatorV3 {
             uint256 updatedAt,
             uint80 answeredInRound
         );
-
-    /// @notice Get the number of decimals in the answer.
     function decimals() external view returns (uint8);
 }
 
 /// @dev Vault interface for ownership check.
 interface IDegenerusVaultOwner {
-    /// @notice Check if account holds >50.1% of DGVE supply.
     function isVaultOwner(address account) external view returns (bool);
+}
+
+/// @dev sDGNRS interface for governance voting weight and circulating supply.
+interface IsDGNRS {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
 }
 
 /**
  * @title DegenerusAdmin
- * @notice Central admin contract: owns the VRF subscription and wires VRF
- *         configuration for the GAME. Deployed using precomputed constants.
+ * @notice Central admin contract: owns the VRF subscription, wires VRF config,
+ *         and governs emergency VRF coordinator swaps via sDGNRS-holder voting.
  */
 contract DegenerusAdmin {
     // =========================================================================
+    // GOVERNANCE TYPES
+    // =========================================================================
+
+    enum Vote { None, Approve, Reject }
+    enum ProposalPath { Admin, Community }
+    enum ProposalState { Active, Executed, Killed, Expired }
+
+    struct Proposal {
+        address proposer;
+        address coordinator;
+        bytes32 keyHash;
+        uint48 createdAt;
+        uint256 approveWeight;
+        uint256 rejectWeight;
+        uint256 circulatingSnapshot;
+        ProposalPath path;
+        ProposalState state;
+    }
+
+    // =========================================================================
     // CUSTOM ERRORS
     // =========================================================================
-    // Using custom errors for gas efficiency and clear failure reasons.
 
-    /// @dev Caller does not hold >50.1% of DGVE supply.
     error NotOwner();
-
-    /// @dev Caller is not authorized for this operation (e.g., wrong token sender).
     error NotAuthorized();
-
-    /// @dev A required address parameter was zero.
     error ZeroAddress();
-
-    /// @dev VRF is not stalled; emergency recovery not allowed.
     error NotStalled();
-
-    /// @dev Required component not yet wired.
     error NotWired();
-
-    /// @dev VRF subscription doesn't exist.
     error NoSubscription();
-
-    /// @dev Invalid amount (zero or mismatch).
     error InvalidAmount();
-
-    /// @dev Game-over has started; operation not allowed.
     error GameOver();
-
-
-    /// @dev Price feed is healthy; replacement not allowed.
     error FeedHealthy();
-
-    /// @dev Price feed decimals do not match expected LINK/ETH decimals.
     error InvalidFeedDecimals();
-
+    error ProposalNotActive();
+    error ProposalExpired();
+    error InsufficientStake();
 
     // =========================================================================
     // EVENTS
     // =========================================================================
-    // Events provide an audit trail for all administrative actions.
 
-    /// @notice Emitted when the VRF coordinator is updated.
-    /// @param coordinator New coordinator address.
-    /// @param subId Associated subscription ID.
     event CoordinatorUpdated(
         address indexed coordinator,
         uint256 indexed subId
     );
-
-    /// @notice Emitted when a consumer is added to the VRF subscription.
-    /// @param consumer Address of the newly added consumer.
     event ConsumerAdded(address indexed consumer);
-
-    /// @notice Emitted when a new VRF subscription is created.
-    /// @param subId The newly created subscription ID.
     event SubscriptionCreated(uint256 indexed subId);
-
-    /// @notice Emitted when a VRF subscription is cancelled.
-    /// @param subId The cancelled subscription ID.
-    /// @param to Address receiving the LINK refund.
     event SubscriptionCancelled(uint256 indexed subId, address indexed to);
-
-    /// @notice Emitted after emergency VRF recovery completes.
-    /// @param newCoordinator New coordinator address.
-    /// @param newSubId New subscription ID.
-    /// @param fundedAmount LINK transferred to new subscription.
-    event EmergencyRecovered(
-        address indexed newCoordinator,
-        uint256 indexed newSubId,
-        uint256 fundedAmount
-    );
-
-    /// @notice Emitted when subscription is shutdown and LINK swept.
-    /// @param subId The shutdown subscription ID.
-    /// @param to Address receiving the LINK.
-    /// @param sweptAmount LINK amount swept.
     event SubscriptionShutdown(
         uint256 indexed subId,
         address indexed to,
         uint256 sweptAmount
     );
-
-    /// @notice Emitted when LINK donation credit is recorded.
-    /// @param player Address receiving the credit.
-    /// @param amount BURNIE amount credited.
     event LinkCreditRecorded(address indexed player, uint256 amount);
-
-    /// @notice Emitted when LINK/ETH price feed is updated.
-    /// @param feed New feed address (zero disables oracle).
     event LinkEthFeedUpdated(address indexed feed);
+
+    // Governance events
+    event ProposalCreated(
+        uint256 indexed proposalId,
+        address indexed proposer,
+        address coordinator,
+        bytes32 keyHash,
+        ProposalPath path
+    );
+    event VoteCast(
+        uint256 indexed proposalId,
+        address indexed voter,
+        bool approve,
+        uint256 weight
+    );
+    event ProposalExecuted(
+        uint256 indexed proposalId,
+        address coordinator,
+        uint256 newSubId
+    );
+    event ProposalKilled(uint256 indexed proposalId);
 
     // =========================================================================
     // PRECOMPUTED ADDRESSES
     // =========================================================================
-    // Trusted external contracts wired from ContractAddresses (compile-time).
 
     IVRFCoordinatorV2_5Owner internal constant vrfCoordinator =
         IVRFCoordinatorV2_5Owner(ContractAddresses.VRF_COORDINATOR);
@@ -311,53 +238,83 @@ contract DegenerusAdmin {
         ILinkTokenLike(ContractAddresses.LINK_TOKEN);
     IDegenerusCoinLinkReward internal constant coinLinkReward =
         IDegenerusCoinLinkReward(ContractAddresses.COIN);
+    IsDGNRS internal constant sDGNRS =
+        IsDGNRS(ContractAddresses.SDGNRS);
 
     // =========================================================================
     // VRF STATE
     // =========================================================================
-    // Chainlink VRF subscription management.
 
     /// @notice Current VRF coordinator address.
-    /// @dev Can be updated during emergency recovery (stall-gated).
     address public coordinator;
 
     /// @notice Current VRF subscription ID.
-    /// @dev Created atomically during constructor; can change during emergency recovery.
     uint256 public subscriptionId;
 
     /// @notice VRF key hash for the current coordinator.
-    /// @dev Different coordinators may require different key hashes.
     bytes32 public vrfKeyHash;
+
+    // =========================================================================
+    // GOVERNANCE STATE
+    // =========================================================================
+
+    /// @notice Total proposals ever created (also serves as next ID - 1).
+    uint256 public proposalCount;
+
+    /// @notice Proposal data by ID (1-indexed).
+    mapping(uint256 => Proposal) public proposals;
+
+    /// @notice Vote direction per voter per proposal.
+    mapping(uint256 => mapping(address => Vote)) public votes;
+
+    /// @notice Vote weight recorded at time of vote.
+    mapping(uint256 => mapping(address => uint256)) public voteWeight;
+
+    /// @notice Number of currently Active proposals.
+    uint8 public activeProposalCount;
 
     // =========================================================================
     // LINK REWARD STATE
     // =========================================================================
 
     /// @notice Chainlink LINK/ETH price feed address.
-    /// @dev Zero address disables oracle-based valuation.
-    ///      Only replaceable if current feed is unhealthy.
-    ///      Assumes Chainlink LINK/ETH feed with 18 decimals (standard for this pair).
     address public linkEthPriceFeed;
 
-    /// @dev BURNIE conversion constant: 1000 BURNIE = 1e21 base units (18 decimals).
-    ///      Used to convert ETH-equivalent value to BURNIE credit amount.
+    /// @dev BURNIE conversion constant: 1000 BURNIE = 1e21 base units.
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
-    /// @dev Expected LINK/ETH feed decimals (Chainlink standard).
+    /// @dev Expected LINK/ETH feed decimals.
     uint8 private constant LINK_ETH_FEED_DECIMALS = 18;
 
     /// @dev Max staleness window before LINK/ETH feed is considered unhealthy.
     uint256 private constant LINK_ETH_MAX_STALE = 1 days;
 
     // =========================================================================
+    // GOVERNANCE CONSTANTS
+    // =========================================================================
+
+    /// @dev Minimum VRF stall duration before admin can propose (20 hours).
+    uint256 private constant ADMIN_STALL_THRESHOLD = 20 hours;
+
+    /// @dev Minimum VRF stall duration before community can propose (7 days).
+    uint256 private constant COMMUNITY_STALL_THRESHOLD = 7 days;
+
+    /// @dev Minimum sDGNRS stake to propose via community path (0.5% = 50 bps).
+    uint256 private constant COMMUNITY_PROPOSE_BPS = 50;
+
+    /// @dev Proposal lifetime before expiry (168 hours = 7 days).
+    uint256 private constant PROPOSAL_LIFETIME = 168 hours;
+
+    /// @dev Basis points denominator.
+    uint256 private constant BPS = 10000;
+
+    // =========================================================================
     // ACCESS CONTROL
     // =========================================================================
 
-    /// @dev Vault contract for ownership check.
     IDegenerusVaultOwner private constant vault =
         IDegenerusVaultOwner(ContractAddresses.VAULT);
 
-    /// @dev Restricts function to anyone holding >50.1% of DGVE.
     modifier onlyOwner() {
         if (!vault.isVaultOwner(msg.sender)) revert NotOwner();
         _;
@@ -367,14 +324,9 @@ contract DegenerusAdmin {
     // CONSTRUCTOR
     // =========================================================================
 
-    /// @notice Initialize admin contract and configure VRF on deployment.
-    /// @dev Atomically creates new VRF subscription and wires the Game consumer.
-    ///      VRF coordinator and keyHash are compile-time constants from ContractAddresses.
     constructor() {
-        // Create new subscription
         uint256 subId = vrfCoordinator.createSubscription();
 
-        // Store VRF config
         coordinator = ContractAddresses.VRF_COORDINATOR;
         subscriptionId = subId;
         vrfKeyHash = ContractAddresses.VRF_KEY_HASH;
@@ -382,10 +334,9 @@ contract DegenerusAdmin {
         emit SubscriptionCreated(subId);
         emit CoordinatorUpdated(ContractAddresses.VRF_COORDINATOR, subId);
 
-        // Add Game as consumer
         vrfCoordinator.addConsumer(subId, ContractAddresses.GAME);
         emit ConsumerAdded(ContractAddresses.GAME);
-        // Wire Game's VRF config
+
         gameAdmin.wireVrf(
             ContractAddresses.VRF_COORDINATOR,
             subId,
@@ -398,19 +349,9 @@ contract DegenerusAdmin {
     // =========================================================================
 
     /// @notice Configure the LINK/ETH price feed for LINK donation valuation.
-    /// @dev Zero address disables oracle-based valuation (LINK donations earn no rewards).
-    ///      Only replaceable if current feed is unhealthy (prevents unnecessary changes).
-    ///
-    ///      SECURITY NOTES:
-    ///      - FeedHealthy guard prevents changing a working feed.
-    ///      - Enforces 18 decimals (Chainlink LINK/ETH standard).
-    ///      - Treats stale feeds (updatedAt too old) as unhealthy.
-    ///      - Invalid feed data (answer <= 0) causes linkAmountToEth to return 0.
-    ///
     /// @param feed New price feed address (zero to disable).
     function setLinkEthPriceFeed(address feed) external onlyOwner {
         address current = linkEthPriceFeed;
-        // Only allow replacement if current feed is unhealthy or doesn't exist.
         if (_feedHealthy(current)) revert FeedHealthy();
         if (
             feed != address(0) &&
@@ -426,101 +367,241 @@ contract DegenerusAdmin {
     // LIQUIDITY MANAGEMENT
     // =========================================================================
 
-    /// @notice Swap owner ETH for GAME-held stETH (1:1 exchange).
-    /// @dev Allows owner to provide ETH liquidity in exchange for stETH yield.
-    ///
-    ///      SECURITY NOTES:
-    ///      - msg.value must be non-zero.
-    ///      - stETH sent to msg.sender (owner), not arbitrary address.
-    ///      - Game contract validates the swap internally.
     function swapGameEthForStEth() external payable onlyOwner {
         if (msg.value == 0) revert InvalidAmount();
         gameAdmin.adminSwapEthForStEth{value: msg.value}(msg.sender, msg.value);
     }
 
-    /// @notice Stake GAME-held ETH into stETH via Lido.
-    /// @dev Converts idle ETH to yield-bearing stETH.
-    /// @param amount Amount of ETH to stake.
     function stakeGameEthToStEth(uint256 amount) external onlyOwner {
         gameAdmin.adminStakeEthForStEth(amount);
     }
 
-    /// @notice Update lootbox RNG request threshold (wei).
     function setLootboxRngThreshold(uint256 newThreshold) external onlyOwner {
         gameAdmin.setLootboxRngThreshold(newThreshold);
     }
 
     // =========================================================================
-    // VRF EMERGENCY RECOVERY (Stall-Gated)
+    // VRF COORDINATOR SWAP GOVERNANCE (M-02 Mitigation)
     // =========================================================================
 
-    /// @notice Migrate to a new VRF coordinator/subscription after 3-day stall.
-    /// @dev Emergency recovery path when Chainlink VRF becomes unavailable.
-    ///
-    ///      EXECUTION ORDER:
-    ///      1. Verify 3-day stall via GAME.rngStalledForThreeDays()
-    ///      2. Cancel old subscription (LINK refunds to this contract)
-    ///      3. Create new subscription on new coordinator
-    ///      4. Add GAME as consumer
-    ///      5. Push new config to game
-    ///      6. Transfer any LINK balance to new subscription
-    ///
-    ///      SECURITY NOTES:
-    ///      - 3-day stall requirement prevents premature migration.
-    ///      - try/catch on cancelSubscription handles edge cases.
-    ///      - New coordinator/keyHash must be non-zero.
-    ///      - Game is updated atomically.
-    ///
-    /// @param newCoordinator Address of the new VRF coordinator.
-    /// @param newKeyHash Key hash for the new coordinator.
-    /// @return newSubId The newly created subscription ID.
-    function emergencyRecover(
+    /// @notice Propose an emergency VRF coordinator swap.
+    /// @dev Two paths:
+    ///      - Admin path: DGVE >50.1% holder, requires 20h+ VRF stall
+    ///      - Community path: 0.5%+ circulating sDGNRS, requires 7d+ VRF stall
+    /// @param newCoordinator Address of the proposed VRF coordinator.
+    /// @param newKeyHash Key hash for the proposed coordinator.
+    /// @return proposalId The ID of the created proposal.
+    function propose(
         address newCoordinator,
         bytes32 newKeyHash
-    ) external onlyOwner returns (uint256 newSubId) {
+    ) external returns (uint256 proposalId) {
         if (subscriptionId == 0) revert NotWired();
-        // SECURITY: Require provable 3-day VRF stall before allowing migration.
-        if (!gameAdmin.rngStalledForThreeDays()) revert NotStalled();
+        if (gameAdmin.gameOver()) revert GameOver();
         if (newCoordinator == address(0) || newKeyHash == bytes32(0))
             revert ZeroAddress();
+
+        uint48 lastVrf = gameAdmin.lastVrfProcessed();
+        uint256 stall = block.timestamp - uint256(lastVrf);
+
+        ProposalPath path;
+        if (vault.isVaultOwner(msg.sender)) {
+            if (stall < ADMIN_STALL_THRESHOLD) revert NotStalled();
+            path = ProposalPath.Admin;
+        } else {
+            if (stall < COMMUNITY_STALL_THRESHOLD) revert NotStalled();
+            uint256 circ = circulatingSupply();
+            if (circ == 0 || sDGNRS.balanceOf(msg.sender) * BPS < circ * COMMUNITY_PROPOSE_BPS)
+                revert InsufficientStake();
+            path = ProposalPath.Community;
+        }
+
+        proposalId = ++proposalCount;
+        Proposal storage p = proposals[proposalId];
+        p.proposer = msg.sender;
+        p.coordinator = newCoordinator;
+        p.keyHash = newKeyHash;
+        p.createdAt = uint48(block.timestamp);
+        p.circulatingSnapshot = circulatingSupply();
+        p.path = path;
+        // p.state = ProposalState.Active (default 0)
+
+        unchecked { activeProposalCount++; }
+
+        emit ProposalCreated(proposalId, msg.sender, newCoordinator, newKeyHash, path);
+    }
+
+    /// @notice Vote on an active VRF swap proposal.
+    /// @dev Votes are changeable. After recording, checks execute/kill conditions.
+    ///      Reverts if VRF has recovered (stall < 20h) — this IS the auto-cancellation.
+    /// @param proposalId ID of the proposal to vote on.
+    /// @param approve True to approve, false to reject.
+    function vote(uint256 proposalId, bool approve) external {
+        // Stall re-check: if VRF recovered, all governance is invalid
+        uint48 lastVrf = gameAdmin.lastVrfProcessed();
+        if (block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD)
+            revert NotStalled();
+
+        Proposal storage p = proposals[proposalId];
+        if (p.state != ProposalState.Active || p.createdAt == 0)
+            revert ProposalNotActive();
+
+        // Check expiry
+        if (block.timestamp - uint256(p.createdAt) >= PROPOSAL_LIFETIME) {
+            p.state = ProposalState.Expired;
+            unchecked { activeProposalCount--; }
+            revert ProposalExpired();
+        }
+
+        // Get voter weight from live sDGNRS balance
+        // Safe: VRF dead = supply frozen (no advances, unwrapTo blocked)
+        uint256 weight = sDGNRS.balanceOf(msg.sender);
+        if (weight == 0) revert InsufficientStake();
+
+        // Handle vote change: subtract old weight before adding new
+        Vote currentVote = votes[proposalId][msg.sender];
+        if (currentVote != Vote.None) {
+            uint256 oldWeight = voteWeight[proposalId][msg.sender];
+            if (currentVote == Vote.Approve) {
+                p.approveWeight -= oldWeight;
+            } else {
+                p.rejectWeight -= oldWeight;
+            }
+        }
+
+        // Record new vote
+        Vote newVote = approve ? Vote.Approve : Vote.Reject;
+        votes[proposalId][msg.sender] = newVote;
+        voteWeight[proposalId][msg.sender] = weight;
+
+        if (approve) {
+            p.approveWeight += weight;
+        } else {
+            p.rejectWeight += weight;
+        }
+
+        emit VoteCast(proposalId, msg.sender, approve, weight);
+
+        // Check execute/kill conditions against decaying threshold
+        uint16 t = threshold(proposalId);
+
+        // Execute: approve% >= threshold AND approve > reject
+        if (
+            p.approveWeight * BPS >= uint256(t) * p.circulatingSnapshot &&
+            p.approveWeight > p.rejectWeight
+        ) {
+            _executeSwap(proposalId);
+            return;
+        }
+
+        // Kill: reject > approve AND reject% >= threshold
+        if (
+            p.rejectWeight > p.approveWeight &&
+            p.rejectWeight * BPS >= uint256(t) * p.circulatingSnapshot
+        ) {
+            p.state = ProposalState.Killed;
+            unchecked { activeProposalCount--; }
+            emit ProposalKilled(proposalId);
+        }
+    }
+
+    /// @notice Check if any governance proposal is currently active.
+    /// @dev Used by AdvanceModule to pause the death clock during VRF stall.
+    function anyProposalActive() external view returns (bool) {
+        return activeProposalCount > 0;
+    }
+
+    /// @notice Circulating sDGNRS supply (excludes undistributed pools and DGNRS wrapper).
+    function circulatingSupply() public view returns (uint256) {
+        return sDGNRS.totalSupply()
+            - sDGNRS.balanceOf(ContractAddresses.SDGNRS)
+            - sDGNRS.balanceOf(ContractAddresses.DGNRS);
+    }
+
+    /// @notice Current approval threshold for a proposal (basis points, decays daily).
+    /// @dev Returns 0 if proposal has expired (168h+).
+    /// @param proposalId ID of the proposal.
+    /// @return Threshold in basis points (e.g. 6000 = 60%).
+    function threshold(uint256 proposalId) public view returns (uint16) {
+        uint256 elapsed = block.timestamp - uint256(proposals[proposalId].createdAt);
+        if (elapsed >= 168 hours) return 0;
+        if (elapsed >= 144 hours) return 500;   // 5%
+        if (elapsed >= 120 hours) return 1000;  // 10%
+        if (elapsed >= 96 hours)  return 2000;  // 20%
+        if (elapsed >= 72 hours)  return 3000;  // 30%
+        if (elapsed >= 48 hours)  return 4000;  // 40%
+        if (elapsed >= 24 hours)  return 5000;  // 50%
+        return 6000; // 60%
+    }
+
+    /// @notice Check if a proposal can be executed (view-only, no side effects).
+    /// @param proposalId ID of the proposal.
+    /// @return True if all execution conditions are met.
+    function canExecute(uint256 proposalId) external view returns (bool) {
+        Proposal storage p = proposals[proposalId];
+        if (p.state != ProposalState.Active || p.createdAt == 0) return false;
+        if (block.timestamp - uint256(p.createdAt) >= PROPOSAL_LIFETIME) return false;
+
+        // Stall check
+        uint48 lastVrf = gameAdmin.lastVrfProcessed();
+        if (block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD) return false;
+
+        uint16 t = threshold(proposalId);
+        return p.approveWeight * BPS >= uint256(t) * p.circulatingSnapshot
+            && p.approveWeight > p.rejectWeight;
+    }
+
+    // =========================================================================
+    // GOVERNANCE INTERNAL
+    // =========================================================================
+
+    /// @dev Execute VRF coordinator swap and void all other active proposals.
+    function _executeSwap(uint256 proposalId) internal {
+        Proposal storage p = proposals[proposalId];
+        p.state = ProposalState.Executed;
+
+        address newCoordinator = p.coordinator;
+        bytes32 newKeyHash = p.keyHash;
 
         uint256 oldSub = subscriptionId;
         address oldCoord = coordinator;
 
-        // Cancel old subscription to recover LINK.
-        try
-            IVRFCoordinatorV2_5Owner(oldCoord).cancelSubscription(
-                oldSub,
-                address(this)
-            )
-        {
-            emit SubscriptionCancelled(oldSub, address(this));
-        } catch {}
-        // Create new subscription.
+        // 1. Cancel old subscription (try/catch for edge cases)
+        if (oldSub != 0) {
+            try
+                IVRFCoordinatorV2_5Owner(oldCoord).cancelSubscription(
+                    oldSub,
+                    address(this)
+                )
+            {
+                emit SubscriptionCancelled(oldSub, address(this));
+            } catch {}
+        }
+
+        // 2. Create new subscription on proposed coordinator
         coordinator = newCoordinator;
-        newSubId = IVRFCoordinatorV2_5Owner(newCoordinator)
+        uint256 newSubId = IVRFCoordinatorV2_5Owner(newCoordinator)
             .createSubscription();
         subscriptionId = newSubId;
         vrfKeyHash = newKeyHash;
         emit CoordinatorUpdated(newCoordinator, newSubId);
         emit SubscriptionCreated(newSubId);
 
-        // Add consumers to new subscription.
+        // 3. Add Game as consumer
         IVRFCoordinatorV2_5Owner(newCoordinator).addConsumer(
             newSubId,
             ContractAddresses.GAME
         );
         emit ConsumerAdded(ContractAddresses.GAME);
-        // Push new config to GAME — must succeed to maintain consistency.
+
+        // 4. Push new config to Game
         gameAdmin.updateVrfCoordinatorAndSub(
             newCoordinator,
             newSubId,
             newKeyHash
         );
 
-        // Transfer any LINK to new subscription.
+        // 5. Transfer LINK to new subscription
         uint256 bal = linkToken.balanceOf(address(this));
-        uint256 funded;
         if (bal != 0) {
             try
                 linkToken.transferAndCall(
@@ -528,24 +609,34 @@ contract DegenerusAdmin {
                     bal,
                     abi.encode(newSubId)
                 )
-            returns (bool ok) {
-                if (ok) {
-                    funded = bal;
-                }
-            } catch {}
+            returns (bool) {} catch {}
         }
 
-        emit EmergencyRecovered(newCoordinator, newSubId, funded);
+        emit ProposalExecuted(proposalId, newCoordinator, newSubId);
+
+        // 6. Void all other active proposals
+        _voidAllActive(proposalId);
     }
+
+    /// @dev Mark all active proposals (except the executed one) as Killed.
+    function _voidAllActive(uint256 exceptId) internal {
+        uint256 count = proposalCount;
+        for (uint256 i = 1; i <= count; i++) {
+            if (i == exceptId) continue;
+            if (proposals[i].state == ProposalState.Active) {
+                proposals[i].state = ProposalState.Killed;
+                emit ProposalKilled(i);
+            }
+        }
+        activeProposalCount = 0;
+    }
+
+    // =========================================================================
+    // VRF SHUTDOWN (Game-Over)
+    // =========================================================================
 
     /// @notice Cancel VRF subscription and sweep LINK to vault after GAME-over.
     /// @dev Only callable by the GAME contract (during handleFinalSweep).
-    ///      Uses try/catch internally so the caller can safely fire-and-forget.
-    ///
-    ///      SECURITY NOTES:
-    ///      - Only GAME contract can call (trusted, runs during final sweep).
-    ///      - LINK refunded to VAULT address.
-    ///      - Sets subscriptionId to 0 to prevent re-use.
     function shutdownVrf() external {
         if (msg.sender != ContractAddresses.GAME) revert NotAuthorized();
         uint256 subId = subscriptionId;
@@ -554,12 +645,10 @@ contract DegenerusAdmin {
         subscriptionId = 0;
         address target = ContractAddresses.VAULT;
 
-        // Cancel subscription; LINK refunds go to vault.
         try IVRFCoordinatorV2_5Owner(coordinator).cancelSubscription(subId, target) {
             emit SubscriptionCancelled(subId, target);
         } catch {}
 
-        // Sweep any LINK sitting on this contract to vault.
         uint256 bal = linkToken.balanceOf(address(this));
         if (bal != 0) {
             try linkToken.transfer(target, bal) returns (bool ok) {
@@ -578,21 +667,6 @@ contract DegenerusAdmin {
     // =========================================================================
 
     /// @notice ERC-677 callback: handles LINK donations to fund VRF subscription.
-    /// @dev Called automatically when LINK is transferred via transferAndCall().
-    ///
-    ///      FLOW:
-    ///      1. Validate sender is LINK token contract
-    ///      2. Calculate reward multiplier based on current subscription balance
-    ///      3. Forward LINK to VRF subscription
-    ///      4. Convert LINK to ETH-equivalent using price feed
-    ///      5. Credit BURNIE reward to donor (live COIN)
-    ///
-    ///      SECURITY NOTES:
-    ///      - msg.sender validation prevents fake LINK attacks.
-    ///      - GameOver guard prevents donations after GAME ends.
-    ///      - Multiplier decreases as subscription fills (incentivizes early donations).
-    ///      - No rewards if price feed unavailable.
-    ///
     /// @param from Address that sent the LINK.
     /// @param amount Amount of LINK received.
     function onTokenTransfer(
@@ -600,24 +674,20 @@ contract DegenerusAdmin {
         uint256 amount,
         bytes calldata
     ) external {
-        // SECURITY: Only accept calls from the LINK token contract.
         if (msg.sender != ContractAddresses.LINK_TOKEN) revert NotAuthorized();
         if (amount == 0) revert InvalidAmount();
 
         uint256 subId = subscriptionId;
         if (subId == 0) revert NoSubscription();
-
-        // Prevent donations after GAME-over.
         if (gameAdmin.gameOver()) revert GameOver();
+
         address coord = coordinator;
 
-        // Calculate reward using tiered multiplier BEFORE forwarding LINK.
         (uint96 bal, , , , ) = IVRFCoordinatorV2_5Owner(coord).getSubscription(
             subId
         );
         uint256 mult = _linkRewardMultiplier(uint256(bal));
 
-        // Forward LINK to VRF subscription.
         try
             linkToken.transferAndCall(coord, amount, abi.encode(subId))
         returns (bool ok) {
@@ -625,19 +695,16 @@ contract DegenerusAdmin {
         } catch {
             revert InvalidAmount();
         }
-        // No reward if subscription is fully funded.
         if (mult == 0) return;
 
-        // Convert LINK amount to ETH-equivalent. Use try/catch to prevent oracle failures from blocking donations.
         uint256 ethEquivalent;
         try this.linkAmountToEth(amount) returns (uint256 eth) {
             ethEquivalent = eth;
         } catch {
-            return; // Oracle failed, LINK forwarded but no reward.
+            return;
         }
-        if (ethEquivalent == 0) return; // Disable rewards if oracle unavailable.
+        if (ethEquivalent == 0) return;
 
-        // Calculate BURNIE credit. Divide by live ticket price so 1000 BURNIE = 1 ticket's worth of ETH.
         (, , , , uint256 priceWei) = gameAdmin.purchaseInfo();
         if (priceWei == 0) return;
         uint256 baseCredit = (ethEquivalent * PRICE_COIN_UNIT) / priceWei;
@@ -653,14 +720,6 @@ contract DegenerusAdmin {
     // =========================================================================
 
     /// @dev Convert LINK amount to ETH-equivalent using price feed.
-    /// @param amount LINK amount (18 decimals).
-    /// @return ethAmount ETH-equivalent amount (18 decimals), or 0 if unavailable.
-    ///
-    /// SECURITY NOTES:
-    /// - Returns 0 on missing feed, zero amount, or invalid price.
-    /// - Assumes feed returns 18 decimal price (Chainlink LINK/ETH standard).
-    /// - Rejects stale rounds (answeredInRound < roundId), future timestamps, and stale updates.
-    /// - Exposed as external to allow try/catch in onTokenTransfer.
     function linkAmountToEth(
         uint256 amount
     ) external view returns (uint256 ethAmount) {
@@ -685,47 +744,31 @@ contract DegenerusAdmin {
     }
 
     /// @dev Calculate reward multiplier based on subscription LINK balance.
-    /// @param subBal Current subscription LINK balance (18 decimals).
-    /// @return mult Multiplier in 18-decimal fixed point (e.g., 3e18 = 3x).
-    ///
-    /// TIERED STRUCTURE:
-    /// - 0-200 LINK: Linear 3x → 1x (incentivizes early donations)
-    /// - 200-1000 LINK: Linear 1x → 0x (diminishing returns)
-    /// - 1000+ LINK: 0x (no reward, subscription is fully funded)
     function _linkRewardMultiplier(
         uint256 subBal
     ) private pure returns (uint256 mult) {
-        if (subBal >= 1000 ether) return 0; // Fully funded, no reward.
+        if (subBal >= 1000 ether) return 0;
         if (subBal <= 200 ether) {
-            // Linear from 3x at 0 LINK down to 1x at 200 LINK.
             uint256 delta = (subBal * 2e18) / 200 ether;
             unchecked {
-                return 3e18 - delta; // delta <= 2e18, cannot underflow
+                return 3e18 - delta;
             }
         }
-        // Between 200 and 1000 LINK: decay from 1x to 0x.
         uint256 excess = subBal - 200 ether;
         uint256 delta2 = (excess * 1e18) / 800 ether;
         if (delta2 >= 1e18) return 0;
         unchecked {
-            return 1e18 - delta2; // delta2 < 1e18, cannot underflow
+            return 1e18 - delta2;
         }
     }
 
     /// @dev Check if a price feed is healthy (fresh and valid).
-    /// @param feed Price feed address.
-    /// @return True if feed is responding with valid, fresh data.
-    ///
-    /// HEALTH CHECKS:
-    /// - answer > 0 (positive price)
-    /// - updatedAt is within LINK_ETH_MAX_STALE and not in the future
-    /// - answeredInRound >= roundId (not stale round)
     function _feedHealthy(address feed) private view returns (bool) {
         if (feed == address(0)) return false;
         try IAggregatorV3(feed).latestRoundData() returns (
             uint80 roundId,
             int256 answer,
-            uint256 /*startedAt*/,
+            uint256,
             uint256 updatedAt,
             uint80 answeredInRound
         ) {

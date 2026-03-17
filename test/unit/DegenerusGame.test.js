@@ -663,16 +663,8 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 22. onDeityPassTransfer access control
+  // 22. onDeityPassTransfer — removed (deity passes are now soulbound)
   // ---------------------------------------------------------------------------
-  describe("onDeityPassTransfer", function () {
-    it("reverts when called by non-deityPass contract", async function () {
-      const { game, alice, bob } = await loadFixture(deployFullProtocol);
-      await expect(
-        game.connect(alice).onDeityPassTransfer(alice.address, bob.address, 0)
-      ).to.be.reverted;
-    });
-  });
 
   // ---------------------------------------------------------------------------
   // 23. consumeCoinflipBoon / consumeDecimatorBoon access control

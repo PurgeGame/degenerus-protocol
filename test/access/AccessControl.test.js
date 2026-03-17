@@ -300,13 +300,7 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 
-    it("resetQuestStreak: reverts when called by alice (onlyGame → OnlyGame)", async function () {
-      const { quests, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        quests.connect(alice).resetQuestStreak(alice.address)
-      ).to.be.revertedWithCustomError(quests, "OnlyGame");
-    });
+    // resetQuestStreak — removed (was only used for deity pass transfer penalties)
 
     it("awardQuestStreakBonus: reverts when called by alice (onlyGame → OnlyGame)", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
@@ -322,12 +316,12 @@ describe("AccessControl", function () {
   // ---------------------------------------------------------------------------
 
   describe("DegenerusAdmin", function () {
-    it("emergencyRecover: reverts when called by alice (onlyOwner → NotOwner)", async function () {
+    it("propose: reverts when called by alice with no VRF stall (NotStalled)", async function () {
       const { admin, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        admin.connect(alice).emergencyRecover(alice.address, ZERO_BYTES32)
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
+        admin.connect(alice).propose(alice.address, ZERO_BYTES32)
+      ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
     it("shutdownVrf: reverts when called by alice (only GAME → NotAuthorized)", async function () {

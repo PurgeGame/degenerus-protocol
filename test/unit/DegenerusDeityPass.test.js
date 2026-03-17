@@ -13,10 +13,10 @@ import { eth, getEvent, getEvents, ZERO_ADDRESS } from "../helpers/testUtils.js"
  * Contract: contracts/DegenerusDeityPass.sol
  *
  * Architecture summary:
- *   - Minimal ERC721 "DEITY" with 32 token slots (tokenId 0-31)
+ *   - Soulbound ERC721 "DEITY" with 32 token slots (tokenId 0-31)
  *   - Ownable (constructor sets _contractOwner = deployer)
- *   - mint() / burn() callable only by ContractAddresses.GAME
- *   - transferFrom() / safeTransferFrom() call back to game via onDeityPassTransfer()
+ *   - mint() callable only by ContractAddresses.GAME
+ *   - All transfers blocked (soulbound) — approve, setApprovalForAll, transferFrom, safeTransferFrom revert
  *   - Optional external renderer (setRenderer) with internal fallback
  *   - setRenderColors() validates hex color format (#rrggbb)
  *   - tokenURI() works for minted tokens, reverts for unminted ones
@@ -407,67 +407,13 @@ describe("DegenerusDeityPass", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // burn() — game-only
+  // burn() — removed (soulbound, no burn function exists)
   // ---------------------------------------------------------------------------
 
   describe("burn()", function () {
-    it("game contract can burn a minted token and emits Transfer to zero address", async function () {
-      const { deityPass, game, alice } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 10);
-
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-      const tx = await deityPass.connect(gameSigner).burn(10);
-      await expect(tx)
-        .to.emit(deityPass, "Transfer")
-        .withArgs(alice.address, ZERO_ADDRESS, 10n);
-      await stopImpersonate(gameAddr);
-
-      expect(await deityPass.balanceOf(alice.address)).to.equal(0n);
-      await expect(deityPass.ownerOf(10)).to.be.revertedWithCustomError(
-        deityPass,
-        "InvalidToken"
-      );
-    });
-
-    it("reverts with NotAuthorized when a non-GAME address tries to burn", async function () {
-      const { deityPass, game, alice } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 7);
-      await expect(
-        deityPass.connect(alice).burn(7)
-      ).to.be.revertedWithCustomError(deityPass, "NotAuthorized");
-    });
-
-    it("reverts with InvalidToken when burning an unminted token", async function () {
-      const { deityPass, game } = await getFixture();
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-
-      await expect(
-        deityPass.connect(gameSigner).burn(0)
-      ).to.be.revertedWithCustomError(deityPass, "InvalidToken");
-      await stopImpersonate(gameAddr);
-    });
-
-    it("clears token approval on burn", async function () {
-      const { deityPass, game, alice, bob } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 3);
-
-      // Alice approves bob
-      await deityPass.connect(alice).approve(bob.address, 3);
-      expect(await deityPass.getApproved(3)).to.equal(bob.address);
-
-      // Game burns the token
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-      await deityPass.connect(gameSigner).burn(3);
-      await stopImpersonate(gameAddr);
-
-      // Token no longer exists; getApproved should revert
-      await expect(deityPass.getApproved(3)).to.be.revertedWithCustomError(
-        deityPass,
-        "InvalidToken"
-      );
+    it("burn function does not exist on soulbound deity pass", async function () {
+      const { deityPass } = await getFixture();
+      expect(deityPass.burn).to.be.undefined;
     });
   });
 
@@ -527,62 +473,33 @@ describe("DegenerusDeityPass", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // approve()
+  // approve() — soulbound
   // ---------------------------------------------------------------------------
 
   describe("approve()", function () {
-    it("token owner can approve another address", async function () {
+    it("reverts with Soulbound when token owner tries to approve", async function () {
       const { deityPass, game, alice, bob } = await getFixture();
       await mintViaGame(deityPass, game, alice.address, 2);
-
-      const tx = await deityPass.connect(alice).approve(bob.address, 2);
-      await expect(tx)
-        .to.emit(deityPass, "Approval")
-        .withArgs(alice.address, bob.address, 2n);
-      expect(await deityPass.getApproved(2)).to.equal(bob.address);
-    });
-
-    it("reverts with NotAuthorized when non-owner tries to approve", async function () {
-      const { deityPass, game, alice, bob, carol } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 4);
       await expect(
-        deityPass.connect(bob).approve(carol.address, 4)
-      ).to.be.revertedWithCustomError(deityPass, "NotAuthorized");
-    });
-
-    it("operator (approved for all) can approve individual tokens", async function () {
-      const { deityPass, game, alice, bob, carol } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 6);
-      await deityPass.connect(alice).setApprovalForAll(bob.address, true);
-      // Bob (operator) should be able to approve carol for tokenId 6
-      await expect(
-        deityPass.connect(bob).approve(carol.address, 6)
-      ).to.not.be.reverted;
+        deityPass.connect(alice).approve(bob.address, 2)
+      ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
   });
 
   // ---------------------------------------------------------------------------
-  // setApprovalForAll()
+  // setApprovalForAll() — soulbound
   // ---------------------------------------------------------------------------
 
   describe("setApprovalForAll()", function () {
-    it("sets operator approval and emits ApprovalForAll", async function () {
+    it("reverts with Soulbound", async function () {
       const { deityPass, alice, bob } = await getFixture();
-      const tx = await deityPass
-        .connect(alice)
-        .setApprovalForAll(bob.address, true);
-      await expect(tx)
-        .to.emit(deityPass, "ApprovalForAll")
-        .withArgs(alice.address, bob.address, true);
-      expect(
-        await deityPass.isApprovedForAll(alice.address, bob.address)
-      ).to.be.true;
+      await expect(
+        deityPass.connect(alice).setApprovalForAll(bob.address, true)
+      ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
 
-    it("can revoke operator approval", async function () {
+    it("isApprovedForAll always returns false", async function () {
       const { deityPass, alice, bob } = await getFixture();
-      await deityPass.connect(alice).setApprovalForAll(bob.address, true);
-      await deityPass.connect(alice).setApprovalForAll(bob.address, false);
       expect(
         await deityPass.isApprovedForAll(alice.address, bob.address)
       ).to.be.false;
@@ -656,86 +573,35 @@ describe("DegenerusDeityPass", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // transferFrom() — requires game callback
-  //
-  // NOTE: The _transfer() internal in DegenerusDeityPass calls
-  //   IDeityPassCallback(ContractAddresses.GAME).onDeityPassTransfer(from, to, tokenId)
-  // before updating storage. The game's onDeityPassTransfer burns BURNIE from
-  // the sender and updates deity pass storage. Without a funded BURNIE balance on
-  // the sender, the callback reverts. These tests verify:
-  //   (a) the early access-control checks that fire BEFORE the callback, and
-  //   (b) that the callback IS invoked (causing a revert when prerequisites are unmet)
+  // transferFrom() — soulbound
   // ---------------------------------------------------------------------------
 
   describe("transferFrom()", function () {
-    it("reverts because the game callback fires during transfer (game enforces BURNIE requirements)", async function () {
+    it("reverts with Soulbound", async function () {
       const { deityPass, game, alice, bob } = await getFixture();
       await mintViaGame(deityPass, game, alice.address, 0);
-
-      // The transfer will reach the game callback and revert there (alice has no BURNIE).
-      // This confirms the callback is wired correctly — NOT a pure access-control failure.
       await expect(
         deityPass.connect(alice).transferFrom(alice.address, bob.address, 0)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
 
-    it("reverts with NotAuthorized when `from` does not own the token (before callback)", async function () {
+    it("reverts with Soulbound even for non-owner caller", async function () {
       const { deityPass, game, alice, bob, carol } = await getFixture();
       await mintViaGame(deityPass, game, alice.address, 0);
-      // Bob tries to transfer Alice's token — the ownership check fires before the callback
       await expect(
         deityPass.connect(bob).transferFrom(alice.address, carol.address, 0)
-      ).to.be.revertedWithCustomError(deityPass, "NotAuthorized");
-    });
-
-    it("reverts with ZeroAddress when `to` is address(0) (before callback)", async function () {
-      const { deityPass, game, alice } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 3);
-      await expect(
-        deityPass.connect(alice).transferFrom(alice.address, ZERO_ADDRESS, 3)
-      ).to.be.revertedWithCustomError(deityPass, "ZeroAddress");
-    });
-
-    it("reverts with NotAuthorized when non-owner unapproved address calls transferFrom", async function () {
-      const { deityPass, game, alice, bob, carol } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 1);
-      // Bob has no approval for tokenId 1 and is not alice
-      await expect(
-        deityPass.connect(bob).transferFrom(alice.address, carol.address, 1)
-      ).to.be.revertedWithCustomError(deityPass, "NotAuthorized");
-    });
-
-    it("approved spender passes access checks but callback reverts without BURNIE", async function () {
-      const { deityPass, game, alice, bob, carol } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 1);
-      await deityPass.connect(alice).approve(bob.address, 1);
-      // Bob is approved — access control passes — but game callback reverts
-      await expect(
-        deityPass.connect(bob).transferFrom(alice.address, carol.address, 1)
-      ).to.be.reverted;
-    });
-
-    it("operator (approvedForAll) passes access checks but callback reverts without BURNIE", async function () {
-      const { deityPass, game, alice, bob, carol } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 2);
-      await deityPass.connect(alice).setApprovalForAll(bob.address, true);
-      // Bob is operator — access control passes — but game callback reverts
-      await expect(
-        deityPass.connect(bob).transferFrom(alice.address, carol.address, 2)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
   });
 
   // ---------------------------------------------------------------------------
-  // safeTransferFrom()
+  // safeTransferFrom() — soulbound
   // ---------------------------------------------------------------------------
 
   describe("safeTransferFrom()", function () {
-    it("reverts because game callback fires (same as transferFrom — no BURNIE to burn)", async function () {
+    it("reverts with Soulbound (no-data overload)", async function () {
       const { deityPass, game, alice, bob } = await getFixture();
       await mintViaGame(deityPass, game, alice.address, 6);
-
-      // The game callback fires and reverts (alice has no BURNIE)
       await expect(
         deityPass
           .connect(alice)
@@ -744,14 +610,12 @@ describe("DegenerusDeityPass", function () {
             bob.address,
             6
           )
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
 
-    it("safeTransferFrom with data overload also routes through the same callback", async function () {
+    it("reverts with Soulbound (with-data overload)", async function () {
       const { deityPass, game, alice, bob } = await getFixture();
       await mintViaGame(deityPass, game, alice.address, 7);
-
-      // Same callback fires and reverts
       await expect(
         deityPass
           .connect(alice)
@@ -761,22 +625,7 @@ describe("DegenerusDeityPass", function () {
             7,
             "0x"
           )
-      ).to.be.reverted;
-    });
-
-    it("reverts with NotAuthorized for ZeroAddress `to` in safeTransferFrom before callback", async function () {
-      const { deityPass, game, alice } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 8);
-
-      await expect(
-        deityPass
-          .connect(alice)
-          ["safeTransferFrom(address,address,uint256)"](
-            alice.address,
-            ZERO_ADDRESS,
-            8
-          )
-      ).to.be.revertedWithCustomError(deityPass, "ZeroAddress");
+      ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
   });
 

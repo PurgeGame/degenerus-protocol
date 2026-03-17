@@ -61,8 +61,8 @@ describe("Phase 25: Dependency & Integration Attacker PoC", function () {
   // =========================================================================
   // VRF-02: 3-day stall enables emergency coordinator rotation
   // =========================================================================
-  describe("VRF-02: Emergency VRF coordinator rotation after 3-day stall", function () {
-    it("emergencyRecover works after 3-day stall, blocked before", async function () {
+  describe("VRF-02: VRF governance propose gate", function () {
+    it("propose blocked before VRF stall, stall detection works after 3 days", async function () {
       const { game, admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
 
       const fakeCoord = "0x0000000000000000000000000000000000000001";
@@ -70,7 +70,7 @@ describe("Phase 25: Dependency & Integration Attacker PoC", function () {
 
       // Should fail immediately -- no stall
       await expect(
-        admin.connect(deployer).emergencyRecover(fakeCoord, fakeKeyHash)
+        admin.connect(deployer).propose(fakeCoord, fakeKeyHash)
       ).to.be.revertedWithCustomError(admin, "NotStalled");
 
       // Request VRF, don't fulfill, wait 3 days

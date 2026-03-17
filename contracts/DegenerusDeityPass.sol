@@ -27,9 +27,8 @@ interface IDeityPassRendererV1 {
 }
 
 /// @title DegenerusDeityPass
-/// @notice Minimal ERC721 for deity passes. 32 tokens max (one per symbol).
-///         On transfer, calls back to the game contract to burn BURNIE, update storage,
-///         and nuke sender stats. tokenId = symbolId (0-31).
+/// @notice Soulbound ERC721 for deity passes. 32 tokens max (one per symbol).
+///         Transfers are permanently disabled. tokenId = symbolId (0-31).
 contract DegenerusDeityPass {
     // -------------------------------------------------------------------------
     // Errors
@@ -39,6 +38,7 @@ contract DegenerusDeityPass {
     error InvalidToken();
     error ZeroAddress();
     error InvalidColor();
+    error Soulbound();
 
     // -------------------------------------------------------------------------
     // Events (ERC721)
@@ -57,8 +57,6 @@ contract DegenerusDeityPass {
 
     mapping(uint256 => address) private _owners;
     mapping(address => uint256) private _balances;
-    mapping(uint256 => address) private _tokenApprovals;
-    mapping(address => mapping(address => bool)) private _operatorApprovals;
 
     address private _contractOwner;
     address public renderer;
@@ -344,41 +342,35 @@ contract DegenerusDeityPass {
 
     function getApproved(uint256 tokenId) external view returns (address) {
         if (_owners[tokenId] == address(0)) revert InvalidToken();
-        return _tokenApprovals[tokenId];
+        return address(0);
     }
 
-    function isApprovedForAll(address account, address operator) external view returns (bool) {
-        return _operatorApprovals[account][operator];
+    function isApprovedForAll(address, address) external pure returns (bool) {
+        return false;
     }
 
     // -------------------------------------------------------------------------
-    // ERC721 Mutations
+    // ERC721 Mutations (soulbound — all transfers blocked)
     // -------------------------------------------------------------------------
 
-    function approve(address to, uint256 tokenId) external {
-        address tokenOwner = _owners[tokenId];
-        if (msg.sender != tokenOwner && !_operatorApprovals[tokenOwner][msg.sender]) revert NotAuthorized();
-        _tokenApprovals[tokenId] = to;
-        emit Approval(tokenOwner, to, tokenId);
+    function approve(address, uint256) external pure {
+        revert Soulbound();
     }
 
-    function setApprovalForAll(address operator, bool approved) external {
-        _operatorApprovals[msg.sender][operator] = approved;
-        emit ApprovalForAll(msg.sender, operator, approved);
+    function setApprovalForAll(address, bool) external pure {
+        revert Soulbound();
     }
 
-    function transferFrom(address from, address to, uint256 tokenId) external {
-        _transfer(from, to, tokenId);
+    function transferFrom(address, address, uint256) external pure {
+        revert Soulbound();
     }
 
-    function safeTransferFrom(address from, address to, uint256 tokenId) external {
-        _transfer(from, to, tokenId);
-        _checkReceiver(from, to, tokenId, "");
+    function safeTransferFrom(address, address, uint256) external pure {
+        revert Soulbound();
     }
 
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) external {
-        _transfer(from, to, tokenId);
-        _checkReceiver(from, to, tokenId, data);
+    function safeTransferFrom(address, address, uint256, bytes calldata) external pure {
+        revert Soulbound();
     }
 
     // -------------------------------------------------------------------------
@@ -397,59 +389,4 @@ contract DegenerusDeityPass {
         emit Transfer(address(0), to, tokenId);
     }
 
-    /// @notice Burn a deity pass. Only callable by the game contract (for refunds).
-    function burn(uint256 tokenId) external {
-        if (msg.sender != ContractAddresses.GAME) revert NotAuthorized();
-        address tokenOwner = _owners[tokenId];
-        if (tokenOwner == address(0)) revert InvalidToken();
-
-        delete _tokenApprovals[tokenId];
-        unchecked { _balances[tokenOwner]--; }
-        delete _owners[tokenId];
-        emit Transfer(tokenOwner, address(0), tokenId);
-    }
-
-    // -------------------------------------------------------------------------
-    // Internal
-    // -------------------------------------------------------------------------
-
-    function _transfer(address from, address to, uint256 tokenId) private {
-        address tokenOwner = _owners[tokenId];
-        if (tokenOwner != from) revert NotAuthorized();
-        if (to == address(0)) revert ZeroAddress();
-
-        if (msg.sender != from
-            && msg.sender != _tokenApprovals[tokenId]
-            && !_operatorApprovals[from][msg.sender]
-        ) revert NotAuthorized();
-
-        // Callback to game: burns BURNIE, updates deity storage, nukes sender stats.
-        // Reverts propagate back here (e.g., insufficient BURNIE).
-        IDeityPassCallback(ContractAddresses.GAME).onDeityPassTransfer(from, to, uint8(tokenId));
-
-        delete _tokenApprovals[tokenId];
-        unchecked { _balances[from]--; }
-        _balances[to]++;
-        _owners[tokenId] = to;
-
-        emit Transfer(from, to, tokenId);
-    }
-
-    function _checkReceiver(address from, address to, uint256 tokenId, bytes memory data) private {
-        if (to.code.length != 0) {
-            try IERC721Receiver(to).onERC721Received(msg.sender, from, tokenId, data) returns (bytes4 ret) {
-                if (ret != IERC721Receiver.onERC721Received.selector) revert NotAuthorized();
-            } catch {
-                revert NotAuthorized();
-            }
-        }
-    }
-}
-
-interface IDeityPassCallback {
-    function onDeityPassTransfer(address from, address to, uint8 symbolId) external;
-}
-
-interface IERC721Receiver {
-    function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data) external returns (bytes4);
 }

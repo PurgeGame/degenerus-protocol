@@ -858,33 +858,18 @@ describe("SecurityEconHardening", function () {
     });
   });
 
-  describe("Cross-cutting: deity pass transfer preserves purchasedCount", function () {
-    it("deity pass transfer moves purchasedCount from sender to receiver", async function () {
+  describe("Cross-cutting: deity pass is soulbound", function () {
+    it("deity pass transferFrom reverts with Soulbound", async function () {
       const { game, deityPass, alice, bob } =
         await loadFixture(deployFullProtocol);
 
-      // Alice purchases a deity pass
       await game
         .connect(alice)
         .purchaseDeityPass(alice.address, 0, { value: eth(24) });
 
-      expect(
-        await game.deityPassPurchasedCountFor(alice.address)
-      ).to.equal(1);
-      expect(
-        await game.deityPassPurchasedCountFor(bob.address)
-      ).to.equal(0);
-
-      // Bob needs to have BURNIE for the transfer cost (5 ETH worth).
-      // In the test environment this may be difficult to set up,
-      // so we verify the storage-level behavior:
-      // After transfer, purchasedCount[to] = purchasedCount[from],
-      //                 purchasedCount[from] = 0
-      // This is confirmed by reading the WhaleModule.handleDeityPassTransfer code.
-
-      // For structural verification, check the function exists
-      const frag = deityPass.interface.getFunction("transferFrom");
-      expect(frag).to.not.be.null;
+      await expect(
+        deityPass.connect(alice).transferFrom(alice.address, bob.address, 0)
+      ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
   });
 

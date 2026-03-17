@@ -153,8 +153,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Deity pass base price (24 ETH, unscaled). Actual price = 24 + T(n) where T(n) = n*(n+1)/2, n = passes sold so far.
     uint256 private constant DEITY_PASS_BASE = 24 ether;
 
-    /// @dev BURNIE transfer cost for deity pass trade (5 ETH worth, scaled).
-    uint256 private constant DEITY_TRANSFER_ETH_COST = 5 ether;
 
     /// @dev Deity pass boon expiry (4 game days, expires at jackpot reset).
     uint48 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
@@ -557,54 +555,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
     }
 
-    /**
-     * @notice Handle deity pass transfer callback from the ERC721 contract.
-     * @dev Called via delegatecall from game's onDeityPassTransfer (triggered by ERC721 transfer).
-     *      Burns 5 ETH worth of BURNIE from sender. Nukes sender's mint stats and quest streak.
-     * @param from The current deity pass holder.
-     * @param to The address receiving the pass.
-     */
-    function handleDeityPassTransfer(address from, address to) external {
-        _handleDeityPassTransfer(from, to);
-    }
-
-    function _handleDeityPassTransfer(address from, address to) private {
-        if (level == 0) revert E();
-        if (deityPassCount[from] == 0) revert E();
-        if (deityPassCount[to] != 0) revert E();
-
-        // Burn 5 ETH worth of BURNIE from sender
-        uint256 burnAmount = (DEITY_TRANSFER_ETH_COST * PRICE_COIN_UNIT) / price;
-        IDegenerusCoin(ContractAddresses.COIN).burnCoin(from, burnAmount);
-
-        // Move pass ownership
-        uint8 symbolId = deityPassSymbol[from];
-        deityBySymbol[symbolId] = to;
-        deityPassSymbol[to] = symbolId;
-        delete deityPassSymbol[from];
-
-        deityPassCount[to] = 1;
-        deityPassCount[from] = 0;
-
-        deityPassPurchasedCount[to] = deityPassPurchasedCount[from];
-        deityPassPurchasedCount[from] = 0;
-        deityPassPaidTotal[to] = deityPassPaidTotal[from];
-        deityPassPaidTotal[from] = 0;
-
-        // Replace sender in owners array
-        uint256 len = deityPassOwners.length;
-        for (uint256 i; i < len; ) {
-            if (deityPassOwners[i] == from) {
-                deityPassOwners[i] = to;
-                break;
-            }
-            unchecked { ++i; }
-        }
-
-        // Nuke sender stats
-        _nukePassHolderStats(from);
-    }
-
     // -------------------------------------------------------------------------
     // Internal Helpers
     // -------------------------------------------------------------------------
@@ -881,24 +831,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         mintPacked_[player] = clearedDay | (uint256(day) << BitPackingLib.DAY_SHIFT);
     }
 
-    /// @dev Zero mint stats and quest streak for a player (penalty for deity pass transfer).
-    function _nukePassHolderStats(address player) private {
-        uint256 data = mintPacked_[player];
-        // Zero: LEVEL_COUNT, LEVEL_STREAK, LAST_LEVEL, MINT_STREAK_LAST_COMPLETED
-        data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_COUNT_SHIFT, BitPackingLib.MASK_24, 0);
-        data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_STREAK_SHIFT, BitPackingLib.MASK_24, 0);
-        data = BitPackingLib.setPacked(data, BitPackingLib.LAST_LEVEL_SHIFT, BitPackingLib.MASK_24, 0);
-        data = BitPackingLib.setPacked(data, MINT_STREAK_LAST_COMPLETED_SHIFT, BitPackingLib.MASK_24, 0);
-        mintPacked_[player] = data;
-
-        // Reset quest streak via external call to quests contract
-        IDegenerusQuestsReset(ContractAddresses.QUESTS).resetQuestStreak(player);
-    }
-}
-
-/// @dev Minimal interface for quest streak reset (called via delegatecall context as GAME).
-interface IDegenerusQuestsReset {
-    function resetQuestStreak(address player) external;
 }
 
 /// @dev Minimal interface for minting deity pass ERC721 tokens.
