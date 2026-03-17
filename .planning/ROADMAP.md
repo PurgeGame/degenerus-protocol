@@ -71,7 +71,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 24. Core Governance Security Audit | 8/8 | Complete    | 2026-03-17 | - |
-| 25. Audit Doc Sync | 4/4 | Complete   | 2026-03-17 | - |
+| 25. Audit Doc Sync | 4/4 | Complete    | 2026-03-17 | - |
 
 ---
 *Roadmap created: 2026-03-17*
