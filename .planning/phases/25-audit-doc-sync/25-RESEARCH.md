@@ -8,7 +8,7 @@
 
 Phase 25 is a documentation synchronization task, not a code change task. The entire body of audit documentation (10+ files, ~15,000+ lines) was written against the v1.0/v2.0 codebase. Phase 24 introduced VRF governance (propose/vote/execute replacing `emergencyRecover`) and produced comprehensive verdicts in `v2.1-governance-verdicts.md`. Now all Tier 1 (findings/known-issues), Tier 2 (function audits/parameter reference), and Tier 3 (delta docs/warden refs) audit documents must be updated to reflect the current codebase state.
 
-The research identified 64 stale references across 10 files (matching `emergencyRecover`, `EmergencyRecovered`, `_threeDayRngGap`, and `18 hours`). The `v2.1-governance-verdicts.md` file itself contains 24 of these as legitimate historical references that must be preserved, leaving 40 stale references in 9 other files. Additionally, ~8 new governance function entries are needed in `state-changing-function-audits.md`, governance constants must be added to `v1.1-parameter-reference.md`, and FINAL-FINDINGS-REPORT.md needs structural updates to its severity distribution, findings, and phase/plan counts.
+The research identified 64 stale references across 10 files (matching `emergencyRecover`, `EmergencyRecovered`, `_threeDayRngGap`, and `18 hours`). The `v2.1-governance-verdicts.md` file itself contains 24 of these as legitimate historical references that must be preserved, leaving 40 stale references in 9 other files. Additionally, ~9 new governance function entries are needed in `state-changing-function-audits.md`, governance constants must be added to `v1.1-parameter-reference.md`, and FINAL-FINDINGS-REPORT.md needs structural updates to its severity distribution, findings, and phase/plan counts.
 
 **Primary recommendation:** Tier the work by document importance -- Tier 1 docs (FINAL-FINDINGS-REPORT.md, KNOWN-ISSUES.md) first since C4A wardens read these, then Tier 2 (state-changing-function-audits.md, parameter-reference.md), then Tier 3 (footnotes in delta/warden/regression docs), with a final cross-reference validation sweep.
 
@@ -150,18 +150,17 @@ Stale "18 hours" references (DO change/annotate):
 - `EXTERNAL-AUDIT-PROMPT.md:246` -- "Time constants: ... 18 hours" -> now 12 hours
 - `v1.2-rng-functions.md:291` -- "revert if <18h or retry if >=18h" -> now 12h
 
-### Pitfall 2: _threeDayRngGap Still Exists in Code
+### Pitfall 2: _threeDayRngGap Still Exists in DegenerusGame.sol
 
 **What goes wrong:** Someone removes all `_threeDayRngGap` references from docs, not realizing the function still exists in DegenerusGame.sol as a private helper for the `rngStalledForThreeDays()` public view.
 **Why it happens:** XCON-04 verdict says "_threeDayRngGap removal verified" but this refers to removal from governance paths, not from all code.
 **How to avoid:** Keep references to `_threeDayRngGap` in docs that describe DegenerusGame's monitoring functions. Remove/annotate only in docs that describe governance/emergency recovery paths.
 **Warning signs:** `rngStalledForThreeDays()` still calls `_threeDayRngGap` per DegenerusGame.sol.
 
-### Pitfall 3: I-22 Finding May Need Update
+### Pitfall 3: I-22 is RESOLVED (Verified)
 
-**What goes wrong:** I-22 states `_threeDayRngGap()` is "duplicated in DegenerusGame + AdvanceModule." If the AdvanceModule copy was removed in v2.1, this finding is stale.
-**Why it happens:** The XCON-04 verdict says `_threeDayRngGap` was removed from AdvanceModule governance paths, but we need to verify whether the private function itself was removed or just the call to it.
-**How to avoid:** Check the AdvanceModule source for `_threeDayRngGap` presence. If removed, I-22 must be updated or marked as resolved.
+**What:** I-22 states `_threeDayRngGap()` is "duplicated in DegenerusGame + AdvanceModule." Research verified via grep that `_threeDayRngGap` is **completely removed from AdvanceModule** (zero matches in `contracts/modules/DegenerusGameAdvanceModule.sol`). The function only exists in DegenerusGame.sol now.
+**Action required:** I-22 must be marked as RESOLVED in FINAL-FINDINGS-REPORT.md. The duplication no longer exists.
 
 ### Pitfall 4: Plan/Phase Count Arithmetic
 
@@ -180,9 +179,13 @@ Stale "18 hours" references (DO change/annotate):
 **What goes wrong:** The executive summary says "Medium: 1" and "Low: 0". After v2.1, M-02 is downgraded to Low, and multiple new known issues exist at Low severity.
 **Why it happens:** The severity distribution section is near the top and easy to overlook in a focused edit.
 **How to avoid:** Update the severity distribution block:
-- Medium: 0 (M-02 downgraded)
-- Low: 5 (M-02 downgraded + GOV-07 CEI + VOTE-03 uint8 overflow + WAR-01 compromised admin + WAR-02 colluding cartel + WAR-06 spam-propose)
-- Or whatever the actual count from Phase 24 decisions
+- Medium: 2 (WAR-01, WAR-02)
+- Low: 4 (M-02 downgraded + GOV-07 + VOTE-03 + WAR-06)
+
+### Pitfall 7: I-09 Rationale is Stale
+
+**What goes wrong:** I-09 says wireVrf lacks re-init guard, "intentional, `emergencyRecover` reuses this path." With emergencyRecover removed, this rationale is wrong.
+**How to avoid:** Update I-09 to note that wireVrf is now truly one-time deployment only. Governance uses `updateVrfCoordinatorAndSub` (not wireVrf) for coordinator rotation.
 
 ## Code Examples
 
@@ -235,7 +238,7 @@ Source: DegenerusAdmin.sol (verified against contract source)
 
 | Function | Visibility | Mutability | Key Detail |
 |----------|-----------|------------|------------|
-| `unwrapTo(address, uint256)` | external | state-changing | Creator-only DGNRS unwrap with VRF stall guard |
+| `unwrapTo(address, uint256)` | external | state-changing | Creator-only DGNRS unwrap with VRF stall guard (>20h blocks) |
 
 ### Functions Needing Update (not new, but stale content)
 
@@ -245,7 +248,7 @@ Source: DegenerusAdmin.sol (verified against contract source)
 | `updateVrfCoordinatorAndSub(address, uint256, bytes32)` | AdvanceModule | `_threeDayRngGap` guard removed; now called by governance `_executeSwap` not `emergencyRecover` |
 | `_handleGameOverPath(...)` | AdvanceModule | Now calls `anyProposalActive()` to pause death clock |
 | `rngGate(...)` | AdvanceModule | VRF retry timeout changed from 18h to 12h |
-| `wireVrf(...)` (NatSpec note) | DegenerusGame.sol | I-09 note references `emergencyRecover` reusing this path -- now governance reuses it |
+| `wireVrf(...)` (NatSpec note) | DegenerusGame.sol | I-09 note references `emergencyRecover` reusing this path -- now governance uses `updateVrfCoordinatorAndSub` instead |
 
 ### New Known Issues from Phase 24
 
@@ -277,6 +280,7 @@ Note: The planner must decide whether WAR-01/WAR-02 are "new findings" or "known
 |---------------------------|-------------------------|----------------|
 | `emergencyRecover` single-admin call | `propose/vote/execute` governance | All M-02 text rewritten |
 | `_threeDayRngGap` in AdvanceModule as governance guard | `lastVrfProcessedTimestamp` 20h/7d threshold | updateVrfCoordinatorAndSub entry updated |
+| `_threeDayRngGap` duplicated in Game + AdvanceModule | `_threeDayRngGap` only in DegenerusGame.sol (I-22 RESOLVED) | I-22 finding marked resolved |
 | 18h VRF retry timeout | 12h VRF retry timeout | RNG-06, rngGate refs updated |
 | `EmergencyRecovered` event | `ProposalCreated/VoteCast/ProposalExecuted/ProposalKilled` events | Event refs updated |
 | No death clock pause during governance | `anyProposalActive()` pauses death clock | _handleGameOverPath entry updated |
@@ -285,20 +289,14 @@ Note: The planner must decide whether WAR-01/WAR-02 are "new findings" or "known
 
 ## Open Questions
 
-1. **I-22 (_threeDayRngGap duplication) status**
-   - What we know: XCON-04 says `_threeDayRngGap` was removed from governance paths in AdvanceModule
-   - What's unclear: Whether the private function definition itself was removed from AdvanceModule, or just the call from `updateVrfCoordinatorAndSub`
-   - Recommendation: Check AdvanceModule source during task execution. If function definition removed, I-22 is resolved. If retained but unused, I-22 becomes "dead code" note.
-
-2. **I-09 (wireVrf re-initialization) status**
-   - What we know: I-09 said wireVrf lacks re-init guard, "intentional, emergencyRecover reuses this path"
-   - What's unclear: With emergencyRecover removed, does governance `_executeSwap` still reuse wireVrf? Looking at the contract: `_executeSwap` calls `gameAdmin.updateVrfCoordinatorAndSub()`, not `wireVrf()`.
-   - Recommendation: I-09 rationale should be updated from "emergencyRecover reuses" to "governance _executeSwap uses updateVrfCoordinatorAndSub" -- wireVrf is now truly one-time deployment only.
-
-3. **Exact plan/phase count arithmetic**
+1. **Exact plan/phase count arithmetic**
    - What we know: v1.0-v1.2 = 72 plans, Phase 24 = 8 plans, Phase 25 = 7 plans (per ROADMAP)
    - What's unclear: Whether "13-phase" in FINAL-FINDINGS-REPORT refers to original 7 phases or includes v2.0 phases
-   - Recommendation: The current text says "13-phase manual code review" (phases 1-7 + 19-23 = 12 phases, but audit methodology header says "13 phases"). Adding Phase 24-25 makes 15 phases total. Verify exact count during execution.
+   - Recommendation: The current text says "13-phase manual code review" (phases 1-7 + 19-23 = 12 phases, but audit methodology header says "13 phases"). Adding Phase 24-25 makes 15 phases total. Verify exact count during execution by checking the methodology table in FINAL-FINDINGS-REPORT.md.
+
+2. **I-09 (wireVrf re-initialization) rationale update**
+   - Verified: `_executeSwap` calls `gameAdmin.updateVrfCoordinatorAndSub()`, NOT `wireVrf()`.
+   - Action: I-09 rationale should change from "intentional, emergencyRecover reuses this path" to "wireVrf is deployment-only; governance coordinator rotation uses updateVrfCoordinatorAndSub".
 
 ## Validation Architecture
 
@@ -323,7 +321,21 @@ This phase has NO code changes, so there are no automated tests to run. Validati
 | DOCS-04 | parameter-reference.md updated | manual + grep | `grep -c 'ADMIN_STALL_THRESHOLD\|COMMUNITY_STALL_THRESHOLD' audit/v1.1-parameter-reference.md` (expect >0) | N/A |
 | DOCS-05 | Tier 2 refs updated | manual + grep | `grep -rn 'emergencyRecover\|18 hours' audit/v1.2-*.md audit/EXTERNAL-AUDIT-PROMPT.md` (expect annotations or 0) | N/A |
 | DOCS-06 | Tier 3 footnotes added | manual + grep | `grep -c 'v2.1 Note\|v2.1 note' audit/regression-check-v2.0.md audit/warden-*.md` (expect >0) | N/A |
-| DOCS-07 | Zero stale refs | grep | `grep -rn 'emergencyRecover\|EmergencyRecovered\|_threeDayRngGap\|18 hours' audit/ --include='*.md' \| grep -v 'v2.1-governance-verdicts.md' \| grep -v 'v2.1 Note' \| grep -v 'v2.1 note' \| grep -v 'endgame'` (expect 0 non-annotated hits) | N/A |
+| DOCS-07 | Zero stale refs | grep | See validation command below | N/A |
+
+DOCS-07 validation command (must return 0 non-annotated hits):
+```bash
+grep -rn 'emergencyRecover\|EmergencyRecovered\|_threeDayRngGap\|18 hours' audit/ --include='*.md' \
+  | grep -v 'v2.1-governance-verdicts.md' \
+  | grep -v 'v2.1 Note' \
+  | grep -v 'v2.1 note' \
+  | grep -v 'endgame' \
+  | grep -v 'v2.1 RESOLVED' \
+  | grep -v 'REMOVED in v2.1' \
+  | grep -v 'rngStalledForThreeDays'
+```
+
+Note: The grep exclusions account for: (1) governance-verdicts.md is intentional, (2) annotated refs contain "v2.1 Note/note", (3) endgame timing refs are unrelated, (4) resolved findings, (5) removed function markers, (6) `_threeDayRngGap` in DegenerusGame monitoring still exists.
 
 ### Sampling Rate
 - **Per task commit:** Grep for stale terms in modified files
@@ -385,28 +397,28 @@ Historical document. Add v2.1 annotations.
 
 | Line | Term | Context | Action |
 |------|------|---------|--------|
-| 665 | _threeDayRngGap | updateVrfCoordinatorAndSub flow | Annotate: guard removed in v2.1 |
+| 665 | _threeDayRngGap | updateVrfCoordinatorAndSub flow | Annotate: guard removed in v2.1, governance uses lastVrfProcessedTimestamp |
 | 675 | _threeDayRngGap | Guards section | Annotate |
 | 718 | _threeDayRngGap | Entry Point Matrix | Annotate |
 
-### v1.2-rng-functions.md (2 hits -- Tier 2b, ANNOTATE)
+### v1.2-rng-functions.md (2+1 hits -- Tier 2b, ANNOTATE)
 
 | Line | Term | Context | Action |
 |------|------|---------|--------|
-| 33 | _threeDayRngGap | AdvanceModule function table | Annotate if removed from AdvanceModule |
-| 128 | _threeDayRngGap | DegenerusGame function table | Keep (function still exists in Game) |
+| 33 | _threeDayRngGap | AdvanceModule function table | Mark as REMOVED from AdvanceModule in v2.1 |
+| 128 | _threeDayRngGap | DegenerusGame function table | Keep (function still exists in Game for rngStalledForThreeDays monitoring view) |
 | 291 | 18h | rngGate timeout description | Change to 12h |
 
 ### EXTERNAL-AUDIT-PROMPT.md (1 hit -- Tier 2b, UPDATE)
 
-Line 246: "Time constants: 912 days, 365 days, 18 hours, 3 days, 30 days" -> add "12 hours (VRF retry), 20 hours (admin stall), 7 days (community stall), 168 hours (proposal lifetime)"
+Line 246: "Time constants: 912 days, 365 days, 18 hours, 3 days, 30 days" -> update to include: "12 hours (VRF retry), 20 hours (admin stall), 7 days (community stall), 168 hours (proposal lifetime)"
 
 ## Sources
 
 ### Primary (HIGH confidence)
 - DegenerusAdmin.sol contract source -- governance function signatures, constants, logic
-- DegenerusGameAdvanceModule.sol contract source -- modified functions, lastVrfProcessedTimestamp writes
-- DegenerusStonk.sol contract source -- unwrapTo function with VRF stall guard
+- DegenerusGameAdvanceModule.sol contract source -- verified `_threeDayRngGap` fully removed (zero grep matches), modified functions, lastVrfProcessedTimestamp writes, 12h retry timeout
+- DegenerusStonk.sol contract source -- unwrapTo function with VRF stall guard (>20h)
 - v2.1-governance-verdicts.md -- all Phase 24 verdicts, finding IDs, severity assessments
 - STATE.md -- all Phase 24 decisions with requirement verdicts
 
@@ -420,6 +432,7 @@ Line 246: "Time constants: 912 days, 365 days, 18 hours, 3 days, 30 days" -> add
 - Stale reference locations: HIGH -- verified by ripgrep with exact line numbers
 - New function list: HIGH -- verified against contract source
 - Severity distribution: HIGH -- derived from STATE.md Phase 24 decisions
+- I-22 resolution: HIGH -- verified via grep that `_threeDayRngGap` is absent from AdvanceModule
 - Plan/phase count arithmetic: MEDIUM -- "13-phase" reference needs verification during execution
 
 **Research date:** 2026-03-17
