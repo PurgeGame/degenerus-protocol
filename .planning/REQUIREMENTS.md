@@ -17,8 +17,8 @@ Requirements for VRF governance security audit and doc sync.
 - [x] **GOV-06**: Kill condition verified — `rejectWeight > approveWeight AND rejectWeight * BPS >= threshold * circulatingSnapshot` symmetric with execute
 - [x] **GOV-07**: `_executeSwap()` follows CEI — state set to Executed before external calls, reentrancy via malicious coordinator cannot trigger dual execution on sibling proposals
 - [x] **GOV-08**: `_voidAllActive()` correctly voids all Active proposals except the executed one, decrements `activeProposalCount` to 0
-- [ ] **GOV-09**: Proposal expiry — voting on expired proposal (168h+) transitions state to Expired and reverts, `activeProposalCount` decremented
-- [ ] **GOV-10**: `circulatingSupply()` correctly excludes undistributed pools (sDGNRS held by SDGNRS contract) and DGNRS wrapper balance
+- [x] **GOV-09**: Proposal expiry — voting on expired proposal (168h+) transitions state to Expired and reverts, `activeProposalCount` decremented
+- [x] **GOV-10**: `circulatingSupply()` correctly excludes undistributed pools (sDGNRS held by SDGNRS contract) and DGNRS wrapper balance
 
 ### Cross-Contract Interactions
 
@@ -30,9 +30,9 @@ Requirements for VRF governance security audit and doc sync.
 
 ### Vote Integrity
 
-- [ ] **VOTE-01**: sDGNRS supply frozen during VRF stall proven — all balance-mutation paths enumerated and verified blocked (no advances, no unwrapTo, soulbound)
-- [ ] **VOTE-02**: `circulatingSnapshot` immutable after proposal creation — cannot be manipulated by burning sDGNRS post-proposal
-- [ ] **VOTE-03**: `activeProposalCount` uint8 overflow analyzed — 256 proposals with `unchecked` increment, impact on `anyProposalActive()` and death clock
+- [x] **VOTE-01**: sDGNRS supply frozen during VRF stall proven — all balance-mutation paths enumerated and verified blocked (no advances, no unwrapTo, soulbound)
+- [x] **VOTE-02**: `circulatingSnapshot` immutable after proposal creation — cannot be manipulated by burning sDGNRS post-proposal
+- [x] **VOTE-03**: `activeProposalCount` uint8 overflow analyzed — 256 proposals with `unchecked` increment, impact on `anyProposalActive()` and death clock
 
 ### War-Game Scenarios
 
@@ -87,16 +87,16 @@ Deferred to future milestone.
 | GOV-06 | Phase 24 | Complete |
 | GOV-07 | Phase 24 | Complete |
 | GOV-08 | Phase 24 | Complete |
-| GOV-09 | Phase 24 | Pending |
-| GOV-10 | Phase 24 | Pending |
+| GOV-09 | Phase 24 | Complete |
+| GOV-10 | Phase 24 | Complete |
 | XCON-01 | Phase 24 | Pending |
 | XCON-02 | Phase 24 | Pending |
 | XCON-03 | Phase 24 | Pending |
 | XCON-04 | Phase 24 | Pending |
 | XCON-05 | Phase 24 | Pending |
-| VOTE-01 | Phase 24 | Pending |
-| VOTE-02 | Phase 24 | Pending |
-| VOTE-03 | Phase 24 | Pending |
+| VOTE-01 | Phase 24 | Complete |
+| VOTE-02 | Phase 24 | Complete |
+| VOTE-03 | Phase 24 | Complete |
 | WAR-01 | Phase 24 | Pending |
 | WAR-02 | Phase 24 | Pending |
 | WAR-03 | Phase 24 | Pending |

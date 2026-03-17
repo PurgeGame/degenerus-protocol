@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 24-03-PLAN.md
-last_updated: "2026-03-17T19:32:39.931Z"
+stopped_at: Completed 24-05-PLAN.md
+last_updated: "2026-03-17T19:30:29Z"
 last_activity: 2026-03-17 -- Completed 24-05 (GOV-09 expiry, GOV-10 circulatingSupply, VOTE-01/02/03 vote integrity)
 progress:
   total_phases: 2
@@ -37,13 +37,16 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 24-01]: GOV-01 PASS -- No slot collision for lastVrfProcessedTimestamp (slot 114, offset 0, sole occupant). All 5 contracts verified via compiler storageLayout JSON.
 - [Phase 24-02]: GOV-02 PASS -- propose() admin path (>50.1% DGVE + 20h stall) and community path (0.5% sDGNRS + 7d stall) correctly gated. circulatingSupply() double-call safe.
 - [Phase 24-02]: GOV-03 PASS (conditional on VOTE-01) -- vote() subtract-before-add arithmetic correct. sDGNRS soulbound invariant critical dependency.
-- [Phase 24-04]: GOV-07 KNOWN-ISSUE (Low) -- _executeSwap CEI violation allows theoretical sibling-proposal reentrancy via malicious coordinator, but requires pre-existing governance control. Recommended fix: move _voidAllActive before external calls.
-- [Phase 24-04]: GOV-08 PASS -- _voidAllActive loop boundaries correct (1-indexed, <= condition), hard-set activeProposalCount=0 robust, idempotent under reentrancy.
-- [Phase 24-04]: GOV-07 KNOWN-ISSUE (Low) -- _executeSwap CEI violation allows theoretical sibling-proposal reentrancy via malicious coordinator, but requires pre-existing governance control
-- [Phase 24-04]: GOV-08 PASS -- _voidAllActive loop boundaries correct, hard-set activeProposalCount=0 robust, idempotent under reentrancy
 - [Phase 24-03]: GOV-04 PASS: threshold decay matches spec (8 steps, boundary analysis, 0 at 168h is unreachable dead code)
 - [Phase 24-03]: GOV-05 PASS: execute condition overflow-safe (max 1e31 vs uint256 1.15e77). circulatingSnapshot==0 not exploitable.
 - [Phase 24-03]: GOV-06 PASS: kill condition symmetric with execute, mutual exclusion proven via strict inequality contradiction
+- [Phase 24-04]: GOV-07 KNOWN-ISSUE (Low) -- _executeSwap CEI violation allows theoretical sibling-proposal reentrancy via malicious coordinator, but requires pre-existing governance control. Recommended fix: move _voidAllActive before external calls.
+- [Phase 24-04]: GOV-08 PASS -- _voidAllActive loop boundaries correct (1-indexed, <= condition), hard-set activeProposalCount=0 robust, idempotent under reentrancy.
+- [Phase 24-05]: GOV-09 PASS (INFO) -- Lazy expiry: revert rolls back state changes, activeProposalCount stays inflated (protective behavior, pauses death clock longer)
+- [Phase 24-05]: GOV-10 PASS -- circulatingSupply correctly excludes SDGNRS pools and DGNRS wrapper; underflow impossible
+- [Phase 24-05]: VOTE-01 PASS (INFO) -- sDGNRS has 7 balance-mutation paths; all blocked during >20h stall except burn (safe). WAR-04 edge case at exactly 20h noted.
+- [Phase 24-05]: VOTE-02 PASS -- circulatingSnapshot written only in propose() line 424, immutable post-creation
+- [Phase 24-05]: VOTE-03 KNOWN-ISSUE (LOW) -- uint8 overflow at 256 proposals wraps to 0, unpausing death clock. ~$3000 cost. Recommend require(activeProposalCount < 255)
 
 ## Accumulated Context
 
@@ -54,9 +57,10 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - Phase 24 must complete before Phase 25 (doc sync needs finding IDs from audit)
 - Storage layout verification (GOV-01) should be first task -- slot collision blocks everything
 - Research flags: `_executeSwap` reentrancy surface and uint8 `activeProposalCount` overflow are highest-priority technical risks
+- VOTE-01 confirms the frozen-supply invariant that GOV-03 depends on -- GOV-03 is now unconditionally PASS
 
 ## Session Continuity
 
-Last session: 2026-03-17T19:32:39.928Z
-Stopped at: Completed 24-03-PLAN.md
+Last session: 2026-03-17T19:30:29Z
+Stopped at: Completed 24-05-PLAN.md
 Resume file: None
