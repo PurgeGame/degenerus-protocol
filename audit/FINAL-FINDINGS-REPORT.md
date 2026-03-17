@@ -4,13 +4,13 @@
 **Auditor:** Claude (AI-assisted security analysis, Claude Opus 4.6)
 **Scope:** 14 core contracts + 10 delegatecall modules (24 deployable) + 7 libraries + 3 shared abstract contracts
 **Solidity:** 0.8.34 (ContractAddresses: ^0.8.26), viaIR enabled, optimizer runs=200
-**Methodology:** 9-phase manual code review with static analysis (Slither) support
+**Methodology:** 13-phase manual code review with static analysis (Slither) support, multi-agent adversarial simulation, and dual-agent gas optimization
 
 ---
 
 ## Executive Summary
 
-Degenerus Protocol is a complex on-chain game system comprising 14 core contracts and 10 delegatecall modules (24 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, sDGNRS, DGNRS, Vault shares, WrappedWrappedXRP). The initial audit conducted a 7-phase systematic review covering 57 plans. A subsequent v2.0 delta audit (Phases 19-21) covered the sDGNRS/DGNRS split and novel attack surface analysis with 9 additional plans. Phase 22 added multi-agent adversarial warden simulation (3 independent agents) plus comprehensive regression verification, for a total of 69 plans examining approximately 16,500 lines of Solidity code.
+Degenerus Protocol is a complex on-chain game system comprising 14 core contracts and 10 delegatecall modules (24 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, sDGNRS, DGNRS, Vault shares, WrappedWrappedXRP). The initial audit conducted a 7-phase systematic review covering 57 plans. A subsequent v2.0 delta audit (Phases 19-21) covered the sDGNRS/DGNRS split and novel attack surface analysis with 9 additional plans. Phase 22 added multi-agent adversarial warden simulation (3 independent agents) plus comprehensive regression verification. Phase 23 performed a Scavenger/Skeptic dual-agent gas optimization audit across ~25,600 lines, identifying 21 dead code candidates and applying 4 behavior-preserving removals that saved 96 bytes of bytecode and ~19,200 deployment gas with zero test regressions, for a total of 72 plans examining approximately 16,500 lines of Solidity code.
 
 **Overall Assessment: SOUND with minor issues.** The protocol demonstrates strong security architecture across all critical paths.
 
@@ -272,6 +272,39 @@ Systematic re-verification of all prior findings against current code:
 
 ---
 
+## Phase 23: Gas Optimization -- Dead Code Removal (Plans 23-01 through 23-03)
+
+**Scope:** Behavior-preserving dead code removal across all production contracts using Scavenger/Skeptic dual-agent analysis.
+
+**Methodology:** The Scavenger agent aggressively identified removal candidates (unreachable checks, dead storage, dead code paths, redundant SLOADs) across ~25,600 lines of Solidity. The Skeptic agent validated each recommendation with counterexample-driven analysis, checking 10 edge case conditions and cross-contract traces. All 4 approved changes were applied to source contracts and verified against the full test suite (1,198 passing, 0 new regressions).
+
+**Results:**
+
+| Metric | Value |
+|--------|-------|
+| Total recommendations analyzed | 21 |
+| Approved | 4 |
+| Rejected | 3 (defense-in-depth guards worth keeping) |
+| N/A (zero savings) | 14 |
+| Bytecode saved (modified contracts) | 96 bytes |
+| Deployment gas saved | ~19,200 gas |
+| Contracts modified | 3 (DecimatorModule, WhaleModule, LootboxModule) |
+| Test regressions | 0 |
+
+**JackpotModule (95.9% of EVM size limit):** Confirmed zero removable bytes. All 2,824 lines represent genuine functional complexity (multi-bucket trait-based jackpot distribution with chunked processing, auto-rebuy, prize pool consolidation). The module's headroom is 999 bytes (23,577 / 24,576).
+
+**Key findings:**
+- **SCAV-004/SCAV-006 (DecimatorModule):** Unreachable `uint232` overflow check and `denom == 0` guard removed -- provably unreachable by mathematical proof and call graph analysis
+- **SCAV-009 (WhaleModule):** Redundant `_simulatedDayIndex()` call replaced with existing `day` parameter -- `block.timestamp` is constant within a transaction
+- **SCAV-016 (LootboxModule):** Dead `unit == 0` check removed -- `unit` is assigned `1 ether` (compile-time constant `10**18`)
+- **3 REJECTED guards (SCAV-005/007/008):** Defense-in-depth guards in DecimatorModule kept despite being unreachable for current callers -- runtime gas savings from avoiding unnecessary SSTORE (2,100+ gas) exceed one-time deployment cost
+
+**Requirements satisfied:** GAS-01 (unreachable checks), GAS-02 (dead storage variables), GAS-03 (dead code paths), GAS-04 (redundant calls/SLOADs)
+
+**Full report:** See [gas-optimization-report.md](gas-optimization-report.md) for the complete Scavenger/Skeptic audit with all 21 recommendations, verdicts, and bytecode measurements.
+
+---
+
 ## Overall Risk Assessment
 
 | Risk Area | Rating | Justification |
@@ -335,7 +368,7 @@ Systematic re-verification of all prior findings against current code:
 | DegenerusGamePayoutUtils | Payout helpers (abstract, inherited by jackpot-related modules) |
 | BitPackingLib / EntropyLib / GameTimeLib / JackpotBucketLib / PriceLookupLib | Utility libraries |
 
-### 9-Phase Audit Structure
+### 13-Phase Audit Structure
 
 | Phase | Focus Area | Plans | Requirements Assessed |
 |-------|-----------|-------|----------------------|
@@ -352,16 +385,18 @@ Systematic re-verification of all prior findings against current code:
 | 20 | Correctness Verification | 3 | CORR-01 to CORR-04 |
 | 21 | Novel Attack Surface Analysis | 4 | NOVEL-01, 02, 03, 04, 05, 09, 10, 11, 12 |
 | 22 | Warden Simulation + Regression Check | 3 | NOVEL-07, NOVEL-08 |
-| **Total** | | **69 plans** | **79 requirements** |
+| 23 | Gas Optimization -- Dead Code Removal | 3 | GAS-01, GAS-02, GAS-03, GAS-04 |
+| **Total** | | **72 plans** | **83 requirements** |
 
 ### Tools Used
 
 - **Manual source code review** (primary methodology) — all 14 core contracts, 10 modules, 7 libraries, and 3 shared abstract contracts read line by line across 69 audit plans
 - **Slither 0.11.5** — static analysis; 1,990 detections (302 HIGH + 1,699 MEDIUM), all triaged as false positive or informational
 - **Foundry `forge inspect`** — storage slot layout verification (Phase 1)
-- **Hardhat test suite** — 1,065 passing (26 pre-existing failures in unrelated affiliate/RNG/economic suites), covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
+- **Hardhat test suite** — 1,198 passing (26 pre-existing failures in unrelated affiliate/RNG/economic suites), covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
 - **Multi-agent adversarial simulation** (Phase 22) — 3 independent C4A warden agents with role specialization (contract auditor, zero-day hunter, economic analyst)
 - **Comprehensive regression verification** (Phase 22) — finding-by-finding re-verification of all 14 formal findings + 9 v1.0 attack scenarios + spot-check of v1.2 surfaces and Phase 21 novel analyses
+- **Scavenger/Skeptic dual-agent gas optimization** (Phase 23) — aggressive dead code identification followed by rigorous counterexample-driven validation across all production contracts
 
 ### Key Audit Techniques
 
@@ -381,7 +416,7 @@ The following were explicitly out of scope for this audit:
 - **Testnet-specific behavior** — `TESTNET_ETH_DIVISOR = 1,000,000` makes testnet findings non-transferable; only mainnet contract logic was audited
 - **Mock contracts** — Test infrastructure excluded
 - **Deployment scripts** — Operational concern; not security surface
-- **Gas optimization recommendations** — Out of scope for security audit
+- **Gas optimization** — Phase 23 covers behavior-preserving dead code removal only; runtime gas profiling and storage layout optimization are out of scope
 
 ---
 
@@ -397,9 +432,9 @@ The following were explicitly out of scope for this audit:
 
 5. **Economic resistance:** Sybil splitting provides at most proportional returns. Activity score inflation costs more than the EV it unlocks. Affiliate rewards are BURNIE mints (not ETH), limiting extraction. No MEV sandwich opportunity exists.
 
-6. **Test coverage:** 1,065 passing tests (26 pre-existing failures in unrelated affiliate/RNG/economic suites) covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites including game-over sequences, RNG stalls, whale bundle edge cases, and price escalation.
+6. **Test coverage:** 1,198 passing tests (26 pre-existing failures in unrelated affiliate/RNG/economic suites) covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites including game-over sequences, RNG stalls, whale bundle edge cases, and price escalation.
 
 ---
 
-*Report generated from 69 individual audit plans across 12 phases, examining 14 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,500 lines of Solidity.*
+*Report generated from 72 individual audit plans across 13 phases, examining 14 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,500 lines of Solidity.*
 *Audit period: February-March 2026*
