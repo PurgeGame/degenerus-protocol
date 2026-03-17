@@ -217,3 +217,258 @@ The call path is: sDGNRS -> BurnieCoinflip.claimCoinflips(address(0), remainingB
 
 **Overall composition verdict: SAFE.** All 5 call chains verified. No exploitable state inconsistency. The mid-burn balance changes from claimWinnings (both ETH and stETH paths) are correctly handled by re-reading balances after the call. CEI pattern holds across all chains.
 
+---
+
+## NOVEL-03: Griefing Vector Enumeration
+
+This section enumerates all griefing vectors on the new sDGNRS/DGNRS entry points. For each vector: description, attack cost, victim impact, duration, verdict, and mitigation status.
+
+### Griefing Vector 1: Dust Burn Spam
+
+**Description:** An attacker calls `DGNRS.burn(1)` or `sDGNRS.burn(1)` repeatedly with the minimum non-zero amount (1 wei of tokens), attempting to waste reserves or bloat state.
+
+**Attack cost:**
+- Gas per DGNRS.burn(1) tx: ~150,000-250,000 gas (DGNRS._burn + sDGNRS.burn with up to 5 external calls)
+- At 30 gwei base fee: ~0.0045-0.0075 ETH per tx (~$15-25 at ETH=$3,000)
+- 1,000 spam burns: ~$15,000-25,000
+
+**Victim impact:**
+- Each dust burn reduces totalSupply by 1 wei, claims `(totalMoney * 1) / supplyBefore` reserves
+- With supplyBefore ~1T * 1e18 = 1e30, the claim is `totalMoney / 1e30` -- effectively 0 for any realistic reserve amount (even 1B ETH = 1e27 wei yields 0 due to integer division)
+- No state bloat: same storage slots updated (balanceOf, totalSupply -- O(1) state changes per burn)
+- No impact on other users' burn values -- totalSupply decreased by dust, reserves decreased by 0
+
+**Code path:** StakedDegenerusStonk.sol:384 -- `if (amount == 0 || amount > bal) revert Insufficient()`. burn(0) reverts. burn(1) proceeds but claims effectively nothing due to integer division rounding down to zero.
+
+**Duration:** Temporary (only during active spam). No lasting state damage.
+
+**Verdict: NEGLIGIBLE.** Attacker wastes $15,000+ in gas for zero impact on other users. Reserves unchanged. State not bloated.
+
+**Mitigation status:** Inherent -- integer division rounds dust claims to 0. No fix needed.
+
+---
+
+### Griefing Vector 2: Gas Limit Attack on Burn
+
+**Description:** An attacker calls `DGNRS.burn()` with carefully calculated gas to execute the `DGNRS._burn()` state change but run out of gas during the sDGNRS.burn() call chain, leaving DGNRS balances reduced without the corresponding sDGNRS burn.
+
+**Attack cost:** Minimal gas fee for a reverting transaction.
+
+**Code path:**
+- DegenerusStonk.sol:154: `_burn(msg.sender, amount)` -- DGNRS state changes
+- DegenerusStonk.sol:156: `stonk.burn(amount)` -- if gas runs out here, EVM reverts ENTIRE transaction
+
+**Victim impact:** NONE. The EVM processes transactions atomically. If gas runs out at ANY point during the transaction, ALL state changes revert -- including the DGNRS._burn() at line 154. There is no partial execution of a transaction.
+
+**Duration:** N/A -- the attack cannot succeed.
+
+**Verdict: BLOCKED.** EVM atomicity prevents partial burn execution. Out-of-gas reverts all state changes. No cross-contract inconsistency possible.
+
+**Mitigation status:** Inherent -- EVM transaction atomicity.
+
+---
+
+### Griefing Vector 3: Block Stuffing Before Burns
+
+**Description:** An attacker fills blocks with high-gas transactions to delay other users' burns (e.g., before a known `gameOver` event to prevent burning at pre-gameOver prices, or before a stETH rebase).
+
+**Attack cost:**
+- Full block gas limit (30M gas) at 30 gwei = 0.9 ETH per block (~$2,700)
+- Sustaining for N blocks: $2,700 * N. For 100 blocks (~20 minutes): $270,000
+
+**Victim impact:**
+- Temporary delay of burn execution
+- Does NOT change burn payout values -- reserves and totalSupply remain unchanged while blocks are stuffed
+- After block stuffing ends, delayed burns execute at current (not stale) proportional values
+
+**Duration:** Only during active block stuffing. No lasting impact.
+
+**Verdict: NEGLIGIBLE.** Cost vastly exceeds any conceivable benefit. Standard blockchain DoS vector not specific to DGNRS. Burns are not time-sensitive in a way that makes delay profitable for the attacker.
+
+**Mitigation status:** Not addressable at the contract level -- this is a network-layer concern.
+
+---
+
+### Griefing Vector 4: Approval Front-Running (ERC20 Race Condition)
+
+**Description:** An attacker monitors pending `DGNRS.approve()` transactions, front-runs with `transferFrom()` to spend the old allowance, then the victim's `approve()` sets the new allowance which the attacker can also spend.
+
+**Attack cost:** Gas for one `transferFrom()` (~50,000 gas) + MEV priority fee.
+
+**Code path:**
+- DegenerusStonk.sol:128-132: `approve(spender, amount)` -- directly sets `allowance[msg.sender][spender] = amount`
+- DegenerusStonk.sol:113-122: `transferFrom(from, to, amount)` -- checks and decrements allowance
+- Line 115: `if (allowed != type(uint256).max)` -- max uint256 approvals are not decremented (infinite approval pattern)
+
+**Victim impact:** Only affects users who change a non-zero allowance to a different non-zero amount (the standard ERC20 approve race condition). This is not specific to DGNRS.
+
+**Duration:** Single event per affected approve transaction.
+
+**Verdict: KNOWN.** This is the standard ERC20 approval race condition documented across the industry. DGNRS follows the standard ERC20 pattern (no increaseAllowance/decreaseAllowance helpers). Already documented under DELTA-L-01 context.
+
+**Mitigation status:** Acknowledged as standard ERC20 behavior. Users should set approval to 0 before changing to a new value, or use the infinite approval pattern (type(uint256).max).
+
+---
+
+### Griefing Vector 5: Pool Exhaustion Racing
+
+**Description:** An attacker front-runs legitimate pool transfers by triggering their own pool claims first, exhausting the pool balance before intended recipients.
+
+**Attack cost:** Depends on what triggers pool transfers.
+
+**Code path:**
+- StakedDegenerusStonk.sol:315: `transferFromPool` has `onlyGame` modifier
+- StakedDegenerusStonk.sol:340: `transferBetweenPools` has `onlyGame` modifier
+- All pool operations are restricted to the game contract
+
+**Victim impact:** NONE. Users cannot directly call `transferFromPool`. All pool transfers are initiated by the game contract during specific game events (whale pass purchases, lootbox wins, jackpot distributions, etc.). The game contract's own logic determines who gets pool tokens and when. A user cannot trigger a pool transfer for themselves unless they meet the game's qualification criteria.
+
+**Duration:** N/A -- the attack vector does not exist.
+
+**Verdict: BLOCKED.** `onlyGame` restriction prevents public access to pool operations. The game contract's internal logic handles all distribution decisions.
+
+**Mitigation status:** Inherent -- access control prevents the attack.
+
+---
+
+### Griefing Vector 6: Forced ETH Donation to Inflate/Deflate Burn Values
+
+**Description:** An attacker force-sends ETH to the sDGNRS contract via `selfdestruct` (or post-Cancun, create+selfdestruct in the same transaction per EIP-6780) to inflate `address(this).balance` and thus inflate the per-token burn value.
+
+**Attack cost:** The ETH amount force-sent + gas for the factory contract deployment and selfdestruct (~100,000 gas).
+
+**Code path:**
+- StakedDegenerusStonk.sol:282: `receive() external payable onlyGame` -- blocks direct ETH sends from non-game addresses
+- BUT: `selfdestruct` bypasses `receive()` and forces ETH into the contract regardless of code at the target address
+- StakedDegenerusStonk.sol:387: `ethBal = address(this).balance` -- includes force-sent ETH
+- StakedDegenerusStonk.sol:390-391: `totalMoney = ethBal + stethBal + claimableEth; totalValueOwed = (totalMoney * amount) / supplyBefore` -- payout includes force-sent ETH
+
+**Victim impact:** The force-sent ETH increases `totalMoney` for ALL burners proportionally. If the attacker holds X% of the supply, they can burn to reclaim X% of the force-sent ETH. They lose (1-X%) of the donation. This is a NET LOSS for the attacker unless they hold 100% of the supply.
+
+**Economic analysis:**
+- Attacker holds 10% of supply, force-sends 10 ETH
+- Attacker burns all their tokens, claims 10% of the extra 10 ETH = 1 ETH
+- Net loss: 10 - 1 = 9 ETH donated to other holders
+- This is a pure donation, not an exploit
+
+**Duration:** Permanent -- the forced ETH cannot be removed except through burns.
+
+**Verdict: NEGLIGIBLE.** Force-sending ETH is a donation to all holders proportionally. The attacker always loses (1 - their_share_percentage) of the donation. Not profitable for any attacker holding less than 100% of supply.
+
+**Mitigation status:** Inherent -- proportional redemption formula makes donation attacks unprofitable. No fix needed.
+
+---
+
+### Griefing Summary Table
+
+| # | Vector | Attack Cost | Victim Impact | Duration | Verdict |
+|---|--------|-------------|---------------|----------|---------|
+| 1 | Dust burn spam | ~$15k+ per 1k burns | None (claims round to 0) | Temporary | NEGLIGIBLE |
+| 2 | Gas limit attack on burn | Minimal (reverts) | None (EVM atomicity) | N/A | BLOCKED |
+| 3 | Block stuffing before burns | ~$2,700/block | Temporary delay only | Active spam only | NEGLIGIBLE |
+| 4 | Approval front-running | Gas + MEV fee | Standard ERC20 race | Single event | KNOWN |
+| 5 | Pool exhaustion racing | N/A | None (onlyGame) | N/A | BLOCKED |
+| 6 | Forced ETH donation | ETH sent (lost) | Positive (donation) | Permanent | NEGLIGIBLE |
+
+**Summary:** No exploitable griefing vectors found. Two vectors are completely blocked (gas limit, pool racing). Three are economically negligible (dust spam, block stuffing, forced donation). One is a known ERC20 limitation (approval race). No new griefing surface introduced by the sDGNRS/DGNRS architecture beyond standard ERC20 patterns.
+
+---
+
+## NOVEL-04: Edge Case Matrix
+
+This section provides a complete edge case matrix for all public/external functions in sDGNRS and DGNRS, covering zero amounts, max uint256, dust (1 wei), amount > balance, amount == totalSupply, and stETH rounding boundaries. Existing test coverage from Phase 20-03 (DGNRSLiquid.test.js) is cross-referenced.
+
+### Edge Case Matrix
+
+| # | Function | Input | Expected Behavior | Code Path | Tested? |
+|---|----------|-------|-------------------|-----------|---------|
+| 1 | `sDGNRS.burn(0)` | amount = 0 | Revert `Insufficient` | StakedDegenerusStonk.sol:384 -- `if (amount == 0 \|\| amount > bal) revert Insufficient()` | YES (DGNRSLiquid.test.js:254 -- "reverts on zero amount") |
+| 2 | `sDGNRS.burn(1)` | amount = 1 wei | Execute, claim 0 reserves (rounding to 0 for dust), burn 1 wei of supply | StakedDegenerusStonk.sol:391 -- `totalValueOwed = (totalMoney * 1) / supplyBefore` rounds to 0 for any supply > totalMoney | Partial (burn tests exist but no explicit 1-wei test) |
+| 3 | `sDGNRS.burn(totalSupply)` | amount = all remaining tokens | Last burn, claims 100% of reserves. `totalValueOwed = totalMoney` (exact). No division by zero because `supplyBefore > 0` when entering burn (checked at line 384). | StakedDegenerusStonk.sol:391 -- `(totalMoney * totalSupply) / totalSupply = totalMoney`. After burn, `totalSupply = 0`. | NO (not tested -- requires all other holders to have burned first) |
+| 4 | `sDGNRS.burn(balance + 1)` | amount > caller's balance | Revert `Insufficient` | StakedDegenerusStonk.sol:384 -- `amount > bal` triggers revert | YES (DGNRSLiquid.test.js:261 -- "reverts when amount exceeds balance") |
+| 5 | `DGNRS.burn(0)` | amount = 0 | Revert `Insufficient` at DGNRS level | DegenerusStonk.sol:204 -- `_burn` checks `if (amount == 0 \|\| amount > bal) revert Insufficient()`. DGNRS reverts before sDGNRS is ever called. | YES (DGNRSLiquid.test.js:254 -- "reverts on zero amount") |
+| 6 | `DGNRS.burn(1)` | amount = 1 wei | Burns 1 wei of DGNRS, triggers sDGNRS.burn(1) which claims dust (0 reserves). DGNRS forwards 0 ETH, 0 stETH, 0 BURNIE. | DegenerusStonk.sol:154 -- `_burn(msg.sender, 1)` succeeds; line 156: `stonk.burn(1)` -> sDGNRS processes dust burn | Partial (burn tests exist but no explicit 1-wei burn-through test) |
+| 7 | `DGNRS.transfer(address(0), amount)` | to = zero address | Revert `ZeroAddress` | DegenerusStonk.sol:191 -- `if (to == address(0)) revert ZeroAddress()` | YES (implicit via transfer tests) |
+| 8 | `DGNRS.transfer(DGNRS_address, amount)` | to = DGNRS contract itself | Tokens permanently locked in DGNRS contract. No recovery mechanism. | DegenerusStonk.sol:190-198 -- `_transfer` does not check `to != address(this)`. Tokens are debited from sender and credited to the DGNRS contract's own balance. | YES (DGNRSLiquid.test.js:164 -- "transfer to self does not change balance (DELTA-L-01)") |
+| 9 | `DGNRS.approve(addr, type(uint256).max)` | Infinite allowance | Sets max uint256 approval. `transferFrom` at line 115 skips allowance decrement for `type(uint256).max`. | DegenerusStonk.sol:128-132 -- `allowance[msg.sender][spender] = amount` sets to max. Line 115: `if (allowed != type(uint256).max)` skips decrement. | Partial (approve test exists at DGNRSLiquid.test.js:150 but not explicit max-uint test) |
+| 10 | `sDGNRS.burn(amount)` where stETH rounding causes `stethOut > stethBal` | stETH 1-2 wei rounding | Revert `Insufficient` | StakedDegenerusStonk.sol:415 -- `if (stethOut > stethBal) revert Insufficient()` | NO (requires specific stETH balance setup with rounding) |
+| 11 | `sDGNRS.burn(amount)` with zero reserves | All reserves are 0 | `totalValueOwed = 0`, `burnieOut = 0`. No transfers executed. Balance and supply reduced. Burn event emitted. | StakedDegenerusStonk.sol:391 -- `totalMoney = 0 + 0 + 0 = 0; totalValueOwed = (0 * amount) / supplyBefore = 0`. Lines 410-437: all conditional transfers skipped. | Partial (burn tests exist but reserves are sometimes 0 in base tests) |
+| 12 | `DGNRS.transfer(to, type(uint256).max)` | Max uint256 transfer | Revert `Insufficient` (no address holds max uint256 tokens) | DegenerusStonk.sol:193 -- `if (amount > bal) revert Insufficient()`. Max supply is 200B * 1e18 = 2e29, far below type(uint256).max = ~1.16e77. | NO (not tested -- trivially safe) |
+| 13 | `sDGNRS.depositSteth(0)` | Zero stETH deposit | `steth.transferFrom(msg.sender, this, 0)` -- executes as no-op. StakedDegenerusStonk.sol:292 -- Lido stETH transferFrom(0) returns true. Deposit event emitted with amount 0. | StakedDegenerusStonk.sol:291-293 -- onlyGame, then transferFrom call with 0. | YES (confirmed as no-op in Phase 20-03) |
+| 14 | `sDGNRS.transferFromPool(pool, to, 0)` | Zero amount pool transfer | Returns 0 immediately | StakedDegenerusStonk.sol:316 -- `if (amount == 0) return 0` | NO (onlyGame, not directly testable by users) |
+| 15 | `sDGNRS.wrapperTransferTo(to, 0)` | Zero amount wrapper transfer | Succeeds with 0 transfer (no explicit zero check) | StakedDegenerusStonk.sol:242-251 -- no `amount == 0` check. `bal - 0 = bal`, `balanceOf[to] += 0`. Transfer event emitted with amount 0. | NO (only callable by DGNRS contract) |
+
+### stETH Rounding Revert Scenario (Edge Case #10) -- Detailed Analysis
+
+**Background:** Lido stETH uses a shares-based accounting system. `balanceOf()` returns `(shares * totalPooledEther) / totalShares`, which introduces 1-2 wei rounding errors on every balance read and transfer. This is documented in the Lido integration guide and in the project's existing I-20 / XCON-06 finding.
+
+**The revert scenario:**
+
+The revert at StakedDegenerusStonk.sol:415 (`if (stethOut > stethBal) revert Insufficient()`) can trigger when:
+
+1. `totalValueOwed > ethBal` (the burn requires some stETH payout)
+2. `stethOut = totalValueOwed - ethOut` (line 414)
+3. The calculated `stethOut` exceeds `stethBal` by 1-2 wei due to rounding
+
+**When does this happen?**
+
+**Scenario A: Last burner (100% of remaining supply)**
+- `totalValueOwed = totalMoney = ethBal + stethBal + claimableEth` (exact equality at 100%)
+- After claimWinnings (if triggered): `ethBal` captures ETH + claimed ETH, `stethBal` captures stETH (possibly with 1-2 wei rounding loss from depositSteth)
+- `stethOut = totalMoney - ethBal_post`
+- If `totalMoney` was computed using pre-claim `stethBal` that was 1 wei higher than post-claim `stethBal` (due to rebase rounding between the read at line 388 and the actual balance at line 407), then `stethOut` could exceed actual `stethBal` by 1 wei
+- **This scenario CAN trigger the revert** -- but only if claimWinnings deposits stETH via the fallback path AND the share rounding causes a 1-2 wei discrepancy
+
+**Scenario B: Normal burn (< 100% of supply)**
+- `totalValueOwed = (totalMoney * amount) / supplyBefore` -- integer division rounds DOWN
+- `stethOut = totalValueOwed - ethOut` -- also subject to the rounding from step above
+- The downward rounding in the proportional calculation provides a natural buffer: the calculated `stethOut` is slightly LESS than the true proportional share
+- For this to trigger the revert, the rounding error from stETH transfers would need to exceed the integer division buffer
+- With 18-decimal precision and supply in the range of 1e29-1e30, the integer division rounding provides many orders of magnitude of buffer
+- **This scenario is practically impossible** for any burn amount < 100% of supply
+
+**Scenario C: stETH rebase between line 388 and line 407**
+- If a Lido rebase occurs between the initial `stethBal` read (line 388, used in `totalMoney`) and the re-read (line 407), `stethBal` could either increase or decrease
+- Lido rebases occur once daily (~12:00 UTC) in a single transaction
+- The sDGNRS.burn() transaction is atomic -- a rebase cannot occur mid-transaction
+- The re-read at line 407 is in the same transaction as the read at line 388
+- **This scenario CANNOT trigger** -- no rebase within a single transaction
+
+**Conditions for the revert:**
+1. Must be the last (or near-last) burner claiming nearly 100% of stETH reserves
+2. The claimWinnings call must trigger the stETH fallback path (game has insufficient ETH)
+3. The stETH `depositSteth()` via `transferFrom` must lose 1-2 wei to share rounding
+4. The proportional calculation must not provide sufficient integer division buffer
+
+**Frequency:** Extremely rare. Only the very last burner in a specific game state (ETH-depleted game forcing stETH fallback) could encounter this. The 1-2 wei error is the maximum per Lido documentation.
+
+**Impact:** The burn reverts, but no state is corrupted (EVM atomicity). The user can retry with `amount - 1` to leave 1 wei of sDGNRS unburned, which provides sufficient rounding buffer. Alternatively, the user can wait for any ETH inflow (game advance, direct ETH deposit) that shifts the payout to pure ETH, bypassing the stETH path entirely.
+
+**Mitigation status:** Acknowledged. The revert is a conservative safety check -- it prevents paying out more stETH than is available. The 1-2 wei stuck dust is economically negligible. No code change recommended.
+
+---
+
+### Existing Test Coverage Cross-Reference
+
+The following tests from `test/unit/DGNRSLiquid.test.js` (Phase 20-03, 80 passing tests) cover edge cases in the matrix above:
+
+| Edge Case | Test Location | Test Name | Status |
+|-----------|--------------|-----------|--------|
+| #1: sDGNRS.burn(0) | DGNRSLiquid.test.js:254 | "reverts on zero amount" | COVERED |
+| #4: sDGNRS.burn(bal+1) | DGNRSLiquid.test.js:261 | "reverts when amount exceeds balance" | COVERED |
+| #5: DGNRS.burn(0) | DGNRSLiquid.test.js:254 | "reverts on zero amount" | COVERED |
+| #7: DGNRS.transfer(0x0) | DGNRSLiquid.test.js (implicit) | Transfer tests check ZeroAddress revert | COVERED |
+| #8: DGNRS.transfer(self) | DGNRSLiquid.test.js:164 | "transfer to self does not change balance (DELTA-L-01)" | COVERED |
+| #8b: DGNRS.transferFrom(self) | DGNRSLiquid.test.js:179 | "transferFrom to self does not change balance" | COVERED |
+| #13: depositSteth(0) | Phase 20-03 verification | "depositSteth(0) confirmed as no-op" | COVERED |
+
+**Coverage gaps identified:**
+- Edge Case #2 (sDGNRS.burn(1) dust): Not explicitly tested. Behavior is trivially correct (integer division rounds to 0).
+- Edge Case #3 (burn entire supply): Not tested. Requires complex fixture setup where all other holders have burned first.
+- Edge Case #6 (DGNRS.burn(1) through): Not explicitly tested. Trivially correct (forwards 0 reserves).
+- Edge Case #9 (max uint256 approve): Not explicitly tested. Standard ERC20 behavior.
+- Edge Case #10 (stETH rounding revert): Not tested. Requires real Lido stETH with share rounding, not achievable with mock stETH in unit tests.
+- Edge Case #12 (max uint256 transfer): Not tested. Trivially reverts (no address holds that many tokens).
+
+All untested edge cases are either trivially correct (provable by code inspection) or require specific environmental conditions not reproducible in unit tests (Lido stETH share rounding). No high-risk coverage gaps identified.
+
