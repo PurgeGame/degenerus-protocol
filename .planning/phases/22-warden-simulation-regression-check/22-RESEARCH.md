@@ -20,7 +20,7 @@ The critical insight for planning is that the warden simulation (NOVEL-07) and t
 | ID | Description | Research Support |
 |----|-------------|-----------------|
 | NOVEL-07 | Multi-agent adversarial simulation (3+ independent auditors cross-referencing findings) | EXTERNAL-AUDIT-PROMPT.md provides ready-made blind audit prompt; three agent personas defined (contract-auditor, zero-day-hunter, economic-analyst); C4A warden methodology documented; cross-reference and deduplication protocol specified |
-| NOVEL-08 | Regression check -- diff every prior audit finding against current code | Complete inventory of 13 formal findings (1M + 1L + 12I) plus 8 v1.0 attack scenarios, 35 v1.2 surface findings, 9 NOVEL analyses, 64 requirement verdicts, and 4 adversarial sessions; v1.2 delta re-verification pattern from v1.2-delta-attack-reverification.md provides proven methodology |
+| NOVEL-08 | Regression check -- diff every prior audit finding against current code | Complete inventory of 14 formal findings (1M + 1L + 12I) plus 8 v1.0 attack scenarios, 35 v1.2 surface findings, 9 NOVEL analyses, 64 requirement verdicts, and 4 adversarial sessions; v1.2 delta re-verification pattern from v1.2-delta-attack-reverification.md provides proven methodology |
 </phase_requirements>
 
 ## Standard Stack
@@ -197,7 +197,7 @@ Do NOT assume safety because other agents are also reviewing.
 
 This is the exhaustive list of all findings that must be regression-checked:
 
-### Formal Findings (13 total)
+### Formal Findings (14 total)
 
 | ID | Severity | Contract | Status | Description |
 |----|----------|----------|--------|-------------|
