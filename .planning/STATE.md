@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 24-04-PLAN.md
-last_updated: "2026-03-17T19:29:50.427Z"
-last_activity: 2026-03-17 -- Completed 24-04 (GOV-07 _executeSwap CEI/reentrancy, GOV-08 _voidAllActive correctness)
+stopped_at: Completed 24-03-PLAN.md
+last_updated: "2026-03-17T19:32:39.931Z"
+last_activity: 2026-03-17 -- Completed 24-05 (GOV-09 expiry, GOV-10 circulatingSupply, VOTE-01/02/03 vote integrity)
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 8
-  completed_plans: 3
-  percent: 38
+  completed_plans: 5
+  percent: 63
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 24 of 25 (Core Governance Security Audit)
-Plan: 4 of 8 in current phase
+Plan: 5 of 8 in current phase
 Status: Executing
-Last activity: 2026-03-17 -- Completed 24-04 (GOV-07 _executeSwap CEI/reentrancy, GOV-08 _voidAllActive correctness)
+Last activity: 2026-03-17 -- Completed 24-05 (GOV-09 expiry, GOV-10 circulatingSupply, VOTE-01/02/03 vote integrity)
 
-Progress: [████░░░░░░] 38%
+Progress: [██████░░░░] 63%
 
 ## Project Reference
 
@@ -41,6 +41,9 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 24-04]: GOV-08 PASS -- _voidAllActive loop boundaries correct (1-indexed, <= condition), hard-set activeProposalCount=0 robust, idempotent under reentrancy.
 - [Phase 24-04]: GOV-07 KNOWN-ISSUE (Low) -- _executeSwap CEI violation allows theoretical sibling-proposal reentrancy via malicious coordinator, but requires pre-existing governance control
 - [Phase 24-04]: GOV-08 PASS -- _voidAllActive loop boundaries correct, hard-set activeProposalCount=0 robust, idempotent under reentrancy
+- [Phase 24-03]: GOV-04 PASS: threshold decay matches spec (8 steps, boundary analysis, 0 at 168h is unreachable dead code)
+- [Phase 24-03]: GOV-05 PASS: execute condition overflow-safe (max 1e31 vs uint256 1.15e77). circulatingSnapshot==0 not exploitable.
+- [Phase 24-03]: GOV-06 PASS: kill condition symmetric with execute, mutual exclusion proven via strict inequality contradiction
 
 ## Accumulated Context
 
@@ -54,6 +57,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-17T19:29:45.043Z
-Stopped at: Completed 24-04-PLAN.md
+Last session: 2026-03-17T19:32:39.928Z
+Stopped at: Completed 24-03-PLAN.md
 Resume file: None

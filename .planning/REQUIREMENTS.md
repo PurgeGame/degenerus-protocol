@@ -12,9 +12,9 @@ Requirements for VRF governance security audit and doc sync.
 - [x] **GOV-01**: Storage layout verified — `lastVrfProcessedTimestamp` at safe delegatecall slot, no collisions with existing GameStorage layout
 - [x] **GOV-02**: `propose()` access control verified — admin path (DGVE >50.1%, 20h stall) and community path (0.5% sDGNRS, 7d stall) both correctly gated
 - [x] **GOV-03**: `vote()` arithmetic verified — changeable votes correctly subtract old weight before adding new, no double-counting or weight leakage
-- [ ] **GOV-04**: Threshold decay verified — discrete daily steps match spec (6000→5000→4000→3000→2000→1000→500→0 at 24h intervals), boundary conditions clean
-- [ ] **GOV-05**: Execute condition verified — `approveWeight * BPS >= threshold * circulatingSnapshot AND approveWeight > rejectWeight` with no overflow or truncation
-- [ ] **GOV-06**: Kill condition verified — `rejectWeight > approveWeight AND rejectWeight * BPS >= threshold * circulatingSnapshot` symmetric with execute
+- [x] **GOV-04**: Threshold decay verified — discrete daily steps match spec (6000→5000→4000→3000→2000→1000→500→0 at 24h intervals), boundary conditions clean
+- [x] **GOV-05**: Execute condition verified — `approveWeight * BPS >= threshold * circulatingSnapshot AND approveWeight > rejectWeight` with no overflow or truncation
+- [x] **GOV-06**: Kill condition verified — `rejectWeight > approveWeight AND rejectWeight * BPS >= threshold * circulatingSnapshot` symmetric with execute
 - [x] **GOV-07**: `_executeSwap()` follows CEI — state set to Executed before external calls, reentrancy via malicious coordinator cannot trigger dual execution on sibling proposals
 - [x] **GOV-08**: `_voidAllActive()` correctly voids all Active proposals except the executed one, decrements `activeProposalCount` to 0
 - [ ] **GOV-09**: Proposal expiry — voting on expired proposal (168h+) transitions state to Expired and reverts, `activeProposalCount` decremented
@@ -82,9 +82,9 @@ Deferred to future milestone.
 | GOV-01 | Phase 24 | Complete |
 | GOV-02 | Phase 24 | Complete |
 | GOV-03 | Phase 24 | Complete |
-| GOV-04 | Phase 24 | Pending |
-| GOV-05 | Phase 24 | Pending |
-| GOV-06 | Phase 24 | Pending |
+| GOV-04 | Phase 24 | Complete |
+| GOV-05 | Phase 24 | Complete |
+| GOV-06 | Phase 24 | Complete |
 | GOV-07 | Phase 24 | Complete |
 | GOV-08 | Phase 24 | Complete |
 | GOV-09 | Phase 24 | Pending |
