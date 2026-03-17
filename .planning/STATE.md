@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 24-05-PLAN.md
-last_updated: "2026-03-17T19:30:29Z"
-last_activity: 2026-03-17 -- Completed 24-05 (GOV-09 expiry, GOV-10 circulatingSupply, VOTE-01/02/03 vote integrity)
+stopped_at: Completed 24-06-PLAN.md
+last_updated: "2026-03-17T22:30:18Z"
+last_activity: 2026-03-17 -- Completed 24-06 (XCON-01 through XCON-05 cross-contract interaction traces)
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 8
-  completed_plans: 5
-  percent: 63
+  completed_plans: 6
+  percent: 75
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 24 of 25 (Core Governance Security Audit)
-Plan: 5 of 8 in current phase
+Plan: 6 of 8 in current phase
 Status: Executing
-Last activity: 2026-03-17 -- Completed 24-05 (GOV-09 expiry, GOV-10 circulatingSupply, VOTE-01/02/03 vote integrity)
+Last activity: 2026-03-17 -- Completed 24-06 (XCON-01 through XCON-05 cross-contract interaction traces)
 
-Progress: [██████░░░░] 63%
+Progress: [███████░░░] 75%
 
 ## Project Reference
 
@@ -47,6 +47,11 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 24-05]: VOTE-01 PASS (INFO) -- sDGNRS has 7 balance-mutation paths; all blocked during >20h stall except burn (safe). WAR-04 edge case at exactly 20h noted.
 - [Phase 24-05]: VOTE-02 PASS -- circulatingSnapshot written only in propose() line 424, immutable post-creation
 - [Phase 24-05]: VOTE-03 KNOWN-ISSUE (LOW) -- uint8 overflow at 256 proposals wraps to 0, unpausing death clock. ~$3000 cost. Recommend require(activeProposalCount < 255)
+- [Phase 24-06]: XCON-01 PASS -- lastVrfProcessedTimestamp has exactly 2 write paths (_applyDailyRng, wireVrf). updateVrfCoordinatorAndSub intentionally does NOT write it.
+- [Phase 24-06]: XCON-02 PASS -- Death clock pause via anyProposalActive() correct. try/catch defensive. VOTE-03 overflow is only bypass.
+- [Phase 24-06]: XCON-03 PASS (INFO) -- 1-second boundary window at exactly 20h where unwrapTo and voting both permitted. Not practically exploitable (soulbound sDGNRS).
+- [Phase 24-06]: XCON-04 PASS -- _threeDayRngGap fully removed from governance paths. Retained only in DegenerusGame monitoring view.
+- [Phase 24-06]: XCON-05 PASS -- VRF retry timeout confirmed 12h (old 18h). Two retries before 20h governance. No downstream breakage.
 
 ## Accumulated Context
 
@@ -61,6 +66,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-17T19:30:29Z
-Stopped at: Completed 24-05-PLAN.md
+Last session: 2026-03-17T22:30:18Z
+Stopped at: Completed 24-06-PLAN.md
 Resume file: None

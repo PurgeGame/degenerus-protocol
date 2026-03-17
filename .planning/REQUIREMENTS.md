@@ -22,11 +22,11 @@ Requirements for VRF governance security audit and doc sync.
 
 ### Cross-Contract Interactions
 
-- [ ] **XCON-01**: `lastVrfProcessedTimestamp` write paths exhaustively enumerated — only `_applyDailyRng()` and `wireVrf()`, no manipulation vector
-- [ ] **XCON-02**: Death clock pause verified — `anyProposalActive()` correctly pauses liveness guard in `_handleGameOverPath()`, try/catch handles Admin revert
-- [ ] **XCON-03**: `unwrapTo` stall guard verified — blocks during VRF stall (>20h), boundary condition at exactly 20h analyzed
-- [ ] **XCON-04**: `updateVrfCoordinatorAndSub` `_threeDayRngGap` removal verified — Admin governance enforces stall, no bypass via direct Game call
-- [ ] **XCON-05**: VRF retry timeout change verified — 18h→12h in `rngGate()`, no downstream breakage
+- [x] **XCON-01**: `lastVrfProcessedTimestamp` write paths exhaustively enumerated — only `_applyDailyRng()` and `wireVrf()`, no manipulation vector
+- [x] **XCON-02**: Death clock pause verified — `anyProposalActive()` correctly pauses liveness guard in `_handleGameOverPath()`, try/catch handles Admin revert
+- [x] **XCON-03**: `unwrapTo` stall guard verified — blocks during VRF stall (>20h), boundary condition at exactly 20h analyzed
+- [x] **XCON-04**: `updateVrfCoordinatorAndSub` `_threeDayRngGap` removal verified — Admin governance enforces stall, no bypass via direct Game call
+- [x] **XCON-05**: VRF retry timeout change verified — 18h→12h in `rngGate()`, no downstream breakage
 
 ### Vote Integrity
 
@@ -89,11 +89,11 @@ Deferred to future milestone.
 | GOV-08 | Phase 24 | Complete |
 | GOV-09 | Phase 24 | Complete |
 | GOV-10 | Phase 24 | Complete |
-| XCON-01 | Phase 24 | Pending |
-| XCON-02 | Phase 24 | Pending |
-| XCON-03 | Phase 24 | Pending |
-| XCON-04 | Phase 24 | Pending |
-| XCON-05 | Phase 24 | Pending |
+| XCON-01 | Phase 24 | Complete |
+| XCON-02 | Phase 24 | Complete |
+| XCON-03 | Phase 24 | Complete |
+| XCON-04 | Phase 24 | Complete |
+| XCON-05 | Phase 24 | Complete |
 | VOTE-01 | Phase 24 | Complete |
 | VOTE-02 | Phase 24 | Complete |
 | VOTE-03 | Phase 24 | Complete |
