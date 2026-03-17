@@ -60,6 +60,14 @@ Plans:
 
 **Requirements:** NOVEL-01, NOVEL-02, NOVEL-03, NOVEL-04, NOVEL-05, NOVEL-09, NOVEL-10, NOVEL-11, NOVEL-12
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 21-01-PLAN.md — Economic attack modeling (MEV, flash loan, sandwich, selfdestruct) + DGNRS-as-amplifier analysis
+- [ ] 21-02-PLAN.md — Composition attack mapping + griefing vector enumeration + edge case matrix
+- [ ] 21-03-PLAN.md — Supply conservation invariant proofs + privilege escalation audit
+- [ ] 21-04-PLAN.md — stETH rebasing timing analysis + game-over race condition analysis
+
 **Success Criteria:**
 1. Economic attack report: MEV/sandwich/flash-loan vectors on transferable DGNRS
 2. Composition attack map: all cross-contract call chains involving sDGNRS+DGNRS+game+coinflip
