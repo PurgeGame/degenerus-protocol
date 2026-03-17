@@ -15,8 +15,8 @@ Requirements for VRF governance security audit and doc sync.
 - [ ] **GOV-04**: Threshold decay verified — discrete daily steps match spec (6000→5000→4000→3000→2000→1000→500→0 at 24h intervals), boundary conditions clean
 - [ ] **GOV-05**: Execute condition verified — `approveWeight * BPS >= threshold * circulatingSnapshot AND approveWeight > rejectWeight` with no overflow or truncation
 - [ ] **GOV-06**: Kill condition verified — `rejectWeight > approveWeight AND rejectWeight * BPS >= threshold * circulatingSnapshot` symmetric with execute
-- [ ] **GOV-07**: `_executeSwap()` follows CEI — state set to Executed before external calls, reentrancy via malicious coordinator cannot trigger dual execution on sibling proposals
-- [ ] **GOV-08**: `_voidAllActive()` correctly voids all Active proposals except the executed one, decrements `activeProposalCount` to 0
+- [x] **GOV-07**: `_executeSwap()` follows CEI — state set to Executed before external calls, reentrancy via malicious coordinator cannot trigger dual execution on sibling proposals
+- [x] **GOV-08**: `_voidAllActive()` correctly voids all Active proposals except the executed one, decrements `activeProposalCount` to 0
 - [ ] **GOV-09**: Proposal expiry — voting on expired proposal (168h+) transitions state to Expired and reverts, `activeProposalCount` decremented
 - [ ] **GOV-10**: `circulatingSupply()` correctly excludes undistributed pools (sDGNRS held by SDGNRS contract) and DGNRS wrapper balance
 
@@ -85,8 +85,8 @@ Deferred to future milestone.
 | GOV-04 | Phase 24 | Pending |
 | GOV-05 | Phase 24 | Pending |
 | GOV-06 | Phase 24 | Pending |
-| GOV-07 | Phase 24 | Pending |
-| GOV-08 | Phase 24 | Pending |
+| GOV-07 | Phase 24 | Complete |
+| GOV-08 | Phase 24 | Complete |
 | GOV-09 | Phase 24 | Pending |
 | GOV-10 | Phase 24 | Pending |
 | XCON-01 | Phase 24 | Pending |
