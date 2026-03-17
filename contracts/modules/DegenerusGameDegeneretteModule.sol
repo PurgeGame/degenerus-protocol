@@ -344,7 +344,6 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     uint8 private constant MODE_FULL_TICKET = 1;
 
     // Full Ticket bit positions
-    uint256 private constant FT_RANDOM_SHIFT = 1;
     uint256 private constant FT_TICKET_SHIFT = 2;
     uint256 private constant FT_COUNT_SHIFT = 34;
     uint256 private constant FT_CURRENCY_SHIFT = 42;
@@ -364,7 +363,6 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     uint16 private constant HERO_SCALE = 10_000;
 
     // Common masks
-    uint256 private constant MASK_1 = 0x1;
     uint256 private constant MASK_2 = 0x3;
     uint256 private constant MASK_3 = 0x7;
     uint256 private constant MASK_8 = 0xFF;

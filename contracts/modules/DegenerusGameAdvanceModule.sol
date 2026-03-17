@@ -101,7 +101,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
     uint256 private constant BURNIE_RNG_TRIGGER = 40_000 ether;
     uint32 private constant VAULT_PERPETUAL_TICKETS = 16;
-    uint8 private constant ETH_PERK_ODDS = 100;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1300;
     uint16 private constant NEXT_TO_FUTURE_BPS_WEEK_STEP = 100;
@@ -230,7 +229,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint8 stage;
         do {
             // RNG: use existing word or request new one
-            bool bonusFlip = (inJackpot && jackpotCounter == 0) || level == 0;
+            bool bonusFlip = (inJackpot && jackpotCounter == 0) || lvl == 0;
             uint256 rngWord = rngGate(ts, day, purchaseLevel, lastPurchase, bonusFlip);
             if (rngWord == 1) {
                 _swapAndFreeze(purchaseLevel);

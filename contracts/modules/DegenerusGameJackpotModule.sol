@@ -214,8 +214,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Number of far-future levels to sample for BURNIE jackpot (10 winners max).
     uint8 private constant FAR_FUTURE_COIN_SAMPLES = 10;
 
-    /// @dev Salt base for far-future coin jackpot winner selection.
-    uint8 private constant FAR_FUTURE_COIN_SALT_BASE = 248;
 
     /// @dev Domain separator for far-future coin jackpot entropy derivation.
     bytes32 private constant FAR_FUTURE_COIN_TAG = keccak256("far-future-coin");
@@ -554,13 +552,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 if (
                     dailyCarryoverEthPool == 0 || dailyCarryoverWinnerCap == 0
                 ) {
-                    dailyEthPhase = 0;
-                    dailyEthBucketCursor = 0;
-                    dailyEthWinnerCursor = 0;
-                    dailyEthPoolBudget = 0;
-                    dailyCarryoverEthPool = 0;
-                    dailyCarryoverWinnerCap = 0;
-                    dailyJackpotCoinTicketsPending = true;
+                    _clearDailyEthState();
                     return;
                 }
 
@@ -615,13 +607,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     }
                 }
 
-                dailyEthPhase = 0;
-                dailyEthBucketCursor = 0;
-                dailyEthWinnerCursor = 0;
-                dailyEthPoolBudget = 0;
-                dailyCarryoverEthPool = 0;
-                dailyCarryoverWinnerCap = 0;
-                dailyJackpotCoinTicketsPending = true;
+                _clearDailyEthState();
                 return;
             }
         }
@@ -1992,7 +1978,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      Returns (newPacked, skip) where skip=true means player should be skipped.
     function _resolveZeroOwedRemainder(
         uint40 packed,
-        uint24 lvl,
+        uint24,
         uint24 rk,
         address player,
         uint256 entropy,
@@ -2818,5 +2804,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         dailyTicketUnits = uint64(packed >> 8);
         carryoverTicketUnits = uint64(packed >> 72);
         carryoverSourceOffset = uint8(packed >> 136);
+    }
+
+    /// @dev Reset all daily ETH distribution state after jackpot day completes.
+    function _clearDailyEthState() private {
+        dailyEthPhase = 0;
+        dailyEthBucketCursor = 0;
+        dailyEthWinnerCursor = 0;
+        dailyEthPoolBudget = 0;
+        dailyCarryoverEthPool = 0;
+        dailyCarryoverWinnerCap = 0;
+        dailyJackpotCoinTicketsPending = true;
     }
 }
