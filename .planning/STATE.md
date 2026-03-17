@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 24-06-PLAN.md
-last_updated: "2026-03-17T22:30:18Z"
-last_activity: 2026-03-17 -- Completed 24-06 (XCON-01 through XCON-05 cross-contract interaction traces)
+stopped_at: Completed 24-07-PLAN.md
+last_updated: "2026-03-17T22:43:33.245Z"
+last_activity: 2026-03-17 -- Completed 24-07 (WAR-01 through WAR-06 adversarial war-game scenarios)
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 88
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 24 of 25 (Core Governance Security Audit)
-Plan: 6 of 8 in current phase
+Plan: 7 of 8 in current phase
 Status: Executing
-Last activity: 2026-03-17 -- Completed 24-06 (XCON-01 through XCON-05 cross-contract interaction traces)
+Last activity: 2026-03-17 -- Completed 24-07 (WAR-01 through WAR-06 adversarial war-game scenarios)
 
-Progress: [███████░░░] 75%
+Progress: [█████████░] 88%
 
 ## Project Reference
 
@@ -52,6 +52,12 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 24-06]: XCON-03 PASS (INFO) -- 1-second boundary window at exactly 20h where unwrapTo and voting both permitted. Not practically exploitable (soulbound sDGNRS).
 - [Phase 24-06]: XCON-04 PASS -- _threeDayRngGap fully removed from governance paths. Retained only in DegenerusGame monitoring view.
 - [Phase 24-06]: XCON-05 PASS -- VRF retry timeout confirmed 12h (old 18h). Two retries before 20h governance. No downstream breakage.
+- [Phase 24-07]: WAR-01 KNOWN-ISSUE (Medium) -- Compromised admin key + 7-day community absence can swap VRF coordinator. DGVE/sDGNRS separation is primary defense.
+- [Phase 24-07]: WAR-02 KNOWN-ISSUE (Medium) -- 5% cartel at day-6 threshold feasible with concentrated sDGNRS. Single reject voter blocks.
+- [Phase 24-07]: WAR-03 PASS (Low) -- VRF oscillation degrades governance but cannot defeat it. Auto-invalidation + death clock pause protect game.
+- [Phase 24-07]: WAR-04 PASS (Informational) -- 1-second unwrapTo boundary at 72000s is not practically exploitable. circulatingSupply self-corrects.
+- [Phase 24-07]: WAR-05 PASS (Informational) -- Post-execute governance loop is intentional design. Stall persists until new coordinator proves functionality.
+- [Phase 24-07]: WAR-06 KNOWN-ISSUE (Low) -- Admin spam-propose can bloat _voidAllActive gas cost. Per-proposer cooldown recommended.
 
 ## Accumulated Context
 
@@ -66,6 +72,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-17T22:30:18Z
-Stopped at: Completed 24-06-PLAN.md
+Last session: 2026-03-17T22:43:33.243Z
+Stopped at: Completed 24-07-PLAN.md
 Resume file: None
