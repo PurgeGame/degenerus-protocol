@@ -1,94 +1,123 @@
-# Requirements: Degenerus Protocol — C4A Audit Prep v2.0
+# Requirements: Degenerus Protocol — VRF Governance Audit v2.1
 
-**Defined:** 2026-03-16
+**Defined:** 2026-03-17
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v2.0 Requirements
+## v2.1 Requirements
 
-### Delta — sDGNRS/DGNRS Split Audit
+Requirements for VRF governance security audit and doc sync.
 
-- [x] **DELTA-01**: StakedDegenerusStonk reviewed for reentrancy, access control, reserve accounting
-- [x] **DELTA-02**: DegenerusStonk wrapper reviewed for ERC20 edge cases, burn delegation, unwrapTo
-- [x] **DELTA-03**: Cross-contract interaction between DGNRS↔sDGNRS verified (supply sync, burn-through)
-- [x] **DELTA-04**: All game→sDGNRS callsites verified (pool transfers, deposits, burnRemainingPools)
-- [x] **DELTA-05**: payCoinflipBountyDgnrs 3-arg gating logic verified
-- [x] **DELTA-06**: Degenerette DGNRS reward math (6/7/8 match tiers) verified
-- [x] **DELTA-07**: Earlybird→Lootbox pool dump verified (was Reward)
-- [x] **DELTA-08**: Pool BPS rebalance impact on all downstream consumers verified
+### Governance Core Audit
 
-### Correctness — Docs, Comments, Tests
+- [ ] **GOV-01**: Storage layout verified — `lastVrfProcessedTimestamp` at safe delegatecall slot, no collisions with existing GameStorage layout
+- [ ] **GOV-02**: `propose()` access control verified — admin path (DGVE >50.1%, 20h stall) and community path (0.5% sDGNRS, 7d stall) both correctly gated
+- [ ] **GOV-03**: `vote()` arithmetic verified — changeable votes correctly subtract old weight before adding new, no double-counting or weight leakage
+- [ ] **GOV-04**: Threshold decay verified — discrete daily steps match spec (6000→5000→4000→3000→2000→1000→500→0 at 24h intervals), boundary conditions clean
+- [ ] **GOV-05**: Execute condition verified — `approveWeight * BPS >= threshold * circulatingSnapshot AND approveWeight > rejectWeight` with no overflow or truncation
+- [ ] **GOV-06**: Kill condition verified — `rejectWeight > approveWeight AND rejectWeight * BPS >= threshold * circulatingSnapshot` symmetric with execute
+- [ ] **GOV-07**: `_executeSwap()` follows CEI — state set to Executed before external calls, reentrancy via malicious coordinator cannot trigger dual execution on sibling proposals
+- [ ] **GOV-08**: `_voidAllActive()` correctly voids all Active proposals except the executed one, decrements `activeProposalCount` to 0
+- [ ] **GOV-09**: Proposal expiry — voting on expired proposal (168h+) transitions state to Expired and reverts, `activeProposalCount` decremented
+- [ ] **GOV-10**: `circulatingSupply()` correctly excludes undistributed pools (sDGNRS held by SDGNRS contract) and DGNRS wrapper balance
 
-- [x] **CORR-01**: All NatDoc comments match implementation across changed contracts
-- [x] **CORR-02**: All 10 audit docs verified against current code (no stale refs)
-- [x] **CORR-03**: Test coverage for new/changed functions (sDGNRS, DGNRS, bounty, degenerette)
-- [x] **CORR-04**: Fuzz test compilation and correctness for changed contracts
+### Cross-Contract Interactions
 
-### Novel — Creative Attack Surface
+- [ ] **XCON-01**: `lastVrfProcessedTimestamp` write paths exhaustively enumerated — only `_applyDailyRng()` and `wireVrf()`, no manipulation vector
+- [ ] **XCON-02**: Death clock pause verified — `anyProposalActive()` correctly pauses liveness guard in `_handleGameOverPath()`, try/catch handles Admin revert
+- [ ] **XCON-03**: `unwrapTo` stall guard verified — blocks during VRF stall (>20h), boundary condition at exactly 20h analyzed
+- [ ] **XCON-04**: `updateVrfCoordinatorAndSub` `_threeDayRngGap` removal verified — Admin governance enforces stall, no bypass via direct Game call
+- [ ] **XCON-05**: VRF retry timeout change verified — 18h→12h in `rngGate()`, no downstream breakage
 
-- [x] **NOVEL-01**: Economic attack modeling on new DGNRS liquidity (MEV, sandwich, flash loan)
-- [x] **NOVEL-02**: Composition attacks across sDGNRS+DGNRS+game+coinflip interaction chains
-- [x] **NOVEL-03**: Griefing vectors (DoS, state bloat, gas limit) on new entry points
-- [x] **NOVEL-04**: Edge case enumeration (zero amounts, max uint, dust, rounding)
-- [x] **NOVEL-05**: Invariant analysis (supply conservation, backing >= obligations)
-- [x] **NOVEL-07**: Multi-agent adversarial simulation (3+ independent auditors cross-referencing findings)
-- [x] **NOVEL-08**: Regression check — diff every prior audit finding against current code
-- [x] **NOVEL-09**: Privilege escalation paths (can any non-game address trigger pool drains, burns, deposits?)
-- [x] **NOVEL-10**: Oracle/price manipulation via sDGNRS burn timing (stETH rebasing + claimable ETH)
-- [x] **NOVEL-11**: Game-over race conditions (burnRemainingPools vs concurrent burns, final sweep timing)
-- [x] **NOVEL-12**: DGNRS wrapper as attack amplifier (transferable token enables strategies impossible with soulbound)
+### Vote Integrity
 
-### Gas — Dead Code and Optimization
+- [ ] **VOTE-01**: sDGNRS supply frozen during VRF stall proven — all balance-mutation paths enumerated and verified blocked (no advances, no unwrapTo, soulbound)
+- [ ] **VOTE-02**: `circulatingSnapshot` immutable after proposal creation — cannot be manipulated by burning sDGNRS post-proposal
+- [ ] **VOTE-03**: `activeProposalCount` uint8 overflow analyzed — 256 proposals with `unchecked` increment, impact on `anyProposalActive()` and death clock
 
-- [x] **GAS-01**: Remove unreachable checks (guards on variables that can never be zero/overflow)
-- [x] **GAS-02**: Remove dead storage variables and unused state from all contracts
-- [x] **GAS-03**: Remove dead code paths and unreachable branches
-- [x] **GAS-04**: Identify redundant external calls and storage reads that can be cached
+### War-Game Scenarios
+
+- [ ] **WAR-01**: Compromised admin key scenario — admin proposes malicious coordinator, community can reject via threshold decay, admin cannot self-approve without sDGNRS
+- [ ] **WAR-02**: Colluding voter cartel at low threshold — day 6 (5% threshold) with minimal sDGNRS holders, practical exploitability assessed
+- [ ] **WAR-03**: VRF oscillation attack — stall → governance active → VRF recovers → proposals invalidated → repeat, assess DoS potential
+- [ ] **WAR-04**: Creator unwrapTo timing attack — attempt vote-stacking via DGNRS→sDGNRS conversion at exact 20h boundary
+- [ ] **WAR-05**: Post-execute governance loop — `lastVrfProcessedTimestamp` not reset after swap, can new proposals be created immediately?
+- [ ] **WAR-06**: Admin spam-propose gas griefing — no per-proposer cooldown, assess `_voidAllActive` gas with many proposals
+
+### M-02 Closure
+
+- [ ] **M02-01**: Original M-02 attack scenario (admin key compromise + VRF death = RNG control) verified as mitigated by governance
+- [ ] **M02-02**: Severity re-assessment — M-02 downgraded from Medium with explicit rationale documenting residual risk (if any)
+
+### Audit Doc Sync
+
+- [ ] **DOCS-01**: FINAL-FINDINGS-REPORT.md updated — M-02 status changed, governance findings added, plan/phase counts updated
+- [ ] **DOCS-02**: KNOWN-ISSUES.md updated — `emergencyRecover` references replaced, governance-specific known issues added
+- [ ] **DOCS-03**: state-changing-function-audits.md updated — ~8 new entries (governance functions), ~7 updated entries (modified functions), ~5 verified-unchanged
+- [ ] **DOCS-04**: parameter-reference.md updated — governance constants added (thresholds, timeouts, BPS values)
+- [ ] **DOCS-05**: Tier 2 reference docs updated — economic flow, VRF lifecycle, admin function references corrected
+- [ ] **DOCS-06**: Tier 3 footnotes added — minor references in delta audit docs, warden reports updated
+- [ ] **DOCS-07**: Cross-reference integrity verified — no stale `emergencyRecover`, `EmergencyRecovered`, `_threeDayRngGap`, or `18 hours` references remain in audit docs
+
+## v2.2+ Requirements
+
+Deferred to future milestone.
+
+- **FUZZ-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
+- **FORMAL-01**: Formal verification of vote counting arithmetic via Halmos
+- **SIM-01**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Unchanged contract internals | Covered by v1.0-v1.2 audits, reuse results |
-| Frontend/UI | Not in C4A audit scope |
-| VRF coordinator internals | External Chainlink dependency |
-| Gas optimizations that change behavior | Risk of introducing bugs pre-audit |
+| Governance UI/frontend | Not in audit scope |
+| Off-chain vote aggregation | On-chain only governance |
+| Governance upgrade mechanisms | Contract is immutable per spec |
+| Re-auditing non-governance contracts | Covered in v1.0-v2.0 |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DELTA-01 | Phase 19 | Complete (19-01) |
-| DELTA-02 | Phase 19 | Complete (19-01) |
-| DELTA-03 | Phase 19 | Complete (19-01) |
-| DELTA-04 | Phase 19 | Complete |
-| DELTA-05 | Phase 19 | Complete |
-| DELTA-06 | Phase 19 | Complete |
-| DELTA-07 | Phase 19 | Complete |
-| DELTA-08 | Phase 19 | Complete |
-| CORR-01 | Phase 20 | Complete |
-| CORR-02 | Phase 20 | Complete |
-| CORR-03 | Phase 20 | Complete |
-| CORR-04 | Phase 20 | Complete |
-| NOVEL-01 | Phase 21 | Complete |
-| NOVEL-02 | Phase 21 | Complete |
-| NOVEL-03 | Phase 21 | Complete |
-| NOVEL-04 | Phase 21 | Complete |
-| NOVEL-05 | Phase 21 | Complete |
-| NOVEL-07 | Phase 22 | Complete |
-| NOVEL-08 | Phase 22 | Complete |
-| NOVEL-09 | Phase 21 | Complete |
-| NOVEL-10 | Phase 21 | Complete |
-| NOVEL-11 | Phase 21 | Complete |
-| NOVEL-12 | Phase 21 | Complete |
-| GAS-01 | Phase 23 | Complete |
-| GAS-02 | Phase 23 | Complete |
-| GAS-03 | Phase 23 | Complete |
-| GAS-04 | Phase 23 | Complete |
+| GOV-01 | TBD | Pending |
+| GOV-02 | TBD | Pending |
+| GOV-03 | TBD | Pending |
+| GOV-04 | TBD | Pending |
+| GOV-05 | TBD | Pending |
+| GOV-06 | TBD | Pending |
+| GOV-07 | TBD | Pending |
+| GOV-08 | TBD | Pending |
+| GOV-09 | TBD | Pending |
+| GOV-10 | TBD | Pending |
+| XCON-01 | TBD | Pending |
+| XCON-02 | TBD | Pending |
+| XCON-03 | TBD | Pending |
+| XCON-04 | TBD | Pending |
+| XCON-05 | TBD | Pending |
+| VOTE-01 | TBD | Pending |
+| VOTE-02 | TBD | Pending |
+| VOTE-03 | TBD | Pending |
+| WAR-01 | TBD | Pending |
+| WAR-02 | TBD | Pending |
+| WAR-03 | TBD | Pending |
+| WAR-04 | TBD | Pending |
+| WAR-05 | TBD | Pending |
+| WAR-06 | TBD | Pending |
+| M02-01 | TBD | Pending |
+| M02-02 | TBD | Pending |
+| DOCS-01 | TBD | Pending |
+| DOCS-02 | TBD | Pending |
+| DOCS-03 | TBD | Pending |
+| DOCS-04 | TBD | Pending |
+| DOCS-05 | TBD | Pending |
+| DOCS-06 | TBD | Pending |
+| DOCS-07 | TBD | Pending |
 
 **Coverage:**
-- v2.0 requirements: 27 total
-- Mapped to phases: 27
-- Unmapped: 0 ✓
+- v2.1 requirements: 33 total
+- Mapped to phases: 0
+- Unmapped: 33
 
 ---
-*Requirements defined: 2026-03-16*
+*Requirements defined: 2026-03-17*
+*Last updated: 2026-03-17 after initial definition*
