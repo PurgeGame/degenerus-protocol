@@ -933,8 +933,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         _creditDgnrsCoinflip(currentPrizePool);
-        lastPurchaseDayFlipTotalPrev = lastPurchaseDayFlipTotal;
-        lastPurchaseDayFlipTotal = 0;
 
         _distributeYieldSurplus(rngWord);
     }

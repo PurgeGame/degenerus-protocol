@@ -230,7 +230,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint8 stage;
         do {
             // RNG: use existing word or request new one
-            uint256 rngWord = rngGate(ts, day, purchaseLevel, lastPurchase);
+            bool bonusFlip = (inJackpot && jackpotCounter == 0) || level == 0;
+            uint256 rngWord = rngGate(ts, day, purchaseLevel, lastPurchase, bonusFlip);
             if (rngWord == 1) {
                 _swapAndFreeze(purchaseLevel);
                 stage = STAGE_RNG_REQUESTED;
@@ -751,7 +752,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 ts,
         uint48 day,
         uint24 lvl,
-        bool isTicketJackpotDay
+        bool isTicketJackpotDay,
+        bool bonusFlip
     ) internal returns (uint256 word) {
         // Already recorded for today
         if (rngWordByDay[day] != 0) return rngWordByDay[day];
@@ -774,7 +776,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
-            bool bonusFlip = isTicketJackpotDay || level == 0;
             coinflip.processCoinflipPayouts(bonusFlip, currentWord, day);
             _finalizeLootboxRng(currentWord);
             return currentWord;

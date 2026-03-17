@@ -460,18 +460,6 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 11. recordCoinflipDeposit access control
-  // ---------------------------------------------------------------------------
-  describe("recordCoinflipDeposit", function () {
-    it("reverts when called by unauthorized address", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        game.connect(alice).recordCoinflipDeposit(eth("1"))
-      ).to.be.reverted;
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // 12. recordMintQuestStreak access control
   // ---------------------------------------------------------------------------
   describe("recordMintQuestStreak", function () {

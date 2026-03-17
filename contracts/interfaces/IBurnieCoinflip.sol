@@ -107,8 +107,8 @@ interface IBurnieCoinflip {
     /// @notice Process coinflip payout for a completed epoch (called by game contract after VRF fulfillment).
     /// @dev Determines win/loss and reward percent from RNG, resolves bounty, advances claimable day.
     ///      Reward percent ranges: 5% chance of 50% (unlucky), 5% chance of 150% (lucky),
-    ///      90% chance of 78-115% (normal). Bonus flip days may add +6% during presale or apply EV adjustment.
-    /// @param bonusFlip Whether this is a bonus flip day (last purchase day of a level).
+    ///      90% chance of 78-115% (normal). Bonus flip days add +6% during presale.
+    /// @param bonusFlip Whether this is a bonus flip day (first jackpot day of a level).
     /// @param rngWord The VRF random word for determining outcome.
     /// @param epoch The epoch (day) index being resolved.
     /// @custom:reverts OnlyDegenerusGame If caller is not the DegenerusGame contract.

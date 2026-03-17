@@ -120,12 +120,6 @@ contract BurnieCoinflip {
     uint256 private constant COINFLIP_LOSS_WWXRP_REWARD = 1 ether;
     uint16 private constant COINFLIP_EXTRA_MIN_PERCENT = 78;
     uint16 private constant COINFLIP_EXTRA_RANGE = 38;
-    uint16 private constant COINFLIP_RATIO_BPS_SCALE = 10_000;
-    uint16 private constant COINFLIP_RATIO_BPS_EQUAL = 10_000;
-    uint16 private constant COINFLIP_RATIO_BPS_TRIPLE = 30_000;
-    int256 private constant COINFLIP_EV_EQUAL_BPS = 0;
-    int256 private constant COINFLIP_EV_TRIPLE_BPS = 300;
-    uint16 private constant COINFLIP_REWARD_MEAN_BPS = 9685;
     uint16 private constant BPS_DENOMINATOR = 10_000;
     uint16 private constant AFKING_RECYCLE_BONUS_BPS = 160;
     uint16 private constant AFKING_DEITY_BONUS_PER_LEVEL_HALF_BPS = 2;
@@ -289,7 +283,6 @@ contract BurnieCoinflip {
 
         // Principal + quest bonus become the pending flip stake.
         IDegenerusGame game = degenerusGame;
-        game.recordCoinflipDeposit(amount);
         uint256 creditedFlip = amount + questReward;
         uint256 rollAmount = state.autoRebuyEnabled
             ? state.autoRebuyCarry
@@ -835,13 +828,6 @@ contract BurnieCoinflip {
             }
         }
 
-        if (bonusFlip && !presaleBonus) {
-            (uint256 prevTotal, uint256 currentTotal) = game
-                .lastPurchaseDayFlipTotals();
-            int256 evBps = _coinflipTargetEvBps(prevTotal, currentTotal);
-            rewardPercent = _applyEvToRewardPercent(rewardPercent, evBps);
-        }
-
         // Preserve original 50/50 win roll.
         bool win = (rngWord & 1) == 1;
 
@@ -1086,65 +1072,6 @@ contract BurnieCoinflip {
             return AFKING_DEITY_BONUS_MAX_HALF_BPS;
         }
         return uint16(bonus);
-    }
-
-    /// @dev Derive target EV (in bps) based on last-purchase-day flip totals.
-    function _coinflipTargetEvBps(
-        uint256 prevTotal,
-        uint256 currentTotal
-    ) private pure returns (int256 evBps) {
-        if (prevTotal == 0) {
-            return COINFLIP_EV_EQUAL_BPS;
-        }
-
-        uint256 ratioBps = (currentTotal * COINFLIP_RATIO_BPS_SCALE) / prevTotal;
-        if (ratioBps <= COINFLIP_RATIO_BPS_EQUAL) {
-            return COINFLIP_EV_EQUAL_BPS;
-        }
-        if (ratioBps >= COINFLIP_RATIO_BPS_TRIPLE) {
-            return COINFLIP_EV_TRIPLE_BPS;
-        }
-
-        return _lerpEvBps(
-            COINFLIP_RATIO_BPS_EQUAL,
-            COINFLIP_RATIO_BPS_TRIPLE,
-            COINFLIP_EV_EQUAL_BPS,
-            COINFLIP_EV_TRIPLE_BPS,
-            ratioBps
-        );
-    }
-
-    /// @dev Linear interpolation helper for EV bps.
-    function _lerpEvBps(
-        uint256 x0,
-        uint256 x1,
-        int256 y0,
-        int256 y1,
-        uint256 x
-    ) private pure returns (int256) {
-        if (x <= x0) return y0;
-        if (x >= x1) return y1;
-        int256 span = int256(x1 - x0);
-        int256 delta = y1 - y0;
-        int256 offset = (int256(x - x0) * delta) / span;
-        return y0 + offset;
-    }
-
-    /// @dev Apply EV-based adjustment to the payout percent (bps) on last purchase day.
-    function _applyEvToRewardPercent(
-        uint16 rewardPercent,
-        int256 evBps
-    ) private pure returns (uint16 adjustedPercent) {
-        int256 targetRewardBps = int256(uint256(BPS_DENOMINATOR)) + (evBps * 2);
-        int256 deltaBps =
-            targetRewardBps - int256(uint256(COINFLIP_REWARD_MEAN_BPS));
-        int256 adjustedBps = int256(uint256(rewardPercent) * 100) + deltaBps;
-        if (adjustedBps <= 0) return 0;
-        uint256 rounded = (uint256(adjustedBps) + 50) / 100;
-        if (rounded > type(uint16).max) {
-            return type(uint16).max;
-        }
-        adjustedPercent = uint16(rounded);
     }
 
     /// @dev Calculate the target day for new coinflip deposits.
