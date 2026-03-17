@@ -10,8 +10,8 @@ Requirements for VRF governance security audit and doc sync.
 ### Governance Core Audit
 
 - [x] **GOV-01**: Storage layout verified — `lastVrfProcessedTimestamp` at safe delegatecall slot, no collisions with existing GameStorage layout
-- [ ] **GOV-02**: `propose()` access control verified — admin path (DGVE >50.1%, 20h stall) and community path (0.5% sDGNRS, 7d stall) both correctly gated
-- [ ] **GOV-03**: `vote()` arithmetic verified — changeable votes correctly subtract old weight before adding new, no double-counting or weight leakage
+- [x] **GOV-02**: `propose()` access control verified — admin path (DGVE >50.1%, 20h stall) and community path (0.5% sDGNRS, 7d stall) both correctly gated
+- [x] **GOV-03**: `vote()` arithmetic verified — changeable votes correctly subtract old weight before adding new, no double-counting or weight leakage
 - [ ] **GOV-04**: Threshold decay verified — discrete daily steps match spec (6000→5000→4000→3000→2000→1000→500→0 at 24h intervals), boundary conditions clean
 - [ ] **GOV-05**: Execute condition verified — `approveWeight * BPS >= threshold * circulatingSnapshot AND approveWeight > rejectWeight` with no overflow or truncation
 - [ ] **GOV-06**: Kill condition verified — `rejectWeight > approveWeight AND rejectWeight * BPS >= threshold * circulatingSnapshot` symmetric with execute
@@ -80,8 +80,8 @@ Deferred to future milestone.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | GOV-01 | Phase 24 | Complete |
-| GOV-02 | Phase 24 | Pending |
-| GOV-03 | Phase 24 | Pending |
+| GOV-02 | Phase 24 | Complete |
+| GOV-03 | Phase 24 | Complete |
 | GOV-04 | Phase 24 | Pending |
 | GOV-05 | Phase 24 | Pending |
 | GOV-06 | Phase 24 | Pending |
