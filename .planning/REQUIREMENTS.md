@@ -30,7 +30,7 @@
 - [x] **NOVEL-03**: Griefing vectors (DoS, state bloat, gas limit) on new entry points
 - [x] **NOVEL-04**: Edge case enumeration (zero amounts, max uint, dust, rounding)
 - [x] **NOVEL-05**: Invariant analysis (supply conservation, backing >= obligations)
-- [ ] **NOVEL-07**: Multi-agent adversarial simulation (3+ independent auditors cross-referencing findings)
+- [x] **NOVEL-07**: Multi-agent adversarial simulation (3+ independent auditors cross-referencing findings)
 - [x] **NOVEL-08**: Regression check — diff every prior audit finding against current code
 - [x] **NOVEL-09**: Privilege escalation paths (can any non-game address trigger pool drains, burns, deposits?)
 - [x] **NOVEL-10**: Oracle/price manipulation via sDGNRS burn timing (stETH rebasing + claimable ETH)
@@ -74,7 +74,7 @@
 | NOVEL-03 | Phase 21 | Complete |
 | NOVEL-04 | Phase 21 | Complete |
 | NOVEL-05 | Phase 21 | Complete |
-| NOVEL-07 | Phase 22 | Pending |
+| NOVEL-07 | Phase 22 | Complete |
 | NOVEL-08 | Phase 22 | Complete |
 | NOVEL-09 | Phase 21 | Complete |
 | NOVEL-10 | Phase 21 | Complete |
