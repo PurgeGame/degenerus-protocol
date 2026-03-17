@@ -71,7 +71,7 @@
 - VRF config can be set or rotated (not one-time-only despite NatSpec suggesting "one-time") via `updateVrfCoordinatorAndSub`
 - Only ADMIN can call
 
-**NatSpec Accuracy:** MINOR INACCURACY. NatSpec says "One-time VRF setup" but the function "Overwrites any existing config on each call" per its own dev comment. The AdvanceModule also exposes `updateVrfCoordinatorAndSub` for emergency rotation. Not a functional concern -- the "one-time" label refers to the expected deployment flow, not a technical enforcement.
+**NatSpec Accuracy:** MINOR INACCURACY. NatSpec says "One-time VRF setup" but the function "Overwrites any existing config on each call" per its own dev comment. wireVrf is deployment-only; governance coordinator rotation uses `updateVrfCoordinatorAndSub` (not wireVrf). Not a functional concern -- the "one-time" label refers to the expected deployment flow, not a technical enforcement.
 
 **Gas Flags:** None.
 
@@ -2310,12 +2310,14 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **ETH Flow:**
 - No direct ETH flow. `coinflip.processCoinflipPayouts` processes coinflip payouts externally.
 
+> **v2.1 Update:** VRF retry timeout changed from 18 hours to 12 hours (XCON-05). Two retries possible before 20h admin governance threshold.
+
 **Invariants:**
 - Returns immediately if today's RNG already recorded (idempotent for double-entry)
 - If VRF word ready and from current day: applies nudges, processes coinflips, finalizes lootbox
 - If VRF word ready but from previous day: finalizes for lootbox only, then requests fresh daily RNG
-- If VRF pending and 18+ hours elapsed: retries request
-- If VRF pending and < 18 hours: reverts `RngNotReady()`
+- If VRF pending and 12+ hours elapsed: retries request
+- If VRF pending and < 12 hours: reverts `RngNotReady()`
 - If no pending request: initiates fresh request, returns 1
 - `bonusFlip` is true when `isTicketJackpotDay` OR `level == 0` (first level always gets bonus)
 
@@ -2332,6 +2334,10 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 ### `updateVrfCoordinatorAndSub(address, uint256, bytes32)` [external]
 
+> **v2.1 Update:** `_threeDayRngGap` guard removed. This function is now called by DegenerusAdmin._executeSwap()
+> during governance-approved VRF coordinator rotation (was called by emergencyRecover in v1.0-v2.0).
+> Access control unchanged (ContractAddresses.ADMIN only). State resets unchanged.
+
 | Field | Value |
 |-------|-------|
 | **Signature** | `function updateVrfCoordinatorAndSub(address newCoordinator, uint256 newSubId, bytes32 newKeyHash) external` |
@@ -2342,9 +2348,8 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 **State Reads:**
 - `msg.sender` (access control)
-- `_simulatedDayIndex()` (current day for 3-day gap check)
-- `rngWordByDay[day]`, `rngWordByDay[day-1]`, `rngWordByDay[day-2]` (via _threeDayRngGap)
 - `vrfCoordinator` (current coordinator for event)
+- Note: v2.1 removed `_simulatedDayIndex()` and `rngWordByDay` reads -- the `_threeDayRngGap` guard was removed. Stall validation now lives in DegenerusAdmin.propose() via `lastVrfProcessedTimestamp` thresholds (20h admin, 7d community).
 
 **State Writes:**
 - `vrfCoordinator = IVRFCoordinator(newCoordinator)`
@@ -2356,30 +2361,29 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `rngWordCurrent = 0`
 
 **Callers:**
-- DegenerusAdmin only (`msg.sender != ContractAddresses.ADMIN` reverts `E()`).
+- DegenerusAdmin only (`msg.sender != ContractAddresses.ADMIN` reverts `E()`). In v2.1, called by DegenerusAdmin._executeSwap() during governance-approved VRF coordinator rotation (was called by emergencyRecover in v1.0-v2.0).
 
 **Callees:**
-- `_simulatedDayIndex()` (view helper)
-- `_threeDayRngGap(day)` (private view)
+- None in v2.1 (v1.0-v2.0 called `_simulatedDayIndex()` and `_threeDayRngGap(day)`, both removed in v2.1)
 
 **ETH Flow:**
 - None. Pure configuration + state reset function.
 
 **Invariants:**
 - Only ContractAddresses.ADMIN can call
-- Requires 3-day RNG gap (no RNG words recorded for current day, day-1, and day-2)
+- v2.1: No on-chain stall guard in this function -- stall validation moved to DegenerusAdmin.propose() (20h/7d lastVrfProcessedTimestamp thresholds) and the governance vote/execute flow
 - Resets all RNG state to allow immediate advancement after rotation
-- This is an emergency recovery mechanism, not normal operation
+- This is a governance-controlled coordinator rotation function (v1.0-v2.0: emergency recovery mechanism)
 
 **NatSpec Accuracy:**
-- NatSpec says "Emergency VRF coordinator rotation after 3-day stall" -- ACCURATE.
-- NatSpec says "Access: ContractAddresses.ADMIN only" -- ACCURATE.
-- NatSpec says "SECURITY: Requires 3-day gap to prevent abuse" -- ACCURATE. `_threeDayRngGap` checks 3 consecutive days without RNG.
+- NatSpec says "Emergency VRF coordinator rotation" -- v2.1 context: now governance-controlled, not single-admin emergency. The word "emergency" is still appropriate since governance proposals only activate during VRF stalls.
+- NatSpec says "Access: ContractAddresses.ADMIN only" -- ACCURATE (unchanged in v2.1).
+- v2.1: NatSpec reference to `_threeDayRngGap` is stale -- the guard was removed. Governance stall thresholds in DegenerusAdmin.propose() replace it.
 - Interface declares `updateVrfCoordinatorAndSub(address, uint256, uint32)` but implementation uses `bytes32` for 3rd param. INTERFACE MISMATCH: interface says `uint32 newKeyHash` but implementation says `bytes32 newKeyHash`. However, checking the interface file: the interface actually declares `bytes32 newKeyHash` at line 32 of IDegenerusGameModules.sol. Confirmed: no mismatch.
 
 **Gas Flags:**
-- 7 SSTOREs + 1 SLOAD + 3 mapping reads. Efficient for an emergency function.
-- `_threeDayRngGap` performs 3 mapping reads. Early-exit on first non-zero optimizes the common denial case.
+- 7 SSTOREs + 1 SLOAD. Efficient for a coordinator rotation function.
+- v2.1: Removed `_threeDayRngGap` 3 mapping reads -- function is now leaner.
 
 **Verdict:** CORRECT
 
@@ -2490,6 +2494,9 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 ### `_handleGameOverPath(uint48, uint48, uint48, uint24, bool, uint48)` [private]
 
+> **v2.1 Update:** Now calls `admin.anyProposalActive()` to pause death clock during active governance proposals (XCON-02).
+> Uses try/catch -- if Admin contract reverts, death clock proceeds normally (defensive behavior).
+
 | Field | Value |
 |-------|-------|
 | **Signature** | `function _handleGameOverPath(uint48 ts, uint48 day, uint48 lst, uint24 lvl, bool lastPurchase, uint48 _dailyIdx) private returns (bool shouldReturn)` |
@@ -2504,6 +2511,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `levelPrizePool[lvl]` (prize target comparison)
 - `rngWordByDay[_dailyIdx]` (RNG availability for drain)
 - DEPLOY_IDLE_TIMEOUT_DAYS (constant: 912 days)
+- `admin.anyProposalActive()` (v2.1: governance proposal liveness check via try/catch external call to DegenerusAdmin)
 
 **State Writes:**
 - `levelStartTime = ts` (when safety check resets liveness timer)
@@ -2516,6 +2524,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `advanceGame()` only
 
 **Callees:**
+- `IDegenerusAdmin(ContractAddresses.ADMIN).anyProposalActive()` (v2.1: external view call via try/catch -- pauses death clock if any governance proposal is active)
 - `ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(handleFinalSweep.selector)` (post-gameover sweep)
 - `ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(handleGameOverDrain.selector, _dailyIdx)` (pre-gameover drain)
 - `_gameOverEntropy(ts, day, lvl, lastPurchase)` (private)
@@ -2529,7 +2538,8 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 
 **Invariants:**
 - Liveness check: level 0 = 912-day timeout, level > 0 = 365-day timeout
-- If liveness not triggered, returns false immediately (no game-over processing)
+- v2.1: If liveness triggered, checks `admin.anyProposalActive()` via try/catch. If any governance proposal is active, liveness is suppressed (death clock paused). If Admin reverts, death clock proceeds normally (defensive).
+- If liveness not triggered (or suppressed by active governance), returns false immediately (no game-over processing)
 - Post-gameover path (gameOver == true): delegates to handleFinalSweep
 - Safety check: if `nextPrizePool >= levelPrizePool[lvl]` at level > 0, resets timer and does NOT trigger game-over (prevents premature activation when prize target is already met)
 - Pre-gameover path: acquires RNG (with fallback), then delegates to handleGameOverDrain
@@ -2540,6 +2550,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **Gas Flags:**
 - Early return on `!livenessTriggered` is the hot path (99.99%+ of calls). Efficient.
 - Liveness arithmetic uses `uint256` promotion for the `DEPLOY_IDLE_TIMEOUT_DAYS * 1 days` multiplication, preventing uint48 overflow. Correct.
+- v2.1: `anyProposalActive()` is a cheap external view call (single SLOAD of `activeProposalCount`). Only called when liveness is triggered (rare path).
 
 **Verdict:** CORRECT
 
@@ -11125,6 +11136,51 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 > **Note:** DGNRS was neutered to remove all active gameplay. Holders can only hold, transfer, and burn for their proportional share of accumulated ETH/stETH/BURNIE. The lock system, gameplay functions (`gamePurchase`, `gamePurchaseTicketsBurnie`, `gamePurchaseBurnieLootbox`, `gameDegeneretteBetEth`, `gameDegeneretteBetBurnie`, `gameOpenLootBox`, `coinDecimatorBurn`), BURNIE rebate logic (`_rebateBurnieFromEthValue`), quest reward logic (`_transferFromPoolInternal`), spend tracking (`_checkAndRecordEthSpend`, `_checkAndRecordBurnieSpend`, `_maxEthActionFromLocked`, `_maxBurnieActionFromLocked`, `_lockedClaimableValues`), lock management (`lockForLevel`, `unlock`, `getLockStatus`, `_reduceActiveLock`), WWXRP handling, and the `IDegenerusQuestsView` interface were all removed. The contract passively accumulates value via free tickets, AFK mode, and deity pass (all handled by the game contract without DGNRS involvement).
 
+### `unwrapTo(address recipient, uint256 amount)` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function unwrapTo(address recipient, uint256 amount) external` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | `recipient` (address): Address to receive unwrapped sDGNRS; `amount` (uint256): Amount of DGNRS to unwrap |
+| **Returns** | None |
+
+**State Reads:**
+- `msg.sender` (must equal `ContractAddresses.CREATOR`)
+- `block.timestamp` (VRF stall duration calculation)
+- `IDegenerusGame(ContractAddresses.GAME).lastVrfProcessed()` (external view: returns `lastVrfProcessedTimestamp` as uint48)
+
+**State Writes:**
+- `balanceOf[msg.sender]` decremented (via `_burn`)
+- `totalSupply` decremented (via `_burn`)
+- Via `stonk.wrapperTransferTo(recipient, amount)`: transfers sDGNRS from sDGNRS contract to recipient
+
+**Callers:** Creator only (`ContractAddresses.CREATOR`). Reverts `Unauthorized()` for all other callers.
+
+**Callees:**
+- `IDegenerusGame(ContractAddresses.GAME).lastVrfProcessed()` (external view)
+- `_burn(msg.sender, amount)` (internal: burns DGNRS from sender)
+- `stonk.wrapperTransferTo(recipient, amount)` (external: transfers underlying sDGNRS to recipient)
+
+**ETH Flow:** None (token operations only: DGNRS burned, sDGNRS transferred).
+
+**Invariants:**
+- Creator-only access: `msg.sender != ContractAddresses.CREATOR` reverts `Unauthorized()`
+- Zero-address recipient blocked: reverts `ZeroAddress()`
+- VRF stall guard: reverts `Unauthorized()` if `block.timestamp - lastVrfProcessed() > 20 hours` (ADMIN_STALL_THRESHOLD). This prevents creator from unwrapping DGNRS to sDGNRS during active governance, which could affect voting weight via circulatingSupply changes.
+- Burns DGNRS from sender, then transfers equivalent sDGNRS from the sDGNRS contract (via wrapperTransferTo) to recipient
+- sDGNRS is soulbound -- recipient cannot transfer it, limiting vote manipulation surface
+
+**NatSpec Accuracy:**
+- NatSpec accurately describes burn + unwrap mechanic and VRF stall guard purpose: "Blocked during VRF stall (>20h) to prevent creator vote-stacking via DGNRS->sDGNRS conversion."
+
+**Gas Flags:** None. Straightforward burn + transfer.
+
+**Verdict:** CORRECT (verified in Phase 24, XCON-03)
+
+---
+
 ### `approve(address spender, uint256 amount)` [external]
 
 | Field | Value |
@@ -12995,6 +13051,10 @@ Rounding: Due to integer division, small dust amounts (< winner count) in scatte
 
 ---
 
+> **v2.1 REMOVED:** `emergencyRecover` was removed in v2.1 and replaced by governance
+> (propose/vote/execute). The entry below is preserved for historical audit traceability.
+> See the `propose()`, `vote()`, `_executeSwap()` entries above for current behavior.
+
 ### `emergencyRecover(address newCoordinator, bytes32 newKeyHash)` [external]
 
 | Field | Value |
@@ -13082,6 +13142,386 @@ Rounding: Due to integer division, small dust amounts (< winner count) in scatte
 **Gas Flags:** The SubscriptionShutdown event is emitted in two paths: once with `bal` when LINK sweep succeeds (line 567), and once with 0 at the end (line 573). If the cancelSubscription succeeds but LINK sweep fails (or bal is 0), the event correctly reports 0. If both succeed, only the first emit fires (due to `return` on line 568). This is correct -- no duplicate events.
 
 **Verdict:** CORRECT
+
+---
+
+### `propose(address newCoordinator, bytes32 newKeyHash)` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function propose(address newCoordinator, bytes32 newKeyHash) external returns (uint256 proposalId)` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | `newCoordinator` (address): Address of proposed VRF coordinator; `newKeyHash` (bytes32): Key hash for proposed coordinator |
+| **Returns** | `proposalId` (uint256): ID of the created proposal |
+
+**State Reads:**
+- `subscriptionId` (NotWired guard: must be non-zero)
+- `gameAdmin.gameOver()` (GameOver guard)
+- `gameAdmin.lastVrfProcessed()` (stall duration calculation -- returns `lastVrfProcessedTimestamp` as uint48)
+- `block.timestamp` (stall duration calculation)
+- `vault.isVaultOwner(msg.sender)` (admin path gate: >50.1% DGVE holder)
+- `sDGNRS.balanceOf(msg.sender)` (community path: minimum 0.5% of circulating supply)
+- `circulatingSupply()` (community path: denominator for stake check, also stored as circulatingSnapshot)
+- `proposalCount` (for new proposal ID)
+
+**State Writes:**
+- `proposalCount` incremented (pre-increment: `++proposalCount`)
+- `proposals[proposalId].proposer = msg.sender`
+- `proposals[proposalId].coordinator = newCoordinator`
+- `proposals[proposalId].keyHash = newKeyHash`
+- `proposals[proposalId].createdAt = uint48(block.timestamp)`
+- `proposals[proposalId].circulatingSnapshot = circulatingSupply()`
+- `proposals[proposalId].path = path` (Admin or Community)
+- `activeProposalCount++` (unchecked increment of uint8)
+
+**Callers:**
+- Admin path: Any address holding >50.1% of DGVE supply, after 20h+ VRF stall (`ADMIN_STALL_THRESHOLD`)
+- Community path: Any address holding >= 0.5% of circulating sDGNRS supply, after 7d+ VRF stall (`COMMUNITY_STALL_THRESHOLD`)
+
+**Callees:**
+- `gameAdmin.gameOver()` (external view)
+- `gameAdmin.lastVrfProcessed()` (external view)
+- `vault.isVaultOwner(msg.sender)` (external view)
+- `circulatingSupply()` (internal view, called twice: once for stake check, once for snapshot)
+- `sDGNRS.balanceOf(msg.sender)` (external view, community path only)
+
+**ETH Flow:** None.
+
+**Invariants:**
+- VRF must be stalled beyond threshold (20h for admin, 7d for community) -- checked via `block.timestamp - lastVrfProcessed()`
+- `newCoordinator != address(0)` and `newKeyHash != bytes32(0)` (ZeroAddress guard)
+- Game must not be over (GameOver guard)
+- Subscription must exist (NotWired guard)
+- Creates new Active proposal (ProposalState.Active is default 0)
+- Records `circulatingSnapshot` at proposal creation time for threshold calculations
+- Community path requires `sDGNRS.balanceOf(msg.sender) * BPS >= circ * COMMUNITY_PROPOSE_BPS` (i.e., >= 0.5%)
+- `activeProposalCount` increment is unchecked uint8 -- KNOWN-ISSUE (VOTE-03): wraps to 0 at 256 proposals
+
+**NatSpec Accuracy:**
+- NatSpec accurately describes two-path access control, stall thresholds, and return value.
+
+**Gas Flags:**
+- `circulatingSupply()` called twice (once for stake check, once for snapshot storage). Could be cached, but the second call ensures snapshot reflects the exact state at storage time. Acceptable.
+
+**Verdict:** CORRECT (verified in Phase 24, GOV-02)
+
+---
+
+### `vote(uint256 proposalId, bool approve)` [external]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function vote(uint256 proposalId, bool approve) external` |
+| **Visibility** | external |
+| **Mutability** | state-changing |
+| **Parameters** | `proposalId` (uint256): ID of the proposal to vote on; `approve` (bool): true to approve, false to reject |
+| **Returns** | None |
+
+**State Reads:**
+- `gameAdmin.lastVrfProcessed()` (stall re-check: reverts if VRF recovered, i.e., stall < 20h)
+- `block.timestamp` (stall duration, expiry check)
+- `proposals[proposalId].state` (must be Active)
+- `proposals[proposalId].createdAt` (expiry check: >= PROPOSAL_LIFETIME = 168h)
+- `sDGNRS.balanceOf(msg.sender)` (voter weight from live balance)
+- `votes[proposalId][msg.sender]` (existing vote direction for subtract-before-add)
+- `voteWeight[proposalId][msg.sender]` (existing vote weight for subtract-before-add)
+- `proposals[proposalId].approveWeight` / `rejectWeight` (for execute/kill condition check)
+- `proposals[proposalId].circulatingSnapshot` (for threshold comparison)
+- `threshold(proposalId)` (decaying threshold in BPS)
+
+**State Writes:**
+- `proposals[proposalId].state = Expired` (if expiry triggered, with `activeProposalCount--`)
+- `proposals[proposalId].approveWeight` / `rejectWeight` (subtract old weight, add new weight)
+- `votes[proposalId][msg.sender] = newVote` (Approve or Reject)
+- `voteWeight[proposalId][msg.sender] = weight` (current sDGNRS balance)
+- `proposals[proposalId].state = Killed` (if kill condition met, with `activeProposalCount--`)
+- Via `_executeSwap(proposalId)` if execute condition met
+
+**Callers:** Any sDGNRS holder (must have non-zero balance).
+
+**Callees:**
+- `gameAdmin.lastVrfProcessed()` (external view)
+- `sDGNRS.balanceOf(msg.sender)` (external view)
+- `threshold(proposalId)` (internal view)
+- `_executeSwap(proposalId)` (internal, if execute condition met)
+
+**ETH Flow:** None.
+
+**Invariants:**
+- Stall re-check at entry: if `block.timestamp - lastVrfProcessed() < ADMIN_STALL_THRESHOLD` (20h), reverts NotStalled. This IS the auto-cancellation mechanism -- VRF recovery invalidates all governance.
+- Proposal must be Active with non-zero createdAt
+- Lazy expiry: if `block.timestamp - createdAt >= PROPOSAL_LIFETIME` (168h), marks Expired and reverts ProposalExpired. State change (Expired + activeProposalCount--) is rolled back by revert -- activeProposalCount stays inflated (protective behavior, pauses death clock longer).
+- Changeable votes via subtract-before-add: old weight subtracted from old direction, new weight added to new direction
+- Execute condition: `approveWeight * BPS >= threshold * circulatingSnapshot` AND `approveWeight > rejectWeight`
+- Kill condition: `rejectWeight > approveWeight` AND `rejectWeight * BPS >= threshold * circulatingSnapshot`
+- Voter weight from live sDGNRS balance (safe: VRF dead = supply frozen, no advances, unwrapTo blocked)
+
+**NatSpec Accuracy:**
+- NatSpec accurately describes changeable votes, stall re-check as auto-cancellation, and execute/kill conditions.
+
+**Gas Flags:**
+- Subtract-before-add pattern requires 2 extra SLOADs for returning voters (existing vote direction + weight). Acceptable for correctness.
+
+**Verdict:** CORRECT (verified in Phase 24, GOV-03)
+
+---
+
+### `_executeSwap(uint256 proposalId)` [internal]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _executeSwap(uint256 proposalId) internal` |
+| **Visibility** | internal |
+| **Mutability** | state-changing |
+| **Parameters** | `proposalId` (uint256): ID of the proposal being executed |
+| **Returns** | None |
+
+**State Reads:**
+- `proposals[proposalId].coordinator` (new coordinator address)
+- `proposals[proposalId].keyHash` (new key hash)
+- `subscriptionId` (old subscription for cancellation)
+- `coordinator` (old coordinator for cancellation)
+- `linkToken.balanceOf(address(this))` (residual LINK for transfer)
+
+**State Writes:**
+- `proposals[proposalId].state = Executed`
+- `coordinator = newCoordinator`
+- `subscriptionId = newSubId` (from new coordinator's createSubscription)
+- `vrfKeyHash = newKeyHash`
+- Via `_voidAllActive(proposalId)`: marks all other Active proposals as Killed, sets `activeProposalCount = 0`
+
+**Callers:** `vote()` only (when execute condition met).
+
+**Callees:**
+- `IVRFCoordinatorV2_5Owner(oldCoord).cancelSubscription(oldSub, address(this))` -- cancels old subscription (try/catch)
+- `IVRFCoordinatorV2_5Owner(newCoordinator).createSubscription()` -- creates new subscription
+- `IVRFCoordinatorV2_5Owner(newCoordinator).addConsumer(newSubId, GAME)` -- registers Game as consumer
+- `gameAdmin.updateVrfCoordinatorAndSub(newCoordinator, newSubId, newKeyHash)` -- pushes new config to Game
+- `linkToken.balanceOf(address(this))` -- checks LINK balance
+- `linkToken.transferAndCall(newCoordinator, bal, abi.encode(newSubId))` -- funds new subscription (try/catch)
+- `_voidAllActive(proposalId)` -- kills all other active proposals
+
+**ETH Flow:** None (LINK flow: residual LINK transferred to new subscription via transferAndCall).
+
+**Invariants:**
+- KNOWN-ISSUE (GOV-07, Low): CEI violation -- external calls to new coordinator (createSubscription, addConsumer, updateVrfCoordinatorAndSub, transferAndCall) occur BEFORE `_voidAllActive`. A malicious coordinator could theoretically re-enter and interact with still-Active sibling proposals. However, exploitation requires pre-existing governance control (proposer chose the malicious coordinator). Recommended fix: move `_voidAllActive` before external calls.
+- Old subscription cancelled best-effort (try/catch handles unresponsive coordinators)
+- New subscription created and configured atomically
+- All other Active proposals voided after execution
+
+**NatSpec Accuracy:**
+- NatSpec accurately describes the 6-step execution order. CEI violation is not documented in NatSpec (flagged as GOV-07).
+
+**Gas Flags:** None. All external calls are necessary.
+
+**Verdict:** CORRECT with KNOWN-ISSUE (GOV-07, Low -- CEI violation, theoretical sibling-proposal reentrancy via malicious coordinator)
+
+---
+
+### `_voidAllActive(uint256 exceptId)` [internal]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function _voidAllActive(uint256 exceptId) internal` |
+| **Visibility** | internal |
+| **Mutability** | state-changing |
+| **Parameters** | `exceptId` (uint256): Proposal ID to exclude from voiding (the executed proposal) |
+| **Returns** | None |
+
+**State Reads:**
+- `proposalCount` (loop bound)
+- `proposals[i].state` for i in 1..proposalCount (check for Active state)
+
+**State Writes:**
+- `proposals[i].state = Killed` for all Active proposals except `exceptId`
+- `activeProposalCount = 0` (hard-set, not decremented per-proposal)
+
+**Callers:** `_executeSwap()` only.
+
+**Callees:** None (emits ProposalKilled events).
+
+**ETH Flow:** None.
+
+**Invariants:**
+- 1-indexed loop with `<=` condition (`for (uint256 i = 1; i <= count; i++)`) -- correct for 1-indexed proposals
+- Skips `exceptId` (the just-executed proposal, already marked Executed)
+- Hard-sets `activeProposalCount = 0` (robust: doesn't rely on per-proposal decrement, idempotent under reentrancy)
+- Loop is O(n) in total proposal count -- KNOWN-ISSUE (WAR-06, Low): spam-propose can bloat gas cost. Per-proposer cooldown recommended.
+
+**NatSpec Accuracy:**
+- NatSpec accurately describes voiding behavior and exception handling.
+
+**Gas Flags:**
+- O(n) loop over all proposals ever created. Gas cost grows linearly with `proposalCount`. In practice, proposals only created during VRF stalls (rare events), so count remains small. WAR-06 notes spam-propose as a theoretical gas griefing vector.
+
+**Verdict:** CORRECT (verified in Phase 24, GOV-08)
+
+---
+
+### `anyProposalActive()` [external view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function anyProposalActive() external view returns (bool)` |
+| **Visibility** | external |
+| **Mutability** | view |
+| **Parameters** | None |
+| **Returns** | `bool`: true if `activeProposalCount > 0` |
+
+**State Reads:**
+- `activeProposalCount` (uint8)
+
+**State Writes:** None (view function).
+
+**Callers:**
+- DegenerusGameAdvanceModule._handleGameOverPath() (via try/catch external call -- pauses death clock if any governance proposal is active)
+
+**Callees:** None.
+
+**ETH Flow:** None.
+
+**Invariants:**
+- Returns `activeProposalCount > 0` -- simple comparison
+- KNOWN-ISSUE dependency (VOTE-03, Low): if `activeProposalCount` wraps to 0 at 256 proposals (uint8 overflow), this function returns false and death clock resumes even with active proposals. ~$3,000 cost to trigger.
+
+**NatSpec Accuracy:**
+- NatSpec accurately describes usage by AdvanceModule for death clock pause.
+
+**Gas Flags:** Minimal -- single SLOAD.
+
+**Verdict:** CORRECT (verified in Phase 24, XCON-02)
+
+---
+
+### `circulatingSupply()` [public view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function circulatingSupply() public view returns (uint256)` |
+| **Visibility** | public |
+| **Mutability** | view |
+| **Parameters** | None |
+| **Returns** | `uint256`: circulating sDGNRS supply |
+
+**State Reads:**
+- `sDGNRS.totalSupply()` (external view)
+- `sDGNRS.balanceOf(ContractAddresses.SDGNRS)` (external view -- sDGNRS held by the sDGNRS contract itself, i.e., undistributed pools)
+- `sDGNRS.balanceOf(ContractAddresses.DGNRS)` (external view -- sDGNRS held by DGNRS wrapper contract)
+
+**State Writes:** None (view function).
+
+**Callers:**
+- `propose()` (community path stake check + circulatingSnapshot storage)
+- `vote()` (indirectly via threshold comparison against circulatingSnapshot)
+
+**Callees:**
+- `sDGNRS.totalSupply()` (external view)
+- `sDGNRS.balanceOf(ContractAddresses.SDGNRS)` (external view)
+- `sDGNRS.balanceOf(ContractAddresses.DGNRS)` (external view)
+
+**ETH Flow:** None.
+
+**Invariants:**
+- Formula: `totalSupply - balanceOf(SDGNRS) - balanceOf(DGNRS)` -- excludes undistributed pool tokens (held by sDGNRS contract itself) and tokens locked in the DGNRS wrapper
+- Underflow impossible: SDGNRS and DGNRS balances are subsets of totalSupply. Combined, they cannot exceed totalSupply because both are balances of the same token.
+- Result represents tokens actively held by users (available for governance voting)
+
+**NatSpec Accuracy:**
+- NatSpec accurately describes the exclusion of undistributed pools and DGNRS wrapper.
+
+**Gas Flags:** 3 external SLOADs. Acceptable for a view function.
+
+**Verdict:** CORRECT (verified in Phase 24, GOV-10)
+
+---
+
+### `threshold(uint256 proposalId)` [public view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function threshold(uint256 proposalId) public view returns (uint16)` |
+| **Visibility** | public |
+| **Mutability** | view |
+| **Parameters** | `proposalId` (uint256): ID of the proposal |
+| **Returns** | `uint16`: threshold in basis points (e.g., 6000 = 60%) |
+
+**State Reads:**
+- `proposals[proposalId].createdAt` (proposal creation timestamp)
+- `block.timestamp` (current time)
+
+**State Writes:** None (view function).
+
+**Callers:**
+- `vote()` (for execute/kill condition checks)
+- `canExecute()` (for execution readiness check)
+
+**Callees:** None.
+
+**ETH Flow:** None.
+
+**Invariants:**
+- 8-step discrete decay schedule:
+  - 0-24h: 6000 BPS (60%)
+  - 24-48h: 5000 BPS (50%)
+  - 48-72h: 4000 BPS (40%)
+  - 72-96h: 3000 BPS (30%)
+  - 96-120h: 2000 BPS (20%)
+  - 120-144h: 1000 BPS (10%)
+  - 144-168h: 500 BPS (5%)
+  - 168h+: 0 BPS (0% -- unreachable in practice, proposal expires at PROPOSAL_LIFETIME = 168h via vote() lazy expiry)
+- Returns uint16 -- all values fit within uint16 range (max 6000)
+
+**NatSpec Accuracy:**
+- NatSpec accurately describes the decaying threshold and basis point return.
+
+**Gas Flags:** Pure arithmetic, single SLOAD for createdAt. Minimal.
+
+**Verdict:** CORRECT (verified in Phase 24, GOV-04)
+
+---
+
+### `canExecute(uint256 proposalId)` [external view]
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `function canExecute(uint256 proposalId) external view returns (bool)` |
+| **Visibility** | external |
+| **Mutability** | view |
+| **Parameters** | `proposalId` (uint256): ID of the proposal |
+| **Returns** | `bool`: true if all execution conditions are met |
+
+**State Reads:**
+- `proposals[proposalId].state` (must be Active)
+- `proposals[proposalId].createdAt` (must be non-zero, not expired)
+- `gameAdmin.lastVrfProcessed()` (stall check)
+- `block.timestamp` (stall duration, expiry check)
+- `threshold(proposalId)` (decaying threshold)
+- `proposals[proposalId].approveWeight` (numerator of threshold check)
+- `proposals[proposalId].rejectWeight` (approve must exceed reject)
+- `proposals[proposalId].circulatingSnapshot` (denominator of threshold check)
+
+**State Writes:** None (view function).
+
+**Callers:** External consumers (UI, off-chain monitoring). Not called on-chain by vote() -- vote() computes the condition inline.
+
+**Callees:**
+- `gameAdmin.lastVrfProcessed()` (external view)
+- `threshold(proposalId)` (internal view)
+
+**ETH Flow:** None.
+
+**Invariants:**
+- Returns false if: proposal not Active, createdAt == 0, expired (>= PROPOSAL_LIFETIME), VRF recovered (stall < 20h)
+- Returns true if: `approveWeight * BPS >= threshold * circulatingSnapshot` AND `approveWeight > rejectWeight`
+- Overflow analysis: max approveWeight = max sDGNRS supply (~1e30), BPS = 10000. Product: ~1e34. Well within uint256 (1.15e77).
+
+**NatSpec Accuracy:**
+- NatSpec accurately describes the view-only execution check with no side effects.
+
+**Gas Flags:** Multiple SLOADs + external call. Acceptable for a view function.
+
+**Verdict:** CORRECT (verified in Phase 24, GOV-05)
 
 ---
 
