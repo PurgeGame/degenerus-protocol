@@ -2,24 +2,24 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: completed
-last_updated: "2026-03-17T00:18:33.397Z"
-last_activity: 2026-03-17 — Completed 21-03 (invariants and privilege escalation)
+status: verifying
+last_updated: "2026-03-17T00:46:53.849Z"
+last_activity: 2026-03-17 -- Completed 22-02 (regression check)
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 12
+  completed_plans: 10
 ---
 
 # State
 
 ## Current Position
 
-Phase: 21 (Novel Attack Surface)
-Plan: 04 of 4 -- COMPLETE
-Status: Phase 21 complete. All 4 plans executed: economic/amplifier attacks, composition/griefing/edge cases, invariants/privilege, timing/race conditions.
-Last activity: 2026-03-17 — Completed 21-03 (invariants and privilege escalation)
+Phase: 22 (Warden Simulation + Regression Check)
+Plan: 02 of 3
+Status: Plan 02 complete. Regression check verified 48 prior audit points (14 findings, 9 attacks, 15 delta surfaces, 10 NOVEL checks) -- 0 regressions found.
+Last activity: 2026-03-17 -- Completed 22-02 (regression check)
 
 ## Project Reference
 
@@ -46,6 +46,7 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - [Phase 21]: 21-04: stETH rebase timing SAFE (<$2 extractable for 10% holder); all 5 game-over race conditions SAFE/INFORMATIONAL
 - 21-02: claimWinnings stETH fallback path confirmed safe (game _payoutWithStethFallback deposits stETH to sDGNRS via depositSteth); stETH rounding revert at line 415 only for near-100% burns; forced ETH donation via selfdestruct is net loss for attacker
 - [Phase 21]: Backing solvency invariant uses Insufficient() revert as backstop; game contract is trust anchor for privilege model
+- [Phase 22]: 22-02: All 48 regression check points PASS -- 14 formal findings STILL VALID, 9 attack scenarios PASS, 15 delta surfaces UNCHANGED, 10 NOVEL checks UNCHANGED. 0 regressions. DELTA-I-04 stale comment has been corrected (LINE_SHIFT).
 
 ## Accumulated Context
 
@@ -65,3 +66,4 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - 21-02: NOVEL-02 (5 call chains) + NOVEL-03 (6 griefing vectors) + NOVEL-04 (15 edge cases) analyzed. All call chains SAFE with CEI. claimWinnings stETH fallback path discovered and verified. 2 griefing vectors BLOCKED, 3 NEGLIGIBLE, 1 KNOWN. stETH rounding revert only for near-100% burns. 474-line report.
 - 21-03: NOVEL-05 (4 invariants) + NOVEL-09 (privilege escalation) analyzed. Supply conservation proven across 6 paths. Cross-contract supply invariant proven across 6 paths. Backing solvency proven with Insufficient() revert backstop. Pool balance consistency proven pre-gameOver. Complete privilege map: GAME, DGNRS, CREATOR, public. 4 escalation vectors (delegatecall, proxy, CREATE2, tx.origin) all NO ESCALATION. 602-line report.
 - 21-04: NOVEL-10 (stETH rebasing) + NOVEL-11 (game-over races) analyzed. Rebase extractable value <$2/burn at 10% holder. previewBurn discrepancy = by design (DELTA-I-03). Branch flipping = composition not value. 4-state game-over machine documented. 5 race conditions analyzed: concurrent burns proven order-independent (algebraic proof). Pending RNG window = INFORMATIONAL. 539-line report.
+- 22-02: Comprehensive regression check: 48 verification points across 4 categories. 14 formal findings (M-02, DELTA-L-01, I-03..I-22, DELTA-I-01..04) all STILL VALID. 9 v1.0 attack scenarios all PASS. 15 v1.2 delta surfaces all UNCHANGED. 10 Phase 21 NOVEL checks all UNCHANGED. 836-line report. 0 regressions.
