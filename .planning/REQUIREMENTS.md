@@ -25,7 +25,7 @@
 
 ### Novel — Creative Attack Surface
 
-- [ ] **NOVEL-01**: Economic attack modeling on new DGNRS liquidity (MEV, sandwich, flash loan)
+- [x] **NOVEL-01**: Economic attack modeling on new DGNRS liquidity (MEV, sandwich, flash loan)
 - [ ] **NOVEL-02**: Composition attacks across sDGNRS+DGNRS+game+coinflip interaction chains
 - [ ] **NOVEL-03**: Griefing vectors (DoS, state bloat, gas limit) on new entry points
 - [ ] **NOVEL-04**: Edge case enumeration (zero amounts, max uint, dust, rounding)
@@ -35,7 +35,7 @@
 - [ ] **NOVEL-09**: Privilege escalation paths (can any non-game address trigger pool drains, burns, deposits?)
 - [ ] **NOVEL-10**: Oracle/price manipulation via sDGNRS burn timing (stETH rebasing + claimable ETH)
 - [ ] **NOVEL-11**: Game-over race conditions (burnRemainingPools vs concurrent burns, final sweep timing)
-- [ ] **NOVEL-12**: DGNRS wrapper as attack amplifier (transferable token enables strategies impossible with soulbound)
+- [x] **NOVEL-12**: DGNRS wrapper as attack amplifier (transferable token enables strategies impossible with soulbound)
 
 ### Gas — Dead Code and Optimization
 
@@ -69,7 +69,7 @@
 | CORR-02 | Phase 20 | Complete |
 | CORR-03 | Phase 20 | Complete |
 | CORR-04 | Phase 20 | Complete |
-| NOVEL-01 | Phase 21 | Pending |
+| NOVEL-01 | Phase 21 | Complete |
 | NOVEL-02 | Phase 21 | Pending |
 | NOVEL-03 | Phase 21 | Pending |
 | NOVEL-04 | Phase 21 | Pending |
@@ -79,7 +79,7 @@
 | NOVEL-09 | Phase 21 | Pending |
 | NOVEL-10 | Phase 21 | Pending |
 | NOVEL-11 | Phase 21 | Pending |
-| NOVEL-12 | Phase 21 | Pending |
+| NOVEL-12 | Phase 21 | Complete |
 | GAS-01 | Phase 23 | Pending |
 | GAS-02 | Phase 23 | Pending |
 | GAS-03 | Phase 23 | Pending |

@@ -2,24 +2,24 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: verifying
-last_updated: "2026-03-16T23:38:51.696Z"
-last_activity: 2026-03-16 — Completed 20-03 (test coverage gaps + fuzz verification)
+status: completed
+last_updated: "2026-03-17T00:10:53.774Z"
+last_activity: 2026-03-17 — Completed 21-01 (economic amplifier attacks)
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 9
+  completed_plans: 7
 ---
 
 # State
 
 ## Current Position
 
-Phase: 20 (Correctness Verification)
-Plan: 03 of 3 -- COMPLETE
-Status: Phase 20 complete. All 3 plans executed: NatDoc+comments, audit doc completeness, test coverage+fuzz verification.
-Last activity: 2026-03-16 — Completed 20-03 (test coverage gaps + fuzz verification)
+Phase: 21 (Novel Attack Surface)
+Plan: 01 of 4
+Status: 21-01 complete. NOVEL-01 + NOVEL-12 economic/amplifier attack analysis delivered.
+Last activity: 2026-03-17 — Completed 21-01 (economic amplifier attacks)
 
 ## Project Reference
 
@@ -41,6 +41,7 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - 20-01: Fixed 3 additional COINFLIP line references plan marked as correct (off-by-one in reference file)
 - 20-02: sDGNRS section placed before DGNRS in function audits (underlying before wrapper); all 14 verdicts CORRECT per Phase 19 verification
 - 20-03: BURNIE burn path documented as untestable without fixture modification; DGNRS self-transfer validates DELTA-L-01; depositSteth(0) confirmed as no-op
+- 21-01: All 9 economic/amplifier attack vectors SAFE or OUT_OF_SCOPE; proportional burn-redeem formula is the fundamental defense
 
 ## Accumulated Context
 
@@ -56,3 +57,4 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - 20-01: DegenerusStonk.sol now has 16 @notice NatDoc tags (full coverage). Stale earlybird comment fixed. 10 parameter reference line numbers corrected. DELTA-L-01 in KNOWN-ISSUES. sDGNRS in external audit scope.
 - 20-02: state-changing-function-audits.md now has complete sDGNRS section (14 entries). FINAL-FINDINGS-REPORT.md updated with v2.0 delta findings (1L+4I), DELTA-01-08 coverage matrix, sDGNRS in scope, 62 plans/68 requirements.
 - 20-03: 7 new edge case tests added (self-transfer, zero-address, zero-amount, stETH burn). Focused tests: 80 passing. Full suite: 1074 passing, 24 pre-existing failures, 0 new regressions. Fuzz tests compile clean. CORR-03+CORR-04 satisfied. Phase 20 complete.
+- 21-01: NOVEL-01 (5 economic vectors) + NOVEL-12 (4 amplifier scenarios) analyzed. Flash loan blocked by onlyGame. Selfdestruct ETH = donation. MEV sandwich on burns = order-independent. Flash loan DGNRS = self-defeating (burn destroys repayment). Accumulation = intended arbitrage. 479-line report with 60+ file:line citations.
