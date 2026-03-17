@@ -56,16 +56,13 @@ Plans:
   3. state-changing-function-audits.md has entries for all new governance functions (~8 new), updated entries for modified functions (~7 updated), and verification notes for unchanged functions (~5 verified)
   4. parameter-reference.md includes all governance constants (thresholds, timeouts, BPS values, decay schedule, stall durations)
   5. Zero stale references remain in any audit doc -- grep for `emergencyRecover`, `EmergencyRecovered`, `_threeDayRngGap`, and `18 hours` returns no hits in audit documentation
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 25-01: TBD
-- [ ] 25-02: TBD
-- [ ] 25-03: TBD
-- [ ] 25-04: TBD
-- [ ] 25-05: TBD
-- [ ] 25-06: TBD
-- [ ] 25-07: TBD
+- [ ] 25-01-PLAN.md -- Tier 1 docs: FINAL-FINDINGS-REPORT.md + KNOWN-ISSUES.md (DOCS-01, DOCS-02)
+- [ ] 25-02-PLAN.md -- Tier 2: state-changing-function-audits.md governance entries (DOCS-03)
+- [ ] 25-03-PLAN.md -- Tier 2/3: parameter-reference.md + RNG docs + historical doc annotations (DOCS-04, DOCS-05, DOCS-06)
+- [ ] 25-04-PLAN.md -- Cross-reference validation sweep (DOCS-07)
 
 ## Progress
 
@@ -74,7 +71,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 24. Core Governance Security Audit | 8/8 | Complete    | 2026-03-17 | - |
-| 25. Audit Doc Sync | v2.1 | 0/7 | Not started | - |
+| 25. Audit Doc Sync | v2.1 | 0/4 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-17*
