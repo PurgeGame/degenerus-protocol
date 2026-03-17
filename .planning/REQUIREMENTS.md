@@ -79,45 +79,45 @@ Deferred to future milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GOV-01 | TBD | Pending |
-| GOV-02 | TBD | Pending |
-| GOV-03 | TBD | Pending |
-| GOV-04 | TBD | Pending |
-| GOV-05 | TBD | Pending |
-| GOV-06 | TBD | Pending |
-| GOV-07 | TBD | Pending |
-| GOV-08 | TBD | Pending |
-| GOV-09 | TBD | Pending |
-| GOV-10 | TBD | Pending |
-| XCON-01 | TBD | Pending |
-| XCON-02 | TBD | Pending |
-| XCON-03 | TBD | Pending |
-| XCON-04 | TBD | Pending |
-| XCON-05 | TBD | Pending |
-| VOTE-01 | TBD | Pending |
-| VOTE-02 | TBD | Pending |
-| VOTE-03 | TBD | Pending |
-| WAR-01 | TBD | Pending |
-| WAR-02 | TBD | Pending |
-| WAR-03 | TBD | Pending |
-| WAR-04 | TBD | Pending |
-| WAR-05 | TBD | Pending |
-| WAR-06 | TBD | Pending |
-| M02-01 | TBD | Pending |
-| M02-02 | TBD | Pending |
-| DOCS-01 | TBD | Pending |
-| DOCS-02 | TBD | Pending |
-| DOCS-03 | TBD | Pending |
-| DOCS-04 | TBD | Pending |
-| DOCS-05 | TBD | Pending |
-| DOCS-06 | TBD | Pending |
-| DOCS-07 | TBD | Pending |
+| GOV-01 | Phase 24 | Pending |
+| GOV-02 | Phase 24 | Pending |
+| GOV-03 | Phase 24 | Pending |
+| GOV-04 | Phase 24 | Pending |
+| GOV-05 | Phase 24 | Pending |
+| GOV-06 | Phase 24 | Pending |
+| GOV-07 | Phase 24 | Pending |
+| GOV-08 | Phase 24 | Pending |
+| GOV-09 | Phase 24 | Pending |
+| GOV-10 | Phase 24 | Pending |
+| XCON-01 | Phase 24 | Pending |
+| XCON-02 | Phase 24 | Pending |
+| XCON-03 | Phase 24 | Pending |
+| XCON-04 | Phase 24 | Pending |
+| XCON-05 | Phase 24 | Pending |
+| VOTE-01 | Phase 24 | Pending |
+| VOTE-02 | Phase 24 | Pending |
+| VOTE-03 | Phase 24 | Pending |
+| WAR-01 | Phase 24 | Pending |
+| WAR-02 | Phase 24 | Pending |
+| WAR-03 | Phase 24 | Pending |
+| WAR-04 | Phase 24 | Pending |
+| WAR-05 | Phase 24 | Pending |
+| WAR-06 | Phase 24 | Pending |
+| M02-01 | Phase 24 | Pending |
+| M02-02 | Phase 24 | Pending |
+| DOCS-01 | Phase 25 | Pending |
+| DOCS-02 | Phase 25 | Pending |
+| DOCS-03 | Phase 25 | Pending |
+| DOCS-04 | Phase 25 | Pending |
+| DOCS-05 | Phase 25 | Pending |
+| DOCS-06 | Phase 25 | Pending |
+| DOCS-07 | Phase 25 | Pending |
 
 **Coverage:**
 - v2.1 requirements: 33 total
-- Mapped to phases: 0
-- Unmapped: 33
+- Mapped to phases: 33
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-17*
-*Last updated: 2026-03-17 after initial definition*
+*Last updated: 2026-03-17 after roadmap creation (phases 24-25)*

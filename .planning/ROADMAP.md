@@ -1,124 +1,80 @@
-# Roadmap: v2.0 C4A Audit Prep
+# Roadmap: v2.1 VRF Governance Audit + Doc Sync
 
-**Milestone:** v2.0
-**Phases:** 19-23 (continuing from v1.2 phase 18)
-**Requirements:** 27
+**Milestone:** v2.1
+**Phases:** 24-25 (continuing from v2.0 phase 23)
+**Requirements:** 33
 
-- [x] **Phase 19: Delta Security Audit — sDGNRS/DGNRS Split** (completed 2026-03-16)
-- [x] **Phase 20: Correctness Verification — Docs, Comments, Tests** (completed 2026-03-16)
-- [x] **Phase 21: Novel Attack Surface — Deep Creative Analysis** (completed 2026-03-17)
+<details>
+<summary>v2.0 C4A Audit Prep (Phases 19-23) -- SHIPPED 2026-03-17</summary>
+
+- [x] **Phase 19: Delta Security Audit -- sDGNRS/DGNRS Split** (completed 2026-03-16)
+- [x] **Phase 20: Correctness Verification -- Docs, Comments, Tests** (completed 2026-03-16)
+- [x] **Phase 21: Novel Attack Surface -- Deep Creative Analysis** (completed 2026-03-17)
 - [x] **Phase 22: Warden Simulation + Regression Check** (completed 2026-03-17)
-- [x] **Phase 23: Gas Optimization — Dead Code Removal** (completed 2026-03-17)
+- [x] **Phase 23: Gas Optimization -- Dead Code Removal** (completed 2026-03-17)
+
+</details>
+
+## Phases
+
+- [ ] **Phase 24: Core Governance Security Audit** - Adversarial security audit of VRF governance (propose/vote/execute), cross-contract interactions, vote integrity, war-game scenarios, and M-02 closure verification
+- [ ] **Phase 25: Audit Doc Sync** - Update all audit documentation to reflect governance changes, new findings, and M-02 closure
+
+## Phase Details
+
+### Phase 24: Core Governance Security Audit
+**Goal**: Every governance attack vector a C4A warden could find is identified -- storage layout, access control, vote arithmetic, reentrancy, cross-contract side effects, and adversarial scenarios are all verified secure or documented as known issues
+**Depends on**: Phase 23 (v2.0 complete)
+**Requirements**: GOV-01, GOV-02, GOV-03, GOV-04, GOV-05, GOV-06, GOV-07, GOV-08, GOV-09, GOV-10, XCON-01, XCON-02, XCON-03, XCON-04, XCON-05, VOTE-01, VOTE-02, VOTE-03, WAR-01, WAR-02, WAR-03, WAR-04, WAR-05, WAR-06, M02-01, M02-02
+**Success Criteria** (what must be TRUE):
+  1. Storage layout for `lastVrfProcessedTimestamp` is verified collision-free via slot computation, and every governance-touched storage variable is mapped to its slot
+  2. Every governance function (propose, vote, execute, kill, void, expiry) has a written audit verdict covering access control, arithmetic correctness, state transitions, and CEI compliance
+  3. All cross-contract interaction paths between DegenerusAdmin, AdvanceModule, GameStorage, Game, and DegenerusStonk are traced and verified -- no manipulation vector exists for `lastVrfProcessedTimestamp`, death clock, unwrapTo stall, or VRF retry timeout
+  4. All six war-game scenarios (compromised admin, colluding cartel, VRF oscillation, unwrapTo timing attack, post-execute governance loop, admin spam-propose) have written assessments with exploit feasibility and severity ratings
+  5. M-02 (admin key compromise + VRF death = RNG control) is verified as mitigated by governance, with explicit residual risk documentation
+**Plans**: TBD
+
+**Constraint**: Self-audit confirmation bias (CP-01) -- this codebase was written by the same team auditing it. Phase 24 plans must apply adversarial persona protocol: assume the code is wrong, attempt to break it before concluding it is correct.
+
+Plans:
+- [ ] 24-01: TBD
+- [ ] 24-02: TBD
+- [ ] 24-03: TBD
+- [ ] 24-04: TBD
+- [ ] 24-05: TBD
+- [ ] 24-06: TBD
+- [ ] 24-07: TBD
+- [ ] 24-08: TBD
+
+### Phase 25: Audit Doc Sync
+**Goal**: Every audit document accurately reflects the current codebase -- no stale references to `emergencyRecover`, old VRF timeouts, or pre-governance security model remain, and all governance findings from Phase 24 are integrated
+**Depends on**: Phase 24 (needs finding IDs, requirement verdicts, severity assessments)
+**Requirements**: DOCS-01, DOCS-02, DOCS-03, DOCS-04, DOCS-05, DOCS-06, DOCS-07
+**Success Criteria** (what must be TRUE):
+  1. FINAL-FINDINGS-REPORT.md has M-02 status updated with governance mitigation rationale, all new governance findings added with finding IDs and severity, and plan/phase counts reflect v2.1
+  2. KNOWN-ISSUES.md has all `emergencyRecover` references replaced with governance equivalents, and governance-specific known issues (e.g., uint8 overflow, threshold decay tradeoffs) are documented
+  3. state-changing-function-audits.md has entries for all new governance functions (~8 new), updated entries for modified functions (~7 updated), and verification notes for unchanged functions (~5 verified)
+  4. parameter-reference.md includes all governance constants (thresholds, timeouts, BPS values, decay schedule, stall durations)
+  5. Zero stale references remain in any audit doc -- grep for `emergencyRecover`, `EmergencyRecovered`, `_threeDayRngGap`, and `18 hours` returns no hits in audit documentation
+**Plans**: TBD
+
+Plans:
+- [ ] 25-01: TBD
+- [ ] 25-02: TBD
+- [ ] 25-03: TBD
+- [ ] 25-04: TBD
+- [ ] 25-05: TBD
+- [ ] 25-06: TBD
+- [ ] 25-07: TBD
+
+## Progress
+
+**Execution Order:** Phase 24 (core audit) must complete before Phase 25 (doc sync depends on audit finding IDs).
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 24. Core Governance Security Audit | v2.1 | 0/8 | Not started | - |
+| 25. Audit Doc Sync | v2.1 | 0/7 | Not started | - |
 
 ---
-
-## Phase 19: Delta Security Audit — sDGNRS/DGNRS Split
-
-**Goal:** Adversarial security review of all code changed in the sDGNRS/DGNRS split.
-
-**Requirements:** DELTA-01, DELTA-02, DELTA-03, DELTA-04, DELTA-05, DELTA-06, DELTA-07, DELTA-08
-
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 19-01-PLAN.md — Core contract audit: sDGNRS + DGNRS line-by-line review + supply invariant proof (2/2 tasks, DELTA-01/02/03 PASS)
-- [x] 19-02-PLAN.md — Consumer callsite audit + reward math + BPS verification + consolidated report
-
-**Success Criteria:**
-1. StakedDegenerusStonk.sol reviewed line-by-line: reentrancy, access control, reserve math, burn accounting
-2. DegenerusStonk.sol reviewed: ERC20 compliance, allowance edge cases, burn delegation, unwrapTo auth
-3. Supply invariant verified: DGNRS.totalSupply + unwrapped sDGNRS == sDGNRS.balanceOf(DGNRS wrapper)
-4. Every game->sDGNRS callsite audited for correct Pool enum, address, and return value handling
-5. payCoinflipBountyDgnrs threshold gating verified (min bet 50k, min pool 20k, BPS=20)
-6. Degenerette reward math verified (cappedBet, tier BPS, pool percentage)
-7. Earlybird->Lootbox dump verified (was Reward), no Reward pool reference remains
-8. Written audit report with findings and severity ratings
-
-## Phase 20: Correctness Verification — Docs, Comments, Tests
-
-**Goal:** Ensure all documentation, NatDoc comments, and test coverage are accurate and complete.
-
-**Requirements:** CORR-01, CORR-02, CORR-03, CORR-04
-
-**Plans:** 3/3 plans complete
-
-Plans:
-- [ ] 20-01-PLAN.md — NatDoc fixes for DegenerusStonk.sol + stale comment fix + parameter reference + KNOWN-ISSUES + EXTERNAL-AUDIT-PROMPT corrections
-- [ ] 20-02-PLAN.md — Add StakedDegenerusStonk.sol section to state-changing-function-audits.md + update FINAL-FINDINGS-REPORT.md with v2.0 delta findings
-- [ ] 20-03-PLAN.md — Test coverage gap analysis + edge case tests + fuzz test compilation verification
-
-**Success Criteria:**
-1. Every NatDoc comment in changed contracts matches the actual implementation
-2. All 10 audit docs verified: no stale IDegenerusStonk, ContractAddresses.DGNRS, old BPS values, burnForGame refs
-3. New test file (DGNRSLiquid.test.js) covers all DGNRS wrapper functions
-4. Fuzz tests compile and reference correct contract names/interfaces
-5. No undocumented external/public function in new contracts
-
-## Phase 21: Novel Attack Surface — Deep Creative Analysis
-
-**Goal:** Find attack vectors that conventional auditing missed across 10+ prior passes.
-
-**Requirements:** NOVEL-01, NOVEL-02, NOVEL-03, NOVEL-04, NOVEL-05, NOVEL-09, NOVEL-10, NOVEL-11, NOVEL-12
-
-**Plans:** 4/4 plans complete
-
-Plans:
-- [ ] 21-01-PLAN.md — Economic attack modeling (MEV, flash loan, sandwich, selfdestruct) + DGNRS-as-amplifier analysis
-- [ ] 21-02-PLAN.md — Composition attack mapping + griefing vector enumeration + edge case matrix
-- [ ] 21-03-PLAN.md — Supply conservation invariant proofs + privilege escalation audit
-- [ ] 21-04-PLAN.md — stETH rebasing timing analysis + game-over race condition analysis
-
-**Success Criteria:**
-1. Economic attack report: MEV/sandwich/flash-loan vectors on transferable DGNRS
-2. Composition attack map: all cross-contract call chains involving sDGNRS+DGNRS+game+coinflip
-3. Griefing vector enumeration with severity and mitigation status
-4. Edge case matrix: zero amounts, max uint, dust, rounding across all new functions
-5. Supply conservation invariant formally stated and verified
-6. Privilege escalation audit: every address that can trigger state changes in sDGNRS
-7. stETH rebasing interaction with burn timing analyzed
-8. Game-over race condition analysis (concurrent burns, sweep timing)
-9. DGNRS-as-attack-amplifier analysis (what's possible now that wasn't with soulbound?)
-
-## Phase 22: Warden Simulation + Regression Check
-
-**Goal:** Multi-agent adversarial simulation and regression verification against all prior findings.
-
-**Requirements:** NOVEL-07, NOVEL-08
-
-**Plans:** 3/3 plans complete
-
-Plans:
-- [ ] 22-01-PLAN.md — Three independent warden agent simulations (contract auditor, zero-day hunter, economic analyst) producing blind C4A-format reports
-- [ ] 22-02-PLAN.md — Comprehensive regression verification of all prior findings (14 formal + 9 v1.0 attacks + v1.2 surfaces + Phase 21 NOVEL)
-- [x] 22-03-PLAN.md — Cross-reference deduplication of warden findings + update FINAL-FINDINGS-REPORT.md with Phase 22 results (completed 2026-03-17)
-
-**Success Criteria:**
-1. 3+ independent adversarial agents (contract-auditor, zero-day-hunter, economic-analyst) run against current code
-2. All findings cross-referenced and deduplicated
-3. Every prior audit finding (v1.0-v1.2) verified against current code — still valid, fixed, or N/A
-4. Any regressions flagged and fixed
-5. Consolidated findings report with severity ratings
-
-## Phase 23: Gas Optimization — Dead Code Removal
-
-**Goal:** Identify and remove dead code, unused variables, and redundant checks without changing behavior.
-
-**Requirements:** GAS-01, GAS-02, GAS-03, GAS-04
-
-**Plans:** 3/3 plans complete
-
-Plans:
-- [x] 23-01-PLAN.md — Scavenger/Skeptic dual-agent gas audit across all contracts (analysis + findings report) (completed 2026-03-17)
-- [ ] 23-02-PLAN.md — Apply approved behavior-preserving removals, compile and test verification
-- [ ] 23-03-PLAN.md — Bytecode impact measurement + FINAL-FINDINGS-REPORT.md update
-
-**Success Criteria:**
-1. All unreachable zero-checks identified (guards on values that can never be zero)
-2. All dead storage variables identified across all contracts
-3. All dead code paths and unreachable branches identified
-4. All redundant external calls and cacheable storage reads identified
-5. Scavenger/Skeptic dual-agent gas audit with approved/rejected verdicts
-6. Only behavior-preserving removals — all tests still pass after changes
-
----
-*Roadmap created: 2026-03-16*
+*Roadmap created: 2026-03-17*

@@ -30,3 +30,18 @@
 - Split DegenerusStonk into StakedDegenerusStonk + DegenerusStonk wrapper
 - Pool BPS rebalance, coinflip bounty tightening, degenerette DGNRS rewards
 - All 10 audit docs updated for new architecture
+
+## v2.0 — C4A Audit Prep
+**Completed:** 2026-03-17
+**Phases:** 19-23
+- Delta security audit of sDGNRS/DGNRS split
+- Correctness verification (docs, comments, tests)
+- Novel attack surface deep creative analysis
+- Warden simulation + regression check
+- Gas optimization and dead code removal
+
+## v2.1 — VRF Governance Audit + Doc Sync
+**Status:** In progress
+**Phases:** 24-25
+- Core governance security audit (propose/vote/execute, cross-contract, war-games, M-02 closure)
+- Audit doc sync (all docs updated for governance changes)
