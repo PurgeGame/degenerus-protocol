@@ -18,7 +18,7 @@
 | W1-L-04 | Low | DGNRS receive() accepts ETH with no sweep mechanism | DegenerusStonk.sol:89 |
 | W1-QA-01 | QA | Compile-time address constants create single-deploy binding | ContractAddresses.sol (throughout) |
 | W1-QA-02 | QA | Generic error E() reduces debuggability | DegenerusGameStorage.sol:185 |
-| W1-QA-03 | QA | emergencyRecover try/catch silently swallows cancellation failure | DegenerusAdmin.sol:491-498 |
+| W1-QA-03 | QA | emergencyRecover try/catch silently swallows cancellation failure | DegenerusAdmin.sol:491-498 | <!-- v2.1 Note: removed -->
 
 > **v2.1 Note:** `emergencyRecover` was removed in v2.1 and replaced by governance
 > (propose/vote/execute). The try/catch pattern now exists in `_executeSwap`.
@@ -62,7 +62,7 @@
 | W1-L-04: DGNRS receive() no sweep mechanism | Low | YES | DELTA-I-02 | KNOWN |
 | W1-QA-01: Compile-time address constants | QA | NO | -- | NEW |
 | W1-QA-02: Generic error E() debuggability | QA | NO | -- | NEW |
-| W1-QA-03: emergencyRecover try/catch swallows failure | QA | PARTIAL | M-02 | EXTENDS |
+| W1-QA-03: emergencyRecover try/catch swallows failure | QA | PARTIAL | M-02 | EXTENDS | <!-- v2.1 Note: removed -->
 
 > **v2.1 Note:** `emergencyRecover` removed in v2.1. W1-QA-03 now references historical code.
 
@@ -107,7 +107,7 @@ The following findings were independently discovered by multiple wardens, valida
 
 ### Coverage Validation
 
-- **Did any warden find M-02 (Admin + VRF failure)?** YES -- W1-QA-03 extends M-02 with analysis of the emergencyRecover try/catch behavior during coordinator migration. Agent 1's confidence assessment explicitly references the 3-day VRF stall and admin privilege model. Expected: YES.
+- **Did any warden find M-02 (Admin + VRF failure)?** YES -- W1-QA-03 extends M-02 with analysis of the emergencyRecover try/catch behavior during coordinator migration. Agent 1's confidence assessment explicitly references the 3-day VRF stall and admin privilege model. Expected: YES. <!-- v2.1 Note: emergencyRecover removed, see annotation above -->
 
 > **v2.1 Note:** `emergencyRecover` was removed in v2.1. M-02 severity downgraded from Medium to Low.
 > Governance (propose/vote/execute) replaced single-admin emergency recovery.

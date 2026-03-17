@@ -189,7 +189,7 @@ Used in 50+ locations across `DegenerusGame.sol` and all 10 modules (e.g., `Dege
 
 ---
 
-## [QA-03] DegenerusAdmin.emergencyRecover try/catch Silently Swallows Old Subscription Cancellation Failure
+## [QA-03] DegenerusAdmin.emergencyRecover try/catch Silently Swallows Old Subscription Cancellation Failure <!-- v2.1 Note: removed -->
 
 ### Description
 

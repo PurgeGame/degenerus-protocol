@@ -316,7 +316,7 @@ All 56 v1.0 requirements across 10 categories were evaluated.
 | **XCON-01** | lastVrfProcessedTimestamp write paths exhaustive | **PASS** | Only _applyDailyRng and wireVrf |
 | **XCON-02** | Death clock pause via anyProposalActive() correct | **PASS** | try/catch defensive |
 | **XCON-03** | unwrapTo stall guard boundary at exactly 20h | **PASS (INFO)** | 1-second window, not exploitable |
-| **XCON-04** | _threeDayRngGap removal from governance paths verified | **PASS (INFO)** | Retained in Game monitoring |
+| **XCON-04** | _threeDayRngGap removal from governance paths verified | **PASS (INFO)** | Retained in Game for rngStalledForThreeDays |
 | **XCON-05** | VRF retry timeout 18h->12h, no downstream breakage | **PASS** | Two retries before 20h governance |
 | **VOTE-01** | sDGNRS supply frozen during VRF stall proven | **PASS** | All mutation paths blocked |
 | **VOTE-02** | circulatingSnapshot immutable post-creation | **PASS** | Single write in propose() |

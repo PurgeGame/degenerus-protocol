@@ -11,26 +11,26 @@
 
 ### Finding: M-02 -- Admin + VRF Failure Scenarios
 
-**Original:** Medium, DegenerusGame / DegenerusAdmin, admin holding >50.1% DGVE can call emergencyRecover after 3-day VRF stall to swap coordinator (integrity risk) or admin absent leads to 365-day timeout (availability risk).
+**Original:** Medium, DegenerusGame / DegenerusAdmin, admin holding >50.1% DGVE can call emergencyRecover after 3-day VRF stall to swap coordinator (integrity risk) or admin absent leads to 365-day timeout (availability risk). <!-- v2.1 Note: see annotation below -->
 **Original Evidence:** DegenerusAdmin.sol emergencyRecover function, DegenerusGame.sol rngStalledForThreeDays, DegenerusGameAdvanceModule.sol updateVrfCoordinatorAndSub
 
 **Current Code Check:**
 - emergencyRecover 3-day guard: DegenerusAdmin.sol:483 -- `if (!gameAdmin.rngStalledForThreeDays()) revert NotStalled();` -- PRESENT
 - >50.1% DGVE requirement via onlyOwner: DegenerusAdmin.sol:362 -- `if (!vault.isVaultOwner(msg.sender)) revert NotOwner();` -- PRESENT
-- EmergencyRecovered event emission: DegenerusAdmin.sol:538 -- `emit EmergencyRecovered(newCoordinator, newSubId, funded);` -- PRESENT
+- EmergencyRecovered event emission: DegenerusAdmin.sol:538 -- `emit EmergencyRecovered(newCoordinator, newSubId, funded);` -- PRESENT <!-- v2.1 Note: event removed -->
 - 365-day timeout path: DegenerusGame.sol:187 -- `uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365;` -- PRESENT
 - 365-day timeout path (AdvanceModule): DegenerusGameAdvanceModule.sol:91 -- `uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365;` -- PRESENT
 - 365-day timeout trigger: DegenerusGameAdvanceModule.sol:422 -- `ts - lst > uint256(DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days` -- PRESENT
-- updateVrfCoordinatorAndSub 3-day gate: DegenerusGameAdvanceModule.sol:1266 -- `if (!_threeDayRngGap(_simulatedDayIndex()))` -- PRESENT
-- Zero-address guard in emergencyRecover: DegenerusAdmin.sol:484 -- `if (newCoordinator == address(0) || newKeyHash == bytes32(0)) revert ZeroAddress();` -- PRESENT
+- updateVrfCoordinatorAndSub 3-day gate: DegenerusGameAdvanceModule.sol:1266 -- `if (!_threeDayRngGap(_simulatedDayIndex()))` -- PRESENT <!-- v2.1 Note: guard removed -->
+- Zero-address guard in emergencyRecover: DegenerusAdmin.sol:484 -- `if (newCoordinator == address(0) || newKeyHash == bytes32(0)) revert ZeroAddress();` -- PRESENT <!-- v2.1 Note: function removed -->
 
 **Delta:** UNCHANGED
 **Current Verdict:** STILL VALID (acknowledged design trade-off, all guards intact)
 
 > **v2.1 Note:** `emergencyRecover` was removed in v2.1 and replaced by governance
-> (propose/vote/execute in DegenerusAdmin). The `_threeDayRngGap` guard was removed from
+> (propose/vote/execute in DegenerusAdmin). The `_threeDayRngGap` guard was removed from <!-- v2.1 Note -->
 > AdvanceModule; governance uses `lastVrfProcessedTimestamp` with 20h/7d thresholds.
-> `EmergencyRecovered` event replaced by `ProposalCreated/VoteCast/ProposalExecuted/ProposalKilled`.
+> `EmergencyRecovered` event replaced by `ProposalCreated/VoteCast/ProposalExecuted/ProposalKilled`. <!-- v2.1 Note -->
 > M-02 severity downgraded from Medium to Low. This historical reference is preserved for
 > audit traceability. See v2.1-governance-verdicts.md for current behavior.
 
@@ -70,7 +70,7 @@
 
 ### Finding: I-09 -- wireVrf() Lacks Re-initialization Guard
 
-**Original:** Informational, DegenerusAdmin.sol, wireVrf can be called multiple times (intentional for emergencyRecover path).
+**Original:** Informational, DegenerusAdmin.sol, wireVrf can be called multiple times (intentional for emergencyRecover path). <!-- v2.1 Note: see annotation below -->
 **Original Evidence:** DegenerusAdmin.sol wireVrf call, DegenerusGameAdvanceModule.sol wireVrf function
 
 **Current Code Check:**
@@ -84,7 +84,7 @@
 
 > **v2.1 Note:** `emergencyRecover` was removed in v2.1. wireVrf is now deployment-only;
 > governance coordinator rotation uses `updateVrfCoordinatorAndSub` via `_executeSwap`.
-> The I-09 rationale about "emergencyRecover reuses this path" is no longer applicable.
+> The I-09 rationale about "emergencyRecover reuses this path" is no longer applicable. <!-- v2.1 Note -->
 > This historical reference is preserved for audit traceability.
 > See v2.1-governance-verdicts.md for current behavior.
 
@@ -97,7 +97,7 @@
 
 **Current Code Check:**
 - wireVrf function: DegenerusGameAdvanceModule.sol:392-404 -- no `require(coordinator_ != address(0))` or zero-address check -- CONFIRMED (no zero-address check)
-- Note: emergencyRecover DOES have zero-address check: DegenerusAdmin.sol:484 -- `if (newCoordinator == address(0) || newKeyHash == bytes32(0)) revert ZeroAddress();` -- PRESENT
+- Note: emergencyRecover DOES have zero-address check: DegenerusAdmin.sol:484 -- `if (newCoordinator == address(0) || newKeyHash == bytes32(0)) revert ZeroAddress();` -- PRESENT <!-- v2.1 Note: function removed -->
 
 **Delta:** UNCHANGED
 **Current Verdict:** STILL VALID (wireVrf only called from Admin constructor with compile-time constants)
@@ -172,14 +172,14 @@
 
 ---
 
-### Finding: I-22 -- _threeDayRngGap() Duplication
+### Finding: I-22 -- _threeDayRngGap() Duplication <!-- v2.1 Note: resolved -->
 
 **Original:** Informational, DegenerusGame.sol + DegenerusGameAdvanceModule.sol, same function duplicated in both contracts (identical logic, immutable post-deploy).
-**Original Evidence:** DegenerusGame.sol _threeDayRngGap, DegenerusGameAdvanceModule.sol _threeDayRngGap
+**Original Evidence:** DegenerusGame.sol _threeDayRngGap, DegenerusGameAdvanceModule.sol _threeDayRngGap <!-- v2.1 Note: see annotation below -->
 
 **Current Code Check:**
-- _threeDayRngGap in DegenerusGame.sol: DegenerusGame.sol:2214-2218 -- `function _threeDayRngGap(uint48 day) private view returns (bool) { if (rngWordByDay[day] != 0) return false; if (rngWordByDay[day - 1] != 0) return false; if (day < 2 || rngWordByDay[day - 2] != 0) return false; return true; }` -- PRESENT
-- _threeDayRngGap in AdvanceModule: DegenerusGameAdvanceModule.sol:1385-1389 -- identical logic -- PRESENT
+- _threeDayRngGap in DegenerusGame.sol: DegenerusGame.sol:2214-2218 -- `function _threeDayRngGap(uint48 day) private view returns (bool) { if (rngWordByDay[day] != 0) return false; if (rngWordByDay[day - 1] != 0) return false; if (day < 2 || rngWordByDay[day - 2] != 0) return false; return true; }` -- PRESENT <!-- v2.1 Note: still exists in Game -->
+- _threeDayRngGap in AdvanceModule: DegenerusGameAdvanceModule.sol:1385-1389 -- identical logic -- PRESENT <!-- v2.1 Note: removed from AdvanceModule -->
 - Both functions are `private view`: confirmed -- no external call path
 - rngStalledForThreeDays wrapper: DegenerusGame.sol:2224-2225 -- `return _threeDayRngGap(_simulatedDayIndex());` -- PRESENT
 
@@ -187,7 +187,7 @@
 **Current Verdict:** STILL VALID (intentional duplication -- private function cannot be shared across delegatecall boundary)
 
 > **v2.1 Note:** `_threeDayRngGap` was completely removed from DegenerusGameAdvanceModule
-> in v2.1 (XCON-04). The duplication noted in I-22 no longer exists. `_threeDayRngGap`
+> in v2.1 (XCON-04). The duplication noted in I-22 no longer exists. `_threeDayRngGap` <!-- v2.1 Note -->
 > remains only in DegenerusGame.sol for the `rngStalledForThreeDays()` monitoring view
 > function. This historical reference is preserved for audit traceability.
 > See v2.1-governance-verdicts.md (XCON-04) for verification.
