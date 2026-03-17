@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 24-01-PLAN.md
-last_updated: "2026-03-17T19:14:08.918Z"
-last_activity: 2026-03-17 -- Completed 24-01 (GOV-01 storage layout verification)
+stopped_at: Completed 24-04-PLAN.md
+last_updated: "2026-03-17T19:28:00Z"
+last_activity: 2026-03-17 -- Completed 24-04 (GOV-07 _executeSwap CEI/reentrancy, GOV-08 _voidAllActive correctness)
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 8
-  completed_plans: 1
-  percent: 13
+  completed_plans: 3
+  percent: 38
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 24 of 25 (Core Governance Security Audit)
-Plan: 1 of 8 in current phase
+Plan: 2 of 8 in current phase
 Status: Executing
-Last activity: 2026-03-17 -- Completed 24-01 (GOV-01 storage layout verification)
+Last activity: 2026-03-17 -- Completed 24-02 (GOV-02 propose access control, GOV-03 vote arithmetic)
 
-Progress: [█░░░░░░░░░] 13%
+Progress: [██░░░░░░░░] 25%
 
 ## Project Reference
 
@@ -35,6 +35,8 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 ## Decisions
 
 - [Phase 24-01]: GOV-01 PASS -- No slot collision for lastVrfProcessedTimestamp (slot 114, offset 0, sole occupant). All 5 contracts verified via compiler storageLayout JSON.
+- [Phase 24-02]: GOV-02 PASS -- propose() admin path (>50.1% DGVE + 20h stall) and community path (0.5% sDGNRS + 7d stall) correctly gated. circulatingSupply() double-call safe.
+- [Phase 24-02]: GOV-03 PASS (conditional on VOTE-01) -- vote() subtract-before-add arithmetic correct. sDGNRS soulbound invariant critical dependency.
 
 ## Accumulated Context
 
@@ -48,6 +50,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-17T19:14:08.916Z
-Stopped at: Completed 24-01-PLAN.md
+Last session: 2026-03-17T19:27:06Z
+Stopped at: Completed 24-02-PLAN.md
 Resume file: None
