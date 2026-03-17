@@ -18,7 +18,7 @@
 ## Phases
 
 - [x] **Phase 24: Core Governance Security Audit** - Adversarial security audit of VRF governance (propose/vote/execute), cross-contract interactions, vote integrity, war-game scenarios, and M-02 closure verification (completed 2026-03-17)
-- [ ] **Phase 25: Audit Doc Sync** - Update all audit documentation to reflect governance changes, new findings, and M-02 closure
+- [x] **Phase 25: Audit Doc Sync** - Update all audit documentation to reflect governance changes, new findings, and M-02 closure (completed 2026-03-17)
 
 ## Phase Details
 
@@ -71,7 +71,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 24. Core Governance Security Audit | 8/8 | Complete    | 2026-03-17 | - |
-| 25. Audit Doc Sync | 3/4 | In Progress|  | - |
+| 25. Audit Doc Sync | 4/4 | Complete   | 2026-03-17 | - |
 
 ---
 *Roadmap created: 2026-03-17*
