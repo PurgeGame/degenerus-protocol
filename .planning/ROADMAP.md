@@ -105,6 +105,13 @@ Plans:
 
 **Requirements:** GAS-01, GAS-02, GAS-03, GAS-04
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 23-01-PLAN.md — Scavenger/Skeptic dual-agent gas audit across all contracts (analysis + findings report)
+- [ ] 23-02-PLAN.md — Apply approved behavior-preserving removals, compile and test verification
+- [ ] 23-03-PLAN.md — Bytecode impact measurement + FINAL-FINDINGS-REPORT.md update
+
 **Success Criteria:**
 1. All unreachable zero-checks identified (guards on values that can never be zero)
 2. All dead storage variables identified across all contracts
