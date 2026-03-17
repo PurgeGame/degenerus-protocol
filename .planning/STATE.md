@@ -2,24 +2,24 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: completed
-last_updated: "2026-03-17T01:05:49.426Z"
-last_activity: 2026-03-17 -- Completed 22-03 (warden cross-reference and FINAL-FINDINGS-REPORT update)
+status: in-progress
+last_updated: "2026-03-17T01:41:18Z"
+last_activity: 2026-03-17 -- Completed 23-01 (Scavenger/Skeptic dual-agent gas audit)
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 15
+  completed_plans: 13
 ---
 
 # State
 
 ## Current Position
 
-Phase: 22 (Warden Simulation + Regression Check) -- COMPLETE
-Plan: 3 of 3 (all complete)
-Status: Phase 22 complete. All 3 plans executed: warden simulation (22-01), regression check (22-02), cross-reference + report update (22-03). 69 total plans across 12 phases.
-Last activity: 2026-03-17 -- Completed 22-03 (warden cross-reference and FINAL-FINDINGS-REPORT update)
+Phase: 23 (Gas Optimization -- Dead Code Removal)
+Plan: 1 of 3 complete
+Status: Phase 23 in progress. Plan 23-01 complete (Scavenger/Skeptic gas audit). 2 plans remaining: 23-02 (apply removals), 23-03 (bytecode impact + report update).
+Last activity: 2026-03-17 -- Completed 23-01 (Scavenger/Skeptic dual-agent gas audit)
 
 ## Project Reference
 
@@ -49,6 +49,7 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - [Phase 22]: 22-02: All 48 regression check points PASS -- 14 formal findings STILL VALID, 9 attack scenarios PASS, 15 delta surfaces UNCHANGED, 10 NOVEL checks UNCHANGED. 0 regressions. DELTA-I-04 stale comment has been corrected (LINE_SHIFT).
 - [Phase 22]: 22-01: 3 blind warden simulations produced 0H/0M/10L/11QA across 1,381 lines -- confirms strong protocol security posture
 - [Phase 22]: 22-03: 21 warden findings cross-referenced: 6 KNOWN, 5 EXTENDS, 10 NEW (all Low/QA). FINAL-FINDINGS-REPORT.md updated to 69 plans/12 phases. 3/3 wardens re-discovered known issues. 0 regressions across 48 check points.
+- [Phase 23]: 23-01: Scavenger/Skeptic gas audit complete. 21 candidates across GAS-01/02/03/04. 4 APPROVED (~68 bytes, ~13,600 gas): SCAV-004 (uint232 check), SCAV-006 (denom==0 guard), SCAV-009 (redundant _simulatedDayIndex), SCAV-016 (unit==0 check). 3 REJECTED (defense-in-depth guards worth keeping). JackpotModule: 0 removable bytes at 95.9% of size limit.
 
 ## Accumulated Context
 
@@ -71,3 +72,4 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 - 22-01: 3 blind C4A warden simulations (contract auditor, zero-day hunter, economic analyst). 1,381 total lines. 0H/0M/10L/11QA. 75+ combined file:line citations. All wardens independently confirm strong security posture. Key Low findings: DGNRS self-transfer unchecked, sDGNRS ETH payout revert for contracts, burnRemainingPools stale array, DGNRS receive() no sweep, EntropyLib shift analysis, forced ETH via selfdestruct, previewBurn/burn split discrepancy, deity pass pricing advantage, vault refill dilution.
 - 22-02: Comprehensive regression check: 48 verification points across 4 categories. 14 formal findings (M-02, DELTA-L-01, I-03..I-22, DELTA-I-01..04) all STILL VALID. 9 v1.0 attack scenarios all PASS. 15 v1.2 delta surfaces all UNCHANGED. 10 Phase 21 NOVEL checks all UNCHANGED. 836-line report. 0 regressions.
 - 22-03: Warden cross-reference complete. 21 raw findings classified: 6 KNOWN (exact match), 5 EXTENDS (adds detail), 10 NEW (all Low/QA, no action). FINAL-FINDINGS-REPORT.md updated to 69 plans across 12 phases. Phase 22 section added with warden simulation (NOVEL-07) and regression verification (NOVEL-08) results. Audit package complete.
+- 23-01: Scavenger/Skeptic dual-agent gas audit across ~25,600 lines. 21 SCAV recommendations with formal Skeptic verdicts. 4 APPROVED removals: SCAV-004 (unreachable uint232 check in DecimatorModule, 22 bytes), SCAV-006 (unreachable denom==0 guard, 10 bytes), SCAV-009 (redundant _simulatedDayIndex() in WhaleModule, 30 bytes), SCAV-016 (dead unit==0 check in LootboxModule, 6 bytes). 3 REJECTED: defense-in-depth guards in DecimatorModule kept. JackpotModule: 0 bytes removable. Total approved: ~68 bytes, ~13,600 deployment gas. Report at audit/gas-optimization-report.md.
