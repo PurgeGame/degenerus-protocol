@@ -1691,11 +1691,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         uint256 poolBalance = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Lootbox);
-        uint256 unit = 1 ether;
 
-        if (poolBalance == 0 || ppm == 0 || unit == 0) return 0;
+        if (poolBalance == 0 || ppm == 0) return 0;
         dgnrsAmount = (poolBalance * ppm * amount) /
-            (1_000_000 * unit);
+            (1_000_000 * 1 ether);
         if (dgnrsAmount > poolBalance) {
             dgnrsAmount = poolBalance;
         }

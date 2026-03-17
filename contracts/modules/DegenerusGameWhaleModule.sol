@@ -810,7 +810,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ) private returns (uint256 boostedAmount) {
         boostedAmount = amount;
         uint16 consumedBoostBps = 0;
-        uint48 currentDay = _simulatedDayIndex();
+        uint48 currentDay = day;
 
         // Check 25% boost first (rarest, best boost)
         bool has25Boost = lootboxBoon25Active[player];

@@ -336,11 +336,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             return poolWei;
         }
 
-        // Safety: If totalBurn exceeds uint232, return pool (economically impossible but defensive)
-        if (totalBurn > type(uint232).max) {
-            return poolWei;
-        }
-
         // Store packed winning subbuckets for claim validation
         decBucketOffsetPacked[lvl] = packedOffsets;
 
@@ -580,7 +575,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 entropy,
         uint8 denom
     ) private pure returns (uint8) {
-        if (denom == 0) return 0;
         return
             uint8(uint256(keccak256(abi.encodePacked(entropy, denom))) % denom);
     }
