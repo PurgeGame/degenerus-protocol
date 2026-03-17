@@ -2335,7 +2335,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 ### `updateVrfCoordinatorAndSub(address, uint256, bytes32)` [external]
 
 > **v2.1 Update:** `_threeDayRngGap` guard removed. This function is now called by DegenerusAdmin._executeSwap()
-> during governance-approved VRF coordinator rotation (was called by emergencyRecover in v1.0-v2.0).
+> during governance-approved VRF coordinator rotation (was called by emergencyRecover in v1.0-v2.0). <!-- v2.1 Note -->
 > Access control unchanged (ContractAddresses.ADMIN only). State resets unchanged.
 
 | Field | Value |
@@ -2349,7 +2349,7 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **State Reads:**
 - `msg.sender` (access control)
 - `vrfCoordinator` (current coordinator for event)
-- Note: v2.1 removed `_simulatedDayIndex()` and `rngWordByDay` reads -- the `_threeDayRngGap` guard was removed. Stall validation now lives in DegenerusAdmin.propose() via `lastVrfProcessedTimestamp` thresholds (20h admin, 7d community).
+- Note: v2.1 removed `_simulatedDayIndex()` and `rngWordByDay` reads -- the `_threeDayRngGap` guard was removed. Stall validation now lives in DegenerusAdmin.propose() via `lastVrfProcessedTimestamp` thresholds (20h admin, 7d community). <!-- v2.1 Note -->
 
 **State Writes:**
 - `vrfCoordinator = IVRFCoordinator(newCoordinator)`
@@ -2361,10 +2361,10 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 - `rngWordCurrent = 0`
 
 **Callers:**
-- DegenerusAdmin only (`msg.sender != ContractAddresses.ADMIN` reverts `E()`). In v2.1, called by DegenerusAdmin._executeSwap() during governance-approved VRF coordinator rotation (was called by emergencyRecover in v1.0-v2.0).
+- DegenerusAdmin only (`msg.sender != ContractAddresses.ADMIN` reverts `E()`). In v2.1, called by DegenerusAdmin._executeSwap() during governance-approved VRF coordinator rotation (was called by emergencyRecover in v1.0-v2.0). <!-- v2.1 Note -->
 
 **Callees:**
-- None in v2.1 (v1.0-v2.0 called `_simulatedDayIndex()` and `_threeDayRngGap(day)`, both removed in v2.1)
+- None in v2.1 (v1.0-v2.0 called `_simulatedDayIndex()` and `_threeDayRngGap(day)`, both removed in v2.1) <!-- v2.1 Note -->
 
 **ETH Flow:**
 - None. Pure configuration + state reset function.
@@ -2378,12 +2378,12 @@ Prize pool split: `PURCHASE_TO_FUTURE_BPS = 1000` (10% to future, 90% to next).
 **NatSpec Accuracy:**
 - NatSpec says "Emergency VRF coordinator rotation" -- v2.1 context: now governance-controlled, not single-admin emergency. The word "emergency" is still appropriate since governance proposals only activate during VRF stalls.
 - NatSpec says "Access: ContractAddresses.ADMIN only" -- ACCURATE (unchanged in v2.1).
-- v2.1: NatSpec reference to `_threeDayRngGap` is stale -- the guard was removed. Governance stall thresholds in DegenerusAdmin.propose() replace it.
+- v2.1: NatSpec reference to `_threeDayRngGap` is stale -- the guard was removed. Governance stall thresholds in DegenerusAdmin.propose() replace it. <!-- v2.1 Note -->
 - Interface declares `updateVrfCoordinatorAndSub(address, uint256, uint32)` but implementation uses `bytes32` for 3rd param. INTERFACE MISMATCH: interface says `uint32 newKeyHash` but implementation says `bytes32 newKeyHash`. However, checking the interface file: the interface actually declares `bytes32 newKeyHash` at line 32 of IDegenerusGameModules.sol. Confirmed: no mismatch.
 
 **Gas Flags:**
 - 7 SSTOREs + 1 SLOAD. Efficient for a coordinator rotation function.
-- v2.1: Removed `_threeDayRngGap` 3 mapping reads -- function is now leaner.
+- v2.1: Removed `_threeDayRngGap` 3 mapping reads -- function is now leaner. <!-- v2.1 Note -->
 
 **Verdict:** CORRECT
 
@@ -13055,11 +13055,11 @@ Rounding: Due to integer division, small dust amounts (< winner count) in scatte
 > (propose/vote/execute). The entry below is preserved for historical audit traceability.
 > See the `propose()`, `vote()`, `_executeSwap()` entries above for current behavior.
 
-### `emergencyRecover(address newCoordinator, bytes32 newKeyHash)` [external]
+### `emergencyRecover(address newCoordinator, bytes32 newKeyHash)` [external] <!-- v2.1 REMOVED -->
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `function emergencyRecover(address newCoordinator, bytes32 newKeyHash) external onlyOwner returns (uint256 newSubId)` |
+| **Signature** | `function emergencyRecover(address newCoordinator, bytes32 newKeyHash) external onlyOwner returns (uint256 newSubId)` | <!-- v2.1 REMOVED -->
 | **Visibility** | external |
 | **Mutability** | state-changing |
 | **Parameters** | `newCoordinator` (address): Address of the new VRF coordinator; `newKeyHash` (bytes32): Key hash for the new coordinator |
