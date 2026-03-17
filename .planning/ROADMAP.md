@@ -73,7 +73,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 24. Core Governance Security Audit | 8/8 | Complete   | 2026-03-17 | - |
+| 24. Core Governance Security Audit | 8/8 | Complete    | 2026-03-17 | - |
 | 25. Audit Doc Sync | v2.1 | 0/7 | Not started | - |
 
 ---
