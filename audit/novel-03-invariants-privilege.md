@@ -385,3 +385,218 @@ If hypothetically `transferFromPool` were called after `burnRemainingPools`, the
 All four invariants hold across all reachable states. The protocol's fundamental guarantees -- supply conservation, cross-contract consistency, backing solvency, and pool accounting -- are mathematically sound.
 
 ---
+
+## NOVEL-09: Privilege Escalation Audit
+
+This section enumerates every address capable of triggering state changes in the sDGNRS/DGNRS system, analyzes how each address is authorized, whether that authorization can be changed post-deployment, and whether any escalation path exists to bypass the access control.
+
+### Part 1: Complete Privilege Map
+
+The following table lists every address type that can trigger state changes (non-view mutations) in StakedDegenerusStonk.sol or DegenerusStonk.sol, along with the exact access control mechanism, source location, and mutability.
+
+| Address | Functions Accessible | Modifier/Check | Source Line | Can Be Changed? |
+|---------|---------------------|----------------|-------------|-----------------|
+| GAME contract (`0x3381...440f`) | `transferFromPool`, `transferBetweenPools`, `burnRemainingPools`, `depositSteth`, `receive()` (ETH deposit) | `onlyGame` modifier: `msg.sender != ContractAddresses.GAME` | StakedDegenerusStonk.sol:181-184 (modifier), :315, :340, :359, :291, :282 | **No -- immutable.** `ContractAddresses.GAME` is a compile-time `address internal constant` (ContractAddresses.sol:28). Cannot be modified post-deployment. |
+| DGNRS contract (`0xDA5A...4C2d`) | `wrapperTransferTo` | `msg.sender != ContractAddresses.DGNRS` check | StakedDegenerusStonk.sol:243 | **No -- immutable.** `ContractAddresses.DGNRS` is a compile-time constant (ContractAddresses.sol:30). |
+| CREATOR address (`0x7FA9...1496`) | `unwrapTo` (on DGNRS contract) | `msg.sender != ContractAddresses.CREATOR` check | DegenerusStonk.sol:140 | **No -- immutable.** `ContractAddresses.CREATOR` is a compile-time constant (ContractAddresses.sol:36). |
+| Any address (public) | `burn` (own tokens) | None -- public. Guards: `amount > 0`, `amount <= balanceOf[msg.sender]` | StakedDegenerusStonk.sol:381, :384 | N/A -- public function, anyone with sDGNRS balance can call |
+| Any address (public) | `gameAdvance`, `gameClaimWhalePass`, `resolveCoinflips` | None -- public permissionless helpers | StakedDegenerusStonk.sol:259, :264, :271 | N/A -- delegate to game/coinflip, which handle their own auth |
+| Any address (public, DGNRS) | `transfer`, `transferFrom`, `approve`, `burn` | Standard ERC20 checks | DegenerusStonk.sol:101, :113, :128, :153 | N/A -- public ERC20 functions |
+
+**Per-address detailed analysis:**
+
+#### GAME Contract (`ContractAddresses.GAME`)
+
+**How address is set:** Compile-time constant in ContractAddresses.sol:28: `address internal constant GAME = address(0x3381cD18e2Fb4dB236BF0525938AB6E43Db0440f)`. The ContractAddresses library is imported at StakedDegenerusStonk.sol:4 and used in the `onlyGame` modifier at line 182.
+
+**Can the address be changed post-deployment?** No. `ContractAddresses.GAME` is a Solidity `constant`, meaning the value is inlined into the bytecode at compile time. There is no storage slot, no setter function, and no proxy indirection. The only way to change it would be to deploy a new sDGNRS contract.
+
+**What is the worst-case action this address can take?**
+- Drain all pool balances via repeated `transferFromPool` calls (StakedDegenerusStonk.sol:315-332). This could transfer up to 800B sDGNRS (80% of initial supply) from pools to arbitrary addresses.
+- Burn all undistributed pool tokens via `burnRemainingPools` (StakedDegenerusStonk.sol:359-367), permanently destroying up to 800B sDGNRS.
+- Deposit arbitrary amounts of stETH via `depositSteth` (StakedDegenerusStonk.sol:291-293).
+- Deposit arbitrary amounts of ETH via `receive()` (StakedDegenerusStonk.sol:282-284).
+
+**Is this a concern?** The game contract is a trusted protocol contract deployed by the same development team. If the game contract is compromised or has a bug, the entire protocol is compromised regardless of sDGNRS access control. The game contract's own security is audited separately across Phases 1-18 of the audit.
+
+#### DGNRS Contract (`ContractAddresses.DGNRS`)
+
+**How address is set:** Compile-time constant in ContractAddresses.sol:30: `address internal constant DGNRS = address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d)`. Used at StakedDegenerusStonk.sol:243.
+
+**Can the address be changed post-deployment?** No. Same reasoning as GAME -- compile-time constant, no storage slot, no setter.
+
+**What is the worst-case action this address can take?**
+- Move sDGNRS from `balanceOf[DGNRS]` to any recipient via `wrapperTransferTo` (StakedDegenerusStonk.sol:242-252). Limited to `sDGNRS.balanceOf[DGNRS]` (initially 200B sDGNRS, the creator's 20% allocation).
+- Cannot create new tokens (no mint function accessible).
+- Cannot access pool balances, reserves, or other users' tokens.
+
+**Is this a concern?** The DGNRS contract is a thin ERC20 wrapper. Its `wrapperTransferTo` is called only from `unwrapTo` (DegenerusStonk.sol:143), which is CREATOR-only. No path in DGNRS calls `wrapperTransferTo` without the CREATOR authorization check.
+
+#### CREATOR Address (`ContractAddresses.CREATOR`)
+
+**How address is set:** Compile-time constant in ContractAddresses.sol:36: `address internal constant CREATOR = address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496)`. Used at DegenerusStonk.sol:140.
+
+**Can the address be changed post-deployment?** No. Compile-time constant.
+
+**What is the worst-case action this address can take?**
+- Call `DGNRS.unwrapTo(recipient, amount)` to burn their own DGNRS and send the underlying sDGNRS to any recipient. Limited to CREATOR's DGNRS balance.
+- This is intentional functionality: the creator can convert their transferable DGNRS back to soulbound sDGNRS for specific recipients (e.g., team members, advisors).
+- Cannot access other users' tokens. Cannot exceed their own DGNRS balance (DegenerusStonk.sol:204 reverts on insufficient balance).
+
+**Is this a concern?** No. This is a feature with correct authorization. The creator can only affect their own tokens.
+
+---
+
+### Part 2: Escalation Path Analysis
+
+Four potential escalation vectors are analyzed to determine if any non-authorized address can call privileged functions.
+
+#### Escalation 1: Delegatecall to sDGNRS
+
+**Hypothesis:** Could any contract delegatecall into sDGNRS to bypass access control (e.g., execute `transferFromPool` with a spoofed `msg.sender`)?
+
+**Analysis:**
+
+1. **sDGNRS as delegatecall target:** For a delegatecall into sDGNRS to be meaningful, an attacker would need to delegatecall sDGNRS's code from their own contract. In delegatecall, the code runs in the caller's storage context. The `onlyGame` check at StakedDegenerusStonk.sol:182 reads `msg.sender != ContractAddresses.GAME`. In a delegatecall, `msg.sender` is the original transaction sender (preserved through the delegatecall chain), NOT the attacker's contract address. So the attacker's `msg.sender` would need to equal `ContractAddresses.GAME` -- i.e., the original caller of the attacker's contract must BE the game contract. This is not a useful escalation path.
+
+2. **More importantly:** Even if an attacker delegatecalled sDGNRS code, the code would run against the ATTACKER's storage, not sDGNRS's storage. The attacker would be modifying their own `totalSupply`, `balanceOf`, and `poolBalances` mappings -- not the real sDGNRS contract's state. No escalation.
+
+3. **Game's delegatecall to modules:** DegenerusGame.sol uses delegatecall extensively (lines 324, 352, 589, 616, 637, etc.) to execute module code in the game's storage context. When a module (e.g., WhaleModule at line 639) calls `dgnrs.transferFromPool(...)`, this is a regular external call FROM the game contract's address. Since the module code runs in the game's context (via delegatecall), the external call to sDGNRS has `msg.sender = game_contract_address`. This correctly passes the `onlyGame` check.
+
+   **Detailed trace:** User -> Game.advanceGame() (external call, msg.sender=User) -> delegatecall to AdvanceModule.advanceGame() (module code runs in Game's storage context) -> sDGNRS.transferFromPool(...) (external call, msg.sender=Game_address). The `onlyGame` modifier at StakedDegenerusStonk.sol:182 checks `msg.sender != ContractAddresses.GAME`, which passes because the external call comes from the game contract's address. This is the intended behavior.
+
+4. **Can an attacker get the game to delegatecall malicious code?** No. All delegatecall targets are compile-time constants from ContractAddresses.sol (e.g., `GAME_ADVANCE_MODULE`, `GAME_MINT_MODULE`, etc. at ContractAddresses.sol:12-21). There is no setter function, no dynamic module registration, and no proxy upgrade mechanism.
+
+**Verdict: NO ESCALATION.** Delegatecall into sDGNRS executes against the caller's storage (useless). The game's delegatecall modules correctly call sDGNRS as the game contract, passing the `onlyGame` check. Module addresses are immutable compile-time constants.
+
+---
+
+#### Escalation 2: Proxy Upgrade
+
+**Hypothesis:** Could sDGNRS or DGNRS be upgraded to a malicious implementation that bypasses access control?
+
+**Analysis:**
+
+1. **StakedDegenerusStonk.sol:** The contract is a plain Solidity contract (line 48: `contract StakedDegenerusStonk {`). No inheritance from any proxy base class. No UUPS, no TransparentProxy, no ERC1967, no diamond pattern. No `fallback()` function that could redirect calls.
+
+2. **DegenerusStonk.sol:** Same -- plain contract (line 24: `contract DegenerusStonk {`). No proxy patterns. No `fallback()` function.
+
+3. **DegenerusGame.sol:** Uses delegatecall to modules but is NOT a proxy. The game contract itself has its own logic and delegates specific function calls to module contracts. The module addresses are compile-time constants (ContractAddresses.sol:12-21). The game contract explicitly documents itself as non-upgradeable (DegenerusGameStorage.sol:84: "Append-only additions are safe for non-upgradeable contracts", line 109: "This contract is NOT upgradeable (no proxy pattern)").
+
+4. **Compile-time constants:** All cross-contract references (GAME, DGNRS, SDGNRS, CREATOR, module addresses) are `address internal constant` in ContractAddresses.sol. These are inlined into bytecode at compile time. No storage variable, no admin setter, no governance function can change them.
+
+**Verdict: NO ESCALATION.** None of the contracts use proxy patterns. All addresses are compile-time constants. The contracts cannot be upgraded post-deployment.
+
+---
+
+#### Escalation 3: CREATE2/Selfdestruct Address Collision
+
+**Hypothesis:** Could an attacker deploy a malicious contract at the same address as the game contract (after it selfdestructs), then call sDGNRS's `onlyGame` functions?
+
+**Analysis:**
+
+1. **Selfdestruct in the protocol:** A search of all contract source files finds ZERO occurrences of `selfdestruct` in any protocol contract (StakedDegenerusStonk.sol, DegenerusStonk.sol, DegenerusGame.sol, all modules, storage contracts). The game contract will never selfdestruct.
+
+2. **Post-Cancun EIP-6780:** Since the Dencun upgrade (March 2024), `selfdestruct` only clears contract state when called in the same transaction as contract creation. Outside the creation transaction, `selfdestruct` only transfers remaining ETH but does NOT remove the contract code or reset the nonce. This means:
+   - Even if the game contract HAD a selfdestruct, post-Cancun it would not be cleared (assuming it's not called in the creation tx).
+   - Even pre-Cancun, re-deploying at the same address via CREATE2 requires the exact same `salt` and `initcode`. An attacker cannot control the deployed bytecode while matching the address.
+
+3. **CREATE2 collision attack:** For an attacker to deploy at `ContractAddresses.GAME = 0x3381cD18e2Fb4dB236BF0525938AB6E43Db0440f`, they would need to find a CREATE2 factory address + salt combination that produces this address with their malicious bytecode. This requires a 160-bit preimage attack (computationally infeasible: ~2^80 operations with birthday attack, well beyond practical capability).
+
+**Verdict: NO ESCALATION.** The game contract has no `selfdestruct`. Post-Cancun EIP-6780 limits selfdestruct's clearing behavior. CREATE2 address collision is computationally infeasible. This attack vector is purely theoretical.
+
+---
+
+#### Escalation 4: msg.sender Spoofing via tx.origin
+
+**Hypothesis:** Could an attacker spoof `msg.sender` to impersonate the game contract, using `tx.origin` confusion or other EVM-level tricks?
+
+**Analysis:**
+
+1. **tx.origin in sDGNRS:** A search of StakedDegenerusStonk.sol finds ZERO occurrences of `tx.origin`. All access control uses `msg.sender` exclusively:
+   - `onlyGame` modifier at line 182: `if (msg.sender != ContractAddresses.GAME) revert Unauthorized()`
+   - `wrapperTransferTo` at line 243: `if (msg.sender != ContractAddresses.DGNRS) revert Unauthorized()`
+
+2. **tx.origin in DGNRS:** A search of DegenerusStonk.sol finds ZERO occurrences of `tx.origin`. The `unwrapTo` check at line 140 uses `msg.sender`: `if (msg.sender != ContractAddresses.CREATOR) revert Unauthorized()`.
+
+3. **tx.origin in the broader protocol:** A search of all contract source files finds ZERO occurrences of `tx.origin` anywhere in the protocol codebase.
+
+4. **EVM msg.sender guarantees:** In the EVM, `msg.sender` for an external call is always the address of the contract (or EOA) that made the call. It cannot be spoofed:
+   - Direct calls: `msg.sender` = caller address
+   - Delegatecall: `msg.sender` = the original external caller (preserved)
+   - Staticcall: `msg.sender` = caller address
+   - No EVM opcode allows setting `msg.sender` to an arbitrary value
+
+5. **Could a malicious contract trick the game into calling sDGNRS?** Only if the game contract has a function that:
+   a. Accepts user-controlled calldata, AND
+   b. Forwards it as an external call to sDGNRS with the game as `msg.sender`.
+
+   The game contract does NOT have generic call-forwarding functions. All delegatecall targets are hardcoded module addresses with specific function selectors (e.g., `IDegenerusGameAdvanceModule.advanceGame.selector` at DegenerusGame.sol:326). The game never uses `address.call(userProvidedData)` with arbitrary calldata.
+
+**Verdict: NO ESCALATION.** All access control is `msg.sender`-based. No `tx.origin` usage anywhere. `msg.sender` cannot be spoofed at the EVM level. The game contract has no generic call-forwarding that could be exploited.
+
+---
+
+### Part 3: Worst-Case Privileged Actions
+
+For each privileged address, the maximum possible damage is documented below, assuming the privileged address acts maliciously or is compromised.
+
+#### GAME Contract -- Worst Case
+
+| Action | Maximum Damage | Mechanism |
+|--------|---------------|-----------|
+| Drain all pools | Transfer up to 800B sDGNRS to attacker-controlled addresses | Repeated `transferFromPool` calls for each pool |
+| Destroy undistributed tokens | Burn up to 800B sDGNRS permanently | `burnRemainingPools()` |
+| Inflate reserves | Deposit unlimited stETH/ETH to sDGNRS reserves | `depositSteth` + `receive()` |
+| Rebalance pools arbitrarily | Move tokens between pools | `transferBetweenPools` |
+
+**Assessment:** The game contract has the highest privilege level. A compromised game contract could drain all pool tokens and manipulate reserves. However, the game is a trusted protocol contract deployed by the same team. If the game is compromised, the entire protocol (including jackpot pools, affiliate rewards, quest rewards, etc.) is compromised regardless of sDGNRS access control. The game contract is a **trust anchor** -- its correctness is a prerequisite for the entire system.
+
+The game contract itself is protected by:
+- Immutable module addresses (ContractAddresses.sol:12-21)
+- No admin upgrade mechanism (DegenerusGameStorage.sol:109: "NOT upgradeable")
+- VRF-based randomness preventing state manipulation (DegenerusGame.sol:14)
+- Access control on admin functions (ADMIN address at ContractAddresses.sol:31)
+
+#### DGNRS Contract -- Worst Case
+
+| Action | Maximum Damage | Mechanism |
+|--------|---------------|-----------|
+| Move sDGNRS from wrapper balance | Transfer up to `sDGNRS.balanceOf[DGNRS]` (initially 200B) to arbitrary address | `wrapperTransferTo(to, amount)` |
+
+**Assessment:** The DGNRS contract can only move tokens that are already in its own sDGNRS balance -- the creator's 20% allocation. It cannot create new tokens, access pool balances, or interact with reserves. The DGNRS contract's `wrapperTransferTo` is called only from `unwrapTo` (DegenerusStonk.sol:143), which requires the CREATOR's DGNRS balance to cover the amount. The DGNRS contract has no path to call `wrapperTransferTo` without burning the corresponding DGNRS tokens first.
+
+#### CREATOR Address -- Worst Case
+
+| Action | Maximum Damage | Mechanism |
+|--------|---------------|-----------|
+| Unwrap DGNRS to arbitrary recipients | Send up to CREATOR's DGNRS balance worth of soulbound sDGNRS to any address | `unwrapTo(recipient, amount)` |
+
+**Assessment:** The CREATOR can only affect their own tokens. They cannot access other users' DGNRS balances, pool tokens, or reserves. The `unwrapTo` function burns from CREATOR's DGNRS balance first (DegenerusStonk.sol:142: `_burn(msg.sender, amount)` which checks `amount <= balanceOf[msg.sender]` at line 204), then moves the corresponding sDGNRS. The maximum amount is bounded by CREATOR's DGNRS holdings, which starts at 200B (20% of supply) and decreases with every burn or unwrap.
+
+---
+
+### Privilege Assessment Summary
+
+**Overall Verdict: NO PRIVILEGE ESCALATION PATHS EXIST.**
+
+The sDGNRS/DGNRS privilege model is based on three principles, all of which hold:
+
+1. **Immutable authorization:** All privileged addresses (GAME, DGNRS, CREATOR) are compile-time constants in ContractAddresses.sol, inlined into contract bytecode. No setter function, no admin override, no governance mechanism can change them post-deployment.
+
+2. **msg.sender-only access control:** All authorization checks use `msg.sender`, which cannot be spoofed at the EVM level. No `tx.origin` is used anywhere in the protocol. No generic call-forwarding exists that could be exploited.
+
+3. **No upgrade mechanism:** None of the contracts (sDGNRS, DGNRS, Game) use proxy patterns (UUPS, TransparentProxy, diamond). The contracts are plain Solidity with no `fallback()` function, no `selfdestruct`, and no dynamic module registration.
+
+**Escalation vector summary:**
+
+| Vector | Analyzed | Verdict | Key Evidence |
+|--------|----------|---------|-------------|
+| Delegatecall to sDGNRS | Yes | **NO ESCALATION** | Delegatecall runs against caller's storage; game modules correctly use external calls with msg.sender = game address |
+| Proxy Upgrade | Yes | **NO ESCALATION** | No proxy patterns; explicitly non-upgradeable (DegenerusGameStorage.sol:109); all addresses are compile-time constants |
+| CREATE2/Selfdestruct collision | Yes | **NO ESCALATION** | No selfdestruct in any contract; post-Cancun EIP-6780 limits clearing; 160-bit preimage attack infeasible |
+| msg.sender spoofing / tx.origin | Yes | **NO ESCALATION** | Zero tx.origin usage; msg.sender is EVM-guaranteed; no generic call-forwarding in game contract |
+
+The privilege model is minimal, immutable, and correctly enforced. The only trust assumption is the correctness of the game contract itself, which is a necessary trust anchor for the entire protocol.
+
+---
