@@ -21,7 +21,6 @@ import {
  *    - slot 0 is always MINT_ETH (type 1)
  *    - slot 1 is different from slot 0
  *    - emits QuestSlotRolled for both slots
- *  - resetQuestStreak (onlyGame)
  *  - awardQuestStreakBonus (onlyGame, happy path, clamping)
  *  - handleMint (onlyCoin, progress, completion, reward)
  *  - handleFlip (onlyCoin, progress, completion)
@@ -307,42 +306,8 @@ describe("DegenerusQuests", function () {
   });
 
   // =========================================================================
-  // 3. resetQuestStreak (onlyGame)
+  // 3. resetQuestStreak — removed (was only used for deity pass transfer penalties)
   // =========================================================================
-  describe("resetQuestStreak", function () {
-    it("reverts OnlyGame when called by EOA", async function () {
-      const { quests, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        quests.connect(alice).resetQuestStreak(alice.address)
-      ).to.be.revertedWithCustomError(quests, "OnlyGame");
-    });
-
-    it("game can reset streak without revert", async function () {
-      const { quests, game, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        callAsGame(hre.ethers, game, quests, "resetQuestStreak", [alice.address])
-      ).to.not.be.reverted;
-    });
-
-    it("resets streak and baseStreak to 0", async function () {
-      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
-      // Roll a quest and build up streak via handleMint
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
-
-      // handleMint: complete slot 0 (MINT_ETH, 2 tickets * mintPrice)
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
-        alice.address,
-        2,
-        true,
-      ]);
-
-      // Reset streak
-      await callAsGame(hre.ethers, game, quests, "resetQuestStreak", [alice.address]);
-
-      const [streak] = await quests.playerQuestStates(alice.address);
-      expect(streak).to.equal(0n);
-    });
-  });
 
   // =========================================================================
   // 4. awardQuestStreakBonus (onlyGame)
@@ -870,8 +835,7 @@ describe("DegenerusQuests", function () {
       expect(streak).to.equal(1n);
 
       // Skip to day 5 (missed days 2-4); do NOT roll a new quest so nothing can complete
-      // Use game's resetQuestStreak to verify the streak can be forced to 0 via direct reset
-      // Also verify QuestStreakReset fires during the next sync action (handleMint triggers syncState)
+      // Verify QuestStreakReset fires during the next sync action (handleMint triggers syncState)
       await rollQuestAsCoin(hre.ethers, coin, quests, 5n, 88n);
       // Call handleMint on day 5 - this triggers _questSyncState which fires QuestStreakReset
       // Note: slot 0 target is 1 * mintPrice, so 1 ticket completes it, resetting then re-incrementing streak
@@ -890,11 +854,6 @@ describe("DegenerusQuests", function () {
       // After reset + new day 5 completion: streak = 0 (reset) + 1 (new completion) = 1
       [streak] = await quests.playerQuestStates(alice.address);
       expect(streak).to.equal(1n);
-
-      // Verify a direct resetQuestStreak also zeros out the streak
-      await callAsGame(hre.ethers, game, quests, "resetQuestStreak", [alice.address]);
-      [streak] = await quests.playerQuestStates(alice.address);
-      expect(streak).to.equal(0n);
     });
   });
 

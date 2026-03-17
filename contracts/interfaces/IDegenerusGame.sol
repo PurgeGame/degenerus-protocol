@@ -388,12 +388,6 @@ interface IDegenerusGame {
     /// @param symbolId Symbol to claim (0-31).
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
 
-    /// @notice Callback from deity pass ERC721 on transfer.
-    /// @param from Current holder.
-    /// @param to New holder.
-    /// @param symbolId The symbol/tokenId being transferred.
-    function onDeityPassTransfer(address from, address to, uint8 symbolId) external;
-
     /// @notice Purchase a 10-level lazy pass (direct in-game activation).
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
     function purchaseLazyPass(address buyer) external payable;

@@ -216,10 +216,6 @@ interface IDegenerusGameWhaleModule {
     /// @param symbolId Symbol index (0-31) to bind the pass to
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
 
-    /// @notice Handles deity pass transfer logic (called via delegatecall from game callback)
-    /// @param from Address transferring the pass
-    /// @param to Address receiving the pass
-    function handleDeityPassTransfer(address from, address to) external;
 }
 
 /// @title IDegenerusGameMintModule

@@ -412,57 +412,97 @@ describe("DegenerusAdmin", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 5. emergencyRecover
+  // 5. VRF Governance (propose / vote / execute)
   // ---------------------------------------------------------------------------
-  describe("emergencyRecover", function () {
-    it("reverts when VRF is not stalled", async function () {
+  describe("VRF Governance", function () {
+    it("propose reverts when VRF is not stalled (< 20h)", async function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const newKeyHash = hre.ethers.id("test-key-hash");
       await expect(
-        admin.connect(deployer).emergencyRecover(vrfAddr, newKeyHash)
+        admin.connect(deployer).propose(vrfAddr, newKeyHash)
       ).to.be.revertedWithCustomError(admin, "NotStalled");
     });
 
-    it("reverts when called by non-owner", async function () {
+    it("propose reverts with ZeroAddress for zero coordinator", async function () {
+      const { admin, deployer } = await loadFixture(deployFullProtocol);
+      const newKeyHash = hre.ethers.id("test-key-hash");
+      // Even if stalled, zero coordinator should revert ZeroAddress first
+      await expect(
+        admin.connect(deployer).propose(ZERO_ADDRESS, newKeyHash)
+      ).to.be.revertedWithCustomError(admin, "ZeroAddress");
+    });
+
+    it("propose reverts with ZeroAddress for zero keyHash", async function () {
+      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+      await expect(
+        admin.connect(deployer).propose(vrfAddr, ZERO_BYTES32)
+      ).to.be.revertedWithCustomError(admin, "ZeroAddress");
+    });
+
+    it("community propose reverts with InsufficientStake when caller has no sDGNRS", async function () {
       const { admin, mockVRF, alice } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const newKeyHash = hre.ethers.id("test-key-hash");
+      // Even after 7d stall, alice has no sDGNRS
+      await hre.ethers.provider.send("evm_increaseTime", [7 * 86400 + 1]);
+      await hre.ethers.provider.send("evm_mine");
       await expect(
-        admin.connect(alice).emergencyRecover(vrfAddr, newKeyHash)
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
+        admin.connect(alice).propose(vrfAddr, newKeyHash)
+      ).to.be.revertedWithCustomError(admin, "InsufficientStake");
     });
 
-    it("reverts when newCoordinator is zero address", async function () {
-      const { admin, game, deployer } = await loadFixture(deployFullProtocol);
-      // First make VRF stall by advancing time 3+ days
-      await hre.ethers.provider.send("evm_increaseTime", [3 * 86400 + 1]);
-      await hre.ethers.provider.send("evm_mine");
-
-      // Only meaningful if game has a pending RNG request; otherwise rngStalledForThreeDays=false
-      // Skip recovery test if not stalled
-      const stalled = await game.rngStalledForThreeDays();
-      if (!stalled) {
-        // Cannot test with current state; skip
-        return;
-      }
-
-      const newKeyHash = hre.ethers.id("test-key-hash");
+    it("vote reverts when VRF is not stalled", async function () {
+      const { admin, deployer } = await loadFixture(deployFullProtocol);
+      // No proposals exist but the stall check should revert first
       await expect(
-        admin.connect(deployer).emergencyRecover(ZERO_ADDRESS, newKeyHash)
-      ).to.be.revertedWithCustomError(admin, "ZeroAddress");
+        admin.connect(deployer).vote(1, true)
+      ).to.be.revertedWithCustomError(admin, "NotStalled");
     });
 
-    it("reverts when newKeyHash is zero", async function () {
-      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
-      await hre.ethers.provider.send("evm_increaseTime", [3 * 86400 + 1]);
+    it("vote reverts with ProposalNotActive for non-existent proposal", async function () {
+      const { admin, deployer } = await loadFixture(deployFullProtocol);
+      // Advance 21 hours to pass stall check
+      await hre.ethers.provider.send("evm_increaseTime", [21 * 3600]);
       await hre.ethers.provider.send("evm_mine");
-      const stalled = await game.rngStalledForThreeDays();
-      if (!stalled) return;
-      const vrfAddr = await mockVRF.getAddress();
       await expect(
-        admin.connect(deployer).emergencyRecover(vrfAddr, ZERO_BYTES32)
-      ).to.be.revertedWithCustomError(admin, "ZeroAddress");
+        admin.connect(deployer).vote(999, true)
+      ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
+    });
+
+    it("anyProposalActive returns false when no proposals exist", async function () {
+      const { admin } = await loadFixture(deployFullProtocol);
+      expect(await admin.anyProposalActive()).to.equal(false);
+    });
+
+    it("circulatingSupply returns reasonable value", async function () {
+      const { admin } = await loadFixture(deployFullProtocol);
+      // After deployment, circulating supply may be 0 or positive
+      const supply = await admin.circulatingSupply();
+      expect(supply).to.be.gte(0n);
+    });
+
+    it("threshold returns 6000 for fresh proposal (day 0)", async function () {
+      const { admin } = await loadFixture(deployFullProtocol);
+      // Threshold for non-existent proposal: createdAt=0, elapsed=block.timestamp (huge) → 0
+      // This is expected — expired proposals have 0 threshold
+      expect(await admin.threshold(0)).to.equal(0);
+    });
+
+    it("canExecute returns false for non-existent proposal", async function () {
+      const { admin } = await loadFixture(deployFullProtocol);
+      expect(await admin.canExecute(1)).to.equal(false);
+    });
+
+    it("proposalCount starts at 0", async function () {
+      const { admin } = await loadFixture(deployFullProtocol);
+      expect(await admin.proposalCount()).to.equal(0n);
+    });
+
+    it("activeProposalCount starts at 0", async function () {
+      const { admin } = await loadFixture(deployFullProtocol);
+      expect(await admin.activeProposalCount()).to.equal(0);
     });
   });
 

@@ -24,6 +24,11 @@ interface IDegenerusVaultOwner {
     function isVaultOwner(address account) external view returns (bool);
 }
 
+/// @dev Admin interface for governance proposal liveness check (death clock pause).
+interface IDegenerusAdmin {
+    function anyProposalActive() external view returns (bool);
+}
+
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.
 contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+======================================================================+
@@ -35,7 +40,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     error NotTimeYet();
     error RngNotReady();
     error RngLocked();
-    error VrfUpdateNotReady();
 
     /*+======================================================================+
       |                              EVENTS                                  |
@@ -400,6 +404,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         vrfCoordinator = IVRFCoordinator(coordinator_);
         vrfSubscriptionId = subId;
         vrfKeyHash = keyHash_;
+        lastVrfProcessedTimestamp = uint48(block.timestamp);
         emit VrfCoordinatorUpdated(current, coordinator_);
     }
 
@@ -421,6 +426,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bool livenessTriggered = (lvl == 0 &&
             ts - lst > uint256(DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days) ||
             (lvl != 0 && ts - 120 days > lst);
+
+        if (livenessTriggered) {
+            // Pause death clock during VRF stall (governance may be active)
+            try IDegenerusAdmin(ContractAddresses.ADMIN).anyProposalActive()
+                returns (bool active) {
+                if (active) livenessTriggered = false;
+            } catch {}
+        }
 
         if (!livenessTriggered) return false;
 
@@ -770,7 +783,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Waiting for VRF - check for timeout retry
         if (rngRequestTime != 0) {
             uint48 elapsed = ts - rngRequestTime;
-            if (elapsed >= 18 hours) {
+            if (elapsed >= 12 hours) {
                 _requestRng(isTicketJackpotDay, lvl);
                 return 1;
             }
@@ -1250,10 +1263,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
     }
 
-    /// @notice Emergency VRF coordinator rotation after 3-day stall.
-    /// @dev Access: ContractAddresses.ADMIN only. Only available when VRF has stalled for 3+ days.
-    ///      This is a recovery mechanism for Chainlink outages.
-    ///      SECURITY: Requires 3-day gap to prevent abuse.
+    /// @notice Emergency VRF coordinator rotation (governance-gated).
+    /// @dev Access: ContractAddresses.ADMIN only. The Admin contract enforces
+    ///      stall duration via sDGNRS-holder governance (propose/vote/execute).
     /// @param newCoordinator New VRF coordinator address.
     /// @param newSubId New subscription ID.
     /// @param newKeyHash New key hash for the gas lane.
@@ -1263,8 +1275,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bytes32 newKeyHash
     ) external {
         if (msg.sender != ContractAddresses.ADMIN) revert E();
-        if (!_threeDayRngGap(_simulatedDayIndex()))
-            revert VrfUpdateNotReady();
 
         address current = address(vrfCoordinator);
         vrfCoordinator = IVRFCoordinator(newCoordinator);
@@ -1361,6 +1371,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
         rngWordCurrent = finalWord;
         rngWordByDay[day] = finalWord;
+        lastVrfProcessedTimestamp = uint48(block.timestamp);
         emit DailyRngApplied(day, rawWord, nudges, finalWord);
     }
 
@@ -1382,10 +1393,4 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
     }
 
-    function _threeDayRngGap(uint48 day) private view returns (bool) {
-        if (rngWordByDay[day] != 0) return false;
-        if (rngWordByDay[day - 1] != 0) return false;
-        if (day < 2 || rngWordByDay[day - 2] != 0) return false;
-        return true;
-    }
 }

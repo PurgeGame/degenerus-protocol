@@ -37,15 +37,15 @@ describe("Nation-State Attacker PoC", function () {
   // =========================================================================
   // DEFENSE-02: Emergency recovery requires 3-day VRF stall
   // =========================================================================
-  describe("DEFENSE-02: Emergency recovery gate", function () {
-    it("emergencyRecover reverts without 3-day stall", async function () {
+  describe("DEFENSE-02: VRF governance gate", function () {
+    it("propose reverts without VRF stall", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
 
       const fakeCoord = "0x0000000000000000000000000000000000000001";
       const fakeKeyHash = "0x" + "ab".repeat(32);
 
       await expect(
-        admin.connect(deployer).emergencyRecover(fakeCoord, fakeKeyHash)
+        admin.connect(deployer).propose(fakeCoord, fakeKeyHash)
       ).to.be.revertedWithCustomError(admin, "NotStalled");
     });
   });
@@ -186,20 +186,7 @@ describe("Nation-State Attacker PoC", function () {
   });
 
   // =========================================================================
-  // DEFENSE-12: DeityPass burn is game-only
-  // =========================================================================
-  describe("DEFENSE-12: DeityPass burn guard", function () {
-    it("DeityPass burn reverts when called by non-game address", async function () {
-      const { deityPass, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        deityPass.connect(alice).burn(0)
-      ).to.be.revertedWithCustomError(deityPass, "NotAuthorized");
-    });
-  });
-
-  // =========================================================================
-  // DEFENSE-13: updateVrfCoordinatorAndSub requires 3-day RNG gap
+  // DEFENSE-13: updateVrfCoordinatorAndSub requires stall
   // =========================================================================
   describe("DEFENSE-13: VRF coordinator update requires stall", function () {
     it("updateVrfCoordinatorAndSub reverts without stall", async function () {

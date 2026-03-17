@@ -164,7 +164,7 @@ describe("RngStall", function () {
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
-    it("calling advanceGame at 12h elapsed reverts with RngNotReady", async function () {
+    it("calling advanceGame at 6h elapsed reverts with RngNotReady", async function () {
       const { game, deployer, advanceModule } = await loadFixture(
         deployFullProtocol
       );
@@ -172,14 +172,14 @@ describe("RngStall", function () {
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      await advanceTime(12 * 3600); // 12 hours.
+      await advanceTime(6 * 3600); // 6 hours — under the 12h threshold.
 
       await expect(
         game.connect(deployer).advanceGame()
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
-    it("calling advanceGame at 17h 59m elapsed reverts with RngNotReady", async function () {
+    it("calling advanceGame at 11h 59m elapsed reverts with RngNotReady", async function () {
       const { game, deployer, advanceModule } = await loadFixture(
         deployFullProtocol
       );
@@ -187,29 +187,29 @@ describe("RngStall", function () {
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      // 17 hours and 59 minutes = just under the 18-hour threshold.
-      await advanceTime(17 * 3600 + 59 * 60);
+      // 11 hours and 59 minutes = just under the 12-hour threshold.
+      await advanceTime(11 * 3600 + 59 * 60);
 
       await expect(
         game.connect(deployer).advanceGame()
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
-    it("calling advanceGame at exactly 18h (not yet elapsed) reverts", async function () {
-      const { game, deployer, advanceModule } = await loadFixture(
+    it("calling advanceGame at 12h+ triggers retry (no revert)", async function () {
+      const { game, deployer } = await loadFixture(
         deployFullProtocol
       );
 
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      // Advance well under 18 hours to be safely within the "not yet timed out" window.
-      // Using 17h to avoid boundary issues with block timestamp advancement.
-      await advanceTime(17 * 3600);
+      // At 12h+, the retry should trigger (no revert).
+      await advanceTime(12 * 3600 + 1);
 
-      await expect(
-        game.connect(deployer).advanceGame()
-      ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
+      // Should not revert — retries the VRF request
+      const tx = await game.connect(deployer).advanceGame();
+      const receipt = await tx.wait();
+      expect(receipt.status).to.equal(1);
     });
   });
 
@@ -636,38 +636,17 @@ describe("RngStall", function () {
   });
 
   // =========================================================================
-  // 9. Emergency Recovery (DegenerusAdmin.emergencyRecover)
+  // 9. VRF Governance (DegenerusAdmin.propose / vote)
   // =========================================================================
 
-  describe("emergencyRecover via DegenerusAdmin", function () {
-    /**
-     * Helper: advance 4 days without any VRF fulfillment so that
-     * rngStalledForThreeDays() returns true, then attempt emergencyRecover.
-     */
-    async function stallAndRecover(fixtures) {
-      const { game, admin, deployer } = fixtures;
-
-      // Advance 4 calendar days without fulfilling any VRF request.
-      for (let d = 0; d < 4; d++) {
-        await advanceToNextDay();
-        try {
-          await game.connect(deployer).advanceGame();
-        } catch {
-          // May revert with RngNotReady within the 18h window — that is OK.
-        }
-      }
-      return await game.rngStalledForThreeDays();
-    }
-
-    it("emergencyRecover reverts when VRF is not stalled (NotStalled)", async function () {
+  describe("VRF governance via DegenerusAdmin", function () {
+    it("propose reverts when VRF is not stalled (NotStalled)", async function () {
       const { game, admin, deployer, mockVRF } = await loadFixture(
         deployFullProtocol
       );
 
-      // No days have passed; stall is false.
       expect(await game.rngStalledForThreeDays()).to.equal(false);
 
-      // Deploy a new mock coordinator for the recovery call.
       const MockVRF = await hre.ethers.getContractFactory(
         "MockVRFCoordinator"
       );
@@ -677,124 +656,44 @@ describe("RngStall", function () {
       await expect(
         admin
           .connect(deployer)
-          .emergencyRecover(newCoordAddr, hre.ethers.keccak256("0x01"))
+          .propose(newCoordAddr, hre.ethers.keccak256("0x01"))
       ).to.be.revertedWithCustomError(admin, "NotStalled");
     });
 
-    it("emergencyRecover succeeds after 3-day stall, updating coordinator on the game", async function () {
-      const { game, admin, deployer } = await loadFixture(deployFullProtocol);
-
-      const stalled = await stallAndRecover({ game, admin, deployer });
-      if (!stalled) {
-        // If the stall condition wasn't reached (e.g. some VRF words recorded
-        // through side-effects), skip gracefully.
-        console.log(
-          "  [SKIP] 3-day stall not triggered in this fixture snapshot"
-        );
-        return;
-      }
-
-      // Deploy a replacement mock VRF coordinator.
-      const MockVRF = await hre.ethers.getContractFactory(
-        "MockVRFCoordinator"
-      );
-      const newCoord = await MockVRF.deploy();
-      const newCoordAddr = await newCoord.getAddress();
-      const newKeyHash = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("new-keyhash"));
-
-      const tx = await admin
-        .connect(deployer)
-        .emergencyRecover(newCoordAddr, newKeyHash);
-      const receipt = await tx.wait();
-      expect(receipt.status).to.equal(1);
-
-      // The admin should emit EmergencyRecovered.
-      const events = await getEvents(tx, admin, "EmergencyRecovered");
-      expect(events.length).to.equal(1);
-      expect(events[0].args.newCoordinator.toLowerCase()).to.equal(
-        newCoordAddr.toLowerCase()
-      );
-    });
-
-    it("after emergencyRecover, rngLocked is reset and game can advance", async function () {
-      const { game, admin, deployer } = await loadFixture(deployFullProtocol);
-
-      const stalled = await stallAndRecover({ game, admin, deployer });
-      if (!stalled) {
-        console.log(
-          "  [SKIP] 3-day stall not triggered in this fixture snapshot"
-        );
-        return;
-      }
-
-      const MockVRF = await hre.ethers.getContractFactory(
-        "MockVRFCoordinator"
-      );
-      const newCoord = await MockVRF.deploy();
-      const newCoordAddr = await newCoord.getAddress();
-      const newKeyHash = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("new-keyhash-2"));
-
-      await admin
-        .connect(deployer)
-        .emergencyRecover(newCoordAddr, newKeyHash);
-
-      // updateVrfCoordinatorAndSub resets rngLockedFlag to false.
-      expect(await game.rngLocked()).to.equal(false);
-
-      // advanceGame should now be able to issue a VRF request against the new
-      // coordinator without reverting.
-      const tx = await game.connect(deployer).advanceGame();
-      const receipt = await tx.wait();
-      expect(receipt.status).to.equal(1);
-
-      // The new mock VRF should have a pending request.
-      const lastId = await getLastVRFRequestId(newCoord);
-      expect(lastId).to.be.gt(0n);
-    });
-
-    it("emergencyRecover reverts with ZeroAddress for zero coordinator", async function () {
-      const { game, admin, deployer } = await loadFixture(deployFullProtocol);
-
-      const stalled = await stallAndRecover({ game, admin, deployer });
-      if (!stalled) {
-        console.log(
-          "  [SKIP] 3-day stall not triggered in this fixture snapshot"
-        );
-        return;
-      }
+    it("propose reverts with ZeroAddress for zero coordinator", async function () {
+      const { admin, deployer } = await loadFixture(deployFullProtocol);
 
       const nonZeroKeyHash = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("kh"));
 
       await expect(
         admin
           .connect(deployer)
-          .emergencyRecover(hre.ethers.ZeroAddress, nonZeroKeyHash)
+          .propose(hre.ethers.ZeroAddress, nonZeroKeyHash)
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
-    it("emergencyRecover reverts with NotOwner when called by non-owner", async function () {
-      const { game, admin, alice, deployer } = await loadFixture(
+    it("community propose reverts with InsufficientStake when no sDGNRS", async function () {
+      const { admin, alice, mockVRF } = await loadFixture(
         deployFullProtocol
       );
 
-      const stalled = await stallAndRecover({ game, admin, deployer });
-      if (!stalled) {
-        console.log(
-          "  [SKIP] 3-day stall not triggered in this fixture snapshot"
-        );
-        return;
-      }
+      // Advance 7+ days for community path stall threshold
+      await advanceTime(7 * 86400 + 1);
 
       const MockVRF = await hre.ethers.getContractFactory(
         "MockVRFCoordinator"
       );
       const newCoord = await MockVRF.deploy();
-      const newCoordAddr = await newCoord.getAddress();
       const newKeyHash = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("kh2"));
 
       await expect(
-        admin.connect(alice).emergencyRecover(newCoordAddr, newKeyHash)
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
+        admin.connect(alice).propose(await newCoord.getAddress(), newKeyHash)
+      ).to.be.revertedWithCustomError(admin, "InsufficientStake");
+    });
+
+    it("anyProposalActive returns false when no proposals exist", async function () {
+      const { admin } = await loadFixture(deployFullProtocol);
+      expect(await admin.anyProposalActive()).to.equal(false);
     });
   });
 

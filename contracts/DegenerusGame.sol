@@ -24,7 +24,7 @@ pragma solidity 0.8.34;
  *      - RNG lock prevents state manipulation during VRF callback window
  *      - Access control via msg.sender checks
  *      - Delegatecall modules use constant addresses from ContractAddresses
- *      - 18h VRF timeout, 3-day stall detection, 120-day inactivity guard
+ *      - 12h VRF timeout, 3-day stall detection, 120-day inactivity guard
  */
 
 import {IDegenerusCoin} from "./interfaces/IDegenerusCoin.sol";
@@ -56,11 +56,6 @@ import {BitPackingLib} from "./libraries/BitPackingLib.sol";
   |  Minimal interfaces for external contracts this contract interacts with.     |
   |  These are defined locally to avoid circular import dependencies.            |
   +==============================================================================+*/
-
-/// @notice Interface for burning deity pass ERC721 tokens (refunds).
-interface IDegenerusDeityPassBurn {
-    function burn(uint256 tokenId) external;
-}
 
 /// @notice Interface for reading player quest states.
 interface IDegenerusQuestView {
@@ -716,23 +711,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     IDegenerusGameWhaleModule.purchaseDeityPass.selector,
                     buyer,
                     symbolId
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Callback from the DegenerusDeityPass ERC721 on transfer.
-    /// @dev Burns 5 ETH worth of BURNIE from sender, updates deity storage, nukes sender stats.
-    ///      Only callable by the DEITY_PASS ERC721 contract.
-    function onDeityPassTransfer(address from, address to, uint8) external {
-        if (msg.sender != ContractAddresses.DEITY_PASS) revert E();
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_WHALE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameWhaleModule.handleDeityPassTransfer.selector,
-                    from,
-                    to
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -1855,19 +1833,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                                                                      |
       |  SECURITY:                                                           |
       |  • RNG lock prevents state manipulation during VRF window            |
-      |  • 18-hour timeout allows recovery from stale requests               |
-      |  • 3-day stall enables emergency coordinator rotation                |
+      |  • 12-hour timeout allows recovery from stale requests               |
+      |  • Governance-gated coordinator rotation via Admin                   |
       |  • Nudge system allows players to influence (not predict) RNG        |
       +======================================================================+*/
 
-    /// @notice Emergency VRF coordinator rotation after 3-day stall.
-    /// @dev Access: ADMIN only. Only available when VRF has stalled for 3+ days.
-    ///      This is a recovery mechanism for Chainlink outages.
-    ///      SECURITY: Requires 3-day gap to prevent abuse.
+    /// @notice Emergency VRF coordinator rotation (governance-gated).
+    /// @dev Access: ADMIN only. Stall duration enforced by Admin governance.
     /// @param newCoordinator New VRF coordinator address.
     /// @param newSubId New subscription ID.
     /// @param newKeyHash New key hash for the gas lane.
-    /// @custom:reverts VrfUpdateNotReady If 3-day stall condition not met.
     /// @custom:reverts E If caller is not ADMIN.
     function updateVrfCoordinatorAndSub(
         address newCoordinator,
@@ -2219,10 +2194,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Check if VRF has stalled for 3 consecutive days.
-    /// @dev Enables emergency VRF coordinator rotation via updateVrfCoordinatorAndSub().
+    /// @dev Retained for monitoring/external use. Governance uses lastVrfProcessed() instead.
     /// @return True if no VRF word has been recorded for the last 3 day slots.
     function rngStalledForThreeDays() external view returns (bool) {
         return _threeDayRngGap(_simulatedDayIndex());
+    }
+
+    /// @notice Timestamp of the last successfully processed VRF word.
+    /// @dev Used by governance contracts to detect VRF stalls (time-based).
+    function lastVrfProcessed() external view returns (uint48) {
+        return lastVrfProcessedTimestamp;
     }
 
     /*+======================================================================+

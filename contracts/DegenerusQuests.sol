@@ -317,18 +317,6 @@ contract DegenerusQuests is IDegenerusQuests {
         return _rollDailyQuest(day, entropy);
     }
 
-    function resetQuestStreak(address player) external onlyGame {
-        PlayerQuestState storage state = questPlayerState[player];
-        uint24 prevStreak = state.streak;
-        state.streak = 0;
-        state.baseStreak = 0;
-        if (prevStreak != 0) {
-            uint48 day = activeQuests[0].day;
-            if (day == 0) day = activeQuests[1].day;
-            emit QuestStreakReset(player, prevStreak, day);
-        }
-    }
-
     /**
      * @notice Award quest streak bonus to a player.
      * @dev Access: GAME contract only.

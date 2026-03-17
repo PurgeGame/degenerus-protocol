@@ -1605,4 +1605,13 @@ abstract contract DegenerusGameStorage {
     /// @dev Bonus entries awarded per player at the current x00 level.
     ///      Used to enforce the 10 ETH cap across multiple purchases.
     mapping(address => uint256) internal centuryBonusUsed;
+
+    // =========================================================================
+    // VRF Liveness Timestamp (Governance)
+    // =========================================================================
+
+    /// @dev Timestamp of the last successfully processed VRF word.
+    ///      Used by governance to detect VRF stalls (time-based vs day-gap-based).
+    ///      Initialized in wireVrf(), updated in _applyDailyRng().
+    uint48 internal lastVrfProcessedTimestamp;
 }
