@@ -9,7 +9,7 @@ Requirements for VRF governance security audit and doc sync.
 
 ### Governance Core Audit
 
-- [ ] **GOV-01**: Storage layout verified — `lastVrfProcessedTimestamp` at safe delegatecall slot, no collisions with existing GameStorage layout
+- [x] **GOV-01**: Storage layout verified — `lastVrfProcessedTimestamp` at safe delegatecall slot, no collisions with existing GameStorage layout
 - [ ] **GOV-02**: `propose()` access control verified — admin path (DGVE >50.1%, 20h stall) and community path (0.5% sDGNRS, 7d stall) both correctly gated
 - [ ] **GOV-03**: `vote()` arithmetic verified — changeable votes correctly subtract old weight before adding new, no double-counting or weight leakage
 - [ ] **GOV-04**: Threshold decay verified — discrete daily steps match spec (6000→5000→4000→3000→2000→1000→500→0 at 24h intervals), boundary conditions clean
@@ -79,7 +79,7 @@ Deferred to future milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GOV-01 | Phase 24 | Pending |
+| GOV-01 | Phase 24 | Complete |
 | GOV-02 | Phase 24 | Pending |
 | GOV-03 | Phase 24 | Pending |
 | GOV-04 | Phase 24 | Pending |
