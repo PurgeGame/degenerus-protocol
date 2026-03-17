@@ -56,7 +56,7 @@ Requirements for VRF governance security audit and doc sync.
 - [x] **DOCS-04**: parameter-reference.md updated — governance constants added (thresholds, timeouts, BPS values)
 - [x] **DOCS-05**: Tier 2 reference docs updated — economic flow, VRF lifecycle, admin function references corrected
 - [x] **DOCS-06**: Tier 3 footnotes added — minor references in delta audit docs, warden reports updated
-- [ ] **DOCS-07**: Cross-reference integrity verified — no stale `emergencyRecover`, `EmergencyRecovered`, `_threeDayRngGap`, or `18 hours` references remain in audit docs
+- [x] **DOCS-07**: Cross-reference integrity verified — no stale `emergencyRecover`, `EmergencyRecovered`, `_threeDayRngGap`, or `18 hours` references remain in audit docs
 
 ## v2.2+ Requirements
 
@@ -111,7 +111,7 @@ Deferred to future milestone.
 | DOCS-04 | Phase 25 | Complete |
 | DOCS-05 | Phase 25 | Complete |
 | DOCS-06 | Phase 25 | Complete |
-| DOCS-07 | Phase 25 | Pending |
+| DOCS-07 | Phase 25 | Complete |
 
 **Coverage:**
 - v2.1 requirements: 33 total
