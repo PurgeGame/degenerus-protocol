@@ -213,6 +213,11 @@ try
 
 **Severity rationale:** QA. Intentional design trade-off. LINK loss is bounded by subscription balance and secondary to game continuity.
 
+> **v2.1 Note:** `emergencyRecover` was removed in v2.1. The try/catch pattern noted in QA-03
+> is no longer present. VRF coordinator rotation now uses governance (propose/vote/execute).
+> The try/catch for old subscription cancellation now exists in `_executeSwap`.
+> See v2.1-governance-verdicts.md for current behavior.
+
 ---
 
 ## [QA-04] sDGNRS Constructor Calls External Contracts During Deployment

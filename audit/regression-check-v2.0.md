@@ -27,6 +27,13 @@
 **Delta:** UNCHANGED
 **Current Verdict:** STILL VALID (acknowledged design trade-off, all guards intact)
 
+> **v2.1 Note:** `emergencyRecover` was removed in v2.1 and replaced by governance
+> (propose/vote/execute in DegenerusAdmin). The `_threeDayRngGap` guard was removed from
+> AdvanceModule; governance uses `lastVrfProcessedTimestamp` with 20h/7d thresholds.
+> `EmergencyRecovered` event replaced by `ProposalCreated/VoteCast/ProposalExecuted/ProposalKilled`.
+> M-02 severity downgraded from Medium to Low. This historical reference is preserved for
+> audit traceability. See v2.1-governance-verdicts.md for current behavior.
+
 ---
 
 ### Finding: DELTA-L-01 -- DGNRS Transfer-to-Self Token Lock
@@ -75,6 +82,12 @@
 **Delta:** UNCHANGED
 **Current Verdict:** STILL VALID (intentional design -- wireVrf for initial setup, updateVrfCoordinatorAndSub for emergency)
 
+> **v2.1 Note:** `emergencyRecover` was removed in v2.1. wireVrf is now deployment-only;
+> governance coordinator rotation uses `updateVrfCoordinatorAndSub` via `_executeSwap`.
+> The I-09 rationale about "emergencyRecover reuses this path" is no longer applicable.
+> This historical reference is preserved for audit traceability.
+> See v2.1-governance-verdicts.md for current behavior.
+
 ---
 
 ### Finding: I-10 -- wireVrf() Lacks Zero-Address Check
@@ -88,6 +101,10 @@
 
 **Delta:** UNCHANGED
 **Current Verdict:** STILL VALID (wireVrf only called from Admin constructor with compile-time constants)
+
+> **v2.1 Note:** `emergencyRecover` was removed in v2.1. The zero-address check now
+> exists in the governance `propose()` function. This historical reference is preserved
+> for audit traceability. See v2.1-governance-verdicts.md for current behavior.
 
 ---
 
@@ -168,6 +185,12 @@
 
 **Delta:** UNCHANGED
 **Current Verdict:** STILL VALID (intentional duplication -- private function cannot be shared across delegatecall boundary)
+
+> **v2.1 Note:** `_threeDayRngGap` was completely removed from DegenerusGameAdvanceModule
+> in v2.1 (XCON-04). The duplication noted in I-22 no longer exists. `_threeDayRngGap`
+> remains only in DegenerusGame.sol for the `rngStalledForThreeDays()` monitoring view
+> function. This historical reference is preserved for audit traceability.
+> See v2.1-governance-verdicts.md (XCON-04) for verification.
 
 ---
 

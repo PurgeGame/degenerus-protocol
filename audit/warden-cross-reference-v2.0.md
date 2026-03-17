@@ -19,6 +19,12 @@
 | W1-QA-01 | QA | Compile-time address constants create single-deploy binding | ContractAddresses.sol (throughout) |
 | W1-QA-02 | QA | Generic error E() reduces debuggability | DegenerusGameStorage.sol:185 |
 | W1-QA-03 | QA | emergencyRecover try/catch silently swallows cancellation failure | DegenerusAdmin.sol:491-498 |
+
+> **v2.1 Note:** `emergencyRecover` was removed in v2.1 and replaced by governance
+> (propose/vote/execute). The try/catch pattern now exists in `_executeSwap`.
+> This historical reference is preserved for audit traceability.
+> See v2.1-governance-verdicts.md for current behavior.
+
 | W1-QA-04 | QA | sDGNRS constructor calls external contracts during deployment | StakedDegenerusStonk.sol:221-227 |
 | W1-QA-05 | QA | linkAmountToEth exposed as external for try/catch self-call | DegenerusAdmin.sol:633-637, 664 |
 
@@ -57,6 +63,9 @@
 | W1-QA-01: Compile-time address constants | QA | NO | -- | NEW |
 | W1-QA-02: Generic error E() debuggability | QA | NO | -- | NEW |
 | W1-QA-03: emergencyRecover try/catch swallows failure | QA | PARTIAL | M-02 | EXTENDS |
+
+> **v2.1 Note:** `emergencyRecover` removed in v2.1. W1-QA-03 now references historical code.
+
 | W1-QA-04: sDGNRS constructor external calls | QA | NO | -- | NEW |
 | W1-QA-05: linkAmountToEth external for try/catch | QA | NO | -- | NEW |
 | W2-L-01: EntropyLib shift triple not analyzed | Low | YES | I-03 | KNOWN |
@@ -99,6 +108,10 @@ The following findings were independently discovered by multiple wardens, valida
 ### Coverage Validation
 
 - **Did any warden find M-02 (Admin + VRF failure)?** YES -- W1-QA-03 extends M-02 with analysis of the emergencyRecover try/catch behavior during coordinator migration. Agent 1's confidence assessment explicitly references the 3-day VRF stall and admin privilege model. Expected: YES.
+
+> **v2.1 Note:** `emergencyRecover` was removed in v2.1. M-02 severity downgraded from Medium to Low.
+> Governance (propose/vote/execute) replaced single-admin emergency recovery.
+> See v2.1-governance-verdicts.md for current behavior.
 - **Did any warden find DELTA-L-01 (self-transfer lock)?** YES -- W1-L-01 independently identified the exact DGNRS transfer-to-self pattern with unchecked arithmetic analysis at DegenerusStonk.sol:190-200. Expected: YES.
 - **How many wardens found at least one known issue?** 3/3 -- All three wardens independently re-discovered at least one prior finding. Higher = better coverage.
 
