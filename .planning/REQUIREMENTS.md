@@ -74,7 +74,7 @@
 
 ### Payout Specification Document
 
-- [ ] **SPEC-01**: Payout specification HTML document created at `audit/PAYOUT-SPECIFICATION.html`
+- [x] **SPEC-01**: Payout specification HTML document created at `audit/PAYOUT-SPECIFICATION.html`
 - [ ] **SPEC-02**: All 17 distribution systems covered with trigger, source, calculation, recipients, claim mechanism, currency
 - [ ] **SPEC-03**: Flow diagrams included for every distribution system showing money path
 - [ ] **SPEC-04**: Edge cases documented for each system (empty pools, single player, max values)
@@ -161,7 +161,7 @@
 | DOC-03 | Phase 29 | Complete |
 | DOC-04 | Phase 29 | Complete |
 | DOC-05 | Phase 29 | Complete |
-| SPEC-01 | Phase 30 | Pending |
+| SPEC-01 | Phase 30 | Complete |
 | SPEC-02 | Phase 30 | Pending |
 | SPEC-03 | Phase 30 | Pending |
 | SPEC-04 | Phase 30 | Pending |
