@@ -37,7 +37,7 @@
 
 - [x] **Phase 26: GAMEOVER Path Audit** - Audit the terminal distribution path where all remaining protocol funds converge into a single irreversible execution (completed 2026-03-18)
 - [x] **Phase 27: Payout/Claim Path Audit** - Audit all 19 normal-gameplay distribution systems covering every value-transfer path outside GAMEOVER (completed 2026-03-18)
-- [ ] **Phase 28: Cross-Cutting Verification** - Verify recent changes, protocol invariants, edge cases, and top vulnerable functions across the full audited system
+- [x] **Phase 28: Cross-Cutting Verification** - Verify recent changes, protocol invariants, edge cases, and top vulnerable functions across the full audited system (completed 2026-03-18)
 - [ ] **Phase 29: Comment/Documentation Correctness** - Verify every natspec, inline comment, storage layout, and parameter reference against audited ground truth
 - [ ] **Phase 30: Payout Specification Document** - Synthesize all audit findings into a self-contained HTML specification covering all 17+ distribution systems
 
@@ -91,7 +91,7 @@ Plans:
   3. Pool accounting, sDGNRS supply conservation, and BURNIE mint/burn lifecycle are each verified with explicit proof that no desynchronization path exists
   4. GAMEOVER at level 0, level 1, and level 100 boundaries are analyzed; single-player GAMEOVER handles all distributions correctly; advanceGame gas griefing, decimator claim timing, coinflip auto-rebuy during known-RNG windows, affiliate self-referral loops, and rounding accumulation are each analyzed with explicit verdicts
   5. Top 10 most vulnerable functions are ranked with weighted criteria, each receives a deep adversarial audit with a dedicated finding or explicit PASS verdict, and a ranking document with rationale is produced
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 - [ ] 28-01-PLAN.md -- Recent changes regression: commit coverage map, CHG-01..04 verdicts
@@ -147,7 +147,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 26. GAMEOVER Path Audit | v3.0 | Complete    | 2026-03-18 | 2026-03-18 |
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
-| 28. Cross-Cutting Verification | 5/6 | In Progress|  | - |
+| 28. Cross-Cutting Verification | 6/6 | Complete   | 2026-03-18 | - |
 | 29. Comment/Documentation Correctness | v3.0 | 0/TBD | Not started | - |
 | 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |
 
