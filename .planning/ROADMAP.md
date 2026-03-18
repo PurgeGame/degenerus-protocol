@@ -71,7 +71,15 @@ Plans:
   3. All ancillary payout paths (coinflip, lootbox, quest, affiliate, stETH yield, accumulator milestones, advance bounty, WWXRP consolation, coinflip recycling/boons) have verified distribution formulas and claim mechanisms
   4. sDGNRS burn and DGNRS wrapper burn proportional redemption math is verified correct for ETH/stETH/BURNIE
   5. Ticket conversion, futurepool mechanics, and auto-rebuy carry are verified with no path allowing extraction beyond intended amounts
-**Plans**: TBD
+**Plans:** 6 plans
+
+Plans:
+- [ ] 27-01-PLAN.md — Jackpot distribution: purchase-phase daily (PAY-01), 5-day draws (PAY-02), ticket conversion/futurepool (PAY-16)
+- [ ] 27-02-PLAN.md — Scatter and decimator: BAF normal (PAY-03), BAF century (PAY-04), decimator normal (PAY-05), decimator x00 (PAY-06)
+- [ ] 27-03-PLAN.md — Coinflip economy: deposit/win/loss (PAY-07), bounty (PAY-08), WWXRP consolation (PAY-18), recycling/boons (PAY-19)
+- [ ] 27-04-PLAN.md — Lootbox, quest, affiliate: lootbox rewards (PAY-09), quest rewards (PAY-10), affiliate commissions (PAY-11)
+- [ ] 27-05-PLAN.md — Yield, burns, bounty: stETH yield (PAY-12), accumulator milestones (PAY-13), advance bounty (PAY-17), sDGNRS burn (PAY-14), DGNRS burn (PAY-15)
+- [ ] 27-06-PLAN.md — Consolidation: cross-reference all 19 verdicts, claimablePool consistency, update findings report
 
 ### Phase 28: Cross-Cutting Verification
 **Goal**: All recent code changes are regression-verified, all protocol-wide invariants hold across every mutation site mapped in Phases 26-27, all boundary conditions are analyzed, and the top vulnerable functions receive deep adversarial audit
@@ -114,7 +122,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 26. GAMEOVER Path Audit | v3.0 | Complete    | 2026-03-18 | 2026-03-18 |
-| 27. Payout/Claim Path Audit | v3.0 | 0/TBD | Not started | - |
+| 27. Payout/Claim Path Audit | v3.0 | 0/6 | Planned | - |
 | 28. Cross-Cutting Verification | v3.0 | 0/TBD | Not started | - |
 | 29. Comment/Documentation Correctness | v3.0 | 0/TBD | Not started | - |
 | 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |
@@ -126,4 +134,4 @@ Plans:
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-17 after Phase 26 planning complete -- 4 plans created*
+*Last updated: 2026-03-17 after Phase 27 planning complete -- 6 plans created*
