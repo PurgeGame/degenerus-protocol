@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
 status: completed
-stopped_at: Completed 30-02-PLAN.md
-last_updated: "2026-03-18T09:00:33.361Z"
-last_activity: 2026-03-18 -- Completed 30-02 jackpot distribution system cards
+stopped_at: Completed 30-03-PLAN.md
+last_updated: "2026-03-18T09:04:40.465Z"
+last_activity: 2026-03-18 -- Completed 30-03 scatter/decimator and coinflip economy system cards
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 28
-  completed_plans: 24
-  percent: 86
+  completed_plans: 25
+  percent: 89
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 30 of 30 (Payout Specification Document)
-Plan: 2 of 6
-Status: Plan 30-02 complete -- Jackpot distribution system cards (PAY-01, PAY-02, PAY-16) with SVG flow diagrams
-Last activity: 2026-03-18 -- Completed 30-02 jackpot distribution system cards
+Plan: 3 of 6
+Status: Plan 30-03 complete -- Scatter/decimator and coinflip economy system cards with SVG diagrams
+Last activity: 2026-03-18 -- Completed 30-03 scatter/decimator and coinflip economy system cards
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 89%
 
 ## Project Reference
 
@@ -121,6 +121,8 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 30]: [Phase 30-01]: SPEC-01 scaffold complete -- self-contained HTML with CSS design system, pool overview SVG, linked TOC, 8 section stubs
 - [Phase 30-02]: Used unique SVG marker IDs per diagram (arrow-j1/j2/j3) to prevent cross-diagram marker conflicts in single HTML file
 - [Phase 30-02]: PAY-16 pool transition chain shown as horizontal layout with prizePoolFrozen dashed-border annotation
+- [Phase 30-03]: Combined PAY-03/04 (BAF scatter) and PAY-05/06 (decimator) into 2 merged system cards; combined PAY-18/19 (WWXRP+recycling) into 1 merged card
+- [Phase 30-03]: Pool source distinction callout (baseFuturePool vs futurePoolLocal) and BURNIE isolation callout added as highlighted category introductions
 
 ## Accumulated Context
 
@@ -153,6 +155,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T09:00:33.359Z
-Stopped at: Completed 30-02-PLAN.md
+Last session: 2026-03-18T09:04:40.463Z
+Stopped at: Completed 30-03-PLAN.md
 Resume file: None
