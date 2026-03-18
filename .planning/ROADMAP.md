@@ -132,12 +132,12 @@ Plans:
 **Plans:** 6 plans
 
 Plans:
-- [ ] 30-01-PLAN.md -- TBD
-- [ ] 30-02-PLAN.md -- TBD
-- [ ] 30-03-PLAN.md -- TBD
-- [ ] 30-04-PLAN.md -- TBD
-- [ ] 30-05-PLAN.md -- TBD
-- [ ] 30-06-PLAN.md -- TBD
+- [ ] 30-01-PLAN.md -- HTML scaffold with CSS design system, header, TOC, pool architecture overview SVG (SPEC-01)
+- [ ] 30-02-PLAN.md -- Jackpot distribution: PAY-01 daily, PAY-02 5-day draws, PAY-16 ticket conversion (SPEC-02/03/04/05/06)
+- [ ] 30-03-PLAN.md -- Scatter/decimator (PAY-03/04/05/06) and coinflip economy (PAY-07/08/18/19) (SPEC-02/03/04/05/06)
+- [ ] 30-04-PLAN.md -- Ancillary payouts (PAY-09/10/11/12/13/17) and token burns (PAY-14/15) (SPEC-02/03/04/05/06)
+- [ ] 30-05-PLAN.md -- GAMEOVER terminal distribution: GO-01/02/07/08 with master sequence diagram (SPEC-02/03/04/05/06)
+- [ ] 30-06-PLAN.md -- Cross-references (claimablePool invariant, known issues), verification script, final assembly (SPEC-01/02/03/04/05/06)
 
 ## Progress
 
@@ -149,7 +149,7 @@ Plans:
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
 | 28. Cross-Cutting Verification | 6/6 | Complete    | 2026-03-18 | - |
 | 29. Comment/Documentation Correctness | 6/6 | Complete    | 2026-03-18 | - |
-| 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |
+| 30. Payout Specification Document | v3.0 | 0/6 | Planned | - |
 
 ## Deferred (v3.1+)
 
@@ -158,4 +158,4 @@ Plans:
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-18 after Phase 29 planning complete -- 6 plans created*
+*Last updated: 2026-03-18 after Phase 30 planning complete -- 6 plans created*
