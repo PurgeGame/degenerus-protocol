@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
 status: completed
-stopped_at: Completed 30-03-PLAN.md
-last_updated: "2026-03-18T09:04:40.465Z"
-last_activity: 2026-03-18 -- Completed 30-03 scatter/decimator and coinflip economy system cards
+stopped_at: Completed 30-04-PLAN.md
+last_updated: "2026-03-18T09:09:05.654Z"
+last_activity: 2026-03-18 -- Completed 30-04 ancillary payouts and token burns system cards
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 28
-  completed_plans: 25
-  percent: 89
+  completed_plans: 26
+  percent: 93
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 30 of 30 (Payout Specification Document)
-Plan: 3 of 6
-Status: Plan 30-03 complete -- Scatter/decimator and coinflip economy system cards with SVG diagrams
-Last activity: 2026-03-18 -- Completed 30-03 scatter/decimator and coinflip economy system cards
+Plan: 4 of 6
+Status: Plan 30-04 complete -- Ancillary payouts and token burns system cards with SVG diagrams
+Last activity: 2026-03-18 -- Completed 30-04 ancillary payouts and token burns system cards
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 93%
 
 ## Project Reference
 
@@ -123,6 +123,8 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 30-02]: PAY-16 pool transition chain shown as horizontal layout with prizePoolFrozen dashed-border annotation
 - [Phase 30-03]: Combined PAY-03/04 (BAF scatter) and PAY-05/06 (decimator) into 2 merged system cards; combined PAY-18/19 (WWXRP+recycling) into 1 merged card
 - [Phase 30-03]: Pool source distinction callout (baseFuturePool vs futurePoolLocal) and BURNIE isolation callout added as highlighted category introductions
+- [Phase 30-04]: PAY-12/PAY-13 combined into one system card (connected systems: yield feeds accumulator, milestones release from accumulator)
+- [Phase 30-04]: PAY-14/PAY-15 combined into one system card (DGNRS wrapper delegates entirely to sDGNRS burn path)
 
 ## Accumulated Context
 
@@ -155,6 +157,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T09:04:40.463Z
-Stopped at: Completed 30-03-PLAN.md
+Last session: 2026-03-18T09:09:05.651Z
+Stopped at: Completed 30-04-PLAN.md
 Resume file: None
