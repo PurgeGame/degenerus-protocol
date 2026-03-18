@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
-status: completed
+status: verifying
 stopped_at: Completed 29-05-PLAN.md
-last_updated: "2026-03-18T07:55:04Z"
+last_updated: "2026-03-18T07:57:35.203Z"
 last_activity: 2026-03-18 -- Completed 29-05 Storage Layout & Constants Comment Verification (DOC-03/DOC-04 PASS)
 progress:
   total_phases: 5
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 29 of 30 (Comment/Documentation Correctness)
-Plan: 3 of 6
-Status: Phase 29 Plan 3 COMPLETE -- 24 NatSpec verdicts across 8 game modules, GO-05-F01 absent from NatSpec
-Last activity: 2026-03-18 -- Completed 29-03 Module NatSpec Part 2 (8 modules, 24 verdicts)
+Plan: 5 of 6
+Status: Phase 29 Plan 5 COMPLETE -- 29-04 peripheral NatSpec also completed (219 verdicts, 0 discrepancies)
+Last activity: 2026-03-18 -- Completed 29-04 Peripheral NatSpec Verification (219 functions, 15 contracts, all MATCH)
 
-Progress: [████████░░] 77%
+Progress: [█████████░] 95%
 
 ## Project Reference
 
@@ -111,6 +111,8 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 29]: [Phase 29-01]: PAY-07-I01 coinflip claim window asymmetry out-of-scope for DegenerusGame.sol (resides in BurnieCoinflip.sol)
 - [Phase 29-02]: JackpotModule payDailyJackpot NatSpec misplacement classified INFORMATIONAL (content correct, position wrong)
 - [Phase 29-02]: 29 external function NatSpec verdicts across 4 large modules (27 MATCH, 2 DISCREPANCY); 891 inline comments with 0 factual discrepancies
+- [Phase 29]: [Phase 29-05]: DOC-03 PASS: Storage layout diagram byte-accurate for Slots 0-2; 1 INFO discrepancy (section header placement)
+- [Phase 29]: [Phase 29-05]: DOC-04 PASS: 210+ constants verified across 20 contracts; 0 BPS/half-BPS/PPM scale confusion; 0 stale comments from removed constants
 
 ## Accumulated Context
 
@@ -143,6 +145,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T07:56:44.898Z
-Stopped at: Completed 29-02-PLAN.md
+Last session: 2026-03-18T07:57:21.220Z
+Stopped at: Completed 29-05-PLAN.md
 Resume file: None
