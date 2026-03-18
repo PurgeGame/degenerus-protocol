@@ -126,7 +126,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Whale bundle early price (levels 0-3).
     uint256 private constant WHALE_BUNDLE_EARLY_PRICE = 2.4 ether;
 
-    /// @dev Whale bundle standard price (x49/x99 levels).
+    /// @dev Whale bundle standard price (levels 4+).
     uint256 private constant WHALE_BUNDLE_STANDARD_PRICE = 4 ether;
 
     /// @dev Whale bundle bonus tickets per level for levels up to 10.
@@ -307,7 +307,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /**
      * @notice Purchase a 10-level lazy pass (direct in-game activation).
-     * @dev Available at levels 0-2 or x9 (9, 19, 29...), or with a valid lazy pass boon.
+     * @dev Available at levels 0-2 or x9 (9, 19, 29... excluding x99), or with a valid lazy pass boon.
      *      Can renew when 7 or fewer levels remain on current pass freeze.
      *      - Grants 4 tickets per level for the next 10 levels (starting at current level + 1).
      *      - Applies the standard 10-level stat boost via _activate10LevelPass.
@@ -316,7 +316,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Awards a lootbox equal to 20% (presale) or 10% (post-presale) of pass value.
      *      - Boon purchases apply a discount (default 10%) to the payment amount.
      * @param buyer The address receiving the pass.
-     * @custom:reverts E When level is not 0-2 or x9 and no boon, pass has 8+ levels remaining, or msg.value is incorrect.
+     * @custom:reverts E When level is not 0-2 or x9 (excluding x99) and no boon, pass has 8+ levels remaining, or msg.value is incorrect.
      */
     function purchaseLazyPass(address buyer) external payable {
         _purchaseLazyPass(buyer);
@@ -345,7 +345,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         } else if (boonDiscountBps != 0) {
             lazyPassBoonDiscountBps[buyer] = 0;
         }
-        if (currentLevel > 2 && currentLevel % 10 != 9 && !hasValidBoon) revert E();
+        if (currentLevel > 2 && (currentLevel % 10 != 9 || currentLevel % 100 == 99) && !hasValidBoon) revert E();
 
         // Cap 1: disallow if player has deity pass or active frozen pass
         if (deityPassCount[buyer] != 0) revert E();
