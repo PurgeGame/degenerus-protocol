@@ -41,10 +41,10 @@
 
 ### Recent Changes Verification
 
-- [ ] **CHG-01**: All commits in last month verified — git log reviewed, each change assessed for correctness
-- [ ] **CHG-02**: VRF governance mechanism verified — propose/vote/execute paths still correct after recent changes
-- [ ] **CHG-03**: Deity non-transferability changes verified — soulbound enforcement, edge cases checked
-- [ ] **CHG-04**: Parameter changes verified — any constant modifications cross-referenced against parameter reference doc
+- [x] **CHG-01**: All commits in last month verified — git log reviewed, each change assessed for correctness
+- [x] **CHG-02**: VRF governance mechanism verified — propose/vote/execute paths still correct after recent changes
+- [x] **CHG-03**: Deity non-transferability changes verified — soulbound enforcement, edge cases checked
+- [x] **CHG-04**: Parameter changes verified — any constant modifications cross-referenced against parameter reference doc
 
 ### Comment/Documentation Correctness
 
@@ -137,10 +137,10 @@
 | PAY-17 | Phase 27 | Complete |
 | PAY-18 | Phase 27 | Complete |
 | PAY-19 | Phase 27 | Complete |
-| CHG-01 | Phase 28 | Pending |
-| CHG-02 | Phase 28 | Pending |
-| CHG-03 | Phase 28 | Pending |
-| CHG-04 | Phase 28 | Pending |
+| CHG-01 | Phase 28 | Complete |
+| CHG-02 | Phase 28 | Complete |
+| CHG-03 | Phase 28 | Complete |
+| CHG-04 | Phase 28 | Complete |
 | INV-01 | Phase 28 | Pending |
 | INV-02 | Phase 28 | Pending |
 | INV-03 | Phase 28 | Pending |
