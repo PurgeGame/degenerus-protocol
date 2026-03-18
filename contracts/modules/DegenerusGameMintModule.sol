@@ -623,8 +623,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint24 purchaseLevel = level + 1;
         uint256 priceWei = price;
 
-        // Block lootbox purchases on the last purchase day of jackpot levels
-        if (lootBoxAmount != 0 && lastPurchaseDay && (purchaseLevel % 5 == 0)) revert E();
         if (lootBoxAmount != 0 && lootBoxAmount < LOOTBOX_MIN) revert E();
 
         uint256 ticketCost = 0;
