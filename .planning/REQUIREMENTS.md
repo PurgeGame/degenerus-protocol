@@ -52,7 +52,7 @@
 - [x] **DOC-02**: Every inline comment verified — no stale comments from prior code versions
 - [x] **DOC-03**: Storage layout comments verified — comments match actual storage positions
 - [x] **DOC-04**: Constants comments verified — comment values match actual contract values
-- [ ] **DOC-05**: Parameter reference doc spot-checked — every value verified against contract source
+- [x] **DOC-05**: Parameter reference doc spot-checked — every value verified against contract source
 
 ### Invariant Verification
 
@@ -160,7 +160,7 @@
 | DOC-02 | Phase 29 | Complete |
 | DOC-03 | Phase 29 | Complete |
 | DOC-04 | Phase 29 | Complete |
-| DOC-05 | Phase 29 | Pending |
+| DOC-05 | Phase 29 | Complete |
 | SPEC-01 | Phase 30 | Pending |
 | SPEC-02 | Phase 30 | Pending |
 | SPEC-03 | Phase 30 | Pending |
