@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
 status: completed
-stopped_at: Completed 28-04-PLAN.md
-last_updated: "2026-03-18T07:02:03.803Z"
+stopped_at: Completed 28-05-PLAN.md
+last_updated: "2026-03-18T07:11:29.810Z"
 last_activity: 2026-03-18 -- Completed 28-03 Supply/Claimability Invariants (INV-03/INV-04/INV-05 all PASS)
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
   percent: 75
 ---
 
@@ -96,6 +96,9 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 28]: EDGE-05 PASS: coinflip RNG frontrunning structurally impossible -- rngLocked blocks claims/toggles, deposits target day+1
 - [Phase 28]: EDGE-06 PASS: affiliate self-referral blocked at DegenerusAffiliate.sol:426; multi-account extraction capped at designed 20% commission rate
 - [Phase 28]: EDGE-07 PASS: BPS rounding ~4 ETH lifetime accumulation is protocol-favoring and non-threatening to INV-01 solvency invariant
+- [Phase 28]: VULN-01 PASS: 48 functions ranked by weighted criteria; advanceGame() tops at 7.85 with rngLockedFlag+jackpotDay increment as replay defenses
+- [Phase 28]: VULN-02 PASS: all 10 top-ranked functions adversarially audited with attack traces; 0 new findings; EDGE-03 LOW and GO-05-F01 MEDIUM not escalated
+- [Phase 28]: VULN-03: DegeneretteModule identified as primary coverage gap (highest-value module, lowest prior audit depth, single-pass review only)
 
 ## Accumulated Context
 
@@ -128,6 +131,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T07:02:03.801Z
-Stopped at: Completed 28-04-PLAN.md
+Last session: 2026-03-18T07:11:29.806Z
+Stopped at: Completed 28-05-PLAN.md
 Resume file: None

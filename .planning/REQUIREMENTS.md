@@ -83,9 +83,9 @@
 
 ### Top 10 Vulnerable Functions
 
-- [ ] **VULN-01**: All state-changing functions ranked by vulnerability likelihood using weighted criteria (value moved, complexity, interaction count, prior coverage gaps)
-- [ ] **VULN-02**: Top 10 most vulnerable functions receive deep adversarial audit — each with dedicated finding or explicit PASS verdict
-- [ ] **VULN-03**: Vulnerability ranking document produced with rationale for each ranking position, suitable for manual review
+- [x] **VULN-01**: All state-changing functions ranked by vulnerability likelihood using weighted criteria (value moved, complexity, interaction count, prior coverage gaps)
+- [x] **VULN-02**: Top 10 most vulnerable functions receive deep adversarial audit — each with dedicated finding or explicit PASS verdict
+- [x] **VULN-03**: Vulnerability ranking document produced with rationale for each ranking position, suitable for manual review
 
 ## v3.1 Requirements (Deferred)
 
@@ -153,9 +153,9 @@
 | EDGE-05 | Phase 28 | Complete |
 | EDGE-06 | Phase 28 | Complete |
 | EDGE-07 | Phase 28 | Complete |
-| VULN-01 | Phase 28 | Pending |
-| VULN-02 | Phase 28 | Pending |
-| VULN-03 | Phase 28 | Pending |
+| VULN-01 | Phase 28 | Complete |
+| VULN-02 | Phase 28 | Complete |
+| VULN-03 | Phase 28 | Complete |
 | DOC-01 | Phase 29 | Pending |
 | DOC-02 | Phase 29 | Pending |
 | DOC-03 | Phase 29 | Pending |
