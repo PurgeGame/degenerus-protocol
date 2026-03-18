@@ -1029,7 +1029,322 @@ lootboxPortion = payout - ethPortion;          // 50% lootbox</code></pre>
 
 <section id="cat-coinflip">
   <h2>3. Coinflip Economy</h2>
-  <!-- Coinflip system cards populated by Plan 30-03 Task 2 -->
+  <p style="background: #fff3e0; border-left: 4px solid #ff6b35; padding: 1rem; margin: 1rem 0; border-radius: 4px;">
+    <strong>BURNIE Isolation:</strong> The coinflip economy operates entirely in BURNIE tokens via a burn-and-mint model. It is fully isolated from the ETH <code>claimablePool</code> -- no coinflip operation can affect protocol ETH solvency. Net house edge is ~1.575% per flip (structurally deflationary).
+  </p>
+
+  <!-- System Card 1: PAY-07 — Coinflip Deposit/Win/Loss -->
+  <div class="system-card" id="pay-07">
+    <h3>PAY-07: Coinflip Deposit / Win / Loss</h3>
+    <div>
+      <span class="badge badge-burnie">BURNIE</span>
+      <span class="badge" style="background:#e8eaf6;color:#3949ab;">PAY-07</span>
+    </div>
+
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Player deposits BURNIE into coinflip; resolved via VRF the following day</td></tr>
+      <tr><th>Source Pool</th><td>N/A -- BURNIE burn-and-mint model (no pool, virtual stakes)</td></tr>
+      <tr><th>Calculation</th><td><code>win = (rngWord &amp; 1) == 1</code> (50/50). Variable multiplier: roll 0 = 1.5x, roll 1 = 2.5x, rolls 2-19 = 1.78x-2.15x. Payout = <code>stake + (stake * uint256(rewardPercent)) / 100</code></td></tr>
+      <tr><th>Recipients</th><td>Winning player (BURNIE minted) or house (BURNIE burned on loss)</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>claimCoinflips()</code> or <code>claimCoinflipsFromBurnie()</code> -- both route to <code>_claimCoinflipsInternal</code></td></tr>
+      <tr><th>Currency</th><td>BURNIE</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// BurnieCoinflip.sol:835
+bool win = (rngWord &amp; 1) == 1; // 50/50 fair coin
+
+// BurnieCoinflip.sol:813-825 -- variable multiplier
+roll = seedWord % 20;
+// roll == 0:    rewardPercent = 50  (1.5x payout)
+// roll == 1:    rewardPercent = 150 (2.5x payout)
+// roll 2-19:    rewardPercent = seedWord % 38 + 78 (1.78x-2.15x)
+
+// Payout:
+uint256 payout = stake + (stake * uint256(rewardPercent)) / 100;
+
+// Net house edge: ~1.575% (players pay via expected burn &gt; expected mint)</code></pre>
+      <p class="file-ref"><strong>Code:</strong> BurnieCoinflip.sol:224-627, BurnieCoin.sol:518-529 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <!-- SVG Flow Diagram: Coinflip -->
+    <svg viewBox="0 0 800 350" class="flow-svg">
+      <defs>
+        <marker id="arrow-cf" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- Player (left) -->
+      <rect x="10" y="130" width="140" height="50" rx="20" class="recipient"/>
+      <text x="80" y="160" text-anchor="middle" font-weight="600">Player</text>
+
+      <!-- Arrow: Deposit BURNIE -->
+      <line x1="150" y1="155" x2="260" y2="155" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-cf)"/>
+      <text x="205" y="145" text-anchor="middle" font-size="10" fill="#555">Deposit BURNIE</text>
+      <text x="205" y="175" text-anchor="middle" font-size="9" fill="#c62828">burnForCoinflip()</text>
+
+      <!-- BurnieCoinflip -->
+      <rect x="265" y="120" width="180" height="70" class="contract"/>
+      <text x="355" y="148" text-anchor="middle" font-weight="600">BurnieCoinflip</text>
+      <text x="355" y="165" text-anchor="middle" font-size="10" fill="#555">processCoinflipPayouts</text>
+      <text x="355" y="180" text-anchor="middle" font-size="9" fill="#555">VRF resolve next day</text>
+
+      <!-- Arrow to decision -->
+      <line x1="445" y1="155" x2="500" y2="155" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-cf)"/>
+
+      <!-- Decision diamond: Win? -->
+      <polygon points="545,125 590,155 545,185 500,155" class="decision"/>
+      <text x="545" y="158" text-anchor="middle" font-size="11">Win?</text>
+
+      <!-- Win path -->
+      <line x1="590" y1="155" x2="670" y2="80" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-cf)"/>
+      <text x="645" y="108" text-anchor="middle" font-size="10" fill="#2e7d32">Win</text>
+
+      <!-- Player receives payout -->
+      <rect x="675" y="55" width="115" height="50" rx="20" class="recipient"/>
+      <text x="732" y="75" text-anchor="middle" font-size="11" font-weight="600">Player</text>
+      <text x="732" y="92" text-anchor="middle" font-size="9" fill="#555">mintForCoinflip()</text>
+
+      <!-- Lose path -->
+      <line x1="590" y1="155" x2="670" y2="230" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-cf)"/>
+      <text x="645" y="202" text-anchor="middle" font-size="10" fill="#c62828">Lose</text>
+
+      <!-- BURNIE Burn -->
+      <rect x="675" y="210" width="115" height="50" rx="4" style="fill:#fce4ec;stroke:#c62828;stroke-width:1.5;"/>
+      <text x="732" y="233" text-anchor="middle" font-size="11" fill="#c62828" font-weight="600">BURNIE Burn</text>
+      <text x="732" y="248" text-anchor="middle" font-size="9" fill="#c62828">Stake destroyed</text>
+
+      <!-- rngLockedFlag annotation -->
+      <rect x="265" y="260" width="240" height="40" rx="4" style="fill:#fff9c4;stroke:#f9a825;stroke-width:1;"/>
+      <text x="385" y="278" text-anchor="middle" font-size="10" font-weight="600">rngLockedFlag blocks claims</text>
+      <text x="385" y="293" text-anchor="middle" font-size="9">during VRF resolution window</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Zero stake:</strong> <code>coinflipBalance</code> cleared to 0 on first processing; no double-payout path exists.</li>
+        <li><strong>RNG locked:</strong> <code>rngLockedFlag</code> blocks claims during VRF resolution on all 6 external claim/toggle paths.</li>
+        <li><strong>Claim window asymmetry:</strong> 30 days first-time, 90 days returning (by-design; PAY-07-I01 INFORMATIONAL). First-time players who wait 31+ days lose winnings.</li>
+        <li><strong>Auto-rebuy carry zeroed on loss:</strong> <code>carry = 0</code> on loss branch -- all accumulated carry is destroyed.</li>
+        <li><strong>Fully isolated from ETH claimablePool:</strong> No coinflip path mutates ETH pool accounting.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- System Card 2: PAY-08 — Coinflip Bounty -->
+  <div class="system-card" id="pay-08">
+    <h3>PAY-08: Coinflip Bounty</h3>
+    <div>
+      <span class="badge badge-burnie">BURNIE</span>
+      <span class="badge" style="background:#e8eaf6;color:#3949ab;">PAY-08</span>
+    </div>
+
+    <table class="info-table">
+      <tr><th>Trigger</th><td>New all-time record daily coinflip volume</td></tr>
+      <tr><th>Source Pool</th><td>Virtual BURNIE bounty pool (accumulates 1000 BURNIE/day via <code>COINFLIP_BOUNTY_DAILY</code>)</td></tr>
+      <tr><th>Calculation</th><td>Bounty = <code>bountyPool / 2</code> (half-pool via <code>creditFlip</code>)</td></tr>
+      <tr><th>Recipients</th><td>Player who sets new daily volume record, gated by DGNRS holding (<code>COINFLIP_BOUNTY_MIN_BET</code> = 50k BURNIE + <code>COINFLIP_BOUNTY_MIN_POOL</code> = 20k BURNIE minimum)</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>creditFlip</code> -- credits BURNIE to coinflip balance for auto-compound (not direct mint)</td></tr>
+      <tr><th>Currency</th><td>BURNIE</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// BurnieCoinflip.sol:634-692
+// Accumulation: COINFLIP_BOUNTY_DAILY = 1000e18 (1000 BURNIE per day)
+
+// Arming condition: new all-time record daily volume
+// DGNRS gating:
+//   bet &gt;= COINFLIP_BOUNTY_MIN_BET (50000 BURNIE = 50000e18)
+//   pool &gt;= COINFLIP_BOUNTY_MIN_POOL (20000 BURNIE = 20000e18)
+
+// Payout: half of bountyPool via creditFlip
+// BurnieCoinflip.sol:843-882
+bountyPayout = bountyPool / 2;
+coin.creditFlip(player, bountyPayout);</code></pre>
+      <p class="file-ref"><strong>Code:</strong> BurnieCoinflip.sol:634-692, BurnieCoinflip.sol:843-882, DegenerusGame.sol:444-467 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <!-- SVG Flow Diagram: Bounty -->
+    <svg viewBox="0 0 700 250" class="flow-svg">
+      <defs>
+        <marker id="arrow-bounty" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- Daily Accumulation -->
+      <rect x="10" y="90" width="150" height="50" rx="8" class="pool"/>
+      <text x="85" y="112" text-anchor="middle" font-weight="600" font-size="11">Daily +1000</text>
+      <text x="85" y="128" text-anchor="middle" font-size="9" fill="#555">BURNIE/day</text>
+
+      <!-- Arrow to Bounty Pool -->
+      <line x1="160" y1="115" x2="215" y2="115" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-bounty)"/>
+
+      <!-- Bounty Pool -->
+      <rect x="220" y="90" width="130" height="50" rx="8" class="pool"/>
+      <text x="285" y="112" text-anchor="middle" font-weight="600" font-size="11">bountyPool</text>
+      <text x="285" y="128" text-anchor="middle" font-size="9" fill="#555">(virtual counter)</text>
+
+      <!-- Arrow to Decision -->
+      <line x1="350" y1="115" x2="395" y2="115" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-bounty)"/>
+
+      <!-- Decision diamond -->
+      <polygon points="440,85 485,115 440,145 395,115" class="decision"/>
+      <text x="440" y="110" text-anchor="middle" font-size="9">Record</text>
+      <text x="440" y="122" text-anchor="middle" font-size="9">+ gate?</text>
+
+      <!-- Yes path -->
+      <line x1="485" y1="115" x2="540" y2="115" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-bounty)"/>
+      <text x="510" y="107" text-anchor="middle" font-size="9" fill="#2e7d32">Yes</text>
+
+      <!-- 50% via creditFlip -->
+      <rect x="545" y="90" width="140" height="50" rx="20" class="recipient"/>
+      <text x="615" y="112" text-anchor="middle" font-weight="600" font-size="11">Player</text>
+      <text x="615" y="128" text-anchor="middle" font-size="9" fill="#555">50% via creditFlip</text>
+
+      <!-- Annotation: DGNRS gating -->
+      <rect x="10" y="175" width="300" height="55" rx="4" style="fill:#fff9c4;stroke:#f9a825;stroke-width:1;"/>
+      <text x="160" y="195" text-anchor="middle" font-size="10" font-weight="600">DGNRS bounty gating:</text>
+      <text x="160" y="210" text-anchor="middle" font-size="9">bet &gt;= 50k BURNIE, pool &gt;= 20k BURNIE</text>
+      <text x="160" y="222" text-anchor="middle" font-size="9">Loss resolution: half destroyed (supply sink)</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Bounty not armed:</strong> Requires new all-time record daily volume (not just high volume). Re-arming requires exceeding current record by at least 1%.</li>
+        <li><strong>DGNRS gating:</strong> If bet &lt; 50k BURNIE or pool &lt; 20k BURNIE, DGNRS bounty not awarded even on record volume.</li>
+        <li><strong>Half-pool payout:</strong> Ensures bounty is never fully depleted in one trigger. On loss, half is destroyed (supply sink).</li>
+        <li><strong>Bounty payout cannot re-arm:</strong> <code>_addDailyFlip</code> called with <code>canArmBounty=false</code>, preventing self-triggering.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- System Card 3: PAY-18 / PAY-19 — WWXRP Consolation and Coinflip Recycling/Boons -->
+  <div class="system-card" id="pay-18-19">
+    <h3>WWXRP Consolation and Coinflip Recycling / Boons</h3>
+    <div>
+      <span class="badge badge-wwxrp">WWXRP</span>
+      <span class="badge badge-burnie">BURNIE</span>
+      <span class="badge" style="background:#e8eaf6;color:#3949ab;">PAY-18</span>
+      <span class="badge" style="background:#e8eaf6;color:#3949ab;">PAY-19</span>
+    </div>
+
+    <h4>PAY-18: WWXRP Consolation Prizes</h4>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Loss day on coinflip (accumulated across claim window)</td></tr>
+      <tr><th>Source Pool</th><td>N/A -- minted directly via <code>mintPrize()</code></td></tr>
+      <tr><th>Calculation</th><td>1 WWXRP per loss day (<code>lossCount * COINFLIP_LOSS_WWXRP_REWARD</code>)</td></tr>
+      <tr><th>Recipients</th><td>Losing player</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>mintPrize()</code> -- restricted to GAME/COIN/COINFLIP roles via compile-time constants</td></tr>
+      <tr><th>Currency</th><td>WWXRP</td></tr>
+    </table>
+
+    <h4>PAY-19: Coinflip Recycling and Boons</h4>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Coinflip deposit (recycling); boon purchase (boons)</td></tr>
+      <tr><th>Source Pool</th><td>Deposit amount (recycling percentage applied)</td></tr>
+      <tr><th>Calculation</th><td>Recycling: 1% (normal), 1.6% (afKing), 3.1% (max deity). Boons: single-use, 2-day expiry, 100k BURNIE cap</td></tr>
+      <tr><th>Recipients</th><td>Player (recycling and boons increase effective deposit)</td></tr>
+      <tr><th>Claim Mechanism</th><td>Applied automatically at deposit time</td></tr>
+      <tr><th>Currency</th><td>BURNIE</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// PAY-18 -- BurnieCoinflip.sol:621-623
+// 1 WWXRP minted per loss day
+wwxrp.mintPrize(player, lossCount * COINFLIP_LOSS_WWXRP_REWARD);
+// WrappedWrappedXRP.sol:342-354
+
+// mintPrize restricted to: GAME, COIN, COINFLIP (compile-time constants)
+// No admin override possible
+
+// PAY-19 -- BurnieCoinflip.sol:1040-1065
+// Recycling rates (applied to deposit):
+//   Normal: 1% (100 BPS), capped at 1000 BURNIE
+//   afKing: 1.6% (160 BPS base)
+//   Max deity: 3.1% (320 + 300 = 620 halfBps / 20000)
+//   Deity bonus capped at first 1M BURNIE (DEITY_RECYCLE_CAP)
+
+// BurnieCoinflip.sol:642-653 -- Boons
+// Single-use, 2-day expiry, 100k BURNIE cap per boon
+// Applied as deposit multiplier: boost = (cappedDeposit * boonBps) / 10_000</code></pre>
+      <p class="file-ref"><strong>Code:</strong> BurnieCoinflip.sol:621-623, WrappedWrappedXRP.sol:342-354, BurnieCoinflip.sol:1040-1065, BurnieCoinflip.sol:642-653 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <!-- SVG Flow Diagram: WWXRP Consolation + Recycling -->
+    <svg viewBox="0 0 700 300" class="flow-svg">
+      <defs>
+        <marker id="arrow-wwxrp" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- Player Deposit -->
+      <rect x="10" y="80" width="140" height="50" rx="20" class="recipient"/>
+      <text x="80" y="103" text-anchor="middle" font-weight="600" font-size="11">Player Deposit</text>
+      <text x="80" y="120" text-anchor="middle" font-size="9" fill="#555">BURNIE</text>
+
+      <!-- Recycling arrow (upward to protocol) -->
+      <line x1="80" y1="80" x2="80" y2="30" stroke="#c62828" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-wwxrp)"/>
+      <text x="140" y="55" text-anchor="start" font-size="9" fill="#c62828">1-3.1% recycling (reduction)</text>
+
+      <!-- Protocol -->
+      <rect x="30" y="5" width="100" height="25" rx="4" style="fill:#fce4ec;stroke:#c62828;stroke-width:1;"/>
+      <text x="80" y="22" text-anchor="middle" font-size="10" fill="#c62828">Protocol</text>
+
+      <!-- Main stake arrow -->
+      <line x1="150" y1="105" x2="280" y2="105" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-wwxrp)"/>
+      <text x="215" y="95" text-anchor="middle" font-size="10" fill="#555">Main stake</text>
+
+      <!-- Coinflip Resolution -->
+      <rect x="285" y="80" width="160" height="50" class="contract"/>
+      <text x="365" y="103" text-anchor="middle" font-weight="600" font-size="11">Coinflip Resolution</text>
+      <text x="365" y="118" text-anchor="middle" font-size="9" fill="#555">VRF day+1</text>
+
+      <!-- On loss: WWXRP consolation -->
+      <line x1="365" y1="130" x2="365" y2="195" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-wwxrp)"/>
+      <text x="385" y="165" text-anchor="start" font-size="10" fill="#c62828">On loss</text>
+
+      <rect x="295" y="200" width="140" height="45" rx="4" style="fill:#fce4ec;stroke:#c62828;stroke-width:1;"/>
+      <text x="365" y="218" text-anchor="middle" font-size="11" fill="#c62828" font-weight="600">1 WWXRP minted</text>
+      <text x="365" y="235" text-anchor="middle" font-size="9" fill="#c62828">mintPrize() per loss day</text>
+
+      <!-- Arrow from WWXRP to player -->
+      <line x1="295" y1="222" x2="185" y2="222" stroke="#c62828" stroke-width="1" marker-end="url(#arrow-wwxrp)"/>
+
+      <!-- Player consolation -->
+      <rect x="50" y="200" width="130" height="45" rx="20" class="recipient"/>
+      <text x="115" y="220" text-anchor="middle" font-size="11" font-weight="600">Player</text>
+      <text x="115" y="235" text-anchor="middle" font-size="9" fill="#555">Consolation prize</text>
+
+      <!-- Boon annotation -->
+      <rect x="470" y="80" width="220" height="60" rx="4" style="fill:#fff9c4;stroke:#f9a825;stroke-width:1;"/>
+      <text x="580" y="100" text-anchor="middle" font-size="10" font-weight="600">Boon system:</text>
+      <text x="580" y="115" text-anchor="middle" font-size="9">Single-use, 2-day expiry</text>
+      <text x="580" y="128" text-anchor="middle" font-size="9">Multiplier applied to deposit (max 100k cap)</text>
+
+      <!-- Compile-time constants annotation -->
+      <rect x="470" y="200" width="220" height="45" rx="4" style="fill:#e8f5e9;stroke:#2e7d32;stroke-width:1;"/>
+      <text x="580" y="218" text-anchor="middle" font-size="10" font-weight="600" fill="#2e7d32">Mint authority:</text>
+      <text x="580" y="235" text-anchor="middle" font-size="9" fill="#2e7d32">Compile-time constants only</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>WWXRP mint authority is compile-time restricted:</strong> Only GAME, COIN, COINFLIP addresses can call <code>mintPrize()</code>. Cannot be changed by admin -- permanent restriction via <code>ContractAddresses</code> library.</li>
+        <li><strong>Recycling rates are fixed per deity tier:</strong> Normal 1% (capped 1000 BURNIE), afKing 1.6% base, max deity 3.1%. Deity bonus applies only to first 1M BURNIE (<code>DEITY_RECYCLE_CAP</code>).</li>
+        <li><strong>Boons expire after 2 days:</strong> <code>COINFLIP_BOON_EXPIRY_DAYS = 2</code>. Cap at 100k BURNIE per boon. Tiers: 5%, 10%, 25%.</li>
+        <li><strong>No extraction amplification through recycling:</strong> Net deflationary. Combined recycling + boon is bounded and non-compounding. 50/50 loss risk prevents unbounded extraction.</li>
+      </ul>
+    </div>
+  </div>
 </section>
 
 <!-- ===== CATEGORY 4: ANCILLARY PAYOUTS ===== -->
