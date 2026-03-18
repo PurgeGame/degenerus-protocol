@@ -69,7 +69,7 @@ Delegatecall modules (all share `DegenerusGameStorage`):
 - `contracts/modules/DegenerusGameGameOverModule.sol` - game over distribution
 - `contracts/modules/DegenerusGameWhaleModule.sol` - whale/lazy/deity passes
 - `contracts/modules/DegenerusGameBoonModule.sol` - boon effects
-- `contracts/modules/DegenerusGameDecimatorModule.sol` - decimator mechanics
+- `contracts/modules/DegenerusGameDecimatorModule.sol` - decimator mechanics + terminal decimator (death bet)
 - `contracts/modules/DegenerusGameDegeneretteModule.sol` - betting
 - `contracts/modules/DegenerusGameAdvanceModule.sol` - level advancement, VRF
 

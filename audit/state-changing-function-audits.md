@@ -6291,14 +6291,14 @@ Per-category behavior:
 - `gameOver = true` -- set terminal state flag
 - `gameOverTime = uint48(block.timestamp)` -- record game-over timestamp
 - `gameOverFinalJackpotPaid = true` -- prevent re-entry / duplicate payouts
-- `claimablePool += decSpend` -- increase liability by decimator jackpot credits (via self-call return)
+- `claimablePool += decSpend` -- increase liability by terminal decimator jackpot credits (via self-call return)
 
 **Callers:**
 - `DegenerusGameAdvanceModule._checkLiveness()` via delegatecall through `GAME_GAMEOVER_MODULE` (line 369-375 of AdvanceModule)
 
 **Callees:**
 - `steth.balanceOf(address(this))` -- external view call to get stETH balance
-- `IDegenerusGame(address(this)).runDecimatorJackpot(decPool, lvl, rngWord)` -- self-call to DegenerusGame which delegatecalls DecimatorModule
+- `IDegenerusGame(address(this)).runTerminalDecimatorJackpot(decPool, lvl, rngWord)` -- self-call to DegenerusGame which delegatecalls DecimatorModule (terminal decimator / death bet)
 - `IDegenerusGame(address(this)).runTerminalJackpot(remaining, lvl + 1, rngWord)` -- self-call to DegenerusGame which delegatecalls JackpotModule
 - `_sendToVault(remaining, stBal)` -- private helper for any undistributed remainder
 - `dgnrs.balanceOf(address(dgnrs))` -- external view call to check DGNRS self-held pool tokens
@@ -6306,7 +6306,7 @@ Per-category behavior:
 
 **ETH Flow:**
 1. **Deity refunds** (level < 10 only): 20 ETH/pass credited to `claimableWinnings[owner]`, funded from `totalFunds - claimablePool` budget. These are pull-pattern credits, not actual transfers.
-2. **Decimator jackpot** (10% of available): `available / 10` sent to `runDecimatorJackpot`. Returns `decRefund` (unallocated portion). `decSpend = decPool - decRefund` added to `claimablePool`.
+2. **Terminal Decimator jackpot** (10% of available): `available / 10` sent to `runTerminalDecimatorJackpot` (death bet). Returns `decRefund` (unallocated portion). `decSpend = decPool - decRefund` added to `claimablePool`.
 3. **Terminal jackpot** (90% + decimator refund): Remainder sent to `runTerminalJackpot` (Day-5-style bucket distribution to next-level ticketholders). `claimablePool` updated internally by JackpotModule.
 4. **Vault sweep**: Any undistributed remainder (`remaining -= termPaid`) sent to vault/DGNRS via `_sendToVault`.
 5. **DGNRS pool burn**: Burns any DGNRS tokens held by the DGNRS contract itself (undistributed pool tokens). This ensures `totalSupply` reflects only holder wallets, so every remaining `burn()` gives a true proportional share of backing assets.
@@ -6320,7 +6320,7 @@ Per-category behavior:
 
 **NatSpec Accuracy:**
 - NatSpec states "liveness guards trigger (2.5yr deploy timeout or 365-day inactivity)" -- the actual code in AdvanceModule uses `DEPLOY_IDLE_TIMEOUT_DAYS` which is 912 days (~2.5 years) for level 0, and 365 days for level > 0. NatSpec is accurate.
-- NatSpec mentions "10% to Decimator, 90% to next-level ticketholders" -- matches code exactly (`remaining / 10` for decimator, rest to terminal jackpot).
+- NatSpec mentions "10% to Terminal Decimator, 90% to next-level ticketholders" -- matches code exactly (`remaining / 10` for terminal decimator death bet, rest to terminal jackpot).
 - NatSpec mentions "VRF fallback: Uses rngWordByDay" -- accurate. The `_gameOverEntropy` function in AdvanceModule populates `rngWordByDay[day]` before calling this function, with a 3-day timeout historical VRF fallback.
 - NatSpec says "FIFO by purchase order" -- correct, iteration is over `deityPassOwners` array which preserves insertion order.
 - `@custom:reverts E When stETH transfer fails` -- this function itself does not directly call stETH transfer (only `_sendToVault` does as a callee), but reverting within `_sendToVault` would propagate. Slightly imprecise but not misleading.
@@ -10849,27 +10849,9 @@ Unlike `_creditClaimable`, this function DOES update `claimablePool` for the rem
 
 ---
 
-### `resolveCoinflips()` [external]
+### ~~`resolveCoinflips()` [external]~~ — REMOVED
 
-| Field | Value |
-|-------|-------|
-| **Signature** | `function resolveCoinflips() external` |
-| **Visibility** | external |
-| **Mutability** | state-changing |
-| **Parameters** | None |
-| **Returns** | None |
-
-**State Reads:** None
-**State Writes:** None directly (delegates to coinflip contract)
-
-**Callers:** Any (permissionless)
-**Callees:** `coinflip.claimCoinflips(address(0), 0)` (line 272)
-
-**ETH Flow:** No
-**Invariants:** Permissionless helper -- advances the flip cursor, compounds auto-rebuy carry, records BAF score. Passes `amount = 0` so no BURNIE is withdrawn -- keeps all BURNIE in the flip system. The `address(0)` resolves to sDGNRS in the coinflip contract.
-**NatSpec Accuracy:** Accurate. Documents that no BURNIE is claimed out.
-**Gas Flags:** None.
-**Verdict:** CORRECT
+**Status:** Deleted. sDGNRS flip cursor is now advanced daily inside `BurnieCoinflip.processCoinflipPayouts()` via `_claimCoinflipsInternal(SDGNRS, false)`. This eliminates the unbounded catch-up loop if nobody called `resolveCoinflips()` for many days.
 
 ---
 

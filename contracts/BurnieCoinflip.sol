@@ -576,7 +576,10 @@ contract BurnieCoinflip {
             }
         }
 
-        if (winningBafCredit != 0) {
+        // sDGNRS is excluded from BAF in jackpots (recordBafFlip returns early).
+        // Skip the BAF section entirely so this path doesn't hit the rngLocked guard
+        // when called from processCoinflipPayouts during advanceGame.
+        if (winningBafCredit != 0 && player != ContractAddresses.SDGNRS) {
             if (!levelCached) {
                 cachedLevel = game.level();
                 levelCached = true;
@@ -877,6 +880,10 @@ contract BurnieCoinflip {
             bountyPaid,
             to
         );
+
+        // Keep sDGNRS flip cursor current — reuses _claimCoinflipsInternal
+        // (BAF skipped for sDGNRS, no rngLocked guard on this path).
+        _claimCoinflipsInternal(ContractAddresses.SDGNRS, false);
     }
 
     /*+======================================================================+

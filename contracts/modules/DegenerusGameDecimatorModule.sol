@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {
     IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -745,4 +746,282 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /*+======================================================================+
+      |                    TERMINAL DECIMATOR (DEATH BET)                    |
+      +======================================================================+
+      |  Always-open burn for GAMEOVER. Time multiplier rewards early        |
+      |  conviction. 200k cap equalizes bankroll — timing differentiates.   |
+      +======================================================================+*/
+
+    // -------------------------------------------------------------------------
+    // Terminal Decimator Events
+    // -------------------------------------------------------------------------
+
+    event TerminalDecBurnRecorded(
+        address indexed player,
+        uint24 indexed lvl,
+        uint8 bucket,
+        uint8 subBucket,
+        uint256 effectiveAmount,
+        uint256 weightedAmount,
+        uint256 timeMultBps
+    );
+
+    // -------------------------------------------------------------------------
+    // Terminal Decimator Errors
+    // -------------------------------------------------------------------------
+
+    error TerminalDecCapped();
+    error TerminalDecNotActive();
+    error TerminalDecAlreadyClaimed();
+    error TerminalDecNotWinner();
+    error TerminalDecDeadlinePassed();
+
+    // -------------------------------------------------------------------------
+    // Terminal Decimator Constants
+    // -------------------------------------------------------------------------
+
+    uint48 private constant TERMINAL_DEC_IDLE_TIMEOUT_DAYS = 365;
+    uint256 private constant TERMINAL_DEC_DEATH_CLOCK = 120 days;
+
+    // -------------------------------------------------------------------------
+    // Terminal Decimator Burn Tracking
+    // -------------------------------------------------------------------------
+
+    /// @dev Bucket base and min for terminal decimator (lvl 100 rules).
+    uint8 private constant TERMINAL_DEC_BUCKET_BASE = 12;
+    uint8 private constant TERMINAL_DEC_MIN_BUCKET = 2;
+    uint16 private constant TERMINAL_DEC_ACTIVITY_CAP_BPS = 23_500;
+
+    /// @notice Record a terminal decimator burn for GAMEOVER eligibility.
+    /// @dev Called by coin contract. Bucket and multiplier computed internally
+    ///      from player activity score (lvl 100 rules, min bucket 2).
+    ///      Time multiplier computed from days remaining on death clock.
+    ///      Burns blocked after death clock expires (remaining=0) or on lastPurchaseDay.
+    /// @param player Address of the player.
+    /// @param lvl Current game level.
+    /// @param baseAmount Burn amount before multiplier.
+    function recordTerminalDecBurn(
+        address player,
+        uint24 lvl,
+        uint256 baseAmount
+    ) external {
+        if (msg.sender != ContractAddresses.COIN) revert OnlyCoin();
+
+        uint256 daysRemaining = _terminalDecDaysRemaining();
+        if (daysRemaining == 0) revert TerminalDecDeadlinePassed();
+
+        // Compute bucket and multiplier from activity score (self-call; runs via delegatecall so address(this) == game)
+        uint256 bonusBps = IDegenerusGame(address(this)).playerActivityScore(player);
+        if (bonusBps > TERMINAL_DEC_ACTIVITY_CAP_BPS) bonusBps = TERMINAL_DEC_ACTIVITY_CAP_BPS;
+        uint8 bucket = _terminalDecBucket(bonusBps);
+        uint256 multBps = bonusBps == 0 ? BPS_DENOMINATOR : BPS_DENOMINATOR + (bonusBps / 3);
+
+        TerminalDecEntry storage e = terminalDecEntries[player];
+
+        // Lazy reset: if entry is from a previous level, zero it out
+        if (e.burnLevel != uint48(lvl)) {
+            e.totalBurn = 0;
+            e.weightedBurn = 0;
+            e.bucket = 0;
+            e.subBucket = 0;
+            e.burnLevel = uint48(lvl);
+        }
+
+        // First burn this level: set bucket and subbucket
+        if (e.bucket == 0) {
+            e.bucket = bucket;
+            e.subBucket = _decSubbucketFor(player, lvl, bucket);
+        }
+
+        // Apply activity multiplier and cap
+        uint256 effectiveAmount = _decEffectiveAmount(
+            uint256(e.totalBurn),
+            baseAmount,
+            multBps
+        );
+        if (effectiveAmount == 0) revert TerminalDecCapped();
+
+        // Update pre-time-multiplier total (for cap enforcement)
+        uint256 newTotal = uint256(e.totalBurn) + effectiveAmount;
+        if (newTotal > type(uint80).max) newTotal = type(uint80).max;
+        e.totalBurn = uint80(newTotal);
+
+        // Apply time multiplier
+        uint256 timeMultBps = _terminalDecMultiplierBps(daysRemaining);
+        uint256 weightedAmount = (effectiveAmount * timeMultBps) / BPS_DENOMINATOR;
+
+        // Update post-time-multiplier total (for claim share)
+        uint256 newWeighted = uint256(e.weightedBurn) + weightedAmount;
+        if (newWeighted > type(uint88).max) newWeighted = type(uint88).max;
+        e.weightedBurn = uint88(newWeighted);
+
+        // Update bucket aggregate (key includes lvl, so old-level entries are naturally stale)
+        bytes32 bucketKey = keccak256(abi.encode(lvl, e.bucket, e.subBucket));
+        terminalDecBucketBurnTotal[bucketKey] += weightedAmount;
+
+        emit TerminalDecBurnRecorded(
+            player, lvl, e.bucket, e.subBucket,
+            effectiveAmount, weightedAmount, timeMultBps
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Terminal Decimator Resolution (GAMEOVER only)
+    // -------------------------------------------------------------------------
+
+    /// @notice Resolve terminal decimator at GAMEOVER.
+    /// @dev Selects winning subbuckets, snapshots claim round.
+    ///      Returns poolWei if no qualifying burns.
+    /// @param poolWei Total ETH allocated (10% of remaining).
+    /// @param lvl Level at GAMEOVER.
+    /// @param rngWord VRF-derived randomness.
+    /// @return returnAmountWei Amount to return (non-zero if no winners).
+    function runTerminalDecimatorJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 returnAmountWei) {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+
+        // Prevent double-resolution
+        if (lastTerminalDecClaimRound.lvl == lvl) {
+            return poolWei;
+        }
+
+        uint256 totalWinnerBurn;
+        uint64 packedOffsets;
+
+        // Select winning subbucket for each denominator (2-12)
+        uint256 decSeed = rngWord;
+        for (uint8 denom = 2; denom <= DECIMATOR_MAX_DENOM; ) {
+            uint8 winningSub = _decWinningSubbucket(decSeed, denom);
+            packedOffsets = _packDecWinningSubbucket(packedOffsets, denom, winningSub);
+
+            bytes32 bucketKey = keccak256(abi.encode(lvl, denom, winningSub));
+            uint256 subTotal = terminalDecBucketBurnTotal[bucketKey];
+            if (subTotal != 0) {
+                totalWinnerBurn += subTotal;
+            }
+            unchecked { ++denom; }
+        }
+
+        if (totalWinnerBurn == 0) {
+            return poolWei;
+        }
+
+        // Store packed offsets for claim validation
+        decBucketOffsetPacked[lvl] = packedOffsets;
+
+        // Snapshot claim round (single slot — no rngWord needed, GAMEOVER skips auto-rebuy)
+        lastTerminalDecClaimRound.lvl = lvl;
+        lastTerminalDecClaimRound.poolWei = uint96(poolWei);
+        lastTerminalDecClaimRound.totalBurn = uint128(totalWinnerBurn);
+
+        return 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // Terminal Decimator Claims
+    // -------------------------------------------------------------------------
+
+    /// @notice Claim terminal decimator jackpot for caller.
+    /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.
+    function claimTerminalDecimatorJackpot() external {
+        if (prizePoolFrozen) revert E();
+
+        uint256 amountWei = _consumeTerminalDecClaim(msg.sender);
+
+        // GAMEOVER claims are always 100% ETH (entropy unused — auto-rebuy skipped when gameOver)
+        _addClaimableEth(msg.sender, amountWei, 0);
+    }
+
+    /// @notice Check if player can claim terminal decimator jackpot.
+    /// @param player Address to check.
+    /// @return amountWei Claimable amount.
+    /// @return winner True if player won.
+    function terminalDecClaimable(
+        address player
+    ) external view returns (uint256 amountWei, bool winner) {
+        uint24 lvl = lastTerminalDecClaimRound.lvl;
+        if (lvl == 0) return (0, false);
+
+        TerminalDecEntry storage e = terminalDecEntries[player];
+        if (e.burnLevel != uint48(lvl) || e.weightedBurn == 0 || e.bucket == 0) {
+            return (0, false);
+        }
+
+        uint64 packedOffsets = decBucketOffsetPacked[lvl];
+        uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, e.bucket);
+        if (e.subBucket != winningSub) return (0, false);
+
+        uint256 totalBurn = uint256(lastTerminalDecClaimRound.totalBurn);
+        if (totalBurn == 0) return (0, false);
+
+        amountWei = (uint256(lastTerminalDecClaimRound.poolWei) * uint256(e.weightedBurn)) / totalBurn;
+        winner = amountWei != 0;
+    }
+
+    /// @dev Validate and consume terminal dec claim.
+    function _consumeTerminalDecClaim(
+        address player
+    ) private returns (uint256 amountWei) {
+        uint24 lvl = lastTerminalDecClaimRound.lvl;
+        if (lvl == 0) revert TerminalDecNotActive();
+
+        TerminalDecEntry storage e = terminalDecEntries[player];
+        if (e.burnLevel != uint48(lvl) || e.weightedBurn == 0) revert TerminalDecNotWinner();
+
+        // Use totalBurn == 0 as claimed flag (set to 0 after claiming)
+        uint88 weight = e.weightedBurn;
+
+        uint64 packedOffsets = decBucketOffsetPacked[lvl];
+        uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, e.bucket);
+        if (e.subBucket != winningSub) revert TerminalDecNotWinner();
+
+        uint256 totalBurn = uint256(lastTerminalDecClaimRound.totalBurn);
+        if (totalBurn == 0) revert TerminalDecNotWinner();
+
+        amountWei = (uint256(lastTerminalDecClaimRound.poolWei) * uint256(weight)) / totalBurn;
+        if (amountWei == 0) revert TerminalDecNotWinner();
+
+        // Mark claimed by zeroing weightedBurn
+        e.weightedBurn = 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // Terminal Decimator Helpers
+    // -------------------------------------------------------------------------
+
+    /// @dev Time multiplier based on days remaining on death clock.
+    ///      > 10 days: daysRemaining / 4 (30x at 120 days, 2.75x at 11 days)
+    ///      <= 10 days: linear 2x (day 10) to 1x (day 1)
+    ///      Intentional discontinuity at day 10 (2.75x → 2x regime change).
+    function _terminalDecMultiplierBps(uint256 daysRemaining) private pure returns (uint256) {
+        if (daysRemaining > 10) {
+            return daysRemaining * 2500;
+        }
+        // Linear: 2x at day 10, 1x at day 1
+        return 10000 + ((daysRemaining - 1) * 10000) / 9;
+    }
+
+    /// @dev Compute terminal decimator bucket from activity score (lvl 100 rules).
+    function _terminalDecBucket(uint256 bonusBps) private pure returns (uint8) {
+        if (bonusBps == 0) return TERMINAL_DEC_BUCKET_BASE;
+        uint256 range = uint256(TERMINAL_DEC_BUCKET_BASE) - uint256(TERMINAL_DEC_MIN_BUCKET);
+        uint256 reduction = (range * bonusBps + (TERMINAL_DEC_ACTIVITY_CAP_BPS / 2)) / TERMINAL_DEC_ACTIVITY_CAP_BPS;
+        uint256 b = uint256(TERMINAL_DEC_BUCKET_BASE) - reduction;
+        if (b < TERMINAL_DEC_MIN_BUCKET) b = TERMINAL_DEC_MIN_BUCKET;
+        return uint8(b);
+    }
+
+    /// @dev Calculate days remaining on death clock. Returns 0 if expired.
+    function _terminalDecDaysRemaining() private view returns (uint256) {
+        uint256 timeout = level == 0
+            ? uint256(TERMINAL_DEC_IDLE_TIMEOUT_DAYS) * 1 days
+            : TERMINAL_DEC_DEATH_CLOCK;
+        uint256 deadline = uint256(levelStartTime) + timeout;
+        if (block.timestamp >= deadline) return 0;
+        return (deadline - block.timestamp) / 1 days;
+    }
 }

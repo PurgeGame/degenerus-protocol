@@ -66,6 +66,12 @@ contract BurnieCoin {
         uint8 bucket
     );
 
+    /// @notice Emitted on a terminal decimator (death bet) burn.
+    event TerminalDecimatorBurn(
+        address indexed player,
+        uint256 amountBurned
+    );
+
     /// @notice Emitted when the daily quest is rolled for a new day.
     /// @param day The day index (1-indexed, day 1 = deploy day).
     /// @param questType The type of quest rolled (see IDegenerusQuests).
@@ -947,6 +953,47 @@ contract BurnieCoin {
         );
 
         emit DecimatorBurn(caller, amount, bucketUsed);
+    }
+
+    /*+======================================================================+
+      |                   TERMINAL DECIMATOR (DEATH BET)                     |
+      +======================================================================+
+      |  Always-open burn betting on GAMEOVER. Time multiplier rewards       |
+      |  early conviction. Total loss if level completes normally.           |
+      +======================================================================+*/
+
+    /// @notice Burn BURNIE as a terminal decimator (death bet).
+    /// @dev Always open (no milestone gating). Blocked on lastPurchaseDay
+    ///      (level completing, death bet can never fire) and after death clock expires.
+    ///      Bucket computed internally using lvl 100 rules (min bucket 2).
+    /// @param player Player address to burn for (address(0) = msg.sender).
+    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 BURNIE).
+    function terminalDecimatorBurn(address player, uint256 amount) external {
+        address caller;
+        if (player == address(0) || player == msg.sender) {
+            caller = msg.sender;
+        } else {
+            if (!degenerusGame.isOperatorApproved(player, msg.sender)) {
+                revert NotApproved();
+            }
+            caller = player;
+        }
+
+        if (amount < DECIMATOR_MIN) revert AmountLTMin();
+
+        (bool open, uint24 lvl) = degenerusGame.terminalDecWindow();
+        if (!open) revert NotDecimatorWindow();
+
+        uint256 consumed = _consumeCoinflipShortfall(caller, amount);
+        _burn(caller, amount - consumed);
+
+        degenerusGame.recordTerminalDecBurn(
+            caller,
+            lvl,
+            amount
+        );
+
+        emit TerminalDecimatorBurn(caller, amount);
     }
 
     /*+======================================================================+

@@ -438,10 +438,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       await expect(sdgnrs.connect(alice).gameClaimWhalePass()).to.not.be.reverted;
     });
 
-    it("resolveCoinflips is permissionless", async function () {
-      const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
-      await expect(sdgnrs.connect(alice).resolveCoinflips()).to.not.be.reverted;
-    });
+    // resolveCoinflips removed — sDGNRS flips now resolve daily in processCoinflipPayouts
   });
 
   // ===========================================================================

@@ -197,6 +197,28 @@ interface IDegenerusGameDecimatorModule {
     /// @return amountWei Claimable amount (0 if not winner, already claimed, or expired).
     /// @return winner True if player is a winner for this level.
     function decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner);
+
+    // Terminal Decimator (Death Bet)
+
+    /// @notice Record a terminal decimator burn.
+    function recordTerminalDecBurn(
+        address player,
+        uint24 lvl,
+        uint256 baseAmount
+    ) external;
+
+    /// @notice Resolve terminal decimator at GAMEOVER.
+    function runTerminalDecimatorJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 returnAmountWei);
+
+    /// @notice Claim terminal decimator jackpot.
+    function claimTerminalDecimatorJackpot() external;
+
+    /// @notice Check terminal decimator claimable amount.
+    function terminalDecClaimable(address player) external view returns (uint256 amountWei, bool winner);
 }
 
 /// @title IDegenerusGameWhaleModule

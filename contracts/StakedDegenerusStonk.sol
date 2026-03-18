@@ -265,13 +265,6 @@ contract StakedDegenerusStonk {
         game.claimWhalePass(address(0));
     }
 
-    /// @notice Resolve pending coinflips without claiming BURNIE out
-    /// @dev Advances the flip cursor, compounds auto-rebuy carry, records BAF score.
-    ///      Keeps all BURNIE in the flip system — nothing is withdrawn.
-    function resolveCoinflips() external {
-        coinflip.claimCoinflips(address(0), 0);
-    }
-
     // =====================================================================
     //                          DEPOSITS (Game Only)
     // =====================================================================
