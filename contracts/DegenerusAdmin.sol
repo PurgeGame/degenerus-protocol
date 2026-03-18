@@ -185,6 +185,7 @@ contract DegenerusAdmin {
     error ProposalNotActive();
     error ProposalExpired();
     error InsufficientStake();
+    error AlreadyHasActiveProposal();
 
     // =========================================================================
     // EVENTS
@@ -269,6 +270,13 @@ contract DegenerusAdmin {
 
     /// @notice Vote weight recorded at time of vote.
     mapping(uint256 => mapping(address => uint256)) public voteWeight;
+
+    /// @notice Tracks each address's current active proposal ID (0 = none).
+    mapping(address => uint256) public activeProposalId;
+
+    /// @dev Proposal ID up to which all proposals are guaranteed non-Active.
+    ///      _voidAllActive starts scanning from this index instead of 1.
+    uint256 private voidedUpTo;
 
     // =========================================================================
     // LINK REWARD STATE
@@ -397,6 +405,16 @@ contract DegenerusAdmin {
         if (newCoordinator == address(0) || newKeyHash == bytes32(0))
             revert ZeroAddress();
 
+        // 1-per-address active proposal limit
+        uint256 existing = activeProposalId[msg.sender];
+        if (existing != 0) {
+            Proposal storage ep = proposals[existing];
+            if (ep.state == ProposalState.Active &&
+                block.timestamp - uint256(ep.createdAt) < PROPOSAL_LIFETIME) {
+                revert AlreadyHasActiveProposal();
+            }
+        }
+
         uint48 lastVrf = gameAdmin.lastVrfProcessed();
         uint256 stall = block.timestamp - uint256(lastVrf);
 
@@ -421,6 +439,8 @@ contract DegenerusAdmin {
         p.circulatingSnapshot = circulatingSupply();
         p.path = path;
         // p.state = ProposalState.Active (default 0)
+
+        activeProposalId[msg.sender] = proposalId;
 
         emit ProposalCreated(proposalId, msg.sender, newCoordinator, newKeyHash, path);
     }
@@ -606,15 +626,19 @@ contract DegenerusAdmin {
     }
 
     /// @dev Mark all active proposals (except the executed one) as Killed.
+    ///      Uses voidedUpTo watermark to skip already-voided prefix.
     function _voidAllActive(uint256 exceptId) internal {
+        uint256 start = voidedUpTo + 1;
         uint256 count = proposalCount;
-        for (uint256 i = 1; i <= count; i++) {
+        for (uint256 i = start; i <= count; i++) {
             if (i == exceptId) continue;
             if (proposals[i].state == ProposalState.Active) {
                 proposals[i].state = ProposalState.Killed;
                 emit ProposalKilled(i);
             }
         }
+        // All proposals up to count are now non-Active (except exceptId which is Executed).
+        voidedUpTo = count;
     }
 
     // =========================================================================
