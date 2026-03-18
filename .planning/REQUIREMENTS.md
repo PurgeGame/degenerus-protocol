@@ -19,8 +19,8 @@
 
 ### Payout/Claim Path Audit
 
-- [ ] **PAY-01**: Daily jackpot (purchase phase) audited — ETH distribution formula, winner selection, claim mechanism verified
-- [ ] **PAY-02**: Daily jackpot (jackpot phase) audited — 5-day draw sequence, prize scaling, unclaimed handling verified
+- [x] **PAY-01**: Daily jackpot (purchase phase) audited — ETH distribution formula, winner selection, claim mechanism verified
+- [x] **PAY-02**: Daily jackpot (jackpot phase) audited — 5-day draw sequence, prize scaling, unclaimed handling verified
 - [ ] **PAY-03**: BAF normal scatter payout audited — trigger conditions, recipient selection, payout calculation verified
 - [ ] **PAY-04**: BAF century scatter payout audited — century trigger, enhanced payout calculation, distribution verified
 - [ ] **PAY-05**: Decimator normal claims audited — `claimDecimatorJackpot` path, round tracking, `lastDecClaimRound` logic verified
@@ -34,7 +34,7 @@
 - [ ] **PAY-13**: Accumulator milestone payouts audited — milestone thresholds, payout triggers, distribution verified
 - [ ] **PAY-14**: sDGNRS `burn()` audited — ETH/stETH/BURNIE proportional redemption math verified
 - [ ] **PAY-15**: DGNRS wrapper `burn()` audited — delegation to sDGNRS, unwrap mechanics verified
-- [ ] **PAY-16**: Ticket conversion and futurepool mechanics audited — conversion formula, futurepool allocation, rollover verified
+- [x] **PAY-16**: Ticket conversion and futurepool mechanics audited — conversion formula, futurepool allocation, rollover verified
 - [ ] **PAY-17**: Advance bounty system audited — trigger, payout calculation, claim mechanism verified
 - [ ] **PAY-18**: WWXRP consolation prizes audited — distribution logic, value transfer paths verified
 - [ ] **PAY-19**: Coinflip recycling and boons audited — recycled BURNIE flow, boon mechanics verified
@@ -118,8 +118,8 @@
 | GO-07 | Phase 26 | Complete |
 | GO-08 | Phase 26 | Complete |
 | GO-09 | Phase 26 | Complete |
-| PAY-01 | Phase 27 | Pending |
-| PAY-02 | Phase 27 | Pending |
+| PAY-01 | Phase 27 | Complete |
+| PAY-02 | Phase 27 | Complete |
 | PAY-03 | Phase 27 | Pending |
 | PAY-04 | Phase 27 | Pending |
 | PAY-05 | Phase 27 | Pending |
@@ -133,7 +133,7 @@
 | PAY-13 | Phase 27 | Pending |
 | PAY-14 | Phase 27 | Pending |
 | PAY-15 | Phase 27 | Pending |
-| PAY-16 | Phase 27 | Pending |
+| PAY-16 | Phase 27 | Complete |
 | PAY-17 | Phase 27 | Pending |
 | PAY-18 | Phase 27 | Pending |
 | PAY-19 | Phase 27 | Pending |
