@@ -4,13 +4,13 @@
 **Auditor:** Claude (AI-assisted security analysis, Claude Opus 4.6)
 **Scope:** 14 core contracts + 10 delegatecall modules (24 deployable) + 7 libraries + 3 shared abstract contracts
 **Solidity:** 0.8.34 (ContractAddresses: ^0.8.26), viaIR enabled, optimizer runs=200
-**Methodology:** 18-phase manual code review with static analysis (Slither) support, multi-agent adversarial simulation, dual-agent gas optimization, GAMEOVER terminal distribution audit, payout/claim path audit, and cross-cutting protocol-wide verification
+**Methodology:** 19-phase manual code review with static analysis (Slither) support, multi-agent adversarial simulation, dual-agent gas optimization, GAMEOVER terminal distribution audit, payout/claim path audit, cross-cutting protocol-wide verification, and comment/documentation correctness verification
 
 ---
 
 ## Executive Summary
 
-Degenerus Protocol is a complex on-chain game system comprising 14 core contracts and 10 delegatecall modules (24 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, sDGNRS, DGNRS, Vault shares, WrappedWrappedXRP). The initial audit conducted a 7-phase systematic review covering 57 plans. A subsequent v2.0 delta audit (Phases 19-21) covered the sDGNRS/DGNRS split and novel attack surface analysis with 9 additional plans. Phase 22 added multi-agent adversarial warden simulation (3 independent agents) plus comprehensive regression verification. Phase 23 performed a Scavenger/Skeptic dual-agent gas optimization audit across ~25,600 lines, identifying 21 dead code candidates and applying 4 behavior-preserving removals that saved 96 bytes of bytecode and ~19,200 deployment gas with zero test regressions, for a total of 72 plans. Phase 24 conducted a comprehensive governance security audit of the new VRF coordinator rotation mechanism (propose/vote/execute) across 8 plans, covering storage layout, access control, vote arithmetic, reentrancy, cross-contract interactions, and adversarial war-game scenarios. Phase 25 synchronized all audit documentation with governance changes across 4 plans. Phase 26 conducted a comprehensive GAMEOVER terminal distribution path audit across 4 plans, covering death clock triggers, distress mode, deity refunds, terminal decimator integration, terminal jackpot distribution, reentrancy/CEI ordering, revert safety, VRF fallback, and claimablePool invariant verification at all 6 mutation sites. Phase 27 conducted a comprehensive payout/claim path audit across 6 plans covering all 19 normal-gameplay distribution systems (jackpot draws, scatter/decimator events, coinflip economy, lootbox/quest/affiliate rewards, stETH yield distribution, token burn redemptions, and ticket conversion mechanics), with claimablePool invariant verification at all 8 normal-gameplay mutation sites cross-referenced against Phase 26 GAMEOVER sites. Phase 28 conducted a cross-cutting verification across 6 plans covering 19 requirements in 4 workstreams: recent changes regression (113 commits categorized, 3 prior findings confirmed fixed), protocol-wide invariant proofs (claimablePool at all 15 mutation sites, sDGNRS supply conservation, BURNIE lifecycle closure, and 25-path claimability enumeration), boundary and edge case analysis (7 scenarios including GAMEOVER boundaries, single-player, gas griefing, and frontrunning), and weighted vulnerability ranking with top-10 adversarial audit. Total: 103 plans examining approximately 25,326 lines of Solidity code.
+Degenerus Protocol is a complex on-chain game system comprising 14 core contracts and 10 delegatecall modules (24 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, sDGNRS, DGNRS, Vault shares, WrappedWrappedXRP). The initial audit conducted a 7-phase systematic review covering 57 plans. A subsequent v2.0 delta audit (Phases 19-21) covered the sDGNRS/DGNRS split and novel attack surface analysis with 9 additional plans. Phase 22 added multi-agent adversarial warden simulation (3 independent agents) plus comprehensive regression verification. Phase 23 performed a Scavenger/Skeptic dual-agent gas optimization audit across ~25,600 lines, identifying 21 dead code candidates and applying 4 behavior-preserving removals that saved 96 bytes of bytecode and ~19,200 deployment gas with zero test regressions, for a total of 72 plans. Phase 24 conducted a comprehensive governance security audit of the new VRF coordinator rotation mechanism (propose/vote/execute) across 8 plans, covering storage layout, access control, vote arithmetic, reentrancy, cross-contract interactions, and adversarial war-game scenarios. Phase 25 synchronized all audit documentation with governance changes across 4 plans. Phase 26 conducted a comprehensive GAMEOVER terminal distribution path audit across 4 plans, covering death clock triggers, distress mode, deity refunds, terminal decimator integration, terminal jackpot distribution, reentrancy/CEI ordering, revert safety, VRF fallback, and claimablePool invariant verification at all 6 mutation sites. Phase 27 conducted a comprehensive payout/claim path audit across 6 plans covering all 19 normal-gameplay distribution systems (jackpot draws, scatter/decimator events, coinflip economy, lootbox/quest/affiliate rewards, stETH yield distribution, token burn redemptions, and ticket conversion mechanics), with claimablePool invariant verification at all 8 normal-gameplay mutation sites cross-referenced against Phase 26 GAMEOVER sites. Phase 28 conducted a cross-cutting verification across 6 plans covering 19 requirements in 4 workstreams: recent changes regression (113 commits categorized, 3 prior findings confirmed fixed), protocol-wide invariant proofs (claimablePool at all 15 mutation sites, sDGNRS supply conservation, BURNIE lifecycle closure, and 25-path claimability enumeration), boundary and edge case analysis (7 scenarios including GAMEOVER boundaries, single-player, gas griefing, and frontrunning), and weighted vulnerability ranking with top-10 adversarial audit. Phase 29 conducted a comprehensive comment and documentation correctness verification across 6 plans covering 5 requirements: NatSpec accuracy for 329 external/public functions across 26 contracts, 1,334+ inline comment reviews, byte-level storage layout verification for 3 packed EVM slots, 210+ constant comment verification, and parameter reference document correction (8 stale entries fixed, 40+ File:Line references updated). Total: 109 plans examining approximately 25,326 lines of Solidity code.
 
 **Overall Assessment: SOUND with minor issues.** The protocol demonstrates strong security architecture across all critical paths.
 
@@ -19,7 +19,7 @@ Degenerus Protocol is a complex on-chain game system comprising 14 core contract
 - **High:** 0
 - **Medium:** 3 -- WAR-01 (compromised admin key + community absence), WAR-02 (colluding voter cartel at low threshold), GO-05-F01 (_sendToVault hard reverts can block terminal distribution)
 - **Low:** 4 -- M-02 (downgraded from Medium, governance mitigation), GOV-07 (_executeSwap CEI violation), VOTE-03 (uint8 activeProposalCount overflow), WAR-06 (admin spam-propose gas griefing)
-- **Informational:** 17+ -- 6 from v1.0-v1.2, 2 from v2.0 delta audit, 4+ from v2.1 governance audit (XCON-03 boundary window, WAR-03 VRF oscillation, WAR-04 unwrapTo timing, WAR-05 post-execute loop), 1 from Phase 26 (GO-03-I01 stale test comments), 3 from Phase 27 (PAY-07-I01 coinflip claim window asymmetry, PAY-11-I01 affiliate doc discrepancy, PAY-03-I01 unused winnerMask), 1 from Phase 28 (FINDING-INFO-CHG04-01 stale parameter reference entries)
+- **Informational:** 22+ -- 6 from v1.0-v1.2, 2 from v2.0 delta audit, 4+ from v2.1 governance audit (XCON-03 boundary window, WAR-03 VRF oscillation, WAR-04 unwrapTo timing, WAR-05 post-execute loop), 1 from Phase 26 (GO-03-I01 stale test comments), 3 from Phase 27 (PAY-07-I01 coinflip claim window asymmetry, PAY-11-I01 affiliate doc discrepancy, PAY-03-I01 unused winnerMask), 1 from Phase 28 (FINDING-INFO-CHG04-01 stale parameter reference entries, resolved in Phase 29), 5 from Phase 29 (FINDING-INFO-DOC-01 through DOC-04 NatSpec/comment discrepancies, FINDING-INFO-CHG04-01 resolved)
 
 Phase 22 warden simulation confirmed existing severity distribution. Three independent blind C4A warden agents produced 0 High, 0 Medium findings. All 10 Low and 11 QA findings were classified as either known (6), extending known (5), or new Low/QA with no action required (10).
 
@@ -374,6 +374,18 @@ All 56 v1.0 requirements across 10 categories were evaluated.
 
 **v3.0 Phase 27 Coverage Summary: 19/19 assessed** (0 findings above INFORMATIONAL)
 
+### v3.0 Documentation Correctness Requirements (Phase 29)
+
+| Requirement | Description | Verdict | Notes |
+|-------------|-------------|---------|-------|
+| **DOC-01** | NatSpec completeness and accuracy (329 functions across 26 contracts) | **PASS** | 323 MATCH, 3 DISCREPANCY (all INFO), 4 MISSING (all low-impact) |
+| **DOC-02** | Inline comment correctness (1,334+ comments reviewed) | **PASS** | 0 factual discrepancies, 3 cosmetic issues |
+| **DOC-03** | Storage layout comments vs actual positions (3 EVM slots) | **PASS** | All 3 slots byte-accurate, 1 INFO section header placement |
+| **DOC-04** | Constants comments vs actual values (210+ constants) | **PASS** | 0 scale confusion, 0 value mismatches |
+| **DOC-05** | Parameter reference spot-check (~200 entries) | **PASS** | 8 stale entries fixed, 40+ line refs corrected, all values verified |
+
+**v3.0 Phase 29 Coverage Summary: 5/5 assessed** (0 findings above INFORMATIONAL)
+
 ---
 
 ## Phase 21: Novel Attack Surface Analysis (Plans 21-01 through 21-04)
@@ -670,6 +682,78 @@ Phase 28 confirms the protocol's cross-cutting security posture is SOUND. All cr
 
 ---
 
+## Phase 29: Comment/Documentation Correctness Verification (Plans 29-01 through 29-06)
+
+**Scope:** Systematic verification of every piece of documentation in the Degenerus Protocol contracts against the ground-truth audit verdicts established in Phases 19-28. 27 contracts, ~25,326 lines, ~380 external/public functions, ~3,066 NatSpec tags, ~627 constants. 5 requirements across 6 plans.
+
+**Methodology:** NatSpec verification against audited code behavior for all external/public functions; inline comment review for factual accuracy; byte-level storage layout diagram verification; constant value and scale annotation verification; and parameter reference document correction with File:Line reference validation against current contract source.
+
+### Requirement Coverage
+
+| Req ID | Description | Verdict | Severity |
+|--------|-------------|---------|----------|
+| DOC-01 | NatSpec completeness and accuracy (329 functions, 26 contracts) | PASS | -- |
+| DOC-02 | Inline comment correctness (1,334+ comments reviewed) | PASS | -- |
+| DOC-03 | Storage layout diagram byte-accuracy (3 packed EVM slots) | PASS | -- |
+| DOC-04 | Constants comment verification (210+ constants, 20 contracts) | PASS | -- |
+| DOC-05 | Parameter reference spot-check (~200 entries verified and corrected) | PASS | -- |
+
+**Coverage: 5/5 requirements assessed. 5 PASS. 0 findings above INFORMATIONAL.**
+
+### Severity Distribution (Phase 29)
+
+- **Critical:** 0
+- **High:** 0
+- **Medium:** 0
+- **Low:** 0
+- **Informational:** 5 (4 NatSpec/comment discrepancies + 1 stale parameter reference resolved)
+
+### Key Findings
+
+**FINDING-INFO-DOC-01: Stale NatSpec on DegeneretteModule.resolveBets**
+- Line 406 contains stale `@notice` text from a removed function
+- Active NatSpec on `resolveBets` (line 407-410) is correct
+- Cosmetic only; no security impact
+
+**FINDING-INFO-DOC-02: Misplaced payDailyJackpot NatSpec Block**
+- JackpotModule: comprehensive NatSpec block (lines 258-287) positioned above `runTerminalJackpot` instead of `payDailyJackpot`
+- Content is factually correct; Solidity compiler associates it with wrong function
+- No security impact
+
+**FINDING-INFO-DOC-03: futurePrizePoolTotalView Naming Imprecision**
+- DegenerusGame.sol: NatSpec describes "aggregate future pool" but variable naming uses "total"
+- Semantic imprecision, not a behavior error
+
+**FINDING-INFO-DOC-04: Storage Section Header Placement**
+- DegenerusGameStorage.sol: "EVM SLOT 1" section header at line 226 appears before last Slot 0 variables
+- Diagram itself is correct; section headers are organizational, not slot-boundary indicators
+
+**FINDING-INFO-CHG04-01: Stale Parameter Reference Entries (RESOLVED)**
+- 8 constants removed in commits f71b6382 and 9b0942af now marked [REMOVED] in v1.1-parameter-reference.md
+- 40+ drifted File:Line references corrected
+- 1 wrong-file reference fixed (INITIAL_SUPPLY: DegenerusStonk -> StakedDegenerusStonk)
+- PAY-11-I01 affiliate allocation clarification added
+- Originally flagged in Phase 28; resolved in Phase 29
+
+### Pre-Identified Issues Resolution
+
+| Issue | Source | Status |
+|-------|--------|--------|
+| FINDING-INFO-CHG04-01: 8 stale param entries | Phase 28-01 | RESOLVED -- all 8 marked [REMOVED] with commit hashes |
+| DELTA-I-04: Earlybird pool comment | Phase 19 | VERIFIED -- fixed in Phase 25 commit baf0ce3d |
+| GO-03-I01: Stale test comments (912d) | Phase 26 | VERIFIED -- contract code uses 365d/120d correctly; test-only issue |
+| PAY-07-I01: Coinflip claim window asymmetry | Phase 27-03 | DOCUMENTED -- by-design, documented in v1.1-burnie-coinflip.md and KNOWN-ISSUES.md |
+| PAY-11-I01: Affiliate doc discrepancy | Phase 27-04 | DOCUMENTED -- note added to parameter reference; documented in KNOWN-ISSUES.md |
+| PAY-03-I01: Unused winnerMask | Phase 27-02 | VERIFIED -- used by DegenerusJackpots.sol for BAF scatter ticket winners |
+
+### Overall Assessment: PASS
+
+Phase 29 confirms that the documentation across all 27 Degenerus Protocol contracts is accurate and trustworthy for C4A wardens. No documentation discrepancy was found that could mislead a warden into a false security conclusion. All discrepancies are cosmetic (misplaced NatSpec, stale function description, minor naming imprecision) and classified INFORMATIONAL. The parameter reference document is now fully corrected with all File:Line references verified against current contract source.
+
+**Full report:** See [v3.0-doc-verification.md](v3.0-doc-verification.md) for the consolidated Phase 29 audit with per-requirement verdicts, aggregate NatSpec statistics, and pre-identified issue resolution tracking.
+
+---
+
 ## Overall Risk Assessment
 
 | Risk Area | Rating | Justification |
@@ -733,7 +817,7 @@ Phase 28 confirms the protocol's cross-cutting security posture is SOUND. All cr
 | DegenerusGamePayoutUtils | Payout helpers (abstract, inherited by jackpot-related modules) |
 | BitPackingLib / EntropyLib / GameTimeLib / JackpotBucketLib / PriceLookupLib | Utility libraries |
 
-### 18-Phase Audit Structure
+### 19-Phase Audit Structure
 
 | Phase | Focus Area | Plans | Requirements Assessed |
 |-------|-----------|-------|----------------------|
@@ -756,11 +840,12 @@ Phase 28 confirms the protocol's cross-cutting security posture is SOUND. All cr
 | 26 | GAMEOVER Path Audit | 4 | GO-01 to GO-09 |
 | 27 | Payout/Claim Path Audit | 6 | PAY-01 to PAY-19 |
 | 28 | Cross-Cutting Verification | 6 | CHG-01 to CHG-04, INV-01 to INV-05, EDGE-01 to EDGE-07, VULN-01 to VULN-03 |
-| **Total** | | **103 plans** | **137 requirements** |
+| 29 | Comment/Documentation Correctness | 6 | DOC-01 to DOC-05 |
+| **Total** | | **109 plans** | **142 requirements** |
 
 ### Tools Used
 
-- **Manual source code review** (primary methodology) — all 14 core contracts, 10 modules, 7 libraries, and 3 shared abstract contracts read line by line across 89 audit plans
+- **Manual source code review** (primary methodology) — all 14 core contracts, 10 modules, 7 libraries, and 3 shared abstract contracts read line by line across 95 audit plans
 - **Slither 0.11.5** — static analysis; 1,990 detections (302 HIGH + 1,699 MEDIUM), all triaged as false positive or informational
 - **Foundry `forge inspect`** — storage slot layout verification (Phase 1)
 - **Hardhat test suite** — 1,200 passing (24 pre-existing failures in unrelated affiliate/RNG/economic suites), covering deploy, unit, integration, access control, edge cases, validation, gas, adversarial, and simulation suites
@@ -806,5 +891,5 @@ The following were explicitly out of scope for this audit:
 
 ---
 
-*Report generated from 97 individual audit plans across 17 phases, examining 14 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,500 lines of Solidity.*
+*Report generated from 109 individual audit plans across 19 phases, examining 14 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 25,326 lines of Solidity.*
 *Audit period: February-March 2026*
