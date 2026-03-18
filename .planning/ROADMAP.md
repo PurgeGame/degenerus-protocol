@@ -91,7 +91,15 @@ Plans:
   3. Pool accounting, sDGNRS supply conservation, and BURNIE mint/burn lifecycle are each verified with explicit proof that no desynchronization path exists
   4. GAMEOVER at level 0, level 1, and level 100 boundaries are analyzed; single-player GAMEOVER handles all distributions correctly; advanceGame gas griefing, decimator claim timing, coinflip auto-rebuy during known-RNG windows, affiliate self-referral loops, and rounding accumulation are each analyzed with explicit verdicts
   5. Top 10 most vulnerable functions are ranked with weighted criteria, each receives a deep adversarial audit with a dedicated finding or explicit PASS verdict, and a ranking document with rationale is produced
-**Plans**: TBD
+**Plans:** 6 plans
+
+Plans:
+- [ ] 28-01-PLAN.md -- Recent changes regression: commit coverage map, CHG-01..04 verdicts
+- [ ] 28-02-PLAN.md -- Pool invariants: claimablePool solvency proof (INV-01) and pool accounting balance (INV-02)
+- [ ] 28-03-PLAN.md -- Supply invariants: sDGNRS conservation (INV-03), BURNIE lifecycle (INV-04), unclaimable funds (INV-05)
+- [ ] 28-04-PLAN.md -- Edge cases and griefing: GAMEOVER boundaries, gas griefing, decimator timing, coinflip RNG, affiliate loops, rounding (EDGE-01..07)
+- [ ] 28-05-PLAN.md -- Vulnerability ranking: weighted top-10 scoring, deep adversarial audit, ranking document (VULN-01..03)
+- [ ] 28-06-PLAN.md -- Consolidation: all 19 verdicts, cross-phase consistency, FINAL-FINDINGS-REPORT + KNOWN-ISSUES update
 
 ### Phase 29: Comment/Documentation Correctness
 **Goal**: Every natspec comment, inline comment, storage layout comment, and constants comment in the protocol contracts matches the actual verified behavior established in Phases 26-28
@@ -101,7 +109,15 @@ Plans:
   1. Every natspec comment on every external/public function across all protocol contracts is verified to match actual behavior, with corrections applied where discrepancies exist
   2. Every inline comment is verified against current code with no stale references from prior code versions remaining
   3. Storage layout comments match actual storage positions, constants comments match actual values, and parameter reference doc values are spot-checked against contract source
-**Plans**: TBD
+**Plans:** 6 plans
+
+Plans:
+- [ ] 28-01-PLAN.md -- Recent changes regression: commit coverage map, CHG-01..04 verdicts
+- [ ] 28-02-PLAN.md -- Pool invariants: claimablePool solvency proof (INV-01) and pool accounting balance (INV-02)
+- [ ] 28-03-PLAN.md -- Supply invariants: sDGNRS conservation (INV-03), BURNIE lifecycle (INV-04), unclaimable funds (INV-05)
+- [ ] 28-04-PLAN.md -- Edge cases and griefing: GAMEOVER boundaries, gas griefing, decimator timing, coinflip RNG, affiliate loops, rounding (EDGE-01..07)
+- [ ] 28-05-PLAN.md -- Vulnerability ranking: weighted top-10 scoring, deep adversarial audit, ranking document (VULN-01..03)
+- [ ] 28-06-PLAN.md -- Consolidation: all 19 verdicts, cross-phase consistency, FINAL-FINDINGS-REPORT + KNOWN-ISSUES update
 
 ### Phase 30: Payout Specification Document
 **Goal**: A self-contained HTML document at audit/PAYOUT-SPECIFICATION.html covering all 17+ distribution systems, synthesized entirely from verified audit findings in Phases 26-29 with exact code references
@@ -113,7 +129,15 @@ Plans:
   3. Flow diagrams are included for every distribution system showing the complete money path from source to recipient
   4. Edge cases (empty pools, single player, max values, expiry) are documented per system, and every formula uses variable names matching contract code exactly
   5. Contract file:line references are included for every relevant code path, traceable to the current codebase commit
-**Plans**: TBD
+**Plans:** 6 plans
+
+Plans:
+- [ ] 28-01-PLAN.md -- Recent changes regression: commit coverage map, CHG-01..04 verdicts
+- [ ] 28-02-PLAN.md -- Pool invariants: claimablePool solvency proof (INV-01) and pool accounting balance (INV-02)
+- [ ] 28-03-PLAN.md -- Supply invariants: sDGNRS conservation (INV-03), BURNIE lifecycle (INV-04), unclaimable funds (INV-05)
+- [ ] 28-04-PLAN.md -- Edge cases and griefing: GAMEOVER boundaries, gas griefing, decimator timing, coinflip RNG, affiliate loops, rounding (EDGE-01..07)
+- [ ] 28-05-PLAN.md -- Vulnerability ranking: weighted top-10 scoring, deep adversarial audit, ranking document (VULN-01..03)
+- [ ] 28-06-PLAN.md -- Consolidation: all 19 verdicts, cross-phase consistency, FINAL-FINDINGS-REPORT + KNOWN-ISSUES update
 
 ## Progress
 
@@ -123,7 +147,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 26. GAMEOVER Path Audit | v3.0 | Complete    | 2026-03-18 | 2026-03-18 |
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
-| 28. Cross-Cutting Verification | v3.0 | 0/TBD | Not started | - |
+| 28. Cross-Cutting Verification | v3.0 | 0/6 | Not started | - |
 | 29. Comment/Documentation Correctness | v3.0 | 0/TBD | Not started | - |
 | 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |
 
@@ -134,4 +158,4 @@ Plans:
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-17 after Phase 27 planning complete -- 6 plans created*
+*Last updated: 2026-03-18 after Phase 28 planning complete -- 6 plans created*
