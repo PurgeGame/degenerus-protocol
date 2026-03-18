@@ -64,13 +64,13 @@
 
 ### Edge Cases & Griefing
 
-- [ ] **EDGE-01**: GAMEOVER at level 0, level 1, level 100 analyzed — behavior at each boundary documented and verified correct
-- [ ] **EDGE-02**: Single-player GAMEOVER scenario analyzed — all distribution paths handle 1 player correctly
-- [ ] **EDGE-03**: `advanceGame` gas griefing and state manipulation analyzed — no blocking vector exists
-- [ ] **EDGE-04**: Decimator `lastDecClaimRound` overwrite timing analyzed — no claim bricking possible
-- [ ] **EDGE-05**: Coinflip auto-rebuy carry during known-RNG windows analyzed — no extraction possible
-- [ ] **EDGE-06**: Affiliate self-referral loop analysis — cannot extract more than intended
-- [ ] **EDGE-07**: Rounding accumulation analysis — no path where rounding compounds to material amounts
+- [x] **EDGE-01**: GAMEOVER at level 0, level 1, level 100 analyzed — behavior at each boundary documented and verified correct
+- [x] **EDGE-02**: Single-player GAMEOVER scenario analyzed — all distribution paths handle 1 player correctly
+- [x] **EDGE-03**: `advanceGame` gas griefing and state manipulation analyzed — no blocking vector exists
+- [x] **EDGE-04**: Decimator `lastDecClaimRound` overwrite timing analyzed — no claim bricking possible
+- [x] **EDGE-05**: Coinflip auto-rebuy carry during known-RNG windows analyzed — no extraction possible
+- [x] **EDGE-06**: Affiliate self-referral loop analysis — cannot extract more than intended
+- [x] **EDGE-07**: Rounding accumulation analysis — no path where rounding compounds to material amounts
 
 ### Payout Specification Document
 
@@ -146,13 +146,13 @@
 | INV-03 | Phase 28 | Complete |
 | INV-04 | Phase 28 | Complete |
 | INV-05 | Phase 28 | Complete |
-| EDGE-01 | Phase 28 | Pending |
-| EDGE-02 | Phase 28 | Pending |
-| EDGE-03 | Phase 28 | Pending |
-| EDGE-04 | Phase 28 | Pending |
-| EDGE-05 | Phase 28 | Pending |
-| EDGE-06 | Phase 28 | Pending |
-| EDGE-07 | Phase 28 | Pending |
+| EDGE-01 | Phase 28 | Complete |
+| EDGE-02 | Phase 28 | Complete |
+| EDGE-03 | Phase 28 | Complete |
+| EDGE-04 | Phase 28 | Complete |
+| EDGE-05 | Phase 28 | Complete |
+| EDGE-06 | Phase 28 | Complete |
+| EDGE-07 | Phase 28 | Complete |
 | VULN-01 | Phase 28 | Pending |
 | VULN-02 | Phase 28 | Pending |
 | VULN-03 | Phase 28 | Pending |
