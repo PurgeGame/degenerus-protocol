@@ -75,11 +75,11 @@
 ### Payout Specification Document
 
 - [x] **SPEC-01**: Payout specification HTML document created at `audit/PAYOUT-SPECIFICATION.html`
-- [ ] **SPEC-02**: All 17 distribution systems covered with trigger, source, calculation, recipients, claim mechanism, currency
-- [ ] **SPEC-03**: Flow diagrams included for every distribution system showing money path
-- [ ] **SPEC-04**: Edge cases documented for each system (empty pools, single player, max values)
-- [ ] **SPEC-05**: Contract file:line references included for every relevant code path
-- [ ] **SPEC-06**: All formulas use variable names matching contract code exactly
+- [x] **SPEC-02**: All 17 distribution systems covered with trigger, source, calculation, recipients, claim mechanism, currency
+- [x] **SPEC-03**: Flow diagrams included for every distribution system showing money path
+- [x] **SPEC-04**: Edge cases documented for each system (empty pools, single player, max values)
+- [x] **SPEC-05**: Contract file:line references included for every relevant code path
+- [x] **SPEC-06**: All formulas use variable names matching contract code exactly
 
 ### Top 10 Vulnerable Functions
 
@@ -162,11 +162,11 @@
 | DOC-04 | Phase 29 | Complete |
 | DOC-05 | Phase 29 | Complete |
 | SPEC-01 | Phase 30 | Complete |
-| SPEC-02 | Phase 30 | Pending |
-| SPEC-03 | Phase 30 | Pending |
-| SPEC-04 | Phase 30 | Pending |
-| SPEC-05 | Phase 30 | Pending |
-| SPEC-06 | Phase 30 | Pending |
+| SPEC-02 | Phase 30 | Complete |
+| SPEC-03 | Phase 30 | Complete |
+| SPEC-04 | Phase 30 | Complete |
+| SPEC-05 | Phase 30 | Complete |
+| SPEC-06 | Phase 30 | Complete |
 
 **Coverage:**
 - v3.0 requirements: 58 total

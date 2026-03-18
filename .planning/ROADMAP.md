@@ -129,7 +129,7 @@ Plans:
   3. Flow diagrams are included for every distribution system showing the complete money path from source to recipient
   4. Edge cases (empty pools, single player, max values, expiry) are documented per system, and every formula uses variable names matching contract code exactly
   5. Contract file:line references are included for every relevant code path, traceable to the current codebase commit
-**Plans:** 1/6 plans executed
+**Plans:** 2/6 plans executed
 
 Plans:
 - [ ] 30-01-PLAN.md -- HTML scaffold with CSS design system, header, TOC, pool architecture overview SVG (SPEC-01)
@@ -149,7 +149,7 @@ Plans:
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
 | 28. Cross-Cutting Verification | 6/6 | Complete    | 2026-03-18 | - |
 | 29. Comment/Documentation Correctness | 6/6 | Complete    | 2026-03-18 | - |
-| 30. Payout Specification Document | 1/6 | In Progress|  | - |
+| 30. Payout Specification Document | 2/6 | In Progress|  | - |
 
 ## Deferred (v3.1+)
 
