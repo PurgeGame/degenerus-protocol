@@ -16,7 +16,7 @@ Pre-disclosure for audit wardens. If you find something listed here, it's alread
 
 These are architectural decisions, not vulnerabilities.
 
-**VRF swap governance (WAR-01/WAR-02).** Emergency VRF coordinator rotation requires a 20h+ stall and sDGNRS community approval with time-decaying threshold. Worst case: admin key compromised + attackers hold >5% of circulating sDGNRS + attacker approve weight exceeds defender reject weight. This is the intended trust model.
+**VRF swap governance.** Emergency VRF coordinator rotation requires a 20h+ stall and sDGNRS community approval with time-decaying threshold. Execution requires approve weight > reject weight and meeting the threshold -- reject voters holding more sDGNRS than approvers block the proposal. This is the intended trust model.
 
 **Chainlink VRF V2.5 dependency.** Sole randomness source. Game stalls but no funds are lost if VRF goes down. Governance-based coordinator rotation and 120-day inactivity timeout provide independent recovery paths.
 
