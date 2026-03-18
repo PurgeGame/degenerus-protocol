@@ -7,3 +7,5 @@ foundry.lock
 out/
 runs/
 *.sol.bak
+.planning/
+.gas-snapshot

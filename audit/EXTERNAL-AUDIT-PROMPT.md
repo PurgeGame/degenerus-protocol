@@ -21,7 +21,7 @@ Your objective is to find real, exploitable vulnerabilities and meaningful econo
 
 ### Protocol Overview
 
-- 23 deployable contracts (13 core + 10 delegatecall game modules sharing storage via `DegenerusGameStorage`) + 7 inlined libraries + 3 shared abstract contracts
+- 24 deployable contracts (14 core + 10 delegatecall game modules sharing storage via `DegenerusGameStorage`) + 7 inlined libraries + 3 shared abstract contracts
 - Solidity 0.8.34 (`ContractAddresses`: ^0.8.26), viaIR enabled, optimizer runs=200
 - All contracts under 24KB (`DegenerusGame` largest at 19KB)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token

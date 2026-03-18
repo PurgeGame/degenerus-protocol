@@ -28,7 +28,7 @@ Requires Node.js 18+.
 ## Tests
 
 ```bash
-# Hardhat tests (1,241 tests)
+# Hardhat tests (1,463 tests)
 npx hardhat test
 
 # Foundry invariant fuzzing
@@ -37,7 +37,7 @@ forge test
 
 ## Architecture
 
-- **23 deployable contracts** (13 core + 10 delegatecall modules), sharing storage via `DegenerusGameStorage`
+- **24 deployable contracts** (14 core + 10 delegatecall modules), sharing storage via `DegenerusGameStorage`
 - Solidity 0.8.34, `viaIR` enabled, optimizer runs = 200
 - All contracts under 24KB (DegenerusGame largest at 19KB)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token
@@ -69,7 +69,8 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 | DegenerusAffiliate | Referral tracking and payouts |
 | DegenerusAdmin | Admin configuration, VRF wiring |
 | DegenerusDeityPass | ERC-721 with on-chain SVG rendering |
-| DegenerusStonk | Reserve-backed burn token (ETH/stETH/BURNIE) |
+| StakedDegenerusStonk | Soulbound reserve token (sDGNRS), holds all pools |
+| DegenerusStonk | Transferable ERC-20 wrapper (DGNRS) for sDGNRS |
 | DeityBoonViewer | Standalone deity boon slot viewer |
 | WrappedWrappedXRP | Meme wrapper contract |
 
@@ -96,13 +97,13 @@ Icons32Data and modules deploy first (nonce N+0..10), then supporting contracts 
 
 See [`scope.txt`](scope.txt) for the complete in-scope file list.
 
-**In scope:** 15 core files (13 deployable + 2 libraries) + 12 module files (10 deployable + 2 abstract utils) + 1 shared storage + 5 libraries + 12 interfaces = 45 Solidity files
+**In scope:** 16 core files (14 deployable + ContractAddresses + DegenerusTraitUtils) + 12 module files (10 deployable + 2 abstract utils) + 1 shared storage + 5 libraries + 12 interfaces = 46 Solidity files
 
 **Out of scope:** `contracts/mocks/`, `contracts/test/`
 
 ## Key Mechanics
 
-- **VRF State Machine:** `rngLockedFlag` prevents concurrent VRF requests. Request -> fulfill -> unlock cycle. 18-hour retry timeout, 3-day emergency fallback.
+- **VRF State Machine:** `rngLockedFlag` prevents concurrent VRF requests. Request -> fulfill -> unlock cycle. 12-hour retry timeout, 3-day emergency fallback.
 - **Prize Pool Split:** 90% current level / 10% future levels on ticket purchase.
 - **Whale Pricing:** Bundles 2.4-4 ETH, lazy passes 0.24 ETH+, deity passes 24 + T(n) ETH triangular.
 - **Game Over:** Multi-step process: advanceGame -> VRF request -> fulfill -> advanceGame -> gameOver = true. 30-day final sweep.
@@ -112,10 +113,10 @@ See [`scope.txt`](scope.txt) for the complete in-scope file list.
 
 The [`audit/`](audit/) directory contains findings from internal audit work:
 
-- **[`KNOWN-ISSUES.md`](audit/KNOWN-ISSUES.md)** — Consolidated known issues with current status
-- **[`FINAL-FINDINGS-REPORT.md`](audit/FINAL-FINDINGS-REPORT.md)** — Full findings report with requirement traceability
-- **[`EXTERNAL-AUDIT-PROMPT.md`](audit/EXTERNAL-AUDIT-PROMPT.md)** — Protocol overview and threat model
-- **[`state-changing-function-audits.md`](audit/state-changing-function-audits.md)** — Function-level audit of all state-changing entry points
+- **[`KNOWN-ISSUES.md`](audit/KNOWN-ISSUES.md)** — Pre-disclosed known issues for wardens
+- **[`FINAL-FINDINGS-REPORT.md`](audit/FINAL-FINDINGS-REPORT.md)** — Full findings report (109 plans across 30 phases)
+- **[`EXTERNAL-AUDIT-PROMPT.md`](audit/EXTERNAL-AUDIT-PROMPT.md)** — Protocol overview, threat model, and audit checklist
+- **[`PAYOUT-SPECIFICATION.html`](audit/PAYOUT-SPECIFICATION.html)** — Complete payout and distribution specification
 
 ### Finding Summary
 
@@ -123,14 +124,14 @@ The [`audit/`](audit/) directory contains findings from internal audit work:
 |----------|-------|
 | Critical | 0 |
 | High | 0 |
-| Medium | 1 (acknowledged design trade-off) |
-| Low | 0 |
-| Informational | 8 |
+| Medium | 3 (VRF governance edge cases, terminal distribution revert risk) |
+| Low | 4 (1 fixed) |
+| Informational | 22+ |
 
 ### Test Coverage
 
-- **1,241 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
-- **21 Foundry test harnesses** (10 invariant, 7 fuzz, 3 Halmos, 1 helper) — ETH solvency, supply invariants, VRF lifecycle, vault math, FSM, composition
+- **1,463 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
+- **27 Foundry test harnesses** (24 fuzz/invariant, 3 Halmos) — ETH solvency, supply invariants, VRF lifecycle, vault math, FSM, composition
 - **Slither** static analysis triaged (all HIGH/MEDIUM detections reviewed)
 
 ## License

@@ -1,7 +1,7 @@
 # Degenerus Protocol — Audit Scope
 # Solidity 0.8.34 | Hardhat + viaIR | Optimizer runs=200
 
-## In Scope — Core Contracts (15)
+## In Scope — Core Contracts (16)
 contracts/BurnieCoin.sol
 contracts/BurnieCoinflip.sol
 contracts/ContractAddresses.sol
@@ -12,6 +12,7 @@ contracts/DegenerusGame.sol
 contracts/DegenerusJackpots.sol
 contracts/DegenerusQuests.sol
 contracts/DegenerusStonk.sol
+contracts/StakedDegenerusStonk.sol
 contracts/DegenerusTraitUtils.sol
 contracts/DegenerusVault.sol
 contracts/DeityBoonViewer.sol
@@ -51,7 +52,7 @@ contracts/interfaces/IDegenerusGame.sol
 contracts/interfaces/IDegenerusGameModules.sol
 contracts/interfaces/IDegenerusJackpots.sol
 contracts/interfaces/IDegenerusQuests.sol
-contracts/interfaces/IDegenerusStonk.sol
+contracts/interfaces/IStakedDegenerusStonk.sol
 contracts/interfaces/IStETH.sol
 contracts/interfaces/IVaultCoin.sol
 contracts/interfaces/IVRFCoordinator.sol
