@@ -80,6 +80,12 @@ No per-proposer cooldown. Admin can create many proposals, bloating `_voidAllAct
 
 ---
 
+## Phase 27 Payout/Claim Path Audit: No New Known Issues
+
+All 19 normal-gameplay payout requirements (PAY-01 through PAY-19) received PASS verdicts with no findings above INFORMATIONAL severity. No new entries required in the Known Finding section.
+
+---
+
 ## Intentional Design (Not Bugs)
 
 **BURNIE has multiple mint pathways.** `mintForCoinflip()`, `mintForGame()`, and the vault's 2M virtual reserve. All authorized via `onlyTrustedContracts`. No free-mint path.
@@ -101,6 +107,14 @@ No per-proposer cooldown. Admin can create many proposals, bloating `_voidAllAct
 **30-day claim window forfeiture applies to all claimable winnings.** After GAMEOVER + 30 days, `handleFinalSweep` sets `claimablePool = 0` and sweeps all remaining balance to vault/sDGNRS. Deity refunds, terminal decimator claims, and terminal jackpot credits are all subject to this window. Unclaimed funds are permanently forfeited. BY DESIGN.
 
 **Stale test comments (912d vs 365d).** `test/edge/GameOver.test.js` references 912-day timeout but code uses 365 days at level 0 and 120 days at level 1+. Tests pass by overshooting. INFORMATIONAL -- defer to Phase 29.
+
+**Decimator claim expiry is by-design.** `lastDecClaimRound` overwrites on each resolution, permanently expiring prior unclaimed decimator rewards. Documented in v1.1-transition-jackpots.md Section 8. Players who do not claim before the next decimator resolution lose their entitlement. BY DESIGN.
+
+**Coinflip claim window asymmetry (30d first-time vs 90d returning) is by-design.** First-time claimants who deposit and wait 31+ days without claiming lose their winnings. Returning claimants (who have previously claimed) get 90 days. Documented in v1.1-burnie-coinflip.md Section 7. Absent from contract natspec. BY DESIGN.
+
+**Whale pass claims have no expiry.** `whalePassClaims[player]` accumulates indefinitely until `claimWhalePass()` is called (EndgameModule:515-534). Unlike decimator claims, whale pass entitlements persist across level transitions. Only GAMEOVER disables claiming (`if (gameOver) revert`). BY DESIGN.
+
+**Affiliate DGNRS uses fixed allocation, not sequential depletion.** The v1.1 affiliate doc describes sequential pool depletion, but the code uses `levelDgnrsAllocation[currLevel]` (snapshot at level transition) with `totalAffiliateScore[currLevel]` as proportional denominator. This eliminates first-mover advantage. The natspec confirms: "eliminating first-mover advantage." Code is authoritative; v1.1 doc is stale on this point. BY DESIGN.
 
 ---
 
