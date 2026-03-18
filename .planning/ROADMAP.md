@@ -46,13 +46,13 @@
 ### Phase 26: GAMEOVER Path Audit
 **Goal**: Every code path in the terminal distribution sequence is verified correct -- no revert can block payouts, no accounting error can desynchronize claimablePool, no reentrancy can double-pay or strand funds
 **Depends on**: Nothing (audit root -- highest risk, newest code, all other phases depend on GAMEOVER context)
-**Requirements**: GO-01, GO-02, GO-03, GO-04, GO-05, GO-06, GO-07, GO-08
+**Requirements**: GO-01, GO-02, GO-03, GO-04, GO-05, GO-06, GO-07, GO-08, GO-09
 **Success Criteria** (what must be TRUE):
   1. handleGameOverDrain distribution is verified: accumulator to decimator (10%), terminal jackpot (90%), and 50/50 vault/sDGNRS sweep each have explicit PASS or FINDING verdict with line references
   2. handleFinalSweep 30-day claim window, claimablePool zeroing, and unclaimed forfeiture are verified correct with no path that strands claimable funds
   3. Death clock trigger conditions (365d at level 0, 120d at level 1+), distress mode effects, and all activation/deactivation paths are mapped and verified
   4. Every require/revert on the GAMEOVER path is confirmed unable to block payout execution, and CEI ordering is confirmed correct with no reentrancy or double-pay path
-  5. Terminal decimator integration and deity pass refund calculations are verified correct against the new code in DegenerusGameDecimatorModule and DegenerusGameGameOverModule
+  5. Terminal decimator integration, deity pass refund calculations, and no-RNG-available fallback path are verified correct against the new code in DegenerusGameDecimatorModule and DegenerusGameGameOverModule
 **Plans**: TBD
 
 ### Phase 27: Payout/Claim Path Audit
