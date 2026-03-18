@@ -149,7 +149,7 @@ Plans:
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
 | 28. Cross-Cutting Verification | 6/6 | Complete    | 2026-03-18 | - |
 | 29. Comment/Documentation Correctness | 6/6 | Complete    | 2026-03-18 | - |
-| 30. Payout Specification Document | 6/6 | Complete   | 2026-03-18 | - |
+| 30. Payout Specification Document | 6/6 | Complete    | 2026-03-18 | - |
 
 ## Deferred (v3.1+)
 
