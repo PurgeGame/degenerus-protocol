@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Degenerus Protocol — Payout Specification</title>
+<style>
+html {
+  scroll-behavior: smooth;
+}
+
+:root {
+  --color-bg: #ffffff;
+  --color-text: #1a1a1a;
+  --color-heading: #0d47a1;
+  --color-border: #e0e0e0;
+  --color-card-bg: #fafafa;
+  --color-code-bg: #f5f5f5;
+  --color-eth: #627eea;
+  --color-burnie: #ff6b35;
+  --color-dgnrs: #4caf50;
+  --color-steth: #00bcd4;
+  --color-pool-bg: #e3f2fd;
+  --color-warning: #fff3e0;
+  --font-mono: 'Courier New', Courier, monospace;
+  --font-sans: system-ui, -apple-system, sans-serif;
+}
+
+body {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  line-height: 1.6;
+  background: var(--color-bg);
+}
+
+h1 {
+  color: var(--color-heading);
+  border-bottom: 3px solid var(--color-heading);
+  padding-bottom: 0.5rem;
+}
+
+h2 {
+  color: var(--color-heading);
+  margin-top: 3rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.5rem;
+}
+
+h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.subtitle {
+  font-size: 1.1rem;
+  color: #555;
+  margin-top: -0.5rem;
+}
+
+.doc-meta {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 0.5rem 0 1.5rem 0;
+}
+
+.doc-meta span {
+  margin-right: 1.5rem;
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.stat-card {
+  text-align: center;
+  padding: 1rem;
+  background: var(--color-card-bg);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+}
+
+.stat-card .stat-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-heading);
+}
+
+.stat-card .stat-label {
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 0.25rem;
+}
+
+.toc {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin: 2rem 0;
+}
+
+.toc a {
+  color: var(--color-heading);
+  text-decoration: none;
+}
+
+.toc a:hover {
+  text-decoration: underline;
+}
+
+.toc ol {
+  margin: 0.5rem 0 0 0;
+  padding-left: 1.5rem;
+}
+
+.toc li {
+  margin: 0.4rem 0;
+}
+
+.toc .toc-reqs {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.system-card {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+
+.info-table th,
+.info-table td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.info-table th {
+  width: 140px;
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.info-table tr:nth-child(even) td {
+  background: #fafafa;
+}
+
+.formula-block {
+  background: var(--color-code-bg);
+  padding: 1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+
+.formula-block pre code {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.file-ref {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.edge-cases {
+  background: var(--color-warning);
+  padding: 1rem;
+  border-radius: 4px;
+  margin-top: 1rem;
+}
+
+.edge-cases h4 {
+  margin-top: 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.badge-eth {
+  background: #e8eaf6;
+  color: var(--color-eth);
+}
+
+.badge-burnie {
+  background: #fff3e0;
+  color: var(--color-burnie);
+}
+
+.badge-dgnrs {
+  background: #e8f5e9;
+  color: var(--color-dgnrs);
+}
+
+.badge-steth {
+  background: #e0f7fa;
+  color: var(--color-steth);
+}
+
+.badge-wwxrp {
+  background: #fce4ec;
+  color: #c62828;
+}
+
+.flow-svg {
+  width: 100%;
+  max-width: 800px;
+  height: auto;
+  display: block;
+  margin: 1rem auto;
+}
+
+.flow-svg .pool {
+  fill: #e3f2fd;
+  stroke: #1565c0;
+  stroke-width: 1.5;
+}
+
+.flow-svg .contract {
+  fill: #f5f5f5;
+  stroke: #616161;
+  stroke-width: 1;
+}
+
+.flow-svg .decision {
+  fill: #fff9c4;
+  stroke: #f9a825;
+  stroke-width: 1;
+}
+
+.flow-svg .recipient {
+  fill: #e8f5e9;
+  stroke: #2e7d32;
+  stroke-width: 1.5;
+}
+
+.flow-svg text {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  fill: #1a1a1a;
+}
+
+.mutation-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+
+.mutation-table th,
+.mutation-table td {
+  border: 1px solid var(--color-border);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.mutation-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.5rem 0;
+}
+
+@media print {
+  .toc {
+    display: none;
+  }
+
+  body {
+    margin: 0;
+    padding: 0.5rem;
+  }
+
+  .system-card {
+    page-break-inside: avoid;
+  }
+
+  h2 {
+    page-break-before: always;
+  }
+
+  * {
+    color: #000 !important;
+  }
+
+  .flow-svg .pool {
+    fill: #e3f2fd !important;
+  }
+
+  .flow-svg .recipient {
+    fill: #e8f5e9 !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+
+<h1>Degenerus Protocol -- Payout Specification</h1>
+<p class="subtitle">Complete distribution system reference synthesized from Phases 26-29 audit findings</p>
+
+<div class="doc-meta">
+  <span><strong>Commit:</strong> 3fa32f51</span>
+  <span><strong>Date:</strong> 2026-03-18</span>
+  <span><strong>Auditor:</strong> Claude Opus 4.6</span>
+</div>
+
+<div class="summary-stats">
+  <div class="stat-card">
+    <div class="stat-number">23</div>
+    <div class="stat-label">Distribution Systems</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-number">28</div>
+    <div class="stat-label">Requirements Verified (9 GO + 19 PAY)</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-number">1</div>
+    <div class="stat-label">Medium Finding (GO-05)</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-number">0</div>
+    <div class="stat-label">Critical/High Findings</div>
+  </div>
+</div>
+
+<!-- ===== TABLE OF CONTENTS ===== -->
+
+<nav class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#pool-overview">Pool Architecture Overview</a></li>
+    <li><a href="#cat-jackpot">Jackpot Distribution</a> <span class="toc-reqs">PAY-01, PAY-02, PAY-16</span></li>
+    <li><a href="#cat-scatter">Scatter / Decimator</a> <span class="toc-reqs">PAY-03, PAY-04, PAY-05, PAY-06</span></li>
+    <li><a href="#cat-coinflip">Coinflip Economy</a> <span class="toc-reqs">PAY-07, PAY-08, PAY-18, PAY-19</span></li>
+    <li><a href="#cat-ancillary">Ancillary Payouts</a> <span class="toc-reqs">PAY-09, PAY-10, PAY-11, PAY-12, PAY-13, PAY-17</span></li>
+    <li><a href="#cat-burns">Token Burns</a> <span class="toc-reqs">PAY-14, PAY-15</span></li>
+    <li><a href="#cat-gameover">GAMEOVER Terminal Distribution</a> <span class="toc-reqs">GO-01, GO-02, GO-07, GO-08</span></li>
+    <li><a href="#cross-claimable">Cross-System: claimablePool Invariant</a></li>
+    <li><a href="#cross-issues">Cross-System: Known Issues</a></li>
+  </ol>
+</nav>
+
+<!-- ===== POOL ARCHITECTURE OVERVIEW ===== -->
+
+<section id="pool-overview">
+  <h2>Pool Architecture Overview</h2>
+
+  <svg viewBox="0 0 900 500" class="flow-svg">
+    <defs>
+      <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+      </marker>
+    </defs>
+
+    <!-- futurePrizePool -->
+    <rect x="30" y="40" width="200" height="70" rx="8" class="pool"/>
+    <text x="130" y="70" text-anchor="middle" font-weight="600">futurePrizePool</text>
+    <text x="130" y="88" text-anchor="middle" font-size="10" fill="#555">Accumulates incoming ETH</text>
+
+    <!-- nextPrizePool -->
+    <rect x="560" y="40" width="200" height="70" rx="8" class="pool"/>
+    <text x="660" y="70" text-anchor="middle" font-weight="600">nextPrizePool</text>
+    <text x="660" y="88" text-anchor="middle" font-size="10" fill="#555">Queued for next level</text>
+
+    <!-- currentPrizePool -->
+    <rect x="30" y="310" width="200" height="70" rx="8" class="pool"/>
+    <text x="130" y="340" text-anchor="middle" font-weight="600">currentPrizePool</text>
+    <text x="130" y="358" text-anchor="middle" font-size="10" fill="#555">Active jackpot draws</text>
+
+    <!-- claimablePool -->
+    <rect x="560" y="310" width="200" height="70" rx="8" class="pool"/>
+    <text x="660" y="340" text-anchor="middle" font-weight="600">claimablePool</text>
+    <text x="660" y="358" text-anchor="middle" font-size="10" fill="#555">Player-withdrawable ETH</text>
+
+    <!-- yieldAccumulator -->
+    <rect x="530" y="160" width="200" height="70" rx="8" class="pool"/>
+    <text x="630" y="190" text-anchor="middle" font-weight="600">yieldAccumulator</text>
+    <text x="630" y="208" text-anchor="middle" font-size="10" fill="#555">stETH yield buffer</text>
+
+    <!-- stETH Yield external source -->
+    <rect x="780" y="170" width="100" height="50" rx="4" class="contract"/>
+    <text x="830" y="195" text-anchor="middle" font-size="11">stETH Yield</text>
+
+    <!-- Players recipient -->
+    <rect x="620" y="430" width="140" height="44" rx="20" class="recipient"/>
+    <text x="690" y="457" text-anchor="middle" font-weight="600">Players</text>
+
+    <!-- Arrow: stETH Yield -> yieldAccumulator -->
+    <line x1="780" y1="195" x2="735" y2="195" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- Arrow: yieldAccumulator -> futurePrizePool (x00 milestone) -->
+    <line x1="530" y1="195" x2="235" y2="95" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="360" y="130" text-anchor="middle" font-size="10" fill="#555">50% at x00 milestone</text>
+
+    <!-- Arrow: futurePrizePool -> currentPrizePool (level transition) -->
+    <line x1="130" y1="110" x2="130" y2="305" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="95" y="210" text-anchor="middle" font-size="10" fill="#555" transform="rotate(-90, 95, 210)">Level transition</text>
+
+    <!-- Arrow: currentPrizePool -> claimablePool (jackpot draws) -->
+    <line x1="230" y1="345" x2="555" y2="345" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="390" y="335" text-anchor="middle" font-size="10" fill="#555">Jackpot draws (6-100%)</text>
+
+    <!-- Arrow: futurePrizePool -> claimablePool (scatter/decimator) -->
+    <line x1="230" y1="90" x2="560" y2="320" stroke="#424242" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow)"/>
+    <text x="430" y="185" text-anchor="middle" font-size="10" fill="#555">Scatter / Decimator</text>
+
+    <!-- Arrow: claimablePool -> Players -->
+    <line x1="660" y1="380" x2="690" y2="425" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="710" y="405" text-anchor="middle" font-size="10" fill="#555">claimWinnings()</text>
+  </svg>
+
+  <p>All ETH entering the protocol flows through a 4-pool lifecycle. <code>futurePrizePool</code> accumulates incoming ETH, transitions to <code>currentPrizePool</code> at each level, which is drawn down by jackpot distributions into <code>claimablePool</code>. Players claim from <code>claimablePool</code> via <code>claimWinnings()</code>. The <code>yieldAccumulator</code> collects stETH rebasing surplus and releases 50% to <code>futurePrizePool</code> at x00 milestones.</p>
+</section>
+
+<!-- ===== CATEGORY 1: JACKPOT DISTRIBUTION ===== -->
+
+<section id="cat-jackpot">
+  <h2>1. Jackpot Distribution</h2>
+  <!-- System cards populated by Plan 30-02 -->
+</section>
+
+<!-- ===== CATEGORY 2: SCATTER / DECIMATOR ===== -->
+
+<section id="cat-scatter">
+  <h2>2. Scatter / Decimator</h2>
+  <!-- System cards populated by Plan 30-03 -->
+</section>
+
+<!-- ===== CATEGORY 3: COINFLIP ECONOMY ===== -->
+
+<section id="cat-coinflip">
+  <h2>3. Coinflip Economy</h2>
+  <!-- System cards populated by Plan 30-03 -->
+</section>
+
+<!-- ===== CATEGORY 4: ANCILLARY PAYOUTS ===== -->
+
+<section id="cat-ancillary">
+  <h2>4. Ancillary Payouts</h2>
+  <!-- System cards populated by Plan 30-04 -->
+</section>
+
+<!-- ===== CATEGORY 5: TOKEN BURNS ===== -->
+
+<section id="cat-burns">
+  <h2>5. Token Burns</h2>
+  <!-- System cards populated by Plan 30-04 -->
+</section>
+
+<!-- ===== CATEGORY 6: GAMEOVER TERMINAL DISTRIBUTION ===== -->
+
+<section id="cat-gameover">
+  <h2>6. GAMEOVER Terminal Distribution</h2>
+  <!-- System cards populated by Plan 30-05 -->
+</section>
+
+<!-- ===== CROSS-SYSTEM: claimablePool INVARIANT ===== -->
+
+<section id="cross-claimable">
+  <h2>7. Cross-System: claimablePool Invariant</h2>
+  <!-- System cards populated by Plan 30-06 -->
+</section>
+
+<!-- ===== CROSS-SYSTEM: KNOWN ISSUES ===== -->
+
+<section id="cross-issues">
+  <h2>8. Cross-System: Known Issues</h2>
+  <!-- System cards populated by Plan 30-06 -->
+</section>
+
+<!-- ===== FOOTER ===== -->
+
+<footer style="margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--color-border); font-size: 0.85rem; color: #666;">
+  <p>Generated from Phases 26-29 audit findings. Commit: 3fa32f51. All file:line references verified against this commit.</p>
+  <p>Degenerus Protocol Payout Specification. For C4A warden reference only. Not legal or financial advice.</p>
+</footer>
+
+</body>
+</html>
