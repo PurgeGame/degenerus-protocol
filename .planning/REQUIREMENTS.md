@@ -15,6 +15,7 @@
 - [ ] **GO-06**: Reentrancy and state ordering on GAMEOVER path audited — no path allows funds stuck or double-paid
 - [ ] **GO-07**: Deity pass refunds on early GAMEOVER (levels 0-9) audited — refund calculations and claimability verified
 - [ ] **GO-08**: Terminal decimator integration audited — new code path through GAMEOVER verified, interaction with existing accumulator/jackpot logic correct
+- [ ] **GO-09**: No-RNG-available GAMEOVER path audited — fallback behavior when VRF is unavailable during terminal distribution, deterministic/default selection logic, fund safety verified
 
 ### Payout/Claim Path Audit
 
@@ -116,6 +117,7 @@
 | GO-06 | Phase 26 | Pending |
 | GO-07 | Phase 26 | Pending |
 | GO-08 | Phase 26 | Pending |
+| GO-09 | Phase 26 | Pending |
 | PAY-01 | Phase 27 | Pending |
 | PAY-02 | Phase 27 | Pending |
 | PAY-03 | Phase 27 | Pending |
@@ -167,8 +169,8 @@
 | SPEC-06 | Phase 30 | Pending |
 
 **Coverage:**
-- v3.0 requirements: 57 total
-- Mapped to phases: 57
+- v3.0 requirements: 58 total
+- Mapped to phases: 58
 - Unmapped: 0
 
 ---
