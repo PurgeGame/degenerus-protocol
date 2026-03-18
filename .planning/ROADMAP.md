@@ -39,7 +39,7 @@
 - [x] **Phase 27: Payout/Claim Path Audit** - Audit all 19 normal-gameplay distribution systems covering every value-transfer path outside GAMEOVER (completed 2026-03-18)
 - [x] **Phase 28: Cross-Cutting Verification** - Verify recent changes, protocol invariants, edge cases, and top vulnerable functions across the full audited system (completed 2026-03-18)
 - [x] **Phase 29: Comment/Documentation Correctness** - Verify every natspec, inline comment, storage layout, and parameter reference against audited ground truth (completed 2026-03-18)
-- [ ] **Phase 30: Payout Specification Document** - Synthesize all audit findings into a self-contained HTML specification covering all 17+ distribution systems
+- [x] **Phase 30: Payout Specification Document** - Synthesize all audit findings into a self-contained HTML specification covering all 17+ distribution systems (completed 2026-03-18)
 
 ## Phase Details
 
@@ -129,7 +129,7 @@ Plans:
   3. Flow diagrams are included for every distribution system showing the complete money path from source to recipient
   4. Edge cases (empty pools, single player, max values, expiry) are documented per system, and every formula uses variable names matching contract code exactly
   5. Contract file:line references are included for every relevant code path, traceable to the current codebase commit
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 - [ ] 30-01-PLAN.md -- HTML scaffold with CSS design system, header, TOC, pool architecture overview SVG (SPEC-01)
@@ -149,7 +149,7 @@ Plans:
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
 | 28. Cross-Cutting Verification | 6/6 | Complete    | 2026-03-18 | - |
 | 29. Comment/Documentation Correctness | 6/6 | Complete    | 2026-03-18 | - |
-| 30. Payout Specification Document | 5/6 | In Progress|  | - |
+| 30. Payout Specification Document | 6/6 | Complete   | 2026-03-18 | - |
 
 ## Deferred (v3.1+)
 
