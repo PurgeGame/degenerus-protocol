@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
-status: in-progress
-stopped_at: Completed 29-03-PLAN.md
-last_updated: "2026-03-18T07:54:30.696Z"
+status: completed
+stopped_at: Completed 29-01-PLAN.md
+last_updated: "2026-03-18T07:55:39.891Z"
 last_activity: 2026-03-18 -- Completed 29-03 Module NatSpec Part 2 (8 modules, 24 verdicts)
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 22
-  completed_plans: 17
+  completed_plans: 18
   percent: 77
 ---
 
@@ -106,6 +106,9 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 29]: [Phase 29-03]: 24 NatSpec verdicts across 8 game modules (MintModule, DegeneretteModule, WhaleModule, BoonModule, EndgameModule, GameOverModule, PayoutUtils, MintStreakUtils): 24 MATCH, 0 DISCREPANCY, 1 MISSING
 - [Phase 29]: [Phase 29-03]: GO-05-F01 _sendToVault revert risk ABSENT from GameOverModule NatSpec -- recommend adding @dev warning
 - [Phase 29]: [Phase 29-03]: DegeneretteModule:1158 claimablePool mutation site comments VERIFIED CORRECT (consistent with Phase 28 INV-01/INV-02 proofs)
+- [Phase 29]: [Phase 29-01]: DOC-01 verified 108 functions in DegenerusGame.sol: 105 MATCH, 1 DISCREPANCY (futurePrizePoolTotalView aggregate naming), 0 MISSING
+- [Phase 29]: [Phase 29-01]: DOC-02 found 3 inline comment issues: 1 stale NatSpec (commit 9b0942af), 2 section header inaccuracies (jackpot compression, decimator scope)
+- [Phase 29]: [Phase 29-01]: PAY-07-I01 coinflip claim window asymmetry out-of-scope for DegenerusGame.sol (resides in BurnieCoinflip.sol)
 
 ## Accumulated Context
 
@@ -138,6 +141,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T07:54:26.110Z
-Stopped at: Completed 29-03-PLAN.md
+Last session: 2026-03-18T07:55:39.889Z
+Stopped at: Completed 29-01-PLAN.md
 Resume file: None
