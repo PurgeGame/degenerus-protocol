@@ -25,8 +25,8 @@
 - [x] **PAY-04**: BAF century scatter payout audited — century trigger, enhanced payout calculation, distribution verified
 - [x] **PAY-05**: Decimator normal claims audited — `claimDecimatorJackpot` path, round tracking, `lastDecClaimRound` logic verified
 - [x] **PAY-06**: Decimator x00 claims audited — century decimator claim path, enhanced payout, eligibility verified
-- [ ] **PAY-07**: Coinflip deposit/win/loss paths audited — `claimCoinflips`, `claimCoinflipsFromBurnie`, auto-rebuy carry verified
-- [ ] **PAY-08**: Coinflip bounty system audited — bounty trigger, DGNRS gating (50k bet, 20k pool), payout verified
+- [x] **PAY-07**: Coinflip deposit/win/loss paths audited — `claimCoinflips`, `claimCoinflipsFromBurnie`, auto-rebuy carry verified
+- [x] **PAY-08**: Coinflip bounty system audited — bounty trigger, DGNRS gating (50k bet, 20k pool), payout verified
 - [ ] **PAY-09**: Lootbox rewards audited — whale passes, lazy passes, deity passes, future tickets, BURNIE payouts verified
 - [ ] **PAY-10**: Quest rewards and streak bonuses audited — trigger conditions, reward calculations, streak mechanics verified
 - [ ] **PAY-11**: Affiliate commissions audited — 3-tier system, taper schedule, ETH and DGNRS claim paths verified
@@ -36,8 +36,8 @@
 - [ ] **PAY-15**: DGNRS wrapper `burn()` audited — delegation to sDGNRS, unwrap mechanics verified
 - [x] **PAY-16**: Ticket conversion and futurepool mechanics audited — conversion formula, futurepool allocation, rollover verified
 - [ ] **PAY-17**: Advance bounty system audited — trigger, payout calculation, claim mechanism verified
-- [ ] **PAY-18**: WWXRP consolation prizes audited — distribution logic, value transfer paths verified
-- [ ] **PAY-19**: Coinflip recycling and boons audited — recycled BURNIE flow, boon mechanics verified
+- [x] **PAY-18**: WWXRP consolation prizes audited — distribution logic, value transfer paths verified
+- [x] **PAY-19**: Coinflip recycling and boons audited — recycled BURNIE flow, boon mechanics verified
 
 ### Recent Changes Verification
 
@@ -124,8 +124,8 @@
 | PAY-04 | Phase 27 | Complete |
 | PAY-05 | Phase 27 | Complete |
 | PAY-06 | Phase 27 | Complete |
-| PAY-07 | Phase 27 | Pending |
-| PAY-08 | Phase 27 | Pending |
+| PAY-07 | Phase 27 | Complete |
+| PAY-08 | Phase 27 | Complete |
 | PAY-09 | Phase 27 | Pending |
 | PAY-10 | Phase 27 | Pending |
 | PAY-11 | Phase 27 | Pending |
@@ -135,8 +135,8 @@
 | PAY-15 | Phase 27 | Pending |
 | PAY-16 | Phase 27 | Complete |
 | PAY-17 | Phase 27 | Pending |
-| PAY-18 | Phase 27 | Pending |
-| PAY-19 | Phase 27 | Pending |
+| PAY-18 | Phase 27 | Complete |
+| PAY-19 | Phase 27 | Complete |
 | CHG-01 | Phase 28 | Pending |
 | CHG-02 | Phase 28 | Pending |
 | CHG-03 | Phase 28 | Pending |
