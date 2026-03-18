@@ -1294,7 +1294,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Internal Helpers — Dice Rolls
     // =========================================================================
 
-    /// @dev Level-100 keep roll: 5 dice with zeros (0-3), mapped to 0-100% keep (avg 50%).
+    /// @dev Level-100 keep roll: 5 dice with zeros (0-3), mapped to 30-65% keep (avg ~47.5%).
     function _futureKeepBps(uint256 rngWord) private pure returns (uint256) {
         // Inlined _rollZeroSum(rngWord, FUTURE_KEEP_TAG, 4, 5)
         uint256 seed = uint256(
@@ -1309,7 +1309,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 ((seed >> 48) % 4) +
                 ((seed >> 64) % 4);
         }
-        return (total * 10_000) / 15;
+        return 3000 + (total * 3500) / 15;
     }
 
     /// @dev Rare roll: 1 in 1e15 chance to dump 90% of future into current on normal levels.
