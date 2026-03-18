@@ -109,7 +109,7 @@ Plans:
   1. Every natspec comment on every external/public function across all protocol contracts is verified to match actual behavior, with corrections applied where discrepancies exist
   2. Every inline comment is verified against current code with no stale references from prior code versions remaining
   3. Storage layout comments match actual storage positions, constants comments match actual values, and parameter reference doc values are spot-checked against contract source
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 - [ ] 29-01-PLAN.md -- Core game NatSpec: DegenerusGame.sol natspec and inline comment verification (DOC-01, DOC-02)
@@ -148,7 +148,7 @@ Plans:
 | 26. GAMEOVER Path Audit | v3.0 | Complete    | 2026-03-18 | 2026-03-18 |
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
 | 28. Cross-Cutting Verification | 6/6 | Complete    | 2026-03-18 | - |
-| 29. Comment/Documentation Correctness | 3/6 | In Progress|  | - |
+| 29. Comment/Documentation Correctness | 4/6 | In Progress|  | - |
 | 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |
 
 ## Deferred (v3.1+)
