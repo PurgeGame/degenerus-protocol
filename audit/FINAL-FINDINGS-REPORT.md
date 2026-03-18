@@ -36,7 +36,7 @@ The protocol depends on two external systems. Neither dependency creates a vulne
 
 **Chainlink VRF V2.5.** Sole randomness source. If VRF goes down, the game stalls but no funds are at risk. A governance mechanism (propose/vote/execute with sDGNRS-weighted community approval) allows VRF coordinator rotation during extended stalls. The governance threshold decays over time to prevent permanent lockout. Execution requires approve weight to exceed reject weight and meet the threshold -- reject voters holding more sDGNRS than approvers block the proposal.
 
-**Lido stETH.** Prize pool growth depends on staking yield. If yield goes to zero, the positive-sum margin disappears but the solvency invariant (`balance + stETH >= claimablePool`) does not depend on yield. If stETH transfers were ever paused, the `_sendToVault` function (which sends surplus to the vault and sDGNRS after GAMEOVER) would revert -- but this only affects routing surplus to protocol reserves, not player claims. Vault and sDGNRS are immutable protocol-owned contracts with unconditional `receive()` functions, and Lido has never paused transfers.
+**Lido stETH.** Prize pool growth depends on staking yield. If yield goes to zero, the positive-sum margin disappears but the solvency invariant (`balance + stETH >= claimablePool`) does not depend on yield. If stETH transfers were ever paused, player claims that require stETH (when ETH balance alone is less than claimable, such as at termination) would also be blocked until transfers resume. This is not a realistic concern -- Lido is the largest DeFi protocol by TVL and has never paused transfers.
 
 ---
 
