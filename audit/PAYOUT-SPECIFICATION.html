@@ -1351,14 +1351,405 @@ wwxrp.mintPrize(player, lossCount * COINFLIP_LOSS_WWXRP_REWARD);
 
 <section id="cat-ancillary">
   <h2>4. Ancillary Payouts</h2>
-  <!-- System cards populated by Plan 30-04 -->
+
+  <!-- PAY-09: Lootbox Rewards -->
+  <div class="system-card" id="pay-09">
+    <h3>PAY-09: Lootbox Rewards</h3>
+    <div class="system-meta">
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge badge-dgnrs">DGNRS</span>
+      <span class="badge badge-wwxrp">WWXRP</span>
+      <span class="badge badge-burnie">BURNIE</span>
+    </div>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Player opens a lootbox (earned from jackpot, scatter, or purchase)</td></tr>
+      <tr><th>Source Pool</th><td>Pre-funded lootbox ETH + token mints</td></tr>
+      <tr><th>Calculation</th><td><code>roll = nextEntropy % 20</code> -- roll-based reward selection across 4 categories</td></tr>
+      <tr><th>Recipients</th><td>Lootbox opener</td></tr>
+      <tr><th>Claim Mechanism</th><td>Various per reward type -- whale pass via <code>claimablePool</code>, others via mint/credit</td></tr>
+      <tr><th>Currency</th><td>ETH (whale pass remainder) + DGNRS + WWXRP + BURNIE + discount boons</td></tr>
+    </table>
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// LootboxModule.sol:1551 -- reward type selection
+roll = nextEntropy % 20;
+// 0-10  (55%): Future tickets (5-tier variance)
+// 11-12 (10%): DGNRS from sDGNRS pool (transferFromPool)
+// 13-14 (10%): 1 WWXRP (mintPrize)
+// 15-19 (25%): BURNIE via creditFlip
+
+// Whale pass -- PayoutUtils.sol:77-93
+// Awarded when ETH payout &gt; 5 ETH threshold
+// ETH added to claimablePool; remainder = whale pass queue
+// Only whale pass remainder mutates claimablePool
+
+// Ticket variance tiers (LootboxModule.sol:1618-1670):
+// varianceRoll = nextEntropy % 10000
+// Tier 1 (1%): 4.6x  |  Tier 2 (4%): 2.3x  |  Tier 3 (20%): 1.1x
+// Tier 4 (45%): 0.651x  |  Tier 5 (30%): 0.45x
+// Applied to base budget of 161% (LOOTBOX_TICKET_ROLL_BPS = 16100)</code></pre>
+      <p class="file-ref"><strong>Code:</strong> LootboxModule.sol:1-1778, EndgameModule.sol:515-534, PayoutUtils.sol:77-93 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <svg viewBox="0 0 800 350" class="flow-svg">
+      <defs>
+        <marker id="arrow-anc" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+      <!-- Lootbox source -->
+      <rect x="10" y="140" width="140" height="60" rx="8" class="pool"/>
+      <text x="80" y="165" text-anchor="middle" font-weight="600">Lootbox</text>
+      <text x="80" y="180" text-anchor="middle" font-size="10" fill="#555">pre-funded ETH</text>
+      <!-- Arrow to decision -->
+      <line x1="150" y1="170" x2="250" y2="170" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="200" y="160" text-anchor="middle" font-size="10" fill="#555">VRF roll</text>
+      <!-- Decision diamond -->
+      <polygon points="320,130 390,170 320,210 250,170" class="decision"/>
+      <text x="320" y="174" text-anchor="middle" font-size="11">Reward?</text>
+      <!-- Arrow to Future Tickets (55%) -->
+      <line x1="390" y1="170" x2="500" y2="60" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="460" y="100" text-anchor="middle" font-size="10" fill="#555">55%</text>
+      <rect x="500" y="35" width="130" height="44" rx="20" class="recipient"/>
+      <text x="565" y="62" text-anchor="middle">Future Tickets</text>
+      <!-- Arrow to DGNRS (10%) -->
+      <line x1="390" y1="170" x2="500" y2="135" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="460" y="142" text-anchor="middle" font-size="10" fill="#555">10%</text>
+      <rect x="500" y="112" width="130" height="44" rx="20" style="fill:#e8f5e9; stroke:#4caf50; stroke-width:1.5"/>
+      <text x="565" y="139" text-anchor="middle" fill="#4caf50" font-weight="600">DGNRS</text>
+      <!-- Arrow to WWXRP (10%) -->
+      <line x1="390" y1="170" x2="500" y2="205" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="460" y="197" text-anchor="middle" font-size="10" fill="#555">10%</text>
+      <rect x="500" y="183" width="130" height="44" rx="20" style="fill:#fce4ec; stroke:#c62828; stroke-width:1.5"/>
+      <text x="565" y="210" text-anchor="middle" fill="#c62828" font-weight="600">WWXRP</text>
+      <!-- Arrow to BURNIE (25%) -->
+      <line x1="390" y1="170" x2="500" y2="275" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="460" y="240" text-anchor="middle" font-size="10" fill="#555">25%</text>
+      <rect x="500" y="253" width="150" height="44" rx="20" style="fill:#fff3e0; stroke:#ff6b35; stroke-width:1.5"/>
+      <text x="575" y="280" text-anchor="middle" fill="#ff6b35" font-weight="600">BURNIE creditFlip</text>
+      <!-- Whale pass branch -->
+      <line x1="565" y1="79" x2="700" y2="79" stroke="#424242" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#arrow-anc)"/>
+      <text x="635" y="72" text-anchor="middle" font-size="9" fill="#555">if ETH &gt; 5</text>
+      <rect x="700" y="57" width="90" height="44" rx="4" class="contract"/>
+      <text x="745" y="75" text-anchor="middle" font-size="10">whale pass</text>
+      <text x="745" y="88" text-anchor="middle" font-size="9" fill="#555">claimablePool</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Empty lootbox:</strong> <code>lootboxEth[index][player]</code> zeroed at resolution; no re-claim possible</li>
+        <li><strong>Whale pass after GAMEOVER:</strong> <code>if (gameOver) revert E()</code> blocks whale pass claim</li>
+        <li><strong>No DGNRS in pool:</strong> <code>transferFromPool</code> would revert (bounded by pool balance)</li>
+        <li><strong>Lootbox split:</strong> Above 0.5 ETH (<code>LOOTBOX_SPLIT_THRESHOLD</code>), split into two independent rolls</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- PAY-10: Quest Rewards and Streak Bonuses -->
+  <div class="system-card" id="pay-10">
+    <h3>PAY-10: Quest Rewards and Streak Bonuses</h3>
+    <div class="system-meta">
+      <span class="badge badge-burnie">BURNIE</span>
+    </div>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Daily quest completion (slot 0 or slot 1)</td></tr>
+      <tr><th>Source Pool</th><td>N/A -- BURNIE minted via <code>creditFlip</code></td></tr>
+      <tr><th>Calculation</th><td>Slot 0: 100 BURNIE (<code>100e18</code>), Slot 1: 200 BURNIE (<code>200e18</code>). Streak: up to 100 consecutive days = 10000 BPS activity contribution</td></tr>
+      <tr><th>Recipients</th><td>Quest-completing player</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>coin.creditFlip(player, amount)</code> -- credits to coinflip balance</td></tr>
+      <tr><th>Currency</th><td>BURNIE</td></tr>
+    </table>
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// DegenerusQuests -- reward amounts
+// Slot 0: QUEST_SLOT0_REWARD = 100 ether (100 BURNIE)
+// Slot 1: QUEST_RANDOM_REWARD = 200 ether (200 BURNIE)
+// Delivered via coin.creditFlip(player, amount)
+
+// Streak mechanics:
+// Each consecutive daily completion = 100 BPS activity
+// Maximum streak: 100 days = 10000 BPS total activity
+// Version-gated: quest progress resets on version change
+// Per-slot completion mask prevents re-claiming same slot same day
+
+// Activity contribution (DegenerusGame.sol:2478-2484):
+// questStreak &gt; 100 ? 100 : questStreakRaw
+// bonusBps += questStreak * 100</code></pre>
+      <p class="file-ref"><strong>Code:</strong> DegenerusQuests.sol:1-1598, BurnieCoin.sol:556-558 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <svg viewBox="0 0 600 200" class="flow-svg">
+      <rect x="10" y="70" width="150" height="60" rx="8" class="contract"/>
+      <text x="85" y="95" text-anchor="middle" font-weight="600">Quest Complete</text>
+      <text x="85" y="110" text-anchor="middle" font-size="10" fill="#555">slot 0 or slot 1</text>
+      <line x1="160" y1="100" x2="250" y2="100" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="205" y="90" text-anchor="middle" font-size="10" fill="#555">creditFlip</text>
+      <rect x="250" y="70" width="130" height="60" rx="4" class="contract"/>
+      <text x="315" y="95" text-anchor="middle" font-weight="600">creditFlip</text>
+      <text x="315" y="110" text-anchor="middle" font-size="10" fill="#555">BurnieCoin:556</text>
+      <line x1="380" y1="100" x2="430" y2="100" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <rect x="430" y="75" width="150" height="50" rx="20" class="recipient"/>
+      <text x="505" y="100" text-anchor="middle" font-weight="600">Player</text>
+      <text x="505" y="113" text-anchor="middle" font-size="10" fill="#555">100/200 BURNIE</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Streak broken:</strong> Activity score contribution resets; maximum 100 consecutive days</li>
+        <li><strong>Version-gated:</strong> Quest progress resets on version change (prevents re-trigger on upgrade)</li>
+        <li><strong>Per-slot completion mask:</strong> Prevents claiming same quest slot twice in one day</li>
+        <li><strong>Slot 1 prerequisite:</strong> Slot 1 cannot complete until slot 0 is done</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- PAY-11: Affiliate Commissions -->
+  <div class="system-card" id="pay-11">
+    <h3>PAY-11: Affiliate Commissions</h3>
+    <div class="system-meta">
+      <span class="badge badge-burnie">BURNIE</span>
+      <span class="badge badge-dgnrs">DGNRS</span>
+      <span class="badge badge-eth">ETH</span>
+    </div>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Referred player makes a purchase (mint)</td></tr>
+      <tr><th>Source Pool</th><td>BURNIE via <code>creditFlip</code> (ETH commission) + sDGNRS affiliate pool (DGNRS allocation)</td></tr>
+      <tr><th>Calculation</th><td>3-tier: direct 20%, tier-2 4%, tier-3 via weighted random lottery. DGNRS: <code>(affiliateScore * levelDgnrsAllocation) / totalAffiliateScore</code>. ETH cap: 0.5 ETH per sender per level (<code>AFFILIATE_ETH_CAP</code>)</td></tr>
+      <tr><th>Recipients</th><td>Referring affiliate (and upstream tier-2/tier-3 affiliates)</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>claimAffiliateEth()</code> for ETH; <code>claimAffiliateDgnrs()</code> for DGNRS</td></tr>
+      <tr><th>Currency</th><td>ETH + DGNRS</td></tr>
+    </table>
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// DegenerusAffiliate.sol:386-623
+// Tier structure:
+//   Direct referrer: 20% commission (REWARD_SCALE_FRESH_L4P_BPS = 2000)
+//   Tier-2 (referrer's referrer): 4% commission
+//   Tier-3: weighted random lottery from pool
+
+// DGNRS allocation -- fixed per level (not sequential depletion)
+// Per-player share:
+share = (affiliateScore * levelDgnrsAllocation[currLevel]) / totalAffiliateScore;
+
+// ETH cap: AFFILIATE_ETH_CAP = 0.5 ETH per sender per level
+// Self-referral blocked at DegenerusAffiliate.sol:426
+
+// Commission rates:
+// Fresh L0-3: 25% (REWARD_SCALE_FRESH_L1_3_BPS = 2500)
+// Fresh L4+:  20% (REWARD_SCALE_FRESH_L4P_BPS = 2000)
+// Recycled:    5% (REWARD_SCALE_RECYCLED_BPS = 500)</code></pre>
+      <p class="file-ref"><strong>Code:</strong> DegenerusAffiliate.sol:386-623, DegenerusGame.sol:1458-1501 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <svg viewBox="0 0 700 300" class="flow-svg">
+      <rect x="10" y="120" width="140" height="60" rx="8" class="pool"/>
+      <text x="80" y="145" text-anchor="middle" font-weight="600">Player Purchase</text>
+      <text x="80" y="160" text-anchor="middle" font-size="10" fill="#555">mint ETH</text>
+      <line x1="150" y1="150" x2="240" y2="150" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <rect x="240" y="115" width="180" height="70" rx="4" class="contract"/>
+      <text x="330" y="140" text-anchor="middle" font-weight="600">Affiliate System</text>
+      <text x="330" y="155" text-anchor="middle" font-size="10" fill="#555">payAffiliate()</text>
+      <text x="330" y="170" text-anchor="middle" font-size="9" fill="#555">DegenerusAffiliate:386</text>
+      <line x1="420" y1="135" x2="510" y2="60" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="480" y="85" text-anchor="middle" font-size="10" fill="#555">20%</text>
+      <rect x="510" y="35" width="170" height="44" rx="20" class="recipient"/>
+      <text x="595" y="57" text-anchor="middle" font-weight="600">Direct Referrer</text>
+      <text x="595" y="70" text-anchor="middle" font-size="9" fill="#555">creditFlip</text>
+      <line x1="420" y1="150" x2="510" y2="150" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="465" y="143" text-anchor="middle" font-size="10" fill="#555">4%</text>
+      <rect x="510" y="128" width="170" height="44" rx="20" class="recipient"/>
+      <text x="595" y="150" text-anchor="middle" font-weight="600">Tier-2 Upline</text>
+      <text x="595" y="163" text-anchor="middle" font-size="9" fill="#555">creditFlip</text>
+      <line x1="420" y1="165" x2="510" y2="240" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="475" y="215" text-anchor="middle" font-size="10" fill="#555">lottery</text>
+      <rect x="510" y="218" width="170" height="44" rx="20" class="recipient"/>
+      <text x="595" y="240" text-anchor="middle" font-weight="600">Tier-3 Random</text>
+      <text x="595" y="253" text-anchor="middle" font-size="9" fill="#555">weighted lottery</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Self-referral:</strong> Blocked at <code>DegenerusAffiliate.sol:426</code></li>
+        <li><strong>ETH cap:</strong> 0.5 ETH per sender per level (<code>AFFILIATE_ETH_CAP</code>)</li>
+        <li><strong><code>totalAffiliateScore == 0</code>:</strong> Prevents division-by-zero (no allocation occurs)</li>
+        <li><strong>DGNRS allocation model:</strong> Uses fixed <code>levelDgnrsAllocation</code> (not sequential depletion as described in v1.1 docs -- code is source of truth)</li>
+        <li><strong>Lootbox taper:</strong> Affiliate rewards taper from 100% to 25% floor as activity score increases from 10000 to 25500</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- PAY-12 / PAY-13: stETH Yield Distribution and Accumulator Milestones -->
+  <div class="system-card" id="pay-12-13">
+    <h3>PAY-12 / PAY-13: stETH Yield Distribution and Accumulator Milestones</h3>
+    <div class="system-meta">
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge badge-steth">stETH</span>
+    </div>
+
+    <h4 style="margin-top: 1rem; color: #0d47a1;">PAY-12: stETH Yield Distribution</h4>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Level transition (fires once per level via <code>poolConsolidationDone</code> flag)</td></tr>
+      <tr><th>Source Pool</th><td>stETH rebasing yield surplus</td></tr>
+      <tr><th>Calculation</th><td><code>yieldSurplus = (ETH + stETH balance) - (currentPrizePool + nextPrizePool + claimablePool + futurePrizePool + yieldAccumulator)</code>. Split: 23% vault, 23% sDGNRS, 46% yieldAccumulator, ~8% retained buffer</td></tr>
+      <tr><th>Recipients</th><td>Vault (23%), sDGNRS holders (23%), yieldAccumulator (46%)</td></tr>
+      <tr><th>Claim Mechanism</th><td>Automatic distribution at level transition via <code>_distributeYieldSurplus</code></td></tr>
+      <tr><th>Currency</th><td>ETH (via <code>_addClaimableEth</code> for vault/sDGNRS shares)</td></tr>
+    </table>
+
+    <h4 style="margin-top: 1rem; color: #0d47a1;">PAY-13: Accumulator Milestone Payouts</h4>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>x00 level milestones (every 100 levels)</td></tr>
+      <tr><th>Source Pool</th><td><code>yieldAccumulator</code> (50% released)</td></tr>
+      <tr><th>Calculation</th><td><code>halfAccumulator = yieldAccumulator / 2; futurePrizePool += halfAccumulator; yieldAccumulator -= halfAccumulator</code></td></tr>
+      <tr><th>Recipients</th><td><code>futurePrizePool</code> (indirect -- feeds back into jackpot/scatter/decimator systems)</td></tr>
+      <tr><th>Claim Mechanism</th><td>Automatic at x00 milestone; remaining 50% kept for next milestone</td></tr>
+      <tr><th>Currency</th><td>ETH (pool accounting)</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// PAY-12 -- JackpotModule.sol:928-958
+yieldSurplus = (address(this).balance + steth.balanceOf(address(this)))
+             - (currentPrizePool + _getNextPrizePool() + claimablePool
+                + _getFuturePrizePool() + yieldAccumulator);
+
+stakeholderShare = (yieldPool * 2300) / 10_000;  // 23% each to Vault and sDGNRS
+accumulatorShare = (yieldPool * 4600) / 10_000;  // 46% to yieldAccumulator
+// ~8% unextracted buffer (10_000 - 2300 - 2300 - 4600 = 800 BPS)
+
+// Insurance skim: 1% of nextPool (AdvanceModule.sol:980-986)
+insuranceSkim = (nextPoolBefore * INSURANCE_SKIM_BPS) / 10_000;  // INSURANCE_SKIM_BPS = 100
+
+// PAY-13 -- JackpotModule.sol:886-924
+// At x00 levels: release 50% of yieldAccumulator to futurePrizePool
+halfAccumulator = yieldAccumulator / 2;
+_setFuturePrizePool(_getFuturePrizePool() + halfAccumulator);
+yieldAccumulator -= halfAccumulator; // rounding favors retention</code></pre>
+      <p class="file-ref"><strong>Code:</strong> JackpotModule.sol:928-958, JackpotModule.sol:886-924, AdvanceModule.sol:980-986 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <svg viewBox="0 0 800 400" class="flow-svg">
+      <rect x="10" y="30" width="140" height="50" rx="4" class="contract"/>
+      <text x="80" y="52" text-anchor="middle" font-weight="600">stETH Yield</text>
+      <text x="80" y="67" text-anchor="middle" font-size="10" fill="#555">rebasing surplus</text>
+      <line x1="150" y1="55" x2="240" y2="130" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <rect x="240" y="105" width="220" height="60" rx="4" class="contract"/>
+      <text x="350" y="130" text-anchor="middle" font-weight="600">_distributeYieldSurplus</text>
+      <text x="350" y="145" text-anchor="middle" font-size="10" fill="#555">JackpotModule:928</text>
+      <text x="350" y="90" text-anchor="middle" font-size="9" fill="#888" font-style="italic">poolConsolidationDone: fires once per level</text>
+      <line x1="460" y1="120" x2="570" y2="50" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="530" y="72" text-anchor="middle" font-size="10" fill="#555">23%</text>
+      <rect x="570" y="25" width="120" height="44" rx="20" class="recipient"/>
+      <text x="630" y="52" text-anchor="middle" font-weight="600">Vault</text>
+      <line x1="460" y1="135" x2="570" y2="120" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="530" y="118" text-anchor="middle" font-size="10" fill="#555">23%</text>
+      <rect x="570" y="95" width="120" height="44" rx="20" class="recipient"/>
+      <text x="630" y="122" text-anchor="middle" font-weight="600">sDGNRS</text>
+      <line x1="460" y1="150" x2="570" y2="200" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="530" y="185" text-anchor="middle" font-size="10" fill="#555">46%</text>
+      <rect x="570" y="178" width="180" height="50" rx="8" class="pool"/>
+      <text x="660" y="200" text-anchor="middle" font-weight="600">yieldAccumulator</text>
+      <text x="660" y="215" text-anchor="middle" font-size="10" fill="#555">+ 1% nextPool skim</text>
+      <line x1="460" y1="160" x2="460" y2="190" stroke="#888" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="460" y1="190" x2="240" y2="190" stroke="#888" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="350" y="205" text-anchor="middle" font-size="9" fill="#888">~8% retained buffer</text>
+      <line x1="660" y1="228" x2="660" y2="310" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <text x="680" y="270" text-anchor="start" font-size="10" fill="#555">50% at x00</text>
+      <rect x="580" y="310" width="170" height="50" rx="8" class="pool"/>
+      <text x="665" y="332" text-anchor="middle" font-weight="600">futurePrizePool</text>
+      <text x="665" y="347" text-anchor="middle" font-size="10" fill="#555">feeds jackpot chain</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases (PAY-12)</h4>
+      <ul>
+        <li><strong><code>totalBal &lt;= obligations</code>:</strong> Returns early, no distribution</li>
+        <li><strong>Rate-independent:</strong> Works regardless of when check occurs</li>
+        <li><strong>Fires exactly once per level transition:</strong> <code>poolConsolidationDone</code> flag prevents re-entry</li>
+        <li><strong>No player addresses receive yield:</strong> Only VAULT and SDGNRS claimable balances affected</li>
+      </ul>
+      <h4>Edge Cases (PAY-13)</h4>
+      <ul>
+        <li><strong>Non-x00 level:</strong> Milestone payout does not fire</li>
+        <li><strong>Rounding:</strong> <code>yieldAccumulator / 2</code> truncates; rounding favors retention (accumulator keeps the extra wei)</li>
+        <li><strong>Release before keep-roll:</strong> 50% enters <code>futurePrizePool</code> before x00 keep-roll randomization</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- PAY-17: Advance Bounty -->
+  <div class="system-card" id="pay-17">
+    <h3>PAY-17: Advance Bounty</h3>
+    <div class="system-meta">
+      <span class="badge badge-burnie">BURNIE</span>
+    </div>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Anyone calls <code>advanceGame()</code> when game is stale</td></tr>
+      <tr><th>Source Pool</th><td>N/A -- BURNIE via <code>creditFlip</code></td></tr>
+      <tr><th>Calculation</th><td><code>bountyAmount = ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT / price</code> where <code>ADVANCE_BOUNTY_ETH = 0.01 ether</code>, multiplier = 1x (&lt; 1h elapsed), 2x (1-2h), 3x (&gt; 2h)</td></tr>
+      <tr><th>Recipients</th><td><code>advanceGame()</code> caller</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>creditFlip</code> -- credits BURNIE to coinflip balance</td></tr>
+      <tr><th>Currency</th><td>BURNIE</td></tr>
+    </table>
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// AdvanceModule.sol:112-376
+// Base: ADVANCE_BOUNTY_ETH = 0.01 ether
+advanceBounty = (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price;
+// At initial price (0.01 ETH): 1000 BURNIE
+// PRICE_COIN_UNIT = 1000 ether (DegenerusGameStorage.sol:125)
+
+// Time-based escalation (AdvanceModule.sol:197-208):
+//   &lt; 1 hour elapsed:  1x multiplier
+//   1-2 hours elapsed: 2x multiplier
+//   &gt; 2 hours elapsed: 3x multiplier
+// Multipliers are non-stacking (if/else if)
+
+// Converted to BURNIE via creditFlip
+// Mint-gate: caller must be eligible (token holder via _enforceDailyMintGate)</code></pre>
+      <p class="file-ref"><strong>Code:</strong> AdvanceModule.sol:112-376 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <svg viewBox="0 0 700 200" class="flow-svg">
+      <rect x="10" y="70" width="140" height="60" rx="8" class="contract"/>
+      <text x="80" y="95" text-anchor="middle" font-weight="600">Game Stale</text>
+      <text x="80" y="110" text-anchor="middle" font-size="10" fill="#555">needs advance</text>
+      <line x1="150" y1="100" x2="220" y2="100" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <rect x="220" y="65" width="160" height="70" rx="4" class="contract"/>
+      <text x="300" y="90" text-anchor="middle" font-weight="600">advanceGame()</text>
+      <text x="300" y="105" text-anchor="middle" font-size="10" fill="#555">AdvanceModule:120</text>
+      <text x="300" y="120" text-anchor="middle" font-size="9" fill="#555">1x / 2x / 3x bounty</text>
+      <line x1="380" y1="100" x2="430" y2="100" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <rect x="430" y="75" width="100" height="50" rx="4" class="contract"/>
+      <text x="480" y="100" text-anchor="middle" font-weight="600">creditFlip</text>
+      <text x="480" y="115" text-anchor="middle" font-size="9" fill="#555">BurnieCoin</text>
+      <line x1="530" y1="100" x2="580" y2="100" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-anc)"/>
+      <rect x="580" y="75" width="110" height="50" rx="20" class="recipient"/>
+      <text x="635" y="100" text-anchor="middle" font-weight="600">Caller</text>
+      <text x="635" y="113" text-anchor="middle" font-size="10" fill="#555">BURNIE</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Division-by-zero impossible:</strong> <code>price</code> initialized to 0.01 ETH, only mutated to non-zero tiers</li>
+        <li><strong>Mint-gate:</strong> Caller must be eligible (holding enough tokens via <code>_enforceDailyMintGate</code>)</li>
+        <li><strong>Time multipliers:</strong> 1x/2x/3x based on elapsed time since last advance, not phase-based</li>
+        <li><strong>No griefing vector:</strong> Each call either does useful work or reverts with <code>NotTimeYet()</code></li>
+      </ul>
+    </div>
+  </div>
+
 </section>
 
 <!-- ===== CATEGORY 5: TOKEN BURNS ===== -->
 
 <section id="cat-burns">
   <h2>5. Token Burns</h2>
-  <!-- System cards populated by Plan 30-04 -->
+  <!-- Token burn cards populated by Plan 30-04 Task 2 -->
 </section>
 
 <!-- ===== CATEGORY 6: GAMEOVER TERMINAL DISTRIBUTION ===== -->
