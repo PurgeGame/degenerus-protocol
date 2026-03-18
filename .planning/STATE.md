@@ -2,28 +2,28 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
-status: completed
-stopped_at: Completed 28-06-PLAN.md
-last_updated: "2026-03-18T07:24:20.088Z"
-last_activity: 2026-03-18 -- Completed 28-03 Supply/Claimability Invariants (INV-03/INV-04/INV-05 all PASS)
+status: in-progress
+stopped_at: Completed 29-03-PLAN.md
+last_updated: "2026-03-18T07:54:30.696Z"
+last_activity: 2026-03-18 -- Completed 29-03 Module NatSpec Part 2 (8 modules, 24 verdicts)
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 16
-  completed_plans: 16
-  percent: 75
+  total_plans: 22
+  completed_plans: 17
+  percent: 77
 ---
 
 # State
 
 ## Current Position
 
-Phase: 28 of 30 (Cross-Cutting Verification)
+Phase: 29 of 30 (Comment/Documentation Correctness)
 Plan: 3 of 6
-Status: Phase 28 Plan 3 COMPLETE -- INV-03/INV-04/INV-05 all PASS; supply and claimability invariants proven
-Last activity: 2026-03-18 -- Completed 28-03 Supply/Claimability Invariants (INV-03/INV-04/INV-05 all PASS)
+Status: Phase 29 Plan 3 COMPLETE -- 24 NatSpec verdicts across 8 game modules, GO-05-F01 absent from NatSpec
+Last activity: 2026-03-18 -- Completed 29-03 Module NatSpec Part 2 (8 modules, 24 verdicts)
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 77%
 
 ## Project Reference
 
@@ -103,6 +103,9 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 28]: Cumulative audit totals updated to 103 plans, 137 requirements, 18 phases after Phase 28 consolidation
 - [Phase 28]: DegeneretteModule:1158 (Site D1) was last uncovered claimablePool mutation site -- proven correct, no finding; all 15 sites now covered
 - [Phase 28]: 5 cross-phase consistency checks vs Phase 26/27 all CONFIRMED; no contradictions across any prior audit verdict
+- [Phase 29]: [Phase 29-03]: 24 NatSpec verdicts across 8 game modules (MintModule, DegeneretteModule, WhaleModule, BoonModule, EndgameModule, GameOverModule, PayoutUtils, MintStreakUtils): 24 MATCH, 0 DISCREPANCY, 1 MISSING
+- [Phase 29]: [Phase 29-03]: GO-05-F01 _sendToVault revert risk ABSENT from GameOverModule NatSpec -- recommend adding @dev warning
+- [Phase 29]: [Phase 29-03]: DegeneretteModule:1158 claimablePool mutation site comments VERIFIED CORRECT (consistent with Phase 28 INV-01/INV-02 proofs)
 
 ## Accumulated Context
 
@@ -135,6 +138,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T07:19:51.968Z
-Stopped at: Completed 28-06-PLAN.md
+Last session: 2026-03-18T07:54:26.110Z
+Stopped at: Completed 29-03-PLAN.md
 Resume file: None
