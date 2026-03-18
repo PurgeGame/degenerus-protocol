@@ -2560,7 +2560,7 @@ uint256 stethBal = steth.balanceOf(address(this));
       <tr><td>PAY-11-I01</td><td>v1.1 affiliate doc describes sequential depletion; code uses fixed proportional allocation</td><td>27</td><td>Code is authoritative; doc is stale</td></tr>
       <tr><td>PAY-03-I01</td><td>Unused <code>winnerMask</code> variable in BAF scatter resolution</td><td>27</td><td>Dead code; no security impact</td></tr>
       <tr><td>GO-03-I01</td><td>Stale test comments (912d vs 365d timeout)</td><td>26</td><td>Tests pass by overshooting</td></tr>
-      <tr><td>EDGE-03</td><td><code>advanceGame</code> queue inflation delays jackpots; bounded by batch mechanism + advance bounty</td><td>28</td><td>Classified LOW (FINDING-LOW-EDGE03-01)</td></tr>
+      <tr><td>EDGE-03</td><td><code>advanceGame</code> queue depth scales with game activity; batch mechanism handles correctly, advance bounty incentivizes progression</td><td>28</td><td>PASS &mdash; normal gameplay, not a finding</td></tr>
     </tbody>
   </table>
 

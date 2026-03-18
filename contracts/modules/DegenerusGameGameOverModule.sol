@@ -68,14 +68,13 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     function handleGameOverDrain(uint48 day) external {
         if (gameOverFinalJackpotPaid) return; // Already processed
 
-        uint24 currentLevel = level;
-        uint24 lvl = currentLevel == 0 ? 1 : currentLevel;
+        uint24 lvl = level;
 
         uint256 ethBal = address(this).balance;
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalFunds = ethBal + stBal;
 
-        if (currentLevel < 10) {
+        if (lvl < 10) {
             uint256 refundPerPass = DEITY_PASS_EARLY_GAMEOVER_REFUND;
             uint256 ownerCount = deityPassOwners.length;
             uint256 budget = totalFunds > claimablePool ? totalFunds - claimablePool : 0;

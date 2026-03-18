@@ -40,6 +40,31 @@ describe("VRF Governance", function () {
   }
 
   // =========================================================================
+  // Helper: give sDGNRS from Reward pool via impersonated game contract
+  // =========================================================================
+  const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
+
+  async function giveSDGNRS(sdgnrs, game, recipient, amount) {
+    const gameAddr = await game.getAddress();
+    await hre.network.provider.request({
+      method: "hardhat_impersonateAccount",
+      params: [gameAddr],
+    });
+    await hre.ethers.provider.send("hardhat_setBalance", [
+      gameAddr,
+      "0xDE0B6B3A7640000",
+    ]);
+    const gameSigner = await hre.ethers.getSigner(gameAddr);
+    await sdgnrs
+      .connect(gameSigner)
+      .transferFromPool(Pool.Reward, recipient, amount);
+    await hre.network.provider.request({
+      method: "hardhat_stopImpersonatingAccount",
+      params: [gameAddr],
+    });
+  }
+
+  // =========================================================================
   // 1. Propose
   // =========================================================================
   describe("propose", function () {
@@ -113,13 +138,19 @@ describe("VRF Governance", function () {
     });
 
     it("increments proposalCount for each proposal", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, mockVRF, deployer, sdgnrs, game } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
+
+      // Give deployer sDGNRS so reject vote has weight to kill
+      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
 
       await createStall(21);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
       expect(await admin.proposalCount()).to.equal(1n);
+
+      // Kill proposal 1 via reject vote so deployer can propose again
+      await admin.connect(deployer).vote(1, false);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
       expect(await admin.proposalCount()).to.equal(2n);
@@ -391,18 +422,105 @@ describe("VRF Governance", function () {
   });
 
   // =========================================================================
-  // 11. Multiple Proposals (approval voting)
+  // 11. 1-Per-Address Active Proposal Limit (WAR-06 fix)
   // =========================================================================
-  describe("multiple proposals", function () {
-    it("can create multiple proposals simultaneously", async function () {
+  describe("1-per-address active proposal limit", function () {
+    it("reverts with AlreadyHasActiveProposal when same address proposes twice", async function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(21);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+
+      await expect(
+        admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"))
+      ).to.be.revertedWithCustomError(admin, "AlreadyHasActiveProposal");
+    });
+
+    it("sets activeProposalId after propose", async function () {
+      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+
+      expect(await admin.activeProposalId(deployer.address)).to.equal(0n);
+
+      await createStall(21);
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+
+      expect(await admin.activeProposalId(deployer.address)).to.equal(1n);
+    });
+
+    it("allows new proposal after previous is Killed", async function () {
+      const { admin, mockVRF, deployer, sdgnrs, game } = await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+
+      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      await createStall(21);
+
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+
+      // Kill proposal 1 via reject vote
+      await admin.connect(deployer).vote(1, false);
+      const [, , , , , , , , state] = await admin.proposals(1);
+      expect(state).to.equal(2, "Proposal 1 should be Killed");
+
+      // Deployer can now propose again
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key3"));
+      expect(await admin.proposalCount()).to.equal(2n);
+      expect(await admin.activeProposalId(deployer.address)).to.equal(2n);
+    });
+
+    it("allows new proposal after previous is Executed", async function () {
+      const { admin, mockVRF, deployer, sdgnrs, game } = await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+
+      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      await createStall(21);
+
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+
+      // Execute proposal 1 via approve vote
+      await admin.connect(deployer).vote(1, true);
+      const [, , , , , , , , state] = await admin.proposals(1);
+      expect(state).to.equal(1, "Proposal 1 should be Executed");
+
+      // Deployer can now propose again (VRF still stalled after swap)
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
+      expect(await admin.proposalCount()).to.equal(2n);
+    });
+
+    it("allows new proposal after previous expires (lazy expiry)", async function () {
+      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+
+      await createStall(21);
+
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+
+      // Advance past PROPOSAL_LIFETIME (168h)
+      await advanceTime(7 * ONE_DAY + 1);
+
+      // Deployer can propose again — lazy expiry check passes
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
+      expect(await admin.proposalCount()).to.equal(2n);
+      expect(await admin.activeProposalId(deployer.address)).to.equal(2n);
+    });
+
+    it("different addresses can each have one active proposal", async function () {
+      const { admin, mockVRF, deployer, alice, bob, sdgnrs, game } =
+        await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+
+      // Give alice and bob enough sDGNRS for community path (0.5% of circulating)
+      await giveSDGNRS(sdgnrs, game, alice.address, eth("500"));
+      await giveSDGNRS(sdgnrs, game, bob.address, eth("500"));
+
+      // 7-day stall for community path
+      await createStall(7 * 24);
+
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key2"));
+      await admin.connect(bob).propose(vrfAddr, hre.ethers.id("key3"));
 
       expect(await admin.proposalCount()).to.equal(3n);
     });
@@ -412,44 +530,23 @@ describe("VRF Governance", function () {
   // 12. _voidAllActive correctness (multi-proposal void)
   // =========================================================================
   describe("_voidAllActive via execute with multiple proposals", function () {
-    // Helper: impersonate game contract and transfer sDGNRS from Reward pool
-    const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
-
-    async function giveSDGNRS(sdgnrs, game, recipient, amount) {
-      const gameAddr = await game.getAddress();
-      await hre.network.provider.request({
-        method: "hardhat_impersonateAccount",
-        params: [gameAddr],
-      });
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        gameAddr,
-        "0xDE0B6B3A7640000",
-      ]);
-      const gameSigner = await hre.ethers.getSigner(gameAddr);
-      await sdgnrs
-        .connect(gameSigner)
-        .transferFromPool(Pool.Reward, recipient, amount);
-      await hre.network.provider.request({
-        method: "hardhat_stopImpersonatingAccount",
-        params: [gameAddr],
-      });
-    }
-
     it("executing one proposal voids all other active proposals", async function () {
-      const { admin, mockVRF, deployer, sdgnrs, game } =
+      const { admin, mockVRF, deployer, alice, bob, sdgnrs, game } =
         await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      // Give deployer sDGNRS so they can vote
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      // Give deployer majority sDGNRS (>60% for threshold), alice and bob for community proposals
+      await giveSDGNRS(sdgnrs, game, deployer.address, eth("5000"));
+      await giveSDGNRS(sdgnrs, game, alice.address, eth("100"));
+      await giveSDGNRS(sdgnrs, game, bob.address, eth("100"));
 
-      // Create 21h stall
-      await createStall(21);
+      // 7-day stall for community path
+      await createStall(7 * 24);
 
-      // Create 3 proposals
+      // Create 3 proposals from different addresses
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key3"));
+      await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key2"));
+      await admin.connect(bob).propose(vrfAddr, hre.ethers.id("key3"));
 
       expect(await admin.proposalCount()).to.equal(3n);
 
@@ -480,20 +577,23 @@ describe("VRF Governance", function () {
       expect(execEvent.args.proposalId).to.equal(2n);
     });
 
-    it("_voidAllActive skips non-Active proposals (expired/killed)", async function () {
-      const { admin, mockVRF, deployer, sdgnrs, game } =
+    it("_voidAllActive skips non-Active proposals (already killed)", async function () {
+      const { admin, mockVRF, deployer, alice, bob, sdgnrs, game } =
         await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      // Give deployer sDGNRS
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      // Give deployer majority sDGNRS (>60% for threshold)
+      await giveSDGNRS(sdgnrs, game, deployer.address, eth("5000"));
+      await giveSDGNRS(sdgnrs, game, alice.address, eth("100"));
+      await giveSDGNRS(sdgnrs, game, bob.address, eth("100"));
 
-      await createStall(21);
+      // 7-day stall
+      await createStall(7 * 24);
 
-      // Create 3 proposals
+      // Create 3 proposals from different addresses
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key3"));
+      await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key2"));
+      await admin.connect(bob).propose(vrfAddr, hre.ethers.id("key3"));
 
       // Kill proposal 1 by voting reject with enough weight
       await admin.connect(deployer).vote(1, false);
@@ -523,34 +623,57 @@ describe("VRF Governance", function () {
       expect(killedIds).to.include(3);
       expect(killedIds).to.not.include(1); // Already killed, no duplicate event
     });
+
+    it("voidedUpTo watermark skips previously voided proposals on second stall", async function () {
+      const { admin, mockVRF, deployer, alice, sdgnrs, game } =
+        await loadFixture(deployFullProtocol);
+      const vrfAddr = await mockVRF.getAddress();
+
+      // Give deployer and alice sDGNRS
+      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      await giveSDGNRS(sdgnrs, game, alice.address, eth("500"));
+
+      // First stall episode: create and execute a proposal
+      await createStall(7 * 24);
+
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key2"));
+      expect(await admin.proposalCount()).to.equal(2n);
+
+      // Execute proposal 1 — voids proposal 2, advances voidedUpTo to 2
+      await admin.connect(deployer).vote(1, true);
+
+      const [, , , , , , , , s1] = await admin.proposals(1);
+      const [, , , , , , , , s2] = await admin.proposals(2);
+      expect(s1).to.equal(1, "Proposal 1 Executed");
+      expect(s2).to.equal(2, "Proposal 2 Killed");
+
+      // Second stall episode: new proposals get IDs 3+
+      // VRF was swapped but the new coordinator is also stalled (mock)
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key3"));
+      await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key4"));
+      expect(await admin.proposalCount()).to.equal(4n);
+
+      // Execute proposal 3 — _voidAllActive only scans from voidedUpTo+1=3
+      // Proposals 1 and 2 are NOT re-scanned
+      const tx = await admin.connect(deployer).vote(3, true);
+
+      const [, , , , , , , , s3] = await admin.proposals(3);
+      const [, , , , , , , , s4] = await admin.proposals(4);
+      expect(s3).to.equal(1, "Proposal 3 Executed");
+      expect(s4).to.equal(2, "Proposal 4 Killed");
+
+      // Only proposal 4 should be killed (proposals 1 and 2 are below watermark)
+      const events = await getEvents(tx, admin, "ProposalKilled");
+      const killedIds = events.map((e) => Number(e.args.proposalId));
+      expect(killedIds).to.deep.equal([4]);
+    });
   });
 
   // =========================================================================
   // 13. Kill condition (GOV-06 evidence)
   // =========================================================================
   describe("kill condition", function () {
-    const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
-
-    async function giveSDGNRS(sdgnrs, game, recipient, amount) {
-      const gameAddr = await game.getAddress();
-      await hre.network.provider.request({
-        method: "hardhat_impersonateAccount",
-        params: [gameAddr],
-      });
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        gameAddr,
-        "0xDE0B6B3A7640000",
-      ]);
-      const gameSigner = await hre.ethers.getSigner(gameAddr);
-      await sdgnrs
-        .connect(gameSigner)
-        .transferFromPool(Pool.Reward, recipient, amount);
-      await hre.network.provider.request({
-        method: "hardhat_stopImpersonatingAccount",
-        params: [gameAddr],
-      });
-    }
-
     it("reject votes exceeding threshold kill the proposal", async function () {
       const { admin, mockVRF, deployer, sdgnrs, game } =
         await loadFixture(deployFullProtocol);
@@ -605,28 +728,6 @@ describe("VRF Governance", function () {
   // 14. Execute with weight (GOV-05 evidence)
   // =========================================================================
   describe("execute with approve weight", function () {
-    const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
-
-    async function giveSDGNRS(sdgnrs, game, recipient, amount) {
-      const gameAddr = await game.getAddress();
-      await hre.network.provider.request({
-        method: "hardhat_impersonateAccount",
-        params: [gameAddr],
-      });
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        gameAddr,
-        "0xDE0B6B3A7640000",
-      ]);
-      const gameSigner = await hre.ethers.getSigner(gameAddr);
-      await sdgnrs
-        .connect(gameSigner)
-        .transferFromPool(Pool.Reward, recipient, amount);
-      await hre.network.provider.request({
-        method: "hardhat_stopImpersonatingAccount",
-        params: [gameAddr],
-      });
-    }
-
     it("approve votes exceeding threshold execute the proposal", async function () {
       const { admin, mockVRF, deployer, sdgnrs, game } =
         await loadFixture(deployFullProtocol);
@@ -659,28 +760,6 @@ describe("VRF Governance", function () {
   // 15. Tie condition (GOV-05/GOV-06 mutual exclusion evidence)
   // =========================================================================
   describe("tie condition", function () {
-    const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
-
-    async function giveSDGNRS(sdgnrs, game, recipient, amount) {
-      const gameAddr = await game.getAddress();
-      await hre.network.provider.request({
-        method: "hardhat_impersonateAccount",
-        params: [gameAddr],
-      });
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        gameAddr,
-        "0xDE0B6B3A7640000",
-      ]);
-      const gameSigner = await hre.ethers.getSigner(gameAddr);
-      await sdgnrs
-        .connect(gameSigner)
-        .transferFromPool(Pool.Reward, recipient, amount);
-      await hre.network.provider.request({
-        method: "hardhat_stopImpersonatingAccount",
-        params: [gameAddr],
-      });
-    }
-
     it("equal approve and reject weights leave proposal Active (neither execute nor kill)", async function () {
       const { admin, mockVRF, deployer, alice, sdgnrs, game } =
         await loadFixture(deployFullProtocol);
