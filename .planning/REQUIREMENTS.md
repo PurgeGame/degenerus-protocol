@@ -11,11 +11,11 @@
 - [x] **GO-02**: `handleFinalSweep` audited — 30-day claim window, claimablePool zeroing, unclaimed forfeiture logic verified correct
 - [x] **GO-03**: Death clock trigger conditions audited — level 0 (365d) and level 1+ (120d) thresholds verified, all activation paths mapped
 - [x] **GO-04**: Distress mode activation audited — effects on lootbox routing and ticket bonuses verified, activation/deactivation conditions mapped
-- [ ] **GO-05**: Every `require`/`revert` on GAMEOVER path audited — no revert can block payout execution
-- [ ] **GO-06**: Reentrancy and state ordering on GAMEOVER path audited — no path allows funds stuck or double-paid
+- [x] **GO-05**: Every `require`/`revert` on GAMEOVER path audited — no revert can block payout execution
+- [x] **GO-06**: Reentrancy and state ordering on GAMEOVER path audited — no path allows funds stuck or double-paid
 - [x] **GO-07**: Deity pass refunds on early GAMEOVER (levels 0-9) audited — refund calculations and claimability verified
 - [ ] **GO-08**: Terminal decimator integration audited — new code path through GAMEOVER verified, interaction with existing accumulator/jackpot logic correct
-- [ ] **GO-09**: No-RNG-available GAMEOVER path audited — fallback behavior when VRF is unavailable during terminal distribution, deterministic/default selection logic, fund safety verified
+- [x] **GO-09**: No-RNG-available GAMEOVER path audited — fallback behavior when VRF is unavailable during terminal distribution, deterministic/default selection logic, fund safety verified
 
 ### Payout/Claim Path Audit
 
@@ -113,11 +113,11 @@
 | GO-02 | Phase 26 | Complete |
 | GO-03 | Phase 26 | Complete |
 | GO-04 | Phase 26 | Complete |
-| GO-05 | Phase 26 | Pending |
-| GO-06 | Phase 26 | Pending |
+| GO-05 | Phase 26 | Complete |
+| GO-06 | Phase 26 | Complete |
 | GO-07 | Phase 26 | Complete |
 | GO-08 | Phase 26 | Pending |
-| GO-09 | Phase 26 | Pending |
+| GO-09 | Phase 26 | Complete |
 | PAY-01 | Phase 27 | Pending |
 | PAY-02 | Phase 27 | Pending |
 | PAY-03 | Phase 27 | Pending |

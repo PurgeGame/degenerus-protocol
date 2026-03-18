@@ -53,7 +53,7 @@
   3. Death clock trigger conditions (365d at level 0, 120d at level 1+), distress mode effects, and all activation/deactivation paths are mapped and verified
   4. Every require/revert on the GAMEOVER path is confirmed unable to block payout execution, and CEI ordering is confirmed correct with no reentrancy or double-pay path
   5. Terminal decimator integration, deity pass refund calculations, and no-RNG-available fallback path are verified correct against the new code in DegenerusGameDecimatorModule and DegenerusGameGameOverModule
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 
 Plans:
 - [ ] 26-01-PLAN.md — Core distribution audit: terminal decimator (GO-08) + handleGameOverDrain (GO-01)
@@ -113,7 +113,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 26. GAMEOVER Path Audit | v3.0 | 3/4 | In progress | - |
+| 26. GAMEOVER Path Audit | 3/4 | In Progress|  | - |
 | 27. Payout/Claim Path Audit | v3.0 | 0/TBD | Not started | - |
 | 28. Cross-Cutting Verification | v3.0 | 0/TBD | Not started | - |
 | 29. Comment/Documentation Correctness | v3.0 | 0/TBD | Not started | - |
