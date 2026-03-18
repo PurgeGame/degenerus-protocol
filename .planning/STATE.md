@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
-status: completed
-stopped_at: Completed 26-04-PLAN.md -- Phase 26 complete (all 9 GAMEOVER requirements)
-last_updated: "2026-03-18T04:31:24.693Z"
-last_activity: 2026-03-18 -- Completed Phase 26 GAMEOVER Path Audit (4/4 plans, 9/9 requirements)
+status: in-progress
+stopped_at: Completed 27-01-PLAN.md
+last_updated: "2026-03-18T05:02:00.000Z"
+last_activity: 2026-03-18 -- Completed 27-01 Jackpot Distribution Audit (PAY-01, PAY-02, PAY-16 all PASS)
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 20
+  total_plans: 10
+  completed_plans: 5
+  percent: 30
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 27 of 30 (Payout/Claim Path Audit)
-Plan: 0 of TBD
-Status: Phase 26 complete, Phase 27 not yet planned
-Last activity: 2026-03-18 -- Completed Phase 26 GAMEOVER Path Audit (4/4 plans, 9/9 requirements)
+Plan: 1 of 6
+Status: 27-01 complete (PAY-01, PAY-02, PAY-16), 5 plans remaining
+Last activity: 2026-03-18 -- Completed 27-01 Jackpot Distribution Audit (PAY-01, PAY-02, PAY-16 all PASS)
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 30%
 
 ## Project Reference
 
@@ -47,18 +47,26 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 26-04]: claimablePool invariant verified consistent across all 3 partial reports at all 6 mutation sites -- no inconsistencies
 - [Phase 26-04]: FINAL-FINDINGS-REPORT.md updated to 91 plans, 99 requirements, 16 phases; KNOWN-ISSUES.md updated with GO-05-F01
 
+- [Phase 27-01]: PAY-01 PASS: 1% futurePrizePool drip, 75/25 lootbox/ETH split, VRF entropy, batched claimablePool liability
+- [Phase 27-01]: PAY-02 PASS: 6-14% BPS days 1-4, 100% day 5, 60/13/13/13 shares, compressed/turbo modes verified
+- [Phase 27-01]: PAY-16 PASS: 2x over-collateralization via _budgetToTicketUnits, pool transition chain verified, prizePoolFrozen guard
+- [Phase 27-01]: Auto-rebuy 130%/145% bonus absorbed by structural over-collateralization (net 1.38x-1.54x)
+
 ## Accumulated Context
 
 - v1.0-v3.0 audit complete (phases 1-26): RNG, economic flow, delta, novel attacks, warden sim, gas optimization, VRF governance, GAMEOVER path
 - Terminal decimator (490 lines, 7 files) now fully audited -- GO-08 PASS, all research questions resolved
 - GAMEOVER path fully audited (9/9 requirements): 8 PASS, 1 FINDING-MEDIUM (GO-05 _sendToVault hard reverts)
 - claimablePool invariant verified at all 6 mutation sites on GAMEOVER path -- consistent across all partial reports
+- Jackpot distribution paths (PAY-01, PAY-02, PAY-16) all PASS -- no findings above INFORMATIONAL severity
+- Shared payout infrastructure documented: _addClaimableEth, _creditClaimable, _calcAutoRebuy (see audit/v3.0-payout-jackpot-distribution.md)
+- claimablePool mutation trace at 4 sites across jackpot paths verified consistent with GAMEOVER-path trace
 - Contracts source of truth: /home/zak/Dev/PurgeGame/degenerus-audit/contracts/
 - Economics primer: audit/v1.1-ECONOMICS-PRIMER.md
 - Parameter reference: audit/v1.1-parameter-reference.md
 
 ## Session Continuity
 
-Last session: 2026-03-18T04:24:34.000Z
-Stopped at: Completed 26-04-PLAN.md -- Phase 26 complete (all 9 GAMEOVER requirements)
+Last session: 2026-03-18T05:02:00.000Z
+Stopped at: Completed 27-01-PLAN.md
 Resume file: None
