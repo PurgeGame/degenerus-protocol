@@ -20,16 +20,30 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ Parameter reference — every named constant consolidated
 - ✓ sDGNRS/DGNRS split implementation — soulbound + liquid wrapper architecture
 - ✓ Audit doc sync — all 10 docs updated for sDGNRS/DGNRS split
+- ✓ v2.1 Governance security audit — 26 verdicts covering all attack vectors — v2.1
+- ✓ v2.1 M-02 closure — emergencyRecover eliminated, governance replaces single-admin authority — v2.1
+- ✓ v2.1 War-game scenarios — 6 adversarial scenarios assessed with severity ratings — v2.1
+- ✓ v2.1 Audit doc sync — all docs updated for governance, zero stale references — v2.1
+- ✓ v2.1 Post-audit hardening — CEI fix, removed death clock pause + activeProposalCount — v2.1
 
 ### Active
 
-See current milestone: v2.1 — VRF Governance Audit + Doc Sync
+(None — all milestones complete. See deferred items below.)
+
+### Deferred (v2.2+)
+
+- [ ] Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
+- [ ] Formal verification of vote counting arithmetic via Halmos
+- [ ] Monte Carlo simulation of governance outcomes under various voter distributions
 
 ### Out of Scope
 
 - Frontend code — not in audit scope
 - Off-chain infrastructure — VRF coordinator is external
 - Gas optimization beyond correctness — C4A QA findings are low-cost
+- Governance UI/frontend — not in audit scope
+- Off-chain vote aggregation — on-chain only governance
+- Governance upgrade mechanisms — contract is immutable per spec
 
 ## Context
 
@@ -37,8 +51,9 @@ See current milestone: v2.1 — VRF Governance Audit + Doc Sync
 - 23 protocol contracts deployed in deterministic order via CREATE nonce prediction
 - All contracts use immutable `ContractAddresses` library (addresses baked at compile time)
 - VRF via Chainlink VRF v2 for randomness
-- Recent major change: DegenerusStonk split into StakedDegenerusStonk (soulbound, holds reserves) + DegenerusStonk (transferable ERC20 wrapper)
+- DegenerusStonk split into StakedDegenerusStonk (soulbound, holds reserves) + DegenerusStonk (transferable ERC20 wrapper)
 - VRF governance: emergencyRecover replaced with sDGNRS-holder propose/vote/execute (M-02 mitigation). Touches DegenerusAdmin, AdvanceModule, GameStorage, Game, DegenerusStonk.
+- Post-v2.1: death clock pause removed (unnecessary complexity), activeProposalCount removed (no on-chain consumer), _executeSwap CEI fixed
 
 ## Constraints
 
@@ -51,22 +66,23 @@ See current milestone: v2.1 — VRF Governance Audit + Doc Sync
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Split DGNRS into sDGNRS + DGNRS wrapper | Enable secondary market for creator allocation while keeping game rewards soulbound | ✓ Good |
-| Pool BPS rebalance (Whale 10%, Affiliate 35%, Lootbox 20%, Reward 5%, Earlybird 10%) | Better distribution alignment with game mechanics | — Pending audit |
-| Coinflip bounty DGNRS gating (min 50k bet, 20k pool) | Prevent dust-amount bounty claims draining reward pool | — Pending audit |
-| burnRemainingPools replacing burnForGame | Cleaner game-over cleanup, removes per-address burn authority | — Pending audit |
-| Replace emergencyRecover with sDGNRS governance | M-02 mitigation: compromised admin key can no longer unilaterally control RNG | — Pending audit |
-| VRF retry timeout 18h → 12h | Faster recovery from stale VRF requests | — Pending audit |
-| unwrapTo blocked during VRF stall | Prevents creator vote-stacking via DGNRS→sDGNRS conversion during governance | — Pending audit |
+| Pool BPS rebalance (Whale 10%, Affiliate 35%, Lootbox 20%, Reward 5%, Earlybird 10%) | Better distribution alignment with game mechanics | ✓ Audited v2.0 |
+| Coinflip bounty DGNRS gating (min 50k bet, 20k pool) | Prevent dust-amount bounty claims draining reward pool | ✓ Audited v2.0 |
+| burnRemainingPools replacing burnForGame | Cleaner game-over cleanup, removes per-address burn authority | ✓ Audited v2.0 |
+| Replace emergencyRecover with sDGNRS governance | M-02 mitigation: compromised admin key can no longer unilaterally control RNG | ✓ Audited v2.1, M-02 downgraded to Low |
+| VRF retry timeout 18h → 12h | Faster recovery from stale VRF requests | ✓ Audited v2.1 |
+| unwrapTo blocked during VRF stall | Prevents creator vote-stacking via DGNRS→sDGNRS conversion during governance | ✓ Audited v2.1 |
+| Remove death clock pause for governance | Chainlink death + game death + 256 proposals is unrealistic; reduces complexity | ✓ Post-v2.1 |
+| Remove activeProposalCount tracking | No on-chain consumer after death clock pause removal; eliminates uint8 overflow surface | ✓ Post-v2.1 |
+| Move _voidAllActive before external calls | CEI compliance in _executeSwap; prevents theoretical sibling-proposal reentrancy | ✓ Post-v2.1 |
 
-## Current Milestone: v2.1 VRF Governance Audit
+## Known Issues (Documented, Not Blocking)
 
-**Goal:** Thorough security audit of the new VRF governance system + update all prior audit docs to account for the changes.
-
-**Target features:**
-- Adversarial security audit of propose/vote/execute governance flow
-- War-game scenarios: compromised admin, colluding voters, VRF oscillation
-- Explicit M-02 closure verification
-- Audit doc sync: findings report, function audits, known issues, parameter reference
+| ID | Severity | Description |
+|----|----------|-------------|
+| WAR-01 | Medium | Compromised admin + 7-day community inattention enables coordinator swap |
+| WAR-02 | Medium | Colluding voter cartel at day 6 (5% threshold) |
+| WAR-06 | Low | Admin spam-propose gas griefing (no per-proposer cooldown) |
 
 ---
-*Last updated: 2026-03-17 after VRF governance implementation*
+*Last updated: 2026-03-18 after v2.1 milestone*

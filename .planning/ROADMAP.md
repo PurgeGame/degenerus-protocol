@@ -1,8 +1,15 @@
-# Roadmap: v2.1 VRF Governance Audit + Doc Sync
+# Roadmap: Degenerus Protocol Audit
 
-**Milestone:** v2.1
-**Phases:** 24-25 (continuing from v2.0 phase 23)
-**Requirements:** 33
+## Milestones
+
+- ✅ **v1.0 Initial RNG Security Audit** — Phases 1-5 (shipped 2026-03-14)
+- ✅ **v1.1 Economic Flow Audit** — Phases 6-15 (shipped 2026-03-15)
+- ✅ **v1.2 RNG Security Audit (Delta)** — Phases 16-18 (shipped 2026-03-15)
+- ✅ **v1.3 sDGNRS/DGNRS Split + Doc Sync** — (shipped 2026-03-16)
+- ✅ **v2.0 C4A Audit Prep** — Phases 19-23 (shipped 2026-03-17)
+- ✅ **v2.1 VRF Governance Audit + Doc Sync** — Phases 24-25 (shipped 2026-03-18)
+
+## Phases
 
 <details>
 <summary>v2.0 C4A Audit Prep (Phases 19-23) -- SHIPPED 2026-03-17</summary>
@@ -15,63 +22,19 @@
 
 </details>
 
-## Phases
+<details>
+<summary>v2.1 VRF Governance Audit + Doc Sync (Phases 24-25) -- SHIPPED 2026-03-18</summary>
 
-- [x] **Phase 24: Core Governance Security Audit** - Adversarial security audit of VRF governance (propose/vote/execute), cross-contract interactions, vote integrity, war-game scenarios, and M-02 closure verification (completed 2026-03-17)
-- [x] **Phase 25: Audit Doc Sync** - Update all audit documentation to reflect governance changes, new findings, and M-02 closure (completed 2026-03-17)
+- [x] **Phase 24: Core Governance Security Audit** — 8 plans, 26 requirements (completed 2026-03-17)
+- [x] **Phase 25: Audit Doc Sync** — 4 plans, 7 requirements (completed 2026-03-17)
 
-## Phase Details
+</details>
 
-### Phase 24: Core Governance Security Audit
-**Goal**: Every governance attack vector a C4A warden could find is identified -- storage layout, access control, vote arithmetic, reentrancy, cross-contract side effects, and adversarial scenarios are all verified secure or documented as known issues
-**Depends on**: Phase 23 (v2.0 complete)
-**Requirements**: GOV-01, GOV-02, GOV-03, GOV-04, GOV-05, GOV-06, GOV-07, GOV-08, GOV-09, GOV-10, XCON-01, XCON-02, XCON-03, XCON-04, XCON-05, VOTE-01, VOTE-02, VOTE-03, WAR-01, WAR-02, WAR-03, WAR-04, WAR-05, WAR-06, M02-01, M02-02
-**Success Criteria** (what must be TRUE):
-  1. Storage layout for `lastVrfProcessedTimestamp` is verified collision-free via slot computation, and every governance-touched storage variable is mapped to its slot
-  2. Every governance function (propose, vote, execute, kill, void, expiry) has a written audit verdict covering access control, arithmetic correctness, state transitions, and CEI compliance
-  3. All cross-contract interaction paths between DegenerusAdmin, AdvanceModule, GameStorage, Game, and DegenerusStonk are traced and verified -- no manipulation vector exists for `lastVrfProcessedTimestamp`, death clock, unwrapTo stall, or VRF retry timeout
-  4. All six war-game scenarios (compromised admin, colluding cartel, VRF oscillation, unwrapTo timing attack, post-execute governance loop, admin spam-propose) have written assessments with exploit feasibility and severity ratings
-  5. M-02 (admin key compromise + VRF death = RNG control) is verified as mitigated by governance, with explicit residual risk documentation
-**Plans**: 8 plans
+## Deferred (v2.2+)
 
-**Constraint**: Self-audit confirmation bias (CP-01) -- this codebase was written by the same team auditing it. Phase 24 plans must apply adversarial persona protocol: assume the code is wrong, attempt to break it before concluding it is correct.
-
-Plans:
-- [ ] 24-01-PLAN.md -- Storage layout verification (GOV-01)
-- [ ] 24-02-PLAN.md -- Propose access control + vote arithmetic (GOV-02, GOV-03)
-- [ ] 24-03-PLAN.md -- Threshold decay + execute/kill conditions (GOV-04, GOV-05, GOV-06)
-- [ ] 24-04-PLAN.md -- _executeSwap CEI + _voidAllActive (GOV-07, GOV-08)
-- [ ] 24-05-PLAN.md -- Expiry + circulatingSupply + vote integrity (GOV-09, GOV-10, VOTE-01, VOTE-02, VOTE-03)
-- [ ] 24-06-PLAN.md -- Cross-contract interaction traces (XCON-01, XCON-02, XCON-03, XCON-04, XCON-05)
-- [ ] 24-07-PLAN.md -- War-game scenarios (WAR-01, WAR-02, WAR-03, WAR-04, WAR-05, WAR-06)
-- [ ] 24-08-PLAN.md -- M-02 closure verification (M02-01, M02-02)
-
-### Phase 25: Audit Doc Sync
-**Goal**: Every audit document accurately reflects the current codebase -- no stale references to `emergencyRecover`, old VRF timeouts, or pre-governance security model remain, and all governance findings from Phase 24 are integrated
-**Depends on**: Phase 24 (needs finding IDs, requirement verdicts, severity assessments)
-**Requirements**: DOCS-01, DOCS-02, DOCS-03, DOCS-04, DOCS-05, DOCS-06, DOCS-07
-**Success Criteria** (what must be TRUE):
-  1. FINAL-FINDINGS-REPORT.md has M-02 status updated with governance mitigation rationale, all new governance findings added with finding IDs and severity, and plan/phase counts reflect v2.1
-  2. KNOWN-ISSUES.md has all `emergencyRecover` references replaced with governance equivalents, and governance-specific known issues (e.g., uint8 overflow, threshold decay tradeoffs) are documented
-  3. state-changing-function-audits.md has entries for all new governance functions (~8 new), updated entries for modified functions (~7 updated), and verification notes for unchanged functions (~5 verified)
-  4. parameter-reference.md includes all governance constants (thresholds, timeouts, BPS values, decay schedule, stall durations)
-  5. Zero stale references remain in any audit doc -- grep for `emergencyRecover`, `EmergencyRecovered`, `_threeDayRngGap`, and `18 hours` returns no hits in audit documentation
-**Plans**: 4 plans
-
-Plans:
-- [ ] 25-01-PLAN.md -- Tier 1 docs: FINAL-FINDINGS-REPORT.md + KNOWN-ISSUES.md (DOCS-01, DOCS-02)
-- [ ] 25-02-PLAN.md -- Tier 2: state-changing-function-audits.md governance entries (DOCS-03)
-- [ ] 25-03-PLAN.md -- Tier 2/3: parameter-reference.md + RNG docs + historical doc annotations (DOCS-04, DOCS-05, DOCS-06)
-- [ ] 25-04-PLAN.md -- Cross-reference validation sweep (DOCS-07)
-
-## Progress
-
-**Execution Order:** Phase 24 (core audit) must complete before Phase 25 (doc sync depends on audit finding IDs).
-
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 24. Core Governance Security Audit | 8/8 | Complete    | 2026-03-17 | - |
-| 25. Audit Doc Sync | 4/4 | Complete    | 2026-03-17 | - |
+- **FUZZ-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
+- **FORMAL-01**: Formal verification of vote counting arithmetic via Halmos
+- **SIM-01**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Roadmap created: 2026-03-17*
+*Last updated: 2026-03-18 after v2.1 milestone completion*

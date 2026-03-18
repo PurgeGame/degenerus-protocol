@@ -1,5 +1,18 @@
 # Milestones
 
+## v2.1 — VRF Governance Audit + Doc Sync
+**Completed:** 2026-03-18
+**Phases:** 24-25 (2 phases, 12 plans)
+**Timeline:** 12 days (2026-03-05 → 2026-03-17)
+**Commits:** 42 | **Audit:** 33/33 requirements passed
+- 26 governance security verdicts: storage layout, access control, vote arithmetic, reentrancy, cross-contract interactions, war-game scenarios
+- M-02 closure: emergencyRecover eliminated, severity downgraded Medium→Low
+- 6 war-game scenarios assessed (compromised admin, cartel voting, VRF oscillation, timing attacks, governance loops, spam-propose)
+- Post-audit hardening: CEI fix in _executeSwap, removed unnecessary death clock pause + activeProposalCount
+- All audit docs synced for governance: zero stale references after full grep sweep
+
+---
+
 ## v1.0 — Initial RNG Security Audit
 **Completed:** 2026-03-14
 **Phases:** 1-5
@@ -40,8 +53,3 @@
 - Warden simulation + regression check
 - Gas optimization and dead code removal
 
-## v2.1 — VRF Governance Audit + Doc Sync
-**Status:** In progress
-**Phases:** 24-25
-- Core governance security audit (propose/vote/execute, cross-contract, war-games, M-02 closure)
-- Audit doc sync (all docs updated for governance changes)
