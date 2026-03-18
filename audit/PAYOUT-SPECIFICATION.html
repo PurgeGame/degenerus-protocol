@@ -1749,7 +1749,134 @@ advanceBounty = (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price;
 
 <section id="cat-burns">
   <h2>5. Token Burns</h2>
-  <!-- Token burn cards populated by Plan 30-04 Task 2 -->
+
+  <!-- PAY-14 / PAY-15: Token Burn Redemption -->
+  <div class="system-card" id="pay-14-15">
+    <h3>PAY-14 / PAY-15: Token Burn Redemption</h3>
+    <div class="system-meta">
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge badge-steth">stETH</span>
+      <span class="badge badge-burnie">BURNIE</span>
+    </div>
+
+    <h4 style="margin-top: 1rem; color: #0d47a1;">PAY-14: sDGNRS Burn (Proportional Redemption)</h4>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Holder calls <code>burn(amount)</code> on StakedDegenerusStonk</td></tr>
+      <tr><th>Source Pool</th><td>Contract ETH + stETH + pending claimable (proportional share)</td></tr>
+      <tr><th>Calculation</th><td><code>totalMoney = ethBal + stethBal + claimableEth; share = (amount * totalMoney) / supplyBefore</code></td></tr>
+      <tr><th>Recipients</th><td>Burning holder (receives proportional share of all assets)</td></tr>
+      <tr><th>Claim Mechanism</th><td>Direct transfer -- ETH preferred, then stETH, with lazy-claim for pending amounts</td></tr>
+      <tr><th>Currency</th><td>ETH + stETH + BURNIE</td></tr>
+    </table>
+
+    <h4 style="margin-top: 1rem; color: #0d47a1;">PAY-15: DGNRS Wrapper Burn (Delegation)</h4>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Holder calls <code>burn(amount)</code> on DegenerusStonk wrapper</td></tr>
+      <tr><th>Source Pool</th><td>Delegated to sDGNRS (PAY-14 path)</td></tr>
+      <tr><th>Calculation</th><td>Burns DGNRS, then calls <code>stonk.burn(amount)</code> which executes the PAY-14 formula</td></tr>
+      <tr><th>Recipients</th><td>Burning holder</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>_burn</code> DGNRS then delegate; <code>unwrapTo</code> restricted to creator-only with VRF stall guard</td></tr>
+      <tr><th>Currency</th><td>ETH + stETH + BURNIE (forwarded from sDGNRS)</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// PAY-14 -- StakedDegenerusStonk.sol:373-435
+totalMoney = ethBal + stethBal + claimableEth;
+// claimableEth includes pending claimable amounts (lazy-claim CP-04 defense)
+share = (amount * totalMoney) / supplyBefore;
+// ETH-preferred payout: pays from ETH first, then stETH, then claims lazily
+
+// supplyBefore ensures sequential burns are correctly proportional
+// Each burn reduces supply, increasing per-token share for remaining holders
+
+// BURNIE component:
+totalBurnie = burnieBal + claimableBurnie;
+burnieOut = (totalBurnie * amount) / supplyBefore;
+
+// PAY-15 -- DegenerusStonk.sol:164-181
+_burn(msg.sender, amount);                    // burn DGNRS wrapper token
+(ethOut, stethOut, burnieOut) = stonk.burn(amount);  // delegate to sDGNRS.burn()
+// Forwards ETH + stETH + BURNIE to caller
+// unwrapTo: creator-only with VRF stall guard (prevents unwrap during pending VRF)</code></pre>
+      <p class="file-ref"><strong>Code:</strong> StakedDegenerusStonk.sol:373-435, DegenerusStonk.sol:164-181 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <svg viewBox="0 0 800 400" class="flow-svg">
+      <defs>
+        <marker id="arrow-burn" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+      <!-- sDGNRS holder entry -->
+      <rect x="10" y="50" width="150" height="50" rx="20" style="fill:#e8f5e9; stroke:#4caf50; stroke-width:1.5"/>
+      <text x="85" y="72" text-anchor="middle" fill="#4caf50" font-weight="600">sDGNRS Holder</text>
+      <text x="85" y="87" text-anchor="middle" font-size="9" fill="#555">burn(amount)</text>
+      <!-- Arrow sDGNRS -> StakedDegenerusStonk.burn -->
+      <line x1="160" y1="75" x2="260" y2="175" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-burn)"/>
+      <!-- DGNRS holder entry -->
+      <rect x="10" y="150" width="150" height="50" rx="20" style="fill:#e8f5e9; stroke:#4caf50; stroke-width:1.5"/>
+      <text x="85" y="172" text-anchor="middle" fill="#4caf50" font-weight="600">DGNRS Holder</text>
+      <text x="85" y="187" text-anchor="middle" font-size="9" fill="#555">burn(amount)</text>
+      <!-- Arrow DGNRS -> DegenerusStonk.burn -->
+      <line x1="160" y1="175" x2="200" y2="260" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-burn)"/>
+      <!-- DegenerusStonk.burn -->
+      <rect x="200" y="240" width="160" height="50" rx="4" class="contract"/>
+      <text x="280" y="260" text-anchor="middle" font-weight="600">DegenerusStonk</text>
+      <text x="280" y="275" text-anchor="middle" font-size="10" fill="#555">_burn + delegate</text>
+      <!-- Arrow delegate -> StakedDegenerusStonk.burn -->
+      <line x1="360" y1="260" x2="350" y2="210" stroke="#424242" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#arrow-burn)"/>
+      <text x="375" y="230" text-anchor="start" font-size="9" fill="#555">delegate</text>
+      <!-- StakedDegenerusStonk.burn (central) -->
+      <rect x="260" y="155" width="220" height="60" rx="4" class="contract"/>
+      <text x="370" y="178" text-anchor="middle" font-weight="600">StakedDegenerusStonk.burn</text>
+      <text x="370" y="195" text-anchor="middle" font-size="10" fill="#555">proportional formula</text>
+      <!-- Annotation: totalMoney -->
+      <text x="370" y="145" text-anchor="middle" font-size="9" fill="#888" font-style="italic">totalMoney = ethBal + stethBal + claimableEth</text>
+      <!-- Arrow to Calculate share -->
+      <line x1="480" y1="185" x2="540" y2="185" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-burn)"/>
+      <!-- Share calculation -->
+      <rect x="540" y="155" width="120" height="60" rx="4" class="decision" style="fill:#fff9c4; stroke:#f9a825"/>
+      <text x="600" y="178" text-anchor="middle" font-size="10">(amount *</text>
+      <text x="600" y="192" text-anchor="middle" font-size="10">totalMoney)</text>
+      <text x="600" y="205" text-anchor="middle" font-size="10">/ supplyBefore</text>
+      <!-- Arrow to ETH -->
+      <line x1="660" y1="170" x2="710" y2="80" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-burn)"/>
+      <text x="700" y="110" text-anchor="middle" font-size="9" fill="#555">preferred</text>
+      <rect x="710" y="55" width="80" height="44" rx="20" class="recipient"/>
+      <text x="750" y="77" text-anchor="middle" font-weight="600" fill="#627eea">ETH</text>
+      <text x="750" y="90" text-anchor="middle" font-size="9" fill="#555">first</text>
+      <!-- Arrow to stETH -->
+      <line x1="660" y1="185" x2="710" y2="160" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-burn)"/>
+      <rect x="710" y="135" width="80" height="44" rx="20" style="fill:#e0f7fa; stroke:#00bcd4; stroke-width:1.5"/>
+      <text x="750" y="157" text-anchor="middle" font-weight="600" fill="#00bcd4">stETH</text>
+      <text x="750" y="170" text-anchor="middle" font-size="9" fill="#555">fallback</text>
+      <!-- Arrow to BURNIE -->
+      <line x1="660" y1="200" x2="710" y2="240" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-burn)"/>
+      <rect x="710" y="218" width="80" height="44" rx="20" style="fill:#fff3e0; stroke:#ff6b35; stroke-width:1.5"/>
+      <text x="750" y="240" text-anchor="middle" font-weight="600" fill="#ff6b35">BURNIE</text>
+      <!-- Lazy-claim annotation -->
+      <text x="600" y="310" text-anchor="middle" font-size="9" fill="#888" font-style="italic">Lazy-claim: claimable included in totalMoney, claimed on-demand</text>
+      <!-- All outputs -> Holder -->
+      <line x1="750" y1="262" x2="750" y2="330" stroke="#424242" stroke-width="1" stroke-dasharray="5,3"/>
+      <line x1="750" y1="99" x2="750" y2="330" stroke="#424242" stroke-width="1" stroke-dasharray="5,3"/>
+      <rect x="690" y="335" width="120" height="44" rx="20" class="recipient"/>
+      <text x="750" y="362" text-anchor="middle" font-weight="600">Holder</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Single sDGNRS holder burning 100%:</strong> Gets proportional share of <code>totalMoney</code> (entire backing)</li>
+        <li><strong>Lazy-claim CP-04 defense:</strong> <code>claimableEth</code> included in <code>totalMoney</code>, claimed on-demand when ETH balance insufficient</li>
+        <li><strong><code>supplyBefore</code> ensures sequential burns are correctly proportional:</strong> Each burn reduces supply before next calculation</li>
+        <li><strong>DGNRS <code>unwrapTo</code> restricted to creator-only:</strong> With VRF stall guard (prevents unwrap during pending VRF resolution)</li>
+        <li><strong>ETH-preferred payout order:</strong> ETH first, stETH only if ETH balance insufficient</li>
+        <li><strong>Rounding direction:</strong> Integer division truncates, always favoring the protocol (remaining holders)</li>
+      </ul>
+    </div>
+  </div>
+
 </section>
 
 <!-- ===== CATEGORY 6: GAMEOVER TERMINAL DISTRIBUTION ===== -->
