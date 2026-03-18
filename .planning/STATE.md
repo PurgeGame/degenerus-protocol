@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
 status: in-progress
-stopped_at: Completed 28-01-PLAN.md
-last_updated: "2026-03-18T06:52:09.135Z"
-last_activity: 2026-03-18 -- Completed 28-01 Recent Changes Regression (CHG-01/02/03/04 PASS, Phase 28 Plan 1/6 COMPLETE)
+stopped_at: Completed 28-03-PLAN.md
+last_updated: "2026-03-18T07:00:07.138Z"
+last_activity: 2026-03-18 -- Completed 28-03 Supply/Claimability Invariants (INV-03/INV-04/INV-05 all PASS)
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 16
-  completed_plans: 11
-  percent: 69
+  completed_plans: 12
+  percent: 75
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 28 of 30 (Cross-Cutting Verification)
-Plan: 1 of 6
-Status: Phase 28 Plan 1 COMPLETE -- CHG-01/02/03/04 all PASS; regression baseline established
-Last activity: 2026-03-18 -- Completed 28-01 Recent Changes Regression (CHG-01/02/03/04 PASS)
+Plan: 3 of 6
+Status: Phase 28 Plan 3 COMPLETE -- INV-03/INV-04/INV-05 all PASS; supply and claimability invariants proven
+Last activity: 2026-03-18 -- Completed 28-03 Supply/Claimability Invariants (INV-03/INV-04/INV-05 all PASS)
 
-Progress: [███████░░░] 69%
+Progress: [████████░░] 75%
 
 ## Project Reference
 
@@ -86,6 +86,9 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 28-01]: CHG-01 PASS: No commit since 2026-02-17 invalidated a prior audit verdict; regression baseline established
 - [Phase 28-01]: CHG-02 PASS: DegenerusAdmin CEI fix (73c50cb3) confirmed; GOV-07 upgraded from KNOWN-ISSUE to PASS
 - [Phase 28-01]: CHG-03 PASS: DeityPass soulbound (5 functions revert); sDGNRS no public transfer; DGNRS intentionally liquid
+- [Phase 28-cross-cutting-verification]: INV-03 PASS: NOVEL-05 proof valid post CHG-01; no new sDGNRS supply-modifying paths since Phase 21
+- [Phase 28-cross-cutting-verification]: INV-04 PASS: BURNIE virtual stakes never minted until claim; stake clearance on win/loss prevents double-claim
+- [Phase 28-cross-cutting-verification]: INV-05 PASS: 25 claim paths enumerated; 16 PERMANENT, 9 EXPIRING-INTENTIONAL, 0 undocumented/unclaimable; no locked funds
 
 ## Accumulated Context
 
@@ -118,6 +121,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T06:52:09.134Z
-Stopped at: Completed 28-01-PLAN.md
+Last session: 2026-03-18T07:00:07.137Z
+Stopped at: Completed 28-03-PLAN.md
 Resume file: None

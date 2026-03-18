@@ -91,7 +91,7 @@ Plans:
   3. Pool accounting, sDGNRS supply conservation, and BURNIE mint/burn lifecycle are each verified with explicit proof that no desynchronization path exists
   4. GAMEOVER at level 0, level 1, and level 100 boundaries are analyzed; single-player GAMEOVER handles all distributions correctly; advanceGame gas griefing, decimator claim timing, coinflip auto-rebuy during known-RNG windows, affiliate self-referral loops, and rounding accumulation are each analyzed with explicit verdicts
   5. Top 10 most vulnerable functions are ranked with weighted criteria, each receives a deep adversarial audit with a dedicated finding or explicit PASS verdict, and a ranking document with rationale is produced
-**Plans:** 1/6 plans executed
+**Plans:** 2/6 plans executed
 
 Plans:
 - [ ] 28-01-PLAN.md -- Recent changes regression: commit coverage map, CHG-01..04 verdicts
@@ -147,7 +147,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 26. GAMEOVER Path Audit | v3.0 | Complete    | 2026-03-18 | 2026-03-18 |
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
-| 28. Cross-Cutting Verification | 1/6 | In Progress|  | - |
+| 28. Cross-Cutting Verification | 2/6 | In Progress|  | - |
 | 29. Comment/Documentation Correctness | v3.0 | 0/TBD | Not started | - |
 | 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |
 
