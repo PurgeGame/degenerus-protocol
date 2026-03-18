@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
-status: in-progress
-stopped_at: Completed 28-03-PLAN.md
-last_updated: "2026-03-18T07:00:07.138Z"
+status: completed
+stopped_at: Completed 28-02-PLAN.md
+last_updated: "2026-03-18T07:01:18.884Z"
 last_activity: 2026-03-18 -- Completed 28-03 Supply/Claimability Invariants (INV-03/INV-04/INV-05 all PASS)
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 16
-  completed_plans: 12
+  completed_plans: 13
   percent: 75
 ---
 
@@ -89,6 +89,9 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 28-cross-cutting-verification]: INV-03 PASS: NOVEL-05 proof valid post CHG-01; no new sDGNRS supply-modifying paths since Phase 21
 - [Phase 28-cross-cutting-verification]: INV-04 PASS: BURNIE virtual stakes never minted until claim; stake clearance on win/loss prevents double-claim
 - [Phase 28-cross-cutting-verification]: INV-05 PASS: 25 claim paths enumerated; 16 PERMANENT, 9 EXPIRING-INTENTIONAL, 0 undocumented/unclaimable; no locked funds
+- [Phase 28-02]: INV-01 PASS: all 15 claimablePool mutation sites proven solvency-preserving (6 GAMEOVER + 8 normal + 1 DegeneretteModule D1)
+- [Phase 28-02]: INV-02 PASS: all 4 pool variables (futurePrizePool, nextPrizePool, currentPrizePool, claimablePool) have conservation proofs; auto-rebuy is zero-sum
+- [Phase 28-02]: DegeneretteModule:1158 is a previously uncovered claimablePool mutation site; proven correct via ETH cap and futurePrizePool pre-deduction
 
 ## Accumulated Context
 
@@ -121,6 +124,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T07:00:07.137Z
-Stopped at: Completed 28-03-PLAN.md
+Last session: 2026-03-18T07:01:18.882Z
+Stopped at: Completed 28-02-PLAN.md
 Resume file: None
