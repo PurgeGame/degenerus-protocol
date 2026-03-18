@@ -21,10 +21,10 @@
 
 - [x] **PAY-01**: Daily jackpot (purchase phase) audited — ETH distribution formula, winner selection, claim mechanism verified
 - [x] **PAY-02**: Daily jackpot (jackpot phase) audited — 5-day draw sequence, prize scaling, unclaimed handling verified
-- [ ] **PAY-03**: BAF normal scatter payout audited — trigger conditions, recipient selection, payout calculation verified
-- [ ] **PAY-04**: BAF century scatter payout audited — century trigger, enhanced payout calculation, distribution verified
-- [ ] **PAY-05**: Decimator normal claims audited — `claimDecimatorJackpot` path, round tracking, `lastDecClaimRound` logic verified
-- [ ] **PAY-06**: Decimator x00 claims audited — century decimator claim path, enhanced payout, eligibility verified
+- [x] **PAY-03**: BAF normal scatter payout audited — trigger conditions, recipient selection, payout calculation verified
+- [x] **PAY-04**: BAF century scatter payout audited — century trigger, enhanced payout calculation, distribution verified
+- [x] **PAY-05**: Decimator normal claims audited — `claimDecimatorJackpot` path, round tracking, `lastDecClaimRound` logic verified
+- [x] **PAY-06**: Decimator x00 claims audited — century decimator claim path, enhanced payout, eligibility verified
 - [ ] **PAY-07**: Coinflip deposit/win/loss paths audited — `claimCoinflips`, `claimCoinflipsFromBurnie`, auto-rebuy carry verified
 - [ ] **PAY-08**: Coinflip bounty system audited — bounty trigger, DGNRS gating (50k bet, 20k pool), payout verified
 - [ ] **PAY-09**: Lootbox rewards audited — whale passes, lazy passes, deity passes, future tickets, BURNIE payouts verified
@@ -120,10 +120,10 @@
 | GO-09 | Phase 26 | Complete |
 | PAY-01 | Phase 27 | Complete |
 | PAY-02 | Phase 27 | Complete |
-| PAY-03 | Phase 27 | Pending |
-| PAY-04 | Phase 27 | Pending |
-| PAY-05 | Phase 27 | Pending |
-| PAY-06 | Phase 27 | Pending |
+| PAY-03 | Phase 27 | Complete |
+| PAY-04 | Phase 27 | Complete |
+| PAY-05 | Phase 27 | Complete |
+| PAY-06 | Phase 27 | Complete |
 | PAY-07 | Phase 27 | Pending |
 | PAY-08 | Phase 27 | Pending |
 | PAY-09 | Phase 27 | Pending |
