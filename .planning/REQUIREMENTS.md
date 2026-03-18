@@ -56,8 +56,8 @@
 
 ### Invariant Verification
 
-- [ ] **INV-01**: `claimablePool <= address(this).balance + stETH balance` verified — all mutation paths checked, no violation possible
-- [ ] **INV-02**: Pool accounting verified — all pool additions and subtractions balance across all paths
+- [x] **INV-01**: `claimablePool <= address(this).balance + stETH balance` verified — all mutation paths checked, no violation possible
+- [x] **INV-02**: Pool accounting verified — all pool additions and subtractions balance across all paths
 - [x] **INV-03**: sDGNRS total supply = sum of all balances (including pool-held) verified
 - [x] **INV-04**: BURNIE mint/burn accounting verified — coinflip lifecycle accounting correct
 - [x] **INV-05**: No permanently unclaimable funds path exists (outside intentional expiry) — verified across all systems
@@ -141,8 +141,8 @@
 | CHG-02 | Phase 28 | Complete |
 | CHG-03 | Phase 28 | Complete |
 | CHG-04 | Phase 28 | Complete |
-| INV-01 | Phase 28 | Pending |
-| INV-02 | Phase 28 | Pending |
+| INV-01 | Phase 28 | Complete |
+| INV-02 | Phase 28 | Complete |
 | INV-03 | Phase 28 | Complete |
 | INV-04 | Phase 28 | Complete |
 | INV-05 | Phase 28 | Complete |
