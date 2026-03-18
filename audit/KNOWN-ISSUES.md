@@ -66,6 +66,18 @@ Theoretical reentrancy via malicious VRF coordinator during `_executeSwap` -- ex
 
 No per-proposer cooldown. Admin can create many proposals, bloating `_voidAllActive` loop gas cost. Recommended fix: per-proposer cooldown or max active proposals.
 
+### GO-05-F01: _sendToVault Hard Reverts Can Block Terminal Distribution (Medium)
+
+**Severity:** MEDIUM
+**Contract:** `DegenerusGameGameOverModule`
+**Source:** Phase 26-02
+
+`_sendToVault` (GameOverModule:195-231) uses hard `revert E()` on any ETH or stETH transfer failure. 7 dangerous revert sites (lines 201, 205, 210-211, 218, 219, 228-229). If the vault or sDGNRS contract cannot receive funds (e.g., Lido stETH pause), both `handleGameOverDrain` and `handleFinalSweep` revert permanently, stranding all terminal distribution.
+
+**Why Medium (not Critical):** Vault and sDGNRS are immutable protocol-owned contracts with simple, unconditional `receive()` functions. sDGNRS's `receive()` has an `onlyGame` modifier permanently satisfied. Lido stETH has never paused transfers. The risk is operational (infrastructure failure), not exploitable by external attackers.
+
+**Recommended fix:** Consider wrapping `_sendToVault` in try/catch or using a pull-based pattern for vault sweep. Alternatively, accept as known risk given immutable recipients.
+
 ---
 
 ## Intentional Design (Not Bugs)
@@ -82,7 +94,13 @@ No per-proposer cooldown. Admin can create many proposals, bloating `_voidAllAct
 
 **Non-VRF entropy for affiliate winner roll.** Deterministic seed (gas optimization). Worst case: player times purchases to direct affiliate credit to a different affiliate. No protocol value extraction.
 
-**`previewBurn` and `burn` may differ slightly.** When `claimableEth > 0`, the ETH/stETH split can shift between preview and execution. By design — claimable ETH remains as reserves for future burners.
+**`previewBurn` and `burn` may differ slightly.** When `claimableEth > 0`, the ETH/stETH split can shift between preview and execution. By design -- claimable ETH remains as reserves for future burners.
+
+**Level aliasing at level 0 targets level 2 for terminal jackpot.** GameOverModule:72 aliases `lvl = 1` when `currentLevel == 0`, causing `runTerminalJackpot(remaining, lvl + 1, rngWord)` to target level 2. At level 0 no tickets exist for level 1, so level 2 (pre-sale/early-bird tickets) is the correct target. BY DESIGN per economics specification.
+
+**30-day claim window forfeiture applies to all claimable winnings.** After GAMEOVER + 30 days, `handleFinalSweep` sets `claimablePool = 0` and sweeps all remaining balance to vault/sDGNRS. Deity refunds, terminal decimator claims, and terminal jackpot credits are all subject to this window. Unclaimed funds are permanently forfeited. BY DESIGN.
+
+**Stale test comments (912d vs 365d).** `test/edge/GameOver.test.js` references 912-day timeout but code uses 365 days at level 0 and 120 days at level 1+. Tests pass by overshooting. INFORMATIONAL -- defer to Phase 29.
 
 ---
 

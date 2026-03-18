@@ -4,22 +4,22 @@
 **Auditor:** Claude (AI-assisted security analysis, Claude Opus 4.6)
 **Scope:** 14 core contracts + 10 delegatecall modules (24 deployable) + 7 libraries + 3 shared abstract contracts
 **Solidity:** 0.8.34 (ContractAddresses: ^0.8.26), viaIR enabled, optimizer runs=200
-**Methodology:** 15-phase manual code review with static analysis (Slither) support, multi-agent adversarial simulation, and dual-agent gas optimization
+**Methodology:** 16-phase manual code review with static analysis (Slither) support, multi-agent adversarial simulation, dual-agent gas optimization, and GAMEOVER terminal distribution audit
 
 ---
 
 ## Executive Summary
 
-Degenerus Protocol is a complex on-chain game system comprising 14 core contracts and 10 delegatecall modules (24 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, sDGNRS, DGNRS, Vault shares, WrappedWrappedXRP). The initial audit conducted a 7-phase systematic review covering 57 plans. A subsequent v2.0 delta audit (Phases 19-21) covered the sDGNRS/DGNRS split and novel attack surface analysis with 9 additional plans. Phase 22 added multi-agent adversarial warden simulation (3 independent agents) plus comprehensive regression verification. Phase 23 performed a Scavenger/Skeptic dual-agent gas optimization audit across ~25,600 lines, identifying 21 dead code candidates and applying 4 behavior-preserving removals that saved 96 bytes of bytecode and ~19,200 deployment gas with zero test regressions, for a total of 72 plans. Phase 24 conducted a comprehensive governance security audit of the new VRF coordinator rotation mechanism (propose/vote/execute) across 8 plans, covering storage layout, access control, vote arithmetic, reentrancy, cross-contract interactions, and adversarial war-game scenarios. Phase 25 synchronized all audit documentation with governance changes across 4 plans, for a total of 87 plans examining approximately 16,500 lines of Solidity code.
+Degenerus Protocol is a complex on-chain game system comprising 14 core contracts and 10 delegatecall modules (24 deployable total), plus 7 inlined libraries and 3 shared abstract contracts. It handles ETH prize pools, Chainlink VRF V2.5 randomness, stETH yield accumulation via Lido, and a multi-token ecosystem (BURNIE, sDGNRS, DGNRS, Vault shares, WrappedWrappedXRP). The initial audit conducted a 7-phase systematic review covering 57 plans. A subsequent v2.0 delta audit (Phases 19-21) covered the sDGNRS/DGNRS split and novel attack surface analysis with 9 additional plans. Phase 22 added multi-agent adversarial warden simulation (3 independent agents) plus comprehensive regression verification. Phase 23 performed a Scavenger/Skeptic dual-agent gas optimization audit across ~25,600 lines, identifying 21 dead code candidates and applying 4 behavior-preserving removals that saved 96 bytes of bytecode and ~19,200 deployment gas with zero test regressions, for a total of 72 plans. Phase 24 conducted a comprehensive governance security audit of the new VRF coordinator rotation mechanism (propose/vote/execute) across 8 plans, covering storage layout, access control, vote arithmetic, reentrancy, cross-contract interactions, and adversarial war-game scenarios. Phase 25 synchronized all audit documentation with governance changes across 4 plans. Phase 26 conducted a comprehensive GAMEOVER terminal distribution path audit across 4 plans, covering death clock triggers, distress mode, deity refunds, terminal decimator integration, terminal jackpot distribution, reentrancy/CEI ordering, revert safety, VRF fallback, and claimablePool invariant verification at all 6 mutation sites, for a total of 91 plans examining approximately 16,500 lines of Solidity code.
 
 **Overall Assessment: SOUND with minor issues.** The protocol demonstrates strong security architecture across all critical paths.
 
 **Severity Distribution:**
 - **Critical:** 0
 - **High:** 0
-- **Medium:** 2 -- WAR-01 (compromised admin key + community absence), WAR-02 (colluding voter cartel at low threshold)
+- **Medium:** 3 -- WAR-01 (compromised admin key + community absence), WAR-02 (colluding voter cartel at low threshold), GO-05-F01 (_sendToVault hard reverts can block terminal distribution)
 - **Low:** 4 -- M-02 (downgraded from Medium, governance mitigation), GOV-07 (_executeSwap CEI violation), VOTE-03 (uint8 activeProposalCount overflow), WAR-06 (admin spam-propose gas griefing)
-- **Informational:** 12+ -- 6 from v1.0-v1.2, 2 from v2.0 delta audit, 4+ from v2.1 governance audit (XCON-03 boundary window, WAR-03 VRF oscillation, WAR-04 unwrapTo timing, WAR-05 post-execute loop)
+- **Informational:** 13+ -- 6 from v1.0-v1.2, 2 from v2.0 delta audit, 4+ from v2.1 governance audit (XCON-03 boundary window, WAR-03 VRF oscillation, WAR-04 unwrapTo timing, WAR-05 post-execute loop), 1 from Phase 26 (GO-03-I01 stale test comments)
 
 Phase 22 warden simulation confirmed existing severity distribution. Three independent blind C4A warden agents produced 0 High, 0 Medium findings. All 10 Low and 11 QA findings were classified as either known (6), extending known (5), or new Low/QA with no action required (10).
 
@@ -332,6 +332,22 @@ All 56 v1.0 requirements across 10 categories were evaluated.
 
 **v2.1 Coverage Summary: 26/26 assessed** (3 KNOWN-ISSUE at stated severities)
 
+### v3.0 GAMEOVER Path Requirements (Phase 26)
+
+| Requirement | Description | Verdict | Notes |
+|-------------|-------------|---------|-------|
+| **GO-01** | handleGameOverDrain distribution verified | **PASS** | 7-step drain sequence with claimablePool invariant trace |
+| **GO-02** | handleFinalSweep 30-day claim window verified | **PASS** | Correct forfeiture, finalSwept latch, CEI ordering |
+| **GO-03** | Death clock trigger conditions (365d/120d) verified | **PASS** | Constants match parameter reference; safety valve correct |
+| **GO-04** | Distress mode activation and effects verified | **PASS** | Computed on read; 100% nextPool routing; 25% ticket bonus |
+| **GO-05** | Every require/revert on GAMEOVER path audited | **FINDING-MEDIUM** | 7 dangerous reverts in _sendToVault; mitigated by immutable recipients |
+| **GO-06** | Reentrancy and CEI ordering verified | **PASS** | 14-step SSTORE map; 3 idempotency latches; sentinel pattern |
+| **GO-07** | Deity pass refunds on early GAMEOVER verified | **PASS** | FIFO, budget cap, unchecked arithmetic safe |
+| **GO-08** | Terminal decimator integration verified | **PASS** | ~490 lines of new code with zero prior audit -- now fully verified |
+| **GO-09** | No-RNG-available GAMEOVER fallback path verified | **PASS** | 4-branch RNG; 3-day fallback; monotonic timer; secure entropy |
+
+**v3.0 Phase 26 Coverage Summary: 9/9 assessed** (1 FINDING-MEDIUM)
+
 ---
 
 ## Phase 21: Novel Attack Surface Analysis (Plans 21-01 through 21-04)
@@ -423,6 +439,62 @@ Systematic re-verification of all prior findings against current code:
 
 ---
 
+## Phase 26: GAMEOVER Path Audit (Plans 26-01 through 26-04)
+
+**Scope:** Terminal distribution path -- all code paths that move funds during GAMEOVER, the 30-day claim window, and final sweep. 7 contract files (~8,700 lines of directly relevant code).
+
+**Contracts Audited:**
+- DegenerusGameGameOverModule.sol (233 lines -- terminal drain + final sweep)
+- DegenerusGameDecimatorModule.sol (1027 lines -- terminal decimator, death bet)
+- DegenerusGameAdvanceModule.sol (~1400 lines -- liveness guards, RNG gate, VRF fallback)
+- DegenerusGameJackpotModule.sol (~1700 lines -- runTerminalJackpot, _distributeJackpotEth)
+- DegenerusGameStorage.sol (~1600 lines -- state variables, _isDistressMode)
+- DegenerusGame.sol (2856 lines -- dispatch wrappers, claimWinnings)
+- StakedDegenerusStonk.sol (~400 lines -- burnRemainingPools, depositSteth)
+
+**Methodology:** Line-by-line code review with C4A warden methodology, claimablePool invariant trace at every mutation point, SSTORE-vs-external-call CEI ordering map, complete revert enumeration, and 4-branch VRF fallback trace.
+
+### Requirement Coverage
+
+| Req ID | Description | Verdict | Severity |
+|--------|-------------|---------|----------|
+| GO-01 | handleGameOverDrain distribution | PASS | -- |
+| GO-02 | handleFinalSweep 30-day claim window | PASS | -- |
+| GO-03 | Death clock trigger conditions (365d/120d) | PASS | -- |
+| GO-04 | Distress mode activation and effects | PASS | -- |
+| GO-05 | Every require/revert on GAMEOVER path | FINDING-MEDIUM | Medium |
+| GO-06 | Reentrancy and CEI ordering | PASS | -- |
+| GO-07 | Deity pass refunds on early GAMEOVER | PASS | -- |
+| GO-08 | Terminal decimator integration | PASS | -- |
+| GO-09 | No-RNG-available GAMEOVER fallback | PASS | -- |
+
+**Coverage: 9/9 requirements assessed. 8 PASS, 1 FINDING-MEDIUM.**
+
+### Severity Distribution (Phase 26)
+
+- **Critical:** 0
+- **High:** 0
+- **Medium:** 1 (GO-05-F01: _sendToVault hard reverts can block terminal distribution)
+- **Low:** 0
+- **Informational:** 1 (GO-03-I01: stale test comments referencing 912d timeout instead of 365d)
+
+### Key Findings
+
+**GO-05-F01 (Medium): _sendToVault Hard Reverts Can Block Terminal Distribution**
+- `_sendToVault` (GameOverModule:195-231) uses `revert E()` on ETH/stETH transfer failures
+- 7 dangerous revert sites identified: lines 201, 205, 210-211, 218, 219, 228-229
+- If vault or sDGNRS cannot receive funds, both `handleGameOverDrain` and `handleFinalSweep` revert permanently
+- Mitigated: vault and sDGNRS are immutable protocol-owned contracts with simple `receive()` functions
+- Recommendation: consider try/catch or pull-based pattern for vault sweep
+
+### Overall Assessment: SOUND (conditional)
+
+The GAMEOVER terminal distribution path is correctly implemented. The `claimablePool` solvency invariant is maintained at all 6 mutation points throughout the GAMEOVER sequence. CEI ordering is correct. All 5 research open questions resolved with no findings. One conditional medium finding (GO-05) exists for `_sendToVault` hard reverts, mitigated by immutable protocol-owned recipients.
+
+**Full report:** See [v3.0-gameover-audit-consolidated.md](v3.0-gameover-audit-consolidated.md) for the consolidated Phase 26 audit with cross-referenced claimablePool invariant trace, annotated execution flow diagram, and detailed verdicts for all 9 requirements.
+
+---
+
 ## Overall Risk Assessment
 
 | Risk Area | Rating | Justification |
@@ -486,7 +558,7 @@ Systematic re-verification of all prior findings against current code:
 | DegenerusGamePayoutUtils | Payout helpers (abstract, inherited by jackpot-related modules) |
 | BitPackingLib / EntropyLib / GameTimeLib / JackpotBucketLib / PriceLookupLib | Utility libraries |
 
-### 15-Phase Audit Structure
+### 16-Phase Audit Structure
 
 | Phase | Focus Area | Plans | Requirements Assessed |
 |-------|-----------|-------|----------------------|
@@ -506,7 +578,8 @@ Systematic re-verification of all prior findings against current code:
 | 23 | Gas Optimization -- Dead Code Removal | 3 | GAS-01, GAS-02, GAS-03, GAS-04 |
 | 24 | Core Governance Security Audit | 8 | GOV-01 to GOV-10, XCON-01 to XCON-05, VOTE-01 to VOTE-03, WAR-01 to WAR-06, M02-01, M02-02 |
 | 25 | Audit Doc Sync | 4 | DOCS-01 to DOCS-07 |
-| **Total** | | **87 plans** | **90 requirements** |
+| 26 | GAMEOVER Path Audit | 4 | GO-01 to GO-09 |
+| **Total** | | **91 plans** | **99 requirements** |
 
 ### Tools Used
 
@@ -556,5 +629,5 @@ The following were explicitly out of scope for this audit:
 
 ---
 
-*Report generated from 87 individual audit plans across 15 phases, examining 14 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,500 lines of Solidity.*
+*Report generated from 91 individual audit plans across 16 phases, examining 14 core contracts, 10 delegatecall modules, 7 libraries, and 3 shared abstract contracts totaling approximately 16,500 lines of Solidity.*
 *Audit period: February-March 2026*
