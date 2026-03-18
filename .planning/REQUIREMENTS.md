@@ -48,8 +48,8 @@
 
 ### Comment/Documentation Correctness
 
-- [ ] **DOC-01**: Every natspec comment on every external/public function verified — description matches actual behavior
-- [ ] **DOC-02**: Every inline comment verified — no stale comments from prior code versions
+- [x] **DOC-01**: Every natspec comment on every external/public function verified — description matches actual behavior
+- [x] **DOC-02**: Every inline comment verified — no stale comments from prior code versions
 - [ ] **DOC-03**: Storage layout comments verified — comments match actual storage positions
 - [ ] **DOC-04**: Constants comments verified — comment values match actual contract values
 - [ ] **DOC-05**: Parameter reference doc spot-checked — every value verified against contract source
@@ -156,8 +156,8 @@
 | VULN-01 | Phase 28 | Complete |
 | VULN-02 | Phase 28 | Complete |
 | VULN-03 | Phase 28 | Complete |
-| DOC-01 | Phase 29 | Pending |
-| DOC-02 | Phase 29 | Pending |
+| DOC-01 | Phase 29 | Complete |
+| DOC-02 | Phase 29 | Complete |
 | DOC-03 | Phase 29 | Pending |
 | DOC-04 | Phase 29 | Pending |
 | DOC-05 | Phase 29 | Pending |
