@@ -1595,4 +1595,37 @@ abstract contract DegenerusGameStorage {
     ///      Used by governance to detect VRF stalls (time-based vs day-gap-based).
     ///      Initialized in wireVrf(), updated in _applyDailyRng().
     uint48 internal lastVrfProcessedTimestamp;
+
+    // =========================================================================
+    // Terminal Decimator (Always-Open Death Bet)
+    // =========================================================================
+
+    /// @dev Per-player terminal decimator entry. Packed into a single 256-bit slot (232/256 bits).
+    ///      totalBurn: pre-time-multiplier cumulative burn (capped at DECIMATOR_MULTIPLIER_CAP).
+    ///      weightedBurn: post-time-multiplier cumulative burn (used for claim share calculation).
+    ///      bucket: bucket denominator (2-12), computed from activity score using lvl 100 rules.
+    ///      subBucket: deterministic from keccak256(player, level, bucket).
+    ///      burnLevel: which level this entry belongs to (stale detection for lazy reset).
+    struct TerminalDecEntry {
+        uint80  totalBurn;
+        uint88  weightedBurn;
+        uint8   bucket;
+        uint8   subBucket;
+        uint48  burnLevel;
+    }
+    mapping(address => TerminalDecEntry) internal terminalDecEntries;
+
+    /// @dev Per-bucket aggregates for terminal decimator.
+    ///      Key: keccak256(abi.encode(level, denom, subBucket)) -> total weighted burn.
+    mapping(bytes32 => uint256) internal terminalDecBucketBurnTotal;
+
+    /// @dev Resolution snapshot for terminal decimator claims (set at GAMEOVER).
+    ///      Packed into a single 256-bit slot (248/256 bits).
+    ///      No rngWord needed — claims are 100% ETH post-GAMEOVER (auto-rebuy skipped).
+    struct TerminalDecClaimRound {
+        uint24  lvl;
+        uint96  poolWei;
+        uint128 totalBurn;
+    }
+    TerminalDecClaimRound internal lastTerminalDecClaimRound;
 }

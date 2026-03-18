@@ -468,7 +468,7 @@ Systematic re-verification of all prior findings against current code:
 | DegenerusGameMintModule | Ticket purchase delegatecall module | ~14KB |
 | DegenerusGameWhaleModule | Whale/deity pass delegatecall module | ~13KB |
 | DegenerusGameJackpotModule | Jackpot distribution delegatecall module | ~16KB |
-| DegenerusGameDecimatorModule | Decimator mechanic delegatecall module | ~12KB |
+| DegenerusGameDecimatorModule | Decimator + terminal decimator (death bet) delegatecall module | ~12KB |
 | DegenerusGameEndgameModule | End-game settlement delegatecall module | ~10KB |
 | DegenerusGameGameOverModule | Game-over drain delegatecall module | ~11KB |
 | DegenerusGameLootboxModule | Lootbox resolution delegatecall module | ~13KB |

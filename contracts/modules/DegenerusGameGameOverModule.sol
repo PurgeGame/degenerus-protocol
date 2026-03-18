@@ -134,16 +134,16 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         // remaining tracks unallocated funds.
         uint256 remaining = available;
 
-        // 10% Decimator — refunds flow back to remaining for terminal jackpot
+        // 10% Terminal Decimator (death bet) — refunds flow back to remaining for terminal jackpot
         uint256 decPool = remaining / 10;
         if (decPool != 0) {
-            uint256 decRefund = IDegenerusGame(address(this)).runDecimatorJackpot(decPool, lvl, rngWord);
+            uint256 decRefund = IDegenerusGame(address(this)).runTerminalDecimatorJackpot(decPool, lvl, rngWord);
             uint256 decSpend = decPool - decRefund;
             if (decSpend != 0) {
                 claimablePool += decSpend;
             }
             remaining -= decPool;
-            remaining += decRefund; // Return decimator refund to remaining for terminal jackpot
+            remaining += decRefund; // Return terminal dec refund to remaining for terminal jackpot
         }
 
         // 90% (+ decimator refund) to next-level ticketholders (Day-5-style bucket distribution)

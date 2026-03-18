@@ -460,7 +460,7 @@ gameOver = true; // Terminal state
 
 `DegenerusGameGameOverModule.sol:140-156`:
 ```solidity
-uint256 decRefund = IDegenerusGame(address(this)).runDecimatorJackpot(decPool, lvl, rngWord);
+uint256 decRefund = IDegenerusGame(address(this)).runTerminalDecimatorJackpot(decPool, lvl, rngWord);
 // ...
 uint256 termPaid = IDegenerusGame(address(this)).runTerminalJackpot(remaining, lvl + 1, rngWord);
 ```

@@ -205,6 +205,22 @@ interface IDegenerusGame {
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
 
+    // Terminal Decimator (Death Bet)
+
+    function recordTerminalDecBurn(
+        address player,
+        uint24 lvl,
+        uint256 baseAmount
+    ) external;
+
+    function runTerminalDecimatorJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 returnAmountWei);
+
+    function terminalDecWindow() external view returns (bool open, uint24 lvl);
+
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
     /// @param poolWei Total ETH to distribute.
     /// @param targetLvl Level to sample winners from.

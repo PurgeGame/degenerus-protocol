@@ -131,7 +131,7 @@ poolBalances[toIdx] += amount;                         // line 352
 - `depositSteth()` (line 291): Only transfers stETH, no balance/supply changes.
 - `gameAdvance()` (line 259): Delegates to game, no balance/supply changes in sDGNRS.
 - `gameClaimWhalePass()` (line 264): Delegates to game, no balance/supply changes.
-- `resolveCoinflips()` (line 271): Delegates to coinflip, no balance/supply changes.
+- ~~`resolveCoinflips()` (line 271)~~: **Removed.** sDGNRS flips now resolve daily inside `BurnieCoinflip.processCoinflipPayouts()`.
 - `previewBurn()` (line 454): View function, no state changes.
 - `burnieReserve()` (line 481): View function, no state changes.
 - `poolBalance()` (line 303): View function, no state changes.
@@ -400,7 +400,7 @@ The following table lists every address type that can trigger state changes (non
 | DGNRS contract (`0xDA5A...4C2d`) | `wrapperTransferTo` | `msg.sender != ContractAddresses.DGNRS` check | StakedDegenerusStonk.sol:243 | **No -- immutable.** `ContractAddresses.DGNRS` is a compile-time constant (ContractAddresses.sol:30). |
 | CREATOR address (`0x7FA9...1496`) | `unwrapTo` (on DGNRS contract) | `msg.sender != ContractAddresses.CREATOR` check | DegenerusStonk.sol:140 | **No -- immutable.** `ContractAddresses.CREATOR` is a compile-time constant (ContractAddresses.sol:36). |
 | Any address (public) | `burn` (own tokens) | None -- public. Guards: `amount > 0`, `amount <= balanceOf[msg.sender]` | StakedDegenerusStonk.sol:381, :384 | N/A -- public function, anyone with sDGNRS balance can call |
-| Any address (public) | `gameAdvance`, `gameClaimWhalePass`, `resolveCoinflips` | None -- public permissionless helpers | StakedDegenerusStonk.sol:259, :264, :271 | N/A -- delegate to game/coinflip, which handle their own auth |
+| Any address (public) | `gameAdvance`, `gameClaimWhalePass` | None -- public permissionless helpers | StakedDegenerusStonk.sol:259, :264 | N/A -- delegate to game, which handles its own auth. (`resolveCoinflips` removed — sDGNRS flips now resolve daily inside `processCoinflipPayouts`.) |
 | Any address (public, DGNRS) | `transfer`, `transferFrom`, `approve`, `burn` | Standard ERC20 checks | DegenerusStonk.sol:101, :113, :128, :153 | N/A -- public ERC20 functions |
 
 **Per-address detailed analysis:**

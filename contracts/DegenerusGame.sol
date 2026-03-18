@@ -1181,6 +1181,61 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
+    // -------------------------------------------------------------------------
+    // Terminal Decimator (Death Bet)
+    // -------------------------------------------------------------------------
+
+    /// @notice Record a terminal decimator burn.
+    /// @dev Delegatecalls to DecimatorModule. Access: coin contract only.
+    function recordTerminalDecBurn(
+        address player,
+        uint24 lvl,
+        uint256 baseAmount
+    ) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_DECIMATOR_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameDecimatorModule.recordTerminalDecBurn.selector,
+                    player,
+                    lvl,
+                    baseAmount
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Resolve terminal decimator at GAMEOVER.
+    /// @dev Access: Game-only (self-call from handleGameOverDrain).
+    function runTerminalDecimatorJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 returnAmountWei) {
+        if (msg.sender != address(this)) revert E();
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_DECIMATOR_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameDecimatorModule.runTerminalDecimatorJackpot.selector,
+                    poolWei,
+                    lvl,
+                    rngWord
+                )
+            );
+        if (!ok) _revertDelegate(data);
+        if (data.length == 0) revert E();
+        return abi.decode(data, (uint256));
+    }
+
+    /// @notice Terminal decimator window. Always open except lastPurchaseDay and gameOver.
+    /// @return open True if terminal decimator burns are allowed.
+    /// @return lvl Current game level.
+    function terminalDecWindow() external view returns (bool open, uint24 lvl) {
+        lvl = level;
+        open = !gameOver && !lastPurchaseDay;
+    }
+
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
     /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
     ///      Updates claimablePool internally — callers must NOT double-count.
