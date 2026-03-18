@@ -797,7 +797,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Called by coin contract. Bucket and multiplier computed internally
     ///      from player activity score (lvl 100 rules, min bucket 2).
     ///      Time multiplier computed from days remaining on death clock.
-    ///      Burns blocked after death clock expires (remaining=0) or on lastPurchaseDay.
+    ///      Burns blocked when <= 1 day remains (24h cooldown before termination).
     /// @param player Address of the player.
     /// @param lvl Current game level.
     /// @param baseAmount Burn amount before multiplier.
@@ -809,7 +809,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (msg.sender != ContractAddresses.COIN) revert OnlyCoin();
 
         uint256 daysRemaining = _terminalDecDaysRemaining();
-        if (daysRemaining == 0) revert TerminalDecDeadlinePassed();
+        if (daysRemaining <= 1) revert TerminalDecDeadlinePassed();
 
         // Compute bucket and multiplier from activity score (self-call; runs via delegatecall so address(this) == game)
         uint256 bonusBps = IDegenerusGame(address(this)).playerActivityScore(player);
@@ -995,14 +995,14 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @dev Time multiplier based on days remaining on death clock.
     ///      > 10 days: daysRemaining / 4 (30x at 120 days, 2.75x at 11 days)
-    ///      <= 10 days: linear 2x (day 10) to 1x (day 1)
+    ///      <= 10 days: linear 2x (day 10) to 1x (day 2), burns blocked at day 1
     ///      Intentional discontinuity at day 10 (2.75x → 2x regime change).
     function _terminalDecMultiplierBps(uint256 daysRemaining) private pure returns (uint256) {
         if (daysRemaining > 10) {
             return daysRemaining * 2500;
         }
-        // Linear: 2x at day 10, 1x at day 1
-        return 10000 + ((daysRemaining - 1) * 10000) / 9;
+        // Linear: 2x at day 10, 1x at day 2 (day 1 blocked by caller)
+        return 10000 + ((daysRemaining - 2) * 10000) / 8;
     }
 
     /// @dev Compute terminal decimator bucket from activity score (lvl 100 rules).
