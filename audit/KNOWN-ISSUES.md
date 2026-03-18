@@ -86,6 +86,28 @@ All 19 normal-gameplay payout requirements (PAY-01 through PAY-19) received PASS
 
 ---
 
+## Phase 28 Cross-Cutting Verification: New Known Issues
+
+Phase 28 identified 1 Low finding and 1 Informational finding. The Low finding is documented below. The Informational finding (stale parameter reference doc entries) is deferred to Phase 29.
+
+### FINDING-LOW-EDGE03-01: advanceGame Queue Inflation DOS (Low)
+
+**Severity:** LOW
+**Contract:** `DegenerusGameAdvanceModule` (via `DegenerusGame`)
+**Source:** Phase 28-04 (EDGE-03)
+
+An attacker can purchase large numbers of tickets at any level, inflating the ticket queue and requiring many sequential `advanceGame` calls before the daily jackpot resolves. No single call can exceed the block gas limit (the batch mechanism bounds work per call), but sustained adversarial ticket purchasing can delay daily jackpot resolution by hours or days.
+
+**Impact:** Daily jackpots can be delayed under adversarial high-volume ticket purchasing. The advance bounty (`PAY-17`) partially compensates external callers who call `advanceGame` to clear the queue (0.01 ETH in BURNIE, escalating 2x/3x after 1-2 hours).
+
+**Why Low (not Medium):** The attack cannot permanently block the game (batch cursor always makes progress). The attacker pays ticket prices. Advance bounty incentivizes external callers to clear queues. No ETH at risk.
+
+**Mitigation:** Accepted design tradeoff. Consider adding a maximum queue depth per day or a higher per-address ticket purchase rate limit as a future improvement. No code change required unless adversarial griefing is observed in practice.
+
+**Status:** Known issue -- documented as accepted Low-severity design tradeoff.
+
+---
+
 ## Intentional Design (Not Bugs)
 
 **BURNIE has multiple mint pathways.** `mintForCoinflip()`, `mintForGame()`, and the vault's 2M virtual reserve. All authorized via `onlyTrustedContracts`. No free-mint path.
@@ -115,6 +137,12 @@ All 19 normal-gameplay payout requirements (PAY-01 through PAY-19) received PASS
 **Whale pass claims have no expiry.** `whalePassClaims[player]` accumulates indefinitely until `claimWhalePass()` is called (EndgameModule:515-534). Unlike decimator claims, whale pass entitlements persist across level transitions. Only GAMEOVER disables claiming (`if (gameOver) revert`). BY DESIGN.
 
 **Affiliate DGNRS uses fixed allocation, not sequential depletion.** The v1.1 affiliate doc describes sequential pool depletion, but the code uses `levelDgnrsAllocation[currLevel]` (snapshot at level transition) with `totalAffiliateScore[currLevel]` as proportional denominator. This eliminates first-mover advantage. The natspec confirms: "eliminating first-mover advantage." Code is authoritative; v1.1 doc is stale on this point. BY DESIGN.
+
+**DegeneretteModule:1158 claimablePool mutation site is a new coverage point, not a bug.** The `_addClaimableEth` call in `DegeneretteModule._distributePayout()` (line 1158) was not explicitly covered in Phases 26 or 27. Phase 28 Plan 02 (INV-01) proved it correct: `ethPortion <= ETH_WIN_CAP_BPS * futurePrizePool / 10000`, futurePrizePool is pre-deducted before `claimablePool` is credited. The INV-01 solvency invariant holds at this site. BY DESIGN -- the ETH cap and pool pre-deduction are correct guards. Note: this is the 15th and final claimablePool mutation site; the invariant is now proven at all 15 sites.
+
+**BPS rounding accumulates ~4 ETH over the lifetime of a full game.** Solidity integer division truncates toward zero. All BPS reward calculations distribute slightly less than the exact amount. The unspent wei stays in `address(this).balance`, strengthening INV-01. Over a full game (100+ levels, 1000+ purchases/level), accumulated rounding is approximately 4 ETH. This does not threaten solvency -- it strengthens the invariant. BY DESIGN per Solidity arithmetic. Confirmed safe in Phase 28 EDGE-07 (PASS).
+
+**advanceGame queue delays are bounded and economically self-correcting.** The batch-and-resume pattern ensures no single `advanceGame` call can exceed the block gas limit. Adversarial ticket-queue inflation delays jackpots but cannot permanently block them. The advance bounty (0.01 ETH in BURNIE, escalating 2x/3x after 1-2 hours) economically incentivizes third parties to clear queues. Classified as FINDING-LOW-EDGE03-01. BY DESIGN -- the batch mechanism and bounty are the intended mitigations.
 
 ---
 
