@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
-status: verifying
-stopped_at: Completed 29-05-PLAN.md
-last_updated: "2026-03-18T07:57:35.203Z"
-last_activity: 2026-03-18 -- Completed 29-05 Storage Layout & Constants Comment Verification (DOC-03/DOC-04 PASS)
+status: completed
+stopped_at: Completed 29-04-PLAN.md
+last_updated: "2026-03-18T07:58:00.214Z"
+last_activity: 2026-03-18 -- Completed 29-04 Peripheral NatSpec Verification (219 functions, 15 contracts, all MATCH)
 progress:
   total_phases: 5
   completed_phases: 3
@@ -113,6 +113,9 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 29-02]: 29 external function NatSpec verdicts across 4 large modules (27 MATCH, 2 DISCREPANCY); 891 inline comments with 0 factual discrepancies
 - [Phase 29]: [Phase 29-05]: DOC-03 PASS: Storage layout diagram byte-accurate for Slots 0-2; 1 INFO discrepancy (section header placement)
 - [Phase 29]: [Phase 29-05]: DOC-04 PASS: 210+ constants verified across 20 contracts; 0 BPS/half-BPS/PPM scale confusion; 0 stale comments from removed constants
+- [Phase 29]: [Phase 29-04]: 219 NatSpec verdicts across 15 non-module contracts (tokens, governance, peripherals, utilities): 219 MATCH, 0 DISCREPANCY, 0 MISSING
+- [Phase 29]: [Phase 29-04]: PAY-11-I01 affiliate DGNRS allocation: code NatSpec correctly describes fixed proportional allocation; v1.1 doc discrepancy is documentation-only, not code issue
+- [Phase 29]: [Phase 29-04]: CHG-02 VRF governance NatSpec confirmed correct (admin 20h, community 7d, 60-5% threshold decay, GOV-07 CEI fix); CHG-03 soulbound enforcement confirmed (5 DeityPass functions revert Soulbound())
 
 ## Accumulated Context
 
@@ -145,6 +148,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T07:57:21.220Z
-Stopped at: Completed 29-05-PLAN.md
+Last session: 2026-03-18T07:58:00.212Z
+Stopped at: Completed 29-04-PLAN.md
 Resume file: None
