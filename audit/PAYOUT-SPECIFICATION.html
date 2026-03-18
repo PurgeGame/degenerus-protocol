@@ -1883,7 +1883,575 @@ _burn(msg.sender, amount);                    // burn DGNRS wrapper token
 
 <section id="cat-gameover">
   <h2>6. GAMEOVER Terminal Distribution</h2>
-  <!-- System cards populated by Plan 30-05 -->
+
+  <p>GAMEOVER is the terminal state of the Degenerus Protocol. When the death clock expires (365 days at level 0, 120 days at level 1+), all remaining protocol funds are distributed in a single irreversible sequence. The GAMEOVER path is protected by idempotency latches (<code>gameOver</code>, <code>gameOverFinalJackpotPaid</code>, <code>finalSwept</code>) that prevent re-execution.</p>
+
+  <!-- GO-05 Finding Callout -->
+  <div style="background: #ffebee; border-left: 4px solid #c62828; padding: 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0;">
+    <strong>FINDING-MEDIUM (GO-05-F01):</strong> <code>_sendToVault</code> uses hard reverts on ETH/stETH transfer failures. If the vault or sDGNRS contract cannot receive funds (e.g., Lido stETH pause), <code>handleGameOverDrain</code> and <code>handleFinalSweep</code> revert permanently. <strong>Risk:</strong> 7 dangerous revert sites across the GAMEOVER path. <strong>Mitigation:</strong> Recipients are immutable, protocol-owned contracts. See audit/KNOWN-ISSUES.md for full analysis.
+  </div>
+
+  <!-- Master GAMEOVER Sequence Flow Diagram -->
+  <h3>GAMEOVER Terminal Sequence Overview</h3>
+  <svg viewBox="0 0 900 600" class="flow-svg" style="max-width:900px;">
+    <defs>
+      <marker id="go-arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+      </marker>
+    </defs>
+
+    <!-- 1. Death Clock Expiry trigger (diamond) -->
+    <polygon points="140,40 260,80 140,120 20,80" class="decision"/>
+    <text x="140" y="75" text-anchor="middle" font-size="11" font-weight="600">Death Clock Expiry</text>
+    <text x="140" y="90" text-anchor="middle" font-size="9" fill="#555">365d L0 / 120d L1+</text>
+
+    <!-- Arrow: trigger -> handleGameOverDrain -->
+    <line x1="260" y1="80" x2="340" y2="80" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+
+    <!-- 2. handleGameOverDrain (contract) -->
+    <rect x="350" y="50" width="220" height="60" class="contract"/>
+    <text x="460" y="75" text-anchor="middle" font-weight="600" font-size="11">handleGameOverDrain</text>
+    <text x="460" y="90" text-anchor="middle" font-size="9" fill="#555">GameOverModule:68-164</text>
+
+    <!-- Arrow: handleGameOverDrain -> budget calc -->
+    <line x1="460" y1="110" x2="460" y2="145" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+    <text x="545" y="132" text-anchor="middle" font-size="9" fill="#555">budget = totalFunds - claimablePool</text>
+
+    <!-- 3. Budget pool -->
+    <rect x="370" y="150" width="180" height="45" rx="8" class="pool"/>
+    <text x="460" y="178" text-anchor="middle" font-weight="600" font-size="11">budget</text>
+
+    <!-- Arrow: budget -> Deity Refunds [1] -->
+    <line x1="370" y1="172" x2="100" y2="172" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+    <text x="240" y="163" text-anchor="middle" font-size="9" fill="#555">[1] 20 ETH/pass, FIFO</text>
+
+    <!-- Deity Refunds box -->
+    <rect x="10" y="150" width="85" height="45" rx="20" class="recipient"/>
+    <text x="52" y="170" text-anchor="middle" font-size="10" font-weight="600">Deity</text>
+    <text x="52" y="182" text-anchor="middle" font-size="9">Refunds</text>
+
+    <!-- Arrow: Deity Refunds -> claimablePool -->
+    <line x1="52" y1="195" x2="52" y2="245" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+
+    <!-- claimablePool -->
+    <rect x="10" y="250" width="130" height="40" rx="8" class="pool"/>
+    <text x="75" y="275" text-anchor="middle" font-size="10" font-weight="600">claimablePool</text>
+
+    <!-- remaining pool -->
+    <rect x="370" y="230" width="180" height="45" rx="8" class="pool"/>
+    <text x="460" y="248" text-anchor="middle" font-size="10" font-weight="600">remaining</text>
+    <text x="460" y="262" text-anchor="middle" font-size="9" fill="#555">budget - totalRefunded</text>
+
+    <!-- Arrow: budget -> remaining -->
+    <line x1="460" y1="195" x2="460" y2="225" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+
+    <!-- Arrow: remaining -> Terminal Decimator [2] -->
+    <line x1="460" y1="275" x2="240" y2="340" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+    <text x="320" y="305" text-anchor="middle" font-size="9" fill="#555">[2] 10%</text>
+
+    <!-- Terminal Decimator -->
+    <rect x="140" y="320" width="100" height="50" class="contract"/>
+    <text x="190" y="342" text-anchor="middle" font-size="10" font-weight="600">Terminal</text>
+    <text x="190" y="355" text-anchor="middle" font-size="10" font-weight="600">Decimator</text>
+
+    <!-- Arrow: remaining -> Terminal Jackpot [3] -->
+    <line x1="460" y1="275" x2="620" y2="340" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+    <text x="570" y="305" text-anchor="middle" font-size="9" fill="#555">[3] 90% + decRefund</text>
+
+    <!-- Terminal Jackpot -->
+    <rect x="600" y="320" width="120" height="50" class="contract"/>
+    <text x="660" y="342" text-anchor="middle" font-size="10" font-weight="600">Terminal</text>
+    <text x="660" y="355" text-anchor="middle" font-size="10" font-weight="600">Jackpot</text>
+
+    <!-- Decision diamond: totalWeightedBurn > 0? -->
+    <polygon points="190,400 240,420 190,440 140,420" class="decision"/>
+    <text x="190" y="423" text-anchor="middle" font-size="8">burns?</text>
+
+    <!-- Arrow: Terminal Decimator -> decision -->
+    <line x1="190" y1="370" x2="190" y2="395" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+
+    <!-- Arrow: decision Yes -> claimablePool -->
+    <line x1="140" y1="420" x2="90" y2="420" stroke="#424242" stroke-width="1" marker-end="url(#go-arrow)"/>
+    <text x="115" y="413" text-anchor="middle" font-size="8" fill="#2e7d32">Yes</text>
+
+    <!-- Arrow: claimablePool (extend down for dec) -->
+    <line x1="75" y1="290" x2="75" y2="415" stroke="#424242" stroke-width="1"/>
+
+    <!-- Arrow: decision No -> decRefund back to jackpot -->
+    <line x1="240" y1="420" x2="600" y2="360" stroke="#424242" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#go-arrow)"/>
+    <text x="420" y="395" text-anchor="middle" font-size="8" fill="#c62828">No: decRefund</text>
+
+    <!-- Arrow: Terminal Jackpot -> VRF Winners -> claimablePool -->
+    <line x1="660" y1="370" x2="660" y2="450" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+    <text x="735" y="415" text-anchor="middle" font-size="9" fill="#555">VRF winners</text>
+
+    <!-- claimablePool (bottom) -->
+    <rect x="590" y="455" width="140" height="40" rx="8" class="pool"/>
+    <text x="660" y="480" text-anchor="middle" font-size="10" font-weight="600">claimablePool</text>
+
+    <!-- Undistributed -> Vault sweep -->
+    <rect x="760" y="320" width="120" height="50" rx="20" class="recipient"/>
+    <text x="820" y="342" text-anchor="middle" font-size="10" font-weight="600">Vault</text>
+    <text x="820" y="355" text-anchor="middle" font-size="9">_sendToVault</text>
+
+    <!-- Arrow: Terminal Jackpot -> Vault (undistributed) -->
+    <line x1="720" y1="345" x2="755" y2="345" stroke="#424242" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#go-arrow)"/>
+    <text x="740" y="337" text-anchor="middle" font-size="8" fill="#555">undist.</text>
+
+    <!-- 30-day claim window annotation -->
+    <rect x="430" y="490" width="180" height="35" rx="4" style="fill:#fff9c4;stroke:#f9a825;stroke-width:1;"/>
+    <text x="520" y="512" text-anchor="middle" font-size="10" font-weight="600">30-day claim window</text>
+
+    <!-- Arrow: claim window -> handleFinalSweep -->
+    <line x1="520" y1="525" x2="520" y2="545" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+
+    <!-- handleFinalSweep -->
+    <rect x="400" y="550" width="180" height="35" class="contract"/>
+    <text x="490" y="572" text-anchor="middle" font-weight="600" font-size="10">handleFinalSweep</text>
+
+    <!-- Arrow: finalSweep -> claimablePool = 0 annotation -->
+    <text x="598" y="565" font-size="9" fill="#c62828">claimablePool = 0</text>
+
+    <!-- Arrow: finalSweep -> 50/50 vault/sDGNRS -->
+    <line x1="400" y1="567" x2="290" y2="567" stroke="#424242" stroke-width="1.5" marker-end="url(#go-arrow)"/>
+    <text x="345" y="558" text-anchor="middle" font-size="9" fill="#555">50/50</text>
+
+    <!-- Vault/sDGNRS recipients -->
+    <rect x="180" y="550" width="105" height="35" rx="20" class="recipient"/>
+    <text x="232" y="572" text-anchor="middle" font-size="10" font-weight="600">Vault/sDGNRS</text>
+  </svg>
+
+  <!-- ===== System Card 1: GO-01 Terminal Jackpot ===== -->
+
+  <div class="system-card" id="go-01">
+    <h3>GO-01 -- Terminal Jackpot</h3>
+    <div>
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge" style="background:#e8eaf6;color:#0d47a1;">GO-01</span>
+    </div>
+
+    <table class="info-table">
+      <tr><th>Trigger</th><td><code>handleGameOverDrain</code> called after GAMEOVER triggered (death clock expiry: 365 days at level 0, 120 days at level 1+)</td></tr>
+      <tr><th>Source Pool</th><td>90% of remaining funds after deity refunds and decimator allocation (+ <code>decRefund</code> if no decimator burns)</td></tr>
+      <tr><th>Calculation</th><td><code>budget = totalFunds - claimablePool; remaining = budget - totalRefunded; decPool = remaining / 10; terminalJackpotPool = remaining - decPool + decRefund</code></td></tr>
+      <tr><th>Recipients</th><td>VRF-selected winners via <code>runTerminalJackpot</code> (same mechanism as normal jackpot distribution)</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>claimWinnings()</code> during 30-day window; <code>liabilityDelta</code> added to <code>claimablePool</code></td></tr>
+      <tr><th>Currency</th><td>ETH</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4 style="margin-top:0;">Formula</h4>
+      <pre><code>// GameOverModule.sol:68-164 -- handleGameOverDrain
+totalFunds = address(this).balance + steth.balanceOf(address(this));
+budget = totalFunds - claimablePool;
+
+// [1] Deity refunds: 20 ETH per pass, FIFO, budget-capped
+// GameOverModule.sol:68-107
+// totalRefunded = sum of min(20 ETH, remaining budget) per deity pass
+
+// [2] Remaining for distribution
+remaining = totalFunds - claimablePool - totalRefunded;
+
+// [3] Terminal decimator allocation
+decPool = remaining / 10;  // 10% to terminal decimator
+// GameOverModule.sol:108-142
+
+// [4] Terminal jackpot
+terminalJackpotPool = remaining - decPool + decRefund;
+// decRefund = full decPool if totalWinnerBurn == 0
+
+// [5] Terminal jackpot distribution
+// JackpotModule.sol:288-324, 1537-1576
+// runTerminalJackpot -> _distributeJackpotEth
+// claimablePool += ctx.liabilityDelta
+
+// [6] Undistributed sweep
+// GameOverModule.sol:155-164
+// _sendToVault(undistributed) -- vault gets remainder</code></pre>
+      <p class="file-ref"><strong>Code:</strong> <code>GameOverModule.sol:68-164</code>, <code>JackpotModule.sol:288-324</code>, <code>JackpotModule.sol:1537-1576</code></p>
+    </div>
+
+    <svg viewBox="0 0 800 400" class="flow-svg">
+      <defs>
+        <marker id="go01-arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- totalFunds pool -->
+      <rect x="10" y="30" width="160" height="50" rx="8" class="pool"/>
+      <text x="90" y="52" text-anchor="middle" font-weight="600" font-size="11">totalFunds</text>
+      <text x="90" y="67" text-anchor="middle" font-size="9" fill="#555">ETH + stETH balance</text>
+
+      <!-- Arrow: totalFunds -> budget -->
+      <line x1="170" y1="55" x2="260" y2="55" stroke="#424242" stroke-width="1.5" marker-end="url(#go01-arrow)"/>
+      <text x="215" y="47" text-anchor="middle" font-size="9" fill="#555">- claimablePool</text>
+
+      <!-- budget -->
+      <rect x="270" y="30" width="140" height="50" class="contract"/>
+      <text x="340" y="60" text-anchor="middle" font-weight="600" font-size="11">budget</text>
+
+      <!-- Arrow: budget -> Deity Refunds -->
+      <line x1="340" y1="80" x2="340" y2="125" stroke="#424242" stroke-width="1.5" marker-end="url(#go01-arrow)"/>
+      <text x="380" y="105" text-anchor="start" font-size="9" fill="#555">20 ETH/pass FIFO</text>
+
+      <!-- Deity Refunds -> claimablePool -->
+      <rect x="270" y="130" width="140" height="40" rx="20" class="recipient"/>
+      <text x="340" y="155" text-anchor="middle" font-size="10">Deity Refunds</text>
+
+      <!-- Arrow from deity -> claimablePool (small) -->
+      <line x1="270" y1="150" x2="200" y2="150" stroke="#424242" stroke-width="1" marker-end="url(#go01-arrow)"/>
+      <rect x="100" y="135" width="95" height="30" rx="8" class="pool"/>
+      <text x="147" y="155" text-anchor="middle" font-size="9">claimablePool</text>
+
+      <!-- remaining -->
+      <rect x="270" y="195" width="140" height="40" rx="8" class="pool"/>
+      <text x="340" y="220" text-anchor="middle" font-weight="600" font-size="10">remaining</text>
+
+      <!-- Arrow: budget area down to remaining -->
+      <line x1="410" y1="150" x2="410" y2="210" stroke="#424242" stroke-width="1"/>
+      <line x1="410" y1="210" x2="410" y2="215" stroke="#424242" stroke-width="1.5" marker-end="url(#go01-arrow)"/>
+
+      <!-- Arrow: remaining -> Terminal Decimator (10%) -->
+      <line x1="270" y1="215" x2="115" y2="275" stroke="#424242" stroke-width="1.5" marker-end="url(#go01-arrow)"/>
+      <text x="170" y="245" text-anchor="middle" font-size="9" fill="#555">10%</text>
+
+      <!-- Terminal Decimator -->
+      <rect x="20" y="260" width="120" height="40" class="contract"/>
+      <text x="80" y="278" text-anchor="middle" font-size="10" font-weight="600">Terminal Dec.</text>
+      <text x="80" y="291" text-anchor="middle" font-size="8" fill="#555">GO-08</text>
+
+      <!-- Arrow: remaining -> Terminal Jackpot (90% + decRefund) -->
+      <line x1="410" y1="215" x2="530" y2="275" stroke="#424242" stroke-width="1.5" marker-end="url(#go01-arrow)"/>
+      <text x="500" y="245" text-anchor="middle" font-size="9" fill="#555">90% + decRefund</text>
+
+      <!-- Terminal Jackpot -->
+      <rect x="500" y="260" width="160" height="40" class="contract"/>
+      <text x="580" y="285" text-anchor="middle" font-weight="600" font-size="10">Terminal Jackpot</text>
+
+      <!-- Arrow: Terminal Jackpot -> VRF winners -> claimablePool -->
+      <line x1="580" y1="300" x2="580" y2="345" stroke="#424242" stroke-width="1.5" marker-end="url(#go01-arrow)"/>
+      <text x="610" y="325" text-anchor="start" font-size="9" fill="#555">VRF winners</text>
+
+      <!-- claimablePool (bottom) -->
+      <rect x="510" y="350" width="140" height="35" rx="8" class="pool"/>
+      <text x="580" y="373" text-anchor="middle" font-size="10" font-weight="600">claimablePool</text>
+
+      <!-- Undistributed -> Vault -->
+      <rect x="700" y="260" width="80" height="40" rx="20" class="recipient"/>
+      <text x="740" y="285" text-anchor="middle" font-size="10" font-weight="600">Vault</text>
+      <line x1="660" y1="280" x2="695" y2="280" stroke="#424242" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#go01-arrow)"/>
+      <text x="680" y="272" text-anchor="middle" font-size="8" fill="#555">undist.</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Level 0 GAMEOVER:</strong> <code>lvl</code> aliased to 1 (<code>GameOverModule.sol:71-72</code>); safety valve skipped; deity refunds may consume entire budget if many passes exist, leaving <code>remaining == 0</code></li>
+        <li><strong>No terminal decimator burns:</strong> <code>totalWinnerBurn == 0</code>; full <code>decPool</code> returned as <code>decRefund</code> to terminal jackpot -- GO-01 receives 100% of remaining</li>
+        <li><strong>Single player:</strong> All distribution paths handle N=1 correctly (EDGE-02 verified)</li>
+        <li><strong>Idempotency:</strong> <code>gameOverFinalJackpotPaid</code> latch set at <code>GameOverModule:128</code> prevents re-execution of handleGameOverDrain</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===== System Card 2: GO-08 Terminal Decimator ===== -->
+
+  <div class="system-card" id="go-08">
+    <h3>GO-08 -- Terminal Decimator</h3>
+    <div>
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge" style="background:#e8eaf6;color:#0d47a1;">GO-08</span>
+    </div>
+
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Allocated during <code>handleGameOverDrain</code>; claimed by players who burned tokens</td></tr>
+      <tr><th>Source Pool</th><td>10% of remaining funds after deity refunds</td></tr>
+      <tr><th>Calculation</th><td><code>decPool = remaining / 10; payout = (decPool * playerWeightedBurn) / totalWeightedBurn</code> where weighted burn includes time multiplier</td></tr>
+      <tr><th>Recipients</th><td>Players who burned tokens in decimator rounds (weighted by burn amount * time multiplier via <code>_terminalDecMultiplierBps</code>)</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>claimDecimatorJackpot()</code> with terminal-specific claim path via <code>claimTerminalDecimatorJackpot()</code></td></tr>
+      <tr><th>Currency</th><td>ETH (100% in terminal context -- no lootbox split)</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4 style="margin-top:0;">Formula</h4>
+      <pre><code>// DecimatorModule.sol:749-1027
+// Terminal decimator allocation: GameOverModule.sol:108-142
+decPool = remaining / 10;  // 10% of remaining after deity refunds
+
+// Weighted burn calculation:
+// playerWeightedBurn = burnAmount * timeMultiplier
+// timeMultiplier based on how long player held before GAMEOVER
+// DecimatorModule.sol:800-850
+
+// Time multiplier: _terminalDecMultiplierBps(daysRemaining)
+//   daysRemaining > 10:  daysRemaining * 2500 BPS (up to 30x at 120d)
+//   daysRemaining <= 10: 10000 + ((daysRemaining - 1) * 10000) / 9
+
+// Claim formula (same as normal decimator, terminal context):
+payout = (decPool * playerWeightedBurn) / totalWeightedBurn;
+// 100% ETH in terminal context (no lootbox split)
+
+// Double-resolution guard prevents re-processing
+// decBucketOffsetPacked collision impossible:
+//   GAMEOVER and normal level completion mutually exclusive for same level</code></pre>
+      <p class="file-ref"><strong>Code:</strong> <code>DecimatorModule.sol:749-1027</code>, <code>GameOverModule.sol:108-142</code></p>
+    </div>
+
+    <svg viewBox="0 0 700 300" class="flow-svg" style="max-width:700px;">
+      <defs>
+        <marker id="go08-arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- remaining pool -->
+      <rect x="10" y="60" width="130" height="50" rx="8" class="pool"/>
+      <text x="75" y="82" text-anchor="middle" font-weight="600" font-size="11">remaining</text>
+      <text x="75" y="97" text-anchor="middle" font-size="9" fill="#555">post-deity-refund</text>
+
+      <!-- Arrow: remaining -> Terminal Decimator Pool -->
+      <line x1="140" y1="85" x2="220" y2="85" stroke="#424242" stroke-width="1.5" marker-end="url(#go08-arrow)"/>
+      <text x="180" y="77" text-anchor="middle" font-size="9" fill="#555">10%</text>
+
+      <!-- Terminal Decimator Pool -->
+      <rect x="230" y="60" width="160" height="50" class="contract"/>
+      <text x="310" y="82" text-anchor="middle" font-weight="600" font-size="10">Terminal Dec Pool</text>
+      <text x="310" y="97" text-anchor="middle" font-size="9" fill="#555">decPool = remaining/10</text>
+
+      <!-- Arrow: Pool -> Decision diamond -->
+      <line x1="310" y1="110" x2="310" y2="145" stroke="#424242" stroke-width="1.5" marker-end="url(#go08-arrow)"/>
+
+      <!-- Decision: totalWeightedBurn > 0? -->
+      <polygon points="310,150 390,180 310,210 230,180" class="decision"/>
+      <text x="310" y="178" text-anchor="middle" font-size="9">totalWeightedBurn</text>
+      <text x="310" y="190" text-anchor="middle" font-size="9">> 0?</text>
+
+      <!-- Arrow: Yes -> Pro-rata distribution -->
+      <line x1="310" y1="210" x2="310" y2="240" stroke="#424242" stroke-width="1.5" marker-end="url(#go08-arrow)"/>
+      <text x="295" y="228" text-anchor="end" font-size="9" fill="#2e7d32">Yes</text>
+
+      <!-- Pro-rata -> _addClaimableEth -> claimablePool -> Players -->
+      <rect x="220" y="245" width="180" height="40" class="contract"/>
+      <text x="310" y="263" text-anchor="middle" font-size="10">Pro-rata by weighted burn</text>
+      <text x="310" y="276" text-anchor="middle" font-size="9" fill="#555">_addClaimableEth -> claimablePool</text>
+
+      <!-- Arrow: pro-rata -> Players -->
+      <line x1="400" y1="265" x2="480" y2="265" stroke="#424242" stroke-width="1.5" marker-end="url(#go08-arrow)"/>
+
+      <!-- Players -->
+      <rect x="490" y="245" width="100" height="40" rx="20" class="recipient"/>
+      <text x="540" y="270" text-anchor="middle" font-weight="600" font-size="10">Players</text>
+
+      <!-- Arrow: No -> decRefund back to Terminal Jackpot -->
+      <line x1="390" y1="180" x2="500" y2="180" stroke="#424242" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#go08-arrow)"/>
+      <text x="450" y="172" text-anchor="middle" font-size="9" fill="#c62828">No</text>
+
+      <!-- Terminal Jackpot (refund target) -->
+      <rect x="510" y="160" width="120" height="40" class="contract"/>
+      <text x="570" y="178" text-anchor="middle" font-size="10" font-weight="600">Terminal</text>
+      <text x="570" y="191" text-anchor="middle" font-size="9">Jackpot (decRefund)</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>No burns:</strong> <code>totalWeightedBurn == 0</code>; full <code>decPool</code> returned as <code>decRefund</code> to terminal jackpot (GO-01 gets 100%)</li>
+        <li><strong><code>decBucketOffsetPacked</code> collision impossible:</strong> GAMEOVER and normal level completion are mutually exclusive for the same level -- different keys in the mapping</li>
+        <li><strong>Double-resolution guard:</strong> <code>lastTerminalDecClaimRound.lvl == lvl</code> check at <code>DecimatorModule:888</code> prevents terminal decimator from being processed twice</li>
+        <li><strong>Time multiplier boundary values:</strong> 1x at 1 day remaining, 2x at 10 days, 2.75x at 11 days (regime change), up to 30x at 120 days -- verified safe at all extremes</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===== System Card 3: GO-07 Deity Pass Refunds ===== -->
+
+  <div class="system-card" id="go-07">
+    <h3>GO-07 -- Deity Pass Refunds</h3>
+    <div>
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge" style="background:#e8eaf6;color:#0d47a1;">GO-07</span>
+    </div>
+
+    <table class="info-table">
+      <tr><th>Trigger</th><td>GAMEOVER at levels 0-9 (early termination); processed during <code>handleGameOverDrain</code></td></tr>
+      <tr><th>Source Pool</th><td><code>budget = totalFunds - claimablePool</code></td></tr>
+      <tr><th>Calculation</th><td>20 ETH per deity pass (<code>DEITY_PASS_EARLY_GAMEOVER_REFUND</code>), FIFO ordering, budget-capped (cannot exceed remaining budget)</td></tr>
+      <tr><th>Recipients</th><td>Deity pass holders (FIFO: first minted, first refunded) via <code>deityPassOwners</code> array</td></tr>
+      <tr><th>Claim Mechanism</th><td>Refund added to <code>claimableWinnings[player]</code>; claimed via <code>claimWinnings()</code> during 30-day window</td></tr>
+      <tr><th>Currency</th><td>ETH</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4 style="margin-top:0;">Formula</h4>
+      <pre><code>// GameOverModule.sol:68-107
+budget = totalFunds - claimablePool;
+
+// FIFO refund loop:
+for each deity pass (in mint order via deityPassOwners[]):
+    refund = min(20 ETH, budget - totalRefunded);
+    if (refund == 0) break;  // budget exhausted
+    _creditClaimable(holder, refund);
+    totalRefunded += refund;
+
+// claimablePool += totalRefunded  (GameOverModule.sol:105)
+// Safe unchecked arithmetic: totalRefunded <= budget by construction</code></pre>
+      <p class="file-ref"><strong>Code:</strong> <code>GameOverModule.sol:68-107</code>, <code>DegenerusGameStorage.sol:1025-1034</code></p>
+    </div>
+
+    <svg viewBox="0 0 700 250" class="flow-svg" style="max-width:700px;">
+      <defs>
+        <marker id="go07-arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- budget pool -->
+      <rect x="10" y="60" width="140" height="55" rx="8" class="pool"/>
+      <text x="80" y="82" text-anchor="middle" font-weight="600" font-size="11">budget</text>
+      <text x="80" y="97" text-anchor="middle" font-size="9" fill="#555">totalFunds - claimablePool</text>
+
+      <!-- Arrow: budget -> Deity Refund Loop -->
+      <line x1="150" y1="87" x2="230" y2="87" stroke="#424242" stroke-width="1.5" marker-end="url(#go07-arrow)"/>
+      <text x="190" y="79" text-anchor="middle" font-size="9" fill="#555">20 ETH each</text>
+
+      <!-- Deity Refund Loop -->
+      <rect x="240" y="60" width="180" height="55" class="contract"/>
+      <text x="330" y="82" text-anchor="middle" font-weight="600" font-size="10">Deity Pass Refund Loop</text>
+      <text x="330" y="97" text-anchor="middle" font-size="9" fill="#555">FIFO, budget-capped</text>
+
+      <!-- Arrow: loop -> claimablePool -->
+      <line x1="420" y1="87" x2="500" y2="87" stroke="#424242" stroke-width="1.5" marker-end="url(#go07-arrow)"/>
+
+      <!-- claimablePool -->
+      <rect x="510" y="60" width="130" height="55" rx="8" class="pool"/>
+      <text x="575" y="82" text-anchor="middle" font-weight="600" font-size="10">claimablePool</text>
+      <text x="575" y="97" text-anchor="middle" font-size="9" fill="#555">+= totalRefunded</text>
+
+      <!-- Arrow: claimablePool -> Deity Holders -->
+      <line x1="575" y1="115" x2="575" y2="155" stroke="#424242" stroke-width="1.5" marker-end="url(#go07-arrow)"/>
+
+      <!-- Deity Holders -->
+      <rect x="505" y="160" width="140" height="40" rx="20" class="recipient"/>
+      <text x="575" y="185" text-anchor="middle" font-weight="600" font-size="10">Deity Holders</text>
+
+      <!-- Budget-capped annotation -->
+      <text x="330" y="145" text-anchor="middle" font-size="10" fill="#c62828" font-style="italic">Budget-capped: stops when budget exhausted</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Budget exhaustion:</strong> If many deity passes exist, later passes may get partial or zero refund -- <code>refund = min(20 ETH, budget)</code> enforced at <code>GameOverModule:88-89</code></li>
+        <li><strong>Level 0 GAMEOVER:</strong> All deity refunds consume from same budget; may leave zero for decimator/jackpot if budget is exhausted</li>
+        <li><strong>FIFO ordering:</strong> First-minted deity passes (earlier in <code>deityPassOwners[]</code> array) get priority refund</li>
+        <li><strong>Unchecked arithmetic provably safe:</strong> <code>totalRefunded</code> bounded by <code>budget</code> by loop construction; <code>claimableWinnings</code> overflow physically impossible</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===== System Card 4: GO-02 Final Sweep ===== -->
+
+  <div class="system-card" id="go-02">
+    <h3>GO-02 -- Final Sweep (30-Day Claim Window)</h3>
+    <div>
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge badge-steth">stETH</span>
+      <span class="badge" style="background:#e8eaf6;color:#0d47a1;">GO-02</span>
+    </div>
+
+    <table class="info-table">
+      <tr><th>Trigger</th><td>30 days after GAMEOVER; anyone can call <code>handleFinalSweep</code> via <code>advanceGame()</code></td></tr>
+      <tr><th>Source Pool</th><td>All remaining protocol balance (ETH + stETH) -- <code>address(this).balance + steth.balanceOf(address(this))</code></td></tr>
+      <tr><th>Calculation</th><td><code>claimablePool = 0</code> (intentional forfeiture of unclaimed winnings); remaining balance split 50/50 to vault and sDGNRS</td></tr>
+      <tr><th>Recipients</th><td>Vault (50%) and sDGNRS holders (50%) via <code>_sendToVault</code></td></tr>
+      <tr><th>Claim Mechanism</th><td><code>handleFinalSweep()</code> -- callable by anyone after 30-day window; guarded by <code>block.timestamp >= gameOverTimestamp + 30 days</code></td></tr>
+      <tr><th>Currency</th><td>ETH + stETH</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4 style="margin-top:0;">Formula</h4>
+      <pre><code>// GameOverModule.sol:171-189
+// Precondition: block.timestamp >= gameOverTimestamp + 30 days
+// Precondition: gameOver == true && !finalSwept
+
+claimablePool = 0;  // Intentional forfeiture of unclaimed winnings
+
+// Remaining balance:
+uint256 ethBal = address(this).balance;
+uint256 stethBal = steth.balanceOf(address(this));
+
+// 50/50 split via _sendToVault
+// dgnrsAmount = totalFunds / 2           -- 50% to sDGNRS
+// vaultAmount = totalFunds - dgnrsAmount -- 50% to vault (gets rounding wei)
+
+// finalSwept latch set BEFORE external calls (CEI)
+// admin.shutdownVrf() wrapped in try/catch (fire-and-forget)</code></pre>
+      <p class="file-ref"><strong>Code:</strong> <code>GameOverModule.sol:171-189</code>, <code>DegenerusGame.sol:1431-1447</code></p>
+    </div>
+
+    <svg viewBox="0 0 800 300" class="flow-svg">
+      <defs>
+        <marker id="go02-arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- 30-Day Timer trigger (diamond) -->
+      <polygon points="100,30 190,65 100,100 10,65" class="decision"/>
+      <text x="100" y="60" text-anchor="middle" font-size="10" font-weight="600">30-Day Timer</text>
+      <text x="100" y="75" text-anchor="middle" font-size="9" fill="#555">Expired?</text>
+
+      <!-- Arrow: trigger -> handleFinalSweep -->
+      <line x1="190" y1="65" x2="270" y2="65" stroke="#424242" stroke-width="1.5" marker-end="url(#go02-arrow)"/>
+      <text x="230" y="55" text-anchor="middle" font-size="9" fill="#2e7d32">Yes</text>
+
+      <!-- handleFinalSweep -->
+      <rect x="280" y="40" width="190" height="50" class="contract"/>
+      <text x="375" y="62" text-anchor="middle" font-weight="600" font-size="10">handleFinalSweep</text>
+      <text x="375" y="77" text-anchor="middle" font-size="9" fill="#555">GameOverModule:171-189</text>
+
+      <!-- claimablePool = 0 annotation -->
+      <text x="375" y="110" text-anchor="middle" font-size="10" fill="#c62828" font-weight="600">claimablePool = 0</text>
+
+      <!-- Arrow: handleFinalSweep -> Vault -->
+      <line x1="375" y1="90" x2="375" y2="140" stroke="#424242" stroke-width="1"/>
+      <line x1="375" y1="140" x2="560" y2="180" stroke="#424242" stroke-width="1.5" marker-end="url(#go02-arrow)"/>
+      <text x="490" y="155" text-anchor="middle" font-size="9" fill="#555">50% ETH+stETH</text>
+
+      <!-- Vault -->
+      <rect x="550" y="165" width="120" height="45" rx="20" class="recipient"/>
+      <text x="610" y="193" text-anchor="middle" font-weight="600" font-size="10">Vault</text>
+
+      <!-- Arrow: handleFinalSweep -> sDGNRS -->
+      <line x1="375" y1="140" x2="560" y2="250" stroke="#424242" stroke-width="1.5" marker-end="url(#go02-arrow)"/>
+      <text x="490" y="215" text-anchor="middle" font-size="9" fill="#555">50% ETH+stETH</text>
+
+      <!-- sDGNRS -->
+      <rect x="550" y="235" width="120" height="45" rx="20" class="recipient"/>
+      <text x="610" y="263" text-anchor="middle" font-weight="600" font-size="10">sDGNRS</text>
+
+      <!-- Unclaimed winnings dashed arrow to Forfeited -->
+      <line x1="280" y1="65" x2="220" y2="150" stroke="#999" stroke-width="1" stroke-dasharray="5,3"/>
+      <text x="215" y="160" text-anchor="middle" font-size="9" fill="#999" font-style="italic">Unclaimed: Forfeited</text>
+
+      <!-- GO-05-F01 warning annotation -->
+      <rect x="545" y="120" width="220" height="30" rx="4" style="fill:#ffebee;stroke:#c62828;stroke-width:0.5;"/>
+      <text x="655" y="140" text-anchor="middle" font-size="9" fill="#c62828">GO-05-F01: _sendToVault hard revert risk</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Unclaimed winnings forfeited:</strong> <code>claimablePool = 0</code> is intentional -- players had 30 days to claim via <code>claimWinnings()</code></li>
+        <li><strong><code>_sendToVault</code> hard revert risk (GO-05-F01 MEDIUM):</strong> If vault or sDGNRS cannot receive ETH/stETH, sweep permanently blocked -- 7 dangerous revert sites in <code>_sendToVault</code></li>
+        <li><strong><code>finalSwept</code> latch:</strong> Set before external calls (correct CEI ordering at <code>GameOverModule:176</code>); prevents re-execution</li>
+        <li><strong>Single player:</strong> Handles correctly; their unclaimed portion is still forfeited after 30 days per design</li>
+        <li><strong>Dead VRF at GAMEOVER:</strong> 3-day fallback timer; <code>_gameOverEntropy</code> 4-branch acquisition guarantees GAMEOVER fires with non-zero entropy</li>
+      </ul>
+    </div>
+  </div>
+
 </section>
 
 <!-- ===== CROSS-SYSTEM: claimablePool INVARIANT ===== -->
