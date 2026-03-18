@@ -770,14 +770,266 @@ dailyBudget = (currentPrizePool * randomBps) / BPS_DENOMINATOR;
 
 <section id="cat-scatter">
   <h2>2. Scatter / Decimator</h2>
-  <!-- System cards populated by Plan 30-03 -->
+  <div style="background: #e3f2fd; border-left: 4px solid #1565c0; padding: 1rem; margin: 1rem 0; border-radius: 4px;">
+    <strong>Pool Source Distinction:</strong> BAF scatter and x00 decimator use <code>baseFuturePool</code> (a snapshot taken at the start of level processing). Normal decimator uses <code>futurePoolLocal</code> (the running total after BAF deduction). This means the normal decimator's 10% is calculated AFTER the BAF scatter has already deducted its share from the pool.
+  </div>
+
+  <!-- System Card 1: PAY-03 / PAY-04 — BAF Scatter Payouts -->
+  <div class="system-card" id="pay-03-04">
+    <h3>BAF Scatter Payouts</h3>
+    <div>
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge" style="background:#e8eaf6;color:#3949ab;">PAY-03</span>
+      <span class="badge" style="background:#e8eaf6;color:#3949ab;">PAY-04</span>
+    </div>
+
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Every 10 levels (normal), every 100 levels (century). Fires during endgame level transition via <code>runRewardJackpots()</code>.</td></tr>
+      <tr><th>Source Pool</th><td><code>baseFuturePool</code> -- snapshot of <code>futurePrizePool</code> at start of level processing</td></tr>
+      <tr><th>Calculation</th><td><strong>Normal (PAY-03):</strong> <code>bafPoolWei = (baseFuturePool * 10) / 100</code> (10%, or 20% at L50)<br><strong>Century (PAY-04):</strong> <code>bafPoolWei = (baseFuturePool * 20) / 100</code> (20% at x00 levels)</td></tr>
+      <tr><th>Recipients</th><td>7-category split via DegenerusJackpots -- A: 10%, A2: 5%, B: 5%, D: 5%, D2: 5%, E1: 45%, E2: 25%</td></tr>
+      <tr><th>Claim Mechanism</th><td>ETH portion via <code>_addClaimableEth</code> -> <code>claimableWinnings</code>; lootbox portion via whale pass queueing</td></tr>
+      <tr><th>Currency</th><td>ETH + lootbox tickets</td></tr>
+    </table>
+
+    <h4>BAF Normal Scatter (PAY-03)</h4>
+    <p>Fires at levels 10, 20, 30, etc. (every <code>lvl % 10 == 0</code>). Uses 10% of <code>baseFuturePool</code>, except at level 50 where the percentage is elevated to 20%. The pool allocation is distributed across 7 prize categories via the <code>_runBafJackpot</code> function in DegenerusJackpots.</p>
+
+    <h4>BAF Century Scatter (PAY-04)</h4>
+    <p>Fires at levels 100, 200, 300, etc. (every <code>prevMod100 == 0</code>). Uses 20% of <code>baseFuturePool</code>. Century scatter uses a distinct sampling pattern: 4 rounds at lvl+1, 4 rounds at lvl+2, 4 rounds at lvl+3, then 38 rounds randomly selected from the past 99 levels. Both share the same 7-category distribution mechanics via <code>_runBafJackpot</code>.</p>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// EndgameModule.sol:168-172
+uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
+uint256 bafPoolWei = (baseFuturePool * bafPct) / 100;
+futurePoolLocal -= bafPoolWei;
+
+// 7-category split -- DegenerusJackpots.sol:229-530
+// A:  10% -- Active player reward (ETH)
+// A2:  5% -- Secondary active player reward (ETH)
+// B:   5% -- Bonus category (lootbox)
+// D:   5% -- DGNRS holder reward
+// D2:  5% -- Secondary DGNRS holder reward
+// E1: 45% -- Primary endgame reward (ETH)
+// E2: 25% -- Secondary endgame reward (lootbox)</code></pre>
+      <p class="file-ref"><strong>Code:</strong> EndgameModule.sol:138-408, DegenerusJackpots.sol:229-530 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <!-- SVG Flow Diagram: BAF Scatter -->
+    <svg viewBox="0 0 800 400" class="flow-svg">
+      <defs>
+        <marker id="arrow-scatter" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- baseFuturePool source -->
+      <rect x="10" y="160" width="170" height="60" rx="8" class="pool"/>
+      <text x="95" y="185" text-anchor="middle" font-weight="600">baseFuturePool</text>
+      <text x="95" y="200" text-anchor="middle" font-size="10" fill="#555">(snapshot)</text>
+
+      <!-- Arrow to BAF Scatter -->
+      <line x1="180" y1="190" x2="260" y2="190" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-scatter)"/>
+      <text x="220" y="180" text-anchor="middle" font-size="10" fill="#555">10% or 20%</text>
+
+      <!-- BAF Scatter contract -->
+      <rect x="265" y="160" width="155" height="60" class="contract"/>
+      <text x="342" y="185" text-anchor="middle" font-weight="600">BAF Scatter</text>
+      <text x="342" y="200" text-anchor="middle" font-size="10" fill="#555">_runBafJackpot</text>
+
+      <!-- Fan out arrows to categories -->
+      <!-- E1: 45% -->
+      <line x1="420" y1="170" x2="530" y2="50" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-scatter)"/>
+      <rect x="535" y="30" width="120" height="40" rx="4" class="recipient"/>
+      <text x="595" y="48" text-anchor="middle" font-size="11">E1: 45% ETH</text>
+      <text x="595" y="62" text-anchor="middle" font-size="9" fill="#555">Endgame primary</text>
+
+      <!-- E2: 25% -->
+      <line x1="420" y1="180" x2="530" y2="110" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-scatter)"/>
+      <rect x="535" y="90" width="130" height="40" rx="4" class="recipient"/>
+      <text x="600" y="108" text-anchor="middle" font-size="11">E2: 25% Lootbox</text>
+      <text x="600" y="122" text-anchor="middle" font-size="9" fill="#555">Endgame secondary</text>
+
+      <!-- A: 10% -->
+      <line x1="420" y1="190" x2="530" y2="170" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-scatter)"/>
+      <rect x="535" y="150" width="125" height="40" rx="4" class="recipient"/>
+      <text x="597" y="168" text-anchor="middle" font-size="11">A: 10% ETH</text>
+      <text x="597" y="182" text-anchor="middle" font-size="9" fill="#555">Active player</text>
+
+      <!-- Others: 20% grouped -->
+      <line x1="420" y1="200" x2="530" y2="230" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-scatter)"/>
+      <rect x="535" y="210" width="170" height="40" rx="4" class="contract"/>
+      <text x="620" y="228" text-anchor="middle" font-size="11">Others: 20% combined</text>
+      <text x="620" y="242" text-anchor="middle" font-size="9" fill="#555">A2(5%) B(5%) D(5%) D2(5%)</text>
+
+      <!-- ETH claim path -->
+      <line x1="655" y1="50" x2="710" y2="310" stroke="#424242" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-scatter)"/>
+      <line x1="660" y1="170" x2="710" y2="310" stroke="#424242" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <!-- _addClaimableEth box -->
+      <rect x="680" y="300" width="110" height="50" rx="4" class="contract"/>
+      <text x="735" y="320" text-anchor="middle" font-size="10">_addClaimableEth</text>
+      <text x="735" y="335" text-anchor="middle" font-size="9" fill="#555">auto-rebuy check</text>
+
+      <!-- Players -->
+      <rect x="680" y="370" width="110" height="30" rx="15" class="recipient"/>
+      <text x="735" y="390" text-anchor="middle" font-size="11" font-weight="600">Players</text>
+      <line x1="735" y1="350" x2="735" y2="368" stroke="#424242" stroke-width="1" marker-end="url(#arrow-scatter)"/>
+
+      <!-- Lootbox path -->
+      <line x1="665" y1="110" x2="710" y2="270" stroke="#ff6b35" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-scatter)"/>
+      <rect x="530" y="270" width="140" height="30" rx="4" style="fill:#fff3e0;stroke:#ff6b35;stroke-width:1;"/>
+      <text x="600" y="290" text-anchor="middle" font-size="10" fill="#ff6b35">Lootbox Tickets</text>
+
+      <!-- Century annotation -->
+      <rect x="10" y="290" width="220" height="50" rx="4" style="fill:#fff9c4;stroke:#f9a825;stroke-width:1;"/>
+      <text x="120" y="310" text-anchor="middle" font-size="10" font-weight="600">Century distinct sampling:</text>
+      <text x="120" y="325" text-anchor="middle" font-size="10">4+4+4+38 rounds</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>No ticket holders at target level:</strong> Prize returns to <code>futurePoolLocal</code> via <code>toReturn</code> (DegenerusJackpots.sol:259, 290). No funds are lost.</li>
+        <li><strong>Single player with large win:</strong> 50/50 ETH/lootbox split; whale pass queueing via <code>_queueWhalePassClaimCore</code> if payout exceeds 5 ETH.</li>
+        <li><strong>Level 50 special case:</strong> Gets 20% instead of standard 10% (<code>lvl == 50 ? 20 : 10</code>).</li>
+        <li><strong>Century scatter distinct sampling:</strong> 4+4+4+38 rounds (vs normal scatter pattern). Both use the same distribution mechanics.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- System Card 2: PAY-05 / PAY-06 — Decimator Claims -->
+  <div class="system-card" id="pay-05-06">
+    <h3>Decimator Claims</h3>
+    <div>
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge" style="background:#e8eaf6;color:#3949ab;">PAY-05</span>
+      <span class="badge" style="background:#e8eaf6;color:#3949ab;">PAY-06</span>
+    </div>
+
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Player claims after a decimator round completes</td></tr>
+      <tr><th>Source Pool</th><td><strong>Normal (PAY-05):</strong> <code>futurePoolLocal</code> -- running total after BAF deduction, 10% allocation<br><strong>x00 (PAY-06):</strong> <code>baseFuturePool</code> -- snapshot, 30% allocation at x00 milestones</td></tr>
+      <tr><th>Calculation</th><td><code>payout = (poolWei * playerBurn) / totalBurn</code> (pro-rata by burn amount), then <code>ethPortion = payout / 2</code> and <code>lootboxPortion = payout - ethPortion</code></td></tr>
+      <tr><th>Recipients</th><td>Players who burned tokens in the decimator round (pro-rata by burn amount)</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>claimDecimatorJackpot()</code> -- checks <code>claimed[player]</code> flag, routes through <code>_addClaimableEth</code></td></tr>
+      <tr><th>Currency</th><td>50% ETH, 50% lootbox tickets</td></tr>
+    </table>
+
+    <h4>Decimator Normal Claims (PAY-05)</h4>
+    <p>Uses 10% of <code>futurePoolLocal</code> (the running total AFTER BAF scatter has deducted its share). Pool allocation at EndgameModule.sol:210. Claims are pro-rata by the amount of tokens each player burned in the decimator round. The 50/50 split between ETH and lootbox tickets is enforced in the claim path.</p>
+
+    <h4>Decimator x00 Claims (PAY-06)</h4>
+    <p>Uses 30% of <code>baseFuturePool</code> (the snapshot taken at the start of level processing, before any BAF deduction). Pool allocation at EndgameModule.sol:194. At x00 levels where both BAF century and x00 decimator fire, the combined draw is up to 50% of <code>baseFuturePool</code> (20% BAF + 30% decimator). Shares the same <code>runDecimatorJackpot</code> resolution and <code>claimDecimatorJackpot</code> claim path as normal decimator.</p>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// Pool allocation -- EndgameModule.sol:210
+uint256 decPoolWei = (futurePoolLocal * 10) / 100; // Normal: 10% of futurePoolLocal
+
+// Pool allocation -- EndgameModule.sol:194
+uint256 decPoolWei = (baseFuturePool * 30) / 100;  // x00: 30% of baseFuturePool
+
+// Claim formula -- DecimatorModule.sol:297-547
+payout = (poolWei * playerBurn) / totalBurn;  // Pro-rata by burn
+ethPortion = payout / 2;                       // 50% ETH
+lootboxPortion = payout - ethPortion;          // 50% lootbox</code></pre>
+      <p class="file-ref"><strong>Code:</strong> DecimatorModule.sol:297-547, EndgameModule.sol:175-210, DegenerusGame.sol:1293-1305 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <!-- SVG Flow Diagram: Decimator Claims -->
+    <svg viewBox="0 0 800 350" class="flow-svg">
+      <defs>
+        <marker id="arrow-dec" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- futurePoolLocal source -->
+      <rect x="10" y="60" width="165" height="55" rx="8" class="pool"/>
+      <text x="92" y="83" text-anchor="middle" font-weight="600" font-size="11">futurePoolLocal</text>
+      <text x="92" y="100" text-anchor="middle" font-size="9" fill="#555">(post-BAF running total)</text>
+
+      <!-- baseFuturePool source -->
+      <rect x="10" y="150" width="165" height="55" rx="8" class="pool"/>
+      <text x="92" y="173" text-anchor="middle" font-weight="600" font-size="11">baseFuturePool</text>
+      <text x="92" y="190" text-anchor="middle" font-size="9" fill="#555">(snapshot)</text>
+
+      <!-- Arrows to Decimator Pool -->
+      <line x1="175" y1="88" x2="270" y2="140" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-dec)"/>
+      <text x="210" y="100" text-anchor="middle" font-size="10" fill="#555">10%</text>
+
+      <line x1="175" y1="178" x2="270" y2="155" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-dec)"/>
+      <text x="210" y="180" text-anchor="middle" font-size="10" fill="#555">30%</text>
+
+      <!-- Decimator Pool -->
+      <rect x="275" y="120" width="145" height="55" class="contract"/>
+      <text x="347" y="143" text-anchor="middle" font-weight="600" font-size="11">Decimator Pool</text>
+      <text x="347" y="160" text-anchor="middle" font-size="9" fill="#555">decPoolWei</text>
+
+      <!-- Arrow to decision -->
+      <line x1="420" y1="148" x2="465" y2="148" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-dec)"/>
+
+      <!-- Decision diamond: totalBurn > 0? -->
+      <polygon points="510,118 555,148 510,178 465,148" class="decision"/>
+      <text x="510" y="145" text-anchor="middle" font-size="9">totalBurn</text>
+      <text x="510" y="155" text-anchor="middle" font-size="9">&gt; 0?</text>
+
+      <!-- Yes path -->
+      <line x1="555" y1="148" x2="600" y2="148" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-dec)"/>
+      <text x="575" y="140" text-anchor="middle" font-size="9" fill="#2e7d32">Yes</text>
+
+      <!-- Pro-rata Distribution -->
+      <rect x="605" y="80" width="120" height="40" rx="4" class="contract"/>
+      <text x="665" y="98" text-anchor="middle" font-size="10">Pro-rata Split</text>
+      <text x="665" y="112" text-anchor="middle" font-size="9" fill="#555">playerBurn/totalBurn</text>
+
+      <!-- 50% ETH -->
+      <line x1="665" y1="120" x2="665" y2="168" stroke="#424242" stroke-width="1" marker-end="url(#arrow-dec)"/>
+      <rect x="605" y="170" width="120" height="35" rx="4" class="contract"/>
+      <text x="665" y="188" text-anchor="middle" font-size="10">_addClaimableEth</text>
+      <text x="665" y="200" text-anchor="middle" font-size="9" fill="#627eea">50% ETH</text>
+
+      <!-- Lootbox path -->
+      <rect x="605" y="230" width="120" height="30" rx="4" style="fill:#fff3e0;stroke:#ff6b35;stroke-width:1;"/>
+      <text x="665" y="250" text-anchor="middle" font-size="10" fill="#ff6b35">50% Lootbox</text>
+      <line x1="665" y1="205" x2="665" y2="228" stroke="#ff6b35" stroke-width="1" marker-end="url(#arrow-dec)"/>
+
+      <!-- claimablePool -> Players -->
+      <rect x="605" y="285" width="120" height="30" rx="15" class="recipient"/>
+      <text x="665" y="305" text-anchor="middle" font-size="11" font-weight="600">Players</text>
+      <line x1="665" y1="260" x2="665" y2="283" stroke="#424242" stroke-width="1" marker-end="url(#arrow-dec)"/>
+
+      <!-- No path: decRefund -->
+      <line x1="510" y1="178" x2="510" y2="280" stroke="#424242" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow-dec)"/>
+      <text x="525" y="215" font-size="9" fill="#c62828">No</text>
+      <rect x="445" y="285" width="130" height="30" rx="4" style="fill:#fce4ec;stroke:#c62828;stroke-width:1;"/>
+      <text x="510" y="305" text-anchor="middle" font-size="10" fill="#c62828">decRefund (recycled)</text>
+
+      <!-- prizePoolFrozen annotation -->
+      <rect x="10" y="270" width="200" height="45" rx="4" style="fill:#fff9c4;stroke:#f9a825;stroke-width:1;"/>
+      <text x="110" y="288" text-anchor="middle" font-size="10" font-weight="600">prizePoolFrozen guard:</text>
+      <text x="110" y="303" text-anchor="middle" font-size="10">Claims blocked days 1-4</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong><code>totalBurn == 0</code>:</strong> No winners; full pool returned as <code>decRefund</code>. In normal gameplay, recycled to the next round. In GAMEOVER, returned to terminal jackpot.</li>
+        <li><strong><code>lastDecClaimRound</code> overwrite:</strong> By-design per v1.1 spec (EDGE-04). Previous round's unclaimed funds are recycled to the next round. Only one decimator round can be active at a time.</li>
+        <li><strong><code>claimed[player]</code> flag:</strong> Prevents double-claim within a round. Per-level per-player flag.</li>
+        <li><strong><code>prizePoolFrozen</code> guard:</strong> Blocks claims during jackpot phase days 1-4 to prevent interference with jackpot distribution.</li>
+      </ul>
+    </div>
+  </div>
 </section>
 
 <!-- ===== CATEGORY 3: COINFLIP ECONOMY ===== -->
 
 <section id="cat-coinflip">
   <h2>3. Coinflip Economy</h2>
-  <!-- System cards populated by Plan 30-03 -->
+  <!-- Coinflip system cards populated by Plan 30-03 Task 2 -->
 </section>
 
 <!-- ===== CATEGORY 4: ANCILLARY PAYOUTS ===== -->
