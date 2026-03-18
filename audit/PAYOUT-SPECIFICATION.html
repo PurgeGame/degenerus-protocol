@@ -2458,20 +2458,121 @@ uint256 stethBal = steth.balanceOf(address(this));
 
 <section id="cross-claimable">
   <h2>7. Cross-System: claimablePool Invariant</h2>
-  <!-- System cards populated by Plan 30-06 -->
+
+  <div style="background: #e3f2fd; border-left: 4px solid #1565c0; padding: 1rem; margin: 1rem 0; border-radius: 4px;">
+    <strong>Invariant INV-01:</strong> <code>claimablePool &lt;= address(this).balance + steth.balanceOf(address(this))</code> &mdash; Verified PASS at all 15 mutation sites across GAMEOVER and normal gameplay paths.
+  </div>
+
+  <p>The <code>claimablePool</code> tracks ETH owed to players. This invariant ensures the protocol always holds enough ETH+stETH to cover all pending claims. Every code path that increases <code>claimablePool</code> also receives corresponding ETH, and the only code path that decreases <code>claimablePool</code> is the <code>claimWinnings()</code> function which transfers the exact amount being deducted.</p>
+
+  <h3>Complete Mutation Site Inventory (15 sites)</h3>
+
+  <h4>GAMEOVER Path (6 sites)</h4>
+  <table class="mutation-table">
+    <thead>
+      <tr><th>Site</th><th>Location</th><th>Mutation</th><th>Direction</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>G1</td><td><code>GameOverModule.sol:105</code></td><td><code>claimablePool += totalRefunded</code></td><td>UP</td></tr>
+      <tr><td>G2</td><td><code>GameOverModule.sol:143</code></td><td><code>claimablePool += decSpend</code></td><td>UP</td></tr>
+      <tr><td>G3</td><td><code>JackpotModule.sol:1573</code></td><td><code>claimablePool += ctx.liabilityDelta</code></td><td>UP</td></tr>
+      <tr><td>G4</td><td><code>GameOverModule.sol:177</code></td><td><code>claimablePool = 0</code></td><td>ZERO</td></tr>
+      <tr><td>G5</td><td><code>DecimatorModule.sol:936</code></td><td>via <code>_addClaimableEth</code> &rarr; <code>_creditClaimable</code></td><td>UP (individual)</td></tr>
+      <tr><td>G6</td><td><code>DegenerusGame.sol:1440</code></td><td><code>claimablePool -= payout</code></td><td>DOWN</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Normal Gameplay (8 sites)</h4>
+  <table class="mutation-table">
+    <thead>
+      <tr><th>Site</th><th>Location</th><th>Mutation</th><th>Direction</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>N1</td><td><code>JackpotModule.sol:1572-1573</code></td><td><code>claimablePool += ctx.liabilityDelta</code></td><td>UP</td></tr>
+      <tr><td>N2</td><td><code>JackpotModule.sol:1529-1531</code></td><td><code>claimablePool += liabilityDelta</code></td><td>UP</td></tr>
+      <tr><td>N3</td><td><code>PayoutUtils.sol:90</code></td><td><code>claimablePool += remainder</code></td><td>UP</td></tr>
+      <tr><td>N4</td><td><code>EndgameModule.sol:226</code></td><td><code>claimablePool += claimableDelta</code></td><td>UP</td></tr>
+      <tr><td>N5</td><td><code>EndgameModule.sol:275</code></td><td><code>claimablePool += calc.reserved</code></td><td>UP</td></tr>
+      <tr><td>N6</td><td><code>DecimatorModule.sol:478/490/519</code></td><td>claimablePool via decimator claim</td><td>UP</td></tr>
+      <tr><td>N7</td><td><code>JackpotModule.sol:940-958</code></td><td><code>claimablePool += claimableDelta</code> (yield)</td><td>UP</td></tr>
+      <tr><td>N8</td><td><code>DegenerusGame.sol:1440</code></td><td><code>claimablePool -= payout</code></td><td>DOWN</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Additional (1 site)</h4>
+  <table class="mutation-table">
+    <thead>
+      <tr><th>Site</th><th>Location</th><th>Mutation</th><th>Direction</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>D1</td><td><code>DegeneretteModule.sol:1158</code></td><td>via <code>_addClaimableEth</code></td><td>UP</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Proof Summary</h3>
+  <p>All 15 mutation sites have been individually verified in Phases 26-28. Each UP mutation is paired with an equal ETH deposit or pre-existing pool balance. The ZERO mutation (G4 at final sweep) is intentional forfeiture after a 30-day claim window. The DOWN mutations (G6, N8) are in <code>claimWinnings()</code> which transfers exact <code>payout</code> amount to the caller. No path exists where <code>claimablePool</code> exceeds actual balance.</p>
+
+  <div style="background: #e3f2fd; border-left: 4px solid #1565c0; padding: 1rem; margin: 1rem 0; border-radius: 4px;">
+    <strong>Invariant INV-02 (Pool Accounting Balance):</strong> All 4 pool variables (<code>futurePrizePool</code>, <code>nextPrizePool</code>, <code>currentPrizePool</code>, <code>claimablePool</code>) have conservation proofs. Auto-rebuy is zero-sum: ticket-converted ETH is excluded from <code>claimablePool</code> delta, maintaining the invariant.
+  </div>
+
 </section>
 
 <!-- ===== CROSS-SYSTEM: KNOWN ISSUES ===== -->
 
 <section id="cross-issues">
   <h2>8. Cross-System: Known Issues</h2>
-  <!-- System cards populated by Plan 30-06 -->
+
+  <p>Across Phases 26-29 (109 plans, 142 requirements, 19 phases): <strong>0 Critical, 0 High, 3 Medium, 4 Low, 22+ Informational</strong> findings.</p>
+
+  <h3>Medium Findings (3)</h3>
+  <table class="mutation-table">
+    <thead>
+      <tr><th>ID</th><th>Finding</th><th>Severity</th><th>Phase</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>WAR-01</td><td>Compromised admin key + 7-day community absence enables malicious VRF coordinator swap</td><td>FINDING-MEDIUM</td><td>24</td><td>Accepted Risk</td></tr>
+      <tr><td>WAR-02</td><td>Colluding voter cartel (&ge;5% sDGNRS) at day-6 threshold decay can approve malicious swap</td><td>FINDING-MEDIUM</td><td>24</td><td>Accepted Risk</td></tr>
+      <tr><td>GO-05-F01</td><td><code>_sendToVault</code> hard reverts can block terminal distribution if vault/sDGNRS cannot receive</td><td>FINDING-MEDIUM</td><td>26</td><td>Accepted Risk</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Low Findings (4)</h3>
+  <table class="mutation-table">
+    <thead>
+      <tr><th>ID</th><th>Finding</th><th>Severity</th><th>Phase</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>M-02</td><td>VRF coordinator swap security (downgraded from Medium after governance mitigation in v2.1)</td><td>FINDING-LOW</td><td>24</td><td>Mitigated</td></tr>
+      <tr><td>GOV-07</td><td><code>_executeSwap</code> CEI violation: external call before <code>_voidAllActive</code> completes</td><td>FINDING-LOW</td><td>24</td><td>Known Issue</td></tr>
+      <tr><td>VOTE-03</td><td><code>uint8 activeProposalCount</code> overflow wraps to 0 at 256 proposals (~$3k cost)</td><td>FINDING-LOW</td><td>24</td><td>Known Issue</td></tr>
+      <tr><td>WAR-06</td><td>Admin spam-propose gas griefing: no per-proposer cooldown bloats <code>_voidAllActive</code> loop</td><td>FINDING-LOW</td><td>24</td><td>Known Issue</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Key Informational Findings</h3>
+  <table class="mutation-table">
+    <thead>
+      <tr><th>ID</th><th>Finding</th><th>Phase</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>PAY-07-I01</td><td>Coinflip claim window 30/90 day asymmetry (first-time vs returning claimants)</td><td>27</td><td>By-design per v1.1 spec; absent from natspec</td></tr>
+      <tr><td>PAY-11-I01</td><td>v1.1 affiliate doc describes sequential depletion; code uses fixed proportional allocation</td><td>27</td><td>Code is authoritative; doc is stale</td></tr>
+      <tr><td>PAY-03-I01</td><td>Unused <code>winnerMask</code> variable in BAF scatter resolution</td><td>27</td><td>Dead code; no security impact</td></tr>
+      <tr><td>GO-03-I01</td><td>Stale test comments (912d vs 365d timeout)</td><td>26</td><td>Tests pass by overshooting</td></tr>
+      <tr><td>EDGE-03</td><td><code>advanceGame</code> queue inflation delays jackpots; bounded by batch mechanism + advance bounty</td><td>28</td><td>Classified LOW (FINDING-LOW-EDGE03-01)</td></tr>
+    </tbody>
+  </table>
+
+  <p><em>Full findings details available in <code>audit/KNOWN-ISSUES.md</code> and <code>audit/FINAL-FINDINGS-REPORT.md</code>.</em></p>
+
 </section>
 
 <!-- ===== FOOTER ===== -->
 
 <footer style="margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--color-border); font-size: 0.85rem; color: #666;">
-  <p>Generated from Phases 26-29 audit findings. Commit: 3fa32f51. All file:line references verified against this commit.</p>
+  <p><strong>Document Statistics:</strong> 20 system cards | 20 SVG flow diagrams | 23 distribution mechanisms (PAY-01&ndash;PAY-19, GO-01, GO-02, GO-07, GO-08) | 6 SPEC requirements verified</p>
+  <p>Generated from Phases 26-29 audit findings (109 plans, 142 requirements, 19 phases). Commit: 3fa32f51. All file:line references verified against this commit.</p>
   <p>Degenerus Protocol Payout Specification. For C4A warden reference only. Not legal or financial advice.</p>
 </footer>
 
