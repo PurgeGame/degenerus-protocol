@@ -672,6 +672,98 @@ dailyBudget = (currentPrizePool * randomBps) / BPS_DENOMINATOR;
     </div>
   </div>
 
+  <!-- PAY-16: Ticket Conversion and Futurepool Mechanics -->
+  <div class="system-card" id="pay-16">
+    <h3>PAY-16: Ticket Conversion and Futurepool Mechanics</h3>
+    <div class="system-meta">
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge">PAY-16</span>
+    </div>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Level transition (when level advances)</td></tr>
+      <tr><th>Source Pool</th><td><code>futurePrizePool</code> transitions to <code>currentPrizePool</code>; ticket value backed by 2x over-collateralization</td></tr>
+      <tr><th>Calculation</th><td><code>_budgetToTicketUnits</code> provides 2x over-collateralization -- each ticket unit backed by 2x its face value in pool ETH. Pool transition: <code>futurePrizePool</code> &#8594; <code>nextPrizePool</code> &#8594; <code>currentPrizePool</code></td></tr>
+      <tr><th>Recipients</th><td>Ticket holders (their tickets become redeemable against <code>currentPrizePool</code>)</td></tr>
+      <tr><th>Claim Mechanism</th><td>Indirect -- ticket value realized through jackpot draw participation</td></tr>
+      <tr><th>Currency</th><td>ETH (pool lifecycle management, not direct payout)</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// JackpotModule.sol:1078-1118 -- _budgetToTicketUnits
+// 2x over-collateralization: each ticket backed by 2x pool ETH
+// ticketUnits = (budget &lt;&lt; 2) / priceForLevel(lvl)
+// = (budget * 4) / priceForLevel(lvl)
+// Over-collateralization absorbs auto-rebuy 130%/145% bonus
+// Net coverage: 1.38x-1.54x after bonus absorption
+
+// JackpotModule.sol:886-924 -- Pool transition chain
+// futurePrizePool -&gt; nextPrizePool (at level N-1 completion)
+// nextPrizePool -&gt; currentPrizePool (at level N start)
+// prizePoolFrozen guard blocks claims during days 1-4</code></pre>
+      <p class="file-ref"><strong>Code:</strong> JackpotModule.sol:1078-1118, JackpotModule.sol:886-924 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <svg viewBox="0 0 800 300" class="flow-svg">
+      <defs>
+        <marker id="arrow-j3" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- futurePrizePool -->
+      <rect x="10" y="40" width="170" height="60" rx="8" class="pool"/>
+      <text x="95" y="65" text-anchor="middle" font-weight="600">futurePrizePool</text>
+      <text x="95" y="82" text-anchor="middle" font-size="10" fill="#555">Accumulates ETH</text>
+
+      <!-- Arrow: futurePrizePool -> nextPrizePool -->
+      <line x1="180" y1="70" x2="290" y2="70" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j3)"/>
+      <text x="235" y="60" text-anchor="middle" font-size="10" fill="#555">Level transition</text>
+
+      <!-- nextPrizePool -->
+      <rect x="300" y="40" width="170" height="60" rx="8" class="pool"/>
+      <text x="385" y="65" text-anchor="middle" font-weight="600">nextPrizePool</text>
+      <text x="385" y="82" text-anchor="middle" font-size="10" fill="#555">Queued for next level</text>
+
+      <!-- Arrow: nextPrizePool -> currentPrizePool -->
+      <line x1="470" y1="70" x2="580" y2="70" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j3)"/>
+      <text x="525" y="60" text-anchor="middle" font-size="10" fill="#555">Next level start</text>
+
+      <!-- currentPrizePool -->
+      <rect x="590" y="40" width="180" height="60" rx="8" class="pool"/>
+      <text x="680" y="65" text-anchor="middle" font-weight="600">currentPrizePool</text>
+      <text x="680" y="82" text-anchor="middle" font-size="10" fill="#555">Active jackpot draws</text>
+
+      <!-- prizePoolFrozen annotation (dashed border) -->
+      <rect x="585" y="35" width="190" height="70" rx="10" fill="none" stroke="#f9a825" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="680" y="120" text-anchor="middle" font-size="10" fill="#f9a825" font-weight="600">Frozen days 1-4</text>
+
+      <!-- _budgetToTicketUnits annotation -->
+      <rect x="190" y="130" width="240" height="40" rx="4" fill="#fff9c4" stroke="#f9a825" stroke-width="1"/>
+      <text x="310" y="148" text-anchor="middle" font-size="11" font-weight="600">_budgetToTicketUnits</text>
+      <text x="310" y="163" text-anchor="middle" font-size="10" fill="#555">2x over-collateralization (TICKET_UNIT_SCALE)</text>
+
+      <!-- yieldAccumulator -->
+      <rect x="10" y="210" width="170" height="60" rx="8" class="pool"/>
+      <text x="95" y="235" text-anchor="middle" font-weight="600">yieldAccumulator</text>
+      <text x="95" y="252" text-anchor="middle" font-size="10" fill="#555">stETH yield buffer</text>
+
+      <!-- Arrow: yieldAccumulator -> futurePrizePool -->
+      <line x1="95" y1="210" x2="95" y2="105" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j3)"/>
+      <text x="115" y="165" text-anchor="start" font-size="10" fill="#555">50% at x00</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Auto-rebuy bonus absorption:</strong> 130% (normal) / 145% (enhanced) ticket bonus covered by structural 2x over-collateralization, yielding net 1.38x-1.54x coverage</li>
+        <li><strong><code>prizePoolFrozen</code> guard:</strong> Blocks decimator claims during jackpot phase days 1-4 to prevent pool depletion mid-draw</li>
+        <li><strong>Atomic pool transition:</strong> Pool transition is atomic per level -- no partial transitions possible</li>
+        <li><strong>Empty pool at transition:</strong> If <code>futurePrizePool</code> is 0 at transition, <code>nextPrizePool</code> receives 0 (no error, just empty jackpot phase)</li>
+      </ul>
+    </div>
+  </div>
+
 </section>
 
 <!-- ===== CATEGORY 2: SCATTER / DECIMATOR ===== -->
