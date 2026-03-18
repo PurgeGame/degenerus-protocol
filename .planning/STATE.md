@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
 status: completed
-stopped_at: Completed 28-02-PLAN.md
-last_updated: "2026-03-18T07:01:18.884Z"
+stopped_at: Completed 28-04-PLAN.md
+last_updated: "2026-03-18T07:02:03.803Z"
 last_activity: 2026-03-18 -- Completed 28-03 Supply/Claimability Invariants (INV-03/INV-04/INV-05 all PASS)
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 16
-  completed_plans: 13
+  completed_plans: 14
   percent: 75
 ---
 
@@ -92,6 +92,10 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 28-02]: INV-01 PASS: all 15 claimablePool mutation sites proven solvency-preserving (6 GAMEOVER + 8 normal + 1 DegeneretteModule D1)
 - [Phase 28-02]: INV-02 PASS: all 4 pool variables (futurePrizePool, nextPrizePool, currentPrizePool, claimablePool) have conservation proofs; auto-rebuy is zero-sum
 - [Phase 28-02]: DegeneretteModule:1158 is a previously uncovered claimablePool mutation site; proven correct via ETH cap and futurePrizePool pre-deduction
+- [Phase 28]: EDGE-03 FINDING-LOW: advanceGame queue inflation delays jackpots but batch mechanism prevents gas exhaustion; advance bounty mitigates
+- [Phase 28]: EDGE-05 PASS: coinflip RNG frontrunning structurally impossible -- rngLocked blocks claims/toggles, deposits target day+1
+- [Phase 28]: EDGE-06 PASS: affiliate self-referral blocked at DegenerusAffiliate.sol:426; multi-account extraction capped at designed 20% commission rate
+- [Phase 28]: EDGE-07 PASS: BPS rounding ~4 ETH lifetime accumulation is protocol-favoring and non-threatening to INV-01 solvency invariant
 
 ## Accumulated Context
 
@@ -124,6 +128,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T07:01:18.882Z
-Stopped at: Completed 28-02-PLAN.md
+Last session: 2026-03-18T07:02:03.801Z
+Stopped at: Completed 28-04-PLAN.md
 Resume file: None
