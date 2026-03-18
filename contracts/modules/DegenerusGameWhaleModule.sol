@@ -223,21 +223,22 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             levelsToAdd = deltaFreeze;
         }
 
-        // Price: boon applies 10/25/50% off standard price,
+        // Price: boon discount applies to first bundle only,
         //        otherwise 2.4 ETH at levels 0-3, 4 ETH after
-        uint256 unitPrice;
+        uint256 totalPrice;
         if (hasValidBoon) {
             uint16 discountBps = whaleBoonDiscountBps[buyer];
             if (discountBps == 0) discountBps = 1000; // Default 10% for legacy boons
-            unitPrice = (WHALE_BUNDLE_STANDARD_PRICE * (10_000 - discountBps)) / 10_000;
+            uint256 discountedPrice = (WHALE_BUNDLE_STANDARD_PRICE * (10_000 - discountBps)) / 10_000;
             delete whaleBoonDay[buyer];
             delete whaleBoonDiscountBps[buyer];
-        } else if (passLevel <= 4) {
-            unitPrice = WHALE_BUNDLE_EARLY_PRICE;
+            totalPrice = discountedPrice + WHALE_BUNDLE_STANDARD_PRICE * (quantity - 1);
         } else {
-            unitPrice = WHALE_BUNDLE_STANDARD_PRICE;
+            // x99 levels: minimum 2 bundles (8 ETH) to deter fresh-account century bonus farming
+            if (passLevel % 100 == 0 && quantity < 2) revert E();
+            uint256 unitPrice = passLevel <= 4 ? WHALE_BUNDLE_EARLY_PRICE : WHALE_BUNDLE_STANDARD_PRICE;
+            totalPrice = unitPrice * quantity;
         }
-        uint256 totalPrice = unitPrice * quantity;
 
         if (msg.value != totalPrice) revert E();
         _awardEarlybirdDgnrs(buyer, totalPrice, passLevel);
