@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
 status: executing
-stopped_at: Completed 26-02-PLAN.md -- safety properties (GO-05, GO-06, GO-09)
-last_updated: "2026-03-18T04:15:12.448Z"
+stopped_at: Completed 26-01-PLAN.md -- core distribution audit (GO-01, GO-08)
+last_updated: "2026-03-18T04:15:41.195Z"
 last_activity: 2026-03-18 -- Completed 26-03 ancillary GAMEOVER paths audit
 progress:
   total_phases: 5
@@ -40,6 +40,9 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - Safety valve can indefinitely defer GAMEOVER -- by design, requires ongoing economic activity (26-03)
 - [Phase 26-02]: GO-05 FINDING-MEDIUM: _sendToVault hard reverts could block terminal distribution; accepted risk for immutable protocol-owned recipients
 - [Phase 26-02]: GO-06 PASS and GO-09 PASS: reentrancy/CEI ordering and VRF fallback verified safe
+- [Phase 26-01]: GO-08 PASS and GO-01 PASS: terminal decimator integration and handleGameOverDrain distribution both verified correct
+- [Phase 26-01]: decBucketOffsetPacked collision impossible -- GAMEOVER and normal level completion mutually exclusive for same level (Q1)
+- [Phase 26-01]: stBal not stale in handleGameOverDrain -- no delegatecall module transfers stETH (Q2)
 
 ## Accumulated Context
 
@@ -53,6 +56,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T04:15:12.445Z
-Stopped at: Completed 26-02-PLAN.md -- safety properties (GO-05, GO-06, GO-09)
+Last session: 2026-03-18T04:15:41.194Z
+Stopped at: Completed 26-01-PLAN.md -- core distribution audit (GO-01, GO-08)
 Resume file: None
