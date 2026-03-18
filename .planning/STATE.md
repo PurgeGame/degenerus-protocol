@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
 status: in-progress
-stopped_at: Completed 27-02-PLAN.md
-last_updated: "2026-03-18T05:13:45.386Z"
-last_activity: 2026-03-18 -- Completed 27-02 Scatter and Decimator Payout Audit (PAY-03, PAY-04, PAY-05, PAY-06 all PASS)
+stopped_at: Completed 27-03-PLAN.md
+last_updated: "2026-03-18T05:23:44.651Z"
+last_activity: 2026-03-18 -- Completed 27-03 Coinflip Economy Audit (PAY-07, PAY-08, PAY-18, PAY-19 all PASS)
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 10
-  completed_plans: 6
-  percent: 60
+  completed_plans: 7
+  percent: 70
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 27 of 30 (Payout/Claim Path Audit)
-Plan: 2 of 6
-Status: 27-02 complete (PAY-03, PAY-04, PAY-05, PAY-06), 4 plans remaining
-Last activity: 2026-03-18 -- Completed 27-02 Scatter and Decimator Payout Audit (PAY-03, PAY-04, PAY-05, PAY-06 all PASS)
+Plan: 3 of 6
+Status: 27-03 complete (PAY-07, PAY-08, PAY-18, PAY-19), 3 plans remaining
+Last activity: 2026-03-18 -- Completed 27-03 Coinflip Economy Audit (PAY-07, PAY-08, PAY-18, PAY-19 all PASS)
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
 ## Project Reference
 
@@ -59,6 +59,13 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 27-02]: BAF always uses baseFuturePool (snapshot) not futurePoolLocal -- code is explicit
 - [Phase 27-02]: lastDecClaimRound overwrite expiry classified as by-design per v1.1 spec Section 8
 
+- [Phase 27-03]: PAY-07 PASS: Coinflip deposit/win/loss lifecycle verified; both claim paths (claimCoinflips, claimCoinflipsFromBurnie) route to identical _claimCoinflipsInternal
+- [Phase 27-03]: PAY-08 PASS: Bounty 1000 BURNIE/day accumulation, DGNRS gating 50k BURNIE bet + 20k BURNIE pool, half-pool credited as flip stake
+- [Phase 27-03]: PAY-18 PASS: WWXRP mintPrize restricted to GAME/COIN/COINFLIP via compile-time constants; 1 WWXRP per loss day
+- [Phase 27-03]: PAY-19 PASS: Recycling 1% (normal) / 1.6% (afKing) / 3.1% (max deity), boons single-use 2-day expiry 100k cap
+- [Phase 27-03]: Coinflip economy fully isolated from ETH claimablePool -- operates entirely in BURNIE burn-and-mint
+- [Phase 27-03]: Claim window 30/90 day asymmetry classified as INFO (by-design per v1.1 spec, absent from natspec)
+
 ## Accumulated Context
 
 - v1.0-v3.0 audit complete (phases 1-26): RNG, economic flow, delta, novel attacks, warden sim, gas optimization, VRF governance, GAMEOVER path
@@ -71,12 +78,16 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - Scatter/decimator paths (PAY-03/04/05/06) all PASS -- pool source summary in audit/v3.0-payout-scatter-decimator.md
 - Pool source distinction verified: baseFuturePool (snapshot) for BAF+x00 decimator, futurePoolLocal (running total) for normal decimator
 - claimablePool invariant extended to scatter/decimator paths -- pre-reserve then deduct pattern verified correct
+- Coinflip economy (PAY-07/08/18/19) all PASS -- burn-and-mint BURNIE model, net deflationary ~1.575% house edge
+- Coinflip economy isolated from ETH claimablePool -- no cross-contamination with pool accounting
+- WWXRP mint authority permanently restricted to GAME/COIN/COINFLIP (compile-time constants, no admin override)
+- Bounty system uses virtual pool counter (not token balance) -- half-pool resolution via creditFlip
 - Contracts source of truth: /home/zak/Dev/PurgeGame/degenerus-audit/contracts/
 - Economics primer: audit/v1.1-ECONOMICS-PRIMER.md
 - Parameter reference: audit/v1.1-parameter-reference.md
 
 ## Session Continuity
 
-Last session: 2026-03-18T05:13:45.384Z
-Stopped at: Completed 27-02-PLAN.md
+Last session: 2026-03-18T05:23:44.648Z
+Stopped at: Completed 27-03-PLAN.md
 Resume file: None
