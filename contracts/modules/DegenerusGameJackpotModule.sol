@@ -146,14 +146,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
     uint16 private constant DAILY_CURRENT_BPS_MAX = 1400;
 
-    /// @dev Domain separator for rare future-pool dump roll derivation.
-    bytes32 private constant FUTURE_DUMP_TAG = keccak256("future-dump");
-
     /// @dev Domain separator for level-100 future pool keep roll derivation.
     bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
-
-    /// @dev 1 in 1 quadrillion chance for a 90% future->current dump on normal levels.
-    uint256 private constant FUTURE_DUMP_ODDS = 1_000_000_000_000_000;
 
     // -------------------------------------------------------------------------
     // Constants — Gas Budgeting (Ticket Batch Processing)
@@ -874,8 +868,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///
     ///      FLOW:
     ///      1. Merge nextPrizePool into currentPrizePool.
-    ///      2. On x00 levels: roll 5-dice keep percentage (0-100%, avg 50%) to move future->current.
-    ///         On other levels: 1-in-1e15 chance to dump 90% of future into current.
+    ///      2. On x00 levels: roll 5-dice keep percentage (30-65%, avg ~47.5%) to move future->current.
     ///      3. Credit coinflip and distribute yield surplus.
     ///
     ///      The entire currentPrizePool stays available for daily jackpots
@@ -904,15 +897,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint256 moveWei = fp - keepWei;
                 if (moveWei != 0) {
                     _setFuturePrizePool(keepWei);
-                    currentPrizePool += moveWei;
-                }
-            }
-        } else if (_shouldFutureDump(rngWord)) {
-            uint256 fp = _getFuturePrizePool();
-            if (fp != 0) {
-                uint256 moveWei = (fp * 9000) / 10_000;
-                if (moveWei != 0) {
-                    _setFuturePrizePool(fp - moveWei);
                     currentPrizePool += moveWei;
                 }
             }
@@ -1310,14 +1294,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 ((seed >> 64) % 4);
         }
         return 3000 + (total * 3500) / 15;
-    }
-
-    /// @dev Rare roll: 1 in 1e15 chance to dump 90% of future into current on normal levels.
-    function _shouldFutureDump(uint256 rngWord) private pure returns (bool) {
-        uint256 seed = uint256(
-            keccak256(abi.encodePacked(rngWord, FUTURE_DUMP_TAG))
-        );
-        return seed % FUTURE_DUMP_ODDS == 0;
     }
 
     // =========================================================================
