@@ -108,69 +108,69 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GO-01 | — | Pending |
-| GO-02 | — | Pending |
-| GO-03 | — | Pending |
-| GO-04 | — | Pending |
-| GO-05 | — | Pending |
-| GO-06 | — | Pending |
-| GO-07 | — | Pending |
-| GO-08 | — | Pending |
-| PAY-01 | — | Pending |
-| PAY-02 | — | Pending |
-| PAY-03 | — | Pending |
-| PAY-04 | — | Pending |
-| PAY-05 | — | Pending |
-| PAY-06 | — | Pending |
-| PAY-07 | — | Pending |
-| PAY-08 | — | Pending |
-| PAY-09 | — | Pending |
-| PAY-10 | — | Pending |
-| PAY-11 | — | Pending |
-| PAY-12 | — | Pending |
-| PAY-13 | — | Pending |
-| PAY-14 | — | Pending |
-| PAY-15 | — | Pending |
-| PAY-16 | — | Pending |
-| PAY-17 | — | Pending |
-| PAY-18 | — | Pending |
-| PAY-19 | — | Pending |
-| CHG-01 | — | Pending |
-| CHG-02 | — | Pending |
-| CHG-03 | — | Pending |
-| CHG-04 | — | Pending |
-| DOC-01 | — | Pending |
-| DOC-02 | — | Pending |
-| DOC-03 | — | Pending |
-| DOC-04 | — | Pending |
-| DOC-05 | — | Pending |
-| INV-01 | — | Pending |
-| INV-02 | — | Pending |
-| INV-03 | — | Pending |
-| INV-04 | — | Pending |
-| INV-05 | — | Pending |
-| EDGE-01 | — | Pending |
-| EDGE-02 | — | Pending |
-| EDGE-03 | — | Pending |
-| EDGE-04 | — | Pending |
-| EDGE-05 | — | Pending |
-| EDGE-06 | — | Pending |
-| EDGE-07 | — | Pending |
-| SPEC-01 | — | Pending |
-| SPEC-02 | — | Pending |
-| SPEC-03 | — | Pending |
-| SPEC-04 | — | Pending |
-| SPEC-05 | — | Pending |
-| SPEC-06 | — | Pending |
-| VULN-01 | — | Pending |
-| VULN-02 | — | Pending |
-| VULN-03 | — | Pending |
+| GO-01 | Phase 26 | Pending |
+| GO-02 | Phase 26 | Pending |
+| GO-03 | Phase 26 | Pending |
+| GO-04 | Phase 26 | Pending |
+| GO-05 | Phase 26 | Pending |
+| GO-06 | Phase 26 | Pending |
+| GO-07 | Phase 26 | Pending |
+| GO-08 | Phase 26 | Pending |
+| PAY-01 | Phase 27 | Pending |
+| PAY-02 | Phase 27 | Pending |
+| PAY-03 | Phase 27 | Pending |
+| PAY-04 | Phase 27 | Pending |
+| PAY-05 | Phase 27 | Pending |
+| PAY-06 | Phase 27 | Pending |
+| PAY-07 | Phase 27 | Pending |
+| PAY-08 | Phase 27 | Pending |
+| PAY-09 | Phase 27 | Pending |
+| PAY-10 | Phase 27 | Pending |
+| PAY-11 | Phase 27 | Pending |
+| PAY-12 | Phase 27 | Pending |
+| PAY-13 | Phase 27 | Pending |
+| PAY-14 | Phase 27 | Pending |
+| PAY-15 | Phase 27 | Pending |
+| PAY-16 | Phase 27 | Pending |
+| PAY-17 | Phase 27 | Pending |
+| PAY-18 | Phase 27 | Pending |
+| PAY-19 | Phase 27 | Pending |
+| CHG-01 | Phase 28 | Pending |
+| CHG-02 | Phase 28 | Pending |
+| CHG-03 | Phase 28 | Pending |
+| CHG-04 | Phase 28 | Pending |
+| INV-01 | Phase 28 | Pending |
+| INV-02 | Phase 28 | Pending |
+| INV-03 | Phase 28 | Pending |
+| INV-04 | Phase 28 | Pending |
+| INV-05 | Phase 28 | Pending |
+| EDGE-01 | Phase 28 | Pending |
+| EDGE-02 | Phase 28 | Pending |
+| EDGE-03 | Phase 28 | Pending |
+| EDGE-04 | Phase 28 | Pending |
+| EDGE-05 | Phase 28 | Pending |
+| EDGE-06 | Phase 28 | Pending |
+| EDGE-07 | Phase 28 | Pending |
+| VULN-01 | Phase 28 | Pending |
+| VULN-02 | Phase 28 | Pending |
+| VULN-03 | Phase 28 | Pending |
+| DOC-01 | Phase 29 | Pending |
+| DOC-02 | Phase 29 | Pending |
+| DOC-03 | Phase 29 | Pending |
+| DOC-04 | Phase 29 | Pending |
+| DOC-05 | Phase 29 | Pending |
+| SPEC-01 | Phase 30 | Pending |
+| SPEC-02 | Phase 30 | Pending |
+| SPEC-03 | Phase 30 | Pending |
+| SPEC-04 | Phase 30 | Pending |
+| SPEC-05 | Phase 30 | Pending |
+| SPEC-06 | Phase 30 | Pending |
 
 **Coverage:**
-- v3.0 requirements: 52 total
-- Mapped to phases: 0
-- Unmapped: 52 ⚠️
+- v3.0 requirements: 57 total
+- Mapped to phases: 57
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-17*
-*Last updated: 2026-03-17 after initial definition*
+*Last updated: 2026-03-17 after roadmap creation -- all 57 requirements mapped to phases*
