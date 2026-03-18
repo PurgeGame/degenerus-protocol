@@ -112,12 +112,12 @@ Plans:
 **Plans:** 6 plans
 
 Plans:
-- [ ] 28-01-PLAN.md -- Recent changes regression: commit coverage map, CHG-01..04 verdicts
-- [ ] 28-02-PLAN.md -- Pool invariants: claimablePool solvency proof (INV-01) and pool accounting balance (INV-02)
-- [ ] 28-03-PLAN.md -- Supply invariants: sDGNRS conservation (INV-03), BURNIE lifecycle (INV-04), unclaimable funds (INV-05)
-- [ ] 28-04-PLAN.md -- Edge cases and griefing: GAMEOVER boundaries, gas griefing, decimator timing, coinflip RNG, affiliate loops, rounding (EDGE-01..07)
-- [ ] 28-05-PLAN.md -- Vulnerability ranking: weighted top-10 scoring, deep adversarial audit, ranking document (VULN-01..03)
-- [ ] 28-06-PLAN.md -- Consolidation: all 19 verdicts, cross-phase consistency, FINAL-FINDINGS-REPORT + KNOWN-ISSUES update
+- [ ] 29-01-PLAN.md -- Core game NatSpec: DegenerusGame.sol natspec and inline comment verification (DOC-01, DOC-02)
+- [ ] 29-02-PLAN.md -- Module NatSpec part 1: JackpotModule, DecimatorModule, LootboxModule, AdvanceModule (DOC-01, DOC-02)
+- [ ] 29-03-PLAN.md -- Module NatSpec part 2: MintModule, DegeneretteModule, WhaleModule, BoonModule, EndgameModule, GameOverModule, PayoutUtils, MintStreakUtils (DOC-01, DOC-02)
+- [ ] 29-04-PLAN.md -- Peripheral NatSpec: all token, governance, and utility contracts (DOC-01, DOC-02)
+- [ ] 29-05-PLAN.md -- Storage layout and constants: storage slot diagram verification (DOC-03), constants comment verification (DOC-04)
+- [ ] 29-06-PLAN.md -- Parameter reference and consolidation: v1.1-parameter-reference.md spot-check (DOC-05), Phase 29 consolidation report
 
 ### Phase 30: Payout Specification Document
 **Goal**: A self-contained HTML document at audit/PAYOUT-SPECIFICATION.html covering all 17+ distribution systems, synthesized entirely from verified audit findings in Phases 26-29 with exact code references
@@ -132,12 +132,12 @@ Plans:
 **Plans:** 6 plans
 
 Plans:
-- [ ] 28-01-PLAN.md -- Recent changes regression: commit coverage map, CHG-01..04 verdicts
-- [ ] 28-02-PLAN.md -- Pool invariants: claimablePool solvency proof (INV-01) and pool accounting balance (INV-02)
-- [ ] 28-03-PLAN.md -- Supply invariants: sDGNRS conservation (INV-03), BURNIE lifecycle (INV-04), unclaimable funds (INV-05)
-- [ ] 28-04-PLAN.md -- Edge cases and griefing: GAMEOVER boundaries, gas griefing, decimator timing, coinflip RNG, affiliate loops, rounding (EDGE-01..07)
-- [ ] 28-05-PLAN.md -- Vulnerability ranking: weighted top-10 scoring, deep adversarial audit, ranking document (VULN-01..03)
-- [ ] 28-06-PLAN.md -- Consolidation: all 19 verdicts, cross-phase consistency, FINAL-FINDINGS-REPORT + KNOWN-ISSUES update
+- [ ] 30-01-PLAN.md -- TBD
+- [ ] 30-02-PLAN.md -- TBD
+- [ ] 30-03-PLAN.md -- TBD
+- [ ] 30-04-PLAN.md -- TBD
+- [ ] 30-05-PLAN.md -- TBD
+- [ ] 30-06-PLAN.md -- TBD
 
 ## Progress
 
@@ -148,7 +148,7 @@ Plans:
 | 26. GAMEOVER Path Audit | v3.0 | Complete    | 2026-03-18 | 2026-03-18 |
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
 | 28. Cross-Cutting Verification | 6/6 | Complete    | 2026-03-18 | - |
-| 29. Comment/Documentation Correctness | v3.0 | 0/TBD | Not started | - |
+| 29. Comment/Documentation Correctness | v3.0 | 0/6 | Planned | - |
 | 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |
 
 ## Deferred (v3.1+)
@@ -158,4 +158,4 @@ Plans:
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-18 after Phase 28 planning complete -- 6 plans created*
+*Last updated: 2026-03-18 after Phase 29 planning complete -- 6 plans created*
