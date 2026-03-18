@@ -120,13 +120,7 @@ The [`audit/`](audit/) directory contains findings from internal audit work:
 
 ### Finding Summary
 
-| Severity | Count |
-|----------|-------|
-| Critical | 0 |
-| High | 0 |
-| Medium | 3 (VRF governance edge cases, terminal distribution revert risk) |
-| Low | 4 (1 fixed) |
-| Informational | 22+ |
+No open findings. All issues identified during the audit were resolved in code.
 
 ### Test Coverage
 
