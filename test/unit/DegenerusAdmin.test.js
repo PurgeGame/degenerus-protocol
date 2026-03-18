@@ -471,11 +471,6 @@ describe("DegenerusAdmin", function () {
       ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
     });
 
-    it("anyProposalActive returns false when no proposals exist", async function () {
-      const { admin } = await loadFixture(deployFullProtocol);
-      expect(await admin.anyProposalActive()).to.equal(false);
-    });
-
     it("circulatingSupply returns reasonable value", async function () {
       const { admin } = await loadFixture(deployFullProtocol);
       // After deployment, circulating supply may be 0 or positive
@@ -500,10 +495,6 @@ describe("DegenerusAdmin", function () {
       expect(await admin.proposalCount()).to.equal(0n);
     });
 
-    it("activeProposalCount starts at 0", async function () {
-      const { admin } = await loadFixture(deployFullProtocol);
-      expect(await admin.activeProposalCount()).to.equal(0);
-    });
   });
 
   // ---------------------------------------------------------------------------

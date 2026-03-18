@@ -21,7 +21,7 @@ import {
  * VRF Governance Tests (M-02 Mitigation)
  *
  * Tests the sDGNRS-holder governance system for emergency VRF coordinator swaps.
- * Covers: propose, vote, threshold decay, execute, kill, expiry, death clock pause,
+ * Covers: propose, vote, threshold decay, execute, kill, expiry,
  * multi-proposal approval voting, unwrapTo block during stall, VRF recovery invalidation.
  */
 describe("VRF Governance", function () {
@@ -59,8 +59,6 @@ describe("VRF Governance", function () {
       expect(ev.args.path).to.equal(0); // Admin path
 
       expect(await admin.proposalCount()).to.equal(1n);
-      expect(await admin.activeProposalCount()).to.equal(1);
-      expect(await admin.anyProposalActive()).to.equal(true);
     });
 
     it("reverts with NotStalled if VRF stall < 20h for admin", async function () {
@@ -125,7 +123,6 @@ describe("VRF Governance", function () {
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
       expect(await admin.proposalCount()).to.equal(2n);
-      expect(await admin.activeProposalCount()).to.equal(2);
     });
 
     it("snapshots circulating supply at creation", async function () {
@@ -280,7 +277,6 @@ describe("VRF Governance", function () {
 
       await createStall(21);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
-      expect(await admin.activeProposalCount()).to.equal(1);
 
       // Advance past 168h lifetime
       await advanceTime(7 * ONE_DAY + 1);
@@ -329,26 +325,6 @@ describe("VRF Governance", function () {
       const dgnrsBal = await sdgnrs.balanceOf(dgnrsAddr);
 
       expect(circ).to.equal(total - sdgnrsBal - dgnrsBal);
-    });
-  });
-
-  // =========================================================================
-  // 7. Death Clock Pause (anyProposalActive)
-  // =========================================================================
-  describe("death clock pause", function () {
-    it("anyProposalActive returns false when no proposals", async function () {
-      const { admin } = await loadFixture(deployFullProtocol);
-      expect(await admin.anyProposalActive()).to.equal(false);
-    });
-
-    it("anyProposalActive returns true when proposal exists", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
-      const vrfAddr = await mockVRF.getAddress();
-
-      await createStall(21);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
-
-      expect(await admin.anyProposalActive()).to.equal(true);
     });
   });
 
@@ -429,7 +405,6 @@ describe("VRF Governance", function () {
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key3"));
 
       expect(await admin.proposalCount()).to.equal(3n);
-      expect(await admin.activeProposalCount()).to.equal(3);
     });
   });
 
@@ -477,7 +452,6 @@ describe("VRF Governance", function () {
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key3"));
 
       expect(await admin.proposalCount()).to.equal(3n);
-      expect(await admin.activeProposalCount()).to.equal(3);
 
       // Vote approve on proposal 2 — deployer has enough weight to trigger execution
       const tx = await admin.connect(deployer).vote(2, true);
@@ -493,12 +467,6 @@ describe("VRF Governance", function () {
       // Verify proposal 3 is Killed (enum value 2) by _voidAllActive
       const [, , , , , , , , state3] = await admin.proposals(3);
       expect(state3).to.equal(2, "Proposal 3 should be Killed");
-
-      // Verify activeProposalCount is 0
-      expect(await admin.activeProposalCount()).to.equal(0);
-
-      // Verify anyProposalActive returns false
-      expect(await admin.anyProposalActive()).to.equal(false);
 
       // Verify ProposalKilled events emitted for proposals 1 and 3
       const events = await getEvents(tx, admin, "ProposalKilled");
@@ -534,9 +502,6 @@ describe("VRF Governance", function () {
       const [, , , , , , , , state1Before] = await admin.proposals(1);
       expect(state1Before).to.equal(2, "Proposal 1 should be Killed after reject vote");
 
-      // activeProposalCount should be 2 (3 - 1 killed)
-      expect(await admin.activeProposalCount()).to.equal(2);
-
       // Now execute proposal 2 — _voidAllActive should skip proposal 1 (already Killed)
       const tx = await admin.connect(deployer).vote(2, true);
 
@@ -551,9 +516,6 @@ describe("VRF Governance", function () {
       // Proposal 3: Killed by _voidAllActive
       const [, , , , , , , , state3] = await admin.proposals(3);
       expect(state3).to.equal(2, "Proposal 3 should be Killed");
-
-      // activeProposalCount = 0
-      expect(await admin.activeProposalCount()).to.equal(0);
 
       // Only proposal 3 should be newly killed (proposal 1 was already killed)
       const events = await getEvents(tx, admin, "ProposalKilled");
@@ -602,7 +564,6 @@ describe("VRF Governance", function () {
 
       // Create a proposal
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
-      expect(await admin.activeProposalCount()).to.equal(1);
 
       // Cast reject vote -- deployer has enough weight to exceed threshold
       const tx = await admin.connect(deployer).vote(1, false);
@@ -610,9 +571,6 @@ describe("VRF Governance", function () {
       // Verify proposal state transitions to Killed (enum value 2)
       const [, , , , , , , , state] = await admin.proposals(1);
       expect(state).to.equal(2, "Proposal should be Killed");
-
-      // Verify activeProposalCount decremented to 0
-      expect(await admin.activeProposalCount()).to.equal(0);
 
       // Verify ProposalKilled event is emitted
       const ev = await getEvent(tx, admin, "ProposalKilled");
@@ -640,7 +598,6 @@ describe("VRF Governance", function () {
       // Proposal should still be Active (enum value 0)
       const [, , , , , , , , state] = await admin.proposals(1);
       expect(state).to.equal(0, "Proposal should still be Active");
-      expect(await admin.activeProposalCount()).to.equal(1);
     });
   });
 
@@ -683,7 +640,6 @@ describe("VRF Governance", function () {
 
       // Create proposal
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
-      expect(await admin.activeProposalCount()).to.equal(1);
 
       // Cast approve vote -- deployer has enough weight to exceed threshold
       const tx = await admin.connect(deployer).vote(1, true);
@@ -691,9 +647,6 @@ describe("VRF Governance", function () {
       // Verify proposal state transitions to Executed (enum value 1)
       const [, , , , , , , , state] = await admin.proposals(1);
       expect(state).to.equal(1, "Proposal should be Executed");
-
-      // Verify activeProposalCount is 0
-      expect(await admin.activeProposalCount()).to.equal(0);
 
       // Verify ProposalExecuted event emitted
       const ev = await getEvent(tx, admin, "ProposalExecuted");
@@ -764,7 +717,6 @@ describe("VRF Governance", function () {
       const [, , , , approveWeight, rejectWeight, , , state2] = await admin.proposals(1);
       expect(approveWeight).to.equal(rejectWeight, "Weights should be equal (tie)");
       expect(state2).to.equal(0, "Proposal should remain Active on tie");
-      expect(await admin.activeProposalCount()).to.equal(1);
     });
   });
 
