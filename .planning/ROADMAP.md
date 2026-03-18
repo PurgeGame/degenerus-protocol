@@ -53,7 +53,13 @@
   3. Death clock trigger conditions (365d at level 0, 120d at level 1+), distress mode effects, and all activation/deactivation paths are mapped and verified
   4. Every require/revert on the GAMEOVER path is confirmed unable to block payout execution, and CEI ordering is confirmed correct with no reentrancy or double-pay path
   5. Terminal decimator integration, deity pass refund calculations, and no-RNG-available fallback path are verified correct against the new code in DegenerusGameDecimatorModule and DegenerusGameGameOverModule
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 26-01-PLAN.md — Core distribution audit: terminal decimator (GO-08) + handleGameOverDrain (GO-01)
+- [ ] 26-02-PLAN.md — Safety properties audit: reverts (GO-05), reentrancy/CEI (GO-06), VRF fallback (GO-09)
+- [ ] 26-03-PLAN.md — Ancillary paths audit: deity refunds (GO-07), final sweep (GO-02), death clock (GO-03), distress mode (GO-04)
+- [ ] 26-04-PLAN.md — Consolidation: cross-reference all verdicts, claimablePool consistency, update findings report
 
 ### Phase 27: Payout/Claim Path Audit
 **Goal**: Every normal-gameplay distribution system is independently verified -- each claim path has confirmed CEI ordering, correct claimablePool pairing, and no extraction beyond intended amounts
@@ -107,7 +113,7 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 26. GAMEOVER Path Audit | v3.0 | 0/TBD | Not started | - |
+| 26. GAMEOVER Path Audit | v3.0 | 0/4 | Planning complete | - |
 | 27. Payout/Claim Path Audit | v3.0 | 0/TBD | Not started | - |
 | 28. Cross-Cutting Verification | v3.0 | 0/TBD | Not started | - |
 | 29. Comment/Documentation Correctness | v3.0 | 0/TBD | Not started | - |
@@ -120,4 +126,4 @@
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-17 after v3.0 roadmap creation*
+*Last updated: 2026-03-17 after Phase 26 planning complete -- 4 plans created*
