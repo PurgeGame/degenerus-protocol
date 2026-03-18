@@ -8,12 +8,12 @@
 ### GAMEOVER Path Audit
 
 - [ ] **GO-01**: `handleGameOverDrain` audited — accumulator distribution, decimator 10%, terminal jackpot 90%, 50/50 vault/DGNRS split on sweep verified correct
-- [ ] **GO-02**: `handleFinalSweep` audited — 30-day claim window, claimablePool zeroing, unclaimed forfeiture logic verified correct
-- [ ] **GO-03**: Death clock trigger conditions audited — level 0 (365d) and level 1+ (120d) thresholds verified, all activation paths mapped
-- [ ] **GO-04**: Distress mode activation audited — effects on lootbox routing and ticket bonuses verified, activation/deactivation conditions mapped
+- [x] **GO-02**: `handleFinalSweep` audited — 30-day claim window, claimablePool zeroing, unclaimed forfeiture logic verified correct
+- [x] **GO-03**: Death clock trigger conditions audited — level 0 (365d) and level 1+ (120d) thresholds verified, all activation paths mapped
+- [x] **GO-04**: Distress mode activation audited — effects on lootbox routing and ticket bonuses verified, activation/deactivation conditions mapped
 - [ ] **GO-05**: Every `require`/`revert` on GAMEOVER path audited — no revert can block payout execution
 - [ ] **GO-06**: Reentrancy and state ordering on GAMEOVER path audited — no path allows funds stuck or double-paid
-- [ ] **GO-07**: Deity pass refunds on early GAMEOVER (levels 0-9) audited — refund calculations and claimability verified
+- [x] **GO-07**: Deity pass refunds on early GAMEOVER (levels 0-9) audited — refund calculations and claimability verified
 - [ ] **GO-08**: Terminal decimator integration audited — new code path through GAMEOVER verified, interaction with existing accumulator/jackpot logic correct
 - [ ] **GO-09**: No-RNG-available GAMEOVER path audited — fallback behavior when VRF is unavailable during terminal distribution, deterministic/default selection logic, fund safety verified
 
@@ -110,12 +110,12 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | GO-01 | Phase 26 | Pending |
-| GO-02 | Phase 26 | Pending |
-| GO-03 | Phase 26 | Pending |
-| GO-04 | Phase 26 | Pending |
+| GO-02 | Phase 26 | Complete |
+| GO-03 | Phase 26 | Complete |
+| GO-04 | Phase 26 | Complete |
 | GO-05 | Phase 26 | Pending |
 | GO-06 | Phase 26 | Pending |
-| GO-07 | Phase 26 | Pending |
+| GO-07 | Phase 26 | Complete |
 | GO-08 | Phase 26 | Pending |
 | GO-09 | Phase 26 | Pending |
 | PAY-01 | Phase 27 | Pending |
