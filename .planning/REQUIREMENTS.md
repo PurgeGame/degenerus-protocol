@@ -27,9 +27,9 @@
 - [x] **PAY-06**: Decimator x00 claims audited — century decimator claim path, enhanced payout, eligibility verified
 - [x] **PAY-07**: Coinflip deposit/win/loss paths audited — `claimCoinflips`, `claimCoinflipsFromBurnie`, auto-rebuy carry verified
 - [x] **PAY-08**: Coinflip bounty system audited — bounty trigger, DGNRS gating (50k bet, 20k pool), payout verified
-- [ ] **PAY-09**: Lootbox rewards audited — whale passes, lazy passes, deity passes, future tickets, BURNIE payouts verified
-- [ ] **PAY-10**: Quest rewards and streak bonuses audited — trigger conditions, reward calculations, streak mechanics verified
-- [ ] **PAY-11**: Affiliate commissions audited — 3-tier system, taper schedule, ETH and DGNRS claim paths verified
+- [x] **PAY-09**: Lootbox rewards audited — whale passes, lazy passes, deity passes, future tickets, BURNIE payouts verified
+- [x] **PAY-10**: Quest rewards and streak bonuses audited — trigger conditions, reward calculations, streak mechanics verified
+- [x] **PAY-11**: Affiliate commissions audited — 3-tier system, taper schedule, ETH and DGNRS claim paths verified
 - [ ] **PAY-12**: stETH yield distribution audited — 50/25/25 split, accumulator milestone payouts verified
 - [ ] **PAY-13**: Accumulator milestone payouts audited — milestone thresholds, payout triggers, distribution verified
 - [ ] **PAY-14**: sDGNRS `burn()` audited — ETH/stETH/BURNIE proportional redemption math verified
@@ -126,9 +126,9 @@
 | PAY-06 | Phase 27 | Complete |
 | PAY-07 | Phase 27 | Complete |
 | PAY-08 | Phase 27 | Complete |
-| PAY-09 | Phase 27 | Pending |
-| PAY-10 | Phase 27 | Pending |
-| PAY-11 | Phase 27 | Pending |
+| PAY-09 | Phase 27 | Complete |
+| PAY-10 | Phase 27 | Complete |
+| PAY-11 | Phase 27 | Complete |
 | PAY-12 | Phase 27 | Pending |
 | PAY-13 | Phase 27 | Pending |
 | PAY-14 | Phase 27 | Pending |

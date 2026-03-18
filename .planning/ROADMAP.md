@@ -71,7 +71,7 @@ Plans:
   3. All ancillary payout paths (coinflip, lootbox, quest, affiliate, stETH yield, accumulator milestones, advance bounty, WWXRP consolation, coinflip recycling/boons) have verified distribution formulas and claim mechanisms
   4. sDGNRS burn and DGNRS wrapper burn proportional redemption math is verified correct for ETH/stETH/BURNIE
   5. Ticket conversion, futurepool mechanics, and auto-rebuy carry are verified with no path allowing extraction beyond intended amounts
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 - [ ] 27-01-PLAN.md — Jackpot distribution: purchase-phase daily (PAY-01), 5-day draws (PAY-02), ticket conversion/futurepool (PAY-16)
@@ -122,7 +122,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 26. GAMEOVER Path Audit | v3.0 | Complete    | 2026-03-18 | 2026-03-18 |
-| 27. Payout/Claim Path Audit | 3/6 | In Progress|  | - |
+| 27. Payout/Claim Path Audit | 4/6 | In Progress|  | - |
 | 28. Cross-Cutting Verification | v3.0 | 0/TBD | Not started | - |
 | 29. Comment/Documentation Correctness | v3.0 | 0/TBD | Not started | - |
 | 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
 status: in-progress
-stopped_at: Completed 27-03-PLAN.md
-last_updated: "2026-03-18T05:23:44.651Z"
-last_activity: 2026-03-18 -- Completed 27-03 Coinflip Economy Audit (PAY-07, PAY-08, PAY-18, PAY-19 all PASS)
+stopped_at: Completed 27-04-PLAN.md
+last_updated: "2026-03-18T05:32:57Z"
+last_activity: 2026-03-18 -- Completed 27-04 Lootbox/Quest/Affiliate Audit (PAY-09, PAY-10, PAY-11 all PASS)
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 10
-  completed_plans: 7
-  percent: 70
+  completed_plans: 8
+  percent: 80
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 27 of 30 (Payout/Claim Path Audit)
-Plan: 3 of 6
-Status: 27-03 complete (PAY-07, PAY-08, PAY-18, PAY-19), 3 plans remaining
-Last activity: 2026-03-18 -- Completed 27-03 Coinflip Economy Audit (PAY-07, PAY-08, PAY-18, PAY-19 all PASS)
+Plan: 4 of 6
+Status: 27-04 complete (PAY-09, PAY-10, PAY-11), 2 plans remaining
+Last activity: 2026-03-18 -- Completed 27-04 Lootbox/Quest/Affiliate Audit (PAY-09, PAY-10, PAY-11 all PASS)
 
-Progress: [███████░░░] 70%
+Progress: [████████░░] 80%
 
 ## Project Reference
 
@@ -66,6 +66,11 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 27-03]: Coinflip economy fully isolated from ETH claimablePool -- operates entirely in BURNIE burn-and-mint
 - [Phase 27-03]: Claim window 30/90 day asymmetry classified as INFO (by-design per v1.1 spec, absent from natspec)
 
+- [Phase 27-04]: PAY-09 PASS: All 5 lootbox reward types verified; only whale pass remainder mutates claimablePool
+- [Phase 27-04]: PAY-10 PASS: Quest rewards 100/200 BURNIE via creditFlip; streak 100 days = 10000 BPS activity
+- [Phase 27-04]: PAY-11 PASS: Affiliate DGNRS uses fixed levelDgnrsAllocation (not sequential depletion per v1.1 doc)
+- [Phase 27-04]: v1.1 affiliate doc discrepancy classified as FINDING-INFO (stale docs, code uses proportional fixed allocation)
+
 ## Accumulated Context
 
 - v1.0-v3.0 audit complete (phases 1-26): RNG, economic flow, delta, novel attacks, warden sim, gas optimization, VRF governance, GAMEOVER path
@@ -82,12 +87,16 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - Coinflip economy isolated from ETH claimablePool -- no cross-contamination with pool accounting
 - WWXRP mint authority permanently restricted to GAME/COIN/COINFLIP (compile-time constants, no admin override)
 - Bounty system uses virtual pool counter (not token balance) -- half-pool resolution via creditFlip
+- Lootbox rewards (PAY-09): 5 types audited -- whale pass queueing (claimablePool remainder), lazy pass discount boons, deity pass discount boons, future tickets (5-tier variance), BURNIE (creditFlip)
+- Quest rewards (PAY-10): 100/200 BURNIE via creditFlip, streak up to 100 days = 10000 BPS activity, version-gated progress, per-slot completion mask
+- Affiliate commissions (PAY-11): 3-tier (direct/20%/4%), weighted random lottery, DGNRS fixed allocation (not sequential depletion), 0.5 ETH cap per sender per level
+- v1.1 affiliate doc describes "sequential depletion" but code uses fixed levelDgnrsAllocation with totalAffiliateScore denominator -- no first-mover advantage
 - Contracts source of truth: /home/zak/Dev/PurgeGame/degenerus-audit/contracts/
 - Economics primer: audit/v1.1-ECONOMICS-PRIMER.md
 - Parameter reference: audit/v1.1-parameter-reference.md
 
 ## Session Continuity
 
-Last session: 2026-03-18T05:23:44.648Z
-Stopped at: Completed 27-03-PLAN.md
+Last session: 2026-03-18T05:32:57Z
+Stopped at: Completed 27-04-PLAN.md
 Resume file: None
