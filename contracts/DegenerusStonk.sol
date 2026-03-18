@@ -143,12 +143,12 @@ contract DegenerusStonk {
     // =====================================================================
 
     /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound.
-    /// @dev Blocked during VRF stall (>20h) to prevent creator vote-stacking via DGNRS→sDGNRS conversion.
+    /// @dev Blocked during VRF stall (>5h) to prevent creator vote-stacking via DGNRS→sDGNRS conversion.
     function unwrapTo(address recipient, uint256 amount) external {
         if (msg.sender != ContractAddresses.CREATOR) revert Unauthorized();
         if (recipient == address(0)) revert ZeroAddress();
         // Block unwrap during VRF stall (prevents creator vote-stacking)
-        if (block.timestamp - IDegenerusGame(ContractAddresses.GAME).lastVrfProcessed() > 20 hours)
+        if (block.timestamp - IDegenerusGame(ContractAddresses.GAME).lastVrfProcessed() > 5 hours)
             revert Unauthorized();
         _burn(msg.sender, amount);
         stonk.wrapperTransferTo(recipient, amount);

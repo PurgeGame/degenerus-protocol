@@ -210,17 +210,17 @@ describe("VRF Governance", function () {
   // 3. Threshold Decay
   // =========================================================================
   describe("threshold decay", function () {
-    it("returns 6000 (60%) at creation", async function () {
+    it("returns 5000 (50%) at creation", async function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(21);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
-      expect(await admin.threshold(1)).to.equal(6000);
+      expect(await admin.threshold(1)).to.equal(5000);
     });
 
-    it("decays to 5000 (50%) after 24h", async function () {
+    it("stays at 5000 (50%) after 24h", async function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
@@ -371,11 +371,11 @@ describe("VRF Governance", function () {
       // Should succeed — no stall
     });
 
-    it("unwrapTo reverts during VRF stall (>20h)", async function () {
+    it("unwrapTo reverts during VRF stall (>5h)", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("100");
 
-      await createStall(21); // 21 hours past lastVrfProcessed
+      await createStall(6); // 6 hours past lastVrfProcessed
 
       await expect(
         dgnrs.connect(deployer).unwrapTo(alice.address, amount)

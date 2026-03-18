@@ -527,7 +527,7 @@ contract DegenerusAdmin {
     /// @notice Current approval threshold for a proposal (basis points, decays daily).
     /// @dev Returns 0 if proposal has expired (168h+).
     /// @param proposalId ID of the proposal.
-    /// @return Threshold in basis points (e.g. 6000 = 60%).
+    /// @return Threshold in basis points (e.g. 5000 = 50%).
     function threshold(uint256 proposalId) public view returns (uint16) {
         uint256 elapsed = block.timestamp - uint256(proposals[proposalId].createdAt);
         if (elapsed >= 168 hours) return 0;
@@ -536,8 +536,7 @@ contract DegenerusAdmin {
         if (elapsed >= 96 hours)  return 2000;  // 20%
         if (elapsed >= 72 hours)  return 3000;  // 30%
         if (elapsed >= 48 hours)  return 4000;  // 40%
-        if (elapsed >= 24 hours)  return 5000;  // 50%
-        return 6000; // 60%
+        return 5000; // 50%
     }
 
     /// @notice Check if a proposal can be executed (view-only, no side effects).
