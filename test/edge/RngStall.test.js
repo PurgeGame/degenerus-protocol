@@ -691,10 +691,6 @@ describe("RngStall", function () {
       ).to.be.revertedWithCustomError(admin, "InsufficientStake");
     });
 
-    it("anyProposalActive returns false when no proposals exist", async function () {
-      const { admin } = await loadFixture(deployFullProtocol);
-      expect(await admin.anyProposalActive()).to.equal(false);
-    });
   });
 
   // =========================================================================

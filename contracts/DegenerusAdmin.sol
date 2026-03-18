@@ -270,9 +270,6 @@ contract DegenerusAdmin {
     /// @notice Vote weight recorded at time of vote.
     mapping(uint256 => mapping(address => uint256)) public voteWeight;
 
-    /// @notice Number of currently Active proposals.
-    uint8 public activeProposalCount;
-
     // =========================================================================
     // LINK REWARD STATE
     // =========================================================================
@@ -425,8 +422,6 @@ contract DegenerusAdmin {
         p.path = path;
         // p.state = ProposalState.Active (default 0)
 
-        unchecked { activeProposalCount++; }
-
         emit ProposalCreated(proposalId, msg.sender, newCoordinator, newKeyHash, path);
     }
 
@@ -448,7 +443,6 @@ contract DegenerusAdmin {
         // Check expiry
         if (block.timestamp - uint256(p.createdAt) >= PROPOSAL_LIFETIME) {
             p.state = ProposalState.Expired;
-            unchecked { activeProposalCount--; }
             revert ProposalExpired();
         }
 
@@ -499,15 +493,8 @@ contract DegenerusAdmin {
             p.rejectWeight * BPS >= uint256(t) * p.circulatingSnapshot
         ) {
             p.state = ProposalState.Killed;
-            unchecked { activeProposalCount--; }
             emit ProposalKilled(proposalId);
         }
-    }
-
-    /// @notice Check if any governance proposal is currently active.
-    /// @dev Used by AdvanceModule to pause the death clock during VRF stall.
-    function anyProposalActive() external view returns (bool) {
-        return activeProposalCount > 0;
     }
 
     /// @notice Circulating sDGNRS supply (excludes undistributed pools and DGNRS wrapper).
@@ -558,6 +545,9 @@ contract DegenerusAdmin {
     function _executeSwap(uint256 proposalId) internal {
         Proposal storage p = proposals[proposalId];
         p.state = ProposalState.Executed;
+
+        // Void all other active proposals before external calls (CEI)
+        _voidAllActive(proposalId);
 
         address newCoordinator = p.coordinator;
         bytes32 newKeyHash = p.keyHash;
@@ -613,9 +603,6 @@ contract DegenerusAdmin {
         }
 
         emit ProposalExecuted(proposalId, newCoordinator, newSubId);
-
-        // 6. Void all other active proposals
-        _voidAllActive(proposalId);
     }
 
     /// @dev Mark all active proposals (except the executed one) as Killed.
@@ -628,7 +615,6 @@ contract DegenerusAdmin {
                 emit ProposalKilled(i);
             }
         }
-        activeProposalCount = 0;
     }
 
     // =========================================================================

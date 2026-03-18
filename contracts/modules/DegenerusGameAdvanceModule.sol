@@ -24,11 +24,6 @@ interface IDegenerusVaultOwner {
     function isVaultOwner(address account) external view returns (bool);
 }
 
-/// @dev Admin interface for governance proposal liveness check (death clock pause).
-interface IDegenerusAdmin {
-    function anyProposalActive() external view returns (bool);
-}
-
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.
 contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+======================================================================+
@@ -426,14 +421,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bool livenessTriggered = (lvl == 0 &&
             ts - lst > uint256(DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days) ||
             (lvl != 0 && ts - 120 days > lst);
-
-        if (livenessTriggered) {
-            // Pause death clock during VRF stall (governance may be active)
-            try IDegenerusAdmin(ContractAddresses.ADMIN).anyProposalActive()
-                returns (bool active) {
-                if (active) livenessTriggered = false;
-            } catch {}
-        }
 
         if (!livenessTriggered) return false;
 
