@@ -30,12 +30,12 @@
 - [x] **PAY-09**: Lootbox rewards audited — whale passes, lazy passes, deity passes, future tickets, BURNIE payouts verified
 - [x] **PAY-10**: Quest rewards and streak bonuses audited — trigger conditions, reward calculations, streak mechanics verified
 - [x] **PAY-11**: Affiliate commissions audited — 3-tier system, taper schedule, ETH and DGNRS claim paths verified
-- [ ] **PAY-12**: stETH yield distribution audited — 50/25/25 split, accumulator milestone payouts verified
-- [ ] **PAY-13**: Accumulator milestone payouts audited — milestone thresholds, payout triggers, distribution verified
-- [ ] **PAY-14**: sDGNRS `burn()` audited — ETH/stETH/BURNIE proportional redemption math verified
-- [ ] **PAY-15**: DGNRS wrapper `burn()` audited — delegation to sDGNRS, unwrap mechanics verified
+- [x] **PAY-12**: stETH yield distribution audited — 50/25/25 split, accumulator milestone payouts verified
+- [x] **PAY-13**: Accumulator milestone payouts audited — milestone thresholds, payout triggers, distribution verified
+- [x] **PAY-14**: sDGNRS `burn()` audited — ETH/stETH/BURNIE proportional redemption math verified
+- [x] **PAY-15**: DGNRS wrapper `burn()` audited — delegation to sDGNRS, unwrap mechanics verified
 - [x] **PAY-16**: Ticket conversion and futurepool mechanics audited — conversion formula, futurepool allocation, rollover verified
-- [ ] **PAY-17**: Advance bounty system audited — trigger, payout calculation, claim mechanism verified
+- [x] **PAY-17**: Advance bounty system audited — trigger, payout calculation, claim mechanism verified
 - [x] **PAY-18**: WWXRP consolation prizes audited — distribution logic, value transfer paths verified
 - [x] **PAY-19**: Coinflip recycling and boons audited — recycled BURNIE flow, boon mechanics verified
 
@@ -129,12 +129,12 @@
 | PAY-09 | Phase 27 | Complete |
 | PAY-10 | Phase 27 | Complete |
 | PAY-11 | Phase 27 | Complete |
-| PAY-12 | Phase 27 | Pending |
-| PAY-13 | Phase 27 | Pending |
-| PAY-14 | Phase 27 | Pending |
-| PAY-15 | Phase 27 | Pending |
+| PAY-12 | Phase 27 | Complete |
+| PAY-13 | Phase 27 | Complete |
+| PAY-14 | Phase 27 | Complete |
+| PAY-15 | Phase 27 | Complete |
 | PAY-16 | Phase 27 | Complete |
-| PAY-17 | Phase 27 | Pending |
+| PAY-17 | Phase 27 | Complete |
 | PAY-18 | Phase 27 | Complete |
 | PAY-19 | Phase 27 | Complete |
 | CHG-01 | Phase 28 | Pending |

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
 status: in-progress
-stopped_at: Completed 27-04-PLAN.md
-last_updated: "2026-03-18T05:32:57Z"
-last_activity: 2026-03-18 -- Completed 27-04 Lootbox/Quest/Affiliate Audit (PAY-09, PAY-10, PAY-11 all PASS)
+stopped_at: Completed 27-05-PLAN.md
+last_updated: "2026-03-18T05:46:56.517Z"
+last_activity: 2026-03-18 -- Completed 27-05 Yield/Burns/Bounty Audit (PAY-12, PAY-13, PAY-17, PAY-14, PAY-15 all PASS)
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 10
-  completed_plans: 8
-  percent: 80
+  completed_plans: 9
+  percent: 90
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 27 of 30 (Payout/Claim Path Audit)
-Plan: 4 of 6
-Status: 27-04 complete (PAY-09, PAY-10, PAY-11), 2 plans remaining
-Last activity: 2026-03-18 -- Completed 27-04 Lootbox/Quest/Affiliate Audit (PAY-09, PAY-10, PAY-11 all PASS)
+Plan: 5 of 6
+Status: 27-05 complete (PAY-12, PAY-13, PAY-17, PAY-14, PAY-15), 1 plan remaining
+Last activity: 2026-03-18 -- Completed 27-05 Yield/Burns/Bounty Audit (PAY-12, PAY-13, PAY-17, PAY-14, PAY-15 all PASS)
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 90%
 
 ## Project Reference
 
@@ -71,6 +71,14 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 27-04]: PAY-11 PASS: Affiliate DGNRS uses fixed levelDgnrsAllocation (not sequential depletion per v1.1 doc)
 - [Phase 27-04]: v1.1 affiliate doc discrepancy classified as FINDING-INFO (stale docs, code uses proportional fixed allocation)
 
+- [Phase 27-05]: PAY-12 PASS: stETH yield surplus 23%/23%/46% split with ~8% buffer; rate-independent formula; insurance skim 1% of nextPool
+- [Phase 27-05]: PAY-13 PASS: Accumulator x00 milestone 50% release to futurePrizePool before keep-roll; rounding favors retention
+- [Phase 27-05]: PAY-17 PASS: Advance bounty 0.01 ETH base, division-by-zero impossible, 1x/2x/3x time escalation, creditFlip delivery
+- [Phase 27-05]: PAY-14 PASS: sDGNRS burn proportional formula with supplyBefore; lazy-claim CP-04 defense (claimable included in totalMoney, claimed on-demand)
+- [Phase 27-05]: PAY-15 PASS: DGNRS wrapper delegates to sDGNRS.burn() with complete forwarding; unwrapTo creator-only with VRF stall guard
+- [Phase 27-05]: v1.1 yield split is 23%/23%/46% with ~8% buffer, not 50/25/25 as research overview approximated
+- [Phase 27-05]: Advance bounty multipliers are time-based (1h/2h elapsed), not phase-based as research suggested
+
 ## Accumulated Context
 
 - v1.0-v3.0 audit complete (phases 1-26): RNG, economic flow, delta, novel attacks, warden sim, gas optimization, VRF governance, GAMEOVER path
@@ -91,12 +99,17 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - Quest rewards (PAY-10): 100/200 BURNIE via creditFlip, streak up to 100 days = 10000 BPS activity, version-gated progress, per-slot completion mask
 - Affiliate commissions (PAY-11): 3-tier (direct/20%/4%), weighted random lottery, DGNRS fixed allocation (not sequential depletion), 0.5 ETH cap per sender per level
 - v1.1 affiliate doc describes "sequential depletion" but code uses fixed levelDgnrsAllocation with totalAffiliateScore denominator -- no first-mover advantage
+- stETH yield distribution (PAY-12): 23%/23%/46% split fires at level transitions via _distributeYieldSurplus; rate-independent surplus formula; ~8% unextracted buffer
+- Accumulator milestones (PAY-13): yieldAccumulator grows from 46% yield + 1% nextPool skim; x00 releases 50% to futurePrizePool before keep-roll
+- Advance bounty (PAY-17): 0.01 ETH in BURNIE via creditFlip; time-based 1x/2x/3x escalation; mint-gate for caller eligibility; no griefing vector
+- sDGNRS burn (PAY-14): totalMoney = ethBal + stethBal + claimableEth; proportional formula with supplyBefore; ETH-preferred payout; lazy-claim CP-04 defense
+- DGNRS wrapper burn (PAY-15): _burn DGNRS then delegate to sDGNRS.burn(); forwards ETH+stETH+BURNIE to caller; unwrapTo creator-only with VRF stall guard
 - Contracts source of truth: /home/zak/Dev/PurgeGame/degenerus-audit/contracts/
 - Economics primer: audit/v1.1-ECONOMICS-PRIMER.md
 - Parameter reference: audit/v1.1-parameter-reference.md
 
 ## Session Continuity
 
-Last session: 2026-03-18T05:32:57Z
-Stopped at: Completed 27-04-PLAN.md
+Last session: 2026-03-18T05:46:40.887Z
+Stopped at: Completed 27-05-PLAN.md
 Resume file: None
