@@ -442,7 +442,236 @@ details summary {
 
 <section id="cat-jackpot">
   <h2>1. Jackpot Distribution</h2>
-  <!-- System cards populated by Plan 30-02 -->
+
+  <!-- PAY-01: Purchase-Phase Daily Jackpot -->
+  <div class="system-card" id="pay-01">
+    <h3>PAY-01: Purchase-Phase Daily Jackpot</h3>
+    <div class="system-meta">
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge">PAY-01</span>
+    </div>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Daily, during purchase phase when <code>daysSince &gt; 0</code> and <code>lvl &gt; 1</code></td></tr>
+      <tr><th>Source Pool</th><td><code>futurePrizePool</code> (1% daily drip via <code>poolBps = 100</code>)</td></tr>
+      <tr><th>Calculation</th><td><code>ethDaySlice = (_getFuturePrizePool() * poolBps) / 10_000</code> then split: <code>lootboxBudget = (ethPool * PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS) / 10_000</code> where <code>PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS = 7500</code></td></tr>
+      <tr><th>Recipients</th><td>VRF-selected ticket holders across 4 trait buckets (Rare / Epic / Legendary / Unique)</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>claimWinnings()</code> via <code>claimableWinnings[player]</code> mapping</td></tr>
+      <tr><th>Currency</th><td>75% lootbox tickets, 25% ETH</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// JackpotModule.sol:635-639
+uint256 poolBps = 100; // 1% daily drip from futurePool
+ethDaySlice = (_getFuturePrizePool() * poolBps) / 10_000;
+_setFuturePrizePool(_getFuturePrizePool() - ethDaySlice);
+
+// JackpotModule.sol:644-651 -- 75/25 split
+lootboxBudget = (ethPool * PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS) / 10_000;
+// PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS = 7500 (75%)
+// Remaining 25% distributed as ETH to winners</code></pre>
+      <p class="file-ref"><strong>Code:</strong> JackpotModule.sol:619-673, PayoutUtils.sol:30-74 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <svg viewBox="0 0 800 350" class="flow-svg">
+      <defs>
+        <marker id="arrow-j1" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- futurePrizePool -->
+      <rect x="10" y="40" width="170" height="60" rx="8" class="pool"/>
+      <text x="95" y="65" text-anchor="middle" font-weight="600">futurePrizePool</text>
+      <text x="95" y="82" text-anchor="middle" font-size="10" fill="#555">1% daily drip</text>
+
+      <!-- Arrow: futurePrizePool -> _distributeJackpotEth -->
+      <line x1="180" y1="70" x2="265" y2="70" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j1)"/>
+      <text x="222" y="60" text-anchor="middle" font-size="10" fill="#555">ethDaySlice</text>
+
+      <!-- _distributeJackpotEth -->
+      <rect x="275" y="40" width="200" height="60" class="contract"/>
+      <text x="375" y="65" text-anchor="middle" font-weight="600">_distributeJackpotEth</text>
+      <text x="375" y="82" text-anchor="middle" font-size="10" fill="#555">JackpotModule:619</text>
+
+      <!-- Arrow to Lootbox Tickets (75%) -->
+      <line x1="475" y1="55" x2="590" y2="30" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j1)"/>
+      <text x="540" y="30" text-anchor="middle" font-size="10" fill="#555">75%</text>
+
+      <!-- Lootbox Tickets -->
+      <rect x="600" y="10" width="170" height="44" rx="20" class="recipient"/>
+      <text x="685" y="37" text-anchor="middle" font-weight="600">Lootbox Tickets</text>
+
+      <!-- Arrow to _addClaimableEth (25% ETH) -->
+      <line x1="475" y1="80" x2="540" y2="140" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j1)"/>
+      <text x="525" y="100" text-anchor="middle" font-size="10" fill="#555">25% ETH</text>
+
+      <!-- _addClaimableEth -->
+      <rect x="550" y="120" width="180" height="50" class="contract"/>
+      <text x="640" y="142" text-anchor="middle" font-weight="600">_addClaimableEth</text>
+      <text x="640" y="157" text-anchor="middle" font-size="10" fill="#555">JackpotModule:973</text>
+
+      <!-- Arrow to Auto-rebuy decision -->
+      <line x1="640" y1="170" x2="640" y2="205" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j1)"/>
+
+      <!-- Diamond: Auto-rebuy? -->
+      <polygon points="640,210 700,240 640,270 580,240" class="decision"/>
+      <text x="640" y="244" text-anchor="middle" font-size="11">Auto-rebuy?</text>
+
+      <!-- Arrow: Yes -> Ticket Conversion -->
+      <line x1="700" y1="240" x2="755" y2="240" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j1)"/>
+      <text x="730" y="232" text-anchor="middle" font-size="10" fill="#555">Yes</text>
+
+      <!-- Ticket Conversion -->
+      <rect x="765" y="218" width="30" height="44" rx="4" class="contract"/>
+      <text x="780" y="244" text-anchor="middle" font-size="9" fill="#555" transform="rotate(-90, 780, 244)">Tickets</text>
+
+      <!-- Arrow: No -> claimablePool -->
+      <line x1="640" y1="270" x2="640" y2="295" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j1)"/>
+      <text x="660" y="287" text-anchor="start" font-size="10" fill="#555">No</text>
+
+      <!-- claimablePool -->
+      <rect x="555" y="300" width="170" height="44" rx="8" class="pool"/>
+      <text x="640" y="327" text-anchor="middle" font-weight="600">claimablePool</text>
+
+      <!-- Arrow: claimablePool -> Players -->
+      <line x1="555" y1="322" x2="480" y2="322" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j1)"/>
+
+      <!-- Players -->
+      <rect x="330" y="300" width="140" height="44" rx="20" class="recipient"/>
+      <text x="400" y="327" text-anchor="middle" font-weight="600">Players</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Empty pool:</strong> If <code>futurePrizePool == 0</code>, <code>ethDaySlice = 0</code>, no distribution occurs</li>
+        <li><strong>No winners at trait bucket:</strong> Unfilled slots refund to yield surplus (not returned to pool)</li>
+        <li><strong>Auto-rebuy dust:</strong> Unconverted remainder dropped; max loss = <code>ticketPrice - 1</code> wei per payout</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- PAY-02: Jackpot-Phase 5-Day Draws -->
+  <div class="system-card" id="pay-02">
+    <h3>PAY-02: Jackpot-Phase 5-Day Draws</h3>
+    <div class="system-meta">
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge">PAY-02</span>
+    </div>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>During jackpot phase (5-day sequence), once per day</td></tr>
+      <tr><th>Source Pool</th><td><code>currentPrizePool</code> (6-14% BPS days 1-4, 100% day 5)</td></tr>
+      <tr><th>Calculation</th><td><code>dailyBudget = (currentPrizePool * randomBps) / BPS_DENOMINATOR</code> where <code>randomBps</code> is random in <code>[600, 1400]</code> for days 1-4, and <code>10000</code> for day 5. Share split: <code>JACKPOT_SHARES_PACKED = 60/13/13/13</code> weighted (6000/1300/1300/1300/100 BPS)</td></tr>
+      <tr><th>Recipients</th><td>4 winners per draw via VRF, weighted by share class (1st: 60%, 2nd-4th: 13% each, remainder: 1%)</td></tr>
+      <tr><th>Claim Mechanism</th><td><code>claimWinnings()</code> via <code>claimableWinnings[player]</code> mapping</td></tr>
+      <tr><th>Currency</th><td>ETH (with auto-rebuy option)</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// JackpotModule.sol:336-613
+// Days 1-4: random BPS in [600, 1400] range (6-14%)
+// Day 5: 100% of currentPrizePool
+dailyBudget = (currentPrizePool * randomBps) / BPS_DENOMINATOR;
+
+// Share split: JACKPOT_SHARES_PACKED
+// 1st place: 6000 BPS (60%)
+// 2nd place: 1300 BPS (13%)
+// 3rd place: 1300 BPS (13%)
+// 4th place: 1300 BPS (13%)
+// Remainder: 100 BPS (1%)
+
+// Compressed mode (&lt; threshold): single winner gets 100%
+// Turbo mode: instant resolution without VRF wait</code></pre>
+      <p class="file-ref"><strong>Code:</strong> JackpotModule.sol:336-613, JackpotModule.sol:2723-2736 &nbsp; <strong>Commit:</strong> 3fa32f51</p>
+    </div>
+
+    <svg viewBox="0 0 800 400" class="flow-svg">
+      <defs>
+        <marker id="arrow-j2" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#424242"/>
+        </marker>
+      </defs>
+
+      <!-- currentPrizePool -->
+      <rect x="10" y="130" width="170" height="60" rx="8" class="pool"/>
+      <text x="95" y="155" text-anchor="middle" font-weight="600">currentPrizePool</text>
+      <text x="95" y="172" text-anchor="middle" font-size="10" fill="#555">6-14% / 100% day 5</text>
+
+      <!-- Arrow: currentPrizePool -> Daily Draw -->
+      <line x1="180" y1="160" x2="275" y2="160" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j2)"/>
+      <text x="228" y="150" text-anchor="middle" font-size="10" fill="#555">dailyBudget</text>
+
+      <!-- Daily Draw -->
+      <rect x="285" y="130" width="180" height="60" class="contract"/>
+      <text x="375" y="153" text-anchor="middle" font-weight="600">Daily Draw</text>
+      <text x="375" y="170" text-anchor="middle" font-size="10" fill="#555">_dailyCurrentPoolBps</text>
+      <text x="375" y="183" text-anchor="middle" font-size="10" fill="#555">JackpotModule:336</text>
+
+      <!-- Arrow: 60% -> Winner 1 -->
+      <line x1="465" y1="140" x2="580" y2="50" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j2)"/>
+      <text x="535" y="82" text-anchor="middle" font-size="10" fill="#555">60%</text>
+
+      <!-- Winner 1 -->
+      <rect x="590" y="28" width="170" height="44" rx="20" class="recipient"/>
+      <text x="675" y="55" text-anchor="middle" font-weight="600">Winner 1 (solo)</text>
+
+      <!-- Arrow: 13% each -> Winners 2-4 -->
+      <line x1="465" y1="155" x2="580" y2="130" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j2)"/>
+      <text x="535" y="132" text-anchor="middle" font-size="10" fill="#555">13% each</text>
+
+      <!-- Winners 2-4 -->
+      <rect x="590" y="108" width="170" height="44" rx="20" class="recipient"/>
+      <text x="675" y="135" text-anchor="middle" font-weight="600">Winners 2-4</text>
+
+      <!-- Arrow: 1% -> Remainder -->
+      <line x1="465" y1="175" x2="580" y2="200" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j2)"/>
+      <text x="530" y="195" text-anchor="middle" font-size="10" fill="#555">1%</text>
+
+      <!-- Remainder -->
+      <rect x="590" y="182" width="170" height="44" rx="20" class="recipient"/>
+      <text x="675" y="209" text-anchor="middle" font-weight="600">Remainder</text>
+
+      <!-- Dashed line from all winners down to _addClaimableEth -->
+      <line x1="675" y1="72" x2="675" y2="268" stroke="#424242" stroke-width="1" stroke-dasharray="5,3"/>
+      <line x1="675" y1="152" x2="675" y2="268" stroke="#424242" stroke-width="1" stroke-dasharray="5,3"/>
+
+      <!-- _addClaimableEth -->
+      <rect x="565" y="270" width="180" height="44" class="contract"/>
+      <text x="655" y="290" text-anchor="middle" font-size="11">_addClaimableEth</text>
+      <text x="655" y="305" text-anchor="middle" font-size="10" fill="#555">auto-rebuy branch</text>
+
+      <!-- Arrow down to claimablePool -->
+      <line x1="565" y1="292" x2="455" y2="292" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j2)"/>
+
+      <!-- claimablePool -->
+      <rect x="285" y="270" width="160" height="44" rx="8" class="pool"/>
+      <text x="365" y="297" text-anchor="middle" font-weight="600">claimablePool</text>
+
+      <!-- Arrow to Players -->
+      <line x1="285" y1="292" x2="220" y2="292" stroke="#424242" stroke-width="1.5" marker-end="url(#arrow-j2)"/>
+
+      <!-- Players -->
+      <rect x="50" y="270" width="160" height="44" rx="20" class="recipient"/>
+      <text x="130" y="297" text-anchor="middle" font-weight="600">Players</text>
+
+      <!-- Compressed mode annotation -->
+      <rect x="10" y="350" width="360" height="36" rx="4" fill="#fff9c4" stroke="#f9a825" stroke-width="1" stroke-dasharray="4,2"/>
+      <text x="190" y="372" text-anchor="middle" font-size="10">Compressed mode: skip days 2-4 (counter x2) | Turbo: all 5 days at once</text>
+    </svg>
+
+    <div class="edge-cases">
+      <h4>Edge Cases</h4>
+      <ul>
+        <li><strong>Compressed mode:</strong> When prize pool is below threshold, <code>counterStep = 2</code> doubles logical days per physical day. Day 1 is never compressed (preserves early-bird lootbox)</li>
+        <li><strong>Turbo mode:</strong> Instant resolution without VRF wait for small pools; <code>counterStep = JACKPOT_LEVEL_CAP</code> processes all 5 days in one physical day</li>
+        <li><strong>Day 5 depletes 100%:</strong> <code>dailyBps = 10_000</code> (100%) of <code>currentPrizePool</code> -- no carry to next jackpot phase</li>
+        <li><strong>randomBps range:</strong> <code>[600, 1400]</code> ensures minimum 6% and maximum 14% per day for days 1-4</li>
+      </ul>
+    </div>
+  </div>
+
 </section>
 
 <!-- ===== CATEGORY 2: SCATTER / DECIMATOR ===== -->
