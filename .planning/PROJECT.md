@@ -28,9 +28,20 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ### Active
 
-(None — all milestones complete. See deferred items below.)
+## Current Milestone: v3.0 Full Contract Audit + Payout Specification
 
-### Deferred (v2.2+)
+**Goal:** Comprehensive security audit of all Degenerus Protocol contracts with zero tolerance on every code path that moves ETH, stETH, BURNIE, DGNRS, or WWXRP, plus a complete payout specification document covering every distribution system.
+
+**Target features:**
+- GAMEOVER path audit (critical — terminal distribution, final sweep, death clock, distress mode)
+- All payout/claim path audits (daily jackpot, decimator, coinflip, lootbox, quest, affiliate, stETH yield, deity refunds, bounties)
+- Recent changes verification (VRF governance, deity non-transferability, parameter changes)
+- Comment and documentation correctness (natspec, inline, storage layout, constants, parameter reference)
+- Invariant verification (claimablePool, pool accounting, sDGNRS supply, BURNIE mint/burn, unclaimable funds)
+- Edge case and griefing analysis (GAMEOVER at various levels, single player, gas griefing, timing attacks, rounding)
+- Payout Specification HTML document covering 17+ distribution systems with diagrams and exact code references
+
+### Deferred (v3.1+)
 
 - [ ] Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
 - [ ] Formal verification of vote counting arithmetic via Halmos
@@ -85,4 +96,4 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | WAR-06 | Low | Admin spam-propose gas griefing (no per-proposer cooldown) |
 
 ---
-*Last updated: 2026-03-18 after v2.1 milestone*
+*Last updated: 2026-03-17 after v3.0 milestone start*
