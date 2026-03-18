@@ -117,7 +117,7 @@ Plans:
 - [ ] 29-03-PLAN.md -- Module NatSpec part 2: MintModule, DegeneretteModule, WhaleModule, BoonModule, EndgameModule, GameOverModule, PayoutUtils, MintStreakUtils (DOC-01, DOC-02)
 - [ ] 29-04-PLAN.md -- Peripheral NatSpec: all token, governance, and utility contracts (DOC-01, DOC-02)
 - [ ] 29-05-PLAN.md -- Storage layout and constants: storage slot diagram verification (DOC-03), constants comment verification (DOC-04)
-- [ ] 29-06-PLAN.md -- Parameter reference and consolidation: v1.1-parameter-reference.md spot-check (DOC-05), Phase 29 consolidation report
+- [x] 29-06-PLAN.md -- Parameter reference and consolidation: v1.1-parameter-reference.md spot-check (DOC-05), Phase 29 consolidation report (completed 2026-03-18)
 
 ### Phase 30: Payout Specification Document
 **Goal**: A self-contained HTML document at audit/PAYOUT-SPECIFICATION.html covering all 17+ distribution systems, synthesized entirely from verified audit findings in Phases 26-29 with exact code references
@@ -148,7 +148,7 @@ Plans:
 | 26. GAMEOVER Path Audit | v3.0 | Complete    | 2026-03-18 | 2026-03-18 |
 | 27. Payout/Claim Path Audit | 6/6 | Complete    | 2026-03-18 | - |
 | 28. Cross-Cutting Verification | 6/6 | Complete    | 2026-03-18 | - |
-| 29. Comment/Documentation Correctness | 6/6 | Complete   | 2026-03-18 | - |
+| 29. Comment/Documentation Correctness | 6/6 | Complete    | 2026-03-18 | - |
 | 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |
 
 ## Deferred (v3.1+)
