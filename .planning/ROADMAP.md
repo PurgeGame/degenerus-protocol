@@ -36,7 +36,7 @@
 **Milestone Goal:** Comprehensive security audit of all value-transfer paths across all Degenerus Protocol contracts, plus a complete payout specification document. Zero tolerance on every code path that moves ETH, stETH, BURNIE, DGNRS, or WWXRP.
 
 - [x] **Phase 26: GAMEOVER Path Audit** - Audit the terminal distribution path where all remaining protocol funds converge into a single irreversible execution (completed 2026-03-18)
-- [ ] **Phase 27: Payout/Claim Path Audit** - Audit all 19 normal-gameplay distribution systems covering every value-transfer path outside GAMEOVER
+- [x] **Phase 27: Payout/Claim Path Audit** - Audit all 19 normal-gameplay distribution systems covering every value-transfer path outside GAMEOVER (completed 2026-03-18)
 - [ ] **Phase 28: Cross-Cutting Verification** - Verify recent changes, protocol invariants, edge cases, and top vulnerable functions across the full audited system
 - [ ] **Phase 29: Comment/Documentation Correctness** - Verify every natspec, inline comment, storage layout, and parameter reference against audited ground truth
 - [ ] **Phase 30: Payout Specification Document** - Synthesize all audit findings into a self-contained HTML specification covering all 17+ distribution systems
@@ -71,7 +71,7 @@ Plans:
   3. All ancillary payout paths (coinflip, lootbox, quest, affiliate, stETH yield, accumulator milestones, advance bounty, WWXRP consolation, coinflip recycling/boons) have verified distribution formulas and claim mechanisms
   4. sDGNRS burn and DGNRS wrapper burn proportional redemption math is verified correct for ETH/stETH/BURNIE
   5. Ticket conversion, futurepool mechanics, and auto-rebuy carry are verified with no path allowing extraction beyond intended amounts
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 - [ ] 27-01-PLAN.md — Jackpot distribution: purchase-phase daily (PAY-01), 5-day draws (PAY-02), ticket conversion/futurepool (PAY-16)
@@ -122,7 +122,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 26. GAMEOVER Path Audit | v3.0 | Complete    | 2026-03-18 | 2026-03-18 |
-| 27. Payout/Claim Path Audit | 5/6 | In Progress|  | - |
+| 27. Payout/Claim Path Audit | 6/6 | Complete   | 2026-03-18 | - |
 | 28. Cross-Cutting Verification | v3.0 | 0/TBD | Not started | - |
 | 29. Comment/Documentation Correctness | v3.0 | 0/TBD | Not started | - |
 | 30. Payout Specification Document | v3.0 | 0/TBD | Not started | - |

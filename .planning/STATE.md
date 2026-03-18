@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
-status: in-progress
-stopped_at: Completed 27-05-PLAN.md
-last_updated: "2026-03-18T05:46:56.517Z"
-last_activity: 2026-03-18 -- Completed 27-05 Yield/Burns/Bounty Audit (PAY-12, PAY-13, PAY-17, PAY-14, PAY-15 all PASS)
+status: completed
+stopped_at: Completed 27-06-PLAN.md
+last_updated: "2026-03-18T05:58:17.533Z"
+last_activity: 2026-03-18 -- Completed 27-06 Payout/Claim Path Consolidation (19/19 PASS, Phase 27 COMPLETE)
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 3
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 ---
 
 # State
@@ -19,18 +19,18 @@ progress:
 ## Current Position
 
 Phase: 27 of 30 (Payout/Claim Path Audit)
-Plan: 5 of 6
-Status: 27-05 complete (PAY-12, PAY-13, PAY-17, PAY-14, PAY-15), 1 plan remaining
-Last activity: 2026-03-18 -- Completed 27-05 Yield/Burns/Bounty Audit (PAY-12, PAY-13, PAY-17, PAY-14, PAY-15 all PASS)
+Plan: 6 of 6
+Status: Phase 27 COMPLETE -- all 19 PAY requirements PASS, consolidated report created
+Last activity: 2026-03-18 -- Completed 27-06 Payout/Claim Path Consolidation (19/19 PASS, Phase 27 COMPLETE)
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 27 — Payout/Claim Path Audit (19 normal-gameplay distribution systems)
+**Current focus:** Phase 27 COMPLETE — all 19 payout/claim path requirements audited and consolidated
 
 ## Decisions
 
@@ -78,6 +78,10 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 27-05]: PAY-15 PASS: DGNRS wrapper delegates to sDGNRS.burn() with complete forwarding; unwrapTo creator-only with VRF stall guard
 - [Phase 27-05]: v1.1 yield split is 23%/23%/46% with ~8% buffer, not 50/25/25 as research overview approximated
 - [Phase 27-05]: Advance bounty multipliers are time-based (1h/2h elapsed), not phase-based as research suggested
+- [Phase 27]: Overall Phase 27 assessment: SOUND (19/19 PASS, 0 findings above INFORMATIONAL)
+- [Phase 27]: claimablePool invariant verified at all 14 unique mutation sites across GAMEOVER + normal-gameplay
+- [Phase 27]: Cumulative audit totals updated to 97 plans, 118 requirements, 17 phases
+- [Phase 27]: 4 design decisions added to KNOWN-ISSUES.md for C4A warden awareness
 
 ## Accumulated Context
 
@@ -110,6 +114,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T05:46:40.887Z
-Stopped at: Completed 27-05-PLAN.md
+Last session: 2026-03-18T05:58:17.531Z
+Stopped at: Completed 27-06-PLAN.md
 Resume file: None
