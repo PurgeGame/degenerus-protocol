@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Full Contract Audit + Payout Specification
-status: completed
-stopped_at: Completed 30-04-PLAN.md
-last_updated: "2026-03-18T09:09:05.654Z"
-last_activity: 2026-03-18 -- Completed 30-04 ancillary payouts and token burns system cards
+status: in_progress
+stopped_at: Completed 30-05-PLAN.md
+last_updated: "2026-03-18T09:08:30.000Z"
+last_activity: 2026-03-18 -- Completed 30-05 GAMEOVER terminal distribution system cards
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 28
-  completed_plans: 26
-  percent: 93
+  completed_plans: 27
+  percent: 96
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 ## Current Position
 
 Phase: 30 of 30 (Payout Specification Document)
-Plan: 4 of 6
-Status: Plan 30-04 complete -- Ancillary payouts and token burns system cards with SVG diagrams
-Last activity: 2026-03-18 -- Completed 30-04 ancillary payouts and token burns system cards
+Plan: 5 of 6
+Status: Plan 30-05 complete -- GAMEOVER terminal distribution system cards with SVG diagrams
+Last activity: 2026-03-18 -- Completed 30-05 GAMEOVER terminal distribution system cards
 
-Progress: [█████████░] 93%
+Progress: [█████████░] 96%
 
 ## Project Reference
 
@@ -125,6 +125,9 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 - [Phase 30-03]: Pool source distinction callout (baseFuturePool vs futurePoolLocal) and BURNIE isolation callout added as highlighted category introductions
 - [Phase 30-04]: PAY-12/PAY-13 combined into one system card (connected systems: yield feeds accumulator, milestones release from accumulator)
 - [Phase 30-04]: PAY-14/PAY-15 combined into one system card (DGNRS wrapper delegates entirely to sDGNRS burn path)
+- [Phase 30-05]: Used unique SVG marker IDs per GAMEOVER diagram (go-arrow, go01-arrow, etc.) to prevent cross-diagram marker conflicts
+- [Phase 30-05]: GO-05-F01 FINDING-MEDIUM callout styled inline with red background for visual prominence
+- [Phase 30-05]: Master GAMEOVER sequence diagram numbered steps [1]-[3] match formula block step numbers for cross-referencing
 
 ## Accumulated Context
 
@@ -157,6 +160,6 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 
 ## Session Continuity
 
-Last session: 2026-03-18T09:09:05.651Z
-Stopped at: Completed 30-04-PLAN.md
+Last session: 2026-03-18T09:08:30Z
+Stopped at: Completed 30-05-PLAN.md
 Resume file: None
