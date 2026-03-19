@@ -61,7 +61,7 @@
 
 - [ ] **Phase 38: RNG Delta Security** - Audit all RNG-adjacent code changes for manipulation vectors
 - [ ] **Phase 39: Comment Scan -- Game Modules** - Fresh comment audit across all 12 game module files
-- [ ] **Phase 40: Comment Scan -- Core + Token Contracts** - Fresh comment audit of core game and token contracts
+- [x] **Phase 40: Comment Scan -- Core + Token Contracts** - Fresh comment audit of core game and token contracts (completed 2026-03-19)
 - [x] **Phase 41: Comment Scan -- Peripheral + Remaining** - Fresh comment audit of peripheral and utility contracts (completed 2026-03-19)
 - [ ] **Phase 42: Governance Fresh Eyes** - Independent sanity check of VRF governance from fresh perspective
 - [ ] **Phase 43: Consolidated Findings** - Cross-cutting patterns and final deliverable with severity classification
@@ -109,7 +109,7 @@ Plans:
   2. BurnieCoin, DegenerusStonk, StakedDegenerusStonk, and WrappedWrappedXRP comments all verified (including sDGNRS/DGNRS split changes)
   3. NatSpec on all external/public functions matches actual parameters, return values, and behavior
   4. Findings list produced with per-contract grouping
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 40-01-PLAN.md — Core game contracts scan (DegenerusGame, GameStorage, DegenerusAdmin)
 - [ ] 40-02-PLAN.md — Token contracts scan (BurnieCoin, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
@@ -156,7 +156,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 38. RNG Delta Security | 1/2 | In Progress|  |
 | 39. Comment Scan -- Game Modules | 2/4 | In Progress|  |
-| 40. Comment Scan -- Core + Token | 1/2 | In Progress|  |
+| 40. Comment Scan -- Core + Token | 2/2 | Complete   | 2026-03-19 |
 | 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete   | 2026-03-19 |
 | 42. Governance Fresh Eyes | 0/TBD | Not started | - |
 | 43. Consolidated Findings | 0/TBD | Not started | - |
