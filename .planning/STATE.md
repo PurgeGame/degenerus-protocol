@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 41 — comment-scan-peripheral
+**Current focus:** Phase 40 — comment-scan-core-token (Plan 02 complete)
 
 ## Current Position
 
-Phase: 41 (comment-scan-peripheral) — COMPLETE
-Plan: 3 of 3
+Phase: 40 (comment-scan-core-token) — Plan 02 COMPLETE
+Plan: 2 of 2
 
 ## Performance Metrics
 
