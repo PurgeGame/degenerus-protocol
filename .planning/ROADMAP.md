@@ -123,7 +123,7 @@ Plans:
   2. Every inline comment in these 10 contracts is verified against current logic with no stale references remaining unflagged
   3. Any vestigial logic, unnecessary restrictions, or intent drift in these 10 contracts is flagged with what/why/suggestion
   4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
-**Plans:** 1/4 plans executed
+**Plans:** 3/4 plans executed
 Plans:
 - [ ] 35-01-PLAN.md — BurnieCoinflip.sol comment audit and intent drift review (1,154 lines)
 - [ ] 35-02-PLAN.md — DegenerusQuests.sol + DegenerusJackpots.sol comment audit and intent drift review (2,287 lines combined)
@@ -151,7 +151,7 @@ Plans:
 | 32. Game Modules Batch A | 3/3 | Complete    | 2026-03-19 | - |
 | 33. Game Modules Batch B | 3/3 | Complete    | 2026-03-19 | - |
 | 34. Token Contracts | 2/2 | Complete    | 2026-03-19 | - |
-| 35. Peripheral Contracts | 1/4 | In Progress|  | - |
+| 35. Peripheral Contracts | 3/4 | In Progress|  | - |
 | 36. Consolidated Findings | v3.1 | 0/TBD | Not started | - |
 
 ## Deferred (v3.2+)

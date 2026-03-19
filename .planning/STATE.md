@@ -17,7 +17,7 @@ progress:
 ## Current Position
 
 Phase: 35 (peripheral-contracts) — EXECUTING
-Plan: 2 of 4
+Plan: 4 of 4
 
 ## Project Reference
 
@@ -51,6 +51,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 | Phase 33 P03 | 10min | 2 tasks | 1 files |
 | Phase 34 P01 | 7min | 2 tasks | 1 files |
 | Phase 34 P02 | 4min | 2 tasks | 1 files |
+| Phase 35 P03 | 11min | 2 tasks | 1 files |
 | Phase 35 P02 | 5min | 2 tasks | 1 files |
 
 ## Accumulated Context
@@ -77,6 +78,8 @@ Recent decisions affecting current work:
 - [Phase 33]: Phase 33 complete: 17 findings (16 CMT, 1 DRIFT) across 5 contracts (5977 lines). No stale cross-module references in AdvanceModule.
 - [Phase 34]: BurnieCoin.sol: 13 CMT, 0 DRIFT -- orphaned NatSpec from coinflip split is the primary pattern (5 of 13 findings). CMT-042 (orphaned BOUNTY STATE with false storage slots) only LOW; rest INFO.
 - [Phase 34]: DegenerusStonk.sol: 2 CMT (undocumented self-transfer block, incomplete @custom:reverts). StakedDegenerusStonk.sol: 1 CMT (sDGNRS/DGNRS naming, 3 instances grouped). WrappedWrappedXRP.sol: 2 CMT (nonexistent wrap 'disabled', VaultAllowanceSpent event param). Phase 34 totals: 18 CMT, 0 DRIFT across 4 contracts.
+- [Phase 35]: DegenerusAffiliate.sol: 2 CMT (lootbox taper @param wrong on start/floor values, "batch for gas" misleading for weighted winner). payAffiliate coin/game access verified accurate. 0 DRIFT.
+- [Phase 35]: DegenerusVault.sol: 2 CMT (AFK/afKing naming in NatSpec, transferFrom @custom:reverts ZeroAddress claim for from). Architecture block comment (5 key invariants) verified. DegenerusVaultShare reviewed as separate contract. 0 DRIFT.
 - [Phase 35]: QUEST_TYPE_RESERVED = 4 classified as DRIFT-004 (INFO): vestigial constant with active defensive skip guard in _bonusQuestType
 - [Phase 35]: DegenerusJackpots.sol: all 5 findings are stale BurnieCoin references from coinflip split (same orphaned pattern as Phase 34). CMT-060 nonexistent onlyCoinOrGame modifier classified LOW.
 
@@ -90,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T06:05:42.234Z
-Stopped at: Completed 35-02-PLAN.md
+Last session: 2026-03-19T06:10:10Z
+Stopped at: Completed 35-03-PLAN.md
 Resume file: None
