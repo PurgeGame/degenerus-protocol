@@ -60,7 +60,7 @@ completed: 2026-03-19
 
 Each task was committed atomically:
 
-1. **Task 1: Audit all 5 remaining/utility contracts** - `pending` (docs)
+1. **Task 1: Audit all 5 remaining/utility contracts** - `b4376fc2` (docs)
 
 **Plan metadata:** `pending` (docs: complete plan)
 
@@ -235,6 +235,13 @@ No new findings identified. CMT-080 fix verified complete.
 - All 5 remaining/utility contracts in CMT-05 scope have been audited
 - CMT-079 remains the only open finding from this group -- carry forward to consolidated findings
 - Phase 41 comment scan is now complete across all 3 plans
+
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/41-comment-scan-peripheral/41-03-SUMMARY.md`
+- FOUND: commit `b4376fc2`
+- PASS: 0 .sol files modified in commit
+- PASS: 5 contract sections present
 
 ---
 *Phase: 41-comment-scan-peripheral*
