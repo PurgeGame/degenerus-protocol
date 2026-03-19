@@ -1306,19 +1306,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Check if player can claim Decimator jackpot for a level.
     /// @param player Address to check.
-    /// @param lvl Level to check (must be the last decimator).
-    /// @return amountWei Claimable amount (0 if not winner, already claimed, or expired).
+    /// @param lvl Level to check.
+    /// @return amountWei Claimable amount (0 if not winner or already claimed).
     /// @return winner True if player is a winner for this level.
     function decClaimable(
         address player,
         uint24 lvl
     ) external view returns (uint256 amountWei, bool winner) {
-        // Only show claimable for the last decimator
-        if (lastDecClaimRound.lvl != lvl) {
+        DecClaimRound storage round = decClaimRounds[lvl];
+        if (round.poolWei == 0) {
             return (0, false);
         }
 
-        uint256 totalBurn = uint256(lastDecClaimRound.totalBurn);
+        uint256 totalBurn = uint256(round.totalBurn);
         if (totalBurn == 0) return (0, false);
 
         DecEntry storage e = decBurn[lvl][player];
@@ -1334,7 +1334,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (sub != winningSub) return (0, false);
 
         amountWei =
-            (lastDecClaimRound.poolWei * uint256(entryBurn)) /
+            (round.poolWei * uint256(entryBurn)) /
             totalBurn;
         winner = amountWei != 0;
     }

@@ -302,8 +302,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ) external returns (uint256 returnAmountWei) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
 
-        // Prevent double-snapshotting: return pool if this level already active
-        if (lastDecClaimRound.lvl == lvl) {
+        // Prevent double-snapshotting: return pool if this level already snapshotted
+        if (decClaimRounds[lvl].poolWei != 0) {
             return poolWei;
         }
 
@@ -340,11 +340,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // Store packed winning subbuckets for claim validation
         decBucketOffsetPacked[lvl] = packedOffsets;
 
-        // Snapshot last claim round (overwrites previous - old claims expire)
-        lastDecClaimRound.lvl = lvl;
-        lastDecClaimRound.poolWei = poolWei;
-        lastDecClaimRound.totalBurn = uint232(totalBurn);
-        lastDecClaimRound.rngWord = rngWord;
+        // Snapshot claim round for this level (persistent — no expiry)
+        decClaimRounds[lvl].poolWei = poolWei;
+        decClaimRounds[lvl].totalBurn = uint232(totalBurn);
+        decClaimRounds[lvl].rngWord = rngWord;
 
         return 0; // All funds held for claims
     }
@@ -358,24 +357,24 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @param player Address claiming the jackpot.
     /// @param lvl Level to claim from.
     /// @return amountWei Pro-rata payout amount.
-    /// @custom:reverts DecClaimInactive When lvl is not the current active decimator round.
+    /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
     /// @custom:reverts DecAlreadyClaimed When player has already claimed for this level.
     /// @custom:reverts DecNotWinner When player's subbucket did not win.
     function _consumeDecClaim(
         address player,
         uint24 lvl
     ) internal returns (uint256 amountWei) {
-        // Only allow claims for the last decimator (claims expire when next decimator runs)
-        if (lastDecClaimRound.lvl != lvl) revert DecClaimInactive();
+        DecClaimRound storage round = decClaimRounds[lvl];
+        if (round.poolWei == 0) revert DecClaimInactive();
 
         DecEntry storage e = decBurn[lvl][player];
         if (e.claimed != 0) revert DecAlreadyClaimed();
 
         // Calculate pro-rata share if player's subbucket won
         uint64 packedOffsets = decBucketOffsetPacked[lvl];
-        uint256 totalBurn = uint256(lastDecClaimRound.totalBurn);
+        uint256 totalBurn = uint256(round.totalBurn);
         amountWei = _decClaimableFromEntry(
-            lastDecClaimRound.poolWei,
+            round.poolWei,
             totalBurn,
             e,
             packedOffsets
@@ -403,9 +402,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @notice Claim Decimator jackpot for caller.
     /// @dev Public function for players to claim their own jackpot.
     ///      Credits payout to player's claimable balance.
-    ///      Claims expire when next decimator runs.
-    /// @param lvl Level to claim from (must be the last decimator).
-    /// @custom:reverts DecClaimInactive When lvl is not the current active decimator round.
+    /// @param lvl Level to claim from.
+    /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
     /// @custom:reverts DecAlreadyClaimed When caller has already claimed for this level.
     /// @custom:reverts DecNotWinner When caller's subbucket did not win.
     function claimDecimatorJackpot(uint24 lvl) external {
@@ -418,14 +416,14 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 amountWei = _consumeDecClaim(msg.sender, lvl);
 
         if (gameOver) {
-            _addClaimableEth(msg.sender, amountWei, lastDecClaimRound.rngWord);
+            _addClaimableEth(msg.sender, amountWei, decClaimRounds[lvl].rngWord);
             return;
         }
 
         uint256 lootboxPortion = _creditDecJackpotClaimCore(
             msg.sender,
             amountWei,
-            lastDecClaimRound.rngWord
+            decClaimRounds[lvl].rngWord
         );
         if (lootboxPortion != 0) {
             _setFuturePrizePool(_getFuturePrizePool() + lootboxPortion);
@@ -434,20 +432,19 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @notice Check if player can claim Decimator jackpot for a level.
     /// @dev View function for UI to show claimable amounts.
-    ///      Only returns non-zero for the last decimator (claims expire when next one runs).
     /// @param player Address to check.
-    /// @param lvl Level to check (must be the last decimator).
+    /// @param lvl Level to check.
     /// @return amountWei Claimable amount (0 if not winner, already claimed, or expired).
     /// @return winner True if player is a winner for this level.
     function decClaimable(
         address player,
         uint24 lvl
     ) external view returns (uint256 amountWei, bool winner) {
-        // Only show claimable for the last decimator
-        if (lastDecClaimRound.lvl != lvl) {
+        DecClaimRound storage round = decClaimRounds[lvl];
+        if (round.poolWei == 0) {
             return (0, false);
         }
-        return _decClaimable(lastDecClaimRound, player, lvl);
+        return _decClaimable(round, player, lvl);
     }
 
     /// @dev Processes auto-rebuy if enabled, converting ETH winnings to tickets.
@@ -639,13 +636,13 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Internal view helper for decClaimable.
-    /// @param round LastDecClaimRound storage reference.
+    /// @param round DecClaimRound storage reference.
     /// @param player Address to check.
     /// @param lvl Level number.
     /// @return amountWei Claimable amount.
     /// @return winner True if player is a winner.
     function _decClaimable(
-        LastDecClaimRound storage round,
+        DecClaimRound storage round,
         address player,
         uint24 lvl
     ) internal view returns (uint256 amountWei, bool winner) {

@@ -223,9 +223,8 @@ abstract contract DegenerusGameStorage {
     bool internal jackpotPhaseFlag;
 
     // =========================================================================
-    // EVM SLOT 1: ETH Phase, Price, and Double-Buffer Fields
+    // EVM SLOT 0 (continued): Counters and Flags
     // =========================================================================
-    // Packs into EVM Slot 1: dailyEthPhase through prizePoolFrozen (27 bytes used, 5 bytes padding).
 
     /// @dev Count of jackpots processed within the current level.
     ///      Capped at 5 (JACKPOT_LEVEL_CAP in JackpotModule); triggers level
@@ -294,8 +293,9 @@ abstract contract DegenerusGameStorage {
     uint48 internal purchaseStartDay;
 
     // =========================================================================
-    // EVM SLOT 1 (continued): Mint Price
+    // EVM SLOT 1: ETH Phase, Price, and Double-Buffer Fields
     // =========================================================================
+    // Packs into EVM Slot 1: dailyEthPhase through prizePoolFrozen (27 bytes used, 5 bytes padding).
 
     /// @dev Base price unit in wei. One unit covers 4 scaled ticket entries.
     ///      uint128 supports up to ~340 undecillion wei (~3.4e20 ETH) — far
@@ -1491,16 +1491,14 @@ abstract contract DegenerusGameStorage {
         uint8 claimed;
     }
 
-    /// @dev Snapshot of last decimator jackpot for claim processing.
-    struct LastDecClaimRound {
+    /// @dev Snapshot of a decimator jackpot for claim processing.
+    struct DecClaimRound {
         /// @notice ETH prize pool available for claims.
         uint256 poolWei;
         /// @notice VRF random word for lootbox entropy derivation.
         uint256 rngWord;
         /// @notice Total qualifying burn across winning subbuckets (denominator for pro-rata).
         uint232 totalBurn;
-        /// @notice Level of this decimator jackpot.
-        uint24 lvl;
     }
 
     /// @dev Player decimator entries per level.
@@ -1512,9 +1510,9 @@ abstract contract DegenerusGameStorage {
     ///      Array sized [13][13] to allow direct indexing (denom 0-12, sub 0-12).
     mapping(uint24 => uint256[13][13]) internal decBucketBurnTotal;
 
-    /// @dev Last Decimator claim round snapshot.
-    ///      Claims expire when next decimator runs.
-    LastDecClaimRound internal lastDecClaimRound;
+    /// @dev Decimator claim round snapshots per level.
+    ///      Claims persist indefinitely — no expiry on prior rounds.
+    mapping(uint24 => DecClaimRound) internal decClaimRounds;
 
     /// @dev Packed winning subbucket per denominator for a level.
     ///      4 bits each for denom 2..12 (44 bits total, fits in uint64).
