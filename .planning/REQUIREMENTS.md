@@ -51,12 +51,12 @@
 | CMT-02 | Phase 32 | Complete |
 | CMT-03 | Phase 33 | Complete |
 | CMT-04 | Phase 34 | Complete |
-| CMT-05 | Phase 35 | Pending |
+| CMT-05 | Phase 35 | In Progress (2 of 10 contracts) |
 | DRIFT-01 | Phase 31 | Complete |
 | DRIFT-02 | Phase 32 | Complete |
 | DRIFT-03 | Phase 33 | Complete |
 | DRIFT-04 | Phase 34 | Complete |
-| DRIFT-05 | Phase 35 | Pending |
+| DRIFT-05 | Phase 35 | In Progress (2 of 10 contracts) |
 | DEL-01 | Phase 36 | Pending |
 
 **Coverage:**
