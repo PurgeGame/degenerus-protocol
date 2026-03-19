@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: RNG Delta Audit + Comment Re-scan
 status: unknown
-stopped_at: Completed 41-01-PLAN.md
-last_updated: "2026-03-19T13:32:24.249Z"
+stopped_at: Completed 41-02-PLAN.md
+last_updated: "2026-03-19T13:33:31.104Z"
 progress:
   total_phases: 6
   completed_phases: 2
@@ -70,6 +70,7 @@ Recent decisions affecting current work:
 - [Phase 40]: [Phase 40 P01]: CMT-02 SATISFIED with 1 deferral -- 11/12 v3.1 fixes verified, CMT-003 NOT FIXED (INFO), 2 new INFO findings (NEW-001, NEW-002)
 - [Phase 39]: [Phase 39 P02]: 11/11 v3.1 fixes verified PASS across DecimatorModule/DegeneretteModule/MintModule; 2 new INFO findings (CMT-V32-001 stale expiry ref, CMT-V32-002 writesUsed misdescription)
 - [Phase 41]: [Phase 41 P01]: CMT-04 PARTIAL -- BurnieCoinflip 3 new findings (CMT-101 to 103), DegenerusQuests clean, DegenerusJackpots 1 over-correction (CMT-104). 17 v3.1 fixes verified.
+- [Phase 41]: [Phase 41 P02]: 9 findings across 4 contracts -- 3 stale RngLocked on IBurnieCoinflip, 5 IDegenerusGame NatSpec gaps, 1 Vault CMT-078 partial fix remainder. v3.1: 3 fixed, 1 partial.
 
 ### Pending Todos
 
@@ -81,6 +82,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-19T13:32:19.108Z
-Stopped at: Completed 41-01-PLAN.md
+Last session: 2026-03-19T13:33:31.102Z
+Stopped at: Completed 41-02-PLAN.md
 Resume file: None
