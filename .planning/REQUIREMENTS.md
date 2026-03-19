@@ -51,13 +51,13 @@
 | CMT-02 | Phase 32 | Complete |
 | CMT-03 | Phase 33 | Complete |
 | CMT-04 | Phase 34 | Complete |
-| CMT-05 | Phase 35 | In Progress (2 of 10 contracts) |
+| CMT-05 | Phase 35 | Complete |
 | DRIFT-01 | Phase 31 | Complete |
 | DRIFT-02 | Phase 32 | Complete |
 | DRIFT-03 | Phase 33 | Complete |
 | DRIFT-04 | Phase 34 | Complete |
-| DRIFT-05 | Phase 35 | In Progress (2 of 10 contracts) |
-| DEL-01 | Phase 36 | Pending |
+| DRIFT-05 | Phase 35 | Complete |
+| DEL-01 | Phase 37 | Pending |
 
 **Coverage:**
 - v3.1 requirements: 11 total
@@ -66,4 +66,4 @@
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-03-19 after Phase 34 completion -- CMT-04 and DRIFT-04 complete*
+*Last updated: 2026-03-19 after milestone audit -- DEL-01 reassigned to Phase 37 gap closure, CMT-05/DRIFT-05 marked Complete*
