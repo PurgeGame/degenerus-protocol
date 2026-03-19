@@ -9,7 +9,7 @@
 - ✅ **v2.0 C4A Audit Prep** — Phases 19-23 (shipped 2026-03-17)
 - ✅ **v2.1 VRF Governance Audit + Doc Sync** — Phases 24-25 (shipped 2026-03-18)
 - ✅ **v3.0 Full Contract Audit + Payout Specification** — Phases 26-30 (shipped 2026-03-18)
-- 🚧 **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-36 (in progress)
+- ✅ **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-36 (shipped 2026-03-19)
 
 ## Phases
 
@@ -52,7 +52,7 @@
 - [x] **Phase 33: Game Modules Batch B** - Comment audit + intent drift review for JackpotModule, DecimatorModule, EndgameModule, GameOverModule, AdvanceModule (completed 2026-03-19)
 - [x] **Phase 34: Token Contracts** - Comment audit + intent drift review for BurnieCoin, StakedDegenerusStonk, DegenerusStonk, WrappedWrappedXRP (completed 2026-03-19)
 - [x] **Phase 35: Peripheral Contracts** - Comment audit + intent drift review for BurnieCoinflip, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DegenerusVault, DegenerusTraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data (completed 2026-03-19)
-- [ ] **Phase 36: Consolidated Findings** - Merge all per-batch findings into a single categorized deliverable
+- [x] **Phase 36: Consolidated Findings** - Merge all per-batch findings into a single categorized deliverable (completed 2026-03-19)
 
 ## Phase Details
 
@@ -141,7 +141,7 @@ Plans:
   4. No finding from any per-batch file is missing from the consolidated list
 **Plans:** 1 plan
 Plans:
-- [ ] 36-01-PLAN.md — Consolidate all 84 findings from Phases 31-35 into categorized deliverable with severity index and cross-cutting patterns
+- [x] 36-01-PLAN.md — Consolidate all 84 findings from Phases 31-35 into categorized deliverable with severity index and cross-cutting patterns
 
 ## Progress
 
@@ -154,7 +154,7 @@ Plans:
 | 33. Game Modules Batch B | 3/3 | Complete    | 2026-03-19 | - |
 | 34. Token Contracts | 2/2 | Complete    | 2026-03-19 | - |
 | 35. Peripheral Contracts | 4/4 | Complete    | 2026-03-19 | - |
-| 36. Consolidated Findings | v3.1 | 0/1 | Not started | - |
+| 36. Consolidated Findings | v3.1 | 1/1 | Complete | 2026-03-19 |
 
 ## Deferred (v3.2+)
 
@@ -163,4 +163,4 @@ Plans:
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-19 after Phase 36 planning -- 1 plan created*
+*Last updated: 2026-03-19 after Phase 36 completion -- v3.1 milestone shipped*
