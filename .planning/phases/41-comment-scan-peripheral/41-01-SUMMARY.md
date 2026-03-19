@@ -147,3 +147,9 @@ All 248 NatSpec tags verified accurate. All handler functions (handleMint, handl
 - CMT-103 is an interface-side finding on IBurnieCoinflip.sol (will be formally audited in Plan 02); included here because it was discovered during implementation-side review.
 - CMT-104 is the over-correction of v3.1 CMT-068: the fix changed "coin contract" to "coinflip contract" instead of "coin or coinflip contract."
 - No .sol files were modified during this audit.
+
+## Self-Check: PASSED
+
+- 41-01-SUMMARY.md: FOUND
+- Task 1 commit ad02a609: FOUND
+- Task 2 commit 6b808721: FOUND
