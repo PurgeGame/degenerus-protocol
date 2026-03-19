@@ -1,4 +1,90 @@
+---
+phase: 41-comment-scan-peripheral
+plan: 02
+subsystem: audit
+tags: [solidity, natspec, comment-audit, interface-parity, rngLocked, decimator-expiry]
+
+requires:
+  - phase: 41-comment-scan-peripheral
+    provides: "41-RESEARCH.md with v3.1 findings status table and pre-identified findings"
+provides:
+  - "Comment audit findings for DegenerusVault, DegenerusAffiliate, IBurnieCoinflip, IDegenerusGame"
+  - "9 new findings (CMT-201 through CMT-209) including 3 HIGH-probability stale RngLocked annotations"
+  - "v3.1 fix verification: 3 fully fixed, 1 partially fixed (CMT-078)"
+affects: [41-comment-scan-peripheral, consolidated-findings]
+
+tech-stack:
+  added: []
+  patterns: [interface-implementation-cross-reference-table, per-contract-scope-header]
+
+key-files:
+  created:
+    - ".planning/phases/41-comment-scan-peripheral/41-02-SUMMARY.md"
+  modified: []
+
+key-decisions:
+  - "CMT-201: Classified _transfer plural 'checks' as INFO since from==address(0) is unreachable in normal operation"
+  - "CMT-202/203/204: Classified stale RngLocked as LOW since wardens would file false findings based on interface docs"
+  - "CMT-207: Classified purchaseDeityPass phantom useBoon parameter as LOW due to API surface confusion"
+  - "PRNG design note on DegenerusAffiliate verified accurate -- no finding needed"
+
+patterns-established:
+  - "Interface-implementation NatSpec cross-reference table format for systematic verification"
+
+requirements-completed: [CMT-04, CMT-05]
+
+duration: 7min
+completed: 2026-03-19
+---
+
 # Phase 41 Plan 02: Light-Change Peripheral + Interfaces -- Comment Audit
+
+**9 findings across 4 contracts (2,514 lines): 3 stale RngLocked on IBurnieCoinflip claim functions, 5 IDegenerusGame NatSpec gaps/staleness, 1 DegenerusVault plural zero-address check from v3.1 partial fix**
+
+## Performance
+
+- **Duration:** 7 min
+- **Started:** 2026-03-19T13:24:11Z
+- **Completed:** 2026-03-19T13:31:13Z
+- **Tasks:** 2
+- **Files modified:** 1
+
+## Accomplishments
+- Verified 4 v3.1 findings: 3 fully fixed (CMT-070, CMT-071, CMT-077), 1 partially fixed (CMT-078)
+- Identified 3 stale @custom:reverts RngLocked annotations on IBurnieCoinflip claim functions (highest-value findings)
+- Completed full interface-implementation NatSpec cross-reference for all 14 IBurnieCoinflip functions and 72 IDegenerusGame functions
+- Verified DegenerusAffiliate PRNG design note accurately characterizes the EV-neutral weighted random mechanism
+- Confirmed clean removal of claimCoinflipsTakeProfit and futurePrizePoolTotalView across all contracts
+
+## Task Commits
+
+Each task was committed atomically:
+
+1. **Task 1: Audit DegenerusVault.sol and DegenerusAffiliate.sol comments** - `7906efd4` (docs)
+2. **Task 2: Audit IBurnieCoinflip.sol and IDegenerusGame.sol interface comments** - `10b83db2` (docs)
+
+## Files Created/Modified
+- `.planning/phases/41-comment-scan-peripheral/41-02-SUMMARY.md` - Comment audit findings for 4 contracts
+
+## Decisions Made
+- Classified DegenerusAffiliate PRNG design note as accurate (no finding) after verifying EV-neutrality and redistributive-only manipulation property
+- Used CMT-201 through CMT-209 numbering (Plan 02 series) to avoid collision with Plan 01 numbering
+
+## Deviations from Plan
+
+None - plan executed exactly as written.
+
+## Issues Encountered
+
+None.
+
+## User Setup Required
+
+None - no external service configuration required.
+
+## Next Phase Readiness
+- Plan 03 (remaining/utility contracts) can proceed immediately
+- CMT numbering should continue from CMT-210 in Plan 03
 
 ## DegenerusVault.sol
 
@@ -209,3 +295,19 @@ All 72 function declarations in IDegenerusGame.sol were reviewed against Degener
 | IBurnieCoinflip.sol | 173 | N/A (no v3.1 findings) | 3 (CMT-202/203/204) | 3 |
 | IDegenerusGame.sol | 443 | N/A (no v3.1 findings) | 5 (CMT-205/206/207/208/209) | 5 |
 | **Total** | **2,514** | **3 fixed, 1 partial** | **9** | **9** |
+
+---
+
+## Self-Check: PASSED
+
+- SUMMARY file exists: FOUND
+- Task 1 commit (7906efd4): FOUND
+- Task 2 commit (10b83db2): FOUND
+- All 4 contract sections present: FOUND
+- Summary table present: FOUND
+- Finding count: 9 (CMT-201 through CMT-209)
+- No .sol files modified by this plan
+
+---
+*Phase: 41-comment-scan-peripheral*
+*Completed: 2026-03-19*
