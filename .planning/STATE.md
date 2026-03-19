@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: RNG Delta Audit + Comment Re-scan
-status: executing
-stopped_at: Completed 38-01-PLAN.md
-last_updated: "2026-03-19T13:27:08.408Z"
+status: unknown
+stopped_at: Completed 39-01-PLAN.md
+last_updated: "2026-03-19T13:30:11.206Z"
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 11
-  completed_plans: 2
+  completed_plans: 7
 ---
 
 # State
@@ -19,28 +19,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 38 — rng-delta-security
+**Current focus:** Phase 41 — comment-scan-peripheral
 
 ## Current Position
 
-Phase: 38 (rng-delta-security) — EXECUTING
-Plan: 2 of 2
+Phase: 41 (comment-scan-peripheral) — COMPLETE
+Plan: 3 of 3
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 1
-- Average duration: 4min
-- Total execution time: 0.07 hours
+- Total plans completed: 2
+- Average duration: 5min
+- Total execution time: 0.15 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 38 | 1 | 4min | 4min |
+| 39 | 1 | 5min | 5min |
 
 *Updated after each plan completion*
+| Phase 39 P03 | 5min | 2 tasks | 1 files |
+| Phase 41 P03 | 4min | 1 tasks | 1 files |
+| Phase 39 P01 | 5min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -54,6 +58,9 @@ Recent decisions affecting current work:
 - RNG-01 SAFE: carry isolation holds by construction via rebuyActive branching, not rngLocked guard
 - RNG-02 SAFE: BAF guard covers exact resolution window, sDGNRS truly ineligible at both layers
 - balanceOfWithClaimable UX inconsistency classified as INFO severity
+- [Phase 39]: LootboxModule+AdvanceModule: 6/6 v3.1 fixes verified PASS, 2 new INFO findings (missing @param tags)
+- [Phase 39]: CMT-029 v3.1 fix applied with wrong text (auto-rebuy vs whale pass) -- flagged as CMT-V32-001
+- [Phase 41]: CMT-079 confirmed NOT FIXED: 'zeroed in source' comment still present in ContractAddresses.sol
 
 ### Pending Todos
 
@@ -65,6 +72,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-19T13:26:20Z
-Stopped at: Completed 38-01-PLAN.md
-Resume file: .planning/phases/38-rng-delta-security/38-01-SUMMARY.md
+Last session: 2026-03-19T13:30:01.200Z
+Stopped at: Completed 39-01-PLAN.md
+Resume file: None

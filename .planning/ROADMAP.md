@@ -62,7 +62,7 @@
 - [ ] **Phase 38: RNG Delta Security** - Audit all RNG-adjacent code changes for manipulation vectors
 - [ ] **Phase 39: Comment Scan -- Game Modules** - Fresh comment audit across all 12 game module files
 - [ ] **Phase 40: Comment Scan -- Core + Token Contracts** - Fresh comment audit of core game and token contracts
-- [ ] **Phase 41: Comment Scan -- Peripheral + Remaining** - Fresh comment audit of peripheral and utility contracts
+- [x] **Phase 41: Comment Scan -- Peripheral + Remaining** - Fresh comment audit of peripheral and utility contracts (completed 2026-03-19)
 - [ ] **Phase 42: Governance Fresh Eyes** - Independent sanity check of VRF governance from fresh perspective
 - [ ] **Phase 43: Consolidated Findings** - Cross-cutting patterns and final deliverable with severity classification
 
@@ -93,7 +93,7 @@ Plans:
   3. All block comments and section headers reflect current contract structure
   4. All 31 v3.1 fixes verified correct in working tree
   5. Findings list produced with file, line, what/why/suggestion for each discrepancy
-**Plans:** 4 plans
+**Plans:** 2/4 plans executed
 Plans:
 - [ ] 39-01-PLAN.md — JackpotModule comment audit (2,792 lines, 6 v3.1 fixes)
 - [ ] 39-02-PLAN.md — DecimatorModule + DegeneretteModule + MintModule comment audit (3,358 lines, 11 v3.1 fixes)
@@ -123,7 +123,7 @@ Plans:
   2. DeityPass, TraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data comments all verified
   3. All interface files (IBurnieCoinflip, IDegenerusGame) NatSpec matches implementation
   4. Findings list produced with per-contract grouping
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 41-01-PLAN.md — Heavy-change peripheral (BurnieCoinflip, DegenerusQuests, DegenerusJackpots)
 - [ ] 41-02-PLAN.md — Light-change peripheral + interfaces (DegenerusVault, DegenerusAffiliate, IBurnieCoinflip, IDegenerusGame)
@@ -155,9 +155,9 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 38. RNG Delta Security | 1/2 | In Progress|  |
-| 39. Comment Scan -- Game Modules | 0/4 | Planned | - |
+| 39. Comment Scan -- Game Modules | 2/4 | In Progress|  |
 | 40. Comment Scan -- Core + Token | 0/2 | Planned | - |
-| 41. Comment Scan -- Peripheral + Remaining | 0/3 | Planned | - |
+| 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete   | 2026-03-19 |
 | 42. Governance Fresh Eyes | 0/TBD | Not started | - |
 | 43. Consolidated Findings | 0/TBD | Not started | - |
 
