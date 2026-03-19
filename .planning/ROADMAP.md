@@ -157,7 +157,7 @@ Plans:
 | 38. RNG Delta Security | 2/2 | Complete   | 2026-03-19 |
 | 39. Comment Scan -- Game Modules | 3/4 | In Progress|  |
 | 40. Comment Scan -- Core + Token | 2/2 | Complete    | 2026-03-19 |
-| 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete   | 2026-03-19 |
+| 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete    | 2026-03-19 |
 | 42. Governance Fresh Eyes | 0/TBD | Not started | - |
 | 43. Consolidated Findings | 0/TBD | Not started | - |
 
