@@ -18,7 +18,7 @@ Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
 
 - [ ] **CMT-01**: Game module contracts — all NatSpec, inline, and block comments verified (9 modules)
 - [ ] **CMT-02**: Core game contracts — all comments verified (DegenerusGame, GameStorage, DegenerusAdmin)
-- [ ] **CMT-03**: Token contracts — all comments verified (BurnieCoin, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
+- [x] **CMT-03**: Token contracts — all comments verified (BurnieCoin, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
 - [ ] **CMT-04**: Peripheral contracts — all comments verified (BurnieCoinflip, DegenerusVault, DegenerusAffiliate, DegenerusQuests, DegenerusJackpots)
 - [x] **CMT-05**: Remaining contracts — all comments verified (DeityPass, TraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data)
 - [ ] **CMT-06**: Cross-cutting patterns identified and documented
@@ -58,7 +58,7 @@ Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
 | RNG-04 | Phase 38 | Pending |
 | CMT-01 | Phase 39 | Pending |
 | CMT-02 | Phase 40 | Pending |
-| CMT-03 | Phase 40 | Pending |
+| CMT-03 | Phase 40 | Complete |
 | CMT-04 | Phase 41 | Pending |
 | CMT-05 | Phase 41 | Complete |
 | CMT-06 | Phase 43 | Pending |
