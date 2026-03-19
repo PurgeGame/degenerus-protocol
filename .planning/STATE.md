@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: RNG Delta Audit + Comment Re-scan
-status: unknown
-stopped_at: Completed 42-02-PLAN.md
-last_updated: "2026-03-19T14:20:04.390Z"
+status: complete
+stopped_at: Completed 43-01-PLAN.md
+last_updated: "2026-03-19T14:44:24.590Z"
 progress:
   total_phases: 6
-  completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
+  completed_phases: 6
+  total_plans: 14
+  completed_plans: 14
 ---
 
 # State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 42 — governance-fresh-eyes
+**Current focus:** Phase 43 — consolidated-findings
 
 ## Current Position
 
-Phase: 42 (governance-fresh-eyes) — COMPLETE
-Plan: 2 of 2 (all complete)
+Phase: 43 (consolidated-findings) — COMPLETE
+Plan: 1 of 1 (DONE)
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Plan: 2 of 2 (all complete)
 | Phase 39 P04 | 5min | 2 tasks | 2 files |
 | Phase 42 P01 | 6min | 2 tasks | 1 files |
 | Phase 42 P02 | 4min | 1 tasks | 1 files |
+| Phase 43 P01 | 8min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,8 @@ Recent decisions affecting current work:
 - [Phase 42]: GOV-01: 14 governance attack surfaces catalogued -- 13 SAFE, 1 KNOWN RISK (WAR-02). WAR-01/02/06 re-verified, GOV-07/VOTE-03 fixes confirmed.
 - [Phase 42]: GOV-02: All 5 post-v2.1 changes are improvements with no regressions. OQ-1 (lastVrfProcessedTimestamp) = INFO, OQ-2 (createSubscription try/catch) = SAFE, OQ-3 (circulatingSupply changes) = SAFE.
 - [Phase 42]: GOV-03: All 7 VRF state variables correctly reset on governance swap; lastVrfProcessedTimestamp non-reset is BY DESIGN; sDGNRS soulbound invariant proven complete. Overall governance verdict: SAFE.
+- [Phase 43]: Deduplication: Phase 38 IDs (LOW-01/02/03) used as canonical over Phase 41 duplicates
+- [Phase 43]: v3.1 fix verification corrected: 76 FIXED, 3 PARTIAL, 4 NOT FIXED, 1 FAIL (total 84)
 
 ### Pending Todos
 
@@ -93,6 +96,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-19T14:20:04.387Z
-Stopped at: Completed 42-02-PLAN.md
+Last session: 2026-03-19T14:44:24.589Z
+Stopped at: Completed 43-01-PLAN.md
 Resume file: None

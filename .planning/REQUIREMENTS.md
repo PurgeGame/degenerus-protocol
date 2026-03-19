@@ -21,8 +21,8 @@ Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
 - [x] **CMT-03**: Token contracts — all comments verified (BurnieCoin, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
 - [x] **CMT-04**: Peripheral contracts — all comments verified (BurnieCoinflip, DegenerusVault, DegenerusAffiliate, DegenerusQuests, DegenerusJackpots)
 - [x] **CMT-05**: Remaining contracts — all comments verified (DeityPass, TraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data)
-- [ ] **CMT-06**: Cross-cutting patterns identified and documented
-- [ ] **CMT-07**: Consolidated findings deliverable with severity classification
+- [x] **CMT-06**: Cross-cutting patterns identified and documented
+- [x] **CMT-07**: Consolidated findings deliverable with severity classification
 
 ### VRF Governance (Fresh Eyes)
 
@@ -61,8 +61,8 @@ Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
 | CMT-03 | Phase 40 | Complete |
 | CMT-04 | Phase 41 | Complete |
 | CMT-05 | Phase 41 | Complete |
-| CMT-06 | Phase 43 | Pending |
-| CMT-07 | Phase 43 | Pending |
+| CMT-06 | Phase 43 | Complete |
+| CMT-07 | Phase 43 | Complete |
 | GOV-01 | Phase 42 | Complete |
 | GOV-02 | Phase 42 | Complete |
 | GOV-03 | Phase 42 | Complete |
