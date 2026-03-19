@@ -11,8 +11,8 @@ Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
 
 - [x] **RNG-01**: Removing rngLocked from coinflip claim paths does not open manipulation windows (carry never enters claimable pool verified)
 - [x] **RNG-02**: BAF epoch-based guard is sufficient as sole coinflip claim protection during resolution windows
-- [ ] **RNG-03**: Persistent decimator claims across rounds do not create RNG-exploitable state
-- [ ] **RNG-04**: Cross-contract RNG data flow remains safe with all recent changes combined (no new manipulation vectors)
+- [x] **RNG-03**: Persistent decimator claims across rounds do not create RNG-exploitable state
+- [x] **RNG-04**: Cross-contract RNG data flow remains safe with all recent changes combined (no new manipulation vectors)
 
 ### Comment Correctness (Fresh Scan)
 
@@ -54,8 +54,8 @@ Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
 |-------------|-------|--------|
 | RNG-01 | Phase 38 | Complete |
 | RNG-02 | Phase 38 | Complete |
-| RNG-03 | Phase 38 | Pending |
-| RNG-04 | Phase 38 | Pending |
+| RNG-03 | Phase 38 | Complete |
+| RNG-04 | Phase 38 | Complete |
 | CMT-01 | Phase 39 | Pending |
 | CMT-02 | Phase 40 | Complete |
 | CMT-03 | Phase 40 | Complete |
