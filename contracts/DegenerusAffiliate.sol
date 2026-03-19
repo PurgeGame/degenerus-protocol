@@ -543,77 +543,45 @@ contract DegenerusAffiliate {
         // -----------------------------------------------------------------
         // DISTRIBUTION
         // -----------------------------------------------------------------
-        // Batch recipients for gas efficiency.
+        // Collect recipients for weighted random winner selection (gas efficient vs 3 separate credits).
+        // PRNG is known — accepted design tradeoff (EV-neutral, manipulation only redistributive between affiliates).
+        // Always 3 recipients: affiliate + upline tier 1 (VAULT fallback) + upline tier 2 (VAULT fallback).
         address[3] memory players;
         uint256[3] memory amounts;
-        uint256 cursor;
 
-        // Add quest reward bonus on top of base affiliate share.
+        // Affiliate share + quest bonus
         uint256 questReward = coin.affiliateQuestReward(affiliateAddr, affiliateShareBase);
-        uint256 totalFlipAward = affiliateShareBase + questReward;
+        players[0] = affiliateAddr;
+        amounts[0] = affiliateShareBase + questReward;
 
-        players[cursor] = affiliateAddr;
-        amounts[cursor] = totalFlipAward;
-        unchecked {
-            ++cursor;
-        }
-
-        // -------------------------------------------------------------
-        // UPLINE TIER 1 (20% of scaled amount)
-        // -------------------------------------------------------------
+        // Upline tier 1 (20% of scaled amount)
         address upline = _referrerAddress(affiliateAddr);
-        if (upline != address(0)) {
-            uint256 baseBonus = scaledAmount / 5; // 20%
-            uint256 questRewardUpline = coin.affiliateQuestReward(upline, baseBonus);
-            uint256 totalUpline = baseBonus + questRewardUpline;
+        uint256 baseBonus = scaledAmount / 5;
+        uint256 questRewardUpline = coin.affiliateQuestReward(upline, baseBonus);
+        players[1] = upline;
+        amounts[1] = baseBonus + questRewardUpline;
 
-            players[cursor] = upline;
-            amounts[cursor] = totalUpline;
-            unchecked {
-                ++cursor;
-            }
+        // Upline tier 2 (20% of tier 1 = 4% of original)
+        address upline2 = _referrerAddress(upline);
+        uint256 bonus2 = scaledAmount / 25;
+        uint256 questReward2 = coin.affiliateQuestReward(upline2, bonus2);
+        players[2] = upline2;
+        amounts[2] = bonus2 + questReward2;
 
-            // ---------------------------------------------------------
-            // UPLINE TIER 2 (20% of tier 1 = 4% of original)
-            // ---------------------------------------------------------
-            address upline2 = _referrerAddress(upline);
-            if (upline2 != address(0)) {
-                uint256 bonus2 = scaledAmount / 25; // 20% of 20% = 4%
-                uint256 questReward2 = coin.affiliateQuestReward(upline2, bonus2);
-                uint256 totalUpline2 = bonus2 + questReward2;
-
-                players[cursor] = upline2;
-                amounts[cursor] = totalUpline2;
-                unchecked {
-                    ++cursor;
-                }
-            }
-        }
-
-        // Distribute rewards.
-        // If multiple recipients exist, roll a single weighted winner and pay
-        // the combined amount. This preserves each recipient's EV:
-        // P(win_i) = amount_i / totalAmount.
-        if (cursor == 1) {
-            _routeAffiliateReward(players[0], amounts[0]);
-        } else {
-            uint256 totalAmount;
-            for (uint256 i; i < cursor; ) {
-                totalAmount += amounts[i];
-                unchecked {
-                    ++i;
-                }
-            }
-
-            if (totalAmount != 0) {
-                address winner = _rollWeightedAffiliateWinner(
-                    players,
-                    amounts,
-                    cursor,
-                    totalAmount,
-                    sender,
-                    storedCode
-                );
+        // Roll weighted winner and pay combined amount.
+        // Preserves each recipient's EV: P(win_i) = amount_i / totalAmount.
+        uint256 totalAmount = amounts[0] + amounts[1] + amounts[2];
+        if (totalAmount != 0) {
+            address winner = _rollWeightedAffiliateWinner(
+                players,
+                amounts,
+                3,
+                totalAmount,
+                sender,
+                storedCode
+            );
+            // Don't pay the buyer from their own purchase
+            if (winner != sender) {
                 _routeAffiliateReward(winner, totalAmount);
             }
         }
@@ -713,14 +681,13 @@ contract DegenerusAffiliate {
 
     /**
      * @notice Get the referrer's address for a player.
-     * @dev Returns address(0) if player has no valid referrer.
+     * @dev Returns VAULT if player has no referrer or is locked to VAULT.
      * @param player The player to look up.
-     * @return The referrer's address.
+     * @return The referrer's address (VAULT as fallback).
      */
     function _referrerAddress(address player) private view returns (address) {
         bytes32 code = playerReferralCode[player];
-        if (code == bytes32(0)) return address(0);
-        if (code == REF_CODE_LOCKED || code == AFFILIATE_CODE_VAULT) return ContractAddresses.VAULT;
+        if (code == bytes32(0) || code == REF_CODE_LOCKED || code == AFFILIATE_CODE_VAULT) return ContractAddresses.VAULT;
         return affiliateCode[code].owner;
     }
 

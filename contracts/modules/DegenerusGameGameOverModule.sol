@@ -188,6 +188,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     }
 
     /// @dev Send funds to vault (50%) and DGNRS (50%), prioritizing stETH transfers over ETH.
+    ///      IMPORTANT: Hard-reverts on stETH/ETH transfer failure. Because game-over
+    ///      sets terminal state flags that roll back on revert, a stuck stETH transfer
+    ///      would block game-over processing until the transfer succeeds.
     /// @param amount Total amount to send (combined ETH + stETH value).
     /// @param stethBal Available stETH balance for transfers.
     /// @custom:reverts E When stETH transfer, approval, or ETH transfer fails

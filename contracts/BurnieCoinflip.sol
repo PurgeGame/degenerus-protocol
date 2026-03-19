@@ -100,7 +100,6 @@ contract BurnieCoinflip {
     error OnlyDegenerusGame();
     error AutoRebuyNotEnabled();
     error AutoRebuyAlreadyEnabled();
-    error TakeProfitZero();
     error RngLocked();
     error Insufficient();
     error NotApproved();
@@ -320,79 +319,33 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     /// @notice Claim coinflip winnings (exact amount).
-    /// @dev Blocked during RNG lock to prevent auto-rebuy carry extraction
-    ///      when the VRF word (and thus win/loss outcome) is already known.
+    /// @dev Processes resolved days and claims from claimableStored (accumulated from
+    ///      settlements, take-profit, and mode changes). Auto-rebuy carry is never exposed.
     function claimCoinflips(
         address player,
         uint256 amount
     ) external returns (uint256 claimed) {
-        if (degenerusGame.rngLocked()) revert RngLocked();
         return _claimCoinflipsAmount(_resolvePlayer(player), amount, true);
     }
 
-    /// @notice Claim coinflip winnings (take profit multiples).
-    /// @dev Blocked during RNG lock to prevent auto-rebuy carry extraction
-    ///      when the VRF word (and thus win/loss outcome) is already known.
-    function claimCoinflipsTakeProfit(
-        address player,
-        uint256 multiples
-    ) external returns (uint256 claimed) {
-        if (degenerusGame.rngLocked()) revert RngLocked();
-        return _claimCoinflipsTakeProfit(_resolvePlayer(player), multiples);
-    }
-
     /// @notice Claim coinflip winnings via BurnieCoin to cover token transfers/burns.
-    /// @dev Access: BurnieCoin only. Blocked during RNG lock to prevent carry extraction.
+    /// @dev Access: BurnieCoin only. Processes resolved days and claims from claimableStored.
+    ///      Auto-rebuy carry is never exposed to this path.
     function claimCoinflipsFromBurnie(
         address player,
         uint256 amount
     ) external onlyBurnieCoin returns (uint256 claimed) {
-        if (degenerusGame.rngLocked()) revert RngLocked();
         return _claimCoinflipsAmount(player, amount, true);
     }
 
     /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
-    /// @dev Access: BurnieCoin only. Blocked during RNG lock to prevent carry extraction.
+    /// @dev Access: BurnieCoin only. Same safety as claimCoinflipsFromBurnie —
+    ///      only claimableStored is consumable, carry stays in autoRebuyCarry.
     function consumeCoinflipsForBurn(
         address player,
         uint256 amount
     ) external onlyBurnieCoin returns (uint256 consumed) {
-        if (degenerusGame.rngLocked()) revert RngLocked();
         return _claimCoinflipsAmount(player, amount, false);
-    }
-
-    /// @dev Internal claim keeping multiples of auto-rebuy stop amount.
-    function _claimCoinflipsTakeProfit(
-        address player,
-        uint256 multiples
-    ) private returns (uint256 claimed) {
-        PlayerCoinflipState storage state = playerState[player];
-        if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
-
-        uint256 takeProfit = state.autoRebuyStop;
-        if (takeProfit == 0) revert TakeProfitZero();
-
-        uint256 mintable = _claimCoinflipsInternal(player, false);
-        uint256 stored = state.claimableStored + mintable;
-        if (stored < takeProfit) {
-            if (mintable != 0) {
-                state.claimableStored = uint128(stored);
-            }
-            return 0;
-        }
-
-        uint256 maxMultiples = stored / takeProfit;
-        uint256 claimMultiples = multiples == 0 || multiples > maxMultiples ? maxMultiples : multiples;
-        uint256 toClaim;
-        unchecked {
-            toClaim = claimMultiples * takeProfit;
-        }
-
-        if (mintable != 0 || toClaim != 0) {
-            state.claimableStored = uint128(stored - toClaim);
-        }
-        burnie.mintForCoinflip(player, toClaim);
-        claimed = toClaim;
     }
 
     /// @dev Internal claim exact amount.

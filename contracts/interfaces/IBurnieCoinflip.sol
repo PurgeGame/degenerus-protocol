@@ -30,7 +30,6 @@ interface IBurnieCoinflip {
     /// @param player The player claiming (address(0) for msg.sender).
     /// @param amount Amount to claim (will be capped at available balance).
     /// @return claimed The actual amount claimed and minted.
-    /// @custom:reverts RngLocked If VRF randomness is currently being resolved.
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
 
     /// @notice Claim coinflip winnings via BurnieCoin contract to cover token transfers/burns.
@@ -39,7 +38,6 @@ interface IBurnieCoinflip {
     /// @param amount Amount to claim.
     /// @return claimed The actual amount claimed and minted.
     /// @custom:reverts OnlyBurnieCoin If caller is not the BurnieCoin contract.
-    /// @custom:reverts RngLocked If VRF randomness is currently being resolved.
     function claimCoinflipsFromBurnie(address player, uint256 amount) external returns (uint256 claimed);
 
     /// @notice Consume coinflip winnings via BurnieCoin for burns without minting new tokens.
@@ -48,22 +46,7 @@ interface IBurnieCoinflip {
     /// @param amount Amount to consume.
     /// @return consumed The actual amount consumed.
     /// @custom:reverts OnlyBurnieCoin If caller is not the BurnieCoin contract.
-    /// @custom:reverts RngLocked If VRF randomness is currently being resolved.
     function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
-
-    /// @notice Claim coinflip winnings in multiples of the auto-rebuy stop amount.
-    /// @dev Requires auto-rebuy to be enabled with a non-zero takeProfit configured.
-    ///      Claims the largest whole multiple of takeProfit that doesn't exceed balance.
-    /// @param player The player claiming (address(0) for msg.sender).
-    /// @param multiples Number of multiples to claim (0 = claim max available multiples).
-    /// @return claimed The actual amount claimed and minted.
-    /// @custom:reverts RngLocked If VRF randomness is currently being resolved.
-    /// @custom:reverts AutoRebuyNotEnabled If player does not have auto-rebuy enabled.
-    /// @custom:reverts TakeProfitZero If auto-rebuy stop amount is zero.
-    function claimCoinflipsTakeProfit(
-        address player,
-        uint256 multiples
-    ) external returns (uint256 claimed);
 
     /// @notice Configure auto-rebuy mode for coinflips.
     /// @dev Auto-rebuy automatically rolls over winnings as stake for future flips.

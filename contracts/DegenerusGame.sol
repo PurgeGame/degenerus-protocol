@@ -1010,11 +1010,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  All modules MUST inherit DegenerusGameStorage for slot alignment.                                             |
       |                                                                                                                |
       |  Modules:                                                                                                      |
-      |  • GAME_DECIMATOR_MODULE - Decimator claim credits and lootbox payouts                                         |
-      |  • GAME_ENDGAME_MODULE   - Endgame settlement (payouts, wipes, jackpots)                                       |
-      |  • GAME_MINT_MODULE      - Mint data recording, airdrop multipliers                                            |
-      |  • GAME_WHALE_MODULE     - Whale bundle purchases                                                              |
-      |  • GAME_JACKPOT_MODULE   - Jackpot calculations and payouts                                                    |
+      |  • GAME_ADVANCE_MODULE      - Daily advance, VRF, daily processing                                             |
+      |  • GAME_BOON_MODULE         - Deity boon effects and activation                                                |
+      |  • GAME_DECIMATOR_MODULE    - Decimator claim credits and lootbox payouts                                       |
+      |  • GAME_DEGENERETTE_MODULE  - Degenerette bet placement and resolution                                          |
+      |  • GAME_ENDGAME_MODULE      - Endgame settlement (payouts, wipes, jackpots)                                     |
+      |  • GAME_JACKPOT_MODULE      - Jackpot calculations and payouts                                                  |
+      |  • GAME_LOOTBOX_MODULE      - Lootbox open, credit, and payout                                                  |
+      |  • GAME_MINT_MODULE         - Mint data recording, airdrop multipliers                                          |
+      |  • GAME_WHALE_MODULE        - Whale bundle purchases                                                            |
       |                                                                                                                |
       |  SECURITY: delegatecall executes module code in this contract's                                                |
       |  context, with access to all storage. Modules are constant addresses.                                          |

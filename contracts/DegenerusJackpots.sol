@@ -44,7 +44,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  specific failure condition in jackpot operations.                   |
       +======================================================================+*/
 
-    /// @notice Thrown when a function restricted to the coin contract is called by another address.
+    /// @notice Thrown when a function restricted to COIN or COINFLIP is called by another address.
     error OnlyCoin();
 
     /// @notice Thrown when a function restricted to the game contract is called by another address.

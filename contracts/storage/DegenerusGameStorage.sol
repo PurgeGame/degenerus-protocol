@@ -275,6 +275,11 @@ abstract contract DegenerusGameStorage {
     ///      Used with dailyEthWinnerCursor for mid-bucket resume.
     uint8 internal dailyEthBucketCursor;
 
+    // =========================================================================
+    // EVM SLOT 1: ETH Phase, Price, and Double-Buffer Fields
+    // =========================================================================
+    // Packs into EVM Slot 1: dailyEthPhase through prizePoolFrozen (27 bytes used, 5 bytes padding).
+
     /// @dev Daily jackpot ETH phase.
     ///      0 = current level, 1 = carryover.
     uint8 internal dailyEthPhase;
@@ -282,20 +287,15 @@ abstract contract DegenerusGameStorage {
     /// @dev Jackpot compression tier: 0=normal (5d), 1=compressed (3d), 2=turbo (1d).
     ///      Set when purchase-phase target is met quickly, signaling high player interest.
     ///      Turbo (2): target met within 1 day — entire jackpot in 1 physical day.
-    ///      Compressed (1): target met within 2 days — 5 logical days in 3 physical.
+    ///      Compressed (1): target met within 3 days — 5 logical days in 3 physical.
     ///      Cleared at phase end.
     uint8 internal compressedJackpotFlag;
 
     /// @dev Game day index when the current purchase phase opened.
     ///      Used to determine whether the purchase target was met quickly enough
     ///      to trigger compressed jackpot mode. Default 0 works for level 0 since
-    ///      the first daily advance is day 1, giving day - 0 = 1 ≤ 2.
+    ///      the first daily advance is day 1, giving day - 0 = 1 ≤ 3.
     uint48 internal purchaseStartDay;
-
-    // =========================================================================
-    // EVM SLOT 1: ETH Phase, Price, and Double-Buffer Fields
-    // =========================================================================
-    // Packs into EVM Slot 1: dailyEthPhase through prizePoolFrozen (27 bytes used, 5 bytes padding).
 
     /// @dev Base price unit in wei. One unit covers 4 scaled ticket entries.
     ///      uint128 supports up to ~340 undecillion wei (~3.4e20 ETH) — far
