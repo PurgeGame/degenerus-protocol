@@ -111,8 +111,8 @@ Plans:
   4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
 **Plans:** 2/2 plans complete
 Plans:
-- [ ] 34-01-PLAN.md — BurnieCoin.sol comment audit and intent drift review (1,065 lines, orphaned NatSpec from coinflip split)
-- [ ] 34-02-PLAN.md — DegenerusStonk + StakedDegenerusStonk + WrappedWrappedXRP comment audit and intent drift review; finalize batch findings
+- [x] 34-01-PLAN.md — BurnieCoin.sol comment audit and intent drift review (1,065 lines, orphaned NatSpec from coinflip split)
+- [x] 34-02-PLAN.md — DegenerusStonk + StakedDegenerusStonk + WrappedWrappedXRP comment audit and intent drift review; finalize batch findings
 
 ### Phase 35: Peripheral Contracts
 **Goal**: Every NatSpec and inline comment in the 10 peripheral contracts is verified accurate, and any intent drift is flagged
@@ -125,10 +125,10 @@ Plans:
   4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
 **Plans:** 4/4 plans complete
 Plans:
-- [ ] 35-01-PLAN.md — BurnieCoinflip.sol comment audit and intent drift review (1,154 lines)
-- [ ] 35-02-PLAN.md — DegenerusQuests.sol + DegenerusJackpots.sol comment audit and intent drift review (2,287 lines combined)
-- [ ] 35-03-PLAN.md — DegenerusAffiliate.sol + DegenerusVault.sol comment audit and intent drift review (1,908 lines combined)
-- [ ] 35-04-PLAN.md — DegenerusDeityPass.sol + DegenerusTraitUtils.sol + DeityBoonViewer.sol + ContractAddresses.sol + Icons32Data.sol + finalize findings (1,013 lines combined)
+- [x] 35-01-PLAN.md — BurnieCoinflip.sol comment audit and intent drift review (1,154 lines)
+- [x] 35-02-PLAN.md — DegenerusQuests.sol + DegenerusJackpots.sol comment audit and intent drift review (2,287 lines combined)
+- [x] 35-03-PLAN.md — DegenerusAffiliate.sol + DegenerusVault.sol comment audit and intent drift review (1,908 lines combined)
+- [x] 35-04-PLAN.md — DegenerusDeityPass.sol + DegenerusTraitUtils.sol + DeityBoonViewer.sol + ContractAddresses.sol + Icons32Data.sol + finalize findings (1,013 lines combined)
 
 ### Phase 36: Consolidated Findings
 **Goal**: All per-batch findings from Phases 31-35 are merged into a single categorized deliverable with what/why/suggestion per item, organized by severity
@@ -139,7 +139,9 @@ Plans:
   2. Each finding has what (the issue), why (why it matters for C4A wardens), and suggestion (recommended fix or documentation) fields
   3. Findings are categorized by severity (at minimum: comment inaccuracy vs. intent drift) and grouped by contract
   4. No finding from any per-batch file is missing from the consolidated list
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 36-01-PLAN.md — Consolidate all 84 findings from Phases 31-35 into categorized deliverable with severity index and cross-cutting patterns
 
 ## Progress
 
@@ -151,8 +153,8 @@ Plans:
 | 32. Game Modules Batch A | 3/3 | Complete    | 2026-03-19 | - |
 | 33. Game Modules Batch B | 3/3 | Complete    | 2026-03-19 | - |
 | 34. Token Contracts | 2/2 | Complete    | 2026-03-19 | - |
-| 35. Peripheral Contracts | 4/4 | Complete   | 2026-03-19 | - |
-| 36. Consolidated Findings | v3.1 | 0/TBD | Not started | - |
+| 35. Peripheral Contracts | 4/4 | Complete    | 2026-03-19 | - |
+| 36. Consolidated Findings | v3.1 | 0/1 | Not started | - |
 
 ## Deferred (v3.2+)
 
@@ -161,4 +163,4 @@ Plans:
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-19 after Phase 35 planning -- 4 plans created*
+*Last updated: 2026-03-19 after Phase 36 planning -- 1 plan created*
