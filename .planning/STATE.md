@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Pre-Audit Polish — Comment Correctness + Intent Verification
 status: unknown
-stopped_at: Completed 35-02-PLAN.md
-last_updated: "2026-03-19T06:05:42.236Z"
+stopped_at: Completed 35-01-PLAN.md
+last_updated: "2026-03-19T06:15:59.595Z"
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 14
-  completed_plans: 11
+  completed_plans: 13
 ---
 
 # State
@@ -53,6 +53,7 @@ See: .planning/PROJECT.md (updated 2026-03-18)
 | Phase 34 P02 | 4min | 2 tasks | 1 files |
 | Phase 35 P03 | 11min | 2 tasks | 1 files |
 | Phase 35 P02 | 5min | 2 tasks | 1 files |
+| Phase 35 P01 | 10min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,7 @@ Recent decisions affecting current work:
 - [Phase 35]: DegenerusVault.sol: 2 CMT (AFK/afKing naming in NatSpec, transferFrom @custom:reverts ZeroAddress claim for from). Architecture block comment (5 key invariants) verified. DegenerusVaultShare reviewed as separate contract. 0 DRIFT.
 - [Phase 35]: QUEST_TYPE_RESERVED = 4 classified as DRIFT-004 (INFO): vestigial constant with active defensive skip guard in _bonusQuestType
 - [Phase 35]: DegenerusJackpots.sol: all 5 findings are stale BurnieCoin references from coinflip split (same orphaned pattern as Phase 34). CMT-060 nonexistent onlyCoinOrGame modifier classified LOW.
+- [Phase 35]: BurnieCoinflip.sol: 5 CMT, 0 DRIFT. Error reuse at line 1142 classified CMT (not DRIFT) following CMT-043 precedent. JACKPOT_RESET_TIME vestigial constant identified. CMT numbering offset to CMT-072 due to concurrent plan execution.
 
 ### Pending Todos
 
@@ -93,6 +95,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T06:10:10Z
-Stopped at: Completed 35-03-PLAN.md
+Last session: 2026-03-19T06:15:59.594Z
+Stopped at: Completed 35-01-PLAN.md
 Resume file: None
