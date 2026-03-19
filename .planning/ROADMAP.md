@@ -138,7 +138,10 @@ Plans:
   2. Timing attack scenarios re-evaluated against current code (including any post-v2.1 changes)
   3. Cross-contract governance interactions verified (DegenerusAdmin, GameStorage, AdvanceModule, DegenerusStonk state consistency)
   4. Any new findings documented with severity; known issues (WAR-01, WAR-02, WAR-06) confirmed still accurate
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 42-01-PLAN.md — Attack surface catalogue (GOV-01) + timing attack analysis (GOV-02) + known issue re-verification
+- [ ] 42-02-PLAN.md — Cross-contract state consistency verification (GOV-03) + executive summary
 
 ### Phase 43: Consolidated Findings
 **Goal**: All findings from phases 38-42 consolidated into deliverable with cross-cutting patterns and severity classification
@@ -154,11 +157,11 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 38. RNG Delta Security | 2/2 | Complete   | 2026-03-19 |
-| 39. Comment Scan -- Game Modules | 4/4 | Complete   | 2026-03-19 |
+| 38. RNG Delta Security | 2/2 | Complete    | 2026-03-19 |
+| 39. Comment Scan -- Game Modules | 4/4 | Complete    | 2026-03-19 |
 | 40. Comment Scan -- Core + Token | 2/2 | Complete    | 2026-03-19 |
 | 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete    | 2026-03-19 |
-| 42. Governance Fresh Eyes | 0/TBD | Not started | - |
+| 42. Governance Fresh Eyes | 0/2 | Not started | - |
 | 43. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred (v3.3+)
@@ -168,4 +171,4 @@ Plans:
 - **FUZZ-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-19 after Phase 41 planning*
+*Last updated: 2026-03-19 after Phase 42 planning*
