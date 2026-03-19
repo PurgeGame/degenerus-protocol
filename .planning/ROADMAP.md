@@ -59,7 +59,7 @@
 
 ### v3.2 RNG Delta Audit + Comment Re-scan (In Progress)
 
-- [ ] **Phase 38: RNG Delta Security** - Audit all RNG-adjacent code changes for manipulation vectors
+- [x] **Phase 38: RNG Delta Security** - Audit all RNG-adjacent code changes for manipulation vectors (completed 2026-03-19)
 - [ ] **Phase 39: Comment Scan -- Game Modules** - Fresh comment audit across all 12 game module files
 - [x] **Phase 40: Comment Scan -- Core + Token Contracts** - Fresh comment audit of core game and token contracts (completed 2026-03-19)
 - [x] **Phase 41: Comment Scan -- Peripheral + Remaining** - Fresh comment audit of peripheral and utility contracts (completed 2026-03-19)
@@ -78,7 +78,7 @@
   3. Persistent decimator claims across rounds do not create state that an RNG-aware attacker can exploit
   4. Cross-contract RNG data flow under all recent changes combined produces no new manipulation vectors
   5. Each finding is documented with severity classification and attack scenario (or explicit "safe" verdict with reasoning)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 38-01-PLAN.md — Carry isolation trace + formal invariant (RNG-01) and BAF guard analysis (RNG-02)
 - [ ] 38-02-PLAN.md — Decimator claim persistence correctness (RNG-03) and cross-contract dependency matrix (RNG-04)
@@ -154,9 +154,9 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 38. RNG Delta Security | 1/2 | In Progress|  |
+| 38. RNG Delta Security | 2/2 | Complete   | 2026-03-19 |
 | 39. Comment Scan -- Game Modules | 3/4 | In Progress|  |
-| 40. Comment Scan -- Core + Token | 2/2 | Complete   | 2026-03-19 |
+| 40. Comment Scan -- Core + Token | 2/2 | Complete    | 2026-03-19 |
 | 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete   | 2026-03-19 |
 | 42. Governance Fresh Eyes | 0/TBD | Not started | - |
 | 43. Consolidated Findings | 0/TBD | Not started | - |

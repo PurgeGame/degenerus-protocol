@@ -4,12 +4,12 @@ milestone: v3.2
 milestone_name: RNG Delta Audit + Comment Re-scan
 status: unknown
 stopped_at: Completed 41-02-PLAN.md
-last_updated: "2026-03-19T13:33:31.104Z"
+last_updated: "2026-03-19T13:35:07.195Z"
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # State
@@ -38,10 +38,11 @@ Plan: 3 of 3
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 38 | 1 | 4min | 4min |
+| 38 | 2 | 8min | 4min |
 | 39 | 1 | 5min | 5min |
 
 *Updated after each plan completion*
+| Phase 38 P02 | 4min | 1 tasks | 1 files |
 | Phase 39 P03 | 5min | 2 tasks | 1 files |
 | Phase 41 P03 | 4min | 1 tasks | 1 files |
 | Phase 39 P01 | 5min | 1 tasks | 1 files |
@@ -63,6 +64,8 @@ Recent decisions affecting current work:
 - RNG-01 SAFE: carry isolation holds by construction via rebuyActive branching, not rngLocked guard
 - RNG-02 SAFE: BAF guard covers exact resolution window, sDGNRS truly ineligible at both layers
 - balanceOfWithClaimable UX inconsistency classified as INFO severity
+- RNG-03 SAFE: per-level decClaimRounds with e.claimed flag prevents double-claims; ETH pools independent per round
+- RNG-04 SAFE: all 18 rngLocked consumers guard configuration changes (not claims); no emergent combined-change vectors
 - [Phase 39]: LootboxModule+AdvanceModule: 6/6 v3.1 fixes verified PASS, 2 new INFO findings (missing @param tags)
 - [Phase 39]: CMT-029 v3.1 fix applied with wrong text (auto-rebuy vs whale pass) -- flagged as CMT-V32-001
 - [Phase 41]: CMT-079 confirmed NOT FIXED: 'zeroed in source' comment still present in ContractAddresses.sol
