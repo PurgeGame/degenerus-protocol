@@ -138,7 +138,7 @@ Plans:
   2. Timing attack scenarios re-evaluated against current code (including any post-v2.1 changes)
   3. Cross-contract governance interactions verified (DegenerusAdmin, GameStorage, AdvanceModule, DegenerusStonk state consistency)
   4. Any new findings documented with severity; known issues (WAR-01, WAR-02, WAR-06) confirmed still accurate
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 - [ ] 42-01-PLAN.md — Attack surface catalogue (GOV-01) + timing attack analysis (GOV-02) + known issue re-verification
 - [ ] 42-02-PLAN.md — Cross-contract state consistency verification (GOV-03) + executive summary
@@ -161,7 +161,7 @@ Plans:
 | 39. Comment Scan -- Game Modules | 4/4 | Complete    | 2026-03-19 |
 | 40. Comment Scan -- Core + Token | 2/2 | Complete    | 2026-03-19 |
 | 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete    | 2026-03-19 |
-| 42. Governance Fresh Eyes | 0/2 | Not started | - |
+| 42. Governance Fresh Eyes | 1/2 | In Progress|  |
 | 43. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred (v3.3+)

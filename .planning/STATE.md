@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: RNG Delta Audit + Comment Re-scan
 status: unknown
-stopped_at: Completed 39-04-PLAN.md
-last_updated: "2026-03-19T13:40:23.047Z"
+stopped_at: Completed 42-01-PLAN.md
+last_updated: "2026-03-19T14:12:56.911Z"
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 13
+  completed_plans: 12
 ---
 
 # State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 41 — comment-scan-peripheral (Plan 02 complete)
+**Current focus:** Phase 42 — governance-fresh-eyes
 
 ## Current Position
 
-Phase: 41 (comment-scan-peripheral) — EXECUTING
-Plan: 3 of 3
+Phase: 42 (governance-fresh-eyes) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Plan: 3 of 3
 | Phase 41 P02 | 7min | 2 tasks | 1 files |
 | Phase 39 P02 | 8min | 2 tasks | 1 files |
 | Phase 39 P04 | 5min | 2 tasks | 2 files |
+| Phase 42 P01 | 6min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,8 @@ Recent decisions affecting current work:
 - [Phase 41]: [Phase 41 P02]: 9 findings across 4 contracts -- 3 stale RngLocked on IBurnieCoinflip, 5 IDegenerusGame NatSpec gaps, 1 Vault CMT-078 partial fix remainder. v3.1: 3 fixed, 1 partial.
 - [Phase 39]: DRIFT-003 re-reported as DRIFT-V32-001 (GameOverModule _sendToVault hard-revert consequence undocumented, NOT FIXED)
 - [Phase 39]: Phase 39 consolidated: 7 new findings (2 LOW, 5 INFO), 28/31 v3.1 fixes verified PASS across 12 modules (11,438 lines)
+- [Phase 42]: GOV-01: 14 governance attack surfaces catalogued -- 13 SAFE, 1 KNOWN RISK (WAR-02). WAR-01/02/06 re-verified, GOV-07/VOTE-03 fixes confirmed.
+- [Phase 42]: GOV-02: All 5 post-v2.1 changes are improvements with no regressions. OQ-1 (lastVrfProcessedTimestamp) = INFO, OQ-2 (createSubscription try/catch) = SAFE, OQ-3 (circulatingSupply changes) = SAFE.
 
 ### Pending Todos
 
@@ -88,6 +91,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-19T13:40:23.046Z
-Stopped at: Completed 39-04-PLAN.md
+Last session: 2026-03-19T14:12:56.909Z
+Stopped at: Completed 42-01-PLAN.md
 Resume file: None
