@@ -9,7 +9,8 @@
 - ✅ **v2.0 C4A Audit Prep** — Phases 19-23 (shipped 2026-03-17)
 - ✅ **v2.1 VRF Governance Audit + Doc Sync** — Phases 24-25 (shipped 2026-03-18)
 - ✅ **v3.0 Full Contract Audit + Payout Specification** — Phases 26-30 (shipped 2026-03-18)
-- **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-37 (gap closure in progress)
+- ✅ **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-37 (shipped 2026-03-19)
+- **v3.2 RNG Delta Audit + Comment Re-scan** — Phases 38-43 (in progress)
 
 ## Phases
 
@@ -43,139 +44,128 @@
 
 </details>
 
-### v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification
+<details>
+<summary>v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification (Phases 31-37) -- SHIPPED 2026-03-19</summary>
 
-**Milestone Goal:** Final pre-C4A sweep of all 23 contracts: ensure every comment is accurate and warden-ready, and identify any logic that has drifted from design intent -- unnecessary restrictions, stale guards, edge cases that no longer match protocol behavior. Flag-only, no auto-fix.
+- [x] **Phase 31: Core Game Contracts** — 2 plans, 2 requirements (completed 2026-03-19)
+- [x] **Phase 32: Game Modules Batch A** — 3 plans, 2 requirements (completed 2026-03-19)
+- [x] **Phase 33: Game Modules Batch B** — 3 plans, 2 requirements (completed 2026-03-19)
+- [x] **Phase 34: Token Contracts** — 2 plans, 2 requirements (completed 2026-03-19)
+- [x] **Phase 35: Peripheral Contracts** — 4 plans, 2 requirements (completed 2026-03-19)
+- [x] **Phase 36: Consolidated Findings** — 1 plan, 1 requirement (completed 2026-03-19)
+- [x] **Phase 37: Milestone Cleanup** — 1 plan, gap closure (completed 2026-03-19)
 
-- [x] **Phase 31: Core Game Contracts** - Comment audit + intent drift review for DegenerusGame, GameStorage, DegenerusAdmin (completed 2026-03-19)
-- [x] **Phase 32: Game Modules Batch A** - Comment audit + intent drift review for MintModule, DegeneretteModule, WhaleModule, BoonModule, LootboxModule, PayoutUtils, MintStreakUtils (completed 2026-03-19)
-- [x] **Phase 33: Game Modules Batch B** - Comment audit + intent drift review for JackpotModule, DecimatorModule, EndgameModule, GameOverModule, AdvanceModule (completed 2026-03-19)
-- [x] **Phase 34: Token Contracts** - Comment audit + intent drift review for BurnieCoin, StakedDegenerusStonk, DegenerusStonk, WrappedWrappedXRP (completed 2026-03-19)
-- [x] **Phase 35: Peripheral Contracts** - Comment audit + intent drift review for BurnieCoinflip, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DegenerusVault, DegenerusTraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data (completed 2026-03-19)
-- [x] **Phase 36: Consolidated Findings** - Merge all per-batch findings into a single categorized deliverable (completed 2026-03-19)
-- [x] **Phase 37: Milestone Cleanup** - Fix stale contract counts, update REQUIREMENTS.md traceability, add missing SUMMARY frontmatter (completed 2026-03-19)
+</details>
+
+### v3.2 RNG Delta Audit + Comment Re-scan (In Progress)
+
+- [ ] **Phase 38: RNG Delta Security** - Audit all RNG-adjacent code changes for manipulation vectors
+- [ ] **Phase 39: Comment Scan -- Game Modules** - Fresh comment audit across all 12 game module files
+- [ ] **Phase 40: Comment Scan -- Core + Token Contracts** - Fresh comment audit of core game and token contracts
+- [ ] **Phase 41: Comment Scan -- Peripheral + Remaining** - Fresh comment audit of peripheral and utility contracts
+- [ ] **Phase 42: Governance Fresh Eyes** - Independent sanity check of VRF governance from fresh perspective
+- [ ] **Phase 43: Consolidated Findings** - Cross-cutting patterns and final deliverable with severity classification
 
 ## Phase Details
 
-### Phase 31: Core Game Contracts
-**Goal**: Every NatSpec and inline comment in DegenerusGame, GameStorage, and DegenerusAdmin is verified accurate, and any logic that has drifted from design intent is flagged with what/why/suggestion
-**Depends on**: Nothing (first phase of v3.1; builds on v3.0 ground truth from Phases 26-30)
-**Requirements**: CMT-01, DRIFT-01
+### Phase 38: RNG Delta Security
+**Goal**: All RNG-adjacent code changes since v3.1 are verified safe -- no new manipulation windows, no exploitable state
+**Depends on**: Nothing (first phase of v3.2)
+**Requirements**: RNG-01, RNG-02, RNG-03, RNG-04
 **Success Criteria** (what must be TRUE):
-  1. Every NatSpec tag (@notice, @dev, @param, @return) in DegenerusGame.sol, GameStorage.sol, and DegenerusAdmin.sol matches actual code behavior -- zero stale or misleading descriptions remain unflagged
-  2. Every inline comment in these 3 contracts is verified against current logic -- no references to removed features, old parameter values, or prior architecture remain unflagged
-  3. Any vestigial guards, unnecessary restrictions, or logic whose behavior no longer matches designer intent in these 3 contracts is flagged with a what/why/suggestion entry
-  4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
-**Plans:** 2/2 plans complete
+  1. rngLocked removal from coinflip claim paths is verified safe -- carry ETH never enters claimable pool during resolution
+  2. BAF epoch-based guard is confirmed sufficient as sole coinflip claim protection (no bypass via timing or reentrancy)
+  3. Persistent decimator claims across rounds do not create state that an RNG-aware attacker can exploit
+  4. Cross-contract RNG data flow under all recent changes combined produces no new manipulation vectors
+  5. Each finding is documented with severity classification and attack scenario (or explicit "safe" verdict with reasoning)
+**Plans:** 2 plans
 Plans:
-- [x] 31-01-PLAN.md — DegenerusAdmin.sol + DegenerusGameStorage.sol comment audit and intent drift review
-- [x] 31-02-PLAN.md — DegenerusGame.sol comment audit and intent drift review; finalize batch findings
+- [ ] 38-01-PLAN.md — Carry isolation trace + formal invariant (RNG-01) and BAF guard analysis (RNG-02)
+- [ ] 38-02-PLAN.md — Decimator claim persistence correctness (RNG-03) and cross-contract dependency matrix (RNG-04)
 
-### Phase 32: Game Modules Batch A
-**Goal**: Every NatSpec and inline comment in MintModule, DegeneretteModule, WhaleModule, BoonModule, LootboxModule, PayoutUtils, and MintStreakUtils is verified accurate, and any intent drift is flagged
-**Depends on**: Phase 31 (core contracts establish baseline patterns and any cross-referenced comment conventions)
-**Requirements**: CMT-02, DRIFT-02
+### Phase 39: Comment Scan -- Game Modules
+**Goal**: Every comment in all 12 game module files is verified accurate against current code behavior
+**Depends on**: Nothing (independent of Phase 38)
+**Requirements**: CMT-01
 **Success Criteria** (what must be TRUE):
-  1. Every NatSpec tag in these 7 module contracts matches actual code behavior -- zero stale or misleading descriptions remain unflagged
-  2. Every inline comment is verified against current logic with no stale references remaining unflagged
-  3. Any vestigial logic, unnecessary restrictions, or intent drift in these 7 contracts is flagged with what/why/suggestion
-  4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
-**Plans:** 3/3 plans complete
+  1. All NatSpec tags (@param, @return, @dev, @notice) in 12 module files match actual function signatures and behavior
+  2. All inline comments accurately describe the code they annotate (no stale references to removed features)
+  3. All block comments and section headers reflect current contract structure
+  4. All 31 v3.1 fixes verified correct in working tree
+  5. Findings list produced with file, line, what/why/suggestion for each discrepancy
+**Plans:** 4 plans
 Plans:
-- [x] 32-01-PLAN.md — MintModule + WhaleModule comment audit and intent drift review (post-Phase-29 changed contracts)
-- [x] 32-02-PLAN.md — DegeneretteModule + PayoutUtils + MintStreakUtils + BoonModule comment audit and intent drift review
-- [x] 32-03-PLAN.md — LootboxModule comment audit and intent drift review; finalize batch findings
+- [ ] 39-01-PLAN.md — JackpotModule comment audit (2,792 lines, 6 v3.1 fixes)
+- [ ] 39-02-PLAN.md — DecimatorModule + DegeneretteModule + MintModule comment audit (3,358 lines, 11 v3.1 fixes)
+- [ ] 39-03-PLAN.md — LootboxModule + AdvanceModule comment audit (3,160 lines, 6 v3.1 fixes)
+- [ ] 39-04-PLAN.md — Small modules audit (2,128 lines, 8 v3.1 fixes) + consolidate final deliverable
 
-### Phase 33: Game Modules Batch B
-**Goal**: Every NatSpec and inline comment in JackpotModule, DecimatorModule, EndgameModule, GameOverModule, and AdvanceModule is verified accurate, and any intent drift is flagged
-**Depends on**: Phase 31 (core contracts context); Phase 32 recommended but not blocking (Batch A and B are independent module sets)
-**Requirements**: CMT-03, DRIFT-03
+### Phase 40: Comment Scan -- Core + Token Contracts
+**Goal**: Every comment in core game contracts and token contracts is verified accurate
+**Depends on**: Nothing (independent)
+**Requirements**: CMT-02, CMT-03
 **Success Criteria** (what must be TRUE):
-  1. Every NatSpec tag in these 5 module contracts matches actual code behavior -- zero stale or misleading descriptions remain unflagged
-  2. Every inline comment is verified against current logic with no stale references remaining unflagged
-  3. Any vestigial logic, unnecessary restrictions, or intent drift in these 5 contracts is flagged with what/why/suggestion
-  4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
-**Plans:** 3/3 plans complete
+  1. DegenerusGame, GameStorage, and DegenerusAdmin comments all verified against current code (including post-governance changes)
+  2. BurnieCoin, DegenerusStonk, StakedDegenerusStonk, and WrappedWrappedXRP comments all verified (including sDGNRS/DGNRS split changes)
+  3. NatSpec on all external/public functions matches actual parameters, return values, and behavior
+  4. Findings list produced with per-contract grouping
+**Plans:** 2 plans
 Plans:
-- [x] 33-01-PLAN.md — JackpotModule comment audit and intent drift review (2,795 lines, 2 post-Phase-29 commits)
-- [x] 33-02-PLAN.md — DecimatorModule comment audit and intent drift review (1,027 lines, 1 post-Phase-29 commit)
-- [x] 33-03-PLAN.md — EndgameModule + GameOverModule + AdvanceModule comment audit and intent drift review; finalize batch findings
+- [ ] 40-01-PLAN.md — Core game contracts scan (DegenerusGame, GameStorage, DegenerusAdmin)
+- [ ] 40-02-PLAN.md — Token contracts scan (BurnieCoin, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
 
-### Phase 34: Token Contracts
-**Goal**: Every NatSpec and inline comment in BurnieCoin, StakedDegenerusStonk, DegenerusStonk, and WrappedWrappedXRP is verified accurate, and any intent drift is flagged
-**Depends on**: Phase 31 (core contracts context)
-**Requirements**: CMT-04, DRIFT-04
+### Phase 41: Comment Scan -- Peripheral + Remaining
+**Goal**: Every comment in peripheral and remaining utility contracts is verified accurate
+**Depends on**: Nothing (independent)
+**Requirements**: CMT-04, CMT-05
 **Success Criteria** (what must be TRUE):
-  1. Every NatSpec tag in these 4 token contracts matches actual code behavior -- zero stale or misleading descriptions remain unflagged
-  2. Every inline comment is verified against current logic with no stale references remaining unflagged
-  3. Any vestigial logic, unnecessary restrictions, or intent drift in these 4 contracts is flagged with what/why/suggestion
-  4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
-**Plans:** 2/2 plans complete
+  1. BurnieCoinflip, DegenerusVault, DegenerusAffiliate, DegenerusQuests, DegenerusJackpots comments all verified
+  2. DeityPass, TraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data comments all verified
+  3. All interface files (IBurnieCoinflip, IDegenerusGame) NatSpec matches implementation
+  4. Findings list produced with per-contract grouping
+**Plans:** 3 plans
 Plans:
-- [x] 34-01-PLAN.md — BurnieCoin.sol comment audit and intent drift review (1,065 lines, orphaned NatSpec from coinflip split)
-- [x] 34-02-PLAN.md — DegenerusStonk + StakedDegenerusStonk + WrappedWrappedXRP comment audit and intent drift review; finalize batch findings
+- [ ] 41-01-PLAN.md — Heavy-change peripheral (BurnieCoinflip, DegenerusQuests, DegenerusJackpots)
+- [ ] 41-02-PLAN.md — Light-change peripheral + interfaces (DegenerusVault, DegenerusAffiliate, IBurnieCoinflip, IDegenerusGame)
+- [ ] 41-03-PLAN.md — Remaining/utility (DeityPass, TraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data)
 
-### Phase 35: Peripheral Contracts
-**Goal**: Every NatSpec and inline comment in the 10 peripheral contracts is verified accurate, and any intent drift is flagged
-**Depends on**: Phase 31 (core contracts context)
-**Requirements**: CMT-05, DRIFT-05
+### Phase 42: Governance Fresh Eyes
+**Goal**: VRF governance flow independently verified from fresh perspective -- all attack surfaces catalogued and edge cases evaluated
+**Depends on**: Phase 38 (RNG context informs governance RNG interactions)
+**Requirements**: GOV-01, GOV-02, GOV-03
 **Success Criteria** (what must be TRUE):
-  1. Every NatSpec tag in BurnieCoinflip, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DegenerusVault, DegenerusTraitUtils, DeityBoonViewer, ContractAddresses, and Icons32Data matches actual code behavior -- zero stale or misleading descriptions remain unflagged
-  2. Every inline comment in these 10 contracts is verified against current logic with no stale references remaining unflagged
-  3. Any vestigial logic, unnecessary restrictions, or intent drift in these 10 contracts is flagged with what/why/suggestion
-  4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
-**Plans:** 4/4 plans complete
-Plans:
-- [x] 35-01-PLAN.md — BurnieCoinflip.sol comment audit and intent drift review (1,154 lines)
-- [x] 35-02-PLAN.md — DegenerusQuests.sol + DegenerusJackpots.sol comment audit and intent drift review (2,287 lines combined)
-- [x] 35-03-PLAN.md — DegenerusAffiliate.sol + DegenerusVault.sol comment audit and intent drift review (1,908 lines combined)
-- [x] 35-04-PLAN.md — DegenerusDeityPass.sol + DegenerusTraitUtils.sol + DeityBoonViewer.sol + ContractAddresses.sol + Icons32Data.sol + finalize findings (1,013 lines combined)
+  1. Complete attack surface catalogue for VRF swap governance (proposal, voting, execution, timelock, veto paths)
+  2. Timing attack scenarios re-evaluated against current code (including any post-v2.1 changes)
+  3. Cross-contract governance interactions verified (DegenerusAdmin, GameStorage, AdvanceModule, DegenerusStonk state consistency)
+  4. Any new findings documented with severity; known issues (WAR-01, WAR-02, WAR-06) confirmed still accurate
+**Plans**: TBD
 
-### Phase 36: Consolidated Findings
-**Goal**: All per-batch findings from Phases 31-35 are merged into a single categorized deliverable with what/why/suggestion per item, organized by severity
-**Depends on**: Phases 31, 32, 33, 34, 35 (all batch reviews must complete before consolidation)
-**Requirements**: DEL-01
+### Phase 43: Consolidated Findings
+**Goal**: All findings from phases 38-42 consolidated into deliverable with cross-cutting patterns and severity classification
+**Depends on**: Phase 38, Phase 39, Phase 40, Phase 41, Phase 42
+**Requirements**: CMT-06, CMT-07
 **Success Criteria** (what must be TRUE):
-  1. A consolidated findings document exists containing every comment inaccuracy and intent drift item from all 5 batch phases
-  2. Each finding has what (the issue), why (why it matters for C4A wardens), and suggestion (recommended fix or documentation) fields
-  3. Findings are categorized by severity (at minimum: comment inaccuracy vs. intent drift) and grouped by contract
-  4. No finding from any per-batch file is missing from the consolidated list
-**Plans:** 1 plan
-Plans:
-- [x] 36-01-PLAN.md — Consolidate all 84 findings from Phases 31-35 into categorized deliverable with severity index and cross-cutting patterns
-
-### Phase 37: Milestone Cleanup
-**Goal**: Close documentation/tracking gaps identified by milestone audit — fix stale contract counts in consolidated findings, update REQUIREMENTS.md traceability, and add missing SUMMARY frontmatter
-**Depends on**: Phase 36 (gap closure for consolidated deliverable)
-**Requirements**: DEL-01
-**Gap Closure:** Closes gaps from v3.1 milestone audit (DEL-01 partial, INT-01 stale contract count)
-**Success Criteria** (what must be TRUE):
-  1. Consolidated findings executive summary shows correct contract counts (29 reviewed, 24 with findings, 5 clean)
-  2. REQUIREMENTS.md DEL-01 is checked off and all traceability statuses are accurate
-  3. 36-01-SUMMARY.md has requirements-completed field in frontmatter
-**Plans:** 1/1 plans complete
-Plans:
-- [ ] 37-01-PLAN.md — Fix consolidated findings contract counts, check off DEL-01, add SUMMARY frontmatter
+  1. Cross-cutting patterns identified across all contract groups (recurring NatSpec issues, systematic comment drift, pattern-level fixes)
+  2. Master findings table with severity classification (LOW/INFO), per-contract counts, and pattern tags
+  3. Deliverable is consumable by protocol team for pre-C4A fix decisions
+**Plans**: TBD
 
 ## Progress
 
-**Execution Order:** Phase 31 -> 32 -> 33 -> 34 -> 35 -> 36 -> 37
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 38. RNG Delta Security | 0/2 | Planned | - |
+| 39. Comment Scan -- Game Modules | 0/4 | Planned | - |
+| 40. Comment Scan -- Core + Token | 0/2 | Planned | - |
+| 41. Comment Scan -- Peripheral + Remaining | 0/3 | Planned | - |
+| 42. Governance Fresh Eyes | 0/TBD | Not started | - |
+| 43. Consolidated Findings | 0/TBD | Not started | - |
 
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 31. Core Game Contracts | 2/2 | Complete    | 2026-03-19 | - |
-| 32. Game Modules Batch A | 3/3 | Complete    | 2026-03-19 | - |
-| 33. Game Modules Batch B | 3/3 | Complete    | 2026-03-19 | - |
-| 34. Token Contracts | 2/2 | Complete    | 2026-03-19 | - |
-| 35. Peripheral Contracts | 4/4 | Complete    | 2026-03-19 | - |
-| 36. Consolidated Findings | v3.1 | 1/1 | Complete | 2026-03-19 |
-| 37. Milestone Cleanup | 1/1 | Complete   | 2026-03-19 | - |
+## Deferred (v3.3+)
 
-## Deferred (v3.2+)
-
-- **FV-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
-- **FV-02**: Formal verification of vote counting arithmetic via Halmos
-- **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
+- **FUZZ-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
+- **FUZZ-02**: Formal verification of vote counting arithmetic via Halmos
+- **FUZZ-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-19 after Phase 37 planning -- plan list added*
+*Last updated: 2026-03-19 after Phase 41 planning*
