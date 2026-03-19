@@ -93,7 +93,7 @@ Plans:
   3. All block comments and section headers reflect current contract structure
   4. All 31 v3.1 fixes verified correct in working tree
   5. Findings list produced with file, line, what/why/suggestion for each discrepancy
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 Plans:
 - [ ] 39-01-PLAN.md — JackpotModule comment audit (2,792 lines, 6 v3.1 fixes)
 - [ ] 39-02-PLAN.md — DecimatorModule + DegeneretteModule + MintModule comment audit (3,358 lines, 11 v3.1 fixes)
@@ -155,7 +155,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 38. RNG Delta Security | 1/2 | In Progress|  |
-| 39. Comment Scan -- Game Modules | 2/4 | In Progress|  |
+| 39. Comment Scan -- Game Modules | 3/4 | In Progress|  |
 | 40. Comment Scan -- Core + Token | 2/2 | Complete   | 2026-03-19 |
 | 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete   | 2026-03-19 |
 | 42. Governance Fresh Eyes | 0/TBD | Not started | - |
