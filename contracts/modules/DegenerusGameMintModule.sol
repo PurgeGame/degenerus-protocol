@@ -939,14 +939,20 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 }
             }
 
-            // Final jackpot day affiliate bonus: +10pp on fresh ETH
+            // Day before final jackpot draw (not turbo): +100 BURNIE per ticket for affiliates
+            // Basis inflated by 7/5 (lvl 0-3, 25% rate) or 3/2 (lvl 4+, 20% rate) to yield +100 after scaling
             uint256 freshBurnie = freshEth != 0
                 ? _ethToBurnieValue(freshEth, priceWei)
                 : 0;
-            if (freshBurnie != 0 && jackpotPhaseFlag && jackpotCounter == JACKPOT_LEVEL_CAP - 1) {
-                freshBurnie = targetLevel <= 3
-                    ? (freshBurnie * 7) / 5
-                    : (freshBurnie * 3) / 2;
+            if (freshBurnie != 0 && jackpotPhaseFlag && compressedJackpotFlag != 2) {
+                // Compute next step size (mirrors JackpotModule logic)
+                uint8 _cnt = jackpotCounter;
+                uint8 _nextStep = (compressedJackpotFlag == 1 && _cnt > 0 && _cnt < JACKPOT_LEVEL_CAP - 1) ? 2 : 1;
+                if (_cnt + _nextStep >= JACKPOT_LEVEL_CAP) {
+                    freshBurnie = targetLevel <= 3
+                        ? (freshBurnie * 7) / 5
+                        : (freshBurnie * 3) / 2;
+                }
             }
 
             uint256 kickback;
@@ -995,9 +1001,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             bonusCredit += coinCost / 10;
             if (quantity >= 10 * 4 * TICKET_SCALE) {
                 bonusCredit += (quantity * PRICE_COIN_UNIT) / (40 * TICKET_SCALE);
-            }
-            if (lastPurchaseDay && (targetLevel % 100) > 90) {
-                bonusCredit += coinCost / 10;
             }
 
         }

@@ -207,18 +207,30 @@ interface IDegenerusGame {
 
     // Terminal Decimator (Death Bet)
 
+    /// @notice Record a terminal decimator burn entry for a player.
+    /// @param player The player burning.
+    /// @param lvl The current game level.
+    /// @param baseAmount The base BURNIE amount burned.
     function recordTerminalDecBurn(
         address player,
         uint24 lvl,
         uint256 baseAmount
     ) external;
 
+    /// @notice Run the terminal decimator jackpot distribution.
+    /// @param poolWei Total ETH pool to distribute.
+    /// @param lvl The game level for winner sampling.
+    /// @param rngWord Random word for winner selection.
+    /// @return returnAmountWei ETH returned undistributed.
     function runTerminalDecimatorJackpot(
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
 
+    /// @notice Check if the terminal decimator window is open.
+    /// @return open True if terminal decimator bets are accepted.
+    /// @return lvl The current level for terminal decimator.
     function terminalDecWindow() external view returns (bool open, uint24 lvl);
 
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
@@ -245,7 +257,7 @@ interface IDegenerusGame {
     /// @notice Check if player can claim Decimator jackpot for a level.
     /// @param player Address to check.
     /// @param lvl Level to check (must be the last decimator).
-    /// @return amountWei Claimable amount (0 if not winner, already claimed, or expired).
+    /// @return amountWei Claimable amount (0 if not winner or already claimed).
     /// @return winner True if player is a winner for this level.
     function decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner);
 
@@ -325,7 +337,6 @@ interface IDegenerusGame {
         uint8 heroQuadrant
     ) external payable;
 
-    /// @notice Place Full Ticket Degenerette bets using pending affiliate Degenerette credit.
     /// @notice Resolve Degenerette bets once RNG is available.
     /// @param player The betting player (address(0) = msg.sender).
     /// @param betIds Bet identifiers for the player.
@@ -384,9 +395,7 @@ interface IDegenerusGame {
     /// @return tickets Array of player addresses (length 0-4).
     function sampleFarFutureTickets(uint256 entropy) external view returns (address[] memory tickets);
 
-    /// @notice Purchase a deity pass (presale or with boon).
-    /// @dev Two modes:
-    ///      - Presale (useBoon=false): During presale only, level 1, fixed 25 ETH price.
+    /// @notice Purchase a deity pass for a specific symbol (0-31).
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
     /// @param symbolId Symbol to claim (0-31).
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
@@ -440,8 +449,12 @@ interface IDegenerusGame {
     // Degenerette Tracking Views
     // -------------------------------------------------------------------------
 
+    /// @notice Get total wager units for a specific hero symbol on a given day.
     function getDailyHeroWager(uint48 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
+    /// @notice Get the winning hero symbol and amount for a given day.
     function getDailyHeroWinner(uint48 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
+    /// @notice Get a player's total Degenerette wager for a level.
     function getPlayerDegeneretteWager(address player, uint24 lvl) external view returns (uint256 weiAmount);
+    /// @notice Get the top Degenerette player for a level.
     function getTopDegenerette(uint24 lvl) external view returns (address topPlayer, uint256 amountUnits);
 }

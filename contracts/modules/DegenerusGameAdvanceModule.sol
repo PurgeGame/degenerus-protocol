@@ -280,7 +280,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
                     if (_getNextPrizePool() >= levelPrizePool[purchaseLevel - 1]) {
                         lastPurchaseDay = true;
-                        if (day - purchaseStartDay <= 2) {
+                        if (day - purchaseStartDay <= 3) {
                             compressedJackpotFlag = 1;
                         }
                     }
@@ -388,6 +388,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      emergency VRF rotation uses updateVrfCoordinatorAndSub instead.
     /// @param coordinator_ Chainlink VRF V2.5 coordinator address.
     /// @param subId VRF subscription ID for LINK billing.
+    /// @param keyHash_ VRF key hash for gas lane selection.
     function wireVrf(
         address coordinator_,
         uint256 subId,

@@ -41,7 +41,7 @@ contract WrappedWrappedXRP {
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+
-      |  Standard ERC20 events plus wrap/unwrap/donate tracking             |
+      |  Standard ERC20 events plus unwrap/donate tracking                  |
       +======================================================================+*/
 
     /// @notice Emitted when tokens are transferred between addresses
@@ -71,7 +71,7 @@ contract WrappedWrappedXRP {
     event Donated(address indexed donor, uint256 amount);
 
     /// @notice Emitted when the vault spends from its uncirculating allowance
-    /// @param spender The vault address
+    /// @param spender The contract spending from allowance (address(this))
     /// @param amount Amount spent from allowance
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
@@ -276,7 +276,7 @@ contract WrappedWrappedXRP {
     /*+======================================================================+
       |                       WRAP / UNWRAP FUNCTIONS                        |
       +======================================================================+
-      |  Wrapping is disabled; unwrap/donate are enabled.                    |
+      |  Wrap not implemented; unwrap/donate are enabled.                     |
       +======================================================================+*/
 
     /// @notice Unwrap WWXRP back to wXRP at 1:1 ratio (if reserves allow!)

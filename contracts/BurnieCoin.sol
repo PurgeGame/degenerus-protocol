@@ -103,8 +103,8 @@ contract BurnieCoin {
     /// @param sender The contract that escrowed the funds (VAULT or GAME).
     /// @param amount The amount added to vault mint allowance (18 decimals).
     event VaultEscrowRecorded(address indexed sender, uint256 amount);
-    /// @notice Emitted when the vault spends from its mint allowance without minting tokens.
-    /// @param spender The vault address.
+    /// @notice Emitted when the vault spends from its mint allowance (may or may not mint tokens).
+    /// @param spender The contract spending from allowance.
     /// @param amount The amount consumed from allowance (18 decimals).
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
@@ -276,9 +276,8 @@ contract BurnieCoin {
         return IBurnieCoinflip(coinflipContract).previewClaimCoinflips(msg.sender);
     }
 
-    /// @notice Total spendable BURNIE at the current time (balance + claimable if RNG unlocked).
-    /// @dev If RNG is locked, claimable coinflips cannot be pulled, so only returns on-chain balance.
-    ///      For ContractAddresses.VAULT, includes virtual vault allowance + any actual balance.
+    /// @notice Total spendable BURNIE at the current time (balance + claimable coinflips).
+    /// @dev For ContractAddresses.VAULT, includes virtual vault allowance + any actual balance.
     /// @param player The address to query.
     /// @return spendable Total spendable amount right now.
     function balanceOfWithClaimable(address player) external view returns (uint256 spendable) {
@@ -286,7 +285,6 @@ contract BurnieCoin {
         if (player == ContractAddresses.VAULT) {
             spendable += uint256(_supply.vaultAllowance);
         }
-        if (degenerusGame.rngLocked()) return spendable;
         unchecked {
             spendable += IBurnieCoinflip(coinflipContract).previewClaimCoinflips(player);
         }
@@ -483,7 +481,7 @@ contract BurnieCoin {
 
     /// @notice Internal burn helper - destroys tokens.
     /// @dev Decreases totalSupply and sender balance. Emits Transfer to address(0).
-    ///      SECURITY: Burns BEFORE any external calls (CEI pattern) in depositCoinflip/decimatorBurn.
+    ///      SECURITY: Burns BEFORE any external calls (CEI pattern) in burnCoin/decimatorBurn/burnForCoinflip/terminalDecimatorBurn.
     /// @param from The address to burn from (cannot be zero).
     /// @param amount The amount to burn (18 decimals).
     function _burn(address from, uint256 amount) internal {

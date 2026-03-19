@@ -606,7 +606,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
         }
 
-        // Non-daily (early-burn) path - BURNIE only, no ETH bonuses
+        // Non-daily (early-burn) path - BURNIE and ETH bonuses on non-day-1 levels
         winningTraitsPacked = _rollWinningTraits(lvl, randWord, false);
         _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
 
@@ -1602,7 +1602,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @return entropyState Updated entropy after selection.
     /// @return ethDelta ETH credited to claimable balances.
     /// @return liabilityDelta Total claimable liability added.
-    /// @return ticketSpent ETH converted into loot box awards (added to nextPrizePool).
+    /// @return ticketSpent Whale pass ETH routed to futurePrizePool.
     function _resolveTraitWinners(
         bool payCoin,
         uint24 lvl,

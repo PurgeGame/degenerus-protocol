@@ -164,7 +164,7 @@ Plans:
 | 40. Comment Scan -- Core + Token | 2/2 | Complete    | 2026-03-19 |
 | 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete    | 2026-03-19 |
 | 42. Governance Fresh Eyes | 2/2 | Complete    | 2026-03-19 |
-| 43. Consolidated Findings | 1/1 | Complete   | 2026-03-19 |
+| 43. Consolidated Findings | 1/1 | Complete    | 2026-03-19 |
 
 ## Deferred (v3.3+)
 

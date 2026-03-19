@@ -22,11 +22,11 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  * compressedJackpotFlag (uint8) determines how jackpot days are compressed:
  *
  *   Tier 0 — Normal (5 physical days):
- *     Target met after 2+ daily advances (purchaseDays > 2).
+ *     Target met after 3+ daily advances (purchaseDays > 3).
  *     counterStep=1, jackpot counter 0→1→2→3→4→5 in 5 physical days.
  *
  *   Tier 1 — Compressed (3 physical days):
- *     Target met within 2 daily advances (purchaseDays ≤ 2, but > 1).
+ *     Target met within 3 daily advances (purchaseDays ≤ 3, but > 1).
  *     counterStep=2 for middle days: counter 0→2→4→5 in 3 physical days.
  *     Set in daily processing at AdvanceModule line ~255.
  *
@@ -40,12 +40,13 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  *   purchaseStartDay defaults to 0 at level 0.
  *   GameTimeLib.currentDayIndexAt returns 1 on deploy day.
  *   Turbo:      (day - purchaseStartDay ≤ 1)  → checked at top of advanceGame.
- *   Compressed: (day - purchaseStartDay ≤ 2)  → checked during daily processing.
- *   Normal:     (day - purchaseStartDay > 2)   → default.
+ *   Compressed: (day - purchaseStartDay ≤ 3)  → checked during daily processing.
+ *   Normal:     (day - purchaseStartDay > 3)   → default.
  *
  *   On deploy day (day 1): 1 - 0 = 1 → turbo if target met.
  *   After advanceToNextDay (day 2): 2 - 0 = 2 → compressed if target met.
- *   After 2x advanceToNextDay (day 3): 3 - 0 = 3 → normal.
+ *   After 2x advanceToNextDay (day 3): 3 - 0 = 3 → compressed if target met.
+ *   After 3x advanceToNextDay (day 4): 4 - 0 = 4 → normal.
  */
 describe("CompressedJackpot", function () {
   this.timeout(300_000);
@@ -256,7 +257,7 @@ describe("CompressedJackpot", function () {
       expect(await game.jackpotCompressionTier()).to.equal(1);
     });
 
-    it("tier=0 (normal) when target met after 2+ daily advances (day 3+)", async function () {
+    it("tier=0 (normal) when target met after 3+ daily advances (day 4+)", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -270,11 +271,16 @@ describe("CompressedJackpot", function () {
       await driveOneCycle(game, deployer, mockVRF, advanceModule, 200n);
       expect(await game.jackpotPhase()).to.equal(false);
 
+      // Advance 3 (day 3): small purchase, target NOT met
+      await buyFullTickets(game, carol, 200, 2);
+      await driveOneCycle(game, deployer, mockVRF, advanceModule, 300n);
+      expect(await game.jackpotPhase()).to.equal(false);
+
       // Heavy purchases push past target
-      const buyers = [carol, dan, eve, ...others.slice(0, 15)];
+      const buyers = [dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
-      // Advance 3 (day 3): purchaseDays = 3 - 0 = 3 > 2 → normal
+      // Advance 4 (day 4): purchaseDays = 4 - 0 = 4 > 3 → normal
       const reached = await driveToJackpotPhase(
         game,
         deployer,
@@ -522,7 +528,7 @@ describe("CompressedJackpot", function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
-      // Spread purchases over 3+ advances to avoid compressed/turbo flag
+      // Spread purchases over 4+ advances to avoid compressed/turbo flag (threshold is ≤3)
       // Advance 1 (deploy day)
       await buyFullTickets(game, alice, 200, 2);
       await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 100n);
@@ -531,8 +537,12 @@ describe("CompressedJackpot", function () {
       await buyFullTickets(game, bob, 200, 2);
       await driveOneCycle(game, deployer, mockVRF, advanceModule, 200n);
 
-      // Advance 3+ (day 3): push past target
-      const buyers = [carol, dan, eve, ...others.slice(0, 15)];
+      // Advance 3 (day 3)
+      await buyFullTickets(game, carol, 200, 2);
+      await driveOneCycle(game, deployer, mockVRF, advanceModule, 300n);
+
+      // Advance 4+ (day 4): push past target
+      const buyers = [dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
       let reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);

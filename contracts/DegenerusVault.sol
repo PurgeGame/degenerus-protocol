@@ -54,7 +54,6 @@ interface IDegenerusGamePlayerActions {
 interface ICoinflipPlayerActions {
     function depositCoinflip(address player, uint256 amount) external;
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
-    function claimCoinflipsTakeProfit(address player, uint256 multiples) external returns (uint256 claimed);
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
     function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
     function setCoinflipAutoRebuyTakeProfit(address player, uint256 takeProfit) external;
@@ -284,7 +283,7 @@ contract DegenerusVaultShare {
     // ---------------------------------------------------------------------
     // INTERNAL HELPERS
     // ---------------------------------------------------------------------
-    /// @dev Internal transfer logic with balance and zero-address checks
+    /// @dev Internal transfer logic with balance and destination zero-address check
     /// @param from Source address
     /// @param to Destination address
     /// @param amount Amount to transfer
@@ -693,16 +692,6 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinClaimCoinflips(uint256 amount) external onlyVaultOwner returns (uint256 claimed) {
         return coinflipPlayer.claimCoinflips(address(this), amount);
-    }
-
-    /// @notice Claim coinflip winnings as take profit multiples
-    /// @param multiples Number of take profit multiples to claim
-    /// @return claimed Actual amount claimed
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function coinClaimCoinflipsTakeProfit(
-        uint256 multiples
-    ) external onlyVaultOwner returns (uint256 claimed) {
-        return coinflipPlayer.claimCoinflipsTakeProfit(address(this), multiples);
     }
 
     /// @notice Burn coins in the decimator for the vault

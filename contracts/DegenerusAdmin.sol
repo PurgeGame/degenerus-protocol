@@ -64,7 +64,7 @@ interface IVRFCoordinatorV2_5Owner {
         );
 }
 
-/// @dev Game contract admin interface (VRF + liquidity + liveness).
+/// @dev Game contract admin interface (VRF + liquidity).
 interface IDegenerusGameAdmin {
     function lastVrfProcessed() external view returns (uint48);
     function jackpotPhase() external view returns (bool);

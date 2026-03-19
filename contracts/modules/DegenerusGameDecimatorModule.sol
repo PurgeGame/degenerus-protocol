@@ -434,7 +434,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev View function for UI to show claimable amounts.
     /// @param player Address to check.
     /// @param lvl Level to check.
-    /// @return amountWei Claimable amount (0 if not winner, already claimed, or expired).
+    /// @return amountWei Claimable amount (0 if not winner or already claimed).
     /// @return winner True if player is a winner for this level.
     function decClaimable(
         address player,
