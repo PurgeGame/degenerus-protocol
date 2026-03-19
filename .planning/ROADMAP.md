@@ -94,7 +94,7 @@ Plans:
   2. Every inline comment is verified against current logic with no stale references remaining unflagged
   3. Any vestigial logic, unnecessary restrictions, or intent drift in these 5 contracts is flagged with what/why/suggestion
   4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
 - [ ] 33-01-PLAN.md — JackpotModule comment audit and intent drift review (2,795 lines, 2 post-Phase-29 commits)
 - [ ] 33-02-PLAN.md — DecimatorModule comment audit and intent drift review (1,027 lines, 1 post-Phase-29 commit)
@@ -141,7 +141,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 31. Core Game Contracts | 2/2 | Complete    | 2026-03-19 | - |
 | 32. Game Modules Batch A | 3/3 | Complete    | 2026-03-19 | - |
-| 33. Game Modules Batch B | v3.1 | 0/3 | Planned | - |
+| 33. Game Modules Batch B | 1/3 | In Progress|  | - |
 | 34. Token Contracts | v3.1 | 0/TBD | Not started | - |
 | 35. Peripheral Contracts | v3.1 | 0/TBD | Not started | - |
 | 36. Consolidated Findings | v3.1 | 0/TBD | Not started | - |
