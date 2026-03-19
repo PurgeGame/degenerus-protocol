@@ -1,37 +1,42 @@
-# Requirements: Degenerus Protocol v3.1
+# Requirements: Degenerus Protocol Audit
 
-**Defined:** 2026-03-18
+**Defined:** 2026-03-19
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v3.1 Requirements
+## v3.2 Requirements
 
-### Comment Audit
+Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
 
-- [x] **CMT-01**: All NatSpec and inline comments in core game contracts (DegenerusGame, GameStorage, DegenerusAdmin) are accurate and warden-ready
-- [x] **CMT-02**: All NatSpec and inline comments in game modules batch A (MintModule, DegeneretteModule, WhaleModule, BoonModule, LootboxModule, PayoutUtils, MintStreakUtils) are accurate and warden-ready
-- [x] **CMT-03**: All NatSpec and inline comments in game modules batch B (JackpotModule, DecimatorModule, EndgameModule, GameOverModule, AdvanceModule) are accurate and warden-ready
-- [x] **CMT-04**: All NatSpec and inline comments in token contracts (BurnieCoin, StakedDegenerusStonk, DegenerusStonk, WrappedWrappedXRP) are accurate and warden-ready
-- [x] **CMT-05**: All NatSpec and inline comments in peripheral contracts (BurnieCoinflip, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DegenerusVault, DegenerusTraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data) are accurate and warden-ready
+### RNG Security (Delta)
 
-### Intent Drift
+- [x] **RNG-01**: Removing rngLocked from coinflip claim paths does not open manipulation windows (carry never enters claimable pool verified)
+- [x] **RNG-02**: BAF epoch-based guard is sufficient as sole coinflip claim protection during resolution windows
+- [ ] **RNG-03**: Persistent decimator claims across rounds do not create RNG-exploitable state
+- [ ] **RNG-04**: Cross-contract RNG data flow remains safe with all recent changes combined (no new manipulation vectors)
 
-- [x] **DRIFT-01**: Core game contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
-- [x] **DRIFT-02**: Game modules batch A reviewed for vestigial logic, unnecessary restrictions, and intent drift
-- [x] **DRIFT-03**: Game modules batch B reviewed for vestigial logic, unnecessary restrictions, and intent drift
-- [x] **DRIFT-04**: Token contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
-- [x] **DRIFT-05**: Peripheral contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
+### Comment Correctness (Fresh Scan)
 
-### Deliverable
+- [ ] **CMT-01**: Game module contracts — all NatSpec, inline, and block comments verified (9 modules)
+- [ ] **CMT-02**: Core game contracts — all comments verified (DegenerusGame, GameStorage, DegenerusAdmin)
+- [ ] **CMT-03**: Token contracts — all comments verified (BurnieCoin, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
+- [ ] **CMT-04**: Peripheral contracts — all comments verified (BurnieCoinflip, DegenerusVault, DegenerusAffiliate, DegenerusQuests, DegenerusJackpots)
+- [ ] **CMT-05**: Remaining contracts — all comments verified (DeityPass, TraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data)
+- [ ] **CMT-06**: Cross-cutting patterns identified and documented
+- [ ] **CMT-07**: Consolidated findings deliverable with severity classification
 
-- [x] **DEL-01**: Consolidated findings list produced with what/why/suggestion per item, categorized by severity
+### VRF Governance (Fresh Eyes)
 
-## Deferred (v3.2+)
+- [ ] **GOV-01**: VRF swap governance flow audited from fresh perspective — all attack surfaces catalogued
+- [ ] **GOV-02**: Governance edge cases and timing attacks re-evaluated against current code
+- [ ] **GOV-03**: Cross-contract governance interactions verified (Admin, GameStorage, AdvanceModule, DegenerusStonk)
 
-### Formal Verification
+## Future Requirements
 
-- **FV-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
-- **FV-02**: Formal verification of vote counting arithmetic via Halmos
-- **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
+### Deferred (v3.3+)
+
+- **FUZZ-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
+- **FUZZ-02**: Formal verification of vote counting arithmetic via Halmos
+- **FUZZ-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ## Out of Scope
 
@@ -39,31 +44,34 @@
 |---------|--------|
 | Frontend code | Not in audit scope |
 | Off-chain infrastructure | VRF coordinator is external |
-| Gas optimization | Already covered in v2.0 |
-| Code changes / fixes | Flag-only milestone — fixes are separate |
-| v3.0 re-audit | Prior audit verdicts stand; this covers comments + intent only |
+| Gas optimization | Already covered in v2.0, not the focus here |
+| Full governance re-audit | v2.1 was comprehensive; v3.2 is a fresh-eyes sanity check only |
+| Comment auto-fix | Findings list is the deliverable — protocol team decides fixes |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CMT-01 | Phase 31 | Complete |
-| CMT-02 | Phase 32 | Complete |
-| CMT-03 | Phase 33 | Complete |
-| CMT-04 | Phase 34 | Complete |
-| CMT-05 | Phase 35 | Complete |
-| DRIFT-01 | Phase 31 | Complete |
-| DRIFT-02 | Phase 32 | Complete |
-| DRIFT-03 | Phase 33 | Complete |
-| DRIFT-04 | Phase 34 | Complete |
-| DRIFT-05 | Phase 35 | Complete |
-| DEL-01 | Phase 36 | Complete |
+| RNG-01 | Phase 38 | Complete |
+| RNG-02 | Phase 38 | Complete |
+| RNG-03 | Phase 38 | Pending |
+| RNG-04 | Phase 38 | Pending |
+| CMT-01 | Phase 39 | Pending |
+| CMT-02 | Phase 40 | Pending |
+| CMT-03 | Phase 40 | Pending |
+| CMT-04 | Phase 41 | Pending |
+| CMT-05 | Phase 41 | Pending |
+| CMT-06 | Phase 43 | Pending |
+| CMT-07 | Phase 43 | Pending |
+| GOV-01 | Phase 42 | Pending |
+| GOV-02 | Phase 42 | Pending |
+| GOV-03 | Phase 42 | Pending |
 
 **Coverage:**
-- v3.1 requirements: 11 total
-- Mapped to phases: 11
+- v3.2 requirements: 14 total
+- Mapped to phases: 14
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-18*
-*Last updated: 2026-03-19 after milestone audit -- DEL-01 reassigned to Phase 37 gap closure, CMT-05/DRIFT-05 marked Complete*
+*Requirements defined: 2026-03-19*
+*Last updated: 2026-03-19 after roadmap creation — all requirements mapped to phases*
