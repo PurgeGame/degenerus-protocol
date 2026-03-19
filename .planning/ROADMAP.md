@@ -123,7 +123,12 @@ Plans:
   2. Every inline comment in these 10 contracts is verified against current logic with no stale references remaining unflagged
   3. Any vestigial logic, unnecessary restrictions, or intent drift in these 10 contracts is flagged with what/why/suggestion
   4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 35-01-PLAN.md — BurnieCoinflip.sol comment audit and intent drift review (1,154 lines)
+- [ ] 35-02-PLAN.md — DegenerusQuests.sol + DegenerusJackpots.sol comment audit and intent drift review (2,287 lines combined)
+- [ ] 35-03-PLAN.md — DegenerusAffiliate.sol + DegenerusVault.sol comment audit and intent drift review (1,908 lines combined)
+- [ ] 35-04-PLAN.md — DegenerusDeityPass.sol + DegenerusTraitUtils.sol + DeityBoonViewer.sol + ContractAddresses.sol + Icons32Data.sol + finalize findings (1,013 lines combined)
 
 ### Phase 36: Consolidated Findings
 **Goal**: All per-batch findings from Phases 31-35 are merged into a single categorized deliverable with what/why/suggestion per item, organized by severity
@@ -145,8 +150,8 @@ Plans:
 | 31. Core Game Contracts | 2/2 | Complete    | 2026-03-19 | - |
 | 32. Game Modules Batch A | 3/3 | Complete    | 2026-03-19 | - |
 | 33. Game Modules Batch B | 3/3 | Complete    | 2026-03-19 | - |
-| 34. Token Contracts | 2/2 | Complete   | 2026-03-19 | - |
-| 35. Peripheral Contracts | v3.1 | 0/TBD | Not started | - |
+| 34. Token Contracts | 2/2 | Complete    | 2026-03-19 | - |
+| 35. Peripheral Contracts | v3.1 | 0/4 | Not started | - |
 | 36. Consolidated Findings | v3.1 | 0/TBD | Not started | - |
 
 ## Deferred (v3.2+)
@@ -156,4 +161,4 @@ Plans:
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-19 after Phase 34 planning -- 2 plans created*
+*Last updated: 2026-03-19 after Phase 35 planning -- 4 plans created*
