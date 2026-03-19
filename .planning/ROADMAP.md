@@ -96,9 +96,9 @@ Plans:
   4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
 **Plans:** 3/3 plans complete
 Plans:
-- [ ] 33-01-PLAN.md — JackpotModule comment audit and intent drift review (2,795 lines, 2 post-Phase-29 commits)
-- [ ] 33-02-PLAN.md — DecimatorModule comment audit and intent drift review (1,027 lines, 1 post-Phase-29 commit)
-- [ ] 33-03-PLAN.md — EndgameModule + GameOverModule + AdvanceModule comment audit and intent drift review; finalize batch findings
+- [x] 33-01-PLAN.md — JackpotModule comment audit and intent drift review (2,795 lines, 2 post-Phase-29 commits)
+- [x] 33-02-PLAN.md — DecimatorModule comment audit and intent drift review (1,027 lines, 1 post-Phase-29 commit)
+- [x] 33-03-PLAN.md — EndgameModule + GameOverModule + AdvanceModule comment audit and intent drift review; finalize batch findings
 
 ### Phase 34: Token Contracts
 **Goal**: Every NatSpec and inline comment in BurnieCoin, StakedDegenerusStonk, DegenerusStonk, and WrappedWrappedXRP is verified accurate, and any intent drift is flagged
@@ -109,7 +109,10 @@ Plans:
   2. Every inline comment is verified against current logic with no stale references remaining unflagged
   3. Any vestigial logic, unnecessary restrictions, or intent drift in these 4 contracts is flagged with what/why/suggestion
   4. A per-batch findings file exists listing all comment inaccuracies and intent drift items found in this batch
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 34-01-PLAN.md — BurnieCoin.sol comment audit and intent drift review (1,065 lines, orphaned NatSpec from coinflip split)
+- [ ] 34-02-PLAN.md — DegenerusStonk + StakedDegenerusStonk + WrappedWrappedXRP comment audit and intent drift review; finalize batch findings
 
 ### Phase 35: Peripheral Contracts
 **Goal**: Every NatSpec and inline comment in the 10 peripheral contracts is verified accurate, and any intent drift is flagged
@@ -141,8 +144,8 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 31. Core Game Contracts | 2/2 | Complete    | 2026-03-19 | - |
 | 32. Game Modules Batch A | 3/3 | Complete    | 2026-03-19 | - |
-| 33. Game Modules Batch B | 3/3 | Complete   | 2026-03-19 | - |
-| 34. Token Contracts | v3.1 | 0/TBD | Not started | - |
+| 33. Game Modules Batch B | 3/3 | Complete    | 2026-03-19 | - |
+| 34. Token Contracts | v3.1 | 0/2 | Planned | - |
 | 35. Peripheral Contracts | v3.1 | 0/TBD | Not started | - |
 | 36. Consolidated Findings | v3.1 | 0/TBD | Not started | - |
 
@@ -153,4 +156,4 @@ Plans:
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-18 after Phase 33 planning -- 3 plans created*
+*Last updated: 2026-03-19 after Phase 34 planning -- 2 plans created*
