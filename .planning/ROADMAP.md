@@ -109,7 +109,7 @@ Plans:
   2. BurnieCoin, DegenerusStonk, StakedDegenerusStonk, and WrappedWrappedXRP comments all verified (including sDGNRS/DGNRS split changes)
   3. NatSpec on all external/public functions matches actual parameters, return values, and behavior
   4. Findings list produced with per-contract grouping
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 - [ ] 40-01-PLAN.md — Core game contracts scan (DegenerusGame, GameStorage, DegenerusAdmin)
 - [ ] 40-02-PLAN.md — Token contracts scan (BurnieCoin, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
@@ -156,7 +156,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 38. RNG Delta Security | 1/2 | In Progress|  |
 | 39. Comment Scan -- Game Modules | 2/4 | In Progress|  |
-| 40. Comment Scan -- Core + Token | 0/2 | Planned | - |
+| 40. Comment Scan -- Core + Token | 1/2 | In Progress|  |
 | 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete   | 2026-03-19 |
 | 42. Governance Fresh Eyes | 0/TBD | Not started | - |
 | 43. Consolidated Findings | 0/TBD | Not started | - |
