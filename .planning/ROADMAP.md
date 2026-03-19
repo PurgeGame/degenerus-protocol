@@ -60,7 +60,7 @@
 ### v3.2 RNG Delta Audit + Comment Re-scan (In Progress)
 
 - [x] **Phase 38: RNG Delta Security** - Audit all RNG-adjacent code changes for manipulation vectors (completed 2026-03-19)
-- [ ] **Phase 39: Comment Scan -- Game Modules** - Fresh comment audit across all 12 game module files
+- [x] **Phase 39: Comment Scan -- Game Modules** - Fresh comment audit across all 12 game module files (completed 2026-03-19)
 - [x] **Phase 40: Comment Scan -- Core + Token Contracts** - Fresh comment audit of core game and token contracts (completed 2026-03-19)
 - [x] **Phase 41: Comment Scan -- Peripheral + Remaining** - Fresh comment audit of peripheral and utility contracts (completed 2026-03-19)
 - [ ] **Phase 42: Governance Fresh Eyes** - Independent sanity check of VRF governance from fresh perspective
@@ -93,7 +93,7 @@ Plans:
   3. All block comments and section headers reflect current contract structure
   4. All 31 v3.1 fixes verified correct in working tree
   5. Findings list produced with file, line, what/why/suggestion for each discrepancy
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [ ] 39-01-PLAN.md — JackpotModule comment audit (2,792 lines, 6 v3.1 fixes)
 - [ ] 39-02-PLAN.md — DecimatorModule + DegeneretteModule + MintModule comment audit (3,358 lines, 11 v3.1 fixes)
@@ -155,7 +155,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 38. RNG Delta Security | 2/2 | Complete   | 2026-03-19 |
-| 39. Comment Scan -- Game Modules | 3/4 | In Progress|  |
+| 39. Comment Scan -- Game Modules | 4/4 | Complete   | 2026-03-19 |
 | 40. Comment Scan -- Core + Token | 2/2 | Complete    | 2026-03-19 |
 | 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete    | 2026-03-19 |
 | 42. Governance Fresh Eyes | 0/TBD | Not started | - |
