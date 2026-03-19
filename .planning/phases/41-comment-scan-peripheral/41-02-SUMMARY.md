@@ -71,3 +71,141 @@ The contract header block comment (lines 8-25) accurately describes the architec
 ### Findings
 
 No new findings identified. All v3.1 findings verified fixed. New PRNG design note is accurate.
+
+---
+
+## IBurnieCoinflip.sol
+
+**Scope:** 173 lines | 82 NatSpec tags | 14 function declarations
+**Changes since v3.1:** 14 lines removed (claimCoinflipsTakeProfit removal)
+**Known issue:** 3 stale @custom:reverts RngLocked annotations (pre-identified in research)
+
+### Code Change Verification
+
+**claimCoinflipsTakeProfit removal:** Cleanly removed from the interface. No remaining references to `claimCoinflipsTakeProfit` or `TakeProfit` as a standalone function concept. The `takeProfit` parameter references on `setCoinflipAutoRebuy` (line 60) and `setCoinflipAutoRebuyTakeProfit` (line 73) are legitimate and still exist in the implementation.
+
+### Interface-Implementation Cross-Reference
+
+Every function declaration in IBurnieCoinflip.sol was cross-referenced against BurnieCoinflip.sol:
+
+| Function | @param match | @return match | @custom:reverts accurate | @notice accurate |
+|----------|:---:|:---:|:---:|:---:|
+| `depositCoinflip` | YES | N/A | YES (AmountLTMin, CoinflipLocked, NotApproved) | YES |
+| `claimCoinflips` | YES | YES | **NO** (stale RngLocked) | YES |
+| `claimCoinflipsFromBurnie` | YES | YES | **NO** (stale RngLocked) | YES |
+| `consumeCoinflipsForBurn` | YES | YES | **NO** (stale RngLocked) | YES |
+| `setCoinflipAutoRebuy` | YES | N/A | YES (RngLocked, AutoRebuyAlreadyEnabled, NotApproved) | YES |
+| `setCoinflipAutoRebuyTakeProfit` | YES | N/A | YES (RngLocked, AutoRebuyNotEnabled, NotApproved) | YES |
+| `settleFlipModeChange` | YES | N/A | YES (OnlyDegenerusGame) | YES |
+| `processCoinflipPayouts` | YES | N/A | YES (OnlyDegenerusGame) | YES |
+| `creditFlip` | YES | N/A | YES (OnlyFlipCreditors) | YES |
+| `creditFlipBatch` | YES | N/A | YES (OnlyFlipCreditors) | YES |
+| `previewClaimCoinflips` | YES | YES | N/A | YES |
+| `coinflipAmount` | YES | YES | N/A | YES |
+| `coinflipAutoRebuyInfo` | YES | YES | N/A | YES |
+| `coinflipTopLastDay` | N/A | YES | N/A | YES |
+
+**Result:** 3 functions have stale `@custom:reverts` annotations. All other NatSpec is accurate.
+
+### Findings
+
+#### CMT-202: Stale @custom:reverts RngLocked on claimCoinflips
+
+- **What:** Interface declares `@custom:reverts RngLocked If VRF randomness is currently being resolved` but the implementation (BurnieCoinflip.sol `claimCoinflips` at line 328) no longer checks `rngLocked()` on this function. The `rngLocked()` check was removed as part of the rngLocked removal refactor. The claim function now uses BAF epoch-based protection exclusively.
+- **Where:** `IBurnieCoinflip.sol:33`
+- **Why:** A warden reading the interface would expect `RngLocked` to be a valid revert condition and might file a false finding based on it, or miss that the actual claim protection is now BAF epoch-based only.
+- **Suggestion:** Remove `@custom:reverts RngLocked If VRF randomness is currently being resolved` from the NatSpec.
+- **Category:** CMT
+- **Severity:** LOW
+
+#### CMT-203: Stale @custom:reverts RngLocked on claimCoinflipsFromBurnie
+
+- **What:** Interface declares `@custom:reverts RngLocked If VRF randomness is currently being resolved` but the implementation (BurnieCoinflip.sol `claimCoinflipsFromBurnie` at line 339) no longer checks `rngLocked()` on this function. The `rngLocked()` check was removed as part of the rngLocked removal refactor.
+- **Where:** `IBurnieCoinflip.sol:42`
+- **Why:** A warden reading the interface would expect `RngLocked` to be a valid revert condition and might file a false finding based on it, or miss that the actual claim protection is now BAF epoch-based only.
+- **Suggestion:** Remove `@custom:reverts RngLocked If VRF randomness is currently being resolved` from the NatSpec.
+- **Category:** CMT
+- **Severity:** LOW
+
+#### CMT-204: Stale @custom:reverts RngLocked on consumeCoinflipsForBurn
+
+- **What:** Interface declares `@custom:reverts RngLocked If VRF randomness is currently being resolved` but the implementation (BurnieCoinflip.sol `consumeCoinflipsForBurn` at line 349) no longer checks `rngLocked()` on this function. The `rngLocked()` check was removed as part of the rngLocked removal refactor.
+- **Where:** `IBurnieCoinflip.sol:51`
+- **Why:** A warden reading the interface would expect `RngLocked` to be a valid revert condition and might file a false finding based on it, or miss that the actual claim protection is now BAF epoch-based only.
+- **Suggestion:** Remove `@custom:reverts RngLocked If VRF randomness is currently being resolved` from the NatSpec.
+- **Category:** CMT
+- **Severity:** LOW
+
+---
+
+## IDegenerusGame.sol
+
+**Scope:** 443 lines | 221 NatSpec tags | 72 function declarations
+**Changes since v3.1:** 4 lines removed (futurePrizePoolTotalView removal)
+
+### Code Change Verification
+
+**futurePrizePoolTotalView removal:** Cleanly removed from the interface. Grep across all contracts confirms zero remaining references to `futurePrizePoolTotalView` or `futurePrizePoolTotal`. The single-pool `futurePrizePoolView` (line 150) remains and is correctly documented.
+
+### Interface-Implementation Cross-Reference
+
+All 72 function declarations in IDegenerusGame.sol were reviewed against DegenerusGame.sol. Parameter names, types, and return values match across all functions. The following specific issues were identified:
+
+### Findings
+
+#### CMT-205: Stale "or expired" in decClaimable @return after decimator claim expiry removal
+
+- **What:** The `decClaimable` function's `@return amountWei` at line 244 says "Claimable amount (0 if not winner, already claimed, or expired)." The "or expired" condition is stale -- decimator claim expiry was removed in commit `19f5bc60` ("feat: remove decimator claim expiry -- claims persist across rounds"). The implementation at DegenerusGame.sol:1310 says "(0 if not winner or already claimed)" without "expired".
+- **Where:** `IDegenerusGame.sol:244`
+- **Why:** A warden reading the interface would believe there is a time-based expiry on decimator claims and might investigate the expiry logic. Since claims now persist indefinitely, the "expired" qualifier is misleading.
+- **Suggestion:** Change to `Claimable amount (0 if not winner or already claimed).` to match the implementation NatSpec.
+- **Category:** CMT
+- **Severity:** INFO
+
+#### CMT-206: Duplicate @notice on resolveDegeneretteBets -- stale "Place" notice from copy-paste
+
+- **What:** The `resolveDegeneretteBets` function at lines 324-325 has two consecutive `@notice` tags. The first (`@notice Place Full Ticket Degenerette bets using pending affiliate Degenerette credit.`) appears to be a leftover from the `placeFullTicketBets` function above it. The second (`@notice Resolve Degenerette bets once RNG is available.`) is correct.
+- **Where:** `IDegenerusGame.sol:324`
+- **Why:** The stale @notice is confusing -- `resolveDegeneretteBets` resolves existing bets, it does not place new ones. A warden or developer would see contradictory descriptions of the same function.
+- **Suggestion:** Remove line 324 (`/// @notice Place Full Ticket Degenerette bets using pending affiliate Degenerette credit.`), keeping only the correct `@notice Resolve Degenerette bets once RNG is available.`
+- **Category:** CMT
+- **Severity:** INFO
+
+#### CMT-207: purchaseDeityPass @dev says "Two modes" but only documents one
+
+- **What:** The `purchaseDeityPass` function's `@dev` at line 384 says "Two modes:" but only lists one mode ("Presale (useBoon=false): During presale only, level 1, fixed 25 ETH price."). The second mode (boon-based purchase outside presale with escalating pricing) is not documented. Additionally, the `useBoon` parameter referenced in the text does not exist in the function signature -- the function signature is `purchaseDeityPass(address buyer, uint8 symbolId)`.
+- **Where:** `IDegenerusGame.sol:384-385`
+- **Why:** Incomplete NatSpec with a phantom parameter reference (`useBoon`) misleads wardens about the function's behavior and API surface.
+- **Suggestion:** Either complete the second mode description and remove the `useBoon` reference (since mode is determined by game state, not a parameter), or simplify to a single accurate description of the purchase flow.
+- **Category:** CMT
+- **Severity:** LOW
+
+#### CMT-208: Three terminal decimator functions lack NatSpec in the interface
+
+- **What:** Three functions in the "Terminal Decimator (Death Bet)" section (lines 206-218) have no NatSpec at all in the interface: `recordTerminalDecBurn`, `runTerminalDecimatorJackpot`, and `terminalDecWindow`. The implementations in DegenerusGame.sol (lines 1188, 1208, 1231) all have `@notice` and `@dev` annotations.
+- **Where:** `IDegenerusGame.sol:206-218`
+- **Why:** Interface files are the primary documentation surface for external integrators. Missing NatSpec on 3 functions means tooling that generates documentation from the interface will have gaps. The section header comment ("Terminal Decimator (Death Bet)") provides some context, but no per-function documentation exists.
+- **Suggestion:** Copy the NatSpec from the implementation to the interface declarations, adding `@param` and `@return` tags as appropriate.
+- **Category:** CMT
+- **Severity:** INFO
+
+#### CMT-209: Four Degenerette tracking view functions lack NatSpec in the interface
+
+- **What:** Four functions in the "Degenerette Tracking Views" section (lines 439-442) have no NatSpec: `getDailyHeroWager`, `getDailyHeroWinner`, `getPlayerDegeneretteWager`, and `getTopDegenerette`. The implementations in DegenerusGame.sol (lines 2749-2803) have full `@param` and `@return` annotations.
+- **Where:** `IDegenerusGame.sol:439-442`
+- **Why:** These view functions are the primary API for UI/tooling integration. Missing NatSpec means integrators must read the implementation to understand parameter semantics and return value formats (e.g., `wagerUnits` is in 1e12 wei units, not raw wei).
+- **Suggestion:** Copy the NatSpec from the implementation to the interface declarations.
+- **Category:** CMT
+- **Severity:** INFO
+
+---
+
+## Plan 02 Summary
+
+| Contract | Lines | v3.1 Findings Verified | New Findings | Total |
+|----------|-------|----------------------|--------------|-------|
+| DegenerusVault.sol | 1,050 | 1 fixed, 1 partial | 1 (CMT-201) | 1 |
+| DegenerusAffiliate.sol | 848 | 2 fixed | 0 | 0 |
+| IBurnieCoinflip.sol | 173 | N/A (no v3.1 findings) | 3 (CMT-202/203/204) | 3 |
+| IDegenerusGame.sol | 443 | N/A (no v3.1 findings) | 5 (CMT-205/206/207/208/209) | 5 |
+| **Total** | **2,514** | **3 fixed, 1 partial** | **9** | **9** |
