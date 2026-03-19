@@ -23,7 +23,7 @@
 
 ### Deliverable
 
-- [ ] **DEL-01**: Consolidated findings list produced with what/why/suggestion per item, categorized by severity
+- [x] **DEL-01**: Consolidated findings list produced with what/why/suggestion per item, categorized by severity
 
 ## Deferred (v3.2+)
 
@@ -57,7 +57,7 @@
 | DRIFT-03 | Phase 33 | Complete |
 | DRIFT-04 | Phase 34 | Complete |
 | DRIFT-05 | Phase 35 | Complete |
-| DEL-01 | Phase 37 | Pending |
+| DEL-01 | Phase 36 | Complete |
 
 **Coverage:**
 - v3.1 requirements: 11 total
