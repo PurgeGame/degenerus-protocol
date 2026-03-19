@@ -151,7 +151,9 @@ Plans:
   1. Cross-cutting patterns identified across all contract groups (recurring NatSpec issues, systematic comment drift, pattern-level fixes)
   2. Master findings table with severity classification (LOW/INFO), per-contract counts, and pattern tags
   3. Deliverable is consumable by protocol team for pre-C4A fix decisions
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 43-01-PLAN.md — Cross-cutting pattern analysis, deduplicated master table, and consolidated deliverable
 
 ## Progress
 
@@ -161,8 +163,8 @@ Plans:
 | 39. Comment Scan -- Game Modules | 4/4 | Complete    | 2026-03-19 |
 | 40. Comment Scan -- Core + Token | 2/2 | Complete    | 2026-03-19 |
 | 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete    | 2026-03-19 |
-| 42. Governance Fresh Eyes | 2/2 | Complete   | 2026-03-19 |
-| 43. Consolidated Findings | 0/TBD | Not started | - |
+| 42. Governance Fresh Eyes | 2/2 | Complete    | 2026-03-19 |
+| 43. Consolidated Findings | 0/1 | Not started | - |
 
 ## Deferred (v3.3+)
 
@@ -171,4 +173,4 @@ Plans:
 - **FUZZ-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-19 after Phase 42 planning*
+*Last updated: 2026-03-19 after Phase 43 planning*
