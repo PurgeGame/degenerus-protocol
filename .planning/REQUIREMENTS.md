@@ -28,7 +28,7 @@ Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
 
 - [x] **GOV-01**: VRF swap governance flow audited from fresh perspective — all attack surfaces catalogued
 - [x] **GOV-02**: Governance edge cases and timing attacks re-evaluated against current code
-- [ ] **GOV-03**: Cross-contract governance interactions verified (Admin, GameStorage, AdvanceModule, DegenerusStonk)
+- [x] **GOV-03**: Cross-contract governance interactions verified (Admin, GameStorage, AdvanceModule, DegenerusStonk)
 
 ## Future Requirements
 
@@ -65,7 +65,7 @@ Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
 | CMT-07 | Phase 43 | Pending |
 | GOV-01 | Phase 42 | Complete |
 | GOV-02 | Phase 42 | Complete |
-| GOV-03 | Phase 42 | Pending |
+| GOV-03 | Phase 42 | Complete |
 
 **Coverage:**
 - v3.2 requirements: 14 total
