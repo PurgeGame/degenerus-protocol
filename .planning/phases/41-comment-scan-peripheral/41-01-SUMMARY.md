@@ -54,3 +54,96 @@
 - **Event NatSpec verified accurate:** CoinflipStakeUpdated, CoinflipDayResolved, CoinflipTopUpdated, BiggestFlipUpdated -- all @notice/@param tags match emitted values.
 - **Internal function comments verified:** _claimCoinflipsInternal, _addDailyFlip, _setCoinflipAutoRebuy, _setCoinflipAutoRebuyTakeProfit, _coinflipLockedDuringTransition, _recyclingBonus, _afKingRecyclingBonus, _afKingDeityBonusHalfBpsWithLevel, _targetFlipDay, _questApplyReward, _score96, _updateTopDayBettor, _bafBracketLevel, _resolvePlayer, _requireApproved -- all @dev comments and inline comments accurately describe code behavior.
 - **Section headers verified:** EVENTS, CUSTOM ERRORS, STORAGE VARIABLES, CONSTRUCTOR, MODIFIERS, CORE COINFLIP FUNCTIONS, CLAIM FUNCTIONS, STAKE MANAGEMENT, AUTO-REBUY FUNCTIONS, RNG PROCESSING, FLIP CREDITING, VIEW FUNCTIONS, INTERNAL HELPER FUNCTIONS -- all accurately reflect their contents.
+
+---
+
+## DegenerusQuests.sol
+
+**Scope:** 1,588 lines | 248 NatSpec tags | ~143 comment lines | 11 external functions
+**Changes since v3.1:** 28 lines changed (QUEST_TYPE_RESERVED removal, ID renumbering, NatSpec fixes)
+**v3.1 findings status:** CMT-059 through CMT-064, DRIFT-004 -- all 7 verified FIXED
+
+### v3.1 Fix Verification
+
+| v3.1 ID | Description | Status | Verification |
+|---------|-------------|--------|-------------|
+| CMT-059 | Contract header says "COIN contract" only | FIXED | Line 16: Header now says "called by the Degenerus ContractAddresses.COIN and COINFLIP contracts" |
+| CMT-060 | Security Model references nonexistent onlyCoinOrGame modifier | FIXED | Line 23: Security Model rewritten; no reference to onlyCoinOrGame; now says "COIN/COINFLIP-gated via `onlyCoin` modifier" |
+| CMT-061 | Security Model says "COIN-gated" without clarifying COINFLIP | FIXED | Line 23: Now says "COIN/COINFLIP-gated via `onlyCoin` modifier" -- both callers documented |
+| CMT-062 | rollDailyQuest @dev says "Slot 0 uses entropy" | FIXED | Line 299: Now says "Slot 0 is fixed to MINT_ETH (no entropy used)" -- accurately reflects the hardcoded slot 0 type |
+| CMT-063 | OnlyCoin error/modifier name implies COIN-only | FIXED | Line 53: Error @notice says "COIN or COINFLIP"; Line 279: Modifier @dev says "COIN or COINFLIP contract" |
+| CMT-064 | _questComplete NatSpec says "all slots finish" | FIXED | Line 1360: Now says "credits streak on slot 0 completion" -- accurate because slot 1 requires slot 0 first (guards at lines 570, 623, 674, 728, 1081) |
+| DRIFT-004 | QUEST_TYPE_RESERVED vestigial constant | FIXED | Constant fully removed; no remaining references to "QUEST_TYPE_RESERVED" or "reserved" in comments or code; _bonusQuestType no longer has a skip guard for it |
+
+### Quest Type ID Renumbering Audit
+
+QUEST_TYPE_RESERVED (old ID 4) was removed, causing all subsequent IDs to shift down by 1:
+- DECIMATOR: 5 -> 4
+- LOOTBOX: 6 -> 5
+- DEGENERETTE_ETH: 7 -> 6
+- DEGENERETTE_BURNIE: 8 -> 7
+- QUEST_TYPE_COUNT: 9 -> 8
+
+**Renumbering audit result:** No stale hardcoded quest type ID numbers found in any comments or NatSpec. All references use constant names (QUEST_TYPE_MINT_BURNIE, QUEST_TYPE_FLIP, etc.) rather than numeric IDs. No references to "9 quest types" or "nine quest" remain. The `_bonusQuestType` function correctly iterates 0 to QUEST_TYPE_COUNT (8) with no RESERVED skip. Clean renumbering.
+
+### Findings
+
+No new findings identified.
+
+All 248 NatSpec tags verified accurate. All handler functions (handleMint, handleFlip, handleDecimator, handleAffiliate, handleLootBox, handleDegenerette) have complete and accurate @notice/@dev/@param/@return/@custom:reverts annotations. The contract header's Architecture Overview, Security Model, Quest Lifecycle, Progress Versioning, and Streak System sections all accurately describe current behavior. Struct documentation (DailyQuest, PlayerQuestState) accurately reflects field semantics including completion mask layout. Internal helper NatSpec (_questSyncState, _questSyncProgress, _questComplete, _questCompleteWithPair, _bonusQuestType, _canRollDecimatorQuest, _questTargetValue, _questRequirements, _questViewData, _questHandleProgressSlot, _questProgressValid, _questProgressValidStorage, _questCompleted, _questReady, _maybeCompleteOther, _seedQuestType, _currentQuestDay, _clampedAdd128, _nextQuestVersion, _materializeActiveQuestsForView) all verified. Section headers accurately reflect their contents. Event NatSpec verified. Error NatSpec verified (OnlyCoin now correctly says "COIN or COINFLIP", OnlyGame accurate).
+
+---
+
+## DegenerusJackpots.sol
+
+**Scope:** 689 lines | 76 NatSpec tags | ~115 comment lines | 3 external functions
+**Changes since v3.1:** 14 lines changed (BurnieCoin->BurnieCoinflip reference fixes)
+**v3.1 findings status:** CMT-065 through CMT-069 -- 4 verified FIXED, 1 over-corrected (CMT-068)
+
+### v3.1 Fix Verification
+
+| v3.1 ID | Description | Status | Verification |
+|---------|-------------|--------|-------------|
+| CMT-065 | Contract-level @dev says "BurnieCoin forwards flips" | FIXED | Line 35: Now says "BurnieCoinflip forwards flips into this contract" -- accurate |
+| CMT-066 | Section header says "Called by BurnieCoin" | FIXED | Line 164: Now says "Called by BurnieCoinflip to record coinflip activity" -- accurate |
+| CMT-067 | recordBafFlip @dev/@custom:access say "coin contract" | FIXED | Line 169: @dev says "coinflip contract"; Line 173: @custom:access says "coinflip contract" -- both accurate for the actual caller |
+| CMT-068 | OnlyCoin error says "restricted to the coin contract" | OVER-CORRECTED | Line 47: Now says "restricted to the coinflip contract" (singular) -- but the `onlyCoin` modifier (line 150) accepts BOTH ContractAddresses.COIN and ContractAddresses.COINFLIP. Fix swung from one inaccuracy to the opposite (see CMT-104 below) |
+| CMT-069 | IDegenerusCoinJackpotView @notice says "coin contract" | FIXED | Line 19: Now says "coinflip contract jackpot-related queries" -- accurate since the interface targets ContractAddresses.COINFLIP |
+
+### Findings
+
+#### CMT-104: OnlyCoin error @notice says "restricted to the coinflip contract" but modifier accepts both COIN and COINFLIP
+
+- **What:** The `OnlyCoin` error @notice at line 47 states "Thrown when a function restricted to the coinflip contract is called by another address." The `onlyCoin` modifier (lines 149-151) checks `msg.sender != ContractAddresses.COIN && msg.sender != ContractAddresses.COINFLIP`, accepting both contracts. Saying "restricted to the coinflip contract" (singular) omits COIN. The v3.1 fix for CMT-068 changed this from "coin contract" to "coinflip contract" but swung to the opposite inaccuracy. The modifier's own @dev at line 147 correctly says "Restricts function to coin or coinflip contract."
+- **Where:** `DegenerusJackpots.sol:47`
+- **Why:** A warden reading the error description would believe only BurnieCoinflip is authorized. If BurnieCoin.sol were to call a function gated by `onlyCoin`, the error message would mislead debugging (the error says "coinflip" when the check allows both). The modifier @dev is correct, but the error @notice is the user-facing documentation most tools and wardens parse first.
+- **Suggestion:** Change to "Thrown when a function restricted to the coin or coinflip contract is called by another address." This matches the modifier @dev at line 147 and the actual implementation.
+- **Category:** CMT
+- **Severity:** INFO
+
+### Notes
+
+- **BurnieCoin->BurnieCoinflip fixes verified complete:** Grep for `BurnieCoin[^f]` (BurnieCoin not followed by "flip") returns zero matches. All references correctly use "BurnieCoinflip" or "coinflip contract."
+- **Prize distribution percentages verified:** 10% (top BAF) + 5% (top flip) + 5% (random 3rd/4th) + 5% (far-future draw 1) + 5% (far-future draw 2) + 45% (scatter 1st) + 25% (scatter 2nd) = 100%. Block comment at lines 196-214 accurate.
+- **PlayerScore struct packing verified:** address (160 bits) + uint96 score = 256 bits per slot. Line 78 @dev is accurate.
+- **All function NatSpec verified accurate:** recordBafFlip, runBafJackpot, getLastBafResolvedDay -- all @notice/@dev/@param/@return/@custom:access tags match actual behavior. runBafJackpot @dev correctly documents winner array sizing (107 max), entropy chaining, and level targeting.
+- **Internal helper NatSpec verified:** _creditOrRefund, _bafScore, _score96, _updateBafTop, _bafTop, _clearBafTop -- all @dev/@param/@return tags accurate.
+- **Event NatSpec verified:** BafFlipRecorded -- all @param tags match emitted values.
+- **Section headers verified:** ERRORS, EVENTS, STRUCTS, CONSTANT STATE, CONSTANTS, BAF STATE STORAGE, MODIFIERS & ACCESS CONTROL, COINFLIP CONTRACT HOOKS, BAF JACKPOT RESOLUTION, INTERNAL HELPER FUNCTIONS, BAF LEADERBOARD HELPERS, VIEW FUNCTIONS -- all accurately reflect their contents.
+- **Scatter level targeting comments verified:** Lines 399-416 inline comments accurately describe both non-century and century BAF targeting patterns.
+
+---
+
+## Plan 01 Summary
+
+| Contract | Lines | v3.1 Findings Verified | New Findings | Total |
+|----------|-------|----------------------|--------------|-------|
+| BurnieCoinflip.sol | 1,114 | 5 fixed, 0 partial | 3 (CMT-101, CMT-102, CMT-103) | 3 |
+| DegenerusQuests.sol | 1,588 | 7 fixed, 0 partial | 0 | 0 |
+| DegenerusJackpots.sol | 689 | 4 fixed, 1 over-corrected | 1 (CMT-104) | 1 |
+| **Total** | **3,391** | **16 fixed, 1 over-corrected** | **4** | **4** |
+
+**Notes:**
+- CMT-103 is an interface-side finding on IBurnieCoinflip.sol (will be formally audited in Plan 02); included here because it was discovered during implementation-side review.
+- CMT-104 is the over-correction of v3.1 CMT-068: the fix changed "coin contract" to "coinflip contract" instead of "coin or coinflip contract."
+- No .sol files were modified during this audit.
