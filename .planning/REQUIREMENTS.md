@@ -10,7 +10,7 @@
 - [x] **CMT-01**: All NatSpec and inline comments in core game contracts (DegenerusGame, GameStorage, DegenerusAdmin) are accurate and warden-ready
 - [x] **CMT-02**: All NatSpec and inline comments in game modules batch A (MintModule, DegeneretteModule, WhaleModule, BoonModule, LootboxModule, PayoutUtils, MintStreakUtils) are accurate and warden-ready
 - [x] **CMT-03**: All NatSpec and inline comments in game modules batch B (JackpotModule, DecimatorModule, EndgameModule, GameOverModule, AdvanceModule) are accurate and warden-ready
-- [ ] **CMT-04**: All NatSpec and inline comments in token contracts (BurnieCoin, StakedDegenerusStonk, DegenerusStonk, WrappedWrappedXRP) are accurate and warden-ready
+- [x] **CMT-04**: All NatSpec and inline comments in token contracts (BurnieCoin, StakedDegenerusStonk, DegenerusStonk, WrappedWrappedXRP) are accurate and warden-ready
 - [ ] **CMT-05**: All NatSpec and inline comments in peripheral contracts (BurnieCoinflip, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DegenerusVault, DegenerusTraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data) are accurate and warden-ready
 
 ### Intent Drift
@@ -18,7 +18,7 @@
 - [x] **DRIFT-01**: Core game contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
 - [x] **DRIFT-02**: Game modules batch A reviewed for vestigial logic, unnecessary restrictions, and intent drift
 - [x] **DRIFT-03**: Game modules batch B reviewed for vestigial logic, unnecessary restrictions, and intent drift
-- [ ] **DRIFT-04**: Token contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
+- [x] **DRIFT-04**: Token contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
 - [ ] **DRIFT-05**: Peripheral contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
 
 ### Deliverable
@@ -50,12 +50,12 @@
 | CMT-01 | Phase 31 | Complete |
 | CMT-02 | Phase 32 | Complete |
 | CMT-03 | Phase 33 | Complete |
-| CMT-04 | Phase 34 | Pending |
+| CMT-04 | Phase 34 | Complete |
 | CMT-05 | Phase 35 | Pending |
 | DRIFT-01 | Phase 31 | Complete |
 | DRIFT-02 | Phase 32 | Complete |
 | DRIFT-03 | Phase 33 | Complete |
-| DRIFT-04 | Phase 34 | Pending |
+| DRIFT-04 | Phase 34 | Complete |
 | DRIFT-05 | Phase 35 | Pending |
 | DEL-01 | Phase 36 | Pending |
 
@@ -66,4 +66,4 @@
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-03-18 after roadmap creation -- all 11 requirements mapped to phases 31-36*
+*Last updated: 2026-03-19 after Phase 33 completion -- CMT-03 and DRIFT-03 complete*
