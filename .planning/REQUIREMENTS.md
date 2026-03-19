@@ -11,7 +11,7 @@
 - [x] **CMT-02**: All NatSpec and inline comments in game modules batch A (MintModule, DegeneretteModule, WhaleModule, BoonModule, LootboxModule, PayoutUtils, MintStreakUtils) are accurate and warden-ready
 - [x] **CMT-03**: All NatSpec and inline comments in game modules batch B (JackpotModule, DecimatorModule, EndgameModule, GameOverModule, AdvanceModule) are accurate and warden-ready
 - [x] **CMT-04**: All NatSpec and inline comments in token contracts (BurnieCoin, StakedDegenerusStonk, DegenerusStonk, WrappedWrappedXRP) are accurate and warden-ready
-- [ ] **CMT-05**: All NatSpec and inline comments in peripheral contracts (BurnieCoinflip, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DegenerusVault, DegenerusTraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data) are accurate and warden-ready
+- [x] **CMT-05**: All NatSpec and inline comments in peripheral contracts (BurnieCoinflip, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DegenerusVault, DegenerusTraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data) are accurate and warden-ready
 
 ### Intent Drift
 
@@ -19,7 +19,7 @@
 - [x] **DRIFT-02**: Game modules batch A reviewed for vestigial logic, unnecessary restrictions, and intent drift
 - [x] **DRIFT-03**: Game modules batch B reviewed for vestigial logic, unnecessary restrictions, and intent drift
 - [x] **DRIFT-04**: Token contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
-- [ ] **DRIFT-05**: Peripheral contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
+- [x] **DRIFT-05**: Peripheral contracts reviewed for vestigial logic, unnecessary restrictions, and intent drift
 
 ### Deliverable
 
