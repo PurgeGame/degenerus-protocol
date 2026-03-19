@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 41 — comment-scan-peripheral (Plan 01 complete)
+**Current focus:** Phase 41 — comment-scan-peripheral (Plan 02 complete)
 
 ## Current Position
 
 Phase: 41 (comment-scan-peripheral) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Plan: 2 of 3
 | Phase 40 P02 | 6min | 2 tasks | 1 files |
 | Phase 40 P01 | 8min | 2 tasks | 1 files |
 | Phase 41 P01 | 7min | 2 tasks | 1 files |
+| Phase 41 P02 | 7min | 2 tasks | 1 files |
 | Phase 39 P02 | 8min | 2 tasks | 1 files |
 
 ## Accumulated Context
