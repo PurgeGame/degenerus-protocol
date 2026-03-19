@@ -9,7 +9,7 @@
 - ✅ **v2.0 C4A Audit Prep** — Phases 19-23 (shipped 2026-03-17)
 - ✅ **v2.1 VRF Governance Audit + Doc Sync** — Phases 24-25 (shipped 2026-03-18)
 - ✅ **v3.0 Full Contract Audit + Payout Specification** — Phases 26-30 (shipped 2026-03-18)
-- ✅ **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-36 (shipped 2026-03-19)
+- **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-37 (gap closure in progress)
 
 ## Phases
 
@@ -53,6 +53,7 @@
 - [x] **Phase 34: Token Contracts** - Comment audit + intent drift review for BurnieCoin, StakedDegenerusStonk, DegenerusStonk, WrappedWrappedXRP (completed 2026-03-19)
 - [x] **Phase 35: Peripheral Contracts** - Comment audit + intent drift review for BurnieCoinflip, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DegenerusVault, DegenerusTraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data (completed 2026-03-19)
 - [x] **Phase 36: Consolidated Findings** - Merge all per-batch findings into a single categorized deliverable (completed 2026-03-19)
+- [ ] **Phase 37: Milestone Cleanup** - Fix stale contract counts, update REQUIREMENTS.md traceability, add missing SUMMARY frontmatter
 
 ## Phase Details
 
@@ -143,9 +144,22 @@ Plans:
 Plans:
 - [x] 36-01-PLAN.md — Consolidate all 84 findings from Phases 31-35 into categorized deliverable with severity index and cross-cutting patterns
 
+### Phase 37: Milestone Cleanup
+**Goal**: Close documentation/tracking gaps identified by milestone audit — fix stale contract counts in consolidated findings, update REQUIREMENTS.md traceability, and add missing SUMMARY frontmatter
+**Depends on**: Phase 36 (gap closure for consolidated deliverable)
+**Requirements**: DEL-01
+**Gap Closure:** Closes gaps from v3.1 milestone audit (DEL-01 partial, INT-01 stale contract count)
+**Success Criteria** (what must be TRUE):
+  1. Consolidated findings executive summary shows correct contract counts (29 reviewed, 24 with findings, 5 clean)
+  2. REQUIREMENTS.md DEL-01 is checked off and all traceability statuses are accurate
+  3. 36-01-SUMMARY.md has requirements-completed field in frontmatter
+**Plans:** 1 plan
+Plans:
+- [ ] 37-01-PLAN.md — Fix consolidated findings contract counts, check off DEL-01, add SUMMARY frontmatter
+
 ## Progress
 
-**Execution Order:** Phase 31 -> 32 -> 33 -> 34 -> 35 -> 36
+**Execution Order:** Phase 31 -> 32 -> 33 -> 34 -> 35 -> 36 -> 37
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -155,6 +169,7 @@ Plans:
 | 34. Token Contracts | 2/2 | Complete    | 2026-03-19 | - |
 | 35. Peripheral Contracts | 4/4 | Complete    | 2026-03-19 | - |
 | 36. Consolidated Findings | v3.1 | 1/1 | Complete | 2026-03-19 |
+| 37. Milestone Cleanup | v3.1 | 0/1 | Pending | - |
 
 ## Deferred (v3.2+)
 
@@ -163,4 +178,4 @@ Plans:
 - **FV-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-19 after Phase 36 completion -- v3.1 milestone shipped*
+*Last updated: 2026-03-19 after Phase 37 planning -- plan list added*
