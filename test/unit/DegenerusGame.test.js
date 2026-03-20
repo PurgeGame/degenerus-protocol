@@ -582,9 +582,9 @@ describe("DegenerusGame", function () {
       expect(await game.lootboxRngThresholdView()).to.equal(eth("1"));
     });
 
-    it("futurePrizePoolTotalView is zero before any purchases", async function () {
+    it("futurePrizePoolView is zero before any purchases", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.futurePrizePoolTotalView()).to.equal(0n);
+      expect(await game.futurePrizePoolView()).to.equal(0n);
     });
 
     it("ethMintLevelCount is 0 for new player", async function () {

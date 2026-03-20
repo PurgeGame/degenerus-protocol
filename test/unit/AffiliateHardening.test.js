@@ -40,9 +40,9 @@ const REWARD_SCALE_FRESH_L1_3_BPS = 2_500n; // 25%
 const REWARD_SCALE_FRESH_L4P_BPS = 2_000n; // 20%
 const REWARD_SCALE_RECYCLED_BPS = 500n; // 5%
 const BPS_DENOMINATOR = 10_000n;
-const LOOTBOX_TAPER_START_SCORE = 15_000;
+const LOOTBOX_TAPER_START_SCORE = 10_000;
 const LOOTBOX_TAPER_END_SCORE = 25_500;
-const LOOTBOX_TAPER_MIN_BPS = 5_000n;
+const LOOTBOX_TAPER_MIN_BPS = 2_500n;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -626,22 +626,22 @@ describe("AffiliateHardening", function () {
         // So payout equals untapered amount
       });
 
-      it("score 20250 (midpoint): approximately 75% payout", async function () {
+      it("score 17750 (midpoint): approximately 62.5% payout", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
         const amount = eth("0.1");
         const lvl = 1;
-        const midScore = 20250; // halfway between 15000 and 25500
+        const midScore = 17750; // halfway between 10000 and 25500
 
         // Compute expected taper
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), true);
         const expectedTapered = computeTaperedAmount(fullScaled, midScore);
 
-        // Midpoint: 100% -> 50% means midpoint is 75%
-        // (10000 - 5000) * 5250 / 10500 = 5000 * 0.5 = 2500 reduction
-        // payout = amt * (10000-2500)/10000 = amt * 75%
-        expect(expectedTapered).to.equal((fullScaled * 7500n) / 10000n);
+        // Midpoint: 100% -> 25% means midpoint is 62.5%
+        // excess = 7750, range = 15500, reductionBps = 7500 * 7750 / 15500 = 3750
+        // payout = amt * (10000-3750)/10000 = amt * 62.5%
+        expect(expectedTapered).to.equal((fullScaled * 6250n) / 10000n);
 
         await payAffiliateAsCoin(
           hre.ethers, coin, affiliate,
@@ -653,21 +653,21 @@ describe("AffiliateHardening", function () {
         expect(score).to.equal(fullScaled);
       });
 
-      it("score 15001: very small reduction from 100%", async function () {
+      it("score 10001: very small reduction from 100%", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
         const amount = eth("1");
         const fullScaled = computeScaledAmount(amount, 1n, true);
-        const tapered = computeTaperedAmount(fullScaled, 15001);
+        const tapered = computeTaperedAmount(fullScaled, 10001);
 
-        // Very small reduction: excess=1, range=10500
-        // reductionBps = 5000 * 1 / 10500 = 0 (integer division)
-        // So payout = full amount (because 5000/10500 = 0 in integer math)
+        // Very small reduction: excess=1, range=15500
+        // reductionBps = 7500 * 1 / 15500 = 0 (integer division)
+        // So payout = full amount (because 7500/15500 = 0 in integer math)
         expect(tapered).to.equal(fullScaled);
       });
 
-      it("score 25499: just below floor, slightly above 50%", async function () {
+      it("score 25499: just below floor, slightly above 25%", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
@@ -675,27 +675,27 @@ describe("AffiliateHardening", function () {
         const fullScaled = computeScaledAmount(amount, 1n, true);
         const tapered = computeTaperedAmount(fullScaled, 25499);
 
-        // excess=10499, range=10500
-        // reductionBps = 5000 * 10499 / 10500 = 4999 (integer)
-        // payout = amt * (10000-4999)/10000 = amt * 5001/10000
-        const expectedReductionBps = (5000n * 10499n) / 10500n;
+        // excess=15499, range=15500
+        // reductionBps = 7500 * 15499 / 15500 = 7499 (integer)
+        // payout = amt * (10000-7499)/10000 = amt * 2501/10000
+        const expectedReductionBps = (7500n * 15499n) / 15500n;
         const expectedPayout = (fullScaled * (10000n - expectedReductionBps)) / 10000n;
         expect(tapered).to.equal(expectedPayout);
-        // Confirm it's slightly above 50%
+        // Confirm it's slightly above 25%
         expect(tapered).to.be.gt((fullScaled * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR);
       });
     });
 
-    // AFF-07: Floor at 50% payout when score >= 25500
-    describe("AFF-07: Floor at 50% for score >= 25500 BPS", function () {
+    // AFF-07: Floor at 25% payout when score >= 25500
+    describe("AFF-07: Floor at 25% for score >= 25500 BPS", function () {
 
-      it("score exactly 25500: 50% payout floor", async function () {
+      it("score exactly 25500: 25% payout floor", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
         const amount = eth("0.1");
         const fullScaled = computeScaledAmount(amount, 1n, true);
-        const expected50pct = (fullScaled * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
+        const expected25pct = (fullScaled * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
 
         await payAffiliateAsCoin(
           hre.ethers, coin, affiliate,
@@ -707,10 +707,10 @@ describe("AffiliateHardening", function () {
         expect(score).to.equal(fullScaled);
 
         // Verify the tapered output via our helper math
-        expect(expected50pct).to.equal(fullScaled / 2n);
+        expect(expected25pct).to.equal(fullScaled / 4n);
       });
 
-      it("score 30000: still 50% floor (no further reduction)", async function () {
+      it("score 30000: still 25% floor (no further reduction)", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
@@ -722,7 +722,7 @@ describe("AffiliateHardening", function () {
         expect(tapered).to.equal(expected50pct);
       });
 
-      it("score 65535 (max uint16): still 50% floor", async function () {
+      it("score 65535 (max uint16): still 25% floor", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
@@ -879,10 +879,10 @@ describe("AffiliateHardening", function () {
           amount, code, carol.address, lvl, true, LOOTBOX_TAPER_END_SCORE
         );
 
-        // Kickback should be different: tapered = 50% of untapered
+        // Kickback should be different: tapered = 25% of untapered
         expect(kickbackNoTaper).to.be.gt(0n);
         expect(kickbackMaxTaper).to.be.gt(0n);
-        expect(kickbackMaxTaper).to.equal(kickbackNoTaper / 2n);
+        expect(kickbackMaxTaper).to.equal(kickbackNoTaper / 4n);
       });
 
       it("taper interacts correctly with commission cap (cap applied first, then taper)", async function () {
@@ -897,7 +897,7 @@ describe("AffiliateHardening", function () {
 
         // Now: remaining cap = 0.3 ETH
         // Send 4 ETH at 25% = 1.0 scaled, capped to 0.3 ETH
-        // With taper score 25500: tapered payout = 0.3 * 50% = 0.15 ETH
+        // With taper score 25500: tapered payout = 0.3 * 25% = 0.075 ETH
         // But leaderboard should record 0.3 (the capped but untapered amount)
         await payAffiliateAsCoin(
           hre.ethers, coin, affiliate,
@@ -986,22 +986,22 @@ describe("AffiliateHardening", function () {
       await affiliate.connect(bob).referPlayer(code);
 
       // Send enough to exceed cap: 4 ETH at 25% = 1 ETH, capped to 0.5 ETH
-      // With taper 25500: kickback = 0.5 * 50% * 10% = 0.025 ETH
+      // With taper 25500: kickback = 0.5 * 25% * 10% = 0.0125 ETH
       const kickback = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate,
         eth("4"), code, bob.address, 1, true, LOOTBOX_TAPER_END_SCORE
       );
 
-      // Expected: scaledAmount capped to 0.5, then tapered to 0.25, then 10% kickback = 0.025
-      const expectedKickback = eth("0.025");
+      // Expected: scaledAmount capped to 0.5, then tapered to 0.125, then 10% kickback = 0.0125
+      const expectedKickback = eth("0.0125");
       expect(kickback).to.equal(expectedKickback);
     });
 
-    it("taper at score 15000 with large amount does not lose precision", async function () {
+    it("taper at score 10000 with large amount does not lose precision", async function () {
       const { affiliate, coin, alice, bob, aliceCode } =
         await loadFixture(deployWithAffiliateSetup);
 
-      // At score 15000: excess=0, reductionBps=0, full payout (no precision issue)
+      // At score 10000: excess=0, reductionBps=0, full payout (no precision issue)
       const amount = eth("0.1");
 
       await payAffiliateAsCoin(

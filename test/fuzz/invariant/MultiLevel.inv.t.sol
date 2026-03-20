@@ -32,7 +32,7 @@ contract MultiLevelInvariant is DeployProtocol {
         uint256 obligations = game.currentPrizePoolView()
             + game.nextPrizePoolView()
             + game.claimablePoolView()
-            + game.futurePrizePoolTotalView();
+            + game.futurePrizePoolView();
 
         assertGe(
             gameBalance,
@@ -66,7 +66,7 @@ contract MultiLevelInvariant is DeployProtocol {
         uint256 currentPool = game.currentPrizePoolView();
         uint256 nextPool = game.nextPrizePoolView();
         uint256 claimablePool = game.claimablePoolView();
-        uint256 futurePool = game.futurePrizePoolTotalView();
+        uint256 futurePool = game.futurePrizePoolView();
 
         // Pools should be internally consistent: none should exceed game balance alone
         uint256 gameBalance = address(game).balance;

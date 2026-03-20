@@ -62,7 +62,7 @@ Each task was committed atomically:
 
 1. **Task 1: Audit all 5 remaining/utility contracts** - `b4376fc2` (docs)
 
-**Plan metadata:** `pending` (docs: complete plan)
+**Plan metadata:** `adddb77c` (docs: complete plan)
 
 ## Files Created/Modified
 - `.planning/phases/41-comment-scan-peripheral/41-03-SUMMARY.md` - Comment audit findings for 5 remaining/utility contracts

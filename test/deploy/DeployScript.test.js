@@ -55,9 +55,9 @@ describe("Deploy Pipeline", function () {
       expect(await f.game.gameOver()).to.equal(false);
     });
 
-    it("BurnieCoin: initial totalSupply is 0", async function () {
+    it("BurnieCoin: initial totalSupply is 2M (sDGNRS backing reserve)", async function () {
       const f = await loadFixture(deployFullProtocol);
-      expect(await f.coin.totalSupply()).to.equal(0);
+      expect(await f.coin.totalSupply()).to.equal(hre.ethers.parseEther("2000000"));
     });
 
     it("BurnieCoin: vaultMintAllowance is 2M", async function () {

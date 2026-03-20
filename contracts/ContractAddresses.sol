@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.34;
 
 // Compile-time constants populated by the deploy script.
-// All addresses are zeroed in source; the deploy pipeline generates
-// a concrete version with live addresses before compilation.
+// The deploy pipeline predicts addresses and patches this file before compilation.
 library ContractAddresses {
     uint48 internal constant DEPLOY_DAY_BOUNDARY = 0;
     bytes32 internal constant VRF_KEY_HASH = 0xabababababababababababababababababababababababababababababababab;

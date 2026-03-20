@@ -221,7 +221,7 @@ contract CompositionHandler is Test {
         uint256 gameBalance = address(game).balance;
         uint256 obligations = game.currentPrizePoolView()
             + game.nextPrizePoolView()
-            + game.futurePrizePoolTotalView()
+            + game.futurePrizePoolView()
             + game.claimablePoolView();
         if (obligations > gameBalance) {
             ghost_poolSolvencyViolation++;

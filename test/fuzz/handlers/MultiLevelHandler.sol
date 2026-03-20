@@ -198,7 +198,7 @@ contract MultiLevelHandler is Test {
             // Snapshot pool state at transition
             ghost_lastCurrentPool = game.currentPrizePoolView();
             ghost_lastNextPool = game.nextPrizePoolView();
-            ghost_lastFuturePool = game.futurePrizePoolTotalView();
+            ghost_lastFuturePool = game.futurePrizePoolView();
             ghost_lastClaimablePool = game.claimablePoolView();
         }
     }

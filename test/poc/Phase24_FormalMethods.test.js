@@ -48,7 +48,7 @@ describe("Phase 24: Formal Methods -- Property Verification PoCs", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
       const nextBefore = await game.nextPrizePoolView();
-      const futureBefore = await game.futurePrizePoolTotalView();
+      const futureBefore = await game.futurePrizePoolView();
 
       // Purchase 4 tickets at level 0 (price = 0.01 ETH, cost = 0.01 ETH)
       const price = hre.ethers.parseEther("0.01");
@@ -61,7 +61,7 @@ describe("Phase 24: Formal Methods -- Property Verification PoCs", function () {
       , { value: price });
 
       const nextAfter = await game.nextPrizePoolView();
-      const futureAfter = await game.futurePrizePoolTotalView();
+      const futureAfter = await game.futurePrizePoolView();
 
       const nextDelta = nextAfter - nextBefore;
       const futureDelta = futureAfter - futureBefore;
