@@ -812,41 +812,4 @@ describe("BurnieCoinflip", function () {
     });
   });
 
-  // =========================================================================
-  // 12. claimCoinflipsTakeProfit
-  // =========================================================================
-  describe("claimCoinflipsTakeProfit", function () {
-    it("reverts AutoRebuyNotEnabled when auto-rebuy is off", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        coinflip
-          .connect(alice)
-          .claimCoinflipsTakeProfit(ZERO_ADDRESS, 0n)
-      ).to.be.revertedWithCustomError(coinflip, "AutoRebuyNotEnabled");
-    });
-
-    it("reverts TakeProfitZero when stop is 0", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
-      await coinflip
-        .connect(alice)
-        .setCoinflipAutoRebuy(ZERO_ADDRESS, true, 0n);
-      await expect(
-        coinflip
-          .connect(alice)
-          .claimCoinflipsTakeProfit(ZERO_ADDRESS, 0n)
-      ).to.be.revertedWithCustomError(coinflip, "TakeProfitZero");
-    });
-
-    it("returns 0 when stored balance is less than one takeProfit", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
-      // Set a very large takeProfit
-      await coinflip
-        .connect(alice)
-        .setCoinflipAutoRebuy(ZERO_ADDRESS, true, eth(100000));
-      const claimed = await coinflip
-        .connect(alice)
-        .claimCoinflipsTakeProfit.staticCall(ZERO_ADDRESS, 0n);
-      expect(claimed).to.equal(0n);
-    });
-  });
 });

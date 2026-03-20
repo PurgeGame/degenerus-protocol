@@ -125,23 +125,6 @@ async function payAffiliateAsCoinStatic(
   return result;
 }
 
-/**
- * Call consumeDegeneretteCredit as the game contract.
- */
-async function consumeAsGame(hreEthers, game, affiliate, player, amount) {
-  const gameAddr = await game.getAddress();
-  await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
-  await hreEthers.provider.send("hardhat_setBalance", [
-    gameAddr,
-    "0x1000000000000000000",
-  ]);
-  const gameSigner = await hreEthers.getSigner(gameAddr);
-  const tx = await affiliate
-    .connect(gameSigner)
-    .consumeDegeneretteCredit(player, amount);
-  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
-  return tx;
-}
 
 // ---------------------------------------------------------------------------
 // Test Suite
@@ -164,12 +147,12 @@ describe("DegenerusAffiliate", function () {
       );
     });
 
-    it("pre-registers DGNRS affiliate code owned by dgnrs address", async function () {
-      const { affiliate, dgnrs } = await loadFixture(deployFullProtocol);
+    it("pre-registers DGNRS affiliate code owned by sdgnrs address", async function () {
+      const { affiliate, sdgnrs } = await loadFixture(deployFullProtocol);
       const dgnrsCode = hre.ethers.encodeBytes32String("DGNRS");
       const info = await affiliate.affiliateCode(dgnrsCode);
       expect(info.owner.toLowerCase()).to.equal(
-        (await dgnrs.getAddress()).toLowerCase()
+        (await sdgnrs.getAddress()).toLowerCase()
       );
     });
 
@@ -183,13 +166,6 @@ describe("DegenerusAffiliate", function () {
       expect(dgnrsInfo.kickback).to.equal(0);
     });
 
-    it("vault and dgnrs default payoutMode is Coinflip (0)", async function () {
-      const { affiliate } = await loadFixture(deployFullProtocol);
-      const vaultCode = hre.ethers.encodeBytes32String("VAULT");
-      const info = await affiliate.affiliateCode(vaultCode);
-      expect(info.payoutMode).to.equal(0);
-    });
-
     it("emits Affiliate(1) events for VAULT and DGNRS on construction", async function () {
       // Since we cannot catch constructor events directly via receipt in this test,
       // we verify the codes exist (side effect of constructor) which implies events fired.
@@ -199,12 +175,12 @@ describe("DegenerusAffiliate", function () {
       expect(info.owner).to.not.equal(ZERO_ADDRESS);
     });
 
-    it("getReferrer returns vault for vault's own address (cross-registered to DGNRS)", async function () {
-      const { affiliate, vault, dgnrs } = await loadFixture(deployFullProtocol);
-      // Vault was registered under DGNRS code, so its referrer is the DGNRS owner
+    it("getReferrer returns sdgnrs for vault's own address (cross-registered to DGNRS)", async function () {
+      const { affiliate, vault, sdgnrs } = await loadFixture(deployFullProtocol);
+      // Vault was registered under DGNRS code, so its referrer is the SDGNRS owner
       const referrer = await affiliate.getReferrer(await vault.getAddress());
       expect(referrer.toLowerCase()).to.equal(
-        (await dgnrs.getAddress()).toLowerCase()
+        (await sdgnrs.getAddress()).toLowerCase()
       );
     });
 
@@ -274,7 +250,6 @@ describe("DegenerusAffiliate", function () {
       const info = await affiliate.affiliateCode(code);
       expect(info.owner).to.equal(alice.address);
       expect(info.kickback).to.equal(10);
-      expect(info.payoutMode).to.equal(0); // default Coinflip
     });
 
     it("emits Affiliate(1, code, creator) event", async function () {
@@ -331,50 +306,7 @@ describe("DegenerusAffiliate", function () {
   });
 
   // =========================================================================
-  // 3. setAffiliatePayoutMode
-  // =========================================================================
-  describe("setAffiliatePayoutMode", function () {
-    it("owner can set payout mode to Degenerette (1)", async function () {
-      const { affiliate, alice } = await loadFixture(deployFullProtocol);
-      const code = toBytes32("PMTEST1");
-      await affiliate.connect(alice).createAffiliateCode(code, 0);
-      await affiliate.connect(alice).setAffiliatePayoutMode(code, 1); // Degenerette
-      expect(await affiliate.affiliatePayoutMode(code)).to.equal(1n);
-    });
-
-    it("owner can set payout mode to NitMode (2)", async function () {
-      const { affiliate, alice } = await loadFixture(deployFullProtocol);
-      const code = toBytes32("PMTEST2");
-      await affiliate.connect(alice).createAffiliateCode(code, 0);
-      await affiliate.connect(alice).setAffiliatePayoutMode(code, 2);
-      expect(await affiliate.affiliatePayoutMode(code)).to.equal(2n);
-    });
-
-    it("emits AffiliatePayoutModeUpdated event", async function () {
-      const { affiliate, alice } = await loadFixture(deployFullProtocol);
-      const code = toBytes32("PMTEST3");
-      await affiliate.connect(alice).createAffiliateCode(code, 0);
-      const tx = await affiliate
-        .connect(alice)
-        .setAffiliatePayoutMode(code, 1);
-      const ev = await getEvent(tx, affiliate, "AffiliatePayoutModeUpdated");
-      expect(ev.args.owner).to.equal(alice.address);
-      expect(ev.args.code).to.equal(code);
-      expect(ev.args.mode).to.equal(1);
-    });
-
-    it("reverts with Insufficient when caller is not the code owner", async function () {
-      const { affiliate, alice, bob } = await loadFixture(deployFullProtocol);
-      const code = toBytes32("PMTEST4");
-      await affiliate.connect(alice).createAffiliateCode(code, 0);
-      await expect(
-        affiliate.connect(bob).setAffiliatePayoutMode(code, 1)
-      ).to.be.revertedWithCustomError(affiliate, "Insufficient");
-    });
-  });
-
-  // =========================================================================
-  // 4. referPlayer
+  // 3. referPlayer
   // =========================================================================
   describe("referPlayer", function () {
     it("registers player under a valid code", async function () {
@@ -442,9 +374,11 @@ describe("DegenerusAffiliate", function () {
   // 5. getReferrer
   // =========================================================================
   describe("getReferrer", function () {
-    it("returns zero address for player with no referral", async function () {
-      const { affiliate, alice } = await loadFixture(deployFullProtocol);
-      expect(await affiliate.getReferrer(alice.address)).to.equal(ZERO_ADDRESS);
+    it("returns vault address for player with no referral", async function () {
+      const { affiliate, vault, alice } = await loadFixture(deployFullProtocol);
+      expect((await affiliate.getReferrer(alice.address)).toLowerCase()).to.equal(
+        (await vault.getAddress()).toLowerCase()
+      );
     });
 
     it("returns correct referrer after referral registration", async function () {
@@ -736,157 +670,7 @@ describe("DegenerusAffiliate", function () {
   });
 
   // =========================================================================
-  // 8. Degenerette Credit Payout Mode
-  // =========================================================================
-  describe("Degenerette payout mode", function () {
-    it("credits pendingDegeneretteCredit when payoutMode is Degenerette", async function () {
-      const { affiliate, coin, alice, bob } = await loadFixture(
-        deployFullProtocol
-      );
-      const code = toBytes32("DEGPAY");
-      await affiliate.connect(alice).createAffiliateCode(code, 0);
-      await affiliate.connect(alice).setAffiliatePayoutMode(code, 1); // Degenerette
-      await affiliate.connect(bob).referPlayer(code);
-
-      await payAffiliateAsCoin(
-        hre.ethers,
-        coin,
-        affiliate,
-        eth(100),
-        code,
-        bob.address,
-        1,
-        true
-      );
-
-      const pending = await affiliate.pendingDegeneretteCreditOf(alice.address);
-      expect(pending).to.be.gt(0n);
-    });
-
-    it("emits DegeneretteCreditUpdated when crediting", async function () {
-      const { affiliate, coin, alice, bob } = await loadFixture(
-        deployFullProtocol
-      );
-      const code = toBytes32("DEGCRED");
-      await affiliate.connect(alice).createAffiliateCode(code, 0);
-      await affiliate.connect(alice).setAffiliatePayoutMode(code, 1);
-      await affiliate.connect(bob).referPlayer(code);
-
-      const tx = await payAffiliateAsCoin(
-        hre.ethers,
-        coin,
-        affiliate,
-        eth(100),
-        code,
-        bob.address,
-        1,
-        true
-      );
-      const evs = await getEvents(tx, affiliate, "DegeneretteCreditUpdated");
-      expect(evs.length).to.be.gte(1);
-      const creditEv = evs.find((e) => e.args.credited === true);
-      expect(creditEv).to.not.be.undefined;
-    });
-  });
-
-  // =========================================================================
-  // 9. consumeDegeneretteCredit
-  // =========================================================================
-  describe("consumeDegeneretteCredit", function () {
-    it("reverts OnlyAuthorized when called by non-game address", async function () {
-      const { affiliate, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        affiliate.connect(alice).consumeDegeneretteCredit(alice.address, eth(10))
-      ).to.be.revertedWithCustomError(affiliate, "OnlyAuthorized");
-    });
-
-    it("returns 0 when player has no pending credit", async function () {
-      const { affiliate, game, alice } = await loadFixture(deployFullProtocol);
-      const gameAddr = await game.getAddress();
-      await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        gameAddr,
-        "0x1000000000000000000",
-      ]);
-      const gameSigner = await hre.ethers.getSigner(gameAddr);
-      const result = await affiliate
-        .connect(gameSigner)
-        .consumeDegeneretteCredit.staticCall(alice.address, eth(100));
-      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
-      expect(result).to.equal(0n);
-    });
-
-    it("consumes pending credit up to requested amount", async function () {
-      const { affiliate, coin, game, alice, bob } = await loadFixture(
-        deployFullProtocol
-      );
-      const code = toBytes32("DEGCONS");
-      await affiliate.connect(alice).createAffiliateCode(code, 0);
-      await affiliate.connect(alice).setAffiliatePayoutMode(code, 1);
-      await affiliate.connect(bob).referPlayer(code);
-
-      // Credit alice with degenerette credit
-      await payAffiliateAsCoin(
-        hre.ethers,
-        coin,
-        affiliate,
-        eth(100),
-        code,
-        bob.address,
-        1,
-        true
-      );
-
-      const before = await affiliate.pendingDegeneretteCreditOf(alice.address);
-      expect(before).to.be.gt(0n);
-
-      // Consume partial
-      const consumeAmt = before / 2n;
-      await consumeAsGame(hre.ethers, game, affiliate, alice.address, consumeAmt);
-
-      const after = await affiliate.pendingDegeneretteCreditOf(alice.address);
-      // Should have consumed approximately half
-      expect(after).to.be.lt(before);
-    });
-
-    it("emits DegeneretteCreditUpdated(false) when consuming", async function () {
-      const { affiliate, coin, game, alice, bob } = await loadFixture(
-        deployFullProtocol
-      );
-      const code = toBytes32("DEGCNE");
-      await affiliate.connect(alice).createAffiliateCode(code, 0);
-      await affiliate.connect(alice).setAffiliatePayoutMode(code, 1);
-      await affiliate.connect(bob).referPlayer(code);
-
-      await payAffiliateAsCoin(
-        hre.ethers,
-        coin,
-        affiliate,
-        eth(100),
-        code,
-        bob.address,
-        1,
-        true
-      );
-
-      const pending = await affiliate.pendingDegeneretteCreditOf(alice.address);
-      const tx = await consumeAsGame(
-        hre.ethers,
-        game,
-        affiliate,
-        alice.address,
-        pending
-      );
-      const evs = await getEvents(tx, affiliate, "DegeneretteCreditUpdated");
-      const consumeEv = evs.find((e) => e.args.credited === false);
-      expect(consumeEv).to.not.be.undefined;
-      expect(consumeEv.args.amount).to.equal(pending);
-      expect(consumeEv.args.newBalance).to.equal(0n);
-    });
-  });
-
-  // =========================================================================
-  // 10. View Functions
+  // 8. View Functions
   // =========================================================================
   describe("affiliateTop / affiliateScore / affiliateBonusPointsBest", function () {
     it("affiliateTop returns zero address for level with no activity", async function () {
@@ -1202,7 +986,7 @@ describe("DegenerusAffiliate", function () {
       expect(result).to.equal(eth("0.0625"));
     });
 
-    it("no taper when activity score is below 15000", async function () {
+    it("no taper when activity score is below 10000", async function () {
       const { affiliate, coin, alice, bob } = await loadFixture(
         deployFullProtocol
       );
@@ -1211,13 +995,13 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(bob).referPlayer(code);
 
       const result = await payAffiliateAsCoinStatic(
-        hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 14999
+        hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 9999
       );
       // Same as no-taper: 0.25 * 25% = 0.0625
       expect(result).to.equal(eth("0.0625"));
     });
 
-    it("50% floor taper when activity score >= 25500", async function () {
+    it("25% floor taper when activity score >= 25500", async function () {
       const { affiliate, coin, alice, bob } = await loadFixture(
         deployFullProtocol
       );
@@ -1225,15 +1009,15 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(alice).createAffiliateCode(code, 25);
       await affiliate.connect(bob).referPlayer(code);
 
-      // At max taper: scaledAmount * 50% => 0.25 * 0.5 = 0.125
-      // kickback = 0.125 * 25% = 0.03125
+      // At max taper: scaledAmount * 25% => 0.25 * 0.25 = 0.0625
+      // kickback = 0.0625 * 25% = 0.015625
       const result = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 25500
       );
-      expect(result).to.equal(eth("0.03125"));
+      expect(result).to.equal(eth("0.015625"));
     });
 
-    it("50% floor also applies above 25500", async function () {
+    it("25% floor also applies above 25500", async function () {
       const { affiliate, coin, alice, bob } = await loadFixture(
         deployFullProtocol
       );
@@ -1244,8 +1028,8 @@ describe("DegenerusAffiliate", function () {
       const result = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 30000
       );
-      // Same as 25500: 0.03125
-      expect(result).to.equal(eth("0.03125"));
+      // Same as 25500: 0.015625
+      expect(result).to.equal(eth("0.015625"));
     });
 
     it("linear taper at midpoint (score 20250)", async function () {
@@ -1298,18 +1082,18 @@ describe("DegenerusAffiliate", function () {
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 0
       );
 
-      // Max taper (50% floor): 0.25 * 50% = 0.125 * 25% kickback = 0.03125
+      // Max taper (25% floor): 0.25 * 25% = 0.0625 * 25% kickback = 0.015625
       const maxTaper = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 25500
       );
 
       expect(noTaper).to.equal(eth("0.0625"));
-      expect(maxTaper).to.equal(eth("0.03125"));
-      // Max taper kickback should be exactly half of no-taper kickback
-      expect(maxTaper * 2n).to.equal(noTaper);
+      expect(maxTaper).to.equal(eth("0.015625"));
+      // Max taper kickback should be exactly one quarter of no-taper kickback
+      expect(maxTaper * 4n).to.equal(noTaper);
     });
 
-    it("taper at exact start boundary (15000) applies reduction", async function () {
+    it("taper at exact start boundary (10000) applies reduction", async function () {
       const { affiliate, coin, alice, bob } = await loadFixture(
         deployFullProtocol
       );
@@ -1317,10 +1101,10 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(alice).createAffiliateCode(code, 25);
       await affiliate.connect(bob).referPlayer(code);
 
-      // Score exactly at 15000: excess = 0, reductionBps = 0, 100% payout
+      // Score exactly at 10000: excess = 0, reductionBps = 0, 100% payout
       // Same as no taper
       const result = await payAffiliateAsCoinStatic(
-        hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 15000
+        hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 10000
       );
       expect(result).to.equal(eth("0.0625"));
     });
@@ -1334,11 +1118,11 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(bob).referPlayer(code);
 
       // Recycled: 5% scale => 0.05 ETH
-      // Max taper: 0.05 * 50% = 0.025 => 25% kickback = 0.00625
+      // Max taper (25% floor): 0.05 * 25% = 0.0125 => 25% kickback = 0.003125
       const result = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, false, 25500
       );
-      expect(result).to.equal(eth("0.00625"));
+      expect(result).to.equal(eth("0.003125"));
 
       // Without taper: 0.05 * 25% = 0.0125
       const noTaper = await payAffiliateAsCoinStatic(
@@ -1355,12 +1139,12 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(alice).createAffiliateCode(code, 25);
       await affiliate.connect(bob).referPlayer(code);
 
-      // 100 ETH fresh L1 => 25 ETH scaled, capped to 0.5 ETH, then 50% taper => 0.25 ETH
-      // Kickback = 0.25 * 25% = 0.0625
+      // 100 ETH fresh L1 => 25 ETH scaled, capped to 0.5 ETH, then 25% taper => 0.125 ETH
+      // Kickback = 0.125 * 25% = 0.03125
       const result = await payAffiliateAsCoinStatic(
         hre.ethers, coin, affiliate, eth(100), code, bob.address, 1, true, 25500
       );
-      expect(result).to.equal(eth("0.0625"));
+      expect(result).to.equal(eth("0.03125"));
 
       // Leaderboard should record the full capped amount (before taper): 0.5 ETH
       await payAffiliateAsCoin(

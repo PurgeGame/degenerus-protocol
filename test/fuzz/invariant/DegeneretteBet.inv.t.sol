@@ -39,7 +39,7 @@ contract DegeneretteBetInvariant is DeployProtocol {
         uint256 obligations = game.currentPrizePoolView()
             + game.nextPrizePoolView()
             + game.claimablePoolView()
-            + game.futurePrizePoolTotalView();
+            + game.futurePrizePoolView();
 
         assertGe(
             gameBalance,

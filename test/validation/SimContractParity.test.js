@@ -57,7 +57,7 @@ describe("Sim vs Contract Parity", function () {
 
       // Read initial pool state
       const nextBefore = await game.nextPrizePoolView();
-      const futureBefore = await game.futurePrizePoolTotalView();
+      const futureBefore = await game.futurePrizePoolView();
 
       // Get current price
       const info = await game.purchaseInfo();
@@ -74,7 +74,7 @@ describe("Sim vs Contract Parity", function () {
 
       // Read post-purchase pool state
       const nextAfter = await game.nextPrizePoolView();
-      const futureAfter = await game.futurePrizePoolTotalView();
+      const futureAfter = await game.futurePrizePoolView();
 
       const nextDelta = nextAfter - nextBefore;
       const futureDelta = futureAfter - futureBefore;
@@ -155,7 +155,7 @@ describe("Sim vs Contract Parity", function () {
       let cumulativeFuture = 0n;
 
       const nextBefore = await game.nextPrizePoolView();
-      const futureBefore = await game.futurePrizePoolTotalView();
+      const futureBefore = await game.futurePrizePoolView();
 
       for (const buyer of buyers) {
         const info = await game.purchaseInfo();
@@ -165,7 +165,7 @@ describe("Sim vs Contract Parity", function () {
 
         // Pre-purchase pools
         const nextPre = await game.nextPrizePoolView();
-        const futurePre = await game.futurePrizePoolTotalView();
+        const futurePre = await game.futurePrizePoolView();
 
         // Purchase
         await game
@@ -174,7 +174,7 @@ describe("Sim vs Contract Parity", function () {
 
         // Post-purchase pools
         const nextPost = await game.nextPrizePoolView();
-        const futurePost = await game.futurePrizePoolTotalView();
+        const futurePost = await game.futurePrizePoolView();
 
         const nextDelta = nextPost - nextPre;
         const futureDelta = futurePost - futurePre;
@@ -193,7 +193,7 @@ describe("Sim vs Contract Parity", function () {
 
       // Verify cumulative balances match
       const nextFinal = await game.nextPrizePoolView();
-      const futureFinal = await game.futurePrizePoolTotalView();
+      const futureFinal = await game.futurePrizePoolView();
 
       expect(nextFinal - nextBefore).to.equal(cumulativeNext);
       expect(futureFinal - futureBefore).to.equal(cumulativeFuture);

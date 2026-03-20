@@ -880,9 +880,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 if (score > 30_500) score = 30_500;
                 uint256 bonusQty = (uint256(adjustedQty32) * score) / 30_500;
 
-                // Per-player 10 ETH cap across multiple purchases at this x00 level
+                // Per-player 20 ETH cap across multiple purchases at this x00 level
                 if (bonusQty != 0) {
-                    uint256 maxBonus = (10 ether) / (priceWei >> 2);
+                    uint256 maxBonus = (20 ether) / (priceWei >> 2);
                     uint256 used = centuryBonusLevel == targetLevel
                         ? centuryBonusUsed[buyer] : 0;
                     uint256 remaining = maxBonus > used ? maxBonus - used : 0;

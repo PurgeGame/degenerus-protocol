@@ -146,14 +146,14 @@ describe("Paper Parity (Phase 46)", function () {
 
       // Actually purchase to verify contract accepts exact amount
       const nextBefore = await game.nextPrizePoolView();
-      const futureBefore = await game.futurePrizePoolTotalView();
+      const futureBefore = await game.futurePrizePoolView();
       await game
         .connect(alice)
         .purchase(alice.address, qty, 0, ZeroHash, 0, { value: expectedCost });
 
       // Verify pools received funds (90/10 split)
       const nextAfter = await game.nextPrizePoolView();
-      const futureAfter = await game.futurePrizePoolTotalView();
+      const futureAfter = await game.futurePrizePoolView();
       expect(nextAfter + futureAfter).to.be.gt(nextBefore + futureBefore);
     });
 
@@ -197,7 +197,7 @@ describe("Paper Parity (Phase 46)", function () {
       const priceWei = info.priceWei;
 
       const nextBefore = await game.nextPrizePoolView();
-      const futureBefore = await game.futurePrizePoolTotalView();
+      const futureBefore = await game.futurePrizePoolView();
 
       const qty = 400;
       const costWei = priceWei;
@@ -207,7 +207,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       const nextDelta = (await game.nextPrizePoolView()) - nextBefore;
       const futureDelta =
-        (await game.futurePrizePoolTotalView()) - futureBefore;
+        (await game.futurePrizePoolView()) - futureBefore;
       const total = nextDelta + futureDelta;
 
       // 10% to future: PURCHASE_TO_FUTURE_BPS = 1000 (10%)
@@ -224,7 +224,7 @@ describe("Paper Parity (Phase 46)", function () {
       const { game, alice } = await loadFixture(deployWithTester);
 
       const nextBefore = await game.nextPrizePoolView();
-      const futureBefore = await game.futurePrizePoolTotalView();
+      const futureBefore = await game.futurePrizePoolView();
 
       // Lootbox minimum is 0.01 ETH
       const lootboxAmount = ethers.parseEther("0.01");
@@ -237,7 +237,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       const nextDelta = (await game.nextPrizePoolView()) - nextBefore;
       const futureDelta =
-        (await game.futurePrizePoolTotalView()) - futureBefore;
+        (await game.futurePrizePoolView()) - futureBefore;
       const total = nextDelta + futureDelta;
 
       if (total > 0n) {
@@ -955,7 +955,7 @@ describe("Paper Parity (Phase 46)", function () {
       const { game, alice } = await loadFixture(deployWithTester);
 
       const nextBefore = await game.nextPrizePoolView();
-      const futureBefore = await game.futurePrizePoolTotalView();
+      const futureBefore = await game.futurePrizePoolView();
 
       const price = ethers.parseEther("2.4");
       await game
@@ -964,7 +964,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       const nextDelta = (await game.nextPrizePoolView()) - nextBefore;
       const futureDelta =
-        (await game.futurePrizePoolTotalView()) - futureBefore;
+        (await game.futurePrizePoolView()) - futureBefore;
 
       const expectedNext = (price * 3000n) / 10000n;
       const expectedFuture = price - expectedNext;

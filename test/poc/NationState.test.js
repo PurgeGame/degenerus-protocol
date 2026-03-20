@@ -70,7 +70,7 @@ describe("Nation-State Attacker PoC", function () {
     it("plain ETH transfer increases futurePrizePool irrecoverably", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
-      const futurePoolBefore = await game.futurePrizePoolTotalView();
+      const futurePoolBefore = await game.futurePrizePoolView();
       const sendAmount = hre.ethers.parseEther("1.0");
 
       await alice.sendTransaction({
@@ -78,7 +78,7 @@ describe("Nation-State Attacker PoC", function () {
         value: sendAmount,
       });
 
-      const futurePoolAfter = await game.futurePrizePoolTotalView();
+      const futurePoolAfter = await game.futurePrizePoolView();
       expect(futurePoolAfter - futurePoolBefore).to.equal(sendAmount);
     });
   });

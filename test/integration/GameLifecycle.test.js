@@ -368,7 +368,7 @@ describe("GameLifecycle", function () {
       await purchaseTickets(game, alice, 100, eth("0.01"));
 
       // futurePrizePool receives 10% (PURCHASE_TO_FUTURE_BPS=1000) of prize contribution.
-      const future = await game.futurePrizePoolTotalView();
+      const future = await game.futurePrizePoolView();
       expect(future).to.be.gt(0n);
     });
 
@@ -376,10 +376,10 @@ describe("GameLifecycle", function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
 
       await purchaseTickets(game, alice, 100, eth("0.01"));
-      const futureAfterAlice = await game.futurePrizePoolTotalView();
+      const futureAfterAlice = await game.futurePrizePoolView();
 
       await purchaseTickets(game, bob, 100, eth("0.01"));
-      const futureAfterBob = await game.futurePrizePoolTotalView();
+      const futureAfterBob = await game.futurePrizePoolView();
 
       expect(futureAfterBob).to.be.gt(futureAfterAlice);
     });

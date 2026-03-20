@@ -207,7 +207,7 @@ contract WhaleSybilHandler is Test {
         uint256 obligations = game.currentPrizePoolView()
             + game.nextPrizePoolView()
             + game.claimablePoolView()
-            + game.futurePrizePoolTotalView();
+            + game.futurePrizePoolView();
 
         if (obligations > 0) {
             uint256 ratio = (gameBalance * 10_000) / obligations;

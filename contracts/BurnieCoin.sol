@@ -264,6 +264,15 @@ contract BurnieCoin {
     /// @custom:security Only ContractAddresses.VAULT/game can increase; only ContractAddresses.VAULT can mint from it.
 
     /*+======================================================================+
+      |                         CONSTRUCTOR                                  |
+      +======================================================================+*/
+
+    /// @notice Seeds the sDGNRS backing reserve with 2 M BURNIE (fresh supply).
+    constructor() {
+        _mint(ContractAddresses.SDGNRS, 2_000_000 ether);
+    }
+
+    /*+======================================================================+
       |                         VIEW HELPERS                                 |
       +======================================================================+
       |  Read-only functions for UIs and external contracts to query state.  |

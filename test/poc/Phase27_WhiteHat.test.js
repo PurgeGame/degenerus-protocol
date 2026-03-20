@@ -19,10 +19,10 @@ describe("Phase 27: White Hat Completionist Attestation", function () {
     it("should accept plain ETH and add to futurePrizePool", async function () {
       const { game } = await loadFixture(deployFixture);
       const [signer] = await hre.ethers.getSigners();
-      const poolBefore = await game.futurePrizePoolTotalView();
+      const poolBefore = await game.futurePrizePoolView();
       const amount = hre.ethers.parseEther("0.01");
       await signer.sendTransaction({ to: game.target, value: amount });
-      const poolAfter = await game.futurePrizePoolTotalView();
+      const poolAfter = await game.futurePrizePoolView();
       expect(poolAfter - poolBefore).to.equal(amount);
     });
   });

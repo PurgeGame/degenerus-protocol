@@ -83,9 +83,9 @@ describe("BurnieCoin", function () {
       expect(await coin.decimals()).to.equal(18);
     });
 
-    it("totalSupply is 0 on deploy", async function () {
+    it("totalSupply is 2M on deploy (sDGNRS backing reserve)", async function () {
       const { coin } = await getFixture();
-      expect(await coin.totalSupply()).to.equal(0n);
+      expect(await coin.totalSupply()).to.equal(eth(2_000_000));
     });
 
     it("vaultMintAllowance is 2,000,000 BURNIE on deploy", async function () {
@@ -336,7 +336,7 @@ describe("BurnieCoin", function () {
 
       await stopImpersonate(gameAddr);
       expect(await coin.balanceOf(alice.address)).to.equal(eth(1000));
-      expect(await coin.totalSupply()).to.equal(eth(1000));
+      expect(await coin.totalSupply()).to.equal(eth(2_000_000) + eth(1000));
     });
 
     it("reverts with OnlyGame when called by non-GAME address", async function () {
