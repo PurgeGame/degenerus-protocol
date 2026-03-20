@@ -162,7 +162,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
      * @param player Address of the player making the purchase.
      * @param lvl Current game level.
      * @param mintUnits Scaled ticket units purchased.
-     * @return coinReward BURNIE amount to credit as coinflip stake (currently 0).
      *
      * ## Activity Score State Updates
      *
@@ -180,7 +179,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         address player,
         uint24 lvl,
         uint32 mintUnits
-    ) external payable returns (uint256 coinReward) {
+    ) external payable {
         // Load previous packed data
         uint256 prevData = mintPacked_[player];
         uint256 data;
@@ -220,7 +219,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             if (data != prevData) {
                 mintPacked_[player] = data;
             }
-            return coinReward;
+            return;
         }
 
         // ---------------------------------------------------------------------
@@ -240,7 +239,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             if (data != prevData) {
                 mintPacked_[player] = data;
             }
-            return coinReward;
+            return;
         }
 
         // ---------------------------------------------------------------------
@@ -284,13 +283,18 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         if (data != prevData) {
             mintPacked_[player] = data;
         }
-        return coinReward;
+        return;
     }
 
     // -------------------------------------------------------------------------
     // Future Ticket Activation
     // -------------------------------------------------------------------------
 
+    /// @notice Activate future-pool tickets for a given level, bounded by a write budget.
+    /// @param lvl The level whose queued tickets to process.
+    /// @return worked   True if at least one ticket was minted this call.
+    /// @return finished True if the entire queue for `lvl` has been drained.
+    /// @return writesUsed Write-budget units consumed (each storage write or skip costs one unit).
     function processFutureTicketBatch(
         uint24 lvl
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
@@ -908,8 +912,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         } else {
             uint32 mintUnits = adjustedQty32;
 
-            (uint256 streakBonus, ) = IDegenerusGame(address(this))
-                .recordMint{value: value}(
+            IDegenerusGame(address(this)).recordMint{value: value}(
                 payer,
                 targetLevel,
                 costWei,
@@ -996,7 +999,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 );
             }
 
-            bonusCredit = streakBonus + kickback;
+            bonusCredit = kickback;
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
             bonusCredit += coinCost / 10;
             if (quantity >= 10 * 4 * TICKET_SCALE) {

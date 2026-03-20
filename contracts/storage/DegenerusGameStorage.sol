@@ -698,13 +698,13 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Compute the ticket queue key for the write slot.
     ///      Slot 0 uses raw level, slot 1 sets bit 23.
-    function _tqWriteKey(uint24 level) internal view returns (uint24) {
-        return ticketWriteSlot != 0 ? level | TICKET_SLOT_BIT : level;
+    function _tqWriteKey(uint24 lvl) internal view returns (uint24) {
+        return ticketWriteSlot != 0 ? lvl | TICKET_SLOT_BIT : lvl;
     }
 
     /// @dev Compute the ticket queue key for the read slot (opposite of write).
-    function _tqReadKey(uint24 level) internal view returns (uint24) {
-        return ticketWriteSlot == 0 ? level | TICKET_SLOT_BIT : level;
+    function _tqReadKey(uint24 lvl) internal view returns (uint24) {
+        return ticketWriteSlot == 0 ? lvl | TICKET_SLOT_BIT : lvl;
     }
 
     // =========================================================================
@@ -970,28 +970,6 @@ abstract contract DegenerusGameStorage {
     mapping(address => mapping(address => bool)) internal operatorApprovals;
 
     // =========================================================================
-    // ETH Perk Burn Tracking
-    // =========================================================================
-
-    /// @dev Level associated with the current ETH perk burn counter.
-    uint24 internal ethPerkLevel;
-
-    /// @dev Count of ETH perk tokens burned this level.
-    uint16 internal ethPerkBurnCount;
-
-    /// @dev Level associated with the current BURNIE perk burn counter.
-    uint24 internal burniePerkLevel;
-
-    /// @dev Count of BURNIE perk tokens burned this level.
-    uint16 internal burniePerkBurnCount;
-
-    /// @dev Level associated with the current DGNRS perk burn counter.
-    uint24 internal dgnrsPerkLevel;
-
-    /// @dev Count of DGNRS perk tokens burned this level.
-    uint16 internal dgnrsPerkBurnCount;
-
-    // =========================================================================
     // Affiliate DGNRS Claims
     // =========================================================================
 
@@ -1009,13 +987,6 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Cumulative DGNRS claimed per level from the segregated allocation.
     mapping(uint24 => uint256) internal levelDgnrsClaimed;
-
-    // =========================================================================
-    // Special Perk Expected Count
-    // =========================================================================
-
-    /// @dev Expected special perk burn count for the current level (1% of purchase count).
-    uint24 internal perkExpectedCount;
 
     // =========================================================================
     // Deity Pass (Perma Whale) Grants
@@ -1372,9 +1343,6 @@ abstract contract DegenerusGameStorage {
 
     /// @dev BURNIE lootbox amounts keyed by lootbox RNG index and player.
     mapping(uint48 => mapping(address => uint256)) internal lootboxBurnie;
-
-    /// @dev Refundable deity pass ETH per buyer before level 1 starts.
-    mapping(address => uint256) internal deityPassRefundable;
 
     // =========================================================================
     // Lootbox Module Storage (for delegatecall modules)

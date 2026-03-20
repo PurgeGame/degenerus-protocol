@@ -247,12 +247,11 @@ interface IDegenerusGameMintModule {
     /// @param player Address of the minting player
     /// @param lvl Current game level
     /// @param mintUnits Number of units being minted
-    /// @return coinReward Amount of coin rewarded for the mint
     function recordMintData(
         address player,
         uint24 lvl,
         uint32 mintUnits
-    ) external payable returns (uint256 coinReward);
+    ) external payable;
 
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyer Address of the buyer

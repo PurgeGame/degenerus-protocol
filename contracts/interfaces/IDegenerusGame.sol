@@ -99,7 +99,6 @@ interface IDegenerusGame {
     /// @param costWei Total cost in wei.
     /// @param mintUnits Number of units purchased.
     /// @param payKind Payment method used.
-    /// @return coinReward BURNIE reward amount.
     /// @return newClaimableBalance Updated claimable balance if using claimable payment.
     function recordMint(
         address player,
@@ -107,7 +106,7 @@ interface IDegenerusGame {
         uint256 costWei,
         uint32 mintUnits,
         MintPaymentKind payKind
-    ) external payable returns (uint256 coinReward, uint256 newClaimableBalance);
+    ) external payable returns (uint256 newClaimableBalance);
 
     /// @notice Consume coinflip boon for next coinflip stake bonus.
     /// @dev Grants bonus to the next coinflip deposit.
