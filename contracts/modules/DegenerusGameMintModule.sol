@@ -20,7 +20,7 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
  *
  * ## Functions
  *
- * - `recordMintData`: Track per-player mint history and calculate BURNIE rewards
+ * - `recordMintData`: Track per-player mint history and update Activity Score metrics
  *
  * ## Activity Score System
  *
@@ -873,7 +873,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         }
         uint32 adjustedQty32 = uint32(adjustedQuantity);
 
-        // x00 century bonus: up to 2x tickets scaling with activity score, 10 ETH cap per player.
+        // x00 century bonus: up to 2x tickets scaling with activity score, 20 ETH cap per player.
         if (targetLevel % 100 == 0) {
             uint256 score = IDegenerusGame(address(this)).playerActivityScore(buyer);
             if (score != 0) {

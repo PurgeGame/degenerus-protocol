@@ -243,7 +243,7 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
-    /// @notice Records mint data and calculates coin rewards
+    /// @notice Records mint data and updates Activity Score metrics
     /// @param player Address of the minting player
     /// @param lvl Current game level
     /// @param mintUnits Number of units being minted
