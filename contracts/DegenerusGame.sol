@@ -377,7 +377,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param costWei Total cost in wei for this mint.
     /// @param mintUnits Number of mint units purchased.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
-    /// @return coinReward BURNIE reward credited for this mint.
     /// @return newClaimableBalance Player's claimable balance after deduction (0 if DirectEth).
     /// @custom:reverts E If caller is not self-call context or payment validation fails.
     function recordMint(
@@ -389,7 +388,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     )
         external
         payable
-        returns (uint256 coinReward, uint256 newClaimableBalance)
+        returns (uint256 newClaimableBalance)
     {
         if (msg.sender != address(this)) revert E();
         uint256 prizeContribution;
@@ -417,7 +416,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             }
         }
 
-        coinReward = _recordMintDataModule(player, lvl, mintUnits);
+        _recordMintDataModule(player, lvl, mintUnits);
         uint256 earlybirdEth = 0;
         if (payKind == MintPaymentKind.DirectEth) {
             earlybirdEth = msg.value > costWei ? costWei : msg.value;
@@ -1035,16 +1034,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @dev Record mint data via mint module delegatecall.
-    ///      Updates player's mint history and calculates BURNIE reward.
+    ///      Updates player's mint history.
     /// @param player Player address being credited.
     /// @param lvl Level at which mint occurred.
     /// @param mintUnits Number of mint units purchased.
-    /// @return coinReward BURNIE tokens to credit to player.
     function _recordMintDataModule(
         address player,
         uint24 lvl,
         uint32 mintUnits
-    ) private returns (uint256 coinReward) {
+    ) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_MINT_MODULE
             .delegatecall(
@@ -1056,8 +1054,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 )
             );
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert E();
-        return abi.decode(data, (uint256));
     }
 
     /*+========================================================================================+
@@ -1537,12 +1533,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Enable or disable auto-rebuy for decimator claims.
-    /// @dev Default is enabled. DGNRS is not permitted to toggle this setting.
+    /// @dev Default is enabled.
     /// @param player Player address to configure (address(0) = msg.sender).
     /// @param enabled True to enable auto-rebuy for decimator claims, false to disable.
     function setDecimatorAutoRebuy(address player, bool enabled) external {
         player = _resolvePlayer(player);
-        if (player == ContractAddresses.SDGNRS) revert E();
         if (rngLockedFlag) revert RngLocked();
         bool disabled = !enabled;
         if (decimatorAutoRebuyDisabled[player] != disabled) {
