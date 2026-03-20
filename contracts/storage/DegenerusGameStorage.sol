@@ -1550,7 +1550,7 @@ abstract contract DegenerusGameStorage {
     uint24 internal centuryBonusLevel;
 
     /// @dev Bonus entries awarded per player at the current x00 level.
-    ///      Used to enforce the 10 ETH cap across multiple purchases.
+    ///      Used to enforce the 20 ETH cap across multiple purchases.
     mapping(address => uint256) internal centuryBonusUsed;
 
     // =========================================================================
