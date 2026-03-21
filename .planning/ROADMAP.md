@@ -86,7 +86,7 @@
 
 - [x] **Phase 50: Skim Redesign Audit** - Verify correctness and economic soundness of the 5-step futurepool skim pipeline (completed 2026-03-21)
 - [x] **Phase 51: Redemption Lootbox Audit** - Verify correctness of 50/50 redemption split, daily cap, and cross-contract access control (completed 2026-03-21)
-- [ ] **Phase 52: Invariant Test Suite** - Fuzz invariants proving skim conservation, take cap, and redemption lootbox split
+- [x] **Phase 52: Invariant Test Suite** - Fuzz invariants proving skim conservation, take cap, and redemption lootbox split (completed 2026-03-21)
 - [ ] **Phase 53: Consolidated Findings** - Master findings table with all v3.4 discoveries plus outstanding v3.2 LOW/INFO
 
 ## Phase Details
@@ -132,11 +132,11 @@ Plans:
   1. Skim conservation invariant passes: nextPool + futurePool + yieldAccumulator is constant across all fuzzed inputs (extends existing FuturepoolSkim.t.sol suite)
   2. Take cap invariant passes: skim take never exceeds 80% of nextPool across all fuzzed inputs
   3. Redemption lootbox split invariant passes: direct ETH + lootbox ETH sums to total rolled ETH for every redemption resolution
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 52-01-PLAN.md — Skim conservation + take cap fuzz invariants (INV-01, INV-02)
-- [ ] 52-02-PLAN.md — Redemption lootbox split invariant: arithmetic + lifecycle (INV-03)
+- [x] 52-02-PLAN.md — Redemption lootbox split invariant: arithmetic + lifecycle (INV-03)
 
 ### Phase 53: Consolidated Findings
 **Goal**: All v3.4 audit findings are consolidated into a single master table sorted by severity, ready for manual triage before C4A submission
@@ -154,7 +154,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 50. Skim Redesign Audit | 3/3 | Complete    | 2026-03-21 |
 | 51. Redemption Lootbox Audit | 4/4 | Complete    | 2026-03-21 |
-| 52. Invariant Test Suite | 1/2 | In Progress|  |
+| 52. Invariant Test Suite | 2/2 | Complete   | 2026-03-21 |
 | 53. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred
