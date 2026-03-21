@@ -106,7 +106,12 @@ Plans:
   2. Handler contract correctly randomizes burn/claim/advanceGame call sequences to explore adversarial state paths
   3. Segregated ETH invariant catches any accounting drift (rounding dust bounded and documented)
   4. Supply consistency invariant verifies totalSupply correctness after arbitrary burn/claim sequences
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 45-01-PLAN.md -- Apply Phase 44 code fixes (CP-08, CP-06, Seam-1, CP-07) and resolve QueueDoubleBuffer compilation blocker
+- [ ] 45-02-PLAN.md -- Create RedemptionHandler with burn/advance/claim actions and ghost variable tracking
+- [ ] 45-03-PLAN.md -- Create RedemptionInvariants with 7 invariant assertions, run and verify all pass
 
 ### Phase 46: Adversarial Sweep + Economic Analysis
 **Goal**: All 29 contracts are swept for High/Medium C4A findings from a fresh-eyes perspective, composability attacks are catalogued, and the gambling mechanism is proven economically fair with no rational actor exploits
@@ -154,7 +159,7 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 44. Delta Audit + Redemption Correctness | 3/3 | Complete    | 2026-03-21 |
-| 45. Invariant Test Suite | 0/TBD | Not started | - |
+| 45. Invariant Test Suite | 0/3 | Planned | - |
 | 46. Adversarial Sweep + Economic Analysis | 0/TBD | Not started | - |
 | 47. Gas Optimization | 0/2 | Planned | - |
 | 48. Documentation Sync | 0/TBD | Not started | - |
@@ -166,4 +171,4 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 - **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-20 after Phase 47 planning*
+*Last updated: 2026-03-21 after Phase 45 planning*
