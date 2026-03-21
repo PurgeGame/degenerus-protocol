@@ -132,7 +132,11 @@ Plans:
   1. Skim conservation invariant passes: nextPool + futurePool + yieldAccumulator is constant across all fuzzed inputs (extends existing FuturepoolSkim.t.sol suite)
   2. Take cap invariant passes: skim take never exceeds 80% of nextPool across all fuzzed inputs
   3. Redemption lootbox split invariant passes: direct ETH + lootbox ETH sums to total rolled ETH for every redemption resolution
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 52-01-PLAN.md — Skim conservation + take cap fuzz invariants (INV-01, INV-02)
+- [ ] 52-02-PLAN.md — Redemption lootbox split invariant: arithmetic + lifecycle (INV-03)
 
 ### Phase 53: Consolidated Findings
 **Goal**: All v3.4 audit findings are consolidated into a single master table sorted by severity, ready for manual triage before C4A submission
@@ -148,9 +152,9 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 50. Skim Redesign Audit | 3/3 | Complete   | 2026-03-21 |
-| 51. Redemption Lootbox Audit | 4/4 | Complete   | 2026-03-21 |
-| 52. Invariant Test Suite | 0/TBD | Not started | - |
+| 50. Skim Redesign Audit | 3/3 | Complete    | 2026-03-21 |
+| 51. Redemption Lootbox Audit | 4/4 | Complete    | 2026-03-21 |
+| 52. Invariant Test Suite | 0/2 | Not started | - |
 | 53. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred
@@ -161,4 +165,4 @@ Plans:
 - Storage packing implementation — 3 opportunities documented in v3.3 gas analysis
 
 ---
-*Last updated: 2026-03-21 after Phase 51 planning (4 plans created)*
+*Last updated: 2026-03-21 after Phase 52 planning (2 plans created)*
