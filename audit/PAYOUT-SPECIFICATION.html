@@ -359,7 +359,7 @@ details summary {
     <li><a href="#cat-scatter">Scatter / Decimator</a> <span class="toc-reqs">PAY-03, PAY-04, PAY-05, PAY-06</span></li>
     <li><a href="#cat-coinflip">Coinflip Economy</a> <span class="toc-reqs">PAY-07, PAY-08, PAY-18, PAY-19</span></li>
     <li><a href="#cat-ancillary">Ancillary Payouts</a> <span class="toc-reqs">PAY-09, PAY-10, PAY-11, PAY-12, PAY-13, PAY-17</span></li>
-    <li><a href="#cat-burns">Token Burns</a> <span class="toc-reqs">PAY-14, PAY-15</span></li>
+    <li><a href="#cat-burns">Token Burns</a> <span class="toc-reqs">PAY-14, PAY-15, PAY-16</span></li>
     <li><a href="#cat-gameover">GAMEOVER Terminal Distribution</a> <span class="toc-reqs">GO-01, GO-02, GO-07, GO-08</span></li>
     <li><a href="#cross-claimable">Cross-System: claimablePool Invariant</a></li>
     <li><a href="#cross-issues">Cross-System: Known Issues</a></li>
@@ -1783,6 +1783,8 @@ advanceBounty = (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price;
       <h4>Formula</h4>
       <pre><code>// PAY-14 -- StakedDegenerusStonk.sol:373-435
 totalMoney = ethBal + stethBal + claimableEth;
+// v3.3 fix (CP-08): totalMoney and totalBurnie subtract pendingRedemptionEthValue/Burnie
+// to prevent double-spending reserves already allocated to gambling claims
 // claimableEth includes pending claimable amounts (lazy-claim CP-04 defense)
 share = (amount * totalMoney) / supplyBefore;
 // ETH-preferred payout: pays from ETH first, then stETH, then claims lazily
@@ -1874,6 +1876,47 @@ _burn(msg.sender, amount);                    // burn DGNRS wrapper token
         <li><strong>ETH-preferred payout order:</strong> ETH first, stETH only if ETH balance insufficient</li>
         <li><strong>Rounding direction:</strong> Integer division truncates, always favoring the protocol (remaining holders)</li>
       </ul>
+    </div>
+  </div>
+
+  <!-- PAY-16: Gambling Burn Redemption (Active Game) -->
+  <div class="system-card" id="pay-16">
+    <h3>PAY-16: Gambling Burn Redemption</h3>
+    <div class="system-meta">
+      <span class="badge badge-eth">ETH</span>
+      <span class="badge badge-burnie">BURNIE</span>
+    </div>
+
+    <h4 style="margin-top: 1rem; color: #0d47a1;">During Active Game: RNG-Gated Burn</h4>
+    <table class="info-table">
+      <tr><th>Trigger</th><td>Holder calls <code>burn(amount)</code> or <code>burnWrapped(amount)</code> on sDGNRS/DGNRS during active game</td></tr>
+      <tr><th>Submit Phase</th><td>sDGNRS burned, proportional ETH/BURNIE base reserved in segregated accounting</td></tr>
+      <tr><th>Resolution</th><td>Next <code>advanceGame()</code> applies VRF roll (25-175%) to base amounts</td></tr>
+      <tr><th>ETH Payout</th><td><code>(ethValueOwed * roll) / 100</code> &mdash; always claimable after resolution</td></tr>
+      <tr><th>BURNIE Payout</th><td><code>(burnieOwed * roll * (100 + rewardPercent)) / 10000</code> &mdash; conditional on coinflip win</td></tr>
+      <tr><th>Claim</th><td>Player calls <code>claimRedemption()</code>; ETH paid immediately, BURNIE deferred if flip unresolved</td></tr>
+      <tr><th>Cap</th><td>50% of totalSupply per redemption period</td></tr>
+    </table>
+
+    <div class="formula-block">
+      <h4>Formula</h4>
+      <pre><code>// PAY-16 -- StakedDegenerusStonk.sol
+// Submit phase (during burn):
+ethBase = (totalMoney * amount) / supplyBefore;    // proportional ETH share
+burnieBase = (totalBurnie * amount) / supplyBefore; // proportional BURNIE share
+// Bases added to pendingRedemptionEthBase/BurnieBase
+
+// Resolution phase (advanceGame):
+roll = (currentWord >> 8) % 151 + 25;  // range 25-175
+rolledEth = (ethBase * roll) / 100;
+burnieToCredit = (burnieBase * roll) / 100;
+// BURNIE credited as coinflip stake via creditFlip
+
+// Claim phase (claimRedemption):
+ethPayout = (claim.ethValueOwed * roll) / 100;  // always claimable
+// BURNIE: if flip won, (claim.burnieOwed * roll * (100 + rewardPercent)) / 10000
+// BURNIE: if flip lost or unresolved, 0 (ETH still paid)</code></pre>
+      <p class="file-ref"><strong>Code:</strong> StakedDegenerusStonk.sol (burn, resolveRedemptionPeriod, claimRedemption)</p>
     </div>
   </div>
 
