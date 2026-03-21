@@ -300,3 +300,208 @@
 | CP-06 | `contracts/modules/DegenerusGameAdvanceModule.sol:850-861,879-890` | APPLIED | Redemption resolution block present in both VRF and fallback paths of `_gameOverEntropy` |
 | Seam-1 | `contracts/DegenerusStonk.sol:169` | APPLIED | `GameNotOver()` revert blocks `DGNRS.burn()` during active game |
 | CP-07 | `contracts/StakedDegenerusStonk.sol:601-607` | APPLIED | Split claim: ETH paid on first call, BURNIE kept for second call when flip unresolved |
+
+---
+
+## Quick Sweep: 25 Remaining Contracts
+
+Focus: DELTA -- anything that might interact differently with the new gambling burn code paths. Checks: access control on state-changing functions, CEI pattern on external calls, `unchecked` overflow potential, new interactions with gambling burn system, storage collision risk with delegatecall module pattern.
+
+### contracts/BurnieCoin.sol (1072 lines)
+
+ERC20 with mint/burn for game, coinflip, and vault. Access control: `onlyDegenerusGameContract`, `onlyFlipCreditors`, `onlyVault`, `onlyAdmin`. No direct interaction with gambling burn system -- coinflip credit routing to sDGNRS goes through `BurnieCoinflip.creditFlip` (not BurnieCoin). `burnForCoinflip` (line 266 approx) and `mintForCoinflip` are correctly gated. `unchecked` blocks in transfer/burn follow standard checked-before-unchecked pattern. No new gambling burn surface.
+
+**Verdict: CLEAN**
+
+### contracts/ContractAddresses.sol (38 lines)
+
+Compile-time constant library. All addresses immutable. No state, no functions, no external calls. Deploy pipeline patches `DEPLOY_DAY_BOUNDARY` and `VRF_KEY_HASH`. No interaction with gambling burn.
+
+**Verdict: CLEAN**
+
+### contracts/DegenerusAdmin.sol (801 lines)
+
+VRF subscription owner + sDGNRS governance for emergency coordinator swaps. Access control: `wireVrf` (ADMIN only), governance functions (sDGNRS holder checks with threshold). No interaction with gambling burn system -- admin manages VRF config, not redemption flows. `_executeSwap` (VRF coordinator update) follows CEI per post-v2.1 fix (`_voidAllActive` before external calls). Governance threshold uses `block.timestamp` for decay -- no manipulation beyond +/-15s block time variance (LOW impact, known).
+
+**Verdict: CLEAN**
+
+### contracts/DegenerusAffiliate.sol (840 lines)
+
+Multi-tier affiliate referral with kickback. Access: `payAffiliate` restricted to coin/game. Leaderboard tracking uses internal state. No ETH handling (payouts via `creditFlip`/`creditCoin`). No interaction with gambling burn. Referral code locking prevents re-pointing. No external calls to untrusted contracts.
+
+**Verdict: CLEAN**
+
+### contracts/DegenerusDeityPass.sol (392 lines)
+
+Soulbound ERC721 for deity passes. 32 tokens max. `transferFrom`/`safeTransferFrom` always revert (`Soulbound()`). Mint by game only. Owner can set renderer (external view call, bounded, fallback to internal). No ETH handling. No interaction with gambling burn.
+
+**Verdict: CLEAN**
+
+### contracts/DegenerusGame.sol (2855 lines)
+
+Core dispatcher: inherits `DegenerusGameMintStreakUtils` (inherits `DegenerusGameStorage`). Uses delegatecall to modules (constant addresses). `purchase`, `claimWinnings`, `advanceGame` (delegated), `setAfKingMode`, etc. `claimWinnings` (`contracts/DegenerusGame.sol`) uses pull pattern -- `claimableWinnings[player]` deducted before ETH send. CEI compliant. No direct gambling burn interaction -- all redemption logic is in sDGNRS and AdvanceModule. The `rawFulfillRandomWords` callback stores `rngWordCurrent` (no external calls, just storage write). Module selector routing verified in prior audits (Phase 22, 26-30). No new delegatecall targets added in v3.3.
+
+**Verdict: CLEAN**
+
+### contracts/DegenerusJackpots.sol (689 lines)
+
+BAF (Big Ass Flip) jackpot leaderboard. Access: `onlyGame` and `onlyCoin` modifiers. `recordBafFlip` (line ~180) accumulates player scores. BAF resolution distributes prizes via game delegatecall. No ETH handling (prizes distributed through game's `claimableWinnings`). sDGNRS is excluded from BAF (early return in `recordBafFlip`). No interaction with gambling burn. `unchecked` blocks in leaderboard iteration are loop counters with bounded iteration. Safe.
+
+**Verdict: CLEAN**
+
+### contracts/DegenerusQuests.sol (1598 lines)
+
+Daily quest system with streak tracking. Access: `onlyCoin` modifier for all player-action handlers. Quest progress tracked per-player with version-gated resets. No ETH handling. No external calls to untrusted contracts. No interaction with gambling burn. Pure game-logic with reward credits via `creditFlip`.
+
+**Verdict: CLEAN**
+
+### contracts/DegenerusTraitUtils.sol (183 lines)
+
+Internal pure library for trait calculations. No state, no external calls, no storage. Used by mint module for trait assignment. No interaction with gambling burn.
+
+**Verdict: CLEAN**
+
+### contracts/DegenerusVault.sol (1050 lines)
+
+Multi-asset vault with independent share classes (DGVE for ETH/stETH, DGVB for BURNIE). Access: `deposit` restricted to game; `withdraw`/`redeemAll` public for share holders. Donation attack protection via minimum deposit. Share math uses checked arithmetic (Solidity 0.8.34). CEI: shares burned before ETH/stETH transfers. `(bool ok,) = to.call{value: amount}("")` at line 1032 for ETH withdrawal -- after share burn and state update. No interaction with gambling burn system. No dependency on sDGNRS redemption state.
+
+**Verdict: CLEAN**
+
+### contracts/DeityBoonViewer.sol (171 lines)
+
+Pure view contract for deity boon data. No state mutations. No external calls that modify state. No interaction with gambling burn.
+
+**Verdict: CLEAN**
+
+### contracts/Icons32Data.sol (228 lines)
+
+SVG path data storage for deity pass NFT rendering. `setPaths`/`setSymbols` restricted to owner (before finalize). `finalize()` sets permanent lock. No ETH handling. No interaction with gambling burn.
+
+**Verdict: CLEAN**
+
+### contracts/WrappedWrappedXRP.sol (389 lines)
+
+Joke ERC20 token. `mintPrize` restricted to game/coinflip/jackpots. `vaultMintTo` restricted to vault. `unwrap` burns WWXRP and transfers wXRP (pull pattern). No interaction with gambling burn. Standard ERC20 with checked arithmetic.
+
+**Verdict: CLEAN**
+
+### contracts/storage/DegenerusGameStorage.sol (1597 lines)
+
+Shared storage layout definition. No executable logic (only state declarations, internal view/pure helpers, and constants). Inherited by all delegatecall modules. Storage slot alignment is the critical concern. Verified in Phase 22 and Phase 26. No new storage variables added for gambling burn (the redemption state is in sDGNRS, not in game storage). The gambling burn integration in AdvanceModule uses external calls to sDGNRS, not storage variables in game storage. Slot alignment intact.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameBoonModule.sol (359 lines)
+
+Deity pass boon effects (boost multipliers on coinflip deposits, lootbox openings). Access: delegatecall from game only. No direct ETH handling. No interaction with gambling burn. Internal state management for boon slots and cooldowns.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameDecimatorModule.sol (1024 lines)
+
+Decimator mechanics (burn BURNIE for jackpot eligibility) and terminal decimator (death bet). Access: delegatecall from game only. `runTerminalDecimatorJackpot` distributes prizes via `_addClaimableEth`. No interaction with gambling burn. `unchecked` blocks in prize distribution loops are bounded by participant count. Death bet mechanism isolated from redemption system.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameDegeneretteModule.sol (1179 lines)
+
+Betting system with ticket-based wagers. Access: delegatecall from game only. Places and resolves bets using VRF randomness. Prize payouts via `_addClaimableEth`. No interaction with gambling burn. Bet state management isolated. `unchecked` blocks in resolution loops bounded by bet count.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameEndgameModule.sol (540 lines)
+
+Endgame settlement (payouts, prize pool wipes). Access: delegatecall from game only. Distributes ETH via `_addClaimableEth`. Rewards top affiliate via `transferFromPool`. No interaction with gambling burn. One `unchecked` block (line 398) in affiliate reward loop -- loop counter bounded by affiliate count.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameGameOverModule.sol (235 lines)
+
+Game over drain and final sweep. Access: delegatecall from game only. `handleGameOverDrain` sets `gameOver = true` (terminal), distributes funds, calls `dgnrs.burnRemainingPools()`. `handleFinalSweep` sweeps remaining funds 30 days post-gameOver. `_sendToVault` splits 50/50 to vault and sDGNRS. ETH transfers via `payable(addr).call{value:}` with revert on failure. Interaction with sDGNRS: `dgnrs.burnRemainingPools()` (line 162) and `dgnrs.depositSteth()` (lines 221, 225). These are trusted protocol calls. No interaction with gambling burn redemption state -- only pool management.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameJackpotModule.sol (2795 lines)
+
+Jackpot calculations and payouts (daily ETH/BURNIE jackpots, terminal jackpot). Access: delegatecall from game only. Complex prize distribution via `_distributeJackpotEth` -> `_addClaimableEth`. Bucket-based winner selection using VRF word. No interaction with gambling burn. `unchecked` blocks in distribution loops are bounded by ticket/winner counts. Prize pool accounting uses checked arithmetic for pool mutations.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameLootboxModule.sol (1779 lines)
+
+Lootbox mechanics (open, resolve, payout). Access: delegatecall from game only. EV calculation uses price curves and activity score. Payouts via `_addClaimableEth` and `transferFromPool`. No interaction with gambling burn. Lootbox RNG uses separate VRF request/fulfillment cycle (`lootboxRngWordByIndex`), independent of daily RNG. No overlap with redemption roll.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameMintModule.sol (1199 lines)
+
+Ticket purchasing and ETH splitting. Access: delegatecall from game only. `purchase` splits ETH across pools (next, future, current, sDGNRS, vault, affiliate). BPS splits sum to 10000. No interaction with gambling burn. `unchecked` blocks in ticket queue management bounded by array operations.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameMintStreakUtils.sol (62 lines)
+
+Utility contract for mint streak tracking. Inherits `DegenerusGameStorage`. Internal pure/view functions only. No state mutations beyond what modules do via delegatecall. No interaction with gambling burn.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGamePayoutUtils.sol (94 lines)
+
+ETH payout helpers (`_addClaimableEth`, `_processClaimableEth`). Inherits `DegenerusGameStorage`. Updates `claimableWinnings[player]` and `claimablePool`. `unchecked` blocks for addition to `claimablePool` -- bounded by total ETH in contract. No interaction with gambling burn.
+
+**Verdict: CLEAN**
+
+### contracts/modules/DegenerusGameWhaleModule.sol (840 lines)
+
+Whale bundle, lazy pass, and deity pass purchase mechanics. Access: delegatecall from game only. ETH handling for deity pass (triangular pricing). Payouts via pool transfers and `_addClaimableEth`. No interaction with gambling burn. Deity pass count tracking (`deityPassPurchasedCount`) used by GameOverModule for refund calculation.
+
+**Verdict: CLEAN**
+
+---
+
+## Consolidated Verdict Table
+
+| # | Contract | Lines | Verdict | Notes |
+|---|----------|-------|---------|-------|
+| 1 | contracts/StakedDegenerusStonk.sol | 802 | CLEAN | All 4 Phase 44 fixes verified (CP-08, CP-06, Seam-1, CP-07). CEI compliant. Solvency sound. |
+| 2 | contracts/DegenerusStonk.sol | 247 | CLEAN | Seam-1 fix verified. burn() blocked during active game. |
+| 3 | contracts/BurnieCoinflip.sol | 1128 | CLEAN (QA only) | ADV-W1-01: uint128 truncation in autoRebuyCarry (economically unreachable). |
+| 4 | contracts/modules/DegenerusGameAdvanceModule.sol | 1442 | CLEAN | CP-06 fix verified. Redemption resolution in both rngGate and _gameOverEntropy paths. |
+| 5 | contracts/BurnieCoin.sol | 1072 | CLEAN | No new gambling burn surface. Standard access controls. |
+| 6 | contracts/ContractAddresses.sol | 38 | CLEAN | Compile-time constants only. |
+| 7 | contracts/DegenerusAdmin.sol | 801 | CLEAN | Governance CEI verified (post-v2.1). No gambling burn interaction. |
+| 8 | contracts/DegenerusAffiliate.sol | 840 | CLEAN | No ETH handling. No gambling burn interaction. |
+| 9 | contracts/DegenerusDeityPass.sol | 392 | CLEAN | Soulbound NFT. No gambling burn interaction. |
+| 10 | contracts/DegenerusGame.sol | 2855 | CLEAN | Core dispatcher. All gambling burn logic delegated to AdvanceModule. |
+| 11 | contracts/DegenerusJackpots.sol | 689 | CLEAN | BAF system. sDGNRS excluded from BAF. No gambling burn interaction. |
+| 12 | contracts/DegenerusQuests.sol | 1598 | CLEAN | Quest tracking. No gambling burn interaction. |
+| 13 | contracts/DegenerusTraitUtils.sol | 183 | CLEAN | Pure library. No state. |
+| 14 | contracts/DegenerusVault.sol | 1050 | CLEAN | Share-based vault. No gambling burn interaction. |
+| 15 | contracts/DeityBoonViewer.sol | 171 | CLEAN | Pure view contract. |
+| 16 | contracts/Icons32Data.sol | 228 | CLEAN | Static data storage. |
+| 17 | contracts/WrappedWrappedXRP.sol | 389 | CLEAN | Joke ERC20. No gambling burn interaction. |
+| 18 | contracts/storage/DegenerusGameStorage.sol | 1597 | CLEAN | Storage layout. No new gambling burn variables in game storage. |
+| 19 | contracts/modules/DegenerusGameBoonModule.sol | 359 | CLEAN | Boon effects. No gambling burn interaction. |
+| 20 | contracts/modules/DegenerusGameDecimatorModule.sol | 1024 | CLEAN | Decimator mechanics. No gambling burn interaction. |
+| 21 | contracts/modules/DegenerusGameDegeneretteModule.sol | 1179 | CLEAN | Betting system. No gambling burn interaction. |
+| 22 | contracts/modules/DegenerusGameEndgameModule.sol | 540 | CLEAN | Endgame settlement. No gambling burn interaction. |
+| 23 | contracts/modules/DegenerusGameGameOverModule.sol | 235 | CLEAN | Game over drain. Interacts with sDGNRS for pool burns/deposits only. |
+| 24 | contracts/modules/DegenerusGameJackpotModule.sol | 2795 | CLEAN | Jackpot distribution. No gambling burn interaction. |
+| 25 | contracts/modules/DegenerusGameLootboxModule.sol | 1779 | CLEAN | Lootbox mechanics. Independent RNG cycle. |
+| 26 | contracts/modules/DegenerusGameMintModule.sol | 1199 | CLEAN | Ticket purchasing. No gambling burn interaction. |
+| 27 | contracts/modules/DegenerusGameMintStreakUtils.sol | 62 | CLEAN | Utility. No gambling burn interaction. |
+| 28 | contracts/modules/DegenerusGamePayoutUtils.sol | 94 | CLEAN | Payout helpers. No gambling burn interaction. |
+| 29 | contracts/modules/DegenerusGameWhaleModule.sol | 840 | CLEAN | Pass purchases. No gambling burn interaction. |
+
+---
+
+## Summary
+
+- **Total contracts swept:** 29
+- **New HIGH findings:** 0
+- **New MEDIUM findings:** 0
+- **New LOW findings:** 0
+- **QA observations:** 1 (ADV-W1-01: uint128 truncation in BurnieCoinflip autoRebuyCarry, economically unreachable)
+- **Previously known (excluded):** WAR-01, WAR-02, WAR-06
+- **Phase 44 fixes verified:** 4/4 (CP-08, CP-06, Seam-1, CP-07 all correctly applied)
+- **Gambling burn isolation confirmed:** Only 4 contracts (sDGNRS, DGNRS, BurnieCoinflip, AdvanceModule) interact with the gambling burn system. Remaining 25 contracts have zero gambling burn surface.
