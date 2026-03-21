@@ -83,8 +83,6 @@ contract StakedDegenerusStonk {
     /// @notice Thrown when a player tries to claim before the period is resolved
     error NotResolved();
 
-    /// @notice Thrown when a player tries to claim before the coinflip day is resolved
-    error FlipNotResolved();
 
 
     // =====================================================================
@@ -570,8 +568,9 @@ contract StakedDegenerusStonk {
     }
 
     /// @notice Claim a resolved gambling burn redemption
-    /// @dev Requires period resolved (roll != 0) and coinflip day resolved.
-    ///      ETH payout uses roll only; BURNIE uses roll * flip multiplier on win, 0 on loss.
+    /// @dev Requires period resolved (roll != 0). ETH is always claimable once period resolved.
+    ///      BURNIE requires coinflip resolution: paid on win, forfeited on loss or if unresolved.
+    ///      If coinflip is unresolved, ETH is paid and BURNIE portion is kept for a second claim.
     function claimRedemption() external {
         address player = msg.sender;
         PendingRedemption storage claim = pendingRedemptions[player];
@@ -580,36 +579,42 @@ contract StakedDegenerusStonk {
         RedemptionPeriod storage period = redemptionPeriods[claim.periodIndex];
         if (period.roll == 0) revert NotResolved();
 
-        // Check coinflip resolved
-        (uint16 rewardPercent, bool flipWon) = coinflip.getCoinflipDayResult(period.flipDay);
-        if (rewardPercent == 0 && !flipWon) revert FlipNotResolved();
-
         uint16 roll = period.roll;
 
-        // ETH payout: roll only (no coinflip multiplier)
+        // ETH payout: roll only (always claimable once period resolved)
         uint256 ethPayout = (claim.ethValueOwed * roll) / 100;
 
-        // BURNIE payout: 0 on loss, roll * flip multiplier on win
+        // BURNIE payout: depends on coinflip resolution
         uint256 burniePayout;
-        if (flipWon) {
-            burniePayout = (claim.burnieOwed * roll * (100 + rewardPercent)) / 10000;
+        bool flipResolved;
+        {
+            (uint16 rewardPercent, bool flipWon) = coinflip.getCoinflipDayResult(period.flipDay);
+            flipResolved = (rewardPercent != 0 || flipWon);
+            if (flipResolved && flipWon) {
+                burniePayout = (claim.burnieOwed * roll * (100 + rewardPercent)) / 10000;
+            }
         }
 
         // Release ETH segregation
         pendingRedemptionEthValue -= ethPayout;
 
-        // Clear claim
-        delete pendingRedemptions[player];
+        if (flipResolved) {
+            // Full claim: clear entirely
+            delete pendingRedemptions[player];
+        } else {
+            // Partial claim: clear ETH portion, keep BURNIE for later
+            claim.ethValueOwed = 0;
+        }
 
-        // Pay ETH (ETH-first, stETH fallback)
+        // Pay ETH (always)
         _payEth(player, ethPayout);
 
-        // Pay BURNIE
+        // Pay BURNIE (only if flip resolved and won)
         if (burniePayout != 0) {
             _payBurnie(player, burniePayout);
         }
 
-        emit RedemptionClaimed(player, roll, flipWon, ethPayout, burniePayout);
+        emit RedemptionClaimed(player, roll, flipResolved, ethPayout, burniePayout);
     }
 
     // =====================================================================
