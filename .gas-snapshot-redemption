@@ -1,0 +1,7 @@
+RedemptionGasTest:test_gas_burnWrapped_gambling() (gas: 308406)
+RedemptionGasTest:test_gas_burn_gambling() (gas: 283855)
+RedemptionGasTest:test_gas_claimRedemption() (gas: 309251)
+RedemptionGasTest:test_gas_hasPendingRedemptions_false() (gas: 10746)
+RedemptionGasTest:test_gas_hasPendingRedemptions_true() (gas: 285679)
+RedemptionGasTest:test_gas_previewBurn() (gas: 40893)
+RedemptionGasTest:test_gas_resolveRedemptionPeriod() (gas: 256972)
