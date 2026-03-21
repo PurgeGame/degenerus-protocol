@@ -505,3 +505,291 @@ Worst case: `pendingRedemptionEthValue = 0.875H` (50% burn, roll=175), then a de
 This is a HIGH severity solvency violation. The fix (adding `- pendingRedemptionEthValue` to line 477) completely eliminates it.
 
 ---
+
+## Cross-Contract Interaction Audit (DELTA-02)
+
+### 4-Contract State Consistency
+
+The following table maps ALL cross-contract calls in the redemption system. Each entry documents the caller, callee, direction, and state change.
+
+| # | Caller | Function | Line | Callee | Function | Direction | State Change |
+|---|--------|----------|------|--------|----------|-----------|-------------|
+| 1 | sDGNRS | `burnWrapped` | 452 | DGNRS | `burnForSdgnrs` | call | Burns DGNRS from player; DGNRS.totalSupply -= amount, DGNRS.balanceOf[player] -= amount |
+| 2 | DGNRS | `burn` | 167 | sDGNRS | `burn` | call | Enters gambling or deterministic path; msg.sender = DGNRS contract |
+| 3 | sDGNRS | `_submitGamblingClaimFrom` | 694 | Game | `_claimableWinnings` -> `claimableWinningsOf` | staticcall | View only -- reads pending winnings for ETH computation |
+| 4 | sDGNRS | `_submitGamblingClaimFrom` | 700 | BurnieCoinflip | `previewClaimCoinflips` | staticcall | View only -- reads claimable BURNIE for share computation |
+| 5 | AdvanceModule | `rngGate` | 772 | sDGNRS | `hasPendingRedemptions` | staticcall | View only -- reads pendingRedemptionEthBase/BurnieBase |
+| 6 | AdvanceModule | `rngGate` | 775 | sDGNRS | `resolveRedemptionPeriod` | call | Sets period roll/flipDay, adjusts pendingRedemptionEthValue, clears bases, releases BURNIE reservation |
+| 7 | AdvanceModule | `rngGate` | 777 | BurnieCoin | `creditFlip` -> BurnieCoinflip.`creditFlip` | call | Credits virtual BURNIE stake to sDGNRS for flipDay via _addDailyFlip |
+| 8 | sDGNRS | `claimRedemption` | 584 | BurnieCoinflip | `getCoinflipDayResult` | staticcall | View only -- reads rewardPercent/win for flipDay |
+| 9 | sDGNRS | `_payEth` | 736 | Game | `claimWinnings` | call | Sends pending ETH winnings from Game to sDGNRS |
+| 10 | sDGNRS | `_payEth` | 741 | player (EOA/contract) | `call{value: amount}` | call | Sends ETH to player -- UNTRUSTED recipient |
+| 11 | sDGNRS | `_payEth` | 747 | player (EOA/contract) | `call{value: ethOut}` | call | Sends partial ETH to player (stETH fallback case) -- UNTRUSTED |
+| 12 | sDGNRS | `_payEth` | 750 | Lido stETH | `transfer` | call | Sends stETH to player (trusted: Lido contract) |
+| 13 | sDGNRS | `_payBurnie` | 760 | BurnieCoin | `transfer` | call | Transfers existing BURNIE from sDGNRS to player. Triggers `_claimCoinflipShortfall(msg.sender=sDGNRS, amount)` inside BurnieCoin.transfer |
+| 14 | BurnieCoin | `transfer` -> `_claimCoinflipShortfall` | 593 | BurnieCoinflip | `claimCoinflipsFromBurnie` | call | Auto-claims coinflip winnings to cover shortfall (if sDGNRS balance < transfer amount) |
+| 15 | sDGNRS | `_payBurnie` | 763 | BurnieCoinflip | `claimCoinflipsForRedemption` | call | Mints BURNIE to sDGNRS from coinflip winnings (sDGNRS-only access) |
+| 16 | sDGNRS | `_payBurnie` | 764 | BurnieCoin | `transfer` | call | Transfers minted BURNIE from sDGNRS to player |
+| 17 | sDGNRS | `_deterministicBurnFrom` | 492 | Game | `claimWinnings` | call | Pulls pending ETH winnings (deterministic path only) |
+| 18 | sDGNRS | `_deterministicBurnFrom` | 510 | BurnieCoin | `transfer` | call | Sends BURNIE to beneficiary (deterministic path) |
+| 19 | sDGNRS | `_deterministicBurnFrom` | 513 | BurnieCoinflip | `claimCoinflips` | call | Claims coinflip winnings to cover BURNIE shortfall (deterministic path) |
+| 20 | sDGNRS | `_deterministicBurnFrom` | 514 | BurnieCoin | `transfer` | call | Sends claimed BURNIE to beneficiary |
+| 21 | sDGNRS | `_deterministicBurnFrom` | 519 | Lido stETH | `transfer` | call | Sends stETH to beneficiary |
+| 22 | sDGNRS | `_deterministicBurnFrom` | 523 | beneficiary (EOA/contract) | `call{value: ethOut}` | call | Sends ETH to beneficiary -- UNTRUSTED recipient |
+| 23 | BurnieCoinflip | `processCoinflipPayouts` | 859 | BurnieCoinflip | `_claimCoinflipsInternal` (for sDGNRS) | internal | Keeps sDGNRS flip cursor current during day resolution |
+| 24 | DGNRS | `burn` | 170 | BurnieCoin | `transfer` | call | Forwards BURNIE from DGNRS to player (deterministic path) |
+| 25 | DGNRS | `burn` | 173 | Lido stETH | `transfer` | call | Forwards stETH from DGNRS to player (deterministic path) |
+| 26 | DGNRS | `burn` | 176 | player (EOA/contract) | `call{value: ethOut}` | call | Forwards ETH from DGNRS to player -- UNTRUSTED |
+
+### Reentrancy Verification
+
+#### External calls to untrusted addresses
+
+**Call #10/11: `player.call{value: amount}("")` in `_payEth` (lines 741, 747)**
+
+At the point of the ETH transfer to the player, the following storage has been committed:
+
+1. `pendingRedemptionEthValue -= ethPayout` (line 599) -- COMMITTED
+2. `delete pendingRedemptions[player]` (line 602) -- COMMITTED
+
+The player's claim is fully deleted before any external call. If the recipient reenters:
+
+| Reentry Target | Outcome | Safe? |
+|----------------|---------|-------|
+| `claimRedemption()` | Reverts at line 578: `claim.periodIndex == 0` (NoClaim) because claim was deleted | YES |
+| `burn(amount)` | Succeeds IF player has sDGNRS balance. Creates NEW independent claim. Does NOT read stale state because `pendingRedemptionEthValue` was already decremented. | YES |
+| `burnWrapped(amount)` | Succeeds IF player has DGNRS. Creates NEW claim (same as above). | YES |
+| `gameAdvance()` | Calls `game.advanceGame()`. Could trigger `rngGate` which calls `resolveRedemptionPeriod`. State is consistent: `pendingRedemptionEthValue` is correct (decremented). | YES |
+
+**No reentrancy vulnerability.** The claim deletion at line 602 prevents double-claiming. New burns create independent claims against correct state.
+
+**Call #22: `beneficiary.call{value: ethOut}` in `_deterministicBurnFrom` (line 523)**
+
+At this point, all state mutations are complete:
+1. `balanceOf[burnFrom] -= amount` (line 486) -- COMMITTED
+2. `totalSupply -= amount` (line 487) -- COMMITTED
+3. BURNIE and stETH transfers already executed (lines 510-520)
+4. Only the ETH transfer remains
+
+If the recipient reenters `_deterministicBurnFrom` (via `burn()` or `burnWrapped()`):
+- The supply has been reduced; `balanceOf[burnFrom]` has been reduced
+- Any new burn would compute proportional shares against the updated (lower) supply
+- **No double-spend possible** -- the burner cannot re-burn already-burned tokens
+
+However, note CP-08: `_deterministicBurnFrom` does NOT subtract `pendingRedemptionEthValue` from `totalMoney`. A reentrant call would ALSO fail to subtract it, compounding the CP-08 issue. But this is the same bug, not a new reentrancy vulnerability.
+
+**Call #26: `player.call{value: ethOut}` in `DegenerusStonk.burn` (line 176)**
+
+At this point:
+1. `DGNRS.balanceOf[msg.sender] -= amount` (via `_burn` at line 165)
+2. `DGNRS.totalSupply -= amount`
+3. `stonk.burn(amount)` already returned (sDGNRS state committed)
+4. BURNIE and stETH already forwarded (lines 169-174)
+
+If the player reenters `DGNRS.burn()`:
+- Their DGNRS balance has been reduced; they can only burn remaining balance
+- `stonk.burn(amount)` would execute with the updated sDGNRS state
+- **SAFE** -- no double-spend possible
+
+### Access Control on New Entry Points
+
+| Function | Contract | Guard | Correct? |
+|----------|----------|-------|----------|
+| `resolveRedemptionPeriod(roll, flipDay)` | sDGNRS (line 545) | `if (msg.sender != ContractAddresses.GAME) revert Unauthorized()` (line 546) | YES -- only callable by GAME contract. AdvanceModule is a module of GAME (delegatecall), so `msg.sender` = GAME when AdvanceModule calls it. Cannot be bypassed. |
+| `hasPendingRedemptions()` | sDGNRS (line 536) | None (view function) | N/A -- read-only, no access control needed. Returns public storage state. |
+| `claimCoinflipsForRedemption(player, amount)` | BurnieCoinflip (line 344) | `if (msg.sender != ContractAddresses.SDGNRS) revert OnlyBurnieCoin()` (line 348) | YES -- only callable by sDGNRS. Note: the error name `OnlyBurnieCoin` is misleading (reused from another guard), but the check is correct (`msg.sender == SDGNRS`). Cannot be bypassed -- SDGNRS address is immutable via ContractAddresses. |
+| `burnForSdgnrs(player, amount)` | DGNRS (line 233) | `if (msg.sender != ContractAddresses.SDGNRS) revert Unauthorized()` (line 234) | YES -- only callable by sDGNRS. Called from `burnWrapped()`. Cannot be bypassed. |
+| `creditFlip(player, amount)` | BurnieCoinflip (line 867) | `onlyFlipCreditors` modifier (line 194-199): allows `degenerusGame` or `burnie` (BurnieCoin) | YES -- called from rngGate via `coin.creditFlip(SDGNRS, burnieToCredit)`. The call chain is: AdvanceModule (delegatecall from GAME) -> BurnieCoin.creditFlip -> BurnieCoinflip.creditFlip. BurnieCoin.creditFlip (line 563) has `onlyFlipCreditors` which allows GAME or AFFILIATE. Since rngGate runs as GAME (delegatecall), the call goes GAME -> BurnieCoin.creditFlip (msg.sender=GAME, passes onlyFlipCreditors) -> BurnieCoinflip.creditFlip (msg.sender=BurnieCoin, passes onlyFlipCreditors allowing burnie). **Correct two-hop authorization chain.** |
+
+**Bypass analysis:** All guards check against `ContractAddresses.*` which are compile-time constants. No proxy pattern, no mutable address storage, no admin override. The only way to bypass would be to deploy a different contract at the same address, which is impossible on mainnet (CREATE2 collision). **No bypass path exists.**
+
+---
+
+## CEI Compliance Verification (CORR-03)
+
+### claimRedemption() CEI Analysis
+
+Line-by-line annotation of `claimRedemption()` (StakedDegenerusStonk.sol lines 575-613):
+
+```
+Line 576: CHECK   -- address player = msg.sender
+Line 577: CHECK   -- PendingRedemption storage claim = pendingRedemptions[player]
+Line 578: CHECK   -- if (claim.periodIndex == 0) revert NoClaim()
+Line 580: CHECK   -- RedemptionPeriod storage period = redemptionPeriods[claim.periodIndex]
+Line 581: CHECK   -- if (period.roll == 0) revert NotResolved()
+Line 584: CHECK   -- (uint16 rewardPercent, bool flipWon) = coinflip.getCoinflipDayResult(period.flipDay)
+                      [STATICCALL to trusted BurnieCoinflip -- safe read, no state mutation]
+Line 585: CHECK   -- if (rewardPercent == 0 && !flipWon) revert FlipNotResolved()
+Line 587: CHECK   -- uint16 roll = period.roll
+Line 590: CHECK   -- uint256 ethPayout = (claim.ethValueOwed * roll) / 100  [pure computation]
+Line 593: CHECK   -- uint256 burniePayout  [declaration]
+Line 594: CHECK   -- if (flipWon) {
+Line 595: CHECK   --     burniePayout = (claim.burnieOwed * roll * (100 + rewardPercent)) / 10000
+Line 596: CHECK   -- }
+Line 599: EFFECT  -- pendingRedemptionEthValue -= ethPayout
+Line 602: EFFECT  -- delete pendingRedemptions[player]
+Line 605: INTERACTION -- _payEth(player, ethPayout)
+Line 608: INTERACTION -- if (burniePayout != 0) {
+Line 609: INTERACTION --     _payBurnie(player, burniePayout)
+Line 610: INTERACTION -- }
+Line 612: INTERACTION -- emit RedemptionClaimed(player, roll, flipWon, ethPayout, burniePayout)
+```
+
+**Ordering: CHECK (576-596) -> EFFECT (599-602) -> INTERACTION (605-612)**
+
+**Verdict: STRICTLY CEI COMPLIANT.** All checks and computations precede all state mutations, which precede all external calls. The staticcall at line 584 is safe (view function, no state change, trusted contract).
+
+### _payEth CEI Depth Analysis
+
+Trace into `_payEth(player, amount)` (lines 730-751):
+
+```
+Line 731: CHECK       -- if (amount == 0) return
+Line 732: CHECK       -- uint256 ethBal = address(this).balance [read]
+Line 733: CHECK       -- uint256 claimableEth = _claimableWinnings() [view call to game]
+Line 735: CHECK       -- if (amount > ethBal && claimableEth != 0)
+Line 736: INTERACTION -- game.claimWinnings(address(0))
+                         [Pulls ETH from Game to sDGNRS. TRUSTED contract (immutable address).
+                          State change: Game.pendingWinnings[sDGNRS] -= amount, ETH transferred to sDGNRS.]
+Line 737: CHECK       -- ethBal = address(this).balance [re-read after pull]
+Line 740: CHECK       -- if (amount <= ethBal)
+Line 741: INTERACTION -- (bool success, ) = player.call{value: amount}("") [UNTRUSTED]
+Line 742: CHECK       -- if (!success) revert TransferFailed()
+Line 744: CHECK       -- uint256 ethOut = ethBal
+Line 745: CHECK       -- uint256 stethOut = amount - ethOut
+Line 747: INTERACTION -- (bool success, ) = player.call{value: ethOut}("") [UNTRUSTED]
+Line 748: CHECK       -- if (!success) revert TransferFailed()
+Line 750: INTERACTION -- steth.transfer(player, stethOut) [TRUSTED: Lido]
+Line 751: CHECK       -- if (!...) revert TransferFailed()
+```
+
+**Storage state at point of `player.call{value:}` (line 741 or 747):**
+
+All sDGNRS storage mutations were completed BEFORE `_payEth` was called:
+- `pendingRedemptionEthValue` -- already decremented (line 599, before _payEth at 605)
+- `pendingRedemptions[player]` -- already deleted (line 602, before _payEth at 605)
+
+If the player reenters:
+- `claimRedemption()` -- reverts with `NoClaim()` (claim deleted at line 602). **SAFE.**
+- `burn(amount)` / `burnWrapped(amount)` -- creates a NEW claim. The `pendingRedemptionEthValue` is already decremented, so `totalMoney` computation uses the correct (lower) segregated value. **SAFE -- independent operation.**
+- Any other sDGNRS function reading `pendingRedemptionEthValue` -- sees the correct (decremented) value. **SAFE.**
+
+**Note on `game.claimWinnings` (line 736):** This is an INTERACTION before the player INTERACTION, technically breaking strict "no interactions before all interactions are done" ordering. However, it is a call to a TRUSTED contract (immutable Game address) and does not expose any reentrancy because: (a) Game.claimWinnings modifies only Game-internal state, (b) the ETH sent TO sDGNRS is not callable by the player, (c) the function has no callback. **ACCEPTABLE -- trusted contract interaction.**
+
+### _payBurnie CEI Depth Analysis
+
+Trace into `_payBurnie(player, amount)` (lines 755-765):
+
+```
+Line 756: CHECK       -- uint256 burnieBal = coin.balanceOf(address(this)) [view call]
+Line 757: CHECK       -- uint256 payBal = amount <= burnieBal ? amount : burnieBal
+Line 758: CHECK       -- uint256 remaining = amount - payBal
+Line 759: CHECK       -- if (payBal != 0)
+Line 760: INTERACTION -- coin.transfer(player, payBal)
+                         [BurnieCoin.transfer: triggers _claimCoinflipShortfall(msg.sender=sDGNRS, payBal)]
+```
+
+**Deep trace of `coin.transfer(player, payBal)` (line 760):**
+
+1. Enters `BurnieCoin.transfer(player, payBal)` (BurnieCoin.sol line 405)
+2. Calls `_claimCoinflipShortfall(msg.sender=sDGNRS, payBal)` (line 406)
+3. Inside `_claimCoinflipShortfall` (line 587-598):
+   - `if (amount == 0) return` -- payBal != 0, continue
+   - `if (degenerusGame.rngLocked()) return` -- during claim, rngLocked may be true or false. If true, skips shortfall claim. If false, continues.
+   - `balance = balanceOf[sDGNRS]` -- sDGNRS's BURNIE balance
+   - `if (balance >= amount) return` -- if sDGNRS has enough, no shortfall. This should be true since we already checked `payBal = min(amount, burnieBal)`, so `payBal <= burnieBal = balanceOf[sDGNRS]`. **Shortfall does NOT fire for the first transfer.**
+4. `_transfer(sDGNRS, player, payBal)` (line 407) -- moves BURNIE from sDGNRS to player
+
+**Does the shortfall mechanism fire?** No. `payBal <= burnieBal` by construction (line 757). The `_claimCoinflipShortfall` check sees `balance >= amount` and returns immediately. No nested coinflip interaction on this path.
+
+```
+Line 762: CHECK       -- if (remaining != 0)
+Line 763: INTERACTION -- coinflip.claimCoinflipsForRedemption(address(this), remaining)
+                         [BurnieCoinflip: sDGNRS-only. Processes pending claims, mints BURNIE to sDGNRS.
+                          Modifies BurnieCoinflip state (claimableStored, lastClaimedDay) and mints
+                          BURNIE tokens to sDGNRS via BurnieCoin.mintForCoinflip.]
+```
+
+**Can `claimCoinflipsForRedemption` fail?**
+- Access: checks `msg.sender == SDGNRS` (line 348) -- passes since caller is sDGNRS.
+- Internal: `_claimCoinflipsAmount(player=sDGNRS, amount=remaining, mintTokens=true)` (line 349)
+- If available claimable < remaining: returns `claimed < remaining`. The returned amount may be less than requested.
+- After this call, sDGNRS should have `claimed` BURNIE tokens minted to its balance.
+
+```
+Line 764: INTERACTION -- coin.transfer(player, remaining)
+                         [Transfers remaining BURNIE from sDGNRS to player.
+                          If claimCoinflipsForRedemption returned less than remaining,
+                          sDGNRS has insufficient balance and this REVERTS.]
+```
+
+**Edge case analysis:** If `claimCoinflipsForRedemption` returns `claimed < remaining`:
+- `coin.transfer(player, remaining)` attempts to transfer `remaining` but sDGNRS only has `claimed + existing_balance`.
+- If `claimed + existing_balance < remaining`, the transfer reverts inside BurnieCoin (underflow on `balanceOf[sDGNRS] -= remaining`).
+- The entire `claimRedemption()` transaction reverts.
+
+**When does this happen?** The coinflip system should have enough claimable BURNIE because:
+1. At resolution, `burnieToCredit = (base * roll) / 100` was credited as virtual stake
+2. If the flip was WON, the claimable amount = `burnieToCredit * (100 + rewardPercent) / 100`
+3. The `burniePayout = (burnieOwed * roll * (100 + rewardPercent)) / 10000`
+4. Since `burnieToCredit ~= sum(burnieOwed) * roll / 100`, the claimable should cover all individual payouts
+
+The only gap is from rounding, which is at most a few wei (see BURNIE Solvency section above). The sDGNRS contract's existing BURNIE balance absorbs this rounding dust in practice. **LOW risk.**
+
+### CEI Verdict
+
+| Entry Point | Verdict | Detail |
+|-------------|---------|--------|
+| `claimRedemption()` | **CEI COMPLIANT** | Strict C->E->I ordering. All storage writes (pendingRedemptionEthValue, delete claim) complete before any external call. Reentrancy safe via claim deletion. |
+| `burn()` | **CEI COMPLIANT** (gambling path) / **CEI MINOR ISSUE** (deterministic path) | Gambling: no external calls after storage writes (returns (0,0,0)). Deterministic: burn-then-interact, but `_deterministicBurnFrom` sends BURNIE/stETH/ETH after all storage writes (lines 486-487 before 510-523). The `game.claimWinnings` at line 492 is between effects and player-facing interactions, but is to a trusted contract. |
+| `burnWrapped()` | **CEI COMPLIANT** (gambling path) / **CEI MINOR ISSUE** (deterministic path) | Same as `burn()`. The `dgnrsWrapper.burnForSdgnrs` call at line 452 is before all storage writes but only modifies DGNRS state (trusted). Gambling path: no external calls after sDGNRS storage writes. |
+| `resolveRedemptionPeriod()` | **CEI COMPLIANT** | Pure effects function. All storage writes (lines 552-567) with no external calls. Returns a value to the caller. No interactions. |
+
+**Overall: The redemption system is CEI compliant for all security-critical paths.** The minor notes on the deterministic path relate to trusted-contract interactions that do not create exploitable reentrancy vectors.
+
+---
+
+## Phase 44 Audit Summary
+
+Consolidated findings across Plans 01, 02, and 03:
+
+| Requirement | Verdict | Key Finding |
+|-------------|---------|-------------|
+| DELTA-01 | PASS (with dust note) | pendingRedemptionEthValue reconciles correctly across submit/resolve/claim; rounding dust accumulates in contract's favor (max O(N*supply) wei/period) |
+| DELTA-02 | PASS | All 26 cross-contract calls mapped with line numbers; access control verified on all 5 new entry points; no bypass paths |
+| DELTA-03 | ISSUE (HIGH) | CP-08 CONFIRMED: _deterministicBurnFrom missing pendingRedemptionEthValue/Burnie deduction -- solvency gap up to 37.5% of holdings |
+| DELTA-04 | ISSUE (HIGH) | CP-06 CONFIRMED: _gameOverEntropy missing resolveRedemptionPeriod -- permanent fund loss for last-period gambling claims |
+| DELTA-05 | ISSUE (HIGH) | Seam-1 CONFIRMED: DGNRS.burn() gambling path orphans claim under DGNRS contract address (no claimRedemption function) |
+| DELTA-06 | PASS (INFO) | CP-02 REFUTED: zero sentinel safe by +1 offset in currentDayIndexAt; periodIndex=0 is unreachable for real periods |
+| DELTA-07 | ISSUE (MEDIUM) | CP-07 CONFIRMED: coinflip dependency blocks ETH claim at game-over boundary when flipDay is skipped |
+| CORR-01 | PASS | Full lifecycle trace documented with 176 line references across 4 contracts; all 13 storage mutations in submit path verified |
+| CORR-02 | PASS (conditional) | Segregation solvency proven for submit/resolve/claim and multi-period scenarios. CONDITIONAL on CP-08 fix: without fix, solvency violated post-gameOver |
+| CORR-03 | PASS | CEI compliance verified for claimRedemption (strict C-E-I), burn, burnWrapped, and resolveRedemptionPeriod |
+| CORR-04 | PASS | Period monotonicity proven (single write site + EVM timestamp monotonicity); resolution ordering proven (base zeroing prevents re-resolution); 50% cap enforced |
+| CORR-05 | PASS | burnWrapped dual burn verified: both DGNRS.totalSupply and sDGNRS.totalSupply decrease by exactly amount |
+
+### Fixes Required Before Phase 45
+
+Ordered by severity:
+
+1. **CP-08 (HIGH): Deterministic burn double-spend via missing segregation deduction**
+   - Fix: Add `- pendingRedemptionEthValue` and `- pendingRedemptionBurnie` to `_deterministicBurnFrom` lines 477, 482
+   - Two-line change. Impact on Phase 45: invariant tests can encode `totalMoney` always excludes segregated amounts
+   - Priority: CRITICAL -- without this fix, post-gameOver burns create solvency violation
+
+2. **CP-06 (HIGH): Stuck claims at game-over -- missing resolveRedemptionPeriod in _gameOverEntropy**
+   - Fix: Add redemption resolution block (mirror rngGate lines 770-780) to both VRF and fallback paths in `_gameOverEntropy` (AdvanceModule lines 823-832, 840-849)
+   - Impact on Phase 45: invariant tests need to verify resolution occurs on ALL RNG paths including game-over
+
+3. **Seam-1 (HIGH): DGNRS.burn() fund trap during active game**
+   - Fix: Option A (recommended): Revert `DGNRS.burn()` during active game when `ethOut == 0 && stethOut == 0 && burnieOut == 0` (gambling path returns zeros)
+   - Impact on Phase 45: invariant tests should verify DGNRS.burn() reverts during active game or that beneficiary is always the player
+
+4. **CP-07 (MEDIUM): Coinflip resolution dependency blocks ETH claim at game boundary**
+   - Fix: Option A (recommended): Modify `claimRedemption()` to allow ETH claiming independently of coinflip resolution -- decouple ETH payout from BURNIE payout
+   - Impact on Phase 45: invariant tests should verify ETH claim path does not depend on coinflip resolution
+
+---
+
+*Document generated for Phase 44 Plan 03 -- DELTA-01, DELTA-02, CORR-02, CORR-03 requirements.*
+*Line numbers reference contracts as of 2026-03-21.*
