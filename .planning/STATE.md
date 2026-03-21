@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: New Feature Audit — Skim Redesign + Redemption Lootbox
 status: unknown
-stopped_at: Completed 52-02-PLAN.md (redemption split invariant)
-last_updated: "2026-03-21T20:34:46.158Z"
+stopped_at: Completed 53-01-PLAN.md (consolidated findings)
+last_updated: "2026-03-21T20:55:57.196Z"
 progress:
   total_phases: 4
-  completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  completed_phases: 4
+  total_plans: 10
+  completed_plans: 10
 ---
 
 # State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 52 — invariant-test-suite
+**Current focus:** Phase 53 — consolidated-findings
 
 ## Current Position
 
-Phase: 52 (invariant-test-suite) — EXECUTING
-Plan: 2 of 2
+Phase: 53 (consolidated-findings) — EXECUTING
+Plan: 1 of 1
 
 ## Accumulated Context
 
@@ -51,6 +51,7 @@ v3.4 context:
 - [Phase 51]: REDM-06-A classified as MEDIUM: unchecked underflow corrupts accounting but cannot be exploited for direct theft
 - [Phase 52]: Extended FuturepoolSkimTest with INV-named tests using property-based fuzz pattern; widened lastPool to 0 for level-1 edge case coverage
 - [Phase 52]: INV-03 split conservation: lootboxEth >= ethDirect (floor division gives lootbox the extra wei for odd totals)
+- [Phase 53]: Assigned global IDs F-51-01 and F-51-02 to resolve Phase 51 INFO-01 collision; confirmed 6 v3.4 findings (1 MEDIUM + 5 INFO); carried 30 v3.2 findings inline for self-contained deliverable
 
 ### Pending Todos
 
@@ -62,6 +63,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T20:34:46.156Z
-Stopped at: Completed 52-02-PLAN.md (redemption split invariant)
+Last session: 2026-03-21T20:55:57.192Z
+Stopped at: Completed 53-01-PLAN.md (consolidated findings)
 Resume file: None
