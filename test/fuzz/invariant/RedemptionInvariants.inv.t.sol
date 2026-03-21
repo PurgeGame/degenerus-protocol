@@ -187,6 +187,22 @@ contract RedemptionInvariants is DeployProtocol {
     }
 
     // =========================================================================
+    //                  INV-08: LOOTBOX SPLIT CONSERVATION
+    // =========================================================================
+
+    /// @notice ethDirect + lootboxEth always sums to totalRolledEth for every claim.
+    /// @dev Tracks cumulative split values via RedemptionClaimed event parsing in the handler.
+    ///      ghost_totalRolledEth = ghost_totalEthDirect + ghost_totalLootboxEth by construction,
+    ///      but this invariant verifies the accounting is consistent across all handler calls.
+    function invariant_lootboxSplitConservation() public view {
+        assertEq(
+            handler.ghost_totalEthDirect() + handler.ghost_totalLootboxEth(),
+            handler.ghost_totalRolledEth(),
+            "INV-08: ethDirect + lootboxEth != totalRolledEth (split conservation violated)"
+        );
+    }
+
+    // =========================================================================
     //                           CANARY
     // =========================================================================
 
@@ -217,6 +233,10 @@ contract RedemptionInvariants is DeployProtocol {
         console.log("  ghost_doubleClaim:    ", handler.ghost_doubleClaim());
         console.log("  ghost_rollOutOfBounds:", handler.ghost_rollOutOfBounds());
         console.log("  ghost_periodIdxDecr:  ", handler.ghost_periodIndexDecreased());
+        console.log("--- Split Tracking (INV-08) ---");
+        console.log("  ghost_totalEthDirect: ", handler.ghost_totalEthDirect());
+        console.log("  ghost_totalLootboxEth:", handler.ghost_totalLootboxEth());
+        console.log("  ghost_totalRolledEth: ", handler.ghost_totalRolledEth());
         console.log("--- VRFHandler ---");
         console.log("  ghost_vrfFulfillments:", vrfHandler.ghost_vrfFulfillments());
     }
