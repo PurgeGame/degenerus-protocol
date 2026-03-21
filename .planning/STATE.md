@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: New Feature Audit — Skim Redesign + Redemption Lootbox
 status: unknown
-stopped_at: Completed 51-03-PLAN.md (activity score snapshot audit)
-last_updated: "2026-03-21T20:02:58.592Z"
+stopped_at: Completed 50-03-PLAN.md (economic analysis verdicts)
+last_updated: "2026-03-21T20:05:48.392Z"
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # State
@@ -46,6 +46,8 @@ v3.4 context:
 - [Phase 51]: REDM-02 SAFE: gameOver bypass confirmed pure ETH/stETH, no lootbox or BURNIE
 - [Phase 51]: INFO finding: rounding dust in pendingRedemptionEthValue (negligible, no action)
 - [Phase 51]: REDM-04 SAFE: activity score snapshot immutable from write through consumption across 3 contracts
+- [Phase 50]: Level-1 overshoot firing classified as acceptable behavior — ETH stays within system per SKIM-06 conservation
+- [Phase 50]: F-50-03 INFO: test_level1_overshootDormant uses unreachable lastPool=0; recommend production-realistic test
 
 ### Pending Todos
 
@@ -57,6 +59,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T20:02:58.590Z
-Stopped at: Completed 51-03-PLAN.md (activity score snapshot audit)
+Last session: 2026-03-21T20:05:48.390Z
+Stopped at: Completed 50-03-PLAN.md (economic analysis verdicts)
 Resume file: None

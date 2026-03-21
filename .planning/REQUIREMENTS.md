@@ -17,9 +17,9 @@
 
 ### Skim Economic Analysis
 
-- [ ] **ECON-01**: Overshoot surcharge correctly accelerates futurepool growth during fast levels
-- [ ] **ECON-02**: Stall escalation still functions (no regression from growth adjustment removal)
-- [ ] **ECON-03**: Level 1 (lastPool=0) is safe — overshoot dormant, no division by zero
+- [x] **ECON-01**: Overshoot surcharge correctly accelerates futurepool growth during fast levels
+- [x] **ECON-02**: Stall escalation still functions (no regression from growth adjustment removal)
+- [x] **ECON-03**: Level 1 (lastPool=0) is safe — overshoot dormant, no division by zero
 
 ### Redemption Lootbox Security
 
@@ -64,9 +64,9 @@
 | SKIM-05 | Phase 50 | Complete |
 | SKIM-06 | Phase 50 | Complete |
 | SKIM-07 | Phase 50 | Complete |
-| ECON-01 | Phase 50 | Pending |
-| ECON-02 | Phase 50 | Pending |
-| ECON-03 | Phase 50 | Pending |
+| ECON-01 | Phase 50 | Complete |
+| ECON-02 | Phase 50 | Complete |
+| ECON-03 | Phase 50 | Complete |
 | REDM-01 | Phase 51 | Complete |
 | REDM-02 | Phase 51 | Complete |
 | REDM-03 | Phase 51 | Complete |
