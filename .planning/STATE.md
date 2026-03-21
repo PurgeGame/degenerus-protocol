@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: New Feature Audit — Skim Redesign + Redemption Lootbox
 status: unknown
-stopped_at: Completed 52-01-PLAN.md (skim invariant fuzz tests)
-last_updated: "2026-03-21T20:33:38.215Z"
+stopped_at: Completed 52-02-PLAN.md (redemption split invariant)
+last_updated: "2026-03-21T20:34:46.158Z"
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # State
@@ -50,6 +50,7 @@ v3.4 context:
 - [Phase 50]: F-50-03 INFO: test_level1_overshootDormant uses unreachable lastPool=0; recommend production-realistic test
 - [Phase 51]: REDM-06-A classified as MEDIUM: unchecked underflow corrupts accounting but cannot be exploited for direct theft
 - [Phase 52]: Extended FuturepoolSkimTest with INV-named tests using property-based fuzz pattern; widened lastPool to 0 for level-1 edge case coverage
+- [Phase 52]: INV-03 split conservation: lootboxEth >= ethDirect (floor division gives lootbox the extra wei for odd totals)
 
 ### Pending Todos
 
@@ -61,6 +62,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T20:33:38.213Z
-Stopped at: Completed 52-01-PLAN.md (skim invariant fuzz tests)
+Last session: 2026-03-21T20:34:46.156Z
+Stopped at: Completed 52-02-PLAN.md (redemption split invariant)
 Resume file: None
