@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: New Feature Audit — Skim Redesign + Redemption Lootbox
 status: unknown
-stopped_at: Completed 51-01-PLAN.md (split routing and gameOver bypass audit)
-last_updated: "2026-03-21T20:02:35.841Z"
+stopped_at: Completed 51-03-PLAN.md (activity score snapshot audit)
+last_updated: "2026-03-21T20:02:58.592Z"
 progress:
   total_phases: 4
   completed_phases: 0
@@ -45,6 +45,7 @@ v3.4 context:
 - [Phase 51]: REDM-01 SAFE: 50/50 split conservation proven algebraically
 - [Phase 51]: REDM-02 SAFE: gameOver bypass confirmed pure ETH/stETH, no lootbox or BURNIE
 - [Phase 51]: INFO finding: rounding dust in pendingRedemptionEthValue (negligible, no action)
+- [Phase 51]: REDM-04 SAFE: activity score snapshot immutable from write through consumption across 3 contracts
 
 ### Pending Todos
 
@@ -56,6 +57,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T20:02:35.837Z
-Stopped at: Completed 51-01-PLAN.md (split routing and gameOver bypass audit)
+Last session: 2026-03-21T20:02:58.590Z
+Stopped at: Completed 51-03-PLAN.md (activity score snapshot audit)
 Resume file: None
