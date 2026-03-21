@@ -10,8 +10,6 @@ requires:
     provides: 5 finding verdicts (CP-08, CP-06, Seam-1, CP-02, CP-07) with severity and fix recommendations
   - phase: 45-invariant-tests
     provides: 7 Foundry invariant tests covering ETH solvency, no double-claim, period monotonicity, supply consistency, 50% cap, roll bounds, aggregate tracking
-  - phase: 47-gas-optimization
-    provides: 7 state variables confirmed alive, 3 packing opportunities identified
 provides:
   - "Warden simulation report covering all 29 contracts with 3-persona blind sweep"
   - "Phase 44 fix verification: CP-08, CP-06, Seam-1, CP-07 all confirmed correctly applied"
