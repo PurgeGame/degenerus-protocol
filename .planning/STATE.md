@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: Gambling Burn Audit + Full Adversarial Sweep
 status: unknown
-stopped_at: Completed 45-03-PLAN.md
-last_updated: "2026-03-21T05:02:48.608Z"
+stopped_at: Completed 46-03-PLAN.md
+last_updated: "2026-03-21T05:31:21.328Z"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 13
+  completed_plans: 9
 ---
 
 # State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 47 — Gas Optimization
+**Current focus:** Phase 46 — Adversarial Sweep + Economic Analysis
 
 ## Current Position
 
-Phase: 48
-Plan: Not started
+Phase: 46 (Adversarial Sweep + Economic Analysis) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: Not started
 | Phase 45 P01 | 6min | 2 tasks | 4 files |
 | Phase 45 P02 | 2min | 2 tasks | 1 files |
 | Phase 45 P03 | 3min | 2 tasks | 2 files |
+| Phase 46 P03 | 3min | 2 tasks | 1 files |
 
 ### Decisions
 
@@ -80,6 +81,10 @@ Prior milestone context:
 - [Phase 45]: Actor addresses at 0xD0000+ to avoid collision with GameHandler (0xA0000) and CompositionHandler (0xC0000)
 - [Phase 45]: 50% supply cap enforcement via vm.load slot reads of internal storage variables (no public getters)
 - [Phase 45]: Double-claim detection checks ETH transfer delta, not try/catch success, due to CP-07 split claim design
+- [Phase 46]: ETH payout EV-neutral: roll [25,175] E[roll]=100, E[payout]=ethValueOwed
+- [Phase 46]: BURNIE payout 1.575% house edge: E[rewardPercent]=96.85 yields E[payout]=0.98425*burnieOwed
+- [Phase 46]: No positive-EV exploits: 4 strategies analyzed, all UNPROFITABLE or NEUTRAL
+- [Phase 46]: Bank-run solvency proven: worst-case 1.75*P <= 0.875*H < H under all-max-rolls scenario
 
 ### Pending Todos
 
@@ -91,6 +96,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T05:02:48.605Z
-Stopped at: Completed 45-03-PLAN.md
+Last session: 2026-03-21T05:31:21.326Z
+Stopped at: Completed 46-03-PLAN.md
 Resume file: None
