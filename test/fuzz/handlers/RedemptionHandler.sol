@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
+import {BurnieCoin} from "../../../contracts/BurnieCoin.sol";
 
 /// @title RedemptionHandler -- Handler for gambling burn lifecycle invariant tests
 /// @notice Wraps the burn-resolve-claim lifecycle with ghost variable tracking,
@@ -15,6 +16,7 @@ contract RedemptionHandler is Test {
     StakedDegenerusStonk public sdgnrs;
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
+    BurnieCoin public coin;
 
     // =========================================================================
     //                          GHOST VARIABLES
@@ -22,7 +24,7 @@ contract RedemptionHandler is Test {
 
     uint256 public ghost_totalBurned;            // cumulative sDGNRS burned
     uint256 public ghost_totalEthClaimed;        // cumulative ETH received from claims
-    uint256 public ghost_totalBurnieClaimed;     // cumulative BURNIE received (placeholder)
+    uint256 public ghost_totalBurnieClaimed;     // cumulative BURNIE received from claims
     uint256 public ghost_periodsResolved;        // count of resolved periods
     uint256 public ghost_claimCount;             // successful claim calls
     uint256 public ghost_lastPeriodIndex;        // last seen redemptionPeriodIndex
@@ -71,11 +73,13 @@ contract RedemptionHandler is Test {
         StakedDegenerusStonk sdgnrs_,
         DegenerusGame game_,
         MockVRFCoordinator vrf_,
+        BurnieCoin coin_,
         uint256 numActors
     ) {
         sdgnrs = sdgnrs_;
         game = game_;
         vrf = vrf_;
+        coin = coin_;
 
         ghost_initialSupply = sdgnrs.totalSupply();
 
@@ -174,11 +178,13 @@ contract RedemptionHandler is Test {
         calls_claim++;
 
         uint256 ethBefore = currentActor.balance;
+        uint256 burnieBefore = coin.balanceOf(currentActor);
 
         vm.prank(currentActor);
         try sdgnrs.claimRedemption() {
             ghost_claimCount++;
             ghost_totalEthClaimed += currentActor.balance - ethBefore;
+            ghost_totalBurnieClaimed += coin.balanceOf(currentActor) - burnieBefore;
         } catch {}
 
         // Attempt re-claim to test no-double-claim invariant.

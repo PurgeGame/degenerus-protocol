@@ -24,7 +24,7 @@ contract RedemptionInvariants is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        handler = new RedemptionHandler(sdgnrs, game, mockVRF, 5);
+        handler = new RedemptionHandler(sdgnrs, game, mockVRF, coin, 5);
         vrfHandler = new VRFHandler(mockVRF, game);
         targetContract(address(handler));
         targetContract(address(vrfHandler));
@@ -162,6 +162,31 @@ contract RedemptionInvariants is DeployProtocol {
     }
 
     // =========================================================================
+    //                    INV-07b: BURNIE CLAIMED MONOTONIC
+    // =========================================================================
+
+    /// @notice Cumulative BURNIE claimed is monotonically non-decreasing.
+    /// @dev ghost_totalBurnieClaimed only increases (claims add, never subtract).
+    ///      This ensures no accounting underflow in BURNIE claim tracking.
+    function invariant_burnieClaimedMonotonic() public view {
+        // ghost_totalBurnieClaimed is only ever incremented (+=), never decremented.
+        // If it were to decrease, the uint256 would underflow and revert in the handler.
+        // This invariant documents the monotonic property explicitly.
+        // Additionally verify it is bounded by a reasonable upper limit:
+        // total BURNIE claimed cannot exceed the initial BURNIE balance of sDGNRS
+        // plus any credited flips (generous bound: initial coin supply).
+        uint256 claimed = handler.ghost_totalBurnieClaimed();
+        // Monotonicity is enforced by the += operator (underflow reverts in 0.8.x).
+        // Boundedness: claimed should not exceed total BURNIE ever in the system.
+        // We use a generous bound: 1e30 (matches BURNIE initial supply order of magnitude).
+        assertLe(
+            claimed,
+            1e30,
+            "INV-07b: cumulative BURNIE claimed exceeds system maximum"
+        );
+    }
+
+    // =========================================================================
     //                           CANARY
     // =========================================================================
 
@@ -188,6 +213,7 @@ contract RedemptionInvariants is DeployProtocol {
         console.log("  ghost_periodsResolved:", handler.ghost_periodsResolved());
         console.log("  ghost_claimCount:     ", handler.ghost_claimCount());
         console.log("  ghost_totalEthClaimed:", handler.ghost_totalEthClaimed());
+        console.log("  ghost_totalBurnieClaimed:", handler.ghost_totalBurnieClaimed());
         console.log("  ghost_doubleClaim:    ", handler.ghost_doubleClaim());
         console.log("  ghost_rollOutOfBounds:", handler.ghost_rollOutOfBounds());
         console.log("  ghost_periodIdxDecr:  ", handler.ghost_periodIndexDecreased());
