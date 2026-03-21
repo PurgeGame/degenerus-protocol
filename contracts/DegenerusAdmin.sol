@@ -561,6 +561,9 @@ contract DegenerusAdmin {
     // =========================================================================
 
     /// @dev Execute VRF coordinator swap and void all other active proposals.
+    // Intentional: lastVrfProcessedTimestamp is NOT reset here — the old stall
+    // timestamp carries over so governance can rapidly re-swap if the new
+    // coordinator also fails, without waiting for a fresh stall window.
     function _executeSwap(uint256 proposalId) internal {
         Proposal storage p = proposals[proposalId];
         p.state = ProposalState.Executed;

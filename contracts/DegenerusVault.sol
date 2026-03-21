@@ -283,7 +283,7 @@ contract DegenerusVaultShare {
     // ---------------------------------------------------------------------
     // INTERNAL HELPERS
     // ---------------------------------------------------------------------
-    /// @dev Internal transfer logic with balance and destination zero-address check
+    /// @dev Internal transfer logic with balance and destination zero-address check (to only)
     /// @param from Source address
     /// @param to Destination address
     /// @param amount Amount to transfer

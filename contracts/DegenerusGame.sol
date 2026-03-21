@@ -1805,7 +1805,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (msg.sender != ContractAddresses.SDGNRS) revert E();
         if (amount == 0) return;
 
-        // Debit from sDGNRS's claimable (ETH stays in Game's balance)
+        // Debit from sDGNRS's claimable (ETH stays in Game's balance).
+        // SAFETY: unchecked is safe because the only path that drains claimableWinnings[SDGNRS]
+        // is _deterministicBurnFrom → game.claimWinnings(), which only fires at gameOver.
+        // This function is only called during active game (lootboxEth = 0 when gameOver).
+        // The two paths are mutually exclusive, so claimable >= amount always holds here.
         uint256 claimable = claimableWinnings[ContractAddresses.SDGNRS];
         unchecked {
             claimableWinnings[ContractAddresses.SDGNRS] = claimable - amount;

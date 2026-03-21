@@ -1019,13 +1019,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
 
-        // Step 2: Additive random 0–10% on bps
+        // Step 2: Additive random 0–10% on bps (full 256-bit modulo; functionally uniform)
         bps += rngWord % (ADDITIVE_RANDOM_BPS + 1);
 
         // Step 3: Compute take from uncapped bps
         uint256 take = (nextPoolBefore * bps) / 10_000;
 
-        // Step 4: ±25% multiplicative variance (triangular: avg of two uniform VRF rolls)
+        // Step 4: ±25% multiplicative variance (triangular: avg of two uniform VRF rolls).
+        // roll1 uses bits [64:255], roll2 uses bits [192:255] — overlap at [192:255] is
+        // irrelevant because modulo by range (small) makes outputs independent.
         if (take != 0) {
             uint256 halfWidth = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000;
             uint256 minWidth = (nextPoolBefore * NEXT_SKIM_VARIANCE_MIN_BPS) / 10_000;
