@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: Gambling Burn Audit + Full Adversarial Sweep
 status: unknown
-stopped_at: Completed 45-01-PLAN.md
-last_updated: "2026-03-21T04:50:59.451Z"
+stopped_at: Completed 45-02-PLAN.md
+last_updated: "2026-03-21T04:56:55.512Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 
 ## Current Position
 
-Phase: 47 (Gas Optimization) — EXECUTING
-Plan: 2 of 2
+Phase: 48
+Plan: Not started
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Plan: 2 of 2
 | Phase 47 P02 | 2min | 2 tasks | 2 files |
 | Phase 47 P01 | 4min | 2 tasks | 1 files |
 | Phase 45 P01 | 6min | 2 tasks | 4 files |
+| Phase 45 P02 | 2min | 2 tasks | 1 files |
 
 ### Decisions
 
@@ -75,6 +76,8 @@ Prior milestone context:
 - [Phase 47]: 3 packing opportunities identified: index+burned (LOW), ethBase+burnieBase (LOW-MED), struct (LOW-MED) -- up to 66,300 gas saved per call
 - [Phase 45]: Seam-1: chose Option A (revert during active game) -- simplest fix, no sDGNRS changes needed
 - [Phase 45]: CP-07: split claim into ETH-always + BURNIE-conditional rather than emergency coinflip resolution
+- [Phase 45]: Actor addresses at 0xD0000+ to avoid collision with GameHandler (0xA0000) and CompositionHandler (0xC0000)
+- [Phase 45]: 50% supply cap enforcement via vm.load slot reads of internal storage variables (no public getters)
 
 ### Pending Todos
 
@@ -86,6 +89,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T04:50:59.448Z
-Stopped at: Completed 45-01-PLAN.md
+Last session: 2026-03-21T04:56:55.510Z
+Stopped at: Completed 45-02-PLAN.md
 Resume file: None
