@@ -33,8 +33,8 @@
 
 ### Invariant Testing
 
-- [ ] **INV-01**: Fuzz invariant: skim conservation holds across random inputs
-- [ ] **INV-02**: Fuzz invariant: take never exceeds 80% of nextPool
+- [x] **INV-01**: Fuzz invariant: skim conservation holds across random inputs
+- [x] **INV-02**: Fuzz invariant: take never exceeds 80% of nextPool
 - [ ] **INV-03**: Fuzz invariant: redemption lootbox split sums to total rolled ETH
 
 ### Consolidated Findings
@@ -74,8 +74,8 @@
 | REDM-05 | Phase 51 | Complete |
 | REDM-06 | Phase 51 | Complete |
 | REDM-07 | Phase 51 | Complete |
-| INV-01 | Phase 52 | Pending |
-| INV-02 | Phase 52 | Pending |
+| INV-01 | Phase 52 | Complete |
+| INV-02 | Phase 52 | Complete |
 | INV-03 | Phase 52 | Pending |
 | FIND-01 | Phase 53 | Pending |
 | FIND-02 | Phase 53 | Pending |

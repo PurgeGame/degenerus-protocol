@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: New Feature Audit — Skim Redesign + Redemption Lootbox
 status: unknown
-stopped_at: Completed 51-04-PLAN.md (access control and reclassification audit)
-last_updated: "2026-03-21T20:10:05.009Z"
+stopped_at: Completed 52-01-PLAN.md (skim invariant fuzz tests)
+last_updated: "2026-03-21T20:33:38.215Z"
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 9
+  completed_plans: 8
 ---
 
 # State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 51 — Redemption Lootbox Audit
+**Current focus:** Phase 52 — invariant-test-suite
 
 ## Current Position
 
-Phase: 51 (Redemption Lootbox Audit) — EXECUTING
-Plan: 4 of 4
+Phase: 52 (invariant-test-suite) — EXECUTING
+Plan: 2 of 2
 
 ## Accumulated Context
 
@@ -49,6 +49,7 @@ v3.4 context:
 - [Phase 50]: Level-1 overshoot firing classified as acceptable behavior — ETH stays within system per SKIM-06 conservation
 - [Phase 50]: F-50-03 INFO: test_level1_overshootDormant uses unreachable lastPool=0; recommend production-realistic test
 - [Phase 51]: REDM-06-A classified as MEDIUM: unchecked underflow corrupts accounting but cannot be exploited for direct theft
+- [Phase 52]: Extended FuturepoolSkimTest with INV-named tests using property-based fuzz pattern; widened lastPool to 0 for level-1 edge case coverage
 
 ### Pending Todos
 
@@ -60,6 +61,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T20:10:05.005Z
-Stopped at: Completed 51-04-PLAN.md (access control and reclassification audit)
+Last session: 2026-03-21T20:33:38.213Z
+Stopped at: Completed 52-01-PLAN.md (skim invariant fuzz tests)
 Resume file: None
