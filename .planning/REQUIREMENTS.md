@@ -9,8 +9,8 @@ Requirements for Gambling Burn Audit + Full Adversarial Sweep.
 
 ### Delta Audit (Gambling Burn)
 
-- [ ] **DELTA-01**: Redemption accounting -- verify `pendingRedemptionEthValue` segregation reconciles at submit, resolve, and claim
-- [ ] **DELTA-02**: Cross-contract interaction audit -- 4-contract state consistency (sDGNRS->Game->Coinflip->AdvanceModule) + reentrancy verification
+- [x] **DELTA-01**: Redemption accounting -- verify `pendingRedemptionEthValue` segregation reconciles at submit, resolve, and claim
+- [x] **DELTA-02**: Cross-contract interaction audit -- 4-contract state consistency (sDGNRS->Game->Coinflip->AdvanceModule) + reentrancy verification
 - [x] **DELTA-03**: Confirm or refute CP-08 -- `_deterministicBurnFrom` double-spend via missing `pendingRedemptionEthValue` deduction
 - [x] **DELTA-04**: Confirm or refute CP-06 -- stuck claims at game-over (`_gameOverEntropy` missing `resolveRedemptionPeriod`)
 - [x] **DELTA-05**: Confirm or refute Seam-1 -- `DGNRS.burn()` fund trap (gambling claim recorded under contract address)
@@ -20,8 +20,8 @@ Requirements for Gambling Burn Audit + Full Adversarial Sweep.
 ### Redemption Correctness
 
 - [x] **CORR-01**: Full redemption lifecycle trace -- submit->resolve->claim state machine verification
-- [ ] **CORR-02**: Segregation solvency invariant -- reserved ETH/BURNIE never exceeds contract holdings
-- [ ] **CORR-03**: CEI compliance -- `claimRedemption()` deletes claim before external calls, all paths verified
+- [x] **CORR-02**: Segregation solvency invariant -- reserved ETH/BURNIE never exceeds contract holdings
+- [x] **CORR-03**: CEI compliance -- `claimRedemption()` deletes claim before external calls, all paths verified
 - [x] **CORR-04**: Period state machine -- monotonicity, resolution ordering, 50% supply cap enforcement
 - [x] **CORR-05**: `burnWrapped()` supply invariant -- sDGNRS burned equals DGNRS burned
 
@@ -98,16 +98,16 @@ All complete. See MILESTONES.md for details.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DELTA-01 | Phase 44 | Pending |
-| DELTA-02 | Phase 44 | Pending |
+| DELTA-01 | Phase 44 | Complete |
+| DELTA-02 | Phase 44 | Complete |
 | DELTA-03 | Phase 44 | Complete |
 | DELTA-04 | Phase 44 | Complete |
 | DELTA-05 | Phase 44 | Complete |
 | DELTA-06 | Phase 44 | Complete |
 | DELTA-07 | Phase 44 | Complete |
 | CORR-01 | Phase 44 | Complete |
-| CORR-02 | Phase 44 | Pending |
-| CORR-03 | Phase 44 | Pending |
+| CORR-02 | Phase 44 | Complete |
+| CORR-03 | Phase 44 | Complete |
 | CORR-04 | Phase 44 | Complete |
 | CORR-05 | Phase 44 | Complete |
 | INV-01 | Phase 45 | Pending |
