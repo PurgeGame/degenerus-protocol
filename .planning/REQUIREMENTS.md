@@ -58,7 +58,7 @@ Requirements for Gambling Burn Audit + Full Adversarial Sweep.
 - [x] **DOC-01**: NatSpec correctness for all 6 changed files
 - [x] **DOC-02**: Bit allocation map comment in `rngGate()` documenting which bits each RNG consumer uses
 - [x] **DOC-03**: Error name fix -- `claimCoinflipsForRedemption` uses `OnlyBurnieCoin` (misleading)
-- [ ] **DOC-04**: Full audit doc sync -- update all 13+ audit reference docs for gambling burn mechanism
+- [x] **DOC-04**: Full audit doc sync -- update all 13+ audit reference docs for gambling burn mechanism
 
 ## Prior Milestone Requirements (v3.2)
 
@@ -129,7 +129,7 @@ All complete. See MILESTONES.md for details.
 | DOC-01 | Phase 48 | Complete |
 | DOC-02 | Phase 48 | Complete |
 | DOC-03 | Phase 48 | Complete |
-| DOC-04 | Phase 48 | Pending |
+| DOC-04 | Phase 48 | Complete |
 
 **Coverage:**
 - v3.3 requirements: 32 total
