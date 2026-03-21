@@ -13,7 +13,7 @@
 
 No code path allows unauthorized extraction of ETH or tokens. Accounting invariants hold at all 15 claimablePool mutation sites. CEI is correctly implemented at all 48 state-changing entry points. All 46 delegatecall sites use a uniform safe pattern.
 
-All findings identified during the audit have been resolved. Four Low-severity issues were fixed in code (CEI ordering, proposal count overflow, spam-propose griefing, dead code removal). No Critical, High, or Medium issues were identified.
+All findings identified during the audit have been resolved. v3.3 identified four findings in the gambling burn redemption system (three High, one Medium) -- all fixed in code. Four Low-severity issues from earlier milestones were also fixed (CEI ordering, proposal count overflow, spam-propose griefing, dead code removal). No open findings remain.
 
 **Key Strengths:**
 1. **VRF integrity.** Chainlink VRF V2.5 sole randomness source. Lock semantics prevent manipulation. Zero MEV extractable value.
@@ -26,7 +26,24 @@ All findings identified during the audit have been resolved. Four Low-severity i
 
 ## Findings
 
-**No open findings.** All issues identified during the audit were resolved.
+**No open findings.** All issues identified during the audit were resolved in code.
+
+### v3.3 Findings (Gambling Burn Redemption System)
+
+| ID | Severity | Title | Status |
+|----|----------|-------|--------|
+| CP-08 | HIGH | `_deterministicBurnFrom` missing pending redemption deduction | FIXED |
+| CP-06 | HIGH | `_gameOverEntropy` missing `resolveRedemptionPeriod` call | FIXED |
+| Seam-1 | HIGH | `DGNRS.burn()` orphans gambling claim under contract address | FIXED |
+| CP-07 | MEDIUM | Coinflip dependency blocks ETH claim at game boundary | FIXED |
+
+**CP-08 (HIGH -- FIXED):** `_deterministicBurnFrom` did not subtract `pendingRedemptionEthValue` and `pendingRedemptionBurnie` from the total reserves before computing proportional share. Post-gameOver burns could double-spend ETH/BURNIE already reserved for pending gambling claims. Fix: deduct pending reserves in both `totalMoney` and `totalBurnie` calculations (StakedDegenerusStonk.sol).
+
+**CP-06 (HIGH -- FIXED):** `_gameOverEntropy` in DegenerusGameAdvanceModule.sol did not call `resolveRedemptionPeriod()`, permanently stranding any gambling burn claims pending at game-over. Fix: added redemption resolution blocks to both VRF and fallback paths in `_gameOverEntropy`, mirroring `rngGate`.
+
+**Seam-1 (HIGH -- FIXED):** `DGNRS.burn()` during active game submitted a gambling claim recorded under the DGNRS contract address (not the actual user). The claim could never be claimed, trapping the user's share of backing. Fix: `DegenerusStonk.burn()` reverts with `GameNotOver()` during active game. Users must use `burnWrapped()` which correctly routes through sDGNRS.
+
+**CP-07 (MEDIUM -- FIXED):** `claimRedemption()` required full coinflip resolution before paying any portion. If the coinflip for a period hadn't resolved yet, both ETH and BURNIE were stuck. Fix: split claim -- ETH is always claimable once the period is resolved; BURNIE payout is conditional on coinflip resolution (paid on win, forfeited on loss, deferred if unresolved).
 
 ---
 
@@ -51,6 +68,7 @@ The protocol depends on two external systems. Neither dependency creates a vulne
 | Access Control | **Low** | DGVE-based admin with CREATOR as fixed deployer. Module isolation complete. |
 | Availability | **Low** | All stuck states have recovery. Worst case: 120-day timeout + VRF failure. |
 | Cross-Contract | **Very Low** | All 46 delegatecall sites verified. Constructor ordering verified. |
+| Gambling Burn | **Very Low** | Four findings found and fixed; invariant test suite provides regression coverage. |
 
 ---
 
@@ -62,6 +80,8 @@ The protocol depends on two external systems. Neither dependency creates a vulne
 
 **Libraries/Shared (10):** ContractAddresses, DegenerusTraitUtils, DegenerusGameStorage, MintStreakUtils, PayoutUtils, BitPackingLib, EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib
 
-**Tools:** Manual line-by-line review, Slither 0.11.5, Foundry `forge inspect`, 1,463 Hardhat tests + 27 Foundry harnesses, multi-agent adversarial warden simulation
+**v3.3 Gambling Burn Scope:** StakedDegenerusStonk.sol (gambling burn functions: burn, burnWrapped, claimRedemption, resolveRedemptionPeriod, hasPendingRedemptions), DegenerusStonk.sol (Seam-1 fix: GameNotOver guard), BurnieCoinflip.sol (claimCoinflipsForRedemption), DegenerusGameAdvanceModule.sol (redemption resolution in rngGate and _gameOverEntropy)
+
+**Tools:** Manual line-by-line review, Slither 0.11.5, Foundry `forge inspect`, 1,463 Hardhat tests + 27 Foundry harnesses, 7 Foundry invariant tests for redemption system, multi-agent adversarial warden simulation
 
 **Out of scope:** Formal verification, coverage-guided fuzzing, frontend/off-chain code, testnet-specific behavior, mocks, deployment scripts

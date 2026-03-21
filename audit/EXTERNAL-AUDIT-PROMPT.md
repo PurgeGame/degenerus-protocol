@@ -42,6 +42,9 @@ Your objective is to find real, exploitable vulnerabilities and meaningful econo
 - DegenerusVault for stETH yield
 - Dual token: StakedDegenerusStonk (sDGNRS, soulbound, holds reserves) + DegenerusStonk (DGNRS, transferable wrapper)
 - Pull-pattern ETH/stETH withdrawals (no push payments)
+- Gambling burn: during active game, sDGNRS/DGNRS burns enter RNG-gated redemption (roll 25-175% of proportional share); post-gameOver, deterministic proportional payout
+- Redemption lifecycle: submit (burn sDGNRS) -> resolve (advanceGame applies VRF roll) -> claim (ETH always, BURNIE conditional on coinflip)
+- Split-claim: ETH paid immediately on period resolution; BURNIE conditional on coinflip win/loss
 - Game over is multi-step: advanceGame -> VRF request -> fulfill -> advanceGame -> `gameOver=true`
 - Deity pass refund on gameOver: flat 20 ETH/pass (levels 0-9), budget-capped, first-purchased-first-paid
 
@@ -76,8 +79,8 @@ Delegatecall modules (all share `DegenerusGameStorage`):
 Supporting contracts:
 - `contracts/BurnieCoin.sol` + `contracts/BurnieCoinflip.sol`
 - `contracts/DegenerusVault.sol`
-- `contracts/StakedDegenerusStonk.sol` (sDGNRS -- soulbound, holds all reserves and pools)
-- `contracts/DegenerusStonk.sol` (DGNRS -- transferable ERC20 wrapper)
+- `contracts/StakedDegenerusStonk.sol` (sDGNRS -- soulbound, holds all reserves and pools) + gambling burn redemption system (burn/claim/resolve lifecycle)
+- `contracts/DegenerusStonk.sol` (DGNRS -- transferable ERC20 wrapper) + GameNotOver guard on burn()
 - `contracts/DegenerusDeityPass.sol`
 - `contracts/DegenerusAdmin.sol`
 
@@ -152,6 +155,13 @@ Audit all areas below and state confidence (high/medium/low) per area:
 - Module A->B sequence integrity and state assumptions
 - Shared-storage composition safety across all module combinations
 - States valid locally but invalid globally
+
+11. Gambling Burn Redemption System
+- Verify segregation accounting (pendingRedemptionEthValue/Burnie) never exceeds contract holdings
+- Check split-claim (ETH always, BURNIE conditional) for double-claim vectors
+- Validate 50% supply cap enforcement per period
+- Verify resolveRedemptionPeriod is called in all RNG resolution paths (rngGate and _gameOverEntropy)
+- Check RNG-locked burn rejection timing
 
 ### Method Requirements
 
@@ -248,6 +258,11 @@ Bad finding pattern (do not do):
 - Lazy pass: 0.24 ETH flat (levels 0-2), sum-of-10-level-prices (level 3+)
 - Deity pass: `24 + T(n)` ETH where `T(n)=n*(n+1)/2`, `n=passesSold`
 - Deity pass gameOver refund: 20 ETH/pass (levels 0-9), budget-capped, first-purchased-first-paid
+- Gambling burn: `sDGNRS.burn(amount)` during active game submits claim; `sDGNRS.claimRedemption()` after resolution
+- Redemption roll: `(currentWord >> 8) % 151 + 25` gives range 25-175 (applied as percentage)
+- BURNIE gamble: staked as coinflip via `creditFlip`; payout depends on flip win/loss
+- Split-claim: ETH portion always claimable after period resolution; BURNIE requires coinflip resolution
+- DGNRS.burn() reverts with GameNotOver during active game (Seam-1 fix)
 
 ### Do Not
 
