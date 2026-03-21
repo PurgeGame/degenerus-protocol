@@ -17,6 +17,9 @@ interface IDegenerusGamePlayer {
     function claimWinnings(address player) external;
     function claimWhalePass(address player) external;
     function claimableWinningsOf(address player) external view returns (uint256);
+    function rngLocked() external view returns (bool);
+    function gameOver() external view returns (bool);
+    function currentDayView() external view returns (uint48);
 }
 
 /// @notice Interface for BURNIE coin contract player-facing functions
@@ -28,6 +31,12 @@ interface IDegenerusCoinPlayer {
 interface IBurnieCoinflipPlayer {
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
+    function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
+    function getCoinflipDayResult(uint48 day) external view returns (uint16 rewardPercent, bool win);
+}
+
+interface IDegenerusStonkWrapper {
+    function burnForSdgnrs(address player, uint256 amount) external;
 }
 
 /**
@@ -62,7 +71,20 @@ contract StakedDegenerusStonk {
     /// @notice Thrown when ETH or token transfer fails
     error TransferFailed();
 
+    /// @notice Thrown when burns are attempted during RNG resolution
+    error BurnsBlockedDuringRng();
 
+    /// @notice Thrown when a player tries to submit a new claim while one is unresolved
+    error UnresolvedClaim();
+
+    /// @notice Thrown when a player tries to claim with no pending redemption
+    error NoClaim();
+
+    /// @notice Thrown when a player tries to claim before the period is resolved
+    error NotResolved();
+
+    /// @notice Thrown when a player tries to claim before the coinflip day is resolved
+    error FlipNotResolved();
 
 
     // =====================================================================
@@ -101,6 +123,15 @@ contract StakedDegenerusStonk {
     /// @param to Destination pool
     /// @param amount Amount transferred
     event PoolRebalance(Pool indexed from, Pool indexed to, uint256 amount);
+
+    /// @notice Emitted when a player submits a gambling burn redemption
+    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieOwed, uint48 periodIndex);
+
+    /// @notice Emitted when a redemption period is resolved with a roll
+    event RedemptionResolved(uint48 indexed periodIndex, uint16 roll, uint256 rolledBurnie, uint48 flipDay);
+
+    /// @notice Emitted when a player claims their resolved redemption
+    event RedemptionClaimed(address indexed player, uint16 roll, bool flipWon, uint256 ethPayout, uint256 burniePayout);
 
     // =====================================================================
     //                          ERC20 METADATA
@@ -142,6 +173,33 @@ contract StakedDegenerusStonk {
     uint256[5] private poolBalances;
 
     // =====================================================================
+    //                   GAMBLING BURN STATE
+    // =====================================================================
+
+    struct PendingRedemption {
+        uint256 ethValueOwed;   // base (100%) ETH-equivalent owed
+        uint256 burnieOwed;     // base (100%) BURNIE owed
+        uint48  periodIndex;    // which daily period (dailyIdx at submission)
+    }
+
+    struct RedemptionPeriod {
+        uint16  roll;           // 0 = unresolved, 25-175 = resolved
+        uint48  flipDay;        // coinflip day for BURNIE gamble
+    }
+
+    mapping(address => PendingRedemption) public pendingRedemptions;
+    mapping(uint48 => RedemptionPeriod) public redemptionPeriods;
+
+    uint256 public pendingRedemptionEthValue;      // total segregated ETH across all periods
+    uint256 internal pendingRedemptionBurnie;       // total reserved BURNIE
+    uint256 internal pendingRedemptionEthBase;      // current unresolved period ETH base
+    uint256 internal pendingRedemptionBurnieBase;   // current unresolved period BURNIE base
+
+    uint256 internal redemptionPeriodSupplySnapshot;
+    uint48  internal redemptionPeriodIndex;
+    uint256 internal redemptionPeriodBurned;
+
+    // =====================================================================
     //                          CONSTANTS
     // =====================================================================
 
@@ -169,6 +227,9 @@ contract StakedDegenerusStonk {
     /// @dev Coinflip contract for claimable BURNIE withdrawals during burns
     IBurnieCoinflipPlayer private constant coinflip =
         IBurnieCoinflipPlayer(ContractAddresses.COINFLIP);
+
+    /// @dev DGNRS wrapper contract for burning wrapped DGNRS to receive sDGNRS backing
+    IDegenerusStonkWrapper private constant dgnrsWrapper = IDegenerusStonkWrapper(ContractAddresses.DGNRS);
 
     /// @dev stETH token reference
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
@@ -365,35 +426,67 @@ contract StakedDegenerusStonk {
     // =====================================================================
 
     /// @notice Burn sDGNRS to claim proportional share of backing assets
-    /// @dev BURNIE paid from balance + coinflip claimables. Prioritizes ETH over stETH.
+    /// @dev Post-gameOver: deterministic payout. During game: gambling path with RNG roll.
+    ///      Returns (0,0,0) during game; player must call claimRedemption() after resolution.
     /// @param amount Amount of sDGNRS to burn
-    /// @return ethOut ETH received
-    /// @return stethOut stETH received
-    /// @return burnieOut BURNIE received
-    function burn(
-        uint256 amount
-    ) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
-        address player = msg.sender;
-        uint256 bal = balanceOf[player];
+    /// @return ethOut ETH received (deterministic path only)
+    /// @return stethOut stETH received (deterministic path only)
+    /// @return burnieOut BURNIE received (deterministic path only)
+    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+        if (game.gameOver()) {
+            return _deterministicBurn(msg.sender, amount);
+        }
+        if (game.rngLocked()) revert BurnsBlockedDuringRng();
+        _submitGamblingClaim(msg.sender, amount);
+        return (0, 0, 0);
+    }
+
+    /// @notice Burn wrapped DGNRS (held in the DGNRS contract) to claim proportional backing assets
+    /// @dev Calls dgnrsWrapper to convert DGNRS to sDGNRS credit, then burns the resulting sDGNRS.
+    ///      Post-gameOver: deterministic payout. During game: gambling path.
+    /// @param amount Amount of sDGNRS-equivalent to burn (from DGNRS wrapper balance)
+    /// @return ethOut ETH received (deterministic path only)
+    /// @return stethOut stETH received (deterministic path only)
+    /// @return burnieOut BURNIE received (deterministic path only)
+    function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+        dgnrsWrapper.burnForSdgnrs(msg.sender, amount);
+        if (game.gameOver()) {
+            return _deterministicBurnFrom(msg.sender, ContractAddresses.DGNRS, amount);
+        }
+        if (game.rngLocked()) revert BurnsBlockedDuringRng();
+        _submitGamblingClaimFrom(msg.sender, ContractAddresses.DGNRS, amount);
+        return (0, 0, 0);
+    }
+
+    /// @dev Deterministic burn: player burns their own sDGNRS and receives backing assets directly.
+    function _deterministicBurn(address player, uint256 amount) private returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+        return _deterministicBurnFrom(player, player, amount);
+    }
+
+    /// @dev Deterministic burn parameterized by beneficiary and burnFrom.
+    ///      Used for the wrapped case where sDGNRS is burned from DGNRS contract's balance
+    ///      but ETH/BURNIE goes to beneficiary.
+    function _deterministicBurnFrom(address beneficiary, address burnFrom, uint256 amount) private returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+        uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
         uint256 supplyBefore = totalSupply;
 
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         uint256 claimableEth = _claimableWinnings();
-        uint256 totalMoney = ethBal + stethBal + claimableEth;
+        uint256 totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue;
         uint256 totalValueOwed = (totalMoney * amount) / supplyBefore;
 
         uint256 burnieBal = coin.balanceOf(address(this));
         uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-        uint256 totalBurnie = burnieBal + claimableBurnie;
+        uint256 totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie;
         burnieOut = (totalBurnie * amount) / supplyBefore;
 
         unchecked {
-            balanceOf[player] = bal - amount;
+            balanceOf[burnFrom] = bal - amount;
             totalSupply -= amount;
         }
-        emit Transfer(player, address(0), amount);
+        emit Transfer(burnFrom, address(0), amount);
 
         if (totalValueOwed > ethBal && claimableEth != 0) {
             game.claimWinnings(address(0));
@@ -414,24 +507,109 @@ contract StakedDegenerusStonk {
             uint256 payBal = remainingBurnie <= burnieBal ? remainingBurnie : burnieBal;
             if (payBal != 0) {
                 remainingBurnie -= payBal;
-                if (!coin.transfer(player, payBal)) revert TransferFailed();
+                if (!coin.transfer(beneficiary, payBal)) revert TransferFailed();
             }
             if (remainingBurnie != 0) {
                 coinflip.claimCoinflips(address(0), remainingBurnie);
-                if (!coin.transfer(player, remainingBurnie)) revert TransferFailed();
+                if (!coin.transfer(beneficiary, remainingBurnie)) revert TransferFailed();
             }
         }
 
         if (stethOut > 0) {
-            if (!steth.transfer(player, stethOut)) revert TransferFailed();
+            if (!steth.transfer(beneficiary, stethOut)) revert TransferFailed();
         }
 
         if (ethOut > 0) {
-            (bool success, ) = player.call{value: ethOut}("");
+            (bool success, ) = beneficiary.call{value: ethOut}("");
             if (!success) revert TransferFailed();
         }
 
-        emit Burn(player, amount, ethOut, stethOut, burnieOut);
+        emit Burn(beneficiary, amount, ethOut, stethOut, burnieOut);
+    }
+
+    // =====================================================================
+    //                       GAMBLING BURN FUNCTIONS
+    // =====================================================================
+
+    /// @notice Check whether there are unresolved gambling burn redemptions pending
+    /// @return True if the current period has unresolved ETH or BURNIE base
+    function hasPendingRedemptions() external view returns (bool) {
+        return pendingRedemptionEthBase != 0 || pendingRedemptionBurnieBase != 0;
+    }
+
+    /// @notice Called by game contract to resolve the current redemption period with a dice roll
+    /// @dev Adjusts segregated ETH by roll and returns rolled BURNIE amount for the game to credit.
+    /// @param roll Percentage roll (e.g. 75 = 75%)
+    /// @param flipDay Coinflip day index used for BURNIE gamble resolution
+    /// @return burnieToCredit Amount of BURNIE the game should credit to the coinflip contract
+    function resolveRedemptionPeriod(uint16 roll, uint48 flipDay) external returns (uint256 burnieToCredit) {
+        if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
+
+        uint48 period = redemptionPeriodIndex;
+        if (pendingRedemptionEthBase == 0 && pendingRedemptionBurnieBase == 0) return 0;
+
+        // Adjust ETH segregation by roll
+        uint256 rolledEth = (pendingRedemptionEthBase * roll) / 100;
+        pendingRedemptionEthValue = pendingRedemptionEthValue - pendingRedemptionEthBase + rolledEth;
+        pendingRedemptionEthBase = 0;
+
+        // Compute rolled BURNIE (game will creditFlip externally)
+        burnieToCredit = (pendingRedemptionBurnieBase * roll) / 100;
+
+        // Release BURNIE reservation (it's now in the flip as virtual stake)
+        pendingRedemptionBurnie -= pendingRedemptionBurnieBase;
+        pendingRedemptionBurnieBase = 0;
+
+        // Store period result
+        redemptionPeriods[period] = RedemptionPeriod({
+            roll: roll,
+            flipDay: flipDay
+        });
+
+        emit RedemptionResolved(period, roll, burnieToCredit, flipDay);
+    }
+
+    /// @notice Claim a resolved gambling burn redemption
+    /// @dev Requires period resolved (roll != 0) and coinflip day resolved.
+    ///      ETH payout uses roll only; BURNIE uses roll * flip multiplier on win, 0 on loss.
+    function claimRedemption() external {
+        address player = msg.sender;
+        PendingRedemption storage claim = pendingRedemptions[player];
+        if (claim.periodIndex == 0) revert NoClaim();
+
+        RedemptionPeriod storage period = redemptionPeriods[claim.periodIndex];
+        if (period.roll == 0) revert NotResolved();
+
+        // Check coinflip resolved
+        (uint16 rewardPercent, bool flipWon) = coinflip.getCoinflipDayResult(period.flipDay);
+        if (rewardPercent == 0 && !flipWon) revert FlipNotResolved();
+
+        uint16 roll = period.roll;
+
+        // ETH payout: roll only (no coinflip multiplier)
+        uint256 ethPayout = (claim.ethValueOwed * roll) / 100;
+
+        // BURNIE payout: 0 on loss, roll * flip multiplier on win
+        uint256 burniePayout;
+        if (flipWon) {
+            burniePayout = (claim.burnieOwed * roll * (100 + rewardPercent)) / 10000;
+        }
+
+        // Release ETH segregation
+        pendingRedemptionEthValue -= ethPayout;
+
+        // Clear claim
+        delete pendingRedemptions[player];
+
+        // Pay ETH (ETH-first, stETH fallback)
+        _payEth(player, ethPayout);
+
+        // Pay BURNIE
+        if (burniePayout != 0) {
+            _payBurnie(player, burniePayout);
+        }
+
+        emit RedemptionClaimed(player, roll, flipWon, ethPayout, burniePayout);
     }
 
     // =====================================================================
@@ -452,10 +630,15 @@ contract StakedDegenerusStonk {
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         uint256 claimableEth = _claimableWinnings();
-        uint256 totalMoney = ethBal + stethBal + claimableEth;
+        uint256 totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue;
         uint256 totalValueOwed = (totalMoney * amount) / supply;
 
         uint256 ethAvailable = ethBal + claimableEth;
+        if (ethAvailable > pendingRedemptionEthValue) {
+            ethAvailable -= pendingRedemptionEthValue;
+        } else {
+            ethAvailable = 0;
+        }
         if (totalValueOwed <= ethAvailable) {
             ethOut = totalValueOwed;
         } else {
@@ -465,22 +648,122 @@ contract StakedDegenerusStonk {
 
         uint256 burnieBal = coin.balanceOf(address(this));
         uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-        uint256 totalBurnie = burnieBal + claimableBurnie;
+        uint256 totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie;
         burnieOut = (totalBurnie * amount) / supply;
     }
 
 
-    /// @notice Get BURNIE backing (balance + claimable coinflips)
-    /// @return BURNIE backing value
+    /// @notice Get BURNIE backing available for new burns (balance + claimable coinflips minus reserved)
+    /// @return BURNIE backing value net of pending redemption reserves
     function burnieReserve() external view returns (uint256) {
         uint256 burnieBal = coin.balanceOf(address(this));
         uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
-        return burnieBal + claimableBurnie;
+        return burnieBal + claimableBurnie - pendingRedemptionBurnie;
     }
 
     // =====================================================================
     //                          INTERNAL HELPERS
     // =====================================================================
+
+    /// @dev Submit a gambling burn claim on behalf of player burning their own sDGNRS.
+    function _submitGamblingClaim(address player, uint256 amount) private {
+        _submitGamblingClaimFrom(player, player, amount);
+    }
+
+    /// @dev Core gambling burn logic. Burns sDGNRS from burnFrom, segregates proportional
+    ///      ETH/BURNIE value for beneficiary, and records into the current period.
+    function _submitGamblingClaimFrom(address beneficiary, address burnFrom, uint256 amount) private {
+        uint256 bal = balanceOf[burnFrom];
+        if (amount == 0 || amount > bal) revert Insufficient();
+
+        // 50% supply cap per period
+        uint48 currentPeriod = game.currentDayView();
+        if (redemptionPeriodIndex != currentPeriod) {
+            redemptionPeriodSupplySnapshot = totalSupply;
+            redemptionPeriodIndex = currentPeriod;
+            redemptionPeriodBurned = 0;
+        }
+        if (redemptionPeriodBurned + amount > redemptionPeriodSupplySnapshot / 2) revert Insufficient();
+        redemptionPeriodBurned += amount;
+
+        uint256 supplyBefore = totalSupply;
+
+        // Compute proportional ETH value (subtract already-segregated)
+        uint256 ethBal = address(this).balance;
+        uint256 stethBal = steth.balanceOf(address(this));
+        uint256 claimableEth = _claimableWinnings();
+        uint256 totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue;
+        uint256 ethValueOwed = (totalMoney * amount) / supplyBefore;
+
+        // Compute proportional BURNIE (subtract already-reserved)
+        uint256 burnieBal = coin.balanceOf(address(this));
+        uint256 claimableBurnie = coinflip.previewClaimCoinflips(address(this));
+        uint256 totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie;
+        uint256 burnieOwed = (totalBurnie * amount) / supplyBefore;
+
+        // Burn sDGNRS
+        unchecked {
+            balanceOf[burnFrom] = bal - amount;
+            totalSupply -= amount;
+        }
+        emit Transfer(burnFrom, address(0), amount);
+
+        // Segregate
+        pendingRedemptionEthValue += ethValueOwed;
+        pendingRedemptionEthBase += ethValueOwed;
+        pendingRedemptionBurnie += burnieOwed;
+        pendingRedemptionBurnieBase += burnieOwed;
+
+        // Stack into existing claim or start new
+        PendingRedemption storage claim = pendingRedemptions[beneficiary];
+        if (claim.periodIndex != 0 && claim.periodIndex != currentPeriod) {
+            revert UnresolvedClaim();
+        }
+        claim.ethValueOwed += ethValueOwed;
+        claim.burnieOwed += burnieOwed;
+        claim.periodIndex = currentPeriod;
+
+        emit RedemptionSubmitted(beneficiary, amount, ethValueOwed, burnieOwed, currentPeriod);
+    }
+
+    /// @dev Pay ETH to player, falling back to stETH if ETH balance is insufficient.
+    function _payEth(address player, uint256 amount) private {
+        if (amount == 0) return;
+        uint256 ethBal = address(this).balance;
+        uint256 claimableEth = _claimableWinnings();
+
+        if (amount > ethBal && claimableEth != 0) {
+            game.claimWinnings(address(0));
+            ethBal = address(this).balance;
+        }
+
+        if (amount <= ethBal) {
+            (bool success, ) = player.call{value: amount}("");
+            if (!success) revert TransferFailed();
+        } else {
+            uint256 ethOut = ethBal;
+            uint256 stethOut = amount - ethOut;
+            if (ethOut > 0) {
+                (bool success, ) = player.call{value: ethOut}("");
+                if (!success) revert TransferFailed();
+            }
+            if (!steth.transfer(player, stethOut)) revert TransferFailed();
+        }
+    }
+
+    /// @dev Pay BURNIE to player, drawing from balance then coinflip claimables.
+    function _payBurnie(address player, uint256 amount) private {
+        uint256 burnieBal = coin.balanceOf(address(this));
+        uint256 payBal = amount <= burnieBal ? amount : burnieBal;
+        uint256 remaining = amount - payBal;
+        if (payBal != 0) {
+            if (!coin.transfer(player, payBal)) revert TransferFailed();
+        }
+        if (remaining != 0) {
+            coinflip.claimCoinflipsForRedemption(address(this), remaining);
+            if (!coin.transfer(player, remaining)) revert TransferFailed();
+        }
+    }
 
     /// @dev Get claimable game winnings, accounting for dust (returns 0 if stored <= 1)
     /// @return claimable Claimable winnings minus 1 wei dust

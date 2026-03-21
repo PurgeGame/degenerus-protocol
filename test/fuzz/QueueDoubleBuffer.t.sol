@@ -75,9 +75,10 @@ contract QueueHarness is DegenerusGameStorage {
         jackpotPhaseFlag = val;
     }
 
-    function getMidDaySwapThreshold() external pure returns (uint32) {
-        return MID_DAY_SWAP_THRESHOLD;
-    }
+    // Disabled: MID_DAY_SWAP_THRESHOLD constant removed from production code
+    // function getMidDaySwapThreshold() external pure returns (uint32) {
+    //     return MID_DAY_SWAP_THRESHOLD;
+    // }
 }
 
 /// @title QueueDoubleBufferTest -- Proves write-key and read-key buffer isolation (QUEUE-01, QUEUE-02).
@@ -247,10 +248,11 @@ contract MidDaySwapTest is Test {
 
     // =========================================================================
     // Test 7: MID_DAY_SWAP_THRESHOLD constant equals 440
+    // Disabled: MID_DAY_SWAP_THRESHOLD constant removed from production code
     // =========================================================================
-    function testMidDaySwapThresholdValue() public view {
-        assertEq(harness.getMidDaySwapThreshold(), 440, "MID_DAY_SWAP_THRESHOLD should be 440");
-    }
+    // function testMidDaySwapThresholdValue() public view {
+    //     assertEq(harness.getMidDaySwapThreshold(), 440, "MID_DAY_SWAP_THRESHOLD should be 440");
+    // }
 
     // =========================================================================
     // Test 8: Write queue at threshold triggers swap successfully
@@ -321,9 +323,10 @@ contract MidDaySwapTest is Test {
         // Not in jackpot phase
         assertFalse(harness.getJackpotPhaseFlag(), "jackpot phase should be inactive");
 
-        // Verify the condition: writeLen < MID_DAY_SWAP_THRESHOLD && !jackpotPhaseFlag
+        // Verify the condition: writeLen < 440 (MID_DAY_SWAP_THRESHOLD) && !jackpotPhaseFlag
         // In the actual advanceGame, this would revert NotTimeYet()
-        assertTrue(writeLen < harness.getMidDaySwapThreshold(), "write queue below threshold");
+        // Note: MID_DAY_SWAP_THRESHOLD removed from production code; using literal 440
+        assertTrue(writeLen < 440, "write queue below threshold");
         assertFalse(harness.getJackpotPhaseFlag(), "not in jackpot -- would revert NotTimeYet");
     }
 
