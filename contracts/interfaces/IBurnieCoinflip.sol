@@ -167,4 +167,19 @@ interface IBurnieCoinflip {
         external
         view
         returns (address player, uint128 score);
+
+    /// @notice Claim coinflip winnings for sDGNRS redemption (skips RNG lock).
+    /// @dev Only callable by sDGNRS contract. Used during claimRedemption() when wallet
+    ///      balance is insufficient and coinflip winnings need to be sourced.
+    /// @param player The player whose winnings to claim.
+    /// @param amount Amount to claim.
+    /// @return claimed The actual amount claimed and minted.
+    /// @custom:reverts OnlyStakedDegenerusStonk If caller is not the sDGNRS contract.
+    function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
+
+    /// @notice Get the result of a coinflip day.
+    /// @param day The day to query.
+    /// @return rewardPercent The reward percentage for that day.
+    /// @return win Whether the flip was a win.
+    function getCoinflipDayResult(uint48 day) external view returns (uint16 rewardPercent, bool win);
 }

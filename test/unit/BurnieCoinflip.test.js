@@ -382,12 +382,12 @@ describe("BurnieCoinflip", function () {
       ).to.not.be.reverted;
     });
 
-    it("claimCoinflips reverts with OnlyBurnieCoin when operator not approved", async function () {
+    it("claimCoinflips reverts with NotApproved when operator not approved", async function () {
       const { coinflip, alice, bob } = await loadFixture(deployFullProtocol);
       // bob tries to claim on behalf of alice without approval
       await expect(
         coinflip.connect(bob).claimCoinflips(alice.address, eth(100))
-      ).to.be.revertedWithCustomError(coinflip, "OnlyBurnieCoin");
+      ).to.be.revertedWithCustomError(coinflip, "NotApproved");
     });
 
     it("previewClaimCoinflips matches actual claimable after winning day", async function () {

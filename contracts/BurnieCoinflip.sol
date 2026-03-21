@@ -97,6 +97,7 @@ contract BurnieCoinflip {
     error CoinflipLocked();
     error OnlyFlipCreditors();
     error OnlyBurnieCoin();
+    error OnlyStakedDegenerusStonk();
     error OnlyDegenerusGame();
     error AutoRebuyNotEnabled();
     error AutoRebuyAlreadyEnabled();
@@ -336,6 +337,26 @@ contract BurnieCoinflip {
         uint256 amount
     ) external onlyBurnieCoin returns (uint256 claimed) {
         return _claimCoinflipsAmount(player, amount, true);
+    }
+
+    /// @notice Claim coinflip winnings for sDGNRS redemption (skips RNG lock).
+    /// @dev Access: sDGNRS only. Used during claimRedemption() when wallet balance
+    ///      is insufficient and coinflip winnings need to be sourced.
+    function claimCoinflipsForRedemption(
+        address player,
+        uint256 amount
+    ) external returns (uint256 claimed) {
+        if (msg.sender != ContractAddresses.SDGNRS) revert OnlyStakedDegenerusStonk();
+        return _claimCoinflipsAmount(player, amount, true);
+    }
+
+    /// @notice Get the result of a coinflip day.
+    /// @param day The day to query.
+    /// @return rewardPercent The reward percentage for that day.
+    /// @return win Whether the flip was a win.
+    function getCoinflipDayResult(uint48 day) external view returns (uint16 rewardPercent, bool win) {
+        CoinflipDayResult memory result = coinflipDayResult[day];
+        return (result.rewardPercent, result.win);
     }
 
     /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
@@ -1092,7 +1113,7 @@ contract BurnieCoinflip {
         if (player == address(0)) return msg.sender;
         if (player != msg.sender) {
             if (!degenerusGame.isOperatorApproved(player, msg.sender)) {
-                revert OnlyBurnieCoin(); // Reusing error
+                revert NotApproved();
             }
         }
         return player;
