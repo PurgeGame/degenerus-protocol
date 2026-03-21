@@ -755,6 +755,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     //       All "full" consumers use modular arithmetic or keccak mixing,
     //       so bit overlap with bits 0 and 8+ is not a collision concern.
 
+    /// @dev Daily RNG processing gate called during advanceGame. Applies VRF word,
+    ///      processes coinflip payouts, resolves pending gambling burn redemptions,
+    ///      stores lootbox RNG, and handles VRF timeout retries (12h).
     function rngGate(
         uint48 ts,
         uint48 day,
@@ -828,6 +831,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Game-over RNG gate with fallback for stalled VRF.
     ///      After 3-day timeout, uses earliest historical VRF word as fallback (more secure
     ///      than blockhash since it's already verified on-chain and cannot be manipulated).
+    ///      Also resolves any pending gambling burn redemptions (mirrors rngGate behavior, CP-06 fix).
     /// @return word RNG word, 1 if request sent, or 0 if waiting on fallback.
     function _gameOverEntropy(
         uint48 ts,
