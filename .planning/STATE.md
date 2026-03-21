@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: Gambling Burn Audit + Full Adversarial Sweep
 status: unknown
-stopped_at: Completed 45-02-PLAN.md
-last_updated: "2026-03-21T04:56:55.512Z"
+stopped_at: Completed 45-03-PLAN.md
+last_updated: "2026-03-21T05:02:48.608Z"
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # State
@@ -49,6 +49,7 @@ Plan: Not started
 | Phase 47 P01 | 4min | 2 tasks | 1 files |
 | Phase 45 P01 | 6min | 2 tasks | 4 files |
 | Phase 45 P02 | 2min | 2 tasks | 1 files |
+| Phase 45 P03 | 3min | 2 tasks | 2 files |
 
 ### Decisions
 
@@ -78,6 +79,7 @@ Prior milestone context:
 - [Phase 45]: CP-07: split claim into ETH-always + BURNIE-conditional rather than emergency coinflip resolution
 - [Phase 45]: Actor addresses at 0xD0000+ to avoid collision with GameHandler (0xA0000) and CompositionHandler (0xC0000)
 - [Phase 45]: 50% supply cap enforcement via vm.load slot reads of internal storage variables (no public getters)
+- [Phase 45]: Double-claim detection checks ETH transfer delta, not try/catch success, due to CP-07 split claim design
 
 ### Pending Todos
 
@@ -89,6 +91,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T04:56:55.510Z
-Stopped at: Completed 45-02-PLAN.md
+Last session: 2026-03-21T05:02:48.605Z
+Stopped at: Completed 45-03-PLAN.md
 Resume file: None
