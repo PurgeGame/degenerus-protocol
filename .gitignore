@@ -9,3 +9,4 @@ runs/
 *.sol.bak
 .planning/
 .gas-snapshot
+.gas-snapshot-*
