@@ -189,3 +189,155 @@ Despite the bit overlap, the outputs are **functionally independent** for practi
 
 **Severity:** INFO
 **Recommendation:** Either update NatSpec/comments to describe "functionally independent via modulo" rather than literal bit isolation, OR add bit masking (`rngWord & mask`) to achieve true window isolation per the documented design.
+
+---
+
+## SKIM-04: Triangular Variance Cannot Underflow Take
+
+**Lines:** 1029-1044 of DegenerusGameAdvanceModule.sol
+**Constants:** `NEXT_SKIM_VARIANCE_BPS = 2500` (L104), `NEXT_SKIM_VARIANCE_MIN_BPS = 1000` (L105)
+
+### Code Under Analysis
+
+```solidity
+// Step 4: +/-25% multiplicative variance (triangular: avg of two uniform VRF rolls)
+if (take != 0) {                                                  // L1029
+    uint256 halfWidth = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000; // L1030
+    uint256 minWidth = (nextPoolBefore * NEXT_SKIM_VARIANCE_MIN_BPS) / 10_000; // L1031
+    if (halfWidth < minWidth) halfWidth = minWidth;               // L1032
+    if (halfWidth > take) halfWidth = take;                       // L1033
+
+    uint256 range = halfWidth * 2 + 1;                            // L1035
+    uint256 roll1 = (rngWord >> 64) % range;                      // L1036
+    uint256 roll2 = (rngWord >> 192) % range;                     // L1037
+    uint256 combined = (roll1 + roll2) / 2;                       // L1038
+
+    if (combined >= halfWidth) {                                  // L1040
+        take += combined - halfWidth;                             // L1041
+    } else {                                                      // L1042
+        take -= halfWidth - combined;                             // L1043
+    }
+}
+```
+
+### Bounds Chain Proof
+
+**Step 1: halfWidth initial computation (L1030)**
+- `halfWidth = (take * 2500) / 10000 = take / 4` (integer division)
+- Since `take > 0` (guard at L1029), `halfWidth >= 0`
+- For `take >= 4`, `halfWidth >= 1`
+
+**Step 2: minWidth floor (L1031-1032)**
+- `minWidth = (nextPoolBefore * 1000) / 10000 = nextPoolBefore / 10`
+- If `halfWidth < minWidth`, halfWidth is raised to minWidth
+- This can push halfWidth ABOVE `take / 4` -- potentially above take itself if nextPoolBefore is much larger than take
+
+**Step 3: The critical clamp (L1033)**
+- `if (halfWidth > take) halfWidth = take`
+- **This guarantees: `halfWidth <= take`** regardless of how large minWidth pushed it
+- This is the invariant that makes the subtraction path safe
+
+**Step 4: Range computation (L1035)**
+- `range = halfWidth * 2 + 1`
+- Since `halfWidth <= take` and `take <= nextPoolBefore * 8000 / 10000` (from eventual cap), range is bounded
+- `range >= 1` (since `halfWidth >= 0`, range >= 1). Division by zero in modulo impossible
+- Overflow: `halfWidth * 2 + 1`. With `halfWidth <= take <= nextPoolBefore` and nextPoolBefore being uint128, `2 * type(uint128).max + 1` fits in uint256. SAFE
+
+**Step 5: Roll bounds (L1036-1037)**
+- `roll1 = (rngWord >> 64) % range` => `roll1 in [0, range-1] = [0, halfWidth * 2]`
+- `roll2 = (rngWord >> 192) % range` => `roll2 in [0, range-1] = [0, halfWidth * 2]`
+
+**Step 6: Combined computation (L1038)**
+- `combined = (roll1 + roll2) / 2`
+- Maximum: `(halfWidth*2 + halfWidth*2) / 2 = halfWidth * 2` (integer division of `4 * halfWidth / 2`)
+- Minimum: `(0 + 0) / 2 = 0`
+- Therefore: `combined in [0, halfWidth * 2]`
+
+**Step 7: Subtraction path safety (L1042-1043)**
+- Condition: `combined < halfWidth`
+- Subtraction amount: `halfWidth - combined`
+- Since `combined >= 0` and `combined < halfWidth`: `halfWidth - combined in [1, halfWidth]`
+- Since `halfWidth <= take` (from Step 3): `halfWidth - combined <= halfWidth <= take`
+- Therefore: `take -= (halfWidth - combined)` **cannot underflow**
+- Resulting take: `take - (halfWidth - combined) >= take - halfWidth >= 0`
+
+**Step 8: Addition path safety (L1040-1041)**
+- Condition: `combined >= halfWidth`
+- Addition amount: `combined - halfWidth`
+- Since `combined <= halfWidth * 2`: `combined - halfWidth <= halfWidth`
+- `take += combined - halfWidth` adds at most `halfWidth` to take
+- Overflow: take is at most ~`nextPoolBefore * bps / 10000` + halfWidth. For uint256, this is negligible. SAFE
+
+**Formal bound summary:**
+```
+Invariant: halfWidth <= take  (enforced by L1033)
+Subtraction path: take -= (halfWidth - combined)
+  where 0 <= halfWidth - combined <= halfWidth <= take
+  => take_after >= take - halfWidth >= 0   QED (no underflow)
+Addition path: take += (combined - halfWidth)
+  where 0 <= combined - halfWidth <= halfWidth
+  => take_after <= take + halfWidth         (no overflow concern for uint256)
+```
+
+**Cross-reference:**
+- `testFuzz_G2_takeCapped` at FuturepoolSkim.t.sol:262 -- runs 1000 fuzz iterations across random `nextPool`, `futurePool`, `lvl`, `lastPool`, `elapsed`, `rngWord`. Never reverts, confirming no underflow panic across the entire pipeline including the variance step.
+- `testFuzz_conservation` at FuturepoolSkim.t.sol:404 -- proves `nextPool + futurePool + yield` is conserved, implying no arithmetic errors create or destroy value in the variance step.
+
+**Verdict: SAFE** -- The `if (halfWidth > take) halfWidth = take` clamp at line 1033 guarantees the subtraction path cannot underflow. Formal bound: subtraction amount = `halfWidth - combined <= halfWidth <= take`, therefore `take -= (halfWidth - combined) >= 0`. Confirmed by 1000-iteration fuzz test with no reverts.
+
+---
+
+## SKIM-05: Take Cap at 80% of nextPool
+
+**Lines:** 1047-1049 of DegenerusGameAdvanceModule.sol
+**Constant:** `NEXT_TO_FUTURE_BPS_MAX = 8000` (L111)
+
+### Code Under Analysis
+
+```solidity
+// Step 5: Cap take at 80% of nextPool
+uint256 maxTake = (nextPoolBefore * NEXT_TO_FUTURE_BPS_MAX) / 10_000; // L1048
+if (take > maxTake) take = maxTake;                                    // L1049
+```
+
+### Arithmetic Analysis
+
+**Cap computation (L1048):**
+- `maxTake = (nextPoolBefore * 8000) / 10000 = 80% of nextPoolBefore`
+- Integer division truncates, so `maxTake <= 80% of nextPoolBefore`. Rounding is conservative (caps slightly lower).
+- Overflow: `nextPoolBefore * 8000`. nextPoolBefore is uint256 from `_getNextPrizePool()` (effective max uint128). `type(uint128).max * 8000 = ~2.7e42`, well within uint256. SAFE.
+
+**Cap enforcement (L1049):**
+- If `take > maxTake`, take is clamped to maxTake. Hard clamp, no exceptions.
+- This cap is applied **AFTER** all variance operations (Steps 1-4), so no subsequent arithmetic can increase take above 80%.
+
+**Post-cap operations (L1051-1054):**
+```solidity
+uint256 insuranceSkim = (nextPoolBefore * INSURANCE_SKIM_BPS) / 10_000; // L1051
+_setNextPrizePool(nextPoolBefore - take - insuranceSkim);               // L1052
+_setFuturePrizePool(futurePoolBefore + take);                           // L1053
+yieldAccumulator += insuranceSkim;                                      // L1054
+```
+
+- Insurance skim: `nextPoolBefore * 100 / 10000 = 1% of nextPoolBefore`
+- Total deduction from nextPool: `take + insuranceSkim <= 80% + 1% = 81% of nextPoolBefore`
+- Remaining in nextPool: `nextPoolBefore - take - insuranceSkim >= 19% of nextPoolBefore`
+- Underflow safety (L1052): `take <= 80%` and `insuranceSkim = 1%`, so `take + insuranceSkim <= 81%` of nextPoolBefore. Since `81% < 100%`, the subtraction `nextPoolBefore - take - insuranceSkim` cannot underflow. SAFE.
+
+**Cross-reference:** `testFuzz_G2_takeCapped` at FuturepoolSkim.t.sol:262 -- asserts `take <= nextPoolBefore * 8000 / 10000` across 1000 fuzz runs with random inputs. Also asserts `nextAfter + yieldAfter <= nextPool` (next pool can only decrease). Both assertions pass.
+
+**Verdict: SAFE** -- Hard cap at 80% of nextPool applied at line 1049 after all variance operations. No subsequent step modifies take. Combined with 1% insurance skim, nextPool retains at least 19%. No overflow or underflow risk. Confirmed by 1000-iteration fuzz test.
+
+---
+
+## Summary Table
+
+| Requirement | Verdict | Severity | Lines | Key Mechanism |
+|-------------|---------|----------|-------|---------------|
+| SKIM-01 | SAFE | -- | 1012-1019 | f'(x) = 40M/(x+10000)^2 > 0; clamp at 3500 bps |
+| SKIM-02 | SAFE | -- | 1000-1008 | Bump/penalty capped at 400; `penalty >= bps ? 0 : bps - penalty` floors at 0 |
+| SKIM-03 | INFO | INFO | 1023, 1036-1037 | Modulo consumes all 256 bits; roll1/roll2 share [192:255]; functionally independent |
+| SKIM-04 | SAFE | -- | 1029-1044 | `halfWidth > take` clamp ensures subtraction <= halfWidth <= take |
+| SKIM-05 | SAFE | -- | 1047-1049 | `maxTake = nextPool * 8000 / 10000`; hard clamp post-variance |
+
+**Overall:** 4 SAFE, 1 INFO. No HIGH, MEDIUM, or LOW findings. The pipeline arithmetic is correct with one informational discrepancy in bit-field documentation vs. implementation.
