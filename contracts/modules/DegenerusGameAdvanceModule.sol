@@ -14,6 +14,7 @@ import {
     VRFRandomWordsRequest
 } from "../interfaces/IVRFCoordinator.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
+import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -764,6 +765,20 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
             coinflip.processCoinflipPayouts(bonusFlip, currentWord, day);
+
+            // Resolve gambling burn period if pending
+            {
+                IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+                if (sdgnrs.hasPendingRedemptions()) {
+                    uint16 redemptionRoll = uint16((currentWord >> 8) % 151 + 25);
+                    uint48 flipDay = day + 1;
+                    uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
+                    if (burnieToCredit != 0) {
+                        coin.creditFlip(ContractAddresses.SDGNRS, burnieToCredit);
+                    }
+                }
+            }
+
             _finalizeLootboxRng(currentWord);
             return currentWord;
         }
@@ -813,6 +828,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     day
                 );
             }
+            // Resolve gambling burn period if pending (mirrors rngGate lines 770-780)
+            {
+                IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+                if (sdgnrs.hasPendingRedemptions()) {
+                    uint16 redemptionRoll = uint16((currentWord >> 8) % 151 + 25);
+                    uint48 flipDay = day + 1;
+                    uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
+                    if (burnieToCredit != 0) {
+                        coin.creditFlip(ContractAddresses.SDGNRS, burnieToCredit);
+                    }
+                }
+            }
             _finalizeLootboxRng(currentWord);
             return currentWord;
         }
@@ -829,6 +856,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         fallbackWord,
                         day
                     );
+                }
+                // Resolve gambling burn period if pending (mirrors rngGate lines 770-780)
+                {
+                    IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+                    if (sdgnrs.hasPendingRedemptions()) {
+                        uint16 redemptionRoll = uint16((fallbackWord >> 8) % 151 + 25);
+                        uint48 flipDay = day + 1;
+                        uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
+                        if (burnieToCredit != 0) {
+                            coin.creditFlip(ContractAddresses.SDGNRS, burnieToCredit);
+                        }
+                    }
                 }
                 _finalizeLootboxRng(fallbackWord);
                 return fallbackWord;

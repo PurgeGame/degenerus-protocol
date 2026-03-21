@@ -15,9 +15,10 @@ interface IERC20Minimal {
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
-/// @dev Game interface for VRF liveness check (unwrap guard).
+/// @dev Game interface for VRF liveness check (unwrap guard) and game-over check (burn guard).
 interface IDegenerusGame {
     function lastVrfProcessed() external view returns (uint48);
+    function gameOver() external view returns (bool);
 }
 
 /**
@@ -39,6 +40,8 @@ contract DegenerusStonk {
     error ZeroAddress();
     /// @notice Thrown when an ETH or token transfer fails
     error TransferFailed();
+    /// @notice Thrown when burn() is called during active game (use burnWrapped() instead)
+    error GameNotOver();
 
     // =====================================================================
     //                              EVENTS
@@ -163,6 +166,7 @@ contract DegenerusStonk {
     /// @dev ETH sent last (checks-effects-interactions)
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         _burn(msg.sender, amount);
+        if (!IDegenerusGame(ContractAddresses.GAME).gameOver()) revert GameNotOver();
 
         (ethOut, stethOut, burnieOut) = stonk.burn(amount);
 
@@ -219,5 +223,25 @@ contract DegenerusStonk {
             totalSupply -= amount;
         }
         emit Transfer(from, address(0), amount);
+    }
+
+    // =====================================================================
+    //                    sDGNRS BURN SUPPORT
+    // =====================================================================
+
+    /// @notice Burn DGNRS from a player on behalf of sDGNRS (for wrapped gambling burns)
+    /// @dev Only callable by sDGNRS contract. Burns the wrapper token so sDGNRS can
+    ///      burn the backing sDGNRS from this contract's balance.
+    /// @param player Address whose DGNRS to burn
+    /// @param amount Amount of DGNRS to burn
+    function burnForSdgnrs(address player, uint256 amount) external {
+        if (msg.sender != ContractAddresses.SDGNRS) revert Unauthorized();
+        uint256 bal = balanceOf[player];
+        if (amount == 0 || amount > bal) revert Insufficient();
+        unchecked {
+            balanceOf[player] = bal - amount;
+            totalSupply -= amount;
+        }
+        emit Transfer(player, address(0), amount);
     }
 }
