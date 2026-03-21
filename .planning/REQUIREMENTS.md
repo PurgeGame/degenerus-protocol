@@ -27,13 +27,13 @@ Requirements for Gambling Burn Audit + Full Adversarial Sweep.
 
 ### Invariant Tests
 
-- [ ] **INV-01**: Foundry invariant -- segregated ETH never exceeds contract balance
-- [ ] **INV-02**: Foundry invariant -- no double-claim (claim deleted before payout)
-- [ ] **INV-03**: Foundry invariant -- period index monotonically increases
-- [ ] **INV-04**: Foundry invariant -- totalSupply consistent after burn/claim sequences
-- [ ] **INV-05**: Foundry invariant -- 50% cap correctly enforced per period
-- [ ] **INV-06**: Foundry invariant -- roll bounds always [25, 175]
-- [ ] **INV-07**: Foundry invariant -- pendingRedemptionEthValue + pendingRedemptionBurnie track matches sum of individual claims
+- [x] **INV-01**: Foundry invariant -- segregated ETH never exceeds contract balance
+- [x] **INV-02**: Foundry invariant -- no double-claim (claim deleted before payout)
+- [x] **INV-03**: Foundry invariant -- period index monotonically increases
+- [x] **INV-04**: Foundry invariant -- totalSupply consistent after burn/claim sequences
+- [x] **INV-05**: Foundry invariant -- 50% cap correctly enforced per period
+- [x] **INV-06**: Foundry invariant -- roll bounds always [25, 175]
+- [x] **INV-07**: Foundry invariant -- pendingRedemptionEthValue + pendingRedemptionBurnie track matches sum of individual claims
 
 ### Adversarial Sweep
 
@@ -110,13 +110,13 @@ All complete. See MILESTONES.md for details.
 | CORR-03 | Phase 44 | Complete |
 | CORR-04 | Phase 44 | Complete |
 | CORR-05 | Phase 44 | Complete |
-| INV-01 | Phase 45 | Pending |
-| INV-02 | Phase 45 | Pending |
-| INV-03 | Phase 45 | Pending |
-| INV-04 | Phase 45 | Pending |
-| INV-05 | Phase 45 | Pending |
-| INV-06 | Phase 45 | Pending |
-| INV-07 | Phase 45 | Pending |
+| INV-01 | Phase 45 | Complete |
+| INV-02 | Phase 45 | Complete |
+| INV-03 | Phase 45 | Complete |
+| INV-04 | Phase 45 | Complete |
+| INV-05 | Phase 45 | Complete |
+| INV-06 | Phase 45 | Complete |
+| INV-07 | Phase 45 | Complete |
 | ADV-01 | Phase 46 | Pending |
 | ADV-02 | Phase 46 | Pending |
 | ADV-03 | Phase 46 | Pending |

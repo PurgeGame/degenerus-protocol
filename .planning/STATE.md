@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: Gambling Burn Audit + Full Adversarial Sweep
 status: unknown
-stopped_at: Completed 47-01-PLAN.md
-last_updated: "2026-03-21T04:49:48.727Z"
+stopped_at: Completed 45-01-PLAN.md
+last_updated: "2026-03-21T04:50:59.451Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # State
@@ -47,6 +47,7 @@ Plan: 2 of 2
 | Phase 44 P03 | 6min | 2 tasks | 1 files |
 | Phase 47 P02 | 2min | 2 tasks | 2 files |
 | Phase 47 P01 | 4min | 2 tasks | 1 files |
+| Phase 45 P01 | 6min | 2 tasks | 4 files |
 
 ### Decisions
 
@@ -72,6 +73,8 @@ Prior milestone context:
 - [Phase 47]: Used transferFromPool via vm.prank(game) for realistic token setup in gas benchmarks
 - [Phase 47]: All 7 gambling burn state variables confirmed ALIVE -- GAS-04 closed as no-op, no dead variables for elimination
 - [Phase 47]: 3 packing opportunities identified: index+burned (LOW), ethBase+burnieBase (LOW-MED), struct (LOW-MED) -- up to 66,300 gas saved per call
+- [Phase 45]: Seam-1: chose Option A (revert during active game) -- simplest fix, no sDGNRS changes needed
+- [Phase 45]: CP-07: split claim into ETH-always + BURNIE-conditional rather than emergency coinflip resolution
 
 ### Pending Todos
 
@@ -79,10 +82,10 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 44 has 3 likely-HIGH findings (CP-08, CP-06, Seam-1) that may require code changes invalidating later analysis -- must resolve before proceeding to Phase 45+
+- ~~Phase 44 has 3 likely-HIGH findings (CP-08, CP-06, Seam-1)~~ RESOLVED: All 4 findings (CP-08, CP-06, Seam-1, CP-07) fixed in 45-01
 
 ## Session Continuity
 
-Last session: 2026-03-21T04:49:48.725Z
-Stopped at: Completed 47-01-PLAN.md
+Last session: 2026-03-21T04:50:59.448Z
+Stopped at: Completed 45-01-PLAN.md
 Resume file: None
