@@ -7,11 +7,11 @@
 
 ### Skim Security
 
-- [ ] **SKIM-01**: Overshoot surcharge formula is monotonic and capped at 35%
-- [ ] **SKIM-02**: Ratio adjustment is bounded ±400 bps and drives bps to 0 (not negative)
-- [ ] **SKIM-03**: Additive random consumes bits [0:63] only; variance rolls use [64:191] and [192:255] with no overlap
-- [ ] **SKIM-04**: Triangular variance cannot underflow take (subtraction is safe)
-- [ ] **SKIM-05**: Take cap at 80% of nextPool holds under all input combinations
+- [x] **SKIM-01**: Overshoot surcharge formula is monotonic and capped at 35%
+- [x] **SKIM-02**: Ratio adjustment is bounded ±400 bps and drives bps to 0 (not negative)
+- [x] **SKIM-03**: Additive random consumes bits [0:63] only; variance rolls use [64:191] and [192:255] with no overlap
+- [x] **SKIM-04**: Triangular variance cannot underflow take (subtraction is safe)
+- [x] **SKIM-05**: Take cap at 80% of nextPool holds under all input combinations
 - [x] **SKIM-06**: ETH conservation: nextPool + futurePool + yieldAccumulator is invariant
 - [x] **SKIM-07**: Insurance skim is always exactly 1% of nextPoolBefore
 
@@ -57,11 +57,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SKIM-01 | Phase 50 | Pending |
-| SKIM-02 | Phase 50 | Pending |
-| SKIM-03 | Phase 50 | Pending |
-| SKIM-04 | Phase 50 | Pending |
-| SKIM-05 | Phase 50 | Pending |
+| SKIM-01 | Phase 50 | Complete |
+| SKIM-02 | Phase 50 | Complete |
+| SKIM-03 | Phase 50 | Complete |
+| SKIM-04 | Phase 50 | Complete |
+| SKIM-05 | Phase 50 | Complete |
 | SKIM-06 | Phase 50 | Complete |
 | SKIM-07 | Phase 50 | Complete |
 | ECON-01 | Phase 50 | Pending |
