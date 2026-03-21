@@ -50,7 +50,7 @@ Requirements for Gambling Burn Audit + Full Adversarial Sweep.
 
 - [ ] **GAS-01**: Dead variable check -- confirm all 7 new state variables in sDGNRS are actually needed
 - [ ] **GAS-02**: Storage packing analysis -- identify packing opportunities (e.g. `redemptionPeriodIndex` uint48)
-- [ ] **GAS-03**: Gas snapshot baseline -- `forge snapshot` for all redemption functions
+- [x] **GAS-03**: Gas snapshot baseline -- `forge snapshot` for all redemption functions
 - [ ] **GAS-04**: Unneeded variable elimination -- implement removals identified by GAS-01
 
 ### Documentation
@@ -124,7 +124,7 @@ All complete. See MILESTONES.md for details.
 | ECON-02 | Phase 46 | Pending |
 | GAS-01 | Phase 47 | Pending |
 | GAS-02 | Phase 47 | Pending |
-| GAS-03 | Phase 47 | Pending |
+| GAS-03 | Phase 47 | Complete |
 | GAS-04 | Phase 47 | Pending |
 | DOC-01 | Phase 48 | Pending |
 | DOC-02 | Phase 48 | Pending |
