@@ -287,6 +287,9 @@ contract BurnieCoin {
 
     /// @notice Total spendable BURNIE at the current time (balance + claimable coinflips).
     /// @dev For ContractAddresses.VAULT, includes virtual vault allowance + any actual balance.
+    ///      Known: conservatively underreports during RNG lock since previewClaimCoinflips
+    ///      may exclude in-flight coinflip results; claims still succeed so the gap is
+    ///      transient and acceptable for UI purposes.
     /// @param player The address to query.
     /// @return spendable Total spendable amount right now.
     function balanceOfWithClaimable(address player) external view returns (uint256 spendable) {

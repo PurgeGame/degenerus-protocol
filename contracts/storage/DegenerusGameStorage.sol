@@ -274,6 +274,8 @@ abstract contract DegenerusGameStorage {
     /// @dev Cursor for daily jackpot ETH distribution (bucket order index, 0..3).
     ///      Used with dailyEthWinnerCursor for mid-bucket resume.
     uint8 internal dailyEthBucketCursor;
+    // Note: dailyJackpotCoinTicketsPending (1 byte) and dailyEthBucketCursor (1 byte)
+    // are the tail of Slot 0 (bytes 31-32), not Slot 1.
 
     // =========================================================================
     // EVM SLOT 1: ETH Phase, Price, and Double-Buffer Fields

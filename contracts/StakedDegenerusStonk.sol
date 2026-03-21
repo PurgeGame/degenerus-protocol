@@ -580,7 +580,8 @@ contract StakedDegenerusStonk {
         uint48 claimPeriodIndex = claim.periodIndex;
         uint16 claimActivityScore = claim.activityScore;
 
-        // Total rolled ETH
+        // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
+        // dust in pendingRedemptionEthValue per period — economically negligible.
         uint256 totalRolledEth = (claim.ethValueOwed * roll) / 100;
 
         // 50/50 split (unless gameOver → 100% direct)
@@ -753,6 +754,7 @@ contract StakedDegenerusStonk {
         if (claim.ethValueOwed + ethValueOwed > MAX_DAILY_REDEMPTION_EV) revert ExceedsDailyRedemptionCap();
 
         claim.ethValueOwed += uint96(ethValueOwed);
+        // burnieOwed: uint96 safe — max realistic BURNIE is ~2e24, well below uint96.max (~7.9e28).
         claim.burnieOwed += uint96(burnieOwed);
         claim.periodIndex = currentPeriod;
 
