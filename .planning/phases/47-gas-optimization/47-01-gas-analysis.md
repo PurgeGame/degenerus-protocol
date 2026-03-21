@@ -2,7 +2,7 @@
 
 ## Variable Liveness Analysis (GAS-01)
 
-Analysis of the 7 new state variables added to StakedDegenerusStonk.sol for the gambling burn / redemption system (declared at lines 193-200). Each variable is traced for every write, read, and delete site through the contract.
+Analysis of the 7 new state variables added to StakedDegenerusStonk.sol for the gambling burn / redemption system (declared at lines 191-198). Each variable is traced for every write, read, and delete site through the contract.
 
 ### Summary Table
 
@@ -18,20 +18,20 @@ Analysis of the 7 new state variables added to StakedDegenerusStonk.sol for the 
 
 ### 1. pendingRedemptionEthValue
 
-**Declaration:** StakedDegenerusStonk.sol:193 -- `uint256 public pendingRedemptionEthValue;`
+**Declaration:** StakedDegenerusStonk.sol:191 -- `uint256 public pendingRedemptionEthValue;`
 
 **Write sites:**
-- StakedDegenerusStonk.sol:553 -- `resolveRedemptionPeriod`: `pendingRedemptionEthValue = pendingRedemptionEthValue - pendingRedemptionEthBase + rolledEth` (adjusts segregated ETH by roll percentage)
-- StakedDegenerusStonk.sol:599 -- `claimRedemption`: `pendingRedemptionEthValue -= ethPayout` (releases ETH segregation when player claims)
-- StakedDegenerusStonk.sol:712 -- `_submitGamblingClaimFrom`: `pendingRedemptionEthValue += ethValueOwed` (segregates proportional ETH for new claim)
+- StakedDegenerusStonk.sol:554 -- `resolveRedemptionPeriod`: `pendingRedemptionEthValue = pendingRedemptionEthValue - pendingRedemptionEthBase + rolledEth` (adjusts segregated ETH by roll percentage)
+- StakedDegenerusStonk.sol:602 -- `claimRedemption`: `pendingRedemptionEthValue -= ethPayout` (releases ETH segregation when player claims)
+- StakedDegenerusStonk.sol:722 -- `_submitGamblingClaimFrom`: `pendingRedemptionEthValue += ethValueOwed` (segregates proportional ETH for new claim)
 
 **Read sites:**
-- StakedDegenerusStonk.sol:477 -- `_deterministicBurnFrom`: `totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue` (excludes segregated ETH from deterministic burn calculation)
-- StakedDegenerusStonk.sol:553 -- `resolveRedemptionPeriod`: read as part of the ETH adjustment computation (also a write site)
-- StakedDegenerusStonk.sol:633 -- `previewBurn`: `totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue` (excludes segregated ETH from preview)
-- StakedDegenerusStonk.sol:637 -- `previewBurn`: `if (ethAvailable > pendingRedemptionEthValue)` (determines available ETH for preview)
-- StakedDegenerusStonk.sol:638 -- `previewBurn`: `ethAvailable -= pendingRedemptionEthValue` (subtract segregated from available)
-- StakedDegenerusStonk.sol:695 -- `_submitGamblingClaimFrom`: `totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue` (excludes segregated ETH when computing new claim's share)
+- StakedDegenerusStonk.sol:478 -- `_deterministicBurnFrom`: `totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue` (excludes segregated ETH from deterministic burn calculation)
+- StakedDegenerusStonk.sol:554 -- `resolveRedemptionPeriod`: read as part of the ETH adjustment computation (also a write site)
+- StakedDegenerusStonk.sol:642 -- `previewBurn`: `totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue` (excludes segregated ETH from preview)
+- StakedDegenerusStonk.sol:646 -- `previewBurn`: `if (ethAvailable > pendingRedemptionEthValue)` (determines available ETH for preview)
+- StakedDegenerusStonk.sol:647 -- `previewBurn`: `ethAvailable -= pendingRedemptionEthValue` (subtract segregated from available)
+- StakedDegenerusStonk.sol:705 -- `_submitGamblingClaimFrom`: `totalMoney = ethBal + stethBal + claimableEth - pendingRedemptionEthValue` (excludes segregated ETH when computing new claim's share)
 
 **Delete sites:** None (decremented on claim, never bulk-zeroed)
 
@@ -41,17 +41,17 @@ Analysis of the 7 new state variables added to StakedDegenerusStonk.sol for the 
 
 ### 2. pendingRedemptionBurnie
 
-**Declaration:** StakedDegenerusStonk.sol:194 -- `uint256 internal pendingRedemptionBurnie;`
+**Declaration:** StakedDegenerusStonk.sol:192 -- `uint256 internal pendingRedemptionBurnie;`
 
 **Write sites:**
-- StakedDegenerusStonk.sol:560 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnie -= pendingRedemptionBurnieBase` (releases BURNIE reservation when period is resolved, since BURNIE is now handled via coinflip)
-- StakedDegenerusStonk.sol:714 -- `_submitGamblingClaimFrom`: `pendingRedemptionBurnie += burnieOwed` (reserves proportional BURNIE for new claim)
+- StakedDegenerusStonk.sol:561 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnie -= pendingRedemptionBurnieBase` (releases BURNIE reservation when period is resolved, since BURNIE is now handled via coinflip)
+- StakedDegenerusStonk.sol:724 -- `_submitGamblingClaimFrom`: `pendingRedemptionBurnie += burnieOwed` (reserves proportional BURNIE for new claim)
 
 **Read sites:**
-- StakedDegenerusStonk.sol:482 -- `_deterministicBurnFrom`: `totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie` (excludes reserved BURNIE from deterministic burn)
-- StakedDegenerusStonk.sol:651 -- `previewBurn`: `totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie` (excludes reserved BURNIE from preview)
-- StakedDegenerusStonk.sol:661 -- `burnieReserve`: `return burnieBal + claimableBurnie - pendingRedemptionBurnie` (net BURNIE reserve view)
-- StakedDegenerusStonk.sol:701 -- `_submitGamblingClaimFrom`: `totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie` (excludes reserved BURNIE when computing new claim's share)
+- StakedDegenerusStonk.sol:483 -- `_deterministicBurnFrom`: `totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie` (excludes reserved BURNIE from deterministic burn)
+- StakedDegenerusStonk.sol:660 -- `previewBurn`: `totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie` (excludes reserved BURNIE from preview)
+- StakedDegenerusStonk.sol:670 -- `burnieReserve`: `return burnieBal + claimableBurnie - pendingRedemptionBurnie` (net BURNIE reserve view)
+- StakedDegenerusStonk.sol:711 -- `_submitGamblingClaimFrom`: `totalBurnie = burnieBal + claimableBurnie - pendingRedemptionBurnie` (excludes reserved BURNIE when computing new claim's share)
 
 **Delete sites:** None (decremented on resolution, never bulk-zeroed)
 
@@ -61,17 +61,17 @@ Analysis of the 7 new state variables added to StakedDegenerusStonk.sol for the 
 
 ### 3. pendingRedemptionEthBase
 
-**Declaration:** StakedDegenerusStonk.sol:195 -- `uint256 internal pendingRedemptionEthBase;`
+**Declaration:** StakedDegenerusStonk.sol:193 -- `uint256 internal pendingRedemptionEthBase;`
 
 **Write sites:**
-- StakedDegenerusStonk.sol:554 -- `resolveRedemptionPeriod`: `pendingRedemptionEthBase = 0` (zeroes after applying roll to the accumulated base)
-- StakedDegenerusStonk.sol:713 -- `_submitGamblingClaimFrom`: `pendingRedemptionEthBase += ethValueOwed` (accumulates ETH base for current unresolved period)
+- StakedDegenerusStonk.sol:555 -- `resolveRedemptionPeriod`: `pendingRedemptionEthBase = 0` (zeroes after applying roll to the accumulated base)
+- StakedDegenerusStonk.sol:723 -- `_submitGamblingClaimFrom`: `pendingRedemptionEthBase += ethValueOwed` (accumulates ETH base for current unresolved period)
 
 **Read sites:**
-- StakedDegenerusStonk.sol:537 -- `hasPendingRedemptions`: `pendingRedemptionEthBase != 0` (check if unresolved period exists)
-- StakedDegenerusStonk.sol:549 -- `resolveRedemptionPeriod`: `if (pendingRedemptionEthBase == 0 && pendingRedemptionBurnieBase == 0) return 0` (early exit if nothing to resolve)
-- StakedDegenerusStonk.sol:552 -- `resolveRedemptionPeriod`: `rolledEth = (pendingRedemptionEthBase * roll) / 100` (compute rolled ETH from base)
-- StakedDegenerusStonk.sol:553 -- `resolveRedemptionPeriod`: used in `pendingRedemptionEthValue - pendingRedemptionEthBase + rolledEth` (adjust segregation from base to rolled)
+- StakedDegenerusStonk.sol:538 -- `hasPendingRedemptions`: `pendingRedemptionEthBase != 0` (check if unresolved period exists)
+- StakedDegenerusStonk.sol:550 -- `resolveRedemptionPeriod`: `if (pendingRedemptionEthBase == 0 && pendingRedemptionBurnieBase == 0) return 0` (early exit if nothing to resolve)
+- StakedDegenerusStonk.sol:553 -- `resolveRedemptionPeriod`: `rolledEth = (pendingRedemptionEthBase * roll) / 100` (compute rolled ETH from base)
+- StakedDegenerusStonk.sol:554 -- `resolveRedemptionPeriod`: used in `pendingRedemptionEthValue - pendingRedemptionEthBase + rolledEth` (adjust segregation from base to rolled)
 
 **Delete sites:** None (zeroed via assignment `= 0`, not Solidity `delete`)
 
@@ -81,17 +81,17 @@ Analysis of the 7 new state variables added to StakedDegenerusStonk.sol for the 
 
 ### 4. pendingRedemptionBurnieBase
 
-**Declaration:** StakedDegenerusStonk.sol:196 -- `uint256 internal pendingRedemptionBurnieBase;`
+**Declaration:** StakedDegenerusStonk.sol:194 -- `uint256 internal pendingRedemptionBurnieBase;`
 
 **Write sites:**
-- StakedDegenerusStonk.sol:561 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnieBase = 0` (zeroes after computing rolled BURNIE for coinflip credit)
-- StakedDegenerusStonk.sol:715 -- `_submitGamblingClaimFrom`: `pendingRedemptionBurnieBase += burnieOwed` (accumulates BURNIE base for current unresolved period)
+- StakedDegenerusStonk.sol:562 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnieBase = 0` (zeroes after computing rolled BURNIE for coinflip credit)
+- StakedDegenerusStonk.sol:725 -- `_submitGamblingClaimFrom`: `pendingRedemptionBurnieBase += burnieOwed` (accumulates BURNIE base for current unresolved period)
 
 **Read sites:**
-- StakedDegenerusStonk.sol:537 -- `hasPendingRedemptions`: `pendingRedemptionBurnieBase != 0` (check if unresolved period exists)
-- StakedDegenerusStonk.sol:549 -- `resolveRedemptionPeriod`: `if (pendingRedemptionEthBase == 0 && pendingRedemptionBurnieBase == 0) return 0` (early exit)
-- StakedDegenerusStonk.sol:557 -- `resolveRedemptionPeriod`: `burnieToCredit = (pendingRedemptionBurnieBase * roll) / 100` (compute rolled BURNIE)
-- StakedDegenerusStonk.sol:560 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnie -= pendingRedemptionBurnieBase` (release base from total reservation)
+- StakedDegenerusStonk.sol:538 -- `hasPendingRedemptions`: `pendingRedemptionBurnieBase != 0` (check if unresolved period exists)
+- StakedDegenerusStonk.sol:550 -- `resolveRedemptionPeriod`: `if (pendingRedemptionEthBase == 0 && pendingRedemptionBurnieBase == 0) return 0` (early exit)
+- StakedDegenerusStonk.sol:558 -- `resolveRedemptionPeriod`: `burnieToCredit = (pendingRedemptionBurnieBase * roll) / 100` (compute rolled BURNIE)
+- StakedDegenerusStonk.sol:561 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnie -= pendingRedemptionBurnieBase` (release base from total reservation)
 
 **Delete sites:** None (zeroed via assignment `= 0`)
 
@@ -101,51 +101,51 @@ Analysis of the 7 new state variables added to StakedDegenerusStonk.sol for the 
 
 ### 5. redemptionPeriodSupplySnapshot
 
-**Declaration:** StakedDegenerusStonk.sol:198 -- `uint256 internal redemptionPeriodSupplySnapshot;`
+**Declaration:** StakedDegenerusStonk.sol:196 -- `uint256 internal redemptionPeriodSupplySnapshot;`
 
 **Write sites:**
-- StakedDegenerusStonk.sol:682 -- `_submitGamblingClaimFrom`: `redemptionPeriodSupplySnapshot = totalSupply` (snapshots supply at start of new period)
+- StakedDegenerusStonk.sol:692 -- `_submitGamblingClaimFrom`: `redemptionPeriodSupplySnapshot = totalSupply` (snapshots supply at start of new period)
 
 **Read sites:**
-- StakedDegenerusStonk.sol:686 -- `_submitGamblingClaimFrom`: `if (redemptionPeriodBurned + amount > redemptionPeriodSupplySnapshot / 2) revert Insufficient()` (enforces 50% supply cap per period)
+- StakedDegenerusStonk.sol:696 -- `_submitGamblingClaimFrom`: `if (redemptionPeriodBurned + amount > redemptionPeriodSupplySnapshot / 2) revert Insufficient()` (enforces 50% supply cap per period)
 
 **Delete sites:** None (overwritten on new period start, never zeroed)
 
-**Verdict:** ALIVE -- Enforces the 50% supply cap per redemption period. Without it, the cap check at line 686 has no reference point, allowing unbounded burns within a single period.
+**Verdict:** ALIVE -- Enforces the 50% supply cap per redemption period. Without it, the cap check at line 696 has no reference point, allowing unbounded burns within a single period.
 
 ---
 
 ### 6. redemptionPeriodIndex
 
-**Declaration:** StakedDegenerusStonk.sol:199 -- `uint48 internal redemptionPeriodIndex;`
+**Declaration:** StakedDegenerusStonk.sol:197 -- `uint48 internal redemptionPeriodIndex;`
 
 **Write sites:**
-- StakedDegenerusStonk.sol:683 -- `_submitGamblingClaimFrom`: `redemptionPeriodIndex = currentPeriod` (sets current period index on new period boundary)
+- StakedDegenerusStonk.sol:693 -- `_submitGamblingClaimFrom`: `redemptionPeriodIndex = currentPeriod` (sets current period index on new period boundary)
 
 **Read sites:**
-- StakedDegenerusStonk.sol:548 -- `resolveRedemptionPeriod`: `uint48 period = redemptionPeriodIndex` (reads period index to store resolution result in `redemptionPeriods[period]`)
-- StakedDegenerusStonk.sol:681 -- `_submitGamblingClaimFrom`: `if (redemptionPeriodIndex != currentPeriod)` (detects period boundary to reset accumulators)
+- StakedDegenerusStonk.sol:549 -- `resolveRedemptionPeriod`: `uint48 period = redemptionPeriodIndex` (reads period index to store resolution result in `redemptionPeriods[period]`)
+- StakedDegenerusStonk.sol:691 -- `_submitGamblingClaimFrom`: `if (redemptionPeriodIndex != currentPeriod)` (detects period boundary to reset accumulators)
 
 **Delete sites:** None (overwritten, never zeroed)
 
-**Verdict:** ALIVE -- Tracks which day/period the current accumulation batch belongs to. Without it, the contract cannot detect period boundaries (line 681) or map resolution results to the correct period (line 548).
+**Verdict:** ALIVE -- Tracks which day/period the current accumulation batch belongs to. Without it, the contract cannot detect period boundaries (line 691) or map resolution results to the correct period (line 549).
 
 ---
 
 ### 7. redemptionPeriodBurned
 
-**Declaration:** StakedDegenerusStonk.sol:200 -- `uint256 internal redemptionPeriodBurned;`
+**Declaration:** StakedDegenerusStonk.sol:198 -- `uint256 internal redemptionPeriodBurned;`
 
 **Write sites:**
-- StakedDegenerusStonk.sol:684 -- `_submitGamblingClaimFrom`: `redemptionPeriodBurned = 0` (reset on new period start)
-- StakedDegenerusStonk.sol:687 -- `_submitGamblingClaimFrom`: `redemptionPeriodBurned += amount` (accumulates burned amount within current period)
+- StakedDegenerusStonk.sol:694 -- `_submitGamblingClaimFrom`: `redemptionPeriodBurned = 0` (reset on new period start)
+- StakedDegenerusStonk.sol:697 -- `_submitGamblingClaimFrom`: `redemptionPeriodBurned += amount` (accumulates burned amount within current period)
 
 **Read sites:**
-- StakedDegenerusStonk.sol:686 -- `_submitGamblingClaimFrom`: `if (redemptionPeriodBurned + amount > redemptionPeriodSupplySnapshot / 2) revert Insufficient()` (enforces 50% supply cap per period)
+- StakedDegenerusStonk.sol:696 -- `_submitGamblingClaimFrom`: `if (redemptionPeriodBurned + amount > redemptionPeriodSupplySnapshot / 2) revert Insufficient()` (enforces 50% supply cap per period)
 
 **Delete sites:** None (zeroed via assignment `= 0` on period boundary)
 
-**Verdict:** ALIVE -- Tracks how much sDGNRS has been burned in the current period to enforce the 50% supply cap. Without it, the cap check at line 686 cannot compare accumulated burns against the snapshot.
+**Verdict:** ALIVE -- Tracks how much sDGNRS has been burned in the current period to enforce the 50% supply cap. Without it, the cap check at line 696 cannot compare accumulated burns against the snapshot.
 
 ---
 
@@ -230,24 +230,24 @@ Struct Slot  Field     Type    Bytes  Wasted
 - Slot 14: `redemptionPeriodIndex` (uint48, 6 bytes) + `redemptionPeriodBurned` (uint208, 26 bytes)
 
 **Bit-width safety proof:**
-- `redemptionPeriodBurned` max value = `totalSupply / 2` (enforced at StakedDegenerusStonk.sol:686)
-- `totalSupply` starts at `INITIAL_SUPPLY` = 1,000,000,000,000 * 1e18 = 1e30 (declared at StakedDegenerusStonk.sol:207)
+- `redemptionPeriodBurned` max value = `totalSupply / 2` (enforced at StakedDegenerusStonk.sol:696)
+- `totalSupply` starts at `INITIAL_SUPPLY` = 1,000,000,000,000 * 1e18 = 1e30 (declared at StakedDegenerusStonk.sol:205)
 - `totalSupply` can only decrease (burns reduce it, no mint function after constructor)
 - Max `redemptionPeriodBurned` = 1e30 / 2 = 5e29
 - 5e29 requires ceil(log2(5e29)) = 100 bits
 - uint208 max = 2^208 = ~4.1e62
 - 5e29 < 4.1e62: fits with 108 bits of headroom
-- The 50% supply cap at line 686 guarantees this bound and is enforced by a revert
+- The 50% supply cap at line 696 guarantees this bound and is enforced by a revert
 
 **Co-access pattern:** Both variables are always accessed together within `_submitGamblingClaimFrom`:
-- StakedDegenerusStonk.sol:681 -- read `redemptionPeriodIndex` (period boundary check)
-- StakedDegenerusStonk.sol:682 -- conditional write to `redemptionPeriodSupplySnapshot` (not packed)
-- StakedDegenerusStonk.sol:683 -- write `redemptionPeriodIndex = currentPeriod`
-- StakedDegenerusStonk.sol:684 -- write `redemptionPeriodBurned = 0`
-- StakedDegenerusStonk.sol:686 -- read `redemptionPeriodBurned` (cap check)
-- StakedDegenerusStonk.sol:687 -- write `redemptionPeriodBurned += amount`
+- StakedDegenerusStonk.sol:691 -- read `redemptionPeriodIndex` (period boundary check)
+- StakedDegenerusStonk.sol:692 -- conditional write to `redemptionPeriodSupplySnapshot` (not packed)
+- StakedDegenerusStonk.sol:693 -- write `redemptionPeriodIndex = currentPeriod`
+- StakedDegenerusStonk.sol:694 -- write `redemptionPeriodBurned = 0`
+- StakedDegenerusStonk.sol:696 -- read `redemptionPeriodBurned` (cap check)
+- StakedDegenerusStonk.sol:697 -- write `redemptionPeriodBurned += amount`
 
-`redemptionPeriodIndex` is also read independently in `resolveRedemptionPeriod` (line 548), but that path does not access `redemptionPeriodBurned`. Packing still saves a slot on the hot path (`_submitGamblingClaimFrom`), and the cold read in `resolveRedemptionPeriod` adds only a masking cost (~3 gas).
+`redemptionPeriodIndex` is also read independently in `resolveRedemptionPeriod` (line 549), but that path does not access `redemptionPeriodBurned`. Packing still saves a slot on the hot path (`_submitGamblingClaimFrom`), and the cold read in `resolveRedemptionPeriod` adds only a masking cost (~3 gas).
 
 **Gas savings (theoretical):**
 - Cold path (first `_submitGamblingClaimFrom` call in a transaction): 1 SSTORE saved (20,000 gas) + 1 SLOAD saved (2,100 gas) = 22,100 gas
@@ -266,7 +266,7 @@ uint48  internal redemptionPeriodIndex;    // slot 14, offset 0
 uint208 internal redemptionPeriodBurned;   // slot 14, offset 6
 ```
 
-No other code changes required -- Solidity handles the packing automatically. All arithmetic on `redemptionPeriodBurned` uses `+=`, `=`, and comparison operators which work identically with uint208. The `/ 2` in the cap check (line 686) also works correctly since uint208 supports division.
+No other code changes required -- Solidity handles the packing automatically. All arithmetic on `redemptionPeriodBurned` uses `+=`, `=`, and comparison operators which work identically with uint208. The `/ 2` in the cap check (line 696) also works correctly since uint208 supports division.
 
 ---
 
@@ -282,17 +282,17 @@ No other code changes required -- Solidity handles the packing automatically. Al
 **Bit-width safety proof:**
 - `pendingRedemptionEthBase`: accumulates `ethValueOwed` per period. Max = `(totalMoney * totalSupply/2) / totalSupply` = `totalMoney / 2`. Realistic max totalMoney: ~100,000 ETH = 1e23 wei. Max value = 5e22 (87 bits). Even with 10x growth: 1e24 wei = 87 bits. uint128 max = 2^128 = 3.4e38. Fits with 41+ bits of headroom.
 - `pendingRedemptionBurnieBase`: accumulates `burnieOwed` per period. Max = `(totalBurnie * totalSupply/2) / totalSupply` = `totalBurnie / 2`. BURNIE total supply = 1e30 (similar token economics). Max value = 5e29 (100 bits). uint128 max = 3.4e38. Fits with 28 bits of headroom.
-- Both are bounded by the 50% supply cap per period (StakedDegenerusStonk.sol:686) AND by total contract holdings (ETH + stETH + claimables for ETH side, BURNIE balance + claimables for BURNIE side).
-- `INITIAL_SUPPLY` is a private constant (StakedDegenerusStonk.sol:207) with no upgrade path -- max cannot increase.
+- Both are bounded by the 50% supply cap per period (StakedDegenerusStonk.sol:696) AND by total contract holdings (ETH + stETH + claimables for ETH side, BURNIE balance + claimables for BURNIE side).
+- `INITIAL_SUPPLY` is a private constant (StakedDegenerusStonk.sol:205) with no upgrade path -- max cannot increase.
 
 **Co-access pattern:** Both variables are always read and written together:
-- StakedDegenerusStonk.sol:537 -- `hasPendingRedemptions`: both read (`!= 0` check)
-- StakedDegenerusStonk.sol:549 -- `resolveRedemptionPeriod`: both read (early exit check `== 0`)
-- StakedDegenerusStonk.sol:552-554 -- `resolveRedemptionPeriod`: `pendingRedemptionEthBase` read (compute rolled ETH) then written `= 0`
-- StakedDegenerusStonk.sol:557 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnieBase` read (compute rolled BURNIE)
-- StakedDegenerusStonk.sol:560-561 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnieBase` read (subtract from total) then written `= 0`
-- StakedDegenerusStonk.sol:713 -- `_submitGamblingClaimFrom`: `pendingRedemptionEthBase += ethValueOwed`
-- StakedDegenerusStonk.sol:715 -- `_submitGamblingClaimFrom`: `pendingRedemptionBurnieBase += burnieOwed`
+- StakedDegenerusStonk.sol:538 -- `hasPendingRedemptions`: both read (`!= 0` check)
+- StakedDegenerusStonk.sol:550 -- `resolveRedemptionPeriod`: both read (early exit check `== 0`)
+- StakedDegenerusStonk.sol:553-555 -- `resolveRedemptionPeriod`: `pendingRedemptionEthBase` read (compute rolled ETH) then written `= 0`
+- StakedDegenerusStonk.sol:558 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnieBase` read (compute rolled BURNIE)
+- StakedDegenerusStonk.sol:561-562 -- `resolveRedemptionPeriod`: `pendingRedemptionBurnieBase` read (subtract from total) then written `= 0`
+- StakedDegenerusStonk.sol:723 -- `_submitGamblingClaimFrom`: `pendingRedemptionEthBase += ethValueOwed`
+- StakedDegenerusStonk.sol:725 -- `_submitGamblingClaimFrom`: `pendingRedemptionBurnieBase += burnieOwed`
 
 They are never accessed independently. Every function that touches one also touches the other.
 
@@ -314,9 +314,9 @@ uint128 internal pendingRedemptionEthBase;       // slot 11, offset 0
 uint128 internal pendingRedemptionBurnieBase;    // slot 11, offset 16
 ```
 
-Solidity 0.8.x overflow protection applies to uint128 arithmetic identically to uint256. The `+= ethValueOwed` and `+= burnieOwed` operations will correctly revert on overflow. The `= 0` assignments work identically. The `-= pendingRedemptionBurnieBase` subtraction at line 560 operates on `pendingRedemptionBurnie` (uint256) so no truncation risk there -- the subtracted value is already uint128-bounded.
+Solidity 0.8.x overflow protection applies to uint128 arithmetic identically to uint256. The `+= ethValueOwed` and `+= burnieOwed` operations will correctly revert on overflow. The `= 0` assignments work identically. The `-= pendingRedemptionBurnieBase` subtraction at line 561 operates on `pendingRedemptionBurnie` (uint256) so no truncation risk there -- the subtracted value is already uint128-bounded.
 
-Note: `pendingRedemptionEthBase` and `pendingRedemptionBurnieBase` appear in arithmetic with uint256 values (e.g., line 552: `pendingRedemptionEthBase * roll`). Solidity will widen uint128 to uint256 for the multiplication, so no precision loss occurs.
+Note: `pendingRedemptionEthBase` and `pendingRedemptionBurnieBase` appear in arithmetic with uint256 values (e.g., line 553: `pendingRedemptionEthBase * roll`). Solidity will widen uint128 to uint256 for the multiplication, so no precision loss occurs.
 
 ---
 
@@ -344,27 +344,27 @@ struct PendingRedemption {
 - `ethValueOwed` per user: bounded by the user's proportional share of total ETH. Even if a single user burned 50% of total supply (the period cap), their max `ethValueOwed` = `totalMoney / 2`. Realistic max totalMoney = ~1e23 wei (100K ETH). Max per-user ethValueOwed = 5e22 (87 bits). uint128 max = 3.4e38. Fits with 41+ bits of headroom.
 - `burnieOwed` per user: bounded by the user's proportional share of total BURNIE. Max = `totalBurnie / 2`. Realistic max totalBurnie = ~1e30. Max per-user burnieOwed = 5e29 (100 bits). uint128 max = 3.4e38. Fits with 28 bits of headroom.
 - Individual user claims are strictly smaller than the period accumulator totals (which are themselves bounded by supply cap).
-- The `+=` accumulation (StakedDegenerusStonk.sol:722-723) only accumulates within the SAME period for the SAME user. A user can only have one active claim (UnresolvedClaim revert at line 720). Within a period, a user can call `burn()` multiple times, each adding to their claim. But the total across all users is bounded by the 50% supply cap.
+- The `+=` accumulation (StakedDegenerusStonk.sol:732-733) only accumulates within the SAME period for the SAME user. A user can only have one active claim (UnresolvedClaim revert at line 730). Within a period, a user can call `burn()` multiple times, each adding to their claim. But the total across all users is bounded by the 50% supply cap.
 
 **Co-access pattern:**
-- StakedDegenerusStonk.sol:578 -- `claimRedemption`: read `claim.periodIndex` (NoClaim check)
-- StakedDegenerusStonk.sol:580 -- `claimRedemption`: read `claim.periodIndex` (load period data)
-- StakedDegenerusStonk.sol:590 -- `claimRedemption`: read `claim.ethValueOwed` (compute ETH payout)
-- StakedDegenerusStonk.sol:595 -- `claimRedemption`: read `claim.burnieOwed` (compute BURNIE payout)
-- StakedDegenerusStonk.sol:602 -- `claimRedemption`: `delete pendingRedemptions[player]` (clear all fields)
-- StakedDegenerusStonk.sol:719 -- `_submitGamblingClaimFrom`: read `claim.periodIndex` (check for existing claim)
-- StakedDegenerusStonk.sol:722 -- `_submitGamblingClaimFrom`: write `claim.ethValueOwed += ethValueOwed`
-- StakedDegenerusStonk.sol:723 -- `_submitGamblingClaimFrom`: write `claim.burnieOwed += burnieOwed`
-- StakedDegenerusStonk.sol:724 -- `_submitGamblingClaimFrom`: write `claim.periodIndex = currentPeriod`
+- StakedDegenerusStonk.sol:580 -- `claimRedemption`: read `claim.periodIndex` (NoClaim check)
+- StakedDegenerusStonk.sol:582 -- `claimRedemption`: read `claim.periodIndex` (load period data)
+- StakedDegenerusStonk.sol:588 -- `claimRedemption`: read `claim.ethValueOwed` (compute ETH payout)
+- StakedDegenerusStonk.sol:597 -- `claimRedemption`: read `claim.burnieOwed` (compute BURNIE payout)
+- StakedDegenerusStonk.sol:606 -- `claimRedemption`: `delete pendingRedemptions[player]` (clear all fields)
+- StakedDegenerusStonk.sol:729 -- `_submitGamblingClaimFrom`: read `claim.periodIndex` (check for existing claim)
+- StakedDegenerusStonk.sol:732 -- `_submitGamblingClaimFrom`: write `claim.ethValueOwed += ethValueOwed`
+- StakedDegenerusStonk.sol:733 -- `_submitGamblingClaimFrom`: write `claim.burnieOwed += burnieOwed`
+- StakedDegenerusStonk.sol:734 -- `_submitGamblingClaimFrom`: write `claim.periodIndex = currentPeriod`
 
-In both functions, all three struct fields are accessed together. Packing `ethValueOwed` + `burnieOwed` into one slot means the read at lines 590+595 becomes 1 SLOAD instead of 2, and the write at lines 722+723 becomes 1 SSTORE instead of 2.
+In both functions, all three struct fields are accessed together. Packing `ethValueOwed` + `burnieOwed` into one slot means the read at lines 588+597 becomes 1 SLOAD instead of 2, and the write at lines 732+733 becomes 1 SSTORE instead of 2.
 
 **Gas savings (theoretical):**
 - Cold path: 1 SSTORE saved (20,000 gas) + 1 SLOAD saved (2,100 gas) = 22,100 gas per user operation
 - Warm path: 1 SSTORE saved (5,000 gas) + 1 SLOAD saved (100 gas) = 5,100 gas
-- `delete pendingRedemptions[player]` at line 602: Solidity `delete` correctly zeros all struct fields regardless of packing -- no behavior change.
+- `delete pendingRedemptions[player]` at line 606: Solidity `delete` correctly zeros all struct fields regardless of packing -- no behavior change.
 
-**Risk:** LOW-MEDIUM. Same uint128 bounds as Opportunity 2. The `+=` accumulation at lines 722-723 works identically with uint128 since Solidity 0.8.x overflow checks still apply. The packed write requires the compiler to handle masking/shifting, which adds ~20 gas per write but saves ~5,000-20,000 gas from the eliminated slot access. Net savings are strongly positive.
+**Risk:** LOW-MEDIUM. Same uint128 bounds as Opportunity 2. The `+=` accumulation at lines 732-733 works identically with uint128 since Solidity 0.8.x overflow checks still apply. The packed write requires the compiler to handle masking/shifting, which adds ~20 gas per write but saves ~5,000-20,000 gas from the eliminated slot access. Net savings are strongly positive.
 
 **Code change:**
 ```solidity
@@ -384,7 +384,7 @@ struct PendingRedemption {
 ```
 
 Additional code changes required:
-- StakedDegenerusStonk.sol:128 -- `RedemptionSubmitted` event: `ethValueOwed` and `burnieOwed` params should remain uint256 in the event (events are not storage-constrained). The emit at line 726 will widen uint128 to uint256 automatically.
+- StakedDegenerusStonk.sol:126 -- `RedemptionSubmitted` event: `ethValueOwed` and `burnieOwed` params should remain uint256 in the event (events are not storage-constrained). The emit at line 736 will widen uint128 to uint256 automatically.
 - No changes needed to `claimRedemption` arithmetic -- lines 590 and 595 compute into local uint256 variables, so the uint128 read is widened without truncation.
 
 ---
