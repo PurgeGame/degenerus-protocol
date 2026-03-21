@@ -123,7 +123,12 @@ Plans:
   3. Access control for all new entry points (claimCoinflipsForRedemption, burnForSdgnrs, resolveRedemptionPeriod, hasPendingRedemptions) is verified correct
   4. Rational actor strategy catalog documents timing attacks, cap manipulation, stale accumulation, and multi-address splitting with cost-benefit analysis showing no repeatable EV exploit
   5. Bank-run scenario (simultaneous mass burns near supply cap) is analyzed with outcome documented
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 46-01-PLAN.md -- Warden simulation: 3-persona deep sweep of 4 core contracts + quick sweep of 25 remaining + consolidated verdict table
+- [ ] 46-02-PLAN.md -- Cross-contract composability attack catalog + access control verification for 4 new entry points
+- [ ] 46-03-PLAN.md -- Rational actor strategy catalog with EV calculations + bank-run scenario analysis
 
 ### Phase 47: Gas Optimization
 **Goal**: All gas optimization opportunities in the redemption system are identified, dead variables confirmed needed or eliminated, storage packing analyzed with implementation recommendations, and gas baseline established
@@ -149,7 +154,11 @@ Plans:
   2. Bit allocation map comment exists in rngGate() documenting which bits each RNG consumer uses
   3. claimCoinflipsForRedemption error name is fixed (no longer uses misleading OnlyBurnieCoin)
   4. All 13+ audit reference docs are updated to reflect v3.3 findings and gambling burn mechanism
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 48-01-PLAN.md -- Error rename (DOC-03), bit allocation map (DOC-02), NatSpec verification (DOC-01)
+- [ ] 48-02-PLAN.md -- Full audit doc sync across 12 files (DOC-04)
 
 ## Progress
 
@@ -159,10 +168,10 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 44. Delta Audit + Redemption Correctness | 3/3 | Complete    | 2026-03-21 |
-| 45. Invariant Test Suite | 3/3 | Complete   | 2026-03-21 |
-| 46. Adversarial Sweep + Economic Analysis | 0/TBD | Not started | - |
+| 45. Invariant Test Suite | 3/3 | Complete    | 2026-03-21 |
+| 46. Adversarial Sweep + Economic Analysis | 0/3 | Not started | - |
 | 47. Gas Optimization | 2/2 | Complete    | 2026-03-21 |
-| 48. Documentation Sync | 0/TBD | Not started | - |
+| 48. Documentation Sync | 0/2 | Not started | - |
 
 ## Deferred (v3.3+)
 
@@ -171,4 +180,4 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 - **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-21 after Phase 45 planning*
+*Last updated: 2026-03-21 after Phase 46 planning*
