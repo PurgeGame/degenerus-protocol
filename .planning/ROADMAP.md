@@ -84,7 +84,7 @@
 
 ### v3.4 New Feature Audit — Skim Redesign + Redemption Lootbox
 
-- [ ] **Phase 50: Skim Redesign Audit** - Verify correctness and economic soundness of the 5-step futurepool skim pipeline
+- [x] **Phase 50: Skim Redesign Audit** - Verify correctness and economic soundness of the 5-step futurepool skim pipeline (completed 2026-03-21)
 - [ ] **Phase 51: Redemption Lootbox Audit** - Verify correctness of 50/50 redemption split, daily cap, and cross-contract access control
 - [ ] **Phase 52: Invariant Test Suite** - Fuzz invariants proving skim conservation, take cap, and redemption lootbox split
 - [ ] **Phase 53: Consolidated Findings** - Master findings table with all v3.4 discoveries plus outstanding v3.2 LOW/INFO
@@ -100,12 +100,12 @@
   2. ETH conservation (nextPool + futurePool + yieldAccumulator = constant) is proven to hold across the entire function for all input combinations
   3. Insurance skim is confirmed to be exactly 1% of nextPoolBefore with no rounding edge cases that leak or create ETH
   4. Overshoot surcharge is confirmed to accelerate futurepool growth during fast levels, stall escalation still functions without growth adjustment, and level 1 (lastPool=0) produces no division-by-zero or unintended surcharge
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 50-01-PLAN.md — Pipeline arithmetic verdicts (SKIM-01 through SKIM-05)
 - [x] 50-02-PLAN.md — ETH conservation proof + insurance skim precision (SKIM-06, SKIM-07)
-- [ ] 50-03-PLAN.md — Economic analysis: overshoot, stall escalation, level-1 safety (ECON-01 through ECON-03)
+- [x] 50-03-PLAN.md — Economic analysis: overshoot, stall escalation, level-1 safety (ECON-01 through ECON-03)
 
 ### Phase 51: Redemption Lootbox Audit
 **Goal**: The 50/50 sDGNRS redemption lootbox split is proven correct -- routing, daily cap enforcement, slot packing, and cross-contract access control are all verified
@@ -148,7 +148,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 50. Skim Redesign Audit | 2/3 | In Progress|  |
+| 50. Skim Redesign Audit | 3/3 | Complete   | 2026-03-21 |
 | 51. Redemption Lootbox Audit | 3/4 | In Progress|  |
 | 52. Invariant Test Suite | 0/TBD | Not started | - |
 | 53. Consolidated Findings | 0/TBD | Not started | - |
