@@ -33,6 +33,9 @@ contract RedemptionHandler is Test {
     uint256 public ghost_supplyBurnMismatch;     // counter: incremented if supply accounting is off
     uint256 public ghost_initialSupply;          // totalSupply at construction time
     uint256 public ghost_doubleClaim;            // counter: incremented if re-claim succeeds
+    uint256 public ghost_totalEthDirect;         // cumulative ethDirect from RedemptionClaimed events
+    uint256 public ghost_totalLootboxEth;        // cumulative lootboxEth from RedemptionClaimed events
+    uint256 public ghost_totalRolledEth;         // cumulative totalRolledEth (ethDirect + lootboxEth per claim)
 
     // =========================================================================
     //                          CALL COUNTERS
@@ -180,11 +183,26 @@ contract RedemptionHandler is Test {
         uint256 ethBefore = currentActor.balance;
         uint256 burnieBefore = coin.balanceOf(currentActor);
 
+        vm.recordLogs();
         vm.prank(currentActor);
         try sdgnrs.claimRedemption() {
             ghost_claimCount++;
             ghost_totalEthClaimed += currentActor.balance - ethBefore;
             ghost_totalBurnieClaimed += coin.balanceOf(currentActor) - burnieBefore;
+
+            // Parse RedemptionClaimed event for split tracking (INV-03)
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            bytes32 claimedSig = keccak256("RedemptionClaimed(address,uint16,bool,uint256,uint256,uint256)");
+            for (uint256 i = 0; i < logs.length; i++) {
+                if (logs[i].topics[0] == claimedSig) {
+                    (, , uint256 ethPayout, , uint256 lootboxEth) =
+                        abi.decode(logs[i].data, (uint16, bool, uint256, uint256, uint256));
+                    ghost_totalEthDirect += ethPayout;
+                    ghost_totalLootboxEth += lootboxEth;
+                    ghost_totalRolledEth += ethPayout + lootboxEth;
+                    break;
+                }
+            }
         } catch {}
 
         // Attempt re-claim to test no-double-claim invariant.
