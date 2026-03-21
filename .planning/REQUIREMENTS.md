@@ -37,7 +37,7 @@ Requirements for Gambling Burn Audit + Full Adversarial Sweep.
 
 ### Adversarial Sweep
 
-- [ ] **ADV-01**: Warden simulation -- fresh-eyes read of all 29 contracts targeting High/Medium C4A findings
+- [x] **ADV-01**: Warden simulation -- fresh-eyes read of all 29 contracts targeting High/Medium C4A findings
 - [x] **ADV-02**: Cross-contract composability attacks -- multi-contract interaction sequences that bypass individual contract guards
 - [x] **ADV-03**: Access control audit of new entry points -- `claimCoinflipsForRedemption`, `burnForSdgnrs`, `resolveRedemptionPeriod`, `hasPendingRedemptions`
 
@@ -117,7 +117,7 @@ All complete. See MILESTONES.md for details.
 | INV-05 | Phase 45 | Complete |
 | INV-06 | Phase 45 | Complete |
 | INV-07 | Phase 45 | Complete |
-| ADV-01 | Phase 46 | Pending |
+| ADV-01 | Phase 46 | Complete |
 | ADV-02 | Phase 46 | Complete |
 | ADV-03 | Phase 46 | Complete |
 | ECON-01 | Phase 46 | Complete |
