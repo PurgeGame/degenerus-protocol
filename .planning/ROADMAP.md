@@ -85,7 +85,7 @@
 ### v3.4 New Feature Audit — Skim Redesign + Redemption Lootbox
 
 - [x] **Phase 50: Skim Redesign Audit** - Verify correctness and economic soundness of the 5-step futurepool skim pipeline (completed 2026-03-21)
-- [ ] **Phase 51: Redemption Lootbox Audit** - Verify correctness of 50/50 redemption split, daily cap, and cross-contract access control
+- [x] **Phase 51: Redemption Lootbox Audit** - Verify correctness of 50/50 redemption split, daily cap, and cross-contract access control (completed 2026-03-21)
 - [ ] **Phase 52: Invariant Test Suite** - Fuzz invariants proving skim conservation, take cap, and redemption lootbox split
 - [ ] **Phase 53: Consolidated Findings** - Master findings table with all v3.4 discoveries plus outstanding v3.2 LOW/INFO
 
@@ -116,13 +116,13 @@ Plans:
   2. The 160 ETH daily cap per wallet is enforced correctly with no bypass via multiple calls, timestamp manipulation, or cross-day boundary abuse
   3. PendingRedemption slot packing (uint96+uint96+uint48+uint16=256) is verified correct with no bit overlap or truncation, and activity score snapshot at submission is immutable through resolution
   4. Cross-contract call chain sDGNRS -> Game -> LootboxModule has correct access control at every hop, and lootbox reclassification performs no ETH transfer (internal accounting only)
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 51-01-PLAN.md — 50/50 split routing + gameOver bypass verdicts (REDM-01, REDM-02)
 - [x] 51-02-PLAN.md — Daily cap enforcement + slot packing verification (REDM-03, REDM-05)
 - [x] 51-03-PLAN.md — Activity score snapshot immutability (REDM-04)
-- [ ] 51-04-PLAN.md — Cross-contract access control + lootbox reclassification (REDM-06, REDM-07)
+- [x] 51-04-PLAN.md — Cross-contract access control + lootbox reclassification (REDM-06, REDM-07)
 
 ### Phase 52: Invariant Test Suite
 **Goal**: Foundry fuzz invariant tests provide automated proof that the skim pipeline and redemption lootbox maintain their core safety properties under randomized inputs
@@ -149,7 +149,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 50. Skim Redesign Audit | 3/3 | Complete   | 2026-03-21 |
-| 51. Redemption Lootbox Audit | 3/4 | In Progress|  |
+| 51. Redemption Lootbox Audit | 4/4 | Complete   | 2026-03-21 |
 | 52. Invariant Test Suite | 0/TBD | Not started | - |
 | 53. Consolidated Findings | 0/TBD | Not started | - |
 
