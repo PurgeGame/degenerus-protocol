@@ -43,8 +43,8 @@ Requirements for Gambling Burn Audit + Full Adversarial Sweep.
 
 ### Economic Analysis
 
-- [ ] **ECON-01**: Rational actor strategy catalog -- timing attacks, cap manipulation, stale accumulation, multi-address splitting with cost-benefit
-- [ ] **ECON-02**: Bank-run scenario analysis -- what happens when many players burn simultaneously near supply cap
+- [x] **ECON-01**: Rational actor strategy catalog -- timing attacks, cap manipulation, stale accumulation, multi-address splitting with cost-benefit
+- [x] **ECON-02**: Bank-run scenario analysis -- what happens when many players burn simultaneously near supply cap
 
 ### Gas Optimization
 
@@ -120,8 +120,8 @@ All complete. See MILESTONES.md for details.
 | ADV-01 | Phase 46 | Pending |
 | ADV-02 | Phase 46 | Pending |
 | ADV-03 | Phase 46 | Pending |
-| ECON-01 | Phase 46 | Pending |
-| ECON-02 | Phase 46 | Pending |
+| ECON-01 | Phase 46 | Complete |
+| ECON-02 | Phase 46 | Complete |
 | GAS-01 | Phase 47 | Complete |
 | GAS-02 | Phase 47 | Complete |
 | GAS-03 | Phase 47 | Complete |
