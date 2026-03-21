@@ -11,7 +11,7 @@
 - ✅ **v3.0 Full Contract Audit + Payout Specification** — Phases 26-30 (shipped 2026-03-18)
 - ✅ **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-37 (shipped 2026-03-19)
 - ✅ **v3.2 RNG Delta Audit + Comment Re-scan** — Phases 38-43 (shipped 2026-03-19)
-- **v3.3 Gambling Burn Audit + Full Adversarial Sweep** — Phases 44-48 (in progress)
+- **v3.3 Gambling Burn Audit + Full Adversarial Sweep** — Phases 44-49 (in progress)
 
 ## Phases
 
@@ -77,6 +77,7 @@
 - [x] **Phase 46: Adversarial Sweep + Economic Analysis** - Full 29-contract warden simulation, composability attacks, and rational actor strategy analysis (completed 2026-03-21)
 - [x] **Phase 47: Gas Optimization** - Dead variable elimination, storage packing, and gas baseline for redemption functions (completed 2026-03-21)
 - [x] **Phase 48: Documentation Sync** - NatSpec correctness for changed files and full audit doc sync (completed 2026-03-21)
+- [ ] **Phase 49: Milestone Cleanup** - Close all tech debt from v3.3 audit: stale line refs, gas test verification, ghost variable invariant, metadata fixes
 
 ## Phase Details
 
@@ -160,10 +161,30 @@ Plans:
 - [x] 48-01-PLAN.md -- Error rename (DOC-03), bit allocation map (DOC-02), NatSpec verification (DOC-01)
 - [x] 48-02-PLAN.md -- Full audit doc sync across 12 files (DOC-04)
 
+### Phase 49: Milestone Cleanup
+**Goal**: Close all tech debt items identified by v3.3 milestone audit -- fix stale line references visible to C4A wardens, verify gas test regression, add BURNIE-claimed invariant, fix metadata gaps
+**Depends on**: Phase 48 (all prior phases must be complete)
+**Requirements**: (Tech debt -- no new REQ-IDs; closes audit anomalies ANOMALY-1, ANOMALY-2, ANOMALY-3 and INV-07 integration gap)
+**Gap Closure:** Closes gaps from v3.3-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. BIT ALLOCATION MAP comment in AdvanceModule.sol references correct line numbers for all consumers
+  2. v3.2-rng-delta-findings.md v3.3 addendum references correct line numbers
+  3. forge test --match-path test/fuzz/RedemptionGas.t.sol passes all 7 tests
+  4. forge build && forge test confirms compilation + baseline unchanged
+  5. ghost_totalBurnieClaimed has an invariant assertion in RedemptionInvariants
+  6. 47-01-gas-analysis.md line references updated to match current contract code
+  7. 48-01-SUMMARY.md requirements_completed populated with DOC-01, DOC-02, DOC-03
+  8. 46-01-SUMMARY.md spurious Phase 47 dependency removed
+**Plans:** 2 plans
+
+Plans:
+- [ ] 49-01-PLAN.md -- Fix stale line refs in BIT ALLOCATION MAP, v3.3 addendum, gas analysis; fix SUMMARY metadata
+- [ ] 49-02-PLAN.md -- Activate ghost_totalBurnieClaimed invariant, verify gas benchmarks, confirm test baseline
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
+Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48 -> 49
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -171,7 +192,8 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 | 45. Invariant Test Suite | 3/3 | Complete    | 2026-03-21 |
 | 46. Adversarial Sweep + Economic Analysis | 3/3 | Complete    | 2026-03-21 |
 | 47. Gas Optimization | 2/2 | Complete    | 2026-03-21 |
-| 48. Documentation Sync | 2/2 | Complete   | 2026-03-21 |
+| 48. Documentation Sync | 2/2 | Complete    | 2026-03-21 |
+| 49. Milestone Cleanup | 0/2 | Not started | - |
 
 ## Deferred (v3.3+)
 
@@ -180,4 +202,4 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 - **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-21 after Phase 46 planning*
+*Last updated: 2026-03-21 after Phase 49 plan creation*
