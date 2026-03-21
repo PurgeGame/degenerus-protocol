@@ -1,77 +1,141 @@
 # Requirements: Degenerus Protocol Audit
 
-**Defined:** 2026-03-19
+**Defined:** 2026-03-20
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v3.2 Requirements
+## v3.3 Requirements
 
-Requirements for RNG Delta Audit + Comment Re-scan + Governance Fresh Eyes.
+Requirements for Gambling Burn Audit + Full Adversarial Sweep.
 
-### RNG Security (Delta)
+### Delta Audit (Gambling Burn)
 
-- [x] **RNG-01**: Removing rngLocked from coinflip claim paths does not open manipulation windows (carry never enters claimable pool verified)
-- [x] **RNG-02**: BAF epoch-based guard is sufficient as sole coinflip claim protection during resolution windows
-- [x] **RNG-03**: Persistent decimator claims across rounds do not create RNG-exploitable state
-- [x] **RNG-04**: Cross-contract RNG data flow remains safe with all recent changes combined (no new manipulation vectors)
+- [ ] **DELTA-01**: Redemption accounting -- verify `pendingRedemptionEthValue` segregation reconciles at submit, resolve, and claim
+- [ ] **DELTA-02**: Cross-contract interaction audit -- 4-contract state consistency (sDGNRS->Game->Coinflip->AdvanceModule) + reentrancy verification
+- [x] **DELTA-03**: Confirm or refute CP-08 -- `_deterministicBurnFrom` double-spend via missing `pendingRedemptionEthValue` deduction
+- [x] **DELTA-04**: Confirm or refute CP-06 -- stuck claims at game-over (`_gameOverEntropy` missing `resolveRedemptionPeriod`)
+- [x] **DELTA-05**: Confirm or refute Seam-1 -- `DGNRS.burn()` fund trap (gambling claim recorded under contract address)
+- [x] **DELTA-06**: Confirm or refute CP-02 -- `periodIndex == 0` sentinel collision on first game day
+- [x] **DELTA-07**: Confirm or refute CP-07 -- coinflip resolution dependency creating second stuck-claim vector
 
-### Comment Correctness (Fresh Scan)
+### Redemption Correctness
 
-- [x] **CMT-01**: Game module contracts — all NatSpec, inline, and block comments verified (9 modules)
-- [x] **CMT-02**: Core game contracts — all comments verified (DegenerusGame, GameStorage, DegenerusAdmin)
-- [x] **CMT-03**: Token contracts — all comments verified (BurnieCoin, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
-- [x] **CMT-04**: Peripheral contracts — all comments verified (BurnieCoinflip, DegenerusVault, DegenerusAffiliate, DegenerusQuests, DegenerusJackpots)
-- [x] **CMT-05**: Remaining contracts — all comments verified (DeityPass, TraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data)
-- [x] **CMT-06**: Cross-cutting patterns identified and documented
-- [x] **CMT-07**: Consolidated findings deliverable with severity classification
+- [ ] **CORR-01**: Full redemption lifecycle trace -- submit->resolve->claim state machine verification
+- [ ] **CORR-02**: Segregation solvency invariant -- reserved ETH/BURNIE never exceeds contract holdings
+- [ ] **CORR-03**: CEI compliance -- `claimRedemption()` deletes claim before external calls, all paths verified
+- [ ] **CORR-04**: Period state machine -- monotonicity, resolution ordering, 50% supply cap enforcement
+- [ ] **CORR-05**: `burnWrapped()` supply invariant -- sDGNRS burned equals DGNRS burned
 
-### VRF Governance (Fresh Eyes)
+### Invariant Tests
 
-- [x] **GOV-01**: VRF swap governance flow audited from fresh perspective — all attack surfaces catalogued
-- [x] **GOV-02**: Governance edge cases and timing attacks re-evaluated against current code
-- [x] **GOV-03**: Cross-contract governance interactions verified (Admin, GameStorage, AdvanceModule, DegenerusStonk)
+- [ ] **INV-01**: Foundry invariant -- segregated ETH never exceeds contract balance
+- [ ] **INV-02**: Foundry invariant -- no double-claim (claim deleted before payout)
+- [ ] **INV-03**: Foundry invariant -- period index monotonically increases
+- [ ] **INV-04**: Foundry invariant -- totalSupply consistent after burn/claim sequences
+- [ ] **INV-05**: Foundry invariant -- 50% cap correctly enforced per period
+- [ ] **INV-06**: Foundry invariant -- roll bounds always [25, 175]
+- [ ] **INV-07**: Foundry invariant -- pendingRedemptionEthValue + pendingRedemptionBurnie track matches sum of individual claims
+
+### Adversarial Sweep
+
+- [ ] **ADV-01**: Warden simulation -- fresh-eyes read of all 29 contracts targeting High/Medium C4A findings
+- [ ] **ADV-02**: Cross-contract composability attacks -- multi-contract interaction sequences that bypass individual contract guards
+- [ ] **ADV-03**: Access control audit of new entry points -- `claimCoinflipsForRedemption`, `burnForSdgnrs`, `resolveRedemptionPeriod`, `hasPendingRedemptions`
+
+### Economic Analysis
+
+- [ ] **ECON-01**: Rational actor strategy catalog -- timing attacks, cap manipulation, stale accumulation, multi-address splitting with cost-benefit
+- [ ] **ECON-02**: Bank-run scenario analysis -- what happens when many players burn simultaneously near supply cap
+
+### Gas Optimization
+
+- [ ] **GAS-01**: Dead variable check -- confirm all 7 new state variables in sDGNRS are actually needed
+- [ ] **GAS-02**: Storage packing analysis -- identify packing opportunities (e.g. `redemptionPeriodIndex` uint48)
+- [ ] **GAS-03**: Gas snapshot baseline -- `forge snapshot` for all redemption functions
+- [ ] **GAS-04**: Unneeded variable elimination -- implement removals identified by GAS-01
+
+### Documentation
+
+- [ ] **DOC-01**: NatSpec correctness for all 6 changed files
+- [ ] **DOC-02**: Bit allocation map comment in `rngGate()` documenting which bits each RNG consumer uses
+- [ ] **DOC-03**: Error name fix -- `claimCoinflipsForRedemption` uses `OnlyBurnieCoin` (misleading)
+- [ ] **DOC-04**: Full audit doc sync -- update all 13+ audit reference docs for gambling burn mechanism
+
+## Prior Milestone Requirements (v3.2)
+
+All complete. See MILESTONES.md for details.
+
+- ✓ RNG-01 through RNG-04: RNG delta audit (Phase 38)
+- ✓ CMT-01 through CMT-07: Comment correctness fresh scan (Phases 39-41, 43)
+- ✓ GOV-01 through GOV-03: VRF governance fresh eyes (Phase 42)
 
 ## Future Requirements
 
 ### Deferred (v3.3+)
 
-- **FUZZ-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
-- **FUZZ-02**: Formal verification of vote counting arithmetic via Halmos
-- **FUZZ-03**: Monte Carlo simulation of governance outcomes under various voter distributions
+- **FORMAL-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
+- **FORMAL-02**: Formal verification of vote counting arithmetic via Halmos
+- **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
+- **RNG-V01**: Roll derivation correctness -- verify `(currentWord >> 8) % 151 + 25` bit allocation and uniformity
+- **EV-01**: Analytical EV proof -- mathematical proof ETH gamble is fair + BURNIE EV formula
+- **EV-02**: Monte Carlo verification script -- independent numerical check (~100 lines)
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
+| Slither full-suite scan | User deferred -- warden simulation provides higher-value coverage |
+| "What if" scenario sweep | User deferred -- rational actor catalog covers strategic edge cases |
+| stETH rounding analysis | Low priority -- 1-2 wei edge case unlikely to produce C4A findings |
+| Re-audit VRF delivery mechanism | Covered in v1.0-v1.2; mechanism unchanged |
+| Re-audit governance system | Covered in v2.1 with 26 verdicts; no governance code changed |
+| Formal verification (Halmos/Certora) | Deferred per PROJECT.md |
+| Full fuzz suite for all 29 contracts | Weeks of work; diminishing returns beyond invariant tests on new code |
+| Re-run comment audit on unchanged contracts | v3.1 + v3.2 already covered 29 contracts with 114 findings |
 | Frontend code | Not in audit scope |
 | Off-chain infrastructure | VRF coordinator is external |
-| Gas optimization | Already covered in v2.0, not the focus here |
-| Full governance re-audit | v2.1 was comprehensive; v3.2 is a fresh-eyes sanity check only |
-| Comment auto-fix | Findings list is the deliverable — protocol team decides fixes |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RNG-01 | Phase 38 | Complete |
-| RNG-02 | Phase 38 | Complete |
-| RNG-03 | Phase 38 | Complete |
-| RNG-04 | Phase 38 | Complete |
-| CMT-01 | Phase 39 | Complete |
-| CMT-02 | Phase 40 | Complete |
-| CMT-03 | Phase 40 | Complete |
-| CMT-04 | Phase 41 | Complete |
-| CMT-05 | Phase 41 | Complete |
-| CMT-06 | Phase 43 | Complete |
-| CMT-07 | Phase 43 | Complete |
-| GOV-01 | Phase 42 | Complete |
-| GOV-02 | Phase 42 | Complete |
-| GOV-03 | Phase 42 | Complete |
+| DELTA-01 | Phase 44 | Pending |
+| DELTA-02 | Phase 44 | Pending |
+| DELTA-03 | Phase 44 | Complete |
+| DELTA-04 | Phase 44 | Complete |
+| DELTA-05 | Phase 44 | Complete |
+| DELTA-06 | Phase 44 | Complete |
+| DELTA-07 | Phase 44 | Complete |
+| CORR-01 | Phase 44 | Pending |
+| CORR-02 | Phase 44 | Pending |
+| CORR-03 | Phase 44 | Pending |
+| CORR-04 | Phase 44 | Pending |
+| CORR-05 | Phase 44 | Pending |
+| INV-01 | Phase 45 | Pending |
+| INV-02 | Phase 45 | Pending |
+| INV-03 | Phase 45 | Pending |
+| INV-04 | Phase 45 | Pending |
+| INV-05 | Phase 45 | Pending |
+| INV-06 | Phase 45 | Pending |
+| INV-07 | Phase 45 | Pending |
+| ADV-01 | Phase 46 | Pending |
+| ADV-02 | Phase 46 | Pending |
+| ADV-03 | Phase 46 | Pending |
+| ECON-01 | Phase 46 | Pending |
+| ECON-02 | Phase 46 | Pending |
+| GAS-01 | Phase 47 | Pending |
+| GAS-02 | Phase 47 | Pending |
+| GAS-03 | Phase 47 | Pending |
+| GAS-04 | Phase 47 | Pending |
+| DOC-01 | Phase 48 | Pending |
+| DOC-02 | Phase 48 | Pending |
+| DOC-03 | Phase 48 | Pending |
+| DOC-04 | Phase 48 | Pending |
 
 **Coverage:**
-- v3.2 requirements: 14 total
-- Mapped to phases: 14
+- v3.3 requirements: 32 total
+- Mapped to phases: 32
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-19*
-*Last updated: 2026-03-19 after roadmap creation — all requirements mapped to phases*
+*Requirements defined: 2026-03-20*
+*Last updated: 2026-03-20 after roadmap creation (traceability added)*

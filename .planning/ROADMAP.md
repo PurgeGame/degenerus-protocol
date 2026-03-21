@@ -90,10 +90,10 @@
   3. Full redemption lifecycle (submit, resolve, claim) is traced through all contracts with each state transition verified correct
   4. Segregation solvency is proven -- reserved ETH/BURNIE never exceeds contract holdings at any step in the lifecycle
   5. CEI compliance is verified for all external call paths in claimRedemption() and every other new entry point
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 44-01-PLAN.md -- Finding verdicts for all 5 research-flagged issues (CP-08, CP-06, Seam-1, CP-02, CP-07)
+- [x] 44-01-PLAN.md -- Finding verdicts for all 5 research-flagged issues (CP-08, CP-06, Seam-1, CP-02, CP-07)
 - [ ] 44-02-PLAN.md -- Redemption lifecycle trace, period state machine proof, supply invariant proof
 - [ ] 44-03-PLAN.md -- Accounting reconciliation, segregation solvency proof, cross-contract interaction audit, CEI verification
 
@@ -149,7 +149,7 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 44. Delta Audit + Redemption Correctness | 0/3 | Planned | - |
+| 44. Delta Audit + Redemption Correctness | 1/3 | In Progress|  |
 | 45. Invariant Test Suite | 0/TBD | Not started | - |
 | 46. Adversarial Sweep + Economic Analysis | 0/TBD | Not started | - |
 | 47. Gas Optimization | 0/TBD | Not started | - |
