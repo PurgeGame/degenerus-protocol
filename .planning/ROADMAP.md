@@ -75,7 +75,7 @@
 - [x] **Phase 44: Delta Audit + Redemption Correctness** - Verify gambling burn code changes for value integrity, state machine correctness, and cross-contract consistency (completed 2026-03-21)
 - [ ] **Phase 45: Invariant Test Suite** - Foundry invariant tests encoding corrected invariants for the redemption system
 - [ ] **Phase 46: Adversarial Sweep + Economic Analysis** - Full 29-contract warden simulation, composability attacks, and rational actor strategy analysis
-- [ ] **Phase 47: Gas Optimization** - Dead variable elimination, storage packing, and gas baseline for redemption functions
+- [x] **Phase 47: Gas Optimization** - Dead variable elimination, storage packing, and gas baseline for redemption functions (completed 2026-03-21)
 - [ ] **Phase 48: Documentation Sync** - NatSpec correctness for changed files and full audit doc sync
 
 ## Phase Details
@@ -134,10 +134,10 @@ Plans:
   2. Storage packing opportunities documented (e.g., redemptionPeriodIndex uint48 packing) with gas savings quantified
   3. forge snapshot baseline exists for all redemption functions
   4. Any dead variables identified in GAS-01 are removed and tests still pass
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 47-01-PLAN.md -- Variable liveness analysis (GAS-01), storage packing analysis (GAS-02), dead variable elimination status (GAS-04)
+- [x] 47-01-PLAN.md -- Variable liveness analysis (GAS-01), storage packing analysis (GAS-02), dead variable elimination status (GAS-04)
 - [x] 47-02-PLAN.md -- Foundry gas benchmark test creation and snapshot baseline capture (GAS-03)
 
 ### Phase 48: Documentation Sync
@@ -161,7 +161,7 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 | 44. Delta Audit + Redemption Correctness | 3/3 | Complete    | 2026-03-21 |
 | 45. Invariant Test Suite | 0/3 | Planned | - |
 | 46. Adversarial Sweep + Economic Analysis | 0/TBD | Not started | - |
-| 47. Gas Optimization | 1/2 | In Progress|  |
+| 47. Gas Optimization | 2/2 | Complete   | 2026-03-21 |
 | 48. Documentation Sync | 0/TBD | Not started | - |
 
 ## Deferred (v3.3+)
