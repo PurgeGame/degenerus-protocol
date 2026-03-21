@@ -736,6 +736,25 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngRequestTime = uint48(block.timestamp);
     }
 
+    // BIT ALLOCATION MAP for VRF random word (currentWord after _applyDailyRng):
+    //
+    // Bit(s)   Consumer                    Operation                         Location
+    // ------   --------                    ---------                         --------
+    // 0        Coinflip win/loss           rngWord & 1                       BurnieCoinflip.sol:808
+    // 8+       Redemption roll             (currentWord >> 8) % 151 + 25     AdvanceModule.sol:773
+    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    BurnieCoinflip.sol:782-787
+    // full     Jackpot winner selection    via delegatecall (full word)      JackpotModule (payDailyJackpot)
+    // full     Coin jackpot                via delegatecall (full word)      JackpotModule (_payDailyCoinJackpot)
+    // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule.sol:804
+    // full     Future take variance        rngWord % (variance * 2 + 1)     AdvanceModule.sol:1010
+    // full     Prize pool consolidation    via delegatecall (full word)      JackpotModule (consolidatePrizePools)
+    // full     Final day DGNRS reward      via delegatecall (full word)      JackpotModule (awardFinalDayDgnrsReward)
+    // full     Reward jackpots             via delegatecall (full word)      JackpotModule (_runRewardJackpots)
+    //
+    // NOTE: Bits 0 and 8+ are the only direct bit-level consumers.
+    //       All "full" consumers use modular arithmetic or keccak mixing,
+    //       so bit overlap with bits 0 and 8+ is not a collision concern.
+
     function rngGate(
         uint48 ts,
         uint48 day,
