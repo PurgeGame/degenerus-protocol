@@ -10,7 +10,8 @@
 - ✅ **v2.1 VRF Governance Audit + Doc Sync** — Phases 24-25 (shipped 2026-03-18)
 - ✅ **v3.0 Full Contract Audit + Payout Specification** — Phases 26-30 (shipped 2026-03-18)
 - ✅ **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-37 (shipped 2026-03-19)
-- **v3.2 RNG Delta Audit + Comment Re-scan** — Phases 38-43 (in progress)
+- ✅ **v3.2 RNG Delta Audit + Comment Re-scan** — Phases 38-43 (shipped 2026-03-19)
+- **v3.3 Gambling Burn Audit + Full Adversarial Sweep** — Phases 44-48 (in progress)
 
 ## Phases
 
@@ -57,120 +58,108 @@
 
 </details>
 
-### v3.2 RNG Delta Audit + Comment Re-scan (In Progress)
+<details>
+<summary>v3.2 RNG Delta Audit + Comment Re-scan (Phases 38-43) -- SHIPPED 2026-03-19</summary>
 
-- [x] **Phase 38: RNG Delta Security** - Audit all RNG-adjacent code changes for manipulation vectors (completed 2026-03-19)
-- [x] **Phase 39: Comment Scan -- Game Modules** - Fresh comment audit across all 12 game module files (completed 2026-03-19)
-- [x] **Phase 40: Comment Scan -- Core + Token Contracts** - Fresh comment audit of core game and token contracts (completed 2026-03-19)
-- [x] **Phase 41: Comment Scan -- Peripheral + Remaining** - Fresh comment audit of peripheral and utility contracts (completed 2026-03-19)
-- [x] **Phase 42: Governance Fresh Eyes** - Independent sanity check of VRF governance from fresh perspective (completed 2026-03-19)
-- [x] **Phase 43: Consolidated Findings** - Cross-cutting patterns and final deliverable with severity classification (completed 2026-03-19)
+- [x] **Phase 38: RNG Delta Security** — 2 plans, 4 requirements (completed 2026-03-19)
+- [x] **Phase 39: Comment Scan -- Game Modules** — 4 plans, 1 requirement (completed 2026-03-19)
+- [x] **Phase 40: Comment Scan -- Core + Token Contracts** — 2 plans, 2 requirements (completed 2026-03-19)
+- [x] **Phase 41: Comment Scan -- Peripheral + Remaining** — 3 plans, 2 requirements (completed 2026-03-19)
+- [x] **Phase 42: Governance Fresh Eyes** — 2 plans, 3 requirements (completed 2026-03-19)
+- [x] **Phase 43: Consolidated Findings** — 1 plan, 2 requirements (completed 2026-03-19)
+
+</details>
+
+### v3.3 Gambling Burn Audit + Full Adversarial Sweep (In Progress)
+
+- [ ] **Phase 44: Delta Audit + Redemption Correctness** - Verify gambling burn code changes for value integrity, state machine correctness, and cross-contract consistency
+- [ ] **Phase 45: Invariant Test Suite** - Foundry invariant tests encoding corrected invariants for the redemption system
+- [ ] **Phase 46: Adversarial Sweep + Economic Analysis** - Full 29-contract warden simulation, composability attacks, and rational actor strategy analysis
+- [ ] **Phase 47: Gas Optimization** - Dead variable elimination, storage packing, and gas baseline for redemption functions
+- [ ] **Phase 48: Documentation Sync** - NatSpec correctness for changed files and full audit doc sync
 
 ## Phase Details
 
-### Phase 38: RNG Delta Security
-**Goal**: All RNG-adjacent code changes since v3.1 are verified safe -- no new manipulation windows, no exploitable state
-**Depends on**: Nothing (first phase of v3.2)
-**Requirements**: RNG-01, RNG-02, RNG-03, RNG-04
+### Phase 44: Delta Audit + Redemption Correctness
+**Goal**: Every code change in the 6 gambling burn files is verified for value integrity and state machine correctness -- all research-flagged findings (CP-08, CP-06, Seam-1, CP-02, CP-07) are confirmed or refuted with severity classifications
+**Depends on**: Nothing (first phase of v3.3)
+**Requirements**: DELTA-01, DELTA-02, DELTA-03, DELTA-04, DELTA-05, DELTA-06, DELTA-07, CORR-01, CORR-02, CORR-03, CORR-04, CORR-05
 **Success Criteria** (what must be TRUE):
-  1. rngLocked removal from coinflip claim paths is verified safe -- carry ETH never enters claimable pool during resolution
-  2. BAF epoch-based guard is confirmed sufficient as sole coinflip claim protection (no bypass via timing or reentrancy)
-  3. Persistent decimator claims across rounds do not create state that an RNG-aware attacker can exploit
-  4. Cross-contract RNG data flow under all recent changes combined produces no new manipulation vectors
-  5. Each finding is documented with severity classification and attack scenario (or explicit "safe" verdict with reasoning)
-**Plans:** 2/2 plans complete
-Plans:
-- [ ] 38-01-PLAN.md — Carry isolation trace + formal invariant (RNG-01) and BAF guard analysis (RNG-02)
-- [ ] 38-02-PLAN.md — Decimator claim persistence correctness (RNG-03) and cross-contract dependency matrix (RNG-04)
+  1. CP-08 (deterministic burn double-spend), CP-06 (stuck claims at game-over), and Seam-1 (DGNRS.burn() fund trap) each have a confirmed/refuted verdict with severity classification and fix recommendation
+  2. CP-02 (period index zero sentinel) and CP-07 (coinflip resolution stuck-claim) each have a confirmed/refuted verdict
+  3. Full redemption lifecycle (submit, resolve, claim) is traced through all contracts with each state transition verified correct
+  4. Segregation solvency is proven -- reserved ETH/BURNIE never exceeds contract holdings at any step in the lifecycle
+  5. CEI compliance is verified for all external call paths in claimRedemption() and every other new entry point
+**Plans:** 3 plans
 
-### Phase 39: Comment Scan -- Game Modules
-**Goal**: Every comment in all 12 game module files is verified accurate against current code behavior
-**Depends on**: Nothing (independent of Phase 38)
-**Requirements**: CMT-01
-**Success Criteria** (what must be TRUE):
-  1. All NatSpec tags (@param, @return, @dev, @notice) in 12 module files match actual function signatures and behavior
-  2. All inline comments accurately describe the code they annotate (no stale references to removed features)
-  3. All block comments and section headers reflect current contract structure
-  4. All 31 v3.1 fixes verified correct in working tree
-  5. Findings list produced with file, line, what/why/suggestion for each discrepancy
-**Plans:** 4/4 plans complete
 Plans:
-- [ ] 39-01-PLAN.md — JackpotModule comment audit (2,792 lines, 6 v3.1 fixes)
-- [ ] 39-02-PLAN.md — DecimatorModule + DegeneretteModule + MintModule comment audit (3,358 lines, 11 v3.1 fixes)
-- [ ] 39-03-PLAN.md — LootboxModule + AdvanceModule comment audit (3,160 lines, 6 v3.1 fixes)
-- [ ] 39-04-PLAN.md — Small modules audit (2,128 lines, 8 v3.1 fixes) + consolidate final deliverable
+- [ ] 44-01-PLAN.md -- Finding verdicts for all 5 research-flagged issues (CP-08, CP-06, Seam-1, CP-02, CP-07)
+- [ ] 44-02-PLAN.md -- Redemption lifecycle trace, period state machine proof, supply invariant proof
+- [ ] 44-03-PLAN.md -- Accounting reconciliation, segregation solvency proof, cross-contract interaction audit, CEI verification
 
-### Phase 40: Comment Scan -- Core + Token Contracts
-**Goal**: Every comment in core game contracts and token contracts is verified accurate
-**Depends on**: Nothing (independent)
-**Requirements**: CMT-02, CMT-03
+### Phase 45: Invariant Test Suite
+**Goal**: Foundry invariant tests are passing that encode the corrected redemption system invariants, providing regression protection and adversarial state sequence coverage
+**Depends on**: Phase 44 (tests must encode corrected invariants after delta findings are resolved)
+**Requirements**: INV-01, INV-02, INV-03, INV-04, INV-05, INV-06, INV-07
 **Success Criteria** (what must be TRUE):
-  1. DegenerusGame, GameStorage, and DegenerusAdmin comments all verified against current code (including post-governance changes)
-  2. BurnieCoin, DegenerusStonk, StakedDegenerusStonk, and WrappedWrappedXRP comments all verified (including sDGNRS/DGNRS split changes)
-  3. NatSpec on all external/public functions matches actual parameters, return values, and behavior
-  4. Findings list produced with per-contract grouping
-**Plans:** 2/2 plans complete
-Plans:
-- [ ] 40-01-PLAN.md — Core game contracts scan (DegenerusGame, GameStorage, DegenerusAdmin)
-- [ ] 40-02-PLAN.md — Token contracts scan (BurnieCoin, DegenerusStonk, StakedDegenerusStonk, WrappedWrappedXRP)
+  1. All 7 invariant tests pass at the default Foundry profile (256 runs, depth 128) with zero failures
+  2. Handler contract correctly randomizes burn/claim/advanceGame call sequences to explore adversarial state paths
+  3. Segregated ETH invariant catches any accounting drift (rounding dust bounded and documented)
+  4. Supply consistency invariant verifies totalSupply correctness after arbitrary burn/claim sequences
+**Plans**: TBD
 
-### Phase 41: Comment Scan -- Peripheral + Remaining
-**Goal**: Every comment in peripheral and remaining utility contracts is verified accurate
-**Depends on**: Nothing (independent)
-**Requirements**: CMT-04, CMT-05
+### Phase 46: Adversarial Sweep + Economic Analysis
+**Goal**: All 29 contracts are swept for High/Medium C4A findings from a fresh-eyes perspective, composability attacks are catalogued, and the gambling mechanism is proven economically fair with no rational actor exploits
+**Depends on**: Phase 44 (delta must be clean before broad sweep), Phase 45 (invariant tests provide regression safety)
+**Requirements**: ADV-01, ADV-02, ADV-03, ECON-01, ECON-02
 **Success Criteria** (what must be TRUE):
-  1. BurnieCoinflip, DegenerusVault, DegenerusAffiliate, DegenerusQuests, DegenerusJackpots comments all verified
-  2. DeityPass, TraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data comments all verified
-  3. All interface files (IBurnieCoinflip, IDegenerusGame) NatSpec matches implementation
-  4. Findings list produced with per-contract grouping
-**Plans:** 3/3 plans complete
-Plans:
-- [ ] 41-01-PLAN.md — Heavy-change peripheral (BurnieCoinflip, DegenerusQuests, DegenerusJackpots)
-- [ ] 41-02-PLAN.md — Light-change peripheral + interfaces (DegenerusVault, DegenerusAffiliate, IBurnieCoinflip, IDegenerusGame)
-- [ ] 41-03-PLAN.md — Remaining/utility (DeityPass, TraitUtils, DeityBoonViewer, ContractAddresses, Icons32Data)
+  1. Warden simulation report covers all 29 contracts with explicit verdict per contract (finding or "clean")
+  2. Cross-contract composability attack catalogue documents multi-contract interaction sequences tested and their outcomes
+  3. Access control for all new entry points (claimCoinflipsForRedemption, burnForSdgnrs, resolveRedemptionPeriod, hasPendingRedemptions) is verified correct
+  4. Rational actor strategy catalog documents timing attacks, cap manipulation, stale accumulation, and multi-address splitting with cost-benefit analysis showing no repeatable EV exploit
+  5. Bank-run scenario (simultaneous mass burns near supply cap) is analyzed with outcome documented
+**Plans**: TBD
 
-### Phase 42: Governance Fresh Eyes
-**Goal**: VRF governance flow independently verified from fresh perspective -- all attack surfaces catalogued and edge cases evaluated
-**Depends on**: Phase 38 (RNG context informs governance RNG interactions)
-**Requirements**: GOV-01, GOV-02, GOV-03
+### Phase 47: Gas Optimization
+**Goal**: All gas optimization opportunities in the redemption system are identified, dead variables confirmed, storage packing analyzed, and actionable optimizations implemented
+**Depends on**: Phase 44 (gas baseline must reflect corrected code)
+**Requirements**: GAS-01, GAS-02, GAS-03, GAS-04
 **Success Criteria** (what must be TRUE):
-  1. Complete attack surface catalogue for VRF swap governance (proposal, voting, execution, timelock, veto paths)
-  2. Timing attack scenarios re-evaluated against current code (including any post-v2.1 changes)
-  3. Cross-contract governance interactions verified (DegenerusAdmin, GameStorage, AdvanceModule, DegenerusStonk state consistency)
-  4. Any new findings documented with severity; known issues (WAR-01, WAR-02, WAR-06) confirmed still accurate
-**Plans:** 2/2 plans complete
-Plans:
-- [ ] 42-01-PLAN.md — Attack surface catalogue (GOV-01) + timing attack analysis (GOV-02) + known issue re-verification
-- [ ] 42-02-PLAN.md — Cross-contract state consistency verification (GOV-03) + executive summary
+  1. All 7 new state variables in sDGNRS are confirmed needed or flagged for removal with justification
+  2. Storage packing opportunities documented (e.g., redemptionPeriodIndex uint48 packing) with gas savings quantified
+  3. forge snapshot baseline exists for all redemption functions
+  4. Any dead variables identified in GAS-01 are removed and tests still pass
+**Plans**: TBD
 
-### Phase 43: Consolidated Findings
-**Goal**: All findings from phases 38-42 consolidated into deliverable with cross-cutting patterns and severity classification
-**Depends on**: Phase 38, Phase 39, Phase 40, Phase 41, Phase 42
-**Requirements**: CMT-06, CMT-07
+### Phase 48: Documentation Sync
+**Goal**: All NatSpec and audit documentation accurately describes the final post-fix implementation -- no stale references, no misleading comments
+**Depends on**: Phase 44, Phase 47 (NatSpec must describe final code after all changes)
+**Requirements**: DOC-01, DOC-02, DOC-03, DOC-04
 **Success Criteria** (what must be TRUE):
-  1. Cross-cutting patterns identified across all contract groups (recurring NatSpec issues, systematic comment drift, pattern-level fixes)
-  2. Master findings table with severity classification (LOW/INFO), per-contract counts, and pattern tags
-  3. Deliverable is consumable by protocol team for pre-C4A fix decisions
-**Plans:** 1/1 plans complete
-Plans:
-- [ ] 43-01-PLAN.md — Cross-cutting pattern analysis, deduplicated master table, and consolidated deliverable
+  1. NatSpec on all 6 changed files is verified correct against final implementation (every @param, @return, @dev, @notice)
+  2. Bit allocation map comment exists in rngGate() documenting which bits each RNG consumer uses
+  3. claimCoinflipsForRedemption error name is fixed (no longer uses misleading OnlyBurnieCoin)
+  4. All 13+ audit reference docs are updated to reflect v3.3 findings and gambling burn mechanism
+**Plans**: TBD
 
 ## Progress
 
+**Execution Order:**
+Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
+
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 38. RNG Delta Security | 2/2 | Complete    | 2026-03-19 |
-| 39. Comment Scan -- Game Modules | 4/4 | Complete    | 2026-03-19 |
-| 40. Comment Scan -- Core + Token | 2/2 | Complete    | 2026-03-19 |
-| 41. Comment Scan -- Peripheral + Remaining | 3/3 | Complete    | 2026-03-19 |
-| 42. Governance Fresh Eyes | 2/2 | Complete    | 2026-03-19 |
-| 43. Consolidated Findings | 1/1 | Complete    | 2026-03-19 |
+| 44. Delta Audit + Redemption Correctness | 0/3 | Planned | - |
+| 45. Invariant Test Suite | 0/TBD | Not started | - |
+| 46. Adversarial Sweep + Economic Analysis | 0/TBD | Not started | - |
+| 47. Gas Optimization | 0/TBD | Not started | - |
+| 48. Documentation Sync | 0/TBD | Not started | - |
 
 ## Deferred (v3.3+)
 
-- **FUZZ-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
-- **FUZZ-02**: Formal verification of vote counting arithmetic via Halmos
-- **FUZZ-03**: Monte Carlo simulation of governance outcomes under various voter distributions
+- **FORMAL-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
+- **FORMAL-02**: Formal verification of vote counting arithmetic via Halmos
+- **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-19 after Phase 43 planning*
+*Last updated: 2026-03-20 after Phase 44 planning*
