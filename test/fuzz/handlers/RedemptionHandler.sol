@@ -181,10 +181,16 @@ contract RedemptionHandler is Test {
             ghost_totalEthClaimed += currentActor.balance - ethBefore;
         } catch {}
 
-        // Attempt re-claim to test no-double-claim invariant
+        // Attempt re-claim to test no-double-claim invariant.
+        // CP-07 split claim: partial claim (ETH-only) leaves the claim alive for
+        // BURNIE resolution. A second call that transfers zero ETH is expected.
+        // Only flag a double claim if the re-claim actually pays ETH again.
+        uint256 ethBeforeReClaim = currentActor.balance;
         vm.prank(currentActor);
         try sdgnrs.claimRedemption() {
-            ghost_doubleClaim++;
+            if (currentActor.balance > ethBeforeReClaim) {
+                ghost_doubleClaim++;
+            }
         } catch {}
     }
 
