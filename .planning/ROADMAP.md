@@ -123,11 +123,11 @@ Plans:
   3. Access control for all new entry points (claimCoinflipsForRedemption, burnForSdgnrs, resolveRedemptionPeriod, hasPendingRedemptions) is verified correct
   4. Rational actor strategy catalog documents timing attacks, cap manipulation, stale accumulation, and multi-address splitting with cost-benefit analysis showing no repeatable EV exploit
   5. Bank-run scenario (simultaneous mass burns near supply cap) is analyzed with outcome documented
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 46-01-PLAN.md -- Warden simulation: 3-persona deep sweep of 4 core contracts + quick sweep of 25 remaining + consolidated verdict table
-- [ ] 46-02-PLAN.md -- Cross-contract composability attack catalog + access control verification for 4 new entry points
+- [x] 46-02-PLAN.md -- Cross-contract composability attack catalog + access control verification for 4 new entry points
 - [x] 46-03-PLAN.md -- Rational actor strategy catalog with EV calculations + bank-run scenario analysis
 
 ### Phase 47: Gas Optimization
@@ -169,7 +169,7 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 |-------|----------------|--------|-----------|
 | 44. Delta Audit + Redemption Correctness | 3/3 | Complete    | 2026-03-21 |
 | 45. Invariant Test Suite | 3/3 | Complete    | 2026-03-21 |
-| 46. Adversarial Sweep + Economic Analysis | 1/3 | In Progress|  |
+| 46. Adversarial Sweep + Economic Analysis | 2/3 | In Progress|  |
 | 47. Gas Optimization | 2/2 | Complete    | 2026-03-21 |
 | 48. Documentation Sync | 0/2 | Not started | - |
 
