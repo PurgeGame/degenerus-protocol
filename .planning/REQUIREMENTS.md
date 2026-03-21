@@ -28,8 +28,8 @@
 - [x] **REDM-03**: 160 ETH daily cap per wallet enforced correctly
 - [x] **REDM-04**: Activity score snapshot at submission is immutable through resolution
 - [x] **REDM-05**: PendingRedemption slot packing is correct (uint96+uint96+uint48+uint16=256)
-- [ ] **REDM-06**: Lootbox reclassification has no ETH transfer (internal accounting only)
-- [ ] **REDM-07**: Cross-contract call from sDGNRS → Game → LootboxModule has correct access control
+- [x] **REDM-06**: Lootbox reclassification has no ETH transfer (internal accounting only)
+- [x] **REDM-07**: Cross-contract call from sDGNRS → Game → LootboxModule has correct access control
 
 ### Invariant Testing
 
@@ -72,8 +72,8 @@
 | REDM-03 | Phase 51 | Complete |
 | REDM-04 | Phase 51 | Complete |
 | REDM-05 | Phase 51 | Complete |
-| REDM-06 | Phase 51 | Pending |
-| REDM-07 | Phase 51 | Pending |
+| REDM-06 | Phase 51 | Complete |
+| REDM-07 | Phase 51 | Complete |
 | INV-01 | Phase 52 | Pending |
 | INV-02 | Phase 52 | Pending |
 | INV-03 | Phase 52 | Pending |
