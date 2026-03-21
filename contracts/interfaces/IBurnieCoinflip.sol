@@ -30,6 +30,7 @@ interface IBurnieCoinflip {
     /// @param player The player claiming (address(0) for msg.sender).
     /// @param amount Amount to claim (will be capped at available balance).
     /// @return claimed The actual amount claimed and minted.
+    /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
 
     /// @notice Claim coinflip winnings via BurnieCoin contract to cover token transfers/burns.

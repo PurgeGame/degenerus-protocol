@@ -430,6 +430,7 @@ contract StakedDegenerusStonk {
     /// @return ethOut ETH received (deterministic path only)
     /// @return stethOut stETH received (deterministic path only)
     /// @return burnieOut BURNIE received (deterministic path only)
+    /// @custom:reverts BurnsBlockedDuringRng If called during active VRF request (rngLocked).
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         if (game.gameOver()) {
             return _deterministicBurn(msg.sender, amount);
@@ -446,6 +447,7 @@ contract StakedDegenerusStonk {
     /// @return ethOut ETH received (deterministic path only)
     /// @return stethOut stETH received (deterministic path only)
     /// @return burnieOut BURNIE received (deterministic path only)
+    /// @custom:reverts BurnsBlockedDuringRng If called during active VRF request (rngLocked).
     function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         dgnrsWrapper.burnForSdgnrs(msg.sender, amount);
         if (game.gameOver()) {
@@ -463,7 +465,8 @@ contract StakedDegenerusStonk {
 
     /// @dev Deterministic burn parameterized by beneficiary and burnFrom.
     ///      Used for the wrapped case where sDGNRS is burned from DGNRS contract's balance
-    ///      but ETH/BURNIE goes to beneficiary.
+    ///      but ETH/BURNIE goes to beneficiary. Deducts pendingRedemptionEthValue and
+    ///      pendingRedemptionBurnie to exclude reserved gambling burn amounts from payout (CP-08).
     function _deterministicBurnFrom(address beneficiary, address burnFrom, uint256 amount) private returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
@@ -537,7 +540,7 @@ contract StakedDegenerusStonk {
 
     /// @notice Called by game contract to resolve the current redemption period with a dice roll
     /// @dev Adjusts segregated ETH by roll and returns rolled BURNIE amount for the game to credit.
-    /// @param roll Percentage roll (e.g. 75 = 75%)
+    /// @param roll The random roll result (range 25-175, applied as percentage)
     /// @param flipDay Coinflip day index used for BURNIE gamble resolution
     /// @return burnieToCredit Amount of BURNIE the game should credit to the coinflip contract
     function resolveRedemptionPeriod(uint16 roll, uint48 flipDay) external returns (uint256 burnieToCredit) {
@@ -623,7 +626,8 @@ contract StakedDegenerusStonk {
 
     /// @notice Preview ETH, stETH, and BURNIE output for burning sDGNRS
     /// @dev Reflects ETH-preferential payout logic using current balances and claimables.
-    ///      BURNIE includes claimable coinflip withdrawals.
+    ///      Deducts pendingRedemptionEthValue and pendingRedemptionBurnie to exclude reserved
+    ///      gambling burn amounts (CP-08). BURNIE includes claimable coinflip withdrawals.
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH that would be received
     /// @return stethOut stETH that would be received
@@ -677,6 +681,7 @@ contract StakedDegenerusStonk {
 
     /// @dev Core gambling burn logic. Burns sDGNRS from burnFrom, segregates proportional
     ///      ETH/BURNIE value for beneficiary, and records into the current period.
+    ///      Enforces 50% supply cap per period. Advances redemptionPeriodIndex on new day.
     function _submitGamblingClaimFrom(address beneficiary, address burnFrom, uint256 amount) private {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();

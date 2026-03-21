@@ -163,7 +163,9 @@ contract DegenerusStonk {
     // =====================================================================
 
     /// @notice Burn DGNRS to claim proportional ETH + stETH + BURNIE from sDGNRS backing
-    /// @dev ETH sent last (checks-effects-interactions)
+    /// @dev ETH sent last (checks-effects-interactions). Only available post-gameOver;
+    ///      during active game, players must use burnWrapped() via sDGNRS gambling path.
+    /// @custom:reverts GameNotOver If called during active game (Seam-1 fix).
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         _burn(msg.sender, amount);
         if (!IDegenerusGame(ContractAddresses.GAME).gameOver()) revert GameNotOver();

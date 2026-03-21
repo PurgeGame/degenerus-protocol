@@ -79,4 +79,15 @@ interface IStakedDegenerusStonk {
     /// @return stethOut Amount of stETH that would be returned
     /// @return burnieOut Amount of BURNIE that would be minted
     function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+
+    /// @notice Check if there are unresolved gambling burn claims for the current period
+    /// @return True if current period has pending base amounts
+    function hasPendingRedemptions() external view returns (bool);
+
+    /// @notice Resolve the current gambling burn period with RNG results
+    /// @dev Only callable by game contract during advanceGame
+    /// @param roll The random roll (25-175)
+    /// @param flipDay The coinflip day for BURNIE gamble
+    /// @return burnieToCredit Amount of BURNIE to credit as coinflip stake
+    function resolveRedemptionPeriod(uint16 roll, uint48 flipDay) external returns (uint256 burnieToCredit);
 }
