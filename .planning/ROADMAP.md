@@ -175,11 +175,11 @@ Plans:
   6. 47-01-gas-analysis.md line references updated to match current contract code
   7. 48-01-SUMMARY.md requirements_completed populated with DOC-01, DOC-02, DOC-03
   8. 46-01-SUMMARY.md spurious Phase 47 dependency removed
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 49-01-PLAN.md -- Fix stale line refs in BIT ALLOCATION MAP, v3.3 addendum, gas analysis; fix SUMMARY metadata
-- [ ] 49-02-PLAN.md -- Activate ghost_totalBurnieClaimed invariant, verify gas benchmarks, confirm test baseline
+- [x] 49-02-PLAN.md -- Activate ghost_totalBurnieClaimed invariant, verify gas benchmarks, confirm test baseline
 
 ## Progress
 
@@ -193,7 +193,7 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48 -> 49
 | 46. Adversarial Sweep + Economic Analysis | 3/3 | Complete    | 2026-03-21 |
 | 47. Gas Optimization | 2/2 | Complete    | 2026-03-21 |
 | 48. Documentation Sync | 2/2 | Complete    | 2026-03-21 |
-| 49. Milestone Cleanup | 0/2 | Not started | - |
+| 49. Milestone Cleanup | 1/2 | In Progress|  |
 
 ## Deferred (v3.3+)
 
