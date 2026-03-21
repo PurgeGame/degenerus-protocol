@@ -422,6 +422,46 @@ contract FuturepoolSkimTest is Test {
     }
 
     // =========================================================================
+    //  INV-01: Skim conservation invariant (fuzz)
+    // =========================================================================
+
+    /// @notice INV-01: Conservation holds across randomized inputs including lastPool=0 edge case (level 1).
+    function testFuzz_INV01_conservation(
+        uint128 nextPool,
+        uint128 futurePool,
+        uint24 lvl,
+        uint128 lastPoolRaw,
+        uint48 elapsedRaw,
+        uint256 rngWord
+    ) public {
+        nextPool = uint128(bound(nextPool, 1 ether, 10_000 ether));
+        futurePool = uint128(bound(futurePool, 0, 50_000 ether));
+        lvl = uint24(bound(lvl, 1, 200));
+        uint256 lastPool = bound(lastPoolRaw, 0, 10_000 ether);
+        uint48 elapsed = uint48(bound(elapsedRaw, 0, 120 days));
+
+        (uint128 nextAfter, uint128 futureAfter, uint256 yieldAfter) =
+            _runSkim(nextPool, futurePool, lvl, lastPool, elapsed, rngWord);
+
+        _assertConservation(nextPool, futurePool, nextAfter, futureAfter, yieldAfter);
+    }
+
+    /// @notice INV-01: Conservation holds at level 1 with production-realistic 50 ETH bootstrap (F-50-03 edge case).
+    function testFuzz_INV01_conservation_level1Bootstrap(
+        uint128 futurePool,
+        uint48 elapsedRaw,
+        uint256 rngWord
+    ) public {
+        futurePool = uint128(bound(futurePool, 0, 500 ether));
+        uint48 elapsed = uint48(bound(elapsedRaw, 0, 120 days));
+
+        (uint128 nextAfter, uint128 futureAfter, uint256 yieldAfter) =
+            _runSkim(50 ether, futurePool, 1, 0, elapsed, rngWord);
+
+        _assertConservation(50 ether, futurePool, nextAfter, futureAfter, yieldAfter);
+    }
+
+    // =========================================================================
     //  Insurance always exactly 1%
     // =========================================================================
 
