@@ -11,7 +11,7 @@
 - ✅ **v3.0 Full Contract Audit + Payout Specification** — Phases 26-30 (shipped 2026-03-18)
 - ✅ **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-37 (shipped 2026-03-19)
 - ✅ **v3.2 RNG Delta Audit + Comment Re-scan** — Phases 38-43 (shipped 2026-03-19)
-- **v3.3 Gambling Burn Audit + Full Adversarial Sweep** — Phases 44-49 (in progress)
+- ✅ **v3.3 Gambling Burn Audit + Full Adversarial Sweep** — Phases 44-49 (shipped 2026-03-21)
 
 ## Phases
 
@@ -70,136 +70,95 @@
 
 </details>
 
-### v3.3 Gambling Burn Audit + Full Adversarial Sweep (In Progress)
+<details>
+<summary>v3.3 Gambling Burn Audit + Full Adversarial Sweep (Phases 44-49) -- SHIPPED 2026-03-21</summary>
 
-- [x] **Phase 44: Delta Audit + Redemption Correctness** - Verify gambling burn code changes for value integrity, state machine correctness, and cross-contract consistency (completed 2026-03-21)
-- [x] **Phase 45: Invariant Test Suite** - Foundry invariant tests encoding corrected invariants for the redemption system (completed 2026-03-21)
-- [x] **Phase 46: Adversarial Sweep + Economic Analysis** - Full 29-contract warden simulation, composability attacks, and rational actor strategy analysis (completed 2026-03-21)
-- [x] **Phase 47: Gas Optimization** - Dead variable elimination, storage packing, and gas baseline for redemption functions (completed 2026-03-21)
-- [x] **Phase 48: Documentation Sync** - NatSpec correctness for changed files and full audit doc sync (completed 2026-03-21)
-- [x] **Phase 49: Milestone Cleanup** - Close all tech debt from v3.3 audit: stale line refs, gas test verification, ghost variable invariant, metadata fixes (completed 2026-03-21)
+- [x] **Phase 44: Delta Audit + Redemption Correctness** — 3 plans, 12 requirements (completed 2026-03-21)
+- [x] **Phase 45: Invariant Test Suite** — 3 plans, 7 requirements (completed 2026-03-21)
+- [x] **Phase 46: Adversarial Sweep + Economic Analysis** — 3 plans, 5 requirements (completed 2026-03-21)
+- [x] **Phase 47: Gas Optimization** — 2 plans, 4 requirements (completed 2026-03-21)
+- [x] **Phase 48: Documentation Sync** — 2 plans, 4 requirements (completed 2026-03-21)
+- [x] **Phase 49: Milestone Cleanup** — 2 plans, gap closure (completed 2026-03-21)
+
+</details>
+
+### v3.4 New Feature Audit — Skim Redesign + Redemption Lootbox
+
+- [ ] **Phase 50: Skim Redesign Audit** - Verify correctness and economic soundness of the 5-step futurepool skim pipeline
+- [ ] **Phase 51: Redemption Lootbox Audit** - Verify correctness of 50/50 redemption split, daily cap, and cross-contract access control
+- [ ] **Phase 52: Invariant Test Suite** - Fuzz invariants proving skim conservation, take cap, and redemption lootbox split
+- [ ] **Phase 53: Consolidated Findings** - Master findings table with all v3.4 discoveries plus outstanding v3.2 LOW/INFO
 
 ## Phase Details
 
-### Phase 44: Delta Audit + Redemption Correctness
-**Goal**: Every code change in the 6 gambling burn files is verified for value integrity and state machine correctness -- all research-flagged findings (CP-08, CP-06, Seam-1, CP-02, CP-07) are confirmed or refuted with severity classifications
-**Depends on**: Nothing (first phase of v3.3)
-**Requirements**: DELTA-01, DELTA-02, DELTA-03, DELTA-04, DELTA-05, DELTA-06, DELTA-07, CORR-01, CORR-02, CORR-03, CORR-04, CORR-05
+### Phase 50: Skim Redesign Audit
+**Goal**: The 5-step futurepool skim pipeline in `_applyTimeBasedFutureTake` is proven correct -- all arithmetic is safe, bit-field consumption has no overlap, and ETH conservation holds under all inputs
+**Depends on**: Nothing (first phase of v3.4; builds on existing 22-test fuzz suite in FuturepoolSkim.t.sol)
+**Requirements**: SKIM-01, SKIM-02, SKIM-03, SKIM-04, SKIM-05, SKIM-06, SKIM-07, ECON-01, ECON-02, ECON-03
 **Success Criteria** (what must be TRUE):
-  1. CP-08 (deterministic burn double-spend), CP-06 (stuck claims at game-over), and Seam-1 (DGNRS.burn() fund trap) each have a confirmed/refuted verdict with severity classification and fix recommendation
-  2. CP-02 (period index zero sentinel) and CP-07 (coinflip resolution stuck-claim) each have a confirmed/refuted verdict
-  3. Full redemption lifecycle (submit, resolve, claim) is traced through all contracts with each state transition verified correct
-  4. Segregation solvency is proven -- reserved ETH/BURNIE never exceeds contract holdings at any step in the lifecycle
-  5. CEI compliance is verified for all external call paths in claimRedemption() and every other new entry point
-**Plans:** 3/3 plans complete
+  1. Every arithmetic step in the 5-step pipeline has a written verdict (safe / finding) with line-ref evidence -- overshoot surcharge monotonicity+cap, ratio adjustment bounds, bit-field isolation, triangular variance underflow safety, and 80% take cap
+  2. ETH conservation (nextPool + futurePool + yieldAccumulator = constant) is proven to hold across the entire function for all input combinations
+  3. Insurance skim is confirmed to be exactly 1% of nextPoolBefore with no rounding edge cases that leak or create ETH
+  4. Overshoot surcharge is confirmed to accelerate futurepool growth during fast levels, stall escalation still functions without growth adjustment, and level 1 (lastPool=0) produces no division-by-zero or unintended surcharge
+**Plans:** 3 plans
 
 Plans:
-- [x] 44-01-PLAN.md -- Finding verdicts for all 5 research-flagged issues (CP-08, CP-06, Seam-1, CP-02, CP-07)
-- [x] 44-02-PLAN.md -- Redemption lifecycle trace, period state machine proof, supply invariant proof
-- [x] 44-03-PLAN.md -- Accounting reconciliation, segregation solvency proof, cross-contract interaction audit, CEI verification
+- [ ] 50-01-PLAN.md — Pipeline arithmetic verdicts (SKIM-01 through SKIM-05)
+- [ ] 50-02-PLAN.md — ETH conservation proof + insurance skim precision (SKIM-06, SKIM-07)
+- [ ] 50-03-PLAN.md — Economic analysis: overshoot, stall escalation, level-1 safety (ECON-01 through ECON-03)
 
-### Phase 45: Invariant Test Suite
-**Goal**: Foundry invariant tests are passing that encode the corrected redemption system invariants, providing regression protection and adversarial state sequence coverage
-**Depends on**: Phase 44 (tests must encode corrected invariants after delta findings are resolved)
-**Requirements**: INV-01, INV-02, INV-03, INV-04, INV-05, INV-06, INV-07
+### Phase 51: Redemption Lootbox Audit
+**Goal**: The 50/50 sDGNRS redemption lootbox split is proven correct -- routing, daily cap enforcement, slot packing, and cross-contract access control are all verified
+**Depends on**: Nothing (independent of Phase 50; separate contracts and feature)
+**Requirements**: REDM-01, REDM-02, REDM-03, REDM-04, REDM-05, REDM-06, REDM-07
 **Success Criteria** (what must be TRUE):
-  1. All 7 invariant tests pass at the default Foundry profile (256 runs, depth 128) with zero failures
-  2. Handler contract correctly randomizes burn/claim/advanceGame call sequences to explore adversarial state paths
-  3. Segregated ETH invariant catches any accounting drift (rounding dust bounded and documented)
-  4. Supply consistency invariant verifies totalSupply correctness after arbitrary burn/claim sequences
-**Plans:** 3/3 plans complete
+  1. The 50/50 split correctly routes half to direct ETH redemption and half to lootbox, and gameOver burns bypass the lootbox entirely (pure ETH/stETH, no BURNIE)
+  2. The 160 ETH daily cap per wallet is enforced correctly with no bypass via multiple calls, timestamp manipulation, or cross-day boundary abuse
+  3. PendingRedemption slot packing (uint96+uint96+uint48+uint16=256) is verified correct with no bit overlap or truncation, and activity score snapshot at submission is immutable through resolution
+  4. Cross-contract call chain sDGNRS -> Game -> LootboxModule has correct access control at every hop, and lootbox reclassification performs no ETH transfer (internal accounting only)
+**Plans:** 4 plans
 
 Plans:
-- [x] 45-01-PLAN.md -- Apply Phase 44 code fixes (CP-08, CP-06, Seam-1, CP-07) and resolve QueueDoubleBuffer compilation blocker
-- [x] 45-02-PLAN.md -- Create RedemptionHandler with burn/advance/claim actions and ghost variable tracking
-- [x] 45-03-PLAN.md -- Create RedemptionInvariants with 7 invariant assertions, run and verify all pass
+- [ ] 51-01-PLAN.md — 50/50 split routing + gameOver bypass verdicts (REDM-01, REDM-02)
+- [ ] 51-02-PLAN.md — Daily cap enforcement + slot packing verification (REDM-03, REDM-05)
+- [ ] 51-03-PLAN.md — Activity score snapshot immutability (REDM-04)
+- [ ] 51-04-PLAN.md — Cross-contract access control + lootbox reclassification (REDM-06, REDM-07)
 
-### Phase 46: Adversarial Sweep + Economic Analysis
-**Goal**: All 29 contracts are swept for High/Medium C4A findings from a fresh-eyes perspective, composability attacks are catalogued, and the gambling mechanism is proven economically fair with no rational actor exploits
-**Depends on**: Phase 44 (delta must be clean before broad sweep), Phase 45 (invariant tests provide regression safety)
-**Requirements**: ADV-01, ADV-02, ADV-03, ECON-01, ECON-02
+### Phase 52: Invariant Test Suite
+**Goal**: Foundry fuzz invariant tests provide automated proof that the skim pipeline and redemption lootbox maintain their core safety properties under randomized inputs
+**Depends on**: Phase 50, Phase 51 (audit understanding informs invariant design and edge case targeting)
+**Requirements**: INV-01, INV-02, INV-03
 **Success Criteria** (what must be TRUE):
-  1. Warden simulation report covers all 29 contracts with explicit verdict per contract (finding or "clean")
-  2. Cross-contract composability attack catalogue documents multi-contract interaction sequences tested and their outcomes
-  3. Access control for all new entry points (claimCoinflipsForRedemption, burnForSdgnrs, resolveRedemptionPeriod, hasPendingRedemptions) is verified correct
-  4. Rational actor strategy catalog documents timing attacks, cap manipulation, stale accumulation, and multi-address splitting with cost-benefit analysis showing no repeatable EV exploit
-  5. Bank-run scenario (simultaneous mass burns near supply cap) is analyzed with outcome documented
-**Plans:** 3/3 plans complete
+  1. Skim conservation invariant passes: nextPool + futurePool + yieldAccumulator is constant across all fuzzed inputs (extends existing FuturepoolSkim.t.sol suite)
+  2. Take cap invariant passes: skim take never exceeds 80% of nextPool across all fuzzed inputs
+  3. Redemption lootbox split invariant passes: direct ETH + lootbox ETH sums to total rolled ETH for every redemption resolution
+**Plans**: TBD
 
-Plans:
-- [x] 46-01-PLAN.md -- Warden simulation: 3-persona deep sweep of 4 core contracts + quick sweep of 25 remaining + consolidated verdict table
-- [x] 46-02-PLAN.md -- Cross-contract composability attack catalog + access control verification for 4 new entry points
-- [x] 46-03-PLAN.md -- Rational actor strategy catalog with EV calculations + bank-run scenario analysis
-
-### Phase 47: Gas Optimization
-**Goal**: All gas optimization opportunities in the redemption system are identified, dead variables confirmed needed or eliminated, storage packing analyzed with implementation recommendations, and gas baseline established
-**Depends on**: Phase 44 (gas baseline must reflect corrected code)
-**Requirements**: GAS-01, GAS-02, GAS-03, GAS-04
+### Phase 53: Consolidated Findings
+**Goal**: All v3.4 audit findings are consolidated into a single master table sorted by severity, ready for manual triage before C4A submission
+**Depends on**: Phase 50, Phase 51, Phase 52 (all findings must be gathered first)
+**Requirements**: FIND-01, FIND-02, FIND-03
 **Success Criteria** (what must be TRUE):
-  1. All 7 new state variables in sDGNRS are confirmed needed or flagged for removal with justification
-  2. Storage packing opportunities documented (e.g., redemptionPeriodIndex uint48 packing) with gas savings quantified
-  3. forge snapshot baseline exists for all redemption functions
-  4. Any dead variables identified in GAS-01 are removed and tests still pass
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 47-01-PLAN.md -- Variable liveness analysis (GAS-01), storage packing analysis (GAS-02), dead variable elimination status (GAS-04)
-- [x] 47-02-PLAN.md -- Foundry gas benchmark test creation and snapshot baseline capture (GAS-03)
-
-### Phase 48: Documentation Sync
-**Goal**: All NatSpec and audit documentation accurately describes the final post-fix implementation -- no stale references, no misleading comments
-**Depends on**: Phase 44, Phase 47 (NatSpec must describe final code after all changes)
-**Requirements**: DOC-01, DOC-02, DOC-03, DOC-04
-**Success Criteria** (what must be TRUE):
-  1. NatSpec on all 6 changed files is verified correct against final implementation (every @param, @return, @dev, @notice)
-  2. Bit allocation map comment exists in rngGate() documenting which bits each RNG consumer uses
-  3. claimCoinflipsForRedemption error name is fixed (no longer uses misleading OnlyBurnieCoin)
-  4. All 13+ audit reference docs are updated to reflect v3.3 findings and gambling burn mechanism
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 48-01-PLAN.md -- Error rename (DOC-03), bit allocation map (DOC-02), NatSpec verification (DOC-01)
-- [x] 48-02-PLAN.md -- Full audit doc sync across 12 files (DOC-04)
-
-### Phase 49: Milestone Cleanup
-**Goal**: Close all tech debt items identified by v3.3 milestone audit -- fix stale line references visible to C4A wardens, verify gas test regression, add BURNIE-claimed invariant, fix metadata gaps
-**Depends on**: Phase 48 (all prior phases must be complete)
-**Requirements**: (Tech debt -- no new REQ-IDs; closes audit anomalies ANOMALY-1, ANOMALY-2, ANOMALY-3 and INV-07 integration gap)
-**Gap Closure:** Closes gaps from v3.3-MILESTONE-AUDIT.md
-**Success Criteria** (what must be TRUE):
-  1. BIT ALLOCATION MAP comment in AdvanceModule.sol references correct line numbers for all consumers
-  2. v3.2-rng-delta-findings.md v3.3 addendum references correct line numbers
-  3. forge test --match-path test/fuzz/RedemptionGas.t.sol passes all 7 tests
-  4. forge build && forge test confirms compilation + baseline unchanged
-  5. ghost_totalBurnieClaimed has an invariant assertion in RedemptionInvariants
-  6. 47-01-gas-analysis.md line references updated to match current contract code
-  7. 48-01-SUMMARY.md requirements_completed populated with DOC-01, DOC-02, DOC-03
-  8. 46-01-SUMMARY.md spurious Phase 47 dependency removed
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 49-01-PLAN.md -- Fix stale line refs in BIT ALLOCATION MAP, v3.3 addendum, gas analysis; fix SUMMARY metadata
-- [x] 49-02-PLAN.md -- Activate ghost_totalBurnieClaimed invariant, verify gas benchmarks, confirm test baseline
+  1. Every finding from Phases 50-52 appears in the master table with severity, contract, line reference, and recommendation
+  2. Outstanding v3.2 LOW/INFO findings are included in the master list for completeness (not re-audited, just consolidated)
+  3. Master table is sorted by severity (HIGH > MEDIUM > LOW > INFO) for efficient manual triage
+**Plans**: TBD
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48 -> 49
-
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 44. Delta Audit + Redemption Correctness | 3/3 | Complete    | 2026-03-21 |
-| 45. Invariant Test Suite | 3/3 | Complete    | 2026-03-21 |
-| 46. Adversarial Sweep + Economic Analysis | 3/3 | Complete    | 2026-03-21 |
-| 47. Gas Optimization | 2/2 | Complete    | 2026-03-21 |
-| 48. Documentation Sync | 2/2 | Complete    | 2026-03-21 |
-| 49. Milestone Cleanup | 2/2 | Complete   | 2026-03-21 |
+| 50. Skim Redesign Audit | 0/3 | Planned | - |
+| 51. Redemption Lootbox Audit | 0/4 | Planned | - |
+| 52. Invariant Test Suite | 0/TBD | Not started | - |
+| 53. Consolidated Findings | 0/TBD | Not started | - |
 
-## Deferred (v3.3+)
+## Deferred
 
 - **FORMAL-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
 - **FORMAL-02**: Formal verification of vote counting arithmetic via Halmos
 - **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
+- Storage packing implementation — 3 opportunities documented in v3.3 gas analysis
 
 ---
-*Last updated: 2026-03-21 after Phase 49 plan creation*
+*Last updated: 2026-03-21 after Phase 51 planning (4 plans created)*
