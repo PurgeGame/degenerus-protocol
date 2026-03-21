@@ -132,10 +132,10 @@ Plans:
   1. Skim conservation invariant passes: nextPool + futurePool + yieldAccumulator is constant across all fuzzed inputs (extends existing FuturepoolSkim.t.sol suite)
   2. Take cap invariant passes: skim take never exceeds 80% of nextPool across all fuzzed inputs
   3. Redemption lootbox split invariant passes: direct ETH + lootbox ETH sums to total rolled ETH for every redemption resolution
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 52-01-PLAN.md — Skim conservation + take cap fuzz invariants (INV-01, INV-02)
+- [x] 52-01-PLAN.md — Skim conservation + take cap fuzz invariants (INV-01, INV-02)
 - [ ] 52-02-PLAN.md — Redemption lootbox split invariant: arithmetic + lifecycle (INV-03)
 
 ### Phase 53: Consolidated Findings
@@ -154,7 +154,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 50. Skim Redesign Audit | 3/3 | Complete    | 2026-03-21 |
 | 51. Redemption Lootbox Audit | 4/4 | Complete    | 2026-03-21 |
-| 52. Invariant Test Suite | 0/2 | Not started | - |
+| 52. Invariant Test Suite | 1/2 | In Progress|  |
 | 53. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred
