@@ -740,13 +740,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     //
     // Bit(s)   Consumer                    Operation                         Location
     // ------   --------                    ---------                         --------
-    // 0        Coinflip win/loss           rngWord & 1                       BurnieCoinflip.sol:808
-    // 8+       Redemption roll             (currentWord >> 8) % 151 + 25     AdvanceModule.sol:773
-    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    BurnieCoinflip.sol:782-787
+    // 0        Coinflip win/loss           rngWord & 1                       BurnieCoinflip.sol:809
+    // 8+       Redemption roll             (currentWord >> 8) % 151 + 25     AdvanceModule.sol:795
+    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    BurnieCoinflip.sol:783-788
     // full     Jackpot winner selection    via delegatecall (full word)      JackpotModule (payDailyJackpot)
     // full     Coin jackpot                via delegatecall (full word)      JackpotModule (_payDailyCoinJackpot)
-    // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule.sol:804
-    // full     Future take variance        rngWord % (variance * 2 + 1)     AdvanceModule.sol:1010
+    // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule.sol:826
+    // full     Future take variance        rngWord % (variance * 2 + 1)     AdvanceModule.sol:1033
     // full     Prize pool consolidation    via delegatecall (full word)      JackpotModule (consolidatePrizePools)
     // full     Final day DGNRS reward      via delegatecall (full word)      JackpotModule (awardFinalDayDgnrsReward)
     // full     Reward jackpots             via delegatecall (full word)      JackpotModule (_runRewardJackpots)
@@ -851,7 +851,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     day
                 );
             }
-            // Resolve gambling burn period if pending (mirrors rngGate lines 770-780)
+            // Resolve gambling burn period if pending (mirrors rngGate lines 792-802)
             {
                 IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
                 if (sdgnrs.hasPendingRedemptions()) {
@@ -880,7 +880,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         day
                     );
                 }
-                // Resolve gambling burn period if pending (mirrors rngGate lines 770-780)
+                // Resolve gambling burn period if pending (mirrors rngGate lines 792-802)
                 {
                     IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
                     if (sdgnrs.hasPendingRedemptions()) {
