@@ -139,3 +139,94 @@ The escalation pressure is correct: as a level stalls, the skim percentage incre
 ### Verdict: SAFE
 
 Stall escalation is completely independent of the removed growth adjustment. The formula `NEXT_TO_FUTURE_BPS_FAST + lvlBonus + weeksStalled * NEXT_TO_FUTURE_BPS_WEEK_STEP` is self-contained and produces monotonically increasing bps with stall duration, correctly pressuring stalled pools. No reference to any variable introduced, modified, or removed by the skim redesign. The 100 bps/week escalation rate and 10000 bps cap are both correct and unchanged.
+
+---
+
+## ECON-03: Level 1 (lastPool=0) is Safe
+
+**Lines:** 1012 of DegenerusGameAdvanceModule.sol, DegenerusGame.sol line 252
+**Constants:** `BOOTSTRAP_PRIZE_POOL = 50 ether` (DegenerusGameStorage.sol line 137-138)
+
+This requirement has two distinct scenarios that must be analyzed separately:
+
+### Scenario A: The `lastPool=0` Guard
+
+- Line 1012: `if (lastPool != 0)` guards the entire overshoot block
+- When lastPool=0, the overshoot surcharge is skipped entirely -- no division, no surcharge computation
+- This is correct: if there is no previous pool to compare against, there is no meaningful growth ratio
+- The division `(nextPoolBefore * 10_000) / lastPool` at line 1013 would panic with division-by-zero if executed with lastPool=0; the guard prevents this
+
+**Test validation:** `test_level1_overshootDormant` (FuturepoolSkim.t.sol line 455) passes lastPool=0 and asserts the skim still works (futurePool increases) without triggering the overshoot path. The test confirms the guard functions correctly.
+
+### Scenario B: Production Level 1 Reality
+
+In the constructor (DegenerusGame.sol line 252):
+```solidity
+levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
+```
+
+Where `BOOTSTRAP_PRIZE_POOL = 50 ether` (contracts/storage/DegenerusGameStorage.sol line 137-138).
+
+At level 1, the calling code at line 998 computes:
+```solidity
+uint256 lastPool = levelPrizePool[lvl - 1];  // = levelPrizePool[0] = 50 ether
+```
+
+This means **lastPool is NOT zero at level 1 in production** -- it is 50 ether.
+
+The overshoot threshold fires when:
+```
+rBps = (nextPoolBefore * 10000) / lastPool > 12500
+=> nextPoolBefore > lastPool * 1.25 = 62.5 ether
+```
+
+If level 1 fills to >62.5 ether, the overshoot surcharge WILL activate.
+
+### Impact Assessment of Overshoot at Level 1
+
+At R=1.5 (nextPool=75 ether, lastPool=50 ether):
+```
+rBps = (75 * 10000) / 50 = 15000
+excess = 15000 - 12500 = 2500
+surcharge = (2500 * 4000) / (2500 + 10000) = 10,000,000 / 12,500 = 800 bps
+```
+
+This is a moderate acceleration of futurepool growth -- not a problem, it is the intended behavior. The surcharge increases the skim from nextPool to futurePool, which means more ETH is saved for future prizes. This is economically desirable at level 1 where the game is establishing its prize pool structure.
+
+There is no exploit: overshoot surcharge only moves ETH WITHIN the system (next -> future), it does not create or destroy ETH (proven by SKIM-06 conservation verdict in 50-02).
+
+### Test Gap
+
+The existing test `test_level1_overshootDormant` uses lastPool=0, which is unreachable in production. The constructor always sets `levelPrizePool[0] = 50 ether` before any level transition can occur. The test proves the guard works for the theoretical zero case but does not test the production scenario where lastPool=50 ether.
+
+**Recommendation:** Add a test with lastPool=50 ether and nextPool=75 ether to verify overshoot fires correctly at level 1 with the bootstrap pool value. This is a test coverage gap, not a code bug.
+
+### Verdict: SAFE
+
+The `if (lastPool != 0)` guard correctly prevents division-by-zero for the theoretical lastPool=0 case. In production, level 1 has lastPool=50 ether (via `BOOTSTRAP_PRIZE_POOL` initialized in the constructor) and overshoot CAN fire when nextPool exceeds 62.5 ether -- this is acceptable behavior as it moves ETH within the system per SKIM-06 conservation. The overshoot surcharge at level 1 is the intended economic mechanism, not a vulnerability.
+
+**Severity:** INFO (test coverage gap, not a code defect)
+
+**Finding ID:** F-50-03
+
+---
+
+## Summary Table
+
+| Requirement | Verdict | Severity | Lines | Key Evidence |
+|-------------|---------|----------|-------|--------------|
+| ECON-01 | SAFE | -- | 1012-1019 | Monotonic surcharge adds bps proportional to growth; R=3.0 example: +2545 bps |
+| ECON-02 | SAFE | -- | 976-980 | Stall formula has no reference to removed growth adjustment; +100 bps/week |
+| ECON-03 | SAFE | INFO (test gap) | 1012, DegenerusGame:252 | Guard handles lastPool=0; production level 1 has 50 ether, overshoot acceptable |
+
+---
+
+## Phase 50 Overall Findings Summary
+
+| Finding | Severity | Requirement | Description |
+|---------|----------|-------------|-------------|
+| F-50-01 | INFO | SKIM-03 | Additive random uses modulo on full 256-bit word, not bit-isolated to [0:63] as documented. Functionally independent but does not match stated design. Recommend updating comments. |
+| F-50-02 | INFO | SKIM-03 | Roll1 (rngWord>>64) and roll2 (rngWord>>192) share bits [192:255]. Modulo makes outputs functionally independent for practical ranges. Recommend bit masking for true isolation or updating docs. |
+| F-50-03 | INFO | ECON-03 | Test test_level1_overshootDormant uses unreachable lastPool=0. Production level 1 has lastPool=50 ether where overshoot can fire. Recommend adding production-realistic test case. |
+
+**Overall Phase 50 Result:** 0 HIGH, 0 MEDIUM, 0 LOW, 3 INFO. All pipeline arithmetic and economic behavior requirements verified SAFE.
