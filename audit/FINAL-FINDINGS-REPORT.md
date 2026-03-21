@@ -13,7 +13,7 @@
 
 No code path allows unauthorized extraction of ETH or tokens. Accounting invariants hold at all 15 claimablePool mutation sites. CEI is correctly implemented at all 48 state-changing entry points. All 46 delegatecall sites use a uniform safe pattern.
 
-All findings identified during the audit have been resolved. v3.3 identified four findings in the gambling burn redemption system (three High, one Medium) -- all fixed in code. Four Low-severity issues from earlier milestones were also fixed (CEI ordering, proposal count overflow, spam-propose griefing, dead code removal). No open findings remain.
+All findings identified during the audit have been resolved. v3.3 identified four findings in the gambling burn redemption system (three High, one Medium) -- all fixed in code. v3.4 audited the futurepool skim redesign and 50/50 redemption lootbox split -- no High, Medium, or Low findings. Five INFO-level documentation notes remain (bit-field overlap comments, rounding dust, uint96 headroom). Four Low-severity issues from earlier milestones were also fixed (CEI ordering, proposal count overflow, spam-propose griefing, dead code removal). No open findings remain.
 
 **Key Strengths:**
 1. **VRF integrity.** Chainlink VRF V2.5 sole randomness source. Lock semantics prevent manipulation. Zero MEV extractable value.
@@ -45,6 +45,20 @@ All findings identified during the audit have been resolved. v3.3 identified fou
 
 **CP-07 (MEDIUM -- FIXED):** `claimRedemption()` required full coinflip resolution before paying any portion. If the coinflip for a period hadn't resolved yet, both ETH and BURNIE were stuck. Fix: split claim -- ETH is always claimable once the period is resolved; BURNIE payout is conditional on coinflip resolution (paid on win, forfeited on loss, deferred if unresolved).
 
+### v3.4 Findings (Skim Redesign + Redemption Lootbox)
+
+No High, Medium, or Low findings. Five INFO-level notes documented in `v3.4-findings-consolidated.md`:
+
+| ID | Severity | Title | Status |
+|----|----------|-------|--------|
+| F-50-01 | INFO | Additive random uses full 256-bit modulo (not bit-isolated) | DOCUMENTED |
+| F-50-02 | INFO | roll1/roll2 share bits [192:255] (independent via modulo) | DOCUMENTED |
+| F-50-03 | INFO | Level-1 test uses unreachable lastPool=0 | DOCUMENTED |
+| F-51-01 | INFO | Rounding dust in pendingRedemptionEthValue (negligible) | DOCUMENTED |
+| F-51-02 | INFO | burnieOwed uint96 cast safe under realistic economics | DOCUMENTED |
+
+REDM-06-A (originally flagged MEDIUM: unchecked subtraction in `resolveRedemptionLootbox`) was downgraded to false positive. The drain path (`_deterministicBurnFrom` → `claimWinnings`) only executes at gameOver; lootbox resolution only executes during active game. The paths are mutually exclusive.
+
 ---
 
 ## External Dependencies
@@ -69,6 +83,8 @@ The protocol depends on two external systems. Neither dependency creates a vulne
 | Availability | **Low** | All stuck states have recovery. Worst case: 120-day timeout + VRF failure. |
 | Cross-Contract | **Very Low** | All 46 delegatecall sites verified. Constructor ordering verified. |
 | Gambling Burn | **Very Low** | Four findings found and fixed; invariant test suite provides regression coverage. |
+| Futurepool Skim | **Very Low** | 5-step pipeline proven correct; ETH conservation holds algebraically and under fuzz. |
+| Redemption Lootbox | **Very Low** | 50/50 split conservation proven; daily cap, slot packing, access control all verified. |
 
 ---
 
@@ -82,6 +98,8 @@ The protocol depends on two external systems. Neither dependency creates a vulne
 
 **v3.3 Gambling Burn Scope:** StakedDegenerusStonk.sol (gambling burn functions: burn, burnWrapped, claimRedemption, resolveRedemptionPeriod, hasPendingRedemptions), DegenerusStonk.sol (Seam-1 fix: GameNotOver guard), BurnieCoinflip.sol (claimCoinflipsForRedemption), DegenerusGameAdvanceModule.sol (redemption resolution in rngGate and _gameOverEntropy)
 
-**Tools:** Manual line-by-line review, Slither 0.11.5, Foundry `forge inspect`, 1,463 Hardhat tests + 27 Foundry harnesses, 7 Foundry invariant tests for redemption system, multi-agent adversarial warden simulation
+**v3.4 New Feature Scope:** DegenerusGameAdvanceModule.sol (futurepool skim redesign: _applyTimeBasedFutureTake 5-step pipeline with overshoot surcharge, triangular variance, 80% cap), StakedDegenerusStonk.sol (50/50 redemption lootbox split, 160 ETH daily cap, activity score snapshot), DegenerusGame.sol (resolveRedemptionLootbox cross-contract call chain), DegenerusGameLootboxModule.sol (lootbox resolution delegatecall)
+
+**Tools:** Manual line-by-line review, Slither 0.11.5, Foundry `forge inspect`, 1,463 Hardhat tests + 27 Foundry harnesses, 11 Foundry invariant tests (7 redemption + 4 skim), multi-agent adversarial warden simulation
 
 **Out of scope:** Formal verification, coverage-guided fuzzing, frontend/off-chain code, testnet-specific behavior, mocks, deployment scripts
