@@ -589,6 +589,7 @@ contract BurnieCoinflip {
         }
 
         if (rebuyActive && oldCarry != carry) {
+            // Safe truncation: carry is bounded by a single day's coinflip payout; uint128 max is unreachable.
             state.autoRebuyCarry = uint128(carry);
         }
 
