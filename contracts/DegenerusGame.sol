@@ -1784,6 +1784,66 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /*+======================================================================+
+      |                    REDEMPTION LOOTBOX                               |
+      +======================================================================+*/
+
+    /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
+    /// @dev Called by sDGNRS during claimRedemption. Reclassifies ETH from sDGNRS's
+    ///      claimableWinnings into futurePrizePool (no ETH transfer — internal accounting only).
+    ///      Splits into 5 ETH boxes and resolves each via lootbox module delegatecall.
+    /// @param player Player receiving lootbox rewards
+    /// @param amount Total lootbox ETH amount to resolve
+    /// @param rngWord RNG entropy for lootbox resolution
+    /// @param activityScore Snapshotted activity score (bps) from burn submission
+    function resolveRedemptionLootbox(
+        address player,
+        uint256 amount,
+        uint256 rngWord,
+        uint16 activityScore
+    ) external {
+        if (msg.sender != ContractAddresses.SDGNRS) revert E();
+        if (amount == 0) return;
+
+        // Debit from sDGNRS's claimable (ETH stays in Game's balance)
+        uint256 claimable = claimableWinnings[ContractAddresses.SDGNRS];
+        unchecked {
+            claimableWinnings[ContractAddresses.SDGNRS] = claimable - amount;
+        }
+        claimablePool -= amount;
+
+        // Credit to future prize pool (respects freeze state)
+        if (prizePoolFrozen) {
+            (uint128 pNext, uint128 pFuture) = _getPendingPools();
+            _setPendingPools(pNext, pFuture + uint128(amount));
+        } else {
+            (uint128 next, uint128 future) = _getPrizePools();
+            _setPrizePools(next, future + uint128(amount));
+        }
+
+        // Resolve lootboxes in 5 ETH chunks via delegatecall to lootbox module
+        uint256 remaining = amount;
+        while (remaining != 0) {
+            uint256 box = remaining > 5 ether ? 5 ether : remaining;
+            (bool ok, bytes memory data) = ContractAddresses
+                .GAME_LOOTBOX_MODULE
+                .delegatecall(
+                    abi.encodeWithSelector(
+                        IDegenerusGameLootboxModule
+                            .resolveRedemptionLootbox
+                            .selector,
+                        player,
+                        box,
+                        rngWord,
+                        activityScore
+                    )
+                );
+            if (!ok) _revertDelegate(data);
+            remaining -= box;
+            rngWord = uint256(keccak256(abi.encode(rngWord)));
+        }
+    }
+
     /*+===============================================================================================+
       |                    JACKPOT PAYOUT FUNCTIONS                                                   |
       +===============================================================================================+

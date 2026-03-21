@@ -714,6 +714,41 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
     }
 
+    /// @notice Resolve a redemption lootbox with a snapshotted activity score
+    /// @dev Called via delegatecall from Game when sDGNRS sends lootbox ETH during claimRedemption.
+    ///      Uses provided activity score instead of reading current (score was snapshotted at submission).
+    /// @param player Player address to resolve for
+    /// @param amount ETH amount for the lootbox resolution
+    /// @param rngWord RNG word to use for resolution
+    /// @param activityScore Raw activity score (bps) snapshotted at burn submission
+    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external {
+        if (amount == 0) return;
+
+        uint48 day = _simulatedDayIndex();
+        uint24 currentLevel = level + 1;
+        uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+        (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(currentLevel, entropy);
+
+        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
+        uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
+
+        _resolveLootboxCommon(
+            player,
+            day,
+            scaledAmount,
+            targetLevel,
+            currentLevel,
+            nextEntropy,
+            false,
+            true,
+            true,
+            true,
+            false,
+            0,
+            0
+        );
+    }
+
     // =========================================================================
     // Deity Boon Functions
     // =========================================================================

@@ -331,6 +331,18 @@ interface IDegenerusGameLootboxModule {
         uint256 rngWord
     ) external;
 
+    /// @notice Resolves a redemption lootbox with a snapshotted activity score
+    /// @param player Player receiving lootbox rewards
+    /// @param amount ETH amount for lootbox resolution
+    /// @param rngWord RNG word for entropy
+    /// @param activityScore Raw activity score (bps) snapshotted at burn submission
+    function resolveRedemptionLootbox(
+        address player,
+        uint256 amount,
+        uint256 rngWord,
+        uint16 activityScore
+    ) external;
+
     /// @notice Returns deity boon slot information
     /// @param deity Address of the deity
     /// @return slots Array of 3 boon slot types
