@@ -25,11 +25,14 @@ contract RedemptionGasTest is DeployProtocol {
         vm.prank(address(game));
         sdgnrs.transferFromPool(StakedDegenerusStonk.Pool.Reward, player, PLAYER_SDGNRS);
 
-        // Fund the sDGNRS contract with ETH backing so burns produce non-zero payouts
+        // Fund the Game with ETH and credit sDGNRS via claimableWinnings
+        // (during active game, all sDGNRS ETH backing is in claimableWinnings on the Game)
         vm.deal(address(game), 100 ether);
-        vm.prank(address(game));
-        (bool ok,) = address(sdgnrs).call{value: 100 ether}("");
-        require(ok, "ETH deposit failed");
+        // claimableWinnings mapping is at slot 9; compute slot for sDGNRS's entry
+        bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(9)));
+        vm.store(address(game), claimableSlot, bytes32(uint256(100 ether)));
+        // claimablePool is at slot 10
+        vm.store(address(game), bytes32(uint256(10)), bytes32(uint256(100 ether)));
     }
 
     // =====================================================================
