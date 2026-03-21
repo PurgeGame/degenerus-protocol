@@ -19,11 +19,11 @@ Requirements for Gambling Burn Audit + Full Adversarial Sweep.
 
 ### Redemption Correctness
 
-- [ ] **CORR-01**: Full redemption lifecycle trace -- submit->resolve->claim state machine verification
+- [x] **CORR-01**: Full redemption lifecycle trace -- submit->resolve->claim state machine verification
 - [ ] **CORR-02**: Segregation solvency invariant -- reserved ETH/BURNIE never exceeds contract holdings
 - [ ] **CORR-03**: CEI compliance -- `claimRedemption()` deletes claim before external calls, all paths verified
-- [ ] **CORR-04**: Period state machine -- monotonicity, resolution ordering, 50% supply cap enforcement
-- [ ] **CORR-05**: `burnWrapped()` supply invariant -- sDGNRS burned equals DGNRS burned
+- [x] **CORR-04**: Period state machine -- monotonicity, resolution ordering, 50% supply cap enforcement
+- [x] **CORR-05**: `burnWrapped()` supply invariant -- sDGNRS burned equals DGNRS burned
 
 ### Invariant Tests
 
@@ -105,11 +105,11 @@ All complete. See MILESTONES.md for details.
 | DELTA-05 | Phase 44 | Complete |
 | DELTA-06 | Phase 44 | Complete |
 | DELTA-07 | Phase 44 | Complete |
-| CORR-01 | Phase 44 | Pending |
+| CORR-01 | Phase 44 | Complete |
 | CORR-02 | Phase 44 | Pending |
 | CORR-03 | Phase 44 | Pending |
-| CORR-04 | Phase 44 | Pending |
-| CORR-05 | Phase 44 | Pending |
+| CORR-04 | Phase 44 | Complete |
+| CORR-05 | Phase 44 | Complete |
 | INV-01 | Phase 45 | Pending |
 | INV-02 | Phase 45 | Pending |
 | INV-03 | Phase 45 | Pending |
