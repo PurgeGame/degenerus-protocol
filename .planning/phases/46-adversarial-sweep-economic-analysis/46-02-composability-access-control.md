@@ -155,3 +155,91 @@
 - `DegenerusStonk.sol:167-185` -- `burn()` function requires `gameOver()` to be true
 - During active game, only `sDGNRS.burn()` and `sDGNRS.burnWrapped()` are available (gambling path)
 **Detail:** The `DegenerusStonk.burn()` function explicitly checks `gameOver()` at line 169 and reverts with `GameNotOver()` if the game is still active. This was the fix for Seam-1 (confirmed HIGH in Phase 44) which previously allowed DGNRS burns during active game to orphan gambling claims. Players wanting to burn during the active game must use `sDGNRS.burn()` (for soulbound tokens) or `sDGNRS.burnWrapped()` (for DGNRS tokens, which routes through the gambling burn flow).
+
+---
+
+## Section 2: Access Control Verification for New Entry Points
+
+**ContractAddresses immutability confirmation:** All addresses in `ContractAddresses.sol` are declared as `internal constant` (compile-time constants baked into bytecode). There are no setter functions, no `SSTORE` operations, and no proxy pattern. The addresses cannot be changed after deployment. This is confirmed by inspecting `ContractAddresses.sol:6-38` -- every address is a `constant`.
+
+### Function: claimCoinflipsForRedemption
+**Contract:** `BurnieCoinflip.sol:345-351`
+**Guard:** `if (msg.sender != ContractAddresses.SDGNRS) revert OnlyStakedDegenerusStonk();`
+**Expected Caller:** StakedDegenerusStonk (via `_payBurnie`)
+**Verified Callers:**
+- `StakedDegenerusStonk.sol:768` -- `coinflip.claimCoinflipsForRedemption(address(this), remaining)` inside `_payBurnie()` private function
+- `contracts/interfaces/IBurnieCoinflip.sol:178` -- interface declaration (not a call site)
+- `StakedDegenerusStonk.sol:34` -- interface declaration in local interface (not a call site)
+- `test/fuzz/RedemptionGas.t.sol:101` -- test mock (not production)
+**Guard Type:** Immutable address (`ContractAddresses.SDGNRS` is a compile-time constant at `ContractAddresses.sol:28`)
+**Bypass Paths:** None found. The only production call site is `StakedDegenerusStonk._payBurnie()` at line 768, which is a `private` function only callable from within `claimRedemption()` (line 614). The `_payBurnie` path is only reached when `burniePayout != 0` (line 613), which requires the coinflip to have been won. No external contract can call `_payBurnie` directly.
+**Verdict:** CORRECT
+
+**Note:** The error name `OnlyStakedDegenerusStonk()` at `BurnieCoinflip.sol:100` is accurate for this guard. However, the plan context notes a DOC-03 finding about `OnlyBurnieCoin` being misleading on a different function -- that finding does not apply here. The guard name correctly describes the required caller.
+
+### Function: burnForSdgnrs
+**Contract:** `DegenerusStonk.sol:237-246`
+**Guard:** `if (msg.sender != ContractAddresses.SDGNRS) revert Unauthorized();`
+**Expected Caller:** StakedDegenerusStonk (via `burnWrapped`)
+**Verified Callers:**
+- `StakedDegenerusStonk.sol:450` -- `dgnrsWrapper.burnForSdgnrs(msg.sender, amount)` inside `burnWrapped()` external function
+- `StakedDegenerusStonk.sol:39` -- interface declaration (not a call site)
+- `test/fuzz/RedemptionGas.t.sol:54` -- test context (not production)
+**Guard Type:** Immutable address (`ContractAddresses.SDGNRS` is a compile-time constant at `ContractAddresses.sol:28`)
+**Bypass Paths:** None found. The only production call site is `StakedDegenerusStonk.burnWrapped()` at line 450. This is an `external` function callable by any EOA or contract, but the `burnForSdgnrs` function will only accept the call from the sDGNRS contract address. The `player` parameter passed to `burnForSdgnrs` is always `msg.sender` of the `burnWrapped` call (the original caller), so a user can only burn their own DGNRS.
+**Verdict:** CORRECT
+
+### Function: resolveRedemptionPeriod
+**Contract:** `StakedDegenerusStonk.sol:543-568`
+**Guard:** `if (msg.sender != ContractAddresses.GAME) revert Unauthorized();`
+**Expected Caller:** DegenerusGameAdvanceModule (via `rngGate` and `_gameOverEntropy`, executing as DegenerusGame via delegatecall)
+**Verified Callers:**
+- `DegenerusGameAdvanceModule.sol:794` -- `sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay)` inside `rngGate()` (normal daily RNG path)
+- `DegenerusGameAdvanceModule.sol:856` -- `sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay)` inside `_gameOverEntropy()` (normal VRF path)
+- `DegenerusGameAdvanceModule.sol:885` -- `sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay)` inside `_gameOverEntropy()` (fallback VRF path)
+- `contracts/interfaces/IStakedDegenerusStonk.sol:92` -- interface declaration (not a call site)
+- `test/fuzz/RedemptionGas.t.sol:72,88` -- test calls via `vm.prank(game)` (not production)
+**Guard Type:** Immutable address (`ContractAddresses.GAME` is a compile-time constant at `ContractAddresses.sol:27`)
+**Bypass Paths:** None found. All three production call sites are in `DegenerusGameAdvanceModule`, which executes via `delegatecall` from `DegenerusGame.advanceGame()` (`DegenerusGame.sol:316-322`). When a delegatecall module makes an external call to sDGNRS, `msg.sender` is the DegenerusGame contract address (the delegating contract), which equals `ContractAddresses.GAME`. The `rngGate` and `_gameOverEntropy` functions are `internal`/`private` to the AdvanceModule and can only be reached through the `advanceGame()` entry point, which itself is called via delegatecall from DegenerusGame.
+**Verdict:** CORRECT
+
+**Delegatecall msg.sender confirmation:** When `DegenerusGame.advanceGame()` delegatecalls into `DegenerusGameAdvanceModule.advanceGame()`, the module code executes in DegenerusGame's context. Any external call made by the module (e.g., `sdgnrs.resolveRedemptionPeriod(...)`) has `msg.sender == address(DegenerusGame)` from sDGNRS's perspective. Since `address(DegenerusGame) == ContractAddresses.GAME`, the guard passes correctly.
+
+### Function: hasPendingRedemptions
+**Contract:** `StakedDegenerusStonk.sol:534-536`
+**Guard:** None (view function, no state change)
+**Expected Caller:** Anyone (public view)
+**Verified Callers:**
+- `DegenerusGameAdvanceModule.sol:791` -- `sdgnrs.hasPendingRedemptions()` inside `rngGate()` (conditional for resolveRedemptionPeriod)
+- `DegenerusGameAdvanceModule.sol:853` -- `sdgnrs.hasPendingRedemptions()` inside `_gameOverEntropy()` (normal VRF path)
+- `DegenerusGameAdvanceModule.sol:882` -- `sdgnrs.hasPendingRedemptions()` inside `_gameOverEntropy()` (fallback VRF path)
+- `contracts/interfaces/IStakedDegenerusStonk.sol:85` -- interface declaration (not a call site)
+- `test/fuzz/RedemptionGas.t.sol:121,128` -- test calls (not production)
+**Guard Type:** No guard (view function)
+**Bypass Paths:** N/A -- no access control needed. Function is `external view` (declared at line 534), reads only from `pendingRedemptionEthBase` and `pendingRedemptionBurnieBase` storage variables, and cannot modify any state. Safe for unrestricted access.
+**Verdict:** CORRECT
+
+---
+
+## Access Control Summary
+
+| Function | Contract | Guard | Verdict |
+|----------|----------|-------|---------|
+| claimCoinflipsForRedemption | BurnieCoinflip.sol:345 | SDGNRS-only | CORRECT |
+| burnForSdgnrs | DegenerusStonk.sol:237 | SDGNRS-only | CORRECT |
+| resolveRedemptionPeriod | StakedDegenerusStonk.sol:543 | GAME-only | CORRECT |
+| hasPendingRedemptions | StakedDegenerusStonk.sol:534 | None (view) | CORRECT |
+
+**Immutability verification:** All guard addresses (`ContractAddresses.SDGNRS` and `ContractAddresses.GAME`) are `internal constant` values in `ContractAddresses.sol` (lines 27-28). They are baked into bytecode at compile time. There are no admin functions, proxy patterns, or storage slots that could change these addresses post-deployment.
+
+---
+
+## Combined Summary
+
+- Composability attack sequences tested: 13
+- Exploitable sequences: 0
+- Safe sequences: 13
+- Griefable sequences: 0
+- Access control verdicts: 4 CORRECT, 0 OVERPERMISSIVE, 0 UNDERPERMISSIVE
+
+**Overall assessment:** All 13 cross-contract interaction sequences are SAFE. All 4 new entry points have correct access control with immutable address guards. No exploitable or griefable paths were found. The gambling burn / redemption system has sound composability defenses: CEI pattern prevents reentrancy, soulbound design prevents flash loans, immutable address guards prevent unauthorized calls, and the RNG-locked window prevents state manipulation between VRF request and fulfillment.
