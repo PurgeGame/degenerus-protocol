@@ -111,6 +111,13 @@ None - no external service configuration required.
 - The pendingRedemptionEthValue underflow analysis from this plan is prerequisite context for REDM-03's daily cap review (both share the same segregation accounting).
 - No blockers for downstream plans.
 
+## Self-Check: PASSED
+
+- [x] 51-01-split-routing-findings.md exists
+- [x] 51-01-SUMMARY.md exists
+- [x] Commit 6c00a152 exists (Task 1)
+- [x] Commit c4726ce0 exists (Task 2)
+
 ---
 *Phase: 51-redemption-lootbox-audit*
 *Completed: 2026-03-21*
