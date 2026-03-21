@@ -39,9 +39,9 @@
 
 ### Consolidated Findings
 
-- [ ] **FIND-01**: All v3.4 findings consolidated with severity, contract, line ref, and recommendation
-- [ ] **FIND-02**: Outstanding v3.2 LOW/INFO findings included in master list for completeness
-- [ ] **FIND-03**: Master findings table sorted by severity for manual triage before C4A
+- [x] **FIND-01**: All v3.4 findings consolidated with severity, contract, line ref, and recommendation
+- [x] **FIND-02**: Outstanding v3.2 LOW/INFO findings included in master list for completeness
+- [x] **FIND-03**: Master findings table sorted by severity for manual triage before C4A
 
 ## Out of Scope
 
@@ -77,9 +77,9 @@
 | INV-01 | Phase 52 | Complete |
 | INV-02 | Phase 52 | Complete |
 | INV-03 | Phase 52 | Complete |
-| FIND-01 | Phase 53 | Pending |
-| FIND-02 | Phase 53 | Pending |
-| FIND-03 | Phase 53 | Pending |
+| FIND-01 | Phase 53 | Complete |
+| FIND-02 | Phase 53 | Complete |
+| FIND-03 | Phase 53 | Complete |
 
 **Coverage:**
 - v3.4 requirements: 23 total
