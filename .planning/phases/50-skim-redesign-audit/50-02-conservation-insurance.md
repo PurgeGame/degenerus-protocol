@@ -118,3 +118,84 @@ _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);   // line 316
 The function is only called during level advancement, which requires ticket purchases that add ETH to the pool. Furthermore, `levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL = 50 ether` (DegenerusGame.sol line 252, DegenerusGameStorage.sol line 137-138), so even the very first level transition starts with at least 50 ether. After skim, the remaining pool is at least 0.19N (19% of pre-skim value), which for a 50 ether bootstrap is 9.5 ether. A zero pool is unreachable through normal game flow.
 
 **Verdict: SAFE** -- ETH conservation holds by algebraic identity. The T and I terms cancel exactly in the three state updates. No rounding, no truncation, no ETH created or destroyed. The underflow `N - T - I` is impossible because `T + I <= 0.81N`. Getter/setter operations are pure packing with no value transformation. Division by zero at line 1001 is unreachable via calling context constraints.
+
+---
+
+## SKIM-07: Insurance Skim Precision
+
+### Formula (line 1051)
+
+```solidity
+uint256 insuranceSkim = (nextPoolBefore * INSURANCE_SKIM_BPS) / 10_000;
+// where INSURANCE_SKIM_BPS = 100 (line 106)
+```
+
+This simplifies to `insuranceSkim = (nextPoolBefore * 100) / 10_000 = nextPoolBefore / 100` via integer division.
+
+The result is `floor(nextPoolBefore / 100)`.
+
+### Precision Analysis
+
+**For `nextPoolBefore >= 100 wei`:**
+- `insuranceSkim = floor(nextPoolBefore / 100)`
+- The exact 1% value is `nextPoolBefore / 100` (real division)
+- The integer truncation error is at most 1 wei (floor rounds down by at most 99/10000 < 1 wei)
+- For any realistic pool (>= 0.01 ether = 10^16 wei), the relative error is at most `1 / 10^16 = 10^-16`, which is negligible
+
+**For `nextPoolBefore < 100 wei`:**
+- `insuranceSkim = 0` (integer division truncates to zero)
+- The "exactly 1%" property fails: 1% of 99 wei should be ~1 wei, but the formula returns 0
+- Maximum absolute loss: 1 wei (the insurance skim that should have been collected)
+
+**For `nextPoolBefore = 0`:**
+- `insuranceSkim = 0` (correct -- 1% of 0 is 0)
+
+### Reachability of Sub-100-Wei Pools
+
+The minimum realistic pool is the bootstrap: `BOOTSTRAP_PRIZE_POOL = 50 ether` (DegenerusGameStorage.sol lines 137-138, initialized at DegenerusGame.sol line 252).
+
+**Level transitions add ETH:** Each level advancement requires ticket purchases which add ETH to the next pool. The pool never starts a level with less than the bootstrap value.
+
+**Maximum depletion per skim:** After a maximum skim (80% take + 1% insurance = 81%), a pool retains 19% of its pre-skim value:
+- 50 ether * 0.19 = 9.5 ether = 9.5 * 10^18 wei -- vastly above 100 wei
+
+**Repeated maximum skims (theoretical worst case):**
+```
+After n consecutive maximum skims: pool = 50 ether * 0.19^n
+
+To reach 100 wei:
+  50 * 10^18 * 0.19^n = 100
+  0.19^n = 100 / (5 * 10^19) = 2 * 10^-18
+  n = log(2 * 10^-18) / log(0.19) = ~24.6
+
+  => ~25 consecutive maximum skims at minimum pool
+```
+
+Each skim requires a level transition, which requires ticket purchases adding ETH. In practice, pools grow between levels. Reaching 25 consecutive maximum skims at the minimum possible pool size is impossible in normal gameplay.
+
+### Fuzz Evidence
+
+`testFuzz_insuranceAlways1Pct` (test/fuzz/FuturepoolSkim.t.sol, lines 428-449) bounds `nextPool` to [1 ether, 10_000 ether] and asserts:
+```solidity
+assertEq(yieldAfter, uint256(nextPool) * INSURANCE_SKIM_BPS / 10_000,
+         "insurance must be exactly 1% of nextPool");
+```
+
+All iterations pass, confirming the formula is correctly implemented within realistic bounds. The fuzz range [1 ether, 10_000 ether] covers the entire realistic pool size space.
+
+### Division by Zero in Insurance Formula
+
+The formula `(nextPoolBefore * 100) / 10_000` uses a constant divisor (10,000). Division by zero is impossible regardless of input values.
+
+Note: The ratio calculation at line 1001 (`(futurePoolBefore * 100) / nextPoolBefore`) DOES divide by `nextPoolBefore` -- this is addressed under SKIM-06 preconditions above (unreachable via calling context).
+
+**Verdict: SAFE** -- Insurance skim is exactly `floor(nextPoolBefore / 100)`. The only precision loss is integer truncation at sub-100-wei pools, which is unreachable in production (minimum bootstrap = 50 ether, minimum post-skim retention = 19%). No rounding edge cases exist at realistic pool sizes (>= 0.01 ether).
+
+---
+
+## Summary Table
+
+| Requirement | Verdict | Severity | Lines | Key Evidence |
+|-------------|---------|----------|-------|--------------|
+| SKIM-06 | SAFE | -- | 1051-1054 | Algebraic cancellation of T and I; fuzz confirms |
+| SKIM-07 | SAFE | -- | 1051 | floor(N/100) exact above 100 wei; sub-100 unreachable |
