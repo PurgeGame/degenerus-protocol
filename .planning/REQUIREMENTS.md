@@ -23,11 +23,11 @@
 
 ### Redemption Lootbox Security
 
-- [ ] **REDM-01**: 50/50 split correctly routes half to direct ETH, half to lootbox
-- [ ] **REDM-02**: GameOver burns bypass lootbox (pure ETH/stETH, no BURNIE payout)
-- [ ] **REDM-03**: 160 ETH daily cap per wallet enforced correctly
+- [x] **REDM-01**: 50/50 split correctly routes half to direct ETH, half to lootbox
+- [x] **REDM-02**: GameOver burns bypass lootbox (pure ETH/stETH, no BURNIE payout)
+- [x] **REDM-03**: 160 ETH daily cap per wallet enforced correctly
 - [ ] **REDM-04**: Activity score snapshot at submission is immutable through resolution
-- [ ] **REDM-05**: PendingRedemption slot packing is correct (uint96+uint96+uint48+uint16=256)
+- [x] **REDM-05**: PendingRedemption slot packing is correct (uint96+uint96+uint48+uint16=256)
 - [ ] **REDM-06**: Lootbox reclassification has no ETH transfer (internal accounting only)
 - [ ] **REDM-07**: Cross-contract call from sDGNRS → Game → LootboxModule has correct access control
 
@@ -67,11 +67,11 @@
 | ECON-01 | Phase 50 | Pending |
 | ECON-02 | Phase 50 | Pending |
 | ECON-03 | Phase 50 | Pending |
-| REDM-01 | Phase 51 | Pending |
-| REDM-02 | Phase 51 | Pending |
-| REDM-03 | Phase 51 | Pending |
+| REDM-01 | Phase 51 | Complete |
+| REDM-02 | Phase 51 | Complete |
+| REDM-03 | Phase 51 | Complete |
 | REDM-04 | Phase 51 | Pending |
-| REDM-05 | Phase 51 | Pending |
+| REDM-05 | Phase 51 | Complete |
 | REDM-06 | Phase 51 | Pending |
 | REDM-07 | Phase 51 | Pending |
 | INV-01 | Phase 52 | Pending |

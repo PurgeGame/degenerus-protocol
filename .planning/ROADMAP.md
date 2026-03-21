@@ -116,12 +116,12 @@ Plans:
   2. The 160 ETH daily cap per wallet is enforced correctly with no bypass via multiple calls, timestamp manipulation, or cross-day boundary abuse
   3. PendingRedemption slot packing (uint96+uint96+uint48+uint16=256) is verified correct with no bit overlap or truncation, and activity score snapshot at submission is immutable through resolution
   4. Cross-contract call chain sDGNRS -> Game -> LootboxModule has correct access control at every hop, and lootbox reclassification performs no ETH transfer (internal accounting only)
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 
 Plans:
-- [ ] 51-01-PLAN.md — 50/50 split routing + gameOver bypass verdicts (REDM-01, REDM-02)
-- [ ] 51-02-PLAN.md — Daily cap enforcement + slot packing verification (REDM-03, REDM-05)
-- [ ] 51-03-PLAN.md — Activity score snapshot immutability (REDM-04)
+- [x] 51-01-PLAN.md — 50/50 split routing + gameOver bypass verdicts (REDM-01, REDM-02)
+- [x] 51-02-PLAN.md — Daily cap enforcement + slot packing verification (REDM-03, REDM-05)
+- [x] 51-03-PLAN.md — Activity score snapshot immutability (REDM-04)
 - [ ] 51-04-PLAN.md — Cross-contract access control + lootbox reclassification (REDM-06, REDM-07)
 
 ### Phase 52: Invariant Test Suite
@@ -149,7 +149,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 50. Skim Redesign Audit | 2/3 | In Progress|  |
-| 51. Redemption Lootbox Audit | 0/4 | Planned | - |
+| 51. Redemption Lootbox Audit | 3/4 | In Progress|  |
 | 52. Invariant Test Suite | 0/TBD | Not started | - |
 | 53. Consolidated Findings | 0/TBD | Not started | - |
 
