@@ -129,7 +129,11 @@ Plans:
   2. Storage packing opportunities documented (e.g., redemptionPeriodIndex uint48 packing) with gas savings quantified
   3. forge snapshot baseline exists for all redemption functions
   4. Any dead variables identified in GAS-01 are removed and tests still pass
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 47-01-PLAN.md -- Variable liveness analysis (GAS-01), storage packing analysis (GAS-02), dead variable elimination status (GAS-04)
+- [ ] 47-02-PLAN.md -- Foundry gas benchmark test creation and snapshot baseline capture (GAS-03)
 
 ### Phase 48: Documentation Sync
 **Goal**: All NatSpec and audit documentation accurately describes the final post-fix implementation -- no stale references, no misleading comments
@@ -149,10 +153,10 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 44. Delta Audit + Redemption Correctness | 3/3 | Complete   | 2026-03-21 |
+| 44. Delta Audit + Redemption Correctness | 3/3 | Complete    | 2026-03-21 |
 | 45. Invariant Test Suite | 0/TBD | Not started | - |
 | 46. Adversarial Sweep + Economic Analysis | 0/TBD | Not started | - |
-| 47. Gas Optimization | 0/TBD | Not started | - |
+| 47. Gas Optimization | 0/2 | Planned | - |
 | 48. Documentation Sync | 0/TBD | Not started | - |
 
 ## Deferred (v3.3+)
@@ -162,4 +166,4 @@ Phases execute in numeric order: 44 -> 45 -> 46 -> 47 -> 48
 - **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
 
 ---
-*Last updated: 2026-03-20 after Phase 44 planning*
+*Last updated: 2026-03-20 after Phase 47 planning*
