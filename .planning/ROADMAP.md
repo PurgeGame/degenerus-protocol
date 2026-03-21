@@ -100,10 +100,10 @@
   2. ETH conservation (nextPool + futurePool + yieldAccumulator = constant) is proven to hold across the entire function for all input combinations
   3. Insurance skim is confirmed to be exactly 1% of nextPoolBefore with no rounding edge cases that leak or create ETH
   4. Overshoot surcharge is confirmed to accelerate futurepool growth during fast levels, stall escalation still functions without growth adjustment, and level 1 (lastPool=0) produces no division-by-zero or unintended surcharge
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
-- [ ] 50-01-PLAN.md — Pipeline arithmetic verdicts (SKIM-01 through SKIM-05)
+- [x] 50-01-PLAN.md — Pipeline arithmetic verdicts (SKIM-01 through SKIM-05)
 - [x] 50-02-PLAN.md — ETH conservation proof + insurance skim precision (SKIM-06, SKIM-07)
 - [ ] 50-03-PLAN.md — Economic analysis: overshoot, stall escalation, level-1 safety (ECON-01 through ECON-03)
 
@@ -148,7 +148,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 50. Skim Redesign Audit | 1/3 | In Progress|  |
+| 50. Skim Redesign Audit | 2/3 | In Progress|  |
 | 51. Redemption Lootbox Audit | 0/4 | Planned | - |
 | 52. Invariant Test Suite | 0/TBD | Not started | - |
 | 53. Consolidated Findings | 0/TBD | Not started | - |
