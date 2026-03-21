@@ -462,6 +462,50 @@ contract FuturepoolSkimTest is Test {
     }
 
     // =========================================================================
+    //  INV-02: Take cap invariant (fuzz)
+    // =========================================================================
+
+    /// @notice INV-02: Take never exceeds 80% of nextPool across randomized inputs including lastPool=0.
+    function testFuzz_INV02_takeCap(
+        uint128 nextPool,
+        uint128 futurePool,
+        uint24 lvl,
+        uint128 lastPoolRaw,
+        uint48 elapsedRaw,
+        uint256 rngWord
+    ) public {
+        nextPool = uint128(bound(nextPool, 1 ether, 10_000 ether));
+        futurePool = uint128(bound(futurePool, 0, 50_000 ether));
+        lvl = uint24(bound(lvl, 1, 200));
+        uint256 lastPool = bound(lastPoolRaw, 0, 10_000 ether);
+        uint48 elapsed = uint48(bound(elapsedRaw, 0, 120 days));
+
+        (uint128 nextAfter, uint128 futureAfter, uint256 yieldAfter) =
+            _runSkim(nextPool, futurePool, lvl, lastPool, elapsed, rngWord);
+
+        uint256 take = uint256(futureAfter) - uint256(futurePool);
+        uint256 maxTake = uint256(nextPool) * NEXT_TO_FUTURE_BPS_MAX / 10_000;
+        assertTrue(take <= maxTake, "INV-02: take must respect 80% cap");
+        assertTrue(uint256(nextAfter) + yieldAfter <= uint256(nextPool), "INV-02: next can only decrease");
+    }
+
+    /// @notice INV-02: Extreme overshoot R=50 (nextPool=500, lastPool=10) at 90-day stale, take still capped.
+    function testFuzz_INV02_takeCap_extremeOvershoot(
+        uint128 futurePool,
+        uint256 rngWord
+    ) public {
+        futurePool = uint128(bound(futurePool, 0, 50_000 ether));
+
+        (uint128 nextAfter, uint128 futureAfter, uint256 yieldAfter) =
+            _runSkim(500 ether, futurePool, 9, 10 ether, 90 days, rngWord);
+
+        uint256 take = uint256(futureAfter) - uint256(futurePool);
+        uint256 maxTake = uint256(500 ether) * NEXT_TO_FUTURE_BPS_MAX / 10_000;
+        assertTrue(take <= maxTake, "INV-02: extreme overshoot must respect 80% cap");
+        _assertConservation(500 ether, futurePool, nextAfter, futureAfter, yieldAfter);
+    }
+
+    // =========================================================================
     //  Insurance always exactly 1%
     // =========================================================================
 
