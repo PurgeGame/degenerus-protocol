@@ -101,9 +101,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1300;
     uint16 private constant NEXT_TO_FUTURE_BPS_WEEK_STEP = 100;
     uint16 private constant NEXT_TO_FUTURE_BPS_X9_BONUS = 200;
-    uint16 private constant NEXT_SKIM_VARIANCE_BPS = 1000;
+    uint16 private constant NEXT_SKIM_VARIANCE_BPS = 2500;
     uint16 private constant NEXT_SKIM_VARIANCE_MIN_BPS = 1000;
     uint16 private constant INSURANCE_SKIM_BPS = 100; // 1% of nextPool -> yieldAccumulator
+    uint16 private constant OVERSHOOT_THRESHOLD_BPS = 12500;  // R > 1.25x triggers surcharge
+    uint16 private constant OVERSHOOT_CAP_BPS = 3500;         // 35% max surcharge
+    uint16 private constant OVERSHOOT_COEFF = 4000;           // numerator coefficient (0.40 in bps)
+    uint16 private constant NEXT_TO_FUTURE_BPS_MAX = 8000;    // 80% total skim hard cap
+    uint16 private constant ADDITIVE_RANDOM_BPS = 1000;      // 0–10% additive random on bps
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
 
     /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH, unscaled).
@@ -950,7 +955,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _nextToFutureBps(
         uint48 elapsed,
         uint24 lvl
-    ) private pure returns (uint16) {
+    ) internal pure returns (uint16) {
         uint256 lvlBonus = (uint256(lvl % 100) / 10) * 100; // +1% per 10 levels within cycle
         uint256 bps;
         if (elapsed <= 1 days) {
@@ -981,7 +986,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 reachedAt,
         uint24 lvl,
         uint256 rngWord
-    ) private {
+    ) internal {
         uint48 start = levelStartTime + 11 days;
         if (reachedAt < start) reachedAt = start;
 
@@ -992,58 +997,58 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 futurePoolBefore = _getFuturePrizePool();
         uint256 lastPool = levelPrizePool[lvl - 1];
 
-        // Ratio adjust: ±2% based on future/next ratio (baseline 2:1)
+        // Ratio adjust: ±4% based on future/next ratio (target 2:1)
         uint256 ratioPct = (futurePoolBefore * 100) / nextPoolBefore;
         if (ratioPct < 200) {
-            bps += 200 - ratioPct;
+            uint256 bump = 200 - ratioPct;
+            bps += (bump > 400 ? 400 : bump);
         } else {
             uint256 penalty = ratioPct - 200;
-            bps = penalty >= bps ? 0 : bps - (penalty > 200 ? 200 : penalty);
+            penalty = penalty > 400 ? 400 : penalty;
+            bps = penalty >= bps ? 0 : bps - penalty;
         }
 
-        // Growth adjust: ±2% based on pool growth vs last level
+        // Overshoot surcharge: hyperbolic, kicks in when nextPool > 1.25x previous level's target
         if (lastPool != 0) {
-            if (nextPoolBefore <= lastPool) {
-                bps += 200;
-            } else {
-                uint256 excessBps = ((nextPoolBefore - lastPool) * 10_000) /
-                    lastPool;
-                if (excessBps >= 2000) {
-                    bps = bps >= 200 ? bps - 200 : 0;
-                } else if (excessBps <= 1000) {
-                    bps += 200 - (excessBps / 5);
-                } else {
-                    uint256 penalty = (excessBps - 1000) / 5;
-                    bps = penalty >= bps ? 0 : bps - penalty;
-                }
+            uint256 rBps = (nextPoolBefore * 10_000) / lastPool;
+            if (rBps > OVERSHOOT_THRESHOLD_BPS) {
+                uint256 excess = rBps - OVERSHOOT_THRESHOLD_BPS;
+                uint256 surcharge = (excess * OVERSHOOT_COEFF) / (excess + 10_000);
+                if (surcharge > OVERSHOOT_CAP_BPS) surcharge = OVERSHOOT_CAP_BPS;
+                bps += surcharge;
             }
         }
 
-        if (bps > 10_000) bps = 10_000;
+        // Step 2: Additive random 0–10% on bps
+        bps += rngWord % (ADDITIVE_RANDOM_BPS + 1);
+
+        // Step 3: Compute take from uncapped bps
         uint256 take = (nextPoolBefore * bps) / 10_000;
 
-        // Variance: ±X% random adjustment
+        // Step 4: ±25% multiplicative variance (triangular: avg of two uniform VRF rolls)
         if (take != 0) {
-            uint256 variance = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000;
-            uint256 minVariance = (nextPoolBefore *
-                NEXT_SKIM_VARIANCE_MIN_BPS) / 10_000;
-            if (variance < minVariance) variance = minVariance;
-            if (variance != 0) {
-                if (variance > take) variance = take;
-                uint256 roll = rngWord % (variance * 2 + 1);
-                if (roll >= variance) {
-                    take += roll - variance;
-                    if (take > nextPoolBefore) take = nextPoolBefore;
-                } else if (variance - roll < take) {
-                    take -= variance - roll;
-                }
+            uint256 halfWidth = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000;
+            uint256 minWidth = (nextPoolBefore * NEXT_SKIM_VARIANCE_MIN_BPS) / 10_000;
+            if (halfWidth < minWidth) halfWidth = minWidth;
+            if (halfWidth > take) halfWidth = take;
+
+            uint256 range = halfWidth * 2 + 1;
+            uint256 roll1 = (rngWord >> 64) % range;
+            uint256 roll2 = (rngWord >> 192) % range;
+            uint256 combined = (roll1 + roll2) / 2;
+
+            if (combined >= halfWidth) {
+                take += combined - halfWidth;
+            } else {
+                take -= halfWidth - combined;
             }
         }
 
+        // Step 5: Cap take at 80% of nextPool
+        uint256 maxTake = (nextPoolBefore * NEXT_TO_FUTURE_BPS_MAX) / 10_000;
+        if (take > maxTake) take = maxTake;
+
         uint256 insuranceSkim = (nextPoolBefore * INSURANCE_SKIM_BPS) / 10_000;
-        if (take + insuranceSkim > nextPoolBefore) {
-            take = nextPoolBefore - insuranceSkim;
-        }
         _setNextPrizePool(nextPoolBefore - take - insuranceSkim);
         _setFuturePrizePool(futurePoolBefore + take);
         yieldAccumulator += insuranceSkim;
