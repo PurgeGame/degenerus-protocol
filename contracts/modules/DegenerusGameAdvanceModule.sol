@@ -1355,6 +1355,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (fallbackWord == 0) fallbackWord = 1;
                 lootboxRngWordByIndex[orphanedIndex] = fallbackWord;
                 lastLootboxRngWord = fallbackWord;
+                emit LootboxRngApplied(orphanedIndex, fallbackWord, outgoingRequestId);
             }
         }
 
