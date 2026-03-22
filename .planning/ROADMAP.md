@@ -208,9 +208,9 @@ Plans:
   3. _applyBoon and all boon consumption functions use read-modify-write on packed struct
   4. Lootbox boost tier logic uses single uint8 tier field instead of 3 separate bool+day+deityDay mapping sets
   5. All existing Hardhat + Foundry tests pass with equivalent behavior after storage layout change
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
-- [ ] 73-01-PLAN.md -- BoonPacked struct + constants + BoonModule rewrite (BOON-01, BOON-02, BOON-04)
+- [x] 73-01-PLAN.md -- BoonPacked struct + constants + BoonModule rewrite (BOON-01, BOON-02, BOON-04)
 - [ ] 73-02-PLAN.md -- LootboxModule + WhaleModule + MintModule rewrite (BOON-03, BOON-05)
 - [ ] 73-03-PLAN.md -- Full test suite verification + human review (BOON-06)
 
@@ -226,7 +226,7 @@ Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72. Ph
 | 70. Coinflip Commitment Window | 0/? | Not started | - |
 | 71. advanceGame Day RNG Window | 0/? | Not started | - |
 | 72. Ticket Queue Deep-Dive + Pattern Scan | 0/? | Not started | - |
-| 73. Boon Storage Packing | 0/3 | Not started | - |
+| 73. Boon Storage Packing | 1/3 | In Progress|  |
 
 ## Deferred
 
