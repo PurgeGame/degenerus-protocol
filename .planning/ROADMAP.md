@@ -167,11 +167,11 @@ Plans:
   3. Coordinator swap state cleanup covers all VRF state variables (confirmed list), orphaned lootbox recovery is correct, and lastLootboxRngWord==0 at swap time cannot produce degenerate entropy
   4. Game-over fallback entropy via _getHistoricalRngFallback and prevrandao is assessed with formal C4A severity classification
   5. All game operations verified using dailyIdx timing consistently — resolveRedemptionPeriod clock mechanism audited, any block.timestamp usage where dailyIdx is expected flagged as finding
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 65-01: TBD
-- [ ] 65-02: TBD
+- [ ] 65-01-PLAN.md — VRF stall edge case fuzz/unit test suite (STALL-01 through STALL-07)
+- [ ] 65-02-PLAN.md — VRF stall findings document + KNOWN-ISSUES.md update
 
 ### Phase 66: VRF Path Test Coverage
 **Goal**: All verified invariants from Phases 63-65 have executable Foundry fuzz/invariant tests and Halmos symbolic verification
@@ -195,8 +195,8 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 63. VRF Request/Fulfillment Core | v3.7 | 2/2 | Complete    | 2026-03-22 |
-| 64. Lootbox RNG Lifecycle | v3.7 | 2/2 | Complete   | 2026-03-22 |
-| 65. VRF Stall Edge Cases | v3.7 | 0/TBD | Not started | - |
+| 64. Lootbox RNG Lifecycle | v3.7 | 2/2 | Complete    | 2026-03-22 |
+| 65. VRF Stall Edge Cases | v3.7 | 0/2 | Not started | - |
 | 66. VRF Path Test Coverage | v3.7 | 0/TBD | Not started | - |
 
 ## Deferred
