@@ -46,6 +46,16 @@ See `audit/v3.7-vrf-core-findings.md` for full findings document.
 
 See `audit/v3.7-lootbox-rng-findings.md` for full findings document.
 
+### v3.7 Phase 65: VRF Stall Edge Cases (2026-03-22)
+
+0 HIGH, 0 MEDIUM, 0 LOW, 3 INFO. All 7 VRF stall edge case requirements (STALL-01 through STALL-07) VERIFIED with 17 Foundry fuzz/unit tests (1000 runs each, 0 failures). Gap backfill entropy: keccak256(vrfWord, gapDay) uniqueness verified. Gas ceiling: 120-day gap uses ~15M gas (2x margin under 30M block limit). Coordinator swap: 8/8 state variables correctly reset, 7 preserved variables audited with rationale. Zero-seed edge case: unreachable in any practical code path. Gameover fallback: prevrandao 1-bit bias documented as INFO (edge-of-edge trigger). DailyIdx timing: all block.timestamp usages consistent with context. V37-001 deferred coverage from Phase 63 resolved.
+
+- **V37-005 (INFO):** Gap backfill manipulation window is identical to standard daily VRF callback-to-consumption window. Coinflip positions pre-committed before stall, lootbox purchases impossible during stall. No additional attack surface.
+- **V37-006 (INFO):** Gameover fallback `_getHistoricalRngFallback` uses `block.prevrandao` supplementary entropy. On Base L2, sequencer controls prevrandao (1-bit manipulation on binary outcomes). Edge-of-edge case: gameover + VRF dead 3+ days. 5 committed VRF words provide bulk entropy.
+- **V37-007 (INFO):** Level-0 `_getHistoricalRngFallback` returns prevrandao-only entropy (no historical VRF words exist). At level 0, no player positions exist to manipulate.
+
+See `audit/v3.7-vrf-stall-findings.md` for full findings document.
+
 ### v3.6: VRF Stall Resilience (2026-03-22)
 
 0 HIGH, 0 MEDIUM, 0 LOW, 2 INFO. Delta audit: all 8 attack surfaces SAFE. See `audit/v3.6-findings-consolidated.md`.
