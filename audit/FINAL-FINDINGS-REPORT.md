@@ -31,7 +31,7 @@ No code path allows unauthorized extraction of ETH or tokens. Accounting invaria
 | Accounting Drift | **Very Low** | Remainder pattern wei-exact. stETH rounding strengthens invariant. |
 | Economic Exploitation | **Very Low** | Sybil, MEV, affiliate, whale vectors all structurally unprofitable. |
 | Access Control | **Low** | DGVE-based admin with CREATOR as fixed deployer. Module isolation complete. |
-| Availability | **Low** | All stuck states have recovery. Worst case: 120-day timeout + VRF failure. |
+| Availability | **Low** | All stuck states have recovery. VRF stall recovery automated via v3.6 gap day backfill. Worst case: 120-day timeout. |
 | Cross-Contract | **Very Low** | All 46 delegatecall sites verified. Constructor ordering verified. |
 
 ---
@@ -40,7 +40,7 @@ No code path allows unauthorized extraction of ETH or tokens. Accounting invaria
 
 The protocol depends on two external systems.
 
-**Chainlink VRF V2.5.** Sole randomness source. If VRF goes down, the game stalls but no funds are at risk. Governance-based coordinator rotation and 120-day inactivity timeout provide independent recovery paths.
+**Chainlink VRF V2.5.** Sole randomness source. If VRF goes down, the game stalls but no funds are at risk. v3.6 adds automatic stall recovery: governance-gated coordinator swap triggers gap day RNG backfill and orphaned lootbox index resolution. Independent recovery paths: governance-based coordinator rotation (20h+ stall threshold) and 120-day inactivity timeout.
 
 **Lido stETH.** A portion of the prize pool is held as stETH. If Lido ever paused transfers, claims requiring stETH settlement would be blocked and the protocol would be functionally insolvent until transfers resumed.
 
