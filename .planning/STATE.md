@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: VRF Commitment Window Audit
-status: Phase complete — ready for verification
-stopped_at: Completed 69-02-PLAN.md
-last_updated: "2026-03-22T21:18:26.153Z"
+status: Ready to plan
+stopped_at: Completed 73-02-PLAN.md
+last_updated: "2026-03-22T21:27:49.667Z"
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 
 ## Current Position
 
-Phase: 73 (boon-storage-packing) — EXECUTING
-Plan: 3 of 3
+Phase: 73
+Plan: Not started
 
 ## Accumulated Context
 
@@ -41,6 +41,8 @@ None (fresh milestone).
 - [Phase 73]: Used // @deprecated comments instead of NatSpec /// @deprecated (Solidity 0.8.34 rejects @deprecated on non-public state variables)
 - [Phase 73]: BoonPacked struct at storage slot 107 (after lastTerminalDecClaimRound at slot 106) -- all 29 old boon mapping slots preserved unchanged
 - [Phase 69-mutation-verdicts]: CW-04 exhaustive proof: all 87 permissionless paths enumerated with 7 protection categories, count verified
+- [Phase 73]: Lootbox boost event emission decodes tier back to BPS via _lootboxTierToBps to preserve original event values
+- [Phase 73]: Lazy pass boon consumption re-reads slot1 before clearing to handle deity-path pre-clearing correctly
 
 ### Pending Todos
 
@@ -53,6 +55,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T21:18:26.151Z
-Stopped at: Completed 69-02-PLAN.md
+Last session: 2026-03-22T21:27:49.665Z
+Stopped at: Completed 73-02-PLAN.md
 Resume file: None

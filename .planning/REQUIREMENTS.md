@@ -42,9 +42,9 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 
 - [x] **BOON-01**: All per-player boon state (currently 29 separate mappings) packed into a 2-slot struct using uint24 day fields (45,000+ year range) and uint8 lootboxTier
 - [x] **BOON-02**: checkAndClearExpiredBoon rewritten to operate on packed struct with single SLOAD per slot instead of 29 separate SLOADs
-- [ ] **BOON-03**: _applyBoon rewritten to read-modify-write packed struct instead of individual mapping writes
+- [x] **BOON-03**: _applyBoon rewritten to read-modify-write packed struct instead of individual mapping writes
 - [x] **BOON-04**: All boon consumption functions (consumeCoinflipBoon, consumePurchaseBoost, consumeDecimatorBoost, consumeActivityBoon) updated for packed layout
-- [ ] **BOON-05**: Lootbox boost tier logic simplified from 3 separate bool+day+deityDay mappings to single tier field in packed struct
+- [x] **BOON-05**: Lootbox boost tier logic simplified from 3 separate bool+day+deityDay mappings to single tier field in packed struct
 - [ ] **BOON-06**: All existing tests pass after storage layout change with equivalent behavior
 
 ## Future Requirements
@@ -87,9 +87,9 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 | TQ-03 | Phase 72 | Pending |
 | BOON-01 | Phase 73 | Complete |
 | BOON-02 | Phase 73 | Complete |
-| BOON-03 | Phase 73 | Pending |
+| BOON-03 | Phase 73 | Complete |
 | BOON-04 | Phase 73 | Complete |
-| BOON-05 | Phase 73 | Pending |
+| BOON-05 | Phase 73 | Complete |
 | BOON-06 | Phase 73 | Pending |
 
 **Coverage:**
