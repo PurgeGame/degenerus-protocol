@@ -11,7 +11,7 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 
 - [x] **CW-01**: Every storage variable written or read by VRF fulfillment (rawFulfillRandomWords -> all downstream consumers) is cataloged with its slot, contract, and purpose
 - [x] **CW-02**: Every storage variable that feeds into VRF-dependent outcome computations is cataloged (backward trace from outcome to committed inputs)
-- [ ] **CW-03**: For each cataloged variable, every external/public function that can mutate it is identified with call-graph depth (direct + indirect via internal calls)
+- [x] **CW-03**: For each cataloged variable, every external/public function that can mutate it is identified with call-graph depth (direct + indirect via internal calls)
 - [ ] **CW-04**: Cross-reference proof that no external function callable by a non-admin actor can mutate any committed input between VRF request and fulfillment
 
 ### Mutation Analysis
@@ -71,7 +71,7 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 |-------------|-------|--------|
 | CW-01 | Phase 68 | Complete |
 | CW-02 | Phase 68 | Complete |
-| CW-03 | Phase 68 | Pending |
+| CW-03 | Phase 68 | Complete |
 | CW-04 | Phase 69 | Pending |
 | MUT-01 | Phase 69 | Pending |
 | MUT-02 | Phase 69 | Pending |
