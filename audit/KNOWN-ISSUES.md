@@ -28,43 +28,15 @@ These are architectural decisions, not vulnerabilities.
 
 ## Audit History
 
-### v3.7 Phase 63: VRF Request/Fulfillment Core (2026-03-22)
+### v3.7 VRF Path Audit (2026-03-22)
 
-0 HIGH, 0 MEDIUM, 0 LOW, 2 INFO. All 4 VRF core requirements (VRFC-01 through VRFC-04) VERIFIED with 22 Foundry fuzz tests (1000 runs each, 0 failures). Slot 0 assembly audit: SAFE (0 of 8 assembly blocks touch packed VRF state). Gas budget: SAFE (~28k-47k vs 300k limit).
+3 INFO findings across Phases 63-67. No HIGH, MEDIUM, or LOW.
 
-- **V37-001 (INFO):** `_tryRequestRng` gameover entry point not covered by VRFCore.t.sol. Low risk: shares `_finalizeRngRequest` with proven daily path. Deferred to Phase 65.
-- **V37-002 (INFO):** Research documentation listed wrong storage slot numbers for `rngWordCurrent` and `vrfRequestId`. Corrected via `forge inspect` during test development. No contract code impact.
-
-See `audit/v3.7-vrf-core-findings.md` for full findings document.
-
-### v3.7 Phase 64: Lootbox RNG Lifecycle (2026-03-22)
-
-0 HIGH, 0 MEDIUM, 0 LOW, 2 INFO. All 5 lootbox RNG lifecycle requirements (LBOX-01 through LBOX-05) VERIFIED with 21 Foundry fuzz tests (1000 runs each, 0 failures). Index mutation audit: 4 mutation sites verified (increment on fresh daily + mid-day, no increment on retry + swap). Word write audit: 5 write sites verified (daily, mid-day, stale, backfill, gameover). Zero-state guards: 4/5 sites guarded. Entropy derivation: unique per (player, day, amount) tuple via keccak256 preimage. Full lifecycle: purchase -> VRF -> open traced end-to-end.
-
-- **V37-003 (INFO):** `_getHistoricalRngFallback` (AdvanceModule line 962) returns keccak256 output without explicit `if (word == 0) word = 1` guard. All other VRF word injection points have this guard. Probability of keccak256 returning 0 is 2^-256 (negligible). If triggered with zero nudges, would cause permanent RngNotReady for that lootbox index.
 - **V37-004 (INFO):** `rawFulfillRandomWords` mid-day branch does not update `lastLootboxRngWord`. Correct by design: variable is only consumed by ticket processing in `advanceGame`, which reads the word via mid-day drain path when needed.
+- **V37-006 (INFO):** Gameover fallback `_getHistoricalRngFallback` uses `block.prevrandao` supplementary entropy. On Base L2, sequencer controls prevrandao (1-bit manipulation on binary outcomes). Edge-of-edge case: gameover + VRF dead 3+ days. 5 committed VRF words provide bulk entropy. **Intended emergency fallback — prevrandao is an acceptable trade-off when VRF is unavailable at gameover.**
+- **V37-007 (INFO):** Level-0 `_getHistoricalRngFallback` returns prevrandao-only entropy (no historical VRF words exist). At level 0, no player positions exist to manipulate. **If this triggers, the game never actually started — no economic impact possible.**
 
-See `audit/v3.7-lootbox-rng-findings.md` for full findings document.
-
-### v3.7 Phase 65: VRF Stall Edge Cases (2026-03-22)
-
-0 HIGH, 0 MEDIUM, 0 LOW, 3 INFO. All 7 VRF stall edge case requirements (STALL-01 through STALL-07) VERIFIED with 17 Foundry fuzz/unit tests (1000 runs each, 0 failures). Gap backfill entropy: keccak256(vrfWord, gapDay) uniqueness verified. Gas ceiling: 120-day gap uses ~15M gas (2x margin under 30M block limit). Coordinator swap: 8/8 state variables correctly reset, 7 preserved variables audited with rationale. Zero-seed edge case: unreachable in any practical code path. Gameover fallback: prevrandao 1-bit bias documented as INFO (edge-of-edge trigger). DailyIdx timing: all block.timestamp usages consistent with context. V37-001 deferred coverage from Phase 63 resolved.
-
-- **V37-005 (INFO):** Gap backfill manipulation window is identical to standard daily VRF callback-to-consumption window. Coinflip positions pre-committed before stall, lootbox purchases impossible during stall. No additional attack surface.
-- **V37-006 (INFO):** Gameover fallback `_getHistoricalRngFallback` uses `block.prevrandao` supplementary entropy. On Base L2, sequencer controls prevrandao (1-bit manipulation on binary outcomes). Edge-of-edge case: gameover + VRF dead 3+ days. 5 committed VRF words provide bulk entropy.
-- **V37-007 (INFO):** Level-0 `_getHistoricalRngFallback` returns prevrandao-only entropy (no historical VRF words exist). At level 0, no player positions exist to manipulate.
-
-See `audit/v3.7-vrf-stall-findings.md` for full findings document.
-
-### v3.7 Phase 66: VRF Path Test Coverage (2026-03-22)
-
-0 new findings. Invariant testing proves no arbitrary sequence of VRF operations can violate lootboxRngIndex lifecycle (TEST-01), stall recovery state machine (TEST-02), or gap backfill completeness (TEST-03). Halmos symbolic verification proves redemption roll formula uint16((word >> 8) % 151 + 25) always produces [25, 175] for all 2^256 inputs (TEST-04).
-
-- **Invariant tests:** 7 invariant assertions (VRFPathInvariants.inv.t.sol), 256 runs / depth 128, 0 violations
-- **Parametric fuzz tests:** 6 gap backfill boundary tests (VRFPathCoverage.t.sol), 1000 runs each, 0 failures
-- **Halmos symbolic proofs:** 4 check_ functions (RedemptionRoll.t.sol), 0 counterexamples, all 2^256 inputs covered
-
-See `test/fuzz/invariant/VRFPathInvariants.inv.t.sol`, `test/fuzz/VRFPathCoverage.t.sol`, and `test/halmos/RedemptionRoll.t.sol`.
+See `audit/v3.7-vrf-core-findings.md`, `audit/v3.7-lootbox-rng-findings.md`, `audit/v3.7-vrf-stall-findings.md`.
 
 ### v3.6: VRF Stall Resilience (2026-03-22)
 

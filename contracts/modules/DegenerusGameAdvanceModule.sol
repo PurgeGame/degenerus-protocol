@@ -92,7 +92,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
-    uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 3;
+    uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
     uint256 private constant BURNIE_RNG_TRIGGER = 40_000 ether;
     uint32 private constant VAULT_PERPETUAL_TICKETS = 16;
@@ -143,15 +143,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
         // Level already incremented at RNG request when lastPurchase=true
         uint24 purchaseLevel = (lastPurchase && rngLockedFlag) ? lvl : lvl + 1;
-        if (
-            _handleGameOverPath(
-                ts,
-                day,
-                levelStartTime,
-                lvl,
-                lastPurchase
-            )
-        ) {
+        if (_handleGameOverPath(ts, day, levelStartTime, lvl, lastPurchase)) {
             emit Advance(STAGE_GAMEOVER, lvl);
             return;
         }
@@ -256,7 +248,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // Process near-future ticket queues (+2..+6) before daily draws
-            // to include fresh lootbox-driven tickets from pass purchases.
+            // to include fresh lootbox-driven tickets
             if (
                 !dailyJackpotCoinTicketsPending &&
                 dailyEthPoolBudget == 0 &&
@@ -984,12 +976,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
 
-        return
-            uint256(
-                keccak256(
-                    abi.encodePacked(combined, currentDay, block.prevrandao)
-                )
-            );
+        word = uint256(
+            keccak256(abi.encodePacked(combined, currentDay, block.prevrandao))
+        );
+        if (word == 0) word = 1;
     }
 
     /*+======================================================================+
