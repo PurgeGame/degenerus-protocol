@@ -174,29 +174,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (ticketQueue[rk].length > 0) {
                     (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(purchaseLevel);
                     if (ticketWorked || !ticketsFinished) {
+                        if (ticketsFinished) {
+                            ticketsFullyProcessed = true;
+                            midDayTicketRngPending = false;
+                        }
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
                         coin.creditFlip(caller, advanceBounty);
                         return;
                     }
                 }
-                ticketsFullyProcessed = true;
             }
 
-            // Clear mid-day ticket flag after drain completes
-            if (midDayTicketRngPending) {
-                midDayTicketRngPending = false;
-            }
-
-            // Swap write buffer during jackpot phase only (daily VRF word is active)
-            if (inJackpot) {
-                uint24 wk = _tqWriteKey(purchaseLevel);
-                if (ticketQueue[wk].length > 0) {
-                    _swapTicketSlot(purchaseLevel);
-                    emit Advance(STAGE_TICKETS_WORKING, lvl);
-                    coin.creditFlip(caller, advanceBounty);
-                    return;
-                }
-            }
             revert NotTimeYet();
         }
 
