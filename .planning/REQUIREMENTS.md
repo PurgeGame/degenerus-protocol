@@ -30,7 +30,7 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 
 - [x] **DAYRNG-01**: Daily VRF word flow traced through all consumers: jackpot selection, lootbox index assignment, coinflip resolution, with data dependency graph
 - [x] **DAYRNG-02**: Commitment window for advanceGame: what state can change between VRF request (in advanceGame) and fulfillment that affects outcome selection
-- [ ] **DAYRNG-03**: Cross-day carry-over analysis: verify day N pending state doesn't leak into or contaminate day N+1 RNG outcomes
+- [x] **DAYRNG-03**: Cross-day carry-over analysis: verify day N pending state doesn't leak into or contaminate day N+1 RNG outcomes
 
 ### Ticket Queue (Known Bug)
 
@@ -81,7 +81,7 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 | COIN-03 | Phase 70 | Complete |
 | DAYRNG-01 | Phase 71 | Complete |
 | DAYRNG-02 | Phase 71 | Complete |
-| DAYRNG-03 | Phase 71 | Pending |
+| DAYRNG-03 | Phase 71 | Complete |
 | TQ-01 | Phase 72 | Pending |
 | TQ-02 | Phase 72 | Pending |
 | TQ-03 | Phase 72 | Pending |
