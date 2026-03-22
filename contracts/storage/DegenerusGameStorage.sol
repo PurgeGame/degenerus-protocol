@@ -40,17 +40,17 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [18:21] level                    uint24   Current jackpot level (starts at 0) |
  * | [21:22] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT|
  * | [22:23] jackpotCounter           uint8    Jackpots processed this level      |
- * | [23:24] earlyBurnPercent         uint8    Previous pool % in early burn      |
- * | [24:25] poolConsolidationDone    bool     Pool consolidation executed flag   |
- * | [25:26] lastPurchaseDay          bool     Prize target met flag              |
- * | [26:27] decWindowOpen            bool     Decimator window latch             |
- * | [27:28] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
- * | [28:29] phaseTransitionActive    bool     Level transition in progress       |
- * | [29:30] gameOver                 bool     Terminal state flag                |
- * | [30:31] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [31:32] dailyEthBucketCursor     uint8    Bucket cursor for daily ETH dist   |
+ * | [23:24] poolConsolidationDone    bool     Pool consolidation executed flag   |
+ * | [24:25] lastPurchaseDay          bool     Prize target met flag              |
+ * | [25:26] decWindowOpen            bool     Decimator window latch             |
+ * | [26:27] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
+ * | [27:28] phaseTransitionActive    bool     Level transition in progress       |
+ * | [28:29] gameOver                 bool     Terminal state flag                |
+ * | [29:30] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
+ * | [30:31] dailyEthBucketCursor     uint8    Bucket cursor for daily ETH dist   |
+ * | [31:32] <padding>                         1 byte unused                      |
  * +-----------------------------------------------------------------------------+
- *   Total: 32 bytes (fully packed)
+ *   Total: 31 bytes used (1 byte padding)
  *
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 1 (32 bytes) — ETH Phase, Price, Double-Buffer Fields             |
@@ -233,11 +233,6 @@ abstract contract DegenerusGameStorage {
     ///      SECURITY: uint8 is sufficient (max 255, only need 0-5).
     uint8 internal jackpotCounter;
 
-    /// @dev Percentage of previous prize pool carried into early burn reward.
-    ///      Range 0-255 (but practically 0-100%). Used for early burn bonus
-    ///      calculations in the jackpot module.
-    uint8 internal earlyBurnPercent;
-
     /// @dev True once prize pool consolidation has been executed for the
     ///      current purchase phase. Prevents double-execution.
     ///
@@ -333,7 +328,7 @@ abstract contract DegenerusGameStorage {
     bool internal prizePoolFrozen;
 
     // =========================================================================
-    // SLOTS 3+: Full-Width Balances and Pools
+    // SLOT 2+: Full-Width Balances and Pools
     // =========================================================================
     // Each uint256 occupies its own 32-byte slot. These track ETH/token flows.
 
@@ -786,9 +781,6 @@ abstract contract DegenerusGameStorage {
     ///      When false: normal loot box rewards.
     ///      Auto-ends at the first phase transition where 200 ETH mint-lootbox cap is met or level >= 3.
     bool internal lootboxPresaleActive = true;
-
-    /// @dev Total ETH spent on lootboxes across all players and indices.
-    uint256 internal lootboxEthTotal;
 
     /// @dev Total ETH allocated to lootboxes from regular mints only (excludes pass lootboxes).
     ///      Used to trigger presale auto-end at 200 ETH cap.
@@ -1335,9 +1327,6 @@ abstract contract DegenerusGameStorage {
     /// @dev Lootbox activity score at purchase time, packed as (score + 1).
     ///      0 means no activity score recorded.
     mapping(uint48 => mapping(address => uint16)) internal lootboxEvScorePacked;
-
-    /// @dev Per-player queue of lootbox RNG indices for auto-open processing.
-    mapping(address => uint48[]) internal lootboxIndexQueue;
 
     // =========================================================================
     // Lootbox Bonus Tracking & BURNIE Lootboxes

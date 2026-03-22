@@ -695,7 +695,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 lootboxBaseLevelPacked[index][buyer] = uint24(level + 2);
                 lootboxEvScorePacked[index][buyer] =
                     uint16(IDegenerusGame(address(this)).playerActivityScore(buyer) + 1);
-                lootboxIndexQueue[buyer].push(index);
                 emit LootBoxIdx(buyer, index, day);
             } else {
                 if (storedDay != day) revert E();
@@ -715,7 +714,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             // Pack: [232 bits: amount] [24 bits: purchase level]
             uint256 newAmount = existingAmount + boostedAmount;
             lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
-            lootboxEthTotal += lootBoxAmount;
             _maybeRequestLootboxRng(lootBoxAmount);
 
             // Track mint-only lootbox ETH for presale cap (checked at phase transition)

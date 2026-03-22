@@ -118,16 +118,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  emit events for transparency and auditability.                      |
       +======================================================================+*/
 
-    event LootBoxPresaleStatus(bool active);
-
     /// @notice Emitted when the lootbox RNG request threshold is updated.
     /// @param previous Previous threshold in wei.
     /// @param current New threshold in wei.
     event LootboxRngThresholdUpdated(uint256 previous, uint256 current);
-    /// @notice Emitted when the lootbox RNG min LINK balance is updated.
-    /// @param previous Previous minimum LINK balance.
-    /// @param current New minimum LINK balance.
-    event LootboxRngMinLinkBalanceUpdated(uint256 previous, uint256 current);
     /// @notice Emitted when a player approves or revokes an operator.
     /// @param owner The player granting approval.
     /// @param operator The approved operator.

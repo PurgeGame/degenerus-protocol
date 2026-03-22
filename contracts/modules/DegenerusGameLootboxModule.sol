@@ -107,17 +107,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Emitted when a lootbox awards a lazy pass
     /// @param player The player who received the lazy pass
-    /// @param day The day index of the award
-    /// @param lootboxAmount The ETH amount of the lootbox
-    /// @param passLevel The level of the lazy pass awarded
-    /// @param activatedNow Whether the pass was activated immediately (always false)
-    event LootBoxLazyPassAwarded(
-        address indexed player,
-        uint48 indexed day,
-        uint256 lootboxAmount,
-        uint24 passLevel,
-        bool activatedNow
-    );
 
     /// @notice Emitted when a lootbox awards DGNRS tokens
     /// @param player The player who received the reward
