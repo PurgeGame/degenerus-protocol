@@ -40,7 +40,7 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 
 ### Boon Storage Packing
 
-- [ ] **BOON-01**: All per-player boon state (currently 29 separate mappings) packed into a struct-per-player design using minimum possible storage slots
+- [ ] **BOON-01**: All per-player boon state (currently 29 separate mappings) packed into a 2-slot struct using uint24 day fields (45,000+ year range) and uint8 lootboxTier
 - [ ] **BOON-02**: checkAndClearExpiredBoon rewritten to operate on packed struct with single SLOAD per slot instead of 29 separate SLOADs
 - [ ] **BOON-03**: _applyBoon rewritten to read-modify-write packed struct instead of individual mapping writes
 - [ ] **BOON-04**: All boon consumption functions (consumeCoinflipBoon, consumePurchaseBoost, consumeDecimatorBoost, consumeActivityBoon) updated for packed layout
