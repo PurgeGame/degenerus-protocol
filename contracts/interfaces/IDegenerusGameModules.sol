@@ -129,28 +129,8 @@ interface IDegenerusGameJackpotModule {
 }
 
 /// @title IDegenerusGameDecimatorModule
-/// @notice Interface for decimator jackpot claim credits
+/// @notice Interface for decimator jackpot tracking and resolution
 interface IDegenerusGameDecimatorModule {
-    /// @notice Credits decimator jackpot claims to multiple accounts
-    /// @param accounts Array of account addresses to credit
-    /// @param amounts Array of amounts to credit to each account
-    /// @param rngWord Random word for distribution logic
-    function creditDecJackpotClaimBatch(
-        address[] calldata accounts,
-        uint256[] calldata amounts,
-        uint256 rngWord
-    ) external;
-
-    /// @notice Credits a decimator jackpot claim to a single account
-    /// @param account Address to credit the claim to
-    /// @param amount Amount to credit
-    /// @param rngWord Random word for distribution logic
-    function creditDecJackpotClaim(
-        address account,
-        uint256 amount,
-        uint256 rngWord
-    ) external;
-
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @param player Address of the player.
     /// @param lvl Current game level.

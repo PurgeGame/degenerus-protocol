@@ -162,22 +162,6 @@ interface IDegenerusGame {
     /// @return Number of whole tickets owed (fractional remainder resolves at batch time).
     function ticketsOwedView(uint24 lvl, address player) external view returns (uint32);
 
-    /// @notice Credit decimator jackpot claims into the game's claimable balance.
-    /// @dev Splits claim 50/50: half ETH, half lootbox tickets (derived using rngWord entropy).
-    ///      Supports both single and batch claims. During GAMEOVER, credits 100% ETH (no lootbox split).
-    /// @param accounts Player addresses to credit.
-    /// @param amounts  Wei amounts to credit per player (total before split).
-    /// @param rngWord VRF random word from jackpot resolution (used for lootbox ticket randomness).
-    function creditDecJackpotClaimBatch(address[] calldata accounts, uint256[] calldata amounts, uint256 rngWord) external;
-
-    /// @notice Credit a single decimator jackpot claim into the game's claimable balance.
-    /// @dev Splits claim 50/50: half ETH, half lootbox tickets (derived using rngWord entropy).
-    ///      During GAMEOVER, credits 100% ETH (no lootbox split).
-    /// @param account Player address to credit.
-    /// @param amount Wei amount to credit (total before split).
-    /// @param rngWord VRF random word from jackpot resolution (used for lootbox ticket randomness).
-    function creditDecJackpotClaim(address account, uint256 amount, uint256 rngWord) external;
-
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @param player Address of the player.
     /// @param lvl Current game level.

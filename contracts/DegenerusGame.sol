@@ -1051,68 +1051,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+========================================================================================+
-      |                    DECIMATOR JACKPOT CREDITS                                           |
-      +========================================================================================+
-      |  Credits from decimator/BAF jackpot wins flow through these                            |
-      |  functions. Called by the ContractAddresses.JACKPOTS contract.                         |
-      +========================================================================================+*/
-
-    /// @notice Batch variant: credit multiple decimator claims (ETH-only during gameover).
-    /// @dev Access: ContractAddresses.JACKPOTS contract only.
-    ///      Gas-optimized for multiple credits in single transaction.
-    ///      Each claim splits 50/50 by default; during GAMEOVER credits 100% ETH.
-    ///      Uses VRF randomness from jackpot resolution for lootbox derivation.
-    /// @param accounts Array of player addresses to credit.
-    /// @param amounts Array of corresponding wei amounts (total before split).
-    /// @param rngWord VRF random word from jackpot resolution.
-    function creditDecJackpotClaimBatch(
-        address[] calldata accounts,
-        uint256[] calldata amounts,
-        uint256 rngWord
-    ) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule
-                        .creditDecJackpotClaimBatch
-                        .selector,
-                    accounts,
-                    amounts,
-                    rngWord
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Single variant: credit a decimator claim (ETH-only during gameover).
-    /// @dev Access: ContractAddresses.JACKPOTS contract only.
-    ///      Each claim splits 50/50 by default; during GAMEOVER credits 100% ETH.
-    ///      Uses VRF randomness from jackpot resolution for lootbox derivation.
-    /// @param account Player address to credit.
-    /// @param amount Wei amount to credit (total before split).
-    /// @param rngWord VRF random word from jackpot resolution.
-    function creditDecJackpotClaim(
-        address account,
-        uint256 amount,
-        uint256 rngWord
-    ) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule
-                        .creditDecJackpotClaim
-                        .selector,
-                    account,
-                    amount,
-                    rngWord
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /*+========================================================================================+
       |                    DECIMATOR JACKPOT LOGIC                                             |
       +========================================================================================+*/
 
