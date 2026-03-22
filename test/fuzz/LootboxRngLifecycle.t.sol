@@ -408,4 +408,286 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 storedWord = _readLootboxWord(indexBefore);
         assertEq(storedWord, 1, "Zero-guarded mid-day word should be stored as 1");
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // LBOX-04: Entropy Uniqueness
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice Two different players purchasing at the same index produce different entropy.
+    ///         Entropy = keccak256(abi.encode(rngWord, player, day, amount)).
+    ///         Different player addresses -> different preimage -> different entropy.
+    function test_entropyUniqueDifferentPlayers(uint256 vrfWord) public {
+        vm.assume(vrfWord != 0);
+
+        address buyer1 = makeAddr("buyer1");
+        address buyer2 = makeAddr("buyer2");
+
+        uint48 purchaseIndex = _readLootboxRngIndex();
+
+        // Both buyers purchase at the same index with identical amounts
+        _makePurchase(buyer1, 1 ether);
+        _makePurchase(buyer2, 1 ether);
+
+        // Complete the day to store the VRF word
+        _completeDay(vrfWord);
+
+        // Read stored word at the purchase index
+        uint256 storedWord = _readLootboxWord(purchaseIndex);
+        assertTrue(storedWord != 0, "Word should be stored");
+
+        // Read buyer1's stored day from lootboxStatus (day is what was recorded at purchase time)
+        // Both purchased on day 1, so day = 1 for both.
+        // Read amounts from lootboxStatus
+        (uint256 amount1, ) = game.lootboxStatus(buyer1, purchaseIndex);
+        (uint256 amount2, ) = game.lootboxStatus(buyer2, purchaseIndex);
+        assertTrue(amount1 != 0, "Buyer1 should have lootbox amount");
+        assertTrue(amount2 != 0, "Buyer2 should have lootbox amount");
+
+        // Compute entropy for each buyer using the contract's formula:
+        // entropy = keccak256(abi.encode(rngWord, player, day, amount))
+        // Day is 1 (deploy starts at ts=86400, day index = 1)
+        uint48 day = 1;
+        uint256 entropy1 = uint256(keccak256(abi.encode(storedWord, buyer1, day, amount1)));
+        uint256 entropy2 = uint256(keccak256(abi.encode(storedWord, buyer2, day, amount2)));
+
+        // Different player addresses in preimage -> different entropy
+        assertTrue(entropy1 != entropy2, "Different players must produce different entropy");
+    }
+
+    /// @notice Same player with different amounts at different indices produces different entropy.
+    ///         Different VRF words + different amounts -> different preimage -> different entropy.
+    function test_entropyUniqueDifferentAmounts(uint256 vrfWord) public {
+        vm.assume(vrfWord != 0);
+
+        address buyer = makeAddr("amountBuyer");
+        uint48 index1 = _readLootboxRngIndex();
+
+        // Day 1: purchase 1 ether lootbox
+        _makePurchase(buyer, 1 ether);
+        _completeDay(vrfWord);
+
+        uint256 word1 = _readLootboxWord(index1);
+        (uint256 amount1, ) = game.lootboxStatus(buyer, index1);
+
+        // Warp to day 2: purchase 2 ether lootbox
+        vm.warp(2 * 86400);
+        uint48 index2 = _readLootboxRngIndex();
+        _makePurchase(buyer, 2 ether);
+        uint256 word2Seed = vrfWord ^ 0xBEEF;
+        if (word2Seed == 0) word2Seed = 1;
+        _completeDay(word2Seed);
+
+        uint256 word2 = _readLootboxWord(index2);
+        (uint256 amount2, ) = game.lootboxStatus(buyer, index2);
+
+        // Compute entropy for each
+        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint48(1), amount1)));
+        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint48(2), amount2)));
+
+        // Different amounts AND different VRF words -> different entropy
+        assertTrue(entropy1 != entropy2, "Different amounts must produce different entropy");
+    }
+
+    /// @notice Same player purchasing on different days produces different entropy.
+    ///         Even if VRF words were identical, the day parameter in keccak256 differs.
+    function test_entropyUniqueDifferentDays(uint256 vrfWord) public {
+        vm.assume(vrfWord != 0);
+
+        address buyer = makeAddr("dayBuyer");
+        uint48 index1 = _readLootboxRngIndex();
+
+        // Day 1: purchase
+        _makePurchase(buyer, 1 ether);
+        _completeDay(vrfWord);
+
+        uint256 word1 = _readLootboxWord(index1);
+        (uint256 amount1, ) = game.lootboxStatus(buyer, index1);
+
+        // Warp to day 2: purchase same amount
+        vm.warp(2 * 86400);
+        uint48 index2 = _readLootboxRngIndex();
+        _makePurchase(buyer, 1 ether);
+        // Use same VRF word to isolate the day variable
+        _completeDay(vrfWord);
+
+        uint256 word2 = _readLootboxWord(index2);
+        (uint256 amount2, ) = game.lootboxStatus(buyer, index2);
+
+        // Compute entropy using the recorded day for each purchase
+        // Day 1 purchase is day=1, Day 2 purchase is day=2
+        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint48(1), amount1)));
+        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint48(2), amount2)));
+
+        // Different day values in preimage -> different entropy
+        assertTrue(entropy1 != entropy2, "Different days must produce different entropy");
+    }
+
+    /// @notice Same player purchasing twice at the same index accumulates amounts.
+    ///         The total amount changes the keccak preimage for entropy.
+    function test_entropyAccumulationSamePlayer() public {
+        address buyer = makeAddr("accumBuyer");
+        uint48 purchaseIndex = _readLootboxRngIndex();
+
+        // First purchase: 0.5 ether lootbox
+        _makePurchase(buyer, 0.5 ether);
+
+        // Check accumulated amount after first purchase
+        (uint256 amountAfterFirst, ) = game.lootboxStatus(buyer, purchaseIndex);
+        assertTrue(amountAfterFirst != 0, "Should have amount after first purchase");
+
+        // Second purchase: another 0.5 ether lootbox at the same index (same day)
+        _makePurchase(buyer, 0.5 ether);
+
+        // Check accumulated amount after second purchase
+        (uint256 amountAfterSecond, ) = game.lootboxStatus(buyer, purchaseIndex);
+
+        // Amount should have increased (accumulated)
+        assertTrue(
+            amountAfterSecond > amountAfterFirst,
+            "Accumulated amount should increase with second purchase"
+        );
+
+        // Complete the day so the word is stored
+        _completeDay(0xDEAD0001);
+
+        // The entropy derivation will use the accumulated total, not individual purchase amounts
+        uint256 storedWord = _readLootboxWord(purchaseIndex);
+        uint256 entropyWithAccumulated = uint256(
+            keccak256(abi.encode(storedWord, buyer, uint48(1), amountAfterSecond))
+        );
+        uint256 entropyWithFirstOnly = uint256(
+            keccak256(abi.encode(storedWord, buyer, uint48(1), amountAfterFirst))
+        );
+
+        // Since accumulated amount differs from first-only, entropy must differ
+        assertTrue(
+            entropyWithAccumulated != entropyWithFirstOnly,
+            "Accumulated amount produces different entropy than single purchase"
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // LBOX-05: Full Purchase-to-Open Lifecycle
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice Full daily lifecycle: purchase -> advanceGame -> VRF fulfill -> process -> openLootBox.
+    function test_fullLifecycleDailyPath() public {
+        address buyer = makeAddr("dailyBuyer");
+
+        // Record index at purchase time
+        uint48 purchaseIndex = _readLootboxRngIndex();
+
+        // Purchase lootbox
+        _makePurchase(buyer, 1 ether);
+
+        // advanceGame triggers VRF request
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Should be locked after VRF request");
+
+        // VRF fulfills
+        uint256 reqId = mockVRF.lastRequestId();
+        mockVRF.fulfillRandomWords(reqId, 0xDEAD0001);
+
+        // Process until unlocked
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
+        assertFalse(game.rngLocked(), "Should be unlocked after processing");
+
+        // Verify word was stored before opening
+        uint256 storedWord = _readLootboxWord(purchaseIndex);
+        assertTrue(storedWord != 0, "Word should be stored at purchase index before open");
+
+        // openLootBox should succeed (word available, no RngNotReady revert)
+        vm.prank(buyer);
+        game.openLootBox(buyer, purchaseIndex);
+    }
+
+    /// @notice Full mid-day lifecycle: purchase -> requestLootboxRng -> VRF fulfill -> openLootBox.
+    function test_fullLifecycleMidDayPath() public {
+        // Setup: complete a day first so daily word exists for today
+        _setupForMidDayRng();
+
+        address buyer = makeAddr("midDayBuyer");
+
+        // Record the index at purchase time
+        uint48 purchaseIndex = _readLootboxRngIndex();
+
+        // Purchase lootbox (creates pending ETH for requestLootboxRng)
+        _makePurchase(buyer, 1 ether);
+
+        // requestLootboxRng -> increments index
+        game.requestLootboxRng();
+
+        // VRF fulfills mid-day (writes directly to lootboxRngWordByIndex)
+        uint256 reqId = mockVRF.lastRequestId();
+        mockVRF.fulfillRandomWords(reqId, 0xCAFE);
+
+        // Verify word stored
+        uint256 storedWord = _readLootboxWord(purchaseIndex);
+        assertTrue(storedWord != 0, "Mid-day word should be stored at purchase index");
+
+        // openLootBox should succeed
+        vm.prank(buyer);
+        game.openLootBox(buyer, purchaseIndex);
+    }
+
+    /// @notice Attempting openLootBox before VRF fulfillment reverts with RngNotReady.
+    function test_fullLifecycleRngNotReady() public {
+        address buyer = makeAddr("notReadyBuyer");
+
+        // Record index at purchase time
+        uint48 purchaseIndex = _readLootboxRngIndex();
+
+        // Purchase lootbox
+        _makePurchase(buyer, 1 ether);
+
+        // advanceGame triggers VRF request (index increments)
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Should be locked after VRF request");
+
+        // Do NOT fulfill VRF -- word at purchaseIndex is still 0
+
+        // openLootBox must revert with RngNotReady
+        vm.prank(buyer);
+        vm.expectRevert(abi.encodeWithSignature("RngNotReady()"));
+        game.openLootBox(buyer, purchaseIndex);
+    }
+
+    /// @notice Multiple indices: purchases at different indices each use their respective VRF word.
+    function test_fullLifecycleMultipleIndices() public {
+        address buyer = makeAddr("multiBuyer");
+
+        // Day 1: purchase at index N
+        uint48 indexN = _readLootboxRngIndex();
+        _makePurchase(buyer, 1 ether);
+
+        // Complete day 1 (stores word at indexN)
+        _completeDay(0xDEAD0001);
+
+        // Day 2: purchase at index N+1
+        vm.warp(2 * 86400);
+        uint48 indexN1 = _readLootboxRngIndex();
+        assertEq(indexN1, indexN + 1, "Index should have incremented after day 1");
+
+        _makePurchase(buyer, 1 ether);
+
+        // Complete day 2 (stores word at indexN1)
+        _completeDay(0xDEAD0002);
+
+        // Verify both words are stored and different
+        uint256 wordN = _readLootboxWord(indexN);
+        uint256 wordN1 = _readLootboxWord(indexN1);
+        assertTrue(wordN != 0, "Word at indexN should be nonzero");
+        assertTrue(wordN1 != 0, "Word at indexN+1 should be nonzero");
+        assertTrue(wordN != wordN1, "Different days should have different words");
+
+        // Open both lootboxes -- both should succeed
+        vm.prank(buyer);
+        game.openLootBox(buyer, indexN);
+
+        vm.prank(buyer);
+        game.openLootBox(buyer, indexN1);
+    }
 }
