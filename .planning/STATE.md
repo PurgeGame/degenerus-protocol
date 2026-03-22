@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.6
 milestone_name: VRF Stall Resilience
 status: unknown
-stopped_at: Completed 60-01-PLAN.md (coordinator swap cleanup)
-last_updated: "2026-03-22T12:50:15.573Z"
+stopped_at: Completed 61-01-PLAN.md (stall resilience tests)
+last_updated: "2026-03-22T13:32:58.698Z"
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
+  completed_phases: 3
+  total_plans: 4
+  completed_plans: 4
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 60 — Coordinator Swap Cleanup
+**Current focus:** Phase 61 — Stall Resilience Tests
 
 ## Current Position
 
-Phase: 60 (Coordinator Swap Cleanup) — EXECUTING
+Phase: 61 (Stall Resilience Tests) — EXECUTING
 Plan: 1 of 1
 
 ## Accumulated Context
@@ -44,6 +44,8 @@ v3.6 context:
 - [Phase 59]: Fallback word derived from lastLootboxRngWord + orphanedIndex for unique entropy per index
 - [Phase 60]: Used outgoingRequestId (captured before vrfRequestId=0 reset) as LootboxRngApplied emit argument for indexer traceability
 - [Phase 60]: Comment-only NatSpec (not @dev tag) matching DegenerusAdmin.sol style for inline design rationale
+- [Phase 61]: Used address(admin) from DeployProtocol for vm.prank -- same as ContractAddresses.ADMIN post-patch, avoids unused import
+- [Phase 61]: Extracted _doCoordinatorSwap (no warp) from _stallAndSwap for incremental time-warp test patterns
 
 ### Pending Todos
 
@@ -55,6 +57,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T12:50:15.572Z
-Stopped at: Completed 60-01-PLAN.md (coordinator swap cleanup)
+Last session: 2026-03-22T13:32:58.697Z
+Stopped at: Completed 61-01-PLAN.md (stall resilience tests)
 Resume file: None

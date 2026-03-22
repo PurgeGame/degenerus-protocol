@@ -20,9 +20,9 @@
 
 ### Testing
 
-- [ ] **TEST-01**: Foundry test simulating full stall→swap→resume cycle with gap day backfill
-- [ ] **TEST-02**: Test that coinflip claims work across gap days
-- [ ] **TEST-03**: Test that lootbox opens work after orphaned index backfill
+- [x] **TEST-01**: Foundry test simulating full stall→swap→resume cycle with gap day backfill
+- [x] **TEST-02**: Test that coinflip claims work across gap days
+- [x] **TEST-03**: Test that lootbox opens work after orphaned index backfill
 
 ### Audit
 
@@ -48,9 +48,9 @@
 | GAP-05 | Phase 59 | Complete |
 | SWAP-01 | Phase 60 | Complete |
 | SWAP-02 | Phase 60 | Complete |
-| TEST-01 | Phase 61 | Pending |
-| TEST-02 | Phase 61 | Pending |
-| TEST-03 | Phase 61 | Pending |
+| TEST-01 | Phase 61 | Complete |
+| TEST-02 | Phase 61 | Complete |
+| TEST-03 | Phase 61 | Complete |
 | AUD-01 | Phase 62 | Pending |
 | AUD-02 | Phase 62 | Pending |
 
