@@ -189,9 +189,9 @@ Plans:
   1. A data dependency graph exists showing daily VRF word flow through all consumers: jackpot selection, lootbox index assignment, coinflip resolution
   2. All state that can change between VRF request (in advanceGame) and fulfillment is identified and assessed for outcome influence
   3. Cross-day carry-over analysis proves day N pending state cannot leak into or contaminate day N+1 RNG outcomes
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 71-01-PLAN.md -- Daily VRF word data dependency graph + commitment window analysis (DAYRNG-01, DAYRNG-02)
+- [x] 71-01-PLAN.md -- Daily VRF word data dependency graph + commitment window analysis (DAYRNG-01, DAYRNG-02)
 - [ ] 71-02-PLAN.md -- Cross-day carry-over analysis with isolation proofs (DAYRNG-03)
 
 ### Phase 72: Ticket Queue Deep-Dive + Pattern Scan
@@ -230,7 +230,7 @@ Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72. Ph
 | 68. Commitment Window Inventory | 2/2 | Complete    | 2026-03-22 |
 | 69. Mutation Verdicts | 2/2 | Complete    | 2026-03-22 |
 | 70. Coinflip Commitment Window | 1/2 | In Progress|  |
-| 71. advanceGame Day RNG Window | 0/2 | Planned | - |
+| 71. advanceGame Day RNG Window | 1/2 | In Progress|  |
 | 72. Ticket Queue Deep-Dive + Pattern Scan | 0/? | Not started | - |
 | 73. Boon Storage Packing | 2/3 | In Progress|  |
 

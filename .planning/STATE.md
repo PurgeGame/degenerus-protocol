@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: VRF Commitment Window Audit
-status: Ready to execute
-stopped_at: Completed 70-01-PLAN.md
-last_updated: "2026-03-22T23:04:01.309Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 71-01-PLAN.md
+last_updated: "2026-03-22T23:08:30.468Z"
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 11
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # State
@@ -46,6 +46,8 @@ None (fresh milestone).
 - [Phase 70]: Game-over deposits unblocked by design -- lost deposits are INFO-level, not exploitable
 - [Phase 70]: sDGNRS auto-claim during processCoinflipPayouts safe -- BAF exclusion (line 556) prevents rngLocked revert
 - [Phase 70]: All 10 BurnieCoinflip entry points SAFE via five layered protections: day+1 keying, rngLockedFlag, pure-function outcome, access control, outcome-irrelevant writes
+- [Phase 71]: Daily VRF word has 10 consumers (not 9): awardFinalDayDgnrsReward is a distinct consumer at JackpotModule:773
+- [Phase 71]: DAYRNG-02 SAFE: dual sub-window proof (Periods A/B/C), 11 permissionless actions tabulated, depositCoinflip targets day+1, _requestRng before _swapAndFreeze
 
 ### Pending Todos
 
@@ -58,6 +60,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T23:04:01.307Z
-Stopped at: Completed 70-01-PLAN.md
+Last session: 2026-03-22T23:08:30.466Z
+Stopped at: Completed 71-01-PLAN.md
 Resume file: None
