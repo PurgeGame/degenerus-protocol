@@ -113,8 +113,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH, unscaled).
     uint256 private constant LOOTBOX_PRESALE_ETH_CAP = 200 ether;
 
-    /// @dev ETH-equivalent target for advanceGame bounty (~0.01 ETH worth of BURNIE).
-    uint256 private constant ADVANCE_BOUNTY_ETH = 0.01 ether;
+    /// @dev ETH-equivalent target for advanceGame bounty (~0.005 ETH worth of BURNIE).
+    uint256 private constant ADVANCE_BOUNTY_ETH = 0.005 ether;
 
     /// @dev Vault contract for DGVE ownership check (advanceGame mint-gate bypass).
     IDegenerusVaultOwner private constant vault =
@@ -184,7 +184,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // Escalate bounty if daily processing is stalled (new-day path only).
-        // 2x after 1 hour past jackpot reset, 3x after 2 hours, capped at 3x.
+        // 2x after 20 min, 4x after 1 hour, 6x after 2 hours.
+        // Absolute targets: 0.005 base, 0.01 @20m, 0.02 @1h, 0.03 @2h ETH-equivalent.
         {
             uint256 dayStart = (uint256(day - 1) +
                 ContractAddresses.DEPLOY_DAY_BOUNDARY) *
@@ -192,8 +193,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 82_620;
             uint256 elapsed = ts - dayStart;
             if (elapsed >= 2 hours) {
-                advanceBounty *= 3;
+                advanceBounty *= 6;
             } else if (elapsed >= 1 hours) {
+                advanceBounty *= 4;
+            } else if (elapsed >= 20 minutes) {
                 advanceBounty *= 2;
             }
         }
