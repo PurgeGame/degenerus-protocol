@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: New Feature Audit — Skim Redesign + Redemption Lootbox
 status: unknown
-stopped_at: Completed 55-01-PLAN.md (storage liveness core Slots 0-24)
-last_updated: "2026-03-22T02:26:43.945Z"
+stopped_at: Completed 55-02-PLAN.md (Storage Liveness Extended)
+last_updated: "2026-03-22T02:28:44.477Z"
 progress:
   total_phases: 4
   completed_phases: 4
@@ -49,6 +49,7 @@ v3.5 context:
 - [Phase 57]: Deity pass loop hard-capped at 32 by DEITY_PASS_MAX_TOTAL -- not a DoS vector
 - [Phase 55]: All 70 standalone contract storage variables confirmed ALIVE; 5 dead code INFO findings (1 error, 4 events)
 - [Phase 55]: 2 DEAD variables found in DegenerusGameStorage: earlyBurnPercent (Slot 0, written but never read) and lootboxEthTotal (Slot 22, incremented but never read)
+- [Phase 55]: lootboxIndexQueue marked DEAD: write-only mapping wasting ~20k gas per lootbox purchase
 
 ### Pending Todos
 
@@ -60,6 +61,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T02:26:43.941Z
-Stopped at: Completed 55-01-PLAN.md (storage liveness core Slots 0-24)
+Last session: 2026-03-22T02:28:44.473Z
+Stopped at: Completed 55-02-PLAN.md (Storage Liveness Extended)
 Resume file: None
