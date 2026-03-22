@@ -1089,56 +1089,27 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 amount
     ) private returns (uint256 boostedAmount) {
         boostedAmount = amount;
-        uint16 consumedBoostBps = 0;
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s0 = bp.slot0;
+        uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
+        if (tier == 0) return boostedAmount;
 
-        // Check 25% boost first (rarest, best boost)
-        bool has25 = lootboxBoon25Active[player];
-        if (has25) {
-            uint48 stampDay = lootboxBoon25Day[player];
-            if (stampDay != 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
-                lootboxBoon25Active[player] = false;
-                has25 = false;
-            }
-        }
-        if (has25) {
-            boostedAmount += _calculateBoost(amount, LOOTBOX_BOOST_25_BONUS_BPS);
-            consumedBoostBps = LOOTBOX_BOOST_25_BONUS_BPS;
-            lootboxBoon25Active[player] = false;
-        } else {
-            // Check 15% boost
-            bool has15 = lootboxBoon15Active[player];
-            if (has15) {
-                uint48 stampDay = lootboxBoon15Day[player];
-                if (stampDay != 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
-                    lootboxBoon15Active[player] = false;
-                    has15 = false;
-                }
-            }
-            if (has15) {
-                boostedAmount += _calculateBoost(amount, LOOTBOX_BOOST_15_BONUS_BPS);
-                consumedBoostBps = LOOTBOX_BOOST_15_BONUS_BPS;
-                lootboxBoon15Active[player] = false;
-            } else {
-                // Check 5% boost if no 15% or 25% boost
-                bool has5 = lootboxBoon5Active[player];
-                if (has5) {
-                    uint48 stampDay = lootboxBoon5Day[player];
-                    if (stampDay != 0 && day > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
-                        lootboxBoon5Active[player] = false;
-                        has5 = false;
-                    }
-                }
-                if (has5) {
-                    boostedAmount += _calculateBoost(amount, LOOTBOX_BOOST_5_BONUS_BPS);
-                    consumedBoostBps = LOOTBOX_BOOST_5_BONUS_BPS;
-                    lootboxBoon5Active[player] = false;
-                }
-            }
+        // Check expiry
+        uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
+        if (stampDay != 0 && uint24(day) > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
+            // Expired: clear lootbox fields
+            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+            return boostedAmount;
         }
 
-        if (consumedBoostBps != 0) {
-            emit BoostUsed(player, day, amount, boostedAmount, consumedBoostBps);
-        }
+        // Apply boost
+        uint16 boostBps = _lootboxTierToBps(tier);
+        boostedAmount += _calculateBoost(amount, boostBps);
+
+        // Clear lootbox fields (consumed)
+        bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+
+        emit BoostUsed(player, day, amount, boostedAmount, boostBps);
     }
 
     /// @notice Resolve a lootbox directly (decimator claims) using provided RNG.
