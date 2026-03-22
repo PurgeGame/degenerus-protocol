@@ -176,9 +176,9 @@ Plans:
   1. A complete coinflip lifecycle trace exists covering bet placement through RNG request, fulfillment, roll computation, and payout, with every state transition identified
   2. All player-controllable state between coinflip bet and resolution is identified and each receives a SAFE or VULNERABLE verdict
   3. Multi-tx attack sequences (bet + manipulate + claim patterns) are modeled and each receives a verdict with exploitation feasibility assessment
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 70-01-PLAN.md -- Coinflip lifecycle trace + per-function commitment window analysis (COIN-01, COIN-02)
+- [x] 70-01-PLAN.md -- Coinflip lifecycle trace + per-function commitment window analysis (COIN-01, COIN-02)
 - [ ] 70-02-PLAN.md -- Multi-tx attack sequence modeling + severity summary (COIN-03)
 
 ### Phase 71: advanceGame Day RNG Window
@@ -229,7 +229,7 @@ Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72. Ph
 |-------|----------------|--------|-----------|
 | 68. Commitment Window Inventory | 2/2 | Complete    | 2026-03-22 |
 | 69. Mutation Verdicts | 2/2 | Complete    | 2026-03-22 |
-| 70. Coinflip Commitment Window | 0/2 | Not started | - |
+| 70. Coinflip Commitment Window | 1/2 | In Progress|  |
 | 71. advanceGame Day RNG Window | 0/2 | Planned | - |
 | 72. Ticket Queue Deep-Dive + Pattern Scan | 0/? | Not started | - |
 | 73. Boon Storage Packing | 2/3 | In Progress|  |

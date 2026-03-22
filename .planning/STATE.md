@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: VRF Commitment Window Audit
-status: Ready to plan
-stopped_at: Completed 73-02-PLAN.md
-last_updated: "2026-03-22T21:27:49.667Z"
+status: Ready to execute
+stopped_at: Completed 70-01-PLAN.md
+last_updated: "2026-03-22T23:04:01.309Z"
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 6
+  total_plans: 11
+  completed_plans: 7
 ---
 
 # State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 73 — boon-storage-packing
+**Current focus:** Phase 71 — advancegame-day-rng-window
 
 ## Current Position
 
-Phase: 73
-Plan: Not started
+Phase: 71 (advancegame-day-rng-window) — EXECUTING
+Plan: 2 of 2
 
 ## Accumulated Context
 
@@ -43,6 +43,9 @@ None (fresh milestone).
 - [Phase 69-mutation-verdicts]: CW-04 exhaustive proof: all 87 permissionless paths enumerated with 7 protection categories, count verified
 - [Phase 73]: Lootbox boost event emission decodes tier back to BPS via _lootboxTierToBps to preserve original event values
 - [Phase 73]: Lazy pass boon consumption re-reads slot1 before clearing to handle deity-path pre-clearing correctly
+- [Phase 70]: Game-over deposits unblocked by design -- lost deposits are INFO-level, not exploitable
+- [Phase 70]: sDGNRS auto-claim during processCoinflipPayouts safe -- BAF exclusion (line 556) prevents rngLocked revert
+- [Phase 70]: All 10 BurnieCoinflip entry points SAFE via five layered protections: day+1 keying, rngLockedFlag, pure-function outcome, access control, outcome-irrelevant writes
 
 ### Pending Todos
 
@@ -55,6 +58,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T21:27:49.665Z
-Stopped at: Completed 73-02-PLAN.md
+Last session: 2026-03-22T23:04:01.307Z
+Stopped at: Completed 70-01-PLAN.md
 Resume file: None
