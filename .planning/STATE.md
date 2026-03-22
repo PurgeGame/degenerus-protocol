@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: VRF Path Audit
 status: unknown
-stopped_at: Completed 63-02-PLAN.md
-last_updated: "2026-03-22T16:02:24.293Z"
+stopped_at: Completed 64-01-PLAN.md
+last_updated: "2026-03-22T16:34:19.992Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 63 — VRF Request/Fulfillment Core
+**Current focus:** Phase 64 — Lootbox RNG Lifecycle
 
 ## Current Position
 
-Phase: 63 (VRF Request/Fulfillment Core) — EXECUTING
+Phase: 64 (Lootbox RNG Lifecycle) — EXECUTING
 Plan: 2 of 2
 
 ## Performance Metrics
@@ -44,6 +44,7 @@ Plan: 2 of 2
 
 | Phase 63 P01 | 11min | 2 tasks | 1 files |
 | Phase 63 P02 | 4min | 2 tasks | 2 files |
+| Phase 64 P01 | 8min | 2 tasks | 1 files |
 
 ### Decisions
 
@@ -58,6 +59,9 @@ v3.7 context:
 - [Phase 63]: Absolute timestamps (N * 86400) used for cross-day boundary tests to avoid Foundry vm.warp relative-timestamp subtlety
 - [Phase 63]: 0 HIGH/MEDIUM/LOW findings: VRF core mechanism correct across all 4 VRFC requirements, Slot 0 assembly SAFE, gas budget 6-10x margin
 - [Phase 63]: V37-001 gameover entry point (_tryRequestRng) deferred to Phase 65 -- shares proven _finalizeRngRequest, low risk
+- [Phase 64]: Used public view getters (lootboxRngWord, lootboxStatus) instead of raw vm.load for lootbox state reads -- cleaner and less brittle
+- [Phase 64]: Backfill tests need 2+ gap days (day > dailyIdx + 1) to trigger _backfillOrphanedLootboxIndices code path
+- [Phase 64]: Entropy uniqueness verified via keccak256 preimage analysis using the contract formula, not end-to-end prize comparison
 
 ### Pending Todos
 
@@ -69,6 +73,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T16:02:24.291Z
-Stopped at: Completed 63-02-PLAN.md
+Last session: 2026-03-22T16:34:19.988Z
+Stopped at: Completed 64-01-PLAN.md
 Resume file: None
