@@ -43,17 +43,22 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v3.5 Gas ceiling analysis — 18 paths profiled (12 advanceGame + 6 purchase), 15 SAFE, 1 TIGHT, 2 AT_RISK, 4 INFO findings — v3.5 Phase 57
 - ✓ v3.5 Final Polish — 43 findings consolidated (10 LOW, 33 INFO) from comment correctness (26), gas optimization (13), and gas ceiling analysis (4) — v3.5 Phase 58
 
+### Validated
+
+- ✓ v3.6 VRF Stall Resilience — gap day RNG backfill, orphaned lootbox recovery, midDayTicketRngPending clearing, stall→swap→resume test coverage, delta audit (8 surfaces SAFE), 2 INFO findings — v3.6 Phases 59-62
+
+### Validated
+
+- ✓ v3.7 VRF Request/Fulfillment Core — rawFulfillRandomWords revert-safety proven, 300k gas budget 6-10x sufficient, vrfRequestId lifecycle verified, rngLockedFlag mutual exclusion airtight, 12h timeout retry correct, Slot 0 assembly SAFE, 22 Foundry fuzz tests, 0 HIGH/MEDIUM/LOW, 2 INFO — v3.7 Phase 63
+- ✓ v3.7 Lootbox RNG Lifecycle — all 5 LBOX requirements VERIFIED, index-to-word 1:1 mapping proven across daily/mid-day/retry/backfill/gameover paths, zero-state guards verified (4/5 guarded, 1 INFO-level 2^-256), per-player entropy uniqueness proven, full purchase-to-open lifecycle traced, 21 Foundry fuzz tests, 0 HIGH/MEDIUM/LOW, 2 INFO (V37-003, V37-004) — v3.7 Phase 64
+- ✓ v3.7 VRF Stall Edge Cases — all 7 STALL requirements VERIFIED, gap backfill entropy unique via keccak256 preimage, gas ceiling 18.9M (< 30M block limit), coordinator swap resets all 8 VRF state vars, zero-seed unreachable after swap, gameover fallback prevrandao 1-bit bias INFO, dailyIdx timing consistent, 17 Foundry fuzz tests, 0 HIGH/MEDIUM/LOW, 3 INFO (V37-005, V37-006, V37-007) — v3.7 Phase 65
+- ✓ v3.7 VRF Path Test Coverage — 7 invariant assertions (256 runs/depth 128), 6 parametric fuzz tests (1000 runs each), 4 Halmos symbolic proofs (0 counterexamples), redemption roll [25,175] bounds verified for all 2^256 inputs — v3.7 Phase 66
+- ✓ v3.7 Verification + Doc Sync — 66-VERIFICATION.md (10/10 must-haves), V37-001 RESOLVED, Phase 66 cross-references in all findings docs, KNOWN-ISSUES.md updated — v3.7 Phase 67
+
 ### Active
 
-## Current Milestone: v3.6 VRF Stall Resilience
-
-**Goal:** Ensure all RNG-dependent systems (coinflips, lootboxes, redemptions) gracefully handle VRF stall → coordinator swap → resume by backfilling gap day RNG words.
-
-**Target features:**
-- Gap day RNG backfill in advanceGame (derive words from first post-gap VRF response)
-- Orphaned lootbox index recovery
-- midDayTicketRngPending cleanup
-- Full stall→swap→resume test coverage
+- [ ] Coinflip RNG path audit under all conditions
+- [ ] advanceGame day RNG path verification
 
 ### Deferred (v3.3+)
 
@@ -119,9 +124,13 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 ---
 ## Current State
 
-v3.6 in progress — VRF Stall Resilience. Phase 59 complete: gap day RNG backfill (`_backfillGapDays` in `rngGate`) fills `rngWordByDay` via `keccak256(vrfWord, gapDay)` for all missed days, processes coinflip payouts per gap day; orphaned lootbox index recovery and `midDayTicketRngPending` clearing added to `updateVrfCoordinatorAndSub`. Phase 60 complete: `LootboxRngApplied` event added for orphaned index backfill (indexer parity), `totalFlipReversals` carry-over documented as design decision (nudges purchased with irreversible BURNIE burns).
+v3.7 shipped — VRF Path Audit complete. 77 Foundry/Halmos tests, 20/20 requirements, 0 HIGH/MEDIUM/LOW findings (7 INFO documented). All VRF-dependent code paths audited: request/fulfillment core, lootbox RNG lifecycle, stall edge cases, with invariant + symbolic verification.
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish).
+**Grand total across all milestones:** 87+ findings (16 LOW, 71+ INFO), 0 HIGH/MEDIUM outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified.
+
+**Remaining unaudited RNG paths:** Coinflip RNG consumption (COIN-01), advanceGame daily seed flow (DAYRNG-01).
+
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit).
 
 ## Evolution
 
@@ -141,4 +150,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-22 after Phase 60 (Coordinator Swap Cleanup) complete — v3.6 milestone in progress*
+*Last updated: 2026-03-22 after v3.7 milestone archived*
