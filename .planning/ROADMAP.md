@@ -149,9 +149,9 @@
   1. A complete forward-trace catalog exists listing every storage variable written or read by rawFulfillRandomWords through all downstream consumers, with contract name, slot number, and purpose
   2. A complete backward-trace catalog exists listing every storage variable that feeds into VRF-dependent outcome computations (from outcome back to committed inputs)
   3. For each cataloged variable, every external/public function that can mutate it is listed with call-graph depth (direct writes + indirect via internal calls)
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 68-01-PLAN.md -- Forward-trace + backward-trace catalogs (CW-01, CW-02)
+- [x] 68-01-PLAN.md -- Forward-trace + backward-trace catalogs (CW-01, CW-02)
 - [ ] 68-02-PLAN.md -- Mutation surface catalog + slot validation (CW-03)
 
 ### Phase 69: Mutation Verdicts
@@ -214,7 +214,7 @@ Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72. Ph
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 68. Commitment Window Inventory | 0/2 | Planning complete | - |
+| 68. Commitment Window Inventory | 1/2 | In Progress|  |
 | 69. Mutation Verdicts | 0/? | Not started | - |
 | 70. Coinflip Commitment Window | 0/? | Not started | - |
 | 71. advanceGame Day RNG Window | 0/? | Not started | - |
