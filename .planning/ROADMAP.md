@@ -107,7 +107,7 @@
 ### v3.6 VRF Stall Resilience
 
 - [x] **Phase 59: RNG Gap Backfill Implementation** — Implement gap day word backfill and orphaned index recovery (completed 2026-03-22)
-- [ ] **Phase 60: Coordinator Swap Cleanup** — Fix stale state in updateVrfCoordinatorAndSub
+- [x] **Phase 60: Coordinator Swap Cleanup** — Fix stale state in updateVrfCoordinatorAndSub (completed 2026-03-22)
 - [ ] **Phase 61: Stall Resilience Tests** — Foundry tests for full stall->swap->resume cycle
 - [ ] **Phase 62: Audit + Consolidated Findings** — Verify changes, document findings
 
@@ -135,7 +135,9 @@ Plans:
 **Success Criteria**:
   1. All stale VRF state properly reset during coordinator swap
   2. totalFlipReversals handling documented as design decision
-**Plans**: TBD
+**Plans:** 1/1 plans complete
+Plans:
+- [x] 60-01-PLAN.md — Add missing LootboxRngApplied event + totalFlipReversals NatSpec (SWAP-01, SWAP-02)
 
 ### Phase 61: Stall Resilience Tests
 **Goal**: Foundry tests prove the full stall->swap->resume cycle works end-to-end
@@ -160,8 +162,8 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 59. RNG Gap Backfill | 2/2 | Complete   | 2026-03-22 |
-| 60. Coordinator Swap Cleanup | 0/TBD | Not started | - |
+| 59. RNG Gap Backfill | 2/2 | Complete    | 2026-03-22 |
+| 60. Coordinator Swap Cleanup | 1/1 | Complete   | 2026-03-22 |
 | 61. Stall Resilience Tests | 0/TBD | Not started | - |
 | 62. Audit + Findings | 0/TBD | Not started | - |
 
