@@ -823,6 +823,7 @@ abstract contract DegenerusGameStorage {
     // SECURITY: Single-use consumable; prevents stacking/hoarding.
     // Expiration prevents indefinite storage.
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day index when coinflip boon was awarded (per player).
     ///      Used to enforce 2-day expiration window (expires at jackpot reset).
     mapping(address => uint48) internal coinflipBoonDay;
@@ -831,6 +832,7 @@ abstract contract DegenerusGameStorage {
     // Lootbox Boost Boons
     // =========================================================================
 
+    // @deprecated Replaced by boonPacked
     /// @dev Lootbox 5% boost boon active flag per player (simple on/off).
     ///      Awarded randomly from lootboxes (2% chance per ETH spent).
     ///      Consumed on next lootbox: adds 5% to lootbox value (max 10 ETH lootbox).
@@ -840,10 +842,12 @@ abstract contract DegenerusGameStorage {
     ///      Simple boolean prevents accumulation.
     mapping(address => bool) internal lootboxBoon5Active;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day index when lootbox 5% boost boon was awarded (per player).
     ///      Used to enforce 2-day expiration window (expires at jackpot reset).
     mapping(address => uint48) internal lootboxBoon5Day;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Lootbox 15% boost boon active flag per player (simple on/off).
     ///      Awarded randomly from lootboxes (0.5% chance per ETH spent).
     ///      Consumed on next lootbox: adds 15% to lootbox value (max 10 ETH lootbox).
@@ -853,10 +857,12 @@ abstract contract DegenerusGameStorage {
     ///      Simple boolean prevents accumulation.
     mapping(address => bool) internal lootboxBoon15Active;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day index when lootbox 15% boost boon was awarded (per player).
     ///      Used to enforce 2-day expiration window (expires at jackpot reset).
     mapping(address => uint48) internal lootboxBoon15Day;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Lootbox 25% boost boon active flag per player (simple on/off).
     ///      Awarded randomly from lootboxes (0.1% chance per ETH spent).
     ///      Consumed on next lootbox: adds 25% to lootbox value (max 10 ETH lootbox).
@@ -866,6 +872,7 @@ abstract contract DegenerusGameStorage {
     ///      Simple boolean prevents accumulation.
     mapping(address => bool) internal lootboxBoon25Active;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day index when lootbox 25% boost boon was awarded (per player).
     ///      Used to enforce 2-day expiration window (expires at jackpot reset).
     mapping(address => uint48) internal lootboxBoon25Day;
@@ -874,11 +881,13 @@ abstract contract DegenerusGameStorage {
     // Whale Bundle Boon
     // =========================================================================
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when whale bundle boon was awarded (per player).
     ///      Allows purchasing 100-level whale bundle at any level with tiered discount.
     ///      EXPIRES: Must be used within 4 days of award (cleared on use or expiry).
     mapping(address => uint48) internal whaleBoonDay;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Discount tier (in BPS) for whale bundle boon (per player).
     ///      Set when boon is awarded: 1000 = 10%, 2500 = 25%, 5000 = 50%.
     mapping(address => uint16) internal whaleBoonDiscountBps;
@@ -887,10 +896,12 @@ abstract contract DegenerusGameStorage {
     // Activity Boons (Mint/Quest Streak Boosts)
     // =========================================================================
 
+    // @deprecated Replaced by boonPacked
     /// @dev Pending activity boon bonus levels per player.
     ///      Applied on lootbox open via game call; expires if not opened within 2 days.
     mapping(address => uint24) internal activityBoonPending;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day index when activity boon was last assigned (per player).
     ///      Used to enforce 2-day expiration window (expires at jackpot reset).
     mapping(address => uint48) internal activityBoonDay;
@@ -927,15 +938,19 @@ abstract contract DegenerusGameStorage {
     // Purchase / Burn Boosts (One-Off)
     // =========================================================================
 
+    // @deprecated Replaced by boonPacked
     /// @dev Purchase boost basis points (5%/15%/25%), one-time, time-limited.
     mapping(address => uint16) internal purchaseBoostBps;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day index when purchase boost was awarded (expires at jackpot reset).
     mapping(address => uint48) internal purchaseBoostDay;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Decimator burn boost basis points (10%/25%/50%), one-time, no expiry.
     mapping(address => uint16) internal decimatorBoostBps;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Coinflip boon boost basis points (5%/10%/25%), one-time, time-limited.
     mapping(address => uint16) internal coinflipBoonBps;
 
@@ -1360,27 +1375,35 @@ abstract contract DegenerusGameStorage {
     /// @dev Day when recipient last received a deity boon (prevents double-receipt).
     mapping(address => uint48) internal deityBoonRecipientDay;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when deity-granted coinflip boon was issued.
     mapping(address => uint48) internal deityCoinflipBoonDay;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when deity-granted 5% lootbox boost was issued.
     mapping(address => uint48) internal deityLootboxBoon5Day;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when deity-granted 15% lootbox boost was issued.
     mapping(address => uint48) internal deityLootboxBoon15Day;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when deity-granted 25% lootbox boost was issued.
     mapping(address => uint48) internal deityLootboxBoon25Day;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when deity-granted purchase boost was issued.
     mapping(address => uint48) internal deityPurchaseBoostDay;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when deity-granted decimator boost was issued.
     mapping(address => uint48) internal deityDecimatorBoostDay;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when deity-granted whale boon was issued.
     mapping(address => uint48) internal deityWhaleBoonDay;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when deity-granted activity boon was issued.
     mapping(address => uint48) internal deityActivityBoonDay;
 
@@ -1408,14 +1431,17 @@ abstract contract DegenerusGameStorage {
     // Deity Pass Purchase Boon (Lootbox Reward)
     // =========================================================================
 
+    // @deprecated Replaced by boonPacked
     /// @dev Deity pass purchase boon tier per player.
     ///      0 = none, 1 = 10% discount, 2 = 25% discount, 3 = 50% discount.
     ///      Awarded randomly from lootboxes; extremely rare.
     mapping(address => uint8) internal deityPassBoonTier;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day index when deity pass boon was awarded (4-day expiry for lootbox-rolled).
     mapping(address => uint48) internal deityPassBoonDay;
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when deity-granted deity pass boon was issued (1-day expiry).
     mapping(address => uint48) internal deityDeityPassBoonDay;
 
@@ -1478,11 +1504,14 @@ abstract contract DegenerusGameStorage {
     // Lazy Pass Boon State
     // =========================================================================
 
+    // @deprecated Replaced by boonPacked
     /// @dev Day when lazy pass boon was awarded.
     ///      Allows discounted lazy pass purchase for 4 days.
     mapping(address => uint48) internal lazyPassBoonDay;
+    // @deprecated Replaced by boonPacked
     /// @dev Lazy pass boon discount in BPS (1000/2500/5000).
     mapping(address => uint16) internal lazyPassBoonDiscountBps;
+    // @deprecated Replaced by boonPacked
     /// @dev Deity-sourced day index (expires when day changes). 0 for lootbox-sourced boons.
     mapping(address => uint48) internal deityLazyPassBoonDay;
 
@@ -1581,4 +1610,197 @@ abstract contract DegenerusGameStorage {
         uint128 totalBurn;
     }
     TerminalDecClaimRound internal lastTerminalDecClaimRound;
+
+    // =========================================================================
+    // Boon Packed Storage (replaces 29 per-player boon mappings above)
+    // =========================================================================
+
+    /// @dev Packed boon state for a single player. 2 storage slots.
+    ///
+    /// Slot 0 (256 bits):
+    ///   [0-23]    coinflipDay          uint24   Day coinflip boon was awarded
+    ///   [24-47]   deityCoinflipDay     uint24   Deity-source day for coinflip boon
+    ///   [48-55]   coinflipTier         uint8    0=none, 1=5%, 2=10%, 3=25%
+    ///   [56-79]   lootboxBoostDay      uint24   Day lootbox boost was awarded
+    ///   [80-103]  deityLootboxDay      uint24   Deity-source day for lootbox boost
+    ///   [104-111] lootboxBoostTier     uint8    0=none, 1=5%, 2=15%, 3=25%
+    ///   [112-135] purchaseDay          uint24   Day purchase boost was awarded
+    ///   [136-159] deityPurchaseDay     uint24   Deity-source day for purchase boost
+    ///   [160-167] purchaseTier         uint8    0=none, 1=5%, 2=15%, 3=25%
+    ///   [168-175] decimatorTier        uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///   [176-199] deityDecimatorDay    uint24   Deity-source day for decimator
+    ///   [200-223] whaleDay             uint24   Day whale boon was awarded
+    ///   [224-247] deityWhaleDay        uint24   Deity-source day for whale boon
+    ///   [248-255] whaleTier            uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///
+    /// Slot 1 (256 bits, using 184):
+    ///   [0-23]    activityPending      uint24   Pending activity bonus levels
+    ///   [24-47]   activityDay          uint24   Day activity boon was awarded
+    ///   [48-71]   deityActivityDay     uint24   Deity-source day for activity boon
+    ///   [72-79]   deityPassTier        uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///   [80-103]  deityPassDay         uint24   Day deity pass boon was awarded
+    ///   [104-127] deityDeityPassDay    uint24   Deity-granted deity pass boon day
+    ///   [128-151] lazyPassDay          uint24   Day lazy pass boon was awarded
+    ///   [152-175] deityLazyPassDay     uint24   Deity-source day for lazy pass boon
+    ///   [176-183] lazyPassTier         uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///   [184-255] (unused, 72 bits)
+    struct BoonPacked {
+        uint256 slot0;
+        uint256 slot1;
+    }
+
+    /// @dev Per-player packed boon state. Replaces the 29 individual boon mappings
+    ///      (slots 25-41, 72-82, 85-87, 93-95) which remain as slot placeholders.
+    mapping(address => BoonPacked) internal boonPacked;
+
+    // ---- Slot 0 shifts ----
+    uint256 internal constant BP_COINFLIP_DAY_SHIFT        = 0;
+    uint256 internal constant BP_DEITY_COINFLIP_DAY_SHIFT   = 24;
+    uint256 internal constant BP_COINFLIP_TIER_SHIFT        = 48;
+    uint256 internal constant BP_LOOTBOX_DAY_SHIFT          = 56;
+    uint256 internal constant BP_DEITY_LOOTBOX_DAY_SHIFT    = 80;
+    uint256 internal constant BP_LOOTBOX_TIER_SHIFT         = 104;
+    uint256 internal constant BP_PURCHASE_DAY_SHIFT         = 112;
+    uint256 internal constant BP_DEITY_PURCHASE_DAY_SHIFT   = 136;
+    uint256 internal constant BP_PURCHASE_TIER_SHIFT        = 160;
+    uint256 internal constant BP_DECIMATOR_TIER_SHIFT       = 168;
+    uint256 internal constant BP_DEITY_DECIMATOR_DAY_SHIFT  = 176;
+    uint256 internal constant BP_WHALE_DAY_SHIFT            = 200;
+    uint256 internal constant BP_DEITY_WHALE_DAY_SHIFT      = 224;
+    uint256 internal constant BP_WHALE_TIER_SHIFT           = 248;
+
+    // ---- Slot 1 shifts ----
+    uint256 internal constant BP_ACTIVITY_PENDING_SHIFT     = 0;
+    uint256 internal constant BP_ACTIVITY_DAY_SHIFT         = 24;
+    uint256 internal constant BP_DEITY_ACTIVITY_DAY_SHIFT   = 48;
+    uint256 internal constant BP_DEITY_PASS_TIER_SHIFT      = 72;
+    uint256 internal constant BP_DEITY_PASS_DAY_SHIFT       = 80;
+    uint256 internal constant BP_DEITY_DEITY_PASS_DAY_SHIFT = 104;
+    uint256 internal constant BP_LAZY_PASS_DAY_SHIFT        = 128;
+    uint256 internal constant BP_DEITY_LAZY_PASS_DAY_SHIFT  = 152;
+    uint256 internal constant BP_LAZY_PASS_TIER_SHIFT       = 176;
+
+    // ---- Masks ----
+    uint256 internal constant BP_MASK_24 = 0xFFFFFF;
+    uint256 internal constant BP_MASK_8  = 0xFF;
+
+    // ---- Clear masks for boon categories (slot 0) ----
+    // Coinflip: bits 0-55 (coinflipDay[24] + deityCoinflipDay[24] + coinflipTier[8])
+    uint256 internal constant BP_COINFLIP_CLEAR = ~uint256((1 << 56) - 1);
+    // Lootbox: bits 56-111 (lootboxDay[24] + deityLootboxDay[24] + lootboxTier[8])
+    uint256 internal constant BP_LOOTBOX_CLEAR = ~(uint256((1 << 56) - 1) << 56);
+    // Purchase: bits 112-167 (purchaseDay[24] + deityPurchaseDay[24] + purchaseTier[8])
+    uint256 internal constant BP_PURCHASE_CLEAR = ~(uint256((1 << 56) - 1) << 112);
+    // Decimator: bits 168-199 (decimatorTier[8] + deityDecimatorDay[24])
+    uint256 internal constant BP_DECIMATOR_CLEAR = ~(uint256((1 << 32) - 1) << 168);
+    // Whale: bits 200-255 (whaleDay[24] + deityWhaleDay[24] + whaleTier[8])
+    uint256 internal constant BP_WHALE_CLEAR = ~(uint256((1 << 56) - 1) << 200);
+
+    // ---- Clear masks for boon categories (slot 1) ----
+    // Activity: bits 0-71 (activityPending[24] + activityDay[24] + deityActivityDay[24])
+    uint256 internal constant BP_ACTIVITY_CLEAR = ~uint256((1 << 72) - 1);
+    // Deity pass: bits 72-127 (deityPassTier[8] + deityPassDay[24] + deityDeityPassDay[24])
+    uint256 internal constant BP_DEITY_PASS_CLEAR = ~(uint256((1 << 56) - 1) << 72);
+    // Lazy pass: bits 128-183 (lazyPassDay[24] + deityLazyPassDay[24] + lazyPassTier[8])
+    uint256 internal constant BP_LAZY_PASS_CLEAR = ~(uint256((1 << 56) - 1) << 128);
+
+    // =========================================================================
+    // Boon Tier <-> BPS Decode/Encode Helpers
+    // =========================================================================
+
+    /// @dev Decode coinflip tier to BPS. Tier: 0=0, 1=500, 2=1000, 3=2500.
+    function _coinflipTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 2500;
+        if (tier == 2) return 1000;
+        if (tier == 1) return 500;
+        return 0;
+    }
+
+    /// @dev Decode lootbox boost tier to BPS. Tier: 0=0, 1=500, 2=1500, 3=2500.
+    function _lootboxTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 2500;
+        if (tier == 2) return 1500;
+        if (tier == 1) return 500;
+        return 0;
+    }
+
+    /// @dev Decode purchase boost tier to BPS. Tier: 0=0, 1=500, 2=1500, 3=2500.
+    function _purchaseTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 2500;
+        if (tier == 2) return 1500;
+        if (tier == 1) return 500;
+        return 0;
+    }
+
+    /// @dev Decode decimator boost tier to BPS. Tier: 0=0, 1=1000, 2=2500, 3=5000.
+    function _decimatorTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 5000;
+        if (tier == 2) return 2500;
+        if (tier == 1) return 1000;
+        return 0;
+    }
+
+    /// @dev Decode whale boon tier to BPS. Tier: 0=0, 1=1000, 2=2500, 3=5000.
+    function _whaleTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 5000;
+        if (tier == 2) return 2500;
+        if (tier == 1) return 1000;
+        return 0;
+    }
+
+    /// @dev Decode lazy pass boon tier to BPS. Tier: 0=0, 1=1000, 2=2500, 3=5000.
+    function _lazyPassTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 5000;
+        if (tier == 2) return 2500;
+        if (tier == 1) return 1000;
+        return 0;
+    }
+
+    /// @dev Encode coinflip BPS to tier. 500->1, 1000->2, 2500->3, else 0.
+    function _coinflipBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 2500) return 3;
+        if (bps >= 1000) return 2;
+        if (bps >= 500) return 1;
+        return 0;
+    }
+
+    /// @dev Encode lootbox BPS to tier. 500->1, 1500->2, 2500->3, else 0.
+    function _lootboxBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 2500) return 3;
+        if (bps >= 1500) return 2;
+        if (bps >= 500) return 1;
+        return 0;
+    }
+
+    /// @dev Encode purchase BPS to tier. 500->1, 1500->2, 2500->3, else 0.
+    function _purchaseBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 2500) return 3;
+        if (bps >= 1500) return 2;
+        if (bps >= 500) return 1;
+        return 0;
+    }
+
+    /// @dev Encode decimator BPS to tier. 1000->1, 2500->2, 5000->3, else 0.
+    function _decimatorBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 5000) return 3;
+        if (bps >= 2500) return 2;
+        if (bps >= 1000) return 1;
+        return 0;
+    }
+
+    /// @dev Encode whale BPS to tier. 1000->1, 2500->2, 5000->3, else 0.
+    function _whaleBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 5000) return 3;
+        if (bps >= 2500) return 2;
+        if (bps >= 1000) return 1;
+        return 0;
+    }
+
+    /// @dev Encode lazy pass BPS to tier. 1000->1, 2500->2, 5000->3, else 0.
+    function _lazyPassBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 5000) return 3;
+        if (bps >= 2500) return 2;
+        if (bps >= 1000) return 1;
+        return 0;
+    }
 }
