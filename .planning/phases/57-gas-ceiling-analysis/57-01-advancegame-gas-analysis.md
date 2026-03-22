@@ -342,9 +342,15 @@ If only 200 units are consumed (66 auto-rebuy winners), total drops to ~4.5M gas
 advanceGame() [AdvanceModule:126]
   -> rngGate() -- RNG word consumed (or requests new VRF)
   -> payDailyJackpot(false, purchaseLevel, rngWord) [AdvanceModule:285, delegatecall JackpotModule:323]
-  |   -> isDaily=false path: early-burn daily distribution
-  |   -> _processDailyEthChunk with unitsBudget = DAILY_JACKPOT_UNITS_SAFE = 1000
-  |   -> Same chunking as Stage 11 but typically smaller pool (purchase phase, not jackpot phase)
+  |   -> isDaily=false path (non-daily / early-burn) [JackpotModule:609-667]
+  |   -> _rollWinningTraits() + _syncDailyWinningTraits()
+  |   -> Conditional ethDaySlice: 1% futurePool drip (if daysSince > 0 && lvl > 1)
+  |   -> _executeJackpot() [JackpotModule:1310] -- NOT chunked, runs to completion
+  |   |   -> _runJackpotEthFlow() -> _distributeJackpotEth()
+  |   |   -> Up to JACKPOT_MAX_WINNERS=300 winners, 4 buckets (MAX_BUCKET_WINNERS=250 per bucket)
+  |   |   -> Per winner: _addClaimableEth (auto-rebuy or normal)
+  |   -> _distributeLootboxAndTickets() (conditional on lootboxBudget)
+  |   -> coin.rollDailyQuest()
   -> _payDailyCoinJackpot(purchaseLevel, rngWord) [AdvanceModule:286, delegatecall JackpotModule:2361]
   |   -> _calcDailyCoinBudget
   |   -> _awardFarFutureCoinJackpot (10 iterations)
@@ -353,22 +359,23 @@ advanceGame() [AdvanceModule:126]
   -> _unlockRng(day), _unfreezePool() [AdvanceModule:293-294]
 ```
 
+**Critical detail:** When `isDaily=false`, `payDailyJackpot` does NOT use `_processDailyEthChunk` with chunking. Instead, it uses `_executeJackpot` -> `_distributeJackpotEth` which distributes to all winners in a single call with NO unit budget and NO cursor-based resume. The maximum winner count is `JACKPOT_MAX_WINNERS = 300`.
+
 **Loop Analysis:**
 
 | Loop | Bound | Per-Iteration Cost | Worst-Case Total |
 |------|-------|--------------------|------------------|
-| payDailyJackpot(false) Phase 0 chunk | 1000 units / 3 per winner = 333 max | ~25,000 per auto-rebuy winner | ~8,325,000 |
+| _distributeJackpotEth (non-chunked) | 300 (JACKPOT_MAX_WINNERS) | ~25,000 per auto-rebuy winner / ~12,000 per normal winner | ~7,500,000 (auto-rebuy) / ~3,600,000 (normal) |
 | _payDailyCoinJackpot: _awardFarFutureCoinJackpot | 10 (fixed) | ~8,000 | ~80,000 |
 | _payDailyCoinJackpot: _awardDailyCoinToTraitWinners | 50 (DAILY_COIN_MAX_WINNERS) | ~6,000 | ~300,000 |
-
-Note: During the purchase phase, `payDailyJackpot(false, ...)` path follows the same `_processDailyEthChunk` logic with the same `unitsBudget = 1000`. The daily init logic is similar but without earlybird (that only fires on jackpot phase Day 1).
+| _distributeLootboxAndTickets | 100 (LOOTBOX_MAX_WINNERS) | ~5,000 | ~500,000 |
 
 **Storage Operations:**
 
 | Operation | Count | Gas |
 |-----------|-------|-----|
-| Cold SLOADs (init + 333 autoRebuyState) | ~353 | ~741,300 |
-| Cold SSTOREs (333 winner credits + daily state) | ~340 | ~1,700,000 |
+| Cold SLOADs (init + 300 autoRebuyState) | ~320 | ~672,000 |
+| Cold SSTOREs (300 winner credits) | ~300 | ~1,500,000 |
 
 **External Calls:**
 
@@ -376,35 +383,39 @@ Note: During the purchase phase, `payDailyJackpot(false, ...)` path follows the 
 |------|--------|-----|
 | JackpotModule.payDailyJackpot() | delegatecall (cold) | ~2,600 |
 | JackpotModule.payDailyCoinJackpot() | delegatecall (cold) | ~2,600 |
+| coin.rollDailyQuest() | external (warm) | ~10,000 |
 
 **Events:**
 
 | Event | Count | Gas |
 |-------|-------|-----|
-| JackpotTicketWinner / PlayerCredited (333 ETH winners) | 333 | ~1,165,000 |
-| AutoRebuyExecuted (333 auto-rebuy winners) | 333 | ~1,165,000 |
+| JackpotTicketWinner / PlayerCredited (300 ETH winners) | 300 | ~1,050,000 |
+| AutoRebuyExecuted (300 auto-rebuy winners) | 300 | ~1,050,000 |
 | CoinJackpotWinner (50 coin winners) | 50 | ~175,000 |
 
-**Worst-Case Total (all auto-rebuy):**
+**Worst-Case Total (all auto-rebuy, 300 winners):**
 
 | Component | Gas |
 |-----------|-----|
 | Common overhead | 75,000 |
 | Delegatecall hops (JackpotModule x2) | ~5,200 |
 | rngGate (word available) | ~5,000 |
-| Daily init (trait roll, budget calc) | ~60,000 |
-| _processDailyEthChunk (333 auto-rebuy winners) | ~8,325,000 |
+| Trait roll + ethDaySlice calc + pool ops | ~30,000 |
+| _distributeJackpotEth (300 auto-rebuy winners) | ~7,500,000 |
+| _distributeLootboxAndTickets (100 lootbox winners) | ~500,000 |
 | _payDailyCoinJackpot (50 BURNIE winners + 10 far-future) | ~380,000 |
-| Winner storage (SLOADs + SSTOREs) | ~2,441,300 |
-| Events (333 x 2 + 50 coin) | ~2,505,000 |
+| Winner storage (SLOADs + SSTOREs for 300) | ~2,172,000 |
+| Events (300 x 2 + 50 coin) | ~2,275,000 |
 | _unlockRng + _unfreezePool | ~10,000 |
-| **TOTAL** | **~13,806,500** |
+| **TOTAL** | **~12,952,200** |
 
-**Headroom:** 14,000,000 - 13,806,500 = **193,500 gas**
+**Headroom:** 14,000,000 - 12,952,200 = **1,047,800 gas**
 
-**Max Payouts:** Same analysis as Stage 11. The unitsBudget = 1000 caps at 333 auto-rebuy winners per chunk. The daily coin jackpot adds 50 winners but those are BURNIE transfers (cheaper than ETH distribution).
+**Note on pool economics:** During the purchase phase, the early-burn ETH pool is small (1% daily drip from futurePool). With typical futurePool values, the actual number of winners is much lower than 300 because bucket counts scale with pool size. The 300-winner worst case requires a very large futurePool.
 
-**Risk Level: AT_RISK** (<1M headroom with all auto-rebuy winners; this is the same fundamental constraint as Stage 11)
+**Max Payouts under 14M:** At ~43,000 gas per auto-rebuy winner (all inclusive), 14M budget with ~120,000 overhead supports ~323 winners. **Code constant (300) is the binding constraint.**
+
+**Risk Level: TIGHT** (1-3M headroom; non-chunked but code-bounded at 300 winners)
 
 ---
 
@@ -505,12 +516,499 @@ Terminal jackpot subtotal: **~8,378,100**
 
 ---
 
-## Heavy-Hitter Summary Table
+## Lighter Stage Analysis
 
-| Stage | Name | Worst-Case Gas | Headroom | Max Payouts | Risk Level |
-|-------|------|----------------|----------|-------------|------------|
-| 10 | JACKPOT_PHASE_ENDED | ~6,058,000 | 7,942,000 | 107 (BAF code cap) | SAFE |
-| 7 | ENTERED_JACKPOT | ~1,972,000 | 12,028,000 | N/A (consolidation) | SAFE |
-| 11 | JACKPOT_DAILY_STARTED | ~14,162,000 (Day 1 + all auto-rebuy) / ~13,157,000 (non-Day-1) | -162,000 / 843,000 | 333 (unitsBudget=1000 / 3) | AT_RISK |
-| 6 | PURCHASE_DAILY | ~13,807,000 (all auto-rebuy) | 193,000 | 333 + 50 coin | AT_RISK |
-| 0 | GAMEOVER | ~9,036,000 | 4,964,000 | 321 (terminal, no auto-rebuy) + 32 deity | SAFE |
+### Stage 1: RNG_REQUESTED
+
+**Entry Conditions:** New day detected, no pending VRF word. The game needs a fresh random word from Chainlink VRF for daily jackpot resolution.
+
+**Call Graph:**
+
+```
+advanceGame() [AdvanceModule:126]
+  -> rngGate(ts, day, purchaseLevel, lastPurchase, bonusFlip) [AdvanceModule:234]
+  |   -> rngWordByDay[day] == 0, rngWordCurrent == 0 or stale
+  |   -> Falls through to _requestRng() path, returns 1
+  -> _swapAndFreeze(purchaseLevel) [AdvanceModule:236, Storage:728]
+  |   -> _swapTicketSlot(): 2 SSTOREs (read/write key swap)
+  |   -> prizePoolFrozen = true: 1 SSTORE
+  |   -> prizePoolPendingPacked = 0: 1 SSTORE
+  -> emit Advance(STAGE_RNG_REQUESTED), coin.creditFlip
+```
+
+**Loop Analysis:** No loops. This is a linear path with a single external VRF call.
+
+**Storage Operations:**
+
+| Operation | Count | Gas |
+|-----------|-------|-----|
+| Cold SLOADs (rngWordByDay, rngWordCurrent, rngRequestTime, vrfCoordinator, vrfKeyHash, vrfSubscriptionId) | ~8 | ~16,800 |
+| Cold SSTOREs (_swapTicketSlot swap, prizePoolFrozen, prizePoolPendingPacked, rngLockedFlag, vrfRequestId, rngRequestTime, rngWordCurrent) | ~8 | ~40,000 |
+
+**External Calls:**
+
+| Call | Target | Gas |
+|------|--------|-----|
+| vrfCoordinator.requestRandomWords() | Chainlink VRF (cold) | ~50,000 |
+
+**Worst-Case Total:**
+
+| Component | Gas |
+|-----------|-----|
+| Common overhead | 75,000 |
+| rngGate logic (SLOADs + conditionals) | ~20,000 |
+| _swapAndFreeze | ~45,000 |
+| VRF requestRandomWords | ~50,000 |
+| _finalizeRngRequest storage writes | ~25,000 |
+| **TOTAL** | **~215,000** |
+
+**Headroom:** 14,000,000 - 215,000 = **13,785,000 gas** (98.5% remaining)
+
+**Risk Level: SAFE** (>3M headroom)
+
+---
+
+### Stage 2: TRANSITION_WORKING
+
+**Entry Conditions:** `phaseTransitionActive` is true, `_processPhaseTransition()` returns false (transition not yet complete). In practice, `_processPhaseTransition` always returns true in a single call (it queues 2 x 16 tickets and stakes ETH), so this stage is only reachable if `_processPhaseTransition` were to be modified to chunk work. Currently, it completes atomically and the flow falls through to STAGE_TRANSITION_DONE.
+
+**Call Graph:**
+
+```
+advanceGame() [AdvanceModule:126]
+  -> rngGate() -- RNG word available
+  -> phaseTransitionActive is true [AdvanceModule:242]
+  -> _processPhaseTransition(purchaseLevel) [AdvanceModule:1174]
+  |   -> _queueTickets(SDGNRS, targetLevel, 16) [Storage]
+  |   -> _queueTickets(VAULT, targetLevel, 16) [Storage]
+  |   -> _autoStakeExcessEth() [AdvanceModule:1192]
+  |       -> address(this).balance check
+  |       -> steth.submit{value}() -- try/catch, non-blocking
+  -> Returns false (hypothetical): stage = STAGE_TRANSITION_WORKING
+  -> emit Advance, coin.creditFlip
+```
+
+**Loop Analysis:** No loops. Two `_queueTickets` calls (O(1) each -- array push or packed update), one external stETH call.
+
+**Storage Operations:**
+
+| Operation | Count | Gas |
+|-----------|-------|-----|
+| Cold SLOADs (phaseTransitionActive, claimablePool, address balance) | ~5 | ~10,500 |
+| Cold SSTOREs (_queueTickets x2: ticketsOwedPacked writes, queue pushes) | ~4 | ~88,400 (2 zero->nonzero at 22,100 each + 2 array pushes at 22,100) |
+| Warm SSTORE (pool state updates) | ~2 | ~200 |
+
+**External Calls:**
+
+| Call | Target | Gas |
+|------|--------|-----|
+| steth.submit{value}() | Lido stETH (cold) | ~30,000 (try/catch, non-blocking) |
+
+**Worst-Case Total:**
+
+| Component | Gas |
+|-----------|-----|
+| Common overhead | 75,000 |
+| rngGate (word available) | ~5,000 |
+| _queueTickets x2 | ~90,000 |
+| _autoStakeExcessEth (stETH submit) | ~35,000 |
+| **TOTAL** | **~205,000** |
+
+**Headroom:** 14,000,000 - 205,000 = **13,795,000 gas** (98.5% remaining)
+
+**Risk Level: SAFE** (>3M headroom)
+
+---
+
+### Stage 3: TRANSITION_DONE
+
+**Entry Conditions:** `phaseTransitionActive` is true, `_processPhaseTransition()` returns true (transition completed). This is the normal outcome -- transition completes in one call.
+
+**Call Graph:**
+
+```
+advanceGame() [AdvanceModule:126]
+  -> rngGate() -- RNG word available
+  -> phaseTransitionActive is true [AdvanceModule:242]
+  -> _processPhaseTransition(purchaseLevel) returns true [AdvanceModule:243]
+  -> phaseTransitionActive = false [AdvanceModule:247]
+  -> _unlockRng(day) [AdvanceModule:248]
+  -> _unfreezePool() [AdvanceModule:249, Storage:738]
+  -> purchaseStartDay = day [AdvanceModule:250]
+  -> jackpotPhaseFlag = false [AdvanceModule:251]
+  -> emit Advance(STAGE_TRANSITION_DONE), coin.creditFlip
+```
+
+**Loop Analysis:** No loops. Same as TRANSITION_WORKING but with additional flag updates after completion.
+
+**Storage Operations:**
+
+| Operation | Count | Gas |
+|-----------|-------|-----|
+| All from TRANSITION_WORKING | ~9 | ~99,100 |
+| Additional cold SSTOREs (phaseTransitionActive=false, rngLockedFlag, prizePoolFrozen, purchaseStartDay, jackpotPhaseFlag) | ~5 | ~25,000 |
+| _unfreezePool: read pending pools + write live pools + clear pending | ~3 SLOADs + ~3 SSTOREs | ~21,600 |
+
+**Worst-Case Total:**
+
+| Component | Gas |
+|-----------|-----|
+| Common overhead | 75,000 |
+| rngGate (word available) | ~5,000 |
+| _processPhaseTransition (tickets + stETH) | ~125,000 |
+| Flag updates + _unlockRng + _unfreezePool | ~50,000 |
+| **TOTAL** | **~255,000** |
+
+**Headroom:** 14,000,000 - 255,000 = **13,745,000 gas** (98.2% remaining)
+
+**Risk Level: SAFE** (>3M headroom)
+
+---
+
+### Stage 4: FUTURE_TICKETS_WORKING
+
+**Entry Conditions:** No daily jackpot in progress (all cursor/budget fields zero), `_prepareFutureTickets(lvl)` returns false (not all future levels processed). This activates tickets for levels lvl+2 through lvl+6.
+
+**Call Graph:**
+
+```
+advanceGame() [AdvanceModule:126]
+  -> rngGate() -- RNG word available
+  -> _prepareFutureTickets(lvl) [AdvanceModule:1109]
+  |   -> For each level in [lvl+2, lvl+6]:
+  |       -> _processFutureTicketBatch(target) [AdvanceModule:1087]
+  |           -> delegatecall MintModule.processFutureTicketBatch()
+  |               -> processTicketBatch bounded by WRITES_BUDGET_SAFE=550
+  |   -> Returns false when any level has remaining work
+  -> stage = STAGE_FUTURE_TICKETS_WORKING
+  -> emit Advance, coin.creditFlip
+```
+
+**Loop Analysis:**
+
+| Loop | Bound | Per-Iteration Cost | Worst-Case Total |
+|------|-------|--------------------|------------------|
+| _prepareFutureTickets: outer level loop | 5 (lvl+2 to lvl+6) | Variable (one processTicketBatch per level) | N/A -- exits after first incomplete level |
+| processTicketBatch inner loop | WRITES_BUDGET_SAFE=550 (357 on first batch) | ~5,000 per SSTORE write (ticket generation + trait assignment) | ~2,750,000 (full budget) / ~1,785,000 (first batch) |
+
+In practice, `_prepareFutureTickets` calls `_processFutureTicketBatch` and returns false as soon as any level does work or is incomplete. So each `advanceGame()` call processes at most ONE batch of 550 writes (or 357 on first call for that level).
+
+**Storage Operations:**
+
+| Operation | Count | Gas |
+|-----------|-------|-----|
+| Cold SLOADs (ticketLevel, ticketCursor, ticketQueue length, ticketsOwedPacked) | ~5 | ~10,500 |
+| Cold SSTOREs (up to 550 ticket writes) | 550 | ~2,750,000 |
+| Cursor updates (ticketCursor, ticketLevel) | ~2 | ~10,000 |
+
+**External Calls:**
+
+| Call | Target | Gas |
+|------|--------|-----|
+| MintModule.processFutureTicketBatch() | delegatecall (cold) | ~2,600 |
+
+**Events:**
+
+| Event | Count | Gas |
+|-------|-------|-----|
+| TraitsGenerated | ~10 (per player batch) | ~15,000 |
+
+**Worst-Case Total (full 550-write batch):**
+
+| Component | Gas |
+|-----------|-----|
+| Common overhead | 75,000 |
+| rngGate (word available) | ~5,000 |
+| Delegatecall (MintModule) | ~2,600 |
+| processTicketBatch (550 SSTOREs) | ~2,750,000 |
+| Cursor + state updates | ~15,000 |
+| Events | ~15,000 |
+| **TOTAL** | **~2,862,600** |
+
+**First-batch total (357 writes):** ~1,897,600
+
+**Headroom:** 14,000,000 - 2,862,600 = **11,137,400 gas** (79.6% remaining)
+
+**Risk Level: SAFE** (>3M headroom)
+
+---
+
+### Stage 5: TICKETS_WORKING
+
+**Entry Conditions:** Current level ticket queue has entries, `ticketsFullyProcessed` is false. Processes the current level's ticket queue via `processTicketBatch`.
+
+**Call Graph:**
+
+```
+advanceGame() [AdvanceModule:126]
+  -> rngGate() -- RNG word available (or mid-day path without rngGate)
+  -> _runProcessTicketBatch(purchaseLevel) [AdvanceModule:1150]
+  |   -> delegatecall JackpotModule.processTicketBatch(lvl) [JackpotModule:1890]
+  |       -> Read ticket queue for read key
+  |       -> writesBudget = WRITES_BUDGET_SAFE = 550 (357 on first batch, idx==0)
+  |       -> Inner loop: _processOneTicketEntry per queued player
+  |       |   -> ticketsOwedPacked SLOAD
+  |       |   -> _generateTicketBatch -> _raritySymbolBatch (trait generation)
+  |       |   -> _finalizeTicketEntry -> update/clear packed state
+  |       -> Updates ticketCursor, cleanup on completion
+  -> emit Advance(STAGE_TICKETS_WORKING), coin.creditFlip
+```
+
+**Loop Analysis:**
+
+| Loop | Bound | Per-Iteration Cost | Worst-Case Total |
+|------|-------|--------------------|------------------|
+| processTicketBatch | WRITES_BUDGET_SAFE=550 (tracked via writesUsed) | ~5,000 per write unit (SLOAD ticket data + trait generation + SSTORE update) | ~2,750,000 |
+
+The writes budget is consumed by `_processOneTicketEntry` which returns `writesUsed` per entry. Each entry's cost depends on ticket count: small entries (~2-4 writes), large entries (take + overhead writes). The budget ensures total SSTOREs stay bounded.
+
+**Storage Operations:**
+
+| Operation | Count | Gas |
+|-----------|-------|-----|
+| Cold SLOADs (ticketLevel, ticketCursor, queue length, ticketsOwedPacked per player) | ~5 + N players | ~10,500 + N*2,100 |
+| Cold SSTOREs (ticket generation: traitBurnTicket, ticketsOwedPacked updates) | up to 550 | ~2,750,000 |
+| Cursor/cleanup SSTOREs | ~3 | ~15,000 |
+
+**External Calls:**
+
+| Call | Target | Gas |
+|------|--------|-----|
+| JackpotModule.processTicketBatch() | delegatecall (cold) | ~2,600 |
+
+**Events:**
+
+| Event | Count | Gas |
+|-------|-------|-----|
+| TraitsGenerated (per player batch) | ~10-50 | ~15,000-75,000 |
+
+**Worst-Case Total (full 550-write batch):**
+
+| Component | Gas |
+|-----------|-----|
+| Common overhead | 75,000 |
+| rngGate (word available or mid-day) | ~5,000 |
+| Delegatecall (JackpotModule) | ~2,600 |
+| processTicketBatch (550 writes) | ~2,750,000 |
+| Player SLOADs (~50 distinct players) | ~105,000 |
+| Cursor + cleanup | ~15,000 |
+| Events | ~75,000 |
+| **TOTAL** | **~3,027,600** |
+
+**First-batch total (357 writes):** ~2,065,600
+
+**Headroom:** 14,000,000 - 3,027,600 = **10,972,400 gas** (78.4% remaining)
+
+**Risk Level: SAFE** (>3M headroom)
+
+---
+
+### Stage 8: JACKPOT_ETH_RESUME
+
+**Entry Conditions:** Jackpot phase active, one of the ETH distribution cursors/state is non-zero (`dailyEthBucketCursor != 0 || dailyEthPhase != 0 || dailyEthPoolBudget != 0 || dailyEthWinnerCursor != 0`). This resumes a prior chunked ETH distribution.
+
+**Call Graph:**
+
+```
+advanceGame() [AdvanceModule:126]
+  -> rngGate() -- RNG word available
+  -> dailyEthBucketCursor != 0 or dailyEthPhase != 0 or ... [AdvanceModule:348-357]
+  -> payDailyJackpot(true, lastDailyJackpotLevel, rngWord) [AdvanceModule:354]
+      -> isResuming = true (cursors non-zero) [JackpotModule:333-336]
+      -> Restore stored traits/level
+      -> Phase 0 or Phase 1 _processDailyEthChunk with unitsBudget = DAILY_JACKPOT_UNITS_SAFE = 1000
+      -> Resumes from saved cursor position
+```
+
+**Loop Analysis:**
+
+| Loop | Bound | Per-Iteration Cost | Worst-Case Total |
+|------|-------|--------------------|------------------|
+| _processDailyEthChunk (resume) | 1000 units / 3 per auto-rebuy winner = 333 max | ~25,000 per auto-rebuy winner | ~8,325,000 |
+
+This is the same chunking mechanism as Stage 11 but starting from a saved cursor. The worst case is identical to Stage 11's non-Day-1 path (no earlybird, no init overhead).
+
+**Storage Operations:**
+
+| Operation | Count | Gas |
+|-----------|-------|-----|
+| Cold SLOADs (resume state: cursors, stored traits, autoRebuyState per winner) | ~338 | ~709,800 |
+| Cold SSTOREs (winner credits for 333 winners) | ~333 | ~1,665,000 |
+
+**Events:**
+
+| Event | Count | Gas |
+|-------|-------|-----|
+| JackpotTicketWinner / PlayerCredited / AutoRebuyExecuted | 333 x 2 | ~2,330,000 |
+
+**Worst-Case Total (all auto-rebuy, 333 winners):**
+
+| Component | Gas |
+|-----------|-----|
+| Common overhead | 75,000 |
+| Delegatecall (JackpotModule) | ~2,600 |
+| rngGate (word available) | ~5,000 |
+| Resume state restore | ~10,000 |
+| _processDailyEthChunk (333 auto-rebuy winners) | ~8,325,000 |
+| Winner storage (SLOADs + SSTOREs) | ~2,374,800 |
+| Events | ~2,330,000 |
+| **TOTAL** | **~13,122,400** |
+
+**Headroom:** 14,000,000 - 13,122,400 = **877,600 gas**
+
+**Max Payouts:** Same as Stage 11 -- 333 auto-rebuy or 1000 normal winners per chunk. The `unitsBudget = 1000` is the binding constraint.
+
+**Risk Level: AT_RISK** (<1M headroom with all auto-rebuy winners)
+
+---
+
+### Stage 9: JACKPOT_COIN_TICKETS
+
+**Entry Conditions:** Jackpot phase active, `dailyJackpotCoinTicketsPending` is true, `jackpotCounter < JACKPOT_LEVEL_CAP` (5) after coin+ticket distribution. This is the coin+ticket phase WITHOUT the end-of-level reward jackpots.
+
+**Call Graph:**
+
+```
+advanceGame() [AdvanceModule:126]
+  -> rngGate() -- RNG word available
+  -> dailyJackpotCoinTicketsPending is true [AdvanceModule:360]
+  -> payDailyJackpotCoinAndTickets(rngWord) [AdvanceModule:361, delegatecall JackpotModule:681]
+  |   -> _unpackDailyTicketBudgets
+  |   -> _calcDailyCoinBudget + _awardFarFutureCoinJackpot (10 iterations)
+  |   -> _awardDailyCoinToTraitWinners (up to 50 BURNIE winners)
+  |   -> _distributeTicketJackpot x2 (up to 100 winners each)
+  |   -> jackpotCounter += counterStep
+  |   -> Clear pending state
+  |   -> coin.rollDailyQuest()
+  -> _unlockRng(day) [AdvanceModule:371]
+  -> emit Advance(STAGE_JACKPOT_COIN_TICKETS), coin.creditFlip
+```
+
+Note: This is the same as the payDailyJackpotCoinAndTickets portion of Stage 10 (JACKPOT_PHASE_ENDED) but WITHOUT the _awardFinalDayDgnrsReward, _rewardTopAffiliate, _runRewardJackpots, or _endPhase calls. No BAF jackpot, no decimator.
+
+**Loop Analysis:**
+
+| Loop | Bound | Per-Iteration Cost | Worst-Case Total |
+|------|-------|--------------------|------------------|
+| _awardFarFutureCoinJackpot | 10 (fixed) | ~8,000 | ~80,000 |
+| _awardDailyCoinToTraitWinners | 50 (DAILY_COIN_MAX_WINNERS) | ~6,000 | ~300,000 |
+| _distributeTicketJackpot (daily) | 100 (LOOTBOX_MAX_WINNERS) | ~5,000 | ~500,000 |
+| _distributeTicketJackpot (carryover) | 100 (LOOTBOX_MAX_WINNERS) | ~5,000 | ~500,000 |
+
+**Storage Operations:**
+
+| Operation | Count | Gas |
+|-----------|-------|-----|
+| Cold SLOADs (pending state, coin budget, trait arrays) | ~15 | ~31,500 |
+| Cold SSTOREs (jackpotCounter, pending flags, ticket distributions) | ~10 | ~50,000 |
+
+**External Calls:**
+
+| Call | Target | Gas |
+|------|--------|-----|
+| JackpotModule.payDailyJackpotCoinAndTickets() | delegatecall (cold) | ~2,600 |
+| coin.rollDailyQuest() | external (warm) | ~10,000 |
+
+**Events:**
+
+| Event | Count | Gas |
+|-------|-------|-----|
+| CoinJackpotWinner (50) | 50 | ~175,000 |
+| TraitsGenerated (ticket distribution, ~200 winners) | ~20 | ~30,000 |
+
+**Worst-Case Total:**
+
+| Component | Gas |
+|-----------|-----|
+| Common overhead | 75,000 |
+| Delegatecall (JackpotModule) | ~2,600 |
+| rngGate (word available) | ~5,000 |
+| _awardFarFutureCoinJackpot (10 iterations) | ~80,000 |
+| _awardDailyCoinToTraitWinners (50 winners) | ~300,000 |
+| _distributeTicketJackpot x2 (200 total winners) | ~1,000,000 |
+| Storage (SLOADs + SSTOREs) | ~81,500 |
+| Events | ~205,000 |
+| _unlockRng | ~5,000 |
+| coin.rollDailyQuest | ~10,000 |
+| **TOTAL** | **~1,764,100** |
+
+**Headroom:** 14,000,000 - 1,764,100 = **12,235,900 gas** (87.4% remaining)
+
+**Risk Level: SAFE** (>3M headroom)
+
+---
+
+## Complete Summary Table (CEIL-01)
+
+All 12 `advanceGame()` stages with worst-case gas profiles:
+
+| Stage | Constant | Name | Worst-Case Gas | Headroom | Max Payouts | Risk Level |
+|-------|----------|------|----------------|----------|-------------|------------|
+| 0 | STAGE_GAMEOVER | GAMEOVER | ~9,036,000 | 4,964,000 | 321 terminal + 32 deity | SAFE |
+| 1 | STAGE_RNG_REQUESTED | RNG_REQUESTED | ~215,000 | 13,785,000 | N/A | SAFE |
+| 2 | STAGE_TRANSITION_WORKING | TRANSITION_WORKING | ~205,000 | 13,795,000 | N/A | SAFE |
+| 3 | STAGE_TRANSITION_DONE | TRANSITION_DONE | ~255,000 | 13,745,000 | N/A | SAFE |
+| 4 | STAGE_FUTURE_TICKETS_WORKING | FUTURE_TICKETS_WORKING | ~2,863,000 | 11,137,000 | N/A (WRITES_BUDGET_SAFE=550) | SAFE |
+| 5 | STAGE_TICKETS_WORKING | TICKETS_WORKING | ~3,028,000 | 10,972,000 | N/A (WRITES_BUDGET_SAFE=550) | SAFE |
+| 6 | STAGE_PURCHASE_DAILY | PURCHASE_DAILY | ~12,952,000 | 1,048,000 | 300 (JACKPOT_MAX_WINNERS) + 50 coin | TIGHT |
+| 7 | STAGE_ENTERED_JACKPOT | ENTERED_JACKPOT | ~1,972,000 | 12,028,000 | N/A (consolidation) | SAFE |
+| 8 | STAGE_JACKPOT_ETH_RESUME | JACKPOT_ETH_RESUME | ~13,122,000 | 878,000 | 333 (unitsBudget=1000 / 3) | AT_RISK |
+| 9 | STAGE_JACKPOT_COIN_TICKETS | JACKPOT_COIN_TICKETS | ~1,764,000 | 12,236,000 | 50 coin + 200 tickets | SAFE |
+| 10 | STAGE_JACKPOT_PHASE_ENDED | JACKPOT_PHASE_ENDED | ~6,058,000 | 7,942,000 | 107 (BAF code cap) | SAFE |
+| 11 | STAGE_JACKPOT_DAILY_STARTED | JACKPOT_DAILY_STARTED | ~14,162,000 | -162,000 | 333 (unitsBudget=1000 / 3) | AT_RISK |
+
+**Legend:**
+- **SAFE:** >3M headroom. No risk of exceeding 14M gas ceiling.
+- **TIGHT:** 1-3M headroom. Within budget but limited margin.
+- **AT_RISK:** <1M headroom. Could breach 14M under extreme worst-case conditions.
+- **BREACH:** Exceeds 14M gas ceiling (none confirmed; Stage 11 Day-1 theoretical only).
+
+---
+
+## CEIL-02: Maximum Jackpot Payouts Under 14M
+
+This section consolidates maximum payout counts across all winner-distributing stages.
+
+### Per-Winner Gas Cost Reference
+
+| Distribution Path | Normal Winner | Auto-Rebuy Winner | Notes |
+|-------------------|---------------|-------------------|-------|
+| _processDailyEthChunk (chunked) | ~15,000 (1 unit) | ~38,600 (3 units) | Includes SLOAD, SSTORE, event, distribution |
+| _distributeJackpotEth (non-chunked) | ~12,000 | ~25,000 | Used by early-burn and terminal jackpot |
+| BAF (_runBafJackpot) | ~45,000 | ~45,000 | External call, whale pass queuing path |
+| Coin jackpot (BURNIE) | ~6,000 | N/A | Token credit only, no auto-rebuy |
+| Lootbox/ticket distribution | ~5,000 | N/A | _queueTickets (O(1) per winner) |
+| Earlybird lootbox | ~10,000 | N/A | Winner selection + ticket queuing |
+
+### Maximum Winner Counts by Stage
+
+| Stage | Distribution Type | Max Winners (Code Bound) | Max Winners (14M Budget) | Binding Constraint |
+|-------|-------------------|--------------------------|--------------------------|-------------------|
+| 0 (GAMEOVER) | Terminal jackpot (non-chunked) | 321 (DAILY_ETH_MAX_WINNERS) | ~538 (normal, no auto-rebuy) | Code constant (321) |
+| 0 (GAMEOVER) | Deity pass refund | 32 (DEITY_PASS_MAX_TOTAL) | ~1,166 | Code constant (32) |
+| 6 (PURCHASE_DAILY) | Early-burn ETH (non-chunked) | 300 (JACKPOT_MAX_WINNERS) | ~323 (auto-rebuy) / ~1,158 (normal) | Code constant (300) |
+| 6 (PURCHASE_DAILY) | BURNIE coin jackpot | 50 (DAILY_COIN_MAX_WINNERS) | ~2,333 | Code constant (50) |
+| 6 (PURCHASE_DAILY) | Lootbox tickets | 100 (LOOTBOX_MAX_WINNERS) | ~2,800 | Code constant (100) |
+| 7 (ENTERED_JACKPOT) | Future ticket batch | 550 writes (WRITES_BUDGET_SAFE) | ~2,563 writes | Code constant (550) |
+| 8 (JACKPOT_ETH_RESUME) | Daily ETH chunk (chunked) | 321 (DAILY_ETH_MAX_WINNERS) per phase | 333 (auto-rebuy) / 1,000 (normal) | unitsBudget=1000 per chunk |
+| 9 (JACKPOT_COIN_TICKETS) | BURNIE coin jackpot | 50 (DAILY_COIN_MAX_WINNERS) | ~2,333 | Code constant (50) |
+| 9 (JACKPOT_COIN_TICKETS) | Ticket distribution | 200 (LOOTBOX_MAX_WINNERS x2) | ~2,800 | Code constant (100 per dist) |
+| 10 (JACKPOT_PHASE_ENDED) | BAF jackpot | 107 (array size cap) | ~310 | Code constant (107) |
+| 10 (JACKPOT_PHASE_ENDED) | BURNIE coin jackpot | 50 (DAILY_COIN_MAX_WINNERS) | ~2,333 | Code constant (50) |
+| 10 (JACKPOT_PHASE_ENDED) | Ticket distribution | 200 (LOOTBOX_MAX_WINNERS x2) | ~2,800 | Code constant (100 per dist) |
+| 11 (JACKPOT_DAILY_STARTED) | Daily ETH chunk (chunked) | 321 (DAILY_ETH_MAX_WINNERS) | 333 (auto-rebuy) / 1,000 (normal) | unitsBudget=1000 per chunk |
+| 11 (JACKPOT_DAILY_STARTED) | Earlybird lootbox (Day 1) | 100 (fixed loop) | ~1,400 | Code constant (100) |
+
+### Key Findings
+
+1. **All code-bounded winner constants fit within 14M.** No single stage exceeds 14M due to winner count alone.
+
+2. **The binding constraint is always the code constant**, not the 14M gas ceiling, for all distribution types except daily ETH chunking (Stages 8, 11) where the `unitsBudget=1000` limits winners per chunk.
+
+3. **AT_RISK stages (8 and 11) are tight when all winners use auto-rebuy** (3x unit cost). With 333 auto-rebuy winners, gas approaches 13-14M. In practice, a mix of auto-rebuy and normal winners keeps gas well under 14M.
+
+4. **Stage 11 Day 1 theoretical breach:** When earlybird lootbox (100 iterations, ~1M gas) combines with a full 333 auto-rebuy winner chunk, the total can theoretically exceed 14M by ~162K gas. This requires ALL of: Day 1 of a new level, a large enough prize pool for 333 winners, AND every winner having auto-rebuy enabled. The economic conditions for this combination are extremely unlikely.
+
+5. **GAMEOVER terminal jackpot is safe** because `gameOver=true` disables auto-rebuy, capping per-winner cost at ~12K (normal path). Even at 321 winners, total is ~9M.
+
+6. **Deity pass loop is bounded at 32** by DEITY_PASS_MAX_TOTAL. Not unbounded. Not a finding.
