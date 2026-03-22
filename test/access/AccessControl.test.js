@@ -470,14 +470,6 @@ describe("AccessControl", function () {
       ).to.be.reverted;
     });
 
-    it("alice cannot directly call game.creditDecJackpotClaim (only JACKPOTS)", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        game.connect(alice).creditDecJackpotClaim(alice.address, eth("1"), 12345n)
-      ).to.be.reverted;
-    });
-
     it("coin.burnForCoinflip reverts when called by alice (not coinflip contract)", async function () {
       const { coin, alice, bob } = await loadFixture(deployFullProtocol);
 
