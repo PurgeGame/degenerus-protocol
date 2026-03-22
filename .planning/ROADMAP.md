@@ -151,11 +151,11 @@ Plans:
   2. EntropyLib xorshift zero-state guards are verified at all VRF word sources -- word==0 is replaced with word=1 before any consumption
   3. Lootbox open entropy derivation produces unique tickets for every distinct (player, day, amount) tuple via keccak256 input verification
   4. Full purchase-to-open lifecycle is traced end-to-end: ticket purchase records pending state, VRF fulfillment provides the word, RngNotReady guard prevents premature opens, and prize determination uses the correct word
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 64-01: TBD
-- [ ] 64-02: TBD
+- [x] 64-01-PLAN.md — Lootbox RNG lifecycle fuzz/unit test suite (LBOX-01 through LBOX-05)
+- [ ] 64-02-PLAN.md — Lootbox RNG findings document + KNOWN-ISSUES.md update
 
 ### Phase 65: VRF Stall Edge Cases
 **Goal**: All VRF stall recovery paths are proven correct -- gap backfill produces VRF-quality entropy, coordinator swap resets all state, and edge cases are documented with C4A severity
@@ -194,8 +194,8 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 63. VRF Request/Fulfillment Core | v3.7 | 2/2 | Complete   | 2026-03-22 |
-| 64. Lootbox RNG Lifecycle | v3.7 | 0/TBD | Not started | - |
+| 63. VRF Request/Fulfillment Core | v3.7 | 2/2 | Complete    | 2026-03-22 |
+| 64. Lootbox RNG Lifecycle | v3.7 | 1/2 | In Progress|  |
 | 65. VRF Stall Edge Cases | v3.7 | 0/TBD | Not started | - |
 | 66. VRF Path Test Coverage | v3.7 | 0/TBD | Not started | - |
 
