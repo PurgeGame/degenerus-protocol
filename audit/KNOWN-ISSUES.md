@@ -24,3 +24,32 @@ These are architectural decisions, not vulnerabilities.
 
 **_sendToVault uses hard reverts (GO-05-F01).** `_sendToVault` reverts on any ETH or stETH transfer failure. Vault and sDGNRS are immutable protocol-owned contracts with unconditional `receive()` functions. Lido stETH has never paused transfers. Recipients can't reject funds.
 
+---
+
+## Audit History
+
+### v3.7 Phase 63: VRF Request/Fulfillment Core (2026-03-22)
+
+0 HIGH, 0 MEDIUM, 0 LOW, 2 INFO. All 4 VRF core requirements (VRFC-01 through VRFC-04) VERIFIED with 22 Foundry fuzz tests (1000 runs each, 0 failures). Slot 0 assembly audit: SAFE (0 of 8 assembly blocks touch packed VRF state). Gas budget: SAFE (~28k-47k vs 300k limit).
+
+- **V37-001 (INFO):** `_tryRequestRng` gameover entry point not covered by VRFCore.t.sol. Low risk: shares `_finalizeRngRequest` with proven daily path. Deferred to Phase 65.
+- **V37-002 (INFO):** Research documentation listed wrong storage slot numbers for `rngWordCurrent` and `vrfRequestId`. Corrected via `forge inspect` during test development. No contract code impact.
+
+See `audit/v3.7-vrf-core-findings.md` for full findings document.
+
+### v3.6: VRF Stall Resilience (2026-03-22)
+
+0 HIGH, 0 MEDIUM, 0 LOW, 2 INFO. Delta audit: all 8 attack surfaces SAFE. See `audit/v3.6-findings-consolidated.md`.
+
+### v3.5: Final Polish (2026-03-22)
+
+43 findings (10 LOW, 33 INFO) from comment correctness, gas optimization, and gas ceiling analysis. See `audit/v3.5-findings-consolidated.md`.
+
+### v3.4: Lootbox + Skim Audit
+
+5 findings (5 INFO). See `audit/v3.4-findings-consolidated.md`.
+
+### v3.2: RNG Delta + Comment Re-scan
+
+30 findings (6 LOW, 24 INFO). See `audit/v3.2-findings-consolidated.md`.
+
