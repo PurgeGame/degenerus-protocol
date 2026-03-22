@@ -14,6 +14,8 @@
 - ✅ **v3.3 Gambling Burn Audit + Full Adversarial Sweep** — Phases 44-49 (shipped 2026-03-21)
 - ✅ **v3.4 New Feature Audit — Skim Redesign + Redemption Lootbox** — Phases 50-53 (shipped 2026-03-21)
 - ✅ **v3.5 Final Polish — Comment Correctness + Gas Optimization** — Phases 54-58 (shipped 2026-03-22)
+- ✅ **v3.6 VRF Stall Resilience** — Phases 59-62 (shipped 2026-03-22)
+- 🚧 **v3.7 VRF Path Audit** — Phases 63-66 (in progress)
 
 ## Phases
 
@@ -104,76 +106,103 @@
 
 </details>
 
-### v3.6 VRF Stall Resilience
+<details>
+<summary>v3.6 VRF Stall Resilience (Phases 59-62) -- SHIPPED 2026-03-22</summary>
 
-- [x] **Phase 59: RNG Gap Backfill Implementation** — Implement gap day word backfill and orphaned index recovery (completed 2026-03-22)
-- [x] **Phase 60: Coordinator Swap Cleanup** — Fix stale state in updateVrfCoordinatorAndSub (completed 2026-03-22)
-- [x] **Phase 61: Stall Resilience Tests** — Foundry tests for full stall->swap->resume cycle (completed 2026-03-22)
-- [x] **Phase 62: Audit + Consolidated Findings** — Verify changes, document findings (completed 2026-03-22)
+- [x] **Phase 59: RNG Gap Backfill Implementation** — 2 plans, 5 requirements (completed 2026-03-22)
+- [x] **Phase 60: Coordinator Swap Cleanup** — 1 plan, 2 requirements (completed 2026-03-22)
+- [x] **Phase 61: Stall Resilience Tests** — 1 plan, 3 requirements (completed 2026-03-22)
+- [x] **Phase 62: Audit + Consolidated Findings** — 2 plans, 2 requirements (completed 2026-03-22)
+
+</details>
+
+### v3.7 VRF Path Audit (In Progress)
+
+**Milestone Goal:** Comprehensive audit of all VRF-dependent code paths -- VRF request/fulfillment core, lootbox RNG lifecycle, and VRF stall edge cases -- with Foundry invariant/fuzz tests and Halmos verification for all confirmed invariants.
+
+- [ ] **Phase 63: VRF Request/Fulfillment Core** - Prove VRF callback revert-safety, request ID lifecycle, rngLockedFlag mutual exclusion, and timeout retry correctness
+- [ ] **Phase 64: Lootbox RNG Lifecycle** - Full trace of lootbox purchase through VRF fulfillment to ticket selection and prize, proving index-to-word 1:1 mapping and per-player entropy uniqueness
+- [ ] **Phase 65: VRF Stall Edge Cases** - Audit gap backfill entropy, manipulation window, gas ceiling, coordinator swap cleanup, zero-seed edge case, game-over fallback, and dailyIdx timing consistency
+- [ ] **Phase 66: VRF Path Test Coverage** - Foundry fuzz/invariant tests for lootbox index lifecycle, stall-to-recovery scenarios, gap backfill edge cases, and Halmos verification of entropy bounds
 
 ## Phase Details
 
-### Phase 59: RNG Gap Backfill Implementation
-**Goal**: advanceGame backfills rngWordByDay and lootboxRngWordByIndex for all gap days when VRF resumes, so coinflips and lootboxes resolve naturally
-**Depends on**: Nothing
-**Requirements**: GAP-01, GAP-02, GAP-03, GAP-04, GAP-05
-**Success Criteria**:
-  1. Gap day detection: when day > dailyIdx+1, loop fills rngWordByDay[gapDay] = keccak256(vrfWord, gapDay)
-  2. Orphaned lootbox indices get valid RNG words derived from the backfill
-  3. midDayTicketRngPending cleared appropriately
-  4. Coinflip claims on gap days succeed with backfilled words
-  5. Lootbox opens on orphaned indices succeed with backfilled words
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 59-01-PLAN.md — Add _backfillGapDays function and wire into rngGate (GAP-01, GAP-04)
-- [x] 59-02-PLAN.md — Orphaned lootbox index recovery + midDayTicketRngPending clearing (GAP-02, GAP-03, GAP-05)
+### Phase 63: VRF Request/Fulfillment Core
+**Goal**: VRF request and fulfillment mechanism is proven correct -- no callback revert risk, no stale/duplicate fulfillment, no daily/mid-day collision
+**Depends on**: Nothing (first phase of v3.7)
+**Requirements**: VRFC-01, VRFC-02, VRFC-03, VRFC-04
+**Success Criteria** (what must be TRUE):
+  1. rawFulfillRandomWords cannot revert on any code path except invalid msg.sender, and 300k gas budget is proven sufficient for worst-case cold SSTORE costs
+  2. vrfRequestId is set exactly once per request, matched on fulfillment, cleared after processing, and retry detection in _finalizeRngRequest correctly distinguishes retries from fresh requests
+  3. rngLockedFlag is proven to prevent daily and mid-day VRF requests from ever being in-flight simultaneously -- no bypass path exists in either direction
+  4. 12h timeout retry correctly detects stale requests and re-requests without corrupting lootboxRngIndex (no double-increment on retry)
+**Plans**: 2 plans
 
-### Phase 60: Coordinator Swap Cleanup
-**Goal**: updateVrfCoordinatorAndSub handles all stale state from the failed coordinator
-**Depends on**: Phase 59 (backfill logic must exist first)
-**Requirements**: SWAP-01, SWAP-02
-**Success Criteria**:
-  1. All stale VRF state properly reset during coordinator swap
-  2. totalFlipReversals handling documented as design decision
-**Plans:** 1/1 plans complete
 Plans:
-- [x] 60-01-PLAN.md — Add missing LootboxRngApplied event + totalFlipReversals NatSpec (SWAP-01, SWAP-02)
+- [ ] 63-01-PLAN.md — VRF core fuzz/unit test suite (VRFC-01 through VRFC-04)
+- [ ] 63-02-PLAN.md — Slot 0 assembly audit + findings document
 
-### Phase 61: Stall Resilience Tests
-**Goal**: Foundry tests prove the full stall->swap->resume cycle works end-to-end
-**Depends on**: Phase 59, Phase 60
-**Requirements**: TEST-01, TEST-02, TEST-03
-**Success Criteria**:
-  1. Test simulates VRF stall, coordinator swap, resume, gap backfill
-  2. Coinflip claims across gap days verified
-  3. Lootbox opens after orphaned index backfill verified
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 61-01-PLAN.md — StallResilience.t.sol with stall-swap-resume, coinflip gap day, and lootbox orphan tests (TEST-01, TEST-02, TEST-03)
+### Phase 64: Lootbox RNG Lifecycle
+**Goal**: Complete lootbox RNG path from purchase to prize is proven correct -- every index increment has exactly one matching VRF word write, and per-player entropy is unique
+**Depends on**: Phase 63
+**Requirements**: LBOX-01, LBOX-02, LBOX-03, LBOX-04, LBOX-05
+**Success Criteria** (what must be TRUE):
+  1. Every lootboxRngIndex mutation point is enumerated and each increment is matched by exactly one VRF word write to lootboxRngWordByIndex[index - 1] -- no index-to-word mismatch across daily, mid-day, retry, and backfill paths
+  2. EntropyLib xorshift zero-state guards are verified at all VRF word sources -- word==0 is replaced with word=1 before any consumption
+  3. Lootbox open entropy derivation produces unique tickets for every distinct (player, day, amount) tuple via keccak256 input verification
+  4. Full purchase-to-open lifecycle is traced end-to-end: ticket purchase records pending state, VRF fulfillment provides the word, RngNotReady guard prevents premature opens, and prize determination uses the correct word
+**Plans**: TBD
 
-### Phase 62: Audit + Consolidated Findings
-**Goal**: All changes audited for correctness, findings documented
-**Depends on**: Phase 59, Phase 60, Phase 61
-**Requirements**: AUD-01, AUD-02
-**Success Criteria**:
-  1. No new attack vectors introduced by backfill mechanism
-  2. All findings in master table
-**Plans:** 2/2 plans complete
 Plans:
-- [x] 62-01-PLAN.md — Delta security audit of all v3.6 code changes (AUD-01)
-- [x] 62-02-PLAN.md — Consolidated findings document + KNOWN-ISSUES/FINAL-FINDINGS-REPORT updates (AUD-02)
+- [ ] 64-01: TBD
+- [ ] 64-02: TBD
+
+### Phase 65: VRF Stall Edge Cases
+**Goal**: All VRF stall recovery paths are proven correct -- gap backfill produces VRF-quality entropy, coordinator swap resets all state, and edge cases are documented with C4A severity
+**Depends on**: Phase 63, Phase 64
+**Requirements**: STALL-01, STALL-02, STALL-03, STALL-04, STALL-05, STALL-06, STALL-07
+**Success Criteria** (what must be TRUE):
+  1. Gap backfill entropy derivation keccak256(vrfWord, gapDay) produces unique per-day words, and the manipulation window between VRF callback and advanceGame consumption is analyzed with severity rating
+  2. Gap backfill gas cost is profiled per-iteration with a safe upper bound for gap count vs block gas limit
+  3. Coordinator swap state cleanup covers all VRF state variables (confirmed list), orphaned lootbox recovery is correct, and lastLootboxRngWord==0 at swap time cannot produce degenerate entropy
+  4. Game-over fallback entropy via _getHistoricalRngFallback and prevrandao is assessed with formal C4A severity classification
+  5. All game operations verified using dailyIdx timing consistently — resolveRedemptionPeriod clock mechanism audited, any block.timestamp usage where dailyIdx is expected flagged as finding
+**Plans**: TBD
+
+Plans:
+- [ ] 65-01: TBD
+- [ ] 65-02: TBD
+
+### Phase 66: VRF Path Test Coverage
+**Goal**: All verified invariants from Phases 63-65 have executable Foundry fuzz/invariant tests and Halmos symbolic verification
+**Depends on**: Phase 63, Phase 64, Phase 65
+**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. Foundry fuzz tests prove lootboxRngIndex lifecycle invariants -- index never skips, never double-increments on retry, every index has a corresponding word
+  2. Foundry invariant tests prove VRF stall-to-recovery scenarios -- the system transitions correctly through stall, coordinator swap, gap backfill, and normal operation
+  3. Foundry tests for gap backfill edge cases cover multi-day gaps and boundary conditions (1-day gap, maximum gap, gap at game boundaries)
+  4. Halmos symbolic verification proves entropy bounds consistency -- redemption roll formula [25, 175] produces identical results across all 3 call sites
+**Plans**: TBD
+
+Plans:
+- [ ] 66-01: TBD
+- [ ] 66-02: TBD
 
 ## Progress
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 59. RNG Gap Backfill | 2/2 | Complete    | 2026-03-22 |
-| 60. Coordinator Swap Cleanup | 1/1 | Complete    | 2026-03-22 |
-| 61. Stall Resilience Tests | 1/1 | Complete   | 2026-03-22 |
-| 62. Audit + Findings | 2/2 | Complete   | 2026-03-22 |
+**Execution Order:** Phases execute in numeric order: 63 -> 64 -> 65 -> 66
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 63. VRF Request/Fulfillment Core | v3.7 | 0/2 | Planning complete | - |
+| 64. Lootbox RNG Lifecycle | v3.7 | 0/TBD | Not started | - |
+| 65. VRF Stall Edge Cases | v3.7 | 0/TBD | Not started | - |
+| 66. VRF Path Test Coverage | v3.7 | 0/TBD | Not started | - |
 
 ## Deferred
 
+- **COIN-01**: Coinflip RNG consumption audit — processCoinflipPayouts entropy derivation, nudge arithmetic, claim paths
+- **DAYRNG-01**: advanceGame day RNG audit — daily seed flow through all game modules (jackpot, lootbox, decimator, etc.)
 - **FORMAL-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
 - **FORMAL-02**: Formal verification of vote counting arithmetic via Halmos
 - **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
