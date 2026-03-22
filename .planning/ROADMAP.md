@@ -230,8 +230,8 @@ Plans:
 | 52. Invariant Test Suite | 2/2 | Complete | 2026-03-21 |
 | 53. Consolidated Findings | 1/1 | Complete | 2026-03-21 |
 | 54. Comment Correctness | 6/6 | Complete    | 2026-03-22 |
-| 55. Gas Optimization | 4/4 | Complete   | 2026-03-22 |
-| 57. Gas Ceiling Analysis | 2/2 | Complete   | 2026-03-22 |
+| 55. Gas Optimization | 4/4 | Complete    | 2026-03-22 |
+| 57. Gas Ceiling Analysis | 2/2 | Complete    | 2026-03-22 |
 | 58. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred
