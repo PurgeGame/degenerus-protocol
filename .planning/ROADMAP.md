@@ -15,7 +15,7 @@
 - ✅ **v3.4 New Feature Audit — Skim Redesign + Redemption Lootbox** — Phases 50-53 (shipped 2026-03-21)
 - ✅ **v3.5 Final Polish — Comment Correctness + Gas Optimization** — Phases 54-58 (shipped 2026-03-22)
 - ✅ **v3.6 VRF Stall Resilience** — Phases 59-62 (shipped 2026-03-22)
-- ✅ **v3.7 VRF Path Audit** — Phases 63-66 (shipped 2026-03-22)
+- ✅ **v3.7 VRF Path Audit** — Phases 63-67 (shipped 2026-03-22)
 
 ## Phases
 
@@ -116,106 +116,16 @@
 
 </details>
 
-### v3.7 VRF Path Audit (In Progress)
+<details>
+<summary>v3.7 VRF Path Audit (Phases 63-67) -- SHIPPED 2026-03-22</summary>
 
-**Milestone Goal:** Comprehensive audit of all VRF-dependent code paths -- VRF request/fulfillment core, lootbox RNG lifecycle, and VRF stall edge cases -- with Foundry invariant/fuzz tests and Halmos verification for all confirmed invariants.
+- [x] **Phase 63: VRF Request/Fulfillment Core** — 2 plans, 4 requirements (completed 2026-03-22)
+- [x] **Phase 64: Lootbox RNG Lifecycle** — 2 plans, 5 requirements (completed 2026-03-22)
+- [x] **Phase 65: VRF Stall Edge Cases** — 2 plans, 7 requirements (completed 2026-03-22)
+- [x] **Phase 66: VRF Path Test Coverage** — 2 plans, 4 requirements (completed 2026-03-22)
+- [x] **Phase 67: Verification + Doc Sync** — 2 plans, 4 requirements (completed 2026-03-22)
 
-- [x] **Phase 63: VRF Request/Fulfillment Core** - Prove VRF callback revert-safety, request ID lifecycle, rngLockedFlag mutual exclusion, and timeout retry correctness (completed 2026-03-22)
-- [x] **Phase 64: Lootbox RNG Lifecycle** - Full trace of lootbox purchase through VRF fulfillment to ticket selection and prize, proving index-to-word 1:1 mapping and per-player entropy uniqueness (completed 2026-03-22)
-- [x] **Phase 65: VRF Stall Edge Cases** - Audit gap backfill entropy, manipulation window, gas ceiling, coordinator swap cleanup, zero-seed edge case, game-over fallback, and dailyIdx timing consistency (completed 2026-03-22)
-- [x] **Phase 66: VRF Path Test Coverage** - Foundry fuzz/invariant tests for lootbox index lifecycle, stall-to-recovery scenarios, gap backfill edge cases, and Halmos verification of entropy bounds (completed 2026-03-22)
-- [ ] **Phase 67: Verification + Doc Sync** - Independent verification of Phase 66, V37-001 resolution sync, Phase 66 audit trail in findings docs and KNOWN-ISSUES.md
-
-## Phase Details
-
-### Phase 63: VRF Request/Fulfillment Core
-**Goal**: VRF request and fulfillment mechanism is proven correct -- no callback revert risk, no stale/duplicate fulfillment, no daily/mid-day collision
-**Depends on**: Nothing (first phase of v3.7)
-**Requirements**: VRFC-01, VRFC-02, VRFC-03, VRFC-04
-**Success Criteria** (what must be TRUE):
-  1. rawFulfillRandomWords cannot revert on any code path except invalid msg.sender, and 300k gas budget is proven sufficient for worst-case cold SSTORE costs
-  2. vrfRequestId is set exactly once per request, matched on fulfillment, cleared after processing, and retry detection in _finalizeRngRequest correctly distinguishes retries from fresh requests
-  3. rngLockedFlag is proven to prevent daily and mid-day VRF requests from ever being in-flight simultaneously -- no bypass path exists in either direction
-  4. 12h timeout retry correctly detects stale requests and re-requests without corrupting lootboxRngIndex (no double-increment on retry)
-**Plans**: 2 plans
-
-Plans:
-- [x] 63-01-PLAN.md — VRF core fuzz/unit test suite (VRFC-01 through VRFC-04)
-- [x] 63-02-PLAN.md — Slot 0 assembly audit + findings document
-
-### Phase 64: Lootbox RNG Lifecycle
-**Goal**: Complete lootbox RNG path from purchase to prize is proven correct -- every index increment has exactly one matching VRF word write, and per-player entropy is unique
-**Depends on**: Phase 63
-**Requirements**: LBOX-01, LBOX-02, LBOX-03, LBOX-04, LBOX-05
-**Success Criteria** (what must be TRUE):
-  1. Every lootboxRngIndex mutation point is enumerated and each increment is matched by exactly one VRF word write to lootboxRngWordByIndex[index - 1] -- no index-to-word mismatch across daily, mid-day, retry, and backfill paths
-  2. EntropyLib xorshift zero-state guards are verified at all VRF word sources -- word==0 is replaced with word=1 before any consumption
-  3. Lootbox open entropy derivation produces unique tickets for every distinct (player, day, amount) tuple via keccak256 input verification
-  4. Full purchase-to-open lifecycle is traced end-to-end: ticket purchase records pending state, VRF fulfillment provides the word, RngNotReady guard prevents premature opens, and prize determination uses the correct word
-**Plans**: 2 plans
-
-Plans:
-- [x] 64-01-PLAN.md — Lootbox RNG lifecycle fuzz/unit test suite (LBOX-01 through LBOX-05)
-- [x] 64-02-PLAN.md — Lootbox RNG findings document + KNOWN-ISSUES.md update
-
-### Phase 65: VRF Stall Edge Cases
-**Goal**: All VRF stall recovery paths are proven correct -- gap backfill produces VRF-quality entropy, coordinator swap resets all state, and edge cases are documented with C4A severity
-**Depends on**: Phase 63, Phase 64
-**Requirements**: STALL-01, STALL-02, STALL-03, STALL-04, STALL-05, STALL-06, STALL-07
-**Success Criteria** (what must be TRUE):
-  1. Gap backfill entropy derivation keccak256(vrfWord, gapDay) produces unique per-day words, and the manipulation window between VRF callback and advanceGame consumption is analyzed with severity rating
-  2. Gap backfill gas cost is profiled per-iteration with a safe upper bound for gap count vs block gas limit
-  3. Coordinator swap state cleanup covers all VRF state variables (confirmed list), orphaned lootbox recovery is correct, and lastLootboxRngWord==0 at swap time cannot produce degenerate entropy
-  4. Game-over fallback entropy via _getHistoricalRngFallback and prevrandao is assessed with formal C4A severity classification
-  5. All game operations verified using dailyIdx timing consistently — resolveRedemptionPeriod clock mechanism audited, any block.timestamp usage where dailyIdx is expected flagged as finding
-**Plans**: 2 plans
-
-Plans:
-- [x] 65-01-PLAN.md — VRF stall edge case fuzz/unit test suite (STALL-01 through STALL-07)
-- [x] 65-02-PLAN.md — VRF stall findings document + KNOWN-ISSUES.md update
-
-### Phase 66: VRF Path Test Coverage
-**Goal**: All verified invariants from Phases 63-65 have executable Foundry fuzz/invariant tests and Halmos symbolic verification
-**Depends on**: Phase 63, Phase 64, Phase 65
-**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04
-**Success Criteria** (what must be TRUE):
-  1. Foundry fuzz tests prove lootboxRngIndex lifecycle invariants -- index never skips, never double-increments on retry, every index has a corresponding word
-  2. Foundry invariant tests prove VRF stall-to-recovery scenarios -- the system transitions correctly through stall, coordinator swap, gap backfill, and normal operation
-  3. Foundry tests for gap backfill edge cases cover multi-day gaps and boundary conditions (1-day gap, maximum gap, gap at game boundaries)
-  4. Halmos symbolic verification proves entropy bounds consistency -- redemption roll formula [25, 175] produces identical results across all 3 call sites
-**Plans**: 2 plans
-
-Plans:
-- [x] 66-01-PLAN.md — VRFPathHandler invariant handler + invariant/fuzz tests (TEST-01, TEST-02, TEST-03)
-- [x] 66-02-PLAN.md — Halmos symbolic verification of redemption roll formula (TEST-04)
-
-### Phase 67: Verification + Doc Sync
-**Goal**: Close all milestone audit gaps -- independent verification of Phase 66 deliverables, V37-001 resolution sync in Phase 63 findings, and Phase 66 audit trail entries in findings docs and KNOWN-ISSUES.md
-**Depends on**: Phase 66
-**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04
-**Gap Closure**: Closes all gaps from v3.7-MILESTONE-AUDIT.md
-**Success Criteria** (what must be TRUE):
-  1. Phase 66 VERIFICATION.md exists with independent verification of all TEST-01 through TEST-04 deliverables (test files exist, tests pass, artifacts substantive)
-  2. V37-001 in audit/v3.7-vrf-core-findings.md is annotated as RESOLVED with cross-reference to Phase 65
-  3. Phase 63-65 findings documents include Phase 66 cross-reference noting invariant/parametric/symbolic coverage
-  4. KNOWN-ISSUES.md Audit History has Phase 66 entry summarizing invariant and Halmos verification
-**Plans**: 2 plans
-
-Plans:
-- [ ] 67-01-PLAN.md — Independent verification of Phase 66 (TEST-01 through TEST-04)
-- [ ] 67-02-PLAN.md — Doc sync: V37-001 resolution, Phase 66 cross-references, KNOWN-ISSUES.md entry
-
-## Progress
-
-**Execution Order:** Phases execute in numeric order: 63 -> 64 -> 65 -> 66 -> 67
-
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 63. VRF Request/Fulfillment Core | v3.7 | 2/2 | Complete    | 2026-03-22 |
-| 64. Lootbox RNG Lifecycle | v3.7 | 2/2 | Complete    | 2026-03-22 |
-| 65. VRF Stall Edge Cases | v3.7 | 2/2 | Complete    | 2026-03-22 |
-| 66. VRF Path Test Coverage | v3.7 | 2/2 | Complete   | 2026-03-22 |
-| 67. Verification + Doc Sync | v3.7 | 0/2 | Pending    | — |
+</details>
 
 ## Deferred
 
