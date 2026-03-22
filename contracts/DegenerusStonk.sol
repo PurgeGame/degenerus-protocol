@@ -107,6 +107,7 @@ contract DegenerusStonk {
     /// @param amount Amount of DGNRS to transfer (18 decimals)
     /// @return True on success
     /// @custom:reverts ZeroAddress if to is address(0)
+    /// @custom:reverts Unauthorized if to is DGNRS contract address
     /// @custom:reverts Insufficient if sender balance < amount
     function transfer(address to, uint256 amount) external returns (bool) {
         return _transfer(msg.sender, to, amount);
@@ -119,6 +120,7 @@ contract DegenerusStonk {
     /// @return True on success
     /// @custom:reverts Insufficient if amount exceeds allowance (unless max uint256 approval)
     /// @custom:reverts ZeroAddress if to is address(0)
+    /// @custom:reverts Unauthorized if to is DGNRS contract address
     /// @custom:reverts Insufficient if from balance < amount
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         uint256 allowed = allowance[from][msg.sender];

@@ -134,7 +134,7 @@ contract StakedDegenerusStonk {
     event RedemptionResolved(uint48 indexed periodIndex, uint16 roll, uint256 rolledBurnie, uint48 flipDay);
 
     /// @notice Emitted when a player claims their resolved redemption
-    event RedemptionClaimed(address indexed player, uint16 roll, bool flipWon, uint256 ethPayout, uint256 burniePayout, uint256 lootboxEth);
+    event RedemptionClaimed(address indexed player, uint16 roll, bool flipResolved, uint256 ethPayout, uint256 burniePayout, uint256 lootboxEth);
 
     // =====================================================================
     //                          ERC20 METADATA
@@ -365,11 +365,11 @@ contract StakedDegenerusStonk {
         return poolBalances[_poolIndex(pool)];
     }
 
-    /// @notice Transfer DGNRS from a reward pool to a recipient
+    /// @notice Transfer sDGNRS from a reward pool to a recipient
     /// @dev Only callable by game contract. Transfers up to available balance if requested amount exceeds pool.
     /// @param pool Pool identifier
     /// @param to Recipient address
-    /// @param amount Requested amount of DGNRS to transfer
+    /// @param amount Requested amount of sDGNRS to transfer
     /// @return transferred Actual amount transferred (may be less than requested if pool depleted)
     /// @custom:reverts Unauthorized If caller is not game contract
     /// @custom:reverts ZeroAddress If to is zero address
@@ -392,7 +392,7 @@ contract StakedDegenerusStonk {
         return amount;
     }
 
-    /// @notice Transfer DGNRS between two reward pools
+    /// @notice Transfer sDGNRS between two reward pools
     /// @dev Only callable by game contract. No token movement — just rebalances internal pool accounting.
     /// @param from Source pool
     /// @param to Destination pool
