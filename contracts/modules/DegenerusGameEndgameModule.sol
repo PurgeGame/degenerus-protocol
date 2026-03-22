@@ -55,6 +55,18 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         uint24 targetLevel
     );
 
+    /// @notice Emitted after BAF/decimator jackpot resolution with final pool values.
+    /// @dev Enables indexers to track pool changes from reward jackpots without
+    ///      replaying on-chain leaderboard/ticket state. Only emitted when pools change.
+    /// @param lvl The level that just completed (indexed for Advance event correlation).
+    /// @param futurePool Authoritative post-resolution future prize pool value.
+    /// @param claimableDelta Total ETH moved to claimable during resolution.
+    event RewardJackpotsSettled(
+        uint24 indexed lvl,
+        uint256 futurePool,
+        uint256 claimableDelta
+    );
+
     /// @notice Emitted when DGNRS is rewarded to the top affiliate.
     /// @param affiliate Address of the top affiliate.
     /// @param level Level for which they were top affiliate.
@@ -224,6 +236,9 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         }
         if (claimableDelta != 0) {
             claimablePool += claimableDelta;
+        }
+        if (futurePoolLocal != baseFuturePool || claimableDelta != 0) {
+            emit RewardJackpotsSettled(lvl, futurePoolLocal, claimableDelta);
         }
     }
 
