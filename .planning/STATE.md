@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: VRF Commitment Window Audit
 status: Phase complete — ready for verification
-stopped_at: Completed 70-02-PLAN.md
-last_updated: "2026-03-22T23:14:08.414Z"
+stopped_at: Completed 71-02-PLAN.md
+last_updated: "2026-03-22T23:17:40.212Z"
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # State
@@ -51,6 +51,8 @@ None (fresh milestone).
 - [Phase 70]: All 7 multi-TX attack sequences SAFE: day+1 keying is the primary defense defeating 4/7 attacks
 - [Phase 70]: Game-over predictable fallback is Informational: deposits allowed but stranded due to day+1 keying
 - [Phase 70]: rngLockedFlag is the only defense for auto-rebuy extraction (Attack 2) -- without it, carry extraction after seeing VRF word would be exploitable
+- [Phase 71]: Contamination defined precisely as day N RNG OUTCOME influencing day N+1 RNG WORD or SELECTION MECHANISM -- carry-over game context excluded by definition
+- [Phase 71]: Exhaustive grep confirms rngWordByDay has exactly 2 write locations (lines 1533, 1484) -- all others are reads/guards, proving write-once immutability
 
 ### Pending Todos
 
@@ -63,6 +65,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T23:14:08.412Z
-Stopped at: Completed 70-02-PLAN.md
+Last session: 2026-03-22T23:17:40.210Z
+Stopped at: Completed 71-02-PLAN.md
 Resume file: None
