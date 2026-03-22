@@ -61,28 +61,28 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CW-01 | — | Pending |
-| CW-02 | — | Pending |
-| CW-03 | — | Pending |
-| CW-04 | — | Pending |
-| MUT-01 | — | Pending |
-| MUT-02 | — | Pending |
-| MUT-03 | — | Pending |
-| COIN-01 | — | Pending |
-| COIN-02 | — | Pending |
-| COIN-03 | — | Pending |
-| DAYRNG-01 | — | Pending |
-| DAYRNG-02 | — | Pending |
-| DAYRNG-03 | — | Pending |
-| TQ-01 | — | Pending |
-| TQ-02 | — | Pending |
-| TQ-03 | — | Pending |
+| CW-01 | Phase 68 | Pending |
+| CW-02 | Phase 68 | Pending |
+| CW-03 | Phase 68 | Pending |
+| CW-04 | Phase 69 | Pending |
+| MUT-01 | Phase 69 | Pending |
+| MUT-02 | Phase 69 | Pending |
+| MUT-03 | Phase 69 | Pending |
+| COIN-01 | Phase 70 | Pending |
+| COIN-02 | Phase 70 | Pending |
+| COIN-03 | Phase 70 | Pending |
+| DAYRNG-01 | Phase 71 | Pending |
+| DAYRNG-02 | Phase 71 | Pending |
+| DAYRNG-03 | Phase 71 | Pending |
+| TQ-01 | Phase 72 | Pending |
+| TQ-02 | Phase 72 | Pending |
+| TQ-03 | Phase 72 | Pending |
 
 **Coverage:**
 - v3.8 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16
+- Mapped to phases: 16
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-22*
-*Last updated: 2026-03-22 after initial definition*
+*Last updated: 2026-03-22 after roadmap creation*

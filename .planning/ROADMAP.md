@@ -16,6 +16,7 @@
 - ✅ **v3.5 Final Polish — Comment Correctness + Gas Optimization** — Phases 54-58 (shipped 2026-03-22)
 - ✅ **v3.6 VRF Stall Resilience** — Phases 59-62 (shipped 2026-03-22)
 - ✅ **v3.7 VRF Path Audit** — Phases 63-67 (shipped 2026-03-22)
+- [ ] **v3.8 VRF Commitment Window Audit** — Phases 68-72 (in progress)
 
 ## Phases
 
@@ -127,10 +128,84 @@
 
 </details>
 
+### v3.8 VRF Commitment Window Audit (In Progress)
+
+**Milestone Goal:** Prove that no player-controllable action between VRF request and fulfillment can influence outcomes determined by that RNG word.
+
+- [ ] **Phase 68: Commitment Window Inventory** - Catalog every variable VRF words touch (forward + backward) and identify all mutation surfaces
+- [ ] **Phase 69: Mutation Verdicts** - Cross-reference proof and per-variable binary SAFE/VULNERABLE verdicts with fix recommendations
+- [ ] **Phase 70: Coinflip Commitment Window** - Full coinflip RNG lifecycle trace with commitment window analysis and multi-tx attack modeling
+- [ ] **Phase 71: advanceGame Day RNG Window** - Daily VRF word flow through all consumers with commitment window and cross-day contamination analysis
+- [ ] **Phase 72: Ticket Queue Deep-Dive + Pattern Scan** - Known ticket queue swap bug exploitation scenario, fix verification, and cross-contract pattern scan
+
+## Phase Details
+
+### Phase 68: Commitment Window Inventory
+**Goal**: Every storage variable that VRF fulfillment reads, writes, or feeds into outcome computation is cataloged with slot, contract, purpose, and mutation surface
+**Depends on**: Nothing (first phase of v3.8)
+**Requirements**: CW-01, CW-02, CW-03
+**Success Criteria** (what must be TRUE):
+  1. A complete forward-trace catalog exists listing every storage variable written or read by rawFulfillRandomWords through all downstream consumers, with contract name, slot number, and purpose
+  2. A complete backward-trace catalog exists listing every storage variable that feeds into VRF-dependent outcome computations (from outcome back to committed inputs)
+  3. For each cataloged variable, every external/public function that can mutate it is listed with call-graph depth (direct writes + indirect via internal calls)
+**Plans**: TBD
+
+### Phase 69: Mutation Verdicts
+**Goal**: Every cataloged variable has a binary SAFE/VULNERABLE verdict with proof, and every VULNERABLE variable has a fix recommendation
+**Depends on**: Phase 68
+**Requirements**: CW-04, MUT-01, MUT-02, MUT-03
+**Success Criteria** (what must be TRUE):
+  1. A cross-reference proof demonstrates that no external function callable by a non-admin actor can mutate any committed input between VRF request and fulfillment
+  2. Every variable from the Phase 68 inventory has a binary SAFE or VULNERABLE verdict with supporting evidence
+  3. Every VULNERABLE variable includes a specific fix recommendation with C4A severity rating
+  4. Call-graph analysis covers indirect mutation paths (A calls internal B which writes C) to at least 3 levels of depth for all mutation surfaces
+**Plans**: TBD
+
+### Phase 70: Coinflip Commitment Window
+**Goal**: The coinflip RNG path is proven safe (or vulnerabilities documented) under all conditions including multi-transaction attack sequences
+**Depends on**: Phase 69
+**Requirements**: COIN-01, COIN-02, COIN-03
+**Success Criteria** (what must be TRUE):
+  1. A complete coinflip lifecycle trace exists covering bet placement through RNG request, fulfillment, roll computation, and payout, with every state transition identified
+  2. All player-controllable state between coinflip bet and resolution is identified and each receives a SAFE or VULNERABLE verdict
+  3. Multi-tx attack sequences (bet + manipulate + claim patterns) are modeled and each receives a verdict with exploitation feasibility assessment
+**Plans**: TBD
+
+### Phase 71: advanceGame Day RNG Window
+**Goal**: The daily VRF word flow through all consumers is proven safe with no cross-day contamination
+**Depends on**: Phase 69
+**Requirements**: DAYRNG-01, DAYRNG-02, DAYRNG-03
+**Success Criteria** (what must be TRUE):
+  1. A data dependency graph exists showing daily VRF word flow through all consumers: jackpot selection, lootbox index assignment, coinflip resolution
+  2. All state that can change between VRF request (in advanceGame) and fulfillment is identified and assessed for outcome influence
+  3. Cross-day carry-over analysis proves day N pending state cannot leak into or contaminate day N+1 RNG outcomes
+**Plans**: TBD
+
+### Phase 72: Ticket Queue Deep-Dive + Pattern Scan
+**Goal**: The known ticket queue swap vulnerability is fully documented with fix, and all contracts are scanned for similar commitment window violations
+**Depends on**: Phase 70, Phase 71
+**Requirements**: TQ-01, TQ-02, TQ-03
+**Success Criteria** (what must be TRUE):
+  1. A full exploitation scenario for ticket queue swap during jackpot phase is documented with step-by-step attacker actions, preconditions, and outcome manipulation
+  2. A fix for the ticket queue commitment window violation is identified and verified (or proven unnecessary with evidence)
+  3. A cross-contract pattern scan is complete covering all contracts for similar commitment window violations (any state that shifts between VRF request and use) with per-finding verdict
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 68. Commitment Window Inventory | 0/? | Not started | - |
+| 69. Mutation Verdicts | 0/? | Not started | - |
+| 70. Coinflip Commitment Window | 0/? | Not started | - |
+| 71. advanceGame Day RNG Window | 0/? | Not started | - |
+| 72. Ticket Queue Deep-Dive + Pattern Scan | 0/? | Not started | - |
+
 ## Deferred
 
-- **COIN-01**: Coinflip RNG consumption audit — processCoinflipPayouts entropy derivation, nudge arithmetic, claim paths
-- **DAYRNG-01**: advanceGame day RNG audit — daily seed flow through all game modules (jackpot, lootbox, decimator, etc.)
 - **FORMAL-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
 - **FORMAL-02**: Formal verification of vote counting arithmetic via Halmos
 - **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions

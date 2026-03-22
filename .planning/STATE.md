@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: VRF Commitment Window Audit
-status: Defining requirements
-stopped_at: Milestone v3.8 started
-last_updated: "2026-03-22T20:30:00.000Z"
+status: Ready to plan
+stopped_at: Roadmap created with 5 phases (68-72), 16 requirements mapped
+last_updated: "2026-03-22T21:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,14 +19,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v3.8 VRF Commitment Window Audit
+**Current focus:** Phase 68 — Commitment Window Inventory
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 68 of 72 (Commitment Window Inventory)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-22 — Milestone v3.8 started
+Status: Ready to plan
+Last activity: 2026-03-22 — Roadmap created for v3.8 (5 phases, 16 requirements)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Accumulated Context
 
@@ -41,9 +43,10 @@ None.
 ### Blockers/Concerns
 
 - Ticket queue swap during jackpot phase is a known commitment window violation — motivates this milestone.
+- COIN-01 and DAYRNG-01 were previously deferred in ROADMAP.md — now promoted to v3.8 scope.
 
 ## Session Continuity
 
 Last session: 2026-03-22
-Stopped at: Milestone v3.8 started
+Stopped at: Roadmap created, ready to plan Phase 68
 Resume file: None
