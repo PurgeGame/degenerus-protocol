@@ -108,7 +108,7 @@
 
 - [ ] **Phase 59: RNG Gap Backfill Implementation** — Implement gap day word backfill and orphaned index recovery
 - [ ] **Phase 60: Coordinator Swap Cleanup** — Fix stale state in updateVrfCoordinatorAndSub
-- [ ] **Phase 61: Stall Resilience Tests** — Foundry tests for full stall→swap→resume cycle
+- [ ] **Phase 61: Stall Resilience Tests** — Foundry tests for full stall->swap->resume cycle
 - [ ] **Phase 62: Audit + Consolidated Findings** — Verify changes, document findings
 
 ## Phase Details
@@ -123,7 +123,10 @@
   3. midDayTicketRngPending cleared appropriately
   4. Coinflip claims on gap days succeed with backfilled words
   5. Lootbox opens on orphaned indices succeed with backfilled words
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 59-01-PLAN.md — Add _backfillGapDays function and wire into rngGate (GAP-01, GAP-04)
+- [ ] 59-02-PLAN.md — Orphaned lootbox index recovery + midDayTicketRngPending clearing (GAP-02, GAP-03, GAP-05)
 
 ### Phase 60: Coordinator Swap Cleanup
 **Goal**: updateVrfCoordinatorAndSub handles all stale state from the failed coordinator
@@ -135,7 +138,7 @@
 **Plans**: TBD
 
 ### Phase 61: Stall Resilience Tests
-**Goal**: Foundry tests prove the full stall→swap→resume cycle works end-to-end
+**Goal**: Foundry tests prove the full stall->swap->resume cycle works end-to-end
 **Depends on**: Phase 59, Phase 60
 **Requirements**: TEST-01, TEST-02, TEST-03
 **Success Criteria**:
@@ -157,7 +160,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 59. RNG Gap Backfill | 0/TBD | Not started | - |
+| 59. RNG Gap Backfill | 0/2 | Planned | - |
 | 60. Coordinator Swap Cleanup | 0/TBD | Not started | - |
 | 61. Stall Resilience Tests | 0/TBD | Not started | - |
 | 62. Audit + Findings | 0/TBD | Not started | - |
