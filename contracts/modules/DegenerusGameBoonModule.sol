@@ -12,18 +12,22 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
  * @notice Delegatecall module for boon consumption and lootbox view functions.
  *
  * @dev Split from DegenerusGameLootboxModule to stay under EIP-170 size limit.
- *      Called via `delegatecall` from DegenerusGame — all storage reads/writes
+ *      Called via `delegatecall` from DegenerusGame -- all storage reads/writes
  *      operate on the game contract's storage.
+ *
+ *      All boon state is packed into a 2-slot BoonPacked struct per player.
+ *      Each function loads the relevant slot(s), modifies in memory, and writes
+ *      back in a single SSTORE. See DegenerusGameStorage for bit layout.
  */
 contract DegenerusGameBoonModule is DegenerusGameStorage {
     // =========================================================================
     // Constants
     // =========================================================================
 
-    uint48 private constant COINFLIP_BOON_EXPIRY_DAYS = 2;
-    uint48 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
-    uint48 private constant PURCHASE_BOOST_EXPIRY_DAYS = 4;
-    uint48 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
+    uint24 private constant COINFLIP_BOON_EXPIRY_DAYS = 2;
+    uint24 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
+    uint24 private constant PURCHASE_BOOST_EXPIRY_DAYS = 4;
+    uint24 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
     IDegenerusQuests internal constant quests = IDegenerusQuests(ContractAddresses.QUESTS);
 
@@ -36,26 +40,24 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @return boonBps The bonus in basis points (0 if no boon, 500/1000/2500 otherwise)
     function consumeCoinflipBoon(address player) external returns (uint16 boonBps) {
         if (player == address(0)) return 0;
-        uint48 currentDay = _simulatedDayIndex();
-        uint48 deityDay = deityCoinflipBoonDay[player];
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s0 = bp.slot0;
+        uint8 tier = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
+        if (tier == 0) return 0;
+
+        uint24 currentDay = uint24(_simulatedDayIndex());
+        uint24 deityDay = uint24(s0 >> BP_DEITY_COINFLIP_DAY_SHIFT);
         if (deityDay != 0 && deityDay != currentDay) {
-            coinflipBoonBps[player] = 0;
-            coinflipBoonDay[player] = 0;
-            deityCoinflipBoonDay[player] = 0;
+            bp.slot0 = s0 & BP_COINFLIP_CLEAR;
             return 0;
         }
-        uint48 stampDay = coinflipBoonDay[player];
+        uint24 stampDay = uint24(s0 >> BP_COINFLIP_DAY_SHIFT);
         if (stampDay > 0 && currentDay > stampDay + COINFLIP_BOON_EXPIRY_DAYS) {
-            coinflipBoonBps[player] = 0;
-            coinflipBoonDay[player] = 0;
-            deityCoinflipBoonDay[player] = 0;
+            bp.slot0 = s0 & BP_COINFLIP_CLEAR;
             return 0;
         }
-        boonBps = coinflipBoonBps[player];
-        if (boonBps == 0) return 0;
-        coinflipBoonBps[player] = 0;
-        coinflipBoonDay[player] = 0;
-        deityCoinflipBoonDay[player] = 0;
+        boonBps = _coinflipTierToBps(tier);
+        bp.slot0 = s0 & BP_COINFLIP_CLEAR;
     }
 
     /// @notice Consume a player's purchase boost and return the bonus BPS
@@ -63,26 +65,24 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @return boostBps The bonus in basis points (0 if no boost, 500/1500/2500 otherwise)
     function consumePurchaseBoost(address player) external returns (uint16 boostBps) {
         if (player == address(0)) return 0;
-        uint48 currentDay = _simulatedDayIndex();
-        uint48 deityDay = deityPurchaseBoostDay[player];
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s0 = bp.slot0;
+        uint8 tier = uint8(s0 >> BP_PURCHASE_TIER_SHIFT);
+        if (tier == 0) return 0;
+
+        uint24 currentDay = uint24(_simulatedDayIndex());
+        uint24 deityDay = uint24(s0 >> BP_DEITY_PURCHASE_DAY_SHIFT);
         if (deityDay != 0 && deityDay != currentDay) {
-            purchaseBoostBps[player] = 0;
-            purchaseBoostDay[player] = 0;
-            deityPurchaseBoostDay[player] = 0;
+            bp.slot0 = s0 & BP_PURCHASE_CLEAR;
             return 0;
         }
-        uint48 stampDay = purchaseBoostDay[player];
+        uint24 stampDay = uint24(s0 >> BP_PURCHASE_DAY_SHIFT);
         if (stampDay > 0 && currentDay > stampDay + PURCHASE_BOOST_EXPIRY_DAYS) {
-            purchaseBoostBps[player] = 0;
-            purchaseBoostDay[player] = 0;
-            deityPurchaseBoostDay[player] = 0;
+            bp.slot0 = s0 & BP_PURCHASE_CLEAR;
             return 0;
         }
-        boostBps = purchaseBoostBps[player];
-        if (boostBps == 0) return 0;
-        purchaseBoostBps[player] = 0;
-        purchaseBoostDay[player] = 0;
-        deityPurchaseBoostDay[player] = 0;
+        boostBps = _purchaseTierToBps(tier);
+        bp.slot0 = s0 & BP_PURCHASE_CLEAR;
     }
 
     /// @notice Consume a player's decimator boost and return the bonus BPS
@@ -90,17 +90,19 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @return boostBps The bonus in basis points (0 if no boost, 1000/2500/5000 otherwise)
     function consumeDecimatorBoost(address player) external returns (uint16 boostBps) {
         if (player == address(0)) return 0;
-        uint48 currentDay = _simulatedDayIndex();
-        uint48 deityDay = deityDecimatorBoostDay[player];
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s0 = bp.slot0;
+        uint8 tier = uint8(s0 >> BP_DECIMATOR_TIER_SHIFT);
+        if (tier == 0) return 0;
+
+        uint24 currentDay = uint24(_simulatedDayIndex());
+        uint24 deityDay = uint24(s0 >> BP_DEITY_DECIMATOR_DAY_SHIFT);
         if (deityDay != 0 && deityDay != currentDay) {
-            decimatorBoostBps[player] = 0;
-            deityDecimatorBoostDay[player] = 0;
+            bp.slot0 = s0 & BP_DECIMATOR_CLEAR;
             return 0;
         }
-        boostBps = decimatorBoostBps[player];
-        if (boostBps == 0) return 0;
-        decimatorBoostBps[player] = 0;
-        deityDecimatorBoostDay[player] = 0;
+        boostBps = _decimatorTierToBps(tier);
+        bp.slot0 = s0 & BP_DECIMATOR_CLEAR;
     }
 
     // =========================================================================
@@ -109,227 +111,193 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @notice Clear all expired boons for a player and report if any remain active.
     /// @dev Called via nested delegatecall from LootboxModule during lootbox resolution.
+    ///      Loads both packed slots (2 SLOADs), checks all boon categories for deity
+    ///      and time-based expiry, clears expired fields in memory, writes back only
+    ///      changed slots (at most 2 SSTOREs).
     /// @param player The player address to check and clear expired boons for
     /// @return hasAnyBoon True if the player has at least one active (non-expired) boon
     function checkAndClearExpiredBoon(address player) external returns (bool hasAnyBoon) {
-        uint48 currentDay = _simulatedDayIndex();
+        uint24 currentDay = uint24(_simulatedDayIndex());
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s0 = bp.slot0;
+        uint256 s1 = bp.slot1;
+        bool changed0;
+        bool changed1;
 
-        uint16 coinflipBps = coinflipBoonBps[player];
-        if (coinflipBps != 0) {
-            uint48 deityDay = deityCoinflipBoonDay[player];
+        // --- Slot 0: Coinflip ---
+        uint8 coinflipTierLocal = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
+        if (coinflipTierLocal != 0) {
+            uint24 deityDay = uint24(s0 >> BP_DEITY_COINFLIP_DAY_SHIFT);
             if (deityDay != 0 && deityDay != currentDay) {
-                coinflipBoonBps[player] = 0;
-                coinflipBoonDay[player] = 0;
-                deityCoinflipBoonDay[player] = 0;
-                coinflipBps = 0;
+                s0 = s0 & BP_COINFLIP_CLEAR;
+                changed0 = true;
+                coinflipTierLocal = 0;
             } else {
-                uint48 stampDay = coinflipBoonDay[player];
+                uint24 stampDay = uint24(s0 >> BP_COINFLIP_DAY_SHIFT);
                 if (stampDay > 0 && currentDay > stampDay + COINFLIP_BOON_EXPIRY_DAYS) {
-                    coinflipBoonBps[player] = 0;
-                    coinflipBoonDay[player] = 0;
-                    deityCoinflipBoonDay[player] = 0;
-                    coinflipBps = 0;
+                    s0 = s0 & BP_COINFLIP_CLEAR;
+                    changed0 = true;
+                    coinflipTierLocal = 0;
                 }
             }
         }
 
-        bool lootbox25 = lootboxBoon25Active[player];
-        if (lootbox25) {
-            uint48 deityDay = deityLootboxBoon25Day[player];
+        // --- Slot 0: Lootbox ---
+        uint8 lootboxTierLocal = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
+        if (lootboxTierLocal != 0) {
+            uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
             if (deityDay != 0 && deityDay != currentDay) {
-                lootboxBoon25Active[player] = false;
-                deityLootboxBoon25Day[player] = 0;
-                lootbox25 = false;
+                s0 = s0 & BP_LOOTBOX_CLEAR;
+                changed0 = true;
+                lootboxTierLocal = 0;
             } else {
-                uint48 stampDay = lootboxBoon25Day[player];
+                uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
                 if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
-                    lootboxBoon25Active[player] = false;
-                    deityLootboxBoon25Day[player] = 0;
-                    lootbox25 = false;
+                    s0 = s0 & BP_LOOTBOX_CLEAR;
+                    changed0 = true;
+                    lootboxTierLocal = 0;
                 }
             }
         } else {
-            uint48 deityDay = deityLootboxBoon25Day[player];
+            // Stale deity day clearing for inactive lootbox boon (matches original behavior)
+            uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
             if (deityDay != 0 && deityDay != currentDay) {
-                deityLootboxBoon25Day[player] = 0;
+                s0 = s0 & BP_LOOTBOX_CLEAR;
+                changed0 = true;
             }
         }
 
-        bool lootbox15 = lootboxBoon15Active[player];
-        if (lootbox15) {
-            uint48 deityDay = deityLootboxBoon15Day[player];
+        // --- Slot 0: Purchase ---
+        uint8 purchaseTierLocal = uint8(s0 >> BP_PURCHASE_TIER_SHIFT);
+        if (purchaseTierLocal != 0) {
+            uint24 deityDay = uint24(s0 >> BP_DEITY_PURCHASE_DAY_SHIFT);
             if (deityDay != 0 && deityDay != currentDay) {
-                lootboxBoon15Active[player] = false;
-                deityLootboxBoon15Day[player] = 0;
-                lootbox15 = false;
+                s0 = s0 & BP_PURCHASE_CLEAR;
+                changed0 = true;
+                purchaseTierLocal = 0;
             } else {
-                uint48 stampDay = lootboxBoon15Day[player];
-                if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
-                    lootboxBoon15Active[player] = false;
-                    deityLootboxBoon15Day[player] = 0;
-                    lootbox15 = false;
-                }
-            }
-        } else {
-            uint48 deityDay = deityLootboxBoon15Day[player];
-            if (deityDay != 0 && deityDay != currentDay) {
-                deityLootboxBoon15Day[player] = 0;
-            }
-        }
-
-        bool lootbox5 = lootboxBoon5Active[player];
-        if (lootbox5) {
-            uint48 deityDay = deityLootboxBoon5Day[player];
-            if (deityDay != 0 && deityDay != currentDay) {
-                lootboxBoon5Active[player] = false;
-                deityLootboxBoon5Day[player] = 0;
-                lootbox5 = false;
-            } else {
-                uint48 stampDay = lootboxBoon5Day[player];
-                if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
-                    lootboxBoon5Active[player] = false;
-                    deityLootboxBoon5Day[player] = 0;
-                    lootbox5 = false;
-                }
-            }
-        } else {
-            uint48 deityDay = deityLootboxBoon5Day[player];
-            if (deityDay != 0 && deityDay != currentDay) {
-                deityLootboxBoon5Day[player] = 0;
-            }
-        }
-
-        uint16 purchaseBps = purchaseBoostBps[player];
-        if (purchaseBps != 0) {
-            uint48 deityDay = deityPurchaseBoostDay[player];
-            if (deityDay != 0 && deityDay != currentDay) {
-                purchaseBoostBps[player] = 0;
-                purchaseBoostDay[player] = 0;
-                deityPurchaseBoostDay[player] = 0;
-                purchaseBps = 0;
-            } else {
-                uint48 stampDay = purchaseBoostDay[player];
+                uint24 stampDay = uint24(s0 >> BP_PURCHASE_DAY_SHIFT);
                 if (stampDay > 0 && currentDay > stampDay + PURCHASE_BOOST_EXPIRY_DAYS) {
-                    purchaseBoostBps[player] = 0;
-                    purchaseBoostDay[player] = 0;
-                    deityPurchaseBoostDay[player] = 0;
-                    purchaseBps = 0;
+                    s0 = s0 & BP_PURCHASE_CLEAR;
+                    changed0 = true;
+                    purchaseTierLocal = 0;
                 }
             }
         }
 
-        uint16 decimatorBps = decimatorBoostBps[player];
-        if (decimatorBps != 0) {
-            uint48 deityDay = deityDecimatorBoostDay[player];
+        // --- Slot 0: Decimator (no time expiry, only deity day) ---
+        uint8 decimatorTierLocal = uint8(s0 >> BP_DECIMATOR_TIER_SHIFT);
+        if (decimatorTierLocal != 0) {
+            uint24 deityDay = uint24(s0 >> BP_DEITY_DECIMATOR_DAY_SHIFT);
             if (deityDay != 0 && deityDay != currentDay) {
-                decimatorBoostBps[player] = 0;
-                deityDecimatorBoostDay[player] = 0;
-                decimatorBps = 0;
+                s0 = s0 & BP_DECIMATOR_CLEAR;
+                changed0 = true;
+                decimatorTierLocal = 0;
             }
         }
 
-        uint48 whaleDay = whaleBoonDay[player];
-        uint48 deityWhaleDay = deityWhaleBoonDay[player];
-        if (deityWhaleDay != 0 && deityWhaleDay != currentDay) {
-            whaleBoonDay[player] = 0;
-            deityWhaleBoonDay[player] = 0;
-            whaleBoonDiscountBps[player] = 0;
-            whaleDay = 0;
-        }
-        uint48 lazyDay = lazyPassBoonDay[player];
-        if (lazyDay != 0) {
-            uint48 deityDay = deityLazyPassBoonDay[player];
-            if (deityDay != 0 && deityDay != currentDay) {
-                lazyPassBoonDay[player] = 0;
-                lazyPassBoonDiscountBps[player] = 0;
-                deityLazyPassBoonDay[player] = 0;
-                lazyDay = 0;
-            } else if (currentDay > lazyDay + 4) {
-                lazyPassBoonDay[player] = 0;
-                lazyPassBoonDiscountBps[player] = 0;
-                deityLazyPassBoonDay[player] = 0;
-                lazyDay = 0;
+        // --- Slot 0: Whale ---
+        uint24 whaleDayLocal = uint24(s0 >> BP_WHALE_DAY_SHIFT);
+        {
+            uint24 deityWhaleDay = uint24(s0 >> BP_DEITY_WHALE_DAY_SHIFT);
+            if (deityWhaleDay != 0 && deityWhaleDay != currentDay) {
+                s0 = s0 & BP_WHALE_CLEAR;
+                changed0 = true;
+                whaleDayLocal = 0;
             }
         }
 
-        uint8 deityTier = deityPassBoonTier[player];
-        if (deityTier != 0) {
-            uint48 deityDay = deityDeityPassBoonDay[player];
+        // --- Slot 1: Activity ---
+        uint24 activityPendingLocal = uint24(s1 >> BP_ACTIVITY_PENDING_SHIFT);
+        if (activityPendingLocal != 0) {
+            uint24 deityDay = uint24(s1 >> BP_DEITY_ACTIVITY_DAY_SHIFT);
+            if (deityDay != 0 && deityDay != currentDay) {
+                s1 = s1 & BP_ACTIVITY_CLEAR;
+                changed1 = true;
+                activityPendingLocal = 0;
+            } else {
+                uint24 stampDay = uint24(s1 >> BP_ACTIVITY_DAY_SHIFT);
+                if (stampDay > 0 && currentDay > stampDay + COINFLIP_BOON_EXPIRY_DAYS) {
+                    s1 = s1 & BP_ACTIVITY_CLEAR;
+                    changed1 = true;
+                    activityPendingLocal = 0;
+                }
+            }
+        }
+
+        // --- Slot 1: Deity Pass ---
+        uint8 deityPassTierLocal = uint8(s1 >> BP_DEITY_PASS_TIER_SHIFT);
+        if (deityPassTierLocal != 0) {
+            uint24 deityDay = uint24(s1 >> BP_DEITY_DEITY_PASS_DAY_SHIFT);
             if (deityDay != 0) {
                 if (currentDay > deityDay) {
-                    deityPassBoonTier[player] = 0;
-                    deityPassBoonDay[player] = 0;
-                    deityDeityPassBoonDay[player] = 0;
-                    deityTier = 0;
+                    s1 = s1 & BP_DEITY_PASS_CLEAR;
+                    changed1 = true;
+                    deityPassTierLocal = 0;
                 }
             } else {
-                uint48 stampDay = deityPassBoonDay[player];
+                uint24 stampDay = uint24(s1 >> BP_DEITY_PASS_DAY_SHIFT);
                 if (stampDay > 0 && currentDay > stampDay + DEITY_PASS_BOON_EXPIRY_DAYS) {
-                    deityPassBoonTier[player] = 0;
-                    deityPassBoonDay[player] = 0;
-                    deityTier = 0;
+                    s1 = s1 & BP_DEITY_PASS_CLEAR;
+                    changed1 = true;
+                    deityPassTierLocal = 0;
                 }
             }
         }
 
-        uint24 activityPending = activityBoonPending[player];
-        if (activityPending != 0) {
-            uint48 deityDay = deityActivityBoonDay[player];
+        // --- Slot 1: Lazy Pass ---
+        uint24 lazyPassDayLocal = uint24(s1 >> BP_LAZY_PASS_DAY_SHIFT);
+        if (lazyPassDayLocal != 0) {
+            uint24 deityDay = uint24(s1 >> BP_DEITY_LAZY_PASS_DAY_SHIFT);
             if (deityDay != 0 && deityDay != currentDay) {
-                activityBoonPending[player] = 0;
-                activityBoonDay[player] = 0;
-                deityActivityBoonDay[player] = 0;
-                activityPending = 0;
-            } else {
-                uint48 stampDay = activityBoonDay[player];
-                if (stampDay > 0 && currentDay > stampDay + COINFLIP_BOON_EXPIRY_DAYS) {
-                    activityBoonPending[player] = 0;
-                    activityBoonDay[player] = 0;
-                    deityActivityBoonDay[player] = 0;
-                    activityPending = 0;
-                }
+                s1 = s1 & BP_LAZY_PASS_CLEAR;
+                changed1 = true;
+                lazyPassDayLocal = 0;
+            } else if (currentDay > lazyPassDayLocal + 4) {
+                s1 = s1 & BP_LAZY_PASS_CLEAR;
+                changed1 = true;
+                lazyPassDayLocal = 0;
             }
         }
 
-        return (whaleDay != 0 ||
-            lazyDay != 0 ||
-            coinflipBps != 0 ||
-            lootbox25 ||
-            lootbox15 ||
-            lootbox5 ||
-            purchaseBps != 0 ||
-            decimatorBps != 0 ||
-            activityPending != 0 ||
-            deityTier != 0);
+        // Write back only changed slots
+        if (changed0) bp.slot0 = s0;
+        if (changed1) bp.slot1 = s1;
+
+        return (whaleDayLocal != 0 ||
+            lazyPassDayLocal != 0 ||
+            coinflipTierLocal != 0 ||
+            lootboxTierLocal != 0 ||
+            purchaseTierLocal != 0 ||
+            decimatorTierLocal != 0 ||
+            activityPendingLocal != 0 ||
+            deityPassTierLocal != 0);
     }
 
     /// @notice Consume a pending activity boon and apply it to player stats.
     /// @dev Called via nested delegatecall from LootboxModule during lootbox resolution.
     /// @param player Player address
     function consumeActivityBoon(address player) external {
-        uint24 pending = activityBoonPending[player];
-        if (pending == 0 || player == address(0)) return;
+        if (player == address(0)) return;
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s1 = bp.slot1;
+        uint24 pending = uint24(s1 >> BP_ACTIVITY_PENDING_SHIFT);
+        if (pending == 0) return;
 
-        uint48 currentDay = _simulatedDayIndex();
-        uint48 deityDay = deityActivityBoonDay[player];
+        uint24 currentDay = uint24(_simulatedDayIndex());
+        uint24 deityDay = uint24(s1 >> BP_DEITY_ACTIVITY_DAY_SHIFT);
         if (deityDay != 0 && deityDay != currentDay) {
-            activityBoonPending[player] = 0;
-            activityBoonDay[player] = 0;
-            deityActivityBoonDay[player] = 0;
+            bp.slot1 = s1 & BP_ACTIVITY_CLEAR;
             return;
         }
 
-        uint48 stampDay = activityBoonDay[player];
+        uint24 stampDay = uint24(s1 >> BP_ACTIVITY_DAY_SHIFT);
         if (stampDay > 0 && currentDay > stampDay + COINFLIP_BOON_EXPIRY_DAYS) {
-            activityBoonPending[player] = 0;
-            activityBoonDay[player] = 0;
-            deityActivityBoonDay[player] = 0;
+            bp.slot1 = s1 & BP_ACTIVITY_CLEAR;
             return;
         }
 
-        activityBoonPending[player] = 0;
-        activityBoonDay[player] = 0;
-        deityActivityBoonDay[player] = 0;
+        bp.slot1 = s1 & BP_ACTIVITY_CLEAR;
 
         uint256 prevData = mintPacked_[player];
         uint24 levelCount = uint24(
