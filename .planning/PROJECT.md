@@ -40,12 +40,20 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v3.3 Documentation sync — NatSpec verified, error renames, bit allocation map, 12 audit docs updated, PAY-16 payout path — v3.3
 - ✓ v3.5 Gas optimization — 204 variables analyzed (201 ALIVE, 3 DEAD), 5 dead code items, 8 packing opportunities, 13 findings (3 LOW, 10 INFO) — v3.5 Phase 55
 - ✓ v3.5 Comment correctness — 46 files (~26,300 lines) swept, 26 findings (7 LOW, 19 INFO), 34 prior findings verified FIXED, 3 regressions documented — v3.5 Phase 54
-- ✓ v3.5 Gas ceiling analysis — 18 paths profiled (12 advanceGame + 6 purchase), 14 SAFE, 1 TIGHT, 2 AT_RISK, 4 INFO findings — v3.5 Phase 57
+- ✓ v3.5 Gas ceiling analysis — 18 paths profiled (12 advanceGame + 6 purchase), 15 SAFE, 1 TIGHT, 2 AT_RISK, 4 INFO findings — v3.5 Phase 57
 - ✓ v3.5 Final Polish — 43 findings consolidated (10 LOW, 33 INFO) from comment correctness (26), gas optimization (13), and gas ceiling analysis (4) — v3.5 Phase 58
 
 ### Active
 
-None — all milestones complete through v3.5.
+## Current Milestone: v3.6 VRF Stall Resilience
+
+**Goal:** Ensure all RNG-dependent systems (coinflips, lootboxes, redemptions) gracefully handle VRF stall → coordinator swap → resume by backfilling gap day RNG words.
+
+**Target features:**
+- Gap day RNG backfill in advanceGame (derive words from first post-gap VRF response)
+- Orphaned lootbox index recovery
+- midDayTicketRngPending cleanup
+- Full stall→swap→resume test coverage
 
 ### Deferred (v3.3+)
 
