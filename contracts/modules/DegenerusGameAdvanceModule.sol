@@ -1343,11 +1343,32 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         vrfSubscriptionId = newSubId;
         vrfKeyHash = newKeyHash;
 
+        // Backfill orphaned lootbox index from the stalled VRF request.
+        // Must happen BEFORE clearing vrfRequestId — we need it to look up the index.
+        uint256 outgoingRequestId = vrfRequestId;
+        if (outgoingRequestId != 0) {
+            uint48 orphanedIndex = lootboxRngRequestIndexById[outgoingRequestId];
+            if (orphanedIndex != 0 && lootboxRngWordByIndex[orphanedIndex] == 0) {
+                uint256 fallbackWord = uint256(keccak256(abi.encodePacked(
+                    lastLootboxRngWord, orphanedIndex
+                )));
+                if (fallbackWord == 0) fallbackWord = 1;
+                lootboxRngWordByIndex[orphanedIndex] = fallbackWord;
+                lastLootboxRngWord = fallbackWord;
+            }
+        }
+
         // Reset RNG state to allow immediate advancement
         rngLockedFlag = false;
         vrfRequestId = 0;
         rngRequestTime = 0;
         rngWordCurrent = 0;
+
+        // Clear mid-day lootbox RNG pending flag to prevent post-swap deadlock.
+        // Without this, advanceGame can revert with NotTimeYet if a mid-day
+        // requestLootboxRng was in-flight when the coordinator stalled.
+        midDayTicketRngPending = false;
+
         emit VrfCoordinatorUpdated(current, newCoordinator);
     }
 
