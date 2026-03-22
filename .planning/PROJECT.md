@@ -57,8 +57,10 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ### Active
 
+- [ ] VRF commitment window audit — exhaustive inventory of every variable VRF words touch (forward + backward), mutation analysis during request→fulfillment window
 - [ ] Coinflip RNG path audit under all conditions
 - [ ] advanceGame day RNG path verification
+- [ ] Per-variable binary verdict: SAFE (immutable in window) or VULNERABLE (mutable + fix recommendation)
 
 ### Deferred (v3.3+)
 
@@ -121,14 +123,24 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | WAR-02 | Medium | Colluding voter cartel at day 6 (5% threshold) |
 | WAR-06 | Low | Admin spam-propose gas griefing (no per-proposer cooldown) |
 
+## Current Milestone: v3.8 VRF Commitment Window Audit
+
+**Goal:** Prove that no player-controllable action between VRF request and fulfillment can influence outcomes determined by that RNG word.
+
+**Target features:**
+- Exhaustive inventory of every variable/state that VRF words touch (forward + backward)
+- Per-variable mutation analysis: which external functions can change it during the commitment window
+- Binary verdict per variable: SAFE (immutable in window) or VULNERABLE (mutable in window)
+- Coinflip RNG path audit under all conditions
+- advanceGame day RNG path verification
+- Ticket queue swap bug deep-dive and similar patterns
+
 ---
 ## Current State
 
-v3.7 shipped — VRF Path Audit complete. 77 Foundry/Halmos tests, 20/20 requirements, 0 HIGH/MEDIUM/LOW findings (7 INFO documented). All VRF-dependent code paths audited: request/fulfillment core, lootbox RNG lifecycle, stall edge cases, with invariant + symbolic verification.
+v3.7 shipped — VRF Path Audit complete. 77 Foundry/Halmos tests, 20/20 requirements, 0 HIGH/MEDIUM/LOW findings (7 INFO documented). Ticket queue swap during jackpot phase identified as commitment window violation — motivates v3.8.
 
 **Grand total across all milestones:** 87+ findings (16 LOW, 71+ INFO), 0 HIGH/MEDIUM outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified.
-
-**Remaining unaudited RNG paths:** Coinflip RNG consumption (COIN-01), advanceGame daily seed flow (DAYRNG-01).
 
 Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit).
 
@@ -150,4 +162,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-22 after v3.7 milestone archived*
+*Last updated: 2026-03-22 after v3.8 milestone started*
