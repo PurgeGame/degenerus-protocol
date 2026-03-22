@@ -29,7 +29,7 @@ interface IWrappedWrappedXRP {
  *
  * ## Functions
  *
- * - Lootbox opening (openLootBox, openBurnieLootBox, resolveLootboxDirect, resolveLootboxRng)
+ * - Lootbox opening (openLootBox, openBurnieLootBox, resolveLootboxDirect, resolveRedemptionLootbox)
  * - Deity boon system (deityBoonSlots, issueDeityBoon)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {

@@ -232,7 +232,7 @@ contract DegenerusVaultShare {
     /// @param to Destination address
     /// @param amount Amount to transfer
     /// @return success Always true (reverts on failure)
-    /// @custom:reverts ZeroAddress If from or to is address(0)
+    /// @custom:reverts ZeroAddress If to is address(0)
     /// @custom:reverts Insufficient If allowance or balance is insufficient
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         uint256 allowed = allowance[from][msg.sender];

@@ -35,10 +35,9 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  * GOVERNANCE (M-02 Mitigation):
  *   - Admin path: DGVE holder proposes after 20h VRF stall
  *   - Community path: 0.5%+ sDGNRS holder proposes after 7d VRF stall
- *   - Approval voting with decaying threshold (60% → 5% over 7 days)
+ *   - Approval voting with decaying threshold (50% → 5% over 7 days)
  *   - Changeable votes, approval voting across proposals
  *   - Auto-invalidation on VRF recovery (stall re-check in every vote)
- *   - Death clock pauses while any proposal is active
  */
 
 // =============================================================================

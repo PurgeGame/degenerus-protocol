@@ -2393,7 +2393,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         priceWei = price;
     }
 
-    /// @notice Return last-purchase-day coinflip totals for payout tuning.
     /*+======================================================================+
       |                   VIEW: PLAYER MINT STATISTICS                       |
       +======================================================================+

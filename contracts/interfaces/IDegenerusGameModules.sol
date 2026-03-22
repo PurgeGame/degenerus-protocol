@@ -48,10 +48,6 @@ interface IDegenerusGameAdvanceModule {
 /// @title IDegenerusGameEndgameModule
 /// @notice Interface for handling endgame finalization and rewards
 interface IDegenerusGameEndgameModule {
-    /// @notice Finalizes the endgame state for a given level
-    /// @param lvl The level being finalized
-    /// @param rngWord Random word for deterministic reward distribution
-
     /// @notice Distributes reward jackpots at endgame
     /// @param lvl The level for jackpot distribution
     /// @param rngWord Random word for winner selection
@@ -407,8 +403,6 @@ interface IDegenerusGameDegeneretteModule {
         uint8 heroQuadrant
     ) external payable;
 
-    /// @notice Places a Full Ticket Degenerette bet using pending affiliate Degenerette credit.
-    /// @param player The player address (use zero address for msg.sender)
     /// @notice Resolves one or more pending bets for a player
     /// @param player The player address (use zero address for msg.sender)
     /// @param betIds Array of bet IDs to resolve
