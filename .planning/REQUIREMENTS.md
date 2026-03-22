@@ -1,70 +1,63 @@
-# Requirements: Degenerus Protocol — v3.5 Final Polish
+# Requirements: Degenerus Protocol — v3.6 VRF Stall Resilience
 
-**Defined:** 2026-03-21
+**Defined:** 2026-03-22
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v3.5 Requirements
+## v3.6 Requirements
 
-### Comment Correctness
+### RNG Gap Backfill
 
-- [x] **CMT-01**: Every NatSpec tag (@param, @return, @dev, @notice) across all 34 contracts matches current code behavior
-- [x] **CMT-02**: No stale references to removed features, renamed variables, or changed semantics
-- [x] **CMT-03**: Inline comments accurately describe the code they annotate
-- [x] **CMT-04**: All findings documented with contract, line ref, and fix recommendation
+- [ ] **GAP-01**: When advanceGame detects dailyIdx gap (day > dailyIdx+1), backfill rngWordByDay for each missed day using keccak256(vrfWord, gapDay)
+- [ ] **GAP-02**: Backfill lootboxRngWordByIndex for any orphaned indices (index had no VRF response)
+- [ ] **GAP-03**: Clear midDayTicketRngPending during coordinator swap or on first post-gap advance
+- [ ] **GAP-04**: Coinflip stakes on gap days resolve normally via backfilled RNG words (no orphaned balances)
+- [ ] **GAP-05**: Lootboxes assigned to orphaned indices can be opened via backfilled RNG words (no bricked lootboxes)
 
-### Gas Optimization
+### Coordinator Swap Cleanup
 
-- [x] **GAS-01**: All storage variables confirmed alive (read + write in reachable code paths)
-- [x] **GAS-02**: No redundant checks, dead branches, or unreachable code
-- [x] **GAS-03**: Storage packing opportunities identified with estimated gas savings
-- [x] **GAS-04**: All findings documented with contract, line ref, and estimated impact
+- [ ] **SWAP-01**: updateVrfCoordinatorAndSub properly handles all stale state from the failed coordinator
+- [ ] **SWAP-02**: totalFlipReversals handling documented (carry-over vs reset — design decision)
 
-### Gas Ceiling Analysis
+### Testing
 
-- [x] **CEIL-01**: advanceGame worst-case gas profiled across every code path (jackpot, transition, daily, gameover)
-- [x] **CEIL-02**: Maximum jackpot payouts per path computed such that no path exceeds 14M gas
-- [x] **CEIL-03**: Ticket minting (purchase) worst-case gas profiled
-- [x] **CEIL-04**: Maximum ticket batch size computed such that purchase never exceeds 14M gas
-- [x] **CEIL-05**: Current headroom documented (how far below 14M each worst-case path sits today)
+- [ ] **TEST-01**: Foundry test simulating full stall→swap→resume cycle with gap day backfill
+- [ ] **TEST-02**: Test that coinflip claims work across gap days
+- [ ] **TEST-03**: Test that lootbox opens work after orphaned index backfill
 
-### Consolidated Findings
+### Audit
 
-- [ ] **FIND-01**: All v3.5 comment, gas, and ceiling findings in a master table sorted by severity
-- [ ] **FIND-02**: Fix recommendations actionable (one-line description of what to change)
+- [ ] **AUD-01**: All changes audited for correctness — no new attack vectors introduced
+- [ ] **AUD-02**: Consolidated findings documented
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Code changes / fixes | Flag-only — protocol team decides what to fix |
-| Test coverage | Tests are not in audit scope |
-| Formal verification | Out of scope for all milestones |
+| Multi-day catch-up processing | Gap days only need RNG backfill, not full advanceGame processing |
+| Nudge refunds for gap days | Nudges carry over — design choice, not a bug |
+| Frontend handling of stall UX | Not in audit scope |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CMT-01 | Phase 54 | Complete |
-| CMT-02 | Phase 54 | Complete |
-| CMT-03 | Phase 54 | Complete |
-| CMT-04 | Phase 54 | Complete |
-| GAS-01 | Phase 55 | Complete |
-| GAS-02 | Phase 55 | Complete |
-| GAS-03 | Phase 55 | Complete |
-| GAS-04 | Phase 55 | Complete |
-| CEIL-01 | Phase 57 | Complete |
-| CEIL-02 | Phase 57 | Complete |
-| CEIL-03 | Phase 57 | Complete |
-| CEIL-04 | Phase 57 | Complete |
-| CEIL-05 | Phase 57 | Complete |
-| FIND-01 | Phase 58 | Pending |
-| FIND-02 | Phase 58 | Pending |
+| GAP-01 | Phase 59 | Pending |
+| GAP-02 | Phase 59 | Pending |
+| GAP-03 | Phase 59 | Pending |
+| GAP-04 | Phase 59 | Pending |
+| GAP-05 | Phase 59 | Pending |
+| SWAP-01 | Phase 60 | Pending |
+| SWAP-02 | Phase 60 | Pending |
+| TEST-01 | Phase 61 | Pending |
+| TEST-02 | Phase 61 | Pending |
+| TEST-03 | Phase 61 | Pending |
+| AUD-01 | Phase 62 | Pending |
+| AUD-02 | Phase 62 | Pending |
 
 **Coverage:**
-- v3.5 requirements: 15 total
-- Mapped to phases: 15
+- v3.6 requirements: 12 total
+- Mapped to phases: 12
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-21*
-*Last updated: 2026-03-21 after initial definition*
+*Requirements defined: 2026-03-22*
