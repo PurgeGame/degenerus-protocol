@@ -7,10 +7,10 @@
 
 ### RNG Gap Backfill
 
-- [ ] **GAP-01**: When advanceGame detects dailyIdx gap (day > dailyIdx+1), backfill rngWordByDay for each missed day using keccak256(vrfWord, gapDay)
+- [x] **GAP-01**: When advanceGame detects dailyIdx gap (day > dailyIdx+1), backfill rngWordByDay for each missed day using keccak256(vrfWord, gapDay)
 - [ ] **GAP-02**: Backfill lootboxRngWordByIndex for any orphaned indices (index had no VRF response)
 - [ ] **GAP-03**: Clear midDayTicketRngPending during coordinator swap or on first post-gap advance
-- [ ] **GAP-04**: Coinflip stakes on gap days resolve normally via backfilled RNG words (no orphaned balances)
+- [x] **GAP-04**: Coinflip stakes on gap days resolve normally via backfilled RNG words (no orphaned balances)
 - [ ] **GAP-05**: Lootboxes assigned to orphaned indices can be opened via backfilled RNG words (no bricked lootboxes)
 
 ### Coordinator Swap Cleanup
@@ -41,10 +41,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GAP-01 | Phase 59 | Pending |
+| GAP-01 | Phase 59 | Complete |
 | GAP-02 | Phase 59 | Pending |
 | GAP-03 | Phase 59 | Pending |
-| GAP-04 | Phase 59 | Pending |
+| GAP-04 | Phase 59 | Complete |
 | GAP-05 | Phase 59 | Pending |
 | SWAP-01 | Phase 60 | Pending |
 | SWAP-02 | Phase 60 | Pending |
