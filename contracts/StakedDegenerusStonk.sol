@@ -442,7 +442,8 @@ contract StakedDegenerusStonk {
     /// @custom:reverts BurnsBlockedDuringRng If called during active VRF request (rngLocked).
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         if (game.gameOver()) {
-            return _deterministicBurn(msg.sender, amount);
+            (ethOut, stethOut) = _deterministicBurn(msg.sender, amount);
+            return (ethOut, stethOut, 0);
         }
         if (game.rngLocked()) revert BurnsBlockedDuringRng();
         _submitGamblingClaim(msg.sender, amount);
@@ -460,7 +461,8 @@ contract StakedDegenerusStonk {
     function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         dgnrsWrapper.burnForSdgnrs(msg.sender, amount);
         if (game.gameOver()) {
-            return _deterministicBurnFrom(msg.sender, ContractAddresses.DGNRS, amount);
+            (ethOut, stethOut) = _deterministicBurnFrom(msg.sender, ContractAddresses.DGNRS, amount);
+            return (ethOut, stethOut, 0);
         }
         if (game.rngLocked()) revert BurnsBlockedDuringRng();
         _submitGamblingClaimFrom(msg.sender, ContractAddresses.DGNRS, amount);
@@ -468,7 +470,7 @@ contract StakedDegenerusStonk {
     }
 
     /// @dev Deterministic burn: player burns their own sDGNRS and receives backing assets directly.
-    function _deterministicBurn(address player, uint256 amount) private returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+    function _deterministicBurn(address player, uint256 amount) private returns (uint256 ethOut, uint256 stethOut) {
         return _deterministicBurnFrom(player, player, amount);
     }
 
@@ -476,7 +478,7 @@ contract StakedDegenerusStonk {
     ///      Used for the wrapped case where sDGNRS is burned from DGNRS contract's balance
     ///      but ETH/stETH goes to beneficiary. No BURNIE payout (gameOver burns are pure ETH/stETH).
     ///      Deducts pendingRedemptionEthValue to exclude reserved gambling burn amounts from payout (CP-08).
-    function _deterministicBurnFrom(address beneficiary, address burnFrom, uint256 amount) private returns (uint256 ethOut, uint256 stethOut, uint256) {
+    function _deterministicBurnFrom(address beneficiary, address burnFrom, uint256 amount) private returns (uint256 ethOut, uint256 stethOut) {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
         uint256 supplyBefore = totalSupply;
