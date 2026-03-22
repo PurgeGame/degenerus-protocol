@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: VRF Path Audit
-status: unknown
-stopped_at: Completed 66-02-PLAN.md
-last_updated: "2026-03-22T17:59:24Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 66-01-PLAN.md
+last_updated: "2026-03-22T18:03:42.054Z"
 progress:
   total_phases: 4
   completed_phases: 4
@@ -49,6 +49,7 @@ Plan: 2 of 2 (complete)
 | Phase 65 P01 | 7min | 2 tasks | 1 files |
 | Phase 65 P02 | 5min | 2 tasks | 2 files |
 | Phase 66 P02 | 16min | 1 tasks | 1 files |
+| Phase 66 P01 | 18min | 2 tasks | 3 files |
 
 ### Decisions
 
@@ -76,6 +77,8 @@ v3.7 context:
 - [Phase 66]: Halmos 0.3.3 requires FOUNDRY_TEST=test/halmos + --build-info flag for AST data in forge artifacts
 - [Phase 66]: TEST-04 closed: Halmos symbolic proof that redemption roll formula always produces [25, 175] with safe uint16 cast for all 2^256 inputs
 - [Phase 66]: Actual formula call sites at lines 805, 868, 897 (not 817, 880, 909 from initial research)
+- [Phase 66]: Recovery detection uses lockedBefore && !lockedAfter transition in advanceGame handler for accurate gap backfill checking
+- [Phase 66]: Parametric fuzz tests use fixed setup words + fuzzed recovery word pattern (matching VRFStallEdgeCases), with 500-iteration unlock loop for edge-case VRF words
 
 ### Pending Todos
 
@@ -87,6 +90,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T17:59:24Z
-Stopped at: Completed 66-02-PLAN.md
+Last session: 2026-03-22T18:03:42.052Z
+Stopped at: Completed 66-01-PLAN.md
 Resume file: None

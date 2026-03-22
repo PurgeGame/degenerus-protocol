@@ -197,7 +197,7 @@ Plans:
 | 63. VRF Request/Fulfillment Core | v3.7 | 2/2 | Complete    | 2026-03-22 |
 | 64. Lootbox RNG Lifecycle | v3.7 | 2/2 | Complete    | 2026-03-22 |
 | 65. VRF Stall Edge Cases | v3.7 | 2/2 | Complete    | 2026-03-22 |
-| 66. VRF Path Test Coverage | v3.7 | 2/2 | Complete    | 2026-03-22 |
+| 66. VRF Path Test Coverage | v3.7 | 2/2 | Complete   | 2026-03-22 |
 
 ## Deferred
 
