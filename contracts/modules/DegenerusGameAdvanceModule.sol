@@ -788,6 +788,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 return 1;
             }
 
+            // Backfill gap days from VRF stall before processing current day
+            uint48 idx = dailyIdx;
+            if (day > idx + 1) {
+                _backfillGapDays(currentWord, idx + 1, day, bonusFlip);
+            }
+
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
             coinflip.processCoinflipPayouts(bonusFlip, currentWord, day);
@@ -1409,6 +1415,33 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             emit LootboxRngApplied(index, word, requestId);
             vrfRequestId = 0;
             rngRequestTime = 0;
+        }
+    }
+
+    /// @dev Backfill rngWordByDay and process coinflip payouts for gap days
+    ///      caused by VRF stall. Derives deterministic words from the first
+    ///      post-gap VRF word via keccak256(vrfWord, gapDay).
+    ///      NOTE: Gap days get zero nudges (totalFlipReversals not consumed).
+    ///      NOTE: resolveRedemptionPeriod is NOT called for backfilled gap days —
+    ///      the redemption timer continued ticking in real time during the stall;
+    ///      it resolves only on the current day via the normal rngGate path.
+    /// @param vrfWord The first post-gap VRF random word.
+    /// @param startDay First gap day (dailyIdx + 1).
+    /// @param endDay Current day (exclusive — not backfilled, handled by normal path).
+    /// @param bonusFlip Whether presale bonus applies to coinflip resolution.
+    function _backfillGapDays(
+        uint256 vrfWord,
+        uint48 startDay,
+        uint48 endDay,
+        bool bonusFlip
+    ) private {
+        for (uint48 gapDay = startDay; gapDay < endDay;) {
+            uint256 derivedWord = uint256(keccak256(abi.encodePacked(vrfWord, gapDay)));
+            if (derivedWord == 0) derivedWord = 1;
+            rngWordByDay[gapDay] = derivedWord;
+            coinflip.processCoinflipPayouts(bonusFlip, derivedWord, gapDay);
+            emit DailyRngApplied(gapDay, derivedWord, 0, derivedWord);
+            unchecked { ++gapDay; }
         }
     }
 
