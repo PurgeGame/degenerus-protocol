@@ -1316,6 +1316,12 @@ abstract contract DegenerusGameStorage {
     ///      Index is 1-based; 0 means "not a lootbox RNG request".
     mapping(uint256 => uint48) internal lootboxRngRequestIndexById;
 
+    /// @dev Lootbox RNG index orphaned by a coordinator swap (stalled VRF never responded).
+    ///      Set by updateVrfCoordinatorAndSub before vrfRequestId is cleared.
+    ///      Consumed by _backfillOrphanedLootboxIndex on first post-swap advanceGame.
+    ///      0 means no orphaned index pending.
+    uint48 internal orphanedLootboxRngIndex;
+
     /// @dev Lootbox purchase day per RNG index and player.
     mapping(uint48 => mapping(address => uint48)) internal lootboxDay;
 
