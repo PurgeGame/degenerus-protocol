@@ -16,16 +16,16 @@
 
 - [x] **GAS-01**: All storage variables confirmed alive (read + write in reachable code paths)
 - [x] **GAS-02**: No redundant checks, dead branches, or unreachable code
-- [ ] **GAS-03**: Storage packing opportunities identified with estimated gas savings
+- [x] **GAS-03**: Storage packing opportunities identified with estimated gas savings
 - [x] **GAS-04**: All findings documented with contract, line ref, and estimated impact
 
 ### Gas Ceiling Analysis
 
 - [x] **CEIL-01**: advanceGame worst-case gas profiled across every code path (jackpot, transition, daily, gameover)
 - [x] **CEIL-02**: Maximum jackpot payouts per path computed such that no path exceeds 14M gas
-- [ ] **CEIL-03**: Ticket minting (purchase) worst-case gas profiled
-- [ ] **CEIL-04**: Maximum ticket batch size computed such that purchase never exceeds 14M gas
-- [ ] **CEIL-05**: Current headroom documented (how far below 14M each worst-case path sits today)
+- [x] **CEIL-03**: Ticket minting (purchase) worst-case gas profiled
+- [x] **CEIL-04**: Maximum ticket batch size computed such that purchase never exceeds 14M gas
+- [x] **CEIL-05**: Current headroom documented (how far below 14M each worst-case path sits today)
 
 ### Consolidated Findings
 
@@ -50,13 +50,13 @@
 | CMT-04 | Phase 54 | Complete |
 | GAS-01 | Phase 55 | Complete |
 | GAS-02 | Phase 55 | Complete |
-| GAS-03 | Phase 55 | Pending |
+| GAS-03 | Phase 55 | Complete |
 | GAS-04 | Phase 55 | Complete |
 | CEIL-01 | Phase 57 | Complete |
 | CEIL-02 | Phase 57 | Complete |
-| CEIL-03 | Phase 57 | Pending |
-| CEIL-04 | Phase 57 | Pending |
-| CEIL-05 | Phase 57 | Pending |
+| CEIL-03 | Phase 57 | Complete |
+| CEIL-04 | Phase 57 | Complete |
+| CEIL-05 | Phase 57 | Complete |
 | FIND-01 | Phase 58 | Pending |
 | FIND-02 | Phase 58 | Pending |
 

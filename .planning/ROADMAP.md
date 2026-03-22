@@ -155,8 +155,8 @@ Plans:
 ### v3.5 Final Polish — Comment Correctness + Gas Optimization
 
 - [x] **Phase 54: Comment Correctness** — Full NatSpec and inline comment sweep across all 34 contracts (completed 2026-03-22)
-- [ ] **Phase 55: Gas Optimization** — Dead variable, redundant check, and packing opportunity sweep
-- [ ] **Phase 57: Gas Ceiling Analysis** — Worst-case gas profiling for advanceGame and purchase, compute max payouts/batches under 14M
+- [x] **Phase 55: Gas Optimization** — Dead variable, redundant check, and packing opportunity sweep (completed 2026-03-22)
+- [x] **Phase 57: Gas Ceiling Analysis** — Worst-case gas profiling for advanceGame and purchase, compute max payouts/batches under 14M (completed 2026-03-22)
 - [ ] **Phase 58: Consolidated Findings** — Master findings table for manual triage
 
 ## Phase Details
@@ -189,13 +189,13 @@ Plans:
   2. No redundant checks, dead branches, or unreachable code
   3. Storage packing opportunities identified with estimated gas savings
   4. All findings documented with contract, line ref, and estimated impact
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 55-01-PLAN.md — GameStorage Slots 0-24 liveness analysis (GAS-01, GAS-04)
 - [x] 55-02-PLAN.md — GameStorage Slots 25-109 liveness analysis (GAS-01, GAS-04)
 - [x] 55-03-PLAN.md — Standalone contracts liveness + dead code sweep (GAS-01, GAS-02, GAS-04)
-- [ ] 55-04-PLAN.md — Packing opportunities + consolidated findings document (GAS-03, GAS-04)
+- [x] 55-04-PLAN.md — Packing opportunities + consolidated findings document (GAS-03, GAS-04)
 
 ### Phase 57: Gas Ceiling Analysis
 **Goal**: Determine absolute worst-case gas for advanceGame and purchase, compute how many jackpot payouts / ticket mints can fit under 14M gas
@@ -206,11 +206,11 @@ Plans:
   2. Maximum jackpot payouts per path computed with 14M ceiling — no path can possibly exceed
   3. Purchase/minting worst-case profiled; max batch size under 14M computed
   4. Current headroom documented per path
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 57-01-PLAN.md — advanceGame stage-by-stage gas profiling + max payouts (CEIL-01, CEIL-02)
-- [ ] 57-02-PLAN.md — Purchase path gas profiling + final deliverable assembly with headroom table (CEIL-03, CEIL-04, CEIL-05)
+- [x] 57-02-PLAN.md — Purchase path gas profiling + final deliverable assembly with headroom table (CEIL-03, CEIL-04, CEIL-05)
 
 ### Phase 58: Consolidated Findings
 **Goal**: All v3.5 findings in a single master table sorted by severity for triage
@@ -229,9 +229,9 @@ Plans:
 | 51. Redemption Lootbox Audit | 4/4 | Complete | 2026-03-21 |
 | 52. Invariant Test Suite | 2/2 | Complete | 2026-03-21 |
 | 53. Consolidated Findings | 1/1 | Complete | 2026-03-21 |
-| 54. Comment Correctness | 6/6 | Complete   | 2026-03-22 |
-| 55. Gas Optimization | 3/4 | In Progress|  |
-| 57. Gas Ceiling Analysis | 1/2 | In Progress|  |
+| 54. Comment Correctness | 6/6 | Complete    | 2026-03-22 |
+| 55. Gas Optimization | 4/4 | Complete   | 2026-03-22 |
+| 57. Gas Ceiling Analysis | 2/2 | Complete   | 2026-03-22 |
 | 58. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred
