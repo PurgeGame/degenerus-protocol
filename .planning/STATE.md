@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: New Feature Audit — Skim Redesign + Redemption Lootbox
 status: unknown
-stopped_at: Completed 57-01-PLAN.md (advanceGame gas ceiling analysis)
-last_updated: "2026-03-22T02:25:49.337Z"
+stopped_at: Completed 55-01-PLAN.md (storage liveness core Slots 0-24)
+last_updated: "2026-03-22T02:26:43.945Z"
 progress:
   total_phases: 4
   completed_phases: 4
@@ -47,6 +47,8 @@ v3.5 context:
 - [Phase 54]: CMT-V35-003 rated LOW (stale function ref in contract header wardens would search for)
 - [Phase 57]: Stage 6 PURCHASE_DAILY uses non-chunked _distributeJackpotEth (300 max), not chunked _processDailyEthChunk
 - [Phase 57]: Deity pass loop hard-capped at 32 by DEITY_PASS_MAX_TOTAL -- not a DoS vector
+- [Phase 55]: All 70 standalone contract storage variables confirmed ALIVE; 5 dead code INFO findings (1 error, 4 events)
+- [Phase 55]: 2 DEAD variables found in DegenerusGameStorage: earlyBurnPercent (Slot 0, written but never read) and lootboxEthTotal (Slot 22, incremented but never read)
 
 ### Pending Todos
 
@@ -58,6 +60,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T02:25:49.335Z
-Stopped at: Completed 57-01-PLAN.md (advanceGame gas ceiling analysis)
+Last session: 2026-03-22T02:26:43.941Z
+Stopped at: Completed 55-01-PLAN.md (storage liveness core Slots 0-24)
 Resume file: None
