@@ -24,16 +24,3 @@ These are architectural decisions, not vulnerabilities.
 
 **_sendToVault uses hard reverts (GO-05-F01).** `_sendToVault` reverts on any ETH or stETH transfer failure. Vault and sDGNRS are immutable protocol-owned contracts with unconditional `receive()` functions. Lido stETH has never paused transfers. Recipients can't reject funds.
 
-**Gambling burn mechanism.** During active game, sDGNRS/DGNRS burns enter a gambling path instead of deterministic redemption. The burn amount is submitted to a pending redemption queue. When the next advanceGame resolves via VRF, a roll (25-175%) is applied to determine the ETH payout multiplier. BURNIE payout is conditional on a separate coinflip result. This is intentional -- it creates an RNG-gated burn with variable outcomes. Post-gameOver, burns revert to deterministic proportional payouts.
-
-**Split-claim design (CP-07 fix).** `claimRedemption()` pays ETH immediately once the period is resolved, regardless of coinflip state. BURNIE is paid only if the coinflip resolved and won. If the coinflip hasn't resolved yet, ETH is paid and the claim remains open for BURNIE. This prevents ETH from being stuck due to unresolved coinflips.
-
-**50% supply cap per period.** Each gambling burn period is capped at 50% of current totalSupply. This prevents bank-run scenarios and ensures the RNG roll applies to at most half the supply in any period.
-
-**RNG-locked burn rejection.** Burns revert with `BurnsBlockedDuringRng` during VRF resolution lock to prevent front-running the RNG outcome.
-
-**50/50 redemption lootbox split.** Gambling burn redemptions split rolled ETH: half paid as direct ETH, half routed to Game as lootbox rewards via internal accounting reclassification (no ETH transfer). gameOver burns are 100% direct ETH with no lootbox component. The `unchecked` subtraction in `resolveRedemptionLootbox` is safe because the only drain path (`_deterministicBurnFrom` → `claimWinnings`) is gameOver-only, while lootbox resolution is active-game-only.
-
-**Futurepool skim pipeline.** The skim uses a 5-step pipeline: deterministic bps (U-curve + ratio ±400 + overshoot surcharge) → additive random 0-10% → uncapped take → ±25% triangular variance → 80% cap. The additive random uses full 256-bit modulo (not bit-isolated); the two variance rolls share bits [192:255]. Both are functionally independent via modulo for practical ranges. ETH conservation holds algebraically.
-
-**160 ETH daily redemption cap.** Each wallet is limited to 160 ETH base EV in gambling burn submissions per period. The cap is enforced via cumulative uint256 comparison before uint96 cast. Period gating (UnresolvedClaim) prevents cross-period stacking.

@@ -13,6 +13,7 @@
 - ✅ **v3.2 RNG Delta Audit + Comment Re-scan** — Phases 38-43 (shipped 2026-03-19)
 - ✅ **v3.3 Gambling Burn Audit + Full Adversarial Sweep** — Phases 44-49 (shipped 2026-03-21)
 - ✅ **v3.4 New Feature Audit — Skim Redesign + Redemption Lootbox** — Phases 50-53 (shipped 2026-03-21)
+- ✅ **v3.5 Final Polish — Comment Correctness + Gas Optimization** — Phases 54-58 (shipped 2026-03-22)
 
 ## Phases
 
@@ -157,7 +158,7 @@ Plans:
 - [x] **Phase 54: Comment Correctness** — Full NatSpec and inline comment sweep across all 34 contracts (completed 2026-03-22)
 - [x] **Phase 55: Gas Optimization** — Dead variable, redundant check, and packing opportunity sweep (completed 2026-03-22)
 - [x] **Phase 57: Gas Ceiling Analysis** — Worst-case gas profiling for advanceGame and purchase, compute max payouts/batches under 14M (completed 2026-03-22)
-- [ ] **Phase 58: Consolidated Findings** — Master findings table for manual triage
+- [x] **Phase 58: Consolidated Findings** — Master findings table for manual triage (completed 2026-03-22)
 
 ## Phase Details
 
@@ -219,7 +220,10 @@ Plans:
 **Success Criteria**:
   1. Every comment, gas, and ceiling finding from Phases 54-57 in master table
   2. Fix recommendations are actionable one-liners
-**Plans**: TBD
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 58-01-PLAN.md — Master findings table with all v3.5 discoveries + validation (FIND-01, FIND-02)
 
 ## Progress
 
@@ -232,7 +236,7 @@ Plans:
 | 54. Comment Correctness | 6/6 | Complete    | 2026-03-22 |
 | 55. Gas Optimization | 4/4 | Complete    | 2026-03-22 |
 | 57. Gas Ceiling Analysis | 2/2 | Complete    | 2026-03-22 |
-| 58. Consolidated Findings | 0/TBD | Not started | - |
+| 58. Consolidated Findings | 1/1 | Complete | 2026-03-22 |
 
 ## Deferred
 
