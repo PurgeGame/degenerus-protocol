@@ -26,7 +26,7 @@
 
 ### Audit
 
-- [ ] **AUD-01**: All changes audited for correctness — no new attack vectors introduced
+- [x] **AUD-01**: All changes audited for correctness — no new attack vectors introduced
 - [ ] **AUD-02**: Consolidated findings documented
 
 ## Out of Scope
@@ -51,7 +51,7 @@
 | TEST-01 | Phase 61 | Complete |
 | TEST-02 | Phase 61 | Complete |
 | TEST-03 | Phase 61 | Complete |
-| AUD-01 | Phase 62 | Pending |
+| AUD-01 | Phase 62 | Complete |
 | AUD-02 | Phase 62 | Pending |
 
 **Coverage:**
