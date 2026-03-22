@@ -37,7 +37,7 @@ Requirements for VRF path audit milestone. Each maps to roadmap phases.
 - [ ] **TEST-01**: Foundry fuzz tests for lootboxRngIndex lifecycle invariants
 - [ ] **TEST-02**: Foundry invariant tests for VRF stall-to-recovery scenarios
 - [ ] **TEST-03**: Foundry tests for gap backfill edge cases (multi-day gaps, boundary conditions)
-- [x] **TEST-04**: Halmos verification of entropy bounds (redemption roll formula consistency across 3 sites)
+- [ ] **TEST-04**: Halmos verification of entropy bounds (redemption roll formula consistency across 3 sites)
 
 ## Future Requirements
 
@@ -89,10 +89,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STALL-05 | Phase 65 | Complete |
 | STALL-06 | Phase 65 | Complete |
 | STALL-07 | Phase 65 | Complete |
-| TEST-01 | Phase 66 | Pending |
-| TEST-02 | Phase 66 | Pending |
-| TEST-03 | Phase 66 | Pending |
-| TEST-04 | Phase 66 | Complete |
+| TEST-01 | Phase 67 | Pending |
+| TEST-02 | Phase 67 | Pending |
+| TEST-03 | Phase 67 | Pending |
+| TEST-04 | Phase 67 | Pending |
 
 **Coverage:**
 - v3.7 requirements: 20 total

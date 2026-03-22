@@ -124,6 +124,7 @@
 - [x] **Phase 64: Lootbox RNG Lifecycle** - Full trace of lootbox purchase through VRF fulfillment to ticket selection and prize, proving index-to-word 1:1 mapping and per-player entropy uniqueness (completed 2026-03-22)
 - [x] **Phase 65: VRF Stall Edge Cases** - Audit gap backfill entropy, manipulation window, gas ceiling, coordinator swap cleanup, zero-seed edge case, game-over fallback, and dailyIdx timing consistency (completed 2026-03-22)
 - [x] **Phase 66: VRF Path Test Coverage** - Foundry fuzz/invariant tests for lootbox index lifecycle, stall-to-recovery scenarios, gap backfill edge cases, and Halmos verification of entropy bounds (completed 2026-03-22)
+- [ ] **Phase 67: Verification + Doc Sync** - Independent verification of Phase 66, V37-001 resolution sync, Phase 66 audit trail in findings docs and KNOWN-ISSUES.md
 
 ## Phase Details
 
@@ -188,9 +189,25 @@ Plans:
 - [x] 66-01-PLAN.md — VRFPathHandler invariant handler + invariant/fuzz tests (TEST-01, TEST-02, TEST-03)
 - [x] 66-02-PLAN.md — Halmos symbolic verification of redemption roll formula (TEST-04)
 
+### Phase 67: Verification + Doc Sync
+**Goal**: Close all milestone audit gaps -- independent verification of Phase 66 deliverables, V37-001 resolution sync in Phase 63 findings, and Phase 66 audit trail entries in findings docs and KNOWN-ISSUES.md
+**Depends on**: Phase 66
+**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04
+**Gap Closure**: Closes all gaps from v3.7-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. Phase 66 VERIFICATION.md exists with independent verification of all TEST-01 through TEST-04 deliverables (test files exist, tests pass, artifacts substantive)
+  2. V37-001 in audit/v3.7-vrf-core-findings.md is annotated as RESOLVED with cross-reference to Phase 65
+  3. Phase 63-65 findings documents include Phase 66 cross-reference noting invariant/parametric/symbolic coverage
+  4. KNOWN-ISSUES.md Audit History has Phase 66 entry summarizing invariant and Halmos verification
+**Plans**: 2 plans
+
+Plans:
+- [ ] 67-01-PLAN.md — Independent verification of Phase 66 (TEST-01 through TEST-04)
+- [ ] 67-02-PLAN.md — Doc sync: V37-001 resolution, Phase 66 cross-references, KNOWN-ISSUES.md entry
+
 ## Progress
 
-**Execution Order:** Phases execute in numeric order: 63 -> 64 -> 65 -> 66
+**Execution Order:** Phases execute in numeric order: 63 -> 64 -> 65 -> 66 -> 67
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -198,6 +215,7 @@ Plans:
 | 64. Lootbox RNG Lifecycle | v3.7 | 2/2 | Complete    | 2026-03-22 |
 | 65. VRF Stall Edge Cases | v3.7 | 2/2 | Complete    | 2026-03-22 |
 | 66. VRF Path Test Coverage | v3.7 | 2/2 | Complete   | 2026-03-22 |
+| 67. Verification + Doc Sync | v3.7 | 0/2 | Pending    | — |
 
 ## Deferred
 
