@@ -200,10 +200,10 @@ Plans:
 **Depends on**: Nothing (independent of commitment window phases)
 **Requirements**: BOON-01, BOON-02, BOON-03, BOON-04, BOON-05, BOON-06
 **Success Criteria** (what must be TRUE):
-  1. All 29 per-player boon mappings replaced with a packed struct using minimum possible storage slots
-  2. checkAndClearExpiredBoon operates on packed struct with single SLOAD per slot instead of 29 separate cold SLOADs
+  1. All 29 per-player boon mappings replaced with a 2-slot packed struct using uint24 day fields and uint8 lootboxTier
+  2. checkAndClearExpiredBoon operates on packed struct with 2 SLOADs instead of 29 separate cold SLOADs
   3. _applyBoon and all boon consumption functions use read-modify-write on packed struct
-  4. Lootbox boost tier logic uses single tier field instead of 3 separate bool+day+deityDay mapping sets
+  4. Lootbox boost tier logic uses single uint8 tier field instead of 3 separate bool+day+deityDay mapping sets
   5. All existing Hardhat + Foundry tests pass with equivalent behavior after storage layout change
 **Plans**: TBD
 
