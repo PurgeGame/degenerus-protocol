@@ -15,8 +15,8 @@
 
 ### Coordinator Swap Cleanup
 
-- [ ] **SWAP-01**: updateVrfCoordinatorAndSub properly handles all stale state from the failed coordinator
-- [ ] **SWAP-02**: totalFlipReversals handling documented (carry-over vs reset — design decision)
+- [x] **SWAP-01**: updateVrfCoordinatorAndSub properly handles all stale state from the failed coordinator
+- [x] **SWAP-02**: totalFlipReversals handling documented (carry-over vs reset — design decision)
 
 ### Testing
 
@@ -46,8 +46,8 @@
 | GAP-03 | Phase 59 | Complete |
 | GAP-04 | Phase 59 | Complete |
 | GAP-05 | Phase 59 | Complete |
-| SWAP-01 | Phase 60 | Pending |
-| SWAP-02 | Phase 60 | Pending |
+| SWAP-01 | Phase 60 | Complete |
+| SWAP-02 | Phase 60 | Complete |
 | TEST-01 | Phase 61 | Pending |
 | TEST-02 | Phase 61 | Pending |
 | TEST-03 | Phase 61 | Pending |

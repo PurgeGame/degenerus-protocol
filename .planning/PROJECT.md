@@ -119,7 +119,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 ---
 ## Current State
 
-v3.5 complete. 43 findings consolidated (10 LOW, 33 INFO) across 4 phases: Phase 54 Comment Correctness (26 findings, 46 files, 34 prior findings verified FIXED), Phase 55 Gas Optimization (13 findings, 204 variables analyzed), Phase 57 Gas Ceiling Analysis (4 findings, 18 paths profiled), Phase 58 Consolidated Findings (master table in `audit/v3.5-findings-consolidated.md`). All findings are documentation or gas optimization items — no exploitable vulnerabilities.
+v3.6 in progress — VRF Stall Resilience. Phase 59 complete: gap day RNG backfill (`_backfillGapDays` in `rngGate`) fills `rngWordByDay` via `keccak256(vrfWord, gapDay)` for all missed days, processes coinflip payouts per gap day; orphaned lootbox index recovery and `midDayTicketRngPending` clearing added to `updateVrfCoordinatorAndSub`.
 
 Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish).
 
@@ -141,4 +141,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-22 after Phase 58 (Consolidated Findings) complete — v3.5 milestone shipped*
+*Last updated: 2026-03-22 after Phase 59 (RNG Gap Backfill Implementation) complete — v3.6 milestone in progress*
