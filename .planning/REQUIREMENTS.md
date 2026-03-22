@@ -22,8 +22,8 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 
 ### Coinflip RNG Path
 
-- [ ] **COIN-01**: Full coinflip lifecycle traced: bet placement -> RNG request -> fulfillment -> roll computation -> payout, with every state transition identified
-- [ ] **COIN-02**: Commitment window analysis specific to coinflip: what player-controllable state exists between bet and resolution
+- [x] **COIN-01**: Full coinflip lifecycle traced: bet placement -> RNG request -> fulfillment -> roll computation -> payout, with every state transition identified
+- [x] **COIN-02**: Commitment window analysis specific to coinflip: what player-controllable state exists between bet and resolution
 - [ ] **COIN-03**: Multi-tx attack sequences modeled: bet + manipulate + claim patterns tested against commitment window
 
 ### advanceGame Day RNG
@@ -76,8 +76,8 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 | MUT-01 | Phase 69 | Complete |
 | MUT-02 | Phase 69 | Complete |
 | MUT-03 | Phase 69 | Complete |
-| COIN-01 | Phase 70 | Pending |
-| COIN-02 | Phase 70 | Pending |
+| COIN-01 | Phase 70 | Complete |
+| COIN-02 | Phase 70 | Complete |
 | COIN-03 | Phase 70 | Pending |
 | DAYRNG-01 | Phase 71 | Pending |
 | DAYRNG-02 | Phase 71 | Pending |
