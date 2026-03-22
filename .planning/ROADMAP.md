@@ -170,7 +170,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 65-01-PLAN.md — VRF stall edge case fuzz/unit test suite (STALL-01 through STALL-07)
+- [x] 65-01-PLAN.md — VRF stall edge case fuzz/unit test suite (STALL-01 through STALL-07)
 - [ ] 65-02-PLAN.md — VRF stall findings document + KNOWN-ISSUES.md update
 
 ### Phase 66: VRF Path Test Coverage
@@ -196,7 +196,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 63. VRF Request/Fulfillment Core | v3.7 | 2/2 | Complete    | 2026-03-22 |
 | 64. Lootbox RNG Lifecycle | v3.7 | 2/2 | Complete    | 2026-03-22 |
-| 65. VRF Stall Edge Cases | v3.7 | 0/2 | Not started | - |
+| 65. VRF Stall Edge Cases | v3.7 | 1/2 | In Progress|  |
 | 66. VRF Path Test Coverage | v3.7 | 0/TBD | Not started | - |
 
 ## Deferred

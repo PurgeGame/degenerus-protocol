@@ -24,13 +24,13 @@ Requirements for VRF path audit milestone. Each maps to roadmap phases.
 
 ### VRF Stall
 
-- [ ] **STALL-01**: Gap backfill entropy derivation verified — keccak256(vrfWord, gapDay) produces unique per-day words
-- [ ] **STALL-02**: Gap backfill manipulation window analyzed — time between VRF callback and advanceGame consumption with severity
-- [ ] **STALL-03**: Gap backfill gas ceiling verified — per-iteration cost profiled, safe upper bound for gap count
-- [ ] **STALL-04**: Coordinator swap state cleanup complete — all state resets confirmed, orphaned lootbox recovery correct
-- [ ] **STALL-05**: Zero-seed edge case verified — lastLootboxRngWord==0 at coordinator swap cannot produce degenerate entropy
-- [ ] **STALL-06**: Game-over fallback entropy verified — _getHistoricalRngFallback and prevrandao usage with C4A severity
-- [ ] **STALL-07**: All game operations verified using dailyIdx timing consistently — audit whether resolveRedemptionPeriod uses block.timestamp or dailyIdx, flag any clock mismatch where stall-frozen operations continue on wall-clock time
+- [x] **STALL-01**: Gap backfill entropy derivation verified — keccak256(vrfWord, gapDay) produces unique per-day words
+- [x] **STALL-02**: Gap backfill manipulation window analyzed — time between VRF callback and advanceGame consumption with severity
+- [x] **STALL-03**: Gap backfill gas ceiling verified — per-iteration cost profiled, safe upper bound for gap count
+- [x] **STALL-04**: Coordinator swap state cleanup complete — all state resets confirmed, orphaned lootbox recovery correct
+- [x] **STALL-05**: Zero-seed edge case verified — lastLootboxRngWord==0 at coordinator swap cannot produce degenerate entropy
+- [x] **STALL-06**: Game-over fallback entropy verified — _getHistoricalRngFallback and prevrandao usage with C4A severity
+- [x] **STALL-07**: All game operations verified using dailyIdx timing consistently — audit whether resolveRedemptionPeriod uses block.timestamp or dailyIdx, flag any clock mismatch where stall-frozen operations continue on wall-clock time
 
 ### Testing
 
@@ -82,13 +82,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LBOX-03 | Phase 64 | Complete |
 | LBOX-04 | Phase 64 | Complete |
 | LBOX-05 | Phase 64 | Complete |
-| STALL-01 | Phase 65 | Pending |
-| STALL-02 | Phase 65 | Pending |
-| STALL-03 | Phase 65 | Pending |
-| STALL-04 | Phase 65 | Pending |
-| STALL-05 | Phase 65 | Pending |
-| STALL-06 | Phase 65 | Pending |
-| STALL-07 | Phase 65 | Pending |
+| STALL-01 | Phase 65 | Complete |
+| STALL-02 | Phase 65 | Complete |
+| STALL-03 | Phase 65 | Complete |
+| STALL-04 | Phase 65 | Complete |
+| STALL-05 | Phase 65 | Complete |
+| STALL-06 | Phase 65 | Complete |
+| STALL-07 | Phase 65 | Complete |
 | TEST-01 | Phase 66 | Pending |
 | TEST-02 | Phase 66 | Pending |
 | TEST-03 | Phase 66 | Pending |
