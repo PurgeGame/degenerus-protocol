@@ -82,8 +82,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         IDegenerusCoin(ContractAddresses.COIN);
     IBurnieCoinflip internal constant coinflip =
         IBurnieCoinflip(ContractAddresses.COINFLIP);
-    IStETH internal constant steth =
-        IStETH(ContractAddresses.STETH_TOKEN);
+    IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     /*+======================================================================+
       |                           CONSTANTS                                  |
       +======================================================================+*/
@@ -104,11 +103,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint16 private constant NEXT_SKIM_VARIANCE_BPS = 2500;
     uint16 private constant NEXT_SKIM_VARIANCE_MIN_BPS = 1000;
     uint16 private constant INSURANCE_SKIM_BPS = 100; // 1% of nextPool -> yieldAccumulator
-    uint16 private constant OVERSHOOT_THRESHOLD_BPS = 12500;  // R > 1.25x triggers surcharge
-    uint16 private constant OVERSHOOT_CAP_BPS = 3500;         // 35% max surcharge
-    uint16 private constant OVERSHOOT_COEFF = 4000;           // numerator coefficient (0.40 in bps)
-    uint16 private constant NEXT_TO_FUTURE_BPS_MAX = 8000;    // 80% total skim hard cap
-    uint16 private constant ADDITIVE_RANDOM_BPS = 1000;      // 0–10% additive random on bps
+    uint16 private constant OVERSHOOT_THRESHOLD_BPS = 12500; // R > 1.25x triggers surcharge
+    uint16 private constant OVERSHOOT_CAP_BPS = 3500; // 35% max surcharge
+    uint16 private constant OVERSHOOT_COEFF = 4000; // numerator coefficient (0.40 in bps)
+    uint16 private constant NEXT_TO_FUTURE_BPS_MAX = 8000; // 80% total skim hard cap
+    uint16 private constant ADDITIVE_RANDOM_BPS = 1000; // 0–10% additive random on bps
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
 
     /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH, unscaled).
@@ -134,7 +133,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // does the level pre-increment (matching normal lastPurchaseDay flow).
         if (!inJackpot && !lastPurchaseDay) {
             uint48 purchaseDays = day - purchaseStartDay;
-            if (purchaseDays <= 1 && _getNextPrizePool() >= levelPrizePool[lvl]) {
+            if (
+                purchaseDays <= 1 && _getNextPrizePool() >= levelPrizePool[lvl]
+            ) {
                 lastPurchaseDay = true;
                 compressedJackpotFlag = 2;
             }
@@ -172,7 +173,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
                 uint24 rk = _tqReadKey(purchaseLevel);
                 if (ticketQueue[rk].length > 0) {
-                    (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(purchaseLevel);
+                    (
+                        bool ticketWorked,
+                        bool ticketsFinished
+                    ) = _runProcessTicketBatch(purchaseLevel);
                     if (ticketWorked || !ticketsFinished) {
                         if (ticketsFinished) {
                             ticketsFullyProcessed = true;
@@ -191,8 +195,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Escalate bounty if daily processing is stalled (new-day path only).
         // 2x after 1 hour past jackpot reset, 3x after 2 hours, capped at 3x.
         {
-            uint256 dayStart = (uint256(day - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY)
-                * 1 days + 82_620;
+            uint256 dayStart = (uint256(day - 1) +
+                ContractAddresses.DEPLOY_DAY_BOUNDARY) *
+                1 days +
+                82_620;
             uint256 elapsed = ts - dayStart;
             if (elapsed >= 2 hours) {
                 advanceBounty *= 3;
@@ -205,7 +211,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ticketsFullyProcessed) {
             uint24 rk = _tqReadKey(purchaseLevel);
             if (ticketQueue[rk].length > 0) {
-                (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(purchaseLevel);
+                (
+                    bool ticketWorked,
+                    bool ticketsFinished
+                ) = _runProcessTicketBatch(purchaseLevel);
                 if (ticketWorked || !ticketsFinished) {
                     emit Advance(STAGE_TICKETS_WORKING, lvl);
                     coin.creditFlip(caller, advanceBounty);
@@ -219,7 +228,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         do {
             // RNG: use existing word or request new one
             bool bonusFlip = (inJackpot && jackpotCounter == 0) || lvl == 0;
-            uint256 rngWord = rngGate(ts, day, purchaseLevel, lastPurchase, bonusFlip);
+            uint256 rngWord = rngGate(
+                ts,
+                day,
+                purchaseLevel,
+                lastPurchase,
+                bonusFlip
+            );
             if (rngWord == 1) {
                 _swapAndFreeze(purchaseLevel);
                 stage = STAGE_RNG_REQUESTED;
@@ -264,7 +279,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 stage = STAGE_TICKETS_WORKING;
                 break;
             }
-            ticketsFullyProcessed = true;  // ADV-03: set before jackpot/phase logic
+            ticketsFullyProcessed = true; // ADV-03: set before jackpot/phase logic
 
             // === PURCHASE PHASE ===
             if (!inJackpot) {
@@ -272,7 +287,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (!lastPurchaseDay) {
                     payDailyJackpot(false, purchaseLevel, rngWord);
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
-                    if (_getNextPrizePool() >= levelPrizePool[purchaseLevel - 1]) {
+                    if (
+                        _getNextPrizePool() >= levelPrizePool[purchaseLevel - 1]
+                    ) {
                         lastPurchaseDay = true;
                         if (day - purchaseStartDay <= 3) {
                             compressedJackpotFlag = 1;
@@ -306,7 +323,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     poolConsolidationDone = true;
                 }
 
-                if (lootboxPresaleActive && (lvl >= 3 || lootboxPresaleMintEth >= LOOTBOX_PRESALE_ETH_CAP)) lootboxPresaleActive = false;
+                if (
+                    lootboxPresaleActive &&
+                    (lvl >= 3 ||
+                        lootboxPresaleMintEth >= LOOTBOX_PRESALE_ETH_CAP)
+                ) lootboxPresaleActive = false;
 
                 // Transition to jackpot phase
                 jackpotPhaseFlag = true;
@@ -529,9 +550,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             .GAME_JACKPOT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule
-                        .consolidatePrizePools
-                        .selector,
+                    IDegenerusGameJackpotModule.consolidatePrizePools.selector,
                     lvl,
                     rngWord
                 )
@@ -614,7 +633,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-
     /// @dev Enforce "must mint today" gate for advanceGame callers.
     ///      Bypass tiers (only checked on revert path, zero cost for normal callers):
     ///        1. Deity pass holder — always bypasses
@@ -655,8 +673,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // DGVE majority bypass — last resort, external call
-            if (!vault.isVaultOwner(caller))
-                revert MustMintToday();
+            if (!vault.isVaultOwner(caller)) revert MustMintToday();
         }
     }
 
@@ -678,7 +695,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (rngRequestTime != 0) revert E();
 
         // LINK balance check
-        (uint96 linkBal, , , , ) = vrfCoordinator.getSubscription(vrfSubscriptionId);
+        (uint96 linkBal, , , , ) = vrfCoordinator.getSubscription(
+            vrfSubscriptionId
+        );
         if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert E();
 
         // Threshold check
@@ -767,18 +786,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // Have a fresh VRF word ready
         if (currentWord != 0 && rngRequestTime != 0) {
-            // Compute which day the RNG request was made on
-            uint48 requestDay = _simulatedDayIndexAt(rngRequestTime);
-
-            // If request was from a previous day, it's stale for daily operations
-            if (requestDay < day) {
-                // Use for lootboxes only, then request fresh daily RNG
-                _finalizeLootboxRng(currentWord);
-                rngWordCurrent = 0;
-                _requestRng(isTicketJackpotDay, lvl);
-                return 1;
-            }
-
             // Backfill gap days from VRF stall before processing current day
             uint48 idx = dailyIdx;
             if (day > idx + 1) {
@@ -800,13 +807,23 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // Resolve gambling burn period if pending
             {
-                IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+                IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
+                    ContractAddresses.SDGNRS
+                );
                 if (sdgnrs.hasPendingRedemptions()) {
-                    uint16 redemptionRoll = uint16((currentWord >> 8) % 151 + 25);
+                    uint16 redemptionRoll = uint16(
+                        ((currentWord >> 8) % 151) + 25
+                    );
                     uint48 flipDay = day + 1;
-                    uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
+                    uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(
+                        redemptionRoll,
+                        flipDay
+                    );
                     if (burnieToCredit != 0) {
-                        coin.creditFlip(ContractAddresses.SDGNRS, burnieToCredit);
+                        coin.creditFlip(
+                            ContractAddresses.SDGNRS,
+                            burnieToCredit
+                        );
                     }
                 }
             }
@@ -863,13 +880,23 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
             // Resolve gambling burn period if pending (mirrors rngGate lines 792-802)
             {
-                IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+                IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
+                    ContractAddresses.SDGNRS
+                );
                 if (sdgnrs.hasPendingRedemptions()) {
-                    uint16 redemptionRoll = uint16((currentWord >> 8) % 151 + 25);
+                    uint16 redemptionRoll = uint16(
+                        ((currentWord >> 8) % 151) + 25
+                    );
                     uint48 flipDay = day + 1;
-                    uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
+                    uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(
+                        redemptionRoll,
+                        flipDay
+                    );
                     if (burnieToCredit != 0) {
-                        coin.creditFlip(ContractAddresses.SDGNRS, burnieToCredit);
+                        coin.creditFlip(
+                            ContractAddresses.SDGNRS,
+                            burnieToCredit
+                        );
                     }
                 }
             }
@@ -892,13 +919,23 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
                 // Resolve gambling burn period if pending (mirrors rngGate lines 792-802)
                 {
-                    IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+                    IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
+                        ContractAddresses.SDGNRS
+                    );
                     if (sdgnrs.hasPendingRedemptions()) {
-                        uint16 redemptionRoll = uint16((fallbackWord >> 8) % 151 + 25);
+                        uint16 redemptionRoll = uint16(
+                            ((fallbackWord >> 8) % 151) + 25
+                        );
                         uint48 flipDay = day + 1;
-                        uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
+                        uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(
+                            redemptionRoll,
+                            flipDay
+                        );
                         if (burnieToCredit != 0) {
-                            coin.creditFlip(ContractAddresses.SDGNRS, burnieToCredit);
+                            coin.creditFlip(
+                                ContractAddresses.SDGNRS,
+                                burnieToCredit
+                            );
                         }
                     }
                 }
@@ -939,7 +976,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint256 w = rngWordByDay[searchDay];
             if (w != 0) {
                 combined = uint256(keccak256(abi.encodePacked(combined, w)));
-                unchecked { ++found; }
+                unchecked {
+                    ++found;
+                }
                 if (found == 5) break;
             }
             unchecked {
@@ -947,7 +986,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
 
-        return uint256(keccak256(abi.encodePacked(combined, currentDay, block.prevrandao)));
+        return
+            uint256(
+                keccak256(
+                    abi.encodePacked(combined, currentDay, block.prevrandao)
+                )
+            );
     }
 
     /*+======================================================================+
@@ -970,7 +1014,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint256 delta = NEXT_TO_FUTURE_BPS_FAST +
                 lvlBonus -
                 NEXT_TO_FUTURE_BPS_MIN;
-            bps = NEXT_TO_FUTURE_BPS_FAST + lvlBonus - (delta * elapsedAfterDay) / 13 days;
+            bps =
+                NEXT_TO_FUTURE_BPS_FAST +
+                lvlBonus -
+                (delta * elapsedAfterDay) /
+                13 days;
         } else if (elapsed <= 28 days) {
             uint256 elapsedAfterMin = elapsed - 14 days;
             uint256 delta = NEXT_TO_FUTURE_BPS_FAST +
@@ -1018,8 +1066,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint256 rBps = (nextPoolBefore * 10_000) / lastPool;
             if (rBps > OVERSHOOT_THRESHOLD_BPS) {
                 uint256 excess = rBps - OVERSHOOT_THRESHOLD_BPS;
-                uint256 surcharge = (excess * OVERSHOOT_COEFF) / (excess + 10_000);
-                if (surcharge > OVERSHOOT_CAP_BPS) surcharge = OVERSHOOT_CAP_BPS;
+                uint256 surcharge = (excess * OVERSHOOT_COEFF) /
+                    (excess + 10_000);
+                if (surcharge > OVERSHOOT_CAP_BPS)
+                    surcharge = OVERSHOOT_CAP_BPS;
                 bps += surcharge;
             }
         }
@@ -1035,7 +1085,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // irrelevant because modulo by range (small) makes outputs independent.
         if (take != 0) {
             uint256 halfWidth = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000;
-            uint256 minWidth = (nextPoolBefore * NEXT_SKIM_VARIANCE_MIN_BPS) / 10_000;
+            uint256 minWidth = (nextPoolBefore * NEXT_SKIM_VARIANCE_MIN_BPS) /
+                10_000;
             if (halfWidth < minWidth) halfWidth = minWidth;
             if (halfWidth > take) halfWidth = take;
 
@@ -1111,9 +1162,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      cursor state so work can resume across multiple advanceGame calls.
     /// @param lvl Current level (purchaseLevel or jackpot level).
     /// @return finished True when all target future levels are fully processed.
-    function _prepareFutureTickets(
-        uint24 lvl
-    ) private returns (bool finished) {
+    function _prepareFutureTickets(uint24 lvl) private returns (bool finished) {
         uint24 startLevel = lvl + 2;
         uint24 endLevel = lvl + 6;
         uint24 resumeLevel = ticketLevel;
@@ -1181,8 +1230,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ) private returns (bool finished) {
         // Vault perpetual tickets: 16 generic tickets per level for DGNRS and VAULT
         uint24 targetLevel = purchaseLevel + 99;
-        _queueTickets(ContractAddresses.SDGNRS, targetLevel, VAULT_PERPETUAL_TICKETS);
-        _queueTickets(ContractAddresses.VAULT, targetLevel, VAULT_PERPETUAL_TICKETS);
+        _queueTickets(
+            ContractAddresses.SDGNRS,
+            targetLevel,
+            VAULT_PERPETUAL_TICKETS
+        );
+        _queueTickets(
+            ContractAddresses.VAULT,
+            targetLevel,
+            VAULT_PERPETUAL_TICKETS
+        );
 
         // Auto-stake all non-claimable ETH into stETH for yield generation.
         // Non-blocking: if stETH contract fails, game continues normally.
@@ -1199,7 +1256,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 reserve = claimablePool;
         if (ethBal <= reserve) return;
         uint256 stakeable = ethBal - reserve;
-        try steth.submit{value: stakeable}(address(0)) returns (uint256) {} catch {
+        try steth.submit{value: stakeable}(address(0)) returns (
+            uint256
+        ) {} catch {
             emit StEthStakeFailed(stakeable);
         }
     }
@@ -1313,7 +1372,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     price = uint128(0.24 ether);
                 }
             }
-
         }
     }
 
@@ -1427,13 +1485,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 endDay,
         bool bonusFlip
     ) private {
-        for (uint48 gapDay = startDay; gapDay < endDay;) {
-            uint256 derivedWord = uint256(keccak256(abi.encodePacked(vrfWord, gapDay)));
+        for (uint48 gapDay = startDay; gapDay < endDay; ) {
+            uint256 derivedWord = uint256(
+                keccak256(abi.encodePacked(vrfWord, gapDay))
+            );
             if (derivedWord == 0) derivedWord = 1;
             rngWordByDay[gapDay] = derivedWord;
             coinflip.processCoinflipPayouts(bonusFlip, derivedWord, gapDay);
             emit DailyRngApplied(gapDay, derivedWord, 0, derivedWord);
-            unchecked { ++gapDay; }
+            unchecked {
+                ++gapDay;
+            }
         }
     }
 
@@ -1446,16 +1508,20 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (idx <= 1) return; // nothing reserved yet
 
         // Scan backwards from the most recent reserved index
-        for (uint48 i = idx - 1; i >= 1;) {
+        for (uint48 i = idx - 1; i >= 1; ) {
             if (lootboxRngWordByIndex[i] != 0) break; // hit a filled index, done
 
-            uint256 fallbackWord = uint256(keccak256(abi.encodePacked(vrfWord, i)));
+            uint256 fallbackWord = uint256(
+                keccak256(abi.encodePacked(vrfWord, i))
+            );
             if (fallbackWord == 0) fallbackWord = 1;
             lootboxRngWordByIndex[i] = fallbackWord;
             lastLootboxRngWord = fallbackWord;
             emit LootboxRngApplied(i, fallbackWord, 0);
 
-            unchecked { --i; }
+            unchecked {
+                --i;
+            }
         }
     }
 
@@ -1495,5 +1561,4 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
         }
     }
-
 }
