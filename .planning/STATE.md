@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: VRF Path Audit
 status: unknown
-stopped_at: Completed 65-01-PLAN.md
-last_updated: "2026-03-22T17:13:00.923Z"
+stopped_at: Completed 65-02-PLAN.md
+last_updated: "2026-03-22T17:21:23.844Z"
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # State
@@ -47,6 +47,7 @@ Plan: 2 of 2
 | Phase 64 P01 | 8min | 2 tasks | 1 files |
 | Phase 64 P02 | 4min | 2 tasks | 2 files |
 | Phase 65 P01 | 7min | 2 tasks | 1 files |
+| Phase 65 P02 | 5min | 2 tasks | 2 files |
 
 ### Decisions
 
@@ -68,6 +69,9 @@ v3.7 context:
 - [Phase 64]: V37-004 documented as INFO design note -- lastLootboxRngWord mid-day update is correct by design, documented for C4A wardens
 - [Phase 64]: Grand total: 84 findings (16 LOW, 68 INFO) across all milestones -- 0 HIGH/MEDIUM, lootbox RNG lifecycle fully audited
 - [Phase 65]: 17 Foundry tests prove STALL-01 through STALL-07: gap backfill entropy, gas ceiling (120d < 25M), coordinator swap state completeness, zero-seed unreachability, V37-001 guard branches resolved, dailyIdx timing consistency
+- [Phase 65]: 3 INFO findings classified (V37-005 manipulation window, V37-006 prevrandao bias, V37-007 level-0 fallback) -- all accept-as-known
+- [Phase 65]: Grand total 87 findings (16 LOW, 71 INFO) -- 84 carried forward + 3 new Phase 65 INFO
+- [Phase 65]: V37-001 (Phase 63 deferred test coverage) marked RESOLVED based on Phase 65 Plan 01 test evidence
 
 ### Pending Todos
 
@@ -79,6 +83,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T17:13:00.922Z
-Stopped at: Completed 65-01-PLAN.md
+Last session: 2026-03-22T17:21:23.842Z
+Stopped at: Completed 65-02-PLAN.md
 Resume file: None
