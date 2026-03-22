@@ -16,9 +16,9 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 
 ### Mutation Analysis
 
-- [ ] **MUT-01**: Each variable receives a binary verdict: SAFE (immutable in commitment window) or VULNERABLE (mutable by player action in window)
+- [x] **MUT-01**: Each variable receives a binary verdict: SAFE (immutable in commitment window) or VULNERABLE (mutable by player action in window)
 - [ ] **MUT-02**: Every VULNERABLE variable includes a specific fix recommendation with severity rating
-- [ ] **MUT-03**: Call-graph analysis covers indirect mutation paths (function A -> internal B -> writes variable C) to at least 3 levels of depth
+- [x] **MUT-03**: Call-graph analysis covers indirect mutation paths (function A -> internal B -> writes variable C) to at least 3 levels of depth
 
 ### Coinflip RNG Path
 
@@ -73,9 +73,9 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 | CW-02 | Phase 68 | Complete |
 | CW-03 | Phase 68 | Complete |
 | CW-04 | Phase 69 | Pending |
-| MUT-01 | Phase 69 | Pending |
+| MUT-01 | Phase 69 | Complete |
 | MUT-02 | Phase 69 | Pending |
-| MUT-03 | Phase 69 | Pending |
+| MUT-03 | Phase 69 | Complete |
 | COIN-01 | Phase 70 | Pending |
 | COIN-02 | Phase 70 | Pending |
 | COIN-03 | Phase 70 | Pending |
