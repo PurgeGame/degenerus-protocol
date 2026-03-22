@@ -206,10 +206,10 @@ Plans:
   2. Maximum jackpot payouts per path computed with 14M ceiling — no path can possibly exceed
   3. Purchase/minting worst-case profiled; max batch size under 14M computed
   4. Current headroom documented per path
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 57-01-PLAN.md — advanceGame stage-by-stage gas profiling + max payouts (CEIL-01, CEIL-02)
+- [x] 57-01-PLAN.md — advanceGame stage-by-stage gas profiling + max payouts (CEIL-01, CEIL-02)
 - [ ] 57-02-PLAN.md — Purchase path gas profiling + final deliverable assembly with headroom table (CEIL-03, CEIL-04, CEIL-05)
 
 ### Phase 58: Consolidated Findings
@@ -231,7 +231,7 @@ Plans:
 | 53. Consolidated Findings | 1/1 | Complete | 2026-03-21 |
 | 54. Comment Correctness | 6/6 | Complete   | 2026-03-22 |
 | 55. Gas Optimization | 0/4 | Planned | - |
-| 57. Gas Ceiling Analysis | 0/2 | Planned | - |
+| 57. Gas Ceiling Analysis | 1/2 | In Progress|  |
 | 58. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred

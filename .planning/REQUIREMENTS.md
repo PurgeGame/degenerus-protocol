@@ -21,8 +21,8 @@
 
 ### Gas Ceiling Analysis
 
-- [ ] **CEIL-01**: advanceGame worst-case gas profiled across every code path (jackpot, transition, daily, gameover)
-- [ ] **CEIL-02**: Maximum jackpot payouts per path computed such that no path exceeds 14M gas
+- [x] **CEIL-01**: advanceGame worst-case gas profiled across every code path (jackpot, transition, daily, gameover)
+- [x] **CEIL-02**: Maximum jackpot payouts per path computed such that no path exceeds 14M gas
 - [ ] **CEIL-03**: Ticket minting (purchase) worst-case gas profiled
 - [ ] **CEIL-04**: Maximum ticket batch size computed such that purchase never exceeds 14M gas
 - [ ] **CEIL-05**: Current headroom documented (how far below 14M each worst-case path sits today)
@@ -52,8 +52,8 @@
 | GAS-02 | Phase 55 | Pending |
 | GAS-03 | Phase 55 | Pending |
 | GAS-04 | Phase 55 | Pending |
-| CEIL-01 | Phase 57 | Pending |
-| CEIL-02 | Phase 57 | Pending |
+| CEIL-01 | Phase 57 | Complete |
+| CEIL-02 | Phase 57 | Complete |
 | CEIL-03 | Phase 57 | Pending |
 | CEIL-04 | Phase 57 | Pending |
 | CEIL-05 | Phase 57 | Pending |
