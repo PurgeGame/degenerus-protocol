@@ -734,7 +734,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             })
         );
 
-        _reserveLootboxRngIndex(id);
+        // Advance lootbox index so new purchases target the NEXT RNG
+        lootboxRngIndex++;
+        lootboxRngPendingEth = 0;
+        lootboxRngPendingBurnie = 0;
         vrfRequestId = id;
         rngWordCurrent = 0;
         rngRequestTime = uint48(block.timestamp);
@@ -794,10 +797,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 uint48 gapCount = day - idx - 1;
                 _backfillGapDays(currentWord, idx + 1, day, bonusFlip);
 
-                // Recover orphaned lootbox index using VRF-derived entropy.
-                // This runs here (not in updateVrfCoordinatorAndSub) so the fallback
-                // word is derived from the fresh VRF response, not predictable on-chain state.
-                _backfillOrphanedLootboxIndex(currentWord);
+                // Backfill any lootbox indices that never got a VRF word (orphaned by stall).
+                // Uses fresh VRF entropy, not predictable on-chain state.
+                _backfillOrphanedLootboxIndices(currentWord);
 
                 // Extend death clock by the stall duration — gap days don't count toward
                 // the 120-day inactivity timeout since the game was stalled, not abandoned.
@@ -841,8 +843,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     function _finalizeLootboxRng(uint256 rngWord) private {
-        uint48 index = lootboxRngRequestIndexById[vrfRequestId];
-        if (index == 0) return;
+        uint48 index = lootboxRngIndex - 1;
+        if (lootboxRngWordByIndex[index] != 0) return;
         lootboxRngWordByIndex[index] = rngWord;
         lastLootboxRngWord = rngWord;
         emit LootboxRngApplied(index, rngWord, vrfRequestId);
@@ -1267,25 +1269,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 lvl,
         uint256 requestId
     ) private {
-        uint256 prevRequestId = vrfRequestId;
-        bool isRetry = prevRequestId != 0 &&
+        bool isRetry = vrfRequestId != 0 &&
             rngRequestTime != 0 &&
             rngWordCurrent == 0;
-        if (isRetry) {
-            // Retry: discard the previous VRF request and remap its reserved lootbox index.
-            uint48 reservedIndex = lootboxRngRequestIndexById[prevRequestId];
-            if (reservedIndex != 0) {
-                delete lootboxRngRequestIndexById[prevRequestId];
-                lootboxRngRequestIndexById[requestId] = reservedIndex;
-            } else {
-                // Do not advance or clear pending on retry.
-                lootboxRngRequestIndexById[requestId] = lootboxRngIndex;
-            }
-        } else {
-            // Fresh request: reserve the next lootbox RNG index so new purchases
-            // are always assigned to the NEXT RNG.
-            _reserveLootboxRngIndex(requestId);
+        if (!isRetry) {
+            // Fresh request: advance lootbox index so new purchases target the NEXT RNG.
+            lootboxRngIndex++;
+            lootboxRngPendingEth = 0;
+            lootboxRngPendingBurnie = 0;
         }
+        // Retry: index already advanced from the original request. No action needed —
+        // lootboxRngIndex - 1 still points to the pending index regardless of request ID.
 
         vrfRequestId = requestId;
         rngWordCurrent = 0;
@@ -1353,19 +1347,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         vrfSubscriptionId = newSubId;
         vrfKeyHash = newKeyHash;
 
-        // Save orphaned lootbox index BEFORE clearing vrfRequestId. The actual backfill
-        // happens in rngGate when the first post-swap VRF word arrives, using VRF-derived
-        // entropy instead of predictable on-chain state. See _backfillOrphanedLootboxIndex.
-        {
-            uint256 outgoingRequestId = vrfRequestId;
-            if (outgoingRequestId != 0) {
-                uint48 orphanedIndex = lootboxRngRequestIndexById[outgoingRequestId];
-                if (orphanedIndex != 0 && lootboxRngWordByIndex[orphanedIndex] == 0) {
-                    orphanedLootboxRngIndex = orphanedIndex;
-                }
-            }
-        }
-
         // Reset RNG state to allow immediate advancement
         rngLockedFlag = false;
         vrfRequestId = 0;
@@ -1411,17 +1392,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         emit ReverseFlip(msg.sender, newCount, cost);
     }
 
-    /// @dev Reserve the next lootbox RNG index for a VRF request.
-    ///      Advances the index immediately so new purchases target the NEXT RNG.
-    function _reserveLootboxRngIndex(uint256 requestId) private {
-        uint48 index = lootboxRngIndex;
-        lootboxRngRequestIndexById[requestId] = index;
-        lootboxRngIndex = index + 1;
-        // Reset pending counters so new purchases accrue toward the next RNG
-        lootboxRngPendingEth = 0;
-        lootboxRngPendingBurnie = 0;
-    }
-
     /// @notice Chainlink VRF callback for random word fulfillment.
     /// @dev Access: VRF coordinator only.
     ///      Daily RNG: stores word for advanceGame processing (nudges applied there).
@@ -1444,7 +1414,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             rngWordCurrent = word;
         } else {
             // Mid-day RNG: directly finalize lootbox and clear state
-            uint48 index = lootboxRngRequestIndexById[requestId];
+            uint48 index = lootboxRngIndex - 1;
             lootboxRngWordByIndex[index] = word;
             emit LootboxRngApplied(index, word, requestId);
             vrfRequestId = 0;
@@ -1479,22 +1449,26 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Recover an orphaned lootbox RNG index left behind by a stalled VRF request.
-    ///      Uses VRF-derived entropy (not predictable on-chain state) so lootbox outcomes
-    ///      cannot be front-run. Reads orphanedLootboxRngIndex set by updateVrfCoordinatorAndSub.
+    /// @dev Backfill any lootbox RNG indices that never received a VRF word.
+    ///      Scans backwards from lootboxRngIndex - 1 until hitting a filled index.
+    ///      Uses VRF-derived entropy so lootbox outcomes cannot be front-run.
     /// @param vrfWord Fresh VRF word from the post-gap callback.
-    function _backfillOrphanedLootboxIndex(uint256 vrfWord) private {
-        uint48 orphanedIndex = orphanedLootboxRngIndex;
-        if (orphanedIndex == 0) return;
+    function _backfillOrphanedLootboxIndices(uint256 vrfWord) private {
+        uint48 idx = lootboxRngIndex;
+        if (idx <= 1) return; // nothing reserved yet
 
-        // Clear before writing — one-shot recovery
-        orphanedLootboxRngIndex = 0;
+        // Scan backwards from the most recent reserved index
+        for (uint48 i = idx - 1; i >= 1;) {
+            if (lootboxRngWordByIndex[i] != 0) break; // hit a filled index, done
 
-        uint256 fallbackWord = uint256(keccak256(abi.encodePacked(vrfWord, orphanedIndex)));
-        if (fallbackWord == 0) fallbackWord = 1;
-        lootboxRngWordByIndex[orphanedIndex] = fallbackWord;
-        lastLootboxRngWord = fallbackWord;
-        emit LootboxRngApplied(orphanedIndex, fallbackWord, 0);
+            uint256 fallbackWord = uint256(keccak256(abi.encodePacked(vrfWord, i)));
+            if (fallbackWord == 0) fallbackWord = 1;
+            lootboxRngWordByIndex[i] = fallbackWord;
+            lastLootboxRngWord = fallbackWord;
+            emit LootboxRngApplied(i, fallbackWord, 0);
+
+            unchecked { --i; }
+        }
     }
 
     /// @dev Apply daily RNG nudges, record the word, and emit the finalized word.
