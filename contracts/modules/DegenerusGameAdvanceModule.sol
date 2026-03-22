@@ -791,7 +791,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Backfill gap days from VRF stall before processing current day
             uint48 idx = dailyIdx;
             if (day > idx + 1) {
+                uint48 gapCount = day - idx - 1;
                 _backfillGapDays(currentWord, idx + 1, day, bonusFlip);
+
+                // Recover orphaned lootbox index using VRF-derived entropy.
+                // This runs here (not in updateVrfCoordinatorAndSub) so the fallback
+                // word is derived from the fresh VRF response, not predictable on-chain state.
+                _backfillOrphanedLootboxIndex(currentWord);
+
+                // Extend death clock by the stall duration — gap days don't count toward
+                // the 120-day inactivity timeout since the game was stalled, not abandoned.
+                levelStartTime += gapCount * 1 days;
             }
 
             // Normal daily RNG processing (request from current day)
@@ -1343,19 +1353,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         vrfSubscriptionId = newSubId;
         vrfKeyHash = newKeyHash;
 
-        // Backfill orphaned lootbox index from the stalled VRF request.
-        // Must happen BEFORE clearing vrfRequestId — we need it to look up the index.
-        uint256 outgoingRequestId = vrfRequestId;
-        if (outgoingRequestId != 0) {
-            uint48 orphanedIndex = lootboxRngRequestIndexById[outgoingRequestId];
-            if (orphanedIndex != 0 && lootboxRngWordByIndex[orphanedIndex] == 0) {
-                uint256 fallbackWord = uint256(keccak256(abi.encodePacked(
-                    lastLootboxRngWord, orphanedIndex
-                )));
-                if (fallbackWord == 0) fallbackWord = 1;
-                lootboxRngWordByIndex[orphanedIndex] = fallbackWord;
-                lastLootboxRngWord = fallbackWord;
-                emit LootboxRngApplied(orphanedIndex, fallbackWord, outgoingRequestId);
+        // Save orphaned lootbox index BEFORE clearing vrfRequestId. The actual backfill
+        // happens in rngGate when the first post-swap VRF word arrives, using VRF-derived
+        // entropy instead of predictable on-chain state. See _backfillOrphanedLootboxIndex.
+        {
+            uint256 outgoingRequestId = vrfRequestId;
+            if (outgoingRequestId != 0) {
+                uint48 orphanedIndex = lootboxRngRequestIndexById[outgoingRequestId];
+                if (orphanedIndex != 0 && lootboxRngWordByIndex[orphanedIndex] == 0) {
+                    orphanedLootboxRngIndex = orphanedIndex;
+                }
             }
         }
 
@@ -1470,6 +1477,24 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             emit DailyRngApplied(gapDay, derivedWord, 0, derivedWord);
             unchecked { ++gapDay; }
         }
+    }
+
+    /// @dev Recover an orphaned lootbox RNG index left behind by a stalled VRF request.
+    ///      Uses VRF-derived entropy (not predictable on-chain state) so lootbox outcomes
+    ///      cannot be front-run. Reads orphanedLootboxRngIndex set by updateVrfCoordinatorAndSub.
+    /// @param vrfWord Fresh VRF word from the post-gap callback.
+    function _backfillOrphanedLootboxIndex(uint256 vrfWord) private {
+        uint48 orphanedIndex = orphanedLootboxRngIndex;
+        if (orphanedIndex == 0) return;
+
+        // Clear before writing — one-shot recovery
+        orphanedLootboxRngIndex = 0;
+
+        uint256 fallbackWord = uint256(keccak256(abi.encodePacked(vrfWord, orphanedIndex)));
+        if (fallbackWord == 0) fallbackWord = 1;
+        lootboxRngWordByIndex[orphanedIndex] = fallbackWord;
+        lastLootboxRngWord = fallbackWord;
+        emit LootboxRngApplied(orphanedIndex, fallbackWord, 0);
     }
 
     /// @dev Apply daily RNG nudges, record the word, and emit the finalized word.

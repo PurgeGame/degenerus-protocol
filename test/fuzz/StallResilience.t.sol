@@ -196,19 +196,19 @@ contract StallResilience is DeployProtocol {
         // Verify no RNG word yet for orphaned index
         assertEq(game.lootboxRngWord(orphanedIndex), 0, "Orphaned index has no RNG word before swap");
 
-        // Stall + swap (warp 3 days, then coordinator swap which backfills orphaned index)
+        // Stall + swap (warp 3 days, coordinator swap saves orphaned index but does NOT backfill yet)
         MockVRFCoordinator newVRF = _stallAndSwap(3);
 
-        // After swap: orphaned index should have a fallback word from updateVrfCoordinatorAndSub
-        assertTrue(game.lootboxRngWord(orphanedIndex) != 0, "Orphaned index backfilled after swap");
+        // After swap: orphaned index is still 0 — backfill uses VRF entropy, not on-chain state
+        assertEq(game.lootboxRngWord(orphanedIndex), 0, "Orphaned index NOT yet backfilled (deferred to rngGate)");
 
-        // Resume to drive game forward
+        // Resume: rngGate backfills gap days AND orphaned lootbox index using fresh VRF word
         _resumeAfterSwap(newVRF, 0x1007CAFE);
 
+        // After resume: orphaned index should now have a VRF-derived word
+        assertTrue(game.lootboxRngWord(orphanedIndex) != 0, "Orphaned index backfilled after resume with VRF entropy");
+
         // Verify openLootBox does not revert for the orphaned index.
-        // openLootBox reverts E() if lootboxEth[index][buyer]==0, or RngNotReady if word==0.
-        // We purchased with lootbox amount targeting this index, and word is now set.
-        // Must prank as buyer since _resolvePlayer requires msg.sender == player or approved.
         vm.prank(buyer);
         game.openLootBox(buyer, orphanedIndex);
     }
