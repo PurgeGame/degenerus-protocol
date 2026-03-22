@@ -12,12 +12,12 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 - [x] **CW-01**: Every storage variable written or read by VRF fulfillment (rawFulfillRandomWords -> all downstream consumers) is cataloged with its slot, contract, and purpose
 - [x] **CW-02**: Every storage variable that feeds into VRF-dependent outcome computations is cataloged (backward trace from outcome to committed inputs)
 - [x] **CW-03**: For each cataloged variable, every external/public function that can mutate it is identified with call-graph depth (direct + indirect via internal calls)
-- [ ] **CW-04**: Cross-reference proof that no external function callable by a non-admin actor can mutate any committed input between VRF request and fulfillment
+- [x] **CW-04**: Cross-reference proof that no external function callable by a non-admin actor can mutate any committed input between VRF request and fulfillment
 
 ### Mutation Analysis
 
 - [x] **MUT-01**: Each variable receives a binary verdict: SAFE (immutable in commitment window) or VULNERABLE (mutable by player action in window)
-- [ ] **MUT-02**: Every VULNERABLE variable includes a specific fix recommendation with severity rating
+- [x] **MUT-02**: Every VULNERABLE variable includes a specific fix recommendation with severity rating
 - [x] **MUT-03**: Call-graph analysis covers indirect mutation paths (function A -> internal B -> writes variable C) to at least 3 levels of depth
 
 ### Coinflip RNG Path
@@ -72,9 +72,9 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 | CW-01 | Phase 68 | Complete |
 | CW-02 | Phase 68 | Complete |
 | CW-03 | Phase 68 | Complete |
-| CW-04 | Phase 69 | Pending |
+| CW-04 | Phase 69 | Complete |
 | MUT-01 | Phase 69 | Complete |
-| MUT-02 | Phase 69 | Pending |
+| MUT-02 | Phase 69 | Complete |
 | MUT-03 | Phase 69 | Complete |
 | COIN-01 | Phase 70 | Pending |
 | COIN-02 | Phase 70 | Pending |
