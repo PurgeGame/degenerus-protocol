@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
@@ -98,5 +97,119 @@ contract StallResilience is DeployProtocol {
         uint256 expectedDay4 = uint256(keccak256(abi.encodePacked(resumeWord, uint48(4))));
         if (expectedDay4 == 0) expectedDay4 = 1;
         assertEq(game.rngWordForDay(4), expectedDay4, "Day 4 word is keccak256(vrfWord, 4)");
+    }
+
+    // ── TEST-02: Coinflip claims across gap days ────────────────────
+
+    /// @notice Proves coinflip stakes placed before/during stall resolve after
+    ///         backfill -- getCoinflipDayResult returns non-zero rewardPercent
+    ///         for each gap day.
+    function test_coinflipClaimsAcrossGapDays() public {
+        // Setup buyer
+        address buyer = makeAddr("flipBuyer");
+        vm.deal(buyer, 100 ether);
+
+        // Day 1: purchase 5 tickets (stakes go to day 2 via _targetFlipDay = currentDayView()+1)
+        for (uint256 i = 0; i < 5; i++) {
+            vm.prank(buyer);
+            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+        }
+
+        // Complete day 1
+        _completeDay(0xF11F0001);
+
+        // Warp to day 2, trigger VRF request (will stall)
+        vm.warp(block.timestamp + 1 days);
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+
+        // Purchase during stall at day 2 (stakes go to day 3)
+        for (uint256 i = 0; i < 5; i++) {
+            vm.prank(buyer);
+            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+        }
+
+        // Warp +1 day (still stalled), purchase at day 3 (stakes go to day 4)
+        vm.warp(block.timestamp + 1 days);
+        for (uint256 i = 0; i < 5; i++) {
+            vm.prank(buyer);
+            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
+        }
+
+        // Warp +2 more days to create the full gap (now at day 5)
+        // _stallAndSwap would warp again, so just do coordinator swap directly
+        vm.warp(block.timestamp + 2 days);
+        MockVRFCoordinator newVRF = _doCoordinatorSwap();
+
+        // Resume
+        _resumeAfterSwap(newVRF, 0xF11FCAFE);
+
+        // Verify coinflip results populated for gap days.
+        // processCoinflipPayouts always writes coinflipDayResult (rewardPercent >= 50).
+        // Gap days 2,3,4 should be processed by _backfillGapDays.
+        (uint16 reward2,) = coinflip.getCoinflipDayResult(2);
+        (uint16 reward3,) = coinflip.getCoinflipDayResult(3);
+        (uint16 reward4,) = coinflip.getCoinflipDayResult(4);
+
+        assertTrue(reward2 != 0, "Day 2 coinflip resolved after backfill");
+        assertTrue(reward3 != 0, "Day 3 coinflip resolved after backfill");
+        assertTrue(reward4 != 0, "Day 4 coinflip resolved after backfill");
+    }
+
+    // ── TEST-03: Lootbox open after orphaned index backfill ─────────
+
+    /// @notice Proves lootbox at orphaned RNG index has non-zero rngWord after
+    ///         coordinator swap, and openLootBox does not revert with RngNotReady.
+    function test_lootboxOpenAfterOrphanedIndexBackfill() public {
+        // Setup buyer with enough ETH for lootbox purchases
+        address buyer = makeAddr("lootBuyer");
+        vm.deal(buyer, 200 ether);
+
+        // Day 1: purchase with lootbox amount
+        // lootboxRngIndex = 1, so this writes to lootboxEth[1][buyer]
+        vm.prank(buyer);
+        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+
+        // Complete day 1 (VRF request reserves lootbox index 1, fulfillment writes word for index 1)
+        // After this: lootboxRngIndex = 2
+        _completeDay(0x10070001);
+
+        // Record the current lootbox index (should be 2 now)
+        uint48 preStallIndex = game.lootboxRngIndexView();
+
+        // Warp to day 2
+        vm.warp(block.timestamp + 1 days);
+
+        // Purchase with lootbox amount BEFORE advanceGame so lootboxEth[preStallIndex][buyer] has value
+        // lootboxRngIndex is still preStallIndex (2), so this writes to lootboxEth[2][buyer]
+        vm.prank(buyer);
+        game.purchase{value: 1.01 ether}(buyer, 400, 1 ether, bytes32(0), MintPaymentKind.DirectEth);
+
+        // advanceGame triggers VRF request, which reserves lootbox index preStallIndex (2)
+        // and increments lootboxRngIndex to 3
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+
+        // The orphaned index is preStallIndex (reserved by the day 2 VRF request)
+        uint48 orphanedIndex = preStallIndex;
+
+        // Verify no RNG word yet for orphaned index
+        assertEq(game.lootboxRngWord(orphanedIndex), 0, "Orphaned index has no RNG word before swap");
+
+        // Stall + swap (warp 3 days, then coordinator swap which backfills orphaned index)
+        MockVRFCoordinator newVRF = _stallAndSwap(3);
+
+        // After swap: orphaned index should have a fallback word from updateVrfCoordinatorAndSub
+        assertTrue(game.lootboxRngWord(orphanedIndex) != 0, "Orphaned index backfilled after swap");
+
+        // Resume to drive game forward
+        _resumeAfterSwap(newVRF, 0x1007CAFE);
+
+        // Verify openLootBox does not revert for the orphaned index.
+        // openLootBox reverts E() if lootboxEth[index][buyer]==0, or RngNotReady if word==0.
+        // We purchased with lootbox amount targeting this index, and word is now set.
+        // Must prank as buyer since _resolvePlayer requires msg.sender == player or approved.
+        vm.prank(buyer);
+        game.openLootBox(buyer, orphanedIndex);
     }
 }
