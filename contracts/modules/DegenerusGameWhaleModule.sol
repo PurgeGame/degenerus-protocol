@@ -195,10 +195,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Check for valid whale boon (10/25/50% off standard price)
         bool hasValidBoon = false;
-        uint48 boonDay = whaleBoonDay[buyer];
+        BoonPacked storage bp = boonPacked[buyer];
+        uint256 s0 = bp.slot0;
+        uint24 boonDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
         if (boonDay != 0) {
             uint48 currentDay = _simulatedDayIndex();
-            hasValidBoon = currentDay <= boonDay + 4;
+            hasValidBoon = uint24(currentDay) <= boonDay + 4;
         }
 
         uint256 prevData = mintPacked_[buyer];
@@ -227,11 +229,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         //        otherwise 2.4 ETH at levels 0-3, 4 ETH after
         uint256 totalPrice;
         if (hasValidBoon) {
-            uint16 discountBps = whaleBoonDiscountBps[buyer];
+            uint8 wTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
+            uint16 discountBps = _whaleTierToBps(wTier);
             if (discountBps == 0) discountBps = 1000; // Default 10% for legacy boons
             uint256 discountedPrice = (WHALE_BUNDLE_STANDARD_PRICE * (10_000 - discountBps)) / 10_000;
-            delete whaleBoonDay[buyer];
-            delete whaleBoonDiscountBps[buyer];
+            // Clear whale fields (consumed)
+            bp.slot0 = s0 & BP_WHALE_CLEAR;
             totalPrice = discountedPrice + WHALE_BUNDLE_STANDARD_PRICE * (quantity - 1);
         } else {
             // x99 levels: minimum 2 bundles (8 ETH) to deter fresh-account century bonus farming
@@ -327,24 +330,29 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (gameOver) revert E();
         uint24 currentLevel = level;
         bool hasValidBoon = false;
-        uint16 boonDiscountBps = lazyPassBoonDiscountBps[buyer];
-        uint48 boonDay = lazyPassBoonDay[buyer];
+        BoonPacked storage bpLazy = boonPacked[buyer];
+        uint256 s1 = bpLazy.slot1;
+        uint8 lazyTier = uint8(s1 >> BP_LAZY_PASS_TIER_SHIFT);
+        uint16 boonDiscountBps = _lazyPassTierToBps(lazyTier);
+        uint24 boonDay = uint24(s1 >> BP_LAZY_PASS_DAY_SHIFT);
         if (boonDay != 0) {
             uint48 currentDay = _simulatedDayIndex();
-            uint48 deityDay = deityLazyPassBoonDay[buyer];
-            if (deityDay != 0 && deityDay != currentDay) {
-                lazyPassBoonDay[buyer] = 0;
-                lazyPassBoonDiscountBps[buyer] = 0;
-                deityLazyPassBoonDay[buyer] = 0;
-            } else if (currentDay <= boonDay + 4) {
+            uint24 deityDay = uint24(s1 >> BP_DEITY_LAZY_PASS_DAY_SHIFT);
+            if (deityDay != 0 && deityDay != uint24(currentDay)) {
+                bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
+                boonDay = 0;
+                boonDiscountBps = 0;
+            } else if (uint24(currentDay) <= boonDay + 4) {
                 hasValidBoon = true;
             } else {
-                lazyPassBoonDay[buyer] = 0;
-                lazyPassBoonDiscountBps[buyer] = 0;
-                deityLazyPassBoonDay[buyer] = 0;
+                bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
+                boonDay = 0;
+                boonDiscountBps = 0;
             }
-        } else if (boonDiscountBps != 0) {
-            lazyPassBoonDiscountBps[buyer] = 0;
+        } else if (lazyTier != 0) {
+            // Stale tier with no day -- clear
+            bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
+            boonDiscountBps = 0;
         }
         if (currentLevel > 2 && (currentLevel % 10 != 9 || currentLevel % 100 == 99) && !hasValidBoon) revert E();
 
@@ -398,9 +406,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             }
         }
         if (hasValidBoon) {
-            lazyPassBoonDay[buyer] = 0;
-            lazyPassBoonDiscountBps[buyer] = 0;
-            deityLazyPassBoonDay[buyer] = 0;
+            // Re-read slot1 in case deity path already cleared, then clear lazy pass fields
+            s1 = bpLazy.slot1;
+            bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
         }
         if (msg.value != totalPrice) revert E();
 
@@ -475,25 +483,25 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Apply discount boon if active (tier 1=10%, 2=25%, 3=50%)
         uint256 totalPrice = basePrice;
-        uint8 boonTier = deityPassBoonTier[buyer];
+        BoonPacked storage bpDeity = boonPacked[buyer];
+        uint256 s1Deity = bpDeity.slot1;
+        uint8 boonTier = uint8(s1Deity >> BP_DEITY_PASS_TIER_SHIFT);
         if (boonTier != 0) {
             // Check expiry: 4 days for lootbox-rolled, 1 day for deity-granted
             bool expired;
-            uint48 deityDay = deityDeityPassBoonDay[buyer];
+            uint24 deityDay = uint24(s1Deity >> BP_DEITY_DEITY_PASS_DAY_SHIFT);
             if (deityDay != 0) {
-                expired = _simulatedDayIndex() > deityDay;
+                expired = uint24(_simulatedDayIndex()) > deityDay;
             } else {
-                uint48 stampDay = deityPassBoonDay[buyer];
-                expired = stampDay > 0 && _simulatedDayIndex() > stampDay + DEITY_PASS_BOON_EXPIRY_DAYS;
+                uint24 stampDay = uint24(s1Deity >> BP_DEITY_PASS_DAY_SHIFT);
+                expired = stampDay > 0 && uint24(_simulatedDayIndex()) > stampDay + DEITY_PASS_BOON_EXPIRY_DAYS;
             }
             if (!expired) {
                 uint16 discountBps = boonTier == 3 ? uint16(5000) : (boonTier == 2 ? uint16(2500) : uint16(1000));
                 totalPrice = (basePrice * (10_000 - discountBps)) / 10_000;
             }
-            // Consume boon regardless of expiry
-            deityPassBoonTier[buyer] = 0;
-            deityPassBoonDay[buyer] = 0;
-            deityDeityPassBoonDay[buyer] = 0;
+            // Consume boon regardless of expiry — clear deity pass fields
+            bpDeity.slot1 = s1Deity & BP_DEITY_PASS_CLEAR;
         }
         if (msg.value != totalPrice) revert E();
 
@@ -746,7 +754,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     }
 
     /// @dev Apply any active lootbox boost boon to the purchase amount.
-    ///      Checks boosts in order: 25% > 15% > 5%. Consumes the first valid boost found.
+    ///      Reads packed lootbox tier from boonPacked[player].slot0.
     ///      Boost is capped at LOOTBOX_BOOST_MAX_VALUE (10 ETH) and expires after 2 game days.
     /// @param player The player whose boost to check and consume.
     /// @param day The current day index for event emission.
@@ -758,63 +766,29 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 amount
     ) private returns (uint256 boostedAmount) {
         boostedAmount = amount;
-        uint16 consumedBoostBps = 0;
-        uint48 currentDay = day;
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s0 = bp.slot0;
+        uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
+        if (tier == 0) return boostedAmount;
 
-        // Check 25% boost first (rarest, best boost)
-        bool has25Boost = lootboxBoon25Active[player];
-        if (has25Boost) {
-            uint48 stampDay = lootboxBoon25Day[player];
-            if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
-                has25Boost = false;
-                lootboxBoon25Active[player] = false;
-            }
-        }
-        if (has25Boost) {
-            uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
-            uint256 boost = (cappedAmount * LOOTBOX_BOOST_25_BONUS_BPS) / 10_000;
-            boostedAmount += boost;
-            consumedBoostBps = LOOTBOX_BOOST_25_BONUS_BPS;
-            lootboxBoon25Active[player] = false;
-        } else {
-            // Check 15% boost next
-            bool has15Boost = lootboxBoon15Active[player];
-            if (has15Boost) {
-                uint48 stampDay = lootboxBoon15Day[player];
-                if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
-                    has15Boost = false;
-                    lootboxBoon15Active[player] = false;
-                }
-            }
-            if (has15Boost) {
-                uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
-                uint256 boost = (cappedAmount * LOOTBOX_BOOST_15_BONUS_BPS) / 10_000;
-                boostedAmount += boost;
-                consumedBoostBps = LOOTBOX_BOOST_15_BONUS_BPS;
-                lootboxBoon15Active[player] = false;
-            } else {
-                // Check 5% boost last
-                bool has5Boost = lootboxBoon5Active[player];
-                if (has5Boost) {
-                    uint48 stampDay = lootboxBoon5Day[player];
-                    if (stampDay > 0 && currentDay > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
-                        has5Boost = false;
-                        lootboxBoon5Active[player] = false;
-                    }
-                }
-                if (has5Boost) {
-                    uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
-                    uint256 boost = (cappedAmount * LOOTBOX_BOOST_5_BONUS_BPS) / 10_000;
-                    boostedAmount += boost;
-                    consumedBoostBps = LOOTBOX_BOOST_5_BONUS_BPS;
-                    lootboxBoon5Active[player] = false;
-                }
-            }
+        // Check expiry
+        uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
+        if (stampDay > 0 && uint24(day) > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
+            // Expired: clear lootbox fields
+            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+            return boostedAmount;
         }
 
-        if (consumedBoostBps != 0) {
-            emit LootBoxBoostConsumed(player, day, amount, boostedAmount, consumedBoostBps);
-        }
+        // Apply boost
+        uint16 boostBps = _lootboxTierToBps(tier);
+        uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
+        uint256 boost = (cappedAmount * boostBps) / 10_000;
+        boostedAmount += boost;
+
+        // Clear lootbox fields (consumed)
+        bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+
+        emit LootBoxBoostConsumed(player, day, amount, boostedAmount, boostBps);
     }
 
     /// @dev Record the mint day in player's packed data for lootbox tracking.
