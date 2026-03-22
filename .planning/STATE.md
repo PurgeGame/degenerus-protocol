@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.6
-milestone_name: VRF Stall Resilience
+milestone: v3.7
+milestone_name: VRF Path Audit
 status: unknown
-stopped_at: Completed 62-02-PLAN.md (consolidated findings)
-last_updated: "2026-03-22T14:00:25.135Z"
+stopped_at: Completed 63-02-PLAN.md
+last_updated: "2026-03-22T16:02:24.293Z"
 progress:
   total_phases: 4
-  completed_phases: 4
-  total_plans: 6
-  completed_plans: 6
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
 ---
 
 # State
@@ -19,36 +19,45 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 62 — Audit + Consolidated Findings
+**Current focus:** Phase 63 — VRF Request/Fulfillment Core
 
 ## Current Position
 
-Phase: 62 (Audit + Consolidated Findings) — EXECUTING
+Phase: 63 (VRF Request/Fulfillment Core) — EXECUTING
 Plan: 2 of 2
+
+## Performance Metrics
+
+**Velocity:**
+
+- Total plans completed: 0
+- Average duration: --
+- Total execution time: --
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
 
 ## Accumulated Context
 
+| Phase 63 P01 | 11min | 2 tasks | 1 files |
+| Phase 63 P02 | 4min | 2 tasks | 2 files |
+
 ### Decisions
 
-v3.6 context:
+v3.7 context:
 
-- VRF stall creates gap days where rngWordByDay[gapDay]=0 and lootboxRngWordByIndex[K]=0
-- Fix: backfill gap day words from first post-gap VRF response using keccak256(vrfWord, gapDay)
-- Coinflips and lootboxes then resolve naturally via existing claim paths
-- No full advanceGame processing needed for gap days — just RNG backfill
-- midDayTicketRngPending needs clearing on swap or first post-gap advance
-- [Phase 59]: Gap days get zero nudges -- totalFlipReversals consumed only on current day
-- [Phase 59]: resolveRedemptionPeriod skipped for gap days -- timer continued in real time during stall
-- [Phase 59]: DailyRngApplied event reused with nudges=0 to distinguish backfilled days
-- [Phase 59]: Orphaned index handled in updateVrfCoordinatorAndSub (not rngGate) -- resolves at exact moment of orphaning
-- [Phase 59]: Fallback word derived from lastLootboxRngWord + orphanedIndex for unique entropy per index
-- [Phase 60]: Used outgoingRequestId (captured before vrfRequestId=0 reset) as LootboxRngApplied emit argument for indexer traceability
-- [Phase 60]: Comment-only NatSpec (not @dev tag) matching DegenerusAdmin.sol style for inline design rationale
-- [Phase 61]: Used address(admin) from DeployProtocol for vm.prank -- same as ContractAddresses.ADMIN post-patch, avoids unused import
-- [Phase 61]: Extracted _doCoordinatorSwap (no warp) from _stallAndSwap for incremental time-warp test patterns
-- [Phase 62]: All 8 v3.6 attack surfaces rated SAFE -- no new vulnerabilities from gap backfill, orphaned lootbox recovery, or midDayTicketRngPending clearing
-- [Phase 62]: 0 HIGH/MEDIUM/LOW findings, 2 INFO (test coverage observations) -- FINAL-FINDINGS-REPORT SOUND assessment remains valid
-- [Phase 62]: 0 HIGH/MEDIUM/LOW from v3.6 -- SOUND assessment preserved, 78 prior findings carried forward (16 LOW, 62 INFO)
+- Motivation: unauthorized lootbox RNG index change (now fixed) warrants dedicated audit pass
+- Scope narrowed: coinflip RNG (COIN-01) and daily RNG gate (DAYRNG-01) deferred to future milestone
+- Scope: VRF core, lootbox RNG lifecycle, VRF stall edge cases, Foundry/Halmos test coverage
+- Deliverables: findings document + Foundry invariant/fuzz tests (no code fixes unless issues found)
+- Research complete: HIGH confidence across all 4 areas (stack, features, architecture, pitfalls)
+- [Phase 63]: Storage slots verified via forge inspect: rngWordCurrent at slot 4, vrfRequestId at slot 5 (corrected from research estimate of 5/6)
+- [Phase 63]: Absolute timestamps (N * 86400) used for cross-day boundary tests to avoid Foundry vm.warp relative-timestamp subtlety
+- [Phase 63]: 0 HIGH/MEDIUM/LOW findings: VRF core mechanism correct across all 4 VRFC requirements, Slot 0 assembly SAFE, gas budget 6-10x margin
+- [Phase 63]: V37-001 gameover entry point (_tryRequestRng) deferred to Phase 65 -- shares proven _finalizeRngRequest, low risk
 
 ### Pending Todos
 
@@ -60,6 +69,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T14:00:25.133Z
-Stopped at: Completed 62-02-PLAN.md (consolidated findings)
+Last session: 2026-03-22T16:02:24.291Z
+Stopped at: Completed 63-02-PLAN.md
 Resume file: None

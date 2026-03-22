@@ -120,7 +120,7 @@
 
 **Milestone Goal:** Comprehensive audit of all VRF-dependent code paths -- VRF request/fulfillment core, lootbox RNG lifecycle, and VRF stall edge cases -- with Foundry invariant/fuzz tests and Halmos verification for all confirmed invariants.
 
-- [ ] **Phase 63: VRF Request/Fulfillment Core** - Prove VRF callback revert-safety, request ID lifecycle, rngLockedFlag mutual exclusion, and timeout retry correctness
+- [x] **Phase 63: VRF Request/Fulfillment Core** - Prove VRF callback revert-safety, request ID lifecycle, rngLockedFlag mutual exclusion, and timeout retry correctness (completed 2026-03-22)
 - [ ] **Phase 64: Lootbox RNG Lifecycle** - Full trace of lootbox purchase through VRF fulfillment to ticket selection and prize, proving index-to-word 1:1 mapping and per-player entropy uniqueness
 - [ ] **Phase 65: VRF Stall Edge Cases** - Audit gap backfill entropy, manipulation window, gas ceiling, coordinator swap cleanup, zero-seed edge case, game-over fallback, and dailyIdx timing consistency
 - [ ] **Phase 66: VRF Path Test Coverage** - Foundry fuzz/invariant tests for lootbox index lifecycle, stall-to-recovery scenarios, gap backfill edge cases, and Halmos verification of entropy bounds
@@ -139,8 +139,8 @@
 **Plans**: 2 plans
 
 Plans:
-- [ ] 63-01-PLAN.md — VRF core fuzz/unit test suite (VRFC-01 through VRFC-04)
-- [ ] 63-02-PLAN.md — Slot 0 assembly audit + findings document
+- [x] 63-01-PLAN.md — VRF core fuzz/unit test suite (VRFC-01 through VRFC-04)
+- [x] 63-02-PLAN.md — Slot 0 assembly audit + findings document
 
 ### Phase 64: Lootbox RNG Lifecycle
 **Goal**: Complete lootbox RNG path from purchase to prize is proven correct -- every index increment has exactly one matching VRF word write, and per-player entropy is unique
@@ -194,7 +194,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 63. VRF Request/Fulfillment Core | v3.7 | 0/2 | Planning complete | - |
+| 63. VRF Request/Fulfillment Core | v3.7 | 2/2 | Complete   | 2026-03-22 |
 | 64. Lootbox RNG Lifecycle | v3.7 | 0/TBD | Not started | - |
 | 65. VRF Stall Edge Cases | v3.7 | 0/TBD | Not started | - |
 | 66. VRF Path Test Coverage | v3.7 | 0/TBD | Not started | - |
