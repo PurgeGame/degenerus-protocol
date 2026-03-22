@@ -182,11 +182,11 @@ Plans:
   2. Foundry invariant tests prove VRF stall-to-recovery scenarios -- the system transitions correctly through stall, coordinator swap, gap backfill, and normal operation
   3. Foundry tests for gap backfill edge cases cover multi-day gaps and boundary conditions (1-day gap, maximum gap, gap at game boundaries)
   4. Halmos symbolic verification proves entropy bounds consistency -- redemption roll formula [25, 175] produces identical results across all 3 call sites
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 66-01: TBD
-- [ ] 66-02: TBD
+- [ ] 66-01-PLAN.md — VRFPathHandler invariant handler + invariant/fuzz tests (TEST-01, TEST-02, TEST-03)
+- [ ] 66-02-PLAN.md — Halmos symbolic verification of redemption roll formula (TEST-04)
 
 ## Progress
 
@@ -196,8 +196,8 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 63. VRF Request/Fulfillment Core | v3.7 | 2/2 | Complete    | 2026-03-22 |
 | 64. Lootbox RNG Lifecycle | v3.7 | 2/2 | Complete    | 2026-03-22 |
-| 65. VRF Stall Edge Cases | v3.7 | 2/2 | Complete   | 2026-03-22 |
-| 66. VRF Path Test Coverage | v3.7 | 0/TBD | Not started | - |
+| 65. VRF Stall Edge Cases | v3.7 | 2/2 | Complete    | 2026-03-22 |
+| 66. VRF Path Test Coverage | v3.7 | 0/2 | Not started | - |
 
 ## Deferred
 
