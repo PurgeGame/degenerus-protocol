@@ -605,6 +605,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         uint256 affiliateReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
         if (affiliateReserve == 0) return;
+        // Reserve the outstanding level claim allocation so whale purchases
+        // cannot drain tokens owed to affiliate claimants.
+        uint256 reserved = levelDgnrsAllocation[level] - levelDgnrsClaimed[level];
+        if (reserved >= affiliateReserve) return;
+        affiliateReserve -= reserved;
 
         if (affiliateAddr != address(0)) {
             uint256 affiliateShare = (affiliateReserve *
@@ -667,6 +672,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         uint256 affiliateReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
         if (affiliateReserve == 0) return buyerDgnrs;
+        // Reserve the outstanding level claim allocation so deity purchases
+        // cannot drain tokens owed to affiliate claimants.
+        uint256 reserved = levelDgnrsAllocation[level] - levelDgnrsClaimed[level];
+        if (reserved >= affiliateReserve) return buyerDgnrs;
+        affiliateReserve -= reserved;
 
         if (affiliateAddr != address(0)) {
             uint256 affiliateShare = (affiliateReserve *
