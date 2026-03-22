@@ -132,7 +132,7 @@
 
 **Milestone Goal:** Prove that no player-controllable action between VRF request and fulfillment can influence outcomes determined by that RNG word.
 
-- [ ] **Phase 68: Commitment Window Inventory** - Catalog every variable VRF words touch (forward + backward) and identify all mutation surfaces
+- [ ] **Phase 68: Commitment Window Inventory** - 2 plans, 3 requirements (CW-01, CW-02, CW-03)
 - [ ] **Phase 69: Mutation Verdicts** - Cross-reference proof and per-variable binary SAFE/VULNERABLE verdicts with fix recommendations
 - [ ] **Phase 70: Coinflip Commitment Window** - Full coinflip RNG lifecycle trace with commitment window analysis and multi-tx attack modeling
 - [ ] **Phase 71: advanceGame Day RNG Window** - Daily VRF word flow through all consumers with commitment window and cross-day contamination analysis
@@ -148,7 +148,10 @@
   1. A complete forward-trace catalog exists listing every storage variable written or read by rawFulfillRandomWords through all downstream consumers, with contract name, slot number, and purpose
   2. A complete backward-trace catalog exists listing every storage variable that feeds into VRF-dependent outcome computations (from outcome back to committed inputs)
   3. For each cataloged variable, every external/public function that can mutate it is listed with call-graph depth (direct writes + indirect via internal calls)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 68-01-PLAN.md -- Forward-trace + backward-trace catalogs (CW-01, CW-02)
+- [ ] 68-02-PLAN.md -- Mutation surface catalog + slot validation (CW-03)
 
 ### Phase 69: Mutation Verdicts
 **Goal**: Every cataloged variable has a binary SAFE/VULNERABLE verdict with proof, and every VULNERABLE variable has a fix recommendation
@@ -198,7 +201,7 @@ Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 68. Commitment Window Inventory | 0/? | Not started | - |
+| 68. Commitment Window Inventory | 0/2 | Planning complete | - |
 | 69. Mutation Verdicts | 0/? | Not started | - |
 | 70. Coinflip Commitment Window | 0/? | Not started | - |
 | 71. advanceGame Day RNG Window | 0/? | Not started | - |
