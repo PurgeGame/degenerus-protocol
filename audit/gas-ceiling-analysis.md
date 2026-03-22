@@ -17,7 +17,7 @@ This analysis profiles the worst-case gas consumption for all 18 execution paths
 
 ### advanceGame Verdict
 
-- **10 of 12 stages:** SAFE (>3M headroom)
+- **9 of 12 stages:** SAFE (>3M headroom)
 - **1 stage:** TIGHT (1-3M headroom) -- Stage 6 PURCHASE_DAILY
 - **2 stages:** AT_RISK (<1M headroom) -- Stages 8 and 11 (daily ETH distribution with full auto-rebuy)
 - **1 theoretical breach:** Stage 11 Day-1 with earlybird + full auto-rebuy (~14.16M, exceeds ceiling by ~162K)
