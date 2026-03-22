@@ -15,7 +15,7 @@
 - ✅ **v3.4 New Feature Audit — Skim Redesign + Redemption Lootbox** — Phases 50-53 (shipped 2026-03-21)
 - ✅ **v3.5 Final Polish — Comment Correctness + Gas Optimization** — Phases 54-58 (shipped 2026-03-22)
 - ✅ **v3.6 VRF Stall Resilience** — Phases 59-62 (shipped 2026-03-22)
-- 🚧 **v3.7 VRF Path Audit** — Phases 63-66 (in progress)
+- ✅ **v3.7 VRF Path Audit** — Phases 63-66 (shipped 2026-03-22)
 
 ## Phases
 
@@ -123,7 +123,7 @@
 - [x] **Phase 63: VRF Request/Fulfillment Core** - Prove VRF callback revert-safety, request ID lifecycle, rngLockedFlag mutual exclusion, and timeout retry correctness (completed 2026-03-22)
 - [x] **Phase 64: Lootbox RNG Lifecycle** - Full trace of lootbox purchase through VRF fulfillment to ticket selection and prize, proving index-to-word 1:1 mapping and per-player entropy uniqueness (completed 2026-03-22)
 - [x] **Phase 65: VRF Stall Edge Cases** - Audit gap backfill entropy, manipulation window, gas ceiling, coordinator swap cleanup, zero-seed edge case, game-over fallback, and dailyIdx timing consistency (completed 2026-03-22)
-- [ ] **Phase 66: VRF Path Test Coverage** - Foundry fuzz/invariant tests for lootbox index lifecycle, stall-to-recovery scenarios, gap backfill edge cases, and Halmos verification of entropy bounds
+- [x] **Phase 66: VRF Path Test Coverage** - Foundry fuzz/invariant tests for lootbox index lifecycle, stall-to-recovery scenarios, gap backfill edge cases, and Halmos verification of entropy bounds (completed 2026-03-22)
 
 ## Phase Details
 
@@ -185,8 +185,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 66-01-PLAN.md — VRFPathHandler invariant handler + invariant/fuzz tests (TEST-01, TEST-02, TEST-03)
-- [ ] 66-02-PLAN.md — Halmos symbolic verification of redemption roll formula (TEST-04)
+- [x] 66-01-PLAN.md — VRFPathHandler invariant handler + invariant/fuzz tests (TEST-01, TEST-02, TEST-03)
+- [x] 66-02-PLAN.md — Halmos symbolic verification of redemption roll formula (TEST-04)
 
 ## Progress
 
@@ -197,7 +197,7 @@ Plans:
 | 63. VRF Request/Fulfillment Core | v3.7 | 2/2 | Complete    | 2026-03-22 |
 | 64. Lootbox RNG Lifecycle | v3.7 | 2/2 | Complete    | 2026-03-22 |
 | 65. VRF Stall Edge Cases | v3.7 | 2/2 | Complete    | 2026-03-22 |
-| 66. VRF Path Test Coverage | v3.7 | 0/2 | Not started | - |
+| 66. VRF Path Test Coverage | v3.7 | 2/2 | Complete    | 2026-03-22 |
 
 ## Deferred
 

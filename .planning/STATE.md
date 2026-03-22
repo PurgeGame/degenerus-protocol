@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: VRF Path Audit
 status: unknown
-stopped_at: Completed 65-02-PLAN.md
-last_updated: "2026-03-22T17:21:23.844Z"
+stopped_at: Completed 66-02-PLAN.md
+last_updated: "2026-03-22T17:59:24Z"
 progress:
   total_phases: 4
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  completed_phases: 4
+  total_plans: 8
+  completed_plans: 8
 ---
 
 # State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 65 — VRF Stall Edge Cases
+**Current focus:** Phase 66 — VRF Path Test Coverage (COMPLETE)
 
 ## Current Position
 
-Phase: 65 (VRF Stall Edge Cases) — EXECUTING
-Plan: 2 of 2
+Phase: 66
+Plan: 2 of 2 (complete)
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Plan: 2 of 2
 | Phase 64 P02 | 4min | 2 tasks | 2 files |
 | Phase 65 P01 | 7min | 2 tasks | 1 files |
 | Phase 65 P02 | 5min | 2 tasks | 2 files |
+| Phase 66 P02 | 16min | 1 tasks | 1 files |
 
 ### Decisions
 
@@ -72,6 +73,9 @@ v3.7 context:
 - [Phase 65]: 3 INFO findings classified (V37-005 manipulation window, V37-006 prevrandao bias, V37-007 level-0 fallback) -- all accept-as-known
 - [Phase 65]: Grand total 87 findings (16 LOW, 71 INFO) -- 84 carried forward + 3 new Phase 65 INFO
 - [Phase 65]: V37-001 (Phase 63 deferred test coverage) marked RESOLVED based on Phase 65 Plan 01 test evidence
+- [Phase 66]: Halmos 0.3.3 requires FOUNDRY_TEST=test/halmos + --build-info flag for AST data in forge artifacts
+- [Phase 66]: TEST-04 closed: Halmos symbolic proof that redemption roll formula always produces [25, 175] with safe uint16 cast for all 2^256 inputs
+- [Phase 66]: Actual formula call sites at lines 805, 868, 897 (not 817, 880, 909 from initial research)
 
 ### Pending Todos
 
@@ -83,6 +87,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T17:21:23.842Z
-Stopped at: Completed 65-02-PLAN.md
+Last session: 2026-03-22T17:59:24Z
+Stopped at: Completed 66-02-PLAN.md
 Resume file: None
