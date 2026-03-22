@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.6
 milestone_name: VRF Stall Resilience
 status: unknown
-stopped_at: Completed 59-01-PLAN.md (gap day RNG backfill)
-last_updated: "2026-03-22T12:19:07.742Z"
+stopped_at: Completed 59-02-PLAN.md (orphaned lootbox recovery + midDayTicketRngPending clearing)
+last_updated: "2026-03-22T12:24:26.093Z"
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # State
@@ -40,6 +40,8 @@ v3.6 context:
 - [Phase 59]: Gap days get zero nudges -- totalFlipReversals consumed only on current day
 - [Phase 59]: resolveRedemptionPeriod skipped for gap days -- timer continued in real time during stall
 - [Phase 59]: DailyRngApplied event reused with nudges=0 to distinguish backfilled days
+- [Phase 59]: Orphaned index handled in updateVrfCoordinatorAndSub (not rngGate) -- resolves at exact moment of orphaning
+- [Phase 59]: Fallback word derived from lastLootboxRngWord + orphanedIndex for unique entropy per index
 
 ### Pending Todos
 
@@ -51,6 +53,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T12:19:07.740Z
-Stopped at: Completed 59-01-PLAN.md (gap day RNG backfill)
+Last session: 2026-03-22T12:24:26.091Z
+Stopped at: Completed 59-02-PLAN.md (orphaned lootbox recovery + midDayTicketRngPending clearing)
 Resume file: None
