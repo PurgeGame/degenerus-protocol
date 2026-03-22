@@ -1370,6 +1370,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // requestLootboxRng was in-flight when the coordinator stalled.
         midDayTicketRngPending = false;
 
+        // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
+        // with irreversible BURNIE burns before or during the stall. They carry over
+        // and apply to the first post-swap VRF word via _applyDailyRng. Resetting
+        // would steal user value (burned BURNIE for zero effect).
+
         emit VrfCoordinatorUpdated(current, newCoordinator);
     }
 
