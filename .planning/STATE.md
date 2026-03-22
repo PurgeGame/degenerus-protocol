@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: VRF Commitment Window Audit
 status: Ready to execute
-stopped_at: Completed 69-01-PLAN.md
-last_updated: "2026-03-22T21:09:51.728Z"
+stopped_at: Completed 73-01-PLAN.md
+last_updated: "2026-03-22T21:15:40.542Z"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 7
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 ## Current Position
 
 Phase: 73 (boon-storage-packing) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Accumulated Context
 
@@ -38,6 +38,8 @@ None (fresh milestone).
 - [Phase 68-commitment-window-inventory]: All 51 variable slot numbers validated via forge inspect -- zero discrepancies
 - [Phase 69]: All 51 VRF-touched variables SAFE: five layered defense mechanisms (rngLockedFlag, prizePoolFrozen, double-buffer, index-keying, day-keying) provide complete commitment window coverage
 - [Phase 69]: Mid-day VRF window harmless by architecture: rawFulfillRandomWords only stores lootboxRngWordByIndex without reading mutable state
+- [Phase 73]: Used // @deprecated comments instead of NatSpec /// @deprecated (Solidity 0.8.34 rejects @deprecated on non-public state variables)
+- [Phase 73]: BoonPacked struct at storage slot 107 (after lastTerminalDecClaimRound at slot 106) -- all 29 old boon mapping slots preserved unchanged
 
 ### Pending Todos
 
@@ -50,6 +52,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T21:09:51.725Z
-Stopped at: Completed 69-01-PLAN.md
+Last session: 2026-03-22T21:15:40.540Z
+Stopped at: Completed 73-01-PLAN.md
 Resume file: None
