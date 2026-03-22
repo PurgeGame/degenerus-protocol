@@ -149,8 +149,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 day,
                 levelStartTime,
                 lvl,
-                lastPurchase,
-                dailyIdx
+                lastPurchase
             )
         ) {
             emit Advance(STAGE_GAMEOVER, lvl);
@@ -429,8 +428,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 day,
         uint48 lst,
         uint24 lvl,
-        bool lastPurchase,
-        uint48 /* _dailyIdx */
+        bool lastPurchase
     ) private returns (bool shouldReturn) {
         // Liveness guard: prevent permanent lockup if game is abandoned
         bool livenessTriggered = (lvl == 0 &&
