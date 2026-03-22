@@ -1323,21 +1323,30 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Determine which boon category is currently active for the player.
+    ///      Reads from packed boonPacked[player] struct (2 SLOADs max).
     function _activeBoonCategory(address player) private view returns (uint8 category) {
-        if (coinflipBoonBps[player] != 0) return BOON_CAT_COINFLIP;
-        if (
-            lootboxBoon25Active[player] ||
-            lootboxBoon15Active[player] ||
-            lootboxBoon5Active[player]
-        ) return BOON_CAT_LOOTBOX;
-        if (purchaseBoostBps[player] != 0) return BOON_CAT_PURCHASE;
-        if (decimatorBoostBps[player] != 0) return BOON_CAT_DECIMATOR;
-        if (whaleBoonDay[player] != 0) return BOON_CAT_WHALE;
-        if (lazyPassBoonDay[player] != 0 || lazyPassBoonDiscountBps[player] != 0) {
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s0 = bp.slot0;
+        // Coinflip: tier at bits 48-55
+        if (uint8(s0 >> BP_COINFLIP_TIER_SHIFT) != 0) return BOON_CAT_COINFLIP;
+        // Lootbox: tier at bits 104-111
+        if (uint8(s0 >> BP_LOOTBOX_TIER_SHIFT) != 0) return BOON_CAT_LOOTBOX;
+        // Purchase: tier at bits 160-167
+        if (uint8(s0 >> BP_PURCHASE_TIER_SHIFT) != 0) return BOON_CAT_PURCHASE;
+        // Decimator: tier at bits 168-175
+        if (uint8(s0 >> BP_DECIMATOR_TIER_SHIFT) != 0) return BOON_CAT_DECIMATOR;
+        // Whale: whaleDay at bits 200-223 (nonzero means active)
+        if (uint24(s0 >> BP_WHALE_DAY_SHIFT) != 0) return BOON_CAT_WHALE;
+
+        uint256 s1 = bp.slot1;
+        // Lazy pass: check lazyPassDay (bits 128-151) or lazyPassTier (bits 176-183)
+        if (uint24(s1 >> BP_LAZY_PASS_DAY_SHIFT) != 0 || uint8(s1 >> BP_LAZY_PASS_TIER_SHIFT) != 0) {
             return BOON_CAT_LAZY_PASS;
         }
-        if (activityBoonPending[player] != 0) return BOON_CAT_ACTIVITY;
-        if (deityPassBoonTier[player] != 0) return BOON_CAT_DEITY_PASS;
+        // Activity: pending at bits 0-23
+        if (uint24(s1 >> BP_ACTIVITY_PENDING_SHIFT) != 0) return BOON_CAT_ACTIVITY;
+        // Deity pass: tier at bits 72-79
+        if (uint8(s1 >> BP_DEITY_PASS_TIER_SHIFT) != 0) return BOON_CAT_DEITY_PASS;
         return BOON_CAT_NONE;
     }
 
@@ -1371,6 +1380,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Apply a boon to a player. Handles both lootbox-sourced and deity-sourced boons.
     ///      Lootbox boons: upgrade semantics (only if higher), emit events, deity day = 0.
     ///      Deity boons: overwrite, no events, deity day = day.
+    ///      All boon state is stored in boonPacked[player] (2-slot packed struct).
     function _applyBoon(
         address player,
         uint8 boonType,
@@ -1379,76 +1389,77 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 originalAmount,
         bool isDeity
     ) private {
-        // Coinflip boons (types 1-3)
+        // Coinflip boons (types 1-3) — slot0
         if (boonType <= BOON_COINFLIP_25) {
             uint16 bps = boonType == BOON_COINFLIP_25
                 ? LOOTBOX_COINFLIP_25_BONUS_BPS
                 : (boonType == BOON_COINFLIP_10 ? LOOTBOX_COINFLIP_10_BONUS_BPS : LOOTBOX_BOON_BONUS_BPS);
-            if (isDeity || bps > coinflipBoonBps[player]) {
-                coinflipBoonBps[player] = bps;
+            BoonPacked storage bp = boonPacked[player];
+            uint256 s0 = bp.slot0;
+            uint8 newTier = _coinflipBpsToTier(bps);
+            uint8 existingTier = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
+            if (isDeity || newTier > existingTier) {
+                s0 = (s0 & ~(uint256(BP_MASK_8) << BP_COINFLIP_TIER_SHIFT)) | (uint256(newTier) << BP_COINFLIP_TIER_SHIFT);
             }
-            coinflipBoonDay[player] = currentDay;
-            deityCoinflipBoonDay[player] = isDeity ? day : uint48(0);
+            // Set coinflipDay = currentDay
+            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_COINFLIP_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_COINFLIP_DAY_SHIFT);
+            // Set deityCoinflipDay = isDeity ? day : 0
+            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_COINFLIP_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_COINFLIP_DAY_SHIFT);
+            bp.slot0 = s0;
             if (!isDeity) emit LootBoxReward(player, day, 2, originalAmount, LOOTBOX_BOON_MAX_BONUS);
             return;
         }
 
-        // Lootbox boost boons (types 5, 6, 22)
+        // Lootbox boost boons (types 5, 6, 22) — slot0, single tier field (BOON-05)
         if (boonType == BOON_LOOTBOX_5 || boonType == BOON_LOOTBOX_15 || boonType == BOON_LOOTBOX_25) {
+            uint8 newTier = boonType == BOON_LOOTBOX_25 ? uint8(3) :
+                            (boonType == BOON_LOOTBOX_15 ? uint8(2) : uint8(1));
+            BoonPacked storage bp = boonPacked[player];
+            uint256 s0 = bp.slot0;
+            uint8 existingTier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
+            uint8 activeTier;
             if (isDeity) {
-                if (boonType == BOON_LOOTBOX_25) {
-                    lootboxBoon25Active[player] = true;
-                    lootboxBoon25Day[player] = currentDay;
-                    deityLootboxBoon25Day[player] = day;
-                } else if (boonType == BOON_LOOTBOX_15) {
-                    lootboxBoon15Active[player] = true;
-                    lootboxBoon15Day[player] = currentDay;
-                    deityLootboxBoon15Day[player] = day;
-                } else {
-                    lootboxBoon5Active[player] = true;
-                    lootboxBoon5Day[player] = currentDay;
-                    deityLootboxBoon5Day[player] = day;
-                }
+                // Deity: always overwrite with the specific tier
+                activeTier = newTier;
             } else {
-                uint16 selectedBps = boonType == BOON_LOOTBOX_25
-                    ? LOOTBOX_BOOST_25_BONUS_BPS
-                    : (boonType == BOON_LOOTBOX_15 ? LOOTBOX_BOOST_15_BONUS_BPS : LOOTBOX_BOOST_5_BONUS_BPS);
-                uint16 currentBps = lootboxBoon25Active[player]
-                    ? LOOTBOX_BOOST_25_BONUS_BPS
-                    : (lootboxBoon15Active[player]
-                        ? LOOTBOX_BOOST_15_BONUS_BPS
-                        : (lootboxBoon5Active[player] ? LOOTBOX_BOOST_5_BONUS_BPS : 0));
-                uint16 activeBps = selectedBps > currentBps ? selectedBps : currentBps;
-                lootboxBoon25Active[player] = activeBps == LOOTBOX_BOOST_25_BONUS_BPS;
-                lootboxBoon15Active[player] = activeBps == LOOTBOX_BOOST_15_BONUS_BPS;
-                lootboxBoon5Active[player] = activeBps == LOOTBOX_BOOST_5_BONUS_BPS;
-                if (lootboxBoon25Active[player]) {
-                    lootboxBoon25Day[player] = currentDay;
-                    deityLootboxBoon25Day[player] = 0;
-                } else if (lootboxBoon15Active[player]) {
-                    lootboxBoon15Day[player] = currentDay;
-                    deityLootboxBoon15Day[player] = 0;
-                } else if (lootboxBoon5Active[player]) {
-                    lootboxBoon5Day[player] = currentDay;
-                    deityLootboxBoon5Day[player] = 0;
-                }
-                uint8 rewardType = activeBps == LOOTBOX_BOOST_25_BONUS_BPS
-                    ? 6 : (activeBps == LOOTBOX_BOOST_15_BONUS_BPS ? 5 : 4);
+                // Lootbox: upgrade semantics — keep higher tier
+                activeTier = newTier > existingTier ? newTier : existingTier;
+            }
+            // Clear lootbox fields, set new values
+            s0 = s0 & BP_LOOTBOX_CLEAR;
+            s0 = s0 | (uint256(uint24(currentDay)) << BP_LOOTBOX_DAY_SHIFT);
+            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+            s0 = s0 | (uint256(deityDayVal) << BP_DEITY_LOOTBOX_DAY_SHIFT);
+            s0 = s0 | (uint256(activeTier) << BP_LOOTBOX_TIER_SHIFT);
+            bp.slot0 = s0;
+            if (!isDeity) {
+                // Map active tier back to BPS and rewardType for event
+                uint16 activeBps = _lootboxTierToBps(activeTier);
+                uint8 rewardType = activeTier == 3 ? 6 : (activeTier == 2 ? 5 : 4);
                 emit LootBoxReward(player, day, rewardType, originalAmount, activeBps);
             }
             return;
         }
 
-        // Purchase boost boons (types 7, 8, 9)
+        // Purchase boost boons (types 7, 8, 9) — slot0
         if (boonType == BOON_PURCHASE_5 || boonType == BOON_PURCHASE_15 || boonType == BOON_PURCHASE_25) {
             uint16 bps = boonType == BOON_PURCHASE_25
                 ? LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
                 : (boonType == BOON_PURCHASE_15 ? LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS : LOOTBOX_PURCHASE_BOOST_5_BONUS_BPS);
-            if (isDeity || bps > purchaseBoostBps[player]) {
-                purchaseBoostBps[player] = bps;
+            BoonPacked storage bp = boonPacked[player];
+            uint256 s0 = bp.slot0;
+            uint8 newTier = _purchaseBpsToTier(bps);
+            uint8 existingTier = uint8(s0 >> BP_PURCHASE_TIER_SHIFT);
+            if (isDeity || newTier > existingTier) {
+                s0 = (s0 & ~(uint256(BP_MASK_8) << BP_PURCHASE_TIER_SHIFT)) | (uint256(newTier) << BP_PURCHASE_TIER_SHIFT);
             }
-            purchaseBoostDay[player] = currentDay;
-            deityPurchaseBoostDay[player] = isDeity ? day : uint48(0);
+            // Set purchaseDay = currentDay
+            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_PURCHASE_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_PURCHASE_DAY_SHIFT);
+            // Set deityPurchaseDay
+            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_PURCHASE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_PURCHASE_DAY_SHIFT);
+            bp.slot0 = s0;
             if (!isDeity) {
                 uint8 rewardType = bps == LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
                     ? 6 : (bps == LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS ? 5 : 4);
@@ -1457,57 +1468,87 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             return;
         }
 
-        // Decimator boost boons (types 13, 14, 15)
+        // Decimator boost boons (types 13, 14, 15) — slot0 (no award day, only tier + deity day)
         if (boonType == BOON_DECIMATOR_10 || boonType == BOON_DECIMATOR_25 || boonType == BOON_DECIMATOR_50) {
             uint16 bps = boonType == BOON_DECIMATOR_50
                 ? LOOTBOX_DECIMATOR_50_BONUS_BPS
                 : (boonType == BOON_DECIMATOR_25 ? LOOTBOX_DECIMATOR_25_BONUS_BPS : LOOTBOX_DECIMATOR_10_BONUS_BPS);
-            if (isDeity || bps > decimatorBoostBps[player]) {
-                decimatorBoostBps[player] = bps;
+            BoonPacked storage bp = boonPacked[player];
+            uint256 s0 = bp.slot0;
+            uint8 newTier = _decimatorBpsToTier(bps);
+            uint8 existingTier = uint8(s0 >> BP_DECIMATOR_TIER_SHIFT);
+            if (isDeity || newTier > existingTier) {
+                s0 = (s0 & ~(uint256(BP_MASK_8) << BP_DECIMATOR_TIER_SHIFT)) | (uint256(newTier) << BP_DECIMATOR_TIER_SHIFT);
             }
-            deityDecimatorBoostDay[player] = isDeity ? day : uint48(0);
+            // Set deityDecimatorDay (no award day for decimator)
+            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_DECIMATOR_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DECIMATOR_DAY_SHIFT);
+            bp.slot0 = s0;
             if (!isDeity) emit LootBoxReward(player, day, 8, originalAmount, bps);
             return;
         }
 
-        // Whale discount boons (types 16, 23, 24)
+        // Whale discount boons (types 16, 23, 24) — slot0
         if (boonType == BOON_WHALE_10 || boonType == BOON_WHALE_25 || boonType == BOON_WHALE_50) {
             uint16 bps = boonType == BOON_WHALE_50
                 ? LOOTBOX_WHALE_BOON_DISCOUNT_50_BPS
                 : (boonType == BOON_WHALE_25 ? LOOTBOX_WHALE_BOON_DISCOUNT_25_BPS : LOOTBOX_WHALE_BOON_DISCOUNT_10_BPS);
-            if (isDeity || bps > whaleBoonDiscountBps[player]) {
-                whaleBoonDiscountBps[player] = bps;
+            BoonPacked storage bp = boonPacked[player];
+            uint256 s0 = bp.slot0;
+            uint8 newTier = _whaleBpsToTier(bps);
+            uint8 existingTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
+            if (isDeity || newTier > existingTier) {
+                s0 = (s0 & ~(uint256(BP_MASK_8) << BP_WHALE_TIER_SHIFT)) | (uint256(newTier) << BP_WHALE_TIER_SHIFT);
             }
-            whaleBoonDay[player] = isDeity ? day : currentDay;
-            deityWhaleBoonDay[player] = isDeity ? day : uint48(0);
+            // whaleDay = isDeity ? day : currentDay (matching original behavior)
+            uint24 whaleDayVal = isDeity ? uint24(day) : uint24(currentDay);
+            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_WHALE_DAY_SHIFT)) | (uint256(whaleDayVal) << BP_WHALE_DAY_SHIFT);
+            // deityWhaleDay = isDeity ? day : 0
+            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+            s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_WHALE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_WHALE_DAY_SHIFT);
+            bp.slot0 = s0;
             if (!isDeity) emit LootBoxReward(player, day, 9, originalAmount, bps);
             return;
         }
 
-        // Activity boons (types 17, 18, 19)
+        // Activity boons (types 17, 18, 19) — slot1
         if (boonType == BOON_ACTIVITY_10 || boonType == BOON_ACTIVITY_25 || boonType == BOON_ACTIVITY_50) {
             uint24 amt = boonType == BOON_ACTIVITY_50
                 ? LOOTBOX_ACTIVITY_BOON_50_BONUS
                 : (boonType == BOON_ACTIVITY_25 ? LOOTBOX_ACTIVITY_BOON_25_BONUS : LOOTBOX_ACTIVITY_BOON_10_BONUS);
-            if (isDeity || amt > activityBoonPending[player]) {
-                activityBoonPending[player] = amt;
+            BoonPacked storage bp = boonPacked[player];
+            uint256 s1 = bp.slot1;
+            uint24 existingAmt = uint24(s1 >> BP_ACTIVITY_PENDING_SHIFT);
+            if (isDeity || amt > existingAmt) {
+                s1 = (s1 & ~(uint256(BP_MASK_24) << BP_ACTIVITY_PENDING_SHIFT)) | (uint256(amt) << BP_ACTIVITY_PENDING_SHIFT);
             }
-            activityBoonDay[player] = currentDay;
-            deityActivityBoonDay[player] = isDeity ? day : uint48(0);
+            // Set activityDay = currentDay
+            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_ACTIVITY_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_ACTIVITY_DAY_SHIFT);
+            // Set deityActivityDay
+            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_ACTIVITY_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_ACTIVITY_DAY_SHIFT);
+            bp.slot1 = s1;
             if (!isDeity) emit LootBoxReward(player, day, 10, originalAmount, amt);
             return;
         }
 
-        // Deity pass discount boons (types 25, 26, 27)
+        // Deity pass discount boons (types 25, 26, 27) — slot1
         if (boonType == BOON_DEITY_PASS_10 || boonType == BOON_DEITY_PASS_25 || boonType == BOON_DEITY_PASS_50) {
             uint8 tier = boonType == BOON_DEITY_PASS_50
                 ? DEITY_PASS_BOON_TIER_50
                 : (boonType == BOON_DEITY_PASS_25 ? DEITY_PASS_BOON_TIER_25 : DEITY_PASS_BOON_TIER_10);
-            if (isDeity || tier > deityPassBoonTier[player]) {
-                deityPassBoonTier[player] = tier;
+            BoonPacked storage bp = boonPacked[player];
+            uint256 s1 = bp.slot1;
+            uint8 existingTier = uint8(s1 >> BP_DEITY_PASS_TIER_SHIFT);
+            if (isDeity || tier > existingTier) {
+                s1 = (s1 & ~(uint256(BP_MASK_8) << BP_DEITY_PASS_TIER_SHIFT)) | (uint256(tier) << BP_DEITY_PASS_TIER_SHIFT);
             }
-            deityPassBoonDay[player] = currentDay;
-            deityDeityPassBoonDay[player] = isDeity ? day : uint48(0);
+            // Set deityPassDay = currentDay
+            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_PASS_DAY_SHIFT)) | (uint256(uint24(currentDay)) << BP_DEITY_PASS_DAY_SHIFT);
+            // Set deityDeityPassDay
+            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_DEITY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DEITY_PASS_DAY_SHIFT);
+            bp.slot1 = s1;
             if (!isDeity) {
                 uint16 bps = tier == DEITY_PASS_BOON_TIER_50 ? 5000 : (tier == DEITY_PASS_BOON_TIER_25 ? 2500 : 1000);
                 emit LootBoxReward(player, day, 10, originalAmount, bps);
@@ -1515,7 +1556,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             return;
         }
 
-        // Whale pass (type 28)
+        // Whale pass (type 28) — no boon mapping access, delegates to _activateWhalePass
         if (boonType == BOON_WHALE_PASS) {
             uint24 startLevel = _activateWhalePass(player);
             if (!isDeity) {
@@ -1524,16 +1565,25 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             return;
         }
 
-        // Lazy pass discount boons (types 29, 30, 31)
+        // Lazy pass discount boons (types 29, 30, 31) — slot1
         if (boonType == BOON_LAZY_PASS_10 || boonType == BOON_LAZY_PASS_25 || boonType == BOON_LAZY_PASS_50) {
             uint16 bps = boonType == BOON_LAZY_PASS_50
                 ? LOOTBOX_LAZY_PASS_DISCOUNT_50_BPS
                 : (boonType == BOON_LAZY_PASS_25 ? LOOTBOX_LAZY_PASS_DISCOUNT_25_BPS : LOOTBOX_LAZY_PASS_DISCOUNT_10_BPS);
-            if (isDeity || bps > lazyPassBoonDiscountBps[player]) {
-                lazyPassBoonDiscountBps[player] = bps;
+            BoonPacked storage bp = boonPacked[player];
+            uint256 s1 = bp.slot1;
+            uint8 newTier = _lazyPassBpsToTier(bps);
+            uint8 existingTier = uint8(s1 >> BP_LAZY_PASS_TIER_SHIFT);
+            if (isDeity || newTier > existingTier) {
+                s1 = (s1 & ~(uint256(BP_MASK_8) << BP_LAZY_PASS_TIER_SHIFT)) | (uint256(newTier) << BP_LAZY_PASS_TIER_SHIFT);
             }
-            lazyPassBoonDay[player] = isDeity ? day : currentDay;
-            deityLazyPassBoonDay[player] = isDeity ? day : uint48(0);
+            // lazyPassDay = isDeity ? day : currentDay (matching original behavior)
+            uint24 lazyDayVal = isDeity ? uint24(day) : uint24(currentDay);
+            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_LAZY_PASS_DAY_SHIFT)) | (uint256(lazyDayVal) << BP_LAZY_PASS_DAY_SHIFT);
+            // deityLazyPassDay = isDeity ? day : 0
+            uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
+            s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_LAZY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_LAZY_PASS_DAY_SHIFT);
+            bp.slot1 = s1;
             if (!isDeity) emit LootBoxReward(player, day, 11, originalAmount, bps);
         }
     }
