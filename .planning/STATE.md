@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: New Feature Audit — Skim Redesign + Redemption Lootbox
 status: unknown
-stopped_at: Completed 54-05-PLAN.md
-last_updated: "2026-03-22T02:23:38.437Z"
+stopped_at: Completed 54-02-PLAN.md (high-risk module comment audit)
+last_updated: "2026-03-22T02:25:04.577Z"
 progress:
   total_phases: 4
   completed_phases: 4
@@ -43,6 +43,8 @@ v3.5 context:
 - [Phase 54]: CMT-V35-003: transferFrom @custom:reverts inconsistency classified as new finding (not duplicate of CMT-201)
 - [Phase 54]: All 5 v3.2 findings confirmed FIXED in game modules -- no carry-forward needed
 - [Phase 54]: CMT-104 deferred to Plan 54-06 (core contract, not module)
+- [Phase 54]: CMT-V35-001 rated LOW: RedemptionClaimed event flipWon/flipResolved mismatch affects indexers
+- [Phase 54]: CMT-V35-003 rated LOW (stale function ref in contract header wardens would search for)
 
 ### Pending Todos
 
@@ -54,6 +56,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T02:23:38.433Z
-Stopped at: Completed 54-05-PLAN.md
+Last session: 2026-03-22T02:25:04.574Z
+Stopped at: Completed 54-02-PLAN.md (high-risk module comment audit)
 Resume file: None
