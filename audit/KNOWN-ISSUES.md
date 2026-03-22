@@ -56,6 +56,16 @@ See `audit/v3.7-lootbox-rng-findings.md` for full findings document.
 
 See `audit/v3.7-vrf-stall-findings.md` for full findings document.
 
+### v3.7 Phase 66: VRF Path Test Coverage (2026-03-22)
+
+0 new findings. Invariant testing proves no arbitrary sequence of VRF operations can violate lootboxRngIndex lifecycle (TEST-01), stall recovery state machine (TEST-02), or gap backfill completeness (TEST-03). Halmos symbolic verification proves redemption roll formula uint16((word >> 8) % 151 + 25) always produces [25, 175] for all 2^256 inputs (TEST-04).
+
+- **Invariant tests:** 7 invariant assertions (VRFPathInvariants.inv.t.sol), 256 runs / depth 128, 0 violations
+- **Parametric fuzz tests:** 6 gap backfill boundary tests (VRFPathCoverage.t.sol), 1000 runs each, 0 failures
+- **Halmos symbolic proofs:** 4 check_ functions (RedemptionRoll.t.sol), 0 counterexamples, all 2^256 inputs covered
+
+See `test/fuzz/invariant/VRFPathInvariants.inv.t.sol`, `test/fuzz/VRFPathCoverage.t.sol`, and `test/halmos/RedemptionRoll.t.sol`.
+
 ### v3.6: VRF Stall Resilience (2026-03-22)
 
 0 HIGH, 0 MEDIUM, 0 LOW, 2 INFO. Delta audit: all 8 attack surfaces SAFE. See `audit/v3.6-findings-consolidated.md`.
