@@ -713,7 +713,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             lootboxBaseLevelPacked[index][buyer] = uint24(level + 2);
             lootboxEvScorePacked[index][buyer] =
                 uint16(IDegenerusGame(address(this)).playerActivityScore(buyer) + 1);
-            lootboxIndexQueue[buyer].push(index);
             emit LootBoxIndexAssigned(buyer, index, dayIndex);
         } else {
             if (storedDay != dayIndex) revert E();
@@ -732,7 +731,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         uint256 newAmount = existingAmount + boostedAmount;
         lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
-        lootboxEthTotal += lootboxAmount;
         _maybeRequestLootboxRng(lootboxAmount);
 
         // Track distress-mode portion for proportional ticket bonus at open time

@@ -770,7 +770,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     error TerminalDecCapped();
     error TerminalDecNotActive();
-    error TerminalDecAlreadyClaimed();
     error TerminalDecNotWinner();
     error TerminalDecDeadlinePassed();
 

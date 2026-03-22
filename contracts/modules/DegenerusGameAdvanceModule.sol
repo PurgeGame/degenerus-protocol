@@ -321,7 +321,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (lootboxPresaleActive && (lvl >= 3 || lootboxPresaleMintEth >= LOOTBOX_PRESALE_ETH_CAP)) lootboxPresaleActive = false;
 
                 // Transition to jackpot phase
-                earlyBurnPercent = 0;
                 jackpotPhaseFlag = true;
 
                 // Open decimator window: levels x4 (not x94) or x99
