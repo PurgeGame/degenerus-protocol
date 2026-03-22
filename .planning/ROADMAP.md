@@ -16,7 +16,7 @@
 - ✅ **v3.5 Final Polish — Comment Correctness + Gas Optimization** — Phases 54-58 (shipped 2026-03-22)
 - ✅ **v3.6 VRF Stall Resilience** — Phases 59-62 (shipped 2026-03-22)
 - ✅ **v3.7 VRF Path Audit** — Phases 63-67 (shipped 2026-03-22)
-- [ ] **v3.8 VRF Commitment Window Audit** — Phases 68-72 (in progress)
+- [ ] **v3.8 VRF Commitment Window Audit** — Phases 68-73 (in progress)
 
 ## Phases
 
@@ -137,6 +137,7 @@
 - [ ] **Phase 70: Coinflip Commitment Window** - Full coinflip RNG lifecycle trace with commitment window analysis and multi-tx attack modeling
 - [ ] **Phase 71: advanceGame Day RNG Window** - Daily VRF word flow through all consumers with commitment window and cross-day contamination analysis
 - [ ] **Phase 72: Ticket Queue Deep-Dive + Pattern Scan** - Known ticket queue swap bug exploitation scenario, fix verification, and cross-contract pattern scan
+- [ ] **Phase 73: Boon Storage Packing** - Pack 29 per-player boon mappings into struct, rewrite boon functions for packed layout, verify all tests pass
 
 ## Phase Details
 
@@ -194,10 +195,22 @@ Plans:
   3. A cross-contract pattern scan is complete covering all contracts for similar commitment window violations (any state that shifts between VRF request and use) with per-finding verdict
 **Plans**: TBD
 
+### Phase 73: Boon Storage Packing
+**Goal**: All per-player boon state packed into minimum storage slots, all boon functions rewritten for packed layout, all tests passing
+**Depends on**: Nothing (independent of commitment window phases)
+**Requirements**: BOON-01, BOON-02, BOON-03, BOON-04, BOON-05, BOON-06
+**Success Criteria** (what must be TRUE):
+  1. All 29 per-player boon mappings replaced with a packed struct using minimum possible storage slots
+  2. checkAndClearExpiredBoon operates on packed struct with single SLOAD per slot instead of 29 separate cold SLOADs
+  3. _applyBoon and all boon consumption functions use read-modify-write on packed struct
+  4. Lootbox boost tier logic uses single tier field instead of 3 separate bool+day+deityDay mapping sets
+  5. All existing Hardhat + Foundry tests pass with equivalent behavior after storage layout change
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72
+Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72. Phase 73 is independent and can run in parallel with any phase.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -206,6 +219,7 @@ Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72
 | 70. Coinflip Commitment Window | 0/? | Not started | - |
 | 71. advanceGame Day RNG Window | 0/? | Not started | - |
 | 72. Ticket Queue Deep-Dive + Pattern Scan | 0/? | Not started | - |
+| 73. Boon Storage Packing | 0/? | Not started | - |
 
 ## Deferred
 

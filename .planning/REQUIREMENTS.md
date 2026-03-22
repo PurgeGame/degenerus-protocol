@@ -38,6 +38,15 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 - [ ] **TQ-02**: Identify and verify fix for the ticket queue commitment window violation
 - [ ] **TQ-03**: Pattern scan for similar commitment window violations across all contracts (any state that shifts between request and use)
 
+### Boon Storage Packing
+
+- [ ] **BOON-01**: All per-player boon state (currently 29 separate mappings) packed into a struct-per-player design using minimum possible storage slots
+- [ ] **BOON-02**: checkAndClearExpiredBoon rewritten to operate on packed struct with single SLOAD per slot instead of 29 separate SLOADs
+- [ ] **BOON-03**: _applyBoon rewritten to read-modify-write packed struct instead of individual mapping writes
+- [ ] **BOON-04**: All boon consumption functions (consumeCoinflipBoon, consumePurchaseBoost, consumeDecimatorBoost, consumeActivityBoon) updated for packed layout
+- [ ] **BOON-05**: Lootbox boost tier logic simplified from 3 separate bool+day+deityDay mappings to single tier field in packed struct
+- [ ] **BOON-06**: All existing tests pass after storage layout change with equivalent behavior
+
 ## Future Requirements
 
 ### Deferred (v3.3+)
@@ -53,7 +62,6 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 |---------|--------|
 | Frontend code | Not in audit scope |
 | Off-chain infrastructure | VRF coordinator is external |
-| Gas optimization | Not the focus of this audit |
 | Governance | Fully audited in v2.1 |
 | VRF pipeline internals | Audited in v3.7 (request/fulfillment/stall/recovery) |
 
@@ -77,10 +85,16 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 | TQ-01 | Phase 72 | Pending |
 | TQ-02 | Phase 72 | Pending |
 | TQ-03 | Phase 72 | Pending |
+| BOON-01 | Phase 73 | Pending |
+| BOON-02 | Phase 73 | Pending |
+| BOON-03 | Phase 73 | Pending |
+| BOON-04 | Phase 73 | Pending |
+| BOON-05 | Phase 73 | Pending |
+| BOON-06 | Phase 73 | Pending |
 
 **Coverage:**
-- v3.8 requirements: 16 total
-- Mapped to phases: 16
+- v3.8 requirements: 22 total
+- Mapped to phases: 22
 - Unmapped: 0
 
 ---
