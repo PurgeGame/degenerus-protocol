@@ -170,13 +170,13 @@ Plans:
   2. No stale references to removed features, renamed variables, or changed semantics
   3. Inline comments accurately describe their code
   4. All findings documented with contract, line ref, and fix recommendation
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 - [ ] 54-01-PLAN.md — High-risk core: DegenerusGame.sol, StakedDegenerusStonk.sol, DegenerusStonk.sol
 - [ ] 54-02-PLAN.md — High-risk modules: AdvanceModule.sol, LootboxModule.sol
 - [x] 54-03-PLAN.md — Medium-risk: BurnieCoinflip.sol, BurnieCoin.sol, IBurnieCoinflip.sol, IStakedDegenerusStonk.sol, IDegenerusGameModules.sol
-- [ ] 54-04-PLAN.md — Core + storage: DegenerusAdmin.sol, DegenerusVault.sol, GameStorage.sol
+- [x] 54-04-PLAN.md — Core + storage: DegenerusAdmin.sol, DegenerusVault.sol, GameStorage.sol
 - [x] 54-05-PLAN.md — Game modules batch: JackpotModule through MintStreakUtils (10 modules)
 - [x] 54-06-PLAN.md — Peripheral + interfaces + libraries (~21 files)
 
@@ -229,7 +229,7 @@ Plans:
 | 51. Redemption Lootbox Audit | 4/4 | Complete | 2026-03-21 |
 | 52. Invariant Test Suite | 2/2 | Complete | 2026-03-21 |
 | 53. Consolidated Findings | 1/1 | Complete | 2026-03-21 |
-| 54. Comment Correctness | 3/6 | In Progress|  |
+| 54. Comment Correctness | 4/6 | In Progress|  |
 | 55. Gas Optimization | 0/4 | Planned | - |
 | 57. Gas Ceiling Analysis | 0/2 | Planned | - |
 | 58. Consolidated Findings | 0/TBD | Not started | - |
