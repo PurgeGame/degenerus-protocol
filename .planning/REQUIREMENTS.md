@@ -31,7 +31,7 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 
 ### RNG Safety
 
-- [ ] **RNG-01**: No permissionless action during the VRF commitment window can influence which player wins a far-future coin jackpot draw -- the FF key is either frozen, guarded, or proven irrelevant to outcome selection when the RNG word is consumed
+- [x] **RNG-01**: No permissionless action during the VRF commitment window can influence which player wins a far-future coin jackpot draw -- the FF key is either frozen, guarded, or proven irrelevant to outcome selection when the RNG word is consumed
 - [x] **RNG-02**: The rngLocked guard in _queueTickets prevents all permissionless far-future ticket writes during the commitment window (lootbox opens, whale purchases, endgame/decimator rolls) while allowing advanceGame-origin writes to pass through
 
 ### Edge Cases
@@ -80,7 +80,7 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 | PROC-03 | Phase 76 | Complete |
 | JACK-01 | Phase 77 | Complete |
 | JACK-02 | Phase 77 | Complete |
-| RNG-01 | Phase 79 | Pending |
+| RNG-01 | Phase 79 | Complete |
 | RNG-02 | Phase 75 | Complete |
 | EDGE-01 | Phase 78 | Complete |
 | EDGE-02 | Phase 78 | Complete |
