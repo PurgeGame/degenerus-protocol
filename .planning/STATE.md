@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
 status: Phase 89 complete — milestone ready for closure
-stopped_at: Completed 82-01-PLAN.md
-last_updated: "2026-03-23T15:08:07.094Z"
+stopped_at: Completed 86-02-PLAN.md
+last_updated: "2026-03-23T15:10:29.933Z"
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 16
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # State
@@ -39,6 +39,9 @@ Plan: 1/1 — done
 - [Phase 82]: Two distinct entropy sources confirmed: processTicketBatch reads lastLootboxRngWord (JM:1915), processFutureTicketBatch reads rngWordCurrent (MM:301)
 - [Phase 82]: Mid-day entropy divergence confirmed: lastLootboxRngWord can hold mid-day lootbox VRF word (AM:159-162) -- by design, not a vulnerability
 - [Phase 82]: LCG constant identity verified: JM:170 hex 0x5851F42D4C957F2D == MM:83 decimal 6364136223846793005
+- [Phase 86]: NF-01: Duplicate winners from _randTraitTicket assessed as intentional gas-efficient design
+- [Phase 86]: NF-02: Early-bird lootbox level arithmetic (price lvl+1, select lvl, target lvl+1) confirmed correct
+- [Phase 86]: NF-03: Phase 81 Path #12 references non-existent _distributeTicketScatter; actual function is _distributeTicketsToBucket
 
 ### Pending Todos
 
@@ -50,6 +53,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T15:08:07.091Z
-Stopped at: Completed 82-01-PLAN.md
+Last session: 2026-03-23T15:10:29.929Z
+Stopped at: Completed 86-02-PLAN.md
 Resume file: None

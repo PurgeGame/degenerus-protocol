@@ -176,7 +176,7 @@
 | 83. Ticket Consumption & Winner Selection | 0/2 | Planned    |  |
 | 84. Prize Pool Flow & currentPrizePool Deep Dive | 0/1 | Planned | — |
 | 85. Daily ETH Jackpot | 0/2 | Planned | — |
-| 86. Daily Coin + Ticket Jackpot | 0/2 | Planned | — |
+| 86. Daily Coin + Ticket Jackpot | 1/2 | In Progress|  |
 | 87. Other Jackpots | 0/4 | Planned | — |
 | 88. RNG-Dependent Variable Re-verification | 0/2 | Planned | — |
 | 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
@@ -232,11 +232,11 @@ Plans:
 
 **Goal:** Trace daily coin (BURNIE) jackpot winner selection (both entry points, near-future and far-future paths), ticket jackpot distribution mechanics, and jackpotCounter lifecycle with exhaustive file:line citations, flagging all discrepancies with prior audit documentation.
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 86-01-PLAN.md — Coin jackpot winner selection (payDailyCoinJackpot + payDailyJackpotCoinAndTickets + _awardFarFutureCoinJackpot) and jackpotCounter lifecycle (DCOIN-01, DCOIN-03, DCOIN-04)
-- [ ] 86-02-PLAN.md — Ticket jackpot distribution (_distributeTicketJackpot, all callers, budget computation chain) (DCOIN-02, DCOIN-04)
+- [x] 86-02-PLAN.md — Ticket jackpot distribution (_distributeTicketJackpot, all callers, budget computation chain) (DCOIN-02, DCOIN-04)
 
 **Requirements:** DCOIN-01, DCOIN-02, DCOIN-03, DCOIN-04
 
