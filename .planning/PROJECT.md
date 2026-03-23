@@ -66,7 +66,32 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ### Active
 
-(None — planning next milestone)
+#### Ticket Lifecycle
+- [x] Exhaustive ticket creation trace — 16 entry points traced with file:line, rngLockedFlag/prizePoolFrozen behavior, 3 discrepancies flagged — v4.0 Phase 81
+- [x] Queue double-buffer mechanics — three key encoding formulas, disjointness proof, ticketWriteSlot state machine, swap triggers documented — v4.0 Phase 81
+- [ ] Ticket processing — processTicketBatch RNG source, cursor management, traitBurnTicket writes — v4.0 Phase 82
+- [x] Ticket consumption — every jackpot winner selection path reading from traitBurnTicket and ticketQueue, 9 jackpot types with winner index formulas, 23 prior claims cross-referenced — v4.0 Phase 83
+
+#### Jackpot Mechanics
+- [ ] Prize pool flow — currentPrizePool vs prizePoolsPacked storage layout, freeze/consolidation/unfreeze mechanics — v4.0 Phase 84
+- [ ] Daily ETH jackpot — currentPrizePool source, BPS table, phase 0/1, bucket/cursor, carryover — v4.0 Phase 85
+- [x] Daily coin + ticket jackpot — coin jackpot (both entry points, near/far-future), ticket jackpot distribution (3 callers), jackpotCounter lifecycle (4 contracts), 6 INFO findings — v4.0 Phase 86
+- [ ] Other jackpots — early-bird lootbox, BAF, decimator, degenerette, final day DGNRS — v4.0 Phase 87
+
+#### RNG-Dependent Variable Re-verification
+- [ ] Re-verify every variable from v3.8 Section 4 against actual Solidity with slot confirmation — v4.0 Phase 88
+- [ ] currentPrizePool deep dive — all writers, all VRF-dependent readers, freeze mechanism, storage layout — v4.0 Phase 84
+- [ ] Missing variable identification — variables that should be in the RNG-dependent catalog but aren't — v4.0 Phase 88
+
+## Current Milestone: v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit
+
+**Goal:** Re-audit the entire ticket lifecycle and all RNG-dependent variables from scratch — every claim verified against actual Solidity, treating existing audit prose as unverified.
+
+**Target features:**
+- Exhaustive ticket lifecycle trace (creation, queuing, double-buffer, processing, consumption)
+- Complete jackpot mechanics audit (daily ETH, coin+ticket, prize pool flow, all other jackpots)
+- Prize pool flow correction (known errors in prior audit: currentPrizePool storage claims, purchase write claims)
+- RNG-dependent variable re-verification (all v3.8 Section 4 variables re-checked, missing variables identified)
 
 ### Deferred (v3.3+)
 
@@ -138,9 +163,9 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v3.9 shipped 2026-03-23 — Far-future ticket stranding bug fixed. Third key space (TICKET_FAR_FUTURE_BIT = 1 << 22), central routing for all 6 ticket callers, dual-queue drain, combined pool jackpot selection, rngLocked guard, formal RNG commitment window proof, and 35 Foundry tests including 23-contract integration test proving zero stranding.
+v4.0 Phase 82 complete 2026-03-23 — Ticket processing mechanics audit complete. processTicketBatch (JM:1889) and processFutureTicketBatch (MM:298) fully traced with 241+ file:line citations; all 5 advanceGame trigger paths documented; two distinct entropy chains distinguished (lastLootboxRngWord vs rngWordCurrent); LCG PRNG algorithm documented with constant identity verified; cursor state machine (ticketLevel/ticketCursor/ticketsFullyProcessed) enumerated with 30 write + 13 read sites; traitBurnTicket storage layout at slot 11 verified with assembly write pattern; 13 v3.8 claims cross-referenced yielding 4 [DISCREPANCY] tags. 6 INFO findings (P82-01 through P82-06).
 
-**Grand total across all milestones:** 90+ findings (16 LOW, 74+ INFO), 0 MEDIUM/HIGH outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in v3.9 Phase 77 via combined pool approach.
+**Grand total across all milestones:** 92+ findings (16 LOW, 76+ INFO), 0 MEDIUM/HIGH outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in v3.9 Phase 77 via combined pool approach.
 
 **Known Issues:**
 - BOON-06: Test verification functionally confirmed (identical results pre/post) but Plan 03 not formally executed
@@ -165,4 +190,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-23 after v3.9 milestone*
+*Last updated: 2026-03-23 after v4.0 Phase 82 complete*
