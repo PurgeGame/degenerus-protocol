@@ -161,9 +161,9 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 ### Daily Coin + Ticket Jackpot
 
 - [ ] **DCOIN-01**: Coin jackpot winner selection path documented with file:line (including _awardFarFutureCoinJackpot)
-- [ ] **DCOIN-02**: Ticket jackpot winner selection path documented with file:line
+- [x] **DCOIN-02**: Ticket jackpot winner selection path documented with file:line
 - [ ] **DCOIN-03**: jackpotCounter lifecycle (initialization, increment, read, reset) fully traced
-- [ ] **DCOIN-04**: Every discrepancy and new finding tagged
+- [x] **DCOIN-04**: Every discrepancy and new finding tagged
 
 ### Other Jackpots
 
