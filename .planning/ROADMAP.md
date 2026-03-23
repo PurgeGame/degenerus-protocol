@@ -164,7 +164,7 @@
 - [ ] **Phase 83: Ticket Consumption & Winner Selection** — 2 plans, 4 requirements (TCON-01 through TCON-04)
 - [ ] **Phase 84: Prize Pool Flow & currentPrizePool Deep Dive** — 1 plan, 6 requirements (PPF-01 through PPF-06)
 - [ ] **Phase 85: Daily ETH Jackpot** — 2 plans, 5 requirements (DETH-01 through DETH-05)
-- [ ] **Phase 86: Daily Coin + Ticket Jackpot** — 2 plans, 4 requirements (DCOIN-01 through DCOIN-04)
+- [x] **Phase 86: Daily Coin + Ticket Jackpot** — 2 plans, 4 requirements (DCOIN-01 through DCOIN-04) (completed 2026-03-23)
 - [ ] **Phase 87: Other Jackpots** — 4 plans, 6 requirements (OJCK-01 through OJCK-06)
 - [ ] **Phase 88: RNG-Dependent Variable Re-verification** — 2 plans, 4 requirements (RDV-01, RDV-02, RDV-03, RDV-04)
 - [x] **Phase 89: Consolidated Findings** — 1 plan, 3 requirements (CFND-01, CFND-02, CFND-03) (completed 2026-03-23)
@@ -176,7 +176,7 @@
 | 83. Ticket Consumption & Winner Selection | 0/2 | Planned    |  |
 | 84. Prize Pool Flow & currentPrizePool Deep Dive | 0/1 | Planned | — |
 | 85. Daily ETH Jackpot | 0/2 | Planned | — |
-| 86. Daily Coin + Ticket Jackpot | 1/2 | In Progress|  |
+| 86. Daily Coin + Ticket Jackpot | 2/2 | Complete   | 2026-03-23 |
 | 87. Other Jackpots | 0/4 | Planned | — |
 | 88. RNG-Dependent Variable Re-verification | 0/2 | Planned | — |
 | 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
@@ -232,10 +232,10 @@ Plans:
 
 **Goal:** Trace daily coin (BURNIE) jackpot winner selection (both entry points, near-future and far-future paths), ticket jackpot distribution mechanics, and jackpotCounter lifecycle with exhaustive file:line citations, flagging all discrepancies with prior audit documentation.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 86-01-PLAN.md — Coin jackpot winner selection (payDailyCoinJackpot + payDailyJackpotCoinAndTickets + _awardFarFutureCoinJackpot) and jackpotCounter lifecycle (DCOIN-01, DCOIN-03, DCOIN-04)
+- [x] 86-01-PLAN.md — Coin jackpot winner selection (payDailyCoinJackpot + payDailyJackpotCoinAndTickets + _awardFarFutureCoinJackpot) and jackpotCounter lifecycle (DCOIN-01, DCOIN-03, DCOIN-04)
 - [x] 86-02-PLAN.md — Ticket jackpot distribution (_distributeTicketJackpot, all callers, budget computation chain) (DCOIN-02, DCOIN-04)
 
 **Requirements:** DCOIN-01, DCOIN-02, DCOIN-03, DCOIN-04
