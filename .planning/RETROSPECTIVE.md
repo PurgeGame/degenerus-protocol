@@ -152,6 +152,49 @@
 
 ---
 
+## Milestone: v3.9 — Far-Future Ticket Fix
+
+**Shipped:** 2026-03-23
+**Phases:** 7 | **Plans:** 8
+
+### What Was Built
+- Third key space (TICKET_FAR_FUTURE_BIT = 1 << 22) with fuzz-proven three-way collision-freedom
+- Central routing fix in _queueTickets/_queueTicketsScaled covering all 6 ticket sources (lootbox, whale, vault, endgame, decimator, jackpot auto-rebuy)
+- Dual-queue drain in processFutureTicketBatch with FF-bit cursor encoding for seamless read-side → far-future transition
+- Combined pool jackpot selection eliminating TQ-01 (MEDIUM) — _tqWriteKey fully removed from _awardFarFutureCoinJackpot
+- RNG commitment window proof: 12 mutation paths all SAFE, combined pool length invariant proven
+- 35 Foundry tests including 23-contract integration test proving zero FF ticket stranding across 9 levels
+
+### What Worked
+- TDD approach (failing test → implementation → green) across Phases 74-77 caught boundary issues early (e.g., FF-bit stripping in _prepareFutureTickets)
+- Combined pool approach (Phase 77) superseded the simple TQ-01 one-line fix with a structurally superior design that reads from both correct pools
+- Phase 78 proved both edge cases SAFE with zero code changes — the Phase 74-76 implementation inherently handled EDGE-01/EDGE-02
+- Reusing v3.8 backward-trace methodology for Phase 79 RNG proof kept analysis consistent and trustworthy
+- Integration test (Phase 80) deploying all 23 contracts via DeployProtocol provided strongest end-to-end confidence
+
+### What Was Inefficient
+- ROADMAP.md progress table had stale data (Phase 79 showed "Not started", Phase 78 showed "0/1 plans") despite both being complete — recurring ROADMAP staleness pattern
+- 3 SUMMARY files missing requirements-completed frontmatter — caught by milestone audit but shouldn't ship incomplete
+- Phase 79 had no formal PLAN.md (showed "TBD") since it was a proof/analysis phase — the workflow assumes all phases have plans
+
+### Patterns Established
+- Bit-reservation pattern for storage key spaces: dedicate high bits for new key categories, validate collision-freedom with fuzz tests
+- phaseTransitionActive exemption pattern: guards that block permissionless callers can exempt privileged flows via existing protocol state flags
+- Combined pool selection pattern: when multiple storage locations hold eligible items, read all pools and index over the combined length rather than trying to merge them
+
+### Key Lessons
+1. "Zero code changes needed" is the best Phase 78 outcome — proving safety from existing implementation is cheaper and more reliable than adding defensive code
+2. Single-day milestones with strong dependency chains (74→75→76→77→78→79→80) execute efficiently when each phase reuses the previous phase's test infrastructure
+3. Integration tests that deploy the full protocol stack are expensive but catch real issues (e.g., constructor pre-queuing behavior) that unit tests with mocks miss
+4. Combined pool approach is structurally superior to patching individual reads — eliminates the class of bug rather than the instance
+
+### Cost Observations
+- Model mix: ~90% opus (all planning + execution), ~10% sonnet (integration checks)
+- 82 commits in ~10 hours
+- Notable: 7 phases from bug discovery (TQ-01) to fully proven fix in a single session
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -165,6 +208,8 @@
 | v3.5 | 4 | 13 | 3-workstream parallelism; gas ceiling profiling; regression tracking across milestones |
 | v3.6 | 4 | 6 | VRF stall resilience code changes; integration tests for stall-to-recovery cycle |
 | v3.7 | 5 | 10 | Halmos symbolic verification; ghost variable invariant testing; single-day milestone delivery |
+| v3.8 | 6 | 13 | Backward-trace commitment window proofs; mutation path enumeration; boon storage packing |
+| v3.9 | 7 | 8 | TDD fix pipeline; combined pool pattern; bit-reservation key spaces; full-protocol integration tests |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -175,3 +220,5 @@
 5. False positive analysis saves real money — REDM-06-A (v3.4) was downgraded by tracing mutually exclusive code paths, avoiding an unnecessary code change
 6. Ghost variable invariant testing is the strongest technique for proving cross-transaction accounting properties — validated in v3.3 (redemption) and v3.7 (VRF lifecycle)
 7. Halmos symbolic proofs give mathematical certainty for numeric invariants — redemption roll [25,175] proven for all 2^256 inputs (v3.7)
+8. Combined pool selection eliminates entire classes of buffer-read bugs — structurally superior to single-read patches (v3.9)
+9. Full-protocol integration tests (23 contracts, multi-level advancement) catch constructor/deploy-order issues that unit tests with mocks miss (v3.9)

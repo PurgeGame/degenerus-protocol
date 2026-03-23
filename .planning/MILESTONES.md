@@ -1,5 +1,22 @@
 # Milestones
 
+## v3.9 Far-Future Ticket Fix (Shipped: 2026-03-23)
+
+**Phases completed:** 7 phases, 8 plans, 14 tasks
+
+**Key accomplishments:**
+
+- TICKET_FAR_FUTURE_BIT constant (1 << 22) and _tqFarFutureKey pure helper with Foundry fuzz proof of three-way key space collision-freedom
+- Far-future ticket routing via conditional _tqFarFutureKey selection with rngLocked guard and phaseTransitionActive exemption in all three queue functions
+- Dual-queue drain in processFutureTicketBatch with FF-bit cursor encoding and _prepareFutureTickets resume fix
+- Combined pool winner selection reading frozen read buffer + FF key in _awardFarFutureCoinJackpot, eliminating TQ-01 write-buffer vulnerability
+- 5 Foundry tests + formal proof document proving EDGE-01 (no double-counting between FF and write buffer) and EDGE-02 (no re-processing after FF key drain) are SAFE -- zero contract changes
+- Formal proof that no permissionless action during VRF commitment window can influence far-future coin jackpot winner selection -- 12 mutation paths enumerated with SAFE verdicts, combined pool length invariant proven, all 5 research pitfalls addressed
+- 34 existing Foundry tests across 4 files formally verified as satisfying TEST-01 through TEST-04: routing, processing, jackpot selection, and rngLocked guard requirements all SATISFIED
+- Full protocol integration test deploying 23 contracts via DeployProtocol, driving 9 level transitions with prize pool seeding, and proving zero FF ticket stranding via vm.load storage inspection
+
+---
+
 ## v3.8 VRF Commitment Window Audit (Shipped: 2026-03-23)
 
 **Phases completed:** 6 phases, 13 plans, 21 tasks
