@@ -125,11 +125,122 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 | DSC-01 | Phase 81 | Complete |
 | DSC-02 | Phase 81 | Complete |
 
+### Ticket Processing Mechanics
+
+- [x] **TPROC-01**: processTicketBatch entry point, all callers, and trigger conditions identified with file:line
+- [x] **TPROC-02**: processFutureTicketBatch entry point, dual-queue drain logic, FF key processing documented with file:line
+- [x] **TPROC-03**: RNG word derivation chain for ticket trait generation documented (rawFulfillRandomWords → trait assignment)
+- [ ] **TPROC-04**: Cursor management (ticketLevel, ticketCursor, ticketsFullyProcessed) full lifecycle traced with file:line
+- [ ] **TPROC-05**: traitBurnTicket storage layout and all write/read paths documented
+- [ ] **TPROC-06**: Every discrepancy between prior audit prose and actual code flagged with [DISCREPANCY] tag; every new issue flagged with [NEW FINDING] tag
+
+### Ticket Consumption & Winner Selection
+
+- [x] **TCON-01**: Every function reading from ticketQueue for winner selection identified with file:line
+- [x] **TCON-02**: Every function reading traitBurnTicket for winner selection identified with file:line
+- [ ] **TCON-03**: Winner index computation documented for each jackpot type (ETH, coin, ticket, FF coin)
+- [ ] **TCON-04**: Every discrepancy and new finding tagged
+
+### Prize Pool Flow & currentPrizePool Deep Dive
+
+- [ ] **PPF-01**: currentPrizePool storage slot confirmed, all writers enumerated with file:line
+- [ ] **PPF-02**: prizePoolsPacked storage layout documented (packed fields, bit positions, BPS allocations)
+- [ ] **PPF-03**: prizePoolFrozen freeze/unfreeze lifecycle traced with all trigger conditions
+- [ ] **PPF-04**: Prize pool consolidation mechanics documented with file:line
+- [ ] **PPF-05**: All VRF-dependent readers of currentPrizePool documented
+- [ ] **PPF-06**: Every discrepancy and new finding tagged
+
+### Daily ETH Jackpot
+
+- [ ] **DETH-01**: currentPrizePool source, BPS allocation table, and split logic documented with file:line
+- [ ] **DETH-02**: Phase 0 vs Phase 1 jackpot behavior documented
+- [ ] **DETH-03**: Bucket/cursor winner selection algorithm documented with file:line
+- [ ] **DETH-04**: Carryover mechanics (unfilled buckets, excess, rollover) documented
+- [ ] **DETH-05**: Every discrepancy and new finding tagged
+
+### Daily Coin + Ticket Jackpot
+
+- [ ] **DCOIN-01**: Coin jackpot winner selection path documented with file:line (including _awardFarFutureCoinJackpot)
+- [ ] **DCOIN-02**: Ticket jackpot winner selection path documented with file:line
+- [ ] **DCOIN-03**: jackpotCounter lifecycle (initialization, increment, read, reset) fully traced
+- [ ] **DCOIN-04**: Every discrepancy and new finding tagged
+
+### Other Jackpots
+
+- [ ] **OJCK-01**: Early-bird lootbox jackpot mechanics documented with file:line
+- [ ] **OJCK-02**: BAF (Buy and Flip) jackpot mechanics documented with file:line
+- [ ] **OJCK-03**: Decimator jackpot mechanics documented with file:line
+- [ ] **OJCK-04**: Degenerette jackpot mechanics documented with file:line
+- [ ] **OJCK-05**: Final day DGNRS distribution mechanics documented with file:line
+- [ ] **OJCK-06**: Every discrepancy and new finding tagged
+
+### RNG-Dependent Variable Re-verification
+
+- [ ] **RDV-01**: Every variable from v3.8 commitment window inventory Section 4 re-verified against current Solidity with storage slot confirmation
+- [ ] **RDV-02**: Missing variables identified — state that should be in the RNG-dependent catalog but was missed
+- [ ] **RDV-03**: Delta assessment — variables that changed behavior since v3.8 audit documented
+- [ ] **RDV-04**: Every discrepancy and new finding tagged
+
+### Consolidated Findings
+
+- [ ] **CFND-01**: All v4.0 findings (phases 81-88) deduplicated and severity-ranked
+- [ ] **CFND-02**: KNOWN-ISSUES.md updated with any new findings above INFO
+- [ ] **CFND-03**: Cross-phase consistency verified — no contradictions between phase audit documents
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| TKT-01 | Phase 81 | Complete |
+| TKT-02 | Phase 81 | Complete |
+| TKT-03 | Phase 81 | Complete |
+| TKT-04 | Phase 81 | Complete |
+| TKT-05 | Phase 81 | Complete |
+| TKT-06 | Phase 81 | Complete |
+| DSC-01 | Phase 81 | Complete |
+| DSC-02 | Phase 81 | Complete |
+| TPROC-01 | Phase 82 | Not started |
+| TPROC-02 | Phase 82 | Not started |
+| TPROC-03 | Phase 82 | Not started |
+| TPROC-04 | Phase 82 | Not started |
+| TPROC-05 | Phase 82 | Not started |
+| TPROC-06 | Phase 82 | Not started |
+| TCON-01 | Phase 83 | Not started |
+| TCON-02 | Phase 83 | Not started |
+| TCON-03 | Phase 83 | Not started |
+| TCON-04 | Phase 83 | Not started |
+| PPF-01 | Phase 84 | Not started |
+| PPF-02 | Phase 84 | Not started |
+| PPF-03 | Phase 84 | Not started |
+| PPF-04 | Phase 84 | Not started |
+| PPF-05 | Phase 84 | Not started |
+| PPF-06 | Phase 84 | Not started |
+| DETH-01 | Phase 85 | Not started |
+| DETH-02 | Phase 85 | Not started |
+| DETH-03 | Phase 85 | Not started |
+| DETH-04 | Phase 85 | Not started |
+| DETH-05 | Phase 85 | Not started |
+| DCOIN-01 | Phase 86 | Not started |
+| DCOIN-02 | Phase 86 | Not started |
+| DCOIN-03 | Phase 86 | Not started |
+| DCOIN-04 | Phase 86 | Not started |
+| OJCK-01 | Phase 87 | Not started |
+| OJCK-02 | Phase 87 | Not started |
+| OJCK-03 | Phase 87 | Not started |
+| OJCK-04 | Phase 87 | Not started |
+| OJCK-05 | Phase 87 | Not started |
+| OJCK-06 | Phase 87 | Not started |
+| RDV-01 | Phase 88 | Not started |
+| RDV-02 | Phase 88 | Not started |
+| RDV-03 | Phase 88 | Not started |
+| RDV-04 | Phase 88 | Not started |
+| CFND-01 | Phase 89 | Not started |
+| CFND-02 | Phase 89 | Not started |
+| CFND-03 | Phase 89 | Not started |
+
 **Coverage:**
-- v4.0 requirements: 8 total
-- Mapped to phases: 8
+- v4.0 requirements: 46 total
+- Mapped to phases: 46
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*
-*Updated: 2026-03-23 — v4.0 ticket lifecycle re-audit requirements added*
+*Updated: 2026-03-23 — v4.0 full milestone requirements added (phases 82-89)*
