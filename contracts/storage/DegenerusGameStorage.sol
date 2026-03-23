@@ -150,8 +150,16 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Bit mask for ticket queue double-buffer key encoding.
     ///      Set bit 23 of the uint24 level key to distinguish write/read slots.
-    ///      Max real level: 2^23 - 1 = 8,388,607 (game would take millennia).
+    ///      Max real level: 2^22 - 1 = 4,194,303 (game would take millennia).
     uint24 internal constant TICKET_SLOT_BIT = 1 << 23;
+
+    /// @dev Bit mask for far-future ticket key encoding.
+    ///      Set bit 22 of the uint24 level key to create a third key space
+    ///      disjoint from both double-buffer slots (bit 23).
+    ///      Far-future = tickets targeting > currentLevel + 6.
+    ///      Three key spaces: Slot0 [0x000000-0x3FFFFF], FF [0x400000-0x7FFFFF],
+    ///      Slot1 [0x800000-0xBFFFFF]. Disjoint for all lvl < 2^22.
+    uint24 internal constant TICKET_FAR_FUTURE_BIT = 1 << 22;
 
     /// @dev Hours before gameover liveness guard at which distress mode activates.
     uint48 internal constant DISTRESS_MODE_HOURS = 6;
@@ -702,6 +710,14 @@ abstract contract DegenerusGameStorage {
     /// @dev Compute the ticket queue key for the read slot (opposite of write).
     function _tqReadKey(uint24 lvl) internal view returns (uint24) {
         return ticketWriteSlot == 0 ? lvl | TICKET_SLOT_BIT : lvl;
+    }
+
+    /// @dev Compute the ticket queue key for the far-future key space.
+    ///      Always sets bit 22, independent of ticketWriteSlot.
+    ///      Far-future tickets are not double-buffered; they persist until
+    ///      drained by processFutureTicketBatch.
+    function _tqFarFutureKey(uint24 lvl) internal pure returns (uint24) {
+        return lvl | TICKET_FAR_FUTURE_BIT;
     }
 
     // =========================================================================
