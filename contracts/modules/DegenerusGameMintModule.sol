@@ -303,7 +303,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
-        if (total > type(uint32).max) revert E();
         if (total == 0) {
             if (!inFarFuture) {
                 uint24 ffk = _tqFarFutureKey(lvl);
@@ -661,7 +660,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 ticketCost = 0;
 
         if (ticketQuantity != 0) {
-            if (ticketQuantity > type(uint32).max) revert E();
             ticketCost = (priceWei * ticketQuantity) / (4 * TICKET_SCALE);
         }
 
@@ -822,9 +820,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             // units and only the fresh-ETH portion when claimable is mixed in.
             if (priceWei != 0) {
                 uint256 questUnitsRaw = lootBoxAmount / priceWei;
-                if (questUnitsRaw > type(uint32).max) {
-                    questUnitsRaw = type(uint32).max;
-                }
                 if (questUnitsRaw != 0 && lootboxFreshEth != 0) {
                     uint256 scaled = (questUnitsRaw * lootboxFreshEth) / lootBoxAmount;
                     if (scaled != 0) {
@@ -864,7 +859,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         bytes32 affiliateCode,
         uint256 value
     ) private {
-        if (quantity == 0 || quantity > type(uint32).max) revert E();
+        if (quantity == 0) revert E();
         if (gameOver) revert E();
         // Ticket routing differs by phase:
         // - purchase phase: tickets target next level
@@ -894,9 +889,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     : ((cappedValue * 4 * TICKET_SCALE) / priceWei);
                 adjustedQuantity += (cappedQty * boostBps) / 10_000;
             }
-        }
-        if (adjustedQuantity > type(uint32).max) {
-            adjustedQuantity = type(uint32).max;
         }
         uint32 adjustedQty32 = uint32(adjustedQuantity);
 
@@ -1042,9 +1034,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint24 ticketLevel = targetLevel;
         uint256 ticketScaled = adjustedQuantity;
 
-        if (ticketScaled > type(uint32).max) {
-            ticketScaled = type(uint32).max;
-        }
         if (ticketScaled != 0) {
             _queueTicketsScaled(buyer, ticketLevel, uint32(ticketScaled));
         }
@@ -1073,9 +1062,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
         {
             uint256 questUnitsRaw = burnieAmount / PRICE_COIN_UNIT;
-            if (questUnitsRaw > type(uint32).max) {
-                questUnitsRaw = type(uint32).max;
-            }
             if (questUnitsRaw != 0) {
                 coin.notifyQuestMint(buyer, uint32(questUnitsRaw), false);
             }

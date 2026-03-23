@@ -68,9 +68,7 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
 
         uint256 bonusTickets = (baseTickets *
             (state.afKingMode ? bonusBpsAfKing : bonusBps)) / 10_000;
-        c.ticketCount = bonusTickets > type(uint32).max
-            ? type(uint32).max
-            : uint32(bonusTickets);
+        c.ticketCount = uint32(bonusTickets);
     }
 
     /// @dev Queue deferred whale pass claims for large payouts.
