@@ -148,7 +148,7 @@
 - [x] **Phase 75: Ticket Routing + RNG Guard** - 1 plan, 4 requirements (ROUTE-01, ROUTE-02, ROUTE-03, RNG-02) (completed 2026-03-23)
 - [x] **Phase 76: Ticket Processing Extension** - 1 plan, 3 requirements (PROC-01, PROC-02, PROC-03) (completed 2026-03-23)
 - [x] **Phase 77: Jackpot Combined Pool + TQ-01 Fix** - 1 plan, 3 requirements (JACK-01, JACK-02, EDGE-03) (completed 2026-03-23)
-- [ ] **Phase 78: Edge Case Handling** - 1 plan, 2 requirements (EDGE-01, EDGE-02)
+- [x] **Phase 78: Edge Case Handling** - 1 plan, 2 requirements (EDGE-01, EDGE-02) (completed 2026-03-23)
 - [ ] **Phase 79: RNG Commitment Window Proof** - RNG-01
 - [ ] **Phase 80: Test Suite** - TEST-01, TEST-02, TEST-03, TEST-04, TEST-05
 
@@ -247,7 +247,7 @@ Phases execute in dependency order: 74 -> 75 -> 76 -> 77 + 78 (parallel-eligible
 | 75. Ticket Routing + RNG Guard | 1/1 | Complete    | 2026-03-23 |
 | 76. Ticket Processing Extension | 1/1 | Complete    | 2026-03-23 |
 | 77. Jackpot Combined Pool + TQ-01 Fix | 1/1 | Complete    | 2026-03-23 |
-| 78. Edge Case Handling | 0/1 | Planned    |  |
+| 78. Edge Case Handling | 0/1 | Complete    | 2026-03-23 |
 | 79. RNG Commitment Window Proof | 0/TBD | Not started | - |
 | 80. Test Suite | 0/TBD | Not started | - |
 
