@@ -169,7 +169,7 @@
 - [x] **Phase 88: RNG-Dependent Variable Re-verification** — 2 plans, 4 requirements (RDV-01, RDV-02, RDV-03, RDV-04) (completed 2026-03-23)
 - [x] **Phase 89: Consolidated Findings** — 1 plan, 3 requirements (CFND-01, CFND-02, CFND-03) (completed 2026-03-23)
 - [x] **Phase 90: Verification Backfill** — gap closure, 12 requirements (OJCK-01 through OJCK-06, PPF-01 through PPF-06) (completed 2026-03-23)
-- [ ] **Phase 91: Consolidated Findings Rewrite** — gap closure, 3 requirements (CFND-01, CFND-02, CFND-03)
+- [x] **Phase 91: Consolidated Findings Rewrite** — gap closure, 3 requirements (CFND-01, CFND-02, CFND-03) (completed 2026-03-23)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -183,7 +183,7 @@
 | 88. RNG-Dependent Variable Re-verification | 2/1 | Complete    | 2026-03-23 |
 | 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
 | 90. Verification Backfill | 3/3 | Complete   | 2026-03-23 |
-| 91. Consolidated Findings Rewrite | 2/3 | In Progress|  |
+| 91. Consolidated Findings Rewrite | 3/3 | Complete   | 2026-03-23 |
 
 ### Phase 82: Ticket Processing Mechanics
 
@@ -303,7 +303,7 @@ Plans:
 Plans:
 - [x] 91-01-PLAN.md — Rewrite v4.0-findings-consolidated.md: add Phases 83-87 findings (~47 INFO; DEC-01 and DGN-01 withdrawn as false positives), update totals, mark FINAL
 - [x] 91-02-PLAN.md — Update KNOWN-ISSUES.md audit history with full v4.0 phase coverage
-- [ ] 91-03-PLAN.md — Re-run cross-phase consistency check with full Phase 87 SUMMARYs; create 89-VERIFICATION.md
+- [x] 91-03-PLAN.md — Re-run cross-phase consistency check with full Phase 87 SUMMARYs; create 89-VERIFICATION.md
 
 **Requirements:** CFND-01, CFND-02, CFND-03
 
