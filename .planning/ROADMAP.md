@@ -182,7 +182,7 @@
 | 87. Other Jackpots | 4/4 | Complete | 2026-03-23 |
 | 88. RNG-Dependent Variable Re-verification | 2/1 | Complete    | 2026-03-23 |
 | 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
-| 90. Verification Backfill | 0/3 | Pending | — |
+| 90. Verification Backfill | 1/3 | In Progress|  |
 | 91. Consolidated Findings Rewrite | 0/3 | Pending | — |
 
 ### Phase 82: Ticket Processing Mechanics
@@ -289,7 +289,7 @@ Plans:
 
 Plans:
 - [ ] 90-01-PLAN.md — Create Phase 87 SUMMARY files (87-01 through 87-04) and 87-VERIFICATION.md from existing audit documents
-- [ ] 90-02-PLAN.md — Create Phase 84 84-VERIFICATION.md from existing audit document and SUMMARY
+- [x] 90-02-PLAN.md — Create Phase 84 84-VERIFICATION.md from existing audit document and SUMMARY
 - [ ] 90-03-PLAN.md — Sync REQUIREMENTS.md: fix 19 stale traceability rows, 3 unchecked checkboxes (TCON-03, TCON-04, RDV-02), mark OJCK-01-06 as [x]
 
 **Requirements:** OJCK-01, OJCK-02, OJCK-03, OJCK-04, OJCK-05, OJCK-06, PPF-01, PPF-02, PPF-03, PPF-04, PPF-05, PPF-06
