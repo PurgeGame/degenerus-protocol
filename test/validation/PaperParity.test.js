@@ -985,26 +985,26 @@ describe("Paper Parity (Phase 46)", function () {
   // The 95%/5% split and offset ranges [0,5]/[5,50] are verified statically.
   // Behavioral testing would require VRF fulfillment to observe actual ticket
   // level assignments.
-  describe("PAR-18: Future ticket odds (95% near k in [0,5], 5% far k in [5,50])", function () {
-    it("95% near future: 0-5 levels ahead", async function () {
-      // _rollTargetLevel: rangeRoll < 5 => far (5%), else near (95%)
-      // Near: levelOffset = entropy % 6 => [0, 5]
-      expect(95).to.equal(95, "Near probability = 95%");
-      // Near offset range: 0 to 5 (inclusive)
-      expect(6 - 1).to.equal(5, "Max near offset = 5");
+  describe("PAR-18: Future ticket odds (90% near k in [0,4], 10% far k in [5,50])", function () {
+    it("90% near future: 0-4 levels ahead", async function () {
+      // _rollTargetLevel: rangeRoll < 10 => far (10%), else near (90%)
+      // Near: levelOffset = entropy % 5 => [0, 4]
+      expect(90).to.equal(90, "Near probability = 90%");
+      // Near offset range: 0 to 4 (inclusive)
+      expect(5 - 1).to.equal(4, "Max near offset = 4");
     });
 
-    it("5% far future: 5-50 levels ahead", async function () {
+    it("10% far future: 5-50 levels ahead", async function () {
       // Far: levelOffset = (entropy % 46) + 5 => [5, 50]
-      expect(5).to.equal(5, "Far probability = 5%");
+      expect(10).to.equal(10, "Far probability = 10%");
       expect(5).to.equal(5, "Min far offset = 5");
       expect(46 + 5 - 1).to.equal(50, "Max far offset = 50");
     });
 
-    it("roll logic: rangeRoll = entropy % 100; < 5 = far, >= 5 = near", async function () {
-      // 5 out of 100 = 5%
-      expect(5 / 100).to.equal(0.05, "5% far threshold");
-      expect(95 / 100).to.equal(0.95, "95% near probability");
+    it("roll logic: rangeRoll = entropy % 100; < 10 = far, >= 10 = near", async function () {
+      // 10 out of 100 = 10%
+      expect(10 / 100).to.equal(0.1, "10% far threshold");
+      expect(90 / 100).to.equal(0.9, "90% near probability");
     });
   });
 

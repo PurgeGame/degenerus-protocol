@@ -861,10 +861,16 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     ) private {
         if (quantity == 0) revert E();
         if (gameOver) revert E();
-        // Ticket routing differs by phase:
-        // - purchase phase: tickets target next level
-        // - jackpot phase: tickets target current level
         uint24 targetLevel = jackpotPhaseFlag ? level : level + 1;
+        // Last jackpot day fix: route to level+1 to prevent stranded tickets
+        // (_endPhase breaks before _unlockRng, so no future daily draw at this level)
+        if (jackpotPhaseFlag && rngLockedFlag) {
+            uint8 cnt = jackpotCounter;
+            uint8 comp = compressedJackpotFlag;
+            uint8 step = comp == 2 ? JACKPOT_LEVEL_CAP
+                : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1) ? 2 : 1;
+            if (cnt + step >= JACKPOT_LEVEL_CAP) targetLevel = level + 1;
+        }
         // Affiliate scores always route to level + 1 so they freeze at
         // level transition and can be claimed against a fixed snapshot.
         uint24 affiliateLevel = level + 1;

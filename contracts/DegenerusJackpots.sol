@@ -102,14 +102,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Fixed values for prize calculations and BAF configuration.          |
       +======================================================================+*/
 
-    /// @dev Bit offset in winnerMask for scatter winner flags.
-    ///      First 128 bits for direct winners, upper bits for scatter.
-    uint256 private constant BAF_SCATTER_MASK_OFFSET = 128;
-
-    /// @dev Number of scatter winners receiving ticket-routing treatment.
-    ///      Last 40 scatter winners get winnerMask flags set.
-    uint8 private constant BAF_SCATTER_TICKET_WINNERS = 40;
-
     /// @dev Fixed number of scatter rounds to keep BAF gas bounded.
     uint8 private constant BAF_SCATTER_ROUNDS = 50;
 
@@ -211,19 +203,18 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  • VRF-derived randomness for all random selections                  |
       |  • Entropy chained via keccak256 for independence                    |
       |  • Unfilled prizes returned via returnAmountWei                      |
-      |  • winnerMask flags scatter winners for ticket routing               |
+      |  • Unfilled scatter rounds return to future pool                     |
       +======================================================================+*/
 
     /// @notice Resolve the BAF jackpot for a level.
     /// @dev Distributes poolWei across multiple winner categories with eligibility checks.
-    ///      Returns arrays of winners/amounts plus winnerMask for scatter ticket handling.
+    ///      Returns arrays of winners/amounts plus unawarded amount for recycling.
     ///      Clears leaderboard state after resolution.
     /// @param poolWei Total ETH prize pool for distribution.
     /// @param lvl Level number being resolved.
     /// @param rngWord VRF-derived randomness seed.
     /// @return winners Array of winner addresses.
     /// @return amounts Array of prize amounts corresponding to winners.
-    /// @return winnerMask Bitmask indicating scatter winners (high bits) for ticket routing.
     /// @return returnAmountWei Unawarded prize amount to return to caller.
     /// @custom:access Restricted to game contract via onlyGame modifier.
     function runBafJackpot(
@@ -234,7 +225,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         external
         override
         onlyGame
-        returns (address[] memory winners, uint256[] memory amounts, uint256 winnerMask, uint256 returnAmountWei)
+        returns (address[] memory winners, uint256[] memory amounts, uint256 returnAmountWei)
     {
         uint256 P = poolWei;
         // Max distinct winners: 1 (top BAF) + 1 (top flip) + 1 (pick) + 4 (far-future x2) + 50 + 50 (scatter) = 107.
@@ -242,7 +233,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
         uint256[] memory tmpA = new uint256[](107);
         uint256 n;
         uint256 toReturn;
-        uint256 mask;
 
         uint256 entropy = rngWord;
         uint256 salt;
@@ -376,7 +366,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         }
 
         // Scatter slice: 200 total draws (4 tickets * 50 rounds). Per round, take top-2 by BAF score.
-        // Game applies special ticket handling for the last BAF_SCATTER_TICKET_WINNERS scatter winners via `winnerMask`.
+        // Unfilled rounds return their per-round share to future pool.
         {
             // Slice E: scatter tickets from trait sampler so casual participants can land smaller cuts.
             uint256 scatterTop = (P * 45) / 100;
@@ -385,8 +375,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
             address[50] memory secondWinners;
             uint256 firstCount;
             uint256 secondCount;
-            uint256 scatterStart = n;
-
             bool isCentury = (lvl % 100 == 0);
 
             // Fixed rounds of 4-ticket sampling to keep gas bounded per call.
@@ -397,22 +385,20 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 entropy = uint256(keccak256(abi.encodePacked(entropy, salt)));
 
                 // Level targeting varies by BAF type:
-                // Non-x00: 20 rounds lvl+1, 10 each lvl+2/+3/+4
-                // x00:     4 rounds lvl+1, 4 each lvl+2/+3, 38 random from past 99
+                // Non-x00: 20 rounds from lvl, 30 rounds random from lvl+1..lvl+4
+                // x00:     4 rounds lvl, 8 rounds lvl+1..lvl+3, 38 random from past 99
                 uint24 targetLvl;
                 if (isCentury) {
-                    if (round < 4) targetLvl = lvl + 1;
-                    else if (round < 8) targetLvl = lvl + 2;
-                    else if (round < 12) targetLvl = lvl + 3;
+                    if (round < 4) targetLvl = lvl;
+                    else if (round < 8) targetLvl = lvl + 1 + uint24(entropy % 3);
+                    else if (round < 12) targetLvl = lvl + 1 + uint24(entropy % 3);
                     else {
                         uint24 maxBack = lvl > 99 ? 99 : lvl - 1;
                         targetLvl = maxBack > 0 ? lvl - 1 - uint24(entropy % maxBack) : lvl;
                     }
                 } else {
-                    if (round < 20) targetLvl = lvl + 1;
-                    else if (round < 30) targetLvl = lvl + 2;
-                    else if (round < 40) targetLvl = lvl + 3;
-                    else targetLvl = lvl + 4;
+                    if (round < 20) targetLvl = lvl;
+                    else targetLvl = lvl + 1 + uint24(entropy % 4);
                 }
 
                 (, address[] memory tickets) = degenerusGame.sampleTraitTicketsAtLevel(targetLvl, entropy);
@@ -462,55 +448,32 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 }
             }
 
-            if (firstCount == 0) {
-                toReturn += scatterTop;
-            } else {
-                uint256 per = scatterTop / firstCount;
-                uint256 rem = scatterTop - per * firstCount;
-                toReturn += rem;
-                if (per != 0) {
-                    for (uint256 i; i < firstCount; ) {
-                        tmpW[n] = firstWinners[i];
-                        tmpA[n] = per;
-                        unchecked {
-                            ++n;
-                            ++i;
-                        }
-                    }
+            // Per-round fixed share: empty rounds return to future pool.
+            uint256 perRoundFirst = scatterTop / BAF_SCATTER_ROUNDS;
+            uint256 perRoundSecond = scatterSecond / BAF_SCATTER_ROUNDS;
+
+            // Return unfilled rounds + integer division dust.
+            toReturn += scatterTop - perRoundFirst * firstCount;
+            toReturn += scatterSecond - perRoundSecond * secondCount;
+
+            for (uint256 i; i < firstCount; ) {
+                tmpW[n] = firstWinners[i];
+                tmpA[n] = perRoundFirst;
+                unchecked {
+                    ++n;
+                    ++i;
                 }
             }
 
-            if (secondCount == 0) {
-                toReturn += scatterSecond;
-            } else {
-                uint256 per2 = scatterSecond / secondCount;
-                uint256 rem2 = scatterSecond - per2 * secondCount;
-                toReturn += rem2;
-                if (per2 != 0) {
-                    for (uint256 i; i < secondCount; ) {
-                        tmpW[n] = secondWinners[i];
-                        tmpA[n] = per2;
-                        unchecked {
-                            ++n;
-                            ++i;
-                        }
-                    }
+            for (uint256 i; i < secondCount; ) {
+                tmpW[n] = secondWinners[i];
+                tmpA[n] = perRoundSecond;
+                unchecked {
+                    ++n;
+                    ++i;
                 }
             }
 
-            uint256 scatterCount = n - scatterStart;
-            if (scatterCount != 0) {
-                uint256 targetSpecialCount = scatterCount < BAF_SCATTER_TICKET_WINNERS
-                    ? scatterCount
-                    : BAF_SCATTER_TICKET_WINNERS;
-                for (uint256 i; i < targetSpecialCount; ) {
-                    uint256 idx = (scatterStart + scatterCount - 1) - i;
-                    mask |= (uint256(1) << (BAF_SCATTER_MASK_OFFSET + idx));
-                    unchecked {
-                        ++i;
-                    }
-                }
-            }
         }
 
         winners = tmpW;
@@ -520,13 +483,11 @@ contract DegenerusJackpots is IDegenerusJackpots {
             mstore(amounts, n)
         }
 
-        winnerMask = mask;
-
         // Clean up leaderboard state for this level
         _clearBafTop(lvl);
         unchecked { ++bafEpoch[lvl]; }
         lastBafResolvedDay = degenerusGame.currentDayView();
-        return (winners, amounts, winnerMask, toReturn);
+        return (winners, amounts, toReturn);
     }
 
     /*+======================================================================+

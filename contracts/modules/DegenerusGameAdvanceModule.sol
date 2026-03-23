@@ -243,14 +243,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
                 phaseTransitionActive = false;
                 _unlockRng(day);
-                _unfreezePool();
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
                 stage = STAGE_TRANSITION_DONE;
                 break;
             }
 
-            // Process near-future ticket queues (+2..+6) before daily draws
+            // Process near-future ticket queues before daily draws
             // to include fresh lootbox-driven tickets
             if (
                 !dailyJackpotCoinTicketsPending &&
@@ -259,7 +258,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 dailyEthBucketCursor == 0 &&
                 dailyEthWinnerCursor == 0
             ) {
-                if (!_prepareFutureTickets(lvl)) {
+                if (!_prepareFutureTickets(inJackpot ? lvl : purchaseLevel)) {
                     stage = STAGE_FUTURE_TICKETS_WORKING;
                     break;
                 }
@@ -290,7 +289,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         }
                     }
                     _unlockRng(day);
-                    _unfreezePool();
                     stage = STAGE_PURCHASE_DAILY;
                     break;
                 }
@@ -366,7 +364,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _rewardTopAffiliate(lvl);
                     _runRewardJackpots(lvl, rngWord);
                     _endPhase();
-                    _unfreezePool();
+                    _unlockRng(day);
                     stage = STAGE_JACKPOT_PHASE_ENDED;
                     break;
                 }
@@ -1148,14 +1146,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Before daily draws, process ticket queues for near-future levels
-    ///      lvl+2..lvl+6. Runs every daily cycle (purchase and jackpot phases)
+    ///      lvl+1..lvl+4. Runs every daily cycle (purchase and jackpot phases)
     ///      so pass-driven tickets are included promptly. Uses existing ticket
     ///      cursor state so work can resume across multiple advanceGame calls.
-    /// @param lvl Current level (purchaseLevel or jackpot level).
+    ///      Caller passes purchaseLevel during purchase phase, level during jackpot.
+    /// @param lvl Base level: purchaseLevel (purchase phase) or level (jackpot phase).
     /// @return finished True when all target future levels are fully processed.
     function _prepareFutureTickets(uint24 lvl) private returns (bool finished) {
-        uint24 startLevel = lvl + 2;
-        uint24 endLevel = lvl + 6;
+        uint24 startLevel = lvl + 1;
+        uint24 endLevel = lvl + 4;
         uint24 resumeLevel = ticketLevel;
         // Strip FF bit to get base level for range comparison.
         // When ticketLevel has bit 22 set, we are mid-FF-processing for that base level.
@@ -1415,6 +1414,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngWordCurrent = 0;
         vrfRequestId = 0;
         rngRequestTime = 0;
+        _unfreezePool();
     }
 
     /// @notice Pay BURNIE to nudge the next RNG word by +1.
