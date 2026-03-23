@@ -202,9 +202,9 @@ Plans:
   1. A full exploitation scenario for ticket queue swap during jackpot phase is documented with step-by-step attacker actions, preconditions, and outcome manipulation
   2. A fix for the ticket queue commitment window violation is identified and verified (or proven unnecessary with evidence)
   3. A cross-contract pattern scan is complete covering all contracts for similar commitment window violations (any state that shifts between VRF request and use) with per-finding verdict
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 72-01-PLAN.md -- Exploitation scenario + fix analysis (TQ-01, TQ-02)
+- [x] 72-01-PLAN.md -- Exploitation scenario + fix analysis (TQ-01, TQ-02)
 - [ ] 72-02-PLAN.md -- Cross-contract commitment window pattern scan (TQ-03)
 
 ### Phase 73: Boon Storage Packing
@@ -234,7 +234,7 @@ Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72. Ph
 | 69. Mutation Verdicts | 2/2 | Complete    | 2026-03-22 |
 | 70. Coinflip Commitment Window | 2/2 | Complete    | 2026-03-22 |
 | 71. advanceGame Day RNG Window | 2/2 | Complete    | 2026-03-22 |
-| 72. Ticket Queue Deep-Dive + Pattern Scan | 0/2 | Not started | - |
+| 72. Ticket Queue Deep-Dive + Pattern Scan | 1/2 | In Progress|  |
 | 73. Boon Storage Packing | 2/3 | In Progress|  |
 
 ## Deferred

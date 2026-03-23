@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: VRF Commitment Window Audit
-status: Phase complete — ready for verification
-stopped_at: Completed 71-02-PLAN.md
-last_updated: "2026-03-22T23:17:40.212Z"
+status: Ready to execute
+stopped_at: Completed 72-01-PLAN.md
+last_updated: "2026-03-23T00:23:54.502Z"
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 11
-  completed_plans: 10
+  total_plans: 13
+  completed_plans: 11
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 71 — advancegame-day-rng-window
+**Current focus:** Phase 72 — ticket-queue-deep-dive-pattern-scan
 
 ## Current Position
 
-Phase: 71 (advancegame-day-rng-window) — EXECUTING
+Phase: 72 (ticket-queue-deep-dive-pattern-scan) — EXECUTING
 Plan: 2 of 2
 
 ## Accumulated Context
@@ -53,6 +53,10 @@ None (fresh milestone).
 - [Phase 70]: rngLockedFlag is the only defense for auto-rebuy extraction (Attack 2) -- without it, carry extraction after seeing VRF word would be exploitable
 - [Phase 71]: Contamination defined precisely as day N RNG OUTCOME influencing day N+1 RNG WORD or SELECTION MECHANISM -- carry-over game context excluded by definition
 - [Phase 71]: Exhaustive grep confirms rngWordByDay has exactly 2 write locations (lines 1533, 1484) -- all others are reads/guards, proving write-once immutability
+- [Phase 72]: Severity MEDIUM not HIGH: stolen asset is BURNIE (flipCredit) not ETH
+- [Phase 72]: Fix Option A (_tqWriteKey -> _tqReadKey) recommended: root cause fix, one-line, aligns with processTicketBatch pattern
+- [Phase 72]: Both call paths affected: payDailyJackpotCoinAndTickets (jackpot phase) AND payDailyCoinJackpot (purchase phase)
+- [Phase 72]: purchaseCoin() equally exploitable: COIN_PURCHASE_CUTOFF is liveness guard (90d), not commitment window guard
 
 ### Pending Todos
 
@@ -65,6 +69,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-22T23:17:40.210Z
-Stopped at: Completed 71-02-PLAN.md
+Last session: 2026-03-23T00:23:54.500Z
+Stopped at: Completed 72-01-PLAN.md
 Resume file: None
