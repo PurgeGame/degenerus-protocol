@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
 status: Ready to execute
-stopped_at: Completed 90-02-PLAN.md
-last_updated: "2026-03-23T16:21:52.848Z"
+stopped_at: Completed 90-01-PLAN.md
+last_updated: "2026-03-23T16:25:23.080Z"
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 21
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 90 — verification-backfill
+**Current focus:** Phase 91 — consolidated-findings-rewrite
 
 ## Current Position
 
-Phase: 90 (verification-backfill) — EXECUTING
+Phase: 91 (consolidated-findings-rewrite) — EXECUTING
 Plan: 2 of 3
 
 ## Accumulated Context
@@ -55,6 +55,7 @@ Plan: 2 of 3
 - [Phase 85]: NF-V38-01: v3.8 omits whalePassClaims from payDailyJackpot scope -- INFO (early-burn only)
 - [Phase 85]: All 13 RNG consumption points in daily ETH jackpot verified safe per VRF commitment window analysis
 - [Phase 90]: Phase 84 VERIFICATION report follows 85-VERIFICATION.md format exactly for gap-closure consistency
+- [Phase 90]: DEC-01 decBucketOffsetPacked collision documented as FALSE POSITIVE; DGN-01 off-by-one documented as FALSE POSITIVE; actual Phase 87 findings: 0 HIGH, 0 MEDIUM, 0 LOW, 21 INFO
 
 ### Pending Todos
 
@@ -66,6 +67,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T16:21:52.846Z
-Stopped at: Completed 90-02-PLAN.md
+Last session: 2026-03-23T16:25:23.078Z
+Stopped at: Completed 90-01-PLAN.md
 Resume file: None

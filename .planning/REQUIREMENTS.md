@@ -167,12 +167,12 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 
 ### Other Jackpots
 
-- [ ] **OJCK-01**: Early-bird lootbox jackpot mechanics documented with file:line
-- [ ] **OJCK-02**: BAF (Buy and Flip) jackpot mechanics documented with file:line
-- [ ] **OJCK-03**: Decimator jackpot mechanics documented with file:line
-- [ ] **OJCK-04**: Degenerette jackpot mechanics documented with file:line
-- [ ] **OJCK-05**: Final day DGNRS distribution mechanics documented with file:line
-- [ ] **OJCK-06**: Every discrepancy and new finding tagged
+- [x] **OJCK-01**: Early-bird lootbox jackpot mechanics documented with file:line
+- [x] **OJCK-02**: BAF (Buy and Flip) jackpot mechanics documented with file:line
+- [x] **OJCK-03**: Decimator jackpot mechanics documented with file:line
+- [x] **OJCK-04**: Degenerette jackpot mechanics documented with file:line
+- [x] **OJCK-05**: Final day DGNRS distribution mechanics documented with file:line
+- [x] **OJCK-06**: Every discrepancy and new finding tagged
 
 ### RNG-Dependent Variable Re-verification
 
@@ -222,12 +222,12 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 | DCOIN-02 | Phase 86 | Complete |
 | DCOIN-03 | Phase 86 | Complete |
 | DCOIN-04 | Phase 86 | Complete |
-| OJCK-01 | Phase 90 | Pending |
-| OJCK-02 | Phase 90 | Pending |
-| OJCK-03 | Phase 90 | Pending |
-| OJCK-04 | Phase 90 | Pending |
-| OJCK-05 | Phase 90 | Pending |
-| OJCK-06 | Phase 90 | Pending |
+| OJCK-01 | Phase 90 | Complete |
+| OJCK-02 | Phase 90 | Complete |
+| OJCK-03 | Phase 90 | Complete |
+| OJCK-04 | Phase 90 | Complete |
+| OJCK-05 | Phase 90 | Complete |
+| OJCK-06 | Phase 90 | Complete |
 | RDV-01 | Phase 88 | Complete |
 | RDV-02 | Phase 88 | Complete |
 | RDV-03 | Phase 88 | Complete |
