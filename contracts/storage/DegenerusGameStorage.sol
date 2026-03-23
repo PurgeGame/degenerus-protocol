@@ -188,6 +188,9 @@ abstract contract DegenerusGameStorage {
     /// @dev Gas-minimal revert signal. Matches codebase convention (DegenerusGame, modules).
     error E();
 
+    /// @dev Reverts when a permissionless far-future ticket write is attempted during VRF commitment window.
+    error RngLocked();
+
     // =========================================================================
     // SLOT 0: Level Timing, Batching, and Finite State Machine
     // =========================================================================
@@ -538,7 +541,9 @@ abstract contract DegenerusGameStorage {
     ) internal {
         if (quantity == 0) return;
         emit TicketsQueued(buyer, targetLevel, quantity);
-        uint24 wk = _tqWriteKey(targetLevel);
+        bool isFarFuture = targetLevel > level + 6;
+        if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
+        uint24 wk = isFarFuture ? _tqFarFutureKey(targetLevel) : _tqWriteKey(targetLevel);
         uint40 packed = ticketsOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
@@ -571,7 +576,9 @@ abstract contract DegenerusGameStorage {
     ) internal {
         if (quantityScaled == 0) return;
         emit TicketsQueuedScaled(buyer, targetLevel, quantityScaled);
-        uint24 wk = _tqWriteKey(targetLevel);
+        bool isFarFuture = targetLevel > level + 6;
+        if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
+        uint24 wk = isFarFuture ? _tqFarFutureKey(targetLevel) : _tqWriteKey(targetLevel);
         uint40 packed = ticketsOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
@@ -628,9 +635,12 @@ abstract contract DegenerusGameStorage {
         uint32 ticketsPerLevel
     ) internal {
         emit TicketsQueuedRange(buyer, startLevel, numLevels, ticketsPerLevel);
+        uint24 currentLevel = level; // cache outside loop to avoid repeated SLOAD
         uint24 lvl = startLevel;
         for (uint24 i = 0; i < numLevels; ) {
-            uint24 wk = _tqWriteKey(lvl);
+            bool isFarFuture = lvl > currentLevel + 6;
+            if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
+            uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
             uint40 packed = ticketsOwedPacked[wk][buyer];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);

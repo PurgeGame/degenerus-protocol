@@ -6,9 +6,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 
 /// @title TicketRoutingHarness -- Exposes internal queue functions and state for routing/guard tests
 contract TicketRoutingHarness is DegenerusGameStorage {
-    /// @dev Matches the error the storage contract will emit once the guard is implemented.
-    ///      Declared here so RED-phase tests can reference it in vm.expectRevert.
-    error RngLocked();
+    // error RngLocked() — inherited from DegenerusGameStorage
 
     function queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
         _queueTickets(buyer, targetLevel, quantity);
@@ -157,7 +155,7 @@ contract TicketRoutingTest is Test {
         // rngLocked=true, phaseTransitionActive=false, far-future target
         harness.setRngLockedFlag(true);
         harness.setPhaseTransitionActive(false);
-        vm.expectRevert(TicketRoutingHarness.RngLocked.selector);
+        vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
         harness.queueTickets(buyer, 17, 1);
     }
 
@@ -187,7 +185,7 @@ contract TicketRoutingTest is Test {
         // rngLocked=true, phaseTransitionActive=false, far-future scaled target
         harness.setRngLockedFlag(true);
         harness.setPhaseTransitionActive(false);
-        vm.expectRevert(TicketRoutingHarness.RngLocked.selector);
+        vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
         harness.queueTicketsScaled(buyer, 17, 100);
     }
 
@@ -200,7 +198,7 @@ contract TicketRoutingTest is Test {
         // range covers levels 14-19, first FF level is 17
         harness.setRngLockedFlag(true);
         harness.setPhaseTransitionActive(false);
-        vm.expectRevert(TicketRoutingHarness.RngLocked.selector);
+        vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
         harness.queueTicketRange(buyer, 14, 6, 1);
     }
 }

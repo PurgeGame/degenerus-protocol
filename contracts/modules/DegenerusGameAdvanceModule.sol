@@ -35,7 +35,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     error MustMintToday();
     error NotTimeYet();
     error RngNotReady();
-    error RngLocked();
+    // error RngLocked() — inherited from DegenerusGameStorage
 
     /*+======================================================================+
       |                              EVENTS                                  |
