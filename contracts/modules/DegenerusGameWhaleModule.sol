@@ -24,7 +24,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
-    error RngLocked();
+    // error RngLocked() — inherited from DegenerusGameStorage
 
     // -------------------------------------------------------------------------
     // Events

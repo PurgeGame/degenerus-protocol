@@ -101,9 +101,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     // error E() — inherited from DegenerusGameStorage
 
-    /// @notice RNG is locked (VRF pending); nudge operations blocked.
-    /// @dev reverseFlip() is only available before RNG request starts.
-    error RngLocked();
+    // error RngLocked() — inherited from DegenerusGameStorage
 
     /// @notice afKing mode cannot be disabled yet (lock period active).
     error AfKingLockActive();
