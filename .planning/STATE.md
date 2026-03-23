@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
 status: Phase 89 complete — milestone ready for closure
-stopped_at: Completed 86-01-PLAN.md
-last_updated: "2026-03-23T15:11:58.189Z"
+stopped_at: Completed 85-01-PLAN.md
+last_updated: "2026-03-23T15:14:54.910Z"
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 16
-  completed_plans: 4
+  completed_plans: 7
 ---
 
 # State
@@ -46,6 +46,16 @@ Plan: 1/1 — done
 - [Phase 83]: Only _awardFarFutureCoinJackpot selects winners from ticketQueue; all other jackpots use traitBurnTicket
 - [Phase 86]: DCJ-03: Near-future coin budget silent skip assessed as intentional design per NatSpec at JM:2403-2404
 - [Phase 86]: DCJ-01: v3.8 stale far-future key claim (readKey -> _tqFarFutureKey) classified INFO
+- [Phase 88]: Slot shifts (27 of 42 DGS) are INFO-level -- caused by v3.8 Phase 73 boon packing, not security issues
+- [Phase 88]: All 55 v3.8 verdicts CONFIRMED SAFE -- v3.9 changes expanded protection (FF key space + rngLockedFlag guard), never weakened it
+- [Phase 85]: PAY-02 payout specification conflates FINAL_DAY shares with all-day shares and claims 4 winners; actual: 321 max across 4 buckets with two share packings
+- [Phase 85]: v3.8 dailyEthPhase slot offset wrong (Slot 0:31 vs actual Slot 1:0); dailyCarryoverEthPool and dailyCarryoverWinnerCap are R/W not W-only
+- [Phase 85]: CMT-V32-001 still unresolved (ticketSpent NatSpec); CMT-V32-002 resolved (inline comment updated)
+- [Phase 84]: 6 currentPrizePool write sites and 5 read sites confirmed with file:line; forge inspect confirmed slots 2/3/14
+- [Phase 84]: 13 prizePoolFrozen check sites classified: 8 REDIRECT, 3 REVERT, 2 SET/CLEAR
+- [Phase 84]: 3 v3.8 slot numbers incorrect (INFO): yieldAccumulator 100->71, levelPrizePool 45->30, autoRebuyState 36->25
+- [Phase 84]: VRF safety CONFIRMED: rawFulfillRandomWords does not read any prize pool variable
+- [Phase 84]: consolidatePrizePools NatSpec omits x00 yield dump step (INFO)
 
 ### Pending Todos
 
@@ -57,6 +67,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T15:11:58.187Z
-Stopped at: Completed 86-01-PLAN.md
+Last session: 2026-03-23T15:14:54.908Z
+Stopped at: Completed 85-01-PLAN.md
 Resume file: None
