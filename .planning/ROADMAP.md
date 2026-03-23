@@ -253,8 +253,8 @@ Phases execute in dependency order: 74 -> 75 -> 76 -> 77 + 78 (parallel-eligible
 | 76. Ticket Processing Extension | 1/1 | Complete    | 2026-03-23 |
 | 77. Jackpot Combined Pool + TQ-01 Fix | 1/1 | Complete    | 2026-03-23 |
 | 78. Edge Case Handling | 0/1 | Complete    | 2026-03-23 |
-| 79. RNG Commitment Window Proof | 1/1 | Complete   | 2026-03-23 |
-| 80. Test Suite | 0/2 | Not started | - |
+| 79. RNG Commitment Window Proof | 1/1 | Complete    | 2026-03-23 |
+| 80. Test Suite | 0/2 | Planned    |  |
 
 ## Deferred
 
