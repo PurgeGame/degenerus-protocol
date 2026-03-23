@@ -10,6 +10,11 @@ optimizer = true
 optimizer_runs = 2
 evm_version = "paris"
 
+# Gas limit for integration tests (default 2^64 - 1 for unit tests,
+# but block gas limit can restrict execution of multi-level game tests)
+gas_limit = 30_000_000_000
+block_gas_limit = 30_000_000_000
+
 # Remappings for OpenZeppelin and forge-std
 remappings = [
     "@openzeppelin/=node_modules/@openzeppelin/",
