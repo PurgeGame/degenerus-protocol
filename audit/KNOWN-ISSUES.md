@@ -30,11 +30,21 @@ These are architectural decisions, not vulnerabilities.
 
 ### v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit (2026-03-23)
 
-3 INFO findings from Phase 81. No HIGH, MEDIUM, or LOW.
+51 INFO findings across 8 phases (81-88). No HIGH, MEDIUM, or LOW.
 
-- **DSC-01 (INFO):** v3.9 RNG commitment window proof describes reverted combined pool code (2bf830a2). Proof conclusions still valid -- FF-only is strictly simpler. Proof document needs rewriting before C4A audit.
-- **DSC-02 (INFO):** `sampleFarFutureTickets` view function at DG:2681 reads from `_tqWriteKey` instead of `_tqFarFutureKey` for far-future levels. Off-chain consumers receive empty results. No on-chain impact.
-- **DSC-03 (INFO):** NatSpec at GS:533 claims uint32 cap but code uses `unchecked` arithmetic. Overflow requires > total ETH supply -- physically infeasible.
+Two findings initially reported above INFO were withdrawn as false positives during Phase 87 audit:
+- ~~DEC-01 (MEDIUM)~~: `decBucketOffsetPacked` collision between regular and terminal decimator -- withdrawn because regular decimator never resolves at a stalled level and `poolWei == 0` guard prevents access.
+- ~~DGN-01 (LOW)~~: `_collectBetFunds` uses `<=` instead of `<` for claimable balance -- withdrawn because `<=` is intentional due to 1-wei sentinel in `claimableWinnings`.
+
+Key findings by phase:
+- **Phase 81 (Ticket Creation):** DSC-01 (stale v3.9 proof), DSC-02 (wrong key in sampleFarFutureTickets view), DSC-03 (NatSpec/unchecked mismatch)
+- **Phase 82 (Ticket Processing):** P82-01 through P82-06 (byte offset, setter attribution, missing writer, line drifts)
+- **Phase 83 (Winner Selection):** 0 new findings; DSC-01/DSC-02 independently re-confirmed
+- **Phase 84 (Prize Pool):** DSC-84-01 through DSC-84-06 (slot shifts from boon packing, line drift, NatSpec gaps, freeze redirect caveat)
+- **Phase 85 (Daily ETH Jackpot):** 9 new INFO (v3.8 slot/access discrepancies, line drifts, scope omission)
+- **Phase 86 (Daily Coin+Ticket):** 6 new INFO (stale FF key claim, line drifts, duplicate winners by design, level arithmetic asymmetry)
+- **Phase 87 (Other Jackpots):** 22 INFO + 2 withdrawn (earlybird dust/truncation/PRNG, BAF zero-score/dead code, decimator design patterns, degenerette auto-rebuy/decorative state/frozen guard)
+- **Phase 88 (RNG Re-verification):** 0 new findings; 55/55 v3.8 rows confirmed SAFE, 27 slot shifts documented
 
 See `audit/v4.0-findings-consolidated.md`.
 
