@@ -1,102 +1,101 @@
-# Requirements: Degenerus Protocol — VRF Commitment Window Audit
+# Requirements: Degenerus Protocol — Far-Future Ticket Fix
 
-**Defined:** 2026-03-22
+**Defined:** 2026-03-23
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v3.8 Requirements
+## v3.9 Requirements
 
-Requirements for VRF commitment window audit. Each maps to roadmap phases.
+Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 
-### Commitment Window Inventory
+### Storage Layer
 
-- [x] **CW-01**: Every storage variable written or read by VRF fulfillment (rawFulfillRandomWords -> all downstream consumers) is cataloged with its slot, contract, and purpose
-- [x] **CW-02**: Every storage variable that feeds into VRF-dependent outcome computations is cataloged (backward trace from outcome to committed inputs)
-- [x] **CW-03**: For each cataloged variable, every external/public function that can mutate it is identified with call-graph depth (direct + indirect via internal calls)
-- [x] **CW-04**: Cross-reference proof that no external function callable by a non-admin actor can mutate any committed input between VRF request and fulfillment
+- [x] **STORE-01**: A third key space constant (TICKET_FAR_FUTURE_BIT = 1 << 22) exists in DegenerusGameStorage with helper function _tqFarFutureKey(lvl)
+- [x] **STORE-02**: The three key spaces (Slot 0, Slot 1, Far Future) are non-colliding for all valid level values
 
-### Mutation Analysis
+### Ticket Routing (Central Fix)
 
-- [x] **MUT-01**: Each variable receives a binary verdict: SAFE (immutable in commitment window) or VULNERABLE (mutable by player action in window)
-- [x] **MUT-02**: Every VULNERABLE variable includes a specific fix recommendation with severity rating
-- [x] **MUT-03**: Call-graph analysis covers indirect mutation paths (function A -> internal B -> writes variable C) to at least 3 levels of depth
+- [x] **ROUTE-01**: _queueTickets and _queueTicketsScaled route to _tqFarFutureKey when targetLevel > level + 6 -- single fix point covering ALL callers (lootbox, whale, vault, endgame, decimator, jackpot auto-rebuy)
+- [x] **ROUTE-02**: Tickets targeting level + 0 through level + 6 continue routing to _tqWriteKey (unchanged near-future behavior)
+- [x] **ROUTE-03**: _queueTickets reverts when writing to the FF key while rngLocked is true, EXCEPT for calls originating from advanceGame (which holds the lock and queues vault/sDGNRS perpetual tickets as part of the advance flow)
 
-### Coinflip RNG Path
+### Ticket Processing
 
-- [x] **COIN-01**: Full coinflip lifecycle traced: bet placement -> RNG request -> fulfillment -> roll computation -> payout, with every state transition identified
-- [x] **COIN-02**: Commitment window analysis specific to coinflip: what player-controllable state exists between bet and resolution
-- [x] **COIN-03**: Multi-tx attack sequences modeled: bet + manipulate + claim patterns tested against commitment window
+- [x] **PROC-01**: processFutureTicketBatch drains the far-future key for each level after the read-side queue is fully drained
+- [x] **PROC-02**: Cursor state tracking distinguishes read-side vs far-future processing (ticketLevel with FF bit)
+- [x] **PROC-03**: processFutureTicketBatch returns finished = true only when both queues (read-side + far-future) are drained
 
-### advanceGame Day RNG
+### Jackpot Eligibility
 
-- [x] **DAYRNG-01**: Daily VRF word flow traced through all consumers: jackpot selection, lootbox index assignment, coinflip resolution, with data dependency graph
-- [x] **DAYRNG-02**: Commitment window for advanceGame: what state can change between VRF request (in advanceGame) and fulfillment that affects outcome selection
-- [x] **DAYRNG-03**: Cross-day carry-over analysis: verify day N pending state doesn't leak into or contaminate day N+1 RNG outcomes
+- [ ] **JACK-01**: _awardFarFutureCoinJackpot selects winners from both write-side buffer AND far-future key combined
+- [ ] **JACK-02**: Winner index is computed over the combined pool length (len + ffLen) with correct routing to the right queue
 
-### Ticket Queue (Known Bug)
+### RNG Safety
 
-- [x] **TQ-01**: Deep-dive on ticket queue swap during jackpot phase -- full exploitation scenario documented with attacker steps
-- [x] **TQ-02**: Identify and verify fix for the ticket queue commitment window violation
-- [x] **TQ-03**: Pattern scan for similar commitment window violations across all contracts (any state that shifts between request and use)
+- [ ] **RNG-01**: No permissionless action during the VRF commitment window can influence which player wins a far-future coin jackpot draw -- the FF key is either frozen, guarded, or proven irrelevant to outcome selection when the RNG word is consumed
+- [x] **RNG-02**: The rngLocked guard in _queueTickets prevents all permissionless far-future ticket writes during the commitment window (lootbox opens, whale purchases, endgame/decimator rolls) while allowing advanceGame-origin writes to pass through
 
-### Boon Storage Packing
+### Edge Cases
 
-- [x] **BOON-01**: All per-player boon state (currently 29 separate mappings) packed into a 2-slot struct using uint24 day fields (45,000+ year range) and uint8 lootboxTier
-- [x] **BOON-02**: checkAndClearExpiredBoon rewritten to operate on packed struct with single SLOAD per slot instead of 29 separate SLOADs
-- [x] **BOON-03**: _applyBoon rewritten to read-modify-write packed struct instead of individual mapping writes
-- [x] **BOON-04**: All boon consumption functions (consumeCoinflipBoon, consumePurchaseBoost, consumeDecimatorBoost, consumeActivityBoon) updated for packed layout
-- [x] **BOON-05**: Lootbox boost tier logic simplified from 3 separate bool+day+deityDay mappings to single tier field in packed struct
-- [ ] **BOON-06**: All existing tests pass after storage layout change with equivalent behavior
+- [ ] **EDGE-01**: Far-future tickets opened after their target level enters the +2 to +6 near-future window are handled correctly (no double-counting or stranding)
+- [ ] **EDGE-02**: Far-future tickets that are already processed by processFutureTicketBatch cannot be re-processed if a new lootbox adds more tickets to the same FF key level
+- [ ] **EDGE-03**: The TQ-01 fix (_tqWriteKey -> _tqReadKey at JM:2544) is included or superseded by the JACK-01 combined pool approach
+
+### Verification
+
+- [ ] **TEST-01**: Unit test confirms far-future tickets from ALL sources (lootbox, whale, vault, endgame) land in FF key, not write key
+- [ ] **TEST-02**: Unit test confirms processFutureTicketBatch drains FF key entries and mints traits
+- [ ] **TEST-03**: Unit test confirms _awardFarFutureCoinJackpot finds winners from FF key entries
+- [ ] **TEST-04**: Unit test confirms _queueTickets reverts for FF key writes when rngLocked is true (permissionless callers) but allows advanceGame-origin writes
+- [ ] **TEST-05**: Integration test advances through multiple levels and verifies far-future tickets from all sources are processed correctly (no stranding)
 
 ## Future Requirements
 
-### Deferred (v3.3+)
+### Deferred
 
-- **GOV-FUZZ-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
+- **GOV-FUZZ-01**: Foundry fuzz invariant tests for governance
 - **GOV-FORMAL-01**: Formal verification of vote counting arithmetic via Halmos
-- **GOV-SIM-01**: Monte Carlo simulation of governance outcomes under various voter distributions
-- **GAS-PACK-01**: Storage packing implementation -- 3 opportunities documented in v3.3 gas analysis (up to 66,300 gas savings)
+- **GOV-SIM-01**: Monte Carlo simulation of governance outcomes
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
 | Frontend code | Not in audit scope |
-| Off-chain infrastructure | VRF coordinator is external |
-| Governance | Fully audited in v2.1 |
-| VRF pipeline internals | Audited in v3.7 (request/fulfillment/stall/recovery) |
+| Near-future ticket routing (+0 to +6) | Already handled by _prepareFutureTickets |
+| _rollTargetLevel changes | Roll distribution unchanged |
+| _swapTicketSlot / _swapAndFreeze | Double-buffer mechanics unchanged |
+| Constructor pre-queue (levels 1-100) | One-time deploy, already in both buffers |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CW-01 | Phase 68 | Complete |
-| CW-02 | Phase 68 | Complete |
-| CW-03 | Phase 68 | Complete |
-| CW-04 | Phase 69 | Complete |
-| MUT-01 | Phase 69 | Complete |
-| MUT-02 | Phase 69 | Complete |
-| MUT-03 | Phase 69 | Complete |
-| COIN-01 | Phase 70 | Complete |
-| COIN-02 | Phase 70 | Complete |
-| COIN-03 | Phase 70 | Complete |
-| DAYRNG-01 | Phase 71 | Complete |
-| DAYRNG-02 | Phase 71 | Complete |
-| DAYRNG-03 | Phase 71 | Complete |
-| TQ-01 | Phase 72 | Complete |
-| TQ-02 | Phase 72 | Complete |
-| TQ-03 | Phase 72 | Complete |
-| BOON-01 | Phase 73 | Complete |
-| BOON-02 | Phase 73 | Complete |
-| BOON-03 | Phase 73 | Complete |
-| BOON-04 | Phase 73 | Complete |
-| BOON-05 | Phase 73 | Complete |
-| BOON-06 | Phase 73 | Pending |
+| STORE-01 | Phase 74 | Complete |
+| STORE-02 | Phase 74 | Complete |
+| ROUTE-01 | Phase 75 | Complete |
+| ROUTE-02 | Phase 75 | Complete |
+| ROUTE-03 | Phase 75 | Complete |
+| PROC-01 | Phase 76 | Complete |
+| PROC-02 | Phase 76 | Complete |
+| PROC-03 | Phase 76 | Complete |
+| JACK-01 | Phase 77 | Pending |
+| JACK-02 | Phase 77 | Pending |
+| RNG-01 | Phase 79 | Pending |
+| RNG-02 | Phase 75 | Complete |
+| EDGE-01 | Phase 78 | Pending |
+| EDGE-02 | Phase 78 | Pending |
+| EDGE-03 | Phase 77 | Pending |
+| TEST-01 | Phase 80 | Pending |
+| TEST-02 | Phase 80 | Pending |
+| TEST-03 | Phase 80 | Pending |
+| TEST-04 | Phase 80 | Pending |
+| TEST-05 | Phase 80 | Pending |
 
 **Coverage:**
-- v3.8 requirements: 22 total
-- Mapped to phases: 22
+- v3.9 requirements: 20 total
+- Mapped to phases: 20
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-22*
-*Last updated: 2026-03-22 after roadmap creation*
+*Requirements defined: 2026-03-23*
+*Updated: 2026-03-23 — expanded scope to all far-future ticket sources + advanceGame exemption*

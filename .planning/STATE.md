@@ -1,63 +1,45 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.8
-milestone_name: VRF Commitment Window Audit
+milestone: v3.9
+milestone_name: Far-Future Ticket Fix
 status: Phase complete — ready for verification
-stopped_at: Completed 72-02-PLAN.md
-last_updated: "2026-03-23T00:31:43.809Z"
+stopped_at: Completed 76-01-PLAN.md
+last_updated: "2026-03-23T02:24:14.636Z"
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 13
-  completed_plans: 12
+  total_phases: 7
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
 ---
 
 # State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-22)
+See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 72 — ticket-queue-deep-dive-pattern-scan
+**Current focus:** Phase 76 — ticket-processing-extension
 
 ## Current Position
 
-Phase: 72 (ticket-queue-deep-dive-pattern-scan) — EXECUTING
-Plan: 2 of 2
+Phase: 76 (ticket-processing-extension) — EXECUTING
+Plan: 1 of 1
 
 ## Accumulated Context
 
 ### Decisions
 
-None (fresh milestone).
-
-- [Phase 68-commitment-window-inventory]: Degenerette confirmed as 7th VRF-dependent outcome category (reads lootboxRngWordByIndex at resolution)
-- [Phase 68-commitment-window-inventory]: Backward trace independently found 17 variables not in forward trace -- validates forward+backward methodology
-- [Phase 68-commitment-window-inventory]: Mutation surface: search ALL modules for each variable write due to delegatecall shared storage
-- [Phase 68-commitment-window-inventory]: All 51 variable slot numbers validated via forge inspect -- zero discrepancies
-- [Phase 69]: All 51 VRF-touched variables SAFE: five layered defense mechanisms (rngLockedFlag, prizePoolFrozen, double-buffer, index-keying, day-keying) provide complete commitment window coverage
-- [Phase 69]: Mid-day VRF window harmless by architecture: rawFulfillRandomWords only stores lootboxRngWordByIndex without reading mutable state
-- [Phase 73]: Used // @deprecated comments instead of NatSpec /// @deprecated (Solidity 0.8.34 rejects @deprecated on non-public state variables)
-- [Phase 73]: BoonPacked struct at storage slot 107 (after lastTerminalDecClaimRound at slot 106) -- all 29 old boon mapping slots preserved unchanged
-- [Phase 69-mutation-verdicts]: CW-04 exhaustive proof: all 87 permissionless paths enumerated with 7 protection categories, count verified
-- [Phase 73]: Lootbox boost event emission decodes tier back to BPS via _lootboxTierToBps to preserve original event values
-- [Phase 73]: Lazy pass boon consumption re-reads slot1 before clearing to handle deity-path pre-clearing correctly
-- [Phase 70]: Game-over deposits unblocked by design -- lost deposits are INFO-level, not exploitable
-- [Phase 70]: sDGNRS auto-claim during processCoinflipPayouts safe -- BAF exclusion (line 556) prevents rngLocked revert
-- [Phase 70]: All 10 BurnieCoinflip entry points SAFE via five layered protections: day+1 keying, rngLockedFlag, pure-function outcome, access control, outcome-irrelevant writes
-- [Phase 71]: Daily VRF word has 10 consumers (not 9): awardFinalDayDgnrsReward is a distinct consumer at JackpotModule:773
-- [Phase 71]: DAYRNG-02 SAFE: dual sub-window proof (Periods A/B/C), 11 permissionless actions tabulated, depositCoinflip targets day+1, _requestRng before _swapAndFreeze
-- [Phase 70]: All 7 multi-TX attack sequences SAFE: day+1 keying is the primary defense defeating 4/7 attacks
-- [Phase 70]: Game-over predictable fallback is Informational: deposits allowed but stranded due to day+1 keying
-- [Phase 70]: rngLockedFlag is the only defense for auto-rebuy extraction (Attack 2) -- without it, carry extraction after seeing VRF word would be exploitable
-- [Phase 71]: Contamination defined precisely as day N RNG OUTCOME influencing day N+1 RNG WORD or SELECTION MECHANISM -- carry-over game context excluded by definition
-- [Phase 71]: Exhaustive grep confirms rngWordByDay has exactly 2 write locations (lines 1533, 1484) -- all others are reads/guards, proving write-once immutability
-- [Phase 72]: Severity MEDIUM not HIGH: stolen asset is BURNIE (flipCredit) not ETH
-- [Phase 72]: Fix Option A (_tqWriteKey -> _tqReadKey) recommended: root cause fix, one-line, aligns with processTicketBatch pattern
-- [Phase 72]: Both call paths affected: payDailyJackpotCoinAndTickets (jackpot phase) AND payDailyCoinJackpot (purchase phase)
-- [Phase 72]: purchaseCoin() equally exploitable: COIN_PURCHASE_CUTOFF is liveness guard (90d), not commitment window guard
-- [Phase 72]: 37 state variables scanned across 10 VRF categories: 1 VULNERABLE (TQ-01), 36 SAFE via five-layer defense model
+- [v3.8 Phase 72]: TQ-01 severity MEDIUM (BURNIE not ETH). Fix Option A (_tqWriteKey -> _tqReadKey) recommended.
+- [v3.8 Phase 72]: Both call paths affected: payDailyJackpotCoinAndTickets AND payDailyCoinJackpot.
+- [v3.9 Roadmap]: EDGE-03 (TQ-01 fix) grouped with JACK-01/JACK-02 -- combined pool approach may supersede the simple _tqReadKey fix.
+- [v3.9 Roadmap]: rngLocked guard (RNG-02) grouped with lootbox routing since the guard lives in the same code path as ticket routing.
+- [Phase 74]: Bit 22 reserved for far-future key space, reducing max level from 2^23-1 to 2^22-1 (still millennia)
+- [Phase 74]: _tqFarFutureKey is pure (not view) -- far-future keys are slot-independent
+- [Phase 75]: Consolidate error RngLocked() in DegenerusGameStorage base, remove from inheriting contracts
+- [Phase 75]: Cache level outside _queueTicketRange loop as currentLevel to avoid per-iteration SLOAD
+- [Phase 76]: Return after read-side drain, start FF on next call (simplicity over intra-call transition)
+- [Phase 76]: Strip FF bit in _prepareFutureTickets for resume (not in processFutureTicketBatch)
 
 ### Pending Todos
 
@@ -65,11 +47,10 @@ None.
 
 ### Blockers/Concerns
 
-- Ticket queue swap during jackpot phase is a known commitment window violation — motivates this milestone.
-- COIN-01 and DAYRNG-01 were previously deferred in ROADMAP.md — now promoted to v3.8 scope.
+- Phase 73 (Boon Storage Packing) Plan 03 not formally executed -- test verification pending from v3.8.
 
 ## Session Continuity
 
-Last session: 2026-03-23T00:31:43.807Z
-Stopped at: Completed 72-02-PLAN.md
+Last session: 2026-03-23T02:24:14.634Z
+Stopped at: Completed 76-01-PLAN.md
 Resume file: None
