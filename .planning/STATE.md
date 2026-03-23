@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
-status: Phase 89 complete — milestone ready for closure
+status: Ready to plan
 stopped_at: Completed 85-01-PLAN.md
-last_updated: "2026-03-23T15:14:54.910Z"
+last_updated: "2026-03-23T15:15:46.311Z"
 progress:
   total_phases: 8
   completed_phases: 3
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 
 ## Current Position
 
-Phase: 89 (consolidated-findings) — COMPLETE
-Plan: 1/1 — done
+Phase: 87
+Plan: Not started
 
 ## Accumulated Context
 
@@ -56,6 +56,13 @@ Plan: 1/1 — done
 - [Phase 84]: 3 v3.8 slot numbers incorrect (INFO): yieldAccumulator 100->71, levelPrizePool 45->30, autoRebuyState 36->25
 - [Phase 84]: VRF safety CONFIRMED: rawFulfillRandomWords does not read any prize pool variable
 - [Phase 84]: consolidatePrizePools NatSpec omits x00 yield dump step (INFO)
+- [Phase 87]: Early-bird lootbox: 100-winner loop with EntropyLib.entropyStep, trait selection, level offset roll, budget recycled to nextPrizePool
+- [Phase 87]: Final-day DGNRS: 1% Reward pool via soloBucketIndex + lastDailyJackpotWinningTraits dependency verified correct ordering
+- [Phase 87]: BAF-01: Inconsistent zero-score handling between far-future (allows) and scatter (strict) selection, INFO
+- [Phase 87]: BAF-02: winnerMask constructed by DJ but discarded by EM at EM:361 — dead code with wasted gas, INFO
+- [Phase 87]: DEC-01: decBucketOffsetPacked collision — terminal decimator overwrites regular decimator packed offsets at same level, MEDIUM
+- [Phase 87]: DGN-01: Off-by-one in degenerette claimable balance check at DDM:552 (<=  should be <)
+- [Phase 87]: DGN-02: Degenerette _addClaimableEth bypasses auto-rebuy unlike JM/EM/DM versions
 
 ### Pending Todos
 
