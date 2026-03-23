@@ -175,10 +175,10 @@
 | 82. Ticket Processing Mechanics | 2/2 | Complete    | 2026-03-23 |
 | 83. Ticket Consumption & Winner Selection | 2/2 | Complete    | 2026-03-23 |
 | 84. Prize Pool Flow & currentPrizePool Deep Dive | 1/1 | Complete | 2026-03-23 |
-| 85. Daily ETH Jackpot | 2/2 | Complete   | 2026-03-23 |
+| 85. Daily ETH Jackpot | 2/2 | Complete    | 2026-03-23 |
 | 86. Daily Coin + Ticket Jackpot | 2/2 | Complete    | 2026-03-23 |
 | 87. Other Jackpots | 4/4 | Complete | 2026-03-23 |
-| 88. RNG-Dependent Variable Re-verification | 2/1 | Complete   | 2026-03-23 |
+| 88. RNG-Dependent Variable Re-verification | 2/1 | Complete    | 2026-03-23 |
 | 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
 
 ### Phase 82: Ticket Processing Mechanics
