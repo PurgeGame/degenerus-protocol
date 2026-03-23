@@ -246,8 +246,8 @@ Phases execute in dependency order: 74 -> 75 -> 76 -> 77 + 78 (parallel-eligible
 | 74. Storage Foundation | 1/1 | Complete    | 2026-03-23 |
 | 75. Ticket Routing + RNG Guard | 1/1 | Complete    | 2026-03-23 |
 | 76. Ticket Processing Extension | 1/1 | Complete    | 2026-03-23 |
-| 77. Jackpot Combined Pool + TQ-01 Fix | 1/1 | Complete   | 2026-03-23 |
-| 78. Edge Case Handling | 0/1 | Not started | - |
+| 77. Jackpot Combined Pool + TQ-01 Fix | 1/1 | Complete    | 2026-03-23 |
+| 78. Edge Case Handling | 0/1 | Planned    |  |
 | 79. RNG Commitment Window Proof | 0/TBD | Not started | - |
 | 80. Test Suite | 0/TBD | Not started | - |
 
