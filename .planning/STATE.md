@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
 status: Phase 89 complete — milestone ready for closure
-stopped_at: Completed 86-02-PLAN.md
-last_updated: "2026-03-23T15:10:29.933Z"
+stopped_at: Completed 86-01-PLAN.md
+last_updated: "2026-03-23T15:11:58.189Z"
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 16
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # State
@@ -42,6 +42,10 @@ Plan: 1/1 — done
 - [Phase 86]: NF-01: Duplicate winners from _randTraitTicket assessed as intentional gas-efficient design
 - [Phase 86]: NF-02: Early-bird lootbox level arithmetic (price lvl+1, select lvl, target lvl+1) confirmed correct
 - [Phase 86]: NF-03: Phase 81 Path #12 references non-existent _distributeTicketScatter; actual function is _distributeTicketsToBucket
+- [Phase 83]: _resolveTraitWinners is correct function name (research used stale _processJackpotBucket)
+- [Phase 83]: Only _awardFarFutureCoinJackpot selects winners from ticketQueue; all other jackpots use traitBurnTicket
+- [Phase 86]: DCJ-03: Near-future coin budget silent skip assessed as intentional design per NatSpec at JM:2403-2404
+- [Phase 86]: DCJ-01: v3.8 stale far-future key claim (readKey -> _tqFarFutureKey) classified INFO
 
 ### Pending Todos
 
@@ -53,6 +57,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T15:10:29.929Z
-Stopped at: Completed 86-02-PLAN.md
+Last session: 2026-03-23T15:11:58.187Z
+Stopped at: Completed 86-01-PLAN.md
 Resume file: None
