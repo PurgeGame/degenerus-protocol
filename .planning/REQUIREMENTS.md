@@ -36,7 +36,7 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 
 - [x] **TQ-01**: Deep-dive on ticket queue swap during jackpot phase -- full exploitation scenario documented with attacker steps
 - [x] **TQ-02**: Identify and verify fix for the ticket queue commitment window violation
-- [ ] **TQ-03**: Pattern scan for similar commitment window violations across all contracts (any state that shifts between request and use)
+- [x] **TQ-03**: Pattern scan for similar commitment window violations across all contracts (any state that shifts between request and use)
 
 ### Boon Storage Packing
 
@@ -84,7 +84,7 @@ Requirements for VRF commitment window audit. Each maps to roadmap phases.
 | DAYRNG-03 | Phase 71 | Complete |
 | TQ-01 | Phase 72 | Complete |
 | TQ-02 | Phase 72 | Complete |
-| TQ-03 | Phase 72 | Pending |
+| TQ-03 | Phase 72 | Complete |
 | BOON-01 | Phase 73 | Complete |
 | BOON-02 | Phase 73 | Complete |
 | BOON-03 | Phase 73 | Complete |

@@ -136,7 +136,7 @@
 - [x] **Phase 69: Mutation Verdicts** - 2 plans, 4 requirements (CW-04, MUT-01, MUT-02, MUT-03) (completed 2026-03-22)
 - [x] **Phase 70: Coinflip Commitment Window** - 2 plans, 3 requirements (COIN-01, COIN-02, COIN-03) (completed 2026-03-22)
 - [x] **Phase 71: advanceGame Day RNG Window** - 2 plans, 3 requirements (DAYRNG-01, DAYRNG-02, DAYRNG-03) (completed 2026-03-22)
-- [ ] **Phase 72: Ticket Queue Deep-Dive + Pattern Scan** - 2 plans, 3 requirements (TQ-01, TQ-02, TQ-03)
+- [x] **Phase 72: Ticket Queue Deep-Dive + Pattern Scan** - 2 plans, 3 requirements (TQ-01, TQ-02, TQ-03) (completed 2026-03-23)
 - [ ] **Phase 73: Boon Storage Packing** - 3 plans, 6 requirements (BOON-01, BOON-02, BOON-03, BOON-04, BOON-05, BOON-06)
 
 ## Phase Details
@@ -202,10 +202,10 @@ Plans:
   1. A full exploitation scenario for ticket queue swap during jackpot phase is documented with step-by-step attacker actions, preconditions, and outcome manipulation
   2. A fix for the ticket queue commitment window violation is identified and verified (or proven unnecessary with evidence)
   3. A cross-contract pattern scan is complete covering all contracts for similar commitment window violations (any state that shifts between VRF request and use) with per-finding verdict
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 72-01-PLAN.md -- Exploitation scenario + fix analysis (TQ-01, TQ-02)
-- [ ] 72-02-PLAN.md -- Cross-contract commitment window pattern scan (TQ-03)
+- [x] 72-02-PLAN.md -- Cross-contract commitment window pattern scan (TQ-03)
 
 ### Phase 73: Boon Storage Packing
 **Goal**: All per-player boon state packed into minimum storage slots, all boon functions rewritten for packed layout, all tests passing
@@ -234,7 +234,7 @@ Phases execute in numeric order: 68 -> 69 -> 70/71 (parallel-eligible) -> 72. Ph
 | 69. Mutation Verdicts | 2/2 | Complete    | 2026-03-22 |
 | 70. Coinflip Commitment Window | 2/2 | Complete    | 2026-03-22 |
 | 71. advanceGame Day RNG Window | 2/2 | Complete    | 2026-03-22 |
-| 72. Ticket Queue Deep-Dive + Pattern Scan | 1/2 | In Progress|  |
+| 72. Ticket Queue Deep-Dive + Pattern Scan | 2/2 | Complete   | 2026-03-23 |
 | 73. Boon Storage Packing | 2/3 | In Progress|  |
 
 ## Deferred
