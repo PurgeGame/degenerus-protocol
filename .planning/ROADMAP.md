@@ -234,7 +234,10 @@ Plans:
   3. A unit test proves _awardFarFutureCoinJackpot can find and award winners from the FF key entries
   4. A unit test proves lootbox opens with far-future results revert when rngLocked == true
   5. An integration test advances through multiple levels and verifies zero far-future tickets are stranded (all processed, all jackpot-eligible)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 80-01-PLAN.md -- Verify existing test coverage for TEST-01 through TEST-04
+- [x] 80-02-PLAN.md -- TDD: multi-level integration test for TEST-05 (zero FF ticket stranding)
 
 ## Progress
 
@@ -249,7 +252,7 @@ Phases execute in dependency order: 74 -> 75 -> 76 -> 77 + 78 (parallel-eligible
 | 77. Jackpot Combined Pool + TQ-01 Fix | 1/1 | Complete    | 2026-03-23 |
 | 78. Edge Case Handling | 0/1 | Complete    | 2026-03-23 |
 | 79. RNG Commitment Window Proof | 0/TBD | Not started | - |
-| 80. Test Suite | 0/TBD | Not started | - |
+| 80. Test Suite | 1/2 | In progress | - |
 
 ## Deferred
 
