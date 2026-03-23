@@ -67,7 +67,8 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ processFutureTicketBatch drains FF key — processes far-future queue alongside read-side with FF-bit cursor encoding — v3.9 Phase 76
 - ✓ _awardFarFutureCoinJackpot reads both pools — combined read-buffer + FF key selection, TQ-01 fixed — v3.9 Phase 77
 - ✓ rngLocked guard on lootbox opens — belt-and-suspenders RNG safety — v3.9 Phase 75
-- [ ] Edge case handling — lootbox opened after FF tickets already processed at near-future boundary
+- ✓ Edge case handling — EDGE-01 (no double-counting) and EDGE-02 (no re-processing) proven safe with 5 Foundry tests + formal proof document — v3.9 Phase 78
+- ✓ RNG commitment window proof — 12 mutation paths to FF key all SAFE, combined pool length invariant proven, v3.8 backward-trace methodology applied — v3.9 Phase 79
 
 ### Deferred (v3.3+)
 
@@ -155,6 +156,10 @@ v3.9 Phase 76 complete — processFutureTicketBatch extended with dual-queue dra
 
 v3.9 Phase 77 complete — _awardFarFutureCoinJackpot now selects winners from combined read-buffer + FF-key population. TQ-01 (MEDIUM) resolved: _tqWriteKey eliminated from the function, replaced by _tqReadKey + _tqFarFutureKey combined pool. 8 Foundry tests proving JACK-01/JACK-02/EDGE-03.
 
+v3.9 Phase 78 complete — Both edge cases (EDGE-01: no double-counting between FF key and write buffer, EDGE-02: no re-processing after drain) proven structurally safe. 5 Foundry tests as regression guards + formal proof document with exact source line references. Zero contract code changes — both properties are inherent in the Phase 74-76 implementation.
+
+v3.9 Phase 79 complete — 354-line formal proof document applying v3.8 backward-trace methodology to _awardFarFutureCoinJackpot combined pool. 12 mutation paths enumerated and all receive SAFE verdict. Combined pool length invariant proven: readLen frozen by double-buffer swap, ffLen frozen by rngLockedFlag guard. RNG-01 requirement satisfied.
+
 **Grand total across all milestones:** 90+ findings (16 LOW, 74+ INFO), 0 MEDIUM outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in Phase 77 via combined pool approach.
 
 **Known Issues:**
@@ -180,4 +185,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-23 after v3.9 milestone start (Far-Future Ticket Fix)*
+*Last updated: 2026-03-23 after v3.9 Phase 79 (RNG Commitment Window Proof)*

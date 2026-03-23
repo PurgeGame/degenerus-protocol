@@ -42,10 +42,10 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 
 ### Verification
 
-- [ ] **TEST-01**: Unit test confirms far-future tickets from ALL sources (lootbox, whale, vault, endgame) land in FF key, not write key
-- [ ] **TEST-02**: Unit test confirms processFutureTicketBatch drains FF key entries and mints traits
-- [ ] **TEST-03**: Unit test confirms _awardFarFutureCoinJackpot finds winners from FF key entries
-- [ ] **TEST-04**: Unit test confirms _queueTickets reverts for FF key writes when rngLocked is true (permissionless callers) but allows advanceGame-origin writes
+- [x] **TEST-01**: Unit test confirms far-future tickets from ALL sources (lootbox, whale, vault, endgame) land in FF key, not write key
+- [x] **TEST-02**: Unit test confirms processFutureTicketBatch drains FF key entries and mints traits
+- [x] **TEST-03**: Unit test confirms _awardFarFutureCoinJackpot finds winners from FF key entries
+- [x] **TEST-04**: Unit test confirms _queueTickets reverts for FF key writes when rngLocked is true (permissionless callers) but allows advanceGame-origin writes
 - [ ] **TEST-05**: Integration test advances through multiple levels and verifies far-future tickets from all sources are processed correctly (no stranding)
 
 ## Future Requirements
@@ -85,10 +85,10 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 | EDGE-01 | Phase 78 | Complete |
 | EDGE-02 | Phase 78 | Complete |
 | EDGE-03 | Phase 77 | Complete |
-| TEST-01 | Phase 80 | Pending |
-| TEST-02 | Phase 80 | Pending |
-| TEST-03 | Phase 80 | Pending |
-| TEST-04 | Phase 80 | Pending |
+| TEST-01 | Phase 80 | Complete |
+| TEST-02 | Phase 80 | Complete |
+| TEST-03 | Phase 80 | Complete |
+| TEST-04 | Phase 80 | Complete |
 | TEST-05 | Phase 80 | Pending |
 
 **Coverage:**
