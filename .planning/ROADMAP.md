@@ -162,10 +162,10 @@
 - [x] **Phase 81: Ticket Creation & Queue Mechanics** — 2 plans, 8 requirements (TKT-01 through TKT-06, DSC-01, DSC-02) (completed 2026-03-23)
 - [ ] **Phase 82: Ticket Processing Mechanics** — 2 plans, 6 requirements (TPROC-01 through TPROC-06)
 - [ ] **Phase 83: Ticket Consumption & Winner Selection** — 2 plans, 4 requirements (TCON-01 through TCON-04)
-- [ ] **Phase 84: Prize Pool Flow & currentPrizePool Deep Dive** — 1 plan, 6 requirements (PPF-01 through PPF-06)
+- [x] **Phase 84: Prize Pool Flow & currentPrizePool Deep Dive** — 1 plan, 6 requirements (PPF-01 through PPF-06) (completed 2026-03-23)
 - [ ] **Phase 85: Daily ETH Jackpot** — 2 plans, 5 requirements (DETH-01 through DETH-05)
 - [x] **Phase 86: Daily Coin + Ticket Jackpot** — 2 plans, 4 requirements (DCOIN-01 through DCOIN-04) (completed 2026-03-23)
-- [ ] **Phase 87: Other Jackpots** — 4 plans, 6 requirements (OJCK-01 through OJCK-06)
+- [x] **Phase 87: Other Jackpots** — 4 plans, 6 requirements (OJCK-01 through OJCK-06) (completed 2026-03-23)
 - [ ] **Phase 88: RNG-Dependent Variable Re-verification** — 2 plans, 4 requirements (RDV-01, RDV-02, RDV-03, RDV-04)
 - [x] **Phase 89: Consolidated Findings** — 1 plan, 3 requirements (CFND-01, CFND-02, CFND-03) (completed 2026-03-23)
 
@@ -174,11 +174,11 @@
 | 81. Ticket Creation & Queue Mechanics | 2/2 | Complete | 2026-03-23 |
 | 82. Ticket Processing Mechanics | 1/2 | In Progress|  |
 | 83. Ticket Consumption & Winner Selection | 0/2 | Planned    |  |
-| 84. Prize Pool Flow & currentPrizePool Deep Dive | 0/1 | Planned | — |
-| 85. Daily ETH Jackpot | 0/2 | Planned | — |
+| 84. Prize Pool Flow & currentPrizePool Deep Dive | 1/1 | Complete | 2026-03-23 |
+| 85. Daily ETH Jackpot | 1/2 | In Progress|  |
 | 86. Daily Coin + Ticket Jackpot | 2/2 | Complete   | 2026-03-23 |
-| 87. Other Jackpots | 0/4 | Planned | — |
-| 88. RNG-Dependent Variable Re-verification | 0/2 | Planned | — |
+| 87. Other Jackpots | 4/4 | Complete | 2026-03-23 |
+| 88. RNG-Dependent Variable Re-verification | 0/2 | Planned    |  |
 | 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
 
 ### Phase 82: Ticket Processing Mechanics
@@ -220,10 +220,10 @@ Plans:
 
 **Goal:** Trace the daily ETH jackpot distribution system -- BPS allocation, Phase 0/Phase 1 behavior, bucket/cursor winner selection, carryover mechanics -- with exhaustive file:line citations and discrepancy flagging against prior audit documentation.
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 85-01-PLAN.md — Trace payDailyJackpot entry points, BPS allocation table, budget split, Phase 0 vs Phase 1 behavior, early-burn path
+- [x] 85-01-PLAN.md — Trace payDailyJackpot entry points, BPS allocation table, budget split, Phase 0 vs Phase 1 behavior, early-burn path
 - [ ] 85-02-PLAN.md — Trace bucket/cursor algorithm, carryover mechanics, complete cross-reference, compile requirement verdicts
 
 **Requirements:** DETH-01, DETH-02, DETH-03, DETH-04, DETH-05
@@ -258,7 +258,7 @@ Plans:
 
 **Goal:** Re-verify every variable from the v3.8 commitment window inventory against current Solidity, confirming storage slots, protection mechanisms, and SAFE verdicts. Identify missing variables and document all v3.9 deltas.
 
-**Plans:** 2 plans
+**Plans:** 0/2 plans executed
 
 Plans:
 - [ ] 88-01-PLAN.md — Re-verify all 55 v3.8 verdict rows (DGS + CF + sDGNRS) with slot confirmation and delta assessment

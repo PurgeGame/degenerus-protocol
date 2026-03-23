@@ -143,20 +143,20 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 
 ### Prize Pool Flow & currentPrizePool Deep Dive
 
-- [ ] **PPF-01**: currentPrizePool storage slot confirmed, all writers enumerated with file:line
-- [ ] **PPF-02**: prizePoolsPacked storage layout documented (packed fields, bit positions, BPS allocations)
-- [ ] **PPF-03**: prizePoolFrozen freeze/unfreeze lifecycle traced with all trigger conditions
-- [ ] **PPF-04**: Prize pool consolidation mechanics documented with file:line
-- [ ] **PPF-05**: All VRF-dependent readers of currentPrizePool documented
-- [ ] **PPF-06**: Every discrepancy and new finding tagged
+- [x] **PPF-01**: currentPrizePool storage slot confirmed, all writers enumerated with file:line
+- [x] **PPF-02**: prizePoolsPacked storage layout documented (packed fields, bit positions, BPS allocations)
+- [x] **PPF-03**: prizePoolFrozen freeze/unfreeze lifecycle traced with all trigger conditions
+- [x] **PPF-04**: Prize pool consolidation mechanics documented with file:line
+- [x] **PPF-05**: All VRF-dependent readers of currentPrizePool documented
+- [x] **PPF-06**: Every discrepancy and new finding tagged
 
 ### Daily ETH Jackpot
 
-- [ ] **DETH-01**: currentPrizePool source, BPS allocation table, and split logic documented with file:line
-- [ ] **DETH-02**: Phase 0 vs Phase 1 jackpot behavior documented
+- [x] **DETH-01**: currentPrizePool source, BPS allocation table, and split logic documented with file:line
+- [x] **DETH-02**: Phase 0 vs Phase 1 jackpot behavior documented
 - [ ] **DETH-03**: Bucket/cursor winner selection algorithm documented with file:line
 - [ ] **DETH-04**: Carryover mechanics (unfilled buckets, excess, rollover) documented
-- [ ] **DETH-05**: Every discrepancy and new finding tagged
+- [x] **DETH-05**: Every discrepancy and new finding tagged
 
 ### Daily Coin + Ticket Jackpot
 
@@ -176,10 +176,10 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 
 ### RNG-Dependent Variable Re-verification
 
-- [ ] **RDV-01**: Every variable from v3.8 commitment window inventory Section 4 re-verified against current Solidity with storage slot confirmation
+- [x] **RDV-01**: Every variable from v3.8 commitment window inventory Section 4 re-verified against current Solidity with storage slot confirmation
 - [ ] **RDV-02**: Missing variables identified — state that should be in the RNG-dependent catalog but was missed
-- [ ] **RDV-03**: Delta assessment — variables that changed behavior since v3.8 audit documented
-- [ ] **RDV-04**: Every discrepancy and new finding tagged
+- [x] **RDV-03**: Delta assessment — variables that changed behavior since v3.8 audit documented
+- [x] **RDV-04**: Every discrepancy and new finding tagged
 
 ### Consolidated Findings
 
