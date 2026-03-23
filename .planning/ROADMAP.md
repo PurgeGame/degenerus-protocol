@@ -183,7 +183,7 @@
 | 88. RNG-Dependent Variable Re-verification | 2/1 | Complete    | 2026-03-23 |
 | 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
 | 90. Verification Backfill | 3/3 | Complete   | 2026-03-23 |
-| 91. Consolidated Findings Rewrite | 0/3 | Planned    |  |
+| 91. Consolidated Findings Rewrite | 1/3 | In Progress|  |
 
 ### Phase 82: Ticket Processing Mechanics
 
@@ -302,7 +302,7 @@ Plans:
 
 Plans:
 - [ ] 91-01-PLAN.md — Rewrite v4.0-findings-consolidated.md: add Phases 83-87 findings (~47 INFO; DEC-01 and DGN-01 withdrawn as false positives), update totals, mark FINAL
-- [ ] 91-02-PLAN.md — Update KNOWN-ISSUES.md audit history with full v4.0 phase coverage
+- [x] 91-02-PLAN.md — Update KNOWN-ISSUES.md audit history with full v4.0 phase coverage
 - [ ] 91-03-PLAN.md — Re-run cross-phase consistency check with full Phase 87 SUMMARYs; create 89-VERIFICATION.md
 
 **Requirements:** CFND-01, CFND-02, CFND-03

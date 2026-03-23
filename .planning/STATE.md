@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
-status: Phase complete — ready for verification
-stopped_at: Completed 90-03-PLAN.md
-last_updated: "2026-03-23T16:29:11.558Z"
+status: Ready to execute
+stopped_at: Completed 91-02-PLAN.md
+last_updated: "2026-03-23T20:25:38.060Z"
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 91 (consolidated-findings-rewrite) — EXECUTING
-Plan: 3 of 3
+Plan: 2 of 3
 
 ## Accumulated Context
 
@@ -58,6 +58,9 @@ Plan: 3 of 3
 - [Phase 90]: DEC-01 decBucketOffsetPacked collision documented as FALSE POSITIVE; DGN-01 off-by-one documented as FALSE POSITIVE; actual Phase 87 findings: 0 HIGH, 0 MEDIUM, 0 LOW, 21 INFO
 - [Phase 91]: DEC-01 and DGN-01 documented as withdrawn false positives in KNOWN-ISSUES.md audit history, not added to body sections
 - [Phase 90]: Coverage count corrected to 44/2 (not 43/3) because CFND-02 was already Complete from Phase 91-02
+- [Phase 91]: Final unique v4.0 finding count is 51 INFO (not ~47 from research estimate) after full Phase 87 dedup
+- [Phase 91]: DEC-01 and DGN-01 both WITHDRAWN as false positives -- CFND-02 satisfied without KNOWN-ISSUES body entries
+- [Phase 91]: Used 51 INFO count (corrected from ~47 research estimate) for KNOWN-ISSUES.md v4.0 audit history entry
 
 ### Pending Todos
 
@@ -69,6 +72,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T16:29:11.555Z
-Stopped at: Completed 90-03-PLAN.md
+Last session: 2026-03-23T20:25:38.058Z
+Stopped at: Completed 91-02-PLAN.md
 Resume file: None
