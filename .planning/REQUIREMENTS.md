@@ -31,7 +31,7 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 
 ### RNG Safety
 
-- [ ] **RNG-01**: No permissionless action during the VRF commitment window can influence which player wins a far-future coin jackpot draw -- the FF key is either frozen, guarded, or proven irrelevant to outcome selection when the RNG word is consumed
+- [x] **RNG-01**: No permissionless action during the VRF commitment window can influence which player wins a far-future coin jackpot draw -- the FF key is either frozen, guarded, or proven irrelevant to outcome selection when the RNG word is consumed
 - [x] **RNG-02**: The rngLocked guard in _queueTickets prevents all permissionless far-future ticket writes during the commitment window (lootbox opens, whale purchases, endgame/decimator rolls) while allowing advanceGame-origin writes to pass through
 
 ### Edge Cases
@@ -42,10 +42,10 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 
 ### Verification
 
-- [ ] **TEST-01**: Unit test confirms far-future tickets from ALL sources (lootbox, whale, vault, endgame) land in FF key, not write key
-- [ ] **TEST-02**: Unit test confirms processFutureTicketBatch drains FF key entries and mints traits
-- [ ] **TEST-03**: Unit test confirms _awardFarFutureCoinJackpot finds winners from FF key entries
-- [ ] **TEST-04**: Unit test confirms _queueTickets reverts for FF key writes when rngLocked is true (permissionless callers) but allows advanceGame-origin writes
+- [x] **TEST-01**: Unit test confirms far-future tickets from ALL sources (lootbox, whale, vault, endgame) land in FF key, not write key
+- [x] **TEST-02**: Unit test confirms processFutureTicketBatch drains FF key entries and mints traits
+- [x] **TEST-03**: Unit test confirms _awardFarFutureCoinJackpot finds winners from FF key entries
+- [x] **TEST-04**: Unit test confirms _queueTickets reverts for FF key writes when rngLocked is true (permissionless callers) but allows advanceGame-origin writes
 - [x] **TEST-05**: Integration test advances through multiple levels and verifies far-future tickets from all sources are processed correctly (no stranding)
 
 ## Future Requirements
@@ -80,15 +80,15 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 | PROC-03 | Phase 76 | Complete |
 | JACK-01 | Phase 77 | Complete |
 | JACK-02 | Phase 77 | Complete |
-| RNG-01 | Phase 79 | Pending |
+| RNG-01 | Phase 79 | Complete |
 | RNG-02 | Phase 75 | Complete |
 | EDGE-01 | Phase 78 | Complete |
 | EDGE-02 | Phase 78 | Complete |
 | EDGE-03 | Phase 77 | Complete |
-| TEST-01 | Phase 80 | Pending |
-| TEST-02 | Phase 80 | Pending |
-| TEST-03 | Phase 80 | Pending |
-| TEST-04 | Phase 80 | Pending |
+| TEST-01 | Phase 80 | Complete |
+| TEST-02 | Phase 80 | Complete |
+| TEST-03 | Phase 80 | Complete |
+| TEST-04 | Phase 80 | Complete |
 | TEST-05 | Phase 80 | Complete |
 
 **Coverage:**

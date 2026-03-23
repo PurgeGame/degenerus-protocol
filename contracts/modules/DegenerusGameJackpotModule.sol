@@ -1206,7 +1206,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 units += 1;
             }
             if (winner != address(0) && units != 0) {
-                if (units > type(uint32).max) units = type(uint32).max;
                 _queueTickets(winner, lvl + 1, uint32(units));
             }
             unchecked {
@@ -2541,18 +2540,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             // Pick a random level in [lvl+5, lvl+99]
             uint24 candidate = lvl + 5 + uint24(entropy % 95);
 
-            // COMBINED POOL: read from both the frozen read buffer and the FF key
-            address[] storage readQueue = ticketQueue[_tqReadKey(candidate)];
-            uint256 readLen = readQueue.length;
-            address[] storage ffQueue = ticketQueue[_tqFarFutureKey(candidate)];
-            uint256 ffLen = ffQueue.length;
-            uint256 combinedLen = readLen + ffLen;
+            address[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
+            uint256 len = queue.length;
 
-            if (combinedLen != 0) {
-                uint256 idx = (entropy >> 32) % combinedLen;
-                address winner = idx < readLen
-                    ? readQueue[idx]
-                    : ffQueue[idx - readLen];
+            if (len != 0) {
+                address winner = queue[(entropy >> 32) % len];
                 if (winner != address(0)) {
                     winners[found] = winner;
                     winnerLevels[found] = candidate;

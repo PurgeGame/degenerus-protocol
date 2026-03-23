@@ -179,6 +179,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Portion of lootbox EV reserved for boon/pass draw (10%)
+    /// @dev Liveness cutoff mirroring MintModule — BURNIE lootbox tickets shift
+    ///      to future levels when opened in the last 30 days before game-over.
+    uint256 private constant BURNIE_LOOT_CUTOFF = 90 days;
+    uint256 private constant BURNIE_LOOT_CUTOFF_LVL0 = 335 days;
+
     uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
     /// @dev Maximum boon/pass budget per lootbox (1 ETH scaled)
     uint256 private constant LOOTBOX_BOON_MAX_BUDGET =
@@ -644,6 +649,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amountEth)));
         (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(currentLevel, entropy);
 
+        // BURNIE lootboxes contribute no ETH to the prize pool. In the last 30 days
+        // before game-over, prevent their tickets from competing with ETH-purchased
+        // tickets for the terminal jackpot by shifting current-level tickets to future.
+        if (targetLevel == currentLevel) {
+            uint256 elapsed = block.timestamp - levelStartTime;
+            uint256 cutoff = level == 0 ? BURNIE_LOOT_CUTOFF_LVL0 : BURNIE_LOOT_CUTOFF;
+            if (elapsed > cutoff) {
+                targetLevel = currentLevel + 2;
+            }
+        }
+
         (uint32 tickets, uint256 burnieReward, ) = _resolveLootboxCommon(
             player,
             day,
@@ -924,7 +940,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
         if (ticketsOut != 0) {
             uint256 totalTickets = uint256(futureTickets) + ticketsOut;
-            if (totalTickets > type(uint32).max) revert E();
             futureTickets = uint32(totalTickets);
         }
         entropy = nextEntropy;
@@ -950,9 +965,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 }
             }
             if (ticketsOut != 0) {
-                uint256 totalTickets = uint256(futureTickets) + ticketsOut;
-                if (totalTickets > type(uint32).max) revert E();
-                futureTickets = uint32(totalTickets);
+                futureTickets += uint32(ticketsOut);
             }
             entropy = nextEntropy;
         }
@@ -981,7 +994,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     / (totalPackedEth * 10_000);
                 if (bonus != 0) {
                     uint256 boosted = uint256(futureTickets) + bonus;
-                    if (boosted > type(uint32).max) boosted = type(uint32).max;
                     futureTickets = uint32(boosted);
                 }
             }
@@ -1740,7 +1752,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         uint256 adjustedBudget = (budgetWei * ticketBps) / 10_000;
         uint256 base = (adjustedBudget * TICKET_SCALE) / priceWei;
-        if (base > type(uint32).max) revert E();
         countScaled = uint32(base);
     }
 

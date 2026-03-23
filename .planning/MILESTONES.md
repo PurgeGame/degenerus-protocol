@@ -1,5 +1,26 @@
 # Milestones
 
+## v3.8 VRF Commitment Window Audit (Shipped: 2026-03-23)
+
+**Phases completed:** 6 phases, 13 plans, 21 tasks
+
+**Key accomplishments:**
+
+- Forward-trace and backward-trace catalogs of 297 table rows covering all VRF-touched storage variables across 3 contract domains and 7 outcome categories, with authoritative slot numbers from forge inspect
+- Exhaustive mutation surface mapping of 51 VRF-touched variables across 121 external mutation paths with call-graph depth, access control, and ticket queue double-buffer commitment boundary analysis
+- 51/51 variables SAFE with zero vulnerabilities -- five layered defense mechanisms (rngLockedFlag, prizePoolFrozen, double-buffer, lootboxRngIndex keying, coinflip day+1 keying) proven to fully protect both commitment windows
+- Exhaustive enumeration of all 87 permissionless mutation paths across 7 protection mechanisms -- CW-04 proof, MUT-02 zero-vulnerability report, MUT-03 depth verification (D0-D3+), and verdict summary statistics confirming 51/51 SAFE
+- Complete coinflip lifecycle trace with 5 state transitions, 4 resolution paths, backward-traced outcome purity proof, and all 10 entry points assessed SAFE across both commitment windows
+- 7 multi-TX attack sequences modeled against coinflip commitment window: 7/7 SAFE, 0 VULNERABLE, 3 Informational findings, day+1 keying proven as primary defense mechanism
+- Daily VRF word traced through 10 consumers with bit allocation map, dual sub-window commitment window proof (Periods A/B/C all SAFE), 11 permissionless actions tabulated, both research open questions resolved with verified line citations
+- DAYRNG-03 proves no cross-day contamination: 5 isolation mechanisms (_unlockRng reset, rngWordByDay write-once, totalFlipReversals consumed-and-cleared, 4 key-based isolation, gap day keccak256 derivation) with 6 carry-over state items classified as legitimate context
+- Complete exploitation scenario for _awardFarFutureCoinJackpot _tqWriteKey bug (MEDIUM severity) with 5-step attack sequence, Phase 69 verdict correction, and Fix Option A recommendation backed by global swap proof
+- Systematic scan of all 10 VRF-dependent outcome categories: 37 variables analyzed, 1 VULNERABLE (TQ-01 at JM:2544), 36 SAFE across five protection layers
+- BoonPacked 2-slot struct with 14 day fields + 7 tier fields in DegenerusGameStorage, all 5 BoonModule functions rewritten from 29 SLOADs to 2 SLOADs per checkAndClearExpiredBoon call
+- All 7 boon functions across LootboxModule, WhaleModule, and MintModule rewritten from 29 individual mapping reads to packed BoonPacked struct with single-tier lootbox boost (BOON-05)
+
+---
+
 ## v3.7 VRF Path Audit (Shipped: 2026-03-22)
 
 **Phases completed:** 5 phases, 10 plans, 18 tasks

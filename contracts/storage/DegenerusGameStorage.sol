@@ -550,18 +550,11 @@ abstract contract DegenerusGameStorage {
         if (owed == 0 && rem == 0) {
             ticketQueue[wk].push(buyer);
         }
-        uint256 newOwed;
         unchecked {
-            newOwed = uint256(owed) + quantity;
+            owed += quantity;
         }
-        if (newOwed > type(uint32).max) {
-            newOwed = type(uint32).max;
-        }
-        if (newOwed != owed) {
-            ticketsOwedPacked[wk][buyer] =
-                (uint40(uint32(newOwed)) << 8) |
-                uint40(rem);
-        }
+        ticketsOwedPacked[wk][buyer] =
+            (uint40(owed) << 8) | uint40(rem);
     }
 
     /// @dev Queues scaled tickets (with 2 decimal places) for fractional ticket purchases.
@@ -588,17 +581,8 @@ abstract contract DegenerusGameStorage {
 
         uint32 whole = uint32(uint256(quantityScaled) / TICKET_SCALE);
         uint8 frac = uint8(uint256(quantityScaled) % TICKET_SCALE);
-        if (whole != 0) {
-            uint256 newOwed;
-            unchecked {
-                newOwed = uint256(owed) + whole;
-            }
-            if (newOwed > type(uint32).max) {
-                newOwed = type(uint32).max;
-            }
-            if (newOwed != owed) {
-                owed = uint32(newOwed);
-            }
+        unchecked {
+            owed += whole;
         }
 
         if (frac != 0) {
@@ -607,11 +591,7 @@ abstract contract DegenerusGameStorage {
                 newRem = uint16(rem) + uint16(frac);
             }
             if (newRem >= TICKET_SCALE) {
-                if (owed < type(uint32).max) {
-                    unchecked {
-                        owed += 1;
-                    }
-                }
+                unchecked { owed += 1; }
                 newRem -= uint16(TICKET_SCALE);
             }
             rem = uint8(newRem);
@@ -647,18 +627,11 @@ abstract contract DegenerusGameStorage {
             if (owed == 0 && rem == 0) {
                 ticketQueue[wk].push(buyer);
             }
-            uint256 newOwed;
             unchecked {
-                newOwed = uint256(owed) + ticketsPerLevel;
+                owed += ticketsPerLevel;
             }
-            if (newOwed > type(uint32).max) {
-                newOwed = type(uint32).max;
-            }
-            if (newOwed != owed) {
-                ticketsOwedPacked[wk][buyer] =
-                    (uint40(uint32(newOwed)) << 8) |
-                    uint40(rem);
-            }
+            ticketsOwedPacked[wk][buyer] =
+                (uint40(owed) << 8) | uint40(rem);
 
             unchecked {
                 ++lvl;
@@ -677,9 +650,6 @@ abstract contract DegenerusGameStorage {
         uint256 quantityScaled
     ) internal {
         if (quantityScaled == 0) return;
-        if (quantityScaled > type(uint32).max) {
-            quantityScaled = type(uint32).max;
-        }
         _queueTicketsScaled(buyer, targetLevel, uint32(quantityScaled));
     }
 
