@@ -60,16 +60,13 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v3.8 VRF commitment window audit — 55 variables, 87 permissionless paths, 51/51 SAFE general proof, coinflip + daily RNG path-specific proofs, 1 MEDIUM vulnerability (TQ-01 _tqWriteKey bug) with fix recommendation — v3.8 Phases 68-72
 - ✓ v3.8 Boon storage packing — 29 per-player boon mappings packed into 2-slot struct, all 12 boon functions rewritten, lootbox boost simplified to single tier — v3.8 Phase 73
 
+### Validated
+
+- ✓ v3.9 Far-future ticket fix — third key space (bit 22), central routing for all 6 callers, dual-queue drain, combined pool jackpot selection, rngLocked guard, 35 Foundry tests, RNG commitment window proof — v3.9 Phases 74-80
+
 ### Active
 
-- ✓ Far-future ticket third key space — stable bucket for tickets targeting > currentLevel + 6 — v3.9 Phase 74
-- ✓ Far-future ticket routing in lootbox resolution — _resolveLootboxCommon routes to FF key — v3.9 Phase 75
-- ✓ processFutureTicketBatch drains FF key — processes far-future queue alongside read-side with FF-bit cursor encoding — v3.9 Phase 76
-- ✓ _awardFarFutureCoinJackpot reads both pools — combined read-buffer + FF key selection, TQ-01 fixed — v3.9 Phase 77
-- ✓ rngLocked guard on lootbox opens — belt-and-suspenders RNG safety — v3.9 Phase 75
-- ✓ Edge case handling — EDGE-01 (no double-counting) and EDGE-02 (no re-processing) proven safe with 5 Foundry tests + formal proof document — v3.9 Phase 78
-- ✓ RNG commitment window proof — 12 mutation paths to FF key all SAFE, combined pool length invariant proven, v3.8 backward-trace methodology applied — v3.9 Phase 79
-- ✓ Test suite — 35 Foundry tests (12 routing, 9 processing, 8 jackpot, 5 edge case, 1 integration) proving TEST-01 through TEST-05 — v3.9 Phase 80
+(None — planning next milestone)
 
 ### Deferred (v3.3+)
 
@@ -133,42 +130,22 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | WAR-06 | Low | Admin spam-propose gas griefing (no per-proposer cooldown) |
 | ~~TQ-01~~ | ~~Medium~~ | ~~RESOLVED v3.9 Phase 77: combined pool replaces _tqWriteKey with _tqReadKey + _tqFarFutureKey~~ |
 
-## Current Milestone: v3.9 Far-Future Ticket Fix
-
-**Goal:** Fix the far-future ticket stranding bug where ~50% of lootbox tickets targeting 7-50 levels ahead are permanently lost due to double-buffer ping-pong, and ensure all far-future tickets are eligible for jackpot draws.
-
-**Target features:**
-- Third key space (TICKET_FAR_FUTURE_BIT = 1 << 22) for stable far-future ticket storage
-- Lootbox resolution routes far-future tickets to FF key instead of double-buffer
-- processFutureTicketBatch extended to drain FF key alongside read-side queue
-- _awardFarFutureCoinJackpot reads both write-side buffer and FF key
-- rngLocked guard on lootbox opens for RNG safety
-- Edge case coverage: FF tickets at near-future boundary, cursor state tracking, jackpot eligibility
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| Bit 22 reserved for far-future key space | Collision-free third key space for tickets > level+6, reduces max level to 2^22-1 (still millennia) | Good |
+| Combined pool approach over simple TQ-01 one-line fix | Reads both _tqReadKey + _tqFarFutureKey, eliminates _tqWriteKey from jackpot entirely | Good — TQ-01 resolved |
+| rngLocked guard with phaseTransitionActive exemption | Prevents permissionless FF writes during VRF window while allowing advanceGame-origin writes | Good — proven safe by RNG commitment window proof |
 
 ## Current State
 
-v3.8 shipped 2026-03-23 — VRF Commitment Window Audit complete. 4047-line audit document proving commitment window safety across all VRF paths. 1 MEDIUM vulnerability found (TQ-01: _awardFarFutureCoinJackpot reads write buffer at JackpotModule:2544) with one-line fix recommendation. Boon storage packing completed as gas optimization (29 mappings → 2-slot packed struct). Affiliate level allocation reservation fix applied to WhaleModule.
+v3.9 shipped 2026-03-23 — Far-future ticket stranding bug fixed. Third key space (TICKET_FAR_FUTURE_BIT = 1 << 22), central routing for all 6 ticket callers, dual-queue drain, combined pool jackpot selection, rngLocked guard, formal RNG commitment window proof, and 35 Foundry tests including 23-contract integration test proving zero stranding.
 
-v3.9 Phase 74 complete — TICKET_FAR_FUTURE_BIT constant (1 << 22) and _tqFarFutureKey(lvl) helper added to DegenerusGameStorage.sol. 5 Foundry fuzz tests prove three-way key space collision-freedom (Slot 0, Slot 1, Far Future) across all valid levels.
-
-v3.9 Phase 75 complete — _queueTickets/_queueTicketsScaled route far-future tickets to FF key, rngLocked guard prevents permissionless FF writes during VRF commitment window, advanceGame-origin writes exempted.
-
-v3.9 Phase 76 complete — processFutureTicketBatch extended with dual-queue drain (read-side then FF key), ticketLevel FF-bit encoding for cursor state tracking, _prepareFutureTickets fixed to strip FF bit for correct resume. 9 Foundry tests proving PROC-01/02/03.
-
-v3.9 Phase 77 complete — _awardFarFutureCoinJackpot now selects winners from combined read-buffer + FF-key population. TQ-01 (MEDIUM) resolved: _tqWriteKey eliminated from the function, replaced by _tqReadKey + _tqFarFutureKey combined pool. 8 Foundry tests proving JACK-01/JACK-02/EDGE-03.
-
-v3.9 Phase 78 complete — Both edge cases (EDGE-01: no double-counting between FF key and write buffer, EDGE-02: no re-processing after drain) proven structurally safe. 5 Foundry tests as regression guards + formal proof document with exact source line references. Zero contract code changes — both properties are inherent in the Phase 74-76 implementation.
-
-v3.9 Phase 79 complete — 354-line formal proof document applying v3.8 backward-trace methodology to _awardFarFutureCoinJackpot combined pool. 12 mutation paths enumerated and all receive SAFE verdict. Combined pool length invariant proven: readLen frozen by double-buffer swap, ffLen frozen by rngLockedFlag guard. RNG-01 requirement satisfied.
-
-v3.9 Phase 80 complete — Test suite verifying all far-future ticket behavior. 35 Foundry tests across 5 files: TicketRouting.t.sol (12 tests, TEST-01/TEST-04), TicketProcessingFF.t.sol (9 tests, TEST-02), JackpotCombinedPool.t.sol (8 tests, TEST-03), TicketEdgeCases.t.sol (5 tests, EDGE-01/EDGE-02), FarFutureIntegration.t.sol (1 integration test, TEST-05). Integration test deploys all 23 protocol contracts, advances through 9 levels, and asserts FF queues drain to zero via vm.load storage inspection. All TEST-01 through TEST-05 requirements SATISFIED.
-
-**Grand total across all milestones:** 90+ findings (16 LOW, 74+ INFO), 0 MEDIUM outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in Phase 77 via combined pool approach.
+**Grand total across all milestones:** 90+ findings (16 LOW, 74+ INFO), 0 MEDIUM/HIGH outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in v3.9 Phase 77 via combined pool approach.
 
 **Known Issues:**
 - BOON-06: Test verification functionally confirmed (identical results pre/post) but Plan 03 not formally executed
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window).
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix).
 
 ## Evolution
 
@@ -188,4 +165,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-23 after v3.9 Phase 80 (Test Suite)*
+*Last updated: 2026-03-23 after v3.9 milestone*
