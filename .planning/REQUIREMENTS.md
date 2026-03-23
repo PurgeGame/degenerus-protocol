@@ -130,9 +130,9 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 - [x] **TPROC-01**: processTicketBatch entry point, all callers, and trigger conditions identified with file:line
 - [x] **TPROC-02**: processFutureTicketBatch entry point, dual-queue drain logic, FF key processing documented with file:line
 - [x] **TPROC-03**: RNG word derivation chain for ticket trait generation documented (rawFulfillRandomWords → trait assignment)
-- [ ] **TPROC-04**: Cursor management (ticketLevel, ticketCursor, ticketsFullyProcessed) full lifecycle traced with file:line
-- [ ] **TPROC-05**: traitBurnTicket storage layout and all write/read paths documented
-- [ ] **TPROC-06**: Every discrepancy between prior audit prose and actual code flagged with [DISCREPANCY] tag; every new issue flagged with [NEW FINDING] tag
+- [x] **TPROC-04**: Cursor management (ticketLevel, ticketCursor, ticketsFullyProcessed) full lifecycle traced with file:line
+- [x] **TPROC-05**: traitBurnTicket storage layout and all write/read paths documented
+- [x] **TPROC-06**: Every discrepancy between prior audit prose and actual code flagged with [DISCREPANCY] tag; every new issue flagged with [NEW FINDING] tag
 
 ### Ticket Consumption & Winner Selection
 

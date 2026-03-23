@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
 status: Ready to plan
-stopped_at: Completed 85-01-PLAN.md
-last_updated: "2026-03-23T15:15:46.311Z"
+stopped_at: Completed 82-02-PLAN.md
+last_updated: "2026-03-23T15:20:35.736Z"
 progress:
   total_phases: 8
-  completed_phases: 3
-  total_plans: 16
-  completed_plans: 7
+  completed_phases: 5
+  total_plans: 15
+  completed_plans: 9
 ---
 
 # State
@@ -39,6 +39,10 @@ Plan: Not started
 - [Phase 82]: Two distinct entropy sources confirmed: processTicketBatch reads lastLootboxRngWord (JM:1915), processFutureTicketBatch reads rngWordCurrent (MM:301)
 - [Phase 82]: Mid-day entropy divergence confirmed: lastLootboxRngWord can hold mid-day lootbox VRF word (AM:159-162) -- by design, not a vulnerability
 - [Phase 82]: LCG constant identity verified: JM:170 hex 0x5851F42D4C957F2D == MM:83 decimal 6364136223846793005
+- [Phase 82]: Cursor state machine documented: 30 write sites (12 ticketLevel + 14 ticketCursor + 4 ticketsFullyProcessed), 13 read sites
+- [Phase 82]: traitBurnTicket slot 11 confirmed by declaration order; assembly write pattern matches Solidity storage layout
+- [Phase 82]: 4 v3.8 discrepancies found: wrong offset (P82-01), wrong setter (P82-02), missing writer (P82-03), incomplete true setters (P82-04)
+- [Phase 82]: v3.8 traitBurnTicket SAFE verdict remains correct despite stale writer documentation (processFutureTicketBatch also game-internal)
 - [Phase 86]: NF-01: Duplicate winners from _randTraitTicket assessed as intentional gas-efficient design
 - [Phase 86]: NF-02: Early-bird lootbox level arithmetic (price lvl+1, select lvl, target lvl+1) confirmed correct
 - [Phase 86]: NF-03: Phase 81 Path #12 references non-existent _distributeTicketScatter; actual function is _distributeTicketsToBucket
@@ -74,6 +78,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T15:14:54.908Z
-Stopped at: Completed 85-01-PLAN.md
+Last session: 2026-03-23T15:20:35.733Z
+Stopped at: Completed 82-02-PLAN.md
 Resume file: None
