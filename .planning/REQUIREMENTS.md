@@ -46,7 +46,7 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 - [ ] **TEST-02**: Unit test confirms processFutureTicketBatch drains FF key entries and mints traits
 - [ ] **TEST-03**: Unit test confirms _awardFarFutureCoinJackpot finds winners from FF key entries
 - [ ] **TEST-04**: Unit test confirms _queueTickets reverts for FF key writes when rngLocked is true (permissionless callers) but allows advanceGame-origin writes
-- [ ] **TEST-05**: Integration test advances through multiple levels and verifies far-future tickets from all sources are processed correctly (no stranding)
+- [x] **TEST-05**: Integration test advances through multiple levels and verifies far-future tickets from all sources are processed correctly (no stranding)
 
 ## Future Requirements
 
@@ -89,7 +89,7 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 | TEST-02 | Phase 80 | Pending |
 | TEST-03 | Phase 80 | Pending |
 | TEST-04 | Phase 80 | Pending |
-| TEST-05 | Phase 80 | Pending |
+| TEST-05 | Phase 80 | Complete |
 
 **Coverage:**
 - v3.9 requirements: 20 total
