@@ -64,34 +64,15 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 - ✓ v3.9 Far-future ticket fix — third key space (bit 22), central routing for all 6 callers, dual-queue drain, combined pool jackpot selection, rngLocked guard, 35 Foundry tests, RNG commitment window proof — v3.9 Phases 74-80
 
-### Active
+### Validated
 
-#### Ticket Lifecycle
-- [x] Exhaustive ticket creation trace — 16 entry points traced with file:line, rngLockedFlag/prizePoolFrozen behavior, 3 discrepancies flagged — v4.0 Phase 81
-- [x] Queue double-buffer mechanics — three key encoding formulas, disjointness proof, ticketWriteSlot state machine, swap triggers documented — v4.0 Phase 81
-- [ ] Ticket processing — processTicketBatch RNG source, cursor management, traitBurnTicket writes — v4.0 Phase 82
-- [x] Ticket consumption — every jackpot winner selection path reading from traitBurnTicket and ticketQueue, 9 jackpot types with winner index formulas, 23 prior claims cross-referenced — v4.0 Phase 83
+- ✓ v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit — 10 phases (81-91), 51 INFO findings (0 HIGH/MEDIUM/LOW), DEC-01/DGN-01 withdrawn as false positives, 134 cumulative total. Ticket creation (16 entry points), processing (RNG/cursor), consumption (9 jackpot types), prize pool flow (storage layout), daily ETH/coin/ticket jackpots, other jackpots (earlybird/BAF/decimator/degenerette/finalday), RNG re-verification (55 vars, 27 slot shifts), consolidated findings, cross-phase consistency verified — v4.0 Phases 81-91
 
-#### Jackpot Mechanics
-- [ ] Prize pool flow — currentPrizePool vs prizePoolsPacked storage layout, freeze/consolidation/unfreeze mechanics — v4.0 Phase 84
-- [x] Daily ETH jackpot — BPS allocation (5 days, 3 modes), Phase 0/1 comparison, bucket/cursor algorithm, carryover mechanics, early-burn path, 726 citations, 11 INFO findings, 13-entry RNG catalog — v4.0 Phase 85
-- [x] Daily coin + ticket jackpot — coin jackpot (both entry points, near/far-future), ticket jackpot distribution (3 callers), jackpotCounter lifecycle (4 contracts), 6 INFO findings — v4.0 Phase 86
-- [ ] Other jackpots — early-bird lootbox, BAF, decimator, degenerette, final day DGNRS — v4.0 Phase 87
+## Completed Milestone: v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit
 
-#### RNG-Dependent Variable Re-verification
-- [ ] Re-verify every variable from v3.8 Section 4 against actual Solidity with slot confirmation — v4.0 Phase 88
-- [ ] currentPrizePool deep dive — all writers, all VRF-dependent readers, freeze mechanism, storage layout — v4.0 Phase 84
-- [ ] Missing variable identification — variables that should be in the RNG-dependent catalog but aren't — v4.0 Phase 88
+**Status:** Complete (2026-03-23)
 
-## Current Milestone: v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit
-
-**Goal:** Re-audit the entire ticket lifecycle and all RNG-dependent variables from scratch — every claim verified against actual Solidity, treating existing audit prose as unverified.
-
-**Target features:**
-- Exhaustive ticket lifecycle trace (creation, queuing, double-buffer, processing, consumption)
-- Complete jackpot mechanics audit (daily ETH, coin+ticket, prize pool flow, all other jackpots)
-- Prize pool flow correction (known errors in prior audit: currentPrizePool storage claims, purchase write claims)
-- RNG-dependent variable re-verification (all v3.8 Section 4 variables re-checked, missing variables identified)
+**Result:** 51 INFO findings across 8 audit phases (81-88), consolidated in v4.0-findings-consolidated.md. No HIGH, MEDIUM, or LOW findings. DEC-01 and DGN-01 withdrawn as false positives. Grand total across all milestones: 134 (51 v4.0 + 83 prior).
 
 ### Deferred (v3.3+)
 
@@ -160,17 +141,22 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | Bit 22 reserved for far-future key space | Collision-free third key space for tickets > level+6, reduces max level to 2^22-1 (still millennia) | Good |
 | Combined pool approach over simple TQ-01 one-line fix | Reads both _tqReadKey + _tqFarFutureKey, eliminates _tqWriteKey from jackpot entirely | Good — TQ-01 resolved |
 | rngLocked guard with phaseTransitionActive exemption | Prevents permissionless FF writes during VRF window while allowing advanceGame-origin writes | Good — proven safe by RNG commitment window proof |
+| Fix sampleFarFutureTickets to use _tqFarFutureKey | Was reading wrong key space (_tqWriteKey), BAF FF slices were always empty | Good — DSC-02 resolved |
+| BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
+| BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
 ## Current State
 
-v4.0 Phase 82 complete 2026-03-23 — Ticket processing mechanics audit complete. processTicketBatch (JM:1889) and processFutureTicketBatch (MM:298) fully traced with 241+ file:line citations; all 5 advanceGame trigger paths documented; two distinct entropy chains distinguished (lastLootboxRngWord vs rngWordCurrent); LCG PRNG algorithm documented with constant identity verified; cursor state machine (ticketLevel/ticketCursor/ticketsFullyProcessed) enumerated with 30 write + 13 read sites; traitBurnTicket storage layout at slot 11 verified with assembly write pattern; 13 v3.8 claims cross-referenced yielding 4 [DISCREPANCY] tags. 6 INFO findings (P82-01 through P82-06).
+v4.0 shipped 2026-03-23 — Complete ticket lifecycle and RNG-dependent variable re-audit. 11 phases (81-91), 24 plans, 46 requirements, all satisfied. 51 INFO findings (0 HIGH/MEDIUM/LOW). DEC-01 (MEDIUM, decBucketOffsetPacked collision) and DGN-01 (LOW, claimable balance off-by-one) both withdrawn as false positives after manual review.
 
-**Grand total across all milestones:** 92+ findings (16 LOW, 76+ INFO), 0 MEDIUM/HIGH outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in v3.9 Phase 77 via combined pool approach.
+**Code fixes applied during v4.0:**
+- `sampleFarFutureTickets`: fixed to read `_tqFarFutureKey` instead of `_tqWriteKey`, range tightened to `+7..+99` matching FF routing boundary
+- BAF scatter: level targeting changed — 20% from current level, 80% random from near-future levels `+1..+6`
+- BAF scatter payout: per-round fixed shares, empty rounds return to future pool (no winner redistribution)
 
-**Known Issues:**
-- BOON-06: Test verification functionally confirmed (identical results pre/post) but Plan 03 not formally executed
+**Grand total across all milestones:** 134 findings (16 LOW, 118 INFO), 0 MEDIUM/HIGH outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in v3.9.
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix).
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit).
 
 ## Evolution
 
@@ -190,4 +176,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-23 after v4.0 Phase 82 complete*
+*Last updated: 2026-03-23 after v4.0 milestone complete*

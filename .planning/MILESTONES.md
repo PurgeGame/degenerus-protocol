@@ -1,5 +1,35 @@
 # Milestones
 
+## v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit (Shipped: 2026-03-23)
+
+**Phases completed:** 10 phases, 21 plans, 36 tasks
+
+**Key accomplishments:**
+
+- Both ticket processing functions fully traced with 241 file:line citations, two distinct VRF-derived entropy chains documented, mid-day divergence confirmed by design, LCG PRNG algorithm verified identical across modules
+- Complete cursor state machine with 30 write sites and 13 read sites enumerated, traitBurnTicket storage layout verified at slot 11 with assembly pattern confirmed, 13 v3.8 claims cross-referenced yielding 4 DISCREPANCY and 6 INFO findings
+- Exhaustive trace of 20 ticketQueue and 14 traitBurnTicket read sites for winner selection across 5 jackpot types with file:line citations verified against Solidity source
+- Winner index formulas documented for 9 jackpot types with 200+ file:line citations, 23 prior audit claims cross-referenced (15 CONFIRMED, 6 DISCREPANCY, 2 STALE), 0 new findings
+- Daily ETH jackpot entry points, BPS allocation table (5 days x 3 modes), Phase 0 vs Phase 1 comparison (14 properties), early-burn path, and budget split logic documented with 286 file:line citations; 10 cross-reference discrepancies found against prior audit documentation
+- JackpotBucketLib 8 functions traced, _processDailyEthChunk line-by-line with determinism proof, carryover source selection decision tree, pre-deduction loss path flagged (INFO), 13-entry RNG catalog verified safe, comprehensive cross-reference (13 items, 11 INFO findings), all 5 DETH requirements VERIFIED
+- Both coin jackpot entry points traced end-to-end (payDailyCoinJackpot + payDailyJackpotCoinAndTickets) with 218 file:line citations, far-future _tqFarFutureKey winner selection and near-future _randTraitTicketWithIndices documented, jackpotCounter lifecycle traced across GS/AM/JM/MM (8 touchpoints), v3.8 Category 3 claims verified (1 DISCREPANCY), 3 INFO findings
+- _distributeTicketJackpot traced end-to-end with 139 citations: 3 callers, 4-bucket winner selection via _randTraitTicket from traitBurnTicket with deity virtual entries, tickets queued to lvl+1 via _queueTickets, budget chain via _budgetToTicketUnits and pack/unpack pair
+- Early-bird lootbox trigger, 3% futurePrizePool allocation, 100-winner loop with EntropyLib.entropyStep, and final-day DGNRS 1% Reward pool distribution traced with 122 file:line citations; 8 INFO findings (EB-01 through EB-04, FD-01 through FD-04), DSC-02 confirmed non-applicable
+- BAF two-contract jackpot traced across DegenerusJackpots and EndgameModule: 7-slice prize distribution (100% verified), 50-round scatter mechanics, large/small payout split, DSC-02 impact assessed (~10% recycled), winnerMask confirmed dead code; 161 file:line citations, 2 INFO findings + 1 cross-ref
+- Regular decimator (burn/resolution/claim with bucket migration and packed subbucket offsets) and terminal decimator (activity-score bucket, time multiplier, GAMEOVER resolution) fully traced with 323 file:line citations; DEC-01 decBucketOffsetPacked collision analyzed and withdrawn as FALSE POSITIVE; 7 INFO findings (DEC-02 through DEC-08)
+- Degenerette bet/resolve/payout lifecycle traced with 133 file:line citations: 3 currency types, lootbox RNG binding, 8-attribute match counting, 25/75 ETH/lootbox split with 10% pool cap, _addClaimableEth confirmed NO auto-rebuy (vs JM/EM/DM versions), sDGNRS rewards for 6+ matches, consolation WWXRP; DGN-01 off-by-one withdrawn as FALSE POSITIVE; 6 Informational findings (DGN-02 through DGN-07)
+- 55/55 v3.8 commitment window verdict rows re-verified against current Solidity: all SAFE, 27 DGS slot shifts from boon packing, 2 protection descriptions updated for v3.9 FF key space
+- 18 CW-01-but-not-CW-04 candidate variables assessed (15 DGS + 2 CF + 1 v3.9 guard): all correctly excluded, CW-04 inventory confirmed complete, findings-consolidated updated with Phase 88 results (0 new findings)
+- Status:
+- Created 4 SUMMARY files and 1 VERIFICATION report for Phase 87 (other jackpots) from existing audit artifacts: 739 file:line citations verified across 2,152 lines, all 6 OJCK requirements SATISFIED, closing the gap in GSD tracking
+- 84-VERIFICATION.md created with 6/6 must-haves verified, all PPF-01 through PPF-06 SATISFIED with evidence citations from audit/v4.0-prize-pool-flow.md (601 lines, 148 file:line citations)
+- Corrected 12 stale traceability rows in REQUIREMENTS.md -- OJCK-01-06 mapped to Phase 87, PPF-01-06 mapped to Phase 84, coverage counts updated from 31/15 to 44/2
+- Complete FINAL v4.0-findings-consolidated.md with 51 INFO findings across 8 phases (81-88), DEC-01/DGN-01 documented as withdrawn false positives, grand total 134
+- KNOWN-ISSUES.md v4.0 entry rewritten from 3 Phase-81 findings to 51 INFO across all 8 phases with DEC-01/DGN-01 withdrawn as false positives
+- 6-dimension cross-phase consistency check across all 8 phases (81-88) with 51 finding IDs verified against 13 source documents, no contradictions found, 89-VERIFICATION.md created
+
+---
+
 ## v3.9 Far-Future Ticket Fix (Shipped: 2026-03-23)
 
 **Phases completed:** 7 phases, 8 plans, 14 tasks

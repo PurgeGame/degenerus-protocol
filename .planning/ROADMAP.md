@@ -18,7 +18,7 @@
 - ✅ **v3.7 VRF Path Audit** — Phases 63-67 (shipped 2026-03-22)
 - ✅ **v3.8 VRF Commitment Window Audit** — Phases 68-73 (shipped 2026-03-23)
 - ✅ **v3.9 Far-Future Ticket Fix** — Phases 74-80 (shipped 2026-03-23)
-- **v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit** — Phases 81+ (in progress)
+- ✅ **v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit** — Phases 81-91 (shipped 2026-03-23)
 
 ## Phases
 
@@ -155,157 +155,22 @@
 
 </details>
 
-### v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit (In Progress)
+<details>
+<summary>v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit (Phases 81-91) -- SHIPPED 2026-03-23</summary>
 
-**Milestone Goal:** Re-audit ticket creation and RNG-dependent variables with independent code traces, flagging all discrepancies between current code and prior audit documentation.
+- [x] **Phase 81: Ticket Creation & Queue Mechanics** — 2 plans, 8 requirements (completed 2026-03-23)
+- [x] **Phase 82: Ticket Processing Mechanics** — 2 plans, 6 requirements (completed 2026-03-23)
+- [x] **Phase 83: Ticket Consumption & Winner Selection** — 2 plans, 4 requirements (completed 2026-03-23)
+- [x] **Phase 84: Prize Pool Flow & currentPrizePool Deep Dive** — 1 plan, 6 requirements (completed 2026-03-23)
+- [x] **Phase 85: Daily ETH Jackpot** — 2 plans, 5 requirements (completed 2026-03-23)
+- [x] **Phase 86: Daily Coin + Ticket Jackpot** — 2 plans, 4 requirements (completed 2026-03-23)
+- [x] **Phase 87: Other Jackpots** — 4 plans, 6 requirements (completed 2026-03-23)
+- [x] **Phase 88: RNG-Dependent Variable Re-verification** — 2 plans, 4 requirements (completed 2026-03-23)
+- [x] **Phase 89: Consolidated Findings** — 1 plan, 3 requirements (completed 2026-03-23)
+- [x] **Phase 90: Verification Backfill** — gap closure (completed 2026-03-23)
+- [x] **Phase 91: Consolidated Findings Rewrite** — gap closure (completed 2026-03-23)
 
-- [x] **Phase 81: Ticket Creation & Queue Mechanics** — 2 plans, 8 requirements (TKT-01 through TKT-06, DSC-01, DSC-02) (completed 2026-03-23)
-- [x] **Phase 82: Ticket Processing Mechanics** — 2 plans, 6 requirements (TPROC-01 through TPROC-06) (completed 2026-03-23)
-- [x] **Phase 83: Ticket Consumption & Winner Selection** — 2 plans, 4 requirements (TCON-01 through TCON-04) (completed 2026-03-23)
-- [x] **Phase 84: Prize Pool Flow & currentPrizePool Deep Dive** — 1 plan, 6 requirements (PPF-01 through PPF-06) (completed 2026-03-23)
-- [x] **Phase 85: Daily ETH Jackpot** — 2 plans, 5 requirements (DETH-01 through DETH-05) (completed 2026-03-23)
-- [x] **Phase 86: Daily Coin + Ticket Jackpot** — 2 plans, 4 requirements (DCOIN-01 through DCOIN-04) (completed 2026-03-23)
-- [x] **Phase 87: Other Jackpots** — 4 plans, 6 requirements (OJCK-01 through OJCK-06) (completed 2026-03-23)
-- [x] **Phase 88: RNG-Dependent Variable Re-verification** — 2 plans, 4 requirements (RDV-01, RDV-02, RDV-03, RDV-04) (completed 2026-03-23)
-- [x] **Phase 89: Consolidated Findings** — 1 plan, 3 requirements (CFND-01, CFND-02, CFND-03) (completed 2026-03-23)
-- [x] **Phase 90: Verification Backfill** — gap closure, 12 requirements (OJCK-01 through OJCK-06, PPF-01 through PPF-06) (completed 2026-03-23)
-- [x] **Phase 91: Consolidated Findings Rewrite** — gap closure, 3 requirements (CFND-01, CFND-02, CFND-03) (completed 2026-03-23)
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 81. Ticket Creation & Queue Mechanics | 2/2 | Complete | 2026-03-23 |
-| 82. Ticket Processing Mechanics | 2/2 | Complete    | 2026-03-23 |
-| 83. Ticket Consumption & Winner Selection | 2/2 | Complete    | 2026-03-23 |
-| 84. Prize Pool Flow & currentPrizePool Deep Dive | 1/1 | Complete | 2026-03-23 |
-| 85. Daily ETH Jackpot | 2/2 | Complete    | 2026-03-23 |
-| 86. Daily Coin + Ticket Jackpot | 2/2 | Complete    | 2026-03-23 |
-| 87. Other Jackpots | 4/4 | Complete | 2026-03-23 |
-| 88. RNG-Dependent Variable Re-verification | 2/1 | Complete    | 2026-03-23 |
-| 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
-| 90. Verification Backfill | 3/3 | Complete   | 2026-03-23 |
-| 91. Consolidated Findings Rewrite | 3/3 | Complete    | 2026-03-23 |
-
-### Phase 82: Ticket Processing Mechanics
-
-**Goal:** Trace processTicketBatch and processFutureTicketBatch with full file:line citations, documenting RNG word derivation for trait generation, cursor lifecycle (ticketLevel, ticketCursor, ticketsFullyProcessed), traitBurnTicket storage layout and all read/write paths, and flagging all discrepancies with prior audit documentation.
-
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 82-01-PLAN.md -- processTicketBatch + processFutureTicketBatch entry points, callers, triggers, RNG derivation chain
-- [x] 82-02-PLAN.md -- Cursor lifecycle, traitBurnTicket storage layout, cross-reference prior audit claims
-
-**Requirements:** TPROC-01, TPROC-02, TPROC-03, TPROC-04, TPROC-05, TPROC-06
-
-### Phase 83: Ticket Consumption & Winner Selection
-
-**Goal:** Re-audit how tickets are consumed from queues for winner selection across all jackpot types, with independent code traces and discrepancy flagging.
-
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 83-01-PLAN.md — Enumerate all ticketQueue and traitBurnTicket reads for winner selection (TCON-01, TCON-02)
-- [x] 83-02-PLAN.md — Document winner index computation per jackpot type, cross-reference prior audits, tag findings (TCON-03, TCON-04)
-
-**Requirements:** TCON-01, TCON-02, TCON-03, TCON-04
-
-### Phase 84: Prize Pool Flow & currentPrizePool Deep Dive
-
-**Goal:** Trace currentPrizePool storage, all readers/writers, prizePoolsPacked packed layout, prizePoolFrozen freeze/unfreeze lifecycle, consolidatePrizePools 5-step mechanics, and VRF-dependent readers with full file:line citations, flagging discrepancies with v3.5 and v3.8 audit documentation.
-
-**Plans:** 1 plan
-
-Plans:
-- [ ] 84-01-PLAN.md — Complete prize pool flow audit (currentPrizePool writers/readers, packed layout, freeze lifecycle, consolidation, VRF safety, discrepancy scan)
-
-**Requirements:** PPF-01, PPF-02, PPF-03, PPF-04, PPF-05, PPF-06
-
-### Phase 85: Daily ETH Jackpot
-
-**Goal:** Trace the daily ETH jackpot distribution system -- BPS allocation, Phase 0/Phase 1 behavior, bucket/cursor winner selection, carryover mechanics -- with exhaustive file:line citations and discrepancy flagging against prior audit documentation.
-
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 85-01-PLAN.md — Trace payDailyJackpot entry points, BPS allocation table, budget split, Phase 0 vs Phase 1 behavior, early-burn path
-- [x] 85-02-PLAN.md — Trace bucket/cursor algorithm, carryover mechanics, complete cross-reference, compile requirement verdicts
-
-**Requirements:** DETH-01, DETH-02, DETH-03, DETH-04, DETH-05
-
-### Phase 86: Daily Coin + Ticket Jackpot
-
-**Goal:** Trace daily coin (BURNIE) jackpot winner selection (both entry points, near-future and far-future paths), ticket jackpot distribution mechanics, and jackpotCounter lifecycle with exhaustive file:line citations, flagging all discrepancies with prior audit documentation.
-
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 86-01-PLAN.md — Coin jackpot winner selection (payDailyCoinJackpot + payDailyJackpotCoinAndTickets + _awardFarFutureCoinJackpot) and jackpotCounter lifecycle (DCOIN-01, DCOIN-03, DCOIN-04)
-- [x] 86-02-PLAN.md — Ticket jackpot distribution (_distributeTicketJackpot, all callers, budget computation chain) (DCOIN-02, DCOIN-04)
-
-**Requirements:** DCOIN-01, DCOIN-02, DCOIN-03, DCOIN-04
-
-
-### Phase 87: Other Jackpots
-
-**Goal:** Document all "other" jackpot mechanics (early-bird lootbox, BAF, decimator, degenerette, final day DGNRS) with file:line citations, tracing each mechanism through actual Solidity code. Flag all discrepancies between prior audit documentation and actual code.
-
-**Plans:** 4 plans
-
-Plans:
-- [ ] 87-01-PLAN.md — Early-bird lootbox jackpot + final-day DGNRS distribution (OJCK-01, OJCK-05)
-- [ ] 87-02-PLAN.md — BAF jackpot: winner selection in DegenerusJackpots + payout processing in EndgameModule (OJCK-02)
-- [ ] 87-03-PLAN.md — Decimator jackpot: regular burn/resolution/claims + terminal decimator (OJCK-03)
-- [ ] 87-04-PLAN.md — Degenerette jackpot: bet/resolution/payout/sDGNRS/consolation (OJCK-04)
-
-**Requirements:** OJCK-01, OJCK-02, OJCK-03, OJCK-04, OJCK-05, OJCK-06
-### Phase 88: RNG-Dependent Variable Re-verification
-
-**Goal:** Re-verify every variable from the v3.8 commitment window inventory against current Solidity, confirming storage slots, protection mechanisms, and SAFE verdicts. Identify missing variables and document all v3.9 deltas.
-
-**Plans:** 2/1 plans complete
-
-Plans:
-- [x] 88-01-PLAN.md — Re-verify all 55 v3.8 verdict rows (DGS + CF + sDGNRS) with slot confirmation and delta assessment
-- [x] 88-02-PLAN.md — Missing variable analysis (18 candidates) and findings consolidation update
-
-**Requirements:** RDV-01, RDV-02, RDV-03, RDV-04
-
-### Phase 89: Consolidated Findings
-
-**Goal:** Finalize v4.0 consolidated findings document, verify cross-phase consistency across Phase 81 audit documents and prior milestone findings, and update KNOWN-ISSUES.md audit history.
-
-**Plans:** 1 plan
-
-Plans:
-- [ ] 89-01-PLAN.md — Finalize consolidated findings, cross-phase consistency, KNOWN-ISSUES.md update
-
-**Requirements:** CFND-01, CFND-02, CFND-03
-
-### Phase 90: Verification Backfill
-
-**Goal:** Create missing GSD process artifacts (SUMMARY.md, VERIFICATION.md) for Phases 84 and 87 whose audit work is complete but was never formally verified. Fix all stale REQUIREMENTS.md traceability rows and checkboxes.
-
-**Gap Closure:** Closes OJCK-01 through OJCK-06 (unsatisfied → satisfied), PPF-01 through PPF-06 (partial → satisfied)
-
-Plans:
-- [x] 90-01-PLAN.md — Create Phase 87 SUMMARY files (87-01 through 87-04) and 87-VERIFICATION.md from existing audit documents
-- [x] 90-02-PLAN.md — Create Phase 84 84-VERIFICATION.md from existing audit document and SUMMARY
-- [x] 90-03-PLAN.md — Sync REQUIREMENTS.md: fix 19 stale traceability rows, 3 unchecked checkboxes (TCON-03, TCON-04, RDV-02), mark OJCK-01-06 as [x]
-
-**Requirements:** OJCK-01, OJCK-02, OJCK-03, OJCK-04, OJCK-05, OJCK-06, PPF-01, PPF-02, PPF-03, PPF-04, PPF-05, PPF-06
-
-### Phase 91: Consolidated Findings Rewrite
-
-**Goal:** Rewrite v4.0-findings-consolidated.md to include ALL phases (81-88), update KNOWN-ISSUES.md audit history with full phase coverage, re-run cross-phase consistency check, and create Phase 89 VERIFICATION. Note: DEC-01 and DGN-01 both withdrawn as false positives — all v4.0 findings are INFO.
-
-**Gap Closure:** Closes CFND-01, CFND-02, CFND-03 (unsatisfied → satisfied). Fixes broken consolidated findings assembly flow.
-
-Plans:
-- [x] 91-01-PLAN.md — Rewrite v4.0-findings-consolidated.md: add Phases 83-87 findings (~47 INFO; DEC-01 and DGN-01 withdrawn as false positives), update totals, mark FINAL
-- [x] 91-02-PLAN.md — Update KNOWN-ISSUES.md audit history with full v4.0 phase coverage
-- [x] 91-03-PLAN.md — Re-run cross-phase consistency check with full Phase 87 SUMMARYs; create 89-VERIFICATION.md
-
-**Requirements:** CFND-01, CFND-02, CFND-03
+</details>
 
 ## Deferred
 
