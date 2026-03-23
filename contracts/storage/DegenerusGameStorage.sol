@@ -828,101 +828,6 @@ abstract contract DegenerusGameStorage {
     mapping(address => uint256) internal whalePassClaims;
 
     // =========================================================================
-    // Coinflip Boon (Lootbox Bonus)
-    // =========================================================================
-
-    // Coinflip boon tiers are stored in coinflipBoonBps (5%/10%/25%).
-    // Awarded randomly from lootboxes (2%/0.5%/0.1% per ETH by tier).
-    // Consumed on next coinflip: adds bps to stake (max 5k/10k/25k BURNIE).
-    // EXPIRES: Must be used within 2 days (172800 seconds) of award.
-    //
-    // SECURITY: Single-use consumable; prevents stacking/hoarding.
-    // Expiration prevents indefinite storage.
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day index when coinflip boon was awarded (per player).
-    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
-    mapping(address => uint48) internal coinflipBoonDay;
-
-    // =========================================================================
-    // Lootbox Boost Boons
-    // =========================================================================
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Lootbox 5% boost boon active flag per player (simple on/off).
-    ///      Awarded randomly from lootboxes (2% chance per ETH spent).
-    ///      Consumed on next lootbox: adds 5% to lootbox value (max 10 ETH lootbox).
-    ///      EXPIRES: Must be used within 2 days (172800 seconds) of award.
-    ///
-    ///      SECURITY: Single-use consumable; prevents stacking/hoarding.
-    ///      Simple boolean prevents accumulation.
-    mapping(address => bool) internal lootboxBoon5Active;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day index when lootbox 5% boost boon was awarded (per player).
-    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
-    mapping(address => uint48) internal lootboxBoon5Day;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Lootbox 15% boost boon active flag per player (simple on/off).
-    ///      Awarded randomly from lootboxes (0.5% chance per ETH spent).
-    ///      Consumed on next lootbox: adds 15% to lootbox value (max 10 ETH lootbox).
-    ///      EXPIRES: Must be used within 2 days (172800 seconds) of award.
-    ///
-    ///      SECURITY: Single-use consumable; prevents stacking/hoarding.
-    ///      Simple boolean prevents accumulation.
-    mapping(address => bool) internal lootboxBoon15Active;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day index when lootbox 15% boost boon was awarded (per player).
-    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
-    mapping(address => uint48) internal lootboxBoon15Day;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Lootbox 25% boost boon active flag per player (simple on/off).
-    ///      Awarded randomly from lootboxes (0.1% chance per ETH spent).
-    ///      Consumed on next lootbox: adds 25% to lootbox value (max 10 ETH lootbox).
-    ///      EXPIRES: Must be used within 2 days (172800 seconds) of award.
-    ///
-    ///      SECURITY: Single-use consumable; prevents stacking/hoarding.
-    ///      Simple boolean prevents accumulation.
-    mapping(address => bool) internal lootboxBoon25Active;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day index when lootbox 25% boost boon was awarded (per player).
-    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
-    mapping(address => uint48) internal lootboxBoon25Day;
-
-    // =========================================================================
-    // Whale Bundle Boon
-    // =========================================================================
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when whale bundle boon was awarded (per player).
-    ///      Allows purchasing 100-level whale bundle at any level with tiered discount.
-    ///      EXPIRES: Must be used within 4 days of award (cleared on use or expiry).
-    mapping(address => uint48) internal whaleBoonDay;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Discount tier (in BPS) for whale bundle boon (per player).
-    ///      Set when boon is awarded: 1000 = 10%, 2500 = 25%, 5000 = 50%.
-    mapping(address => uint16) internal whaleBoonDiscountBps;
-
-    // =========================================================================
-    // Activity Boons (Mint/Quest Streak Boosts)
-    // =========================================================================
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Pending activity boon bonus levels per player.
-    ///      Applied on lootbox open via game call; expires if not opened within 2 days.
-    mapping(address => uint24) internal activityBoonPending;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day index when activity boon was last assigned (per player).
-    ///      Used to enforce 2-day expiration window (expires at jackpot reset).
-    mapping(address => uint48) internal activityBoonDay;
-
-    // =========================================================================
     // Auto-Rebuy + afKing Mode (Packed)
     // =========================================================================
 
@@ -949,26 +854,6 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Decimator auto-rebuy toggle (true = disabled). Default is enabled (false).
     mapping(address => bool) internal decimatorAutoRebuyDisabled;
-
-    // =========================================================================
-    // Purchase / Burn Boosts (One-Off)
-    // =========================================================================
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Purchase boost basis points (5%/15%/25%), one-time, time-limited.
-    mapping(address => uint16) internal purchaseBoostBps;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day index when purchase boost was awarded (expires at jackpot reset).
-    mapping(address => uint48) internal purchaseBoostDay;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Decimator burn boost basis points (10%/25%/50%), one-time, no expiry.
-    mapping(address => uint16) internal decimatorBoostBps;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Coinflip boon boost basis points (5%/10%/25%), one-time, time-limited.
-    mapping(address => uint16) internal coinflipBoonBps;
 
     // =========================================================================
     // Daily Jackpot Trait Tracking (Coin Jackpot Reuse)
@@ -1391,38 +1276,6 @@ abstract contract DegenerusGameStorage {
     /// @dev Day when recipient last received a deity boon (prevents double-receipt).
     mapping(address => uint48) internal deityBoonRecipientDay;
 
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when deity-granted coinflip boon was issued.
-    mapping(address => uint48) internal deityCoinflipBoonDay;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when deity-granted 5% lootbox boost was issued.
-    mapping(address => uint48) internal deityLootboxBoon5Day;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when deity-granted 15% lootbox boost was issued.
-    mapping(address => uint48) internal deityLootboxBoon15Day;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when deity-granted 25% lootbox boost was issued.
-    mapping(address => uint48) internal deityLootboxBoon25Day;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when deity-granted purchase boost was issued.
-    mapping(address => uint48) internal deityPurchaseBoostDay;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when deity-granted decimator boost was issued.
-    mapping(address => uint48) internal deityDecimatorBoostDay;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when deity-granted whale boon was issued.
-    mapping(address => uint48) internal deityWhaleBoonDay;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when deity-granted activity boon was issued.
-    mapping(address => uint48) internal deityActivityBoonDay;
-
     // =========================================================================
     // Degenerette (Roulette) Bets
     // =========================================================================
@@ -1442,24 +1295,6 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Per-player bet counters for Degenerette.
     mapping(address => uint64) internal degeneretteBetNonce;
-
-    // =========================================================================
-    // Deity Pass Purchase Boon (Lootbox Reward)
-    // =========================================================================
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Deity pass purchase boon tier per player.
-    ///      0 = none, 1 = 10% discount, 2 = 25% discount, 3 = 50% discount.
-    ///      Awarded randomly from lootboxes; extremely rare.
-    mapping(address => uint8) internal deityPassBoonTier;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day index when deity pass boon was awarded (4-day expiry for lootbox-rolled).
-    mapping(address => uint48) internal deityPassBoonDay;
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when deity-granted deity pass boon was issued (1-day expiry).
-    mapping(address => uint48) internal deityDeityPassBoonDay;
 
     // =========================================================================
     // Lootbox EV Multiplier Cap Tracking
@@ -1515,21 +1350,6 @@ abstract contract DegenerusGameStorage {
     ///      4 bits each for denom 2..12 (44 bits total, fits in uint64).
     ///      Layout: bits 0-3 = denom 2, bits 4-7 = denom 3, etc.
     mapping(uint24 => uint64) internal decBucketOffsetPacked;
-
-    // =========================================================================
-    // Lazy Pass Boon State
-    // =========================================================================
-
-    // @deprecated Replaced by boonPacked
-    /// @dev Day when lazy pass boon was awarded.
-    ///      Allows discounted lazy pass purchase for 4 days.
-    mapping(address => uint48) internal lazyPassBoonDay;
-    // @deprecated Replaced by boonPacked
-    /// @dev Lazy pass boon discount in BPS (1000/2500/5000).
-    mapping(address => uint16) internal lazyPassBoonDiscountBps;
-    // @deprecated Replaced by boonPacked
-    /// @dev Deity-sourced day index (expires when day changes). 0 for lootbox-sourced boons.
-    mapping(address => uint48) internal deityLazyPassBoonDay;
 
     // =========================================================================
     // Degenerette Hero Wager Tracking (Daily)
