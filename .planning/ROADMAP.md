@@ -296,13 +296,13 @@ Plans:
 
 ### Phase 91: Consolidated Findings Rewrite
 
-**Goal:** Rewrite v4.0-findings-consolidated.md to include ALL phases (81-88), update KNOWN-ISSUES.md with DEC-01 (MEDIUM) and DGN-01 (LOW), re-run cross-phase consistency check, and create Phase 89 VERIFICATION.
+**Goal:** Rewrite v4.0-findings-consolidated.md to include ALL phases (81-88), update KNOWN-ISSUES.md audit history with full phase coverage, re-run cross-phase consistency check, and create Phase 89 VERIFICATION. Note: DEC-01 and DGN-01 both withdrawn as false positives — all v4.0 findings are INFO.
 
 **Gap Closure:** Closes CFND-01, CFND-02, CFND-03 (unsatisfied → satisfied). Fixes broken consolidated findings assembly flow.
 
 Plans:
-- [ ] 91-01-PLAN.md — Rewrite v4.0-findings-consolidated.md: add Phases 83-87 findings (~48 findings including DGN-01 LOW; DEC-01 withdrawn as false positive), update totals, mark FINAL
-- [ ] 91-02-PLAN.md — Update KNOWN-ISSUES.md with DGN-01 (LOW) entry
+- [ ] 91-01-PLAN.md — Rewrite v4.0-findings-consolidated.md: add Phases 83-87 findings (~47 INFO; DEC-01 and DGN-01 withdrawn as false positives), update totals, mark FINAL
+- [ ] 91-02-PLAN.md — Update KNOWN-ISSUES.md audit history with full v4.0 phase coverage
 - [ ] 91-03-PLAN.md — Re-run cross-phase consistency check with full Phase 87 SUMMARYs; create 89-VERIFICATION.md
 
 **Requirements:** CFND-01, CFND-02, CFND-03
