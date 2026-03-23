@@ -197,50 +197,52 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 | TKT-06 | Phase 81 | Complete |
 | DSC-01 | Phase 81 | Complete |
 | DSC-02 | Phase 81 | Complete |
-| TPROC-01 | Phase 82 | Not started |
-| TPROC-02 | Phase 82 | Not started |
-| TPROC-03 | Phase 82 | Not started |
-| TPROC-04 | Phase 82 | Not started |
-| TPROC-05 | Phase 82 | Not started |
-| TPROC-06 | Phase 82 | Not started |
+| TPROC-01 | Phase 82 | Complete |
+| TPROC-02 | Phase 82 | Complete |
+| TPROC-03 | Phase 82 | Complete |
+| TPROC-04 | Phase 82 | Complete |
+| TPROC-05 | Phase 82 | Complete |
+| TPROC-06 | Phase 82 | Complete |
 | TCON-01 | Phase 83 | Complete |
 | TCON-02 | Phase 83 | Complete |
 | TCON-03 | Phase 83 | Complete |
 | TCON-04 | Phase 83 | Complete |
-| PPF-01 | Phase 84 | Complete |
-| PPF-02 | Phase 84 | Complete |
-| PPF-03 | Phase 84 | Complete |
-| PPF-04 | Phase 84 | Complete |
-| PPF-05 | Phase 84 | Complete |
-| PPF-06 | Phase 84 | Complete |
-| DETH-01 | Phase 85 | Not started |
-| DETH-02 | Phase 85 | Not started |
-| DETH-03 | Phase 85 | Not started |
-| DETH-04 | Phase 85 | Not started |
-| DETH-05 | Phase 85 | Not started |
-| DCOIN-01 | Phase 86 | Not started |
-| DCOIN-02 | Phase 86 | Not started |
-| DCOIN-03 | Phase 86 | Not started |
-| DCOIN-04 | Phase 86 | Not started |
-| OJCK-01 | Phase 87 | Not started |
-| OJCK-02 | Phase 87 | Not started |
-| OJCK-03 | Phase 87 | Not started |
-| OJCK-04 | Phase 87 | Not started |
-| OJCK-05 | Phase 87 | Not started |
-| OJCK-06 | Phase 87 | Not started |
+| PPF-01 | Phase 90 | Pending |
+| PPF-02 | Phase 90 | Pending |
+| PPF-03 | Phase 90 | Pending |
+| PPF-04 | Phase 90 | Pending |
+| PPF-05 | Phase 90 | Pending |
+| PPF-06 | Phase 90 | Pending |
+| DETH-01 | Phase 85 | Complete |
+| DETH-02 | Phase 85 | Complete |
+| DETH-03 | Phase 85 | Complete |
+| DETH-04 | Phase 85 | Complete |
+| DETH-05 | Phase 85 | Complete |
+| DCOIN-01 | Phase 86 | Complete |
+| DCOIN-02 | Phase 86 | Complete |
+| DCOIN-03 | Phase 86 | Complete |
+| DCOIN-04 | Phase 86 | Complete |
+| OJCK-01 | Phase 90 | Pending |
+| OJCK-02 | Phase 90 | Pending |
+| OJCK-03 | Phase 90 | Pending |
+| OJCK-04 | Phase 90 | Pending |
+| OJCK-05 | Phase 90 | Pending |
+| OJCK-06 | Phase 90 | Pending |
 | RDV-01 | Phase 88 | Complete |
 | RDV-02 | Phase 88 | Complete |
 | RDV-03 | Phase 88 | Complete |
 | RDV-04 | Phase 88 | Complete |
-| CFND-01 | Phase 89 | Not started |
-| CFND-02 | Phase 89 | Not started |
-| CFND-03 | Phase 89 | Not started |
+| CFND-01 | Phase 91 | Pending |
+| CFND-02 | Phase 91 | Pending |
+| CFND-03 | Phase 91 | Pending |
 
 **Coverage:**
 - v4.0 requirements: 46 total
 - Mapped to phases: 46
 - Unmapped: 0
+- Complete: 31
+- Pending (gap closure): 15
 
 ---
 *Requirements defined: 2026-03-23*
-*Updated: 2026-03-23 — v4.0 full milestone requirements added (phases 82-89)*
+*Updated: 2026-03-23 — gap closure phases 90-91 assigned; traceability table synced with milestone audit*

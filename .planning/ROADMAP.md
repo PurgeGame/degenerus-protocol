@@ -168,6 +168,8 @@
 - [x] **Phase 87: Other Jackpots** — 4 plans, 6 requirements (OJCK-01 through OJCK-06) (completed 2026-03-23)
 - [x] **Phase 88: RNG-Dependent Variable Re-verification** — 2 plans, 4 requirements (RDV-01, RDV-02, RDV-03, RDV-04) (completed 2026-03-23)
 - [x] **Phase 89: Consolidated Findings** — 1 plan, 3 requirements (CFND-01, CFND-02, CFND-03) (completed 2026-03-23)
+- [ ] **Phase 90: Verification Backfill** — gap closure, 12 requirements (OJCK-01 through OJCK-06, PPF-01 through PPF-06)
+- [ ] **Phase 91: Consolidated Findings Rewrite** — gap closure, 3 requirements (CFND-01, CFND-02, CFND-03)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -180,6 +182,8 @@
 | 87. Other Jackpots | 4/4 | Complete | 2026-03-23 |
 | 88. RNG-Dependent Variable Re-verification | 2/1 | Complete    | 2026-03-23 |
 | 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
+| 90. Verification Backfill | 0/3 | Pending | — |
+| 91. Consolidated Findings Rewrite | 0/3 | Pending | — |
 
 ### Phase 82: Ticket Processing Mechanics
 
@@ -274,6 +278,32 @@ Plans:
 
 Plans:
 - [ ] 89-01-PLAN.md — Finalize consolidated findings, cross-phase consistency, KNOWN-ISSUES.md update
+
+**Requirements:** CFND-01, CFND-02, CFND-03
+
+### Phase 90: Verification Backfill
+
+**Goal:** Create missing GSD process artifacts (SUMMARY.md, VERIFICATION.md) for Phases 84 and 87 whose audit work is complete but was never formally verified. Fix all stale REQUIREMENTS.md traceability rows and checkboxes.
+
+**Gap Closure:** Closes OJCK-01 through OJCK-06 (unsatisfied → satisfied), PPF-01 through PPF-06 (partial → satisfied)
+
+Plans:
+- [ ] 90-01-PLAN.md — Create Phase 87 SUMMARY files (87-01 through 87-04) and 87-VERIFICATION.md from existing audit documents
+- [ ] 90-02-PLAN.md — Create Phase 84 84-VERIFICATION.md from existing audit document and SUMMARY
+- [ ] 90-03-PLAN.md — Sync REQUIREMENTS.md: fix 19 stale traceability rows, 3 unchecked checkboxes (TCON-03, TCON-04, RDV-02), mark OJCK-01-06 as [x]
+
+**Requirements:** OJCK-01, OJCK-02, OJCK-03, OJCK-04, OJCK-05, OJCK-06, PPF-01, PPF-02, PPF-03, PPF-04, PPF-05, PPF-06
+
+### Phase 91: Consolidated Findings Rewrite
+
+**Goal:** Rewrite v4.0-findings-consolidated.md to include ALL phases (81-88), update KNOWN-ISSUES.md with DEC-01 (MEDIUM) and DGN-01 (LOW), re-run cross-phase consistency check, and create Phase 89 VERIFICATION.
+
+**Gap Closure:** Closes CFND-01, CFND-02, CFND-03 (unsatisfied → satisfied). Fixes broken consolidated findings assembly flow.
+
+Plans:
+- [ ] 91-01-PLAN.md — Rewrite v4.0-findings-consolidated.md: add Phases 83-87 findings (~49 findings including DEC-01 MEDIUM, DGN-01 LOW), update totals, mark FINAL
+- [ ] 91-02-PLAN.md — Update KNOWN-ISSUES.md with DEC-01 and DGN-01 entries
+- [ ] 91-03-PLAN.md — Re-run cross-phase consistency check with full Phase 87 SUMMARYs; create 89-VERIFICATION.md
 
 **Requirements:** CFND-01, CFND-02, CFND-03
 
