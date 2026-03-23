@@ -74,7 +74,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 #### Jackpot Mechanics
 - [ ] Prize pool flow — currentPrizePool vs prizePoolsPacked storage layout, freeze/consolidation/unfreeze mechanics — v4.0 Phase 84
-- [ ] Daily ETH jackpot — currentPrizePool source, BPS table, phase 0/1, bucket/cursor, carryover — v4.0 Phase 85
+- [x] Daily ETH jackpot — BPS allocation (5 days, 3 modes), Phase 0/1 comparison, bucket/cursor algorithm, carryover mechanics, early-burn path, 726 citations, 11 INFO findings, 13-entry RNG catalog — v4.0 Phase 85
 - [x] Daily coin + ticket jackpot — coin jackpot (both entry points, near/far-future), ticket jackpot distribution (3 callers), jackpotCounter lifecycle (4 contracts), 6 INFO findings — v4.0 Phase 86
 - [ ] Other jackpots — early-bird lootbox, BAF, decimator, degenerette, final day DGNRS — v4.0 Phase 87
 
