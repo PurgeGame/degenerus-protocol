@@ -28,6 +28,16 @@ These are architectural decisions, not vulnerabilities.
 
 ## Audit History
 
+### v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit (2026-03-23)
+
+3 INFO findings from Phase 81. No HIGH, MEDIUM, or LOW.
+
+- **DSC-01 (INFO):** v3.9 RNG commitment window proof describes reverted combined pool code (2bf830a2). Proof conclusions still valid -- FF-only is strictly simpler. Proof document needs rewriting before C4A audit.
+- **DSC-02 (INFO):** `sampleFarFutureTickets` view function at DG:2681 reads from `_tqWriteKey` instead of `_tqFarFutureKey` for far-future levels. Off-chain consumers receive empty results. No on-chain impact.
+- **DSC-03 (INFO):** NatSpec at GS:533 claims uint32 cap but code uses `unchecked` arithmetic. Overflow requires > total ETH supply -- physically infeasible.
+
+See `audit/v4.0-findings-consolidated.md`.
+
 ### v3.7 VRF Path Audit (2026-03-22)
 
 3 INFO findings across Phases 63-67. No HIGH, MEDIUM, or LOW.
