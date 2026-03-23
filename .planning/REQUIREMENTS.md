@@ -207,12 +207,12 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 | TCON-02 | Phase 83 | Not started |
 | TCON-03 | Phase 83 | Not started |
 | TCON-04 | Phase 83 | Not started |
-| PPF-01 | Phase 84 | Not started |
-| PPF-02 | Phase 84 | Not started |
-| PPF-03 | Phase 84 | Not started |
-| PPF-04 | Phase 84 | Not started |
-| PPF-05 | Phase 84 | Not started |
-| PPF-06 | Phase 84 | Not started |
+| PPF-01 | Phase 84 | Complete |
+| PPF-02 | Phase 84 | Complete |
+| PPF-03 | Phase 84 | Complete |
+| PPF-04 | Phase 84 | Complete |
+| PPF-05 | Phase 84 | Complete |
+| PPF-06 | Phase 84 | Complete |
 | DETH-01 | Phase 85 | Not started |
 | DETH-02 | Phase 85 | Not started |
 | DETH-03 | Phase 85 | Not started |
