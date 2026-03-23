@@ -184,7 +184,7 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 ### Consolidated Findings
 
 - [ ] **CFND-01**: All v4.0 findings (phases 81-88) deduplicated and severity-ranked
-- [ ] **CFND-02**: KNOWN-ISSUES.md updated with any new findings above INFO
+- [x] **CFND-02**: KNOWN-ISSUES.md updated with any new findings above INFO
 - [ ] **CFND-03**: Cross-phase consistency verified — no contradictions between phase audit documents
 
 | Requirement | Phase | Status |
@@ -207,12 +207,12 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 | TCON-02 | Phase 83 | Complete |
 | TCON-03 | Phase 83 | Complete |
 | TCON-04 | Phase 83 | Complete |
-| PPF-01 | Phase 90 | Complete |
-| PPF-02 | Phase 90 | Complete |
-| PPF-03 | Phase 90 | Complete |
-| PPF-04 | Phase 90 | Complete |
-| PPF-05 | Phase 90 | Complete |
-| PPF-06 | Phase 90 | Complete |
+| PPF-01 | Phase 84 | Complete |
+| PPF-02 | Phase 84 | Complete |
+| PPF-03 | Phase 84 | Complete |
+| PPF-04 | Phase 84 | Complete |
+| PPF-05 | Phase 84 | Complete |
+| PPF-06 | Phase 84 | Complete |
 | DETH-01 | Phase 85 | Complete |
 | DETH-02 | Phase 85 | Complete |
 | DETH-03 | Phase 85 | Complete |
@@ -222,27 +222,27 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 | DCOIN-02 | Phase 86 | Complete |
 | DCOIN-03 | Phase 86 | Complete |
 | DCOIN-04 | Phase 86 | Complete |
-| OJCK-01 | Phase 90 | Complete |
-| OJCK-02 | Phase 90 | Complete |
-| OJCK-03 | Phase 90 | Complete |
-| OJCK-04 | Phase 90 | Complete |
-| OJCK-05 | Phase 90 | Complete |
-| OJCK-06 | Phase 90 | Complete |
+| OJCK-01 | Phase 87 | Complete |
+| OJCK-02 | Phase 87 | Complete |
+| OJCK-03 | Phase 87 | Complete |
+| OJCK-04 | Phase 87 | Complete |
+| OJCK-05 | Phase 87 | Complete |
+| OJCK-06 | Phase 87 | Complete |
 | RDV-01 | Phase 88 | Complete |
 | RDV-02 | Phase 88 | Complete |
 | RDV-03 | Phase 88 | Complete |
 | RDV-04 | Phase 88 | Complete |
 | CFND-01 | Phase 91 | Pending |
-| CFND-02 | Phase 91 | Pending |
+| CFND-02 | Phase 91 | Complete |
 | CFND-03 | Phase 91 | Pending |
 
 **Coverage:**
 - v4.0 requirements: 46 total
 - Mapped to phases: 46
 - Unmapped: 0
-- Complete: 31
-- Pending (gap closure): 15
+- Complete: 44
+- Pending (gap closure): 2
 
 ---
 *Requirements defined: 2026-03-23*
-*Updated: 2026-03-23 — gap closure phases 90-91 assigned; traceability table synced with milestone audit*
+*Updated: 2026-03-23 — OJCK-01-06 mapped to Phase 87, PPF-01-06 mapped to Phase 84; gap closure verification complete*
