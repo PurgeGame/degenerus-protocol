@@ -2678,7 +2678,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             word = uint256(keccak256(abi.encodePacked(word, s)));
             uint24 candidate = currentLvl + 5 + uint24(word % 95);
 
-            address[] storage queue = ticketQueue[_tqWriteKey(candidate)];
+            address[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
             uint256 len = queue.length;
             if (len != 0) {
                 uint256 idx = (word >> 32) % len;

@@ -138,7 +138,7 @@ contract QueueDoubleBufferTest is Test {
     // Test 3: _queueTicketRange routes to write buffer for all levels
     // =========================================================================
     function testQueueTicketRangeUsesWriteKey() public {
-        uint24 startLvl = 5;
+        uint24 startLvl = 3;
         uint24 numLevels = 3;
         harness.exposed_queueTicketRange(ALICE, startLvl, numLevels, 7);
 

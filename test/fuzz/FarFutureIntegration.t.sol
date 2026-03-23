@@ -20,15 +20,15 @@ contract FFKeyComputer is DegenerusGameStorage {
 ///         verifies that advanceGame's internal processFutureTicketBatch drains FF queues.
 ///
 ///         The constructor pre-queues 16 sDGNRS + 16 vault tickets for levels 1-100.
-///         At construction time (level=0), levels 7-100 have targetLevel > 0+6 = true,
+///         At construction time (level=0), levels 6-100 have targetLevel > 0+5 = true,
 ///         so they route to FF key. This test proves those entries are processed (drained)
 ///         when the game reaches those levels.
 ///
 ///         Key assertions:
-///         1. Constructor pre-queues 2 unique addresses in FF key at levels 7+ (sDGNRS + VAULT)
+///         1. Constructor pre-queues 2 unique addresses in FF key at levels 6+ (sDGNRS + VAULT)
 ///            (ticketQueue stores unique addresses, not ticket counts; each address gets 16 tickets
 ///            tracked separately in ticketsOwedPacked)
-///         2. Game advances past level 8 without reverting (proves FF processing works)
+///         2. Game advances past level 5 without reverting (proves FF processing works)
 ///         3. FF queues for processed levels drain to zero (addresses removed after processing)
 ///
 /// @dev To fast-track level transitions, this test seeds the nextPrizePool via vm.store
@@ -65,20 +65,22 @@ contract FarFutureIntegrationTest is DeployProtocol {
         // --- Phase 1: Verify initial state ---
         assertEq(game.level(), 0, "Initial level should be 0");
 
-        // Verify constructor pre-queued FF entries at level 7.
+        // Verify constructor pre-queued FF entries at levels 6, 7, 8.
         // ticketQueue[key] is an address[] of unique buyers. The constructor queues tickets
         // for 2 addresses (sDGNRS and VAULT) at each level, so the array length is 2.
         // Each address has 16 tickets tracked in ticketsOwedPacked (not in the array length).
+        uint256 ffLen6 = _ffQueueLength(6);
+        assertEq(ffLen6, 2, "Constructor should pre-queue 2 FF addresses at level 6 (sDGNRS + VAULT)");
+
         uint256 ffLen7 = _ffQueueLength(7);
         assertEq(ffLen7, 2, "Constructor should pre-queue 2 FF addresses at level 7 (sDGNRS + VAULT)");
 
-        // Also verify level 8 has pre-queued FF entries
         uint256 ffLen8 = _ffQueueLength(8);
         assertEq(ffLen8, 2, "Constructor should pre-queue 2 FF addresses at level 8 (sDGNRS + VAULT)");
 
-        // Verify level 6 is NOT in FF key (6 <= 0+6, routes to write key)
-        uint256 ffLen6 = _ffQueueLength(6);
-        assertEq(ffLen6, 0, "Level 6 should NOT have FF entries (6 <= 0+6)");
+        // Verify level 5 is NOT in FF key (5 <= 0+5, routes to write key)
+        uint256 ffLen5 = _ffQueueLength(5);
+        assertEq(ffLen5, 0, "Level 5 should NOT have FF entries (5 <= 0+5)");
 
         // --- Phase 2: Drive game through levels ---
         // Each level requires:
@@ -93,7 +95,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
         uint256 simTime = block.timestamp; // start at 86400 (deploy time)
 
         for (uint256 day = 0; day < 300; day++) {
-            if (game.level() >= 9) break;
+            if (game.level() >= 6) break;
             if (game.gameOver()) break;
 
             // Advance to next day
@@ -122,14 +124,17 @@ contract FarFutureIntegrationTest is DeployProtocol {
         }
 
         // --- Phase 3: Assert game advanced past FF-containing levels ---
+        // At level 4, _prepareFutureTickets(4) processes levels 6-9 (draining their FF entries).
         uint256 finalLevel = game.level();
         emit log_named_uint("Final level reached", finalLevel);
-        assertGe(finalLevel, 8, "Game should advance past level 7 where FF entries exist");
+        assertGe(finalLevel, 5, "Game should advance past level 4 where FF entries at 6-9 are processed");
 
         // --- Phase 4: Verify FF queues for processed levels are drained ---
-        // After processing through level 7+, FF queues for those levels should be empty.
-        // processFutureTicketBatch is called during advanceGame's STAGE_FUTURE_TICKETS_WORKING
-        // and during the lastPurchaseDay future ticket activation path.
+        // _prepareFutureTickets at level L processes levels L+2..L+5.
+        // By level 5, levels 6-10 have been in processing range.
+        uint256 ffLen6After = _ffQueueLength(6);
+        assertEq(ffLen6After, 0, "FF queue for level 6 should be drained to zero after processing");
+
         uint256 ffLen7After = _ffQueueLength(7);
         assertEq(ffLen7After, 0, "FF queue for level 7 should be drained to zero after processing");
 

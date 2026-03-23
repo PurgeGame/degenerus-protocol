@@ -64,7 +64,7 @@ contract TicketRoutingTest is Test {
     // =========================================================================
 
     function testFarFutureRoutesToFFKey() public {
-        // level=10, targetLevel=17 (17 > 10+6 = true, far-future)
+        // level=10, targetLevel=17 (17 > 10+5 = true, far-future)
         harness.queueTickets(buyer, 17, 1);
         uint24 ffKey = harness.tqFarFutureKey(17);
         uint24 writeKey = harness.tqWriteKey(17);
@@ -78,31 +78,31 @@ contract TicketRoutingTest is Test {
     // =========================================================================
 
     function testNearFutureRoutesToWriteKey() public {
-        // level=10, targetLevel=16 (16 <= 10+6 = true, near-future)
-        harness.queueTickets(buyer, 16, 1);
-        uint24 ffKey = harness.tqFarFutureKey(16);
-        uint24 writeKey = harness.tqWriteKey(16);
+        // level=10, targetLevel=15 (15 <= 10+5 = true, near-future)
+        harness.queueTickets(buyer, 15, 1);
+        uint24 ffKey = harness.tqFarFutureKey(15);
+        uint24 writeKey = harness.tqWriteKey(15);
         assertEq(harness.getQueueLength(writeKey), 1, "write key should have 1 entry");
         assertEq(harness.getQueueEntry(writeKey, 0), buyer, "write key entry should be buyer");
         assertEq(harness.getQueueLength(ffKey), 0, "FF key should be empty");
     }
 
     // =========================================================================
-    // ROUTE-01/02 Boundary: level+6 is near, level+7 is far
+    // ROUTE-01/02 Boundary: level+5 is near, level+6 is far
     // =========================================================================
 
-    function testBoundaryLevel6RoutesToWriteKey() public {
-        // level=10, targetLevel=16 (exactly level+6, near-future)
-        harness.queueTickets(buyer, 16, 1);
-        uint24 writeKey = harness.tqWriteKey(16);
-        assertEq(harness.getQueueLength(writeKey), 1, "boundary level+6 must route to write key");
+    function testBoundaryLevel5RoutesToWriteKey() public {
+        // level=10, targetLevel=15 (exactly level+5, near-future)
+        harness.queueTickets(buyer, 15, 1);
+        uint24 writeKey = harness.tqWriteKey(15);
+        assertEq(harness.getQueueLength(writeKey), 1, "boundary level+5 must route to write key");
     }
 
-    function testBoundaryLevel7RoutesToFFKey() public {
-        // level=10, targetLevel=17 (exactly level+7, far-future)
-        harness.queueTickets(buyer, 17, 1);
-        uint24 ffKey = harness.tqFarFutureKey(17);
-        assertEq(harness.getQueueLength(ffKey), 1, "boundary level+7 must route to FF key");
+    function testBoundaryLevel6RoutesToFFKey() public {
+        // level=10, targetLevel=16 (exactly level+6, far-future)
+        harness.queueTickets(buyer, 16, 1);
+        uint24 ffKey = harness.tqFarFutureKey(16);
+        assertEq(harness.getQueueLength(ffKey), 1, "boundary level+6 must route to FF key");
     }
 
     // =========================================================================
@@ -110,7 +110,7 @@ contract TicketRoutingTest is Test {
     // =========================================================================
 
     function testScaledFarFutureRoutesToFFKey() public {
-        // level=10, targetLevel=17 (far-future), scaled quantity
+        // level=10, targetLevel=17 (17 > 10+5 = true, far-future), scaled quantity
         harness.queueTicketsScaled(buyer, 17, 100);
         uint24 ffKey = harness.tqFarFutureKey(17);
         assertEq(harness.getQueueLength(ffKey), 1, "scaled FF key should have 1 entry");
@@ -118,9 +118,9 @@ contract TicketRoutingTest is Test {
     }
 
     function testScaledNearFutureRoutesToWriteKey() public {
-        // level=10, targetLevel=16 (near-future), scaled quantity
-        harness.queueTicketsScaled(buyer, 16, 100);
-        uint24 writeKey = harness.tqWriteKey(16);
+        // level=10, targetLevel=15 (15 <= 10+5 = true, near-future), scaled quantity
+        harness.queueTicketsScaled(buyer, 15, 100);
+        uint24 writeKey = harness.tqWriteKey(15);
         assertEq(harness.getQueueLength(writeKey), 1, "scaled write key should have 1 entry");
         assertEq(harness.getQueueEntry(writeKey, 0), buyer, "scaled write key entry should be buyer");
     }
@@ -130,18 +130,18 @@ contract TicketRoutingTest is Test {
     // =========================================================================
 
     function testRangeRoutingSplitsCorrectly() public {
-        // level=10, startLevel=14, numLevels=6 -> covers levels 14,15,16,17,18,19
-        // levels 14,15,16 (<=10+6) -> write key
-        // levels 17,18,19 (>10+6) -> FF key
-        harness.queueTicketRange(buyer, 14, 6, 1);
+        // level=10, startLevel=13, numLevels=6 -> covers levels 13,14,15,16,17,18
+        // levels 13,14,15 (<=10+5) -> write key
+        // levels 16,17,18 (>10+5) -> FF key
+        harness.queueTicketRange(buyer, 13, 6, 1);
 
-        // Near-future levels (14, 15, 16) should be in write key
-        for (uint24 lvl = 14; lvl <= 16; lvl++) {
+        // Near-future levels (13, 14, 15) should be in write key
+        for (uint24 lvl = 13; lvl <= 15; lvl++) {
             uint24 writeKey = harness.tqWriteKey(lvl);
             assertEq(harness.getQueueLength(writeKey), 1, "near-future level should be in write key");
         }
-        // Far-future levels (17, 18, 19) should be in FF key
-        for (uint24 lvl = 17; lvl <= 19; lvl++) {
+        // Far-future levels (16, 17, 18) should be in FF key
+        for (uint24 lvl = 16; lvl <= 18; lvl++) {
             uint24 ffKey = harness.tqFarFutureKey(lvl);
             assertEq(harness.getQueueLength(ffKey), 1, "far-future level should be in FF key");
         }
@@ -172,8 +172,8 @@ contract TicketRoutingTest is Test {
         // rngLocked=true, phaseTransitionActive=false, near-future target -> no revert
         harness.setRngLockedFlag(true);
         harness.setPhaseTransitionActive(false);
-        harness.queueTickets(buyer, 16, 1);
-        uint24 writeKey = harness.tqWriteKey(16);
+        harness.queueTickets(buyer, 15, 1);
+        uint24 writeKey = harness.tqWriteKey(15);
         assertEq(harness.getQueueLength(writeKey), 1, "near-future unaffected by rngLocked");
     }
 
@@ -195,7 +195,7 @@ contract TicketRoutingTest is Test {
 
     function testRngGuardRangeRevertsOnFirstFFLevel() public {
         // rngLocked=true, phaseTransitionActive=false
-        // range covers levels 14-19, first FF level is 17
+        // range covers levels 14-19, first FF level is 16
         harness.setRngLockedFlag(true);
         harness.setPhaseTransitionActive(false);
         vm.expectRevert(DegenerusGameStorage.RngLocked.selector);

@@ -826,7 +826,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Roll a target level for lootbox resolution.
-    ///      95% chance: 0-5 levels above base. 5% chance: 5-50 levels above base.
+    ///      90% chance: 0-4 levels above base. 10% chance: 5-50 levels above base.
     /// @param baseLevel The base level to roll from
     /// @param entropy Starting entropy value
     /// @return targetLevel The rolled target level
@@ -837,15 +837,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) private pure returns (uint24 targetLevel, uint256 nextEntropy) {
         uint256 levelEntropy = EntropyLib.entropyStep(entropy);
         uint256 rangeRoll = levelEntropy % 100;
-        if (rangeRoll < 5) {
-            // 5% chance: far future (5-50 levels ahead)
+        if (rangeRoll < 10) {
+            // 10% chance: far future (5-50 levels ahead)
             uint256 farEntropy = EntropyLib.entropyStep(levelEntropy);
             uint256 levelOffset = (farEntropy % 46) + 5;
             targetLevel = baseLevel + uint24(levelOffset);
             nextEntropy = farEntropy;
         } else {
-            // 95% chance: near future (0-5 levels ahead)
-            uint256 levelOffset = levelEntropy % 6;
+            // 90% chance: near future (0-4 levels ahead)
+            uint256 levelOffset = levelEntropy % 5;
             targetLevel = baseLevel + uint24(levelOffset);
             nextEntropy = levelEntropy;
         }

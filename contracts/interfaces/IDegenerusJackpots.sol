@@ -12,7 +12,6 @@ interface IDegenerusJackpots {
     /// @param rngWord VRF random word for winner selection.
     /// @return winners Array of winning addresses.
     /// @return amounts Array of corresponding payout amounts.
-    /// @return winnerMask Bitpacked winner eligibility mask.
     /// @return returnAmountWei Amount of pool returned (undistributed).
     function runBafJackpot(
         uint256 poolWei,
@@ -20,7 +19,7 @@ interface IDegenerusJackpots {
         uint256 rngWord
     )
         external
-        returns (address[] memory winners, uint256[] memory amounts, uint256 winnerMask, uint256 returnAmountWei);
+        returns (address[] memory winners, uint256[] memory amounts, uint256 returnAmountWei);
 
     /// @notice Record a BAF (coinflip) deposit for jackpot eligibility tracking.
     /// @param player The player making the deposit.

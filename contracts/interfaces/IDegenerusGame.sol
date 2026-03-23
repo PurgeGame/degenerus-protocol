@@ -378,6 +378,7 @@ interface IDegenerusGame {
     /// @return tickets Array of player addresses (length 0-4).
     function sampleFarFutureTickets(uint256 entropy) external view returns (address[] memory tickets);
 
+
     /// @notice Purchase a deity pass for a specific symbol (0-31).
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
     /// @param symbolId Symbol to claim (0-31).

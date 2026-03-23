@@ -156,7 +156,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Bit mask for far-future ticket key encoding.
     ///      Set bit 22 of the uint24 level key to create a third key space
     ///      disjoint from both double-buffer slots (bit 23).
-    ///      Far-future = tickets targeting > currentLevel + 6.
+    ///      Far-future = tickets targeting > currentLevel + 5.
     ///      Three key spaces: Slot0 [0x000000-0x3FFFFF], FF [0x400000-0x7FFFFF],
     ///      Slot1 [0x800000-0xBFFFFF]. Disjoint for all lvl < 2^22.
     uint24 internal constant TICKET_FAR_FUTURE_BIT = 1 << 22;
@@ -541,7 +541,7 @@ abstract contract DegenerusGameStorage {
     ) internal {
         if (quantity == 0) return;
         emit TicketsQueued(buyer, targetLevel, quantity);
-        bool isFarFuture = targetLevel > level + 6;
+        bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
         uint24 wk = isFarFuture ? _tqFarFutureKey(targetLevel) : _tqWriteKey(targetLevel);
         uint40 packed = ticketsOwedPacked[wk][buyer];
@@ -569,7 +569,7 @@ abstract contract DegenerusGameStorage {
     ) internal {
         if (quantityScaled == 0) return;
         emit TicketsQueuedScaled(buyer, targetLevel, quantityScaled);
-        bool isFarFuture = targetLevel > level + 6;
+        bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
         uint24 wk = isFarFuture ? _tqFarFutureKey(targetLevel) : _tqWriteKey(targetLevel);
         uint40 packed = ticketsOwedPacked[wk][buyer];
@@ -618,7 +618,7 @@ abstract contract DegenerusGameStorage {
         uint24 currentLevel = level; // cache outside loop to avoid repeated SLOAD
         uint24 lvl = startLevel;
         for (uint24 i = 0; i < numLevels; ) {
-            bool isFarFuture = lvl > currentLevel + 6;
+            bool isFarFuture = lvl > currentLevel + 5;
             if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
             uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
             uint40 packed = ticketsOwedPacked[wk][buyer];

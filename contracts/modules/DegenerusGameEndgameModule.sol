@@ -358,7 +358,6 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         (
             address[] memory winnersArr,
             uint256[] memory amountsArr,
-            ,
             uint256 refund
         ) = jackpots.runBafJackpot(poolWei, lvl, rngWord);
 
