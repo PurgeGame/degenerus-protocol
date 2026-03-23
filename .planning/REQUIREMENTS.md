@@ -36,8 +36,8 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 
 ### Edge Cases
 
-- [ ] **EDGE-01**: Far-future tickets opened after their target level enters the +2 to +6 near-future window are handled correctly (no double-counting or stranding)
-- [ ] **EDGE-02**: Far-future tickets that are already processed by processFutureTicketBatch cannot be re-processed if a new lootbox adds more tickets to the same FF key level
+- [x] **EDGE-01**: Far-future tickets opened after their target level enters the +2 to +6 near-future window are handled correctly (no double-counting or stranding)
+- [x] **EDGE-02**: Far-future tickets that are already processed by processFutureTicketBatch cannot be re-processed if a new lootbox adds more tickets to the same FF key level
 - [x] **EDGE-03**: The TQ-01 fix (_tqWriteKey -> _tqReadKey at JM:2544) is included or superseded by the JACK-01 combined pool approach
 
 ### Verification
@@ -82,8 +82,8 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 | JACK-02 | Phase 77 | Complete |
 | RNG-01 | Phase 79 | Pending |
 | RNG-02 | Phase 75 | Complete |
-| EDGE-01 | Phase 78 | Pending |
-| EDGE-02 | Phase 78 | Pending |
+| EDGE-01 | Phase 78 | Complete |
+| EDGE-02 | Phase 78 | Complete |
 | EDGE-03 | Phase 77 | Complete |
 | TEST-01 | Phase 80 | Pending |
 | TEST-02 | Phase 80 | Pending |
