@@ -299,17 +299,26 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint24 lvl
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
         uint256 entropy = rngWordCurrent;
-        uint24 rk = _tqReadKey(lvl);
+        bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
+        uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
         if (total > type(uint32).max) revert E();
         if (total == 0) {
+            if (!inFarFuture) {
+                uint24 ffk = _tqFarFutureKey(lvl);
+                if (ticketQueue[ffk].length > 0) {
+                    ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
+                    ticketCursor = 0;
+                    return (false, false, 0);
+                }
+            }
             ticketCursor = 0;
             ticketLevel = 0;
             return (false, true, 0);
         }
 
-        if (ticketLevel != lvl) {
+        if (!inFarFuture && ticketLevel != lvl) {
             ticketLevel = lvl;
             ticketCursor = 0;
         }
@@ -317,6 +326,14 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 idx = ticketCursor;
         if (idx >= total) {
             delete ticketQueue[rk];
+            if (!inFarFuture) {
+                uint24 ffk = _tqFarFutureKey(lvl);
+                if (ticketQueue[ffk].length > 0) {
+                    ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
+                    ticketCursor = 0;
+                    return (false, false, 0);
+                }
+            }
             ticketCursor = 0;
             ticketLevel = 0;
             return (false, true, 0);
@@ -419,8 +436,20 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         finished = (idx >= total);
         if (finished) {
             delete ticketQueue[rk];
-            ticketCursor = 0;
-            ticketLevel = 0;
+            if (!inFarFuture) {
+                uint24 ffk = _tqFarFutureKey(lvl);
+                if (ticketQueue[ffk].length > 0) {
+                    ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
+                    ticketCursor = 0;
+                    finished = false;
+                } else {
+                    ticketCursor = 0;
+                    ticketLevel = 0;
+                }
+            } else {
+                ticketCursor = 0;
+                ticketLevel = 0;
+            }
         }
     }
 
