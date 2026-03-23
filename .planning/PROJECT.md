@@ -55,12 +55,19 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v3.7 VRF Path Test Coverage — 7 invariant assertions (256 runs/depth 128), 6 parametric fuzz tests (1000 runs each), 4 Halmos symbolic proofs (0 counterexamples), redemption roll [25,175] bounds verified for all 2^256 inputs — v3.7 Phase 66
 - ✓ v3.7 Verification + Doc Sync — 66-VERIFICATION.md (10/10 must-haves), V37-001 RESOLVED, Phase 66 cross-references in all findings docs, KNOWN-ISSUES.md updated — v3.7 Phase 67
 
+### Validated
+
+- ✓ v3.8 VRF commitment window audit — 55 variables, 87 permissionless paths, 51/51 SAFE general proof, coinflip + daily RNG path-specific proofs, 1 MEDIUM vulnerability (TQ-01 _tqWriteKey bug) with fix recommendation — v3.8 Phases 68-72
+- ✓ v3.8 Boon storage packing — 29 per-player boon mappings packed into 2-slot struct, all 12 boon functions rewritten, lootbox boost simplified to single tier — v3.8 Phase 73
+
 ### Active
 
-- [ ] VRF commitment window audit — exhaustive inventory of every variable VRF words touch (forward + backward), mutation analysis during request→fulfillment window
-- [ ] Coinflip RNG path audit under all conditions
-- [ ] advanceGame day RNG path verification
-- [ ] Per-variable binary verdict: SAFE (immutable in window) or VULNERABLE (mutable + fix recommendation)
+- ✓ Far-future ticket third key space — stable bucket for tickets targeting > currentLevel + 6 — v3.9 Phase 74
+- ✓ Far-future ticket routing in lootbox resolution — _resolveLootboxCommon routes to FF key — v3.9 Phase 75
+- ✓ processFutureTicketBatch drains FF key — processes far-future queue alongside read-side with FF-bit cursor encoding — v3.9 Phase 76
+- ✓ _awardFarFutureCoinJackpot reads both pools — combined read-buffer + FF key selection, TQ-01 fixed — v3.9 Phase 77
+- ✓ rngLocked guard on lootbox opens — belt-and-suspenders RNG safety — v3.9 Phase 75
+- [ ] Edge case handling — lootbox opened after FF tickets already processed at near-future boundary
 
 ### Deferred (v3.3+)
 
@@ -122,27 +129,38 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | WAR-01 | Medium | Compromised admin + 7-day community inattention enables coordinator swap |
 | WAR-02 | Medium | Colluding voter cartel at day 6 (5% threshold) |
 | WAR-06 | Low | Admin spam-propose gas griefing (no per-proposer cooldown) |
+| ~~TQ-01~~ | ~~Medium~~ | ~~RESOLVED v3.9 Phase 77: combined pool replaces _tqWriteKey with _tqReadKey + _tqFarFutureKey~~ |
 
-## Current Milestone: v3.8 VRF Commitment Window Audit
+## Current Milestone: v3.9 Far-Future Ticket Fix
 
-**Goal:** Prove that no player-controllable action between VRF request and fulfillment can influence outcomes determined by that RNG word.
+**Goal:** Fix the far-future ticket stranding bug where ~50% of lootbox tickets targeting 7-50 levels ahead are permanently lost due to double-buffer ping-pong, and ensure all far-future tickets are eligible for jackpot draws.
 
 **Target features:**
-- Exhaustive inventory of every variable/state that VRF words touch (forward + backward)
-- Per-variable mutation analysis: which external functions can change it during the commitment window
-- Binary verdict per variable: SAFE (immutable in window) or VULNERABLE (mutable in window)
-- Coinflip RNG path audit under all conditions
-- advanceGame day RNG path verification
-- Ticket queue swap bug deep-dive and similar patterns
+- Third key space (TICKET_FAR_FUTURE_BIT = 1 << 22) for stable far-future ticket storage
+- Lootbox resolution routes far-future tickets to FF key instead of double-buffer
+- processFutureTicketBatch extended to drain FF key alongside read-side queue
+- _awardFarFutureCoinJackpot reads both write-side buffer and FF key
+- rngLocked guard on lootbox opens for RNG safety
+- Edge case coverage: FF tickets at near-future boundary, cursor state tracking, jackpot eligibility
 
----
 ## Current State
 
-v3.7 shipped — VRF Path Audit complete. 77 Foundry/Halmos tests, 20/20 requirements, 0 HIGH/MEDIUM/LOW findings (7 INFO documented). Ticket queue swap during jackpot phase identified as commitment window violation — motivates v3.8.
+v3.8 shipped 2026-03-23 — VRF Commitment Window Audit complete. 4047-line audit document proving commitment window safety across all VRF paths. 1 MEDIUM vulnerability found (TQ-01: _awardFarFutureCoinJackpot reads write buffer at JackpotModule:2544) with one-line fix recommendation. Boon storage packing completed as gas optimization (29 mappings → 2-slot packed struct). Affiliate level allocation reservation fix applied to WhaleModule.
 
-**Grand total across all milestones:** 87+ findings (16 LOW, 71+ INFO), 0 HIGH/MEDIUM outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified.
+v3.9 Phase 74 complete — TICKET_FAR_FUTURE_BIT constant (1 << 22) and _tqFarFutureKey(lvl) helper added to DegenerusGameStorage.sol. 5 Foundry fuzz tests prove three-way key space collision-freedom (Slot 0, Slot 1, Far Future) across all valid levels.
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit).
+v3.9 Phase 75 complete — _queueTickets/_queueTicketsScaled route far-future tickets to FF key, rngLocked guard prevents permissionless FF writes during VRF commitment window, advanceGame-origin writes exempted.
+
+v3.9 Phase 76 complete — processFutureTicketBatch extended with dual-queue drain (read-side then FF key), ticketLevel FF-bit encoding for cursor state tracking, _prepareFutureTickets fixed to strip FF bit for correct resume. 9 Foundry tests proving PROC-01/02/03.
+
+v3.9 Phase 77 complete — _awardFarFutureCoinJackpot now selects winners from combined read-buffer + FF-key population. TQ-01 (MEDIUM) resolved: _tqWriteKey eliminated from the function, replaced by _tqReadKey + _tqFarFutureKey combined pool. 8 Foundry tests proving JACK-01/JACK-02/EDGE-03.
+
+**Grand total across all milestones:** 90+ findings (16 LOW, 74+ INFO), 0 MEDIUM outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in Phase 77 via combined pool approach.
+
+**Known Issues:**
+- BOON-06: Test verification functionally confirmed (identical results pre/post) but Plan 03 not formally executed
+
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window).
 
 ## Evolution
 
@@ -162,4 +180,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-22 after v3.8 milestone started*
+*Last updated: 2026-03-23 after v3.9 milestone start (Far-Future Ticket Fix)*
