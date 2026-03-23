@@ -149,7 +149,7 @@
 - [x] **Phase 76: Ticket Processing Extension** - 1 plan, 3 requirements (PROC-01, PROC-02, PROC-03) (completed 2026-03-23)
 - [x] **Phase 77: Jackpot Combined Pool + TQ-01 Fix** - 1 plan, 3 requirements (JACK-01, JACK-02, EDGE-03) (completed 2026-03-23)
 - [x] **Phase 78: Edge Case Handling** - 1 plan, 2 requirements (EDGE-01, EDGE-02) (completed 2026-03-23)
-- [ ] **Phase 79: RNG Commitment Window Proof** - 1 plan, 1 requirement (RNG-01)
+- [x] **Phase 79: RNG Commitment Window Proof** - 1 plan, 1 requirement (RNG-01) (completed 2026-03-23)
 - [ ] **Phase 80: Test Suite** - 2 plans, 5 requirements (TEST-01, TEST-02, TEST-03, TEST-04, TEST-05)
 
 ## Phase Details
@@ -224,7 +224,7 @@ Plans:
   3. The proof follows the same methodology as the v3.8 commitment window audit (backward-trace from outcome to committed inputs)
 **Plans**: 1 plan
 Plans:
-- [ ] 79-01-PLAN.md -- Backward-trace proof: mutation path enumeration + SAFE verdicts for FF key commitment window
+- [x] 79-01-PLAN.md -- Backward-trace proof: mutation path enumeration + SAFE verdicts for FF key commitment window
 
 ### Phase 80: Test Suite
 **Goal**: All far-future ticket behavior is covered by unit and integration tests proving correctness of routing, processing, jackpot selection, and RNG guards
@@ -253,7 +253,7 @@ Phases execute in dependency order: 74 -> 75 -> 76 -> 77 + 78 (parallel-eligible
 | 76. Ticket Processing Extension | 1/1 | Complete    | 2026-03-23 |
 | 77. Jackpot Combined Pool + TQ-01 Fix | 1/1 | Complete    | 2026-03-23 |
 | 78. Edge Case Handling | 0/1 | Complete    | 2026-03-23 |
-| 79. RNG Commitment Window Proof | 0/1 | Not started | - |
+| 79. RNG Commitment Window Proof | 1/1 | Complete   | 2026-03-23 |
 | 80. Test Suite | 0/2 | Not started | - |
 
 ## Deferred
