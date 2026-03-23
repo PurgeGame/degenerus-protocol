@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
-status: Ready to execute
-stopped_at: Completed 90-01-PLAN.md
-last_updated: "2026-03-23T16:25:23.080Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 90-03-PLAN.md
+last_updated: "2026-03-23T16:29:11.558Z"
 progress:
   total_phases: 10
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 91 (consolidated-findings-rewrite) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Accumulated Context
 
@@ -56,6 +56,8 @@ Plan: 2 of 3
 - [Phase 85]: All 13 RNG consumption points in daily ETH jackpot verified safe per VRF commitment window analysis
 - [Phase 90]: Phase 84 VERIFICATION report follows 85-VERIFICATION.md format exactly for gap-closure consistency
 - [Phase 90]: DEC-01 decBucketOffsetPacked collision documented as FALSE POSITIVE; DGN-01 off-by-one documented as FALSE POSITIVE; actual Phase 87 findings: 0 HIGH, 0 MEDIUM, 0 LOW, 21 INFO
+- [Phase 91]: DEC-01 and DGN-01 documented as withdrawn false positives in KNOWN-ISSUES.md audit history, not added to body sections
+- [Phase 90]: Coverage count corrected to 44/2 (not 43/3) because CFND-02 was already Complete from Phase 91-02
 
 ### Pending Todos
 
@@ -67,6 +69,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T16:25:23.078Z
-Stopped at: Completed 90-01-PLAN.md
+Last session: 2026-03-23T16:29:11.555Z
+Stopped at: Completed 90-03-PLAN.md
 Resume file: None

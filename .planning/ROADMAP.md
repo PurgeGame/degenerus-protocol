@@ -168,7 +168,7 @@
 - [x] **Phase 87: Other Jackpots** — 4 plans, 6 requirements (OJCK-01 through OJCK-06) (completed 2026-03-23)
 - [x] **Phase 88: RNG-Dependent Variable Re-verification** — 2 plans, 4 requirements (RDV-01, RDV-02, RDV-03, RDV-04) (completed 2026-03-23)
 - [x] **Phase 89: Consolidated Findings** — 1 plan, 3 requirements (CFND-01, CFND-02, CFND-03) (completed 2026-03-23)
-- [ ] **Phase 90: Verification Backfill** — gap closure, 12 requirements (OJCK-01 through OJCK-06, PPF-01 through PPF-06)
+- [x] **Phase 90: Verification Backfill** — gap closure, 12 requirements (OJCK-01 through OJCK-06, PPF-01 through PPF-06) (completed 2026-03-23)
 - [ ] **Phase 91: Consolidated Findings Rewrite** — gap closure, 3 requirements (CFND-01, CFND-02, CFND-03)
 
 | Phase | Plans Complete | Status | Completed |
@@ -182,8 +182,8 @@
 | 87. Other Jackpots | 4/4 | Complete | 2026-03-23 |
 | 88. RNG-Dependent Variable Re-verification | 2/1 | Complete    | 2026-03-23 |
 | 89. Consolidated Findings | 1/1 | Complete | 2026-03-23 |
-| 90. Verification Backfill | 2/3 | In Progress|  |
-| 91. Consolidated Findings Rewrite | 0/3 | Pending | — |
+| 90. Verification Backfill | 3/3 | Complete   | 2026-03-23 |
+| 91. Consolidated Findings Rewrite | 0/3 | Planned    |  |
 
 ### Phase 82: Ticket Processing Mechanics
 
@@ -290,7 +290,7 @@ Plans:
 Plans:
 - [x] 90-01-PLAN.md — Create Phase 87 SUMMARY files (87-01 through 87-04) and 87-VERIFICATION.md from existing audit documents
 - [x] 90-02-PLAN.md — Create Phase 84 84-VERIFICATION.md from existing audit document and SUMMARY
-- [ ] 90-03-PLAN.md — Sync REQUIREMENTS.md: fix 19 stale traceability rows, 3 unchecked checkboxes (TCON-03, TCON-04, RDV-02), mark OJCK-01-06 as [x]
+- [x] 90-03-PLAN.md — Sync REQUIREMENTS.md: fix 19 stale traceability rows, 3 unchecked checkboxes (TCON-03, TCON-04, RDV-02), mark OJCK-01-06 as [x]
 
 **Requirements:** OJCK-01, OJCK-02, OJCK-03, OJCK-04, OJCK-05, OJCK-06, PPF-01, PPF-02, PPF-03, PPF-04, PPF-05, PPF-06
 
