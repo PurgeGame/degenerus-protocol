@@ -240,8 +240,8 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 - v4.0 requirements: 46 total
 - Mapped to phases: 46
 - Unmapped: 0
-- Complete: 44
-- Pending (gap closure): 2
+- Complete: 46
+- Pending: 0
 
 ---
 *Requirements defined: 2026-03-23*
