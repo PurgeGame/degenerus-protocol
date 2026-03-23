@@ -1157,18 +1157,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 startLevel = lvl + 2;
         uint24 endLevel = lvl + 6;
         uint24 resumeLevel = ticketLevel;
+        // Strip FF bit to get base level for range comparison.
+        // When ticketLevel has bit 22 set, we are mid-FF-processing for that base level.
+        uint24 baseResume = resumeLevel & ~uint24(TICKET_FAR_FUTURE_BIT);
 
         // Continue an in-flight future level first to preserve progress.
-        if (resumeLevel >= startLevel && resumeLevel <= endLevel) {
+        if (baseResume >= startLevel && baseResume <= endLevel) {
             (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
-                resumeLevel
+                baseResume
             );
             if (worked || !levelFinished) return false;
         }
 
         // Then probe remaining target levels in order.
         for (uint24 target = startLevel; target <= endLevel; ) {
-            if (target != resumeLevel) {
+            if (target != baseResume) {
                 (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
                     target
                 );
