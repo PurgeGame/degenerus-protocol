@@ -177,7 +177,7 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 ### RNG-Dependent Variable Re-verification
 
 - [x] **RDV-01**: Every variable from v3.8 commitment window inventory Section 4 re-verified against current Solidity with storage slot confirmation
-- [ ] **RDV-02**: Missing variables identified — state that should be in the RNG-dependent catalog but was missed
+- [x] **RDV-02**: Missing variables identified — state that should be in the RNG-dependent catalog but was missed
 - [x] **RDV-03**: Delta assessment — variables that changed behavior since v3.8 audit documented
 - [x] **RDV-04**: Every discrepancy and new finding tagged
 
@@ -228,10 +228,10 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 | OJCK-04 | Phase 87 | Not started |
 | OJCK-05 | Phase 87 | Not started |
 | OJCK-06 | Phase 87 | Not started |
-| RDV-01 | Phase 88 | Not started |
-| RDV-02 | Phase 88 | Not started |
-| RDV-03 | Phase 88 | Not started |
-| RDV-04 | Phase 88 | Not started |
+| RDV-01 | Phase 88 | Complete |
+| RDV-02 | Phase 88 | Complete |
+| RDV-03 | Phase 88 | Complete |
+| RDV-04 | Phase 88 | Complete |
 | CFND-01 | Phase 89 | Not started |
 | CFND-02 | Phase 89 | Not started |
 | CFND-03 | Phase 89 | Not started |
