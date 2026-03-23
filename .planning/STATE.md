@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.9
-milestone_name: Far-Future Ticket Fix
-status: Milestone complete
-stopped_at: Completed 80-02-PLAN.md
-last_updated: "2026-03-23T03:44:17.919Z"
+milestone: v4.0
+milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
+status: In progress
+stopped_at: Completed 83-02-PLAN.md
+last_updated: "2026-03-23T15:22:05Z"
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 8
-  completed_plans: 8
+  total_phases: 8
+  completed_phases: 3
+  total_plans: 16
+  completed_plans: 6
 ---
 
 # State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 80 — Test Suite (Plan 02 complete)
+**Current focus:** Phase 83 — Ticket Consumption & Winner Selection (Plan 02 complete)
 
 ## Current Position
 
-Phase: 80
-Plan: Not started
+Phase: 83
+Plan: 02 of 02 (complete)
 
 ## Accumulated Context
 
@@ -46,6 +46,10 @@ Plan: Not started
 - [Phase 80]: ticketQueue stores unique addresses (not ticket counts) -- constructor pre-queues 2 entries (sDGNRS + VAULT) per FF level, not 32
 - [Phase 80]: Prize pool seeding via vm.store(slot 3) to 49.9 ETH fast-tracks level transitions in integration tests
 - [Phase 80]: gas_limit/block_gas_limit 30B added to foundry.toml for multi-level integration test support
+- [Phase 83]: Far-future coin jackpot uses fundamentally different winner selection ((entropy >> 32) % len, no deity virtual entries) vs all other trait-based jackpots
+- [Phase 83]: BAF jackpot documented as 9th type -- uses view functions on DegenerusGame, not direct storage reads
+- [Phase 83]: v3.9 proof discrepancies (DSC-01) confirmed security-neutral: FF-only is strictly simpler than combined pool
+- [Phase 83]: No new findings -- all 9 jackpot winner index formulas verified correct against current Solidity source
 
 ### Pending Todos
 
@@ -57,6 +61,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T03:37:08Z
-Stopped at: Completed 80-02-PLAN.md
+Last session: 2026-03-23T15:22:05Z
+Stopped at: Completed 83-02-PLAN.md
 Resume file: None
