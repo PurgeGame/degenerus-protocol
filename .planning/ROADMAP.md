@@ -163,7 +163,7 @@
 - [x] **Phase 82: Ticket Processing Mechanics** — 2 plans, 6 requirements (TPROC-01 through TPROC-06) (completed 2026-03-23)
 - [x] **Phase 83: Ticket Consumption & Winner Selection** — 2 plans, 4 requirements (TCON-01 through TCON-04) (completed 2026-03-23)
 - [x] **Phase 84: Prize Pool Flow & currentPrizePool Deep Dive** — 1 plan, 6 requirements (PPF-01 through PPF-06) (completed 2026-03-23)
-- [ ] **Phase 85: Daily ETH Jackpot** — 2 plans, 5 requirements (DETH-01 through DETH-05)
+- [x] **Phase 85: Daily ETH Jackpot** — 2 plans, 5 requirements (DETH-01 through DETH-05) (completed 2026-03-23)
 - [x] **Phase 86: Daily Coin + Ticket Jackpot** — 2 plans, 4 requirements (DCOIN-01 through DCOIN-04) (completed 2026-03-23)
 - [x] **Phase 87: Other Jackpots** — 4 plans, 6 requirements (OJCK-01 through OJCK-06) (completed 2026-03-23)
 - [x] **Phase 88: RNG-Dependent Variable Re-verification** — 2 plans, 4 requirements (RDV-01, RDV-02, RDV-03, RDV-04) (completed 2026-03-23)
@@ -172,10 +172,10 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 81. Ticket Creation & Queue Mechanics | 2/2 | Complete | 2026-03-23 |
-| 82. Ticket Processing Mechanics | 2/2 | Complete   | 2026-03-23 |
+| 82. Ticket Processing Mechanics | 2/2 | Complete    | 2026-03-23 |
 | 83. Ticket Consumption & Winner Selection | 2/2 | Complete | 2026-03-23 |
 | 84. Prize Pool Flow & currentPrizePool Deep Dive | 1/1 | Complete | 2026-03-23 |
-| 85. Daily ETH Jackpot | 1/2 | In Progress|  |
+| 85. Daily ETH Jackpot | 2/2 | Complete   | 2026-03-23 |
 | 86. Daily Coin + Ticket Jackpot | 2/2 | Complete    | 2026-03-23 |
 | 87. Other Jackpots | 4/4 | Complete | 2026-03-23 |
 | 88. RNG-Dependent Variable Re-verification | 1/1 | Complete   | 2026-03-23 |
@@ -220,11 +220,11 @@ Plans:
 
 **Goal:** Trace the daily ETH jackpot distribution system -- BPS allocation, Phase 0/Phase 1 behavior, bucket/cursor winner selection, carryover mechanics -- with exhaustive file:line citations and discrepancy flagging against prior audit documentation.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 85-01-PLAN.md — Trace payDailyJackpot entry points, BPS allocation table, budget split, Phase 0 vs Phase 1 behavior, early-burn path
-- [ ] 85-02-PLAN.md — Trace bucket/cursor algorithm, carryover mechanics, complete cross-reference, compile requirement verdicts
+- [x] 85-02-PLAN.md — Trace bucket/cursor algorithm, carryover mechanics, complete cross-reference, compile requirement verdicts
 
 **Requirements:** DETH-01, DETH-02, DETH-03, DETH-04, DETH-05
 

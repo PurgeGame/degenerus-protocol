@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
-status: In progress
-stopped_at: Completed 83-02-PLAN.md
-last_updated: "2026-03-23T15:22:05Z"
+status: Ready to plan
+stopped_at: Completed 85-02-PLAN.md
+last_updated: "2026-03-23T15:27:38.429Z"
 progress:
   total_phases: 8
-  completed_phases: 3
-  total_plans: 16
-  completed_plans: 6
+  completed_phases: 7
+  total_plans: 15
+  completed_plans: 11
 ---
 
 # State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 83
-Plan: 02 of 02 (complete)
+Plan: Not started
 
 ## Accumulated Context
 
@@ -50,6 +50,10 @@ Plan: 02 of 02 (complete)
 - [Phase 83]: BAF jackpot documented as 9th type -- uses view functions on DegenerusGame, not direct storage reads
 - [Phase 83]: v3.9 proof discrepancies (DSC-01) confirmed security-neutral: FF-only is strictly simpler than combined pool
 - [Phase 83]: No new findings -- all 9 jackpot winner index formulas verified correct against current Solidity source
+- [Phase 85]: Chunked daily path does NOT use solo bucket 75/25 split -- deliberate design for gas-predictable costs
+- [Phase 85]: Pre-deduction carryover loss path: 0.5% futurePrizePool when cap=0, assessed as INFO (solvency buffer)
+- [Phase 85]: NF-V38-01: v3.8 omits whalePassClaims from payDailyJackpot scope -- INFO (early-burn only)
+- [Phase 85]: All 13 RNG consumption points in daily ETH jackpot verified safe per VRF commitment window analysis
 
 ### Pending Todos
 
@@ -61,6 +65,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T15:22:05Z
-Stopped at: Completed 83-02-PLAN.md
+Last session: 2026-03-23T15:27:38.426Z
+Stopped at: Completed 85-02-PLAN.md
 Resume file: None

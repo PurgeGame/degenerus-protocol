@@ -154,8 +154,8 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 
 - [x] **DETH-01**: currentPrizePool source, BPS allocation table, and split logic documented with file:line
 - [x] **DETH-02**: Phase 0 vs Phase 1 jackpot behavior documented
-- [ ] **DETH-03**: Bucket/cursor winner selection algorithm documented with file:line
-- [ ] **DETH-04**: Carryover mechanics (unfilled buckets, excess, rollover) documented
+- [x] **DETH-03**: Bucket/cursor winner selection algorithm documented with file:line
+- [x] **DETH-04**: Carryover mechanics (unfilled buckets, excess, rollover) documented
 - [x] **DETH-05**: Every discrepancy and new finding tagged
 
 ### Daily Coin + Ticket Jackpot
