@@ -147,8 +147,8 @@
 - [x] **Phase 74: Storage Foundation** - 1 plan, 2 requirements (STORE-01, STORE-02) (completed 2026-03-23)
 - [x] **Phase 75: Ticket Routing + RNG Guard** - 1 plan, 4 requirements (ROUTE-01, ROUTE-02, ROUTE-03, RNG-02) (completed 2026-03-23)
 - [x] **Phase 76: Ticket Processing Extension** - 1 plan, 3 requirements (PROC-01, PROC-02, PROC-03) (completed 2026-03-23)
-- [ ] **Phase 77: Jackpot Combined Pool + TQ-01 Fix** - 1 plan, 3 requirements (JACK-01, JACK-02, EDGE-03)
-- [ ] **Phase 78: Edge Case Handling** - EDGE-01, EDGE-02
+- [x] **Phase 77: Jackpot Combined Pool + TQ-01 Fix** - 1 plan, 3 requirements (JACK-01, JACK-02, EDGE-03) (completed 2026-03-23)
+- [ ] **Phase 78: Edge Case Handling** - 1 plan, 2 requirements (EDGE-01, EDGE-02)
 - [ ] **Phase 79: RNG Commitment Window Proof** - RNG-01
 - [ ] **Phase 80: Test Suite** - TEST-01, TEST-02, TEST-03, TEST-04, TEST-05
 
@@ -201,7 +201,7 @@ Plans:
   3. The TQ-01 vulnerability (_tqWriteKey read at JM:2544) is either directly fixed or made irrelevant by the combined pool approach reading both pools
 **Plans**: 1 plan
 Plans:
-- [ ] 77-01-PLAN.md -- TDD: combined pool selection in _awardFarFutureCoinJackpot + TQ-01 fix
+- [x] 77-01-PLAN.md -- TDD: combined pool selection in _awardFarFutureCoinJackpot + TQ-01 fix
 
 ### Phase 78: Edge Case Handling
 **Goal**: Boundary conditions around far-future ticket lifecycle are handled without double-counting, stranding, or re-processing
@@ -210,7 +210,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. A ticket deposited via lootbox into the FF key for level L is correctly handled when level L later enters the +2 to +6 near-future window (no double-counting between FF key and write buffer)
   2. Once processFutureTicketBatch has fully drained the FF key for a level, subsequent lootbox deposits to that same level's FF key start a fresh queue that does not re-process already-minted entries
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 78-01-PLAN.md -- Foundry edge case tests + formal safety proof for EDGE-01/EDGE-02
 
 ### Phase 79: RNG Commitment Window Proof
 **Goal**: The new far-future key space is proven safe under VRF commitment window analysis -- no permissionless action can influence jackpot winner selection after VRF request
@@ -244,8 +246,8 @@ Phases execute in dependency order: 74 -> 75 -> 76 -> 77 + 78 (parallel-eligible
 | 74. Storage Foundation | 1/1 | Complete    | 2026-03-23 |
 | 75. Ticket Routing + RNG Guard | 1/1 | Complete    | 2026-03-23 |
 | 76. Ticket Processing Extension | 1/1 | Complete    | 2026-03-23 |
-| 77. Jackpot Combined Pool + TQ-01 Fix | 0/1 | Not started | - |
-| 78. Edge Case Handling | 0/TBD | Not started | - |
+| 77. Jackpot Combined Pool + TQ-01 Fix | 1/1 | Complete   | 2026-03-23 |
+| 78. Edge Case Handling | 0/1 | Not started | - |
 | 79. RNG Commitment Window Proof | 0/TBD | Not started | - |
 | 80. Test Suite | 0/TBD | Not started | - |
 
