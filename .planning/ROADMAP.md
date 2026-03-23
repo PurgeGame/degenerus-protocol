@@ -149,8 +149,8 @@
 - [x] **Phase 76: Ticket Processing Extension** - 1 plan, 3 requirements (PROC-01, PROC-02, PROC-03) (completed 2026-03-23)
 - [x] **Phase 77: Jackpot Combined Pool + TQ-01 Fix** - 1 plan, 3 requirements (JACK-01, JACK-02, EDGE-03) (completed 2026-03-23)
 - [x] **Phase 78: Edge Case Handling** - 1 plan, 2 requirements (EDGE-01, EDGE-02) (completed 2026-03-23)
-- [ ] **Phase 79: RNG Commitment Window Proof** - RNG-01
-- [ ] **Phase 80: Test Suite** - TEST-01, TEST-02, TEST-03, TEST-04, TEST-05
+- [ ] **Phase 79: RNG Commitment Window Proof** - 1 plan, 1 requirement (RNG-01)
+- [ ] **Phase 80: Test Suite** - 2 plans, 5 requirements (TEST-01, TEST-02, TEST-03, TEST-04, TEST-05)
 
 ## Phase Details
 
@@ -212,7 +212,7 @@ Plans:
   2. Once processFutureTicketBatch has fully drained the FF key for a level, subsequent lootbox deposits to that same level's FF key start a fresh queue that does not re-process already-minted entries
 **Plans**: 1 plan
 Plans:
-- [ ] 78-01-PLAN.md -- Foundry edge case tests + formal safety proof for EDGE-01/EDGE-02
+- [x] 78-01-PLAN.md -- Foundry edge case tests + formal safety proof for EDGE-01/EDGE-02
 
 ### Phase 79: RNG Commitment Window Proof
 **Goal**: The new far-future key space is proven safe under VRF commitment window analysis -- no permissionless action can influence jackpot winner selection after VRF request
@@ -222,7 +222,9 @@ Plans:
   1. All permissionless mutation paths that can modify the FF key population between VRF request and fulfillment are enumerated and each receives a SAFE verdict (frozen, guarded, or outcome-irrelevant)
   2. The combined pool length used by _awardFarFutureCoinJackpot cannot change between VRF request and the moment the RNG word selects a winner index
   3. The proof follows the same methodology as the v3.8 commitment window audit (backward-trace from outcome to committed inputs)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 79-01-PLAN.md -- Backward-trace proof: mutation path enumeration + SAFE verdicts for FF key commitment window
 
 ### Phase 80: Test Suite
 **Goal**: All far-future ticket behavior is covered by unit and integration tests proving correctness of routing, processing, jackpot selection, and RNG guards
@@ -234,7 +236,10 @@ Plans:
   3. A unit test proves _awardFarFutureCoinJackpot can find and award winners from the FF key entries
   4. A unit test proves lootbox opens with far-future results revert when rngLocked == true
   5. An integration test advances through multiple levels and verifies zero far-future tickets are stranded (all processed, all jackpot-eligible)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 80-01-PLAN.md -- Verify existing test coverage for TEST-01 through TEST-04 (34 tests across 4 files)
+- [ ] 80-02-PLAN.md -- TDD: multi-level integration test for TEST-05 (zero FF ticket stranding)
 
 ## Progress
 
@@ -248,8 +253,8 @@ Phases execute in dependency order: 74 -> 75 -> 76 -> 77 + 78 (parallel-eligible
 | 76. Ticket Processing Extension | 1/1 | Complete    | 2026-03-23 |
 | 77. Jackpot Combined Pool + TQ-01 Fix | 1/1 | Complete    | 2026-03-23 |
 | 78. Edge Case Handling | 0/1 | Complete    | 2026-03-23 |
-| 79. RNG Commitment Window Proof | 0/TBD | Not started | - |
-| 80. Test Suite | 0/TBD | Not started | - |
+| 79. RNG Commitment Window Proof | 0/1 | Not started | - |
+| 80. Test Suite | 0/2 | Not started | - |
 
 ## Deferred
 
