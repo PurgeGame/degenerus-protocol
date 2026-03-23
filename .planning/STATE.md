@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.9
 milestone_name: Far-Future Ticket Fix
 status: Phase complete — ready for verification
-stopped_at: Completed 76-01-PLAN.md
-last_updated: "2026-03-23T02:24:14.636Z"
+stopped_at: Completed 77-01-PLAN.md
+last_updated: "2026-03-23T02:51:02.307Z"
 progress:
   total_phases: 7
-  completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
+  completed_phases: 4
+  total_plans: 5
+  completed_plans: 4
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 76 — ticket-processing-extension
+**Current focus:** Phase 78 — Edge Case Handling
 
 ## Current Position
 
-Phase: 76 (ticket-processing-extension) — EXECUTING
+Phase: 78 (Edge Case Handling) — EXECUTING
 Plan: 1 of 1
 
 ## Accumulated Context
@@ -40,6 +40,8 @@ Plan: 1 of 1
 - [Phase 75]: Cache level outside _queueTicketRange loop as currentLevel to avoid per-iteration SLOAD
 - [Phase 76]: Return after read-side drain, start FF on next call (simplicity over intra-call transition)
 - [Phase 76]: Strip FF bit in _prepareFutureTickets for resume (not in processFutureTicketBatch)
+- [Phase 77]: Combined pool approach (read buffer + FF key) supersedes simple TQ-01 one-line fix
+- [Phase 77]: Index routing uses strict less-than (idx < readLen) to avoid off-by-one at boundary
 
 ### Pending Todos
 
@@ -51,6 +53,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T02:24:14.634Z
-Stopped at: Completed 76-01-PLAN.md
+Last session: 2026-03-23T02:51:02.305Z
+Stopped at: Completed 77-01-PLAN.md
 Resume file: None

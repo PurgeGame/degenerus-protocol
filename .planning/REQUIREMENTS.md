@@ -26,8 +26,8 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 
 ### Jackpot Eligibility
 
-- [ ] **JACK-01**: _awardFarFutureCoinJackpot selects winners from both write-side buffer AND far-future key combined
-- [ ] **JACK-02**: Winner index is computed over the combined pool length (len + ffLen) with correct routing to the right queue
+- [x] **JACK-01**: _awardFarFutureCoinJackpot selects winners from both write-side buffer AND far-future key combined
+- [x] **JACK-02**: Winner index is computed over the combined pool length (len + ffLen) with correct routing to the right queue
 
 ### RNG Safety
 
@@ -38,7 +38,7 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 
 - [ ] **EDGE-01**: Far-future tickets opened after their target level enters the +2 to +6 near-future window are handled correctly (no double-counting or stranding)
 - [ ] **EDGE-02**: Far-future tickets that are already processed by processFutureTicketBatch cannot be re-processed if a new lootbox adds more tickets to the same FF key level
-- [ ] **EDGE-03**: The TQ-01 fix (_tqWriteKey -> _tqReadKey at JM:2544) is included or superseded by the JACK-01 combined pool approach
+- [x] **EDGE-03**: The TQ-01 fix (_tqWriteKey -> _tqReadKey at JM:2544) is included or superseded by the JACK-01 combined pool approach
 
 ### Verification
 
@@ -78,13 +78,13 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 | PROC-01 | Phase 76 | Complete |
 | PROC-02 | Phase 76 | Complete |
 | PROC-03 | Phase 76 | Complete |
-| JACK-01 | Phase 77 | Pending |
-| JACK-02 | Phase 77 | Pending |
+| JACK-01 | Phase 77 | Complete |
+| JACK-02 | Phase 77 | Complete |
 | RNG-01 | Phase 79 | Pending |
 | RNG-02 | Phase 75 | Complete |
 | EDGE-01 | Phase 78 | Pending |
 | EDGE-02 | Phase 78 | Pending |
-| EDGE-03 | Phase 77 | Pending |
+| EDGE-03 | Phase 77 | Complete |
 | TEST-01 | Phase 80 | Pending |
 | TEST-02 | Phase 80 | Pending |
 | TEST-03 | Phase 80 | Pending |
