@@ -18,6 +18,7 @@
 - ✅ **v3.7 VRF Path Audit** — Phases 63-67 (shipped 2026-03-22)
 - ✅ **v3.8 VRF Commitment Window Audit** — Phases 68-73 (shipped 2026-03-23)
 - ✅ **v3.9 Far-Future Ticket Fix** — Phases 74-80 (shipped 2026-03-23)
+- **v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit** — Phases 81+ (in progress)
 
 ## Phases
 
@@ -153,6 +154,16 @@
 - [x] **Phase 80: Test Suite** - 2 plans, 5 requirements (TEST-01 through TEST-05) (completed 2026-03-23)
 
 </details>
+
+### v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit (In Progress)
+
+**Milestone Goal:** Re-audit ticket creation and RNG-dependent variables with independent code traces, flagging all discrepancies between current code and prior audit documentation.
+
+- [x] **Phase 81: Ticket Creation & Queue Mechanics** - 1/2 plans, 8 requirements (TKT-01 through TKT-06, DSC-01, DSC-02) (in progress)
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 81. Ticket Creation & Queue Mechanics | 1/2 | In progress | - |
 
 ## Deferred
 

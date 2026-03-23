@@ -96,6 +96,40 @@ Requirements for far-future ticket stranding fix. Each maps to roadmap phases.
 - Mapped to phases: 20
 - Unmapped: 0
 
+## v4.0 Requirements
+
+Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps to roadmap phases.
+
+### Ticket Creation & Queue Mechanics
+
+- [x] **TKT-01**: Every external function that queues tickets is identified with file:line, caller chain, and storage reads/writes
+- [x] **TKT-02**: For each ticket creation path: what determines ticket count, target level, and queue key selection
+- [x] **TKT-03**: Every ticket creation path's rngLockedFlag and prizePoolFrozen behavior is documented
+- [x] **TKT-04**: All callers of _queueTickets, _queueTicketsScaled, _queueTicketRange, and direct ticketQueue pushes are enumerated
+- [x] **TKT-05**: Double-buffer formulas (_tqReadKey, _tqWriteKey, _tqFarFutureKey) documented with ticketWriteSlot relationship
+- [x] **TKT-06**: _swapAndFreeze / _swapTicketSlot trigger conditions and complete code path list documented
+
+### Discrepancy Detection
+
+- [x] **DSC-01**: Every discrepancy between prior audit prose and actual code flagged with [DISCREPANCY] tag
+- [x] **DSC-02**: Every new issue not in prior audits flagged with [NEW FINDING] tag
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| TKT-01 | Phase 81 | Complete |
+| TKT-02 | Phase 81 | Complete |
+| TKT-03 | Phase 81 | Complete |
+| TKT-04 | Phase 81 | Complete |
+| TKT-05 | Phase 81 | Complete |
+| TKT-06 | Phase 81 | Complete |
+| DSC-01 | Phase 81 | Complete |
+| DSC-02 | Phase 81 | Complete |
+
+**Coverage:**
+- v4.0 requirements: 8 total
+- Mapped to phases: 8
+- Unmapped: 0
+
 ---
 *Requirements defined: 2026-03-23*
-*Updated: 2026-03-23 — expanded scope to all far-future ticket sources + advanceGame exemption*
+*Updated: 2026-03-23 — v4.0 ticket lifecycle re-audit requirements added*
