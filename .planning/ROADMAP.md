@@ -161,7 +161,7 @@
 
 - [x] **Phase 81: Ticket Creation & Queue Mechanics** — 2 plans, 8 requirements (TKT-01 through TKT-06, DSC-01, DSC-02) (completed 2026-03-23)
 - [x] **Phase 82: Ticket Processing Mechanics** — 2 plans, 6 requirements (TPROC-01 through TPROC-06) (completed 2026-03-23)
-- [ ] **Phase 83: Ticket Consumption & Winner Selection** — 2 plans, 4 requirements (TCON-01 through TCON-04)
+- [x] **Phase 83: Ticket Consumption & Winner Selection** — 2 plans, 4 requirements (TCON-01 through TCON-04) (completed 2026-03-23)
 - [x] **Phase 84: Prize Pool Flow & currentPrizePool Deep Dive** — 1 plan, 6 requirements (PPF-01 through PPF-06) (completed 2026-03-23)
 - [ ] **Phase 85: Daily ETH Jackpot** — 2 plans, 5 requirements (DETH-01 through DETH-05)
 - [x] **Phase 86: Daily Coin + Ticket Jackpot** — 2 plans, 4 requirements (DCOIN-01 through DCOIN-04) (completed 2026-03-23)
@@ -173,7 +173,7 @@
 |-------|----------------|--------|-----------|
 | 81. Ticket Creation & Queue Mechanics | 2/2 | Complete | 2026-03-23 |
 | 82. Ticket Processing Mechanics | 2/2 | Complete   | 2026-03-23 |
-| 83. Ticket Consumption & Winner Selection | 0/2 | Planned    |  |
+| 83. Ticket Consumption & Winner Selection | 2/2 | Complete | 2026-03-23 |
 | 84. Prize Pool Flow & currentPrizePool Deep Dive | 1/1 | Complete | 2026-03-23 |
 | 85. Daily ETH Jackpot | 1/2 | In Progress|  |
 | 86. Daily Coin + Ticket Jackpot | 2/2 | Complete    | 2026-03-23 |
@@ -197,11 +197,11 @@ Plans:
 
 **Goal:** Re-audit how tickets are consumed from queues for winner selection across all jackpot types, with independent code traces and discrepancy flagging.
 
-**Plans:** 0/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 83-01-PLAN.md — Enumerate all ticketQueue and traitBurnTicket reads for winner selection (TCON-01, TCON-02)
-- [ ] 83-02-PLAN.md — Document winner index computation per jackpot type, cross-reference prior audits, tag findings (TCON-03, TCON-04)
+- [x] 83-01-PLAN.md — Enumerate all ticketQueue and traitBurnTicket reads for winner selection (TCON-01, TCON-02)
+- [x] 83-02-PLAN.md — Document winner index computation per jackpot type, cross-reference prior audits, tag findings (TCON-03, TCON-04)
 
 **Requirements:** TCON-01, TCON-02, TCON-03, TCON-04
 
