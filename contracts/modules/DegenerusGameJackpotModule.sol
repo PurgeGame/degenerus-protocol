@@ -2541,11 +2541,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             // Pick a random level in [lvl+5, lvl+99]
             uint24 candidate = lvl + 5 + uint24(entropy % 95);
 
-            address[] storage queue = ticketQueue[_tqWriteKey(candidate)];
-            uint256 len = queue.length;
-            if (len != 0) {
-                uint256 idx = (entropy >> 32) % len;
-                address winner = queue[idx];
+            // COMBINED POOL: read from both the frozen read buffer and the FF key
+            address[] storage readQueue = ticketQueue[_tqReadKey(candidate)];
+            uint256 readLen = readQueue.length;
+            address[] storage ffQueue = ticketQueue[_tqFarFutureKey(candidate)];
+            uint256 ffLen = ffQueue.length;
+            uint256 combinedLen = readLen + ffLen;
+
+            if (combinedLen != 0) {
+                uint256 idx = (entropy >> 32) % combinedLen;
+                address winner = idx < readLen
+                    ? readQueue[idx]
+                    : ffQueue[idx - readLen];
                 if (winner != address(0)) {
                     winners[found] = winner;
                     winnerLevels[found] = candidate;
