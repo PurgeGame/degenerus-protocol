@@ -138,8 +138,8 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 
 - [x] **TCON-01**: Every function reading from ticketQueue for winner selection identified with file:line
 - [x] **TCON-02**: Every function reading traitBurnTicket for winner selection identified with file:line
-- [ ] **TCON-03**: Winner index computation documented for each jackpot type (ETH, coin, ticket, FF coin)
-- [ ] **TCON-04**: Every discrepancy and new finding tagged
+- [x] **TCON-03**: Winner index computation documented for each jackpot type (ETH, coin, ticket, FF coin)
+- [x] **TCON-04**: Every discrepancy and new finding tagged
 
 ### Prize Pool Flow & currentPrizePool Deep Dive
 
@@ -203,10 +203,10 @@ Requirements for ticket lifecycle and RNG-dependent variable re-audit. Each maps
 | TPROC-04 | Phase 82 | Not started |
 | TPROC-05 | Phase 82 | Not started |
 | TPROC-06 | Phase 82 | Not started |
-| TCON-01 | Phase 83 | Not started |
-| TCON-02 | Phase 83 | Not started |
-| TCON-03 | Phase 83 | Not started |
-| TCON-04 | Phase 83 | Not started |
+| TCON-01 | Phase 83 | Complete |
+| TCON-02 | Phase 83 | Complete |
+| TCON-03 | Phase 83 | Complete |
+| TCON-04 | Phase 83 | Complete |
 | PPF-01 | Phase 84 | Complete |
 | PPF-02 | Phase 84 | Complete |
 | PPF-03 | Phase 84 | Complete |
