@@ -52,6 +52,9 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///      - EDGE-07: testPrepareFutureTicketsRange (_prepareFutureTickets reads +1..+4 only, not FF)
 ///      - EDGE-08: testFullLevelCycleAllQueuesDrained (all read-slot queues empty after full cycle)
 ///      - EDGE-09: testWriteSlotSurvivesSwapAndFreeze (write-slot tickets survive swap, appear in read)
+///      - ZSA-01: testZeroStrandingSweepAfterTransitions (read-key sweep across all processed levels)
+///      - ZSA-02: testZeroStrandingSweepAfterTransitions (FF-key sweep across all levels in drain range)
+///      - ZSA-03: testMultiSourceZeroStrandingSweep (4 transitions with multi-source buying, zero stranding)
 contract TicketLifecycleTest is DeployProtocol {
     // =========================================================================
     // Storage slots (confirmed via forge inspect)
@@ -1103,7 +1106,147 @@ contract TicketLifecycleTest is DeployProtocol {
     // last-day state (rngLocked + jackpotCounter+step >= JACKPOT_LEVEL_CAP) is
     // timing-fragile to trigger organically.
 
+    // =========================================================================
+    // Test 19 [ZSA-01, ZSA-02]: Systematic zero-stranding sweep after multiple
+    //         level transitions. Read keys and FF keys for all processed levels
+    //         must be empty.
+    // =========================================================================
+
+    /// @notice Drive through 5+ level transitions, then systematically sweep all
+    ///         processed levels to verify zero stranding across read and FF key spaces.
+    /// @dev ZSA-01: After transitions, readKey.length == 0 for processed levels.
+    ///      ZSA-02: ffKey.length == 0 for levels in drain range.
+    function testZeroStrandingSweepAfterTransitions() public {
+        // Drive to level 6 to complete several level transitions
+        _driveToLevel(6);
+        _flushAdvance();
+        uint256 reached = game.level();
+        assertGe(reached, 5, "Must complete at least 5 level transitions");
+
+        // ZSA-01 sweep: read-key queue must be empty for all fully processed levels.
+        // Levels 1 through reached-1 have been fully processed (current level may
+        // still have pending tickets).
+        for (uint24 lvl = 1; lvl <= uint24(reached) - 1; lvl++) {
+            uint24 rk = _readKeyForLevel(lvl);
+            assertEq(
+                _queueLength(rk), 0,
+                string.concat("ZSA-01: Read queue not zero at level ", _uint2str(lvl))
+            );
+        }
+
+        // ZSA-02 sweep: FF-key queue must be empty for all levels in drain range.
+        // Transition at level L drains FF at L+5. So after transitions at levels
+        // 1 through reached-1, FF levels 6 through (reached-1)+5 = reached+4 are drained.
+        for (uint24 lvl = 6; lvl <= uint24(reached) + 4; lvl++) {
+            assertEq(
+                _ffQueueLength(lvl), 0,
+                string.concat("ZSA-02: FF queue not zero at level ", _uint2str(lvl))
+            );
+        }
+
+        // Sanity check: FF levels beyond the drain range should still have constructor entries.
+        // Constructor pre-queues 2 entries (sDGNRS + VAULT) per level up to 100.
+        uint24 beyondDrain = uint24(reached) + 10;
+        if (beyondDrain <= 100) {
+            assertGe(_ffQueueLength(beyondDrain), 2,
+                "FF queue beyond drain range should still have constructor entries");
+        }
+    }
+
+    // =========================================================================
+    // Test 20 [ZSA-03]: Comprehensive multi-source zero-stranding sweep with
+    //         4 consecutive level transitions using direct purchase + whale
+    //         bundle + lootbox ticket sources.
+    // =========================================================================
+
+    /// @notice 4 consecutive transitions with continuous multi-source ticket buying
+    ///         (direct purchase, whale bundle, lootbox). After all transitions, verify
+    ///         zero stranding across all key spaces for all processed levels.
+    /// @dev ZSA-03: 3+ consecutive transitions with multi-source buying yield zero
+    ///      stranding across all key spaces.
+    function testMultiSourceZeroStrandingSweep() public {
+        uint48[] memory lboxIndices = new uint48[](25); // up to ~5 per level x 4+ levels
+        uint256 lboxCount = 0;
+
+        for (uint256 targetLvl = 1; targetLvl <= 4; targetLvl++) {
+            // Multi-source ticket buying at current level
+            _buyWhaleBundle(buyer3, 1);
+
+            // Lootbox purchases (5 per level)
+            for (uint256 i = 0; i < 5; i++) {
+                uint48 idx = _purchaseWithLootbox(buyer3, 0, 1 ether);
+                if (idx > 0 && lboxCount < lboxIndices.length) {
+                    lboxIndices[lboxCount] = idx;
+                    lboxCount++;
+                }
+            }
+
+            // Finalize RNG, store words, open
+            _driveAdvanceCycle();
+            for (uint256 i = 0; i < lboxCount; i++) {
+                if (lboxIndices[i] > 0 && game.lootboxRngWord(lboxIndices[i]) == 0) {
+                    _storeLootboxRngWord(lboxIndices[i], 5000 + i);
+                }
+            }
+            for (uint256 i = 0; i < lboxCount; i++) {
+                if (lboxIndices[i] > 0) {
+                    _openLootbox(buyer3, lboxIndices[i]);
+                }
+            }
+
+            // Drive to next level (this also buys tickets for buyer1/buyer2 daily)
+            _driveToLevel(targetLvl + 1);
+        }
+
+        _flushAdvance();
+        uint256 reached = game.level();
+        assertGe(reached, 4, "Must complete at least 4 level transitions");
+
+        // ZSA-01 + ZSA-02: sweep all processed levels using the reusable helper
+        _assertZeroStranding(1, uint24(reached) - 1);
+
+        // ZSA-02 extended: FF drain range beyond the helper's sweep
+        for (uint24 lvl = uint24(reached); lvl <= uint24(reached) + 4; lvl++) {
+            assertEq(_ffQueueLength(lvl), 0,
+                string.concat("ZSA-02: FF not drained at level ", _uint2str(lvl)));
+        }
+
+        // ZSA-03: buyer3 verification -- buyer3 used whale bundles and lootboxes at
+        // every level. Read-key queues being empty (via _assertZeroStranding) proves
+        // all sources were processed. Additionally verify no stray FF entries at
+        // levels in the combined range of whale + lootbox targets.
+        for (uint24 lvl = 6; lvl <= uint24(reached) + 4; lvl++) {
+            assertEq(_ffQueueLength(lvl), 0,
+                string.concat("ZSA-03: buyer3 FF not zero at level ", _uint2str(lvl)));
+        }
+    }
+
     // ==================== Internal Helpers ====================
+
+    /// @notice Sweep levels fromLevel..toLevel and assert all read-slot and FF queues are zero.
+    /// @dev Covers ZSA-01 (read key sweep) and ZSA-02 (FF key sweep) requirements.
+    ///      Checks the current read key for the queue sweep. The write side may have
+    ///      nonzero entries from later transitions (vault perpetual writes to past levels).
+    ///      The read key being zero proves the level was fully processed during its lifecycle.
+    function _assertZeroStranding(uint24 fromLevel, uint24 toLevel) internal view {
+        for (uint24 lvl = fromLevel; lvl <= toLevel; lvl++) {
+            // ZSA-01: read key queue must be empty for processed levels.
+            // Since writeSlot may have toggled multiple times since this level was active,
+            // check both buffer sides. At least one MUST be zero (the one that was read
+            // during processing). If neither is zero, tickets were stranded.
+            uint256 qPlain = _queueLength(lvl);
+            uint256 qSlot = _queueLength(lvl | TICKET_SLOT_BIT);
+            assertTrue(
+                qPlain == 0 || qSlot == 0,
+                string.concat("ZSA-01: Neither buffer side drained at level ", _uint2str(lvl))
+            );
+            // ZSA-02: FF key queue must be empty for levels in drain range
+            assertEq(
+                _ffQueueLength(lvl), 0,
+                string.concat("ZSA-02: FF queue not zero at level ", _uint2str(lvl))
+            );
+        }
+    }
 
     /// @notice Run extra advanceGame + VRF cycles on the current day to flush any
     ///         in-flight phase transition work (FF drain, ticket processing, etc.)
