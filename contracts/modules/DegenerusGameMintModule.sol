@@ -105,9 +105,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_SPLIT_FUTURE_BPS = 9000;
     uint16 private constant LOOTBOX_SPLIT_NEXT_BPS = 1000;
 
-    /// @dev Loot box presale pool split: 40% future, 40% next, 20% vault.
-    uint16 private constant LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 4000;
-    uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 4000;
+    /// @dev Loot box presale pool split: 50% future, 30% next, 20% vault.
+    uint16 private constant LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 5000;
+    uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 3000;
     uint16 private constant LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000;
 
     /// @dev BURNIE ticket purchases are blocked this long after levelStartTime.
@@ -754,18 +754,14 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             uint256 futureShare = (lootBoxAmount * futureBps) / 10_000;
             uint256 nextShare = (lootBoxAmount * nextBps) / 10_000;
             uint256 vaultShare = (lootBoxAmount * vaultBps) / 10_000;
-            uint256 rewardShare;
-            unchecked {
-                rewardShare = lootBoxAmount - futureShare - nextShare - vaultShare;
-            }
+            // Rounding dust (a few wei) stays in the contract as yield buffer.
 
-            uint256 futureDelta = futureShare + rewardShare;
             if (prizePoolFrozen) {
                 (uint128 pNext, uint128 pFuture) = _getPendingPools();
-                _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(futureDelta));
+                _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(futureShare));
             } else {
                 (uint128 next, uint128 future) = _getPrizePools();
-                _setPrizePools(next + uint128(nextShare), future + uint128(futureDelta));
+                _setPrizePools(next + uint128(nextShare), future + uint128(futureShare));
             }
             if (vaultShare != 0) {
                 (bool ok, ) = payable(ContractAddresses.VAULT).call{value: vaultShare}("");
