@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Ticket Lifecycle Integration Tests
-status: Phase complete — ready for verification
-stopped_at: Completed 94-01-PLAN.md
-last_updated: "2026-03-24T02:08:08.409Z"
+status: Milestone archived
+stopped_at: v4.1 milestone complete
+last_updated: "2026-03-24T02:56:18.443Z"
 progress:
   total_phases: 3
   completed_phases: 3
@@ -16,56 +16,38 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-23)
+See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 94 — RNG Commitment Window Proofs
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 94 (RNG Commitment Window Proofs) — EXECUTING
-Plan: 1 of 1
+Phase: 94 (final)
+Plan: Complete
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 4
+- Average duration: 9.5 min
+- Total execution time: 38 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 92 | 2 | 22min | 11min |
+| 93 | 1 | 8min | 8min |
+| 94 | 1 | 8min | 8min |
 
 ## Accumulated Context
 
-| Phase 92 P01 | 14min | 1 tasks | 1 files |
-| Phase 92 P02 | 8min | 1 tasks | 1 files |
-| Phase 93 P01 | 8min | 2 tasks | 1 files |
-| Phase 94 P01 | 8min | 2 tasks | 2 files |
-
 ### Decisions
 
-- [v4.0 Phase 91]: Final unique v4.0 finding count is 51 INFO, DEC-01/DGN-01 both WITHDRAWN, grand total 134
-- [v4.1 Roadmap]: SRC + structural EDGE requirements (05/07/08/09) grouped into Phase 92 -- scaffold + source coverage first
-- [v4.1 Roadmap]: Boundary EDGE requirements (01/02/03/04/06) grouped with ZSA in Phase 93 -- both need the scaffold from 92
-- [v4.1 Roadmap]: RNG requirements isolated in Phase 94 -- distinct analytical concern (commitment window proofs)
-- [v4.1 Roadmap]: Test file target is test/fuzz/TicketLifecycle.t.sol, extending FarFutureIntegration.t.sol patterns (DeployProtocol base, vm.store seeding, vm.load inspection)
-- [Phase 92]: testLastDayTicketsRouteToNextLevel uses vm.store for forced state (timing-fragile organic trigger)
-- [Phase 92]: Fixed _getWriteSlot: was reading slot 24, correct is slot 1 offset 23 (184-bit shift)
-- [Phase 92]: EDGE-08 tests FF draining (not both buffer sides) since constructor entries persist in write-side for passed levels
-- [Phase 92]: Lootbox tests use buyer3 (not buyer1/2) to isolate from _driveToLevel contamination
-- [Phase 92]: SRC-05 verifies FF drain property rather than forcing specific far-roll entropy seed
-- [Phase 92]: ticketsOwed checks replace read-queue-zero assertions (vault perpetual writes make queue checks unreliable)
-- [Phase 93]: EDGE-03: Check L+6 (not L+5) since _driveToLevel transition at L already drains L+5
-- [Phase 93]: EDGE-04: Assert queue length zero (not ticketsOwed) since ticketsOwedPacked tracks allocated tickets post-processing
-- [Phase 93]: ZSA helper: Check both buffer sides (plain + SLOT_BIT) since writeSlot toggles between processing and sweep time
-- [Phase 94]: Used ticketsOwed checks (not queue length delta) for write-slot isolation tests -- buyer3 zero-to-nonzero is definitive proof of routing
-- [Phase 94]: Lootbox RNG-03b test uses try/catch: both near-future success and far-future RngLocked() revert are safe outcomes proving guard is wired
-- [Phase 94]: Corrected claimDecimatorBundle to claimDecimatorJackpot (actual function name); path 9 is auto-rebuy within decimator claim
+- [v4.1]: All 22 requirements (SRC, EDGE, ZSA, RNG) satisfied, 24 Foundry tests passing
+- [v4.1]: 1 contract bug fix discovered — requestLootboxRng blocked during mid-day processing
 
 ### Pending Todos
 
@@ -77,6 +59,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-24T02:08:08.407Z
-Stopped at: Completed 94-01-PLAN.md
+Last session: 2026-03-24
+Stopped at: v4.1 milestone archived
 Resume file: None

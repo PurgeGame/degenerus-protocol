@@ -19,6 +19,7 @@
 - ✅ **v3.8 VRF Commitment Window Audit** — Phases 68-73 (shipped 2026-03-23)
 - ✅ **v3.9 Far-Future Ticket Fix** — Phases 74-80 (shipped 2026-03-23)
 - ✅ **v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit** — Phases 81-91 (shipped 2026-03-23)
+- ✅ **v4.1 Ticket Lifecycle Integration Tests** — Phases 92-94 (shipped 2026-03-24)
 
 ## Phases
 
@@ -172,67 +173,14 @@
 
 </details>
 
-### v4.1 Ticket Lifecycle Integration Tests (In Progress)
+<details>
+<summary>v4.1 Ticket Lifecycle Integration Tests (Phases 92-94) -- SHIPPED 2026-03-24</summary>
 
-**Milestone Goal:** Write a comprehensive Foundry integration test suite that deploys the full protocol and verifies all ticket queuing paths result in processed tickets with zero stranding across level transitions.
+- [x] **Phase 92: Integration Scaffold + Source Coverage** — 2 plans, 10 requirements (completed 2026-03-24)
+- [x] **Phase 93: Edge Cases + Zero-Stranding Assertions** — 1 plan, 8 requirements (completed 2026-03-24)
+- [x] **Phase 94: RNG Commitment Window Proofs** — 1 plan, 4 requirements (completed 2026-03-24)
 
-- [x] **Phase 92: Integration Scaffold + Source Coverage** - Full-protocol test harness with all 6 ticket sources exercised end-to-end (completed 2026-03-24)
-- [x] **Phase 93: Edge Cases + Zero-Stranding Assertions** - Boundary routing, phase-transition timing, and comprehensive zero-stranding sweeps (completed 2026-03-24)
-- [x] **Phase 94: RNG Commitment Window Proofs** - Formal proof that no permissionless ticket path can influence jackpot resolution during VRF pending window (completed 2026-03-24)
-
-## Phase Details
-
-### Phase 92: Integration Scaffold + Source Coverage
-**Goal**: All 6 ticket sources (direct purchase in purchase/jackpot/last-day phases, lootbox near/far, whale bundle) produce tickets that are fully processed after level transitions with no stranding
-**Depends on**: Phase 91 (v4.0 audit knowledge of all ticket paths)
-**Requirements**: SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, EDGE-05, EDGE-07, EDGE-08, EDGE-09
-**Success Criteria** (what must be TRUE):
-  1. `forge test --match-contract TicketLifecycle` compiles and passes with the full 23-contract protocol deployed via DeployProtocol
-  2. Each of the 6 ticket sources (direct-purchase-phase, direct-jackpot-phase, direct-last-day, lootbox-near, lootbox-far, whale-bundle) has a dedicated test function that queues tickets and verifies they appear in the expected key space via vm.load
-  3. After a complete level cycle (purchase phase -> jackpot phase -> transition), all read-slot queues for the processed level range are empty (verified by storage inspection)
-  4. Constructor-queued FF tickets at levels 6+ are present before level advancement and drained after the game passes those levels
-  5. _prepareFutureTickets processes only levels in the +1..+4 read range and does NOT touch FF keys (verified by pre/post storage comparison)
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 92-01-PLAN.md -- Fix failing test + direct-purchase sources (SRC-01/02/03) + edge cases (EDGE-05/07/08/09)
-- [x] 92-02-PLAN.md -- Lootbox near/far (SRC-04/05) + whale bundle (SRC-06) source tests
-
-### Phase 93: Edge Cases + Zero-Stranding Assertions
-**Goal**: All boundary routing conditions and phase-transition timing behaviors are verified, and zero-stranding is proven across all key spaces after multi-level play
-**Depends on**: Phase 92
-**Requirements**: EDGE-01, EDGE-02, EDGE-03, EDGE-04, EDGE-06, ZSA-01, ZSA-02, ZSA-03
-**Success Criteria** (what must be TRUE):
-  1. Tickets at exactly level+5 are verified in the write key (not FF key), and tickets at level+6 are verified in the FF key, via storage inspection after queuing
-  2. FF tickets within drain range are confirmed drained during phase transition (not during daily cycle), verified by comparing storage before and after advanceGame calls
-  3. Jackpot-phase tickets appear in the read slot after _swapAndFreeze and are processed by _runProcessTicketBatch, verified by comparing read-slot queue length before and after the processing step
-  4. After 3+ consecutive level transitions with continuous multi-source ticket buying, every ticketQueue[readKey] and ticketQueue[ffKey] for processed levels reads as zero length
-  5. The last-jackpot-day routing fix is verified: when rngLocked and jackpotCounter+step >= CAP, tickets route to level+1 (not current level)
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 93-01-PLAN.md -- Edge case tests (EDGE-01/02/03/04/06) + zero-stranding sweeps (ZSA-01/02/03)
-
-### Phase 94: RNG Commitment Window Proofs
-**Goal**: Formal proof that the ticket double-buffer architecture and rngLocked guard make jackpot resolution immune to permissionless ticket manipulation during VRF pending windows
-**Depends on**: Phase 92 (integration scaffold for test-based verification of RNG-03 and RNG-04)
-**Requirements**: RNG-01, RNG-02, RNG-03, RNG-04
-**Success Criteria** (what must be TRUE):
-  1. A test or formal proof demonstrates that no permissionless external call can mutate ticketQueue read-slot entries while VRF is pending (RNG-01), with each candidate path (purchase, lootbox open, whale bundle) shown to write only to write-slot
-  2. A test or formal proof demonstrates that no permissionless external call can mutate traitBurnTicket entries used for jackpot winner selection during VRF pending window (RNG-02)
-  3. A Foundry test verifies that purchase, lootbox open, and whale bundle all revert or skip when rngLocked is true and the call would write to an FF key (RNG-03)
-  4. A Foundry test verifies that purchase routing always creates entries in the write slot regardless of rngLocked state, confirming the double-buffer as the structural guarantee (RNG-04)
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 94-01-PLAN.md -- Analytical proof document (RNG-01/02) + Foundry integration tests (RNG-03/04)
-
-## Progress
-
-**Execution Order:** 92 -> 93 -> 94
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 92. Integration Scaffold + Source Coverage | 2/2 | Complete    | 2026-03-24 |
-| 93. Edge Cases + Zero-Stranding Assertions | 1/1 | Complete    | 2026-03-24 |
-| 94. RNG Commitment Window Proofs | 1/1 | Complete   | 2026-03-24 |
+</details>
 
 ## Deferred
 

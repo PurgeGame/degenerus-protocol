@@ -1,5 +1,18 @@
 # Milestones
 
+## v4.1 Ticket Lifecycle Integration Tests (Shipped: 2026-03-24)
+
+**Phases completed:** 3 phases, 4 plans, 6 tasks
+
+**Key accomplishments:**
+
+- Fixed failing testMultiLevelZeroStranding, added jackpot-phase and last-day routing tests (SRC-02/03), strengthened 4 edge-case tests (EDGE-05/07/08/09) with requirement traceability -- 12/12 tests pass
+- 3 integration tests for lootbox near/far roll and whale bundle ticket routing, completing all 6 ticket sources (SRC-01 through SRC-06) with 5 new helpers and 15 total passing tests
+- 5 edge-case tests proving boundary routing at non-zero levels, FF drain timing in phaseTransitionActive only, jackpot read-slot pipeline, and systematic zero-stranding sweeps across all key spaces after multi-source 4-level transitions
+- Formal proof enumerating 9 permissionless mutation paths (all SAFE) plus 4 integration tests verifying rngLocked guard and double-buffer write-slot isolation under unified > level+5 boundary
+
+---
+
 ## v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit (Shipped: 2026-03-23)
 
 **Phases completed:** 10 phases, 21 plans, 36 tasks
