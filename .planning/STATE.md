@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Ticket Lifecycle Integration Tests
 status: Phase complete — ready for verification
-stopped_at: Completed 93-01-PLAN.md
-last_updated: "2026-03-24T01:49:30.895Z"
+stopped_at: Completed 94-01-PLAN.md
+last_updated: "2026-03-24T02:08:08.409Z"
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
+  completed_phases: 3
+  total_plans: 4
+  completed_plans: 4
 ---
 
 # State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 93 — Edge Cases + Zero-Stranding Assertions
+**Current focus:** Phase 94 — RNG Commitment Window Proofs
 
 ## Current Position
 
-Phase: 93 (Edge Cases + Zero-Stranding Assertions) — EXECUTING
+Phase: 94 (RNG Commitment Window Proofs) — EXECUTING
 Plan: 1 of 1
 
 ## Performance Metrics
@@ -45,6 +45,7 @@ Plan: 1 of 1
 | Phase 92 P01 | 14min | 1 tasks | 1 files |
 | Phase 92 P02 | 8min | 1 tasks | 1 files |
 | Phase 93 P01 | 8min | 2 tasks | 1 files |
+| Phase 94 P01 | 8min | 2 tasks | 2 files |
 
 ### Decisions
 
@@ -62,6 +63,9 @@ Plan: 1 of 1
 - [Phase 93]: EDGE-03: Check L+6 (not L+5) since _driveToLevel transition at L already drains L+5
 - [Phase 93]: EDGE-04: Assert queue length zero (not ticketsOwed) since ticketsOwedPacked tracks allocated tickets post-processing
 - [Phase 93]: ZSA helper: Check both buffer sides (plain + SLOT_BIT) since writeSlot toggles between processing and sweep time
+- [Phase 94]: Used ticketsOwed checks (not queue length delta) for write-slot isolation tests -- buyer3 zero-to-nonzero is definitive proof of routing
+- [Phase 94]: Lootbox RNG-03b test uses try/catch: both near-future success and far-future RngLocked() revert are safe outcomes proving guard is wired
+- [Phase 94]: Corrected claimDecimatorBundle to claimDecimatorJackpot (actual function name); path 9 is auto-rebuy within decimator claim
 
 ### Pending Todos
 
@@ -73,6 +77,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-24T01:49:30.890Z
-Stopped at: Completed 93-01-PLAN.md
+Last session: 2026-03-24T02:08:08.407Z
+Stopped at: Completed 94-01-PLAN.md
 Resume file: None

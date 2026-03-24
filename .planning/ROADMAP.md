@@ -178,7 +178,7 @@
 
 - [x] **Phase 92: Integration Scaffold + Source Coverage** - Full-protocol test harness with all 6 ticket sources exercised end-to-end (completed 2026-03-24)
 - [x] **Phase 93: Edge Cases + Zero-Stranding Assertions** - Boundary routing, phase-transition timing, and comprehensive zero-stranding sweeps (completed 2026-03-24)
-- [ ] **Phase 94: RNG Commitment Window Proofs** - Formal proof that no permissionless ticket path can influence jackpot resolution during VRF pending window
+- [x] **Phase 94: RNG Commitment Window Proofs** - Formal proof that no permissionless ticket path can influence jackpot resolution during VRF pending window (completed 2026-03-24)
 
 ## Phase Details
 
@@ -220,7 +220,9 @@ Plans:
   2. A test or formal proof demonstrates that no permissionless external call can mutate traitBurnTicket entries used for jackpot winner selection during VRF pending window (RNG-02)
   3. A Foundry test verifies that purchase, lootbox open, and whale bundle all revert or skip when rngLocked is true and the call would write to an FF key (RNG-03)
   4. A Foundry test verifies that purchase routing always creates entries in the write slot regardless of rngLocked state, confirming the double-buffer as the structural guarantee (RNG-04)
-**Plans**: TBD
+**Plans:** 1/1 plans complete
+Plans:
+- [x] 94-01-PLAN.md -- Analytical proof document (RNG-01/02) + Foundry integration tests (RNG-03/04)
 
 ## Progress
 
@@ -229,8 +231,8 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 92. Integration Scaffold + Source Coverage | 2/2 | Complete    | 2026-03-24 |
-| 93. Edge Cases + Zero-Stranding Assertions | 1/1 | Complete   | 2026-03-24 |
-| 94. RNG Commitment Window Proofs | 0/TBD | Not started | - |
+| 93. Edge Cases + Zero-Stranding Assertions | 1/1 | Complete    | 2026-03-24 |
+| 94. RNG Commitment Window Proofs | 1/1 | Complete   | 2026-03-24 |
 
 ## Deferred
 
