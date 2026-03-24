@@ -739,75 +739,80 @@ contract TicketLifecycleTest is DeployProtocol {
     //         Drained at phase transition.
     // =========================================================================
 
-    /// @notice Purchase multiple lootboxes, open all, and verify that FF queues in the far range
-    ///         are fully drained after sufficient level transitions. This proves that far-roll
-    ///         lootbox tickets are not stranded in FF key space.
-    /// @dev SRC-05: Lootbox far roll (offset 5-50) queues to FF key, drained at phase transition
+    /// @notice Purchase many lootboxes with diverse entropy seeds, open all, and verify that
+    ///         at least one far roll (offset 5-50) routes to the FF key. Then drive levels
+    ///         forward and verify all FF queues for processed levels are drained.
+    /// @dev SRC-05: Lootbox far roll (offset 5-50) queues to FF key, drained at phase transition.
+    ///      Uses 20 lootbox opens across 4 buyers with different seeds to ensure at least one
+    ///      far roll: P(zero far in 20 opens) = 0.9^20 ~ 12%. With diverse buyer/seed combos,
+    ///      effective probability is much higher.
     function testLootboxFarRollTicketsRouteToFF() public {
         assertEq(game.level(), 0, "Should start at level 0");
 
-        // Snapshot FF queue lengths before lootbox opens. Constructor places 2 entries
-        // at each FF level. We'll detect new entries by comparing after opens.
-        uint256[10] memory ffBefore;
-        for (uint24 i = 0; i < 10; i++) {
+        // Snapshot FF queue lengths before lootbox opens across a wide range.
+        // Constructor places 2 entries at each FF level 6-100. We check levels 6-55
+        // (max far target = baseLevel + 50 = 1 + 50 = 51).
+        uint256[50] memory ffBefore;
+        for (uint24 i = 0; i < 50; i++) {
             ffBefore[i] = _ffQueueLength(i + 6);
         }
 
-        // Purchase and open multiple lootboxes to maximize chance of at least one far roll.
-        // Each open has ~10% far probability. With 15 opens, P(zero far) = 0.9^15 ~ 20%.
-        // We also force some far rolls via vm.store with a known far-producing seed.
-        uint48[] memory indices = new uint48[](5);
-        for (uint256 i = 0; i < 5; i++) {
-            uint48 idx = _purchaseWithLootbox(buyer1, 0, 0.1 ether);
-            if (idx > 0) {
-                indices[i] = idx;
+        // Purchase lootboxes from 4 different buyers with different amounts to create
+        // diverse entropy paths through _rollTargetLevel.
+        address[4] memory lboxBuyers = [buyer1, buyer2, buyer3, makeAddr("lbox_buyer4")];
+        vm.deal(lboxBuyers[3], 50_000 ether);
+
+        uint48[][] memory allIndices = new uint48[][](4);
+        for (uint256 b = 0; b < 4; b++) {
+            allIndices[b] = new uint48[](5);
+            for (uint256 i = 0; i < 5; i++) {
+                // Vary amounts to produce different entropy chains
+                uint256 amount = 0.1 ether + (i * 0.05 ether) + (b * 0.02 ether);
+                uint48 idx = _purchaseWithLootbox(lboxBuyers[b], 0, amount);
+                if (idx > 0) allIndices[b][i] = idx;
             }
         }
 
         // Finalize RNG via advance cycle
         _driveAdvanceCycle();
 
-        // For the first index, force a far-producing RNG word via vm.store.
-        // seed=3 produces rangeRoll=3 (<10 = far) for a specific player/day/amount combo.
-        // Since the actual entropy depends on player, day, and lootboxEth amount, we set
-        // a large range of seeds and rely on statistical coverage for the rest.
-        if (indices[0] > 0) {
-            // Set a deterministic RNG word; the actual roll depends on entropy chain
-            // but even if this particular seed doesn't produce far for our exact params,
-            // the other 4 opens provide additional coverage.
-            _storeLootboxRngWord(indices[0], 3);
-        }
-
-        // Ensure all indices have RNG words (fill any missing with sequential seeds)
-        for (uint256 i = 0; i < 5; i++) {
-            if (indices[i] > 0 && game.lootboxRngWord(indices[i]) == 0) {
-                _storeLootboxRngWord(indices[i], 100 + i);
+        // Inject diverse RNG words for each buyer's lootboxes. Use very different seeds
+        // to maximize entropy diversity through the EntropyLib.entropyStep chain.
+        uint256[4] memory baseSeed = [
+            uint256(7),      // produces different entropyStep chain
+            uint256(42),
+            uint256(0xdead),
+            uint256(0xcafe)
+        ];
+        for (uint256 b = 0; b < 4; b++) {
+            for (uint256 i = 0; i < 5; i++) {
+                if (allIndices[b][i] > 0 && game.lootboxRngWord(allIndices[b][i]) == 0) {
+                    _storeLootboxRngWord(allIndices[b][i], baseSeed[b] + i * 1000);
+                }
             }
         }
 
-        // Open all lootboxes
-        for (uint256 i = 0; i < 5; i++) {
-            if (indices[i] > 0) {
-                _openLootbox(buyer1, indices[i]);
+        // Open all 20 lootboxes
+        for (uint256 b = 0; b < 4; b++) {
+            for (uint256 i = 0; i < 5; i++) {
+                if (allIndices[b][i] > 0) {
+                    _openLootbox(lboxBuyers[b], allIndices[b][i]);
+                }
             }
         }
 
         // Check if any FF queue grew (indicating at least one far roll routed to FF).
-        // If no growth detected, the test still validates the zero-stranding property.
         bool anyFFGrowth = false;
-        for (uint24 i = 0; i < 10; i++) {
+        for (uint24 i = 0; i < 50; i++) {
             if (_ffQueueLength(i + 6) > ffBefore[i]) {
                 anyFFGrowth = true;
                 break;
             }
         }
-        // Note: even if no FF growth (all near rolls), the zero-stranding property still holds.
-        // The test verifies that after full advancement, all FF queues are drained.
+        // SRC-05 requires proving a lootbox far roll actually reached an FF key.
+        assertTrue(anyFFGrowth, "SRC-05: at least one lootbox open must produce a far roll routed to FF key");
 
         // Drive game forward enough to drain FF queues in the lootbox target range.
-        // Max far offset is 50 from baseLevel=1, so max target = 51. To drain FF at level 51,
-        // need transition at level 46 (transition at L drains FF at L+5).
-        // Driving to level 10 drains FF through level 15, which covers the common far range.
         _driveToLevel(8);
         _flushAdvance();
         uint256 reached = game.level();
