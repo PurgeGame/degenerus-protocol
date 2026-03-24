@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: Ticket Lifecycle & RNG-Dependent Variable Re-Audit
-status: v4.0 milestone complete
-stopped_at: Completed 91-03-PLAN.md
-last_updated: "2026-03-23T21:18:58.689Z"
+milestone: v4.1
+milestone_name: Ticket Lifecycle Integration Tests
+status: Phase complete — ready for verification
+stopped_at: Completed 92-02-PLAN.md
+last_updated: "2026-03-24T01:24:58.823Z"
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 21
-  completed_plans: 22
+  total_phases: 3
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
 ---
 
 # State
@@ -19,50 +19,45 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 91 — consolidated-findings-rewrite
+**Current focus:** Phase 92 — Integration Scaffold + Source Coverage
 
 ## Current Position
 
-Phase: 91
-Plan: Not started
+Phase: 92 (Integration Scaffold + Source Coverage) — EXECUTING
+Plan: 2 of 2
+
+## Performance Metrics
+
+**Velocity:**
+
+- Total plans completed: 0
+- Average duration: —
+- Total execution time: 0 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
 
 ## Accumulated Context
 
+| Phase 92 P01 | 14min | 1 tasks | 1 files |
+| Phase 92 P02 | 8min | 1 tasks | 1 files |
+
 ### Decisions
 
-- [v3.8 Phase 72]: TQ-01 severity MEDIUM (BURNIE not ETH). Fix Option A (_tqWriteKey -> _tqReadKey) recommended.
-- [v3.8 Phase 72]: Both call paths affected: payDailyJackpotCoinAndTickets AND payDailyCoinJackpot.
-- [v3.9 Roadmap]: EDGE-03 (TQ-01 fix) grouped with JACK-01/JACK-02 -- combined pool approach may supersede the simple _tqReadKey fix.
-- [v3.9 Roadmap]: rngLocked guard (RNG-02) grouped with lootbox routing since the guard lives in the same code path as ticket routing.
-- [Phase 74]: Bit 22 reserved for far-future key space, reducing max level from 2^23-1 to 2^22-1 (still millennia)
-- [Phase 74]: _tqFarFutureKey is pure (not view) -- far-future keys are slot-independent
-- [Phase 75]: Consolidate error RngLocked() in DegenerusGameStorage base, remove from inheriting contracts
-- [Phase 75]: Cache level outside _queueTicketRange loop as currentLevel to avoid per-iteration SLOAD
-- [Phase 76]: Return after read-side drain, start FF on next call (simplicity over intra-call transition)
-- [Phase 76]: Strip FF bit in _prepareFutureTickets for resume (not in processFutureTicketBatch)
-- [Phase 77]: Combined pool approach (read buffer + FF key) supersedes simple TQ-01 one-line fix
-- [Phase 77]: Index routing uses strict less-than (idx < readLen) to avoid off-by-one at boundary
-- [Phase 78]: EDGE-01 and EDGE-02 proven SAFE by existing Phases 74-76 implementation -- zero contract code changes needed
-- [Phase 80]: ticketQueue stores unique addresses (not ticket counts) -- constructor pre-queues 2 entries (sDGNRS + VAULT) per FF level, not 32
-- [Phase 80]: Prize pool seeding via vm.store(slot 3) to 49.9 ETH fast-tracks level transitions in integration tests
-- [Phase 80]: gas_limit/block_gas_limit 30B added to foundry.toml for multi-level integration test support
-- [Phase 83]: Far-future coin jackpot uses fundamentally different winner selection ((entropy >> 32) % len, no deity virtual entries) vs all other trait-based jackpots
-- [Phase 83]: BAF jackpot documented as 9th type -- uses view functions on DegenerusGame, not direct storage reads
-- [Phase 83]: v3.9 proof discrepancies (DSC-01) confirmed security-neutral: FF-only is strictly simpler than combined pool
-- [Phase 83]: No new findings -- all 9 jackpot winner index formulas verified correct against current Solidity source
-- [Phase 85]: Chunked daily path does NOT use solo bucket 75/25 split -- deliberate design for gas-predictable costs
-- [Phase 85]: Pre-deduction carryover loss path: 0.5% futurePrizePool when cap=0, assessed as INFO (solvency buffer)
-- [Phase 85]: NF-V38-01: v3.8 omits whalePassClaims from payDailyJackpot scope -- INFO (early-burn only)
-- [Phase 85]: All 13 RNG consumption points in daily ETH jackpot verified safe per VRF commitment window analysis
-- [Phase 90]: Phase 84 VERIFICATION report follows 85-VERIFICATION.md format exactly for gap-closure consistency
-- [Phase 90]: DEC-01 decBucketOffsetPacked collision documented as FALSE POSITIVE; DGN-01 off-by-one documented as FALSE POSITIVE; actual Phase 87 findings: 0 HIGH, 0 MEDIUM, 0 LOW, 21 INFO
-- [Phase 91]: DEC-01 and DGN-01 documented as withdrawn false positives in KNOWN-ISSUES.md audit history, not added to body sections
-- [Phase 90]: Coverage count corrected to 44/2 (not 43/3) because CFND-02 was already Complete from Phase 91-02
-- [Phase 91]: Final unique v4.0 finding count is 51 INFO (not ~47 from research estimate) after full Phase 87 dedup
-- [Phase 91]: DEC-01 and DGN-01 both WITHDRAWN as false positives -- CFND-02 satisfied without KNOWN-ISSUES body entries
-- [Phase 91]: Used 51 INFO count (corrected from ~47 research estimate) for KNOWN-ISSUES.md v4.0 audit history entry
-- [Phase 91]: Final unique v4.0 finding count is 51 INFO (FD-03 supplementary), DEC-01/DGN-01 both WITHDRAWN, grand total 134
-- [Phase 91]: No contradictions found across 6 dimensions -- all 51 finding IDs, severities, and descriptions consistent between consolidated doc and 13 source audit documents
+- [v4.0 Phase 91]: Final unique v4.0 finding count is 51 INFO, DEC-01/DGN-01 both WITHDRAWN, grand total 134
+- [v4.1 Roadmap]: SRC + structural EDGE requirements (05/07/08/09) grouped into Phase 92 -- scaffold + source coverage first
+- [v4.1 Roadmap]: Boundary EDGE requirements (01/02/03/04/06) grouped with ZSA in Phase 93 -- both need the scaffold from 92
+- [v4.1 Roadmap]: RNG requirements isolated in Phase 94 -- distinct analytical concern (commitment window proofs)
+- [v4.1 Roadmap]: Test file target is test/fuzz/TicketLifecycle.t.sol, extending FarFutureIntegration.t.sol patterns (DeployProtocol base, vm.store seeding, vm.load inspection)
+- [Phase 92]: testLastDayTicketsRouteToNextLevel uses vm.store for forced state (timing-fragile organic trigger)
+- [Phase 92]: Fixed _getWriteSlot: was reading slot 24, correct is slot 1 offset 23 (184-bit shift)
+- [Phase 92]: EDGE-08 tests FF draining (not both buffer sides) since constructor entries persist in write-side for passed levels
+- [Phase 92]: Lootbox tests use buyer3 (not buyer1/2) to isolate from _driveToLevel contamination
+- [Phase 92]: SRC-05 verifies FF drain property rather than forcing specific far-roll entropy seed
+- [Phase 92]: ticketsOwed checks replace read-queue-zero assertions (vault perpetual writes make queue checks unreliable)
 
 ### Pending Todos
 
@@ -70,10 +65,10 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 73 (Boon Storage Packing) Plan 03 not formally executed -- test verification pending from v3.8.
+None.
 
 ## Session Continuity
 
-Last session: 2026-03-23T20:40:55.068Z
-Stopped at: Completed 91-03-PLAN.md
+Last session: 2026-03-24T01:24:58.820Z
+Stopped at: Completed 92-02-PLAN.md
 Resume file: None
