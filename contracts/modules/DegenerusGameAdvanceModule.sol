@@ -235,9 +235,25 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 break;
             }
 
-            // Phase transition housekeeping + near-future tickets
+            // Phase transition housekeeping + FF promotion
             if (phaseTransitionActive) {
-                if (!_processPhaseTransition(purchaseLevel)) {
+                // Drain the one FF level that entered near-future at this level transition.
+                // At new level L, the boundary moved from >L+4 to >L+5, making L+5 near-future.
+                // No new FF entries can arrive at L+5 (tickets targeting it now route to write key).
+                // purchaseLevel = level + 1, so the FF level is purchaseLevel + 4 = level + 5.
+                uint24 ffLevel = purchaseLevel + 4;
+                bool resumingFF = (ticketLevel == (ffLevel | TICKET_FAR_FUTURE_BIT));
+                if (!resumingFF) {
+                    if (!_processPhaseTransition(purchaseLevel)) {
+                        stage = STAGE_TRANSITION_WORKING;
+                        break;
+                    }
+                    // Set up FF drain — ticketLevel signals we've completed transition housekeeping
+                    ticketLevel = ffLevel | TICKET_FAR_FUTURE_BIT;
+                    ticketCursor = 0;
+                }
+                (bool ffWorked, bool ffFinished, ) = _processFutureTicketBatch(ffLevel);
+                if (ffWorked || !ffFinished) {
                     stage = STAGE_TRANSITION_WORKING;
                     break;
                 }
@@ -264,9 +280,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
             }
 
-            // Process current level tickets
+            // Process current level tickets:
+            // Purchase phase processes purchaseLevel (= level+1) where new tickets route.
+            // Jackpot phase processes level where jackpot-phase tickets route.
             (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(
-                purchaseLevel
+                inJackpot ? lvl : purchaseLevel
             );
             if (ticketWorked || !ticketsFinished) {
                 stage = STAGE_TICKETS_WORKING;
@@ -1145,32 +1163,28 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         return abi.decode(data, (bool, bool, uint32));
     }
 
-    /// @dev Before daily draws, process ticket queues for near-future levels
-    ///      lvl+1..lvl+4. Runs every daily cycle (purchase and jackpot phases)
-    ///      so pass-driven tickets are included promptly. Uses existing ticket
-    ///      cursor state so work can resume across multiple advanceGame calls.
-    ///      Caller passes purchaseLevel during purchase phase, level during jackpot.
-    /// @param lvl Base level: purchaseLevel (purchase phase) or level (jackpot phase).
+    /// @dev Before daily draws, process near-future ticket read queues.
+    ///      Caller passes level during jackpot phase (range lvl+1..lvl+4) or
+    ///      purchaseLevel during purchase phase (range lvl+2..lvl+5).
+    ///      FF promotion is handled separately at phase transition time.
+    /// @param lvl Base level (level during jackpot, purchaseLevel during purchase).
     /// @return finished True when all target future levels are fully processed.
     function _prepareFutureTickets(uint24 lvl) private returns (bool finished) {
         uint24 startLevel = lvl + 1;
         uint24 endLevel = lvl + 4;
         uint24 resumeLevel = ticketLevel;
-        // Strip FF bit to get base level for range comparison.
-        // When ticketLevel has bit 22 set, we are mid-FF-processing for that base level.
-        uint24 baseResume = resumeLevel & ~uint24(TICKET_FAR_FUTURE_BIT);
 
         // Continue an in-flight future level first to preserve progress.
-        if (baseResume >= startLevel && baseResume <= endLevel) {
+        if (resumeLevel >= startLevel && resumeLevel <= endLevel) {
             (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
-                baseResume
+                resumeLevel
             );
             if (worked || !levelFinished) return false;
         }
 
         // Then probe remaining target levels in order.
         for (uint24 target = startLevel; target <= endLevel; ) {
-            if (target != baseResume) {
+            if (target != resumeLevel) {
                 (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
                     target
                 );

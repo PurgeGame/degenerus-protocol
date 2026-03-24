@@ -304,14 +304,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
         if (total == 0) {
-            if (!inFarFuture) {
-                uint24 ffk = _tqFarFutureKey(lvl);
-                if (ticketQueue[ffk].length > 0) {
-                    ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
-                    ticketCursor = 0;
-                    return (false, false, 0);
-                }
-            }
             ticketCursor = 0;
             ticketLevel = 0;
             return (false, true, 0);
@@ -325,14 +317,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 idx = ticketCursor;
         if (idx >= total) {
             delete ticketQueue[rk];
-            if (!inFarFuture) {
-                uint24 ffk = _tqFarFutureKey(lvl);
-                if (ticketQueue[ffk].length > 0) {
-                    ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
-                    ticketCursor = 0;
-                    return (false, false, 0);
-                }
-            }
             ticketCursor = 0;
             ticketLevel = 0;
             return (false, true, 0);
