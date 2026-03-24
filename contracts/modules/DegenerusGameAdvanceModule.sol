@@ -692,6 +692,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      VRF callback handles finalization directly - no advanceGame needed.
     function requestLootboxRng() external {
         if (rngLockedFlag) revert RngLocked();
+        // Block while mid-day ticket processing is active — prevents entropy reroll
+        // by requesting a new VRF word after inspecting the current one.
+        if (midDayTicketRngPending) revert E();
 
         uint48 nowTs = uint48(block.timestamp);
         uint48 currentDay = _simulatedDayIndexAt(nowTs);
