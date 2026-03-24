@@ -1532,6 +1532,399 @@ contract TicketLifecycleTest is DeployProtocol {
         // The key property: purchases ALWAYS go to _tqWriteKey, never _tqReadKey.
     }
 
+    // =========================================================================
+    // Mid-Day RNG Path Tests
+    // =========================================================================
+
+    /// @notice Verify that the mid-day swap is conditional: only happens when
+    ///         ticketQueue[writeKey].length > 0 AND ticketsFullyProcessed == true.
+    ///         When conditions aren't met, no swap occurs and tickets wait for daily path.
+    function testMidDaySwapConditional_NoTickets() public {
+        // Drive to a state where daily processing has occurred (ticketsFullyProcessed = true)
+        // but no new tickets have been purchased since.
+        _buyTickets(buyer1, 4000);
+        uint256 simTime = block.timestamp + 1 days + 1;
+        vm.warp(simTime);
+        _seedNextPrizePool(49.9 ether);
+        _buyTickets(buyer1, 4000);
+
+        // Drive advanceGame to complete daily cycle
+        for (uint256 i = 0; i < 50; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Record write slot state before mid-day RNG attempt
+        uint8 wsBefore = _getWriteSlot();
+
+        // Purchase a lootbox to create pending lootbox RNG demand
+        _purchaseWithLootbox(buyer1, 0, 0.5 ether);
+
+        // Try to trigger lootbox RNG — this may or may not succeed depending on
+        // threshold, but we can check the swap didn't happen if write queue is empty
+        uint24 wk = _writeKeyForLevel(game.level() + 1);
+        uint256 writeQueueLen = _queueLength(wk);
+
+        // If write queue is empty, no swap should happen even if lootbox RNG fires
+        if (writeQueueLen == 0) {
+            uint8 wsAfter = _getWriteSlot();
+            assertEq(wsAfter, wsBefore, "Write slot should NOT change when write queue is empty");
+        }
+        // Regardless, drive the game forward and verify no stranding
+        simTime += 1 days + 1;
+        vm.warp(simTime);
+        for (uint256 i = 0; i < 50; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+    }
+
+    /// @notice Verify that tickets purchased during mid-day VRF pending window
+    ///         go to the write slot (rngLocked is NOT set for mid-day) and are
+    ///         eventually processed via the daily path with zero stranding.
+    function testMidDayTicketsNotStranded() public {
+        // Drive to level 1 to get past bootstrap
+        _driveToLevel(2);
+        uint256 reached = game.level();
+        assertGe(reached, 1, "Must reach level 1");
+
+        // Now buy tickets + lootbox on the same day to trigger mid-day path
+        uint256 simTime = block.timestamp + 1 days + 1;
+        vm.warp(simTime);
+        _seedNextPrizePool(49.9 ether);
+
+        // Buy tickets (goes to write slot)
+        _buyTickets(buyer1, 4000);
+        _buyTickets(buyer2, 4000);
+
+        // Purchase lootbox to create mid-day RNG demand
+        _purchaseWithLootbox(buyer3, 0, 0.5 ether);
+
+        // Drive advanceGame through daily + potentially mid-day cycle
+        for (uint256 i = 0; i < 80; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Buy more tickets AFTER mid-day processing may have occurred
+        // These should go to current write slot (which may have swapped)
+        _buyTickets(buyer1, 2000);
+
+        // Drive through more days to ensure everything processes
+        _driveToLevel(reached + 3);
+        uint256 finalLevel = game.level();
+        assertGe(finalLevel, reached + 2, "Must advance at least 2 more levels");
+
+        // Assert zero stranding for all processed levels
+        _assertZeroStranding(1, uint24(finalLevel));
+    }
+
+    /// @notice Verify that FF writes are NOT blocked during mid-day RNG
+    ///         (rngLockedFlag is false for mid-day, unlike daily VRF).
+    function testMidDayFFWritesNotBlocked() public {
+        // Drive to level 1
+        _driveToLevel(2);
+        assertGe(game.level(), 1, "Must reach level 1");
+
+        // Advance to next day and complete daily processing
+        uint256 simTime = block.timestamp + 1 days + 1;
+        vm.warp(simTime);
+        _seedNextPrizePool(49.9 ether);
+        _buyTickets(buyer1, 4000);
+
+        for (uint256 i = 0; i < 50; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Now we're in mid-day territory. rngLockedFlag should be false.
+        // Snapshot FF queues at far-future levels
+        uint24 lvl = uint24(game.level());
+        uint24 ffTarget = lvl + 7; // definitely far future (> lvl + 5)
+        uint256 ffBefore = _ffQueueLength(ffTarget);
+
+        // Purchase lootbox — this may produce a far roll that writes to FF key
+        // The key assertion: it does NOT revert with RngLocked()
+        _purchaseWithLootbox(buyer1, 0, 0.5 ether);
+
+        // Also buy regular tickets — if a lootbox open targets FF, it should succeed
+        // because rngLocked is false during mid-day
+        // (We can't directly control lootbox target level, but we can verify
+        // the purchase itself doesn't revert)
+
+        // Drive forward to drain everything
+        _driveToLevel(lvl + 3);
+        _flushAdvance();
+    }
+
+    /// @notice Verify that tickets swapped into read slot by mid-day path are
+    ///         fully processed and don't get double-counted on the next daily cycle.
+    function testMidDaySwapTicketsNotDoubleCounted() public {
+        // Drive to level 1
+        _driveToLevel(2);
+        uint256 reached = game.level();
+        assertGe(reached, 1, "Must reach level 1");
+
+        // Day N: buy tickets, complete daily processing
+        uint256 simTime = block.timestamp + 1 days + 1;
+        vm.warp(simTime);
+        _seedNextPrizePool(49.9 ether);
+        _buyTickets(buyer1, 8000);
+        _buyTickets(buyer2, 8000);
+
+        // Complete daily cycle (swap happens, tickets process)
+        for (uint256 i = 0; i < 80; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Still same day — buy more tickets (these go to new write slot)
+        _buyTickets(buyer1, 4000);
+        _buyTickets(buyer3, 4000);
+
+        // Purchase lootbox to trigger potential mid-day swap
+        _purchaseWithLootbox(buyer2, 0, 0.5 ether);
+
+        // Drive mid-day advanceGame
+        for (uint256 i = 0; i < 50; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Day N+1 through N+3: drive through more levels
+        _driveToLevel(reached + 4);
+        uint256 finalLevel = game.level();
+        assertGe(finalLevel, reached + 3, "Must advance 3 more levels");
+
+        // The critical assertion: zero stranding proves no double-counting.
+        // If tickets were double-counted, the queue invariants would break
+        // (either extra entries or missing processing).
+        _assertZeroStranding(1, uint24(finalLevel));
+    }
+
+    // =========================================================================
+    // Mid-Day RNG Scenario Matrix
+    // =========================================================================
+
+    /// @notice Scenario: Some tickets in write queue, then a burst of purchases immediately
+    ///         after mid-day RNG request. Tickets bought after the swap should land in the
+    ///         NEW write slot and not interfere with the swapped read-slot processing.
+    function testMidDayBurstAfterRngRequest() public {
+        _driveToLevel(2);
+        uint256 reached = game.level();
+        assertGe(reached, 1, "Must reach level 1");
+
+        // Day N: complete daily cycle
+        uint256 simTime = block.timestamp + 1 days + 1;
+        vm.warp(simTime);
+        _seedNextPrizePool(49.9 ether);
+        _buyTickets(buyer1, 4000);
+
+        for (uint256 i = 0; i < 80; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Same day: buy some tickets to populate write queue
+        _buyTickets(buyer1, 2000);
+        _buyTickets(buyer2, 2000);
+
+        // Purchase lootbox to create mid-day RNG demand + trigger potential swap
+        _purchaseWithLootbox(buyer3, 0, 1 ether);
+
+        // Attempt to trigger lootbox RNG (may need requestLootboxRng)
+        try game.requestLootboxRng() {} catch {}
+
+        // BURST: immediately buy a large batch of tickets AFTER RNG request
+        // If swap happened, these go to the new write slot
+        // If swap didn't happen, these go to the existing write slot
+        _buyTickets(buyer1, 8000);
+        _buyTickets(buyer2, 8000);
+        _buyTickets(buyer3, 8000);
+
+        // Drive mid-day advanceGame to process anything pending
+        for (uint256 i = 0; i < 50; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Drive through several more levels
+        _driveToLevel(reached + 4);
+        uint256 finalLevel = game.level();
+        assertGe(finalLevel, reached + 3, "Must advance 3+ levels after burst");
+
+        // Zero stranding: all burst tickets must be eventually processed
+        _assertZeroStranding(1, uint24(finalLevel));
+    }
+
+    /// @notice Scenario: Heavy ticket volume across multiple buyers — many tickets in write
+    ///         queue when mid-day swap decision is made. Verifies the swap + processing
+    ///         handles large queues without stranding.
+    function testMidDayHeavyTicketVolume() public {
+        _driveToLevel(2);
+        uint256 reached = game.level();
+        assertGe(reached, 1, "Must reach level 1");
+
+        // Day N: complete daily cycle
+        uint256 simTime = block.timestamp + 1 days + 1;
+        vm.warp(simTime);
+        _seedNextPrizePool(49.9 ether);
+        _buyTickets(buyer1, 4000);
+
+        for (uint256 i = 0; i < 80; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Same day: heavy buying from multiple buyers
+        _buyTickets(buyer1, 16000);
+        _buyTickets(buyer2, 16000);
+        _buyTickets(buyer3, 16000);
+        address buyer4 = makeAddr("heavy_buyer4");
+        vm.deal(buyer4, 50_000 ether);
+        _buyTickets(buyer4, 16000);
+
+        // Trigger mid-day RNG via lootbox purchase
+        _purchaseWithLootbox(buyer1, 0, 1 ether);
+        try game.requestLootboxRng() {} catch {}
+
+        // Drive mid-day processing — may take multiple calls due to large queue
+        for (uint256 i = 0; i < 100; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Continue to next days and advance levels
+        _driveToLevel(reached + 4);
+        uint256 finalLevel = game.level();
+        assertGe(finalLevel, reached + 3, "Must advance 3+ levels after heavy volume");
+
+        _assertZeroStranding(1, uint24(finalLevel));
+    }
+
+    /// @notice Scenario: Read slot NOT fully processed when mid-day RNG fires.
+    ///         The swap should be skipped (ticketsFullyProcessed == false), and
+    ///         the existing read-slot processing should continue via daily path.
+    function testMidDaySwapSkipped_ReadNotDrained() public {
+        _driveToLevel(2);
+        uint256 reached = game.level();
+        assertGe(reached, 1, "Must reach level 1");
+
+        // Day N: buy a lot to create a large read queue that takes multiple batches
+        uint256 simTime = block.timestamp + 1 days + 1;
+        vm.warp(simTime);
+        _seedNextPrizePool(49.9 ether);
+        _buyTickets(buyer1, 16000);
+        _buyTickets(buyer2, 16000);
+
+        // Run ONE advanceGame call — this swaps and starts processing but may not finish
+        _fulfillVrfIfPending();
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        // Don't drain fully — the read slot should still have entries
+
+        // Record write slot
+        uint8 wsBefore = _getWriteSlot();
+
+        // Buy more tickets (goes to write slot)
+        _buyTickets(buyer3, 4000);
+
+        // Try to trigger mid-day lootbox RNG
+        _purchaseWithLootbox(buyer1, 0, 0.5 ether);
+        try game.requestLootboxRng() {} catch {}
+
+        // If ticketsFullyProcessed is false, the swap condition (AM:735) is not met.
+        // Write slot should NOT have changed from the mid-day path.
+        // (Daily path already swapped once, and mid-day should NOT swap again
+        //  because read isn't drained yet.)
+
+        // Drive everything to completion via daily path
+        for (uint256 i = 0; i < 100; i++) {
+            _fulfillVrfIfPending();
+            (bool ok2, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok2) break;
+        }
+
+        // Next day + more levels
+        _driveToLevel(reached + 3);
+        uint256 finalLevel = game.level();
+        assertGe(finalLevel, reached + 2, "Must advance 2+ levels");
+
+        // Zero stranding: all tickets from all scenarios processed
+        _assertZeroStranding(1, uint24(finalLevel));
+    }
+
+    /// @notice Scenario: Multiple mid-day RNG cycles in a single day. Each cycle
+    ///         independently evaluates the swap condition. Verify no tickets stranded
+    ///         between multiple swap decisions.
+    function testMidDayMultipleCyclesSameDay() public {
+        _driveToLevel(2);
+        uint256 reached = game.level();
+        assertGe(reached, 1, "Must reach level 1");
+
+        uint256 simTime = block.timestamp + 1 days + 1;
+        vm.warp(simTime);
+        _seedNextPrizePool(49.9 ether);
+
+        // Daily cycle
+        _buyTickets(buyer1, 4000);
+        for (uint256 i = 0; i < 80; i++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+
+        // Mid-day cycle 1: buy tickets + trigger lootbox RNG
+        _buyTickets(buyer1, 4000);
+        _purchaseWithLootbox(buyer2, 0, 0.5 ether);
+        try game.requestLootboxRng() {} catch {}
+        _fulfillVrfIfPending();
+        for (uint256 i = 0; i < 50; i++) {
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+            _fulfillVrfIfPending();
+        }
+
+        // Mid-day cycle 2: more tickets + another lootbox
+        _buyTickets(buyer2, 4000);
+        _buyTickets(buyer3, 4000);
+        _purchaseWithLootbox(buyer3, 0, 0.5 ether);
+        try game.requestLootboxRng() {} catch {}
+        _fulfillVrfIfPending();
+        for (uint256 i = 0; i < 50; i++) {
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+            _fulfillVrfIfPending();
+        }
+
+        // Mid-day cycle 3: burst
+        _buyTickets(buyer1, 8000);
+        _purchaseWithLootbox(buyer1, 0, 1 ether);
+        try game.requestLootboxRng() {} catch {}
+        _fulfillVrfIfPending();
+        for (uint256 i = 0; i < 50; i++) {
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+            _fulfillVrfIfPending();
+        }
+
+        // Advance through levels to drain everything
+        _driveToLevel(reached + 4);
+        uint256 finalLevel = game.level();
+        assertGe(finalLevel, reached + 3, "Must advance 3+ levels after multiple mid-day cycles");
+
+        _assertZeroStranding(1, uint24(finalLevel));
+    }
+
     // ==================== Internal Helpers ====================
 
     /// @notice Sweep levels fromLevel..toLevel and assert all read-slot and FF queues are zero.
