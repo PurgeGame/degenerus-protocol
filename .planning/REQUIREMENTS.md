@@ -18,21 +18,21 @@ Requirements for Ticket Lifecycle Integration Tests milestone. Each maps to road
 
 ### Edge Cases
 
-- [ ] **EDGE-01**: Tickets at exactly level+5 route to write key (near-future), not FF key
-- [ ] **EDGE-02**: Tickets at level+6 route to FF key
-- [ ] **EDGE-03**: FF tickets at level L+5 are drained during phase transition, not during daily cycle
-- [ ] **EDGE-04**: Jackpot-phase tickets at level appear in read slot after _swapAndFreeze and are processed by _runProcessTicketBatch(level)
+- [x] **EDGE-01**: Tickets at exactly level+5 route to write key (near-future), not FF key
+- [x] **EDGE-02**: Tickets at level+6 route to FF key
+- [x] **EDGE-03**: FF tickets at level L+5 are drained during phase transition, not during daily cycle
+- [x] **EDGE-04**: Jackpot-phase tickets at level appear in read slot after _swapAndFreeze and are processed by _runProcessTicketBatch(level)
 - [x] **EDGE-05**: Constructor-queued FF tickets at levels 6-100 accumulate and drain one-per-transition as game advances
-- [ ] **EDGE-06**: Last jackpot day routing fix verified — rngLocked + jackpotCounter+step >= JACKPOT_LEVEL_CAP routes to level+1
+- [x] **EDGE-06**: Last jackpot day routing fix verified — rngLocked + jackpotCounter+step >= JACKPOT_LEVEL_CAP routes to level+1
 - [x] **EDGE-07**: _prepareFutureTickets processes only read queues in +1..+4 range, does NOT touch FF keys
 - [x] **EDGE-08**: After full level cycle (purchase -> jackpot -> transition), ALL read-slot queues for processed range are empty
 - [x] **EDGE-09**: Write-slot tickets from current day survive _swapAndFreeze and appear in read slot on next cycle
 
 ### Zero-Stranding Assertions
 
-- [ ] **ZSA-01**: After each level transition, iterate levels 0..level+10 and assert ticketQueue[readKey].length == 0 for processed levels
-- [ ] **ZSA-02**: After each level transition, assert ticketQueue[ffKey].length == 0 for levels within FF drain range
-- [ ] **ZSA-03**: 3+ consecutive level transitions with continuous ticket buying from multiple sources yield zero stranding across all key spaces
+- [x] **ZSA-01**: After each level transition, iterate levels 0..level+10 and assert ticketQueue[readKey].length == 0 for processed levels
+- [x] **ZSA-02**: After each level transition, assert ticketQueue[ffKey].length == 0 for levels within FF drain range
+- [x] **ZSA-03**: 3+ consecutive level transitions with continuous ticket buying from multiple sources yield zero stranding across all key spaces
 
 ### RNG Commitment Window Safety
 
@@ -77,18 +77,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRC-04 | Phase 92 | Complete |
 | SRC-05 | Phase 92 | Complete |
 | SRC-06 | Phase 92 | Complete |
-| EDGE-01 | Phase 93 | Pending |
-| EDGE-02 | Phase 93 | Pending |
-| EDGE-03 | Phase 93 | Pending |
-| EDGE-04 | Phase 93 | Pending |
+| EDGE-01 | Phase 93 | Complete |
+| EDGE-02 | Phase 93 | Complete |
+| EDGE-03 | Phase 93 | Complete |
+| EDGE-04 | Phase 93 | Complete |
 | EDGE-05 | Phase 92 | Complete |
-| EDGE-06 | Phase 93 | Pending |
+| EDGE-06 | Phase 93 | Complete |
 | EDGE-07 | Phase 92 | Complete |
 | EDGE-08 | Phase 92 | Complete |
 | EDGE-09 | Phase 92 | Complete |
-| ZSA-01 | Phase 93 | Pending |
-| ZSA-02 | Phase 93 | Pending |
-| ZSA-03 | Phase 93 | Pending |
+| ZSA-01 | Phase 93 | Complete |
+| ZSA-02 | Phase 93 | Complete |
+| ZSA-03 | Phase 93 | Complete |
 | RNG-01 | Phase 94 | Pending |
 | RNG-02 | Phase 94 | Pending |
 | RNG-03 | Phase 94 | Pending |

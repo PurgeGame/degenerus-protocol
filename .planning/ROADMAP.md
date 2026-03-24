@@ -177,7 +177,7 @@
 **Milestone Goal:** Write a comprehensive Foundry integration test suite that deploys the full protocol and verifies all ticket queuing paths result in processed tickets with zero stranding across level transitions.
 
 - [x] **Phase 92: Integration Scaffold + Source Coverage** - Full-protocol test harness with all 6 ticket sources exercised end-to-end (completed 2026-03-24)
-- [ ] **Phase 93: Edge Cases + Zero-Stranding Assertions** - Boundary routing, phase-transition timing, and comprehensive zero-stranding sweeps
+- [x] **Phase 93: Edge Cases + Zero-Stranding Assertions** - Boundary routing, phase-transition timing, and comprehensive zero-stranding sweeps (completed 2026-03-24)
 - [ ] **Phase 94: RNG Commitment Window Proofs** - Formal proof that no permissionless ticket path can influence jackpot resolution during VRF pending window
 
 ## Phase Details
@@ -207,7 +207,9 @@ Plans:
   3. Jackpot-phase tickets appear in the read slot after _swapAndFreeze and are processed by _runProcessTicketBatch, verified by comparing read-slot queue length before and after the processing step
   4. After 3+ consecutive level transitions with continuous multi-source ticket buying, every ticketQueue[readKey] and ticketQueue[ffKey] for processed levels reads as zero length
   5. The last-jackpot-day routing fix is verified: when rngLocked and jackpotCounter+step >= CAP, tickets route to level+1 (not current level)
-**Plans**: TBD
+**Plans:** 1/1 plans complete
+Plans:
+- [x] 93-01-PLAN.md -- Edge case tests (EDGE-01/02/03/04/06) + zero-stranding sweeps (ZSA-01/02/03)
 
 ### Phase 94: RNG Commitment Window Proofs
 **Goal**: Formal proof that the ticket double-buffer architecture and rngLocked guard make jackpot resolution immune to permissionless ticket manipulation during VRF pending windows
@@ -226,8 +228,8 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 92. Integration Scaffold + Source Coverage | 2/2 | Complete   | 2026-03-24 |
-| 93. Edge Cases + Zero-Stranding Assertions | 0/TBD | Not started | - |
+| 92. Integration Scaffold + Source Coverage | 2/2 | Complete    | 2026-03-24 |
+| 93. Edge Cases + Zero-Stranding Assertions | 1/1 | Complete   | 2026-03-24 |
 | 94. RNG Commitment Window Proofs | 0/TBD | Not started | - |
 
 ## Deferred
