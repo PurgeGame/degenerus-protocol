@@ -67,6 +67,13 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 ### Validated
 
 - ✓ v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit — 10 phases (81-91), 51 INFO findings (0 HIGH/MEDIUM/LOW), DEC-01/DGN-01 withdrawn as false positives, 134 cumulative total. Ticket creation (16 entry points), processing (RNG/cursor), consumption (9 jackpot types), prize pool flow (storage layout), daily ETH/coin/ticket jackpots, other jackpots (earlybird/BAF/decimator/degenerette/finalday), RNG re-verification (55 vars, 27 slot shifts), consolidated findings, cross-phase consistency verified — v4.0 Phases 81-91
+- ✓ v4.1 Ticket Lifecycle Integration Tests — 3 phases (92-94), 24 Foundry integration tests deploying full 23-contract protocol, all 6 ticket sources verified (direct purchase x3, lootbox near/far, whale bundle), boundary routing (L+5 write vs L+6 FF), FF drain timing proven, zero-stranding sweeps across all key spaces, RNG commitment window formal proof (9/9 paths SAFE), rngLocked guard verified, 1 bug fix (requestLootboxRng mid-day gating) — v4.1 Phases 92-94
+
+## Completed Milestone: v4.1 Ticket Lifecycle Integration Tests
+
+**Status:** Complete (2026-03-24)
+
+**Result:** 24 Foundry integration tests across 3 phases (92-94). All 22 requirements satisfied. Full-protocol deployment via DeployProtocol exercising all 6 ticket sources, edge cases, zero-stranding sweeps, and RNG commitment window proofs. 1 contract bug fix discovered (requestLootboxRng blocked during mid-day ticket processing).
 
 ## Completed Milestone: v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit
 
@@ -147,16 +154,15 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v4.0 shipped 2026-03-23 — Complete ticket lifecycle and RNG-dependent variable re-audit. 11 phases (81-91), 24 plans, 46 requirements, all satisfied. 51 INFO findings (0 HIGH/MEDIUM/LOW). DEC-01 (MEDIUM, decBucketOffsetPacked collision) and DGN-01 (LOW, claimable balance off-by-one) both withdrawn as false positives after manual review.
+v4.1 shipped 2026-03-24 — Ticket lifecycle integration tests. 3 phases (92-94), 4 plans, 22 requirements, all satisfied. 24 Foundry integration tests deploying full 23-contract protocol. All 6 ticket sources verified end-to-end. RNG commitment window formal proof (9/9 paths SAFE). 1 contract bug fix: `requestLootboxRng` blocked during mid-day ticket processing to prevent RNG race condition.
 
-**Code fixes applied during v4.0:**
-- `sampleFarFutureTickets`: fixed to read `_tqFarFutureKey` instead of `_tqWriteKey`, range tightened to `+7..+99` matching FF routing boundary
-- BAF scatter: level targeting changed — 20% from current level, 80% random from near-future levels `+1..+6`
-- BAF scatter payout: per-round fixed shares, empty rounds return to future pool (no winner redistribution)
+**Code fixes applied during v4.1:**
+- `requestLootboxRng`: blocked while mid-day ticket processing is active (prevents RNG race)
+- Near/far-future ticket boundary unified at +5 with jackpot-phase routing fix
 
 **Grand total across all milestones:** 134 findings (16 LOW, 118 INFO), 0 MEDIUM/HIGH outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in v3.9.
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit).
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests).
 
 ## Evolution
 
@@ -176,4 +182,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-23 after v4.0 milestone complete*
+*Last updated: 2026-03-24 after v4.1 milestone completed*

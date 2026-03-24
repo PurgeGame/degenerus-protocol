@@ -195,6 +195,49 @@
 
 ---
 
+## Milestone: v4.1 — Ticket Lifecycle Integration Tests
+
+**Shipped:** 2026-03-24
+**Phases:** 3 | **Plans:** 4
+
+### What Was Built
+- 24 Foundry integration tests deploying full 23-contract protocol via DeployProtocol
+- All 6 ticket sources (direct purchase x3, lootbox near/far, whale bundle) verified end-to-end with storage-level inspection
+- Edge case coverage: boundary routing (L+5 write vs L+6 FF), FF drain timing (phaseTransitionActive only), jackpot read-slot pipeline, last-day routing override
+- Zero-stranding sweep helper checking both buffer sides + FF keys across all processed levels
+- Formal RNG commitment window proof: 9/9 permissionless paths SAFE, traitBurnTicket 0 permissionless writers
+- 4 rngLocked guard tests verifying FF key write blocking and double-buffer write-slot isolation
+- 1 contract bug fix: requestLootboxRng blocked during mid-day ticket processing
+
+### What Worked
+- v3.9's DeployProtocol + vm.store/vm.load pattern scaled perfectly — all v4.1 tests reused the same infrastructure
+- Phase ordering (scaffold → edge cases → RNG proofs) minimized rework: each phase extended the single accumulating test file
+- "ticketsOwed over queue length" decision (Phase 92) propagated cleanly through Phases 93-94, avoiding the vault-perpetual false assertion trap
+- buyer3 isolation pattern eliminated _driveToLevel contamination in all lootbox/whale tests
+- try/catch pattern for lootbox RNG-03b test elegantly handled the non-deterministic near/far roll outcome
+
+### What Was Inefficient
+- 92-VERIFICATION.md was stale (showed gaps_found pre-fix) — autonomous execution didn't re-run verification after SRC-05 fix
+- 7 auto-fixed bugs across 4 plans: plan-sketched assertions consistently needed adjustment for actual storage semantics (queue length vs ticketsOwed, writeSlot toggle parity, slot/offset misalignment)
+
+### Patterns Established
+- Accumulating single test file pattern: all phases contribute to one TicketLifecycle.t.sol rather than separate files per phase
+- _assertZeroStranding sweep: checks both buffer sides (plain + SLOT_BIT) to handle writeSlot toggle parity
+- Analytical proof + Foundry test pattern: formal path enumeration for structural properties (RNG-01/02), integration tests for behavioral properties (RNG-03/04)
+
+### Key Lessons
+1. Plan-sketched test assertions are consistently wrong about storage semantics — the auto-fix pipeline (Rule 1) handles this well, but planning should note "assertion approach TBD pending actual storage behavior"
+2. Single accumulating test file works better than per-phase files for integration suites where later tests reuse earlier helpers
+3. Autonomous execution should re-run verification after auto-fixes — the stale 92-VERIFICATION.md was caught by milestone audit but shouldn't have shipped
+4. vm.store slot manipulation patterns (bit shifts for slot 0/slot 1 packed fields) are reusable infrastructure worth documenting in helper functions rather than inline constants
+
+### Cost Observations
+- Model mix: ~90% opus (all phases), ~10% sonnet (integration checks)
+- 16 commits in ~3 hours
+- Notable: 24 integration tests from zero in a single session, building on v3.9 infrastructure
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -210,6 +253,8 @@
 | v3.7 | 5 | 10 | Halmos symbolic verification; ghost variable invariant testing; single-day milestone delivery |
 | v3.8 | 6 | 13 | Backward-trace commitment window proofs; mutation path enumeration; boon storage packing |
 | v3.9 | 7 | 8 | TDD fix pipeline; combined pool pattern; bit-reservation key spaces; full-protocol integration tests |
+| v4.0 | 11 | 24 | Exhaustive lifecycle trace; file:line citation density; false positive withdrawal; cross-phase consistency |
+| v4.1 | 3 | 4 | Accumulating test file; analytical proof + Foundry test pairing; zero-stranding sweep helper |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -221,4 +266,6 @@
 6. Ghost variable invariant testing is the strongest technique for proving cross-transaction accounting properties — validated in v3.3 (redemption) and v3.7 (VRF lifecycle)
 7. Halmos symbolic proofs give mathematical certainty for numeric invariants — redemption roll [25,175] proven for all 2^256 inputs (v3.7)
 8. Combined pool selection eliminates entire classes of buffer-read bugs — structurally superior to single-read patches (v3.9)
-9. Full-protocol integration tests (23 contracts, multi-level advancement) catch constructor/deploy-order issues that unit tests with mocks miss (v3.9)
+9. Full-protocol integration tests (23 contracts, multi-level advancement) catch constructor/deploy-order issues that unit tests with mocks miss (v3.9, v4.1)
+10. Plan-sketched test assertions are consistently wrong about storage semantics — auto-fix pipelines handle this, but acknowledging it during planning reduces deviation count (v4.1)
+11. Accumulating single test file beats per-phase files for integration suites where later tests reuse earlier helpers and storage inspection patterns (v4.1)
