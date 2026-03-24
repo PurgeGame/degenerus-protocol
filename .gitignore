@@ -10,3 +10,4 @@ runs/
 .planning/
 .gas-snapshot
 .gas-snapshot-*
+/memory
