@@ -36,10 +36,10 @@ Requirements for Ticket Lifecycle Integration Tests milestone. Each maps to road
 
 ### RNG Commitment Window Safety
 
-- [ ] **RNG-01**: No permissionless ticket path can mutate ticketQueue read-slot entries during VRF pending window (jackpot-resolution state frozen)
-- [ ] **RNG-02**: No permissionless ticket path can mutate traitBurnTicket entries used for jackpot winner selection during VRF pending window
-- [ ] **RNG-03**: rngLocked guard blocks FF key writes from all external callers (purchase, lootbox, whale bundle)
-- [ ] **RNG-04**: Purchase routing always creates entries in write slot (never read slot), regardless of rngLocked state — double-buffer is the structural guarantee
+- [x] **RNG-01**: No permissionless ticket path can mutate ticketQueue read-slot entries during VRF pending window (jackpot-resolution state frozen)
+- [x] **RNG-02**: No permissionless ticket path can mutate traitBurnTicket entries used for jackpot winner selection during VRF pending window
+- [x] **RNG-03**: rngLocked guard blocks FF key writes from all external callers (purchase, lootbox, whale bundle)
+- [x] **RNG-04**: Purchase routing always creates entries in write slot (never read slot), regardless of rngLocked state — double-buffer is the structural guarantee
 
 ## Future Requirements
 
@@ -89,10 +89,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ZSA-01 | Phase 93 | Complete |
 | ZSA-02 | Phase 93 | Complete |
 | ZSA-03 | Phase 93 | Complete |
-| RNG-01 | Phase 94 | Pending |
-| RNG-02 | Phase 94 | Pending |
-| RNG-03 | Phase 94 | Pending |
-| RNG-04 | Phase 94 | Pending |
+| RNG-01 | Phase 94 | Complete |
+| RNG-02 | Phase 94 | Complete |
+| RNG-03 | Phase 94 | Complete |
+| RNG-04 | Phase 94 | Complete |
 
 **Coverage:**
 - v4.1 requirements: 22 total
