@@ -127,10 +127,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint48 indexed day,
         uint256 amount,
         bool presale,
-        uint256 futureShare,
-        uint256 nextPrizeShare,
-        uint256 vaultShare,
-        uint256 rewardShare
+        uint24 level
     );
     event LootBoxIdx(
         address indexed buyer,
@@ -795,7 +792,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 coin.creditFlip(buyer, lootboxKickback);
             }
 
-            emit LootBoxBuy(buyer, day, lootBoxAmount, presale, futureShare, nextShare, vaultShare, rewardShare);
+            emit LootBoxBuy(buyer, day, lootBoxAmount, presale, level);
 
             // Match ticket purchase behavior: mint quest progress uses whole ticket-equivalent
             // units and only the fresh-ETH portion when claimable is mixed in.
