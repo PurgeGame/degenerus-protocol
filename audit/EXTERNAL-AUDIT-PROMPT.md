@@ -47,6 +47,11 @@ Your objective is to find real, exploitable vulnerabilities and meaningful econo
 - Split-claim: ETH paid immediately on period resolution; BURNIE conditional on coinflip win/loss
 - Game over is multi-step: advanceGame -> VRF request -> fulfill -> advanceGame -> `gameOver=true`
 - Deity pass refund on gameOver: flat 20 ETH/pass (levels 0-9), budget-capped, first-purchased-first-paid
+- Ticket double-buffer: read/write key separation ensures permissionless purchases never mutate jackpot resolution inputs
+- Far-future tickets (level + 6 and beyond) use a third key space (bit 22) with `rngLocked` guard preventing writes during VRF pending windows
+- Combined pool jackpot selection reads from both read key and far-future key
+- Boon storage: 29 per-player boon mappings packed into 2-slot struct via bit packing
+- BAF scatter: 20% current level, 80% random near-future (+1..+6), per-round fixed payouts, empty rounds return to future pool
 
 ### Threat Model
 
@@ -108,7 +113,7 @@ Audit all areas below and state confidence (high/medium/low) per area:
 - Validate RNG lock state machine (request, fulfill, unlock) for stuck states
 - Check callback manipulation vectors (revert griefing, gas griefing, timing games)
 - Verify entropy derivation and consumption
-- Check timeout boundaries: 912d, 365d, 18h, 3d, 30d
+- Check timeout boundaries: 912d, 365d, 12h, 3d, 30d
 
 4. Economic Attack Vectors
 - Model Sybil purchase influence and cost
@@ -156,7 +161,15 @@ Audit all areas below and state confidence (high/medium/low) per area:
 - Shared-storage composition safety across all module combinations
 - States valid locally but invalid globally
 
-11. Gambling Burn Redemption System
+11. Ticket Queue and Double-Buffer Architecture
+- Verify read/write key separation prevents permissionless mutation of jackpot resolution inputs
+- Check far-future key space (bit 22) for collision with read/write keys
+- Verify `rngLocked` guard blocks far-future writes during VRF pending window
+- Check combined pool selection reads from all key spaces without double-counting
+- Verify zero stranding: all tickets are eventually processed across level transitions
+- Check boon storage packing for bit overlap or truncation in packed struct
+
+12. Gambling Burn Redemption System
 - Verify segregation accounting (pendingRedemptionEthValue/Burnie) never exceeds contract holdings
 - Check split-claim (ETH always, BURNIE conditional) for double-claim vectors
 - Validate 50% supply cap enforcement per period
@@ -219,6 +232,8 @@ Use this exact structure:
 - Temporal and Lifecycle Edge Cases: High/Medium/Low
 - EVM-Level Risks: High/Medium/Low
 - Cross-Contract Composition: High/Medium/Low
+- Ticket Queue and Double-Buffer: High/Medium/Low
+- Gambling Burn Redemption: High/Medium/Low
 
 ## Coverage Gaps
 - List explicit files/functions/paths you could not fully verify
@@ -253,7 +268,7 @@ Bad finding pattern (do not do):
 - Cost: `costWei = (priceWei * ticketQuantity) / 400`
 - `MintPaymentKind`: { DirectEth: 0, Claimable: 1, Combined: 2 }
 - Game level starts at 0; `purchaseInfo().lvl` = level + 1 during purchase phase
-- Time constants: 912 days, 365 days, 12 hours (VRF retry, was 18h pre-v2.1), 3 days, 30 days, 20 hours (admin governance threshold), 7 days (community governance threshold), 168 hours (proposal lifetime) <!-- v2.1 Update: VRF retry 18h->12h, governance thresholds added -->
+- Time constants: 912 days, 365 days, 12 hours (VRF retry), 3 days, 30 days, 20 hours (admin governance threshold), 7 days (community governance threshold), 168 hours (proposal lifetime)
 - Whale bundle: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), qty 1-100
 - Lazy pass: 0.24 ETH flat (levels 0-2), sum-of-10-level-prices (level 3+)
 - Deity pass: `24 + T(n)` ETH where `T(n)=n*(n+1)/2`, `n=passesSold`
