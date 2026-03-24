@@ -1063,8 +1063,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Ratio adjust: ±4% based on future/next ratio (target 2:1)
         uint256 ratioPct = (futurePoolBefore * 100) / nextPoolBefore;
         if (ratioPct < 200) {
-            uint256 bump = 200 - ratioPct;
-            bps += (bump > 400 ? 400 : bump);
+            uint256 bump = (200 - ratioPct) * 2;
+            bps += bump;
         } else {
             uint256 penalty = ratioPct - 200;
             penalty = penalty > 400 ? 400 : penalty;
