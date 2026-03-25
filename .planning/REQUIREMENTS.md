@@ -30,7 +30,7 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 
 ### Unit Execution
 
-- [ ] **UNIT-01**: Unit 1 — Game Router + Storage Layout complete (DegenerusGame, DegenerusGameStorage)
+- [x] **UNIT-01**: Unit 1 — Game Router + Storage Layout complete (DegenerusGame, DegenerusGameStorage)
 - [ ] **UNIT-02**: Unit 2 — Day Advancement + VRF complete (DegenerusGameAdvanceModule)
 - [ ] **UNIT-03**: Unit 3 — Jackpot Distribution complete (DegenerusGameJackpotModule, DegenerusGamePayoutUtils)
 - [ ] **UNIT-04**: Unit 4 — Endgame + Game Over complete (DegenerusGameEndgameModule, DegenerusGameGameOverModule)
@@ -89,7 +89,7 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 | VAL-02 | 103-118 (every unit) | Complete |
 | VAL-03 | 103-118 (every unit) | Complete |
 | VAL-04 | 103-118 (every unit) | Complete |
-| UNIT-01 | Phase 103 | Pending |
+| UNIT-01 | Phase 103 | Complete |
 | UNIT-02 | Phase 104 | Pending |
 | UNIT-03 | Phase 105 | Pending |
 | UNIT-04 | Phase 106 | Pending |
