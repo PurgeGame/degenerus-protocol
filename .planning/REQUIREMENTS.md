@@ -28,7 +28,7 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 ### Comments
 
-- [ ] **CMT-01**: NatSpec and inline comments accurate for all modified functions
+- [x] **CMT-01**: NatSpec and inline comments accurate for all modified functions
 
 ## Out of Scope
 
@@ -52,7 +52,7 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 | GOPT-01 | Phase 96 | Complete |
 | GOPT-02 | Phase 96 | Complete |
 | GOPT-03 | Phase 96 | Pending |
-| CMT-01 | Phase 97 | Pending |
+| CMT-01 | Phase 97 | Complete |
 
 **Coverage:**
 - v4.2 requirements: 11 total
