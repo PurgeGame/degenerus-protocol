@@ -743,7 +743,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 nextBps = 10_000;
                 vaultBps = 0;
             } else {
-                bool presaleSplit = presale && level == 0;
+                bool presaleSplit = level == 0 && _getNextPrizePool() <= 50 ether;
                 futureBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS : LOOTBOX_SPLIT_FUTURE_BPS;
                 nextBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS : LOOTBOX_SPLIT_NEXT_BPS;
                 vaultBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_VAULT_BPS : 0;
