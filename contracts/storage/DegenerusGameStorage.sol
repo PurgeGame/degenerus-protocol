@@ -278,11 +278,6 @@ abstract contract DegenerusGameStorage {
     // Note: dailyJackpotCoinTicketsPending ends at Slot 0 byte 29.
     // dailyEthPhase (byte 30) and compressedJackpotFlag (byte 31) fill the remaining Slot 0 space. No padding.
 
-    // =========================================================================
-    // EVM SLOT 1: Price and Double-Buffer Fields
-    // =========================================================================
-    // Packs into EVM Slot 1: purchaseStartDay through prizePoolFrozen (25 bytes used, 7 bytes padding).
-
     /// @dev Daily jackpot ETH phase.
     ///      0 = current level, 1 = carryover.
     uint8 internal dailyEthPhase;
@@ -293,6 +288,11 @@ abstract contract DegenerusGameStorage {
     ///      Compressed (1): target met within 3 days — 5 logical days in 3 physical.
     ///      Cleared at phase end.
     uint8 internal compressedJackpotFlag;
+
+    // =========================================================================
+    // EVM SLOT 1: Price and Double-Buffer Fields
+    // =========================================================================
+    // Packs into EVM Slot 1: purchaseStartDay through prizePoolFrozen (25 bytes used, 7 bytes padding).
 
     /// @dev Game day index when the current purchase phase opened.
     ///      Used to determine whether the purchase target was met quickly enough
