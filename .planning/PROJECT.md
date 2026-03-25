@@ -69,15 +69,15 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit — 10 phases (81-91), 51 INFO findings (0 HIGH/MEDIUM/LOW), DEC-01/DGN-01 withdrawn as false positives, 134 cumulative total. Ticket creation (16 entry points), processing (RNG/cursor), consumption (9 jackpot types), prize pool flow (storage layout), daily ETH/coin/ticket jackpots, other jackpots (earlybird/BAF/decimator/degenerette/finalday), RNG re-verification (55 vars, 27 slot shifts), consolidated findings, cross-phase consistency verified — v4.0 Phases 81-91
 - ✓ v4.1 Ticket Lifecycle Integration Tests — 3 phases (92-94), 24 Foundry integration tests deploying full 23-contract protocol, all 6 ticket sources verified (direct purchase x3, lootbox near/far, whale bundle), boundary routing (L+5 write vs L+6 FF), FF drain timing proven, zero-stranding sweeps across all key spaces, RNG commitment window formal proof (9/9 paths SAFE), rngLocked guard verified, 1 bug fix (requestLootboxRng mid-day gating) — v4.1 Phases 92-94
 
-## Current Milestone: v4.2 Daily Jackpot Chunk Removal + Gas Optimization
+### Validated
 
-**Goal:** Verify the dead mid-chunk resume infrastructure removal is behaviorally equivalent, then optimize the daily jackpot path for maximum gas efficiency.
+- ✓ v4.2 Daily Jackpot Chunk Removal + Gas Optimization — 3 phases (95-97), chunk removal delta verified (behavioral equivalence + zero stale refs), gas ceiling profiled (all 3 stages SAFE with 34.9-42.3% headroom), 24 SLOADs audited + 7 loops analyzed, comment cleanup (8 issues fixed, function rename), 0 new findings — v4.2 Phases 95-97
 
-**Target features:**
-- Delta audit of chunk removal (behavioral equivalence proof, test verification, grep sweep)
-- Gas ceiling re-analysis of _processDailyEthChunk and payDailyJackpot under worst-case inputs
-- Gas optimization pass on the entire daily jackpot code path (unnecessary SLOADs, redundant computation, loop inefficiencies)
-- Comment/NatSpec correctness for changed code
+## Completed Milestone: v4.2 Daily Jackpot Chunk Removal + Gas Optimization
+
+**Status:** Complete (2026-03-25)
+
+**Result:** 3 phases (95-97). Chunk removal delta verified (behavioral equivalence proof, zero stale refs across all Solidity files). Gas ceiling profiled — all 3 daily jackpot stages reclassified from AT_RISK/TIGHT to SAFE with 34.9-42.3% headroom. 24 SLOADs audited, 7 loops analyzed, 1 actionable optimization identified (deferred as architectural). Comment cleanup: 8 issues fixed, `_processDailyEthChunk` renamed to `_processDailyEth`, full NatSpec added.
 
 ## Completed Milestone: v4.1 Ticket Lifecycle Integration Tests
 
@@ -164,9 +164,11 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v4.2 in progress (2026-03-25) — Daily Jackpot Chunk Removal + Gas Optimization. Phase 95 (delta verification) and Phase 96 (gas ceiling + optimization) complete. Phase 97 (comment cleanup) pending.
+v4.2 complete (2026-03-25) — Daily Jackpot Chunk Removal + Gas Optimization. All 3 phases done: Phase 95 (delta verification), Phase 96 (gas ceiling + optimization), Phase 97 (comment cleanup).
 
 **Phase 96 results:** All 3 daily jackpot stages reclassified from AT_RISK/TIGHT to SAFE with 34.9-42.3% headroom under the 14M gas ceiling. 24 SLOADs audited, 7 loops analyzed. No contract changes needed — costs dominated by unavoidable per-address cold SLOADs.
+
+**Phase 97 results:** 8 stale comment issues fixed across 2 contract files. Storage layout comments corrected to match `forge inspect` output (Slot 0 fully packed at 32 bytes, Slot 1 at 25 bytes). `_processDailyEthChunk` renamed to `_processDailyEth` (chunking removed). Full NatSpec added.
 
 **Code fixes applied during v4.1:**
 - `requestLootboxRng`: blocked while mid-day ticket processing is active (prevents RNG race)
@@ -194,4 +196,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after Phase 96 completion*
+*Last updated: 2026-03-25 after Phase 97 completion (v4.2 milestone complete)*
