@@ -73,46 +73,48 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| COV-01 | TBD | Pending |
-| COV-02 | TBD | Pending |
-| COV-03 | TBD | Pending |
-| ATK-01 | TBD | Pending |
-| ATK-02 | TBD | Pending |
-| ATK-03 | TBD | Pending |
-| ATK-04 | TBD | Pending |
-| ATK-05 | TBD | Pending |
-| VAL-01 | TBD | Pending |
-| VAL-02 | TBD | Pending |
-| VAL-03 | TBD | Pending |
-| VAL-04 | TBD | Pending |
-| UNIT-01 | TBD | Pending |
-| UNIT-02 | TBD | Pending |
-| UNIT-03 | TBD | Pending |
-| UNIT-04 | TBD | Pending |
-| UNIT-05 | TBD | Pending |
-| UNIT-06 | TBD | Pending |
-| UNIT-07 | TBD | Pending |
-| UNIT-08 | TBD | Pending |
-| UNIT-09 | TBD | Pending |
-| UNIT-10 | TBD | Pending |
-| UNIT-11 | TBD | Pending |
-| UNIT-12 | TBD | Pending |
-| UNIT-13 | TBD | Pending |
-| UNIT-14 | TBD | Pending |
-| UNIT-15 | TBD | Pending |
-| UNIT-16 | TBD | Pending |
-| DEL-01 | TBD | Pending |
-| DEL-02 | TBD | Pending |
-| DEL-03 | TBD | Pending |
-| DEL-04 | TBD | Pending |
+**Cross-cutting process requirements** (COV-*, ATK-*, VAL-*) apply to every unit phase (103-118). They are not mapped 1:1 to a single phase because they define the methodology each unit must follow. They are satisfied when ALL 16 unit phases complete with full coverage, attack reports, and Skeptic validation.
+
+| Requirement | Phase(s) | Status |
+|-------------|----------|--------|
+| COV-01 | 103-118 (every unit) | Pending |
+| COV-02 | 103-118 (every unit) | Pending |
+| COV-03 | 103-118 (every unit) | Pending |
+| ATK-01 | 103-118 (every unit) | Pending |
+| ATK-02 | 103-118 (every unit) | Pending |
+| ATK-03 | 103-118 (every unit) | Pending |
+| ATK-04 | 103-118 (every unit) | Pending |
+| ATK-05 | 103-118 (every unit) | Pending |
+| VAL-01 | 103-118 (every unit) | Pending |
+| VAL-02 | 103-118 (every unit) | Pending |
+| VAL-03 | 103-118 (every unit) | Pending |
+| VAL-04 | 103-118 (every unit) | Pending |
+| UNIT-01 | Phase 103 | Pending |
+| UNIT-02 | Phase 104 | Pending |
+| UNIT-03 | Phase 105 | Pending |
+| UNIT-04 | Phase 106 | Pending |
+| UNIT-05 | Phase 107 | Pending |
+| UNIT-06 | Phase 108 | Pending |
+| UNIT-07 | Phase 109 | Pending |
+| UNIT-08 | Phase 110 | Pending |
+| UNIT-09 | Phase 111 | Pending |
+| UNIT-10 | Phase 112 | Pending |
+| UNIT-11 | Phase 113 | Pending |
+| UNIT-12 | Phase 114 | Pending |
+| UNIT-13 | Phase 115 | Pending |
+| UNIT-14 | Phase 116 | Pending |
+| UNIT-15 | Phase 117 | Pending |
+| UNIT-16 | Phase 118 | Pending |
+| DEL-01 | Phase 119 | Pending |
+| DEL-02 | Phase 119 | Pending |
+| DEL-03 | Phase 119 | Pending |
+| DEL-04 | Phase 119 | Pending |
 
 **Coverage:**
 - v5.0 requirements: 32 total
-- Mapped to phases: 0
-- Unmapped: 32 (awaiting roadmap)
+- Mapped to phases: 32 (16 UNIT-* to phases 103-118, 4 DEL-* to phase 119, 12 COV/ATK/VAL cross-cutting across 103-118)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after initial definition*
+*Last updated: 2026-03-25 after roadmap creation*
