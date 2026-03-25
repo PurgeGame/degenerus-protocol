@@ -73,6 +73,13 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 - ✓ v4.2 Daily Jackpot Chunk Removal + Gas Optimization — 4 phases (95-98), chunk removal delta verified (behavioral equivalence + zero stale refs), gas ceiling profiled (all 3 stages SAFE with 34.9-42.3% headroom), 24 SLOADs audited + 7 loops analyzed, comment cleanup (8 issues fixed, function rename), documentation gap closure (13/13 requirements verified), 0 new findings — v4.2 Phases 95-98
 - ✓ v4.3 prizePoolsPacked Batching Optimization — closed early after Phase 99 callsite audit revealed H14 gas savings was 25x overestimate (~63.8K actual vs ~1.6M estimated). Optimization abandoned as not cost-effective. — v4.3 Phase 99
+- ✓ v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan — 3 phases (100-102), protocol-wide cache-overwrite scan (1 VULNERABLE / 11 SAFE across 29 contracts), delta reconciliation fix applied to `runRewardJackpots`, Foundry fix-proof test, zero regressions — v4.4 Phases 100-102
+
+## Completed Milestone: v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan
+
+**Status:** Complete (2026-03-25)
+
+**Result:** 3 phases (100-102). Protocol-wide scan for cache-then-overwrite pattern found 1 VULNERABLE instance (`runRewardJackpots` in EndgameModule) and 11 SAFE across 29 contracts. Delta reconciliation fix: `rebuyDelta = _getFuturePrizePool() - baseFuturePool` added before write-back, preserving auto-rebuy contributions. Foundry integration test (`BafRebuyReconciliation.t.sol`) proves the fix. Foundry 355/14, Hardhat 1208/34 — zero regressions.
 
 ## Completed Milestone: v4.3 prizePoolsPacked Batching Optimization
 
@@ -169,17 +176,9 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current Milestone: v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan
-
-**Goal:** Fix the `runRewardJackpots` cache-overwrite bug and scan the entire protocol for similar local-cache-then-overwrite patterns.
-
-**Target features:**
-- Fix the BAF bug via Option A (delta reconciliation at write-back)
-- Prove the fix is correct (arithmetic trace + invariant that only auto-rebuy modifies futurePrizePool during the call)
-- Full protocol scan for any function that caches a storage value locally, calls nested functions that write to the same slot, then writes back the stale local
-- Test coverage for the fix + any other instances found
-
 ## Current State
+
+v4.4 complete (2026-03-25) — BAF cache-overwrite bug fixed. `runRewardJackpots` delta reconciliation: `rebuyDelta = _getFuturePrizePool() - baseFuturePool` folded into write-back. Protocol-wide scan found 1 VULNERABLE / 11 SAFE across 29 contracts. Foundry fix-proof test passes. Zero regressions.
 
 v4.3 closed early (2026-03-25) — prizePoolsPacked batching optimization investigated and abandoned. Phase 99 callsite audit revealed H14's ~1.6M gas savings estimate was a 25x overestimate: warm dirty-slot SSTOREs cost 100 gas (EIP-2200), not 5,000. Actual savings: ~63,800 gas (0.46% of 14M ceiling, ~$0.13/execution at 1 gwei). Not worth the architectural complexity of refactoring `_processAutoRebuy`'s return signature across all callers.
 
@@ -211,4 +210,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after v4.4 milestone start*
+*Last updated: 2026-03-25 after v4.4 milestone complete*

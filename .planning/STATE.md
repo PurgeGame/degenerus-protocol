@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: BAF Cache-Overwrite Bug Fix + Pattern Scan
-status: Milestone complete
+status: v4.4 milestone complete
 stopped_at: Roadmap created, Phase 100 not yet planned
-last_updated: "2026-03-25T16:03:38.198Z"
+last_updated: "2026-03-25T16:04:22.547Z"
 progress:
   total_phases: 3
   completed_phases: 3

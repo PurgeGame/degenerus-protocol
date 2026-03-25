@@ -1,5 +1,18 @@
 # Milestones
 
+## v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan (Shipped: 2026-03-25)
+
+**Phases completed:** 3 phases, 4 plans, 2 tasks
+
+**Key accomplishments:**
+
+- Protocol-wide scan of 29 contracts for cache-then-overwrite pattern -- 1 VULNERABLE (runRewardJackpots), 11 SAFE, with delta reconciliation fix recommendation for Phase 101
+- Before:
+- Task 1:
+- Task 1 (Foundry):
+
+---
+
 ## v4.3 prizePoolsPacked Batching Optimization (Shipped: 2026-03-25)
 
 **Phases completed:** 1 phases, 1 plans, 2 tasks
