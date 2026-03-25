@@ -189,7 +189,7 @@
 
 - [x] **Phase 95: Delta Verification** - Prove chunk removal is behaviorally safe across both test stacks (completed 2026-03-25)
 - [x] **Phase 96: Gas Ceiling + Optimization** - Profile worst-case gas and optimize the daily jackpot code path (completed 2026-03-25)
-- [ ] **Phase 97: Comment Cleanup** - Verify NatSpec and inline comments for all modified code
+- [x] **Phase 97: Comment Cleanup** - Verify NatSpec and inline comments for all modified code (completed 2026-03-25)
 
 ## Phase Details
 
@@ -220,9 +220,9 @@ Plans:
   5. Any loop-hoistable computation is identified and either hoisted or justified as not worth the complexity
 **Plans:** 3/3 plans complete
 Plans:
-- [ ] 96-01-PLAN.md — Gas ceiling profiling (static analysis + empirical Hardhat validation)
-- [ ] 96-02-PLAN.md — SLOAD audit + loop hoisting audit
-- [ ] 96-03-PLAN.md — Optimization disposition and implementation
+- [x] 96-01-PLAN.md — Gas ceiling profiling (static analysis + empirical Hardhat validation)
+- [x] 96-02-PLAN.md — SLOAD audit + loop hoisting audit
+- [x] 96-03-PLAN.md — Optimization disposition and implementation
 
 ### Phase 97: Comment Cleanup
 **Goal**: All modified code has accurate NatSpec and inline comments reflecting current behavior
@@ -231,7 +231,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Every function modified during chunk removal or gas optimization has accurate NatSpec (@notice, @dev, @param, @return)
   2. No inline comments reference removed concepts (chunks, cursors, bucket iteration resumption)
-**Plans**: TBD
+**Plans:** 1/1 plans complete
+Plans:
+- [x] 97-01-PLAN.md — Storage layout comment fix + function rename + NatSpec update
 
 ## Progress
 
@@ -241,8 +243,8 @@ Phases execute in numeric order: 95 -> 96 -> 97
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 95. Delta Verification | 3/3 | Complete   | 2026-03-25 |
-| 96. Gas Ceiling + Optimization | 0/3 | Complete    | 2026-03-25 |
-| 97. Comment Cleanup | 0/TBD | Not started | - |
+| 96. Gas Ceiling + Optimization | 3/3 | Complete    | 2026-03-25 |
+| 97. Comment Cleanup | 1/1 | Complete   | 2026-03-25 |
 
 ## Deferred
 
