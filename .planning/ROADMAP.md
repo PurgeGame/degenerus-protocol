@@ -187,7 +187,7 @@
 
 **Milestone Goal:** Verify the dead mid-chunk resume infrastructure removal is behaviorally equivalent, then optimize the daily jackpot path for maximum gas efficiency.
 
-- [ ] **Phase 95: Delta Verification** - Prove chunk removal is behaviorally safe across both test stacks
+- [x] **Phase 95: Delta Verification** - Prove chunk removal is behaviorally safe across both test stacks (completed 2026-03-25)
 - [ ] **Phase 96: Gas Ceiling + Optimization** - Profile worst-case gas and optimize the daily jackpot code path
 - [ ] **Phase 97: Comment Cleanup** - Verify NatSpec and inline comments for all modified code
 
@@ -202,11 +202,11 @@
   2. `grep -r` for all 6 removed symbols returns zero hits across all Solidity files
   3. A side-by-side trace proves _processDailyEthChunk produces identical winner selection, payout amounts, and entropy chain as the pre-removal version
   4. All Foundry tests (invariant + fuzz + integration) pass green
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [x] 95-01-PLAN.md — Hardhat regression triage + removed symbol sweep
 - [x] 95-02-PLAN.md — Fix 14 Foundry test stale slot offset constants
-- [ ] 95-03-PLAN.md — Behavioral equivalence trace document
+- [x] 95-03-PLAN.md — Behavioral equivalence trace document
 
 ### Phase 96: Gas Ceiling + Optimization
 **Goal**: Daily jackpot code path is profiled under worst-case inputs and optimized for gas efficiency
@@ -236,7 +236,7 @@ Phases execute in numeric order: 95 -> 96 -> 97
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 95. Delta Verification | 2/3 | In progress (Plan 03 remaining) |  |
+| 95. Delta Verification | 3/3 | Complete   | 2026-03-25 |
 | 96. Gas Ceiling + Optimization | 0/TBD | Not started | - |
 | 97. Comment Cleanup | 0/TBD | Not started | - |
 
