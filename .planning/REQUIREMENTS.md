@@ -23,10 +23,10 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 
 ### Validation (Skeptic)
 
-- [ ] **VAL-01**: Every VULNERABLE and INVESTIGATE finding from the Mad Genius has a Skeptic verdict: CONFIRMED, FALSE POSITIVE, or DOWNGRADE TO INFO
-- [ ] **VAL-02**: Every FALSE POSITIVE dismissal cites the specific line(s) that prevent the attack
-- [ ] **VAL-03**: Every CONFIRMED finding has a severity rating (CRITICAL / HIGH / MEDIUM / LOW / INFO)
-- [ ] **VAL-04**: Skeptic independently verifies the Taskmaster's function checklist for each unit — confirms no state-changing functions were omitted from the coverage checklist
+- [x] **VAL-01**: Every VULNERABLE and INVESTIGATE finding from the Mad Genius has a Skeptic verdict: CONFIRMED, FALSE POSITIVE, or DOWNGRADE TO INFO
+- [x] **VAL-02**: Every FALSE POSITIVE dismissal cites the specific line(s) that prevent the attack
+- [x] **VAL-03**: Every CONFIRMED finding has a severity rating (CRITICAL / HIGH / MEDIUM / LOW / INFO)
+- [x] **VAL-04**: Skeptic independently verifies the Taskmaster's function checklist for each unit — confirms no state-changing functions were omitted from the coverage checklist
 
 ### Unit Execution
 
@@ -85,10 +85,10 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 | ATK-03 | 103-118 (every unit) | Complete |
 | ATK-04 | 103-118 (every unit) | Complete |
 | ATK-05 | 103-118 (every unit) | Complete |
-| VAL-01 | 103-118 (every unit) | Pending |
-| VAL-02 | 103-118 (every unit) | Pending |
-| VAL-03 | 103-118 (every unit) | Pending |
-| VAL-04 | 103-118 (every unit) | Pending |
+| VAL-01 | 103-118 (every unit) | Complete |
+| VAL-02 | 103-118 (every unit) | Complete |
+| VAL-03 | 103-118 (every unit) | Complete |
+| VAL-04 | 103-118 (every unit) | Complete |
 | UNIT-01 | Phase 103 | Pending |
 | UNIT-02 | Phase 104 | Pending |
 | UNIT-03 | Phase 105 | Pending |

@@ -256,7 +256,7 @@
 Plans:
 - [x] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
 - [x] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [x] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
 - [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 104: Day Advancement + VRF
@@ -274,7 +274,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [x] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [x] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
 - [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
 - [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
@@ -290,7 +290,7 @@ Plans:
   5. Unit 3 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [x] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
 - [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
 - [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
 - [ ] 103-04-PLAN.md — Final Unit 1 findings report
@@ -541,7 +541,7 @@ Phase 118 requires all of 103-117. Phase 119 requires 118.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 103. Game Router + Storage Layout | 2/4 | In Progress|  |
+| 103. Game Router + Storage Layout | 3/4 | In Progress|  |
 | 104. Day Advancement + VRF | 0/TBD | Not started | - |
 | 105. Jackpot Distribution | 0/TBD | Not started | - |
 | 106. Endgame + Game Over | 0/TBD | Not started | - |
