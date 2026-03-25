@@ -32,11 +32,11 @@
 
 | # | Function | Lines | Access Control | Storage Writes | External Calls | Risk Tier | Subsystem | Analyzed? | Call Tree? | Storage Map? | Cache Check? |
 |---|----------|-------|---------------|---------------|----------------|-----------|-----------|-----------|-----------|-------------|-------------|
-| B1 | `recordMintData(address,uint24,uint32)` | 175-284 | external payable (delegatecall from Game) | `mintPacked_[player]` | None | Tier 2 | MINT-DATA | pending | pending | pending | pending |
-| B2 | `processFutureTicketBatch(uint24)` | 295-434 | external (delegatecall from Game) | `ticketCursor`, `ticketLevel`, `ticketsOwedPacked[rk][player]`, `ticketQueue[rk]`, `traitBurnTicket[lvl][trait]` (via assembly) | None | Tier 1 | TICKET-DRAIN | pending | pending | pending | pending |
-| B3 | `purchase(address,uint256,uint256,bytes32,MintPaymentKind)` | 560-574 | external payable (delegatecall from Game) | Via C1: see _purchaseFor storage writes | Via C1: affiliate.payAffiliate, coin.creditFlip, coin.notifyQuestMint, coin.notifyQuestLootBox, IDegenerusGame.recordMint, IDegenerusGame.consumePurchaseBoost, IDegenerusGame.playerActivityScore, Vault.call, sDGNRS.transferFromPool | Tier 1 | ETH-PURCHASE | pending | pending | pending | pending |
-| B4 | `purchaseCoin(address,uint256,uint256)` | 581-591 | external (delegatecall from Game) | Via C2: see _purchaseCoinFor storage writes | Via C2/C3: coin.burnCoin, coin.notifyQuestMint, affiliate.payAffiliate, IDegenerusGame.recordMint | Tier 2 | COIN-PURCHASE | pending | pending | pending | pending |
-| B5 | `purchaseBurnieLootbox(address,uint256)` | 595-598 | external (delegatecall from Game) | Via C5: lootboxBurnie, lootboxDay, lootboxRngPendingBurnie, lootboxRngPendingEth | coin.burnCoin, coin.notifyQuestMint | Tier 3 | BURNIE-LOOT | pending | pending | pending | pending |
+| B1 | `recordMintData(address,uint24,uint32)` | 175-284 | external payable (delegatecall from Game) | `mintPacked_[player]` | None | Tier 2 | MINT-DATA | YES | YES | YES | YES |
+| B2 | `processFutureTicketBatch(uint24)` | 295-434 | external (delegatecall from Game) | `ticketCursor`, `ticketLevel`, `ticketsOwedPacked[rk][player]`, `ticketQueue[rk]`, `traitBurnTicket[lvl][trait]` (via assembly) | None | Tier 1 | TICKET-DRAIN | YES | YES | YES | YES |
+| B3 | `purchase(address,uint256,uint256,bytes32,MintPaymentKind)` | 560-574 | external payable (delegatecall from Game) | Via C1: see _purchaseFor storage writes | Via C1: affiliate.payAffiliate, coin.creditFlip, coin.notifyQuestMint, coin.notifyQuestLootBox, IDegenerusGame.recordMint, IDegenerusGame.consumePurchaseBoost, IDegenerusGame.playerActivityScore, Vault.call, sDGNRS.transferFromPool | Tier 1 | ETH-PURCHASE | YES | YES | YES | YES |
+| B4 | `purchaseCoin(address,uint256,uint256)` | 581-591 | external (delegatecall from Game) | Via C2: see _purchaseCoinFor storage writes | Via C2/C3: coin.burnCoin, coin.notifyQuestMint, affiliate.payAffiliate, IDegenerusGame.recordMint | Tier 2 | COIN-PURCHASE | YES | YES | YES | YES |
+| B5 | `purchaseBurnieLootbox(address,uint256)` | 595-598 | external (delegatecall from Game) | Via C5: lootboxBurnie, lootboxDay, lootboxRngPendingBurnie, lootboxRngPendingEth | coin.burnCoin, coin.notifyQuestMint | Tier 3 | BURNIE-LOOT | YES | YES | YES | YES |
 
 ---
 
@@ -44,17 +44,17 @@
 
 | # | Function | Lines | Contract | Called By | Key Storage Writes | Flags | Analyzed? | Call Tree? | Storage Map? | Cache Check? |
 |---|----------|-------|----------|-----------|-------------------|-------|-----------|-----------|-------------|-------------|
-| C1 | `_purchaseFor()` | 628-829 | MintModule | B3 | `claimableWinnings[buyer]`, `claimablePool`, `lootboxEth[idx][buyer]`, `lootboxDay[idx][buyer]`, `lootboxBaseLevelPacked[idx][buyer]`, `lootboxEvScorePacked[idx][buyer]`, `lootboxEthBase[idx][buyer]`, `lootboxDistressEth[idx][buyer]`, `prizePoolsPacked`/`prizePoolPendingPacked`, `lootboxPresaleMintEth`, `lootboxRngPendingEth`, `boonPacked[player].slot0`, `earlybirdDgnrsPoolStart`, `earlybirdEthIn` | | pending | pending | pending | pending |
-| C2 | `_purchaseCoinFor()` | 600-626 | MintModule | B4 | (delegates to C3, C5) | | pending | pending | pending | pending |
-| C3 | `_callTicketPurchase()` | 831-1024 | MintModule | C1, C2 | `centuryBonusLevel`, `centuryBonusUsed[buyer]`, `ticketQueue[wk]`, `ticketsOwedPacked[wk][buyer]` (via C10) | [MULTI-PARENT] | pending | pending | pending | pending |
-| C4 | `_coinReceive()` | 1026-1031 | MintModule | C3 (payInCoin path) | None (external: `coin.burnCoin`) | | pending | pending | pending | pending |
-| C5 | `_purchaseBurnieLootboxFor()` | 1039-1071 | MintModule | B5, C2 | `lootboxBurnie[idx][buyer]`, `lootboxDay[idx][buyer]`, `lootboxRngPendingBurnie`, `lootboxRngPendingEth` (via C6) | [MULTI-PARENT] | pending | pending | pending | pending |
-| C6 | `_maybeRequestLootboxRng()` | 1073-1075 | MintModule | C1, C5 | `lootboxRngPendingEth` | [MULTI-PARENT] | pending | pending | pending | pending |
-| C7 | `_applyLootboxBoostOnPurchase()` | 1085-1112 | MintModule | C1 | `boonPacked[player].slot0` | | pending | pending | pending | pending |
-| C8 | `_raritySymbolBatch()` | 443-537 | MintModule | B2 | `traitBurnTicket[lvl][traitId]` (via inline Yul assembly) | [ASSEMBLY] | pending | pending | pending | pending |
-| C9 | `_recordMintStreakForLevel()` | 17-46 | MintStreakUtils | (called from GameStorage helpers, part of recordMint chain) | `mintPacked_[player]` | [INHERITED] | pending | pending | pending | pending |
-| C10 | `_queueTicketsScaled()` | 556-594 | GameStorage | C3 | `ticketQueue[wk]`, `ticketsOwedPacked[wk][buyer]` | [INHERITED] | pending | pending | pending | pending |
-| C11 | `_awardEarlybirdDgnrs()` | 914-974 | GameStorage | C1 | `earlybirdDgnrsPoolStart`, `earlybirdEthIn` (external: `sDGNRS.transferFromPool`, `sDGNRS.transferBetweenPools`) | [INHERITED] | pending | pending | pending | pending |
+| C1 | `_purchaseFor()` | 628-829 | MintModule | B3 | `claimableWinnings[buyer]`, `claimablePool`, `lootboxEth[idx][buyer]`, `lootboxDay[idx][buyer]`, `lootboxBaseLevelPacked[idx][buyer]`, `lootboxEvScorePacked[idx][buyer]`, `lootboxEthBase[idx][buyer]`, `lootboxDistressEth[idx][buyer]`, `prizePoolsPacked`/`prizePoolPendingPacked`, `lootboxPresaleMintEth`, `lootboxRngPendingEth`, `boonPacked[player].slot0`, `earlybirdDgnrsPoolStart`, `earlybirdEthIn` | | YES | YES | YES | YES |
+| C2 | `_purchaseCoinFor()` | 600-626 | MintModule | B4 | (delegates to C3, C5) | | YES | YES | YES | YES |
+| C3 | `_callTicketPurchase()` | 831-1024 | MintModule | C1, C2 | `centuryBonusLevel`, `centuryBonusUsed[buyer]`, `ticketQueue[wk]`, `ticketsOwedPacked[wk][buyer]` (via C10) | [MULTI-PARENT] | YES | YES | YES | YES |
+| C4 | `_coinReceive()` | 1026-1031 | MintModule | C3 (payInCoin path) | None (external: `coin.burnCoin`) | | YES | YES | YES | YES |
+| C5 | `_purchaseBurnieLootboxFor()` | 1039-1071 | MintModule | B5, C2 | `lootboxBurnie[idx][buyer]`, `lootboxDay[idx][buyer]`, `lootboxRngPendingBurnie`, `lootboxRngPendingEth` (via C6) | [MULTI-PARENT] | YES | YES | YES | YES |
+| C6 | `_maybeRequestLootboxRng()` | 1073-1075 | MintModule | C1, C5 | `lootboxRngPendingEth` | [MULTI-PARENT] | YES | YES | YES | YES |
+| C7 | `_applyLootboxBoostOnPurchase()` | 1085-1112 | MintModule | C1 | `boonPacked[player].slot0` | | YES | YES | YES | YES |
+| C8 | `_raritySymbolBatch()` | 443-537 | MintModule | B2 | `traitBurnTicket[lvl][traitId]` (via inline Yul assembly) | [ASSEMBLY] | YES | YES | YES | YES |
+| C9 | `_recordMintStreakForLevel()` | 17-46 | MintStreakUtils | (called from GameStorage helpers, part of recordMint chain) | `mintPacked_[player]` | [INHERITED] | YES | YES | YES | YES |
+| C10 | `_queueTicketsScaled()` | 556-594 | GameStorage | C3 | `ticketQueue[wk]`, `ticketsOwedPacked[wk][buyer]` | [INHERITED] | YES | YES | YES | YES |
+| C11 | `_awardEarlybirdDgnrs()` | 914-974 | GameStorage | C1 | `earlybirdDgnrsPoolStart`, `earlybirdEthIn` (external: `sDGNRS.transferFromPool`, `sDGNRS.transferBetweenPools`) | [INHERITED] | YES | YES | YES | YES |
 
 ---
 
@@ -62,10 +62,10 @@
 
 | # | Function | Lines | Contract | Reads/Computes | Security Note | Reviewed? |
 |---|----------|-------|----------|---------------|---------------|-----------|
-| D1 | `_rollRemainder()` | 540-547 | MintModule | `EntropyLib.entropyStep(entropy ^ rollSalt) % TICKET_SCALE` | Modulo bias: TICKET_SCALE=100 divides 2^256 evenly (no bias). EntropyLib.entropyStep is keccak256-based. | pending |
-| D2 | `_ethToBurnieValue()` | 1034-1037 | MintModule | `amountWei * PRICE_COIN_UNIT / priceWei` | Division by zero: guarded by `priceWei == 0 -> return 0`. Overflow: amountWei * 1000e18 fits in uint256 for any realistic ETH amount. | pending |
-| D3 | `_calculateBoost()` | 1078-1083 | MintModule | `cappedAmount * bonusBps / 10_000` in unchecked block | Safe: cappedAmount <= 10 ether (LOOTBOX_BOOST_MAX_VALUE), bonusBps <= 2500. Product fits in uint256. | pending |
-| D4 | `_mintStreakEffective()` | 49-61 | MintStreakUtils | Reads `mintPacked_[player]`, returns streak or 0 | View function. Returns 0 if `currentMintLevel > lastCompleted + 1` (reset on missed level). | pending |
+| D1 | `_rollRemainder()` | 540-547 | MintModule | `EntropyLib.entropyStep(entropy ^ rollSalt) % TICKET_SCALE` | Modulo bias: TICKET_SCALE=100 divides 2^256 evenly (no bias). EntropyLib.entropyStep is keccak256-based. | YES |
+| D2 | `_ethToBurnieValue()` | 1034-1037 | MintModule | `amountWei * PRICE_COIN_UNIT / priceWei` | Division by zero: guarded by `priceWei == 0 -> return 0`. Overflow: amountWei * 1000e18 fits in uint256 for any realistic ETH amount. | YES |
+| D3 | `_calculateBoost()` | 1078-1083 | MintModule | `cappedAmount * bonusBps / 10_000` in unchecked block | Safe: cappedAmount <= 10 ether (LOOTBOX_BOOST_MAX_VALUE), bonusBps <= 2500. Product fits in uint256. | YES |
+| D4 | `_mintStreakEffective()` | 49-61 | MintStreakUtils | Reads `mintPacked_[player]`, returns streak or 0 | View function. Returns 0 if `currentMintLevel > lastCompleted + 1` (reset on missed level). | YES |
 
 ---
 
