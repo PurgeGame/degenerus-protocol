@@ -22,6 +22,7 @@
 - ✅ **v4.1 Ticket Lifecycle Integration Tests** — Phases 92-94 (shipped 2026-03-24)
 - ✅ **v4.2 Daily Jackpot Chunk Removal + Gas Optimization** — Phases 95-98 (shipped 2026-03-25)
 - ✅ **v4.3 prizePoolsPacked Batching Optimization** — Phase 99 (closed early 2026-03-25, savings revised ~1.6M → ~63.8K)
+- 🔄 **v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan** — Phases 100-102 (active)
 
 ## Phases
 
@@ -201,6 +202,55 @@
 - Phases 100-102 abandoned — gas savings revised from ~1.6M to ~63.8K (0.46% of ceiling, ~$0.13/execution at 1 gwei)
 
 </details>
+
+### v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan (Phases 100-102) -- ACTIVE
+
+- [ ] **Phase 100: Protocol-Wide Pattern Scan** - Inventory all cache-then-overwrite instances across all contracts
+- [ ] **Phase 101: Bug Fix** - Apply delta reconciliation to `runRewardJackpots` and fix any additional vulnerable instances
+- [ ] **Phase 102: Verification** - Foundry targeted test, Hardhat + Foundry regression suites, comment accuracy
+
+## Phase Details
+
+### Phase 100: Protocol-Wide Pattern Scan
+**Goal**: Every function in the protocol that caches a storage variable locally, calls nested functions that write to the same slot, then writes back the stale local is identified and classified
+**Depends on**: Nothing (first phase of v4.4)
+**Requirements**: SCAN-01, SCAN-02
+**Success Criteria** (what must be TRUE):
+  1. A complete inventory lists every function across all contracts examined for the read-local / nested-write / stale-writeback pattern
+  2. Each candidate instance carries a VULNERABLE or SAFE verdict with a plain-English reason (e.g., "nested call cannot reach this slot", "no auto-rebuy path reachable here")
+  3. The known BAF instance in `runRewardJackpots` (EndgameModule) appears in the inventory and is classified VULNERABLE
+  4. All storage variables that `_addClaimableEth` or any auto-rebuy path can write are enumerated so the Phase 101 fix targets the correct slots
+**Plans**: TBD
+
+### Phase 101: Bug Fix
+**Goal**: The cache-overwrite vulnerability in `runRewardJackpots` is eliminated and any additional vulnerable instances found in Phase 100 are fixed or documented
+**Depends on**: Phase 100
+**Requirements**: BAF-01, BAF-02, SCAN-03
+**Success Criteria** (what must be TRUE):
+  1. `runRewardJackpots` reads `futurePrizePool` from storage immediately before the final `_setFuturePrizePool` write-back, computes `rebuyDelta = storageNow - baseFuturePool`, and adds it to `futurePoolLocal` before writing
+  2. An arithmetic proof shows the delta reconciliation preserves both `runRewardJackpots`' own deductions and any auto-rebuy contributions for every execution path (zero-rebuy path, single-rebuy path, multi-rebuy path)
+  3. Every additional VULNERABLE instance from Phase 100 either has an equivalent fix applied or a documented fix recommendation explaining why the instance was deferred
+  4. No existing function signatures or external interfaces are changed by the fix
+**Plans**: TBD
+
+### Phase 102: Verification
+**Goal**: The fix is proven correct by tests, existing test suites show zero regressions, and all modified code has accurate comments
+**Depends on**: Phase 101
+**Requirements**: TEST-01, TEST-02, TEST-03, CMT-01
+**Success Criteria** (what must be TRUE):
+  1. A Foundry test triggers `runRewardJackpots` with at least one auto-rebuy execution, then asserts that `futurePrizePool` storage contains the sum of `runRewardJackpots`' contributions plus the auto-rebuy contribution (i.e., the auto-rebuy value is not lost)
+  2. The full Hardhat suite passes with zero new failures (pre-existing failures remain unchanged and are accounted for)
+  3. The full Foundry suite passes with zero new failures
+  4. All NatSpec and inline comments in modified functions accurately describe the post-fix behavior, including an explanation of why the delta snapshot is taken
+**Plans**: TBD
+
+## Progress Table
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 100. Protocol-Wide Pattern Scan | 0/? | Not started | - |
+| 101. Bug Fix | 0/? | Not started | - |
+| 102. Verification | 0/? | Not started | - |
 
 ## Deferred
 
