@@ -33,26 +33,26 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 - [x] **UNIT-01**: Unit 1 — Game Router + Storage Layout complete (DegenerusGame, DegenerusGameStorage)
 - [x] **UNIT-02**: Unit 2 — Day Advancement + VRF complete (DegenerusGameAdvanceModule)
 - [x] **UNIT-03**: Unit 3 — Jackpot Distribution complete (DegenerusGameJackpotModule, DegenerusGamePayoutUtils)
-- [ ] **UNIT-04**: Unit 4 — Endgame + Game Over complete (DegenerusGameEndgameModule, DegenerusGameGameOverModule)
-- [ ] **UNIT-05**: Unit 5 — Mint + Purchase Flow complete (DegenerusGameMintModule, DegenerusGameMintStreakUtils)
-- [ ] **UNIT-06**: Unit 6 — Whale Purchases complete (DegenerusGameWhaleModule)
-- [ ] **UNIT-07**: Unit 7 — Decimator System complete (DegenerusGameDecimatorModule)
-- [ ] **UNIT-08**: Unit 8 — Degenerette Betting complete (DegenerusGameDegeneretteModule)
-- [ ] **UNIT-09**: Unit 9 — Lootbox + Boons complete (DegenerusGameLootboxModule, DegenerusGameBoonModule)
+- [x] **UNIT-04**: Unit 4 — Endgame + Game Over complete (DegenerusGameEndgameModule, DegenerusGameGameOverModule)
+- [x] **UNIT-05**: Unit 5 — Mint + Purchase Flow complete (DegenerusGameMintModule, DegenerusGameMintStreakUtils)
+- [x] **UNIT-06**: Unit 6 — Whale Purchases complete (DegenerusGameWhaleModule)
+- [x] **UNIT-07**: Unit 7 — Decimator System complete (DegenerusGameDecimatorModule)
+- [x] **UNIT-08**: Unit 8 — Degenerette Betting complete (DegenerusGameDegeneretteModule)
+- [x] **UNIT-09**: Unit 9 — Lootbox + Boons complete (DegenerusGameLootboxModule, DegenerusGameBoonModule)
 - [x] **UNIT-10**: Unit 10 — BURNIE Token + Coinflip complete (BurnieCoin, BurnieCoinflip)
 - [x] **UNIT-11**: Unit 11 — sDGNRS + DGNRS complete (StakedDegenerusStonk, DegenerusStonk)
-- [ ] **UNIT-12**: Unit 12 — Vault + WWXRP complete (DegenerusVault, WrappedWrappedXRP)
+- [x] **UNIT-12**: Unit 12 — Vault + WWXRP complete (DegenerusVault, WrappedWrappedXRP)
 - [x] **UNIT-13**: Unit 13 — Admin + Governance complete (DegenerusAdmin)
-- [ ] **UNIT-14**: Unit 14 — Affiliate + Quests + Jackpots complete (DegenerusAffiliate, DegenerusQuests, DegenerusJackpots)
-- [ ] **UNIT-15**: Unit 15 — Libraries complete (EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, PriceLookupLib)
-- [ ] **UNIT-16**: Unit 16 — Cross-Contract Integration Sweep complete (all contracts, meta-analysis)
+- [x] **UNIT-14**: Unit 14 — Affiliate + Quests + Jackpots complete (DegenerusAffiliate, DegenerusQuests, DegenerusJackpots)
+- [x] **UNIT-15**: Unit 15 — Libraries complete (EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, PriceLookupLib)
+- [x] **UNIT-16**: Unit 16 — Cross-Contract Integration Sweep complete (all contracts, meta-analysis)
 
 ### Final Deliverables
 
-- [ ] **DEL-01**: Master FINDINGS.md with all confirmed findings, severity-sorted
-- [ ] **DEL-02**: ACCESS-CONTROL-MATRIX.md mapping every external function to its guard
-- [ ] **DEL-03**: STORAGE-WRITE-MAP.md listing every storage slot and every function that writes to it
-- [ ] **DEL-04**: ETH-FLOW-MAP.md tracing every wei from entry to exit
+- [x] **DEL-01**: Master FINDINGS.md with all confirmed findings, severity-sorted
+- [x] **DEL-02**: ACCESS-CONTROL-MATRIX.md mapping every external function to its guard
+- [x] **DEL-03**: STORAGE-WRITE-MAP.md listing every storage slot and every function that writes to it
+- [x] **DEL-04**: ETH-FLOW-MAP.md tracing every wei from entry to exit
 
 ## Deferred
 
@@ -92,23 +92,23 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 | UNIT-01 | Phase 103 | Complete |
 | UNIT-02 | Phase 104 | Complete |
 | UNIT-03 | Phase 105 | Complete |
-| UNIT-04 | Phase 106 | Pending |
-| UNIT-05 | Phase 107 | Pending |
-| UNIT-06 | Phase 108 | Pending |
-| UNIT-07 | Phase 109 | Pending |
-| UNIT-08 | Phase 110 | Pending |
-| UNIT-09 | Phase 111 | Pending |
+| UNIT-04 | Phase 106 | Complete |
+| UNIT-05 | Phase 107 | Complete |
+| UNIT-06 | Phase 108 | Complete |
+| UNIT-07 | Phase 109 | Complete |
+| UNIT-08 | Phase 110 | Complete |
+| UNIT-09 | Phase 111 | Complete |
 | UNIT-10 | Phase 112 | Complete |
 | UNIT-11 | Phase 113 | Complete |
-| UNIT-12 | Phase 114 | Pending |
+| UNIT-12 | Phase 114 | Complete |
 | UNIT-13 | Phase 115 | Complete |
-| UNIT-14 | Phase 116 | Pending |
-| UNIT-15 | Phase 117 | Pending |
-| UNIT-16 | Phase 118 | Pending |
-| DEL-01 | Phase 119 | Pending |
-| DEL-02 | Phase 119 | Pending |
-| DEL-03 | Phase 119 | Pending |
-| DEL-04 | Phase 119 | Pending |
+| UNIT-14 | Phase 116 | Complete |
+| UNIT-15 | Phase 117 | Complete |
+| UNIT-16 | Phase 118 | Complete |
+| DEL-01 | Phase 119 | Complete |
+| DEL-02 | Phase 119 | Complete |
+| DEL-03 | Phase 119 | Complete |
+| DEL-04 | Phase 119 | Complete |
 
 **Coverage:**
 - v5.0 requirements: 32 total
@@ -117,4 +117,4 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after roadmap creation*
+*Last updated: 2026-03-25 -- all 32 requirements COMPLETE (v5.0 audit shipped)*
