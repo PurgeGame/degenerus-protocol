@@ -193,10 +193,11 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v5.0 in progress (2026-03-25) — Ultimate Adversarial Audit. 3 of 17 phases complete, 14 units remaining.
+v5.0 in progress (2026-03-25) — Ultimate Adversarial Audit. 4 of 17 phases complete, 13 units remaining.
 - Phase 103 (Game Router + Storage Layout): 177 functions inventoried, 0 confirmed vulnerabilities, storage layout verified (102 vars, 10 modules EXACT MATCH).
 - Phase 104 (Day Advancement + VRF): 35 functions attacked — 0 vulnerabilities, 3 INFO. Ticket queue drain PROVEN SAFE.
 - Phase 105 (Jackpot Distribution): 55 functions across JackpotModule + PayoutUtils attacked — 0 vulnerabilities, 5 INFO. BAF-critical chain (_addClaimableEth/_processAutoRebuy) re-audited from scratch, all 6 paths SAFE. Inline Yul assembly verified CORRECT. 100% coverage.
+- Phase 108 (Whale Purchases): 16 functions in WhaleModule attacked — 0 vulnerabilities, 1 INFO (DGNRS diminishing returns). mintPacked_ cache concern in lazy pass PROVEN SAFE. ERC721 callback re-entry SAFE. All 3 purchase paths (whale/lazy/deity) BAF cache-overwrite verified SAFE. 100% coverage.
 
 v4.3 closed early (2026-03-25) — prizePoolsPacked batching optimization investigated and abandoned. Phase 99 callsite audit revealed H14's ~1.6M gas savings estimate was a 25x overestimate: warm dirty-slot SSTOREs cost 100 gas (EIP-2200), not 5,000. Actual savings: ~63,800 gas (0.46% of 14M ceiling, ~$0.13/execution at 1 gwei). Not worth the architectural complexity of refactoring `_processAutoRebuy`'s return signature across all callers.
 
