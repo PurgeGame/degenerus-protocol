@@ -478,10 +478,10 @@ Plans:
   5. Unit 14 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [x] 116-01 -- Taskmaster: coverage checklist (13 Cat B, 17 Cat C, 31 Cat D)
+- [x] 116-02 -- Mad Genius: full attack analysis on all functions
+- [x] 116-03 -- Skeptic review + Taskmaster coverage verification
+- [x] 116-04 -- Final Unit 14 findings report
 
 ### Phase 117: Libraries
 **Goal**: Every state-changing function in EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, and PriceLookupLib has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on entropy extraction bias and caller misuse patterns
