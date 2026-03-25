@@ -42,22 +42,22 @@ Requirements for milestone v4.3: prizePoolsPacked Batching Optimization.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CALL-01 | TBD | Pending |
-| CALL-02 | TBD | Pending |
-| BATCH-01 | TBD | Pending |
-| BATCH-02 | TBD | Pending |
-| BATCH-03 | TBD | Pending |
-| EQUIV-01 | TBD | Pending |
-| EQUIV-02 | TBD | Pending |
-| EQUIV-03 | TBD | Pending |
-| GAS-01 | TBD | Pending |
-| GAS-02 | TBD | Pending |
-| CMT-01 | TBD | Pending |
+| CALL-01 | Phase 99 | Pending |
+| CALL-02 | Phase 99 | Pending |
+| BATCH-01 | Phase 100 | Pending |
+| BATCH-02 | Phase 100 | Pending |
+| BATCH-03 | Phase 100 | Pending |
+| EQUIV-01 | Phase 101 | Pending |
+| EQUIV-02 | Phase 101 | Pending |
+| EQUIV-03 | Phase 101 | Pending |
+| GAS-01 | Phase 101 | Pending |
+| GAS-02 | Phase 101 | Pending |
+| CMT-01 | Phase 102 | Pending |
 
 **Coverage:**
 - v4.3 requirements: 11 total
-- Mapped to phases: 0
-- Unmapped: 11
+- Mapped to phases: 11
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-25*
