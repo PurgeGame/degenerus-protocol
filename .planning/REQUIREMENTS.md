@@ -24,7 +24,7 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 - [ ] **GOPT-01**: Daily jackpot code path audited for unnecessary SLOADs
 - [ ] **GOPT-02**: Loop bodies audited for redundant computation that can be hoisted
-- [ ] **GOPT-03**: Any identified optimizations implemented and verified
+- [x] **GOPT-03**: Any identified optimizations implemented and verified
 
 ### Comments
 
@@ -51,7 +51,7 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 | CEIL-03 | Phase 96 | Pending |
 | GOPT-01 | Phase 96 | Pending |
 | GOPT-02 | Phase 96 | Pending |
-| GOPT-03 | Phase 96 | Pending |
+| GOPT-03 | Phase 96 | Complete (96-03) |
 | CMT-01 | Phase 97 | Pending |
 
 **Coverage:**
