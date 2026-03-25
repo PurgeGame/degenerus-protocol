@@ -197,7 +197,7 @@
 
 **Milestone Goal:** Eliminate ~320 redundant SSTOREs per daily jackpot by batching prizePoolsPacked writes -- accumulate deltas in memory, write once at end of loop.
 
-- [ ] **Phase 99: Callsite Audit** - Inventory all _processAutoRebuy and prize pool write callsites before code changes
+- [x] **Phase 99: Callsite Audit** - 1 plan, 2 requirements (completed 2026-03-25)
 - [ ] **Phase 100: Batching Implementation** - Refactor _processAutoRebuy to return deltas; update all callers to accumulate and batch-write
 - [ ] **Phase 101: Equivalence + Gas Verification** - Prove batched writes produce identical state; confirm gas savings and ceiling safety
 - [ ] **Phase 102: Comment Cleanup** - NatSpec and inline comments accurate for all modified functions

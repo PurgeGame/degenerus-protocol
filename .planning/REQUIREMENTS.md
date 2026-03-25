@@ -9,8 +9,8 @@ Requirements for milestone v4.3: prizePoolsPacked Batching Optimization.
 
 ### Callsite Audit
 
-- [ ] **CALL-01**: Every callsite of `_processAutoRebuy` is inventoried with current prize pool write behavior documented
-- [ ] **CALL-02**: Every callsite of `_setFuturePrizePool` and `_setNextPrizePool` within auto-rebuy paths is mapped
+- [x] **CALL-01**: Every callsite of `_processAutoRebuy` is inventoried with current prize pool write behavior documented
+- [x] **CALL-02**: Every callsite of `_setFuturePrizePool` and `_setNextPrizePool` within auto-rebuy paths is mapped
 
 ### Implementation
 
@@ -42,8 +42,8 @@ Requirements for milestone v4.3: prizePoolsPacked Batching Optimization.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CALL-01 | Phase 99 | Pending |
-| CALL-02 | Phase 99 | Pending |
+| CALL-01 | Phase 99 | Complete |
+| CALL-02 | Phase 99 | Complete |
 | BATCH-01 | Phase 100 | Pending |
 | BATCH-02 | Phase 100 | Pending |
 | BATCH-03 | Phase 100 | Pending |
