@@ -212,7 +212,9 @@
   1. Every callsite of _processAutoRebuy is listed with its caller context (daily ETH, earlybird, daily coin, etc.) and the number of loop iterations at each site
   2. Every _setFuturePrizePool and _setNextPrizePool call within auto-rebuy paths is mapped with the packed slot being written and the write frequency per jackpot execution
   3. The total SSTORE count per daily ETH jackpot execution is quantified from the callsite map (baseline for gas comparison)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 99-01-PLAN.md — Callsite inventory and SSTORE gas baseline
 
 ### Phase 100: Batching Implementation
 **Goal**: _processAutoRebuy returns pool deltas instead of writing storage directly, and every caller accumulates deltas in memory then writes once at the end
@@ -250,7 +252,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 99. Callsite Audit | 0/? | Not started | - |
+| 99. Callsite Audit | 0/1 | Planned    |  |
 | 100. Batching Implementation | 0/? | Not started | - |
 | 101. Equivalence + Gas Verification | 0/? | Not started | - |
 | 102. Comment Cleanup | 0/? | Not started | - |
