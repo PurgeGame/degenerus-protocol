@@ -9,10 +9,10 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 ### Delta Verification
 
-- [ ] **DELTA-01**: All Hardhat tests pass with zero regressions after chunk removal
-- [ ] **DELTA-02**: Zero remaining references to removed symbols in Solidity code (dailyEthBucketCursor, dailyEthWinnerCursor, _skipEntropyToBucket, _winnerUnits, DAILY_JACKPOT_UNITS_SAFE, DAILY_JACKPOT_UNITS_AUTOREBUY)
+- [x] **DELTA-01**: All Hardhat tests pass with zero regressions after chunk removal
+- [x] **DELTA-02**: Zero remaining references to removed symbols in Solidity code (dailyEthBucketCursor, dailyEthWinnerCursor, _skipEntropyToBucket, _winnerUnits, DAILY_JACKPOT_UNITS_SAFE, DAILY_JACKPOT_UNITS_AUTOREBUY)
 - [x] **DELTA-03**: Behavioral equivalence proven — _processDailyEthChunk produces identical payout distribution and entropy chain as before (same winners, same amounts, same order)
-- [ ] **DELTA-04**: All Foundry tests pass (invariant + fuzz + integration)
+- [x] **DELTA-04**: All Foundry tests pass (invariant + fuzz + integration)
 
 ### Gas Ceiling
 
@@ -24,7 +24,7 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 - [x] **GOPT-01**: Daily jackpot code path audited for unnecessary SLOADs
 - [x] **GOPT-02**: Loop bodies audited for redundant computation that can be hoisted
-- [ ] **GOPT-03**: Any identified optimizations implemented and verified
+- [x] **GOPT-03**: Any identified optimizations implemented and verified
 
 ### Comments
 
@@ -47,19 +47,19 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DELTA-01 | Phase 95 (tracking: Phase 98) | Verified — checkbox pending |
-| DELTA-02 | Phase 95 (tracking: Phase 98) | Verified — checkbox pending |
+| DELTA-01 | Phase 95 | Complete |
+| DELTA-02 | Phase 95 | Complete |
 | DELTA-03 | Phase 95 | Complete |
-| DELTA-04 | Phase 95 (tracking: Phase 98) | Verified — checkbox pending |
+| DELTA-04 | Phase 95 | Complete |
 | CEIL-01 | Phase 96 | Complete |
 | CEIL-02 | Phase 96 | Complete |
 | CEIL-03 | Phase 96 | Complete |
 | GOPT-01 | Phase 96 | Complete |
 | GOPT-02 | Phase 96 | Complete |
-| GOPT-03 | Phase 96 (tracking: Phase 98) | Complete — checkbox pending |
+| GOPT-03 | Phase 96 | Complete |
 | CMT-01 | Phase 97 | Complete |
-| DOC-01 | Phase 98 | Pending |
-| BANNER-01 | Phase 98 | Pending |
+| DOC-01 | Phase 98 | Complete |
+| BANNER-01 | Phase 98 | Complete |
 
 **Coverage:**
 - v4.2 requirements: 13 total (11 original + 2 gap closure)
@@ -68,4 +68,4 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after gap closure planning (audit reset partial requirements)*
+*Last updated: 2026-03-25 after Phase 98 gap closure (all v4.2 requirements complete)*
