@@ -169,6 +169,16 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
+## Current Milestone: v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan
+
+**Goal:** Fix the `runRewardJackpots` cache-overwrite bug and scan the entire protocol for similar local-cache-then-overwrite patterns.
+
+**Target features:**
+- Fix the BAF bug via Option A (delta reconciliation at write-back)
+- Prove the fix is correct (arithmetic trace + invariant that only auto-rebuy modifies futurePrizePool during the call)
+- Full protocol scan for any function that caches a storage value locally, calls nested functions that write to the same slot, then writes back the stale local
+- Test coverage for the fix + any other instances found
+
 ## Current State
 
 v4.3 closed early (2026-03-25) — prizePoolsPacked batching optimization investigated and abandoned. Phase 99 callsite audit revealed H14's ~1.6M gas savings estimate was a 25x overestimate: warm dirty-slot SSTOREs cost 100 gas (EIP-2200), not 5,000. Actual savings: ~63,800 gas (0.46% of 14M ceiling, ~$0.13/execution at 1 gwei). Not worth the architectural complexity of refactoring `_processAutoRebuy`'s return signature across all callers.
@@ -201,4 +211,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after v4.3 milestone close (early — optimization not cost-effective)*
+*Last updated: 2026-03-25 after v4.4 milestone start*
