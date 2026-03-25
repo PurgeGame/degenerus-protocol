@@ -32,11 +32,11 @@
 
 | # | Function | Lines | Contract | Access Control | Storage Writes | External Calls | Risk Tier | Subsystem | Analyzed? | Call Tree? | Storage Map? | Cache Check? |
 |---|----------|-------|----------|---------------|---------------|---------------|-----------|-----------|-----------|------------|--------------|-------------|
-| B1 | `runRewardJackpots(uint24 lvl, uint256 rngWord)` | 172-254 | EndgameModule | external (via delegatecall from advanceGame) | prizePoolsPacked (future), claimablePool | IDegenerusGame.runDecimatorJackpot, jackpots.runBafJackpot (via C2) | Tier 1 [BAF-CRITICAL] | REWARD-JACKPOT | pending | pending | pending | pending |
-| B2 | `rewardTopAffiliate(uint24 lvl)` | 130-149 | EndgameModule | external (via delegatecall from advanceGame) | levelDgnrsAllocation[lvl] | affiliate.affiliateTop, dgnrs.poolBalance, dgnrs.transferFromPool | Tier 3 | AFFILIATE | pending | pending | pending | pending |
-| B3 | `claimWhalePass(address player)` | 540-559 | EndgameModule | external (via delegatecall from DegenerusGame) | whalePassClaims[player], ticketsOwedPacked, ticketQueue, mintPacked_ | none | Tier 2 | WHALE-PASS | pending | pending | pending | pending |
-| B4 | `handleGameOverDrain(uint48 day)` | 68-163 | GameOverModule | external (via delegatecall from advanceGame) | gameOver, gameOverTime, gameOverFinalJackpotPaid, claimableWinnings, claimablePool, prizePoolsPacked, currentPrizePool, yieldAccumulator | IDegenerusGame.runTerminalDecimatorJackpot, IDegenerusGame.runTerminalJackpot, dgnrs.burnRemainingPools, steth.balanceOf, steth.transfer, steth.approve, dgnrs.depositSteth | Tier 1 | GAME-OVER | pending | pending | pending | pending |
-| B5 | `handleFinalSweep()` | 170-188 | GameOverModule | external (via delegatecall from advanceGame) | finalSwept, claimablePool | admin.shutdownVrf, steth.balanceOf, steth.transfer, steth.approve, dgnrs.depositSteth | Tier 2 | GAME-OVER | pending | pending | pending | pending |
+| B1 | `runRewardJackpots(uint24 lvl, uint256 rngWord)` | 172-254 | EndgameModule | external (via delegatecall from advanceGame) | prizePoolsPacked (future), claimablePool | IDegenerusGame.runDecimatorJackpot, jackpots.runBafJackpot (via C2) | Tier 1 [BAF-CRITICAL] | REWARD-JACKPOT | YES | YES | YES | YES |
+| B2 | `rewardTopAffiliate(uint24 lvl)` | 130-149 | EndgameModule | external (via delegatecall from advanceGame) | levelDgnrsAllocation[lvl] | affiliate.affiliateTop, dgnrs.poolBalance, dgnrs.transferFromPool | Tier 3 | AFFILIATE | YES | YES | YES | YES |
+| B3 | `claimWhalePass(address player)` | 540-559 | EndgameModule | external (via delegatecall from DegenerusGame) | whalePassClaims[player], ticketsOwedPacked, ticketQueue, mintPacked_ | none | Tier 2 | WHALE-PASS | YES | YES | YES | YES |
+| B4 | `handleGameOverDrain(uint48 day)` | 68-163 | GameOverModule | external (via delegatecall from advanceGame) | gameOver, gameOverTime, gameOverFinalJackpotPaid, claimableWinnings, claimablePool, prizePoolsPacked, currentPrizePool, yieldAccumulator | IDegenerusGame.runTerminalDecimatorJackpot, IDegenerusGame.runTerminalJackpot, dgnrs.burnRemainingPools, steth.balanceOf, steth.transfer, steth.approve, dgnrs.depositSteth | Tier 1 | GAME-OVER | YES | YES | YES | YES |
+| B5 | `handleFinalSweep()` | 170-188 | GameOverModule | external (via delegatecall from advanceGame) | finalSwept, claimablePool | admin.shutdownVrf, steth.balanceOf, steth.transfer, steth.approve, dgnrs.depositSteth | Tier 2 | GAME-OVER | YES | YES | YES | YES |
 
 ---
 
@@ -44,13 +44,13 @@
 
 | # | Function | Lines | Contract | Called By | Storage Writes | Flags | Analyzed? | Call Tree? | Storage Map? | Cache Check? |
 |---|----------|-------|----------|-----------|---------------|-------|-----------|------------|--------------|-------------|
-| C1 | `_addClaimableEth(address, uint256, uint256)` | 267-316 | EndgameModule | C2 (via B1) | prizePoolsPacked (future/next), claimableWinnings, claimablePool, ticketsOwedPacked, ticketQueue | [BAF-CRITICAL] | pending | pending | pending | pending |
-| C2 | `_runBafJackpot(uint256, uint24, uint256)` | 356-433 | EndgameModule | B1 | via C1, C3, C5, C6 | [BAF-PATH] | pending | pending | pending | pending |
-| C3 | `_awardJackpotTickets(address, uint256, uint24, uint256)` | 448-486 | EndgameModule | C2 | ticketsOwedPacked, ticketQueue, whalePassClaims, claimableWinnings, claimablePool (via C6) | | pending | pending | pending | pending |
-| C4 | `_jackpotTicketRoll(address, uint256, uint24, uint256)` | 498-531 | EndgameModule | C3 | ticketsOwedPacked, ticketQueue (via _queueLootboxTickets) | | pending | pending | pending | pending |
-| C5 | `_creditClaimable(address, uint256)` | 30-36 | PayoutUtils | C1 (no-rebuy path, take-profit), C6 (whale pass remainder) | claimableWinnings | [MULTI-PARENT] | pending | pending | pending | pending |
-| C6 | `_queueWhalePassClaimCore(address, uint256)` | 75-91 | PayoutUtils | C2 (large winner lootbox), C3 (large ticket award) | whalePassClaims, claimableWinnings, claimablePool | [MULTI-PARENT] | pending | pending | pending | pending |
-| C7 | `_sendToVault(uint256, uint256)` | 197-234 | GameOverModule | B4 (game-over remainder), B5 (final sweep) | (no storage writes; ETH/stETH external transfers) | [MULTI-PARENT] | pending | pending | pending | pending |
+| C1 | `_addClaimableEth(address, uint256, uint256)` | 267-316 | EndgameModule | C2 (via B1) | prizePoolsPacked (future/next), claimableWinnings, claimablePool, ticketsOwedPacked, ticketQueue | [BAF-CRITICAL] | YES | YES | YES | YES |
+| C2 | `_runBafJackpot(uint256, uint24, uint256)` | 356-433 | EndgameModule | B1 | via C1, C3, C5, C6 | [BAF-PATH] | YES | YES | YES | YES |
+| C3 | `_awardJackpotTickets(address, uint256, uint24, uint256)` | 448-486 | EndgameModule | C2 | ticketsOwedPacked, ticketQueue, whalePassClaims, claimableWinnings, claimablePool (via C6) | | YES | YES | YES | YES |
+| C4 | `_jackpotTicketRoll(address, uint256, uint24, uint256)` | 498-531 | EndgameModule | C3 | ticketsOwedPacked, ticketQueue (via _queueLootboxTickets) | | YES | YES | YES | YES |
+| C5 | `_creditClaimable(address, uint256)` | 30-36 | PayoutUtils | C1 (no-rebuy path, take-profit), C6 (whale pass remainder) | claimableWinnings | [MULTI-PARENT] | YES | YES | YES | YES |
+| C6 | `_queueWhalePassClaimCore(address, uint256)` | 75-91 | PayoutUtils | C2 (large winner lootbox), C3 (large ticket award) | whalePassClaims, claimableWinnings, claimablePool | [MULTI-PARENT] | YES | YES | YES | YES |
+| C7 | `_sendToVault(uint256, uint256)` | 197-234 | GameOverModule | B4 (game-over remainder), B5 (final sweep) | (no storage writes; ETH/stETH external transfers) | [MULTI-PARENT] | YES | YES | YES | YES |
 
 ---
 
@@ -58,15 +58,15 @@
 
 | # | Function | Lines | Contract | Reads/Computes | Security Note | Subsystem | Reviewed? |
 |---|----------|-------|----------|---------------|--------------|-----------|-----------|
-| D1 | `_calcAutoRebuy(...)` | 38-72 | PayoutUtils | Pure: target level, ticket count, take profit calc | RNG entropy derivation (EntropyLib.entropyStep) for level offset | AUTO-REBUY | pending |
-| D2 | `_getFuturePrizePool()` | 746-749 | Storage | Reads prizePoolsPacked high 128 bits | Used in BAF reconciliation | POOL-READ | pending |
-| D3 | `_setFuturePrizePool(uint256)` | 752-755 | Storage | Writes prizePoolsPacked (preserves next) | Used in BAF reconciliation write-back | POOL-WRITE | pending |
-| D4 | `_getNextPrizePool()` | 734-737 | Storage | Reads prizePoolsPacked low 128 bits | Used in auto-rebuy | POOL-READ | pending |
-| D5 | `_setNextPrizePool(uint256)` | 740-743 | Storage | Writes prizePoolsPacked (preserves future) | Used in auto-rebuy and game-over zeroing | POOL-WRITE | pending |
-| D6 | `_queueTickets(address, uint24, uint32)` | 528-549 | Storage | Writes ticketsOwedPacked, ticketQueue | RNG-locked guard for far-future tickets | TICKET-QUEUE | pending |
-| D7 | `_queueLootboxTickets(address, uint24, uint256)` | 638-645 | Storage | Delegates to _queueTicketsScaled | Wrapper; truncates to uint32 | TICKET-QUEUE | pending |
-| D8 | `_queueTicketRange(address, uint24, uint24, uint32)` | 602-632 | Storage | Writes ticketsOwedPacked, ticketQueue per level (loop) | Used by claimWhalePass for 100 levels | TICKET-QUEUE | pending |
-| D9 | `_applyWhalePassStats(address, uint24)` | 1067-~1100 | Storage | Writes mintPacked_ (packed bit fields) | Whale pass freeze/stat tracking | WHALE-PASS | pending |
+| D1 | `_calcAutoRebuy(...)` | 38-72 | PayoutUtils | Pure: target level, ticket count, take profit calc | RNG entropy derivation (EntropyLib.entropyStep) for level offset | AUTO-REBUY | YES |
+| D2 | `_getFuturePrizePool()` | 746-749 | Storage | Reads prizePoolsPacked high 128 bits | Used in BAF reconciliation | POOL-READ | YES |
+| D3 | `_setFuturePrizePool(uint256)` | 752-755 | Storage | Writes prizePoolsPacked (preserves next) | Used in BAF reconciliation write-back | POOL-WRITE | YES |
+| D4 | `_getNextPrizePool()` | 734-737 | Storage | Reads prizePoolsPacked low 128 bits | Used in auto-rebuy | POOL-READ | YES |
+| D5 | `_setNextPrizePool(uint256)` | 740-743 | Storage | Writes prizePoolsPacked (preserves future) | Used in auto-rebuy and game-over zeroing | POOL-WRITE | YES |
+| D6 | `_queueTickets(address, uint24, uint32)` | 528-549 | Storage | Writes ticketsOwedPacked, ticketQueue | RNG-locked guard for far-future tickets | TICKET-QUEUE | YES |
+| D7 | `_queueLootboxTickets(address, uint24, uint256)` | 638-645 | Storage | Delegates to _queueTicketsScaled | Wrapper; truncates to uint32 | TICKET-QUEUE | YES |
+| D8 | `_queueTicketRange(address, uint24, uint24, uint32)` | 602-632 | Storage | Writes ticketsOwedPacked, ticketQueue per level (loop) | Used by claimWhalePass for 100 levels | TICKET-QUEUE | YES |
+| D9 | `_applyWhalePassStats(address, uint24)` | 1067-~1100 | Storage | Writes mintPacked_ (packed bit fields) | Whale pass freeze/stat tracking | WHALE-PASS | YES |
 
 ---
 
