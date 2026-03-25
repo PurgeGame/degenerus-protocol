@@ -9,7 +9,7 @@ import {StakedDegenerusStonk} from "../../contracts/StakedDegenerusStonk.sol";
 /// @notice Validates proportional distribution, claim window, and edge cases.
 ///
 /// Strategy: tests that need claims use vm.store to set levelDgnrsAllocation
-/// directly (slot 51), bypassing the complex game state machine for the
+/// directly (slot 32), bypassing the complex game state machine for the
 /// jackpot/transition flow. Score routing and totalAffiliateScore accumulation
 /// are tested via actual purchases (no vm.store needed).
 contract AffiliateDgnrsClaim is DeployProtocol {
@@ -21,10 +21,10 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     bytes32 constant CODE_BOB   = bytes32("BOB");
     bytes32 constant CODE_CAROL = bytes32("CAROL");
 
-    // Storage slots (from forge inspect DegenerusGame storage-layout)
-    uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 0, 3 bytes (uint24)
-    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 51;
-    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 52;
+    // Storage slots (verified via forge inspect DegenerusGame storage, 2026-03-24)
+    uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 18, 3 bytes (uint24)
+    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 32;
+    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 33;
 
     uint256 buyerNonce;
 

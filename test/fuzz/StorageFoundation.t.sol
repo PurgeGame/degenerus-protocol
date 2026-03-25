@@ -90,30 +90,30 @@ contract StorageFoundationTest is Test {
     // STOR-01: Field Placement Tests
     // =====================================================================
 
-    /// @dev Verify ticketWriteSlot at Slot 1, offset 24; ticketsFullyProcessed at offset 25; prizePoolFrozen at offset 26.
+    /// @dev Verify ticketWriteSlot at Slot 1, offset 22; ticketsFullyProcessed at offset 23; prizePoolFrozen at offset 24.
     function testSlot1FieldOffsets() public {
         // Set ticketWriteSlot = 1
         harness.setTicketWriteSlot(1);
         bytes32 slot1 = vm.load(address(harness), bytes32(uint256(1)));
-        // offset 24 means byte 24 from the RIGHT in the 32-byte word (little-endian packing)
+        // offset 22 means byte 22 from the RIGHT in the 32-byte word (little-endian packing)
         // In EVM storage packing, offset N means bits [N*8, (N+1)*8)
-        // So ticketWriteSlot at offset 24 = bits [192, 200)
-        assertEq(uint8(uint256(slot1) >> 192), 1, "ticketWriteSlot not at offset 24");
+        // So ticketWriteSlot at offset 22 = bits [176, 184)
+        assertEq(uint8(uint256(slot1) >> 176), 1, "ticketWriteSlot not at offset 22");
 
-        // Reset and set ticketsFullyProcessed = true (offset 25 = bits [200, 208))
+        // Reset and set ticketsFullyProcessed = true (offset 23 = bits [184, 192))
         harness.setTicketWriteSlot(0);
         harness.setTicketsFullyProcessed(true);
         slot1 = vm.load(address(harness), bytes32(uint256(1)));
-        assertEq(uint8(uint256(slot1) >> 200), 1, "ticketsFullyProcessed not at offset 25");
+        assertEq(uint8(uint256(slot1) >> 184), 1, "ticketsFullyProcessed not at offset 23");
 
-        // Reset and set prizePoolFrozen = true (offset 26 = bits [208, 216))
+        // Reset and set prizePoolFrozen = true (offset 24 = bits [192, 200))
         harness.setTicketsFullyProcessed(false);
         harness.setPrizePoolFrozen(true);
         slot1 = vm.load(address(harness), bytes32(uint256(1)));
-        assertEq(uint8(uint256(slot1) >> 208), 1, "prizePoolFrozen not at offset 26");
+        assertEq(uint8(uint256(slot1) >> 192), 1, "prizePoolFrozen not at offset 24");
     }
 
-    /// @dev Verify prizePoolsPacked at Slot 3 and prizePoolPendingPacked at Slot 16.
+    /// @dev Verify prizePoolsPacked at Slot 3 and prizePoolPendingPacked at Slot 14.
     function testPackedPoolSlotsUnshifted() public {
         // Write a known value to Slot 3 via vm.store, then read back via harness getter
         uint256 sentinel3 = 0xDEADBEEF00000000000000000000000100000000000000000000000000000002;
@@ -122,12 +122,12 @@ contract StorageFoundationTest is Test {
         assertEq(uint256(next3), sentinel3 & type(uint128).max, "prizePoolsPacked not at slot 3 (next)");
         assertEq(uint256(future3), sentinel3 >> 128, "prizePoolsPacked not at slot 3 (future)");
 
-        // Write a known value to Slot 16 via vm.store, then read back via harness getter
-        uint256 sentinel16 = 0x0000000000000000000000000000000300000000000000000000000000000004;
-        vm.store(address(harness), bytes32(uint256(16)), bytes32(sentinel16));
-        (uint128 next16, uint128 future16) = harness.exposed_getPendingPools();
-        assertEq(uint256(next16), sentinel16 & type(uint128).max, "prizePoolPendingPacked not at slot 16 (next)");
-        assertEq(uint256(future16), sentinel16 >> 128, "prizePoolPendingPacked not at slot 16 (future)");
+        // Write a known value to Slot 14 via vm.store, then read back via harness getter
+        uint256 sentinel14 = 0x0000000000000000000000000000000300000000000000000000000000000004;
+        vm.store(address(harness), bytes32(uint256(14)), bytes32(sentinel14));
+        (uint128 next14, uint128 future14) = harness.exposed_getPendingPools();
+        assertEq(uint256(next14), sentinel14 & type(uint128).max, "prizePoolPendingPacked not at slot 14 (next)");
+        assertEq(uint256(future14), sentinel14 >> 128, "prizePoolPendingPacked not at slot 14 (future)");
     }
 
     // =====================================================================

@@ -30,8 +30,8 @@ contract TLKeyComputer is DegenerusGameStorage {
 /// @dev Storage slots confirmed via `forge inspect DegenerusGame storage-layout`:
 ///      - Slot 0: [0:6]levelStartTime [6:12]dailyIdx [12:18]rngRequestTime [18:21]level
 ///                [21:22]jackpotPhaseFlag [22:23]jackpotCounter [26:27]rngLockedFlag
-///      - Slot 1: [0:1]dailyEthPhase [1:2]compressedJackpotFlag [2:8]purchaseStartDay
-///                [8:24]price [24:25]ticketWriteSlot
+///      - Slot 0 continued: [30:31]dailyEthPhase [31:32]compressedJackpotFlag
+///      - Slot 1: [0:6]purchaseStartDay [6:22]price [22:23]ticketWriteSlot
 ///      - ticketQueue: slot 15 (mapping(uint24 => address[]))
 ///      - ticketsOwedPacked: slot 16 (mapping(uint24 => mapping(address => uint40)))
 ///      - prizePoolsPacked: slot 3 ([future:128][next:128])
@@ -89,11 +89,11 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev rngLockedFlag is bool at slot 0 offset 26 bytes = bit 208
     uint256 private constant RNG_LOCKED_SHIFT = 208;
 
-    /// @dev ticketWriteSlot is uint8 at slot 1 offset 23 bytes = bits 184-191
-    uint256 private constant WRITE_SLOT_SHIFT = 184;
+    /// @dev ticketWriteSlot is uint8 at slot 1 offset 22 bytes = bits 176-183
+    uint256 private constant WRITE_SLOT_SHIFT = 176;
 
-    /// @dev compressedJackpotFlag is uint8 at slot 1 offset 1 byte = bits 8-15
-    uint256 private constant COMPRESSED_FLAG_SHIFT = 8;
+    /// @dev compressedJackpotFlag is uint8 at slot 0 offset 31 bytes = bits 248-255
+    uint256 private constant COMPRESSED_FLAG_SHIFT = 248;
 
     // =========================================================================
     // Constants matching production code
@@ -585,13 +585,10 @@ contract TicketLifecycleTest is DeployProtocol {
               | (uint256(4) << JACKPOT_COUNTER_SHIFT);
         // Set rngLockedFlag = true (bit 208)
         slot0 = slot0 | (uint256(1) << RNG_LOCKED_SHIFT);
+        // Ensure compressedJackpotFlag = 0 (normal mode, step=1) — now in slot 0
+        slot0 = slot0 & ~(uint256(0xFF) << COMPRESSED_FLAG_SHIFT);
 
         vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(slot0));
-
-        // Also ensure compressedJackpotFlag = 0 (normal mode, step=1) in slot 1
-        uint256 slot1val = uint256(vm.load(address(game), bytes32(uint256(SLOT_1))));
-        slot1val = slot1val & ~(uint256(0xFF) << COMPRESSED_FLAG_SHIFT);
-        vm.store(address(game), bytes32(uint256(SLOT_1)), bytes32(slot1val));
 
         // Verify we set the state correctly
         (, bool inJackpot, , bool rngLocked_,) = game.purchaseInfo();
@@ -2197,8 +2194,8 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     /// @notice Get the current ticketWriteSlot from game storage
-    /// @dev ticketWriteSlot is uint8 at slot 1 offset 23 bytes (bits 184-191).
-    ///      Confirmed via forge inspect: slot=1, offset=23, size=1.
+    /// @dev ticketWriteSlot is uint8 at slot 1 offset 22 bytes (bits 176-183).
+    ///      Confirmed via forge inspect: slot=1, offset=22, size=1.
     function _getWriteSlot() internal view returns (uint8) {
         bytes32 raw = vm.load(address(game), bytes32(uint256(SLOT_1)));
         return uint8(uint256(raw) >> WRITE_SLOT_SHIFT);
