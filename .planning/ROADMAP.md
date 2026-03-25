@@ -220,7 +220,8 @@
   2. Each candidate instance carries a VULNERABLE or SAFE verdict with a plain-English reason (e.g., "nested call cannot reach this slot", "no auto-rebuy path reachable here")
   3. The known BAF instance in `runRewardJackpots` (EndgameModule) appears in the inventory and is classified VULNERABLE
   4. All storage variables that `_addClaimableEth` or any auto-rebuy path can write are enumerated so the Phase 101 fix targets the correct slots
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 100-01-PLAN.md — Scan all contracts for cache-then-overwrite pattern; produce VULNERABLE/SAFE inventory + Phase 101 fix targets
 
 ### Phase 101: Bug Fix
 **Goal**: The cache-overwrite vulnerability in `runRewardJackpots` is eliminated and any additional vulnerable instances found in Phase 100 are fixed or documented
