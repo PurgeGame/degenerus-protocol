@@ -233,7 +233,7 @@
 - [x] **Phase 111: Lootbox + Boons** - Unit 9: DegenerusGameLootboxModule, DegenerusGameBoonModule (completed 2026-03-25)
 - [ ] **Phase 112: BURNIE Token + Coinflip** - Unit 10: BurnieCoin, BurnieCoinflip
 - [x] **Phase 113: sDGNRS + DGNRS** - Unit 11: StakedDegenerusStonk, DegenerusStonk (completed 2026-03-25)
-- [ ] **Phase 114: Vault + WWXRP** - Unit 12: DegenerusVault, DegenerusVaultShare, WrappedWrappedXRP
+- [x] **Phase 114: Vault + WWXRP** - Unit 12: DegenerusVault, DegenerusVaultShare, WrappedWrappedXRP (completed 2026-03-25)
 - [ ] **Phase 115: Admin + Governance** - Unit 13: DegenerusAdmin
 - [ ] **Phase 116: Affiliate + Quests + Jackpots** - Unit 14: DegenerusAffiliate, DegenerusQuests, DegenerusJackpots
 - [ ] **Phase 117: Libraries** - Unit 15: EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, PriceLookupLib
@@ -444,10 +444,10 @@ Plans:
   5. Unit 12 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [x] 114-01-PLAN.md — Taskmaster: coverage checklist for Vault + VaultShare + WWXRP
+- [x] 114-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [x] 114-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [x] 114-04-PLAN.md — Final Unit 12 findings report
 
 ### Phase 115: Admin + Governance
 **Goal**: Every state-changing function in DegenerusAdmin has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on VRF governance manipulation and coordinator swap
