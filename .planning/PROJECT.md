@@ -193,7 +193,9 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v5.0 in progress (2026-03-25) — Ultimate Adversarial Audit. Phase 103 (Game Router + Storage Layout) complete: 177 functions inventoried, 0 confirmed vulnerabilities, storage layout verified (102 vars, 10 modules EXACT MATCH). 16 units remaining.
+v5.0 in progress (2026-03-25) — Ultimate Adversarial Audit. 2 of 17 phases complete, 15 units remaining.
+- Phase 103 (Game Router + Storage Layout): 177 functions inventoried, 0 confirmed vulnerabilities, storage layout verified (102 vars, 10 modules EXACT MATCH).
+- Phase 104 (Day Advancement + VRF): 35 functions in DegenerusGameAdvanceModule.sol attacked — 0 confirmed vulnerabilities, 3 INFO findings (stale bounty price, stale lootbox RNG word, test assertion bug). Ticket queue drain PROVEN SAFE (test helper bug, not contract bug). 100% coverage verified by Taskmaster.
 
 v4.3 closed early (2026-03-25) — prizePoolsPacked batching optimization investigated and abandoned. Phase 99 callsite audit revealed H14's ~1.6M gas savings estimate was a 25x overestimate: warm dirty-slot SSTOREs cost 100 gas (EIP-2200), not 5,000. Actual savings: ~63,800 gas (0.46% of 14M ceiling, ~$0.13/execution at 1 gwei). Not worth the architectural complexity of refactoring `_processAutoRebuy`'s return signature across all callers.
 
