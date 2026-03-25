@@ -11,7 +11,7 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 - [ ] **DELTA-01**: All Hardhat tests pass with zero regressions after chunk removal
 - [ ] **DELTA-02**: Zero remaining references to removed symbols in Solidity code (dailyEthBucketCursor, dailyEthWinnerCursor, _skipEntropyToBucket, _winnerUnits, DAILY_JACKPOT_UNITS_SAFE, DAILY_JACKPOT_UNITS_AUTOREBUY)
-- [ ] **DELTA-03**: Behavioral equivalence proven — _processDailyEthChunk produces identical payout distribution and entropy chain as before (same winners, same amounts, same order)
+- [x] **DELTA-03**: Behavioral equivalence proven — _processDailyEthChunk produces identical payout distribution and entropy chain as before (same winners, same amounts, same order)
 - [ ] **DELTA-04**: All Foundry tests pass (invariant + fuzz + integration)
 
 ### Gas Ceiling
