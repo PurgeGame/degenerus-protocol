@@ -69,6 +69,16 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit — 10 phases (81-91), 51 INFO findings (0 HIGH/MEDIUM/LOW), DEC-01/DGN-01 withdrawn as false positives, 134 cumulative total. Ticket creation (16 entry points), processing (RNG/cursor), consumption (9 jackpot types), prize pool flow (storage layout), daily ETH/coin/ticket jackpots, other jackpots (earlybird/BAF/decimator/degenerette/finalday), RNG re-verification (55 vars, 27 slot shifts), consolidated findings, cross-phase consistency verified — v4.0 Phases 81-91
 - ✓ v4.1 Ticket Lifecycle Integration Tests — 3 phases (92-94), 24 Foundry integration tests deploying full 23-contract protocol, all 6 ticket sources verified (direct purchase x3, lootbox near/far, whale bundle), boundary routing (L+5 write vs L+6 FF), FF drain timing proven, zero-stranding sweeps across all key spaces, RNG commitment window formal proof (9/9 paths SAFE), rngLocked guard verified, 1 bug fix (requestLootboxRng mid-day gating) — v4.1 Phases 92-94
 
+## Current Milestone: v4.2 Daily Jackpot Chunk Removal + Gas Optimization
+
+**Goal:** Verify the dead mid-chunk resume infrastructure removal is behaviorally equivalent, then optimize the daily jackpot path for maximum gas efficiency.
+
+**Target features:**
+- Delta audit of chunk removal (behavioral equivalence proof, test verification, grep sweep)
+- Gas ceiling re-analysis of _processDailyEthChunk and payDailyJackpot under worst-case inputs
+- Gas optimization pass on the entire daily jackpot code path (unnecessary SLOADs, redundant computation, loop inefficiencies)
+- Comment/NatSpec correctness for changed code
+
 ## Completed Milestone: v4.1 Ticket Lifecycle Integration Tests
 
 **Status:** Complete (2026-03-24)
@@ -182,4 +192,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-24 after v4.1 milestone completed*
+*Last updated: 2026-03-24 after v4.2 milestone started*
