@@ -273,10 +273,10 @@ Plans:
   6. Unit 2 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [x] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [x] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [x] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [ ] 104-01-PLAN.md — Taskmaster: coverage checklist for DegenerusGameAdvanceModule
+- [ ] 104-02-PLAN.md — Mad Genius: full attack analysis + ticket queue drain investigation
+- [ ] 104-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 104-04-PLAN.md — Final Unit 2 findings report
 
 ### Phase 105: Jackpot Distribution
 **Goal**: Every state-changing function in DegenerusGameJackpotModule and DegenerusGamePayoutUtils has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
@@ -542,7 +542,7 @@ Phase 118 requires all of 103-117. Phase 119 requires 118.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 103. Game Router + Storage Layout | 4/4 | Complete    | 2026-03-25 |
-| 104. Day Advancement + VRF | 0/TBD | Not started | - |
+| 104. Day Advancement + VRF | 0/4 | Planned | - |
 | 105. Jackpot Distribution | 0/TBD | Not started | - |
 | 106. Endgame + Game Over | 0/TBD | Not started | - |
 | 107. Mint + Purchase Flow | 0/TBD | Not started | - |
