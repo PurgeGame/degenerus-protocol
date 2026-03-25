@@ -425,3 +425,51 @@ The daily jackpot hot path is well-optimized. Key findings:
 5. **Warm SLOAD optimizations (gameOver, level, rngLockedFlag)** save 32K-64K gas each -- marginal at 0.23-0.46% of the 14M ceiling. The `via_ir` compiler may already be caching these register-level. Not worth the function signature changes.
 
 **Recommendation for GOPT-03:** If the Phase 95 chunk removal has been applied, no additional code changes are recommended for the daily jackpot hot path. The remaining gas costs are dominated by unavoidable per-address storage operations. If further gas reduction is needed in the future, the `prizePoolsPacked` batching (H14) is the only remaining opportunity with meaningful impact, but it requires architectural review.
+
+---
+
+## Optimization Disposition (GOPT-03)
+
+**Date:** 2026-03-25
+**Status:** Complete -- all optimization candidates from SLOAD audit (GOPT-01) and loop hoisting audit (GOPT-02) have a final disposition.
+
+### Disposition Table
+
+| # | Candidate | Source | Plan 02 Verdict | Gas Savings | Disposition | Justification |
+|---|-----------|--------|-----------------|-------------|-------------|---------------|
+| 1 | Remove `_winnerUnits` dead code (SLOAD #11) | SLOAD audit | OPTIMIZE | 674,100 (4.8% of 14M ceiling) | **IMPLEMENTED** | Already applied via Phase 95 chunk removal refactor. Verified: `_winnerUnits`, `unitsBudget`, `unitsUsed`, `DAILY_JACKPOT_UNITS_SAFE`, and `DAILY_JACKPOT_UNITS_AUTOREBUY` are absent from the current codebase. The per-winner cold SLOAD of `autoRebuyState[addr]` now only occurs once (in `_addClaimableEth`) rather than twice. |
+| 2 | Batch `prizePoolsPacked` writes (H14) | Loop hoisting | DEFER (architectural) | ~1,600,000 (~11.4% of ceiling) | **DEFER** | Requires restructuring `_processAutoRebuy` to return pool deltas instead of writing `prizePoolsPacked` directly, restructuring `_processDailyEthChunk` to accumulate and apply deltas, and auditing all 6+ other callers of `_processAutoRebuy` and `_addClaimableEth`. This is an architectural change (deviation Rule 4) disproportionate to its benefit -- all daily jackpot stages are now classified SAFE with 35-42% headroom. The optimization can be revisited if future code changes tighten the gas ceiling. |
+| 3 | Pass `gameOver` as parameter (SLOAD #12 / H7) | Both | SKIP | 32,100 (0.23% of ceiling) | **REJECT** | Warm SLOAD at 100 gas per winner. Adding a `bool` parameter to `_addClaimableEth` ripples across 6+ callsites in multiple modules (`_runEarlyBirdLootboxJackpot`, `_yieldSkim`, `_distributeJackpotEth`, etc.). The `via_ir` compiler with SSA analysis may already cache this register-level since no SSTORE to Slot 0 occurs between reads. Savings do not change any risk classification. |
+| 4 | Pass `level` as parameter (SLOAD #14-15 / H8-H9) | Both | SKIP | 32,100-64,200 (0.23-0.46% of ceiling) | **REJECT** | Warm SLOAD at 100 gas per winner (Slot 0, already loaded). `_queueTickets` is called from 12+ sites across the codebase. Changing its signature for a sub-0.5% gas reduction is not justified. Risk classification unchanged. |
+| 5 | Pass `rngLockedFlag`/`phaseTransitionActive` as params (SLOAD #16-17 / H4 guard) | SLOAD audit | SKIP | 0-64,200 (0-0.46% of ceiling) | **REJECT** | Already short-circuited by `isFarFuture` check. During daily jackpot processing, `phaseTransitionActive` is true, so the revert guard never fires regardless. These are warm Slot 0 reads at 100 gas each. Zero effective gas cost in the daily jackpot path. |
+
+### Hoisting Disposition (from Loop Hoisting Audit)
+
+All 13 non-candidate hoisting entries (H1-H6, H10-H13) had verdict **ALREADY-HOISTED**. Confirmed: the codebase already pre-computes all library calls (`PriceLookupLib.priceForLevel`, `JackpotBucketLib.soloBucketIndex`, `bucketShares`, `bucketOrderLargestFirst`) above loop boundaries, and pre-computes per-bucket values (`perWinner`, `entropyState`, `deity`, `effectiveLen`) at the correct loop level. No additional hoisting opportunities exist.
+
+### Rejection Rationale
+
+**Why candidates 3-5 do not warrant implementation:**
+
+1. **Marginal savings vs ceiling headroom.** The daily jackpot stages are now all classified SAFE with 35-42% headroom (5-6M gas below the 14M ceiling). Saving 32-64K gas (0.23-0.46%) does not change any stage from SAFE to a lower risk level, nor does it provide meaningful additional margin.
+
+2. **Code complexity cost exceeds gas benefit.** Adding parameters to `_addClaimableEth` (6+ callers), `_processAutoRebuy` (multiple callers), and `_queueTickets` (12+ callers) increases function signature complexity across the codebase. Each change requires updating every callsite, increasing review surface for the C4A audit.
+
+3. **Compiler may already optimize.** The Solidity `via_ir` pipeline with `optimizer_runs=2` performs SSA-based analysis. Warm SLOADs from a packed slot (Slot 0) with no intervening SSTORE to that slot may be cached at the register level. Empirical measurement would be needed to confirm, but even without compiler caching, the cost is only 100 gas per read.
+
+4. **No behavioral risk from rejection.** Leaving warm SLOADs in place has zero correctness or security implications. The reads return the same value that would be passed as a parameter.
+
+**Why candidate 2 is deferred rather than rejected:**
+
+The `prizePoolsPacked` batching (H14) offers the largest potential savings (~1.6M gas, 11.4% of ceiling) among all non-implemented candidates. Unlike candidates 3-5, this optimization targets SSTOREs (5,000 gas each) rather than warm SLOADs (100 gas each), giving it a 50x higher per-operation gas impact. However, the implementation requires:
+
+- Restructuring `_processAutoRebuy` to return `(nextPoolDelta, futurePoolDelta)` instead of writing storage directly
+- Adding accumulation logic to `_processDailyEthChunk` for pool deltas
+- Auditing all other callers of `_processAutoRebuy` (earlybird, daily coin, etc.) for compatibility
+- Verifying that batched writes produce identical final state as sequential writes
+
+This is a meaningful architectural change. With all stages currently SAFE at 35-42% headroom, the complexity is not justified now. If future contract changes reduce headroom below 20%, this optimization should be the first candidate revisited.
+
+### Summary Statement (GOPT-03 Conclusion)
+
+No additional code changes are recommended for the daily jackpot hot path. The single actionable optimization from the SLOAD audit -- removing the redundant `_winnerUnits` cold SLOAD (674,100 gas, 4.8% of ceiling) -- was already implemented by Phase 95's chunk removal refactor and verified absent from the current codebase. The remaining 4 candidates are either deferred (1 architectural change at ~1.6M gas) or rejected (3 marginal warm-SLOAD parameter passes at 32-64K gas each). All daily jackpot stages (11, 8, 6) are now classified SAFE with 35-42% headroom under the 14M gas ceiling (per Plan 01's gas analysis). The hot path's dominant costs are unavoidable per-address cold SLOADs and SSTOREs for `autoRebuyState`, `claimableWinnings`, `ticketsOwedPacked`, and `traitBurnTicket` -- inherent to the per-winner processing model and not optimizable without changing the data model.
