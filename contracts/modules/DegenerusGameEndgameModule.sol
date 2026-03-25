@@ -230,9 +230,14 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
             }
         }
 
-        // Commit future pool update only when changed (saves an SSTORE on non-jackpot levels)
+        // Commit future pool update only when changed (saves an SSTORE on non-jackpot levels).
+        // Reconcile any auto-rebuy contributions that wrote directly to futurePrizePool
+        // storage during _runBafJackpot / runDecimatorJackpot. baseFuturePool is the
+        // futurePrizePool value at function entry; rebuyDelta captures every increment
+        // written by _processAutoRebuy between cache and write-back.
         if (futurePoolLocal != baseFuturePool) {
-            _setFuturePrizePool(futurePoolLocal);
+            uint256 rebuyDelta = _getFuturePrizePool() - baseFuturePool;
+            _setFuturePrizePool(futurePoolLocal + rebuyDelta);
         }
         if (claimableDelta != 0) {
             claimablePool += claimableDelta;
