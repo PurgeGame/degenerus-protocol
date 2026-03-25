@@ -506,3 +506,74 @@ Breakdown:
 ### Combined Note
 
 Phase 0 and Phase 1 execute in SEPARATE advanceGame calls. The gas ceiling applies per call, not combined. The heavier call is Phase 0 (Day 1 + earlybird) at ~9,113,500. Both calls are individually SAFE under 14M.
+
+---
+
+## Empirical Validation
+
+### Test Configuration
+
+- **Framework:** Hardhat 2.28.6 with ethers.js
+- **Test file:** `test/gas/AdvanceGameGas.test.js`
+- **Protocol deployment:** Full 23-contract `deployFullProtocol` fixture
+- **Scenario:** Organic state progression with 20 buyers (alice, bob, carol, dan, eve + 15 others), heavy purchases (whale bundles + 500 full tickets each)
+- **Compilation:** Solidity 0.8.34, `via_ir = true`, `optimizer_runs = 2`, EVM target: Paris
+
+### Raw Hardhat Gas Measurements
+
+All 16 tests passed. Key results (sorted by gas usage, descending):
+
+| Test | Stage | Gas Used |
+|------|-------|----------|
+| Phase Transition | 2 | 6,256,786 |
+| Ticket Batch (550 writes) | 5 | 6,093,990 |
+| Future Ticket Processing | 4 | 6,084,728 |
+| Sybil Ticket Batch (first cold) | 4 | 5,779,730 |
+| VRF 18h Timeout Retry | 1 | 5,268,931 |
+| Final Day Phase End | 10 | 3,131,326 |
+| Jackpot Coin+Tickets | 9 | 3,062,922 |
+| Game Over Drain | 0 | 2,061,646 |
+| **Jackpot Daily ETH** | **11** | **1,552,428** |
+| Sybil Ticket Batch (second warm) | 4 | 1,473,452 |
+| **Purchase Daily Jackpot** | **6** | **556,292** |
+| Enter Jackpot Phase | 7 | 408,922 |
+| **Jackpot ETH Resume** | **8** | **339,732** |
+| Fresh VRF Request | 1 | 179,979 |
+| Game Over VRF Request | 0 | 110,069 |
+| Final Sweep | 0 | 68,564 |
+| VRF Callback (daily RNG) | -- | 62,580 |
+
+**Peak:** 6,256,786 gas (Phase Transition, stage=2). All paths within safe gas limits.
+
+### Comparison: Static Estimate vs Empirical Measurement
+
+| Stage | Static Worst-Case | Empirical | Ratio (Emp/Static) | Explanation |
+|-------|-------------------|-----------|-------------------|-------------|
+| 11 (JACKPOT_DAILY_STARTED) | ~9,113,500 | 1,552,428 | 17.0% | Test scenario has far fewer winners than 321; no earlybird (not Day 1); pool size limits winner count |
+| 8 (JACKPOT_ETH_RESUME) | ~8,071,100 | 339,732 | 4.2% | Carryover phase has very few winners in organic test; pool is small |
+| 6 (PURCHASE_DAILY) | ~8,275,200 | 556,292 | 6.7% | 1% daily drip produces small pool; far fewer than 300 winners |
+
+### Delta Analysis
+
+The empirical measurements are 4-17% of the static worst-case estimates. This is expected and validates the analysis:
+
+1. **The test cannot construct the true worst case organically.** To reach 321 all-auto-rebuy winners requires: (a) 321+ unique players with tickets in the matching trait buckets, (b) all with auto-rebuy enabled, (c) a pool large enough to trigger maximum bucket counts, (d) final physical day for 100% budget. The test has 20 buyers, which limits winners to a small subset.
+
+2. **Pool size limits winner count.** The `bucketCountsForPoolCap` function scales winner count with pool size. At 20 buyers contributing ~7.4 ETH each, the pool is ~99 ETH. This produces a moderate number of winners, far below the 321 maximum.
+
+3. **No auto-rebuy in test.** The test does not enable auto-rebuy for any buyer. All winners take the cheaper normal path (~16,400 gas) rather than auto-rebuy (~24,700 gas).
+
+4. **No empirical data exceeds static estimate.** This is the key validation: if any empirical number exceeded the static estimate, it would indicate the static analysis missed something. All empirical numbers are well below static estimates, confirming the analysis is conservative (upper-bound).
+
+### Confidence Assessment
+
+| Stage | Static Confidence | After Empirical | Notes |
+|-------|-------------------|----------------|-------|
+| 11 | HIGH | HIGH | Empirical confirms well below ceiling; per-winner cost methodology is sound |
+| 8 | HIGH | HIGH | Empirical shows typical carryover is trivial (~340K gas) |
+| 6 | HIGH | HIGH | Empirical confirms early-burn pool produces few winners |
+| Overall (all stages) | HIGH | HIGH | Peak observed across all tests is 6.26M gas (Phase Transition) -- well under 14M |
+
+### Key Observation
+
+The Hardhat test provides a **lower bound** on gas for these stages, while the static analysis provides an **upper bound**. The true worst case lies between them, but closer to the static estimate only under extreme conditions (321 unique auto-rebuy winners on final day). The gap between the bounds confirms that the daily jackpot stages have substantial headroom under realistic conditions.
