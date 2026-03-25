@@ -71,13 +71,13 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ### Validated
 
-- ✓ v4.2 Daily Jackpot Chunk Removal + Gas Optimization — 3 phases (95-97), chunk removal delta verified (behavioral equivalence + zero stale refs), gas ceiling profiled (all 3 stages SAFE with 34.9-42.3% headroom), 24 SLOADs audited + 7 loops analyzed, comment cleanup (8 issues fixed, function rename), 0 new findings — v4.2 Phases 95-97
+- ✓ v4.2 Daily Jackpot Chunk Removal + Gas Optimization — 4 phases (95-98), chunk removal delta verified (behavioral equivalence + zero stale refs), gas ceiling profiled (all 3 stages SAFE with 34.9-42.3% headroom), 24 SLOADs audited + 7 loops analyzed, comment cleanup (8 issues fixed, function rename), documentation gap closure (13/13 requirements verified), 0 new findings — v4.2 Phases 95-98
 
 ## Completed Milestone: v4.2 Daily Jackpot Chunk Removal + Gas Optimization
 
 **Status:** Complete (2026-03-25)
 
-**Result:** 3 phases (95-97). Chunk removal delta verified (behavioral equivalence proof, zero stale refs across all Solidity files). Gas ceiling profiled — all 3 daily jackpot stages reclassified from AT_RISK/TIGHT to SAFE with 34.9-42.3% headroom. 24 SLOADs audited, 7 loops analyzed, 1 actionable optimization identified (deferred as architectural). Comment cleanup: 8 issues fixed, `_processDailyEthChunk` renamed to `_processDailyEth`, full NatSpec added.
+**Result:** 4 phases (95-98). Chunk removal delta verified (behavioral equivalence proof, zero stale refs across all Solidity files). Gas ceiling profiled — all 3 daily jackpot stages reclassified from AT_RISK/TIGHT to SAFE with 34.9-42.3% headroom. 24 SLOADs audited, 7 loops analyzed, 1 actionable optimization identified (deferred as architectural). Comment cleanup: 8 issues fixed, `_processDailyEthChunk` renamed to `_processDailyEth`, full NatSpec added. Gap closure: all 13 requirements verified and tracked, EVM SLOT 1 banner corrected.
 
 ## Completed Milestone: v4.1 Ticket Lifecycle Integration Tests
 
