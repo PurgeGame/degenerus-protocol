@@ -170,3 +170,68 @@ The following contracts were scanned and contain no functions that cache a prize
 | 10 | `_runEarlyBirdLootboxJackpot` | JackpotModule | (none -- fresh re-reads) | SAFE | Fresh reads at write sites; no `_addClaimableEth` calls |
 | 11 | `payDailyJackpot` (purchase reward) | JackpotModule | `ethDaySlice` (derived) | SAFE | Write-back before nested calls |
 | 12 | `payDailyJackpot` (reserveSlice init) | JackpotModule | `reserveSlice` (derived) | SAFE | Fresh re-read at write site |
+
+---
+
+## Phase 101 Fix Targets
+
+### Confirmed Vulnerable Instances
+
+**1. `runRewardJackpots` in DegenerusGameEndgameModule**
+
+- **Cached variable:** `futurePoolLocal` (snapshot of `futurePrizePool` from `prizePoolsPacked` high-128 bits)
+- **Cache location:** `contracts/modules/DegenerusGameEndgameModule.sol:169`
+- **Base snapshot:** `baseFuturePool = futurePoolLocal` at line 170
+- **Nested write path (BAF):** `_runBafJackpot` (line 189) -> `_addClaimableEth` (lines 385, 405) -> auto-rebuy -> `_setFuturePrizePool(_getFuturePrizePool() + calc.ethSpent)` (line 281)
+- **Nested write path (Decimator, level % 100 == 0):** `IDegenerusGame(address(this)).runDecimatorJackpot` (line 208-209) -> DecimatorModule delegatecall -> `_addClaimableEth` -> `_processAutoRebuy` -> `_setFuturePrizePool(_getFuturePrizePool() + calc.ethSpent)` (DecimatorModule line 387)
+- **Nested write path (Decimator, levels x5):** Same as above via lines 224-225
+- **Write-back location:** `contracts/modules/DegenerusGameEndgameModule.sol:235` -- `_setFuturePrizePool(futurePoolLocal)`
+- **Recommended fix:** Delta reconciliation immediately before the write-back at line 234-235:
+  ```solidity
+  // Before writing back futurePoolLocal, reconcile any auto-rebuy contributions
+  // that wrote directly to storage during _runBafJackpot / runDecimatorJackpot.
+  if (futurePoolLocal != baseFuturePool) {
+      uint256 rebuyDelta = _getFuturePrizePool() - baseFuturePool;
+      _setFuturePrizePool(futurePoolLocal + rebuyDelta);
+  }
+  ```
+  This re-reads `futurePrizePool` from storage, computes the delta between storage-now and the base snapshot (capturing all auto-rebuy contributions), and adds the delta to the locally-adjusted `futurePoolLocal` before writing back.
+- **Risk if unfixed:** Auto-rebuy ETH contributions to `futurePrizePool` during BAF/Decimator jackpot distribution are silently erased. The ETH vanishes from accounting. Solvency invariant (`address(this).balance >= sum_of_all_pools`) may be violated over time as auto-rebuy contributions accumulate and are repeatedly lost.
+
+No additional VULNERABLE instances found beyond `runRewardJackpots`.
+
+### Storage Slots Needing Protection
+
+Phase 101 must protect these storage slots against stale overwrite during `runRewardJackpots`:
+
+| Slot | Variable | Access Pattern | Protection Needed |
+|---|---|---|---|
+| `prizePoolsPacked` high-128 | `futurePrizePool` | Cached as `futurePoolLocal`; auto-rebuy writes via `_setFuturePrizePool` | Delta reconciliation before write-back |
+| `prizePoolsPacked` low-128 | `nextPrizePool` | NOT cached in `runRewardJackpots`; auto-rebuy writes via `_setNextPrizePool` | No protection needed -- no stale overwrite (not cached) |
+
+**Why `nextPrizePool` does not need protection:** `runRewardJackpots` never caches `nextPrizePool` into a local and never writes to `nextPrizePool`. Auto-rebuy may write to `nextPrizePool` (25% probability), but since there is no stale local for `nextPrizePool`, those writes persist correctly.
+
+**Why `claimablePool` does not need protection:** `runRewardJackpots` writes `claimablePool += claimableDelta` at line 238, but `claimableDelta` is accumulated from `_addClaimableEth` return values during the function's execution. The auto-rebuy path in EndgameModule manages `claimablePool` via the return value pattern (returning 0 when auto-rebuy fires), so `claimableDelta` correctly excludes auto-rebuy amounts. No stale overwrite.
+
+### Functions Confirmed Safe
+
+1. `payDailyJackpot` / `poolSnapshot` (JackpotModule) -- SAFE: `poolSnapshot` is read-only; caches `currentPrizePool` which auto-rebuy never writes
+2. `_applyTimeBasedFutureTake` (AdvanceModule) -- SAFE: pure arithmetic between cache and write-back; no nested calls
+3. `consolidatePrizePools` / `fp` (JackpotModule) -- SAFE: write-back completes before any nested calls
+4. `_distributeYieldSurplus` (JackpotModule) -- SAFE: locals are derived values never written back to pool storage
+5. `_distributePayout` (DegeneretteModule) -- SAFE: write-back before `_addClaimableEth`; module has no auto-rebuy path
+6. `_autoStakeExcessEth` (AdvanceModule) -- SAFE: `reserve` is read-only; never written back
+7. `manualStakeEth` (DegenerusGame) -- SAFE: `reserve` is read-only; never written back
+8. `_drawDownFuturePrizePool` (AdvanceModule) -- SAFE: fresh re-reads at write sites
+9. `_runEarlyBirdLootboxJackpot` (JackpotModule) -- SAFE: fresh re-reads; no `_addClaimableEth` calls
+10. `payDailyJackpot` / purchase reward (JackpotModule) -- SAFE: write-back before nested calls
+11. `payDailyJackpot` / reserveSlice (JackpotModule) -- SAFE: fresh re-read at write site
+
+### Scope Confirmed
+
+- **Total contracts scanned:** 29 (all contracts in `contracts/` including modules, storage, libraries, and interfaces)
+- **Total .sol files examined:** 46 (29 contracts + 5 libraries + 12 interfaces)
+- **Total functions with cached storage locals:** 12
+- **VULNERABLE:** 1 (`runRewardJackpots` in EndgameModule)
+- **SAFE:** 11 (with specific reasoning per function)
+- **Contracts with no candidates:** 22 (no pool caching pattern present)
