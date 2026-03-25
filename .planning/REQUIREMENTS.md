@@ -14,8 +14,8 @@ Requirements for milestone v4.4: BAF Cache-Overwrite Bug Fix + Pattern Scan.
 
 ### Pattern Scan
 
-- [ ] **SCAN-01**: Every function across all contracts that caches a storage variable locally, calls nested functions that write to the same slot, then writes back the local is inventoried
-- [ ] **SCAN-02**: Each instance found is classified as VULNERABLE (stale overwrite possible) or SAFE (with reasoning)
+- [x] **SCAN-01**: Every function across all contracts that caches a storage variable locally, calls nested functions that write to the same slot, then writes back the local is inventoried
+- [x] **SCAN-02**: Each instance found is classified as VULNERABLE (stale overwrite possible) or SAFE (with reasoning)
 - [ ] **SCAN-03**: Any additional vulnerable instances are fixed or documented with fix recommendations
 
 ### Verification
@@ -42,8 +42,8 @@ Requirements for milestone v4.4: BAF Cache-Overwrite Bug Fix + Pattern Scan.
 |-------------|-------|--------|
 | BAF-01 | Phase 101 | Pending |
 | BAF-02 | Phase 101 | Pending |
-| SCAN-01 | Phase 100 | Pending |
-| SCAN-02 | Phase 100 | Pending |
+| SCAN-01 | Phase 100 | Complete |
+| SCAN-02 | Phase 100 | Complete |
 | SCAN-03 | Phase 101 | Pending |
 | TEST-01 | Phase 102 | Pending |
 | TEST-02 | Phase 102 | Pending |
