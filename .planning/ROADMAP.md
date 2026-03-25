@@ -226,7 +226,7 @@
 - [x] **Phase 104: Day Advancement + VRF** - Unit 2: DegenerusGameAdvanceModule (completed 2026-03-25)
 - [x] **Phase 105: Jackpot Distribution** - Unit 3: DegenerusGameJackpotModule, DegenerusGamePayoutUtils (completed 2026-03-25)
 - [x] **Phase 106: Endgame + Game Over** - Unit 4: DegenerusGameEndgameModule, DegenerusGameGameOverModule (completed 2026-03-25)
-- [ ] **Phase 107: Mint + Purchase Flow** - Unit 5: DegenerusGameMintModule, DegenerusGameMintStreakUtils
+- [x] **Phase 107: Mint + Purchase Flow** - Unit 5: DegenerusGameMintModule, DegenerusGameMintStreakUtils (completed 2026-03-25)
 - [x] **Phase 108: Whale Purchases** - Unit 6: DegenerusGameWhaleModule (completed 2026-03-25)
 - [ ] **Phase 109: Decimator System** - Unit 7: DegenerusGameDecimatorModule
 - [ ] **Phase 110: Degenerette Betting** - Unit 8: DegenerusGameDegeneretteModule
@@ -325,10 +325,10 @@ Plans:
   5. Unit 5 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [x] 107-01-PLAN.md — Taskmaster: coverage checklist for MintModule + MintStreakUtils
+- [x] 107-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [x] 107-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [x] 107-04-PLAN.md — Final Unit 5 findings report
 
 ### Phase 108: Whale Purchases
 **Goal**: Every state-changing function in DegenerusGameWhaleModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
