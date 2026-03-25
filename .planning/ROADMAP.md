@@ -290,10 +290,10 @@ Plans:
   5. Unit 3 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [x] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [x] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [ ] 105-01-PLAN.md — Taskmaster: coverage checklist for JackpotModule + PayoutUtils
+- [ ] 105-02-PLAN.md — Mad Genius: full attack analysis with BAF-critical path re-audit
+- [ ] 105-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 105-04-PLAN.md — Final Unit 3 findings report
 
 ### Phase 106: Endgame + Game Over
 **Goal**: Every state-changing function in DegenerusGameEndgameModule and DegenerusGameGameOverModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on auto-rebuy paths where the BAF bug lived
