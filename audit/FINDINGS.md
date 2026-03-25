@@ -478,19 +478,24 @@ Already disclosed in KNOWN-ISSUES.md. Lido 1:1 mint with 1-2 wei rounding streng
 | 4. Endgame + Game Over | 106 | 21 | 100% | 2 INFO |
 | 5. Mint + Purchase Flow | 107 | 20 | 100% | 0 confirmed |
 | 6. Whale Purchases | 108 | 16 | 100% | 1 INFO |
-| 7. Decimator System | 109 | 32 | 100% | 1 MEDIUM |
-| 8. Degenerette Betting | 110 | 27 | 100% | 1 LOW + 1 INFO |
+| 7. Decimator System | 109 | 32 | 100% | ~~1 MEDIUM~~ dismissed as FP (post-unit review) |
+| 8. Degenerette Betting | 110 | 27 | 100% | ~~1 LOW~~ dismissed as FP (1-wei sentinel) + 1 INFO |
 | 9. Lootbox + Boons | 111 | 32 | 100% | 1 INFO |
 | 10. BURNIE Token + Coinflip | 112 | 71 | 100% | 3 INFO |
 | 11. sDGNRS + DGNRS | 113 | 37 | 100% | 3 INFO |
 | 12. Vault + WWXRP | 114 | 64 | 100% | 1 INFO |
-| 13. Admin + Governance | 115 | 17 | 100% | 1 LOW + 3 INFO |
+| 13. Admin + Governance | 115 | 17 | 100% | ~~1 LOW~~ dismissed as FP (Chainlink failure) + 3 INFO |
 | 14. Affiliate + Quests + Jackpots | 116 | 61 | 100% | 1 INFO |
 | 15. Libraries | 117 | 18 | 100% | 2 INFO |
-| 16. Integration Sweep | 118 | 7 surfaces | 100% | 0 new (1 MEDIUM confirmed) |
-| **Total** | | **693** | **100%** | **1M + 2L + 29I = 32** |
+| 16. Integration Sweep | 118 | 7 surfaces | 100% | 0 new |
+| **Total** | | **693** | **100%** | **29 INFO (0 actionable)** |
 
 ---
+
+**Post-unit reclassifications (protocol team review, 2026-03-25):**
+- M-01 (decBucketOffsetPacked collision): FALSE POSITIVE — regular and terminal decimator fire in mutually exclusive game states; same-level collision structurally impossible
+- L-01 (Degenerette `<=` check): FALSE POSITIVE — `claimableWinnings` uses 1-wei sentinel to avoid cold SSTORE; `<=` is intentional
+- L-02 (LINK recovery path): FALSE POSITIVE — if LINK transfer fails, Chainlink is broken and LINK is likely worthless; no practical benefit to a sweep function
 
 *Master findings report compiled from 16 unit audits, v5.0 Ultimate Adversarial Audit.*
 *Phase 119 deliverable DEL-01.*
