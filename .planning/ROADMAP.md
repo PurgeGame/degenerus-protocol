@@ -227,7 +227,7 @@
 - [x] **Phase 105: Jackpot Distribution** - Unit 3: DegenerusGameJackpotModule, DegenerusGamePayoutUtils (completed 2026-03-25)
 - [x] **Phase 106: Endgame + Game Over** - Unit 4: DegenerusGameEndgameModule, DegenerusGameGameOverModule (completed 2026-03-25)
 - [ ] **Phase 107: Mint + Purchase Flow** - Unit 5: DegenerusGameMintModule, DegenerusGameMintStreakUtils
-- [ ] **Phase 108: Whale Purchases** - Unit 6: DegenerusGameWhaleModule
+- [x] **Phase 108: Whale Purchases** - Unit 6: DegenerusGameWhaleModule (completed 2026-03-25)
 - [ ] **Phase 109: Decimator System** - Unit 7: DegenerusGameDecimatorModule
 - [ ] **Phase 110: Degenerette Betting** - Unit 8: DegenerusGameDegeneretteModule
 - [ ] **Phase 111: Lootbox + Boons** - Unit 9: DegenerusGameLootboxModule, DegenerusGameBoonModule
@@ -342,10 +342,10 @@ Plans:
   5. Unit 6 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [x] 108-01-PLAN.md -- Taskmaster: coverage checklist for DegenerusGameWhaleModule
+- [x] 108-02-PLAN.md -- Mad Genius: full attack analysis on all functions
+- [x] 108-03-PLAN.md -- Skeptic review + Taskmaster coverage verification
+- [x] 108-04-PLAN.md -- Final Unit 6 findings report
 
 ### Phase 109: Decimator System
 **Goal**: Every state-changing function in DegenerusGameDecimatorModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on auto-rebuy paths (same BAF pattern risk as Endgame)
@@ -546,7 +546,7 @@ Phase 118 requires all of 103-117. Phase 119 requires 118.
 | 105. Jackpot Distribution | 4/4 | Complete    | 2026-03-25 |
 | 106. Endgame + Game Over | 0/TBD | Not started | - |
 | 107. Mint + Purchase Flow | 0/TBD | Not started | - |
-| 108. Whale Purchases | 0/TBD | Not started | - |
+| 108. Whale Purchases | 4/4 | Complete   | 2026-03-25 |
 | 109. Decimator System | 0/TBD | Not started | - |
 | 110. Degenerette Betting | 0/TBD | Not started | - |
 | 111. Lootbox + Boons | 0/TBD | Not started | - |
