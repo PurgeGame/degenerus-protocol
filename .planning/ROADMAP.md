@@ -228,7 +228,7 @@
 - [x] **Phase 106: Endgame + Game Over** - Unit 4: DegenerusGameEndgameModule, DegenerusGameGameOverModule (completed 2026-03-25)
 - [x] **Phase 107: Mint + Purchase Flow** - Unit 5: DegenerusGameMintModule, DegenerusGameMintStreakUtils (completed 2026-03-25)
 - [x] **Phase 108: Whale Purchases** - Unit 6: DegenerusGameWhaleModule (completed 2026-03-25)
-- [ ] **Phase 109: Decimator System** - Unit 7: DegenerusGameDecimatorModule
+- [x] **Phase 109: Decimator System** - Unit 7: DegenerusGameDecimatorModule (completed 2026-03-25)
 - [x] **Phase 110: Degenerette Betting** - Unit 8: DegenerusGameDegeneretteModule (completed 2026-03-25)
 - [x] **Phase 111: Lootbox + Boons** - Unit 9: DegenerusGameLootboxModule, DegenerusGameBoonModule (completed 2026-03-25)
 - [ ] **Phase 112: BURNIE Token + Coinflip** - Unit 10: BurnieCoin, BurnieCoinflip
@@ -359,10 +359,10 @@ Plans:
   5. Unit 7 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [x] 109-01-PLAN.md -- Taskmaster: coverage checklist for DegenerusGameDecimatorModule
+- [x] 109-02-PLAN.md -- Mad Genius: full attack analysis on all functions
+- [x] 109-03-PLAN.md -- Skeptic review + Taskmaster coverage verification
+- [x] 109-04-PLAN.md -- Final Unit 7 findings report
 
 ### Phase 110: Degenerette Betting
 **Goal**: Every state-changing function in DegenerusGameDegeneretteModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
