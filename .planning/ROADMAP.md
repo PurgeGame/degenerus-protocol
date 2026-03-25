@@ -244,7 +244,10 @@
   2. The full Hardhat suite passes with zero new failures (pre-existing failures remain unchanged and are accounted for)
   3. The full Foundry suite passes with zero new failures
   4. All NatSpec and inline comments in modified functions accurately describe the post-fix behavior, including an explanation of why the delta snapshot is taken
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 102-01-PLAN.md — Foundry targeted test proving BAF delta-reconciliation fix (testBafRebuyContributionPreserved) + NatSpec comment accuracy (checkpoint for user approval before commit)
+- [ ] 102-02-PLAN.md — Full Hardhat + Foundry regression suites; confirm zero new failures vs pre-existing baselines
 
 ## Progress Table
 
