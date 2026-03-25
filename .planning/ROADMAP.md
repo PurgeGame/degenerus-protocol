@@ -20,6 +20,7 @@
 - ✅ **v3.9 Far-Future Ticket Fix** — Phases 74-80 (shipped 2026-03-23)
 - ✅ **v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit** — Phases 81-91 (shipped 2026-03-23)
 - ✅ **v4.1 Ticket Lifecycle Integration Tests** — Phases 92-94 (shipped 2026-03-24)
+- **v4.2 Daily Jackpot Chunk Removal + Gas Optimization** — Phases 95-97 (in progress)
 
 ## Phases
 
@@ -181,6 +182,63 @@
 - [x] **Phase 94: RNG Commitment Window Proofs** — 1 plan, 4 requirements (completed 2026-03-24)
 
 </details>
+
+### v4.2 Daily Jackpot Chunk Removal + Gas Optimization (In Progress)
+
+**Milestone Goal:** Verify the dead mid-chunk resume infrastructure removal is behaviorally equivalent, then optimize the daily jackpot path for maximum gas efficiency.
+
+- [ ] **Phase 95: Delta Verification** - Prove chunk removal is behaviorally safe across both test stacks
+- [ ] **Phase 96: Gas Ceiling + Optimization** - Profile worst-case gas and optimize the daily jackpot code path
+- [ ] **Phase 97: Comment Cleanup** - Verify NatSpec and inline comments for all modified code
+
+## Phase Details
+
+### Phase 95: Delta Verification
+**Goal**: Chunk removal is proven behaviorally equivalent with zero test regressions
+**Depends on**: Nothing (first phase of v4.2)
+**Requirements**: DELTA-01, DELTA-02, DELTA-03, DELTA-04
+**Success Criteria** (what must be TRUE):
+  1. All Hardhat tests pass -- the 33 failures are triaged as either pre-existing (documented) or regressions (fixed)
+  2. `grep -r` for all 6 removed symbols returns zero hits across all Solidity files
+  3. A side-by-side trace proves _processDailyEthChunk produces identical winner selection, payout amounts, and entropy chain as the pre-removal version
+  4. All Foundry tests (invariant + fuzz + integration) pass green
+**Plans:** 2/3 plans executed
+Plans:
+- [x] 95-01-PLAN.md — Hardhat regression triage + removed symbol sweep
+- [x] 95-02-PLAN.md — Fix 14 Foundry test stale slot offset constants
+- [ ] 95-03-PLAN.md — Behavioral equivalence trace document
+
+### Phase 96: Gas Ceiling + Optimization
+**Goal**: Daily jackpot code path is profiled under worst-case inputs and optimized for gas efficiency
+**Depends on**: Phase 95
+**Requirements**: CEIL-01, CEIL-02, CEIL-03, GOPT-01, GOPT-02, GOPT-03
+**Success Criteria** (what must be TRUE):
+  1. Worst-case gas for _processDailyEthChunk (321 winners, all auto-rebuy, 4 populated buckets) is measured and documented with a specific number
+  2. Worst-case gas for payDailyJackpot (Phase 0 + Phase 1 combined, final physical day) is measured and documented
+  3. All profiled paths are under 14M gas ceiling with headroom percentage documented
+  4. Every unnecessary SLOAD in the daily jackpot code path is identified and either eliminated or justified
+  5. Any loop-hoistable computation is identified and either hoisted or justified as not worth the complexity
+**Plans**: TBD
+
+### Phase 97: Comment Cleanup
+**Goal**: All modified code has accurate NatSpec and inline comments reflecting current behavior
+**Depends on**: Phase 96
+**Requirements**: CMT-01
+**Success Criteria** (what must be TRUE):
+  1. Every function modified during chunk removal or gas optimization has accurate NatSpec (@notice, @dev, @param, @return)
+  2. No inline comments reference removed concepts (chunks, cursors, bucket iteration resumption)
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 95 -> 96 -> 97
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 95. Delta Verification | 2/3 | In progress (Plan 03 remaining) |  |
+| 96. Gas Ceiling + Optimization | 0/TBD | Not started | - |
+| 97. Comment Cleanup | 0/TBD | Not started | - |
 
 ## Deferred
 
