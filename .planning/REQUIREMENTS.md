@@ -32,8 +32,8 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 ### Milestone Documentation Cleanup (Gap Closure)
 
-- [ ] **DOC-01**: REQUIREMENTS.md checkboxes and traceability table reflect verified status for all requirements
-- [ ] **BANNER-01**: DegenerusGameStorage.sol "EVM SLOT 1" section banner positioned after Slot 0 variables (before purchaseStartDay)
+- [x] **DOC-01**: REQUIREMENTS.md checkboxes and traceability table reflect verified status for all requirements
+- [x] **BANNER-01**: DegenerusGameStorage.sol "EVM SLOT 1" section banner positioned after Slot 0 variables (before purchaseStartDay)
 
 ## Out of Scope
 
