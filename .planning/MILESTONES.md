@@ -1,5 +1,21 @@
 # Milestones
 
+## v4.2 Daily Jackpot Chunk Removal + Gas Optimization (Shipped: 2026-03-25)
+
+**Phases completed:** 4 phases, 8 plans, 15 tasks
+
+**Key accomplishments:**
+
+- Hardhat suite confirmed 1209 pass / 33 fail (all pre-existing), grep sweep confirmed zero remaining references to 6 removed chunk symbols across contracts/
+- Fixed 2 pre-existing StorageFoundation test failures by correcting stale slot offsets (23/24/25 instead of 24/25/26) and slot number (14 instead of 16), corrected AffiliateDgnrsClaim mapping slot constants to authoritative values (32/33), and documented latent COMPRESSED_FLAG_SHIFT bug in TicketLifecycle NatSpec
+- Post-chunk-removal gas analysis: all three daily jackpot stages (11, 8, 6) reclassified from AT_RISK/TIGHT to SAFE with >3M headroom, validated by Hardhat benchmarks
+- 24 SLOADs cataloged across daily jackpot hot path: 69.4% unavoidable (per-address mappings), 22.7% optimizable (_winnerUnits dead code = 674K gas), 7.6% already-optimized (warm packed slots); 7 loops analyzed with all library computations confirmed already-hoisted
+- All 5 optimization candidates dispositioned: 1 IMPLEMENTED (Phase 95 _winnerUnits removal, 674K gas), 1 DEFER (prizePoolsPacked batching, 1.6M gas architectural), 3 REJECT (warm SLOAD parameter passing, 32-64K gas marginal); no code changes -- all stages SAFE with 35-42% headroom
+- Storage layout comments corrected for Slot 0/1 post-chunk-removal, _processDailyEthChunk renamed to _processDailyEth with full NatSpec
+- All 13 v4.2 REQUIREMENTS.md checkboxes checked and EVM SLOT 1 banner moved to correct Slot 0/1 boundary in DegenerusGameStorage.sol
+
+---
+
 ## v4.1 Ticket Lifecycle Integration Tests (Shipped: 2026-03-24)
 
 **Phases completed:** 3 phases, 4 plans, 6 tasks
