@@ -75,20 +75,11 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v4.3 prizePoolsPacked Batching Optimization — closed early after Phase 99 callsite audit revealed H14 gas savings was 25x overestimate (~63.8K actual vs ~1.6M estimated). Optimization abandoned as not cost-effective. — v4.3 Phase 99
 - ✓ v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan — 3 phases (100-102), protocol-wide cache-overwrite scan (1 VULNERABLE / 11 SAFE across 29 contracts), delta reconciliation fix applied to `runRewardJackpots`, Foundry fix-proof test, zero regressions — v4.4 Phases 100-102
 
-## Current Milestone: v5.0 Ultimate Adversarial Audit
+## Completed Milestone: v5.0 Ultimate Adversarial Audit
 
-**Goal:** Exhaustive three-agent adversarial audit of every state-changing function in the protocol, with mandatory call-tree expansion, storage-write mapping, and coverage enforcement — designed to catch BAF-class bugs that survived 24 prior milestones.
+**Status:** Complete (2026-03-25)
 
-**Target features:**
-- 16-unit full-protocol sweep with Mad Genius (attacker) / Skeptic (validator) / Taskmaster (coverage enforcer) agents
-- Mandatory recursive call-tree expansion and storage-write map for every function
-- Explicit stale-cache-vs-storage check (the BAF pattern) on every function
-- 100% coverage enforcement with no shortcuts
-- All agents on Opus at maximum effort (GSD quality profile)
-- Focus: state coherence, RNG manipulation, cross-contract desync, rare conditional paths, access control, ordering attacks, silent failures, economic/MEV attacks, griefing
-- Excluded (already covered in v3.0-v4.4): pure arithmetic, classic reentrancy
-
-**Design doc:** `.planning/ULTIMATE-AUDIT-DESIGN.md`
+**Result:** 17 phases (103-119), 29 contracts, 693 functions, ~15,000+ lines Solidity. Three-agent adversarial system (Taskmaster/Mad Genius/Skeptic) with mandatory call-tree expansion, storage-write mapping, and BAF cache-overwrite checks on every state-changing function. 100% Taskmaster coverage in all 16 units. Zero actionable findings (0 CRITICAL/HIGH/MEDIUM/LOW, 29 INFO). BAF-class bugs comprehensively eliminated. ETH conservation PROVEN. All 4 master deliverables produced (FINDINGS.md, ACCESS-CONTROL-MATRIX.md, STORAGE-WRITE-MAP.md, ETH-FLOW-MAP.md).
 
 ## Completed Milestone: v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan
 
@@ -193,11 +184,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v5.0 in progress (2026-03-25) — Ultimate Adversarial Audit. 4 of 17 phases complete, 13 units remaining.
-- Phase 103 (Game Router + Storage Layout): 177 functions inventoried, 0 confirmed vulnerabilities, storage layout verified (102 vars, 10 modules EXACT MATCH).
-- Phase 104 (Day Advancement + VRF): 35 functions attacked — 0 vulnerabilities, 3 INFO. Ticket queue drain PROVEN SAFE.
-- Phase 105 (Jackpot Distribution): 55 functions across JackpotModule + PayoutUtils attacked — 0 vulnerabilities, 5 INFO. BAF-critical chain (_addClaimableEth/_processAutoRebuy) re-audited from scratch, all 6 paths SAFE. Inline Yul assembly verified CORRECT. 100% coverage.
-- Phase 108 (Whale Purchases): 16 functions in WhaleModule attacked — 0 vulnerabilities, 1 INFO (DGNRS diminishing returns). mintPacked_ cache concern in lazy pass PROVEN SAFE. ERC721 callback re-entry SAFE. All 3 purchase paths (whale/lazy/deity) BAF cache-overwrite verified SAFE. 100% coverage.
+v5.0 complete (2026-03-25) — Ultimate Adversarial Audit. 17 phases, 29 contracts, 693 functions. 0 actionable findings (29 INFO). BAF-class eliminated. ETH conservation proven. 4 master deliverables shipped.
 
 v4.3 closed early (2026-03-25) — prizePoolsPacked batching optimization investigated and abandoned. Phase 99 callsite audit revealed H14's ~1.6M gas savings estimate was a 25x overestimate: warm dirty-slot SSTOREs cost 100 gas (EIP-2200), not 5,000. Actual savings: ~63,800 gas (0.46% of 14M ceiling, ~$0.13/execution at 1 gwei). Not worth the architectural complexity of refactoring `_processAutoRebuy`'s return signature across all callers.
 

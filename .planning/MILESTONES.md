@@ -1,5 +1,42 @@
 # Milestones
 
+## v5.0 Ultimate Adversarial Audit (Shipped: 2026-03-25)
+
+**Phases completed:** 17 phases, 56 plans, 16 tasks
+
+**Key accomplishments:**
+
+- 173-function coverage checklist across 4 categories with forge-inspect-verified storage layout alignment for all 10 delegatecall modules (102 vars, slots 0-78, PASS)
+- Systematic attack analysis of all 49 state-changing functions in DegenerusGame.sol: 19 full deep-dives with call trees, storage-write maps, and BAF-class cache checks; 30 delegatecall dispatch verifications; 7 INVESTIGATE findings (0 VULNERABLE)
+- Skeptic validated 7 findings (0 confirmed, 2 INFO, 5 FP); Taskmaster verified 100% coverage with PASS verdict and 5 spot-checks
+- Unit 1 final report compiled: 0 confirmed findings across 177 functions (30 dispatchers, 19 direct, 32 helpers, 96 views), storage layout PASS, coverage PASS, all 6 audit deliverables complete
+- 35-function coverage checklist for DegenerusGameAdvanceModule (6B + 21C + 8D) with MULTI-PARENT flags, cached-local-vs-storage pairs, and 4-module delegatecall map
+- Mad Genius attack analysis of all 6 Category B functions in DegenerusGameAdvanceModule.sol: 0 VULNERABLE, 6 INVESTIGATE (all INFO), ticket queue drain PROVEN SAFE as test bug, all cross-module delegatecall coherence verified for 4 modules
+- Skeptic validated all 6 Mad Genius findings (0 exploitable, 3 FP, 2 INFO, 1 INFO test bug), independently confirmed ticket queue drain PROVEN SAFE, verified checklist completeness; Taskmaster issued PASS verdict with 100% coverage across 6B/26C/8D functions and 11 delegatecall targets
+- Unit 2 (Day Advancement + VRF) complete: 0 vulnerabilities across 1,571-line AdvanceModule, 3 INFO findings (stale bounty price, stale lootbox word, test assertion bug), ticket queue drain PROVEN SAFE, all 5 deliverables cross-referenced
+- Complete coverage checklist for DegenerusGameJackpotModule (2,715 lines) + DegenerusGamePayoutUtils (92 lines): 55 functions categorized (7B/28C/20D), 6 BAF-critical call chains traced, 7 multi-parent helpers flagged, inline assembly marked
+- Full adversarial attack on 35 state-changing functions (7B + 28C) in DegenerusGameJackpotModule + PayoutUtils: 0 VULNERABLE, 5 INVESTIGATE/INFO, BAF-critical chain re-audited from scratch, inline Yul assembly independently verified, all multi-parent helpers cleared
+- Skeptic validated all 5 Mad Genius findings as INFO (0 exploitable), independently confirmed BAF-critical chain safety across 6 paths and inline assembly correctness; Taskmaster gave PASS on 100% coverage (55/55 functions); F-01 corrected: VAULT can enable auto-rebuy but stale obligations snapshot remains non-exploitable
+- Final Unit 3 findings compiled: 0 confirmed vulnerabilities across 55 functions, 5 INFO observations, BAF-critical paths all SAFE (6/6 chains dual-verified), inline assembly CORRECT (dual-verified), 100% Taskmaster coverage -- Unit 3 audit complete
+- Status:
+- Status:
+- Status:
+- Status:
+- Plan:
+- Plan:
+- Plan:
+- Plan:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+
+---
+
 ## v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan (Shipped: 2026-03-25)
 
 **Phases completed:** 3 phases, 4 plans, 2 tasks
