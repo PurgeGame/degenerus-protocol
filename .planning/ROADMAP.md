@@ -234,9 +234,9 @@
 - [x] **Phase 112: BURNIE Token + Coinflip** - Unit 10: BurnieCoin, BurnieCoinflip (completed 2026-03-25)
 - [x] **Phase 113: sDGNRS + DGNRS** - Unit 11: StakedDegenerusStonk, DegenerusStonk (completed 2026-03-25)
 - [x] **Phase 114: Vault + WWXRP** - Unit 12: DegenerusVault, DegenerusVaultShare, WrappedWrappedXRP (completed 2026-03-25)
-- [ ] **Phase 115: Admin + Governance** - Unit 13: DegenerusAdmin
+- [x] **Phase 115: Admin + Governance** - Unit 13: DegenerusAdmin (completed 2026-03-25)
 - [ ] **Phase 116: Affiliate + Quests + Jackpots** - Unit 14: DegenerusAffiliate, DegenerusQuests, DegenerusJackpots
-- [ ] **Phase 117: Libraries** - Unit 15: EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, PriceLookupLib
+- [x] **Phase 117: Libraries** - Unit 15: EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, PriceLookupLib (completed 2026-03-25)
 - [ ] **Phase 118: Cross-Contract Integration Sweep** - Unit 16: all contracts, meta-analysis
 - [ ] **Phase 119: Final Deliverables** - Master findings, access control matrix, storage write map, ETH flow map
 
@@ -495,10 +495,10 @@ Plans:
   5. Unit 15 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [x] 117-01 — Taskmaster: coverage checklist (18 functions, 17 constants)
+- [x] 117-02 — Mad Genius: full attack analysis on all functions
+- [x] 117-03 — Skeptic review + Taskmaster coverage verification
+- [x] 117-04 — Final Unit 15 findings report
 
 ### Phase 118: Cross-Contract Integration Sweep
 **Goal**: Protocol-wide meta-analysis confirms ETH conservation, token supply invariants, access control completeness, delegatecall storage coherence, state machine consistency, and cross-contract reentrancy safety -- aggregating insights from all 15 prior unit audits
