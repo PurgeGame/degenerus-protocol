@@ -28,9 +28,9 @@
 
 | # | Function | Lines | Access Control | Primary Storage Writes | External Calls | Risk Tier | Analyzed? | Call Tree? | Storage Map? | Cache Check? |
 |---|----------|-------|---------------|----------------------|----------------|-----------|-----------|------------|-------------|-------------|
-| B1 | `purchaseWhaleBundle(address,uint256)` | 183-310 | any (via router delegatecall, operator-approved) | boonPacked[].slot0, mintPacked_[], ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | affiliate.getReferrer, dgnrs.poolBalance, dgnrs.transferFromPool, IDegenerusGame.playerActivityScore | Tier 1 | pending | pending | pending | pending |
-| B2 | `purchaseLazyPass(address)` | 325-450 | any (via router delegatecall, operator-approved) | boonPacked[].slot1, mintPacked_[], ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | IDegenerusGame.playerActivityScore | Tier 1 | pending | pending | pending | pending |
-| B3 | `purchaseDeityPass(address,uint8)` | 470-565 | any (via router delegatecall, operator-approved), rngLockedFlag gate | deityPassPaidTotal[], deityPassCount[], deityPassPurchasedCount[], deityPassOwners[], deityPassSymbol[], deityBySymbol[], boonPacked[].slot1, mintPacked_[], ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | affiliate.getReferrer, dgnrs.poolBalance, dgnrs.transferFromPool, IDegenerusDeityPassMint.mint, IDegenerusGame.playerActivityScore | Tier 1 | pending | pending | pending | pending |
+| B1 | `purchaseWhaleBundle(address,uint256)` | 183-310 | any (via router delegatecall, operator-approved) | boonPacked[].slot0, mintPacked_[], ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | affiliate.getReferrer, dgnrs.poolBalance, dgnrs.transferFromPool, IDegenerusGame.playerActivityScore | Tier 1 | YES | YES | YES | YES |
+| B2 | `purchaseLazyPass(address)` | 325-450 | any (via router delegatecall, operator-approved) | boonPacked[].slot1, mintPacked_[], ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | IDegenerusGame.playerActivityScore | Tier 1 | YES | YES | YES | YES |
+| B3 | `purchaseDeityPass(address,uint8)` | 470-565 | any (via router delegatecall, operator-approved), rngLockedFlag gate | deityPassPaidTotal[], deityPassCount[], deityPassPurchasedCount[], deityPassOwners[], deityPassSymbol[], deityBySymbol[], boonPacked[].slot1, mintPacked_[], ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | affiliate.getReferrer, dgnrs.poolBalance, dgnrs.transferFromPool, IDegenerusDeityPassMint.mint, IDegenerusGame.playerActivityScore | Tier 1 | YES | YES | YES | YES |
 
 ### Risk Tier Justification
 - **B1 (Tier 1):** Up to 400 ETH per tx (100 qty x 4 ETH). Complex pricing (boon discount first bundle only, early vs standard). 100-iteration ticket queuing loop. DGNRS reward loop with external calls. Multiple storage writes across boonPacked, mintPacked_, ticket queues, prize pools, lootbox data.
@@ -43,15 +43,15 @@
 
 | # | Function | Lines | Called By | Key Storage Writes | Flags | Analyzed? | Call Tree? | Storage Map? | Cache Check? |
 |---|----------|-------|-----------|-------------------|-------|-----------|------------|-------------|-------------|
-| C1 | `_purchaseWhaleBundle(address,uint256)` | 187-310 | B1 | boonPacked[].slot0, mintPacked_[], ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | | pending | pending | pending | pending |
-| C2 | `_purchaseLazyPass(address)` | 329-450 | B2 | boonPacked[].slot1, mintPacked_[] (via _activate10LevelPass), ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | | pending | pending | pending | pending |
-| C3 | `_purchaseDeityPass(address,uint8)` | 474-565 | B3 | deityPassPaidTotal[], deityPassCount[], deityPassPurchasedCount[], deityPassOwners[], deityPassSymbol[], deityBySymbol[], boonPacked[].slot1, prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | | pending | pending | pending | pending |
-| C4 | `_rewardWhaleBundleDgnrs(address,address,address,address)` | 587-644 | C1 (loop, per quantity) | External only: dgnrs.transferFromPool (Whale pool, Affiliate pool) | | pending | pending | pending | pending |
-| C5 | `_rewardDeityPassDgnrs(address,address,address,address)` | 652-712 | C3 | External only: dgnrs.transferFromPool (Whale pool, Affiliate pool) | | pending | pending | pending | pending |
-| C6 | `_recordLootboxEntry(address,uint256,uint24,uint256)` | 714-758 | C1, C2, C3 | lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxEth[][], lootboxRngPendingEth, lootboxDistressEth[][], mintPacked_[] (via C9), boonPacked[].slot0 (via C8) | [MULTI-PARENT] | pending | pending | pending | pending |
-| C7 | `_maybeRequestLootboxRng(uint256)` | 762-764 | C6 | lootboxRngPendingEth | | pending | pending | pending | pending |
-| C8 | `_applyLootboxBoostOnPurchase(address,uint48,uint256)` | 773-802 | C6 | boonPacked[].slot0 (lootbox fields cleared on consume/expiry) | | pending | pending | pending | pending |
-| C9 | `_recordLootboxMintDay(address,uint32,uint256)` | 808-815 | C6 | mintPacked_[] (day field only, conditional on day mismatch) | [MULTI-PARENT] (via C6, called from C1/C2/C3) | pending | pending | pending | pending |
+| C1 | `_purchaseWhaleBundle(address,uint256)` | 187-310 | B1 | boonPacked[].slot0, mintPacked_[], ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | | YES | YES | YES | YES |
+| C2 | `_purchaseLazyPass(address)` | 329-450 | B2 | boonPacked[].slot1, mintPacked_[] (via _activate10LevelPass), ticketsOwedPacked[][], ticketQueue[][], prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | | YES | YES | YES | YES |
+| C3 | `_purchaseDeityPass(address,uint8)` | 474-565 | B3 | deityPassPaidTotal[], deityPassCount[], deityPassPurchasedCount[], deityPassOwners[], deityPassSymbol[], deityBySymbol[], boonPacked[].slot1, prizePoolsPacked/pendingPoolsPacked, lootboxEth[][], lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxRngPendingEth, lootboxDistressEth[][] | | YES | YES | YES | YES |
+| C4 | `_rewardWhaleBundleDgnrs(address,address,address,address)` | 587-644 | C1 (loop, per quantity) | External only: dgnrs.transferFromPool (Whale pool, Affiliate pool) | | YES | YES | YES | YES |
+| C5 | `_rewardDeityPassDgnrs(address,address,address,address)` | 652-712 | C3 | External only: dgnrs.transferFromPool (Whale pool, Affiliate pool) | | YES | YES | YES | YES |
+| C6 | `_recordLootboxEntry(address,uint256,uint24,uint256)` | 714-758 | C1, C2, C3 | lootboxDay[][], lootboxBaseLevelPacked[][], lootboxEvScorePacked[][], lootboxEthBase[][], lootboxEth[][], lootboxRngPendingEth, lootboxDistressEth[][], mintPacked_[] (via C9), boonPacked[].slot0 (via C8) | [MULTI-PARENT] | YES | YES | YES | YES |
+| C7 | `_maybeRequestLootboxRng(uint256)` | 762-764 | C6 | lootboxRngPendingEth | | YES | YES | YES | YES |
+| C8 | `_applyLootboxBoostOnPurchase(address,uint48,uint256)` | 773-802 | C6 | boonPacked[].slot0 (lootbox fields cleared on consume/expiry) | | YES | YES | YES | YES |
+| C9 | `_recordLootboxMintDay(address,uint32,uint256)` | 808-815 | C6 | mintPacked_[] (day field only, conditional on day mismatch) | [MULTI-PARENT] (via C6, called from C1/C2/C3) | YES | YES | YES | YES |
 
 ---
 
@@ -59,10 +59,10 @@
 
 | # | Function | Lines | Reads/Computes | Security Note | Reviewed? |
 |---|----------|-------|---------------|---------------|-----------|
-| D1 | `_lazyPassCost(uint24)` | 573-580 | Sums PriceLookupLib.priceForLevel over 10 levels | Pure; verify PriceLookupLib correctness (Phase 117). No overflow risk: 10 levels x max price. | pending |
-| D2 | `_whaleTierToBps(uint8)` | Storage L1551-1557 | Maps tier 1->1000, 2->2500, 3->5000 | Inherited from Storage. Tier 0 returns 0. | pending |
-| D3 | `_lazyPassTierToBps(uint8)` | Storage L1559-1565 | Maps tier 1->1000, 2->2500, 3->5000 | Inherited from Storage. Tier 0 returns 0. | pending |
-| D4 | `_lootboxTierToBps(uint8)` | Storage L1527-1533 | Maps tier 1->500, 2->1500, 3->2500 | Inherited from Storage. Used by C8 for boost calculation. | pending |
+| D1 | `_lazyPassCost(uint24)` | 573-580 | Sums PriceLookupLib.priceForLevel over 10 levels | Pure; verify PriceLookupLib correctness (Phase 117). No overflow risk: 10 levels x max price. | YES |
+| D2 | `_whaleTierToBps(uint8)` | Storage L1551-1557 | Maps tier 1->1000, 2->2500, 3->5000 | Inherited from Storage. Tier 0 returns 0. | YES |
+| D3 | `_lazyPassTierToBps(uint8)` | Storage L1559-1565 | Maps tier 1->1000, 2->2500, 3->5000 | Inherited from Storage. Tier 0 returns 0. | YES |
+| D4 | `_lootboxTierToBps(uint8)` | Storage L1527-1533 | Maps tier 1->500, 2->1500, 3->2500 | Inherited from Storage. Used by C8 for boost calculation. | YES |
 
 ---
 
@@ -119,4 +119,4 @@ External `IDegenerusDeityPassMint.mint(buyer, symbolId)` at L521 could trigger `
 ---
 
 *Checklist built: 2026-03-25*
-*Taskmaster: All 16 functions catalogued. Ready for Mad Genius Wave 2.*
+*Updated: 2026-03-25 -- All Analyzed columns set to YES after Mad Genius attack report and Taskmaster coverage verification. Coverage: PASS (16/16).*
