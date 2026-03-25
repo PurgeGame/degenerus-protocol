@@ -231,7 +231,7 @@
 - [x] **Phase 109: Decimator System** - Unit 7: DegenerusGameDecimatorModule (completed 2026-03-25)
 - [x] **Phase 110: Degenerette Betting** - Unit 8: DegenerusGameDegeneretteModule (completed 2026-03-25)
 - [x] **Phase 111: Lootbox + Boons** - Unit 9: DegenerusGameLootboxModule, DegenerusGameBoonModule (completed 2026-03-25)
-- [ ] **Phase 112: BURNIE Token + Coinflip** - Unit 10: BurnieCoin, BurnieCoinflip
+- [x] **Phase 112: BURNIE Token + Coinflip** - Unit 10: BurnieCoin, BurnieCoinflip (completed 2026-03-25)
 - [x] **Phase 113: sDGNRS + DGNRS** - Unit 11: StakedDegenerusStonk, DegenerusStonk (completed 2026-03-25)
 - [x] **Phase 114: Vault + WWXRP** - Unit 12: DegenerusVault, DegenerusVaultShare, WrappedWrappedXRP (completed 2026-03-25)
 - [ ] **Phase 115: Admin + Governance** - Unit 13: DegenerusAdmin
@@ -408,12 +408,12 @@ Plans:
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 10 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
+**Plans**: 4 plans (all complete)
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [x] 112-01-PLAN.md — Taskmaster: coverage checklist for BurnieCoin + BurnieCoinflip
+- [x] 112-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [x] 112-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [x] 112-04-PLAN.md — Final Unit 10 findings report
 
 ### Phase 113: sDGNRS + DGNRS
 **Goal**: Every state-changing function in StakedDegenerusStonk and DegenerusStonk has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on redemption flow (submit/resolve/claim) and soulbound enforcement

@@ -39,7 +39,7 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 - [ ] **UNIT-07**: Unit 7 — Decimator System complete (DegenerusGameDecimatorModule)
 - [ ] **UNIT-08**: Unit 8 — Degenerette Betting complete (DegenerusGameDegeneretteModule)
 - [ ] **UNIT-09**: Unit 9 — Lootbox + Boons complete (DegenerusGameLootboxModule, DegenerusGameBoonModule)
-- [ ] **UNIT-10**: Unit 10 — BURNIE Token + Coinflip complete (BurnieCoin, BurnieCoinflip)
+- [x] **UNIT-10**: Unit 10 — BURNIE Token + Coinflip complete (BurnieCoin, BurnieCoinflip)
 - [x] **UNIT-11**: Unit 11 — sDGNRS + DGNRS complete (StakedDegenerusStonk, DegenerusStonk)
 - [ ] **UNIT-12**: Unit 12 — Vault + WWXRP complete (DegenerusVault, WrappedWrappedXRP)
 - [ ] **UNIT-13**: Unit 13 — Admin + Governance complete (DegenerusAdmin)
@@ -98,7 +98,7 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 | UNIT-07 | Phase 109 | Pending |
 | UNIT-08 | Phase 110 | Pending |
 | UNIT-09 | Phase 111 | Pending |
-| UNIT-10 | Phase 112 | Pending |
+| UNIT-10 | Phase 112 | Complete |
 | UNIT-11 | Phase 113 | Complete |
 | UNIT-12 | Phase 114 | Pending |
 | UNIT-13 | Phase 115 | Pending |
