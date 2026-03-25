@@ -13,10 +13,10 @@
 |----------|-------|
 | CRITICAL | 0 |
 | HIGH | 0 |
-| MEDIUM | 1 |
+| MEDIUM | 0 |
 | LOW | 0 |
 | INFO | 0 |
-| **TOTAL** | **1** |
+| **TOTAL** | **0** |
 
 **Coverage:** 100% -- All 32 functions analyzed (7 external state-changing, 13 internal helpers, 12 view/pure). Taskmaster coverage review: PASS.
 
@@ -26,63 +26,16 @@
 
 ## Confirmed Findings
 
-### FINDING-01: decBucketOffsetPacked Collision Between Regular and Terminal Decimator
+None.
 
-**Severity:** MEDIUM
+## Dismissed Findings
 
-**Affected Functions:**
-- `runDecimatorJackpot()` (L205-256, specifically L248)
-- `runTerminalDecimatorJackpot()` (L783-825, specifically L817)
-- `_consumeDecClaim()` (L270-293, specifically L281)
-- `_consumeTerminalDecClaim()` (L869-893, specifically L881)
+### ~~FINDING-01: decBucketOffsetPacked Collision Between Regular and Terminal Decimator~~
 
-**Description:**
+**Original Severity:** MEDIUM
+**Verdict:** FALSE POSITIVE -- dismissed during protocol team review
 
-Both `runDecimatorJackpot` and `runTerminalDecimatorJackpot` write to the same storage mapping `decBucketOffsetPacked[lvl]` to store their winning subbucket selections. Both `_consumeDecClaim` and `_consumeTerminalDecClaim` read from this same mapping to validate claims.
-
-When GAMEOVER occurs at a level where the regular decimator has already been resolved (levels where `lvl % 100 == 0` or `lvl % 10 == 5 && lvl % 100 != 95`), the terminal decimator resolution overwrites the regular decimator's winning subbucket selections. This is because:
-
-1. `runDecimatorJackpot` writes `decBucketOffsetPacked[lvl]` at L248 during normal jackpot phase.
-2. `runTerminalDecimatorJackpot` writes `decBucketOffsetPacked[lvl]` at L817 during GAMEOVER.
-3. Both use different RNG words and different burn aggregate sources to select winning subbuckets.
-4. After the overwrite, regular decimator claims at that level use the terminal decimator's winning selections.
-
-**Impact:**
-
-At the GAMEOVER level (if regular decimator had previously fired):
-- Original regular decimator winners for that level can no longer claim (their subbucket no longer matches the overwritten winning subbucket).
-- Non-winners may gain access to the pool if their subbucket happens to match the new terminal selections.
-- The `totalBurn` in `decClaimRounds[lvl]` was computed from the ORIGINAL winning subbuckets but claims now validate against the OVERWRITTEN subbuckets, creating a mismatch between the pro-rata denominator and the actual qualifying claimants.
-
-The impact is limited to:
-- A single level (the GAMEOVER level)
-- Only if regular decimator also fired at that level
-- Only affecting unclaimed regular decimator prizes at that specific level
-
-Terminal decimator claims are also affected but in the opposite direction: they would coincidentally use the correct offsets (since B6 wrote last), so terminal claims function correctly.
-
-**Recommendation:**
-
-Store terminal decimator winning subbuckets in a separate storage variable:
-
-```solidity
-// Add to DegenerusGameStorage.sol:
-mapping(uint24 => uint64) internal terminalDecBucketOffsetPacked;
-```
-
-Update `runTerminalDecimatorJackpot` (L817) to write to `terminalDecBucketOffsetPacked[lvl]` instead of `decBucketOffsetPacked[lvl]`.
-
-Update `_consumeTerminalDecClaim` (L881) to read from `terminalDecBucketOffsetPacked[lvl]` instead of `decBucketOffsetPacked[lvl]`.
-
-This eliminates the shared-slot collision with zero gas overhead (the mapping access pattern is identical).
-
-**Evidence:**
-- `runDecimatorJackpot` L248: `decBucketOffsetPacked[lvl] = packedOffsets;`
-- `runTerminalDecimatorJackpot` L817: `decBucketOffsetPacked[lvl] = packedOffsets;`
-- `_consumeDecClaim` L281: `uint64 packedOffsets = decBucketOffsetPacked[lvl];`
-- `_consumeTerminalDecClaim` L881: `uint64 packedOffsets = decBucketOffsetPacked[lvl];`
-- GameOverModule L139: `runTerminalDecimatorJackpot(decPool, lvl, rngWord)` -- same `lvl` as current level
-- EndgameModule L215/L231: `runDecimatorJackpot(decPoolWei, lvl, rngWord)` -- same `lvl` during jackpot phase
+**Why False Positive:** `runDecimatorJackpot` fires from `runRewardJackpots` during `advanceGame()` level transitions. `runTerminalDecimatorJackpot` fires from `handleGameOverDrain` during GAMEOVER. Once GAMEOVER triggers, `advanceGame()` never runs again -- no more level transitions occur, so the regular decimator can never fire at the GAMEOVER level. The two functions operate in mutually exclusive game states, making `decBucketOffsetPacked[lvl]` collision at the same `lvl` structurally impossible.
 
 ---
 

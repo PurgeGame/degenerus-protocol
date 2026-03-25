@@ -13,57 +13,25 @@
 |----------|-------|
 | CRITICAL | 0 |
 | HIGH | 0 |
-| MEDIUM | 1 |
+| MEDIUM | 0 |
 | LOW | 2 |
 | INFO | 29 |
-| **Total** | **32** |
+| **Total** | **31** |
 
 **Overall Assessment:** The Degenerus Protocol is well-architected with effective isolation mechanisms. All BAF-class cache-overwrite checks are SAFE. ETH conservation is PROVEN across all entry/exit paths. Token supply invariants are PROVEN for all 4 tokens (BURNIE, DGNRS, sDGNRS, WWXRP). Access control is COMPLETE with compile-time constant guards and no admin re-pointing.
 
-The single MEDIUM finding (decimator storage collision) has a straightforward fix. The 2 LOW findings are minor UX friction and a missing recovery path for an unlikely failure mode. The 29 INFO findings are code quality observations, gas inefficiencies, and cosmetic issues with no security impact.
+Zero CRITICAL, HIGH, or MEDIUM findings across all 29 contracts. The 2 LOW findings are minor UX friction and a missing recovery path for an unlikely failure mode. The 29 INFO findings are code quality observations, gas inefficiencies, and cosmetic issues with no security impact.
 
 ---
 
-## MEDIUM Findings (1)
+## ~~MEDIUM Findings~~ (0)
 
-### M-01: decBucketOffsetPacked Collision Between Regular and Terminal Decimator
+### ~~M-01: decBucketOffsetPacked Collision Between Regular and Terminal Decimator~~
 
-| Field | Value |
-|-------|-------|
-| **Severity** | MEDIUM |
-| **Unit** | 7 (Decimator System) |
-| **Phase** | 109 |
-| **Contract** | DegenerusGameDecimatorModule.sol |
-| **Functions** | `runDecimatorJackpot()` L248, `runTerminalDecimatorJackpot()` L817, `_consumeDecClaim()` L281, `_consumeTerminalDecClaim()` L881 |
-| **Integration Confirmed** | Unit 16 (Phase 118) |
+**Original Severity:** MEDIUM
+**Verdict:** FALSE POSITIVE -- dismissed during protocol team review
 
-**Description:**
-Both `runDecimatorJackpot` and `runTerminalDecimatorJackpot` write to the same storage mapping `decBucketOffsetPacked[lvl]` to store their winning subbucket selections. When GAMEOVER occurs at a level where the regular decimator has already been resolved, the terminal decimator resolution overwrites the regular decimator's winning subbucket selections.
-
-**Attack Scenario:**
-1. `runDecimatorJackpot` writes `decBucketOffsetPacked[lvl]` at L248 during normal jackpot phase
-2. `runTerminalDecimatorJackpot` writes `decBucketOffsetPacked[lvl]` at L817 during GAMEOVER
-3. Both use different RNG words and different burn aggregate sources
-4. After overwrite, regular decimator claims at that level validate against terminal decimator's selections
-5. Original regular decimator winners lose access; non-winners may gain access
-
-**Impact:**
-- Affects a single level (the GAMEOVER level) only if regular decimator also fired there
-- ~20% probability (game-over at a decimator level: levels ending in 0 or 5)
-- Affects up to 10-30 ETH in unclaimed regular decimator prizes
-- Terminal decimator claims function correctly (last writer wins)
-
-**Recommendation:**
-Store terminal decimator winning subbuckets in a separate storage variable:
-```solidity
-// Add to DegenerusGameStorage.sol:
-mapping(uint24 => uint64) internal terminalDecBucketOffsetPacked;
-```
-Update `runTerminalDecimatorJackpot` (L817) and `_consumeTerminalDecClaim` (L881) to use the new mapping. Zero gas overhead.
-
-**Evidence:**
-- Unit 7 ATTACK-REPORT.md, SKEPTIC-REVIEW.md
-- Unit 16 INTEGRATION-ATTACK-REPORT.md (cross-module call chain confirmation)
+**Why False Positive:** `runDecimatorJackpot` fires from `runRewardJackpots` during `advanceGame()` level transitions. `runTerminalDecimatorJackpot` fires from `handleGameOverDrain` during GAMEOVER. Once GAMEOVER triggers, `advanceGame()` never runs again -- no more level transitions occur. The regular decimator can never fire at the GAMEOVER level because that level will never have a level transition. The two functions operate in mutually exclusive game states, making `decBucketOffsetPacked[lvl]` collision at the same `lvl` structurally impossible.
 
 ---
 
