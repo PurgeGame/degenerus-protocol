@@ -237,7 +237,7 @@
 - [x] **Phase 115: Admin + Governance** - Unit 13: DegenerusAdmin (completed 2026-03-25)
 - [x] **Phase 116: Affiliate + Quests + Jackpots** - Unit 14: DegenerusAffiliate, DegenerusQuests, DegenerusJackpots (completed 2026-03-25)
 - [x] **Phase 117: Libraries** - Unit 15: EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, PriceLookupLib (completed 2026-03-25)
-- [ ] **Phase 118: Cross-Contract Integration Sweep** - Unit 16: all contracts, meta-analysis
+- [x] **Phase 118: Cross-Contract Integration Sweep** - Unit 16: all contracts, meta-analysis (completed 2026-03-25)
 - [ ] **Phase 119: Final Deliverables** - Master findings, access control matrix, storage write map, ETH flow map
 
 ## Phase Details
@@ -510,12 +510,12 @@ Plans:
   3. Access control matrix complete: every external function mapped to its guard, no unguarded state-changing external functions
   4. Delegatecall storage coherence verified: all modules proven to agree on storage layout with no rogue slot additions
   5. Unit 16 findings report produced with severity-rated confirmed findings covering state machine consistency and cross-contract reentrancy
-**Plans**: 4 plans
+**Plans**: 4 plans (all complete)
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [x] 118-01-PLAN.md -- Integration map: cross-contract call graph + shared storage + access control matrix
+- [x] 118-02-PLAN.md -- Integration attack analysis: 7 attack surfaces, ETH conservation proven
+- [x] 118-03-PLAN.md -- Skeptic review + coverage verification (100% PASS)
+- [x] 118-04-PLAN.md -- Final Unit 16 findings report (0 new findings, 1 MEDIUM confirmed from Unit 7)
 
 ### Phase 119: Final Deliverables
 **Goal**: All unit findings aggregated into master deliverables that provide a complete security picture of the protocol
