@@ -229,7 +229,7 @@
 - [x] **Phase 107: Mint + Purchase Flow** - Unit 5: DegenerusGameMintModule, DegenerusGameMintStreakUtils (completed 2026-03-25)
 - [x] **Phase 108: Whale Purchases** - Unit 6: DegenerusGameWhaleModule (completed 2026-03-25)
 - [ ] **Phase 109: Decimator System** - Unit 7: DegenerusGameDecimatorModule
-- [ ] **Phase 110: Degenerette Betting** - Unit 8: DegenerusGameDegeneretteModule
+- [x] **Phase 110: Degenerette Betting** - Unit 8: DegenerusGameDegeneretteModule (completed 2026-03-25)
 - [ ] **Phase 111: Lootbox + Boons** - Unit 9: DegenerusGameLootboxModule, DegenerusGameBoonModule
 - [ ] **Phase 112: BURNIE Token + Coinflip** - Unit 10: BurnieCoin, BurnieCoinflip
 - [ ] **Phase 113: sDGNRS + DGNRS** - Unit 11: StakedDegenerusStonk, DegenerusStonk
@@ -376,10 +376,10 @@ Plans:
   5. Unit 8 findings report produced with severity-rated confirmed findings
 **Plans**: 4 plans
 Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
+- [x] 110-01-PLAN.md -- Taskmaster: coverage checklist for DegeneretteModule
+- [x] 110-02-PLAN.md -- Mad Genius: full attack analysis on all functions
+- [x] 110-03-PLAN.md -- Skeptic review + Taskmaster coverage verification
+- [x] 110-04-PLAN.md -- Final Unit 8 findings report
 
 ### Phase 111: Lootbox + Boons
 **Goal**: Every state-changing function in DegenerusGameLootboxModule and DegenerusGameBoonModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
@@ -548,7 +548,7 @@ Phase 118 requires all of 103-117. Phase 119 requires 118.
 | 107. Mint + Purchase Flow | 0/TBD | Not started | - |
 | 108. Whale Purchases | 4/4 | Complete   | 2026-03-25 |
 | 109. Decimator System | 0/TBD | Not started | - |
-| 110. Degenerette Betting | 0/TBD | Not started | - |
+| 110. Degenerette Betting | 4/4 | Complete   | 2026-03-25 |
 | 111. Lootbox + Boons | 0/TBD | Not started | - |
 | 112. BURNIE Token + Coinflip | 0/TBD | Not started | - |
 | 113. sDGNRS + DGNRS | 0/TBD | Not started | - |
