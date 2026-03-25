@@ -274,7 +274,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [x] 104-01-PLAN.md — Taskmaster: coverage checklist for DegenerusGameAdvanceModule
-- [ ] 104-02-PLAN.md — Mad Genius: full attack analysis + ticket queue drain investigation
+- [x] 104-02-PLAN.md — Mad Genius: full attack analysis + ticket queue drain investigation
 - [ ] 104-03-PLAN.md — Skeptic review + Taskmaster coverage verification
 - [ ] 104-04-PLAN.md — Final Unit 2 findings report
 
@@ -542,7 +542,7 @@ Phase 118 requires all of 103-117. Phase 119 requires 118.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 103. Game Router + Storage Layout | 4/4 | Complete    | 2026-03-25 |
-| 104. Day Advancement + VRF | 1/4 | In Progress|  |
+| 104. Day Advancement + VRF | 2/4 | In Progress|  |
 | 105. Jackpot Distribution | 0/TBD | Not started | - |
 | 106. Endgame + Game Over | 0/TBD | Not started | - |
 | 107. Mint + Purchase Flow | 0/TBD | Not started | - |
