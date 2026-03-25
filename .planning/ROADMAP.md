@@ -252,7 +252,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 1 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 104: Day Advancement + VRF
 **Goal**: Every state-changing function in DegenerusGameAdvanceModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
@@ -266,7 +271,12 @@
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Ticket queue drain investigation complete with verdict (CONFIRMED BUG or PROVEN SAFE) and full trace evidence
   6. Unit 2 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 105: Jackpot Distribution
 **Goal**: Every state-changing function in DegenerusGameJackpotModule and DegenerusGamePayoutUtils has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
@@ -278,7 +288,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 3 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 106: Endgame + Game Over
 **Goal**: Every state-changing function in DegenerusGameEndgameModule and DegenerusGameGameOverModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on auto-rebuy paths where the BAF bug lived
@@ -290,7 +305,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 4 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 107: Mint + Purchase Flow
 **Goal**: Every state-changing function in DegenerusGameMintModule and DegenerusGameMintStreakUtils has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
@@ -303,7 +323,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 5 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 108: Whale Purchases
 **Goal**: Every state-changing function in DegenerusGameWhaleModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
@@ -315,7 +340,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 6 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 109: Decimator System
 **Goal**: Every state-changing function in DegenerusGameDecimatorModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on auto-rebuy paths (same BAF pattern risk as Endgame)
@@ -327,7 +357,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 7 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 110: Degenerette Betting
 **Goal**: Every state-changing function in DegenerusGameDegeneretteModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
@@ -339,7 +374,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 8 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 111: Lootbox + Boons
 **Goal**: Every state-changing function in DegenerusGameLootboxModule and DegenerusGameBoonModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
@@ -351,7 +391,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 9 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 112: BURNIE Token + Coinflip
 **Goal**: Every state-changing function in BurnieCoin and BurnieCoinflip has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on coinflip auto-rebuy paths (BAF pattern risk)
@@ -363,7 +408,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 10 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 113: sDGNRS + DGNRS
 **Goal**: Every state-changing function in StakedDegenerusStonk and DegenerusStonk has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on redemption flow (submit/resolve/claim) and soulbound enforcement
@@ -375,7 +425,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 11 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 114: Vault + WWXRP
 **Goal**: Every state-changing function in DegenerusVault, DegenerusVaultShare, and WrappedWrappedXRP has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on share calculation and WWXRP undercollateralized unwrap race
@@ -387,7 +442,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 12 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 115: Admin + Governance
 **Goal**: Every state-changing function in DegenerusAdmin has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on VRF governance manipulation and coordinator swap
@@ -399,7 +459,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 13 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 116: Affiliate + Quests + Jackpots
 **Goal**: Every state-changing function in DegenerusAffiliate, DegenerusQuests, and DegenerusJackpots has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
@@ -411,7 +476,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 14 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 117: Libraries
 **Goal**: Every state-changing function in EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, and PriceLookupLib has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on entropy extraction bias and caller misuse patterns
@@ -423,7 +493,12 @@
   3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
   4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
   5. Unit 15 findings report produced with severity-rated confirmed findings
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 118: Cross-Contract Integration Sweep
 **Goal**: Protocol-wide meta-analysis confirms ETH conservation, token supply invariants, access control completeness, delegatecall storage coherence, state machine consistency, and cross-contract reentrancy safety -- aggregating insights from all 15 prior unit audits
@@ -435,7 +510,12 @@
   3. Access control matrix complete: every external function mapped to its guard, no unguarded state-changing external functions
   4. Delegatecall storage coherence verified: all modules proven to agree on storage layout with no rogue slot additions
   5. Unit 16 findings report produced with severity-rated confirmed findings covering state machine consistency and cross-contract reentrancy
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ### Phase 119: Final Deliverables
 **Goal**: All unit findings aggregated into master deliverables that provide a complete security picture of the protocol
@@ -446,7 +526,12 @@
   2. ACCESS-CONTROL-MATRIX.md produced mapping every external function across all 29 contracts to its access guard
   3. STORAGE-WRITE-MAP.md produced listing every storage slot and every function that writes to it across the full protocol
   4. ETH-FLOW-MAP.md produced tracing every wei from entry (msg.value, stETH) through internal accounting to exit (claimable, vault, burns)
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
+- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
+- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
+- [ ] 103-04-PLAN.md — Final Unit 1 findings report
 
 ## Progress
 
