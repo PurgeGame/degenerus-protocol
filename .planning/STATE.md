@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.4
-milestone_name: BAF Cache-Overwrite Bug Fix + Pattern Scan
-status: v4.4 milestone complete
-stopped_at: Roadmap created, Phase 100 not yet planned
-last_updated: "2026-03-25T16:04:22.547Z"
+milestone: v5.0
+milestone_name: Ultimate Adversarial Audit
+status: Defining requirements
+stopped_at: Milestone started, requirements being defined
+last_updated: "2026-03-25"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -19,21 +19,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 102 — verification
+**Current focus:** Defining v5.0 requirements
 
 ## Current Position
 
-Phase: 102
-Plan: Not started
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-25 — Milestone v5.0 started
 
 ## Accumulated Context
 
 ### Decisions
 
-- [v4.4]: BAF bug root cause: runRewardJackpots caches futurePrizePool into futurePoolLocal, but auto-rebuy inside _addClaimableEth writes directly to storage. Final _setFuturePrizePool(futurePoolLocal) overwrites auto-rebuy contributions.
-- [v4.4]: Fix approach: Option A (delta reconciliation) — 3 lines, no signature changes. Compare storage to snapshot, fold delta into local before write-back.
-- [v4.4]: Pattern scan required — same read-local / nested-write / stale-writeback pattern could exist elsewhere in the protocol.
-- [v4.4]: Phase order: scan first (know the full scope), fix second (apply to known BAF instance + any scan discoveries), verify third (tests + comments).
+- [v5.0]: Three-agent system: Mad Genius (attacker), Skeptic (validator), Taskmaster (coverage enforcer)
+- [v5.0]: 16 audit units covering all 52 .sol files with 200+ state-changing functions
+- [v5.0]: All agents run Opus (quality profile) — no model downgrades at any stage
+- [v5.0]: Arithmetic and reentrancy excluded — already covered exhaustively in v3.0-v4.4
+- [v5.0]: Design doc at .planning/ULTIMATE-AUDIT-DESIGN.md
 
 ### Pending Todos
 
@@ -46,5 +49,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Roadmap created, Phase 100 not yet planned
+Stopped at: Milestone started, requirements being defined
 Resume file: None

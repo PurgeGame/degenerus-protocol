@@ -75,6 +75,21 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v4.3 prizePoolsPacked Batching Optimization — closed early after Phase 99 callsite audit revealed H14 gas savings was 25x overestimate (~63.8K actual vs ~1.6M estimated). Optimization abandoned as not cost-effective. — v4.3 Phase 99
 - ✓ v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan — 3 phases (100-102), protocol-wide cache-overwrite scan (1 VULNERABLE / 11 SAFE across 29 contracts), delta reconciliation fix applied to `runRewardJackpots`, Foundry fix-proof test, zero regressions — v4.4 Phases 100-102
 
+## Current Milestone: v5.0 Ultimate Adversarial Audit
+
+**Goal:** Exhaustive three-agent adversarial audit of every state-changing function in the protocol, with mandatory call-tree expansion, storage-write mapping, and coverage enforcement — designed to catch BAF-class bugs that survived 24 prior milestones.
+
+**Target features:**
+- 16-unit full-protocol sweep with Mad Genius (attacker) / Skeptic (validator) / Taskmaster (coverage enforcer) agents
+- Mandatory recursive call-tree expansion and storage-write map for every function
+- Explicit stale-cache-vs-storage check (the BAF pattern) on every function
+- 100% coverage enforcement with no shortcuts
+- All agents on Opus at maximum effort (GSD quality profile)
+- Focus: state coherence, RNG manipulation, cross-contract desync, rare conditional paths, access control, ordering attacks, silent failures, economic/MEV attacks, griefing
+- Excluded (already covered in v3.0-v4.4): pure arithmetic, classic reentrancy
+
+**Design doc:** `.planning/ULTIMATE-AUDIT-DESIGN.md`
+
 ## Completed Milestone: v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan
 
 **Status:** Complete (2026-03-25)
@@ -178,7 +193,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v4.4 complete (2026-03-25) — BAF cache-overwrite bug fixed. `runRewardJackpots` delta reconciliation: `rebuyDelta = _getFuturePrizePool() - baseFuturePool` folded into write-back. Protocol-wide scan found 1 VULNERABLE / 11 SAFE across 29 contracts. Foundry fix-proof test passes. Zero regressions.
+v5.0 started (2026-03-25) — Ultimate Adversarial Audit. Three-agent system (Mad Genius / Skeptic / Taskmaster) attacking every state-changing function with mandatory call-tree expansion and storage-write mapping. Motivated by BAF cache-overwrite bug surviving 12 prior audit rounds.
 
 v4.3 closed early (2026-03-25) — prizePoolsPacked batching optimization investigated and abandoned. Phase 99 callsite audit revealed H14's ~1.6M gas savings estimate was a 25x overestimate: warm dirty-slot SSTOREs cost 100 gas (EIP-2200), not 5,000. Actual savings: ~63,800 gas (0.46% of 14M ceiling, ~$0.13/execution at 1 gwei). Not worth the architectural complexity of refactoring `_processAutoRebuy`'s return signature across all callers.
 
@@ -210,4 +225,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after v4.4 milestone complete*
+*Last updated: 2026-03-25 after v5.0 milestone started*
