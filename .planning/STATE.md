@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: BAF Cache-Overwrite Bug Fix + Pattern Scan
-status: Ready to plan
+status: Executing Phase 101
 stopped_at: Roadmap created, Phase 100 not yet planned
-last_updated: "2026-03-25T14:55:10.612Z"
+last_updated: "2026-03-25T15:04:58.302Z"
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 1
+  total_plans: 2
   completed_plans: 1
 ---
 
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 100 — protocol-wide-pattern-scan
+**Current focus:** Phase 101 — bug-fix
 
 ## Current Position
 
-Phase: 101
-Plan: Not started
+Phase: 101 (bug-fix) — EXECUTING
+Plan: 1 of 1
 
 ## Accumulated Context
 
