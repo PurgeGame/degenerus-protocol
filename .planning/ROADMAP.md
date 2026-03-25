@@ -230,7 +230,7 @@
 - [x] **Phase 108: Whale Purchases** - Unit 6: DegenerusGameWhaleModule (completed 2026-03-25)
 - [ ] **Phase 109: Decimator System** - Unit 7: DegenerusGameDecimatorModule
 - [x] **Phase 110: Degenerette Betting** - Unit 8: DegenerusGameDegeneretteModule (completed 2026-03-25)
-- [ ] **Phase 111: Lootbox + Boons** - Unit 9: DegenerusGameLootboxModule, DegenerusGameBoonModule
+- [x] **Phase 111: Lootbox + Boons** - Unit 9: DegenerusGameLootboxModule, DegenerusGameBoonModule (completed 2026-03-25)
 - [ ] **Phase 112: BURNIE Token + Coinflip** - Unit 10: BurnieCoin, BurnieCoinflip
 - [ ] **Phase 113: sDGNRS + DGNRS** - Unit 11: StakedDegenerusStonk, DegenerusStonk
 - [ ] **Phase 114: Vault + WWXRP** - Unit 12: DegenerusVault, DegenerusVaultShare, WrappedWrappedXRP
@@ -549,7 +549,7 @@ Phase 118 requires all of 103-117. Phase 119 requires 118.
 | 108. Whale Purchases | 4/4 | Complete   | 2026-03-25 |
 | 109. Decimator System | 0/TBD | Not started | - |
 | 110. Degenerette Betting | 4/4 | Complete   | 2026-03-25 |
-| 111. Lootbox + Boons | 0/TBD | Not started | - |
+| 111. Lootbox + Boons | 4/4 | Complete   | 2026-03-25 |
 | 112. BURNIE Token + Coinflip | 0/TBD | Not started | - |
 | 113. sDGNRS + DGNRS | 0/TBD | Not started | - |
 | 114. Vault + WWXRP | 0/TBD | Not started | - |
