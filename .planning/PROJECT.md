@@ -162,13 +162,20 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
+## Current Milestone: v4.3 prizePoolsPacked Batching Optimization
+
+**Goal:** Eliminate ~320 redundant SSTOREs per daily jackpot by batching prizePoolsPacked writes — accumulate deltas in memory, write once at end of loop.
+
+**Target features:**
+- Refactor `_processAutoRebuy` to return pool deltas instead of writing storage directly
+- Update `_processDailyEth` to accumulate deltas and do a single batched write
+- Audit and update all other `_processAutoRebuy` callers (earlybird, daily coin, etc.)
+- Prove batched writes produce identical final state as sequential writes
+- Gas profiling to validate ~1.6M savings
+
 ## Current State
 
-v4.2 complete (2026-03-25) — Daily Jackpot Chunk Removal + Gas Optimization. All 3 phases done: Phase 95 (delta verification), Phase 96 (gas ceiling + optimization), Phase 97 (comment cleanup).
-
-**Phase 96 results:** All 3 daily jackpot stages reclassified from AT_RISK/TIGHT to SAFE with 34.9-42.3% headroom under the 14M gas ceiling. 24 SLOADs audited, 7 loops analyzed. No contract changes needed — costs dominated by unavoidable per-address cold SLOADs.
-
-**Phase 97 results:** 8 stale comment issues fixed across 2 contract files. Storage layout comments corrected to match `forge inspect` output (Slot 0 fully packed at 32 bytes, Slot 1 at 25 bytes). `_processDailyEthChunk` renamed to `_processDailyEth` (chunking removed). Full NatSpec added.
+v4.2 complete (2026-03-25) — Daily Jackpot Chunk Removal + Gas Optimization. 4 phases (95-98). Gas ceiling profiled — all 3 daily jackpot stages SAFE with 34.9-42.3% headroom. 24 SLOADs audited, 7 loops analyzed. `_processDailyEthChunk` renamed to `_processDailyEth`.
 
 **Code fixes applied during v4.1:**
 - `requestLootboxRng`: blocked while mid-day ticket processing is active (prevents RNG race)
@@ -196,4 +203,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after Phase 97 completion (v4.2 milestone complete)*
+*Last updated: 2026-03-25 after v4.3 milestone start*
