@@ -228,3 +228,200 @@ SSTOREs are not the focus of this audit, but for completeness:
 | `ticketQueue[wk]` (push) | variable | 22,100 (new entry) | variable | Only on first credit per player per wk |
 
 The SSTORE costs for `claimableWinnings` and `ticketsOwedPacked` dwarf the SLOAD costs. These are unavoidable -- each unique winner address requires a storage write.
+
+---
+
+## Loop Hoisting Audit (GOPT-02)
+
+Every loop in the daily jackpot hot path analyzed for loop-invariant computation that could be hoisted above the loop.
+
+### Loop Inventory
+
+| Loop | Location (file:line) | Bound | Iterations (worst case) | Body Contains |
+|------|----------------------|-------|------------------------|---------------|
+| L1: `_processDailyEthChunk` outer bucket loop | JackpotModule:1427 (`for j < 4`) | 4 (constant) | 4 | `_randTraitTicketWithIndices`, `EntropyLib.entropyStep`, share/count arithmetic, inner loop L2 |
+| L2: `_processDailyEthChunk` inner winner loop | JackpotModule:1466 (`for i < len`) | `winners.length` per bucket, up to 250 | 321 total across 4 buckets | `_winnerUnits(w)`, `_addClaimableEth(w, perWinner, entropyState)`, `emit JackpotTicketWinner`, `paidEth +=`, `liabilityDelta +=` |
+| L3: `_addClaimableEth` (per-winner function call) | JackpotModule:957-978 | N/A (called per L2 iteration) | 321 | `gameOver` check, `autoRebuyState` read, branch to `_processAutoRebuy` or `_creditClaimable` |
+| L4: `_processAutoRebuy` (per-auto-rebuy-winner call) | JackpotModule:988-1028 | N/A (called per L3 auto-rebuy branch) | up to 321 | `_calcAutoRebuy` (pure), `_queueTickets`, `_setFuturePrizePool`/`_setNextPrizePool`, `_creditClaimable` (if reserved), `emit AutoRebuyProcessed` |
+| L5: `_runEarlyBirdLootboxJackpot` winner loop | JackpotModule:829 (`for i < 100`) | 100 (constant) | 100 (Day 1 only) | `EntropyLib.entropyStep`, `_randTraitTicket`, `_queueTickets`, `levelPrices[offset]` lookup |
+| L6: `_runEarlyBirdLootboxJackpot` price precompute loop | JackpotModule:819 (`for l < 5`) | 5 (constant) | 5 (Day 1 only) | `PriceLookupLib.priceForLevel(baseLevel + l)` -- precomputes prices for L5 |
+| L7: `_randTraitTicketWithIndices` winner selection loop | JackpotModule:2322 (`for i < numWinners`) | `numWinners` (up to 250 per bucket) | up to 321 total | `slice % effectiveLen`, `holders[idx]` storage read, bit rotation |
+
+### Per-Loop Hoisting Analysis
+
+#### L1: Outer Bucket Loop (4 iterations)
+
+**Expressions evaluated per iteration:**
+
+| Expression | Line | Invariant? | Analysis |
+|------------|------|------------|----------|
+| `order[j]` | 1428 | NOT-INVARIANT | Depends on iteration variable `j` |
+| `bucketCounts[traitIdx]` | 1429 | NOT-INVARIANT | `traitIdx` varies per iteration |
+| `shares[traitIdx]` | 1430 | NOT-INVARIANT | `traitIdx` varies per iteration |
+| `EntropyLib.entropyStep(...)` | 1436-1438 | NOT-INVARIANT | Input includes `traitIdx` and `share` which vary |
+| `_randTraitTicketWithIndices(traitBurnTicket[lvl], ...)` | 1447-1453 | NOT-INVARIANT | `traitIds[traitIdx]`, `totalCount`, and entropy vary per bucket |
+| `perWinner = share / totalCount` | 1459 | NOT-INVARIANT | Both `share` and `totalCount` are per-bucket |
+
+**Verdict:** All expressions in L1 body depend on the iteration variable `traitIdx`. No loop-invariant computation to hoist.
+
+**Pre-loop hoisted computations (confirmed ALREADY-HOISTED):**
+
+| Computation | Line | Status |
+|-------------|------|--------|
+| `PriceLookupLib.priceForLevel(lvl + 1) >> 2` | 1400 | ALREADY-HOISTED -- computed as `unit` before L1 |
+| `JackpotBucketLib.soloBucketIndex(entropy)` | 1401 | ALREADY-HOISTED -- computed as `remainderIdx` before L1 |
+| `JackpotBucketLib.bucketShares(ethPool, shareBps, bucketCounts, remainderIdx, unit)` | 1402-1408 | ALREADY-HOISTED -- computed as `shares[4]` memory array before L1 |
+| `JackpotBucketLib.bucketOrderLargestFirst(bucketCounts)` | 1410-1412 | ALREADY-HOISTED -- computed as `order[4]` memory array before L1 |
+
+#### L2: Inner Winner Loop (up to 250 per bucket, 321 total)
+
+**Expressions evaluated per iteration:**
+
+| Expression | Line | Invariant? | Analysis |
+|------------|------|------------|----------|
+| `winners[i]` | 1467 | NOT-INVARIANT | Depends on `i` |
+| `_winnerUnits(w)` | 1468 | NOT-INVARIANT | Depends on `w` (per-winner address) |
+| `unitsUsed + cost > unitsBudget` | 1469 | NOT-INVARIANT | `unitsUsed` accumulates, `cost` varies by winner |
+| `_addClaimableEth(w, perWinner, entropyState)` | 1479-1483 | NOT-INVARIANT (w varies) | `w` is per-winner; `perWinner` and `entropyState` are invariant within this inner loop |
+| `perWinner` (value used in _addClaimableEth) | 1459 | INVARIANT within L2 | Computed at L1 level: `share / totalCount`. Same for all winners in this bucket. |
+| `entropyState` (passed to _addClaimableEth) | 1436-1438 | INVARIANT within L2 | Computed once per bucket (L1 level). Does not change across L2 iterations. |
+| `traitIds[traitIdx]` (in emit) | 1487 | INVARIANT within L2 | Fixed for this bucket iteration |
+| `emit JackpotTicketWinner(...)` | 1484-1490 | NOT-INVARIANT | Per-winner event with `w`, `ticketIndexes[i]` |
+
+**Invariant within L2 but already used correctly:**
+- `perWinner` -- computed before L2 at L1 level (line 1459). Correctly used as-is.
+- `entropyState` -- computed before L2 at L1 level (line 1436-1438). Correctly used as-is.
+- `traitIds[traitIdx]` -- fixed for this bucket. Correctly used as-is.
+
+**Verdict:** `perWinner` and `entropyState` are already computed above L2 (at L1 level) and passed into L2 body calls. No additional hoisting opportunity.
+
+#### L3: `_addClaimableEth` (called per winner)
+
+**Expressions evaluated per call:**
+
+| Expression | Line | Invariant across calls? | Analysis |
+|------------|------|------------------------|----------|
+| `gameOver` storage read | 966 | YES (invariant) | `gameOver` does not change during daily jackpot processing. Could be hoisted to caller and passed as parameter. |
+| `autoRebuyState[beneficiary]` | 967 | NO | Different beneficiary each call |
+| `state.autoRebuyEnabled` | 968 | NO | Per-winner state |
+
+**`gameOver` as hoisting candidate:** This is a warm SLOAD (Slot 0, 100 gas per winner). See SLOAD Candidate 2 above. The compiler may optimize this: the `via_ir` pipeline with SSA analysis can detect that `gameOver` is invariant within the call (no SSTORE to Slot 0 between reads). If so, the compiler would cache it in a register after the first read. Empirical measurement would be needed to confirm compiler behavior.
+
+#### L4: `_processAutoRebuy` (called per auto-rebuy winner)
+
+**Expressions evaluated per call:**
+
+| Expression | Line | Invariant across calls? | Analysis |
+|------------|------|------------------------|----------|
+| `level` (passed to `_calcAutoRebuy`) | 999 | YES (invariant) | `level` does not change during jackpot processing. Warm Slot 0 read. |
+| `13_000` (bonusBps constant) | 1000 | YES | Literal constant, zero gas |
+| `14_500` (bonusBpsAfKing constant) | 1001 | YES | Literal constant, zero gas |
+| `_calcAutoRebuy(...)` (pure function) | 994-1002 | NO | Arguments vary per winner (`player`, `newAmount`, `entropy`, `state`) |
+| `_queueTickets(player, calc.targetLevel, calc.ticketCount)` | 1008 | NO | Per-winner arguments |
+| `_setFuturePrizePool(_getFuturePrizePool() + calc.ethSpent)` | 1011 | NO | `ethSpent` varies, and `prizePoolsPacked` is read-modify-write per call |
+| `_setNextPrizePool(_getNextPrizePool() + calc.ethSpent)` | 1013 | NO | Same as above |
+| `_creditClaimable(player, calc.reserved)` | 1017 | NO | Per-winner |
+
+**`level` as hoisting candidate:** See SLOAD Candidate 3 above. `_processAutoRebuy` already receives `state` (AutoRebuyState) as a parameter. Adding `level` would be straightforward but affects the function signature. The warm SLOAD cost (100 gas) makes this marginal.
+
+**`prizePoolsPacked` read-modify-write accumulation:** Each auto-rebuy winner reads `prizePoolsPacked` (SLOAD, warm after first = 100 gas), adds `ethSpent`, and writes it back (SSTORE, warm = 5,000 gas). The SLOAD is unavoidable because each write changes the value for the next read. However, the write cost dominates (5,000 >> 100). An alternative would be to accumulate `ethSpent` totals in memory (split by `toFuture` flag) and do a single SSTORE at the end. This would save ~320 SSTOREs x 5,000 = 1,600,000 gas but requires restructuring the prize pool update to batch. **This is an architectural change (Rule 4 territory) -- flagging for GOPT-03 consideration.**
+
+#### L5: `_runEarlyBirdLootboxJackpot` Winner Loop (100 iterations, Day 1 only)
+
+**Expressions evaluated per iteration:**
+
+| Expression | Line | Invariant? | Analysis |
+|------------|------|------------|----------|
+| `EntropyLib.entropyStep(entropy)` | 830 | NOT-INVARIANT | Chained -- each call feeds the next |
+| `uint8(entropy)` | 831 | NOT-INVARIANT | Derived from changing entropy |
+| `_randTraitTicket(traitBurnTicket[lvl], ...)` | 832-838 | NOT-INVARIANT | `entropy`, `traitId`, `salt` all vary |
+| `EntropyLib.entropyStep(entropy)` (second) | 842 | NOT-INVARIANT | Chained |
+| `uint24(entropy % 5)` | 843 | NOT-INVARIANT | Derived from changing entropy |
+| `levelPrices[levelOffset]` | 844 | NOT-INVARIANT | `levelOffset` varies; but `levelPrices` array is invariant |
+| `perWinnerEth` | 815 | INVARIANT | Computed before loop: `totalBudget / 100`. Same for all winners. |
+| `perWinnerEth / ticketPrice` | 846 | NOT-INVARIANT | `ticketPrice` varies per winner |
+
+**Already-hoisted computations (confirmed):**
+
+| Computation | Line | Status |
+|-------------|------|--------|
+| `levelPrices[0..4]` precomputed via L6 | 819-826 | ALREADY-HOISTED -- `PriceLookupLib.priceForLevel` called 5 times before loop, results cached in memory array |
+| `perWinnerEth = totalBudget / maxWinners` | 815 | ALREADY-HOISTED -- computed before loop |
+
+**Verdict:** L5 is well-optimized. The expensive `PriceLookupLib.priceForLevel` calls are precomputed in L6 and cached in the `levelPrices` memory array. `perWinnerEth` is pre-computed. No hoisting opportunities.
+
+#### L6: Price Precompute Loop (5 iterations, Day 1 only)
+
+This loop IS the hoisting mechanism for L5. It precomputes `PriceLookupLib.priceForLevel` for 5 levels before the 100-winner loop. At 5 iterations of a pure library call, the gas cost is negligible (~1,000 gas total).
+
+**Verdict:** ALREADY-HOISTED (this loop is itself the optimization for L5).
+
+#### L7: `_randTraitTicketWithIndices` Winner Selection Loop (up to 250 per call)
+
+**Expressions evaluated per iteration:**
+
+| Expression | Line | Invariant? | Analysis |
+|------------|------|------------|----------|
+| `slice % effectiveLen` | 2323 | NOT-INVARIANT | `slice` rotates each iteration |
+| `holders[idx]` | 2325 | NOT-INVARIANT | `idx` varies (but this is a storage array read -- cold SLOAD) |
+| `deity` | 2328 | INVARIANT | Same deity address for all iterations in this call |
+| `effectiveLen` | 2311 | INVARIANT | Computed before loop from `len + virtualCount` |
+
+**`deity` and `effectiveLen` are already hoisted.** Both are computed before the loop (lines 2301-2311) and used as-is inside. The `holders[idx]` reads are unavoidable cold SLOADs (unique storage array elements).
+
+**Verdict:** No hoisting opportunities. `deity` and `effectiveLen` are already pre-computed.
+
+### Hoisting Verdicts Table
+
+| # | Computation | Loop | Invariant? | Current Gas (321 winners) | If Hoisted | Savings | Verdict |
+|---|-------------|------|------------|--------------------------|------------|---------|---------|
+| H1 | `PriceLookupLib.priceForLevel(lvl+1) >> 2` | L1 | Yes | N/A | N/A | 0 | ALREADY-HOISTED |
+| H2 | `JackpotBucketLib.soloBucketIndex(entropy)` | L1 | Yes | N/A | N/A | 0 | ALREADY-HOISTED |
+| H3 | `JackpotBucketLib.bucketShares(...)` | L1 | Yes | N/A | N/A | 0 | ALREADY-HOISTED |
+| H4 | `JackpotBucketLib.bucketOrderLargestFirst(...)` | L1 | Yes | N/A | N/A | 0 | ALREADY-HOISTED |
+| H5 | `perWinner = share / totalCount` | L2 (within L1) | Yes (within L2) | N/A | N/A | 0 | ALREADY-HOISTED (computed at L1 level) |
+| H6 | `entropyState` | L2 (within L1) | Yes (within L2) | N/A | N/A | 0 | ALREADY-HOISTED (computed at L1 level) |
+| H7 | `gameOver` check in `_addClaimableEth` | L2 (via L3) | Yes | 32,100 (warm SLOAD) | 0 (pass as param) | 32,100 | SKIP (marginal, wide callsite impact) |
+| H8 | `level` in `_processAutoRebuy` | L2 (via L4) | Yes | 32,100 (warm SLOAD) | 0 (pass as param) | 32,100 | SKIP (marginal, 12+ callsites) |
+| H9 | `level` in `_queueTickets` | L2 (via L4) | Yes | 32,100 (warm SLOAD) | 0 (pass as param) | 32,100 | SKIP (marginal, 12+ callsites) |
+| H10 | `levelPrices[0..4]` precompute | L5 (via L6) | Yes | N/A | N/A | 0 | ALREADY-HOISTED (L6 is the hoist) |
+| H11 | `perWinnerEth` in earlybird | L5 | Yes | N/A | N/A | 0 | ALREADY-HOISTED |
+| H12 | `deity` in `_randTraitTicketWithIndices` | L7 | Yes | N/A | N/A | 0 | ALREADY-HOISTED |
+| H13 | `effectiveLen` in `_randTraitTicketWithIndices` | L7 | Yes | N/A | N/A | 0 | ALREADY-HOISTED |
+| H14 | `prizePoolsPacked` accumulation in `_processAutoRebuy` | L2 (via L4) | NO (read-modify-write) | ~1,634,100 (320 warm SSTOREs) | ~5,200 (1 SSTORE) | ~1,600,000 | NOT-INVARIANT (see note below) |
+
+**Note on H14 (prizePoolsPacked batching):** Each auto-rebuy winner calls `_setFuturePrizePool` or `_setNextPrizePool`, which reads `prizePoolsPacked`, modifies one half, and writes back. With 321 auto-rebuy winners, this is 321 read-modify-write cycles. The SSTOREs (5,000 gas warm) dominate. An alternative is to accumulate `nextPoolDelta` and `futurePoolDelta` in memory across all winners, then write once at the end. This would save ~320 warm SSTOREs = ~1,600,000 gas. However, this requires restructuring `_processAutoRebuy` to return pool deltas instead of writing directly, and restructuring `_processDailyEthChunk` to accumulate and apply them. This is an **architectural change** requiring careful analysis of all callers of `_processAutoRebuy` and `_addClaimableEth` (used in 6+ contexts beyond daily jackpot). Flagging for GOPT-03 consideration.
+
+---
+
+## Optimization Summary
+
+### Combined Findings (SLOAD Audit + Loop Hoisting)
+
+Ranked by gas impact:
+
+| Rank | Optimization | Gas Savings | Complexity | Status | Recommendation |
+|------|-------------|------------|------------|--------|---------------|
+| 1 | **Remove `_winnerUnits` dead code** (SLOAD #11) | 674,100 | Low | Identified in Phase 95 | **IMPLEMENT** via Phase 95 chunk removal (already planned) |
+| 2 | **Batch `prizePoolsPacked` writes** (H14) | ~1,600,000 | High | New finding | **DEFER** -- architectural change, requires restructuring _processAutoRebuy return values and all callers. Flag for future optimization if gas ceiling becomes critical. |
+| 3 | **Pass `gameOver` as parameter** (SLOAD #12 / H7) | 32,100 | Low-Medium | New finding | **SKIP** -- 0.23% of ceiling, affects 6+ callsites across modules |
+| 4 | **Pass `level` as parameter** (SLOAD #14-15 / H8-H9) | 32,100-64,200 | Medium | Known | **SKIP** -- 0.23-0.46% of ceiling, affects 12+ callsites |
+| 5 | **Pass `rngLockedFlag`/`phaseTransitionActive` as params** (SLOAD #16-17) | 0-64,200 | Medium | Known | **SKIP** -- already short-circuited by `isFarFuture` |
+
+### Summary Verdict
+
+**Actionable optimizations for GOPT-03: 1 (the Phase 95 `_winnerUnits` removal)**
+
+The daily jackpot hot path is well-optimized. Key findings:
+
+1. **All library computations are already hoisted above the loop.** `PriceLookupLib.priceForLevel`, `JackpotBucketLib.soloBucketIndex`, `bucketShares`, and `bucketOrderLargestFirst` are computed once before the 4-bucket outer loop. Per-bucket values (`perWinner`, `entropyState`) are computed at the L1 level and reused across L2 iterations. The earlybird loop pre-caches `levelPrices[5]` via a dedicated precompute loop.
+
+2. **The dominant cost is unavoidable per-address cold SLOADs and SSTOREs.** Each unique winner requires cold reads of `autoRebuyState[addr]` (2,100), `claimableWinnings[addr]` (2,100), `ticketsOwedPacked[wk][addr]` (2,100), and `traitBurnTicket[lvl][trait][idx]` (2,100) -- plus corresponding SSTOREs for `claimableWinnings` (5,000-22,100) and `ticketsOwedPacked` (5,000-22,100). These are inherent to the per-winner processing model and cannot be optimized without changing the data model.
+
+3. **The only significant optimizable SLOAD is the `_winnerUnits` dead code** -- already targeted by Phase 95's chunk removal refactor. Removing it saves 674,100 gas (4.8% of the 14M ceiling).
+
+4. **The `prizePoolsPacked` batching opportunity (H14)** could save ~1.6M gas but requires architectural changes to `_processAutoRebuy` return values, accumulation in `_processDailyEthChunk`, and careful review of all other callers. This is disproportionate in complexity for a function that is already near its gas ceiling.
+
+5. **Warm SLOAD optimizations (gameOver, level, rngLockedFlag)** save 32K-64K gas each -- marginal at 0.23-0.46% of the 14M ceiling. The `via_ir` compiler may already be caching these register-level. Not worth the function signature changes.
+
+**Recommendation for GOPT-03:** If the Phase 95 chunk removal has been applied, no additional code changes are recommended for the daily jackpot hot path. The remaining gas costs are dominated by unavoidable per-address storage operations. If further gas reduction is needed in the future, the `prizePoolsPacked` batching (H14) is the only remaining opportunity with meaningful impact, but it requires architectural review.
