@@ -32,7 +32,7 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * -----------------------------------------------------------------------------
  *
  * +-----------------------------------------------------------------------------+
- * | EVM SLOT 0 (32 bytes) — Timing, FSM, Cursors, Counters, Flags              |
+ * | EVM SLOT 0 (32 bytes) — Timing, FSM, Counters, Flags, ETH Phase           |
  * +-----------------------------------------------------------------------------+
  * | [0:6]   levelStartTime           uint48   Timestamp when level opened       |
  * | [6:12]  dailyIdx                 uint48   Monotonic day counter             |
@@ -47,23 +47,22 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [27:28] phaseTransitionActive    bool     Level transition in progress       |
  * | [28:29] gameOver                 bool     Terminal state flag                |
  * | [29:30] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [30:32] <padding>                         2 bytes unused                     |
+ * | [30:31] dailyEthPhase            uint8    0=current level, 1=carryover       |
+ * | [31:32] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
  * +-----------------------------------------------------------------------------+
- *   Total: 30 bytes used (2 bytes padding)
+ *   Total: 32 bytes used (0 bytes padding)
  *
  * +-----------------------------------------------------------------------------+
- * | EVM SLOT 1 (32 bytes) — ETH Phase, Price, Double-Buffer Fields             |
+ * | EVM SLOT 1 (32 bytes) — Price and Double-Buffer Fields                     |
  * +-----------------------------------------------------------------------------+
- * | [0:1]   dailyEthPhase            uint8    0=current level, 1=carryover       |
- * | [1:2]   compressedJackpotFlag    uint8    0=normal, 1=compressed (3d), 2=turbo (1d) |
- * | [2:8]   purchaseStartDay         uint48   Day index when purchase phase began|
- * | [8:24]  price                    uint128  Current mint price in wei          |
- * | [24:25] ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
- * | [25:26] ticketsFullyProcessed    bool     Read slot fully drained flag       |
- * | [26:27] prizePoolFrozen          bool     Prize pool freeze active flag      |
- * | [27:32] <padding>                         5 bytes unused                     |
+ * | [0:6]   purchaseStartDay         uint48   Day index when purchase phase began|
+ * | [6:22]  price                    uint128  Current mint price in wei          |
+ * | [22:23] ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
+ * | [23:24] ticketsFullyProcessed    bool     Read slot fully drained flag       |
+ * | [24:25] prizePoolFrozen          bool     Prize pool freeze active flag      |
+ * | [25:32] <padding>                         7 bytes unused                     |
  * +-----------------------------------------------------------------------------+
- *   Total: 27 bytes used (5 bytes padding)
+ *   Total: 25 bytes used (7 bytes padding)
  *
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 2 (32 bytes) — Current Prize Pool                                  |
@@ -276,13 +275,13 @@ abstract contract DegenerusGameStorage {
     ///      stay under 15M gas block limit. Cleared after coin+ticket distribution.
     bool internal dailyJackpotCoinTicketsPending;
 
-    // Note: dailyJackpotCoinTicketsPending (1 byte) is the tail of Slot 0 (byte 30),
-    // followed by 2 bytes of padding.
+    // Note: dailyJackpotCoinTicketsPending ends at Slot 0 byte 29.
+    // dailyEthPhase (byte 30) and compressedJackpotFlag (byte 31) fill the remaining Slot 0 space. No padding.
 
     // =========================================================================
-    // EVM SLOT 1: ETH Phase, Price, and Double-Buffer Fields
+    // EVM SLOT 1: Price and Double-Buffer Fields
     // =========================================================================
-    // Packs into EVM Slot 1: dailyEthPhase through prizePoolFrozen (27 bytes used, 5 bytes padding).
+    // Packs into EVM Slot 1: purchaseStartDay through prizePoolFrozen (25 bytes used, 7 bytes padding).
 
     /// @dev Daily jackpot ETH phase.
     ///      0 = current level, 1 = carryover.
