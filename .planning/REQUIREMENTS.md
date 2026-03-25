@@ -15,11 +15,11 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 
 ### Attack (Mad Genius)
 
-- [ ] **ATK-01**: Every function has a fully-expanded recursive call tree with line numbers for every call site
-- [ ] **ATK-02**: Every function has a complete storage-write map listing every variable written by any function in its transitive call graph
-- [ ] **ATK-03**: Every function has an explicit cached-local-vs-storage check identifying all (ancestor_local, descendant_write) pairs
-- [ ] **ATK-04**: Every function is attacked from all applicable angles: state coherence, RNG manipulation, cross-contract desync, rare paths, access control, ordering, silent failures, economic/MEV, griefing
-- [ ] **ATK-05**: Every finding classified as VULNERABLE or INVESTIGATE includes exact line numbers, a concrete attack scenario, and proof-of-concept steps
+- [x] **ATK-01**: Every function has a fully-expanded recursive call tree with line numbers for every call site
+- [x] **ATK-02**: Every function has a complete storage-write map listing every variable written by any function in its transitive call graph
+- [x] **ATK-03**: Every function has an explicit cached-local-vs-storage check identifying all (ancestor_local, descendant_write) pairs
+- [x] **ATK-04**: Every function is attacked from all applicable angles: state coherence, RNG manipulation, cross-contract desync, rare paths, access control, ordering, silent failures, economic/MEV, griefing
+- [x] **ATK-05**: Every finding classified as VULNERABLE or INVESTIGATE includes exact line numbers, a concrete attack scenario, and proof-of-concept steps
 
 ### Validation (Skeptic)
 
@@ -80,11 +80,11 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 | COV-01 | 103-118 (every unit) | Complete |
 | COV-02 | 103-118 (every unit) | Complete |
 | COV-03 | 103-118 (every unit) | Complete |
-| ATK-01 | 103-118 (every unit) | Pending |
-| ATK-02 | 103-118 (every unit) | Pending |
-| ATK-03 | 103-118 (every unit) | Pending |
-| ATK-04 | 103-118 (every unit) | Pending |
-| ATK-05 | 103-118 (every unit) | Pending |
+| ATK-01 | 103-118 (every unit) | Complete |
+| ATK-02 | 103-118 (every unit) | Complete |
+| ATK-03 | 103-118 (every unit) | Complete |
+| ATK-04 | 103-118 (every unit) | Complete |
+| ATK-05 | 103-118 (every unit) | Complete |
 | VAL-01 | 103-118 (every unit) | Pending |
 | VAL-02 | 103-118 (every unit) | Pending |
 | VAL-03 | 103-118 (every unit) | Pending |
