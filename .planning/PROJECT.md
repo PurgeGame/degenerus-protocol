@@ -72,6 +72,13 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 ### Validated
 
 - ✓ v4.2 Daily Jackpot Chunk Removal + Gas Optimization — 4 phases (95-98), chunk removal delta verified (behavioral equivalence + zero stale refs), gas ceiling profiled (all 3 stages SAFE with 34.9-42.3% headroom), 24 SLOADs audited + 7 loops analyzed, comment cleanup (8 issues fixed, function rename), documentation gap closure (13/13 requirements verified), 0 new findings — v4.2 Phases 95-98
+- ✓ v4.3 prizePoolsPacked Batching Optimization — closed early after Phase 99 callsite audit revealed H14 gas savings was 25x overestimate (~63.8K actual vs ~1.6M estimated). Optimization abandoned as not cost-effective. — v4.3 Phase 99
+
+## Completed Milestone: v4.3 prizePoolsPacked Batching Optimization
+
+**Status:** Closed early (2026-03-25)
+
+**Result:** Phase 99 callsite audit completed. Key finding: H14's ~1.6M gas savings estimate used cold SSTORE pricing (5,000/write) but subsequent writes to the same dirty slot cost only 100 gas (EIP-2200). Actual savings: ~63,800 gas (0.46% of 14M ceiling). Phases 100-102 abandoned — architectural complexity not justified for ~$0.13/execution savings at 1 gwei.
 
 ## Completed Milestone: v4.2 Daily Jackpot Chunk Removal + Gas Optimization
 
@@ -162,18 +169,9 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current Milestone: v4.3 prizePoolsPacked Batching Optimization
-
-**Goal:** Eliminate ~320 redundant SSTOREs per daily jackpot by batching prizePoolsPacked writes — accumulate deltas in memory, write once at end of loop.
-
-**Target features:**
-- Refactor `_processAutoRebuy` to return pool deltas instead of writing storage directly
-- Update `_processDailyEth` to accumulate deltas and do a single batched write
-- Audit and update all other `_processAutoRebuy` callers (earlybird, daily coin, etc.)
-- Prove batched writes produce identical final state as sequential writes
-- Gas profiling to validate ~1.6M savings
-
 ## Current State
+
+v4.3 closed early (2026-03-25) — prizePoolsPacked batching optimization investigated and abandoned. Phase 99 callsite audit revealed H14's ~1.6M gas savings estimate was a 25x overestimate: warm dirty-slot SSTOREs cost 100 gas (EIP-2200), not 5,000. Actual savings: ~63,800 gas (0.46% of 14M ceiling, ~$0.13/execution at 1 gwei). Not worth the architectural complexity of refactoring `_processAutoRebuy`'s return signature across all callers.
 
 v4.2 complete (2026-03-25) — Daily Jackpot Chunk Removal + Gas Optimization. 4 phases (95-98). Gas ceiling profiled — all 3 daily jackpot stages SAFE with 34.9-42.3% headroom. 24 SLOADs audited, 7 loops analyzed. `_processDailyEthChunk` renamed to `_processDailyEth`.
 
@@ -203,4 +201,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after v4.3 milestone start*
+*Last updated: 2026-03-25 after v4.3 milestone close (early — optimization not cost-effective)*

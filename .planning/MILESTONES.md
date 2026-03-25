@@ -1,5 +1,15 @@
 # Milestones
 
+## v4.3 prizePoolsPacked Batching Optimization (Shipped: 2026-03-25)
+
+**Phases completed:** 1 phases, 1 plans, 2 tasks
+
+**Key accomplishments:**
+
+- Complete callsite inventory for _processAutoRebuy and prizePoolsPacked writes across daily ETH jackpot paths, with SSTORE gas baseline and Phase 100 change targets
+
+---
+
 ## v4.2 Daily Jackpot Chunk Removal + Gas Optimization (Shipped: 2026-03-25)
 
 **Phases completed:** 4 phases, 8 plans, 15 tasks
