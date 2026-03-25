@@ -40,20 +40,20 @@ Requirements for milestone v4.4: BAF Cache-Overwrite Bug Fix + Pattern Scan.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BAF-01 | TBD | Pending |
-| BAF-02 | TBD | Pending |
-| SCAN-01 | TBD | Pending |
-| SCAN-02 | TBD | Pending |
-| SCAN-03 | TBD | Pending |
-| TEST-01 | TBD | Pending |
-| TEST-02 | TBD | Pending |
-| TEST-03 | TBD | Pending |
-| CMT-01 | TBD | Pending |
+| BAF-01 | Phase 101 | Pending |
+| BAF-02 | Phase 101 | Pending |
+| SCAN-01 | Phase 100 | Pending |
+| SCAN-02 | Phase 100 | Pending |
+| SCAN-03 | Phase 101 | Pending |
+| TEST-01 | Phase 102 | Pending |
+| TEST-02 | Phase 102 | Pending |
+| TEST-03 | Phase 102 | Pending |
+| CMT-01 | Phase 102 | Pending |
 
 **Coverage:**
 - v4.4 requirements: 9 total
-- Mapped to phases: 0
-- Unmapped: 9
+- Mapped to phases: 9
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-25*
