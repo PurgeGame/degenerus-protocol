@@ -319,7 +319,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint32 winningTraitsPacked;
 
         if (isDaily) {
-            // Check if resuming from a prior chunk
+            // Check if resuming an interrupted daily jackpot (Phase 1 carryover)
             bool isResuming = dailyEthPoolBudget != 0 ||
                 dailyEthPhase != 0;
 
@@ -492,7 +492,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             uint8(entropyDaily & 3)
                         );
 
-                    uint256 paidDailyEth = _processDailyEthChunk(
+                    uint256 paidDailyEth = _processDailyEth(
                         lvl,
                         budget,
                         entropyDaily,
@@ -562,7 +562,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             uint8(entropyNext & 3)
                         );
 
-                    _processDailyEthChunk(
+                    _processDailyEth(
                         carryoverSourceLevel,
                         carryPool,
                         entropyNext,
@@ -1325,8 +1325,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Daily Jackpot ETH — Distribution
     // =========================================================================
 
-    /// @dev Processes daily jackpot ETH winners across all 4 trait buckets.
-    function _processDailyEthChunk(
+    /// @dev Processes daily jackpot ETH distribution across all 4 trait buckets.
+    ///      Iterates each bucket, selects winners proportional to shareBps,
+    ///      pays out ETH via _addClaimableEth, and processes auto-rebuy.
+    /// @param lvl The level whose winners are being paid.
+    /// @param ethPool Total ETH to distribute across all buckets.
+    /// @param entropy VRF-derived random word for winner selection.
+    /// @param traitIds The 4 winning trait IDs for this daily jackpot.
+    /// @param shareBps Basis-point share for each of the 4 buckets.
+    /// @param bucketCounts Number of holders in each trait bucket.
+    /// @return paidEth Total ETH actually paid out (may be less than ethPool if buckets empty).
+    function _processDailyEth(
         uint24 lvl,
         uint256 ethPool,
         uint256 entropy,
