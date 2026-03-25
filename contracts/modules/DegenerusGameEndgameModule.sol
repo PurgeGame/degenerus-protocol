@@ -150,6 +150,10 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
 
     /// @notice Run reward jackpots (BAF/Decimator) during the level transition RNG period.
     /// @dev Called via delegatecall from DegenerusGame during purchase jackpot time.
+    ///      Auto-rebuy contributions that write directly to futurePrizePool storage during
+    ///      nested _runBafJackpot / runDecimatorJackpot calls are reconciled via rebuyDelta
+    ///      before the final write-back, preventing the cached futurePoolLocal from
+    ///      overwriting them. See baseFuturePool snapshot and rebuyDelta at lines 238-240.
     /// @param lvl Level to resolve jackpots for.
     /// @param rngWord VRF entropy for jackpot selection and randomization.
     ///
@@ -167,6 +171,8 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     /// Pool: 10% of future pool (level 100 uses 30% special)
     function runRewardJackpots(uint24 lvl, uint256 rngWord) external {
         uint256 futurePoolLocal = _getFuturePrizePool();
+        // Snapshot at entry: used as (1) BAF/Decimator pool sizing baseline and
+        // (2) rebuyDelta reference to detect auto-rebuy writes to storage.
         uint256 baseFuturePool = futurePoolLocal;
         uint24 prevMod10 = lvl % 10;
         uint24 prevMod100 = lvl % 100;
