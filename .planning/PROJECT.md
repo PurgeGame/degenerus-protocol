@@ -193,7 +193,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v5.0 started (2026-03-25) — Ultimate Adversarial Audit. Three-agent system (Mad Genius / Skeptic / Taskmaster) attacking every state-changing function with mandatory call-tree expansion and storage-write mapping. Motivated by BAF cache-overwrite bug surviving 12 prior audit rounds.
+v5.0 in progress (2026-03-25) — Ultimate Adversarial Audit. Phase 103 (Game Router + Storage Layout) complete: 177 functions inventoried, 0 confirmed vulnerabilities, storage layout verified (102 vars, 10 modules EXACT MATCH). 16 units remaining.
 
 v4.3 closed early (2026-03-25) — prizePoolsPacked batching optimization investigated and abandoned. Phase 99 callsite audit revealed H14's ~1.6M gas savings estimate was a 25x overestimate: warm dirty-slot SSTOREs cost 100 gas (EIP-2200), not 5,000. Actual savings: ~63,800 gas (0.46% of 14M ceiling, ~$0.13/execution at 1 gwei). Not worth the architectural complexity of refactoring `_processAutoRebuy`'s return signature across all callers.
 
