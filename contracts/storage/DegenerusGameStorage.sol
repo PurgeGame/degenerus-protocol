@@ -47,10 +47,9 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [27:28] phaseTransitionActive    bool     Level transition in progress       |
  * | [28:29] gameOver                 bool     Terminal state flag                |
  * | [29:30] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [30:31] dailyEthBucketCursor     uint8    Bucket cursor for daily ETH dist   |
- * | [31:32] <padding>                         1 byte unused                      |
+ * | [30:32] <padding>                         2 bytes unused                     |
  * +-----------------------------------------------------------------------------+
- *   Total: 31 bytes used (1 byte padding)
+ *   Total: 30 bytes used (2 bytes padding)
  *
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 1 (32 bytes) — ETH Phase, Price, Double-Buffer Fields             |
@@ -277,11 +276,8 @@ abstract contract DegenerusGameStorage {
     ///      stay under 15M gas block limit. Cleared after coin+ticket distribution.
     bool internal dailyJackpotCoinTicketsPending;
 
-    /// @dev Cursor for daily jackpot ETH distribution (bucket order index, 0..3).
-    ///      Used with dailyEthWinnerCursor for mid-bucket resume.
-    uint8 internal dailyEthBucketCursor;
-    // Note: dailyJackpotCoinTicketsPending (1 byte) and dailyEthBucketCursor (1 byte)
-    // are the tail of Slot 0 (bytes 31-32), not Slot 1.
+    // Note: dailyJackpotCoinTicketsPending (1 byte) is the tail of Slot 0 (byte 30),
+    // followed by 2 bytes of padding.
 
     // =========================================================================
     // EVM SLOT 1: ETH Phase, Price, and Double-Buffer Fields
@@ -477,12 +473,8 @@ abstract contract DegenerusGameStorage {
     uint24 internal ticketLevel;
 
     // =========================================================================
-    // Daily Jackpot Resume State
+    // Daily Jackpot Carryover State
     // =========================================================================
-
-    /// @dev Resume cursor within the current daily jackpot bucket (winner index).
-    ///      0 = start of bucket, >0 = resume at this winner index.
-    uint16 internal dailyEthWinnerCursor;
 
     /// @dev Carryover ETH pool reserved after daily phase 0 completes.
     ///      Stored to avoid re-deducting the future pool across split calls.
