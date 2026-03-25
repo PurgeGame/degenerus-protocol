@@ -30,6 +30,11 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 - [x] **CMT-01**: NatSpec and inline comments accurate for all modified functions
 
+### Milestone Documentation Cleanup (Gap Closure)
+
+- [ ] **DOC-01**: REQUIREMENTS.md checkboxes and traceability table reflect verified status for all requirements
+- [ ] **BANNER-01**: DegenerusGameStorage.sol "EVM SLOT 1" section banner positioned after Slot 0 variables (before purchaseStartDay)
+
 ## Out of Scope
 
 | Feature | Reason |
@@ -42,21 +47,23 @@ Requirements for milestone v4.2: Daily Jackpot Chunk Removal + Gas Optimization.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DELTA-01 | Phase 95 | Partial — needs verification |
-| DELTA-02 | Phase 95 | Partial — needs verification |
-| DELTA-03 | Phase 95 | Pending — Plan 03 not executed |
-| DELTA-04 | Phase 95 | Partial — needs verification |
+| DELTA-01 | Phase 95 (tracking: Phase 98) | Verified — checkbox pending |
+| DELTA-02 | Phase 95 (tracking: Phase 98) | Verified — checkbox pending |
+| DELTA-03 | Phase 95 | Complete |
+| DELTA-04 | Phase 95 (tracking: Phase 98) | Verified — checkbox pending |
 | CEIL-01 | Phase 96 | Complete |
 | CEIL-02 | Phase 96 | Complete |
 | CEIL-03 | Phase 96 | Complete |
 | GOPT-01 | Phase 96 | Complete |
 | GOPT-02 | Phase 96 | Complete |
-| GOPT-03 | Phase 96 | Pending |
+| GOPT-03 | Phase 96 (tracking: Phase 98) | Complete — checkbox pending |
 | CMT-01 | Phase 97 | Complete |
+| DOC-01 | Phase 98 | Pending |
+| BANNER-01 | Phase 98 | Pending |
 
 **Coverage:**
-- v4.2 requirements: 11 total
-- Mapped to phases: 11
+- v4.2 requirements: 13 total (11 original + 2 gap closure)
+- Mapped to phases: 13
 - Unmapped: 0
 
 ---

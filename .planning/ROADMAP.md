@@ -190,6 +190,7 @@
 - [x] **Phase 95: Delta Verification** - Prove chunk removal is behaviorally safe across both test stacks (completed 2026-03-25)
 - [x] **Phase 96: Gas Ceiling + Optimization** - Profile worst-case gas and optimize the daily jackpot code path (completed 2026-03-25)
 - [x] **Phase 97: Comment Cleanup** - Verify NatSpec and inline comments for all modified code (completed 2026-03-25)
+- [ ] **Phase 98: Milestone Documentation Cleanup** - Fix stale tracking docs + cosmetic banner fix (gap closure)
 
 ## Phase Details
 
@@ -235,16 +236,30 @@ Plans:
 Plans:
 - [x] 97-01-PLAN.md — Storage layout comment fix + function rename + NatSpec update
 
+### Phase 98: Milestone Documentation Cleanup
+**Goal**: Fix stale REQUIREMENTS.md tracking, update ROADMAP progress, and correct cosmetic section banner in DegenerusGameStorage.sol
+**Depends on**: Phase 97
+**Requirements**: Closes partial gaps DELTA-01, DELTA-02, DELTA-04 (documentation only) + BANNER-01
+**Gap Closure**: Closes all gaps from v4.2-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. All REQUIREMENTS.md checkboxes match verification status (DELTA-01/02/04, GOPT-03 checked)
+  2. All REQUIREMENTS.md traceability rows show "Complete"
+  3. DegenerusGameStorage.sol "EVM SLOT 1" banner appears after compressedJackpotFlag, before purchaseStartDay
+**Plans:** 0/1 plans complete
+Plans:
+- [ ] 98-01-PLAN.md — Fix tracking docs + banner placement
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 95 -> 96 -> 97
+Phases execute in numeric order: 95 -> 96 -> 97 -> 98
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 95. Delta Verification | 3/3 | Complete   | 2026-03-25 |
 | 96. Gas Ceiling + Optimization | 3/3 | Complete    | 2026-03-25 |
-| 97. Comment Cleanup | 1/1 | Complete   | 2026-03-25 |
+| 97. Comment Cleanup | 1/1 | Complete    | 2026-03-25 |
+| 98. Milestone Documentation Cleanup | 0/1 | Planned | — |
 
 ## Deferred
 
