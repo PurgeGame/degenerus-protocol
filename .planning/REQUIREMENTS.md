@@ -9,9 +9,9 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 
 ### Coverage (Taskmaster)
 
-- [ ] **COV-01**: Every state-changing function (external, public, internal, private) across all 29 protocol contracts has a Taskmaster-built checklist entry
-- [ ] **COV-02**: Every function checklist entry is signed off with: analyzed (Y/N), call tree complete (Y/N), storage writes complete (Y/N), cache check done (Y/N)
-- [ ] **COV-03**: No unit advances to Skeptic review until Taskmaster gives PASS verdict with 100% coverage
+- [x] **COV-01**: Every state-changing function (external, public, internal, private) across all 29 protocol contracts has a Taskmaster-built checklist entry
+- [x] **COV-02**: Every function checklist entry is signed off with: analyzed (Y/N), call tree complete (Y/N), storage writes complete (Y/N), cache check done (Y/N)
+- [x] **COV-03**: No unit advances to Skeptic review until Taskmaster gives PASS verdict with 100% coverage
 
 ### Attack (Mad Genius)
 
@@ -77,9 +77,9 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 
 | Requirement | Phase(s) | Status |
 |-------------|----------|--------|
-| COV-01 | 103-118 (every unit) | Pending |
-| COV-02 | 103-118 (every unit) | Pending |
-| COV-03 | 103-118 (every unit) | Pending |
+| COV-01 | 103-118 (every unit) | Complete |
+| COV-02 | 103-118 (every unit) | Complete |
+| COV-03 | 103-118 (every unit) | Complete |
 | ATK-01 | 103-118 (every unit) | Pending |
 | ATK-02 | 103-118 (every unit) | Pending |
 | ATK-03 | 103-118 (every unit) | Pending |
