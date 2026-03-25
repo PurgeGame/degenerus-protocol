@@ -188,7 +188,7 @@
 **Milestone Goal:** Verify the dead mid-chunk resume infrastructure removal is behaviorally equivalent, then optimize the daily jackpot path for maximum gas efficiency.
 
 - [x] **Phase 95: Delta Verification** - Prove chunk removal is behaviorally safe across both test stacks (completed 2026-03-25)
-- [ ] **Phase 96: Gas Ceiling + Optimization** - Profile worst-case gas and optimize the daily jackpot code path
+- [x] **Phase 96: Gas Ceiling + Optimization** - Profile worst-case gas and optimize the daily jackpot code path (completed 2026-03-25)
 - [ ] **Phase 97: Comment Cleanup** - Verify NatSpec and inline comments for all modified code
 
 ## Phase Details
@@ -218,7 +218,7 @@ Plans:
   3. All profiled paths are under 14M gas ceiling with headroom percentage documented
   4. Every unnecessary SLOAD in the daily jackpot code path is identified and either eliminated or justified
   5. Any loop-hoistable computation is identified and either hoisted or justified as not worth the complexity
-**Plans:** 0/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 96-01-PLAN.md — Gas ceiling profiling (static analysis + empirical Hardhat validation)
 - [ ] 96-02-PLAN.md — SLOAD audit + loop hoisting audit
@@ -241,7 +241,7 @@ Phases execute in numeric order: 95 -> 96 -> 97
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 95. Delta Verification | 3/3 | Complete   | 2026-03-25 |
-| 96. Gas Ceiling + Optimization | 0/3 | Planned    |  |
+| 96. Gas Ceiling + Optimization | 0/3 | Complete    | 2026-03-25 |
 | 97. Comment Cleanup | 0/TBD | Not started | - |
 
 ## Deferred
