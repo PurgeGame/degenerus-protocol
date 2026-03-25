@@ -164,7 +164,9 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v4.1 shipped 2026-03-24 — Ticket lifecycle integration tests. 3 phases (92-94), 4 plans, 22 requirements, all satisfied. 24 Foundry integration tests deploying full 23-contract protocol. All 6 ticket sources verified end-to-end. RNG commitment window formal proof (9/9 paths SAFE). 1 contract bug fix: `requestLootboxRng` blocked during mid-day ticket processing to prevent RNG race condition.
+v4.2 in progress (2026-03-25) — Daily Jackpot Chunk Removal + Gas Optimization. Phase 95 (delta verification) and Phase 96 (gas ceiling + optimization) complete. Phase 97 (comment cleanup) pending.
+
+**Phase 96 results:** All 3 daily jackpot stages reclassified from AT_RISK/TIGHT to SAFE with 34.9-42.3% headroom under the 14M gas ceiling. 24 SLOADs audited, 7 loops analyzed. No contract changes needed — costs dominated by unavoidable per-address cold SLOADs.
 
 **Code fixes applied during v4.1:**
 - `requestLootboxRng`: blocked while mid-day ticket processing is active (prevents RNG race)
@@ -192,4 +194,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-24 after v4.2 milestone started*
+*Last updated: 2026-03-25 after Phase 96 completion*
