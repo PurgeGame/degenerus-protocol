@@ -42,7 +42,7 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 - [x] **UNIT-10**: Unit 10 — BURNIE Token + Coinflip complete (BurnieCoin, BurnieCoinflip)
 - [x] **UNIT-11**: Unit 11 — sDGNRS + DGNRS complete (StakedDegenerusStonk, DegenerusStonk)
 - [ ] **UNIT-12**: Unit 12 — Vault + WWXRP complete (DegenerusVault, WrappedWrappedXRP)
-- [ ] **UNIT-13**: Unit 13 — Admin + Governance complete (DegenerusAdmin)
+- [x] **UNIT-13**: Unit 13 — Admin + Governance complete (DegenerusAdmin)
 - [ ] **UNIT-14**: Unit 14 — Affiliate + Quests + Jackpots complete (DegenerusAffiliate, DegenerusQuests, DegenerusJackpots)
 - [ ] **UNIT-15**: Unit 15 — Libraries complete (EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, PriceLookupLib)
 - [ ] **UNIT-16**: Unit 16 — Cross-Contract Integration Sweep complete (all contracts, meta-analysis)
@@ -101,7 +101,7 @@ Requirements for exhaustive three-agent adversarial audit. Each maps to roadmap 
 | UNIT-10 | Phase 112 | Complete |
 | UNIT-11 | Phase 113 | Complete |
 | UNIT-12 | Phase 114 | Pending |
-| UNIT-13 | Phase 115 | Pending |
+| UNIT-13 | Phase 115 | Complete |
 | UNIT-14 | Phase 116 | Pending |
 | UNIT-15 | Phase 117 | Pending |
 | UNIT-16 | Phase 118 | Pending |
