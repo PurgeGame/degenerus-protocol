@@ -156,16 +156,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Default SSTORE budget for processTicketBatch to stay safely under 15M gas.
     uint32 private constant WRITES_BUDGET_SAFE = 550;
 
-    // -------------------------------------------------------------------------
-    // Constants — Daily Jackpot Chunking
-    // -------------------------------------------------------------------------
-
-    /// @dev Default unit budget for daily jackpot ETH distribution (conservative).
-    uint16 private constant DAILY_JACKPOT_UNITS_SAFE = 1000;
-
-    /// @dev Winner unit cost when auto-rebuy is enabled.
-    uint8 private constant DAILY_JACKPOT_UNITS_AUTOREBUY = 3;
-
     /// @dev LCG multiplier for deterministic trait generation (Knuth's MMIX constant).
     uint64 private constant TICKET_LCG_MULT = 0x5851F42D4C957F2D;
 
@@ -331,9 +321,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (isDaily) {
             // Check if resuming from a prior chunk
             bool isResuming = dailyEthPoolBudget != 0 ||
-                dailyEthPhase != 0 ||
-                dailyEthBucketCursor != 0 ||
-                dailyEthWinnerCursor != 0;
+                dailyEthPhase != 0;
 
             if (isResuming) {
                 // Resume: restore stored state (don't re-roll traits)
@@ -467,14 +455,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 dailyCarryoverEthPool = futureEthPool;
 
                 dailyEthPhase = 0;
-                dailyEthBucketCursor = 0;
-                dailyEthWinnerCursor = 0;
             }
 
             uint256 entropyDaily = randWord ^ (uint256(lvl) << 192);
             uint8[4] memory traitIdsDaily = JackpotBucketLib
                 .unpackWinningTraits(winningTraitsPacked);
-            uint16 unitsBudget = DAILY_JACKPOT_UNITS_SAFE;
             (
                 uint8 counterStep_,
                 ,
@@ -507,23 +492,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             uint8(entropyDaily & 3)
                         );
 
-                    (
-                        uint256 paidDailyEth,
-                        bool dailyComplete
-                    ) = _processDailyEthChunk(
-                            lvl,
-                            budget,
-                            entropyDaily,
-                            traitIdsDaily,
-                            shareBpsDaily,
-                            bucketCountsDaily,
-                            unitsBudget
-                        );
+                    uint256 paidDailyEth = _processDailyEthChunk(
+                        lvl,
+                        budget,
+                        entropyDaily,
+                        traitIdsDaily,
+                        shareBpsDaily,
+                        bucketCountsDaily
+                    );
                     currentPrizePool -= paidDailyEth;
-
-                    if (!dailyComplete) {
-                        return;
-                    }
 
                     uint256 totalDailyWinners = JackpotBucketLib
                         .sumBucketCounts(bucketCountsDaily);
@@ -551,8 +528,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 }
 
                 dailyEthPhase = 1;
-                dailyEthBucketCursor = 0;
-                dailyEthWinnerCursor = 0;
                 return;
             }
 
@@ -587,18 +562,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             uint8(entropyNext & 3)
                         );
 
-                    (, bool carryComplete) = _processDailyEthChunk(
+                    _processDailyEthChunk(
                         carryoverSourceLevel,
                         carryPool,
                         entropyNext,
                         traitIdsDaily,
                         shareBpsNext,
-                        bucketCountsNext,
-                        unitsBudget
+                        bucketCountsNext
                     );
-                    if (!carryComplete) {
-                        return;
-                    }
                 }
 
                 _clearDailyEthState();
@@ -1351,50 +1322,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     // =========================================================================
-    // Daily Jackpot ETH — Chunked Distribution
+    // Daily Jackpot ETH — Distribution
     // =========================================================================
 
-    /// @dev Winner unit cost (auto-rebuy counts as 3x).
-    function _winnerUnits(address winner) private view returns (uint8 units) {
-        if (winner == address(0)) return 0;
-        return
-            autoRebuyState[winner].autoRebuyEnabled
-                ? DAILY_JACKPOT_UNITS_AUTOREBUY
-                : 1;
-    }
-
-    /// @dev Skips entropy forward for already-processed buckets.
-    function _skipEntropyToBucket(
-        uint256 entropy,
-        uint8[4] memory order,
-        uint256[4] memory shares,
-        uint16[4] memory bucketCounts,
-        uint8 startOrderIdx
-    ) private pure returns (uint256 entropyState) {
-        entropyState = entropy;
-        for (uint8 j; j < startOrderIdx; ++j) {
-            uint8 traitIdx = order[j];
-            uint16 count = bucketCounts[traitIdx];
-            uint256 share = shares[traitIdx];
-            if (count == 0 || share == 0) continue;
-            entropyState = EntropyLib.entropyStep(
-                entropyState ^ (uint256(traitIdx) << 64) ^ share
-            );
-        }
-    }
-
-    /// @dev Processes daily jackpot ETH winners in chunks, resuming mid-bucket if needed.
+    /// @dev Processes daily jackpot ETH winners across all 4 trait buckets.
     function _processDailyEthChunk(
         uint24 lvl,
         uint256 ethPool,
         uint256 entropy,
         uint8[4] memory traitIds,
         uint16[4] memory shareBps,
-        uint16[4] memory bucketCounts,
-        uint16 unitsBudget
-    ) private returns (uint256 paidEth, bool complete) {
+        uint16[4] memory bucketCounts
+    ) private returns (uint256 paidEth) {
         if (ethPool == 0) {
-            return (0, true);
+            return 0;
         }
 
         uint256 unit = PriceLookupLib.priceForLevel(lvl + 1) >> 2;
@@ -1410,26 +1351,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8[4] memory order = JackpotBucketLib.bucketOrderLargestFirst(
             bucketCounts
         );
-        uint8 startOrderIdx = dailyEthBucketCursor;
-        uint16 startWinnerIdx = dailyEthWinnerCursor;
 
-        uint256 entropyState = _skipEntropyToBucket(
-            entropy,
-            order,
-            shares,
-            bucketCounts,
-            startOrderIdx
-        );
-
-        uint16 unitsUsed;
+        uint256 entropyState = entropy;
         uint256 liabilityDelta;
 
-        for (uint8 j = startOrderIdx; j < 4; ++j) {
+        for (uint8 j; j < 4; ++j) {
             uint8 traitIdx = order[j];
             uint16 count = bucketCounts[traitIdx];
             uint256 share = shares[traitIdx];
             if (count == 0 || share == 0) {
-                startWinnerIdx = 0;
                 continue;
             }
 
@@ -1452,28 +1382,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     uint8(200 + traitIdx)
                 );
             if (winners.length == 0) {
-                startWinnerIdx = 0;
                 continue;
             }
 
             uint256 perWinner = share / totalCount;
             if (perWinner == 0) {
-                startWinnerIdx = 0;
                 continue;
             }
 
             uint256 len = winners.length;
-            for (uint256 i = startWinnerIdx; i < len; ) {
+            for (uint256 i; i < len; ) {
                 address w = winners[i];
-                uint8 cost = _winnerUnits(w);
-                if (cost != 0 && unitsUsed + cost > unitsBudget) {
-                    dailyEthBucketCursor = j;
-                    dailyEthWinnerCursor = uint16(i);
-                    if (liabilityDelta != 0) {
-                        claimablePool += liabilityDelta;
-                    }
-                    return (paidEth, false);
-                }
 
                 if (w != address(0)) {
                     uint256 claimableDelta = _addClaimableEth(
@@ -1492,21 +1411,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     liabilityDelta += claimableDelta;
                 }
 
-                unitsUsed += cost;
                 unchecked {
                     ++i;
                 }
             }
-
-            startWinnerIdx = 0;
         }
 
         if (liabilityDelta != 0) {
             claimablePool += liabilityDelta;
         }
-        dailyEthBucketCursor = 0;
-        dailyEthWinnerCursor = 0;
-        return (paidEth, true);
+        return paidEth;
     }
 
     function _distributeJackpotEth(
@@ -2784,8 +2698,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Reset all daily ETH distribution state after jackpot day completes.
     function _clearDailyEthState() private {
         dailyEthPhase = 0;
-        dailyEthBucketCursor = 0;
-        dailyEthWinnerCursor = 0;
         dailyEthPoolBudget = 0;
         dailyCarryoverEthPool = 0;
         dailyCarryoverWinnerCap = 0;

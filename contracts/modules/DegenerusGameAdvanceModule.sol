@@ -270,9 +270,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (
                 !dailyJackpotCoinTicketsPending &&
                 dailyEthPoolBudget == 0 &&
-                dailyEthPhase == 0 &&
-                dailyEthBucketCursor == 0 &&
-                dailyEthWinnerCursor == 0
+                dailyEthPhase == 0
             ) {
                 if (!_prepareFutureTickets(inJackpot ? lvl : purchaseLevel)) {
                     stage = STAGE_FUTURE_TICKETS_WORKING;
@@ -360,14 +358,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // === JACKPOT PHASE ===
 
-            // Resume split ETH distribution (Phase 0 mid-bucket OR Phase 1 carryover)
+            // Resume Phase 1 carryover ETH distribution.
             // Must match payDailyJackpot's isResuming condition to avoid
             // emitting STAGE_JACKPOT_DAILY_STARTED on what is actually a resume.
             if (
-                dailyEthBucketCursor != 0 ||
                 dailyEthPhase != 0 ||
-                dailyEthPoolBudget != 0 ||
-                dailyEthWinnerCursor != 0
+                dailyEthPoolBudget != 0
             ) {
                 payDailyJackpot(true, lastDailyJackpotLevel, rngWord);
                 stage = STAGE_JACKPOT_ETH_RESUME;
