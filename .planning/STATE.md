@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Ultimate Adversarial Audit
 status: Ready to execute
-stopped_at: Completed 125-01-PLAN.md
-last_updated: "2026-03-26T15:51:26.652Z"
+stopped_at: Completed 125-02-PLAN.md
+last_updated: "2026-03-26T16:25:31.020Z"
 progress:
   total_phases: 17
   completed_phases: 0
@@ -48,7 +48,7 @@ Plan: 4 of 4
 *Updated after each plan completion*
 | Phase 103 P01 | 9min | 2 tasks | 2 files |
 | Phase 103 P02 | 8min | 1 tasks | 1 files |
-| Phase 125 P01 | 16min | 2 tasks | 18 files |
+| Phase 125 P02 | 30min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -64,7 +64,8 @@ Recent decisions affecting current work:
 - [v5.0]: Design doc at .planning/ULTIMATE-AUDIT-DESIGN.md
 - [Phase 103]: Category C restricted to state-changing internal helpers; view/pure in D. Storage comparison uses AST-ID-normalized types.
 - [Phase 103]: Mad Genius: 0 VULNERABLE, 7 INVESTIGATE findings across 49 functions. BAF-class cache check SAFE on all 19 direct functions.
-- [Phase 125]: 13 redundant tests deleted: 7 ghost (poc/), 3 adversarial, 2 simulation, 1 validation -- zero unique coverage lost
+- [Phase 125]: Pre-existing 14 Foundry + 32 Hardhat failures from Phases 121-124 documented as baseline, not caused by pruning
+- [Phase 125]: Function-level coverage tracing proves zero unique coverage lost across all 13 deleted test files
 
 ### Pending Todos
 
@@ -76,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T15:51:26.650Z
-Stopped at: Completed 125-01-PLAN.md
+Last session: 2026-03-26T16:25:31.017Z
+Stopped at: Completed 125-02-PLAN.md
 Resume file: None
