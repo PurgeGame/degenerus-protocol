@@ -184,19 +184,13 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
+v6.0 complete (2026-03-26) — Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity. 6 phases (120-125). Test suite green baseline established, 7 audit findings fixed (lastLootboxRngWord deleted, double SLOAD cached, event emission fixed, NatSpec corrected, deity boon downgrade prevention, advanceBounty rewrite, degenerette freeze fix). DegenerusCharity contract deployed at nonce N+23 with soulbound GNRUS token, proportional burn redemption, and sDGNRS governance. Game integration hooks wired (resolveLevel + handleGameOver). Test suite pruned: 13 redundant files deleted (~4,487 lines), zero unique coverage lost.
+
 v5.0 complete (2026-03-25) — Ultimate Adversarial Audit. 17 phases, 29 contracts, 693 functions. 0 actionable findings (29 INFO). BAF-class eliminated. ETH conservation proven. 4 master deliverables shipped.
-
-v4.3 closed early (2026-03-25) — prizePoolsPacked batching optimization investigated and abandoned. Phase 99 callsite audit revealed H14's ~1.6M gas savings estimate was a 25x overestimate: warm dirty-slot SSTOREs cost 100 gas (EIP-2200), not 5,000. Actual savings: ~63,800 gas (0.46% of 14M ceiling, ~$0.13/execution at 1 gwei). Not worth the architectural complexity of refactoring `_processAutoRebuy`'s return signature across all callers.
-
-v4.2 complete (2026-03-25) — Daily Jackpot Chunk Removal + Gas Optimization. 4 phases (95-98). Gas ceiling profiled — all 3 daily jackpot stages SAFE with 34.9-42.3% headroom. 24 SLOADs audited, 7 loops analyzed. `_processDailyEthChunk` renamed to `_processDailyEth`.
-
-**Code fixes applied during v4.1:**
-- `requestLootboxRng`: blocked while mid-day ticket processing is active (prevents RNG race)
-- Near/far-future ticket boundary unified at +5 with jackpot-phase routing fix
 
 **Grand total across all milestones:** 134 findings (16 LOW, 118 INFO), 0 MEDIUM/HIGH outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in v3.9.
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests).
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests), v4.2 (daily jackpot chunk removal), v4.3 (prizePoolsPacked — closed early), v4.4 (BAF cache-overwrite fix), v5.0 (ultimate adversarial audit).
 
 ## Evolution
 
@@ -216,4 +210,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after v5.0 milestone started*
+*Last updated: 2026-03-26 after v6.0 milestone completed*
