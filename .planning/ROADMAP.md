@@ -257,7 +257,7 @@
 - [x] **Phase 126: Delta Extraction + Plan Reconciliation** - Map every v6.0 contract change, reconcile plan-vs-reality, flag unplanned diffs (completed 2026-03-26)
 - [x] **Phase 127: DegenerusCharity Full Adversarial Audit** - Three-agent audit of all Charity functions + GNRUS token + governance + game hooks + storage layout (completed 2026-03-26)
 - [x] **Phase 128: Changed Contract Adversarial Audit** - Three-agent audit of all modified functions across 11 changed contracts + storage verification (completed 2026-03-26)
-- [ ] **Phase 129: Consolidated Findings** - Master findings report with plan-drift annotations, KNOWN-ISSUES update
+- [x] **Phase 129: Consolidated Findings** - Master findings report with plan-drift annotations, KNOWN-ISSUES update (completed 2026-03-26)
 
 ## Phase Details
 
@@ -317,7 +317,7 @@ Plans:
   1. A single findings report exists with every finding rated by C4A severity (CRITICAL/HIGH/MEDIUM/LOW/INFO)
   2. Any finding triggered by plan-vs-reality mismatch has a plan-drift annotation linking back to the Phase 126 reconciliation
   3. KNOWN-ISSUES.md is updated with any new findings from this milestone
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 129-01-PLAN.md — Consolidated findings report + KNOWN-ISSUES update
 
@@ -332,7 +332,7 @@ Phases execute in numeric order: 126 -> 127 -> 128 -> 129
 | 126. Delta Extraction + Plan Reconciliation | 2/2 | Complete    | 2026-03-26 |
 | 127. DegenerusCharity Full Adversarial Audit | 0/3 | Complete    | 2026-03-26 |
 | 128. Changed Contract Adversarial Audit | 0/5 | Complete    | 2026-03-26 |
-| 129. Consolidated Findings | 0/TBD | Not started | - |
+| 129. Consolidated Findings | 0/TBD | Complete    | 2026-03-26 |
 
 ## Deferred
 
