@@ -317,7 +317,9 @@ Plans:
   1. A single findings report exists with every finding rated by C4A severity (CRITICAL/HIGH/MEDIUM/LOW/INFO)
   2. Any finding triggered by plan-vs-reality mismatch has a plan-drift annotation linking back to the Phase 126 reconciliation
   3. KNOWN-ISSUES.md is updated with any new findings from this milestone
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 129-01-PLAN.md — Consolidated findings report + KNOWN-ISSUES update
 
 ## Progress
 
