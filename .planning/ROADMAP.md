@@ -259,9 +259,9 @@
   2. `forge test` runs to completion with zero failures
   3. `npx hardhat test` runs to completion with zero failures
   4. LCOV coverage reports generated for both suites showing per-contract line coverage percentages
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 120-01-PLAN.md — Fix all 14 failing Foundry tests and establish green forge test baseline
+- [x] 120-01-PLAN.md — Fix all 14 failing Foundry tests and establish green forge test baseline
 - [ ] 120-02-PLAN.md — Hardhat green baseline + LCOV coverage reports for both suites
 
 ### Phase 121: Storage and Gas Fixes
@@ -330,7 +330,7 @@ Phase 125 (pruning) must be last since it depends on all contract changes being 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 120. Test Suite Cleanup | 0/2 | Planning complete | - |
+| 120. Test Suite Cleanup | 1/2 | In Progress|  |
 | 121. Storage and Gas Fixes | 0/? | Not started | - |
 | 122. Degenerette Freeze Fix | 0/? | Not started | - |
 | 123. DegenerusCharity Contract | 0/? | Not started | - |
