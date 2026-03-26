@@ -19,6 +19,7 @@ interface IERC20Minimal {
 interface IDegenerusGame {
     function lastVrfProcessed() external view returns (uint48);
     function gameOver() external view returns (bool);
+    function gameOverTimestamp() external view returns (uint48);
 }
 
 /**
@@ -227,6 +228,59 @@ contract DegenerusStonk {
             totalSupply -= amount;
         }
         emit Transfer(from, address(0), amount);
+    }
+
+    // =====================================================================
+    //                    1-YEAR POST-GAMEOVER SWEEP
+    // =====================================================================
+
+    /// @notice Thrown when 1-year sweep is called too early or game not over
+    error SweepNotReady();
+
+    /// @notice Thrown when no remaining sDGNRS to sweep
+    error NothingToSweep();
+
+    /// @notice Emitted when 1-year sweep distributes remaining backing
+    event YearSweep(uint256 ethToGnrus, uint256 stethToGnrus, uint256 ethToVault, uint256 stethToVault);
+
+    /// @notice Sweep remaining DGNRS backing 50-50 to GNRUS and VAULT after 1 year post-gameover.
+    /// @dev Permissionless. Burns all sDGNRS held by this contract and forwards the
+    ///      ETH/stETH output. stETH sent first, then ETH (CEI).
+    function yearSweep() external {
+        IDegenerusGame gameContract = IDegenerusGame(ContractAddresses.GAME);
+        if (!gameContract.gameOver()) revert SweepNotReady();
+        uint48 goTime = gameContract.gameOverTimestamp();
+        if (goTime == 0 || block.timestamp < uint256(goTime) + 365 days) revert SweepNotReady();
+
+        uint256 remaining = stonk.balanceOf(address(this));
+        if (remaining == 0) revert NothingToSweep();
+
+        (uint256 ethOut, uint256 stethOut,) = stonk.burn(remaining);
+
+        // 50-50 split
+        uint256 stethToGnrus = stethOut / 2;
+        uint256 stethToVault = stethOut - stethToGnrus;
+        uint256 ethToGnrus = ethOut / 2;
+        uint256 ethToVault = ethOut - ethToGnrus;
+
+        // stETH first (lower reentrancy risk)
+        if (stethToGnrus != 0) {
+            if (!steth.transfer(ContractAddresses.GNRUS, stethToGnrus)) revert TransferFailed();
+        }
+        if (stethToVault != 0) {
+            if (!steth.transfer(ContractAddresses.VAULT, stethToVault)) revert TransferFailed();
+        }
+        // ETH last
+        if (ethToGnrus != 0) {
+            (bool ok,) = payable(ContractAddresses.GNRUS).call{value: ethToGnrus}("");
+            if (!ok) revert TransferFailed();
+        }
+        if (ethToVault != 0) {
+            (bool ok,) = payable(ContractAddresses.VAULT).call{value: ethToVault}("");
+            if (!ok) revert TransferFailed();
+        }
+
+        emit YearSweep(ethToGnrus, stethToGnrus, ethToVault, stethToVault);
     }
 
     // =====================================================================

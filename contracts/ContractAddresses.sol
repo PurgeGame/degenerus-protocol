@@ -32,6 +32,7 @@ library ContractAddresses {
     address internal constant WWXRP = address(0x756e0562323ADcDA4430d6cb456d9151f605290B);
     address internal constant STETH_TOKEN = address(0x2e234DAe75C793f67A35089C9d99245E1C58470b);
     address internal constant LINK_TOKEN = address(0xF62849F9A0B5Bf2913b396098F7c7019b51A820a);
+    address internal constant GNRUS = address(0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC);
     address internal constant CREATOR = address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR = address(0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f);
     address internal constant WXRP = address(0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9);

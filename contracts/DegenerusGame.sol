@@ -1350,12 +1350,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Claim accrued ETH winnings with stETH-first payout.
     /// @dev Restricted to self-claims by the vault or DGNRS contract.
     function claimWinningsStethFirst() external {
-        address player = msg.sender;
-        if (
-            player != ContractAddresses.VAULT &&
-            player != ContractAddresses.SDGNRS
-        ) revert E();
-        _claimWinningsInternal(player, true);
+        if (msg.sender != ContractAddresses.VAULT) revert E();
+        _claimWinningsInternal(msg.sender, true);
     }
 
     function _claimWinningsInternal(address player, bool stethFirst) private {
@@ -2157,6 +2153,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Check if the final sweep has executed (all funds forfeited).
     function isFinalSwept() external view returns (bool) {
         return finalSwept;
+    }
+
+    /// @notice Timestamp when gameover was triggered (0 if game still active).
+    function gameOverTimestamp() external view returns (uint48) {
+        return gameOverTime;
     }
 
     /// @notice Get the yield surplus (stETH appreciation above all pool obligations).

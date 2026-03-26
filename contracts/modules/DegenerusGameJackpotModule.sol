@@ -881,7 +881,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Distributes yield surplus (stETH appreciation) to stakeholders.
-    ///      23% DGNRS claimable, 23% vault claimable, 46% yield accumulator (~8% buffer).
+    ///      23% each to DGNRS, vault, and charity claimable, 23% yield accumulator (~8% buffer).
     function _distributeYieldSurplus(uint256 rngWord) private {
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalBal = address(this).balance + stBal;
@@ -894,25 +894,29 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (totalBal <= obligations) return;
 
         uint256 yieldPool = totalBal - obligations;
-        uint256 stakeholderShare = (yieldPool * 2300) / 10_000; // 23% each for DGNRS and Vault
-        uint256 accumulatorShare = (yieldPool * 4600) / 10_000; // 46% to yield accumulator (~8% buffer left unextracted)
+        uint256 quarterShare = (yieldPool * 2300) / 10_000; // 23% each (~8% buffer left unextracted)
 
         uint256 claimableDelta;
-        if (stakeholderShare != 0) {
+        if (quarterShare != 0) {
             claimableDelta =
                 _addClaimableEth(
                     ContractAddresses.VAULT,
-                    stakeholderShare,
+                    quarterShare,
                     rngWord
                 ) +
                 _addClaimableEth(
                     ContractAddresses.SDGNRS,
-                    stakeholderShare,
+                    quarterShare,
+                    rngWord
+                ) +
+                _addClaimableEth(
+                    ContractAddresses.GNRUS,
+                    quarterShare,
                     rngWord
                 );
             if (claimableDelta != 0) claimablePool += claimableDelta;
+            yieldAccumulator += quarterShare;
         }
-        if (accumulatorShare != 0) yieldAccumulator += accumulatorShare;
     }
 
     // =========================================================================
