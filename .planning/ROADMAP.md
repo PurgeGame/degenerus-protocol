@@ -243,9 +243,9 @@
 
 - [x] **Phase 120: Test Suite Cleanup** - Fix broken Foundry tests and establish green baseline for both suites (completed 2026-03-26)
 - [x] **Phase 121: Storage and Gas Fixes** - Delete lastLootboxRngWord, eliminate double SLOADs, fix event emission, NatSpec, deity boon, advanceBounty (completed 2026-03-26)
-- [ ] **Phase 122: Degenerette Freeze Fix** - Route frozen-context degenerette ETH through pending pools (I-12, isolated for BAF safety)
-- [ ] **Phase 123: DegenerusCharity Contract** - Standalone soulbound GNRUS token with burn-for-ETH/stETH redemption and sDGNRS governance
-- [ ] **Phase 124: Game Integration** - Wire yield surplus split, resolveLevel hook, stETH-first allowlist, and claimYield into existing contracts
+- [x] **Phase 122: Degenerette Freeze Fix** - Route frozen-context degenerette ETH through pending pools (I-12, isolated for BAF safety) (completed 2026-03-26)
+- [x] **Phase 123: DegenerusCharity Contract** - Standalone soulbound GNRUS token with burn-for-ETH/stETH redemption and sDGNRS governance (completed 2026-03-26)
+- [x] **Phase 124: Game Integration** - Wire yield surplus split, resolveLevel hook, stETH-first allowlist, and claimYield into existing contracts (completed 2026-03-26)
 - [ ] **Phase 125: Test Suite Pruning** - Redundancy audit, prune duplicates, verify zero coverage loss, final green baseline
 
 ## Phase Details
@@ -288,7 +288,9 @@ Plans:
   1. Degenerette ETH resolution succeeds when `prizePoolFrozen` is true, routing payouts through `_setPendingPools` (matching existing bet-placement pattern at DegeneretteModule L558-561)
   2. BAF cache-overwrite re-scan of all `_getFuturePrizePool()` read-then-write paths in DegeneretteModule confirms zero reintroduction
   3. Foundry test proves ETH conservation across a resolution-during-freeze scenario (total ETH in = total ETH out + total ETH held)
-**Plans**: TBD
+**Plans:** 1/1 plans complete
+Plans:
+- [x] 122-01-PLAN.md — Fix _distributePayout freeze guard + BAF re-scan + ETH conservation test
 
 ### Phase 123: DegenerusCharity Contract
 **Goal**: DegenerusCharity.sol exists as a standalone tested contract at nonce N+23 with soulbound GNRUS token, proportional burn-for-ETH/stETH redemption, sDGNRS governance, and a verified deploy pipeline
@@ -300,18 +302,25 @@ Plans:
   3. Per-level sDGNRS-weighted governance (propose, vote, resolveLevel) functions correctly with documented vote window, quorum, and tie-breaking rules
   4. ContractAddresses.sol contains CHARITY constant, and the full deploy pipeline (predictAddresses.js, patchForFoundry.js, DeployProtocol.sol) handles nonce N+23
   5. DeployCanary.t.sol passes with CHARITY address prediction matching actual deploy
-**Plans**: TBD
+**Plans:** 3/3 plans complete
+Plans:
+- [x] 123-01-PLAN.md — DegenerusCharity.sol contract (soulbound GNRUS + burn redemption + governance)
+- [x] 123-02-PLAN.md — Deploy pipeline integration (ContractAddresses + predictAddresses + DeployProtocol + DeployCanary)
+- [x] 123-03-PLAN.md — Hardhat unit tests for DegenerusCharity
 
 ### Phase 124: Game Integration
-**Goal**: DegenerusCharity receives yield surplus, responds to level transitions, and can claim accumulated ETH/stETH through the existing game credit system
+**Goal**: DegenerusCharity responds to level transitions and gameover via game hooks
 **Depends on**: Phase 123 (CHARITY contract must exist and ContractAddresses must be updated before existing contracts can reference it)
-**Requirements**: INTG-01, INTG-02, INTG-03, INTG-04
+**Requirements**: INTG-02
 **Success Criteria** (what must be TRUE):
-  1. `_distributeYieldSurplus` in JackpotModule routes charity share (2300 BPS) to CHARITY via `_addClaimableEth`
-  2. `_finalizeRngRequest` in AdvanceModule calls `resolveLevel` on CHARITY with try/catch and explicit gas cap (e.g., `{gas: 50_000}`), and `advanceGame` gas ceiling delta shows headroom remains above 30%
-  3. CHARITY address appears in the `claimWinningsStethFirst` allowlist in DegenerusGame
-  4. `claimYield()` on DegenerusCharity permissionlessly pulls accumulated ETH/stETH from DegenerusGame into the CHARITY contract's redemption pools
-**Plans**: TBD
+  1. ~~`_distributeYieldSurplus` routes charity share~~ — DONE in Phase 123 (JackpotModule lines 912-916)
+  2. `_finalizeRngRequest` in AdvanceModule calls `resolveLevel` on CHARITY at level transition (direct call, no try/catch)
+  3. ~~`claimWinningsStethFirst` allowlist~~ — DONE in Phase 123 (VAULT-only restriction, GNRUS uses regular claimWinnings)
+  4. ~~`claimYield()` permissionless pull~~ — DROPPED (burn() lazy pull at DegenerusCharity:297 is sufficient)
+  5. `handleGameOverDrain` calls `DegenerusCharity.handleGameOver()` to burn unallocated GNRUS at gameover (direct call, no try/catch)
+**Plans:** 1/1 plans complete
+Plans:
+- [x] 124-01-PLAN.md — Wire resolveLevel hook in AdvanceModule + handleGameOver hook in GameOverModule + integration tests
 
 ### Phase 125: Test Suite Pruning
 **Goal**: Redundant test coverage across Foundry and Hardhat identified and removed without losing any unique line coverage
@@ -320,9 +329,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Redundancy audit document identifies every duplicate-coverage test across Foundry and Hardhat suites with justification for each deletion candidate
   2. Redundant tests deleted from the repository
-  3. LCOV coverage comparison (before vs after pruning) shows zero lost lines of contract coverage
+  3. Coverage comparison (before vs after pruning) shows zero lost unique coverage via function-level tracing (LCOV infeasible per Phase 120 findings)
   4. Both `forge test` and `npx hardhat test` pass 100% with documented final pass/fail counts
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 125-01-PLAN.md — Redundancy audit across all 90 test files + delete redundant tests
+- [ ] 125-02-PLAN.md — Final green baseline verification + coverage comparison document
 
 ## Progress
 
@@ -335,11 +347,11 @@ Phase 125 (pruning) must be last since it depends on all contract changes being 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 120. Test Suite Cleanup | 2/2 | Complete    | 2026-03-26 |
-| 121. Storage and Gas Fixes | 3/3 | Complete   | 2026-03-26 |
-| 122. Degenerette Freeze Fix | 0/? | Not started | - |
-| 123. DegenerusCharity Contract | 0/? | Not started | - |
-| 124. Game Integration | 0/? | Not started | - |
-| 125. Test Suite Pruning | 0/? | Not started | - |
+| 121. Storage and Gas Fixes | 3/3 | Complete    | 2026-03-26 |
+| 122. Degenerette Freeze Fix | 1/1 | Complete    | 2026-03-26 |
+| 123. DegenerusCharity Contract | 3/3 | Complete    | 2026-03-26 |
+| 124. Game Integration | 1/1 | Complete    | 2026-03-26 |
+| 125. Test Suite Pruning | 0/2 | Not started | - |
 
 ## Deferred
 
