@@ -273,8 +273,8 @@
   5. Any commit history anomalies (reverts, merge weirdness, out-of-order commits) are identified and explained
 **Plans:** 2/2 plans complete
 Plans:
-- [ ] 126-01-PLAN.md — Delta extraction: file-level diff inventory + per-contract function catalog
-- [ ] 126-02-PLAN.md — Plan reconciliation: per-plan MATCH/DRIFT verdicts + anomaly analysis
+- [x] 126-01-PLAN.md — Delta extraction: file-level diff inventory + per-contract function catalog
+- [x] 126-02-PLAN.md — Plan reconciliation: per-plan MATCH/DRIFT verdicts + anomaly analysis
 
 ### Phase 127: DegenerusCharity Full Adversarial Audit
 **Goal**: DegenerusCharity.sol is proven correct and safe through exhaustive three-agent adversarial analysis covering all functions, token economics, governance, and game integration
@@ -286,7 +286,11 @@ Plans:
   3. Governance (propose/vote/resolveLevel) is verified resistant to vote manipulation, flash-loan attacks, and threshold gaming
   4. Game integration hooks (resolveLevel, handleGameOver) are verified for reentrancy safety and state consistency across module boundaries
   5. Storage layout has no slot collisions (forge inspect verified)
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 127-01-PLAN.md — Token operations audit: soulbound enforcement, burn redemption math, supply invariants
+- [ ] 127-02-PLAN.md — Governance audit: propose/vote/resolveLevel, flash-loan attacks, threshold gaming
+- [ ] 127-03-PLAN.md — Game hooks + storage: handleGameOver, resolveLevel call paths, forge inspect layout verification
 
 ### Phase 128: Changed Contract Adversarial Audit
 **Goal**: Every modified function across the 11 non-Charity changed contracts is verified correct through three-agent adversarial analysis with BAF-class checks and storage layout verification
@@ -317,8 +321,8 @@ Phases execute in numeric order: 126 -> 127 -> 128 -> 129
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 126. Delta Extraction + Plan Reconciliation | 0/2 | Complete    | 2026-03-26 |
-| 127. DegenerusCharity Full Adversarial Audit | 0/TBD | Not started | - |
+| 126. Delta Extraction + Plan Reconciliation | 2/2 | Complete    | 2026-03-26 |
+| 127. DegenerusCharity Full Adversarial Audit | 0/3 | Planned | - |
 | 128. Changed Contract Adversarial Audit | 0/TBD | Not started | - |
 | 129. Consolidated Findings | 0/TBD | Not started | - |
 
