@@ -324,10 +324,9 @@ contract VRFStallEdgeCases is DeployProtocol {
 
     /// @dev Storage slot for totalFlipReversals (verified via forge inspect).
     uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 6;
-    /// @dev Storage slot for lastLootboxRngWord (verified via forge inspect DegenerusGame storage-layout).
-    uint256 constant SLOT_LAST_LOOTBOX_RNG_WORD = 55;
     /// @dev Storage slot for midDayTicketRngPending (verified via forge inspect DegenerusGame storage-layout).
-    uint256 constant SLOT_MID_DAY_PENDING = 56;
+    ///      Shifted from slot 56 to 55 after FIX-01 redundant storage variable deletion.
+    uint256 constant SLOT_MID_DAY_PENDING = 55;
 
     /// @notice Unit: coordinator swap resets all VRF state and preserves intentionally-kept variables.
     function test_coordinatorSwapResetsAllVrfState() public {
@@ -467,49 +466,39 @@ contract VRFStallEdgeCases is DeployProtocol {
     // STALL-05: Zero-Seed Edge Case
     // ══════════════════════════════════════════════════════════════════════
 
-    /// @notice Unit: after day 1 completes, lastLootboxRngWord is nonzero.
+    /// @notice Unit: after day 1 completes, lootboxRngWord at current index is nonzero.
     ///         Coordinator swap preserves it. Resume updates it to new value.
     function test_zeroSeedUnreachableAfterSwap() public {
-        // Day 1: complete normally -> _finalizeLootboxRng sets lastLootboxRngWord
+        // Day 1: complete normally -> _finalizeLootboxRng sets lootboxRngWordByIndex
         _completeDay(0xDEAD0001);
 
-        // Verify lastLootboxRngWord is nonzero after day 1
-        uint256 preSwapWord = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_LAST_LOOTBOX_RNG_WORD)))
-        );
-        assertTrue(preSwapWord != 0, "lastLootboxRngWord nonzero after day 1");
+        // Verify lootboxRngWord at current index is nonzero after day 1
+        uint48 preSwapIndex = game.lootboxRngIndexView() - 1;
+        uint256 preSwapWord = game.lootboxRngWord(preSwapIndex);
+        assertTrue(preSwapWord != 0, "lootboxRngWord at current index nonzero after day 1");
 
         // Warp to day 2, trigger VRF request, then swap
         vm.warp(2 * 86400);
         game.advanceGame();
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // Verify lastLootboxRngWord is STILL the pre-swap nonzero value
-        uint256 postSwapWord = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_LAST_LOOTBOX_RNG_WORD)))
-        );
-        assertEq(postSwapWord, preSwapWord, "lastLootboxRngWord preserved by swap");
+        // Verify lootboxRngWord at pre-swap index is STILL the pre-swap nonzero value
+        uint256 postSwapWord = game.lootboxRngWord(preSwapIndex);
+        assertEq(postSwapWord, preSwapWord, "lootboxRngWord at current index preserved by swap");
 
         // Resume with new VRF
         _resumeAfterSwap(newVRF, 0xCAFE0002);
 
-        // After resume: lastLootboxRngWord updated to new value via _finalizeLootboxRng
-        uint256 postResumeWord = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_LAST_LOOTBOX_RNG_WORD)))
-        );
-        assertTrue(postResumeWord != 0, "lastLootboxRngWord nonzero after resume");
+        // After resume: lootboxRngWord at new index updated via _finalizeLootboxRng
+        uint48 postResumeIndex = game.lootboxRngIndexView() - 1;
+        uint256 postResumeWord = game.lootboxRngWord(postResumeIndex);
+        assertTrue(postResumeWord != 0, "lootboxRngWord at current index nonzero after resume");
     }
 
-    /// @notice Unit: at game start (before any day completion), lastLootboxRngWord == 0.
-    ///         After coordinator swap at start + resume cycle, it becomes nonzero.
+    /// @notice Unit: at game start (before any day completion), lootboxRngWord at index 0 == 0.
+    ///         After coordinator swap at start + resume cycle, the resume index becomes nonzero.
     function test_zeroSeedAtGameStart() public {
-        // At game start: lastLootboxRngWord should be 0 (no day completed yet)
-        uint256 startWord = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_LAST_LOOTBOX_RNG_WORD)))
-        );
-        assertEq(startWord, 0, "lastLootboxRngWord zero at game start");
-
-        // lootboxRngWord at index 0 should also be 0
+        // At game start: lootboxRngWord at index 0 should be 0 (no day completed yet)
         assertEq(game.lootboxRngWord(0), 0, "No word at index 0 at game start");
 
         // Trigger VRF request (day 1) -- increments lootboxRngIndex from 1 to 2
@@ -519,19 +508,12 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Coordinator swap at game start (edge case) -- orphans index 1
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // Resume: advanceGame -> VRF -> advanceGame sets lastLootboxRngWord to nonzero
+        // Resume: advanceGame -> VRF -> advanceGame sets lootboxRngWordByIndex to nonzero
         // The resume fires a new VRF request (lootboxRngIndex increments to 3, reserving index 2)
         _resumeAfterSwap(newVRF, 0xF0E50001);
 
-        // After resume: lastLootboxRngWord should be nonzero
-        uint256 postResumeWord = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_LAST_LOOTBOX_RNG_WORD)))
-        );
-        assertTrue(postResumeWord != 0, "lastLootboxRngWord nonzero after resume from start");
-
-        // The resume VRF word is stored at the index reserved by the resume request.
+        // After resume: lootboxRngWord at resume index should be nonzero
         // The current lootboxRngIndex is 3, so index 2 was reserved by the resume.
-        // Verify that the resumed index has a nonzero word.
         uint48 currentIndex = game.lootboxRngIndexView();
         uint48 resumeIndex = currentIndex - 1;
         assertTrue(

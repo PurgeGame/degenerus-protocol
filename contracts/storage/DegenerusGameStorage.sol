@@ -1225,11 +1225,6 @@ abstract contract DegenerusGameStorage {
     /// @dev Total pending BURNIE lootbox amount for manual RNG trigger threshold.
     uint256 internal lootboxRngPendingBurnie;
 
-    /// @dev Last resolved lootbox RNG word — always a real VRF value after first daily advance.
-    ///      Set by _finalizeLootboxRng (daily) and advanceGame mid-day path (from lootboxRngWordByIndex).
-    ///      Used by processTicketBatch for trait-assignment entropy.
-    uint256 internal lastLootboxRngWord;
-
     /// @dev True when requestLootboxRng swapped the ticket buffer and mid-day ticket
     ///      processing is pending. Cleared by advanceGame after tickets are fully drained.
     bool internal midDayTicketRngPending;

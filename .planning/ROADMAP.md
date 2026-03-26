@@ -242,7 +242,7 @@
 **Milestone Goal:** Fix broken tests, apply storage/gas/event fixes from audit findings, implement the new DegenerusCharity contract with yield split integration, and prune redundant test coverage.
 
 - [ ] **Phase 120: Test Suite Cleanup** - Fix broken Foundry tests and establish green baseline for both suites
-- [ ] **Phase 121: Storage and Gas Fixes** - Deprecate lastLootboxRngWord, eliminate double SLOADs, fix event emission, NatSpec, deity boon, advanceBounty
+- [ ] **Phase 121: Storage and Gas Fixes** - Delete lastLootboxRngWord, eliminate double SLOADs, fix event emission, NatSpec, deity boon, advanceBounty
 - [ ] **Phase 122: Degenerette Freeze Fix** - Route frozen-context degenerette ETH through pending pools (I-12, isolated for BAF safety)
 - [ ] **Phase 123: DegenerusCharity Contract** - Standalone soulbound GNRUS token with burn-for-ETH/stETH redemption and sDGNRS governance
 - [ ] **Phase 124: Game Integration** - Wire yield surplus split, resolveLevel hook, stETH-first allowlist, and claimYield into existing contracts
@@ -269,12 +269,16 @@ Plans:
 **Depends on**: Phase 120 (green baseline required to detect regressions from contract changes)
 **Requirements**: FIX-01, FIX-02, FIX-03, FIX-05, FIX-06, FIX-07, FIX-08
 **Success Criteria** (what must be TRUE):
-  1. `lastLootboxRngWord` slot declaration kept as `// DEPRECATED`, all 3 write sites removed, the 1 read site in JackpotModule redirected to `lootboxRngWordByIndex[lootboxRngIndex - 1]`, and FIX-08 delta audit proves identical values across all 5 RNG paths
+  1. `lastLootboxRngWord` storage declaration DELETED (not deprecated), all 3 write sites removed, the 1 read site in JackpotModule redirected to `lootboxRngWordByIndex[lootboxRngIndex - 1]`, and FIX-08 delta audit proves equivalent values across all 5 RNG paths
   2. Earlybird and early-burn paths cache `_getFuturePrizePool()` into a local variable and reuse it, eliminating the double SLOAD
   3. `RewardJackpotsSettled` event emits `futurePoolLocal + rebuyDelta` (post-reconciliation value) instead of stale `futurePoolLocal`
   4. BitPackingLib NatSpec reads "bits 152-153" (not "bits 152-154") with zero bytecode change confirmed
   5. Deity boon application checks existing tier and never downgrades any boon type; `advanceBounty` computed at payout time using current price and escalation multiplier at all 3 locations
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 121-01-PLAN.md — Delete lastLootboxRngWord + advanceBounty rewrite + NatSpec fix + delta audit
+- [ ] 121-02-PLAN.md — Cache double SLOAD + fix RewardJackpotsSettled event
+- [ ] 121-03-PLAN.md — Deity boon downgrade prevention
 
 ### Phase 122: Degenerette Freeze Fix
 **Goal**: Degenerette ETH bets resolve correctly during `prizePoolFrozen` without reintroducing the BAF cache-overwrite class of bug
@@ -331,7 +335,7 @@ Phase 125 (pruning) must be last since it depends on all contract changes being 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 120. Test Suite Cleanup | 1/2 | In Progress|  |
-| 121. Storage and Gas Fixes | 0/? | Not started | - |
+| 121. Storage and Gas Fixes | 0/3 | Not started | - |
 | 122. Degenerette Freeze Fix | 0/? | Not started | - |
 | 123. DegenerusCharity Contract | 0/? | Not started | - |
 | 124. Game Integration | 0/? | Not started | - |

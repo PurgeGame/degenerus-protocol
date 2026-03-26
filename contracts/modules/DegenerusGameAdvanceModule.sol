@@ -158,8 +158,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (midDayTicketRngPending) {
                     uint256 word = lootboxRngWordByIndex[lootboxRngIndex - 1];
                     if (word == 0) revert NotTimeYet();
-                    // VRF word arrived — update entropy source before processing tickets
-                    lastLootboxRngWord = word;
                 }
 
                 uint24 rk = _tqReadKey(purchaseLevel);
@@ -859,7 +857,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 index = lootboxRngIndex - 1;
         if (lootboxRngWordByIndex[index] != 0) return;
         lootboxRngWordByIndex[index] = rngWord;
-        lastLootboxRngWord = rngWord;
         emit LootboxRngApplied(index, rngWord, vrfRequestId);
     }
 
@@ -1523,7 +1520,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
             if (fallbackWord == 0) fallbackWord = 1;
             lootboxRngWordByIndex[i] = fallbackWord;
-            lastLootboxRngWord = fallbackWord;
             emit LootboxRngApplied(i, fallbackWord, 0);
 
             unchecked {
