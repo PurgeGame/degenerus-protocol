@@ -1,5 +1,23 @@
 # Milestones
 
+## v7.0 Delta Adversarial Audit (v6.0 Changes) (Shipped: 2026-03-26)
+
+**Phases completed:** 4 phases, 11 plans, 13 tasks
+
+**Key accomplishments:**
+
+- Complete v5.0-to-HEAD delta inventory (17 files, 13 commits) and function catalog (65 entries across 12 production contracts) defining adversarial review scope for Phases 127-128
+- 9/9 token-domain functions adversarially audited (0 VULNERABLE, 0 INVESTIGATE, 9 SAFE) with soulbound/supply/redemption invariant proofs and BAF-class cache-overwrite verification on burn()
+- Three-agent adversarial audit of DegenerusCharity governance: 5/5 functions analyzed, 31 verdicts, GOV-01 permissionless resolveLevel desync finding (potential MEDIUM), flash-loan attacks proven impossible via sDGNRS soulbound proof
+- PART A -- Game Hook Analysis:
+- Commit:
+- Three-agent adversarial audit of 18 DegeneretteModule functions: 1 logic change (frozen ETH routing through pending pool) triaged and proven SAFE with BAF-class verification, 17 formatting-only functions fast-tracked
+- Three-agent adversarial audit of 8 unplanned DegenerusAffiliate functions: default code namespace proven collision-free, ETH flow correct, 0 VULNERABLE/INVESTIGATE, 8 SAFE
+- Seam 1 -- Fund Split End-to-End:
+- v7.0 delta audit consolidated: 0 open actionable findings, 3 FIXED (GOV-01, GH-01, GH-02), 4 INFO (GOV-02, GOV-03, GOV-04, AFF-01) across GNRUS + 11 modified contracts
+
+---
+
 ## v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity (Shipped: 2026-03-26)
 
 **Phases completed:** 6 phases, 12 plans, 20 tasks

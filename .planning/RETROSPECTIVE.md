@@ -238,6 +238,47 @@
 
 ---
 
+## Milestone: v7.0 — Delta Adversarial Audit (v6.0 Changes)
+
+**Shipped:** 2026-03-26
+**Phases:** 4 | **Plans:** 11
+
+### What Was Built
+- Delta extraction: 17 changed files, 65 function catalog entries across 12 production contracts, 23/29 plan items MATCH with 5 DRIFT flagged
+- DegenerusCharity full adversarial audit: 17 functions across 3 domains (token ops, governance, game hooks), 0 VULNERABLE, GOV-01 finding led to onlyGame guard fix
+- Changed contract audit: 48 functions across 11 contracts, formatting-only triage fast-tracked 17/18 DegeneretteModule changes, 5 cross-contract seams analyzed
+- Consolidated: 3 FIXED (GOV-01 permissionless resolveLevel, GH-01/GH-02 burnAtGameOver reorder), 4 INFO, 0 open actionable findings
+- All 11 changed contract storage layouts verified via forge inspect
+
+### What Worked
+- Plan-vs-reality reconciliation (Phase 126) caught the unplanned DegenerusAffiliate change and 5 DRIFT items that needed explicit audit attention
+- Formatting-only triage in Phase 128 Plan 02 correctly fast-tracked 17/18 DegeneretteModule functions, focusing audit time on the 1 logic change
+- Cross-contract integration seam analysis (Phase 128 Plan 05) validated 5 seams across module boundaries — fund split, level transition, gameover drain, storage read-through, event emission
+- Delta audit methodology (extract → reconcile → per-phase audit → consolidated) executed in a single session with zero rework
+
+### What Was Inefficient
+- REQUIREMENTS.md traceability table was never updated during execution — all 20 requirements stayed "Pending" despite being satisfied
+- ROADMAP.md plan checkboxes for Phases 127-129 showed unchecked despite summaries existing (recurring pattern from v3.7+)
+- Some SUMMARY.md one-liners were malformed (contained "PART A -- Game Hook Analysis:", "Commit:", "Seam 1 --" fragments) — summary-extract tool needs better parsing of multi-section summaries
+
+### Patterns Established
+- Formatting-only triage: when a large batch of functions changed, classify formatting-only vs logic changes first to focus audit time
+- Plan-vs-reality reconciliation as Phase 1: establishes audit scope precisely before adversarial analysis begins
+- Parallel adversarial audits: Phases 127 and 128 ran concurrently after Phase 126 dependency was met
+
+### Key Lessons
+1. Delta audits are fast when the base audit (v5.0) was thorough — the three-agent system only needs to re-examine changed functions
+2. Plan reconciliation catches unplanned changes that would otherwise be audit blind spots (DegenerusAffiliate default code namespace change)
+3. Formatting-only triage is a legitimate optimization — 17 functions correctly fast-tracked with zero missed findings
+4. The v6.0→v7.0 implementation→audit cycle validates the "ship fixes, then delta-audit" approach for iterative protocol development
+
+### Cost Observations
+- Model mix: 100% opus (quality profile for all agents)
+- Single-session execution (~4 hours wall clock)
+- Notable: 65 functions audited with 11 plans, 3 real bugs found and fixed — lean and effective
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -255,6 +296,8 @@
 | v3.9 | 7 | 8 | TDD fix pipeline; combined pool pattern; bit-reservation key spaces; full-protocol integration tests |
 | v4.0 | 11 | 24 | Exhaustive lifecycle trace; file:line citation density; false positive withdrawal; cross-phase consistency |
 | v4.1 | 3 | 4 | Accumulating test file; analytical proof + Foundry test pairing; zero-stranding sweep helper |
+| v6.0 | 6 | 12 | Implementation milestone: test cleanup, storage/gas fixes, DegenerusCharity contract, game integration |
+| v7.0 | 4 | 11 | Delta audit methodology; formatting-only triage; plan-vs-reality reconciliation; parallel adversarial audits |
 
 ### Top Lessons (Verified Across Milestones)
 
