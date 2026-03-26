@@ -241,15 +241,16 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         // storage during _runBafJackpot / runDecimatorJackpot. baseFuturePool is the
         // futurePrizePool value at function entry; rebuyDelta captures every increment
         // written by _processAutoRebuy between cache and write-back.
+        uint256 rebuyDelta;
         if (futurePoolLocal != baseFuturePool) {
-            uint256 rebuyDelta = _getFuturePrizePool() - baseFuturePool;
+            rebuyDelta = _getFuturePrizePool() - baseFuturePool;
             _setFuturePrizePool(futurePoolLocal + rebuyDelta);
         }
         if (claimableDelta != 0) {
             claimablePool += claimableDelta;
         }
         if (futurePoolLocal != baseFuturePool || claimableDelta != 0) {
-            emit RewardJackpotsSettled(lvl, futurePoolLocal, claimableDelta);
+            emit RewardJackpotsSettled(lvl, futurePoolLocal + rebuyDelta, claimableDelta);
         }
     }
 
