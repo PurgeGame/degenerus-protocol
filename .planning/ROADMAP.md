@@ -242,7 +242,7 @@
 **Milestone Goal:** Fix broken tests, apply storage/gas/event fixes from audit findings, implement the new DegenerusCharity contract with yield split integration, and prune redundant test coverage.
 
 - [x] **Phase 120: Test Suite Cleanup** - Fix broken Foundry tests and establish green baseline for both suites (completed 2026-03-26)
-- [ ] **Phase 121: Storage and Gas Fixes** - Delete lastLootboxRngWord, eliminate double SLOADs, fix event emission, NatSpec, deity boon, advanceBounty
+- [x] **Phase 121: Storage and Gas Fixes** - Delete lastLootboxRngWord, eliminate double SLOADs, fix event emission, NatSpec, deity boon, advanceBounty (completed 2026-03-26)
 - [ ] **Phase 122: Degenerette Freeze Fix** - Route frozen-context degenerette ETH through pending pools (I-12, isolated for BAF safety)
 - [ ] **Phase 123: DegenerusCharity Contract** - Standalone soulbound GNRUS token with burn-for-ETH/stETH redemption and sDGNRS governance
 - [ ] **Phase 124: Game Integration** - Wire yield surplus split, resolveLevel hook, stETH-first allowlist, and claimYield into existing contracts
@@ -274,10 +274,10 @@ Plans:
   3. `RewardJackpotsSettled` event emits `futurePoolLocal + rebuyDelta` (post-reconciliation value) instead of stale `futurePoolLocal`
   4. BitPackingLib NatSpec reads "bits 152-153" (not "bits 152-154") with zero bytecode change confirmed
   5. Deity boon application checks existing tier and never downgrades any boon type; `advanceBounty` computed at payout time using current price and escalation multiplier at all 3 locations
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [x] 121-01-PLAN.md — Delete lastLootboxRngWord + advanceBounty rewrite + NatSpec fix + delta audit
-- [ ] 121-02-PLAN.md — Cache double SLOAD + fix RewardJackpotsSettled event
+- [x] 121-02-PLAN.md — Cache double SLOAD + fix RewardJackpotsSettled event
 - [x] 121-03-PLAN.md — Deity boon downgrade prevention
 
 ### Phase 122: Degenerette Freeze Fix
@@ -335,7 +335,7 @@ Phase 125 (pruning) must be last since it depends on all contract changes being 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 120. Test Suite Cleanup | 2/2 | Complete    | 2026-03-26 |
-| 121. Storage and Gas Fixes | 2/3 | In Progress|  |
+| 121. Storage and Gas Fixes | 3/3 | Complete   | 2026-03-26 |
 | 122. Degenerette Freeze Fix | 0/? | Not started | - |
 | 123. DegenerusCharity Contract | 0/? | Not started | - |
 | 124. Game Integration | 0/? | Not started | - |

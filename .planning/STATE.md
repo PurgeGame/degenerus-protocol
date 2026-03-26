@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity
-status: Ready to execute
-stopped_at: Completed 121-03-PLAN.md
-last_updated: "2026-03-26T02:46:14.883Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 121-02-PLAN.md
+last_updated: "2026-03-26T02:55:32.176Z"
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -49,6 +49,7 @@ Plan: 3 of 3
 | Phase 120 P01 | 27min | 2 tasks | 7 files |
 | Phase 121 P01 | 13min | 3 tasks | 5 files |
 | Phase 121 P03 | 14min | 1 tasks | 1 files |
+| Phase 121 P02 | 7min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - [Phase 121]: Full deletion of lastLootboxRngWord (not deprecation) -- safe for fresh deploy, saves ~20K gas/write x3 paths
 - [Phase 121]: Stall backfill path: mapping read more correct than lastLootboxRngWord (latent bug fix)
 - [Phase 121]: Removed isDeity bypass from all 7 boon tier-comparison guards -- simpler than separate deity checks, same upgrade-only semantics
+- [Phase 121]: Used futurePool local cache pattern for SLOAD elimination (consistent with codebase)
+- [Phase 121]: Hoisted rebuyDelta declaration for cross-scope event access (Option A -- default zero preserves correctness)
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T02:46:14.881Z
-Stopped at: Completed 121-03-PLAN.md
+Last session: 2026-03-26T02:55:32.174Z
+Stopped at: Completed 121-02-PLAN.md
 Resume file: None

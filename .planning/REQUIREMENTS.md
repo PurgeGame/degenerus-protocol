@@ -17,8 +17,8 @@ Requirements for Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity miles
 ### Contract Fixes
 
 - [x] **FIX-01**: `lastLootboxRngWord` storage variable deprecated (slot preserved, 3 writes deleted, 1 read redirected to `lootboxRngWordByIndex[lootboxRngIndex - 1]`)
-- [ ] **FIX-02**: Double `_getFuturePrizePool()` SLOAD eliminated in earlybird and early-burn paths (cache first read, reuse local)
-- [ ] **FIX-03**: `RewardJackpotsSettled` event emits post-reconciliation value (`futurePoolLocal + rebuyDelta`)
+- [x] **FIX-02**: Double `_getFuturePrizePool()` SLOAD eliminated in earlybird and early-burn paths (cache first read, reuse local)
+- [x] **FIX-03**: `RewardJackpotsSettled` event emits post-reconciliation value (`futurePoolLocal + rebuyDelta`)
 - [ ] **FIX-04**: Degenerette ETH resolution succeeds during `prizePoolFrozen` via pending pool routing through `_setPendingPools`
 - [x] **FIX-05**: BitPackingLib NatSpec corrected ("bits 152-154" to "bits 152-153")
 - [x] **FIX-06**: Deity boon application checks existing tier and does not downgrade any boon type
@@ -77,8 +77,8 @@ Deferred to subsequent milestones.
 | TEST-03 | Phase 120 | Pending |
 | TEST-04 | Phase 120 | Pending |
 | FIX-01 | Phase 121 | Complete |
-| FIX-02 | Phase 121 | Pending |
-| FIX-03 | Phase 121 | Pending |
+| FIX-02 | Phase 121 | Complete |
+| FIX-03 | Phase 121 | Complete |
 | FIX-04 | Phase 122 | Pending |
 | FIX-05 | Phase 121 | Complete |
 | FIX-06 | Phase 121 | Complete |
