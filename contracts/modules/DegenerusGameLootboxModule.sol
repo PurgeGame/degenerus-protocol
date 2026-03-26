@@ -1390,8 +1390,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Apply a boon to a player. Handles both lootbox-sourced and deity-sourced boons.
-    ///      Lootbox boons: upgrade semantics (only if higher), emit events, deity day = 0.
-    ///      Deity boons: overwrite, no events, deity day = day.
+    ///      Both sources use upgrade semantics (only if higher tier/amount).
+    ///      Lootbox boons: emit events, deity day = 0.
+    ///      Deity boons: no events, deity day = day.
     ///      All boon state is stored in boonPacked[player] (2-slot packed struct).
     function _applyBoon(
         address player,
@@ -1410,7 +1411,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s0 = bp.slot0;
             uint8 newTier = _coinflipBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
-            if (isDeity || newTier > existingTier) {
+            if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_COINFLIP_TIER_SHIFT)) | (uint256(newTier) << BP_COINFLIP_TIER_SHIFT);
             }
             // Set coinflipDay = currentDay
@@ -1430,14 +1431,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             BoonPacked storage bp = boonPacked[player];
             uint256 s0 = bp.slot0;
             uint8 existingTier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
-            uint8 activeTier;
-            if (isDeity) {
-                // Deity: always overwrite with the specific tier
-                activeTier = newTier;
-            } else {
-                // Lootbox: upgrade semantics — keep higher tier
-                activeTier = newTier > existingTier ? newTier : existingTier;
-            }
+            // Both deity and lootbox: upgrade semantics — keep higher tier
+            uint8 activeTier = newTier > existingTier ? newTier : existingTier;
             // Clear lootbox fields, set new values
             s0 = s0 & BP_LOOTBOX_CLEAR;
             s0 = s0 | (uint256(uint24(currentDay)) << BP_LOOTBOX_DAY_SHIFT);
@@ -1463,7 +1458,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s0 = bp.slot0;
             uint8 newTier = _purchaseBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_PURCHASE_TIER_SHIFT);
-            if (isDeity || newTier > existingTier) {
+            if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_PURCHASE_TIER_SHIFT)) | (uint256(newTier) << BP_PURCHASE_TIER_SHIFT);
             }
             // Set purchaseDay = currentDay
@@ -1489,7 +1484,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s0 = bp.slot0;
             uint8 newTier = _decimatorBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_DECIMATOR_TIER_SHIFT);
-            if (isDeity || newTier > existingTier) {
+            if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_DECIMATOR_TIER_SHIFT)) | (uint256(newTier) << BP_DECIMATOR_TIER_SHIFT);
             }
             // Set deityDecimatorDay (no award day for decimator)
@@ -1509,7 +1504,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s0 = bp.slot0;
             uint8 newTier = _whaleBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
-            if (isDeity || newTier > existingTier) {
+            if (newTier > existingTier) {
                 s0 = (s0 & ~(uint256(BP_MASK_8) << BP_WHALE_TIER_SHIFT)) | (uint256(newTier) << BP_WHALE_TIER_SHIFT);
             }
             // whaleDay = isDeity ? day : currentDay (matching original behavior)
@@ -1531,7 +1526,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             BoonPacked storage bp = boonPacked[player];
             uint256 s1 = bp.slot1;
             uint24 existingAmt = uint24(s1 >> BP_ACTIVITY_PENDING_SHIFT);
-            if (isDeity || amt > existingAmt) {
+            if (amt > existingAmt) {
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_ACTIVITY_PENDING_SHIFT)) | (uint256(amt) << BP_ACTIVITY_PENDING_SHIFT);
             }
             // Set activityDay = currentDay
@@ -1552,7 +1547,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             BoonPacked storage bp = boonPacked[player];
             uint256 s1 = bp.slot1;
             uint8 existingTier = uint8(s1 >> BP_DEITY_PASS_TIER_SHIFT);
-            if (isDeity || tier > existingTier) {
+            if (tier > existingTier) {
                 s1 = (s1 & ~(uint256(BP_MASK_8) << BP_DEITY_PASS_TIER_SHIFT)) | (uint256(tier) << BP_DEITY_PASS_TIER_SHIFT);
             }
             // Set deityPassDay = currentDay
@@ -1586,7 +1581,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 s1 = bp.slot1;
             uint8 newTier = _lazyPassBpsToTier(bps);
             uint8 existingTier = uint8(s1 >> BP_LAZY_PASS_TIER_SHIFT);
-            if (isDeity || newTier > existingTier) {
+            if (newTier > existingTier) {
                 s1 = (s1 & ~(uint256(BP_MASK_8) << BP_LAZY_PASS_TIER_SHIFT)) | (uint256(newTier) << BP_LAZY_PASS_TIER_SHIFT);
             }
             // lazyPassDay = isDeity ? day : currentDay (matching original behavior)
