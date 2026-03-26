@@ -126,8 +126,6 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             _setFuturePrizePool(0);
             currentPrizePool = 0;
             yieldAccumulator = 0;
-            // Burn unallocated GNRUS at gameover (no funds to distribute, but GNRUS cleanup still needed)
-            charityGameOver.handleGameOver();
             return;
         }
 
