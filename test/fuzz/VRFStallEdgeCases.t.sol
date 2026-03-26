@@ -22,10 +22,17 @@ contract VRFStallEdgeCases is DeployProtocol {
     // ── Helpers ──────────────────────────────────────────────────────────
 
     /// @dev Complete a full day: advanceGame -> VRF fulfill -> loop until unlocked.
+    ///      Tracks the last-known request ID to avoid double-fulfillment when the
+    ///      game reuses a stale rngWordCurrent across day boundaries.
+    uint256 private _lastFulfilledReqId;
+
     function _completeDay(uint256 vrfWord) internal {
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
-        mockVRF.fulfillRandomWords(reqId, vrfWord);
+        if (reqId != _lastFulfilledReqId && reqId > 0) {
+            mockVRF.fulfillRandomWords(reqId, vrfWord);
+            _lastFulfilledReqId = reqId;
+        }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
             game.advanceGame();
@@ -33,12 +40,14 @@ contract VRFStallEdgeCases is DeployProtocol {
     }
 
     /// @dev Deploy a new MockVRFCoordinator, wire it up via admin prank.
+    ///      Resets _lastFulfilledReqId since the new mock has its own request counter.
     function _doCoordinatorSwap() internal returns (MockVRFCoordinator newVRF) {
         newVRF = new MockVRFCoordinator();
         uint256 newSubId = newVRF.createSubscription();
         newVRF.addConsumer(newSubId, address(game));
         vm.prank(address(admin));
         game.updateVrfCoordinatorAndSub(address(newVRF), newSubId, bytes32(uint256(1)));
+        _lastFulfilledReqId = 0;
     }
 
     /// @dev Warp forward by gapDays, then do coordinator swap.
@@ -315,10 +324,10 @@ contract VRFStallEdgeCases is DeployProtocol {
 
     /// @dev Storage slot for totalFlipReversals (verified via forge inspect).
     uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 6;
-    /// @dev Storage slot for lastLootboxRngWord.
-    uint256 constant SLOT_LAST_LOOTBOX_RNG_WORD = 70;
-    /// @dev Storage slot for midDayTicketRngPending.
-    uint256 constant SLOT_MID_DAY_PENDING = 71;
+    /// @dev Storage slot for lastLootboxRngWord (verified via forge inspect DegenerusGame storage-layout).
+    uint256 constant SLOT_LAST_LOOTBOX_RNG_WORD = 55;
+    /// @dev Storage slot for midDayTicketRngPending (verified via forge inspect DegenerusGame storage-layout).
+    uint256 constant SLOT_MID_DAY_PENDING = 56;
 
     /// @notice Unit: coordinator swap resets all VRF state and preserves intentionally-kept variables.
     function test_coordinatorSwapResetsAllVrfState() public {

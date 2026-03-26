@@ -24,6 +24,7 @@
 - ✅ **v4.3 prizePoolsPacked Batching Optimization** — Phase 99 (closed early 2026-03-25, savings revised ~1.6M -> ~63.8K)
 - ✅ **v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan** — Phases 100-102 (shipped 2026-03-25)
 - ✅ **v5.0 Ultimate Adversarial Audit** — Phases 103-119 (shipped 2026-03-25)
+- 🚧 **v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity** — Phases 120-125 (in progress)
 
 ## Phases
 
@@ -213,14 +214,8 @@
 
 </details>
 
-### v5.0 Ultimate Adversarial Audit (Phases 103-119, In Progress)
-
-**Milestone Goal:** Exhaustive three-agent adversarial audit of every state-changing function in the protocol, with mandatory call-tree expansion, storage-write mapping, and coverage enforcement. Designed to catch BAF-class bugs that survived 24 prior milestones.
-
-**Cross-cutting process requirements (satisfied by every unit phase):**
-- COV-01, COV-02, COV-03 (Taskmaster coverage enforcement)
-- ATK-01, ATK-02, ATK-03, ATK-04, ATK-05 (Mad Genius attack methodology)
-- VAL-01, VAL-02, VAL-03, VAL-04 (Skeptic validation)
+<details>
+<summary>v5.0 Ultimate Adversarial Audit (Phases 103-119) -- SHIPPED 2026-03-25</summary>
 
 - [x] **Phase 103: Game Router + Storage Layout** - Unit 1: DegenerusGame, DegenerusGameStorage (completed 2026-03-25)
 - [x] **Phase 104: Day Advancement + VRF** - Unit 2: DegenerusGameAdvanceModule (completed 2026-03-25)
@@ -240,327 +235,113 @@
 - [x] **Phase 118: Cross-Contract Integration Sweep** - Unit 16: all contracts, meta-analysis (completed 2026-03-25)
 - [x] **Phase 119: Final Deliverables** - Master findings, access control matrix, storage write map, ETH flow map (completed 2026-03-25)
 
+</details>
+
+### v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity (Phases 120-125, In Progress)
+
+**Milestone Goal:** Fix broken tests, apply storage/gas/event fixes from audit findings, implement the new DegenerusCharity contract with yield split integration, and prune redundant test coverage.
+
+- [ ] **Phase 120: Test Suite Cleanup** - Fix broken Foundry tests and establish green baseline for both suites
+- [ ] **Phase 121: Storage and Gas Fixes** - Deprecate lastLootboxRngWord, eliminate double SLOADs, fix event emission, NatSpec, deity boon, advanceBounty
+- [ ] **Phase 122: Degenerette Freeze Fix** - Route frozen-context degenerette ETH through pending pools (I-12, isolated for BAF safety)
+- [ ] **Phase 123: DegenerusCharity Contract** - Standalone soulbound GNRUS token with burn-for-ETH/stETH redemption and sDGNRS governance
+- [ ] **Phase 124: Game Integration** - Wire yield surplus split, resolveLevel hook, stETH-first allowlist, and claimYield into existing contracts
+- [ ] **Phase 125: Test Suite Pruning** - Redundancy audit, prune duplicates, verify zero coverage loss, final green baseline
+
 ## Phase Details
 
-### Phase 103: Game Router + Storage Layout
-**Goal**: Every state-changing function in DegenerusGame and DegenerusGameStorage has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
-**Depends on**: Nothing (unit phases are independent; this is first due to storage layout being foundational)
-**Requirements**: UNIT-01 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
+### Phase 120: Test Suite Cleanup
+**Goal**: Both test suites pass 100% with documented coverage, providing a trustworthy regression baseline before any contract changes
+**Depends on**: Nothing (first phase -- green baseline is prerequisite for all subsequent work)
+**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04
 **Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusGame.sol and DegenerusGameStorage.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 1 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
+  1. All 14 failing Foundry tests either fixed or deleted with documented justification for each deletion
+  2. `forge test` runs to completion with zero failures
+  3. `npx hardhat test` runs to completion with zero failures
+  4. LCOV coverage reports generated for both suites showing per-contract line coverage percentages
+**Plans:** 2 plans
 Plans:
-- [x] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [x] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [x] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [x] 103-04-PLAN.md — Final Unit 1 findings report
+- [ ] 120-01-PLAN.md — Fix all 14 failing Foundry tests and establish green forge test baseline
+- [ ] 120-02-PLAN.md — Hardhat green baseline + LCOV coverage reports for both suites
 
-### Phase 104: Day Advancement + VRF
-**Goal**: Every state-changing function in DegenerusGameAdvanceModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
-**Depends on**: Phase 103 (delegatecall routing and storage layout must be proven correct before auditing modules that execute in Game's context)
-**Requirements**: UNIT-02 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**PRIORITY INVESTIGATION — Ticket Queue Drain Bug**: 3 TicketLifecycle Foundry tests fail with `Read queue not drained for level 1: 2 != 0` (testFiveLevelIntegration, testMultiLevelZeroStranding, testZeroStrandingSweepAfterTransitions). Mad Genius must trace `_prepareFutureTickets` and `processFutureTicketBatch` end-to-end to determine whether this is a contract bug (tickets silently stranded) or a test setup issue. Verdict must be CONFIRMED BUG or PROVEN SAFE with full evidence.
+### Phase 121: Storage and Gas Fixes
+**Goal**: Audit findings FIX-01 through FIX-03, FIX-05 through FIX-08 applied as mechanical contract changes with delta verification proving behavioral equivalence
+**Depends on**: Phase 120 (green baseline required to detect regressions from contract changes)
+**Requirements**: FIX-01, FIX-02, FIX-03, FIX-05, FIX-06, FIX-07, FIX-08
 **Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusGameAdvanceModule.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Ticket queue drain investigation complete with verdict (CONFIRMED BUG or PROVEN SAFE) and full trace evidence
-  6. Unit 2 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 104-01-PLAN.md — Taskmaster: coverage checklist for DegenerusGameAdvanceModule
-- [x] 104-02-PLAN.md — Mad Genius: full attack analysis + ticket queue drain investigation
-- [x] 104-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [x] 104-04-PLAN.md — Final Unit 2 findings report
+  1. `lastLootboxRngWord` slot declaration kept as `// DEPRECATED`, all 3 write sites removed, the 1 read site in JackpotModule redirected to `lootboxRngWordByIndex[lootboxRngIndex - 1]`, and FIX-08 delta audit proves identical values across all 5 RNG paths
+  2. Earlybird and early-burn paths cache `_getFuturePrizePool()` into a local variable and reuse it, eliminating the double SLOAD
+  3. `RewardJackpotsSettled` event emits `futurePoolLocal + rebuyDelta` (post-reconciliation value) instead of stale `futurePoolLocal`
+  4. BitPackingLib NatSpec reads "bits 152-153" (not "bits 152-154") with zero bytecode change confirmed
+  5. Deity boon application checks existing tier and never downgrades any boon type; `advanceBounty` computed at payout time using current price and escalation multiplier at all 3 locations
+**Plans**: TBD
 
-### Phase 105: Jackpot Distribution
-**Goal**: Every state-changing function in DegenerusGameJackpotModule and DegenerusGamePayoutUtils has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
-**Depends on**: Phase 103
-**Requirements**: UNIT-03 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
+### Phase 122: Degenerette Freeze Fix
+**Goal**: Degenerette ETH bets resolve correctly during `prizePoolFrozen` without reintroducing the BAF cache-overwrite class of bug
+**Depends on**: Phase 121 (storage/gas fixes must be stable before isolating the BAF-sensitive change)
+**Requirements**: FIX-04
 **Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusGameJackpotModule.sol and DegenerusGamePayoutUtils.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 3 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 105-01-PLAN.md — Taskmaster: coverage checklist for JackpotModule + PayoutUtils
-- [x] 105-02-PLAN.md — Mad Genius: full attack analysis with BAF-critical path re-audit
-- [x] 105-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [x] 105-04-PLAN.md — Final Unit 3 findings report
+  1. Degenerette ETH resolution succeeds when `prizePoolFrozen` is true, routing payouts through `_setPendingPools` (matching existing bet-placement pattern at DegeneretteModule L558-561)
+  2. BAF cache-overwrite re-scan of all `_getFuturePrizePool()` read-then-write paths in DegeneretteModule confirms zero reintroduction
+  3. Foundry test proves ETH conservation across a resolution-during-freeze scenario (total ETH in = total ETH out + total ETH held)
+**Plans**: TBD
 
-### Phase 106: Endgame + Game Over
-**Goal**: Every state-changing function in DegenerusGameEndgameModule and DegenerusGameGameOverModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on auto-rebuy paths where the BAF bug lived
-**Depends on**: Phase 103
-**Requirements**: UNIT-04 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
+### Phase 123: DegenerusCharity Contract
+**Goal**: DegenerusCharity.sol exists as a standalone tested contract at nonce N+23 with soulbound GNRUS token, proportional burn-for-ETH/stETH redemption, sDGNRS governance, and a verified deploy pipeline
+**Depends on**: Phase 122 (all existing contract fixes must be complete before adding a new contract to the deploy pipeline)
+**Requirements**: CHAR-01, CHAR-02, CHAR-03, CHAR-04, CHAR-05, CHAR-06, CHAR-07
 **Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusGameEndgameModule.sol and DegenerusGameGameOverModule.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 4 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 106-01-PLAN.md — Taskmaster: coverage checklist for EndgameModule + GameOverModule
-- [x] 106-02-PLAN.md — Mad Genius: full attack analysis with BAF fix verification
-- [x] 106-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [x] 106-04-PLAN.md — Final Unit 4 findings report
+  1. DegenerusCharity.sol deploys at nonce N+23 with soulbound GNRUS token (name="Degenerus Charity", symbol="GNRUS", 18 decimals, 1T supply to contract, no transfer/transferFrom/approve)
+  2. Burning GNRUS returns proportional ETH and stETH (`amount/totalSupply` share of both assets) with minimum burn enforcement and last-holder sweep
+  3. Per-level sDGNRS-weighted governance (propose, vote, resolveLevel) functions correctly with documented vote window, quorum, and tie-breaking rules
+  4. ContractAddresses.sol contains CHARITY constant, and the full deploy pipeline (predictAddresses.js, patchForFoundry.js, DeployProtocol.sol) handles nonce N+23
+  5. DeployCanary.t.sol passes with CHARITY address prediction matching actual deploy
+**Plans**: TBD
 
-### Phase 107: Mint + Purchase Flow
-**Goal**: Every state-changing function in DegenerusGameMintModule and DegenerusGameMintStreakUtils has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
-**Depends on**: Phase 103
-**Requirements**: UNIT-05 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**NOTE**: `processFutureTicketBatch` lives here — coordinate with Phase 104 ticket queue drain investigation. Mad Genius must trace the full ticket lifecycle from queue write through batch processing to ensure no tickets can be silently stranded.
+### Phase 124: Game Integration
+**Goal**: DegenerusCharity receives yield surplus, responds to level transitions, and can claim accumulated ETH/stETH through the existing game credit system
+**Depends on**: Phase 123 (CHARITY contract must exist and ContractAddresses must be updated before existing contracts can reference it)
+**Requirements**: INTG-01, INTG-02, INTG-03, INTG-04
 **Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusGameMintModule.sol and DegenerusGameMintStreakUtils.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 5 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 107-01-PLAN.md — Taskmaster: coverage checklist for MintModule + MintStreakUtils
-- [x] 107-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [x] 107-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [x] 107-04-PLAN.md — Final Unit 5 findings report
+  1. `_distributeYieldSurplus` in JackpotModule routes charity share (2300 BPS) to CHARITY via `_addClaimableEth`
+  2. `_finalizeRngRequest` in AdvanceModule calls `resolveLevel` on CHARITY with try/catch and explicit gas cap (e.g., `{gas: 50_000}`), and `advanceGame` gas ceiling delta shows headroom remains above 30%
+  3. CHARITY address appears in the `claimWinningsStethFirst` allowlist in DegenerusGame
+  4. `claimYield()` on DegenerusCharity permissionlessly pulls accumulated ETH/stETH from DegenerusGame into the CHARITY contract's redemption pools
+**Plans**: TBD
 
-### Phase 108: Whale Purchases
-**Goal**: Every state-changing function in DegenerusGameWhaleModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
-**Depends on**: Phase 103
-**Requirements**: UNIT-06 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
+### Phase 125: Test Suite Pruning
+**Goal**: Redundant test coverage across Foundry and Hardhat identified and removed without losing any unique line coverage
+**Depends on**: Phase 124 (all contract changes must be finalized before pruning tests against the stable codebase)
+**Requirements**: PRUNE-01, PRUNE-02, PRUNE-03, PRUNE-04
 **Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusGameWhaleModule.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 6 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 108-01-PLAN.md -- Taskmaster: coverage checklist for DegenerusGameWhaleModule
-- [x] 108-02-PLAN.md -- Mad Genius: full attack analysis on all functions
-- [x] 108-03-PLAN.md -- Skeptic review + Taskmaster coverage verification
-- [x] 108-04-PLAN.md -- Final Unit 6 findings report
-
-### Phase 109: Decimator System
-**Goal**: Every state-changing function in DegenerusGameDecimatorModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on auto-rebuy paths (same BAF pattern risk as Endgame)
-**Depends on**: Phase 103
-**Requirements**: UNIT-07 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusGameDecimatorModule.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 7 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 109-01-PLAN.md -- Taskmaster: coverage checklist for DegenerusGameDecimatorModule
-- [x] 109-02-PLAN.md -- Mad Genius: full attack analysis on all functions
-- [x] 109-03-PLAN.md -- Skeptic review + Taskmaster coverage verification
-- [x] 109-04-PLAN.md -- Final Unit 7 findings report
-
-### Phase 110: Degenerette Betting
-**Goal**: Every state-changing function in DegenerusGameDegeneretteModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
-**Depends on**: Phase 103
-**Requirements**: UNIT-08 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusGameDegeneretteModule.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 8 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 110-01-PLAN.md -- Taskmaster: coverage checklist for DegeneretteModule
-- [x] 110-02-PLAN.md -- Mad Genius: full attack analysis on all functions
-- [x] 110-03-PLAN.md -- Skeptic review + Taskmaster coverage verification
-- [x] 110-04-PLAN.md -- Final Unit 8 findings report
-
-### Phase 111: Lootbox + Boons
-**Goal**: Every state-changing function in DegenerusGameLootboxModule and DegenerusGameBoonModule has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
-**Depends on**: Phase 103
-**Requirements**: UNIT-09 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusGameLootboxModule.sol and DegenerusGameBoonModule.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 9 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [ ] 103-01-PLAN.md — Taskmaster: coverage checklist + storage layout verification
-- [ ] 103-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [ ] 103-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [ ] 103-04-PLAN.md — Final Unit 1 findings report
-
-### Phase 112: BURNIE Token + Coinflip
-**Goal**: Every state-changing function in BurnieCoin and BurnieCoinflip has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on coinflip auto-rebuy paths (BAF pattern risk)
-**Depends on**: Nothing (standalone contracts, not delegatecalled through Game)
-**Requirements**: UNIT-10 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in BurnieCoin.sol and BurnieCoinflip.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 10 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans (all complete)
-Plans:
-- [x] 112-01-PLAN.md — Taskmaster: coverage checklist for BurnieCoin + BurnieCoinflip
-- [x] 112-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [x] 112-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [x] 112-04-PLAN.md — Final Unit 10 findings report
-
-### Phase 113: sDGNRS + DGNRS
-**Goal**: Every state-changing function in StakedDegenerusStonk and DegenerusStonk has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on redemption flow (submit/resolve/claim) and soulbound enforcement
-**Depends on**: Nothing (standalone contracts)
-**Requirements**: UNIT-11 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in StakedDegenerusStonk.sol and DegenerusStonk.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 11 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans (all complete)
-Plans:
-- [x] 113-01-PLAN.md — Taskmaster: coverage checklist (37 functions catalogued)
-- [x] 113-02-PLAN.md — Mad Genius: full attack analysis (0 VULNERABLE, 4 INVESTIGATE)
-- [x] 113-03-PLAN.md — Skeptic review + coverage verification (3 CONFIRMED INFO, 1 FP, PASS)
-- [x] 113-04-PLAN.md — Final Unit 11 findings report (0 actionable findings)
-
-### Phase 114: Vault + WWXRP
-**Goal**: Every state-changing function in DegenerusVault, DegenerusVaultShare, and WrappedWrappedXRP has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on share calculation and WWXRP undercollateralized unwrap race
-**Depends on**: Nothing (standalone contracts)
-**Requirements**: UNIT-12 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusVault.sol, DegenerusVaultShare.sol, and WrappedWrappedXRP.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 12 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 114-01-PLAN.md — Taskmaster: coverage checklist for Vault + VaultShare + WWXRP
-- [x] 114-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [x] 114-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [x] 114-04-PLAN.md — Final Unit 12 findings report
-
-### Phase 115: Admin + Governance
-**Goal**: Every state-changing function in DegenerusAdmin has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on VRF governance manipulation and coordinator swap
-**Depends on**: Nothing (standalone contract)
-**Requirements**: UNIT-13 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusAdmin.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 13 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 115-01-PLAN.md — Taskmaster: coverage checklist for DegenerusAdmin
-- [x] 115-02-PLAN.md — Mad Genius: full attack analysis on all functions
-- [x] 115-03-PLAN.md — Skeptic review + Taskmaster coverage verification
-- [x] 115-04-PLAN.md — Final Unit 13 findings report
-
-### Phase 116: Affiliate + Quests + Jackpots
-**Goal**: Every state-changing function in DegenerusAffiliate, DegenerusQuests, and DegenerusJackpots has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings
-**Depends on**: Nothing (standalone contracts)
-**Requirements**: UNIT-14 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in DegenerusAffiliate.sol, DegenerusQuests.sol, and DegenerusJackpots.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 14 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 116-01 -- Taskmaster: coverage checklist (13 Cat B, 17 Cat C, 31 Cat D)
-- [x] 116-02 -- Mad Genius: full attack analysis on all functions
-- [x] 116-03 -- Skeptic review + Taskmaster coverage verification
-- [x] 116-04 -- Final Unit 14 findings report
-
-### Phase 117: Libraries
-**Goal**: Every state-changing function in EntropyLib, BitPackingLib, GameTimeLib, JackpotBucketLib, and PriceLookupLib has been attacked with full call-tree expansion, storage-write maps, and Skeptic-validated findings -- with special focus on entropy extraction bias and caller misuse patterns
-**Depends on**: Nothing (libraries, but best audited after seeing how modules use them in phases 103-116)
-**Requirements**: UNIT-15 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. Taskmaster coverage checklist built for all state-changing functions in EntropyLib.sol, BitPackingLib.sol, GameTimeLib.sol, JackpotBucketLib.sol, and PriceLookupLib.sol, and PASS verdict achieved with 100% coverage
-  2. Skeptic independently verified no state-changing functions were omitted from the Taskmaster checklist
-  3. Mad Genius attack report complete for every function with full recursive call trees (line numbers), storage-write maps, and explicit cached-local-vs-storage checks
-  4. Skeptic review complete with CONFIRMED / FALSE POSITIVE / DOWNGRADE verdict on every VULNERABLE and INVESTIGATE finding
-  5. Unit 15 findings report produced with severity-rated confirmed findings
-**Plans**: 4 plans
-Plans:
-- [x] 117-01 — Taskmaster: coverage checklist (18 functions, 17 constants)
-- [x] 117-02 — Mad Genius: full attack analysis on all functions
-- [x] 117-03 — Skeptic review + Taskmaster coverage verification
-- [x] 117-04 — Final Unit 15 findings report
-
-### Phase 118: Cross-Contract Integration Sweep
-**Goal**: Protocol-wide meta-analysis confirms ETH conservation, token supply invariants, access control completeness, delegatecall storage coherence, state machine consistency, and cross-contract reentrancy safety -- aggregating insights from all 15 prior unit audits
-**Depends on**: Phases 103-117 (all unit audits must complete before cross-contract sweep)
-**Requirements**: UNIT-16 (+ cross-cutting: COV-01, COV-02, COV-03, ATK-01, ATK-02, ATK-03, ATK-04, ATK-05, VAL-01, VAL-02, VAL-03, VAL-04)
-**Success Criteria** (what must be TRUE):
-  1. ETH conservation analysis complete: every msg.value entry and every ETH exit traced, total-in = total-distributed + total-held proven or gap identified
-  2. Token supply invariant analysis complete: every mint and burn path for BURNIE/DGNRS/sDGNRS/WWXRP verified against corresponding value backing
-  3. Access control matrix complete: every external function mapped to its guard, no unguarded state-changing external functions
-  4. Delegatecall storage coherence verified: all modules proven to agree on storage layout with no rogue slot additions
-  5. Unit 16 findings report produced with severity-rated confirmed findings covering state machine consistency and cross-contract reentrancy
-**Plans**: 4 plans (all complete)
-Plans:
-- [x] 118-01-PLAN.md -- Integration map: cross-contract call graph + shared storage + access control matrix
-- [x] 118-02-PLAN.md -- Integration attack analysis: 7 attack surfaces, ETH conservation proven
-- [x] 118-03-PLAN.md -- Skeptic review + coverage verification (100% PASS)
-- [x] 118-04-PLAN.md -- Final Unit 16 findings report (0 new findings, 1 MEDIUM confirmed from Unit 7)
-
-### Phase 119: Final Deliverables
-**Goal**: All unit findings aggregated into master deliverables that provide a complete security picture of the protocol
-**Depends on**: Phase 118 (all 16 units must be complete)
-**Requirements**: DEL-01, DEL-02, DEL-03, DEL-04
-**Success Criteria** (what must be TRUE):
-  1. Master FINDINGS.md produced with all confirmed findings from all 16 units, severity-sorted (CRITICAL > HIGH > MEDIUM > LOW > INFO)
-  2. ACCESS-CONTROL-MATRIX.md produced mapping every external function across all 29 contracts to its access guard
-  3. STORAGE-WRITE-MAP.md produced listing every storage slot and every function that writes to it across the full protocol
-  4. ETH-FLOW-MAP.md produced tracing every wei from entry (msg.value, stETH) through internal accounting to exit (claimable, vault, burns)
-**Plans**: 4 plans
-Plans:
-- [x] 119-01-PLAN.md -- Master FINDINGS.md (32 findings, severity-sorted)
-- [x] 119-02-PLAN.md -- ACCESS-CONTROL-MATRIX.md (all 29 contracts mapped)
-- [x] 119-03-PLAN.md -- STORAGE-WRITE-MAP.md (102+ variables with writer functions)
-- [x] 119-04-PLAN.md -- ETH-FLOW-MAP.md (10 entry points, 9 exit points, conservation PROVEN)
+  1. Redundancy audit document identifies every duplicate-coverage test across Foundry and Hardhat suites with justification for each deletion candidate
+  2. Redundant tests deleted from the repository
+  3. LCOV coverage comparison (before vs after pruning) shows zero lost lines of contract coverage
+  4. Both `forge test` and `npx hardhat test` pass 100% with documented final pass/fail counts
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases 103-117 can execute in any order (unit audits are independent after Phase 103 proves storage layout).
-Phase 118 requires all of 103-117. Phase 119 requires 118.
+Phases execute sequentially: 120 -> 121 -> 122 -> 123 -> 124 -> 125.
+Phase 122 (I-12 freeze fix) isolated from Phase 121 due to BAF cache-overwrite reintroduction risk.
+Phase 123 (CHARITY) must precede Phase 124 (integration) because ContractAddresses must exist first.
+Phase 125 (pruning) must be last since it depends on all contract changes being stable.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 103. Game Router + Storage Layout | 4/4 | Complete    | 2026-03-25 |
-| 104. Day Advancement + VRF | 4/4 | Complete    | 2026-03-25 |
-| 105. Jackpot Distribution | 4/4 | Complete    | 2026-03-25 |
-| 106. Endgame + Game Over | 4/4 | Complete   | 2026-03-25 |
-| 107. Mint + Purchase Flow | 4/4 | Complete   | 2026-03-25 |
-| 108. Whale Purchases | 4/4 | Complete   | 2026-03-25 |
-| 109. Decimator System | 4/4 | Complete   | 2026-03-25 |
-| 110. Degenerette Betting | 4/4 | Complete   | 2026-03-25 |
-| 111. Lootbox + Boons | 4/4 | Complete   | 2026-03-25 |
-| 112. BURNIE Token + Coinflip | 4/4 | Complete   | 2026-03-25 |
-| 113. sDGNRS + DGNRS | 4/4 | Complete   | 2026-03-25 |
-| 114. Vault + WWXRP | 4/4 | Complete   | 2026-03-25 |
-| 115. Admin + Governance | 4/4 | Complete   | 2026-03-25 |
-| 116. Affiliate + Quests + Jackpots | 4/4 | Complete   | 2026-03-25 |
-| 117. Libraries | 4/4 | Complete   | 2026-03-25 |
-| 118. Cross-Contract Integration Sweep | 4/4 | Complete   | 2026-03-25 |
-| 119. Final Deliverables | 4/4 | Complete   | 2026-03-25 |
+| 120. Test Suite Cleanup | 0/2 | Planning complete | - |
+| 121. Storage and Gas Fixes | 0/? | Not started | - |
+| 122. Degenerette Freeze Fix | 0/? | Not started | - |
+| 123. DegenerusCharity Contract | 0/? | Not started | - |
+| 124. Game Integration | 0/? | Not started | - |
+| 125. Test Suite Pruning | 0/? | Not started | - |
 
 ## Deferred
 
 - **FORMAL-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
 - **FORMAL-02**: Formal verification of vote counting arithmetic via Halmos
 - **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
+- **FVER-01**: Halmos symbolic proof of CHARITY burn math (proportional ETH/stETH)
+- **FVER-02**: stETH shares-based accounting for 1-2 wei rounding precision
+- **FVER-03**: Foundry fuzz invariant tests for governance (vote weight conservation)

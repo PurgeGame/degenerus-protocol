@@ -94,6 +94,12 @@ contract MockVRFCoordinator {
         require(ok, "VRF callback failed");
     }
 
+    /// @dev Reset the fulfilled flag for a request so it can be reused in multi-day
+    ///      test sequences where the game may reuse the same VRF request slot.
+    function resetFulfilled(uint256 requestId) external {
+        pendingRequests[requestId].fulfilled = false;
+    }
+
     function fulfillRandomWordsRaw(
         uint256 requestId,
         address consumer,

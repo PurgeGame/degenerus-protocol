@@ -86,11 +86,12 @@ contract VRFLifecycle is DeployProtocol {
 
         // Fund a buyer with enough ETH to hit the 50 ETH nextPrizePool target.
         // Presale lootbox split: 40% to nextPrizePool. Ticket cost also contributes
-        // 90% of 0.01 ETH to nextPrizePool. Need ~130 purchases of 1 ETH lootbox.
+        // 90% of 0.01 ETH to nextPrizePool. Need ~200 purchases of 1 ETH lootbox
+        // to ensure we exceed the 50 ETH bootstrap threshold accounting for all splits.
         address buyer = makeAddr("buyer");
-        vm.deal(buyer, 200 ether);
+        vm.deal(buyer, 500 ether);
 
-        for (uint256 i = 0; i < 140; i++) {
+        for (uint256 i = 0; i < 200; i++) {
             vm.prank(buyer);
             game.purchase{value: 1.01 ether}(
                 buyer,
@@ -109,23 +110,26 @@ contract VRFLifecycle is DeployProtocol {
         //   4. Complete phase transition -> level increments
         uint24 initialLevel = game.level();
         uint256 ts = block.timestamp;
-        for (uint256 day = 0; day < 15; day++) {
+        uint256 lastFulfilledId;
+        for (uint256 day = 0; day < 30; day++) {
             ts += 1 days;
             vm.warp(ts);
 
             // Try advanceGame -- may revert if not ready
             try game.advanceGame() {} catch { continue; }
 
-            if (game.rngLocked()) {
-                // Fulfill VRF
-                uint256 reqId = mockVRF.lastRequestId();
-                mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(day))));
+            // If a new VRF request was fired, fulfill it
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId > lastFulfilledId && reqId > 0) {
+                try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(day)))) {
+                    lastFulfilledId = reqId;
+                } catch {}
+            }
 
-                // Process until unlocked (may take multiple calls as tickets are batched)
-                for (uint256 j = 0; j < 50; j++) {
-                    if (!game.rngLocked()) break;
-                    try game.advanceGame() {} catch { break; }
-                }
+            // Process until unlocked (may take multiple calls as tickets are batched)
+            for (uint256 j = 0; j < 50; j++) {
+                if (!game.rngLocked()) break;
+                try game.advanceGame() {} catch { break; }
             }
 
             // Check if level changed
