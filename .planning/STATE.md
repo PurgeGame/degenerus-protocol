@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v6.0
-milestone_name: Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity
-status: Phase complete — ready for verification
-stopped_at: Completed 123-03-PLAN.md
-last_updated: "2026-03-26T05:25:16.526Z"
+milestone: v5.0
+milestone_name: Ultimate Adversarial Audit
+status: Ready to execute
+stopped_at: Completed 125-01-PLAN.md
+last_updated: "2026-03-26T15:51:26.652Z"
 progress:
-  total_phases: 6
+  total_phases: 17
   completed_phases: 0
   total_plans: 0
-  completed_plans: 5
+  completed_plans: 2
 ---
 
 # Project State
@@ -19,18 +19,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 121 — storage-and-gas-fixes
+**Current focus:** Phase 103 — game-router-storage-layout
 
 ## Current Position
 
-Phase: 121 (storage-and-gas-fixes) — EXECUTING
-Plan: 3 of 3
+Phase: 103 (game-router-storage-layout) — EXECUTING
+Plan: 4 of 4
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0 (v6.0 milestone)
+- Total plans completed: 0 (v5.0 milestone)
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -46,11 +46,9 @@ Plan: 3 of 3
 - Trend: New milestone
 
 *Updated after each plan completion*
-| Phase 120 P01 | 27min | 2 tasks | 7 files |
-| Phase 121 P01 | 13min | 3 tasks | 5 files |
-| Phase 121 P03 | 14min | 1 tasks | 1 files |
-| Phase 121 P02 | 7min | 2 tasks | 2 files |
-| Phase 123 P03 | 5min | 1 tasks | 4 files |
+| Phase 103 P01 | 9min | 2 tasks | 2 files |
+| Phase 103 P02 | 8min | 1 tasks | 1 files |
+| Phase 125 P01 | 16min | 2 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -59,18 +57,14 @@ Plan: 3 of 3
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v6.0 roadmap]: I-12 freeze fix (FIX-04) isolated in Phase 122 due to BAF cache-overwrite reintroduction risk
-- [v6.0 roadmap]: FIX-08 delta audit grouped with FIX-01 in Phase 121 (same variable)
-- [v6.0 roadmap]: DegenerusCharity (123) before game integration (124) -- ContractAddresses must exist first
-- [v6.0 roadmap]: Test pruning (125) last -- depends on all contract changes being stable
-- [Phase 120]: Track _lastFulfilledReqId in VRF mock helpers to avoid double-fulfillment when game processes multiple days inline
-- [Phase 120]: TicketLifecycle constructor entries (sDGNRS+VAULT) tolerated at <= 2 per level due to write-key/read-key swap timing
-- [Phase 121]: Full deletion of lastLootboxRngWord (not deprecation) -- safe for fresh deploy, saves ~20K gas/write x3 paths
-- [Phase 121]: Stall backfill path: mapping read more correct than lastLootboxRngWord (latent bug fix)
-- [Phase 121]: Removed isDeity bypass from all 7 boon tier-comparison guards -- simpler than separate deity checks, same upgrade-only semantics
-- [Phase 121]: Used futurePool local cache pattern for SLOAD elimination (consistent with codebase)
-- [Phase 121]: Hoisted rebuyDelta declaration for cross-scope event access (Option A -- default zero preserves correctness)
-- [Phase 123]: Used hardhat_setCode mock injection for isolated unit testing -- DegenerusCharity not yet in deploy pipeline
+- [v5.0]: Three-agent system: Mad Genius (attacker), Skeptic (validator), Taskmaster (coverage enforcer)
+- [v5.0]: 16 audit units covering all 29 contracts with mandatory call-tree expansion and storage-write mapping
+- [v5.0]: All agents run Opus (quality profile) -- no model downgrades at any stage
+- [v5.0]: Arithmetic and reentrancy excluded -- already covered exhaustively in v3.0-v4.4
+- [v5.0]: Design doc at .planning/ULTIMATE-AUDIT-DESIGN.md
+- [Phase 103]: Category C restricted to state-changing internal helpers; view/pure in D. Storage comparison uses AST-ID-normalized types.
+- [Phase 103]: Mad Genius: 0 VULNERABLE, 7 INVESTIGATE findings across 49 functions. BAF-class cache check SAFE on all 19 direct functions.
+- [Phase 125]: 13 redundant tests deleted: 7 ghost (poc/), 3 adversarial, 2 simulation, 1 validation -- zero unique coverage lost
 
 ### Pending Todos
 
@@ -78,13 +72,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 123: CHARITY governance design spec needed before coding (vote window, quorum, tie-breaking, mint trigger)
-- Phase 124: CHARITY yield split BPS values (2300 BPS placeholder) need economics confirmation; buffer floor (~8%) must be preserved
-- Phase 122: BAF scan scope should be derived from v4.4 Phase 100-102 deliverables before planning
 - ContractAddresses.sol has unstaged changes (different deploy addresses) -- stash before test runs
 
 ## Session Continuity
 
-Last session: 2026-03-26T05:25:16.524Z
-Stopped at: Completed 123-03-PLAN.md
+Last session: 2026-03-26T15:51:26.650Z
+Stopped at: Completed 125-01-PLAN.md
 Resume file: None

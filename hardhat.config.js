@@ -6,8 +6,6 @@ import { glob } from "hardhat/internal/util/glob.js";
 import path from "node:path";
 
 // Override default test file discovery to control ordering.
-// Simulations must run LAST — they advance EVM state so far that earlier
-// loadFixture snapshots become invalid if they run mid-suite.
 const TEST_DIR_ORDER = [
   "access",
   "deploy",
@@ -16,8 +14,6 @@ const TEST_DIR_ORDER = [
   "edge",
   "validation",
   "gas",
-  "adversarial",
-  "simulation",
 ];
 
 subtask(TASK_TEST_GET_TEST_FILES).setAction(async (args, hre) => {
