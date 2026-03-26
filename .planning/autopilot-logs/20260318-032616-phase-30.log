@@ -1,0 +1,26 @@
+Since `--no-transition` flag is present, I return completion status to the parent.
+
+## PHASE COMPLETE
+
+Phase: 30 - Payout Specification Document
+Plans: 6/6
+Verification: Passed (5/5 must-haves, 54/54 automated checks)
+
+### Deliverables
+- **audit/PAYOUT-SPECIFICATION.html** — 2580-line self-contained HTML document
+  - 18 system cards covering 23 distribution mechanisms across 6 categories
+  - 20 inline SVG flow diagrams (18 per-system + 1 pool overview + 1 GAMEOVER master sequence)
+  - claimablePool invariant table (15 mutation sites)
+  - Known issues summary (3 Medium, 4 Low, 22+ Informational)
+  - Exact contract variable names in all formulas
+  - File:line references to current codebase commit (3fa32f51)
+- **verify-spec.sh** — 54-check verification script (all PASS)
+
+### Wave Execution
+| Wave | Plans | Status |
+|------|-------|--------|
+| 1 | 30-01 | ✓ Complete |
+| 2 | 30-02, 30-03, 30-04, 30-05 | ✓ Complete |
+| 3 | 30-06 | ✓ Complete |
+
+This is the **last phase** of milestone v3.0 (Full Contract Audit + Payout Specification).

@@ -1,0 +1,33 @@
+# DELTA-02: Removed Symbol Sweep
+
+**Date:** 2026-03-25
+**Scope:** All .sol files under contracts/
+
+## Primary Sweep (exact symbol names)
+
+**Command:** `grep -rn 'dailyEthBucketCursor\|dailyEthWinnerCursor\|_skipEntropyToBucket\|_winnerUnits\|DAILY_JACKPOT_UNITS_SAFE\|DAILY_JACKPOT_UNITS_AUTOREBUY' contracts/`
+**Result:** EXIT:1 (zero matches)
+
+## Secondary Sweep (partial match patterns)
+
+**Command:** `grep -rn 'BucketCursor\|WinnerCursor\|skipEntropy\|winnerUnits\|UNITS_SAFE\|UNITS_AUTOREBUY' contracts/`
+**Result:** EXIT:1 (zero matches)
+
+## Symbols Verified Absent
+
+| Symbol | Type | Previously In | Status |
+|--------|------|---------------|--------|
+| dailyEthBucketCursor | uint8 storage var | DegenerusGameStorage.sol, AdvanceModule, JackpotModule | REMOVED |
+| dailyEthWinnerCursor | uint16 storage var | DegenerusGameStorage.sol, AdvanceModule, JackpotModule | REMOVED |
+| _skipEntropyToBucket | private function | DegenerusGameJackpotModule.sol | REMOVED |
+| _winnerUnits | private function | DegenerusGameJackpotModule.sol | REMOVED |
+| DAILY_JACKPOT_UNITS_SAFE | uint16 constant | DegenerusGameJackpotModule.sol | REMOVED |
+| DAILY_JACKPOT_UNITS_AUTOREBUY | uint8 constant | DegenerusGameJackpotModule.sol | REMOVED |
+
+## Cross-Verification
+
+Hardhat test re-run after applying chunk removal in this worktree: 1209 passing, 33 failing (identical to pre-removal baseline). Confirms the removal does not introduce any Hardhat regressions.
+
+## Verdict
+
+DELTA-02 CONFIRMED: All 6 removed symbols have zero remaining references in any .sol file under contracts/. Both exact-name and partial-match sweeps return empty results.

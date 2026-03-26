@@ -1,0 +1,23 @@
+## Phase 70: Coinflip Commitment Window — Complete
+
+**Plans:** 2/2 complete | **Verification:** Passed (7/7 must-haves) | **Findings:** 0 HIGH/MEDIUM, 3 INFO
+
+### Key Results
+- **COIN-01**: Full lifecycle trace — 5 state transitions, 4 resolution paths (normal daily, gap backfill, game-over, fallback), backward trace from outcome
+- **COIN-02**: All 10 BurnieCoinflip external entry points assessed **SAFE** — `_targetFlipDay() = currentDayView() + 1` temporal separation is the primary defense
+- **COIN-03**: 7 multi-tx attack sequences modeled, all 7 **SAFE** (5 not feasible, 2 feasible but harmless)
+
+### Findings
+| ID | Severity | Description |
+|----|----------|-------------|
+| COIN-F1 | INFO | Stranded post-game-over deposits (no withdrawal path) |
+| COIN-F2 | INFO | prevrandao 1-bit bias in game-over fallback |
+| COIN-F3 | INFO | reverseFlip collective influence on outcomes |
+
+### Commits
+- `809b2c0b` feat(70-01): coinflip lifecycle trace (COIN-01)
+- `21cca17b` feat(70-01): commitment window analysis (COIN-02)
+- `9aabb965` feat(70-02): 7 multi-tx attack sequences (COIN-03)
+- `9d68c3fd` feat(70-02): attack summary table + Phase 70 conclusion
+
+AUTOPILOT_STATUS: PHASE_COMPLETE
