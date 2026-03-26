@@ -256,7 +256,7 @@
 
 - [x] **Phase 126: Delta Extraction + Plan Reconciliation** - Map every v6.0 contract change, reconcile plan-vs-reality, flag unplanned diffs (completed 2026-03-26)
 - [x] **Phase 127: DegenerusCharity Full Adversarial Audit** - Three-agent audit of all Charity functions + GNRUS token + governance + game hooks + storage layout (completed 2026-03-26)
-- [ ] **Phase 128: Changed Contract Adversarial Audit** - Three-agent audit of all modified functions across 11 changed contracts + storage verification
+- [x] **Phase 128: Changed Contract Adversarial Audit** - Three-agent audit of all modified functions across 11 changed contracts + storage verification (completed 2026-03-26)
 - [ ] **Phase 129: Consolidated Findings** - Master findings report with plan-drift annotations, KNOWN-ISSUES update
 
 ## Phase Details
@@ -301,7 +301,7 @@ Plans:
   2. Taskmaster confirms 100% coverage of all changed functions (zero gaps)
   3. Every function that reads then writes storage has a BAF-class cache-overwrite check with explicit verdict
   4. Storage layout changes verified via forge inspect for all modified contracts, with lastLootboxRngWord deletion confirmed zero stale references
-**Plans:** 5 plans in 2 waves
+**Plans:** 5/5 plans complete
 Plans:
 - [ ] 128-01-PLAN.md — Phase 121 storage/gas fixes audit (11 functions)
 - [ ] 128-02-PLAN.md — Phase 122 degenerette freeze fix audit (18 functions)
@@ -329,7 +329,7 @@ Phases execute in numeric order: 126 -> 127 -> 128 -> 129
 |-------|----------------|--------|-----------|
 | 126. Delta Extraction + Plan Reconciliation | 2/2 | Complete    | 2026-03-26 |
 | 127. DegenerusCharity Full Adversarial Audit | 0/3 | Complete    | 2026-03-26 |
-| 128. Changed Contract Adversarial Audit | 0/5 | Planned | - |
+| 128. Changed Contract Adversarial Audit | 0/5 | Complete    | 2026-03-26 |
 | 129. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred
