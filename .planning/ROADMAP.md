@@ -246,7 +246,7 @@
 - [x] **Phase 122: Degenerette Freeze Fix** - Route frozen-context degenerette ETH through pending pools (I-12, isolated for BAF safety) (completed 2026-03-26)
 - [x] **Phase 123: DegenerusCharity Contract** - Standalone soulbound GNRUS token with burn-for-ETH/stETH redemption and sDGNRS governance (completed 2026-03-26)
 - [x] **Phase 124: Game Integration** - Wire yield surplus split, resolveLevel hook, stETH-first allowlist, and claimYield into existing contracts (completed 2026-03-26)
-- [ ] **Phase 125: Test Suite Pruning** - Redundancy audit, prune duplicates, verify zero coverage loss, final green baseline
+- [x] **Phase 125: Test Suite Pruning** - Redundancy audit, prune duplicates, verify zero coverage loss, final green baseline (completed 2026-03-26)
 
 ## Phase Details
 
@@ -331,7 +331,7 @@ Plans:
   2. Redundant tests deleted from the repository
   3. Coverage comparison (before vs after pruning) shows zero lost unique coverage via function-level tracing (LCOV infeasible per Phase 120 findings)
   4. Both `forge test` and `npx hardhat test` pass 100% with documented final pass/fail counts
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 125-01-PLAN.md — Redundancy audit across all 90 test files + delete redundant tests
 - [ ] 125-02-PLAN.md — Final green baseline verification + coverage comparison document
@@ -351,7 +351,7 @@ Phase 125 (pruning) must be last since it depends on all contract changes being 
 | 122. Degenerette Freeze Fix | 1/1 | Complete    | 2026-03-26 |
 | 123. DegenerusCharity Contract | 3/3 | Complete    | 2026-03-26 |
 | 124. Game Integration | 1/1 | Complete    | 2026-03-26 |
-| 125. Test Suite Pruning | 0/2 | Not started | - |
+| 125. Test Suite Pruning | 0/2 | Complete    | 2026-03-26 |
 
 ## Deferred
 
