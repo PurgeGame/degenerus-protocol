@@ -598,10 +598,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 ethDaySlice;
         if (isEthDay) {
             uint256 poolBps = 100; // 1% daily drip from futurePool
-            ethDaySlice = (_getFuturePrizePool() * poolBps) / 10_000;
+            uint256 futurePool = _getFuturePrizePool();
+            ethDaySlice = (futurePool * poolBps) / 10_000;
 
             // Deduct immediately (upfront model)
-            _setFuturePrizePool(_getFuturePrizePool() - ethDaySlice);
+            _setFuturePrizePool(futurePool - ethDaySlice);
         }
 
         uint256 ethPool = ethDaySlice;
@@ -771,11 +772,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Execute the early-bird lootbox jackpot from the unified future pool.
     function _runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) private {
         // Take 3% from unified reserve
-        uint256 reserveContribution = (_getFuturePrizePool() * 300) / 10_000; // 3%
+        uint256 futurePool = _getFuturePrizePool();
+        uint256 reserveContribution = (futurePool * 300) / 10_000; // 3%
         uint256 totalBudget = reserveContribution;
 
         // Deduct from reserve
-        _setFuturePrizePool(_getFuturePrizePool() - reserveContribution);
+        _setFuturePrizePool(futurePool - reserveContribution);
 
         if (totalBudget == 0) {
             return;
