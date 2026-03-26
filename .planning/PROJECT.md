@@ -182,6 +182,18 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
+## Current Milestone: v7.0 Delta Adversarial Audit (v6.0 Changes)
+
+**Goal:** Verify every v6.0 contract change is correct, safe, and matches plan intent using v5.0-style three-agent adversarial system.
+
+**Target features:**
+- Git delta extraction — identify every contract file changed since v5.0 completion
+- Plan-vs-reality reconciliation — cross-reference each v6.0 phase plan's intended changes against what actually landed in contracts
+- Three-agent adversarial audit (Mad Genius / Skeptic / Taskmaster) on all changed/new functions
+- DegenerusCharity full audit — new contract gets complete coverage, not just delta
+- Storage layout verification for all changed contracts
+- Consolidated findings report with plan-drift annotations
+
 ## Current State
 
 v6.0 complete (2026-03-26) — Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity. 6 phases (120-125). Test suite green baseline established, 7 audit findings fixed (lastLootboxRngWord deleted, double SLOAD cached, event emission fixed, NatSpec corrected, deity boon downgrade prevention, advanceBounty rewrite, degenerette freeze fix). DegenerusCharity contract deployed at nonce N+23 with soulbound GNRUS token, proportional burn redemption, and sDGNRS governance. Game integration hooks wired (resolveLevel + handleGameOver). Test suite pruned: 13 redundant files deleted (~4,487 lines), zero unique coverage lost.
@@ -190,7 +202,7 @@ v5.0 complete (2026-03-25) — Ultimate Adversarial Audit. 17 phases, 29 contrac
 
 **Grand total across all milestones:** 134 findings (16 LOW, 118 INFO), 0 MEDIUM/HIGH outstanding. All confirmed HIGHs/MEDIUMs from v3.3 were fixed and verified. TQ-01 (MEDIUM) resolved in v3.9.
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests), v4.2 (daily jackpot chunk removal), v4.3 (prizePoolsPacked — closed early), v4.4 (BAF cache-overwrite fix), v5.0 (ultimate adversarial audit).
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests), v4.2 (daily jackpot chunk removal), v4.3 (prizePoolsPacked — closed early), v4.4 (BAF cache-overwrite fix), v5.0 (ultimate adversarial audit), v6.0 (test cleanup + fixes + charity).
 
 ## Evolution
 
@@ -210,4 +222,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after v6.0 milestone completed*
+*Last updated: 2026-03-26 after v7.0 milestone started*

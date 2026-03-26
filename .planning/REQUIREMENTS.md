@@ -1,110 +1,95 @@
-# Requirements: Degenerus Protocol v6.0
+# Requirements: Degenerus Protocol — v7.0 Delta Adversarial Audit
 
-**Defined:** 2026-03-25
+**Defined:** 2026-03-26
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v6.0 Requirements
+## v7.0 Requirements
 
-Requirements for Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity milestone.
+Requirements for delta adversarial audit of all v6.0 contract changes. Each maps to roadmap phases.
 
-### Test Suite Cleanup
+### Delta Extraction & Mapping
 
-- [x] **TEST-01**: All 14 failing Foundry tests either fixed or intentionally deleted with justification
-- [x] **TEST-02**: `forge test` achieves 100% pass rate (green baseline)
-- [ ] **TEST-03**: `npx hardhat test` achieves 100% pass rate (green baseline)
-- [ ] **TEST-04**: LCOV coverage report generated for both suites documenting per-contract line coverage
+- [ ] **DELTA-01**: Every contract file changed since v5.0 is identified with line-level diff stats
+- [ ] **DELTA-02**: Each changed function is cataloged with change type (new/modified/deleted)
+- [ ] **DELTA-03**: Unplanned changes (commits not traceable to a v6.0 phase plan) are flagged
 
-### Contract Fixes
+### Plan Reconciliation
 
-- [x] **FIX-01**: `lastLootboxRngWord` storage variable deprecated (slot preserved, 3 writes deleted, 1 read redirected to `lootboxRngWordByIndex[lootboxRngIndex - 1]`)
-- [x] **FIX-02**: Double `_getFuturePrizePool()` SLOAD eliminated in earlybird and early-burn paths (cache first read, reuse local)
-- [x] **FIX-03**: `RewardJackpotsSettled` event emits post-reconciliation value (`futurePoolLocal + rebuyDelta`)
-- [ ] **FIX-04**: Degenerette ETH resolution succeeds during `prizePoolFrozen` via pending pool routing through `_setPendingPools`
-- [x] **FIX-05**: BitPackingLib NatSpec corrected ("bits 152-154" to "bits 152-153")
-- [x] **FIX-06**: Deity boon application checks existing tier and does not downgrade any boon type
-- [x] **FIX-07**: `advanceBounty` computed at payout time using current price and escalation multiplier (3 locations)
-- [x] **FIX-08**: Delta audit proves `lootboxRngWordByIndex[lootboxRngIndex - 1]` returns the identical value as `lastLootboxRngWord` in every code path (normal VRF, mid-day, stall backfill, coordinator swap, game-over fallback)
+- [ ] **PLAN-01**: Each v6.0 phase plan's intended changes are cross-referenced against actual commits
+- [ ] **PLAN-02**: Drift between plan intent and final contract state is documented with severity
+- [ ] **PLAN-03**: Commit history anomalies (reverts, merge weirdness, ordering) are identified
 
-### DegenerusCharity Contract
+### Adversarial Audit
 
-- [x] **CHAR-01**: `DegenerusCharity.sol` deployed as standalone contract at nonce N+23
-- [x] **CHAR-02**: Soulbound GNRUS token (name="Degenerus Charity", symbol="GNRUS", 18 decimals, no transfer/transferFrom/approve) with 1T supply minted to contract
-- [x] **CHAR-03**: Proportional burn-for-ETH/stETH redemption (`amount/totalSupply` share of both assets)
-- [x] **CHAR-04**: Per-level sDGNRS-weighted governance (propose, vote, resolveLevel)
-- [ ] **CHAR-05**: `ContractAddresses.sol` updated with CHARITY address constant
-- [ ] **CHAR-06**: Deploy pipeline updated (predictAddresses.js, patchForFoundry.js, DeployProtocol.sol)
-- [ ] **CHAR-07**: DeployCanary.t.sol passes with new CHARITY address prediction
+- [ ] **AUDIT-01**: Every changed/new state-changing function gets Mad Genius attack analysis
+- [ ] **AUDIT-02**: Every Mad Genius finding gets Skeptic validation
+- [ ] **AUDIT-03**: Taskmaster verifies 100% coverage of all changed functions
+- [ ] **AUDIT-04**: BAF-class cache-overwrite check on every function that reads then writes storage
 
-### Game Integration
+### DegenerusCharity Full Audit
 
-- [ ] **INTG-01**: `_distributeYieldSurplus` routes charity share (2300 BPS) via `_addClaimableEth(CHARITY, ...)`
-- [ ] **INTG-02**: `resolveLevel` hook in `_finalizeRngRequest` with try/catch and explicit gas cap
-- [ ] **INTG-03**: CHARITY added to `claimWinningsStethFirst` allowlist in DegenerusGame
-- [ ] **INTG-04**: `claimYield()` permissionless function on DegenerusCharity pulls accumulated yield
+- [ ] **CHAR-01**: Full function-by-function audit of DegenerusCharity.sol (~538 lines)
+- [ ] **CHAR-02**: GNRUS token economics verified (soulbound, proportional redemption, supply)
+- [ ] **CHAR-03**: Governance mechanism (propose/vote/resolveLevel) verified for vote manipulation
+- [ ] **CHAR-04**: Game integration hooks (resolveLevel, handleGameOver) verified for reentrancy and state consistency
 
-### Test Suite Pruning
+### Storage Verification
 
-- [ ] **PRUNE-01**: Redundancy audit identifies duplicate coverage across Foundry/Hardhat suites with justification
-- [ ] **PRUNE-02**: Redundant tests deleted
-- [ ] **PRUNE-03**: No coverage gaps introduced (LCOV before/after comparison shows zero lost lines)
-- [ ] **PRUNE-04**: Final green baseline established for both suites with documented pass/fail counts
+- [ ] **STOR-01**: Storage layout changes verified for all modified contracts (forge inspect)
+- [ ] **STOR-02**: Slot collision check for DegenerusCharity (new contract)
+- [ ] **STOR-03**: DegenerusGameStorage deletions (lastLootboxRngWord) verified zero stale references
+
+### Findings
+
+- [ ] **FIND-01**: Consolidated findings report with C4A severity ratings
+- [ ] **FIND-02**: Plan-drift annotations for any finding triggered by plan-vs-reality mismatch
+- [ ] **FIND-03**: KNOWN-ISSUES.md updated if any new findings
 
 ## Future Requirements
 
-Deferred to subsequent milestones.
-
-### Formal Verification
-
-- **FVER-01**: Halmos symbolic proof of CHARITY burn math (proportional ETH/stETH)
-- **FVER-02**: stETH shares-based accounting for 1-2 wei rounding precision
-- **FVER-03**: Foundry fuzz invariant tests for governance (vote weight conservation)
+None — this is a verification milestone.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| OpenZeppelin ERC20/Governor for CHARITY | Protocol uses custom implementations; OZ imports unused transfer surfaces |
-| wstETH integration | Protocol committed to rebasing stETH; mixing wstETH creates two Lido patterns |
-| Automated cross-framework test deduplication | No tool compares Hardhat JS to Foundry Solidity semantics; LCOV manual comparison |
-| OZ 5.6.x upgrade | Breaking Strings changes with zero benefit for this milestone |
+| Re-auditing unchanged contracts | Already covered exhaustively in v5.0 (693 functions, 0 actionable findings) |
+| Test file changes | v6.0 test pruning verified zero unique coverage lost; test correctness not in audit scope |
+| ContractAddresses.sol | User-managed file, deploy addresses only |
+| Mock contracts | Test infrastructure only, not deployed |
+| Frontend code | Not in audit scope |
+| Arithmetic/reentrancy on unchanged code | Already covered in v3.0-v4.4 |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TEST-01 | Phase 120 | Complete |
-| TEST-02 | Phase 120 | Complete |
-| TEST-03 | Phase 120 | Pending |
-| TEST-04 | Phase 120 | Pending |
-| FIX-01 | Phase 121 | Complete |
-| FIX-02 | Phase 121 | Complete |
-| FIX-03 | Phase 121 | Complete |
-| FIX-04 | Phase 122 | Pending |
-| FIX-05 | Phase 121 | Complete |
-| FIX-06 | Phase 121 | Complete |
-| FIX-07 | Phase 121 | Complete |
-| FIX-08 | Phase 121 | Complete |
-| CHAR-01 | Phase 123 | Complete |
-| CHAR-02 | Phase 123 | Complete |
-| CHAR-03 | Phase 123 | Complete |
-| CHAR-04 | Phase 123 | Complete |
-| CHAR-05 | Phase 123 | Pending |
-| CHAR-06 | Phase 123 | Pending |
-| CHAR-07 | Phase 123 | Pending |
-| INTG-01 | Phase 124 | Pending |
-| INTG-02 | Phase 124 | Pending |
-| INTG-03 | Phase 124 | Pending |
-| INTG-04 | Phase 124 | Pending |
-| PRUNE-01 | Phase 125 | Pending |
-| PRUNE-02 | Phase 125 | Pending |
-| PRUNE-03 | Phase 125 | Pending |
-| PRUNE-04 | Phase 125 | Pending |
+| DELTA-01 | Phase 126 | Pending |
+| DELTA-02 | Phase 126 | Pending |
+| DELTA-03 | Phase 126 | Pending |
+| PLAN-01 | Phase 126 | Pending |
+| PLAN-02 | Phase 126 | Pending |
+| PLAN-03 | Phase 126 | Pending |
+| AUDIT-01 | Phase 128 | Pending |
+| AUDIT-02 | Phase 128 | Pending |
+| AUDIT-03 | Phase 128 | Pending |
+| AUDIT-04 | Phase 128 | Pending |
+| CHAR-01 | Phase 127 | Pending |
+| CHAR-02 | Phase 127 | Pending |
+| CHAR-03 | Phase 127 | Pending |
+| CHAR-04 | Phase 127 | Pending |
+| STOR-01 | Phase 128 | Pending |
+| STOR-02 | Phase 127 | Pending |
+| STOR-03 | Phase 128 | Pending |
+| FIND-01 | Phase 129 | Pending |
+| FIND-02 | Phase 129 | Pending |
+| FIND-03 | Phase 129 | Pending |
 
 **Coverage:**
-- v6.0 requirements: 27 total
-- Mapped to phases: 27
+- v7.0 requirements: 20 total
+- Mapped to phases: 20
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after roadmap creation*
+*Requirements defined: 2026-03-26*
+*Last updated: 2026-03-26 after roadmap creation*

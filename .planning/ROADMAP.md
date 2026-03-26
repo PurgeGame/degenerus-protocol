@@ -25,6 +25,7 @@
 - ✅ **v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan** — Phases 100-102 (shipped 2026-03-25)
 - ✅ **v5.0 Ultimate Adversarial Audit** — Phases 103-119 (shipped 2026-03-25)
 - ✅ **v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity** — Phases 120-125 (shipped 2026-03-26)
+- **v7.0 Delta Adversarial Audit (v6.0 Changes)** — Phases 126-129 (in progress)
 
 ## Phases
 
@@ -248,6 +249,78 @@
 - [x] **Phase 125: Test Suite Pruning** - 13 redundant tests deleted, zero unique coverage lost (completed 2026-03-26)
 
 </details>
+
+### v7.0 Delta Adversarial Audit (v6.0 Changes) (In Progress)
+
+**Milestone Goal:** Verify every v6.0 contract change is correct, safe, and matches plan intent using v5.0-style three-agent adversarial system.
+
+- [ ] **Phase 126: Delta Extraction + Plan Reconciliation** - Map every v6.0 contract change, reconcile plan-vs-reality, flag unplanned diffs
+- [ ] **Phase 127: DegenerusCharity Full Adversarial Audit** - Three-agent audit of all Charity functions + GNRUS token + governance + game hooks + storage layout
+- [ ] **Phase 128: Changed Contract Adversarial Audit** - Three-agent audit of all modified functions across 11 changed contracts + storage verification
+- [ ] **Phase 129: Consolidated Findings** - Master findings report with plan-drift annotations, KNOWN-ISSUES update
+
+## Phase Details
+
+### Phase 126: Delta Extraction + Plan Reconciliation
+**Goal**: Every v6.0 contract change is mapped, cataloged, and reconciled against phase plans so the audit scope is precisely defined
+**Depends on**: Nothing (first phase)
+**Requirements**: DELTA-01, DELTA-02, DELTA-03, PLAN-01, PLAN-02, PLAN-03
+**Success Criteria** (what must be TRUE):
+  1. A complete diff inventory exists showing every changed contract file with insertion/deletion counts
+  2. Every changed/new/deleted function is cataloged with its change type and originating v6.0 phase
+  3. The DegenerusAffiliate unplanned change (commit a3e2341f) is traced and explained
+  4. Each v6.0 phase plan's intended changes are cross-referenced against actual commits with drift documented
+  5. Any commit history anomalies (reverts, merge weirdness, out-of-order commits) are identified and explained
+**Plans:** 2 plans
+Plans:
+- [ ] 126-01-PLAN.md — Delta extraction: file-level diff inventory + per-contract function catalog
+- [ ] 126-02-PLAN.md — Plan reconciliation: per-plan MATCH/DRIFT verdicts + anomaly analysis
+
+### Phase 127: DegenerusCharity Full Adversarial Audit
+**Goal**: DegenerusCharity.sol is proven correct and safe through exhaustive three-agent adversarial analysis covering all functions, token economics, governance, and game integration
+**Depends on**: Phase 126
+**Requirements**: CHAR-01, CHAR-02, CHAR-03, CHAR-04, STOR-02
+**Success Criteria** (what must be TRUE):
+  1. Every state-changing function in DegenerusCharity.sol has a Mad Genius attack analysis with Skeptic validation
+  2. GNRUS soulbound enforcement, proportional redemption math, and supply invariants are proven correct
+  3. Governance (propose/vote/resolveLevel) is verified resistant to vote manipulation, flash-loan attacks, and threshold gaming
+  4. Game integration hooks (resolveLevel, handleGameOver) are verified for reentrancy safety and state consistency across module boundaries
+  5. Storage layout has no slot collisions (forge inspect verified)
+**Plans**: TBD
+
+### Phase 128: Changed Contract Adversarial Audit
+**Goal**: Every modified function across the 11 non-Charity changed contracts is verified correct through three-agent adversarial analysis with BAF-class checks and storage layout verification
+**Depends on**: Phase 126
+**Requirements**: AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04, STOR-01, STOR-03
+**Success Criteria** (what must be TRUE):
+  1. Every changed/new state-changing function across all 11 modified contracts has Mad Genius attack analysis with Skeptic validation
+  2. Taskmaster confirms 100% coverage of all changed functions (zero gaps)
+  3. Every function that reads then writes storage has a BAF-class cache-overwrite check with explicit verdict
+  4. Storage layout changes verified via forge inspect for all modified contracts, with lastLootboxRngWord deletion confirmed zero stale references
+**Plans**: TBD
+
+### Phase 129: Consolidated Findings
+**Goal**: All findings from Phases 126-128 are consolidated into a single report with C4A severity ratings, plan-drift annotations, and KNOWN-ISSUES updated
+**Depends on**: Phase 127, Phase 128
+**Requirements**: FIND-01, FIND-02, FIND-03
+**Success Criteria** (what must be TRUE):
+  1. A single findings report exists with every finding rated by C4A severity (CRITICAL/HIGH/MEDIUM/LOW/INFO)
+  2. Any finding triggered by plan-vs-reality mismatch has a plan-drift annotation linking back to the Phase 126 reconciliation
+  3. KNOWN-ISSUES.md is updated with any new findings from this milestone
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 126 -> 127 -> 128 -> 129
+(Phases 127 and 128 can execute in parallel after 126 completes)
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 126. Delta Extraction + Plan Reconciliation | 0/2 | Not started | - |
+| 127. DegenerusCharity Full Adversarial Audit | 0/TBD | Not started | - |
+| 128. Changed Contract Adversarial Audit | 0/TBD | Not started | - |
+| 129. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred
 
