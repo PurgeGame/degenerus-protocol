@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Changes)
 status: executing
-stopped_at: Phase 127 context gathered
-last_updated: "2026-03-26T18:35:46.011Z"
+stopped_at: Phase 128 context gathered
+last_updated: "2026-03-26T19:13:15.476Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 4
@@ -81,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T18:12:43.086Z
-Stopped at: Phase 127 context gathered
-Resume file: .planning/phases/127-degeneruscharity-full-adversarial-audit/127-CONTEXT.md
+Last session: 2026-03-26T19:13:15.471Z
+Stopped at: Phase 128 context gathered
+Resume file: .planning/phases/128-changed-contract-adversarial-audit/128-CONTEXT.md
