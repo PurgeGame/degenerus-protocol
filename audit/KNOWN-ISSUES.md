@@ -24,3 +24,22 @@ These are architectural decisions, not vulnerabilities.
 
 **Gameover prevrandao fallback.** `_getHistoricalRngFallback` uses `block.prevrandao` as supplementary entropy when VRF is unavailable at game over. A block proposer can bias prevrandao (1-bit manipulation on binary outcomes). Edge-of-edge case: gameover + VRF dead 3+ days. 5 committed VRF words provide bulk entropy.
 
+---
+
+## v7.0 Delta Audit (GNRUS + v6.0 Changes)
+
+v7.0 delta adversarial audit completed 2026-03-26 covering GNRUS (new contract, 17 functions) and 11 modified contracts (48 entries). Three-agent adversarial methodology (Mad Genius / Skeptic / Taskmaster) with 100% coverage of all changed functions.
+
+**Result: 0 open actionable findings.**
+
+3 findings were identified and fixed:
+- **GOV-01** (permissionless resolveLevel desync) -- fixed in commit 1f65cc1c: renamed to `pickCharity` with `onlyGame` modifier.
+- **GH-02** (same root cause as GOV-01) -- fixed in same commit.
+- **GH-01** (Path A burnAtGameOver omission) -- fixed in commit ba89d160: `burnAtGameOver` calls moved before the Path A early return in `handleGameOverDrain`.
+
+4 findings are informational design intent (GOV-02, GOV-03, GOV-04, AFF-01) with no action required.
+
+**Nice-to-have note (not a vulnerability):** Prior to the GH-01 fix, Path A of `handleGameOverDrain` did not call `burnAtGameOver` on the GNRUS contract. Path A is practically unreachable (requires `available == 0`, meaning the game's entire ETH+stETH balance is consumed by existing claimable winnings) and amounts would be trivial. This was fixed in commit ba89d160 so both terminal paths now invoke `burnAtGameOver`.
+
+Full report: `audit/delta-v7/CONSOLIDATED-FINDINGS.md`
+
