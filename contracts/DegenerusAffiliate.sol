@@ -12,7 +12,10 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
  *
  * @dev ARCHITECTURE:
  *      - 3-tier referral: Player → Affiliate (base) → Upline1 (20%) → Upline2 (4%)
- *      - Kickback: 0-25% of reward returned to referred player
+ *      - Default codes: every address has an implicit code (bytes32(uint256(uint160(addr))))
+ *        with 0% kickback, no tx required. Custom codes use high bytes (string-encoded),
+ *        so the two namespaces cannot collide.
+ *      - Kickback: 0-25% of reward returned to referred player (custom codes only)
  *      - Affiliate payouts + quest bonuses via creditFlip; kickback returned to caller
  *      - Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+)
  *      - Recycled ETH rewards: 5% (all levels)
@@ -295,6 +298,7 @@ contract DegenerusAffiliate {
      * VALIDATION:
      * - code_ != bytes32(0) (reserved for "no code")
      * - code_ != REF_CODE_LOCKED (reserved sentinel value)
+     * - code_ not in address-derived range (uint256(code_) <= type(uint160).max)
      * - code_ not already taken
      * - kickbackPct <= 25 (max 25% kickback)
      *
@@ -308,19 +312,19 @@ contract DegenerusAffiliate {
     /**
      * @notice Register the caller as referred by an affiliate code.
      * @dev This is the explicit user-initiated way to set a referrer.
+     *      Accepts both custom codes and default address-derived codes.
      *      Alternatively, referrers can be set implicitly during payAffiliate().
      *      Once set (or locked), cannot be changed.
      *
      * VALIDATION:
-     * - code_ must exist (owner != address(0))
+     * - code_ must resolve to a valid owner (custom or default)
      * - code_ owner must not be the caller (no self-referral)
      * - caller must not already have a referral code set
      *
      * @param code_ The affiliate code to register under.
      */
     function referPlayer(bytes32 code_) external {
-        AffiliateCodeInfo storage info = affiliateCode[code_];
-        address referrer = info.owner;
+        address referrer = _resolveCodeOwner(code_);
         // SECURITY: Prevent invalid codes and self-referral.
         if (referrer == address(0) || referrer == msg.sender) revert Insufficient();
         bytes32 existing = playerReferralCode[msg.sender];
@@ -338,6 +342,12 @@ contract DegenerusAffiliate {
      */
     function getReferrer(address player) external view returns (address) {
         return _referrerAddress(player);
+    }
+
+    /// @notice Compute the default affiliate code for any address.
+    /// @dev Pure helper for frontend link generation: bytes32(uint256(uint160(addr))).
+    function defaultCode(address addr) external pure returns (bytes32) {
+        return bytes32(uint256(uint160(addr)));
     }
 
     // =====================================================================
@@ -421,30 +431,39 @@ contract DegenerusAffiliate {
                 info = vaultInfo;
                 noReferrer = true;
             } else {
-                AffiliateCodeInfo storage candidate = affiliateCode[code];
-                if (
-                    candidate.owner == address(0) ||
-                    candidate.owner == sender
-                ) {
+                // Try custom code first, then default (address-derived) code.
+                address resolved = _resolveCodeOwner(code);
+                if (resolved == address(0) || resolved == sender) {
                     // Invalid/self-referral: lock to VAULT as default.
                     _setReferralCode(sender, REF_CODE_LOCKED);
                     storedCode = AFFILIATE_CODE_VAULT;
                     info = vaultInfo;
                     noReferrer = true;
                 } else {
-                    // Valid code: store it permanently.
+                    // Valid code (custom or default): store it permanently.
                     _setReferralCode(sender, code);
-                    info = candidate;
+                    AffiliateCodeInfo storage customInfo = affiliateCode[code];
+                    if (customInfo.owner != address(0)) {
+                        info = customInfo;
+                    } else {
+                        // Default code: 0% kickback.
+                        info = AffiliateCodeInfo({ owner: resolved, kickback: 0 });
+                    }
                     storedCode = code;
                 }
             }
             infoSet = true;
         } else {
             if (code != bytes32(0) && code != storedCode && _vaultReferralMutable(storedCode)) {
-                AffiliateCodeInfo storage candidate = affiliateCode[code];
-                if (candidate.owner != address(0) && candidate.owner != sender) {
+                address resolved = _resolveCodeOwner(code);
+                if (resolved != address(0) && resolved != sender) {
                     _setReferralCode(sender, code);
-                    info = candidate;
+                    AffiliateCodeInfo storage customInfo = affiliateCode[code];
+                    if (customInfo.owner != address(0)) {
+                        info = customInfo;
+                    } else {
+                        info = AffiliateCodeInfo({ owner: resolved, kickback: 0 });
+                    }
                     storedCode = code;
                     infoSet = true;
                 }
@@ -455,8 +474,13 @@ contract DegenerusAffiliate {
                     info = vaultInfo;
                     noReferrer = true;
                 } else {
-                    // Use the stored code.
-                    info = affiliateCode[storedCode];
+                    // Use the stored code (custom or default).
+                    AffiliateCodeInfo storage customInfo = affiliateCode[storedCode];
+                    if (customInfo.owner != address(0)) {
+                        info = customInfo;
+                    } else {
+                        info = AffiliateCodeInfo({ owner: _resolveCodeOwner(storedCode), kickback: 0 });
+                    }
                 }
             }
         }
@@ -700,9 +724,21 @@ contract DegenerusAffiliate {
         if (locked || code == AFFILIATE_CODE_VAULT) {
             referrer = ContractAddresses.VAULT;
         } else {
-            referrer = affiliateCode[code].owner;
+            referrer = _resolveCodeOwner(code);
         }
         emit ReferralUpdated(player, code, referrer, locked);
+    }
+
+    /// @dev Resolve code owner: custom code lookup first, then address-derived default code.
+    ///      Returns address(0) only if code is unregistered AND not a valid default code.
+    function _resolveCodeOwner(bytes32 code) private view returns (address) {
+        address owner = affiliateCode[code].owner;
+        if (owner != address(0)) return owner;
+        // Default code: low 20 bytes encode the owner address directly.
+        if (uint256(code) <= type(uint160).max) {
+            return address(uint160(uint256(code)));
+        }
+        return address(0);
     }
 
     /**
@@ -714,7 +750,9 @@ contract DegenerusAffiliate {
     function _referrerAddress(address player) private view returns (address) {
         bytes32 code = playerReferralCode[player];
         if (code == bytes32(0) || code == REF_CODE_LOCKED || code == AFFILIATE_CODE_VAULT) return ContractAddresses.VAULT;
-        return affiliateCode[code].owner;
+        address owner = _resolveCodeOwner(code);
+        if (owner == address(0)) return ContractAddresses.VAULT;
+        return owner;
     }
 
     /// @dev Shared code registration logic for user-created and constructor-bootstrapped codes.
@@ -726,6 +764,8 @@ contract DegenerusAffiliate {
         if (owner == address(0)) revert Zero();
         // SECURITY: Prevent reserved values from being claimed.
         if (code_ == bytes32(0) || code_ == REF_CODE_LOCKED) revert Zero();
+        // SECURITY: Reject codes in the address-derived default code range (low 160 bits only).
+        if (uint256(code_) <= type(uint160).max) revert Zero();
         // SECURITY: Cap kickback to prevent affiliate from giving away all rewards.
         if (kickbackPct > MAX_KICKBACK_PCT) revert InvalidKickback();
         AffiliateCodeInfo storage info = affiliateCode[code_];
