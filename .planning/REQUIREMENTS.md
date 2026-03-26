@@ -16,14 +16,14 @@ Requirements for Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity miles
 
 ### Contract Fixes
 
-- [ ] **FIX-01**: `lastLootboxRngWord` storage variable deprecated (slot preserved, 3 writes deleted, 1 read redirected to `lootboxRngWordByIndex[lootboxRngIndex - 1]`)
+- [x] **FIX-01**: `lastLootboxRngWord` storage variable deprecated (slot preserved, 3 writes deleted, 1 read redirected to `lootboxRngWordByIndex[lootboxRngIndex - 1]`)
 - [ ] **FIX-02**: Double `_getFuturePrizePool()` SLOAD eliminated in earlybird and early-burn paths (cache first read, reuse local)
 - [ ] **FIX-03**: `RewardJackpotsSettled` event emits post-reconciliation value (`futurePoolLocal + rebuyDelta`)
 - [ ] **FIX-04**: Degenerette ETH resolution succeeds during `prizePoolFrozen` via pending pool routing through `_setPendingPools`
-- [ ] **FIX-05**: BitPackingLib NatSpec corrected ("bits 152-154" to "bits 152-153")
+- [x] **FIX-05**: BitPackingLib NatSpec corrected ("bits 152-154" to "bits 152-153")
 - [ ] **FIX-06**: Deity boon application checks existing tier and does not downgrade any boon type
-- [ ] **FIX-07**: `advanceBounty` computed at payout time using current price and escalation multiplier (3 locations)
-- [ ] **FIX-08**: Delta audit proves `lootboxRngWordByIndex[lootboxRngIndex - 1]` returns the identical value as `lastLootboxRngWord` in every code path (normal VRF, mid-day, stall backfill, coordinator swap, game-over fallback)
+- [x] **FIX-07**: `advanceBounty` computed at payout time using current price and escalation multiplier (3 locations)
+- [x] **FIX-08**: Delta audit proves `lootboxRngWordByIndex[lootboxRngIndex - 1]` returns the identical value as `lastLootboxRngWord` in every code path (normal VRF, mid-day, stall backfill, coordinator swap, game-over fallback)
 
 ### DegenerusCharity Contract
 
@@ -76,14 +76,14 @@ Deferred to subsequent milestones.
 | TEST-02 | Phase 120 | Complete |
 | TEST-03 | Phase 120 | Pending |
 | TEST-04 | Phase 120 | Pending |
-| FIX-01 | Phase 121 | Pending |
+| FIX-01 | Phase 121 | Complete |
 | FIX-02 | Phase 121 | Pending |
 | FIX-03 | Phase 121 | Pending |
 | FIX-04 | Phase 122 | Pending |
-| FIX-05 | Phase 121 | Pending |
+| FIX-05 | Phase 121 | Complete |
 | FIX-06 | Phase 121 | Pending |
-| FIX-07 | Phase 121 | Pending |
-| FIX-08 | Phase 121 | Pending |
+| FIX-07 | Phase 121 | Complete |
+| FIX-08 | Phase 121 | Complete |
 | CHAR-01 | Phase 123 | Pending |
 | CHAR-02 | Phase 123 | Pending |
 | CHAR-03 | Phase 123 | Pending |

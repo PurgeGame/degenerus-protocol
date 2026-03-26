@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity
 status: Ready to execute
-stopped_at: Completed 120-01-PLAN.md
-last_updated: "2026-03-26T01:00:56.882Z"
+stopped_at: Completed 121-01-PLAN.md
+last_updated: "2026-03-26T02:45:45.227Z"
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 2
-  completed_plans: 1
+  completed_phases: 1
+  total_plans: 5
+  completed_plans: 4
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 120 — test-suite-cleanup
+**Current focus:** Phase 121 — storage-and-gas-fixes
 
 ## Current Position
 
-Phase: 120 (test-suite-cleanup) — EXECUTING
-Plan: 2 of 2
+Phase: 121 (storage-and-gas-fixes) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Plan: 2 of 2
 
 *Updated after each plan completion*
 | Phase 120 P01 | 27min | 2 tasks | 7 files |
+| Phase 121 P01 | 13min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,8 @@ Recent decisions affecting current work:
 - [v6.0 roadmap]: Test pruning (125) last -- depends on all contract changes being stable
 - [Phase 120]: Track _lastFulfilledReqId in VRF mock helpers to avoid double-fulfillment when game processes multiple days inline
 - [Phase 120]: TicketLifecycle constructor entries (sDGNRS+VAULT) tolerated at <= 2 per level due to write-key/read-key swap timing
+- [Phase 121]: Full deletion of lastLootboxRngWord (not deprecation) -- safe for fresh deploy, saves ~20K gas/write x3 paths
+- [Phase 121]: Stall backfill path: mapping read more correct than lastLootboxRngWord (latent bug fix)
 
 ### Pending Todos
 
@@ -75,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T01:00:56.880Z
-Stopped at: Completed 120-01-PLAN.md
+Last session: 2026-03-26T02:45:45.225Z
+Stopped at: Completed 121-01-PLAN.md
 Resume file: None
