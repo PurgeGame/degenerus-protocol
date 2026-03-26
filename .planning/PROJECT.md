@@ -81,7 +81,8 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 **Phase 126 complete:** Delta extraction + plan reconciliation — 17 files inventoried, 65 functions cataloged, 23/29 plan items MATCH, 5 DRIFT flagged.
 **Phase 127 complete:** DegenerusCharity full adversarial audit — 17 functions across 3 domains (token ops, governance, game hooks + storage). 0 VULNERABLE, 1 INVESTIGATE (GOV-01: permissionless resolveLevel can brick advanceGame — potential MEDIUM), 5 INFO. Storage layout PASS (12 slots, no collisions).
-**Phase 128 complete:** Changed contract adversarial audit — 48 non-Charity functions across 11 contracts in 5 plans (4 per-phase + 1 integration). Triage classified 17/18 DegeneretteModule changes as formatting-only. 5 cross-contract integration seams analyzed. forge inspect verified all 11 contracts (STOR-01). Taskmaster 48/48 coverage (AUDIT-03). 0 VULNERABLE/INVESTIGATE, all SAFE. Next: Phase 129 (consolidated findings).
+**Phase 128 complete:** Changed contract adversarial audit — 48 non-Charity functions across 11 contracts in 5 plans (4 per-phase + 1 integration). Triage classified 17/18 DegeneretteModule changes as formatting-only. 5 cross-contract integration seams analyzed. forge inspect verified all 11 contracts (STOR-01). Taskmaster 48/48 coverage (AUDIT-03). 0 VULNERABLE/INVESTIGATE, all SAFE.
+**Phase 129 complete:** Consolidated findings — 3 FIXED (GOV-01 onlyGame, GH-01 burnAtGameOver reorder, GH-02 same root cause), 4 INFO (design intent), 0 open actionable findings. KNOWN-ISSUES.md updated. v7.0 milestone complete.
 
 ## Completed Milestone: v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity
 
