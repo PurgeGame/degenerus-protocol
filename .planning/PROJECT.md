@@ -75,6 +75,18 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v4.3 prizePoolsPacked Batching Optimization — closed early after Phase 99 callsite audit revealed H14 gas savings was 25x overestimate (~63.8K actual vs ~1.6M estimated). Optimization abandoned as not cost-effective. — v4.3 Phase 99
 - ✓ v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan — 3 phases (100-102), protocol-wide cache-overwrite scan (1 VULNERABLE / 11 SAFE across 29 contracts), delta reconciliation fix applied to `runRewardJackpots`, Foundry fix-proof test, zero regressions — v4.4 Phases 100-102
 
+## Current Milestone: v7.0 Delta Adversarial Audit (v6.0 Changes)
+
+**Status:** In progress (started 2026-03-26)
+
+**Phase 126 complete:** Delta extraction + plan reconciliation — 17 files inventoried, 65 functions cataloged across 12 production contracts, 23/29 plan items MATCH, 5 DRIFT flagged for adversarial review, 1 unplanned change (DegenerusAffiliate default referral codes). Next: Phases 127-128 (adversarial audit of Charity + changed contracts).
+
+## Completed Milestone: v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity
+
+**Status:** Complete (2026-03-26)
+
+**Result:** 6 phases (120-125). Test suite cleanup (green baseline), storage/gas fixes (lastLootboxRngWord deletion, double-SLOAD elimination, NatSpec fixes, deity boon downgrade prevention, advanceBounty rewrite), degenerette freeze fix (frozen-context ETH routed through pending pools), DegenerusCharity contract (soulbound GNRUS token with burn redemption and sDGNRS governance), game integration (resolveLevel + handleGameOver hooks), test suite pruning (13 redundant tests deleted, zero unique coverage lost).
+
 ## Completed Milestone: v5.0 Ultimate Adversarial Audit
 
 **Status:** Complete (2026-03-25)
