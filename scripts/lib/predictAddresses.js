@@ -13,6 +13,7 @@ const JACKPOT_RESET_TIME = 82620n;
  *  - GAME (N+13) + modules (N+1..10) before SDGNRS (N+20): stonk calls claimWhalePass/setAfKingMode
  *  - SDGNRS (N+20) before DGNRS (N+21): DGNRS reads SDGNRS balance
  *  - GAME (N+13) before ADMIN (N+22): admin calls wireVrf()
+ *  - GNRUS (N+23) last: no constructor cross-calls, reads compile-time constants only
  */
 export const DEPLOY_ORDER = [
   "ICONS_32",              // N+0:  Icons32Data
@@ -38,6 +39,7 @@ export const DEPLOY_ORDER = [
   "SDGNRS",                // N+20: StakedDegenerusStonk (calls GAME, mints to DGNRS)
   "DGNRS",                 // N+21: DegenerusStonk (reads SDGNRS balance)
   "ADMIN",                 // N+22: DegenerusAdmin (calls VRF + GAME)
+  "GNRUS",                 // N+23: DegenerusCharity (self-mint only, no cross-calls)
 ];
 
 /**
@@ -67,6 +69,7 @@ export const KEY_TO_CONTRACT = {
   SDGNRS: "StakedDegenerusStonk",
   DGNRS: "DegenerusStonk",
   ADMIN: "DegenerusAdmin",
+  GNRUS: "DegenerusCharity",
 };
 
 /**
