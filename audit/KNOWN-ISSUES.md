@@ -24,11 +24,4 @@ These are architectural decisions, not vulnerabilities.
 
 **Gameover prevrandao fallback.** `_getHistoricalRngFallback` uses `block.prevrandao` as supplementary entropy when VRF is unavailable at game over. A block proposer can bias prevrandao (1-bit manipulation on binary outcomes). Edge-of-edge case: gameover + VRF dead 3+ days. 5 committed VRF words provide bulk entropy.
 
----
-
-## GNRUS Contract
-
-**GNRUS** is a soulbound ERC-20 charity token with sDGNRS-weighted governance for selecting donation recipients at each level. Game hooks: `pickCharity` (called by AdvanceModule at level transitions) and `burnAtGameOver` (called by GameOverModule at game end). Proportional ETH/stETH burn redemption for holders.
-
-`pickCharity` is `onlyGame` -- cannot be called permissionlessly. Both `handleGameOverDrain` terminal paths invoke `burnAtGameOver`.
 
