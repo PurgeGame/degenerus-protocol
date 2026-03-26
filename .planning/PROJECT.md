@@ -79,7 +79,8 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 **Status:** In progress (started 2026-03-26)
 
-**Phase 126 complete:** Delta extraction + plan reconciliation — 17 files inventoried, 65 functions cataloged across 12 production contracts, 23/29 plan items MATCH, 5 DRIFT flagged for adversarial review, 1 unplanned change (DegenerusAffiliate default referral codes). Next: Phases 127-128 (adversarial audit of Charity + changed contracts).
+**Phase 126 complete:** Delta extraction + plan reconciliation — 17 files inventoried, 65 functions cataloged, 23/29 plan items MATCH, 5 DRIFT flagged.
+**Phase 127 complete:** DegenerusCharity full adversarial audit — 17 functions across 3 domains (token ops, governance, game hooks + storage). 0 VULNERABLE, 1 INVESTIGATE (GOV-01: permissionless resolveLevel can brick advanceGame — potential MEDIUM), 5 INFO. Storage layout PASS (12 slots, no collisions). Next: Phase 128 (changed contracts audit).
 
 ## Completed Milestone: v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity
 
