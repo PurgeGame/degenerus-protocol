@@ -17,8 +17,8 @@ import {
 /**
  * Charity Game Hooks integration tests.
  *
- * Verifies that the game modules correctly call DegenerusCharity hooks:
- *   1. resolveLevel(level) at each level transition during advanceGame
+ * Verifies that the game modules correctly call GNRUS hooks:
+ *   1. pickCharity(level) at each level transition during advanceGame
  *   2. handleGameOver() during gameover drain to burn unallocated GNRUS
  *
  * Both hooks are direct calls (no try/catch) that surface reverts as bugs.
@@ -32,12 +32,12 @@ describe("CharityGameHooks", function () {
   const SECONDS_912_DAYS = 912 * 86400;
 
   /**
-   * Get the DegenerusCharity contract instance at the deployed GNRUS address.
+   * Get the GNRUS contract instance at the deployed GNRUS address.
    * The contract is deployed as part of DEPLOY_ORDER but not returned by name.
    */
   async function getCharity(deployedAddrs) {
     const gnrusAddr = deployedAddrs.get("GNRUS");
-    return hre.ethers.getContractAt("DegenerusCharity", gnrusAddr);
+    return hre.ethers.getContractAt("GNRUS", gnrusAddr);
   }
 
   /**
@@ -109,10 +109,10 @@ describe("CharityGameHooks", function () {
   }
 
   // =========================================================================
-  // resolveLevel hook
+  // pickCharity hook
   // =========================================================================
 
-  describe("resolveLevel fires at level transition", function () {
+  describe("pickCharity fires at level transition", function () {
     it("charity.currentLevel increments from 0 to 1 after first level transition", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, deployer, mockVRF, alice, bob, carol, dan, eve, others, deployedAddrs } = fixture;
@@ -131,7 +131,7 @@ describe("CharityGameHooks", function () {
       await driveVRFCycle(game, deployer, mockVRF);
 
       // Day 2: Second VRF cycle triggers the level transition via _finalizeRngRequest
-      // with isTicketJackpotDay=true, which calls charityResolve.resolveLevel(lvl - 1)
+      // with isTicketJackpotDay=true, which calls charityResolve.pickCharity(lvl - 1)
       await advanceToNextDay();
       await driveVRFCycle(game, deployer, mockVRF);
 
@@ -139,9 +139,9 @@ describe("CharityGameHooks", function () {
       const gameLevel = await game.level();
       expect(gameLevel).to.be.gte(1, "Game level should have incremented past 0");
 
-      // Verify: charity resolveLevel was called (currentLevel advanced)
+      // Verify: charity pickCharity was called (currentLevel advanced)
       expect(await charity.currentLevel()).to.equal(1,
-        "Charity currentLevel should be 1 after resolveLevel(0) called");
+        "Charity currentLevel should be 1 after pickCharity(0) called");
       expect(await charity.levelResolved(0)).to.equal(true,
         "Level 0 should be marked as resolved");
     });
@@ -165,7 +165,7 @@ describe("CharityGameHooks", function () {
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
 
-      // Collect events during ticket processing (level transition fires resolveLevel)
+      // Collect events during ticket processing (level transition fires pickCharity)
       let levelSkippedFound = false;
       for (let i = 0; i < 200; i++) {
         if (!(await game.rngLocked())) break;
@@ -177,9 +177,9 @@ describe("CharityGameHooks", function () {
         }
       }
 
-      // Verify charity state advanced (resolveLevel was called)
+      // Verify charity state advanced (pickCharity was called)
       expect(await charity.currentLevel()).to.equal(1,
-        "Charity currentLevel should be 1 (resolveLevel was called)");
+        "Charity currentLevel should be 1 (pickCharity was called)");
       expect(await charity.levelResolved(0)).to.equal(true,
         "Level 0 should be marked as resolved");
     });

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-/// @dev Minimal mock for DegenerusGame used by DegenerusCharity unit tests.
+/// @dev Minimal mock for DegenerusGame used by GNRUS unit tests.
 ///      Supports claimWinnings (sends ETH), claimableWinningsOf, and gameOver.
 contract MockGameCharity {
     bool public gameOver;

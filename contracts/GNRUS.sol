@@ -38,7 +38,7 @@ interface IDegenerusVaultOwner {
  * - At GAMEOVER: all unallocated GNRUS burned, game pushes final ETH/stETH
  * - Soulbound: transfer, transferFrom, approve all revert
  */
-contract DegenerusCharity {
+contract GNRUS {
     // =====================================================================
     //                              ERRORS
     // =====================================================================
@@ -73,7 +73,7 @@ contract DegenerusCharity {
     /// @notice Thrown when proposal index is out of range
     error InvalidProposal();
 
-    /// @notice Thrown when resolveLevel is called twice for the same level
+    /// @notice Thrown when pickCharity is called twice for the same level
     error LevelAlreadyResolved();
 
     /// @notice Thrown when voting or proposing for a non-current level
@@ -118,7 +118,7 @@ contract DegenerusCharity {
     // =====================================================================
 
     /// @notice Token name
-    string public constant name = "Degenerus Donations";
+    string public constant name = "GNRUS Donations";
 
     /// @notice Token symbol
     string public constant symbol = "GNRUS";
@@ -148,7 +148,7 @@ contract DegenerusCharity {
         uint128 rejectWeight;    // 16 bytes | slot 2 (packs with approveWeight)
     }
 
-    /// @notice Current governance level (incremented by resolveLevel)
+    /// @notice Current governance level (incremented by pickCharity)
     uint24 public currentLevel;
 
     /// @notice Total proposals ever created (global counter)
@@ -168,7 +168,7 @@ contract DegenerusCharity {
     /// @notice Number of proposals for a given level
     mapping(uint24 => uint8) public levelProposalCount;
 
-    /// @notice Whether resolveLevel has been called for a given level
+    /// @notice Whether pickCharity has been called for a given level
     mapping(uint24 => bool) public levelResolved;
 
     /// @notice Whether an address has already proposed for a given level
@@ -434,13 +434,13 @@ contract DegenerusCharity {
     //                    GOVERNANCE -- RESOLVE LEVEL
     // =====================================================================
 
-    /// @notice Resolve the current governance level, distributing 2% of unallocated GNRUS
-    ///         to the winning proposal's recipient
+    /// @notice Pick the winning charity for the current level, distributing 2% of unallocated
+    ///         GNRUS to the winning proposal's recipient. Called by the game on level transition.
     /// @dev Winner is the proposal with the highest positive net weight (approve - reject).
     ///      Ties broken by first-submitted. If no proposals exist or all are net-negative,
     ///      the level is skipped.
     /// @param level The level to resolve (must equal currentLevel)
-    function resolveLevel(uint24 level) external {
+    function pickCharity(uint24 level) external onlyGame {
         if (level != currentLevel) revert LevelNotActive();
         if (levelResolved[level]) revert LevelAlreadyResolved();
         levelResolved[level] = true;

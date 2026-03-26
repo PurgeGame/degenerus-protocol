@@ -28,7 +28,7 @@ import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
 import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol";
 import {DegenerusStonk} from "../../../contracts/DegenerusStonk.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
-import {DegenerusCharity} from "../../../contracts/DegenerusCharity.sol";
+import {GNRUS} from "../../../contracts/GNRUS.sol";
 
 // Mock contracts
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
@@ -74,7 +74,7 @@ abstract contract DeployProtocol is Test {
     StakedDegenerusStonk public sdgnrs;
     DegenerusStonk public dgnrs;
     DegenerusAdmin public admin;
-    DegenerusCharity public gnrus;
+    GNRUS public gnrus;
 
     /// @notice Deploy the full protocol. Must be called from setUp().
     /// @dev Uses vm.warp(86400) to match the fixed timestamp in patchForFoundry.js.
@@ -144,6 +144,6 @@ abstract contract DeployProtocol is Test {
         admin = new DegenerusAdmin();                  // N+22 = nonce 28
 
         // GNRUS: self-mints 1T to address(this), no cross-contract constructor calls
-        gnrus = new DegenerusCharity();                // N+23 = nonce 29
+        gnrus = new GNRUS();                            // N+23 = nonce 29
     }
 }

@@ -25,9 +25,9 @@ interface IDegenerusVaultOwner {
     function isVaultOwner(address account) external view returns (bool);
 }
 
-/// @dev Charity interface for level-transition governance resolution.
-interface IDegenerusCharityResolve {
-    function resolveLevel(uint24 level) external;
+/// @dev GNRUS interface for level-transition governance resolution.
+interface IGNRUSResolve {
+    function pickCharity(uint24 level) external;
 }
 
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.
@@ -88,9 +88,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     IBurnieCoinflip internal constant coinflip =
         IBurnieCoinflip(ContractAddresses.COINFLIP);
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
-    /// @notice Charity contract for governance resolution at level transitions
-    IDegenerusCharityResolve private constant charityResolve =
-        IDegenerusCharityResolve(ContractAddresses.GNRUS);
+    /// @notice GNRUS contract for governance resolution at level transitions
+    IGNRUSResolve private constant charityResolve =
+        IGNRUSResolve(ContractAddresses.GNRUS);
     /*+======================================================================+
       |                           CONSTANTS                                  |
       +======================================================================+*/
@@ -1358,10 +1358,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // Resolve charity governance for the completed level.
             // lvl is the NEW level (old level + 1). CHARITY.currentLevel tracks
-            // the CURRENT governance level (starts at 0, incremented by resolveLevel).
+            // the CURRENT governance level (starts at 0, incremented by pickCharity).
             // The game's level 0->1 transition means level 0 gameplay is complete,
             // so we resolve governance for level 0 = lvl - 1.
-            charityResolve.resolveLevel(lvl - 1);
+            charityResolve.pickCharity(lvl - 1);
 
             // Set price for the new level based on intro tiers then 100-level cycle
             if (lvl == 5) {

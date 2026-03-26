@@ -39,7 +39,7 @@ export const DEPLOY_ORDER = [
   "SDGNRS",                // N+20: StakedDegenerusStonk (calls GAME, mints to DGNRS)
   "DGNRS",                 // N+21: DegenerusStonk (reads SDGNRS balance)
   "ADMIN",                 // N+22: DegenerusAdmin (calls VRF + GAME)
-  "GNRUS",                 // N+23: DegenerusCharity (self-mint only, no cross-calls)
+  "GNRUS",                 // N+23: GNRUS (self-mint only, no cross-calls)
 ];
 
 /**
@@ -69,7 +69,7 @@ export const KEY_TO_CONTRACT = {
   SDGNRS: "StakedDegenerusStonk",
   DGNRS: "DegenerusStonk",
   ADMIN: "DegenerusAdmin",
-  GNRUS: "DegenerusCharity",
+  GNRUS: "GNRUS",
 };
 
 /**

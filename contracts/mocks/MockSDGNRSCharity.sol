@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-/// @dev Minimal mock for sDGNRS used by DegenerusCharity unit tests.
+/// @dev Minimal mock for sDGNRS used by GNRUS unit tests.
 ///      Exposes settable totalSupply and per-address balances.
 contract MockSDGNRSCharity {
     uint256 public totalSupply;

@@ -61,7 +61,7 @@ async function stopImpersonating(address) {
 }
 
 // ---------------------------------------------------------------------------
-// Fixture: deploy mocks at ContractAddresses, then deploy DegenerusCharity
+// Fixture: deploy mocks at ContractAddresses, then deploy GNRUS
 // ---------------------------------------------------------------------------
 async function deployCharityFixture() {
   const signers = await hre.ethers.getSigners();
@@ -84,8 +84,8 @@ async function deployCharityFixture() {
   // Give voter3 0.1% (below 0.5% threshold)
   await mockSdgnrs.setBalance(voter3.address, sdgnrsSupply / 1000n);
 
-  // Deploy DegenerusCharity
-  const CharityFactory = await hre.ethers.getContractFactory("DegenerusCharity");
+  // Deploy GNRUS
+  const CharityFactory = await hre.ethers.getContractFactory("GNRUS");
   const charity = await CharityFactory.deploy();
   await charity.waitForDeployment();
   const charityAddress = await charity.getAddress();
@@ -127,14 +127,15 @@ async function distributeGNRUS(charity, mockVault, mockSdgnrs, voter, recipientA
   // Vote to approve
   await charity.connect(voter).vote(proposalId, true);
 
-  // Resolve the level
-  await charity.resolveLevel(level);
+  // Resolve the level (onlyGame)
+  const gameSigner = await impersonate(ADDR.GAME);
+  await charity.connect(gameSigner).pickCharity(level);
 
   // Clean up vault owner status
   await mockVault.setVaultOwner(voter.address, false);
 }
 
-describe("DegenerusCharity (GNRUS)", function () {
+describe("GNRUS (GNRUS)", function () {
   // =========================================================================
   // 1. Token Metadata
   // =========================================================================
@@ -630,10 +631,10 @@ describe("DegenerusCharity (GNRUS)", function () {
   });
 
   // =========================================================================
-  // 6. Governance -- resolveLevel
+  // 6. Governance -- pickCharity
   // =========================================================================
-  describe("Governance -- resolveLevel", function () {
-    it("resolveLevel distributes 2% of unallocated GNRUS to winning recipient", async function () {
+  describe("Governance -- pickCharity", function () {
+    it("pickCharity distributes 2% of unallocated GNRUS to winning recipient", async function () {
       const { charity, charityAddress, mockVault, mockSdgnrs, voter1, recipient1 } = await loadFixture(deployCharityFixture);
 
       await mockVault.setVaultOwner(voter1.address, true);
@@ -643,7 +644,8 @@ describe("DegenerusCharity (GNRUS)", function () {
       const unallocatedBefore = await charity.balanceOf(charityAddress);
       const expectedDist = (unallocatedBefore * DISTRIBUTION_BPS) / BPS_DENOM;
 
-      const tx = await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      const tx = await charity.connect(gameSigner).pickCharity(0);
       const ev = await getEvent(tx, charity, "LevelResolved");
 
       expect(ev.args.gnrusDistributed).to.equal(expectedDist);
@@ -652,55 +654,60 @@ describe("DegenerusCharity (GNRUS)", function () {
       expect(await charity.balanceOf(charityAddress)).to.equal(unallocatedBefore - expectedDist);
     });
 
-    it("resolveLevel increments currentLevel", async function () {
+    it("pickCharity increments currentLevel", async function () {
       const { charity, mockVault, voter1, recipient1 } = await loadFixture(deployCharityFixture);
       expect(await charity.currentLevel()).to.equal(0);
 
       await mockVault.setVaultOwner(voter1.address, true);
       await charity.connect(voter1).propose(recipient1.address);
       await charity.connect(voter1).vote(0, true);
-      await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      await charity.connect(gameSigner).pickCharity(0);
 
       expect(await charity.currentLevel()).to.equal(1);
     });
 
-    it("resolveLevel marks level as resolved", async function () {
+    it("pickCharity marks level as resolved", async function () {
       const { charity, mockVault, voter1, recipient1 } = await loadFixture(deployCharityFixture);
 
       await mockVault.setVaultOwner(voter1.address, true);
       await charity.connect(voter1).propose(recipient1.address);
       await charity.connect(voter1).vote(0, true);
-      await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      await charity.connect(gameSigner).pickCharity(0);
 
       expect(await charity.levelResolved(0)).to.equal(true);
     });
 
     it("resolving same level twice reverts with LevelAlreadyResolved", async function () {
       const { charity } = await loadFixture(deployCharityFixture);
+      const gameSigner = await impersonate(ADDR.GAME);
       // Resolve level 0 with no proposals (skip)
-      await charity.resolveLevel(0);
+      await charity.connect(gameSigner).pickCharity(0);
 
       // Try to resolve level 0 again -- but currentLevel is now 1
       await expect(
-        charity.resolveLevel(0)
+        charity.connect(gameSigner).pickCharity(0)
       ).to.be.revertedWithCustomError(charity, "LevelNotActive");
     });
 
     it("resolving wrong level reverts with LevelNotActive", async function () {
       const { charity } = await loadFixture(deployCharityFixture);
+      const gameSigner = await impersonate(ADDR.GAME);
       await expect(
-        charity.resolveLevel(5)
+        charity.connect(gameSigner).pickCharity(5)
       ).to.be.revertedWithCustomError(charity, "LevelNotActive");
     });
 
-    it("resolveLevel with no proposals emits LevelSkipped", async function () {
+    it("pickCharity with no proposals emits LevelSkipped", async function () {
       const { charity } = await loadFixture(deployCharityFixture);
-      const tx = await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      const tx = await charity.connect(gameSigner).pickCharity(0);
       const ev = await getEvent(tx, charity, "LevelSkipped");
       expect(ev.args.level).to.equal(0);
     });
 
-    it("resolveLevel where all proposals net-negative emits LevelSkipped", async function () {
+    it("pickCharity where all proposals net-negative emits LevelSkipped", async function () {
       const { charity, voter1, voter2, recipient1 } = await loadFixture(deployCharityFixture);
 
       await charity.connect(voter1).propose(recipient1.address);
@@ -708,12 +715,13 @@ describe("DegenerusCharity (GNRUS)", function () {
       await charity.connect(voter1).vote(0, false);
       await charity.connect(voter2).vote(0, false);
 
-      const tx = await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      const tx = await charity.connect(gameSigner).pickCharity(0);
       const ev = await getEvent(tx, charity, "LevelSkipped");
       expect(ev.args.level).to.equal(0);
     });
 
-    it("resolveLevel where all proposals net-zero emits LevelSkipped", async function () {
+    it("pickCharity where all proposals net-zero emits LevelSkipped", async function () {
       const { charity, mockSdgnrs, voter1, voter2, recipient1 } = await loadFixture(deployCharityFixture);
       // Set a small total supply so the equal weight is above 0.5% threshold
       const smallSupply = eth("10000");
@@ -728,7 +736,8 @@ describe("DegenerusCharity (GNRUS)", function () {
       await charity.connect(voter1).vote(0, true);
       await charity.connect(voter2).vote(0, false);
 
-      const tx = await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      const tx = await charity.connect(gameSigner).pickCharity(0);
       const ev = await getEvent(tx, charity, "LevelSkipped");
       expect(ev.args.level).to.equal(0);
     });
@@ -750,7 +759,8 @@ describe("DegenerusCharity (GNRUS)", function () {
       await charity.connect(voter1).vote(0, true);
       await charity.connect(voter2).vote(1, true);
 
-      const tx = await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      const tx = await charity.connect(gameSigner).pickCharity(0);
       const ev = await getEvent(tx, charity, "LevelResolved");
       // First proposal (id 0) wins because it's evaluated first and bestNet starts at 0
       // net = equalWeight > 0 = bestNet, so proposal 0 wins
@@ -767,14 +777,15 @@ describe("DegenerusCharity (GNRUS)", function () {
       await mockVault.setVaultOwner(voter1.address, true);
       await charity.connect(voter1).propose(recipient1.address);
       await charity.connect(voter1).vote(0, true);
-      const tx1 = await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      const tx1 = await charity.connect(gameSigner).pickCharity(0);
       const ev1 = await getEvent(tx1, charity, "LevelResolved");
       const dist1 = ev1.args.gnrusDistributed;
 
       // Level 1: distribute 2% of remaining (1T - dist1)
       await charity.connect(voter1).propose(recipient2.address);
       await charity.connect(voter1).vote(1, true);
-      const tx2 = await charity.resolveLevel(1);
+      const tx2 = await charity.connect(gameSigner).pickCharity(1);
       const ev2 = await getEvent(tx2, charity, "LevelResolved");
       const dist2 = ev2.args.gnrusDistributed;
 
@@ -788,13 +799,14 @@ describe("DegenerusCharity (GNRUS)", function () {
       expect(dist2).to.equal(expectedDist2);
     });
 
-    it("resolveLevel emits Transfer from contract to recipient", async function () {
+    it("pickCharity emits Transfer from contract to recipient", async function () {
       const { charity, charityAddress, mockVault, voter1, recipient1 } = await loadFixture(deployCharityFixture);
 
       await mockVault.setVaultOwner(voter1.address, true);
       await charity.connect(voter1).propose(recipient1.address);
       await charity.connect(voter1).vote(0, true);
-      const tx = await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      const tx = await charity.connect(gameSigner).pickCharity(0);
 
       const transfers = await getEvents(tx, charity, "Transfer");
       // Should have exactly one Transfer event (contract -> recipient)
@@ -803,7 +815,7 @@ describe("DegenerusCharity (GNRUS)", function () {
       expect(distTransfer.args.to).to.equal(recipient1.address);
     });
 
-    it("resolveLevel picks highest net-positive proposal", async function () {
+    it("pickCharity picks highest net-positive proposal", async function () {
       const { charity, mockSdgnrs, voter1, voter2, recipient1, recipient2 } = await loadFixture(deployCharityFixture);
       // voter1 has 1%, voter2 has 1%
       // voter1 proposes recipient1, voter2 proposes recipient2
@@ -816,7 +828,8 @@ describe("DegenerusCharity (GNRUS)", function () {
       // voter2 approves only proposal 1 (so proposal 1 has more approve weight)
       await charity.connect(voter2).vote(1, true);
 
-      const tx = await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      const tx = await charity.connect(gameSigner).pickCharity(0);
       const ev = await getEvent(tx, charity, "LevelResolved");
       // Proposal 1 should win -- voter1 + voter2 approved it
       expect(ev.args.winningProposalId).to.equal(1);
@@ -944,7 +957,8 @@ describe("DegenerusCharity (GNRUS)", function () {
       // Level 0: create and resolve
       await charity.connect(voter1).propose(recipient1.address);
       await charity.connect(voter1).vote(0, true);
-      await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      await charity.connect(gameSigner).pickCharity(0);
 
       // Level 1: create new proposal
       await charity.connect(voter1).propose(recipient2.address);
@@ -962,7 +976,8 @@ describe("DegenerusCharity (GNRUS)", function () {
       await mockVault.setVaultOwner(voter1.address, true);
       await charity.connect(voter1).propose(recipient1.address);
       await charity.connect(voter1).vote(0, true);
-      await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      await charity.connect(gameSigner).pickCharity(0);
 
       // Level 1 -- voter2 can propose (different level, hasProposed resets per level)
       await charity.connect(voter2).propose(recipient2.address);
@@ -979,7 +994,8 @@ describe("DegenerusCharity (GNRUS)", function () {
         await charity.connect(voter1).propose(recs0[i]);
       }
       await charity.connect(voter1).vote(0, true);
-      await charity.resolveLevel(0);
+      const gameSigner = await impersonate(ADDR.GAME);
+      await charity.connect(gameSigner).pickCharity(0);
 
       // Level 1: can propose 5 more (count resets per level)
       await charity.connect(voter1).propose(others[2].address);

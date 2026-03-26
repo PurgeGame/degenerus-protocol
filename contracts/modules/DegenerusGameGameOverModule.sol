@@ -18,8 +18,8 @@ interface IDegenerusAdminShutdown {
     function shutdownVrf() external;
 }
 
-/// @dev Charity interface for gameover GNRUS cleanup.
-interface IDegenerusCharityGameOver {
+/// @dev GNRUS interface for gameover GNRUS cleanup.
+interface IGNRUSGameOver {
     function handleGameOver() external;
 }
 
@@ -39,9 +39,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     IDegenerusAdminShutdown private constant admin =
         IDegenerusAdminShutdown(ContractAddresses.ADMIN);
 
-    /// @notice Charity contract for gameover GNRUS cleanup
-    IDegenerusCharityGameOver private constant charityGameOver =
-        IDegenerusCharityGameOver(ContractAddresses.GNRUS);
+    /// @notice GNRUS contract for gameover cleanup
+    IGNRUSGameOver private constant charityGameOver =
+        IGNRUSGameOver(ContractAddresses.GNRUS);
 
     /// @notice Fixed refund amount per deity pass for early game over (levels 0-9)
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
