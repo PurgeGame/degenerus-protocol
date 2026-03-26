@@ -13,3 +13,13 @@ coverage/
 .gas-snapshot-*
 /memory
 .claude/
+audit/unit-*/
+audit/delta-*/
+audit/FINDINGS.md
+audit/FINAL-FINDINGS-REPORT.md
+audit/EXTERNAL-AUDIT-PROMPT.md
+audit/PAYOUT-SPECIFICATION.html
+audit/ACCESS-CONTROL-MATRIX.md
+audit/ETH-FLOW-MAP.md
+audit/STORAGE-WRITE-MAP.md
+audit/v*.md
