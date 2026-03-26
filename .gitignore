@@ -6,8 +6,10 @@ forge-out/
 foundry.lock
 out/
 runs/
+coverage/
 *.sol.bak
 .planning/
 .gas-snapshot
 .gas-snapshot-*
 /memory
+.claude/

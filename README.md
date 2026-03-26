@@ -39,7 +39,7 @@ forge test
 
 ## Architecture
 
-- **24 deployable contracts** (14 core + 10 delegatecall modules), sharing storage via `DegenerusGameStorage`
+- **25 deployable contracts** (15 core + 10 delegatecall modules), sharing storage via `DegenerusGameStorage`
 - Solidity 0.8.34, `viaIR` enabled, optimizer runs = 200
 - All contracts under 24KB (DegenerusGame largest at 19KB)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token
@@ -74,6 +74,7 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 | StakedDegenerusStonk | Soulbound reserve token (sDGNRS), holds all pools |
 | DegenerusStonk | Transferable ERC-20 wrapper (DGNRS) for sDGNRS |
 | DeityBoonViewer | Standalone deity boon slot viewer |
+| GNRUS | Soulbound charity token with sDGNRS-governed level-based donations |
 | WrappedWrappedXRP | Meme wrapper contract |
 
 ### Libraries
@@ -93,13 +94,13 @@ All contract addresses are compile-time constants in `ContractAddresses.sol`. Th
 2. Patches `ContractAddresses.sol` with concrete addresses
 3. Recompiles and deploys in deterministic order
 
-Icons32Data and modules deploy first (nonce N+0..10), then supporting contracts (COIN, COINFLIP, GAME, etc.), then contracts that depend on earlier ones (VAULT, DGNRS, ADMIN).
+Icons32Data and modules deploy first (nonce N+0..10), then supporting contracts (COIN, COINFLIP, GAME, etc.), then contracts that depend on earlier ones (VAULT, DGNRS, ADMIN, GNRUS).
 
 ## Scope
 
 See [`scope.txt`](scope.txt) for the complete in-scope file list.
 
-**In scope:** 16 core files (14 deployable + ContractAddresses + DegenerusTraitUtils) + 12 module files (10 deployable + 2 abstract utils) + 1 shared storage + 5 libraries + 12 interfaces = 46 Solidity files
+**In scope:** 17 core files (15 deployable + ContractAddresses + DegenerusTraitUtils) + 12 module files (10 deployable + 2 abstract utils) + 1 shared storage + 5 libraries + 12 interfaces = 47 Solidity files
 
 **Out of scope:** `contracts/mocks/`, `contracts/test/`
 
@@ -113,16 +114,7 @@ See [`scope.txt`](scope.txt) for the complete in-scope file list.
 
 ## Audit
 
-The [`audit/`](audit/) directory contains findings from internal audit work:
-
-- **[`KNOWN-ISSUES.md`](audit/KNOWN-ISSUES.md)** — Pre-disclosed known issues for wardens
-- **[`FINAL-FINDINGS-REPORT.md`](audit/FINAL-FINDINGS-REPORT.md)** — Full findings report (109 plans across 30 phases)
-- **[`EXTERNAL-AUDIT-PROMPT.md`](audit/EXTERNAL-AUDIT-PROMPT.md)** — Protocol overview, threat model, and audit checklist
-- **[`PAYOUT-SPECIFICATION.html`](audit/PAYOUT-SPECIFICATION.html)** — Complete payout and distribution specification
-
-### Finding Summary
-
-No open findings. All issues identified during the audit were resolved in code.
+- **[`KNOWN-ISSUES.md`](audit/KNOWN-ISSUES.md)** — Pre-disclosed known issues and intentional design decisions for wardens
 
 ### Test Coverage
 
