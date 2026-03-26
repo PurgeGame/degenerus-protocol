@@ -218,11 +218,11 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
-    it("burnRemainingPools: reverts when called by alice (onlyGame → Unauthorized)", async function () {
+    it("burnAtGameOver: reverts when called by alice (onlyGame → Unauthorized)", async function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        sdgnrs.connect(alice).burnRemainingPools()
+        sdgnrs.connect(alice).burnAtGameOver()
       ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
   });

@@ -838,17 +838,17 @@ describe("GNRUS (GNRUS)", function () {
   });
 
   // =========================================================================
-  // 7. handleGameOver
+  // 7. burnAtGameOver
   // =========================================================================
-  describe("handleGameOver", function () {
-    it("handleGameOver burns all unallocated GNRUS (onlyGame)", async function () {
+  describe("burnAtGameOver", function () {
+    it("burnAtGameOver burns all unallocated GNRUS (onlyGame)", async function () {
       const { charity, charityAddress } = await loadFixture(deployCharityFixture);
 
       const gameSigner = await impersonate(ADDR.GAME);
       const unallocated = await charity.balanceOf(charityAddress);
       const supplyBefore = await charity.totalSupply();
 
-      const tx = await charity.connect(gameSigner).handleGameOver();
+      const tx = await charity.connect(gameSigner).burnAtGameOver();
       await stopImpersonating(ADDR.GAME);
 
       expect(await charity.balanceOf(charityAddress)).to.equal(0n);
@@ -858,42 +858,42 @@ describe("GNRUS (GNRUS)", function () {
       expect(ev.args.gnrusBurned).to.equal(unallocated);
     });
 
-    it("handleGameOver reverts if not called by game", async function () {
+    it("burnAtGameOver reverts if not called by game", async function () {
       const { charity, voter1 } = await loadFixture(deployCharityFixture);
       await expect(
-        charity.connect(voter1).handleGameOver()
+        charity.connect(voter1).burnAtGameOver()
       ).to.be.revertedWithCustomError(charity, "Unauthorized");
     });
 
-    it("handleGameOver reverts if called twice (AlreadyFinalized)", async function () {
+    it("burnAtGameOver reverts if called twice (AlreadyFinalized)", async function () {
       const { charity } = await loadFixture(deployCharityFixture);
 
       const gameSigner = await impersonate(ADDR.GAME);
-      await charity.connect(gameSigner).handleGameOver();
+      await charity.connect(gameSigner).burnAtGameOver();
 
       await expect(
-        charity.connect(gameSigner).handleGameOver()
+        charity.connect(gameSigner).burnAtGameOver()
       ).to.be.revertedWithCustomError(charity, "AlreadyFinalized");
       await stopImpersonating(ADDR.GAME);
     });
 
-    it("handleGameOver sets finalized to true", async function () {
+    it("burnAtGameOver sets finalized to true", async function () {
       const { charity } = await loadFixture(deployCharityFixture);
       expect(await charity.finalized()).to.equal(false);
 
       const gameSigner = await impersonate(ADDR.GAME);
-      await charity.connect(gameSigner).handleGameOver();
+      await charity.connect(gameSigner).burnAtGameOver();
       await stopImpersonating(ADDR.GAME);
 
       expect(await charity.finalized()).to.equal(true);
     });
 
-    it("handleGameOver emits Transfer(contract, address(0), amount)", async function () {
+    it("burnAtGameOver emits Transfer(contract, address(0), amount)", async function () {
       const { charity, charityAddress } = await loadFixture(deployCharityFixture);
       const unallocated = await charity.balanceOf(charityAddress);
 
       const gameSigner = await impersonate(ADDR.GAME);
-      const tx = await charity.connect(gameSigner).handleGameOver();
+      const tx = await charity.connect(gameSigner).burnAtGameOver();
       await stopImpersonating(ADDR.GAME);
 
       const transferEv = await getEvent(tx, charity, "Transfer");
@@ -902,7 +902,7 @@ describe("GNRUS (GNRUS)", function () {
       expect(transferEv.args.amount).to.equal(unallocated);
     });
 
-    it("handleGameOver after partial distribution burns only remaining", async function () {
+    it("burnAtGameOver after partial distribution burns only remaining", async function () {
       const { charity, charityAddress, mockVault, mockSdgnrs, voter1, recipient1 } = await loadFixture(deployCharityFixture);
 
       // Distribute some GNRUS via governance first
@@ -914,7 +914,7 @@ describe("GNRUS (GNRUS)", function () {
       expect(unallocatedAfterDist).to.be.lt(INITIAL_SUPPLY);
 
       const gameSigner = await impersonate(ADDR.GAME);
-      const tx = await charity.connect(gameSigner).handleGameOver();
+      const tx = await charity.connect(gameSigner).burnAtGameOver();
       await stopImpersonating(ADDR.GAME);
 
       const ev = await getEvent(tx, charity, "GameOverFinalized");

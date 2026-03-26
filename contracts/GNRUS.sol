@@ -85,7 +85,7 @@ contract GNRUS {
     /// @notice Thrown when game is not in gameover state
     error GameNotOver();
 
-    /// @notice Thrown when handleGameOver has already been called
+    /// @notice Thrown when burnAtGameOver has already been called
     error AlreadyFinalized();
 
     // =====================================================================
@@ -154,7 +154,7 @@ contract GNRUS {
     /// @notice Total proposals ever created (global counter)
     uint48 public proposalCount;
 
-    /// @notice Whether handleGameOver has been called
+    /// @notice Whether burnAtGameOver has been called
     bool public finalized;
 
     // ^ currentLevel (3) + proposalCount (6) + finalized (1) = 10 bytes, one slot
@@ -328,7 +328,7 @@ contract GNRUS {
     ///      The game contract pushes final ETH/stETH to VAULT, DGNRS, and GNRUS
     ///      during gameover processing. This function handles the GNRUS-side cleanup
     ///      of burning unallocated tokens.
-    function handleGameOver() external onlyGame {
+    function burnAtGameOver() external onlyGame {
         if (finalized) revert AlreadyFinalized();
         finalized = true;
 

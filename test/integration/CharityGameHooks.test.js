@@ -19,7 +19,7 @@ import {
  *
  * Verifies that the game modules correctly call GNRUS hooks:
  *   1. pickCharity(level) at each level transition during advanceGame
- *   2. handleGameOver() during gameover drain to burn unallocated GNRUS
+ *   2. burnAtGameOver() during gameover drain to burn unallocated GNRUS
  *
  * Both hooks are direct calls (no try/catch) that surface reverts as bugs.
  */
@@ -186,10 +186,10 @@ describe("CharityGameHooks", function () {
   });
 
   // =========================================================================
-  // handleGameOver hook
+  // burnAtGameOver hook
   // =========================================================================
 
-  describe("handleGameOver fires during gameover drain", function () {
+  describe("burnAtGameOver fires during gameover drain", function () {
     it("charity.finalized becomes true after game over", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, deployer, mockVRF, deployedAddrs } = fixture;
@@ -205,9 +205,9 @@ describe("CharityGameHooks", function () {
       // Verify game is over
       expect(await game.gameOver()).to.equal(true);
 
-      // Verify handleGameOver was called: finalized = true
+      // Verify burnAtGameOver was called: finalized = true
       expect(await charity.finalized()).to.equal(true,
-        "Charity should be finalized after handleGameOver() called");
+        "Charity should be finalized after burnAtGameOver() called");
     });
 
     it("unallocated GNRUS is burned at gameover", async function () {
@@ -240,7 +240,7 @@ describe("CharityGameHooks", function () {
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);
 
-      // Second call: processes word, calls handleGameOverDrain -> handleGameOver
+      // Second call: processes word, calls handleGameOverDrain -> burnAtGameOver
       const tx = await game.connect(deployer).advanceGame();
       const events = await getEvents(tx, charity, "GameOverFinalized");
 

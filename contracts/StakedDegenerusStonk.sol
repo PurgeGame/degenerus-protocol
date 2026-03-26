@@ -417,7 +417,7 @@ contract StakedDegenerusStonk {
 
     /// @notice Burn all undistributed pool tokens at game over
     /// @dev Only callable by game contract. Burns this contract's own balance.
-    function burnRemainingPools() external onlyGame {
+    function burnAtGameOver() external onlyGame {
         uint256 bal = balanceOf[address(this)];
         if (bal == 0) return;
         unchecked {

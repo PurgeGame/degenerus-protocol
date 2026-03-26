@@ -20,7 +20,7 @@ interface IDegenerusAdminShutdown {
 
 /// @dev GNRUS interface for gameover GNRUS cleanup.
 interface IGNRUSGameOver {
-    function handleGameOver() external;
+    function burnAtGameOver() external;
 }
 
 /**
@@ -120,6 +120,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         gameOver = true; // Terminal state
         gameOverTime = uint48(block.timestamp);
 
+        // Burn unallocated tokens before fund distribution (fires on all paths)
+        charityGameOver.burnAtGameOver();
+        dgnrs.burnAtGameOver();
+
         if (available == 0) {
             gameOverFinalJackpotPaid = true;
             _setNextPrizePool(0);
@@ -167,10 +171,6 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             }
         }
 
-        // Burn unallocated GNRUS at gameover
-        charityGameOver.handleGameOver();
-        // Burn undistributed sDGNRS pool tokens so totalSupply reflects only holder wallets
-        dgnrs.burnRemainingPools();
     }
 
     /// @notice Final sweep of all remaining funds after 30 days post-gameover.

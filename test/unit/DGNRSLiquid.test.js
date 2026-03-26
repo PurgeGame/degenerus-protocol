@@ -400,14 +400,14 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
   // 7. sDGNRS new features
   // ===========================================================================
   describe("sDGNRS new features", function () {
-    it("burnRemainingPools: reverts for non-game caller", async function () {
+    it("burnAtGameOver: reverts for non-game caller", async function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        sdgnrs.connect(alice).burnRemainingPools()
+        sdgnrs.connect(alice).burnAtGameOver()
       ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
-    it("burnRemainingPools: game can burn all pool tokens", async function () {
+    it("burnAtGameOver: game can burn all pool tokens", async function () {
       const { sdgnrs, game } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
       const sdgnrsAddr = await sdgnrs.getAddress();
@@ -420,7 +420,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       expect(poolBal).to.be.gt(0n);
       const supplyBefore = await sdgnrs.totalSupply();
 
-      await sdgnrs.connect(gameSigner).burnRemainingPools();
+      await sdgnrs.connect(gameSigner).burnAtGameOver();
       expect(await sdgnrs.balanceOf(sdgnrsAddr)).to.equal(0n);
       expect(await sdgnrs.totalSupply()).to.equal(supplyBefore - poolBal);
 

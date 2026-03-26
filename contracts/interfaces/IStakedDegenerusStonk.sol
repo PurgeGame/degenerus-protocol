@@ -42,7 +42,7 @@ interface IStakedDegenerusStonk {
     function transferBetweenPools(Pool from, Pool to, uint256 amount) external returns (uint256 transferred);
 
     /// @notice Burn all undistributed pool tokens at game over
-    function burnRemainingPools() external;
+    function burnAtGameOver() external;
 
     /// @notice Burn sDGNRS to claim proportional share of backing assets
     /// @param amount Amount of sDGNRS to burn

@@ -331,14 +331,14 @@ describe("DegenerusStonk", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 7. burnRemainingPools (game-only, game over)
+  // 7. burnAtGameOver (game-only, game over)
   // ---------------------------------------------------------------------------
 
-  describe("burnRemainingPools", function () {
+  describe("burnAtGameOver", function () {
     it("reverts when called by non-game address", async function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        sdgnrs.connect(alice).burnRemainingPools()
+        sdgnrs.connect(alice).burnAtGameOver()
       ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
 
@@ -360,7 +360,7 @@ describe("DegenerusStonk", function () {
       expect(poolBal).to.be.gt(0n);
       const supplyBefore = await sdgnrs.totalSupply();
 
-      await sdgnrs.connect(gameSigner).burnRemainingPools();
+      await sdgnrs.connect(gameSigner).burnAtGameOver();
       expect(await sdgnrs.balanceOf(sdgnrsAddr)).to.equal(0n);
       expect(await sdgnrs.totalSupply()).to.equal(supplyBefore - poolBal);
 
