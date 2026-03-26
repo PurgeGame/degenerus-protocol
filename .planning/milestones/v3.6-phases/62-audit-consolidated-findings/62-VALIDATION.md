@@ -1,0 +1,73 @@
+---
+phase: 62
+slug: audit-consolidated-findings
+status: draft
+nyquist_compliant: false
+wave_0_complete: false
+created: 2026-03-22
+---
+
+# Phase 62 — Validation Strategy
+
+> Per-phase validation contract for feedback sampling during execution.
+
+---
+
+## Test Infrastructure
+
+| Property | Value |
+|----------|-------|
+| **Framework** | Foundry (forge test) |
+| **Config file** | foundry.toml |
+| **Quick run command** | `forge test --match-contract StallResilience -vv` |
+| **Full suite command** | `forge test -vv` |
+| **Estimated runtime** | ~60 seconds |
+
+---
+
+## Sampling Rate
+
+- **After every task commit:** Run `forge test --match-contract StallResilience -vv`
+- **After every plan wave:** Run `forge test -vv`
+- **Before `/gsd:verify-work`:** Full suite must be green
+- **Max feedback latency:** 60 seconds
+
+---
+
+## Per-Task Verification Map
+
+| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
+|---------|------|------|-------------|-----------|-------------------|-------------|--------|
+| 62-01-01 | 01 | 1 | AUD-01 | audit | `forge test -vv` (existing tests still pass) | ✅ | ⬜ pending |
+| 62-01-02 | 01 | 1 | AUD-01 | review | Manual code review of backfill mechanism | N/A | ⬜ pending |
+| 62-02-01 | 02 | 1 | AUD-02 | doc | Consolidated findings document written | N/A | ⬜ pending |
+
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+---
+
+## Wave 0 Requirements
+
+Existing infrastructure covers all phase requirements. This is an audit/documentation phase — no new test infrastructure needed.
+
+---
+
+## Manual-Only Verifications
+
+| Behavior | Requirement | Why Manual | Test Instructions |
+|----------|-------------|------------|-------------------|
+| No new attack vectors in backfill | AUD-01 | Security audit requires human review of code paths | Review each attack surface enumerated in 62-RESEARCH.md |
+| All findings in master table | AUD-02 | Document completeness requires human verification | Compare findings against prior milestone format |
+
+---
+
+## Validation Sign-Off
+
+- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
+- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
+- [ ] Wave 0 covers all MISSING references
+- [ ] No watch-mode flags
+- [ ] Feedback latency < 60s
+- [ ] `nyquist_compliant: true` set in frontmatter
+
+**Approval:** pending

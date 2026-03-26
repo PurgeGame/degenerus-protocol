@@ -1,5 +1,26 @@
 # Milestones
 
+## v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity (Shipped: 2026-03-26)
+
+**Phases completed:** 6 phases, 12 plans, 20 tasks
+
+**Key accomplishments:**
+
+- Fixed all 14 failing Foundry tests (6 VRF mock double-fulfillment, 3 stale storage slots, 1 BPS precision, 1 level advancement, 3 queue drain assertions) achieving 369/369 green baseline
+- Status:
+- Deleted lastLootboxRngWord redundant storage (3 SSTOREs saved), rewrote advanceBounty to payout-time computation with bountyMultiplier pattern, corrected BitPackingLib NatSpec, and proved deletion safe via 5-path delta audit
+- Cached _getFuturePrizePool() in earlybird/early-burn paths (~100 gas/call saved) and fixed RewardJackpotsSettled to emit post-reconciliation future pool value
+- Removed isDeity tier-check bypass from all 7 tiered boon categories in _applyBoon, preventing deity boons from downgrading existing higher-tier boons
+- Status:
+- Soulbound GNRUS token (1T supply) with proportional ETH/stETH burn redemption and per-level sDGNRS-weighted governance (propose/vote/resolveLevel)
+- GNRUS (DegenerusCharity) added to deploy pipeline at nonce N+23 -- predictAddresses, patchForFoundry, DeployProtocol, DeployCanary all updated for 24-contract protocol
+- 1. [Adjusted] Token metadata matches actual contract, not plan spec
+- resolveLevel hook at level transitions and handleGameOver hook at gameover drain wired into game modules with 5 passing integration tests
+- Redundancy audit of all 90 test files: 13 DELETE verdicts (7 ghost + 3 adversarial + 2 simulation + 1 validation), 75 KEEP, 2 borderline KEEP -- ~4,000 lines removed with zero unique coverage lost
+- Both test suites verified green after pruning -- COVERAGE-COMPARISON.md proves zero unique coverage lost across all 13 deleted files with function-level tracing
+
+---
+
 ## v5.0 Ultimate Adversarial Audit (Shipped: 2026-03-25)
 
 **Phases completed:** 17 phases, 56 plans, 16 tasks
