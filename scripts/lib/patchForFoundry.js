@@ -103,7 +103,7 @@ if (scriptPath && scriptPath.endsWith("patchForFoundry.js")) {
     `  First contract: ${result.predicted.get("ICONS_32")} (ICONS_32)`
   );
   console.log(
-    `  Last contract:  ${result.predicted.get("ADMIN")} (ADMIN)`
+    `  Last contract:  ${result.predicted.get("GNRUS")} (GNRUS)`
   );
   console.log(`  Mock VRF:       ${result.mockAddrs.MockVRFCoordinator}`);
   console.log(`  Mock stETH:     ${result.mockAddrs.MockStETH}`);
