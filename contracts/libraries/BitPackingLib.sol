@@ -56,7 +56,7 @@ library BitPackingLib {
     /// @notice Bit position for frozen until level (bits 128-151)
     uint256 internal constant FROZEN_UNTIL_LEVEL_SHIFT = 128;
 
-    /// @notice Bit position for whale bundle type (bits 152-154)
+    /// @notice Bit position for whale bundle type (bits 152-153)
     uint256 internal constant WHALE_BUNDLE_TYPE_SHIFT = 152;
 
     /// @notice Bit position for level units count (bits 228-243)

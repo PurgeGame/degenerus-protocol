@@ -124,7 +124,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///         Caller receives ~0.01 ETH worth of BURNIE as flip credit.
     function advanceGame() external {
         address caller = msg.sender;
-        uint256 advanceBounty = (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price;
         uint48 ts = uint48(block.timestamp);
         uint48 day = _simulatedDayIndexAt(ts);
         bool inJackpot = jackpotPhaseFlag;
@@ -172,7 +171,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             midDayTicketRngPending = false;
                         }
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
-                        coin.creditFlip(caller, advanceBounty);
+                        coin.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price);
                         return;
                     }
                 }
@@ -181,9 +180,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             revert NotTimeYet();
         }
 
-        // Escalate bounty if daily processing is stalled (new-day path only).
+        // Escalate bounty multiplier if daily processing is stalled (new-day path only).
         // 2x after 20 min, 4x after 1 hour, 6x after 2 hours.
         // Absolute targets: 0.005 base, 0.01 @20m, 0.02 @1h, 0.03 @2h ETH-equivalent.
+        uint256 bountyMultiplier = 1;
         {
             uint256 dayStart = (uint256(day - 1) +
                 ContractAddresses.DEPLOY_DAY_BOUNDARY) *
@@ -191,11 +191,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 82_620;
             uint256 elapsed = ts - dayStart;
             if (elapsed >= 2 hours) {
-                advanceBounty *= 6;
+                bountyMultiplier = 6;
             } else if (elapsed >= 1 hours) {
-                advanceBounty *= 4;
+                bountyMultiplier = 4;
             } else if (elapsed >= 20 minutes) {
-                advanceBounty *= 2;
+                bountyMultiplier = 2;
             }
         }
 
@@ -209,7 +209,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 ) = _runProcessTicketBatch(purchaseLevel);
                 if (ticketWorked || !ticketsFinished) {
                     emit Advance(STAGE_TICKETS_WORKING, lvl);
-                    coin.creditFlip(caller, advanceBounty);
+                    coin.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
                     return;
                 }
             }
@@ -391,7 +391,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         } while (false);
 
         emit Advance(stage, lvl);
-        coin.creditFlip(caller, advanceBounty);
+        coin.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
     }
 
     /*+========================================================================================+
