@@ -27,10 +27,10 @@ Requirements for Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity miles
 
 ### DegenerusCharity Contract
 
-- [ ] **CHAR-01**: `DegenerusCharity.sol` deployed as standalone contract at nonce N+23
-- [ ] **CHAR-02**: Soulbound GNRUS token (name="Degenerus Charity", symbol="GNRUS", 18 decimals, no transfer/transferFrom/approve) with 1T supply minted to contract
-- [ ] **CHAR-03**: Proportional burn-for-ETH/stETH redemption (`amount/totalSupply` share of both assets)
-- [ ] **CHAR-04**: Per-level sDGNRS-weighted governance (propose, vote, resolveLevel)
+- [x] **CHAR-01**: `DegenerusCharity.sol` deployed as standalone contract at nonce N+23
+- [x] **CHAR-02**: Soulbound GNRUS token (name="Degenerus Charity", symbol="GNRUS", 18 decimals, no transfer/transferFrom/approve) with 1T supply minted to contract
+- [x] **CHAR-03**: Proportional burn-for-ETH/stETH redemption (`amount/totalSupply` share of both assets)
+- [x] **CHAR-04**: Per-level sDGNRS-weighted governance (propose, vote, resolveLevel)
 - [ ] **CHAR-05**: `ContractAddresses.sol` updated with CHARITY address constant
 - [ ] **CHAR-06**: Deploy pipeline updated (predictAddresses.js, patchForFoundry.js, DeployProtocol.sol)
 - [ ] **CHAR-07**: DeployCanary.t.sol passes with new CHARITY address prediction
@@ -84,10 +84,10 @@ Deferred to subsequent milestones.
 | FIX-06 | Phase 121 | Complete |
 | FIX-07 | Phase 121 | Complete |
 | FIX-08 | Phase 121 | Complete |
-| CHAR-01 | Phase 123 | Pending |
-| CHAR-02 | Phase 123 | Pending |
-| CHAR-03 | Phase 123 | Pending |
-| CHAR-04 | Phase 123 | Pending |
+| CHAR-01 | Phase 123 | Complete |
+| CHAR-02 | Phase 123 | Complete |
+| CHAR-03 | Phase 123 | Complete |
+| CHAR-04 | Phase 123 | Complete |
 | CHAR-05 | Phase 123 | Pending |
 | CHAR-06 | Phase 123 | Pending |
 | CHAR-07 | Phase 123 | Pending |
