@@ -1,59 +1,55 @@
 ---
 gsd_state_version: 1.0
 milestone: v6.0
-milestone_name: Changes)
-status: executing
-stopped_at: Phase 128 context gathered
-last_updated: "2026-03-26T19:13:15.476Z"
-last_activity: 2026-03-26
+milestone_name: Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity
+status: Milestone complete
+stopped_at: Completed 128-01-PLAN.md
+last_updated: "2026-03-26T19:35:36.372Z"
 progress:
-  total_phases: 4
+  total_phases: 6
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 50
+  total_plans: 3
+  completed_plans: 10
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-26)
+See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 127 — degeneruscharity-full-adversarial-audit
+**Current focus:** Phase 103 — game-router-storage-layout
 
 ## Current Position
 
-Phase: 128
+Phase: 125
 Plan: Not started
-Status: Executing Phase 127
-Last activity: 2026-03-26
-
-Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2 (v7.0 milestone)
-- Average duration: 3.5min
-- Total execution time: ~7 min
+- Total plans completed: 0 (v5.0 milestone)
+- Average duration: -
+- Total execution time: 0 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 126 | 2/2 | 7min | 3.5min |
+| - | - | - | - |
 
 **Recent Trend:**
 
-- Last 5 plans: 126-01 (4min), 126-02 (3min)
+- Last 5 plans: -
 - Trend: New milestone
 
 *Updated after each plan completion*
-| Phase 126 P01 | 4min | 2 tasks | 2 files |
-| Phase 126 P02 | 3min | 1 tasks | 1 files |
+| Phase 103 P01 | 9min | 2 tasks | 2 files |
+| Phase 103 P02 | 8min | 1 tasks | 1 files |
+| Phase 125 P02 | 30min | 2 tasks | 1 files |
+| Phase 128 P01 | 4min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -63,13 +59,15 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
 - [v5.0]: Three-agent system: Mad Genius (attacker), Skeptic (validator), Taskmaster (coverage enforcer)
-- [v6.0]: DegenerusCharity deployed at nonce N+23 with soulbound GNRUS token
-- [v6.0]: 7 audit findings fixed across multiple contracts
-- [v7.0]: Audit motivated by commit weirdness -- verify plan-vs-reality alignment
-- [v7.0]: DegenerusAffiliate has unplanned change (commit a3e2341f) -- first-class reconciliation concern
-- [v7.0]: Phases 127/128 can run in parallel after Phase 126 completes
-- [Phase 126]: 65 function entries cataloged across 12 production contracts; 64 flagged NEEDS_ADVERSARIAL_REVIEW for Phases 127-128
-- [Phase 126]: 23/29 plan items MATCH, 5 DRIFT, 1 UNPLANNED; Path A handleGameOver removal is only behavioral drift
+- [v5.0]: 16 audit units covering all 29 contracts with mandatory call-tree expansion and storage-write mapping
+- [v5.0]: All agents run Opus (quality profile) -- no model downgrades at any stage
+- [v5.0]: Arithmetic and reentrancy excluded -- already covered exhaustively in v3.0-v4.4
+- [v5.0]: Design doc at .planning/ULTIMATE-AUDIT-DESIGN.md
+- [Phase 103]: Category C restricted to state-changing internal helpers; view/pure in D. Storage comparison uses AST-ID-normalized types.
+- [Phase 103]: Mad Genius: 0 VULNERABLE, 7 INVESTIGATE findings across 49 functions. BAF-class cache check SAFE on all 19 direct functions.
+- [Phase 125]: Pre-existing 14 Foundry + 32 Hardhat failures from Phases 121-124 documented as baseline, not caused by pruning
+- [Phase 125]: Function-level coverage tracing proves zero unique coverage lost across all 13 deleted test files
+- [Phase 128]: All 12 Phase 121 entries SAFE -- 0 VULNERABLE, 0 INVESTIGATE, BAF-class checks explicit
 
 ### Pending Todos
 
@@ -81,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T19:13:15.471Z
-Stopped at: Phase 128 context gathered
-Resume file: .planning/phases/128-changed-contract-adversarial-audit/128-CONTEXT.md
+Last session: 2026-03-26T19:35:36.370Z
+Stopped at: Completed 128-01-PLAN.md
+Resume file: None
