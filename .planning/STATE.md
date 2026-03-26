@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity
 status: Ready to execute
-stopped_at: Completed 121-01-PLAN.md
-last_updated: "2026-03-26T02:45:45.227Z"
+stopped_at: Completed 121-03-PLAN.md
+last_updated: "2026-03-26T02:46:14.883Z"
 progress:
   total_phases: 6
   completed_phases: 1
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 121 (storage-and-gas-fixes) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Plan: 2 of 3
 *Updated after each plan completion*
 | Phase 120 P01 | 27min | 2 tasks | 7 files |
 | Phase 121 P01 | 13min | 3 tasks | 5 files |
+| Phase 121 P03 | 14min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,7 @@ Recent decisions affecting current work:
 - [Phase 120]: TicketLifecycle constructor entries (sDGNRS+VAULT) tolerated at <= 2 per level due to write-key/read-key swap timing
 - [Phase 121]: Full deletion of lastLootboxRngWord (not deprecation) -- safe for fresh deploy, saves ~20K gas/write x3 paths
 - [Phase 121]: Stall backfill path: mapping read more correct than lastLootboxRngWord (latent bug fix)
+- [Phase 121]: Removed isDeity bypass from all 7 boon tier-comparison guards -- simpler than separate deity checks, same upgrade-only semantics
 
 ### Pending Todos
 
@@ -78,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T02:45:45.225Z
-Stopped at: Completed 121-01-PLAN.md
+Last session: 2026-03-26T02:46:14.881Z
+Stopped at: Completed 121-03-PLAN.md
 Resume file: None

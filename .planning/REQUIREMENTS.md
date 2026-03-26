@@ -21,7 +21,7 @@ Requirements for Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity miles
 - [ ] **FIX-03**: `RewardJackpotsSettled` event emits post-reconciliation value (`futurePoolLocal + rebuyDelta`)
 - [ ] **FIX-04**: Degenerette ETH resolution succeeds during `prizePoolFrozen` via pending pool routing through `_setPendingPools`
 - [x] **FIX-05**: BitPackingLib NatSpec corrected ("bits 152-154" to "bits 152-153")
-- [ ] **FIX-06**: Deity boon application checks existing tier and does not downgrade any boon type
+- [x] **FIX-06**: Deity boon application checks existing tier and does not downgrade any boon type
 - [x] **FIX-07**: `advanceBounty` computed at payout time using current price and escalation multiplier (3 locations)
 - [x] **FIX-08**: Delta audit proves `lootboxRngWordByIndex[lootboxRngIndex - 1]` returns the identical value as `lastLootboxRngWord` in every code path (normal VRF, mid-day, stall backfill, coordinator swap, game-over fallback)
 
@@ -81,7 +81,7 @@ Deferred to subsequent milestones.
 | FIX-03 | Phase 121 | Pending |
 | FIX-04 | Phase 122 | Pending |
 | FIX-05 | Phase 121 | Complete |
-| FIX-06 | Phase 121 | Pending |
+| FIX-06 | Phase 121 | Complete |
 | FIX-07 | Phase 121 | Complete |
 | FIX-08 | Phase 121 | Complete |
 | CHAR-01 | Phase 123 | Pending |
