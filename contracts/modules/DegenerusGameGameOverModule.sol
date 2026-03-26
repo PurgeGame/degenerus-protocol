@@ -18,6 +18,11 @@ interface IDegenerusAdminShutdown {
     function shutdownVrf() external;
 }
 
+/// @dev Charity interface for gameover GNRUS cleanup.
+interface IDegenerusCharityGameOver {
+    function handleGameOver() external;
+}
+
 /**
  * @title DegenerusGameGameOverModule
  * @notice Handles game over logic including jackpot distribution and final sweeps.
@@ -33,6 +38,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @notice Admin contract for VRF shutdown
     IDegenerusAdminShutdown private constant admin =
         IDegenerusAdminShutdown(ContractAddresses.ADMIN);
+
+    /// @notice Charity contract for gameover GNRUS cleanup
+    IDegenerusCharityGameOver private constant charityGameOver =
+        IDegenerusCharityGameOver(ContractAddresses.GNRUS);
 
     /// @notice Fixed refund amount per deity pass for early game over (levels 0-9)
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
@@ -158,6 +167,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             }
         }
 
+        // Burn unallocated GNRUS at gameover
+        charityGameOver.handleGameOver();
         // Burn undistributed sDGNRS pool tokens so totalSupply reflects only holder wallets
         dgnrs.burnRemainingPools();
     }
