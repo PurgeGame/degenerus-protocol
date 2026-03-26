@@ -4,7 +4,9 @@ pragma solidity 0.8.34;
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
-import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
+import {
+    IDegenerusGameLootboxModule
+} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
@@ -52,7 +54,10 @@ interface IWrappedWrappedXRP {
  * @dev Uses lootbox RNG index/word for randomness. All storage reads/writes operate
  *      on the inherited DegenerusGameStorage. Supports ETH, BURNIE, and WWXRP currencies.
  */
-contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGameMintStreakUtils {
+contract DegenerusGameDegeneretteModule is
+    DegenerusGamePayoutUtils,
+    DegenerusGameMintStreakUtils
+{
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -157,7 +162,9 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     ///      Validates operator approval if player differs from msg.sender.
     /// @param player The player address (or zero for msg.sender).
     /// @return resolved The resolved player address.
-    function _resolvePlayer(address player) private view returns (address resolved) {
+    function _resolvePlayer(
+        address player
+    ) private view returns (address resolved) {
         if (player == address(0)) return msg.sender;
         if (player != msg.sender) {
             _requireApproved(player);
@@ -170,7 +177,8 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     // -------------------------------------------------------------------------
 
     /// @dev Reference to the BURNIE coin contract for burn/mint operations.
-    IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
+    IDegenerusCoin internal constant coin =
+        IDegenerusCoin(ContractAddresses.COIN);
 
     /// @dev Reference to the quests contract for reading player quest streaks.
     IDegenerusQuestView internal constant questView =
@@ -231,12 +239,13 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     uint16 private constant WHALE_PASS_MINT_COUNT_FLOOR_POINTS = 25;
 
     /// @dev sDGNRS contract reference for degenerette DGNRS rewards
-    IStakedDegenerusStonk private constant sdgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+    IStakedDegenerusStonk private constant sdgnrs =
+        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     /// @dev Degenerette DGNRS reward BPS (per ETH wagered, % of remaining Reward pool)
-    uint16 private constant DEGEN_DGNRS_6_BPS = 400;   // 4% per ETH
-    uint16 private constant DEGEN_DGNRS_7_BPS = 800;   // 8% per ETH
-    uint16 private constant DEGEN_DGNRS_8_BPS = 1500;  // 15% per ETH
+    uint16 private constant DEGEN_DGNRS_6_BPS = 400; // 4% per ETH
+    uint16 private constant DEGEN_DGNRS_7_BPS = 800; // 8% per ETH
+    uint16 private constant DEGEN_DGNRS_8_BPS = 1500; // 15% per ETH
 
     /// @dev Currency type identifier for ETH.
     uint8 private constant CURRENCY_ETH = 0;
@@ -280,14 +289,14 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     ///      Packed as 32 bits each: [matches*32 .. matches*32+31]
     ///      Total EV at 100% ROI: 99.99% (just under 100%)
     uint256 private constant QUICK_PLAY_BASE_PAYOUTS_PACKED =
-        (uint256(0) << 0) |          // 0 matches: 0x
-        (uint256(0) << 32) |         // 1 match: 0x
-        (uint256(190) << 64) |       // 2 matches: 1.90x base
-        (uint256(475) << 96) |       // 3 matches: 4.75x base
-        (uint256(1500) << 128) |     // 4 matches: 15x base
-        (uint256(4250) << 160) |     // 5 matches: 42.5x base
-        (uint256(19500) << 192) |    // 6 matches: 195x base
-        (uint256(100000) << 224);    // 7 matches: 1,000x base
+        (uint256(0) << 0) | // 0 matches: 0x
+            (uint256(0) << 32) | // 1 match: 0x
+            (uint256(190) << 64) | // 2 matches: 1.90x base
+            (uint256(475) << 96) | // 3 matches: 4.75x base
+            (uint256(1500) << 128) | // 4 matches: 15x base
+            (uint256(4250) << 160) | // 5 matches: 42.5x base
+            (uint256(19500) << 192) | // 6 matches: 195x base
+            (uint256(100000) << 224); // 7 matches: 1,000x base
 
     /// @dev Base payout for 8 matches (jackpot). 10,000,000 centi-x = 100,000x at 100% ROI.
     uint256 private constant QUICK_PLAY_BASE_PAYOUT_8_MATCHES = 10_000_000;
@@ -408,10 +417,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @dev Requires RNG word to be available. Processes wins by minting tokens or crediting ETH.
     /// @param player The player address (use zero address for msg.sender).
     /// @param betIds Array of bet IDs to resolve.
-    function resolveBets(
-        address player,
-        uint64[] calldata betIds
-    ) external {
+    function resolveBets(address player, uint64[] calldata betIds) external {
         player = _resolvePlayer(player);
         uint256 len = betIds.length;
         for (uint256 i; i < len; ) {
@@ -444,12 +450,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             heroQuadrant
         );
 
-        _collectBetFunds(
-            player,
-            currency,
-            totalBet,
-            msg.value
-        );
+        _collectBetFunds(player, currency, totalBet, msg.value);
 
         // Quest progress for Degenerette bets (slot 1 only).
         if (currency == CURRENCY_ETH) {
@@ -467,7 +468,8 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
         uint32 customTicket,
         uint8 heroQuadrant
     ) private returns (uint256 totalBet) {
-        if (ticketCount == 0 || ticketCount > MAX_SPINS_PER_BET) revert InvalidBet();
+        if (ticketCount == 0 || ticketCount > MAX_SPINS_PER_BET)
+            revert InvalidBet();
         if (amountPerTicket == 0) revert InvalidBet();
 
         uint48 index = lootboxRngIndex;
@@ -481,13 +483,19 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
 
         // Pack the bet (isRandom=false, hasCustom=true always)
         uint256 packed = _packFullTicketBet(
-            customTicket, ticketCount,
-            currency, amountPerTicket, index, activityScore,
+            customTicket,
+            ticketCount,
+            currency,
+            amountPerTicket,
+            index,
+            activityScore,
             heroQuadrant
         );
 
         uint64 nonce = degeneretteBetNonce[player];
-        unchecked { ++nonce; }
+        unchecked {
+            ++nonce;
+        }
         degeneretteBetNonce[player] = nonce;
 
         degeneretteBets[player][nonce] = packed;
@@ -498,7 +506,8 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             // 1. Daily hero symbol tracking
             if (heroQuadrant < 4) {
                 uint48 day = _simulatedDayIndex();
-                uint8 heroSymbol = uint8(customTicket >> (heroQuadrant * 8)) & 7;
+                uint8 heroSymbol = uint8(customTicket >> (heroQuadrant * 8)) &
+                    7;
                 uint256 wagerUnit = totalBet / 1e12;
                 if (wagerUnit > 0) {
                     uint256 wPacked = dailyHeroWagers[day][heroQuadrant];
@@ -506,20 +515,25 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
                     uint256 current = (wPacked >> shift) & 0xFFFFFFFF;
                     uint256 updated = current + wagerUnit;
                     if (updated > 0xFFFFFFFF) updated = 0xFFFFFFFF;
-                    wPacked = (wPacked & ~(uint256(0xFFFFFFFF) << shift)) | (updated << shift);
+                    wPacked =
+                        (wPacked & ~(uint256(0xFFFFFFFF) << shift)) |
+                        (updated << shift);
                     dailyHeroWagers[day][heroQuadrant] = wPacked;
                 }
             }
 
             // 2. Per-player per-level ETH wagered
             uint24 lvl = level;
-            uint256 playerTotal = playerDegeneretteEthWagered[player][lvl] + totalBet;
+            uint256 playerTotal = playerDegeneretteEthWagered[player][lvl] +
+                totalBet;
             playerDegeneretteEthWagered[player][lvl] = playerTotal;
             uint256 topPacked = topDegeneretteByLevel[lvl];
             uint256 topAmount = topPacked >> 160;
             uint256 playerScaled = playerTotal / 1e12;
             if (playerScaled > topAmount) {
-                topDegeneretteByLevel[lvl] = (playerScaled << 160) | uint256(uint160(player));
+                topDegeneretteByLevel[lvl] =
+                    (playerScaled << 160) |
+                    uint256(uint160(player));
             }
         }
     }
@@ -549,7 +563,8 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             if (ethPaid > totalBet) revert InvalidBet();
             if (ethPaid < totalBet) {
                 uint256 fromClaimable = totalBet - ethPaid;
-                if (claimableWinnings[player] <= fromClaimable) revert InvalidBet();
+                if (claimableWinnings[player] <= fromClaimable)
+                    revert InvalidBet();
                 claimableWinnings[player] -= fromClaimable;
                 claimablePool -= fromClaimable;
             }
@@ -582,12 +597,18 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     }
 
     /// @dev Resolves a Full Ticket bet.
-    function _resolveFullTicketBet(address player, uint64 betId, uint256 packed) private {
+    function _resolveFullTicketBet(
+        address player,
+        uint64 betId,
+        uint256 packed
+    ) private {
         // Decode packed bet
         uint32 customTicket = uint32((packed >> FT_TICKET_SHIFT) & MASK_32);
         uint8 ticketCount = uint8((packed >> FT_COUNT_SHIFT) & MASK_8);
         uint8 currency = uint8((packed >> FT_CURRENCY_SHIFT) & MASK_2);
-        uint128 amountPerTicket = uint128((packed >> FT_AMOUNT_SHIFT) & MASK_128);
+        uint128 amountPerTicket = uint128(
+            (packed >> FT_AMOUNT_SHIFT) & MASK_128
+        );
         uint48 index = uint48((packed >> FT_INDEX_SHIFT) & MASK_48);
         uint16 activityScore = uint16((packed >> FT_ACTIVITY_SHIFT) & MASK_16);
         uint256 heroBits = (packed >> FT_HERO_SHIFT) & MASK_3;
@@ -614,9 +635,22 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             // Spin results are derived deterministically from the lootbox RNG word + index.
             // For backwards compatibility, spin 0 uses the legacy seed (no spinIdx mixed in).
             uint256 resultSeed = spinIdx == 0
-                ? uint256(keccak256(abi.encodePacked(rngWord, index, QUICK_PLAY_SALT)))
-                : uint256(keccak256(abi.encodePacked(rngWord, index, spinIdx, QUICK_PLAY_SALT)));
-            uint32 resultTicket = DegenerusTraitUtils.packedTraitsFromSeed(resultSeed);
+                ? uint256(
+                    keccak256(abi.encodePacked(rngWord, index, QUICK_PLAY_SALT))
+                )
+                : uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            rngWord,
+                            index,
+                            spinIdx,
+                            QUICK_PLAY_SALT
+                        )
+                    )
+                );
+            uint32 resultTicket = DegenerusTraitUtils.packedTraitsFromSeed(
+                resultSeed
+            );
             if (spinIdx == 0) {
                 firstResultTicket = resultTicket;
             }
@@ -638,8 +672,12 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             );
 
             emit FullTicketResult(
-                player, betId, spinIdx, playerTicket,
-                matches, payout
+                player,
+                betId,
+                spinIdx,
+                playerTicket,
+                matches,
+                payout
             );
 
             if (payout != 0) {
@@ -649,7 +687,16 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
                 // (avoid identical lootbox results when multiple spins share the same payout amount).
                 uint256 lootboxWord = spinIdx == 0
                     ? rngWord
-                    : uint256(keccak256(abi.encodePacked(rngWord, index, spinIdx, bytes1(0x4c)))); // 'L'
+                    : uint256(
+                        keccak256(
+                            abi.encodePacked(
+                                rngWord,
+                                index,
+                                spinIdx,
+                                bytes1(0x4c)
+                            )
+                        )
+                    ); // 'L'
                 _distributePayout(player, currency, payout, lootboxWord);
             }
 
@@ -663,7 +710,13 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             }
         }
 
-        emit FullTicketResolved(player, betId, ticketCount, totalPayout, firstResultTicket);
+        emit FullTicketResolved(
+            player,
+            betId,
+            ticketCount,
+            totalPayout,
+            firstResultTicket
+        );
 
         if (totalPayout == 0) {
             // Consolation prize for qualifying fully-losing bets
@@ -677,31 +730,52 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @param currency The currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP).
     /// @param payout The payout amount.
     /// @param rngWord The RNG word for lootbox conversion (only used for ETH).
-    function _distributePayout(address player, uint8 currency, uint256 payout, uint256 rngWord) private {
+    function _distributePayout(
+        address player,
+        uint8 currency,
+        uint256 payout,
+        uint256 rngWord
+    ) private {
         if (currency == CURRENCY_ETH) {
-            // Block ETH payouts while prize pools are frozen (jackpot math in progress).
-            // Payouts drain the live futurePrizePool — allowing this during freeze would
-            // corrupt the snapshot that advanceGame/runRewardJackpots is operating on.
-            if (prizePoolFrozen) revert E();
-
-            uint256 pool = _getFuturePrizePool();
-
             // Split: 25% as ETH, 75% as lootbox
             uint256 ethPortion = payout / 4;
             uint256 lootboxPortion = payout - ethPortion;
 
-            // Cap ETH portion at 10% of pool, excess goes to lootbox
-            // After capping, ethPortion <= pool*10% < pool, so no solvency check needed
-            uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
-            if (ethPortion > maxEth) {
-                lootboxPortion += ethPortion - maxEth;
-                ethPortion = maxEth;
-                emit PayoutCapped(player, ethPortion, lootboxPortion);
-            }
+            if (prizePoolFrozen) {
+                // During freeze, route ETH payouts through the pending pool side-channel
+                // (matching the bet-placement pattern at L558-561). The live futurePrizePool
+                // snapshot that advanceGame/runRewardJackpots operates on is UNTOUCHED.
+                // Pending future was credited by purchases during freeze; we debit it here.
+                // No percentage cap: degenerette payouts are never a significant portion
+                // of the total future pool, so the full ethPortion is debited directly.
+                (uint128 pNext, uint128 pFuture) = _getPendingPools();
 
-            unchecked { pool -= ethPortion; }
-            _setFuturePrizePool(pool);
-            _addClaimableEth(player, ethPortion);
+                // Solvency check: pending accumulator must cover the ETH payout
+                if (uint256(pFuture) < ethPortion) revert E();
+
+                // BAF-SAFE: _setPendingPools write completes before _addClaimableEth (no stale local).
+                // DegeneretteModule._addClaimableEth has no auto-rebuy path (no pool writes).
+                // _resolveLootboxDirect -> LootboxModule has zero pool writes.
+                _setPendingPools(pNext, pFuture - uint128(ethPortion));
+                _addClaimableEth(player, ethPortion);
+            } else {
+                // Unfrozen path: debit the live futurePrizePool directly (unchanged from original).
+                uint256 pool = _getFuturePrizePool();
+
+                // Cap ETH portion at 10% of pool, excess goes to lootbox
+                // After capping, ethPortion <= pool*10% < pool, so no solvency check needed
+                uint256 maxEth = (pool * ETH_WIN_CAP_BPS) / 10_000;
+                if (ethPortion > maxEth) {
+                    lootboxPortion += ethPortion - maxEth;
+                    ethPortion = maxEth;
+                    emit PayoutCapped(player, ethPortion, lootboxPortion);
+                }
+                unchecked {
+                    pool -= ethPortion;
+                }
+                _setFuturePrizePool(pool);
+                _addClaimableEth(player, ethPortion);
+            }
 
             // Convert 75% (+ any cap excess) to lootbox rewards
             if (lootboxPortion > 0) {
@@ -719,13 +793,25 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @param player The player to potentially award.
     /// @param currency The currency type of the bet.
     /// @param amountPerTicket The bet amount per ticket.
-    function _maybeAwardConsolation(address player, uint8 currency, uint128 amountPerTicket) private {
+    function _maybeAwardConsolation(
+        address player,
+        uint8 currency,
+        uint128 amountPerTicket
+    ) private {
         bool qualifies;
-        if (currency == CURRENCY_ETH && amountPerTicket >= CONSOLATION_MIN_ETH) {
+        if (
+            currency == CURRENCY_ETH && amountPerTicket >= CONSOLATION_MIN_ETH
+        ) {
             qualifies = true;
-        } else if (currency == CURRENCY_BURNIE && amountPerTicket >= CONSOLATION_MIN_BURNIE) {
+        } else if (
+            currency == CURRENCY_BURNIE &&
+            amountPerTicket >= CONSOLATION_MIN_BURNIE
+        ) {
             qualifies = true;
-        } else if (currency == CURRENCY_WWXRP && amountPerTicket >= CONSOLATION_MIN_WWXRP) {
+        } else if (
+            currency == CURRENCY_WWXRP &&
+            amountPerTicket >= CONSOLATION_MIN_WWXRP
+        ) {
             qualifies = true;
         }
         // Unsupported currencies do not qualify
@@ -781,7 +867,9 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             (uint256(1) << FT_HAS_CUSTOM_SHIFT);
         // Hero quadrant: 3 bits at FT_HERO_SHIFT — [0]=enabled, [1..2]=quadrant
         if (heroQuadrant < 4) {
-            packed |= (uint256(1) | (uint256(heroQuadrant) << 1)) << FT_HERO_SHIFT;
+            packed |=
+                (uint256(1) | (uint256(heroQuadrant) << 1)) <<
+                FT_HERO_SHIFT;
         }
     }
 
@@ -861,17 +949,23 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
             uint8 pColor = (pQuad >> 3) & 7;
             uint8 rColor = (rQuad >> 3) & 7;
             if (pColor == rColor) {
-                unchecked { ++matches; }
+                unchecked {
+                    ++matches;
+                }
             }
 
             // Symbol = bits 2-0 (sub-bucket)
             uint8 pSymbol = pQuad & 7;
             uint8 rSymbol = rQuad & 7;
             if (pSymbol == rSymbol) {
-                unchecked { ++matches; }
+                unchecked {
+                    ++matches;
+                }
             }
 
-            unchecked { ++q; }
+            unchecked {
+                ++q;
+            }
         }
     }
 
@@ -945,18 +1039,29 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
         // Apply ROI scaling: payout = betAmount * basePayout * roiBps / 10000 / 100
         // basePayout is in "centi-x" (178 = 1.78x), roiBps is in bps (9000 = 90%)
         // Final: betAmount * basePayout * roiBps / 1_000_000
-        payout = (uint256(betAmount) * basePayoutBps * effectiveRoi) / 1_000_000;
+        payout =
+            (uint256(betAmount) * basePayoutBps * effectiveRoi) /
+            1_000_000;
 
         // Apply per-outcome EV normalization to ensure EXACT equal EV
         // regardless of trait selection. Product of 4 per-quadrant probability ratios.
-        (uint256 evNum, uint256 evDen) = _evNormalizationRatio(playerTicket, resultTicket);
+        (uint256 evNum, uint256 evDen) = _evNormalizationRatio(
+            playerTicket,
+            resultTicket
+        );
         payout = (payout * evNum) / evDen;
 
         // Hero quadrant: boost payout when hero quadrant both-matches, penalize otherwise.
         // EV-neutral per match count: P(hero|M)*boost(M) + (1-P(hero|M))*penalty = 1.
         // No adjustment for M<2 (payout=0) or M=8 (hero always matches, can't offset).
         if (heroEnabled && matches >= 2 && matches < 8) {
-            payout = _applyHeroMultiplier(payout, playerTicket, resultTicket, matches, heroQuadrant);
+            payout = _applyHeroMultiplier(
+                payout,
+                playerTicket,
+                resultTicket,
+                matches,
+                heroQuadrant
+            );
         }
     }
 
@@ -971,13 +1076,17 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
         uint8 heroQuadrant
     ) private pure returns (uint256) {
         uint256 shift = uint256(heroQuadrant) * 8;
-        bool colorMatch = ((playerTicket >> (shift + 3)) & 7) == ((resultTicket >> (shift + 3)) & 7);
-        bool symbolMatch = ((playerTicket >> shift) & 7) == ((resultTicket >> shift) & 7);
+        bool colorMatch = ((playerTicket >> (shift + 3)) & 7) ==
+            ((resultTicket >> (shift + 3)) & 7);
+        bool symbolMatch = ((playerTicket >> shift) & 7) ==
+            ((resultTicket >> shift) & 7);
 
         uint256 multiplier;
         if (colorMatch && symbolMatch) {
             // Hero quadrant fully matched — look up per-M boost
-            multiplier = (HERO_BOOST_PACKED >> (uint256(matches - 2) * 16)) & MASK_16;
+            multiplier =
+                (HERO_BOOST_PACKED >> (uint256(matches - 2) * 16)) &
+                MASK_16;
         } else {
             multiplier = HERO_PENALTY;
         }
@@ -989,9 +1098,10 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @return Base payout in centi-x (190 = 1.90x at 100% ROI).
     function _getBasePayoutBps(uint8 matches) private pure returns (uint256) {
         if (matches >= 8) return QUICK_PLAY_BASE_PAYOUT_8_MATCHES;
-        return (QUICK_PLAY_BASE_PAYOUTS_PACKED >> (uint256(matches) * 32)) & 0xFFFFFFFF;
+        return
+            (QUICK_PLAY_BASE_PAYOUTS_PACKED >> (uint256(matches) * 32)) &
+            0xFFFFFFFF;
     }
-
 
     // -------------------------------------------------------------------------
     // Payout Math
@@ -1132,13 +1242,16 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     ///      Scales from 90.0% base to 109.9% max.
     /// @param score The activity score in basis points.
     /// @return roiBps The WWXRP high-value ROI in basis points.
-    function _wwxrpHighValueRoi(uint256 score) private pure returns (uint256 roiBps) {
+    function _wwxrpHighValueRoi(
+        uint256 score
+    ) private pure returns (uint256 roiBps) {
         if (score > ACTIVITY_SCORE_MAX_BPS) {
             score = ACTIVITY_SCORE_MAX_BPS;
         }
 
         // Linear scale from 90.0% (9000 bps) to 109.9% (10990 bps)
-        roiBps = WWXRP_HIGH_ROI_BASE_BPS +
+        roiBps =
+            WWXRP_HIGH_ROI_BASE_BPS +
             (score * (WWXRP_HIGH_ROI_MAX_BPS - WWXRP_HIGH_ROI_BASE_BPS)) /
             ACTIVITY_SCORE_MAX_BPS;
     }
@@ -1150,10 +1263,7 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @dev Adds ETH to a player's claimable winnings balance.
     /// @param beneficiary The address to credit.
     /// @param weiAmount The amount in wei to credit.
-    function _addClaimableEth(
-        address beneficiary,
-        uint256 weiAmount
-    ) private {
+    function _addClaimableEth(address beneficiary, uint256 weiAmount) private {
         if (weiAmount == 0) return;
         claimablePool += weiAmount;
         _creditClaimable(beneficiary, weiAmount);
@@ -1161,19 +1271,29 @@ contract DegenerusGameDegeneretteModule is DegenerusGamePayoutUtils, DegenerusGa
 
     /// @dev Award sDGNRS from Reward pool on 6+ match Degenerette ETH bets.
     ///      Reward scales by bet size (capped at 1 ETH) and match tier.
-    function _awardDegeneretteDgnrs(address player, uint256 betWei, uint8 matchCount) private {
+    function _awardDegeneretteDgnrs(
+        address player,
+        uint256 betWei,
+        uint8 matchCount
+    ) private {
         uint256 bps;
         if (matchCount == 6) bps = DEGEN_DGNRS_6_BPS;
         else if (matchCount == 7) bps = DEGEN_DGNRS_7_BPS;
         else bps = DEGEN_DGNRS_8_BPS;
 
-        uint256 poolBalance = sdgnrs.poolBalance(IStakedDegenerusStonk.Pool.Reward);
+        uint256 poolBalance = sdgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Reward
+        );
         if (poolBalance == 0) return;
 
         uint256 cappedBet = betWei > 1 ether ? 1 ether : betWei;
         uint256 reward = (poolBalance * bps * cappedBet) / (10_000 * 1 ether);
         if (reward == 0) return;
 
-        sdgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Reward, player, reward);
+        sdgnrs.transferFromPool(
+            IStakedDegenerusStonk.Pool.Reward,
+            player,
+            reward
+        );
     }
 }
