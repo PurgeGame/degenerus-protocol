@@ -142,11 +142,12 @@ contract GNRUS {
 
     /// @notice A governance proposal for GNRUS distribution
     struct Proposal {
-        address recipient;       // 20 bytes | slot 0: recipient + proposer won't pack (40 bytes)
-        address proposer;        // 20 bytes | slot 1
-        uint128 approveWeight;   // 16 bytes | slot 2 (sDGNRS supply ~1e30, uint128 max ~3.4e38)
-        uint128 rejectWeight;    // 16 bytes | slot 2 (packs with approveWeight)
+        address recipient;       // 20 bytes ┐
+        uint48  approveWeight;   //  6 bytes ├─ slot 0 (32 bytes exact)
+        uint48  rejectWeight;    //  6 bytes ┘
+        address proposer;        // 20 bytes ── slot 1 (12 bytes free)
     }
+    // Weights stored as whole tokens (/ 1e18). uint48 max ~2.8e14, sDGNRS supply ~1e12 = 281× headroom.
 
     /// @notice Current governance level (incremented by pickCharity)
     uint24 public currentLevel;
@@ -413,11 +414,11 @@ contract GNRUS {
         if (hasVoted[level][voter][proposalId]) revert AlreadyVoted();
         hasVoted[level][voter][proposalId] = true;
 
-        uint128 weight = uint128(sdgnrs.balanceOf(voter));
+        uint48 weight = uint48(sdgnrs.balanceOf(voter) / 1e18);
         // Vault owner bonus: 5% of snapshot per proposal. Snapshot locks on first vault-owner action.
         if (voter == levelVaultOwner[level] || (levelVaultOwner[level] == address(0) && vault.isVaultOwner(voter))) {
             if (levelVaultOwner[level] == address(0)) levelVaultOwner[level] = voter;
-            weight += uint128((uint256(levelSdgnrsSnapshot[level]) * VAULT_VOTE_BPS) / BPS_DENOM);
+            weight += uint48((uint256(levelSdgnrsSnapshot[level]) * VAULT_VOTE_BPS) / (BPS_DENOM * 1e18));
         }
         if (weight == 0) revert InsufficientStake();
 
@@ -511,7 +512,7 @@ contract GNRUS {
 
     /// @notice Get proposal details by global ID
     function getProposal(uint48 proposalId) external view returns (
-        address recipient, address proposer, uint128 approveWeight, uint128 rejectWeight
+        address recipient, address proposer, uint48 approveWeight, uint48 rejectWeight
     ) {
         Proposal storage p = proposals[proposalId];
         return (p.recipient, p.proposer, p.approveWeight, p.rejectWeight);
