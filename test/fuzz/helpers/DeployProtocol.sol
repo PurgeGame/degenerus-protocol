@@ -28,6 +28,7 @@ import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
 import {StakedDegenerusStonk} from "../../../contracts/StakedDegenerusStonk.sol";
 import {DegenerusStonk} from "../../../contracts/DegenerusStonk.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
+import {DegenerusCharity} from "../../../contracts/DegenerusCharity.sol";
 
 // Mock contracts
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
@@ -37,7 +38,7 @@ import {MockWXRP} from "../../../contracts/mocks/MockWXRP.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 5 mocks + 23 protocol contracts in setUp().
+/// @notice Deploys all 5 mocks + 24 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 /// @dev Address correctness depends on patchForFoundry.js having patched
 ///      ContractAddresses.sol before forge build.
@@ -73,6 +74,7 @@ abstract contract DeployProtocol is Test {
     StakedDegenerusStonk public sdgnrs;
     DegenerusStonk public dgnrs;
     DegenerusAdmin public admin;
+    DegenerusCharity public gnrus;
 
     /// @notice Deploy the full protocol. Must be called from setUp().
     /// @dev Uses vm.warp(86400) to match the fixed timestamp in patchForFoundry.js.
@@ -81,7 +83,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 5 mocks (nonces 1-5) ---
-        // Then 23 protocol contracts (nonces 6-28) ---
+        // Then 24 protocol contracts (nonces 6-29) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -140,5 +142,8 @@ abstract contract DeployProtocol is Test {
 
         // Admin constructor calls VRF.createSubscription() + GAME.wireVrf()
         admin = new DegenerusAdmin();                  // N+22 = nonce 28
+
+        // GNRUS: self-mints 1T to address(this), no cross-contract constructor calls
+        gnrus = new DegenerusCharity();                // N+23 = nonce 29
     }
 }
