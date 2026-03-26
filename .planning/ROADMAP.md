@@ -301,7 +301,13 @@ Plans:
   2. Taskmaster confirms 100% coverage of all changed functions (zero gaps)
   3. Every function that reads then writes storage has a BAF-class cache-overwrite check with explicit verdict
   4. Storage layout changes verified via forge inspect for all modified contracts, with lastLootboxRngWord deletion confirmed zero stale references
-**Plans**: TBD
+**Plans:** 5 plans in 2 waves
+Plans:
+- [ ] 128-01-PLAN.md — Phase 121 storage/gas fixes audit (11 functions)
+- [ ] 128-02-PLAN.md — Phase 122 degenerette freeze fix audit (18 functions)
+- [ ] 128-03-PLAN.md — Phase 124 game integration audit (10 functions)
+- [ ] 128-04-PLAN.md — Unplanned DegenerusAffiliate audit (8 functions)
+- [ ] 128-05-PLAN.md — Cross-contract integration seams + storage verification + consolidated coverage
 
 ### Phase 129: Consolidated Findings
 **Goal**: All findings from Phases 126-128 are consolidated into a single report with C4A severity ratings, plan-drift annotations, and KNOWN-ISSUES updated
@@ -323,7 +329,7 @@ Phases execute in numeric order: 126 -> 127 -> 128 -> 129
 |-------|----------------|--------|-----------|
 | 126. Delta Extraction + Plan Reconciliation | 2/2 | Complete    | 2026-03-26 |
 | 127. DegenerusCharity Full Adversarial Audit | 0/3 | Complete    | 2026-03-26 |
-| 128. Changed Contract Adversarial Audit | 0/TBD | Not started | - |
+| 128. Changed Contract Adversarial Audit | 0/5 | Planned | - |
 | 129. Consolidated Findings | 0/TBD | Not started | - |
 
 ## Deferred
