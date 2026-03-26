@@ -114,7 +114,7 @@ See [`scope.txt`](scope.txt) for the complete in-scope file list.
 
 ## Audit
 
-- **[`KNOWN-ISSUES.md`](audit/KNOWN-ISSUES.md)** — Pre-disclosed known issues and intentional design decisions for wardens
+- **[`KNOWN-ISSUES.md`](KNOWN-ISSUES.md)** — Pre-disclosed known issues and intentional design decisions for wardens
 
 ### Test Coverage
 
