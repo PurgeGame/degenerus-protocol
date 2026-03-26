@@ -25,6 +25,11 @@ interface IDegenerusVaultOwner {
     function isVaultOwner(address account) external view returns (bool);
 }
 
+/// @dev Charity interface for level-transition governance resolution.
+interface IDegenerusCharityResolve {
+    function resolveLevel(uint24 level) external;
+}
+
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.
 contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+======================================================================+
@@ -83,6 +88,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     IBurnieCoinflip internal constant coinflip =
         IBurnieCoinflip(ContractAddresses.COINFLIP);
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
+    /// @notice Charity contract for governance resolution at level transitions
+    IDegenerusCharityResolve private constant charityResolve =
+        IDegenerusCharityResolve(ContractAddresses.GNRUS);
     /*+======================================================================+
       |                           CONSTANTS                                  |
       +======================================================================+*/
@@ -124,7 +132,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///         Caller receives ~0.01 ETH worth of BURNIE as flip credit.
     function advanceGame() external {
         address caller = msg.sender;
-        uint256 advanceBounty = (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price;
         uint48 ts = uint48(block.timestamp);
         uint48 day = _simulatedDayIndexAt(ts);
         bool inJackpot = jackpotPhaseFlag;
@@ -158,8 +165,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (midDayTicketRngPending) {
                     uint256 word = lootboxRngWordByIndex[lootboxRngIndex - 1];
                     if (word == 0) revert NotTimeYet();
-                    // VRF word arrived — update entropy source before processing tickets
-                    lastLootboxRngWord = word;
                 }
 
                 uint24 rk = _tqReadKey(purchaseLevel);
@@ -174,7 +179,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             midDayTicketRngPending = false;
                         }
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
-                        coin.creditFlip(caller, advanceBounty);
+                        coin.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price);
                         return;
                     }
                 }
@@ -183,9 +188,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             revert NotTimeYet();
         }
 
-        // Escalate bounty if daily processing is stalled (new-day path only).
+        // Escalate bounty multiplier if daily processing is stalled (new-day path only).
         // 2x after 20 min, 4x after 1 hour, 6x after 2 hours.
         // Absolute targets: 0.005 base, 0.01 @20m, 0.02 @1h, 0.03 @2h ETH-equivalent.
+        uint256 bountyMultiplier = 1;
         {
             uint256 dayStart = (uint256(day - 1) +
                 ContractAddresses.DEPLOY_DAY_BOUNDARY) *
@@ -193,11 +199,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 82_620;
             uint256 elapsed = ts - dayStart;
             if (elapsed >= 2 hours) {
-                advanceBounty *= 6;
+                bountyMultiplier = 6;
             } else if (elapsed >= 1 hours) {
-                advanceBounty *= 4;
+                bountyMultiplier = 4;
             } else if (elapsed >= 20 minutes) {
-                advanceBounty *= 2;
+                bountyMultiplier = 2;
             }
         }
 
@@ -211,7 +217,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 ) = _runProcessTicketBatch(purchaseLevel);
                 if (ticketWorked || !ticketsFinished) {
                     emit Advance(STAGE_TICKETS_WORKING, lvl);
-                    coin.creditFlip(caller, advanceBounty);
+                    coin.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
                     return;
                 }
             }
@@ -393,7 +399,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         } while (false);
 
         emit Advance(stage, lvl);
-        coin.creditFlip(caller, advanceBounty);
+        coin.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
     }
 
     /*+========================================================================================+
@@ -859,7 +865,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 index = lootboxRngIndex - 1;
         if (lootboxRngWordByIndex[index] != 0) return;
         lootboxRngWordByIndex[index] = rngWord;
-        lastLootboxRngWord = rngWord;
         emit LootboxRngApplied(index, rngWord, vrfRequestId);
     }
 
@@ -1351,6 +1356,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (isTicketJackpotDay && !isRetry) {
             level = lvl;
 
+            // Resolve charity governance for the completed level.
+            // lvl is the NEW level (old level + 1). CHARITY.currentLevel tracks
+            // the CURRENT governance level (starts at 0, incremented by resolveLevel).
+            // The game's level 0->1 transition means level 0 gameplay is complete,
+            // so we resolve governance for level 0 = lvl - 1.
+            charityResolve.resolveLevel(lvl - 1);
+
             // Set price for the new level based on intro tiers then 100-level cycle
             if (lvl == 5) {
                 price = uint128(0.02 ether);
@@ -1523,7 +1535,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
             if (fallbackWord == 0) fallbackWord = 1;
             lootboxRngWordByIndex[i] = fallbackWord;
-            lastLootboxRngWord = fallbackWord;
             emit LootboxRngApplied(i, fallbackWord, 0);
 
             unchecked {

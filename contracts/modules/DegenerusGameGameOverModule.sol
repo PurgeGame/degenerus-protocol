@@ -18,6 +18,11 @@ interface IDegenerusAdminShutdown {
     function shutdownVrf() external;
 }
 
+/// @dev Charity interface for gameover GNRUS cleanup.
+interface IDegenerusCharityGameOver {
+    function handleGameOver() external;
+}
+
 /**
  * @title DegenerusGameGameOverModule
  * @notice Handles game over logic including jackpot distribution and final sweeps.
@@ -33,6 +38,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @notice Admin contract for VRF shutdown
     IDegenerusAdminShutdown private constant admin =
         IDegenerusAdminShutdown(ContractAddresses.ADMIN);
+
+    /// @notice Charity contract for gameover GNRUS cleanup
+    IDegenerusCharityGameOver private constant charityGameOver =
+        IDegenerusCharityGameOver(ContractAddresses.GNRUS);
 
     /// @notice Fixed refund amount per deity pass for early game over (levels 0-9)
     uint256 private constant DEITY_PASS_EARLY_GAMEOVER_REFUND =
@@ -117,6 +126,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             _setFuturePrizePool(0);
             currentPrizePool = 0;
             yieldAccumulator = 0;
+            // Burn unallocated GNRUS at gameover (no funds to distribute, but GNRUS cleanup still needed)
+            charityGameOver.handleGameOver();
             return;
         }
 
@@ -158,13 +169,15 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             }
         }
 
+        // Burn unallocated GNRUS at gameover
+        charityGameOver.handleGameOver();
         // Burn undistributed sDGNRS pool tokens so totalSupply reflects only holder wallets
         dgnrs.burnRemainingPools();
     }
 
-    /// @notice Final sweep of all remaining funds to vault after 30 days post-gameover.
+    /// @notice Final sweep of all remaining funds after 30 days post-gameover.
     /// @dev Forfeits all unclaimed winnings and sweeps entire balance.
-    ///      Funds are split 50/50 between vault and DGNRS contract.
+    ///      Funds are split 33% DGNRS / 33% vault / 34% GNRUS.
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts E When ETH or stETH transfer fails
     function handleFinalSweep() external {
@@ -187,7 +200,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         _sendToVault(totalFunds, stBal);
     }
 
-    /// @dev Send funds to vault (50%) and DGNRS (50%), prioritizing stETH transfers over ETH.
+    /// @dev Send funds to DGNRS (33%), vault (33%), and GNRUS (34%), stETH-first for all.
     ///      IMPORTANT: Hard-reverts on stETH/ETH transfer failure. Because game-over
     ///      sets terminal state flags that roll back on revert, a stuck stETH transfer
     ///      would block game-over processing until the transfer succeeds.
@@ -195,41 +208,30 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @param stethBal Available stETH balance for transfers.
     /// @custom:reverts E When stETH transfer, approval, or ETH transfer fails
     function _sendToVault(uint256 amount, uint256 stethBal) private {
-        uint256 dgnrsAmount = amount / 2;  // 50%
-        uint256 vaultAmount = amount - dgnrsAmount;  // 50%
+        uint256 thirdShare = amount / 3;                     // 33% each
+        uint256 gnrusAmount = amount - thirdShare - thirdShare; // 34% (remainder to GNRUS)
 
-        if (vaultAmount != 0) {
-            if (vaultAmount <= stethBal) {
-                if (!steth.transfer(ContractAddresses.VAULT, vaultAmount)) revert E();
-                stethBal -= vaultAmount;
-            } else {
-                if (stethBal != 0) {
-                    if (!steth.transfer(ContractAddresses.VAULT, stethBal)) revert E();
-                }
-                uint256 ethAmount = vaultAmount - stethBal;
-                stethBal = 0;
-                if (ethAmount != 0) {
-                    (bool ok, ) = payable(ContractAddresses.VAULT).call{value: ethAmount}("");
-                    if (!ok) revert E();
-                }
-            }
-        }
+        // Send stETH-first to each recipient, then ETH for any remainder
+        stethBal = _sendStethFirst(ContractAddresses.SDGNRS, thirdShare, stethBal);
+        stethBal = _sendStethFirst(ContractAddresses.VAULT, thirdShare, stethBal);
+        _sendStethFirst(ContractAddresses.GNRUS, gnrusAmount, stethBal);
+    }
 
-        if (dgnrsAmount != 0) {
-            if (dgnrsAmount <= stethBal) {
-                if (!steth.approve(ContractAddresses.SDGNRS, dgnrsAmount)) revert E();
-                dgnrs.depositSteth(dgnrsAmount);
-            } else {
-                if (stethBal != 0) {
-                    if (!steth.approve(ContractAddresses.SDGNRS, stethBal)) revert E();
-                    dgnrs.depositSteth(stethBal);
-                }
-                uint256 ethAmount = dgnrsAmount - stethBal;
-                if (ethAmount != 0) {
-                    (bool ok, ) = payable(ContractAddresses.SDGNRS).call{value: ethAmount}("");
-                    if (!ok) revert E();
-                }
-            }
+    /// @dev Send stETH first to a recipient, then ETH for the remainder. Returns updated stETH balance.
+    function _sendStethFirst(address to, uint256 amount, uint256 stethBal) private returns (uint256) {
+        if (amount == 0) return stethBal;
+        if (amount <= stethBal) {
+            if (!steth.transfer(to, amount)) revert E();
+            return stethBal - amount;
         }
+        if (stethBal != 0) {
+            if (!steth.transfer(to, stethBal)) revert E();
+        }
+        uint256 ethAmount = amount - stethBal;
+        if (ethAmount != 0) {
+            (bool ok, ) = payable(to).call{value: ethAmount}("");
+            if (!ok) revert E();
+        }
+        return 0;
     }
 }
