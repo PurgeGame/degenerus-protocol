@@ -8,8 +8,13 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @dev Minimal stETH interface (ERC20 subset)
 interface IStETH {
+    /// @param account Address to query balance of.
     function balanceOf(address account) external view returns (uint256);
+    /// @param to Recipient address.
+    /// @param amount Transfer amount in wei.
     function transfer(address to, uint256 amount) external returns (bool);
+    /// @param spender Address to approve.
+    /// @param amount Allowance amount in wei.
     function approve(address spender, uint256 amount) external returns (bool);
 }
 
@@ -216,6 +221,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     }
 
     /// @dev Send stETH first to a recipient, then ETH for the remainder. Returns updated stETH balance.
+    /// @param to Recipient address.
+    /// @param amount Total amount to send (stETH preferred, ETH as fallback).
+    /// @param stethBal Remaining stETH balance available for transfers.
+    /// @return Updated stETH balance after transfer.
     function _sendStethFirst(address to, uint256 amount, uint256 stethBal) private returns (uint256) {
         if (amount == 0) return stethBal;
         if (amount <= stethBal) {

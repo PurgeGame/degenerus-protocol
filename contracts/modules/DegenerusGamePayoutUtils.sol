@@ -27,6 +27,9 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
         uint256 rebuyAmount;
     }
 
+    /// @dev Credit ETH to a player's claimable winnings balance.
+    /// @param beneficiary Address to credit.
+    /// @param weiAmount Amount in wei to credit.
     function _creditClaimable(address beneficiary, uint256 weiAmount) internal {
         if (weiAmount == 0) return;
         unchecked {
@@ -35,6 +38,17 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
         emit PlayerCredited(beneficiary, beneficiary, weiAmount);
     }
 
+    /// @dev Calculate auto-rebuy ticket conversion for a jackpot payout.
+    ///      Reserves take-profit multiples, converts remainder to tickets at a
+    ///      probabilistically selected future level (1-4 levels ahead).
+    /// @param beneficiary Player address (mixed into entropy for level selection).
+    /// @param weiAmount Total ETH payout to process.
+    /// @param entropy RNG seed for target level selection.
+    /// @param state Player's auto-rebuy configuration (enabled, take-profit, afKing mode).
+    /// @param currentLevel Current game level for target offset calculation.
+    /// @param bonusBps Standard auto-rebuy ticket bonus in basis points.
+    /// @param bonusBpsAfKing Affiliate-king mode ticket bonus in basis points.
+    /// @return c Calculated rebuy parameters (target level, ticket count, reserved amount).
     function _calcAutoRebuy(
         address beneficiary,
         uint256 weiAmount,
