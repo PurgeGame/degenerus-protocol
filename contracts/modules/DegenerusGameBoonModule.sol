@@ -58,6 +58,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         }
         boonBps = _coinflipTierToBps(tier);
         bp.slot0 = s0 & BP_COINFLIP_CLEAR;
+        emit BoonConsumed(player, 1, boonBps);
     }
 
     /// @notice Consume a player's purchase boost and return the bonus BPS
@@ -83,6 +84,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         }
         boostBps = _purchaseTierToBps(tier);
         bp.slot0 = s0 & BP_PURCHASE_CLEAR;
+        emit BoonConsumed(player, 2, boostBps);
     }
 
     /// @notice Consume a player's decimator boost and return the bonus BPS
@@ -103,6 +105,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         }
         boostBps = _decimatorTierToBps(tier);
         bp.slot0 = s0 & BP_DECIMATOR_CLEAR;
+        emit BoonConsumed(player, 3, boostBps);
     }
 
     // =========================================================================
@@ -323,5 +326,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if (currentDay != 0 && bonus != 0) {
             quests.awardQuestStreakBonus(player, bonus, currentDay);
         }
+        emit BoonConsumed(player, 5, bonus);
     }
 }

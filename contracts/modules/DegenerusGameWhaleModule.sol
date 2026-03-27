@@ -562,6 +562,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (lootboxAmount != 0) {
             _recordLootboxEntry(buyer, lootboxAmount, passLevel, mintPacked_[buyer]);
         }
+
+        emit DeityPassPurchased(buyer, symbolId, totalPrice, passLevel);
     }
 
     // -------------------------------------------------------------------------

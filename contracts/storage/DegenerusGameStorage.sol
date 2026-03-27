@@ -519,6 +519,24 @@ abstract contract DegenerusGameStorage {
         uint32 ticketsPerLevel
     );
 
+    /// @notice Emitted when a deity pass is purchased.
+    event DeityPassPurchased(address indexed buyer, uint8 symbolId, uint256 price, uint24 level);
+
+    /// @notice Emitted when game-over drain processes terminal jackpots.
+    event GameOverDrained(uint24 level, uint256 available, uint256 claimablePool);
+
+    /// @notice Emitted when final sweep forfeits unclaimed winnings 30 days post-gameover.
+    event FinalSwept(uint256 totalFunds);
+
+    /// @notice Emitted when a boon is consumed by a player.
+    event BoonConsumed(address indexed player, uint8 boonType, uint16 boostBps);
+
+    /// @notice Emitted when admin swaps game ETH for stETH.
+    event AdminSwapEthForStEth(address indexed recipient, uint256 amount);
+
+    /// @notice Emitted when admin stakes game ETH into Lido stETH.
+    event AdminStakeEthForStEth(uint256 amount);
+
     /// @dev Queues whole tickets for a buyer at a target level.
     ///      If buyer has no existing tickets at that level, adds them to the queue.
     ///      Caps at uint32 max to prevent overflow.

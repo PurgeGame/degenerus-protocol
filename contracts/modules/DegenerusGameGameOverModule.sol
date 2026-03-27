@@ -148,6 +148,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         currentPrizePool = 0;
         yieldAccumulator = 0;
 
+        emit GameOverDrained(lvl, available, claimablePool);
+
         // remaining tracks unallocated funds.
         uint256 remaining = available;
 
@@ -197,6 +199,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         uint256 ethBal = address(this).balance;
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalFunds = ethBal + stBal;
+
+        emit FinalSwept(totalFunds);
 
         if (totalFunds == 0) return;
 

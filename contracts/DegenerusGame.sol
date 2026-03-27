@@ -1826,6 +1826,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 stBal = steth.balanceOf(address(this));
         if (stBal < amount) revert E();
         if (!steth.transfer(recipient, amount)) revert E();
+        emit AdminSwapEthForStEth(recipient, amount);
     }
 
     /// @notice Admin-only stake of game-held ETH into stETH via Lido.
@@ -1855,6 +1856,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         try steth.submit{value: amount}(address(0)) returns (uint256) {} catch {
             revert E();
         }
+        emit AdminStakeEthForStEth(amount);
     }
 
     /*+======================================================================+
