@@ -322,7 +322,13 @@ Plans:
   1. Every NatSpec tag (@param, @return, @notice, @dev) in contracts changed since v3.5 matches current function signatures and behavior
   2. Inline comments in v6.0/v7.0-modified functions describe what the code actually does (no stale logic descriptions)
   3. Zero references to removed/renamed functions, variables, or constants remain anywhere in the codebase
-**Plans**: TBD
+**Plans:** 4/5 plans executed
+Plans:
+- [x] 133-01-PLAN.md — Game core: DegenerusGame + GameStorage + AdvanceModule + JackpotModule (CMT-01, CMT-02)
+- [x] 133-02-PLAN.md — Game modules: Lootbox, Mint, Decimator, Degenerette, Whale, Endgame, GameOver, Boon, MintStreak, Payout (CMT-01, CMT-02)
+- [x] 133-03-PLAN.md — Token + vault: BurnieCoin, BurnieCoinflip, DGNRS, sDGNRS, GNRUS, WWXRP, Vault (CMT-01, CMT-02)
+- [x] 133-04-PLAN.md — Admin + support: Admin, Affiliate, Quests, DeityPass, Jackpots, TraitUtils, BoonViewer, Icons32, libraries (CMT-01, CMT-02)
+- [ ] 133-05-PLAN.md — CMT-03 stale reference sweep + interface NatSpec + summary + bot-race appendix (CMT-03)
 
 ### Phase 134: Consolidation
 **Goal**: All bot-race, ERC-20, event, and comment findings are either fixed in code or comprehensively documented in KNOWN-ISSUES.md so wardens cannot file them
@@ -340,8 +346,8 @@ Plans:
 |-------|----------------|--------|-----------|
 | 130. Bot Race | 2/2 | Complete    | 2026-03-27 |
 | 131. ERC-20 Compliance | 1/1 | Complete   | 2026-03-27 |
-| 132. Event Correctness | 3/3 | Complete   | 2026-03-27 |
-| 133. Comment Re-scan | 0/TBD | Not started | - |
+| 132. Event Correctness | 3/3 | Complete    | 2026-03-27 |
+| 133. Comment Re-scan | 4/5 | In Progress|  |
 | 134. Consolidation | 0/TBD | Not started | - |
 
 ## Deferred
