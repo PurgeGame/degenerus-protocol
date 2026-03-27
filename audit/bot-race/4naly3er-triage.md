@@ -9,16 +9,16 @@
 
 ## Summary
 
-| Severity | Categories | Instances | FIXED | DOCUMENT | FP |
-|----------|------------|-----------|-------|----------|----|
-| High | 2 | 9 | 0 | 0 | 2 |
-| Medium | 6 | 16 | 0 | 4 | 2 |
-| Low | 20 | 286 | 0 | 7 | 13 |
-| Non-Critical | 35 | 2,471 | 1 | 8 | 26 |
-| Gas | 18 | 1,671 | 0 | 2 | 16 |
-| **Total** | **81** | **4,453** | **1** | **21** | **57** |
+| Severity | Categories | Instances | DOCUMENT | FP |
+|----------|------------|-----------|----------|----|
+| High | 2 | 9 | 0 | 2 |
+| Medium | 6 | 16 | 4 | 2 |
+| Low | 20 | 286 | 7 | 13 |
+| Non-Critical | 34 | 2,469 | 8 | 26 |
+| Gas | 18 | 1,671 | 2 | 16 |
+| **Total** | **80** | **4,451** | **21** | **57** |
 
-**Disposition policy (D-05):** Default DOCUMENT, not FIX. No contract code changes this close to audit. All findings reviewed for Phase 134 consolidation.
+**Disposition policy (D-05):** Default DOCUMENT, not FIX. All findings reviewed for Phase 134 consolidation.
 
 ---
 
@@ -263,17 +263,13 @@ None. Per D-05, all findings are triaged as DOCUMENT or FALSE-POSITIVE. Phase 13
 - **Instances:** 290
 - **Reasoning:** DOCUMENT. The protocol uses a mix of named constants and inline literals. The inline literals are primarily: (1) bit positions/masks in assembly blocks where named constants cannot be used, (2) small arithmetic values (2, 10, 100) whose meaning is obvious in context, (3) BPS values documented in NatSpec comments above. The v3.5 comment correctness sweep verified that all magic numbers have adequate NatSpec documentation.
 
-### [NC-9] Event is never emitted
-- **Instances:** 2
-- **Reasoning:** ~~DOCUMENT~~ **FIXED**. Both unused events (Approval, ApprovalForAll) deleted from DegenerusDeityPass in commit `026f4dab`.
-
 ### [NC-10] Event missing indexed field
 - **Instances:** 4
 - **Reasoning:** DOCUMENT. Some events intentionally omit `indexed` on fields to save gas or because the field is not useful as a filter key. However, key events should index addresses and IDs for off-chain indexing. Flag for Phase 132 event correctness sweep.
 
 ### [NC-11] Events that mark critical parameter changes should contain both the old and the new value
-- **Instances:** 7
-- **Reasoning:** DOCUMENT (6 remaining). 1 instance **FIXED**: `LinkEthFeedUpdated` now emits (oldFeed, newFeed) per commit `4c2d9579`. Remaining 6 instances: 4 are FP (already emit old+new or are boolean toggles), 2 are cosmetic DOCUMENT (RenderColorsUpdated, NC-10 indexed fields).
+- **Instances:** 6
+- **Reasoning:** DOCUMENT. 4 instances are FP (already emit old+new or are boolean toggles), 2 are cosmetic DOCUMENT (RenderColorsUpdated, indexed fields).
 
 ### [NC-13] Functions should not be longer than 50 lines
 - **Instances:** 377
@@ -373,7 +369,7 @@ None. Per D-05, all findings are triaged as DOCUMENT or FALSE-POSITIVE. Phase 13
 
 ### [GAS-10] State variables only set in the constructor should be declared `immutable`
 - **Instances:** 10
-- **Reasoning:** DOCUMENT. All 10 reported instances are FP (6 already immutable, 1 string type, 1 mutated post-constructor, 2 duplicates). No code changes needed from the original triage. Separately, BurnieCoinflip immutables were converted to constants via ContractAddresses in commit `822a3d27` as a code quality improvement (not from this finding).
+- **Reasoning:** DOCUMENT. All 10 reported instances are FP (6 already immutable, 1 string type, 1 mutated post-constructor, 2 duplicates). No code changes needed.
 
 ### [GAS-11] Functions guaranteed to revert when called by normal users can be marked `payable`
 - **Instances:** 39
@@ -417,9 +413,8 @@ None. Per D-05, all findings are triaged as DOCUMENT or FALSE-POSITIVE. Phase 13
 - **L-9 (Gas consumption)** relates to existing "Chainlink VRF V2.5 dependency" entry (external call patterns)
 
 ### Findings for Phase 132 (Event Correctness)
-- NC-9: Event never emitted (2 instances)
 - NC-10: Event missing indexed field (4 instances)
-- NC-11: Events should contain old+new value (7 instances)
+- NC-11: Events should contain old+new value (6 instances)
 - NC-17: Missing event for critical parameter change (27 instances)
 - NC-33: Event missing indexed fields (67 instances)
 
@@ -430,6 +425,6 @@ None. Per D-05, all findings are triaged as DOCUMENT or FALSE-POSITIVE. Phase 13
 - NC-34: Magic numbers (8 instances)
 
 ### Findings for Phase 134 (Consolidation Review)
-- GAS-10: Constructor-only variables not declared immutable (10 instances)
+- GAS-10: Constructor-only variables not declared immutable (10 instances -- all FP)
 - GAS-7: Unchecked arithmetic opportunities (1,054 instances -- review selectively)
 - L-4: abi.encodePacked hash collision risk (35 instances -- review entropy uses)

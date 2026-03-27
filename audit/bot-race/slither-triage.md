@@ -10,10 +10,9 @@
 
 | Disposition | Count |
 |-------------|-------|
-| FIXED | 3 |
 | DOCUMENT | 2 |
 | FALSE-POSITIVE | 27 |
-| **Total (by detector)** | **32** |
+| **Total (by detector)** | **29** |
 
 **Note:** The 1959 raw findings collapse to 32 unique detector categories. Many detectors fire multiple times across different locations for the same structural reason. This triage is organized by detector category with instance counts. All findings have been individually reviewed; grouping is used where all instances share the same root cause and disposition.
 
@@ -50,33 +49,6 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 - **Location:** `DegenerusGame.resolveRedemptionLootbox()` (DegenerusGame.sol L1725-1775)
 - **Description:** `claimablePool -= amount` at L1743 modifies a critical state variable without emitting a dedicated event for the change.
 - **Reasoning:** DOCUMENT -- the function emits other events for the redemption resolution. The `claimablePool` variable is a running tally of ETH reserved for winners; it does not need a separate event on every decrement since the higher-level redemption events capture the full context. However, this is a legitimate informational finding that C4A bots may flag. Pre-disclosing avoids a paid LOW.
-
-### DOC-03: dead-code -- Unused internal function (1 instance)
-
-- **Impact:** Informational
-- **Confidence:** Medium
-- **Detector:** `dead-code`
-- **Location:** `DegenerusGameStorage._lootboxBpsToTier(uint16)` (DegenerusGameStorage.sol L1570-1575)
-- **Description:** This internal function is never called from any code path.
-- **Reasoning:** ~~DOCUMENT~~ **FIXED** -- function deleted in commit `bff3c8ed`.
-
-### DOC-04: shadowing-local -- Local variable shadows state variable (1 instance)
-
-- **Impact:** Low
-- **Confidence:** High
-- **Detector:** `shadowing-local`
-- **Location:** `DegenerusGameMintModule._callTicketPurchase().ticketLevel` (DegenerusGameMintModule.sol L1018) shadows `DegenerusGameStorage.ticketLevel` (DegenerusGameStorage.sol L472)
-- **Description:** A local variable named `ticketLevel` in `_callTicketPurchase` shadows the storage variable of the same name inherited from `DegenerusGameStorage`.
-- **Reasoning:** ~~DOCUMENT~~ **FIXED** -- local variable inlined as `targetLevel` in commit `026f4dab`, eliminating the shadowing.
-
-### DOC-05: redundant-statements -- Unused function parameter silencer (1 instance)
-
-- **Impact:** Informational
-- **Confidence:** High
-- **Detector:** `redundant-statements`
-- **Location:** `DegenerusGameJackpotModule._computeBucketCounts()` (DegenerusGameJackpotModule.sol L2544)
-- **Description:** The statement `lvl;` is a no-op expression that has no effect.
-- **Reasoning:** ~~DOCUMENT~~ **FIXED** -- `lvl` parameter removed entirely from `_rollWinningTraits` in commit `026f4dab`.
 
 ---
 
@@ -312,10 +284,8 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 | Slither Detector | Prior Finding | Status |
 |-----------------|---------------|--------|
 | reentrancy-eth (advanceGame) | v5.0 I-01 (advanceBounty stale price) | INFO -- documented |
-| dead-code (_lootboxBpsToTier) | v3.8 Phase 73 (boon tier simplification) | FIXED -- deleted in `bff3c8ed` |
 | reentrancy-balance (_deterministicBurnFrom) | v3.3 CP-08 (pending reservation subtraction) | FIXED in v3.3 |
 | arbitrary-send-eth (payout functions) | v5.0 ETH-FLOW-MAP.md | PROVEN -- ETH conservation verified |
-| shadowing-local (ticketLevel) | Not previously flagged | FIXED -- inlined as targetLevel in `026f4dab` |
 
 ---
 
@@ -351,29 +321,24 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 | 16 | reentrancy-benign | Low | Medium | 47 | FALSE-POSITIVE | FP-16 |
 | 17 | timestamp | Low | Medium | 35 | FALSE-POSITIVE | FP-17 |
 | 18 | missing-zero-check | Low | Medium | 14 | FALSE-POSITIVE | FP-18 |
-| 19 | shadowing-local | Low | High | 1 | FIXED | DOC-04 |
-| 20 | events-maths | Low | Medium | 1 | DOCUMENT | DOC-02 |
-| 21 | unused-state | Informational | High | 1049 | FALSE-POSITIVE | FP-13 |
-| 22 | naming-convention | Informational | High | 70 | FALSE-POSITIVE | FP-19 |
-| 23 | costly-loop | Informational | Medium | 60 | FALSE-POSITIVE | FP-20 |
-| 24 | low-level-calls | Informational | High | 54 | FALSE-POSITIVE | FP-21 |
-| 25 | missing-inheritance | Informational | High | 36 | FALSE-POSITIVE | FP-22 |
-| 26 | cyclomatic-complexity | Informational | High | 23 | FALSE-POSITIVE | FP-23 |
-| 27 | assembly | Informational | High | 7 | FALSE-POSITIVE | FP-24 |
-| 28 | dead-code | Informational | Medium | 1 | FIXED | DOC-03 |
-| 29 | redundant-statements | Informational | High | 1 | FIXED | DOC-05 |
-| 30 | too-many-digits | Informational | Medium | 1 | FALSE-POSITIVE | FP-27 |
-| 31 | constable-states | Optimization | High | 48 | FALSE-POSITIVE | FP-25 |
-| 32 | immutable-states | Optimization | High | 1 | FALSE-POSITIVE | FP-26 |
+| 19 | events-maths | Low | Medium | 1 | DOCUMENT | DOC-02 |
+| 20 | unused-state | Informational | High | 1049 | FALSE-POSITIVE | FP-13 |
+| 21 | naming-convention | Informational | High | 70 | FALSE-POSITIVE | FP-19 |
+| 22 | costly-loop | Informational | Medium | 60 | FALSE-POSITIVE | FP-20 |
+| 23 | low-level-calls | Informational | High | 54 | FALSE-POSITIVE | FP-21 |
+| 24 | missing-inheritance | Informational | High | 36 | FALSE-POSITIVE | FP-22 |
+| 25 | cyclomatic-complexity | Informational | High | 23 | FALSE-POSITIVE | FP-23 |
+| 26 | assembly | Informational | High | 7 | FALSE-POSITIVE | FP-24 |
+| 27 | too-many-digits | Informational | Medium | 1 | FALSE-POSITIVE | FP-27 |
+| 28 | constable-states | Optimization | High | 48 | FALSE-POSITIVE | FP-25 |
+| 29 | immutable-states | Optimization | High | 1 | FALSE-POSITIVE | FP-26 |
 
 ---
 
 ## Key Takeaways
 
-1. **3 FIXED findings.** DOC-03 dead code deleted (`bff3c8ed`), DOC-04 shadowing eliminated (`026f4dab`), DOC-05 unused param removed (`026f4dab`).
+1. **Root cause of most FPs: delegatecall module architecture.** The DegenerusGame -> module delegatecall pattern causes Slither to misidentify: uninitialized state (86), unused state (1049), constable state (48), immutable state (1), locked ether (1), reentrancy (6), and unused returns (some). This single architectural decision accounts for ~1200 of 1959 raw findings.
 
-2. **Root cause of most FPs: delegatecall module architecture.** The DegenerusGame -> module delegatecall pattern causes Slither to misidentify: uninitialized state (86), unused state (1049), constable state (48), immutable state (1), locked ether (1), reentrancy (6), and unused returns (some). This single architectural decision accounts for ~1200 of 1959 raw findings.
+2. **2 DOCUMENT findings should be pre-disclosed** to avoid paid C4A findings: arbitrary-send-eth (payouts to users), events-maths (missing claimablePool event).
 
-3. **2 DOCUMENT findings should be pre-disclosed** to avoid paid C4A findings: arbitrary-send-eth (payouts to users), events-maths (missing claimablePool event).
-
-4. **All HIGH findings are false positives.** The 105 raw HIGH findings break down to: 86 uninitialized-state (delegatecall FP), 7 weak-prng (VRF is secure), 4 arbitrary-send-eth (documented as intentional), 4 reentrancy-balance (verified safe), 2 incorrect-exp (XOR not exponentiation), 2 reentrancy-eth (delegatecall targets are constant).
+3. **All HIGH findings are false positives.** The 105 raw HIGH findings break down to: 86 uninitialized-state (delegatecall FP), 7 weak-prng (VRF is secure), 4 arbitrary-send-eth (documented as intentional), 4 reentrancy-balance (verified safe), 2 incorrect-exp (XOR not exponentiation), 2 reentrancy-eth (delegatecall targets are constant).

@@ -13,15 +13,14 @@ All deviations are intentional design decisions. Disposition is DOCUMENT per Pha
 | # | Token | Deviation | EIP-20 Expectation | Actual Behavior | Severity | Disposition | KNOWN-ISSUES |
 |---|-------|-----------|--------------------|-----------------|----------|-------------|--------------|
 | 1 | DGNRS | Transfer to `address(this)` reverts | EIP-20 does not restrict recipients | `Unauthorized()` revert in `_transfer` | Info | Document | Yes |
-| 2 | DGNRS | `transferFrom` does not emit `Approval` on allowance change | EIP-20: "SHOULD fire Approval" on allowance change | No `Approval` event after allowance decrement | Info | Document | Yes |
-| 3 | DGNRS | No EIP-2612 `permit` | Not required by ERC-20 | Not implemented | Info | N/A | No |
-| 4 | DGNRS | No `increaseAllowance`/`decreaseAllowance` | Not required by ERC-20 | Not implemented; approve race is ERC-20 known issue | Info | N/A | No |
-| 5 | BURNIE | Game contract bypasses allowance in `transferFrom` | EIP-20: transferFrom MUST check allowance | Game contract has implicit infinite approval over all addresses | Low | Document | Yes |
-| 6 | BURNIE | `transfer`/`transferFrom` may auto-claim coinflip BURNIE | EIP-20: transfer should only move existing tokens | `_claimCoinflipShortfall` may mint BURNIE to sender before transfer | Info | Document | Yes |
-| 7 | BURNIE | Transfer to VAULT burns tokens | EIP-20: transfer should move tokens to recipient | `_transfer` special-cases VAULT -- burns and adds to vault allowance | Info | Document | Yes |
-| 8 | BURNIE | No EIP-2612 `permit` | Not required by ERC-20 | Not implemented | Info | N/A | No |
-| 9 | sDGNRS | Soulbound -- no transfer/approve/allowance | ERC-20 requires all functions | By design: not an ERC-20 token | N/A | Document | No |
-| 10 | GNRUS | Soulbound -- transfer/transferFrom/approve revert | ERC-20 requires functional transfer | `TransferDisabled()` revert on all three | N/A | Document | No |
+| 2 | DGNRS | No EIP-2612 `permit` | Not required by ERC-20 | Not implemented | Info | N/A | No |
+| 3 | DGNRS | No `increaseAllowance`/`decreaseAllowance` | Not required by ERC-20 | Not implemented; approve race is ERC-20 known issue | Info | N/A | No |
+| 4 | BURNIE | Game contract bypasses allowance in `transferFrom` | EIP-20: transferFrom MUST check allowance | Game contract has implicit infinite approval over all addresses | Low | Document | Yes |
+| 5 | BURNIE | `transfer`/`transferFrom` may auto-claim coinflip BURNIE | EIP-20: transfer should only move existing tokens | `_claimCoinflipShortfall` may mint BURNIE to sender before transfer | Info | Document | Yes |
+| 6 | BURNIE | Transfer to VAULT burns tokens | EIP-20: transfer should move tokens to recipient | `_transfer` special-cases VAULT -- burns and adds to vault allowance | Info | Document | Yes |
+| 7 | BURNIE | No EIP-2612 `permit` | Not required by ERC-20 | Not implemented | Info | N/A | No |
+| 8 | sDGNRS | Soulbound -- no transfer/approve/allowance | ERC-20 requires all functions | By design: not an ERC-20 token | N/A | Document | No |
+| 9 | GNRUS | Soulbound -- transfer/transferFrom/approve revert | ERC-20 requires functional transfer | `TransferDisabled()` revert on all three | N/A | Document | No |
 
 ---
 
@@ -29,7 +28,7 @@ All deviations are intentional design decisions. Disposition is DOCUMENT per Pha
 
 **Classification:** ERC-20 token (transferable)
 **Contract:** `DegenerusStonk` -- 305 lines
-**Verdict:** ERC-20 COMPLIANT with 2 documented deviations
+**Verdict:** ERC-20 COMPLIANT with 1 documented deviation
 
 ### Function-by-Function Analysis
 
@@ -41,7 +40,7 @@ All deviations are intentional design decisions. Disposition is DOCUMENT per Pha
 | `totalSupply` | REQUIRED | `uint256 public totalSupply` -- decremented on burn | Compliant |
 | `balanceOf` | REQUIRED | `mapping(address => uint256) public balanceOf` | Compliant |
 | `transfer(to, amount)` | REQUIRED | Calls `_transfer(msg.sender, to, amount)`, returns `true` | Compliant |
-| `transferFrom(from, to, amount)` | REQUIRED | Checks/decrements allowance (max-uint skip), calls `_transfer`, returns `true` | Compliant (Deviation #2: no Approval emit) |
+| `transferFrom(from, to, amount)` | REQUIRED | Checks/decrements allowance (max-uint skip), calls `_transfer`, emits `Approval`, returns `true` | Compliant |
 | `approve(spender, amount)` | REQUIRED | Sets allowance, emits `Approval`, returns `true` | Compliant |
 | `allowance` | REQUIRED | `mapping(address => mapping(address => uint256)) public allowance` | Compliant |
 
@@ -83,10 +82,9 @@ Trace: `_transfer` always executes `emit Transfer(from, to, amount)` regardless 
 Trace: `_burn(from, 0)` -> `if (amount == 0 || amount > bal) revert Insufficient()`.
 **Result:** `burn(0)` reverts. This is not an ERC-20 function -- `burn` is an extension. Not a compliance issue.
 
-**10. No `Approval` event on `transferFrom` allowance change (Deviation #2)**
-Trace: `transferFrom` at line 127-134 -- decrements `allowance[from][msg.sender]` in the `unchecked` block but does NOT emit `Approval(from, msg.sender, newAllowance)`.
-EIP-20: "The function SHOULD throw unless the _from account has deliberately authorized the sender... NOTE: Transfers of 0 values MUST be treated as normal transfers and fire the Transfer event." The Approval emit on allowance change is a SHOULD, documented as: "To prevent attack vectors... the allowance... SHOULD first be reset to 0."
-**Result:** Missing `Approval` emit on allowance decrement. SHOULD-level recommendation in EIP-20. **Intentional deviation, wardens could file this as QA/Info.**
+**10. `Approval` event on `transferFrom` allowance change**
+Trace: `transferFrom` decrements `allowance[from][msg.sender]` and emits `Approval(from, msg.sender, newAllowance)`.
+**Result:** Compliant. `Approval` event emitted on allowance decrement per EIP-20 SHOULD recommendation.
 
 **11. Reentrancy via receiver**
 Trace: `_transfer` performs only state manipulation (`balanceOf` writes) and `emit Transfer`. No external calls in any ERC-20 function path. `transfer`, `transferFrom`, and `approve` contain zero external calls.
@@ -272,25 +270,19 @@ The following deviations should be added to KNOWN-ISSUES.md. Each entry is forma
 **DGNRS blocks transfer to its own contract address.** `_transfer` reverts with `Unauthorized()` when `to == address(this)`. EIP-20 does not restrict recipients. This prevents accidental token lockup since DGNRS held by the contract is indistinguishable from the sDGNRS-backed reserve. Intentional design.
 ```
 
-### Deviation #2: DGNRS transferFrom missing Approval event
-
-```
-**DGNRS transferFrom does not emit Approval on allowance change.** EIP-20 says transferFrom SHOULD fire Approval when allowance is updated. DGNRS decrements allowance but does not emit. Standard ERC-20 pattern -- many production tokens omit this (OpenZeppelin's ERC20 added it in v4.1). QA-level at most.
-```
-
-### Deviation #5: BURNIE game contract allowance bypass
+### Deviation #4: BURNIE game contract allowance bypass
 
 ```
 **BURNIE game contract bypasses transferFrom allowance.** The DegenerusGame contract can call `transferFrom` without prior approval. This is the trusted contract pattern -- the game address is a compile-time immutable constant, not upgradeable. Enables seamless gameplay transactions without pre-approval UX. All other callers require standard allowance.
 ```
 
-### Deviation #6: BURNIE auto-claim on transfer
+### Deviation #5: BURNIE auto-claim on transfer
 
 ```
 **BURNIE transfer/transferFrom may auto-claim pending coinflip winnings.** Before executing a transfer, `_claimCoinflipShortfall` checks if the sender has insufficient balance and auto-claims pending coinflip BURNIE from the trusted BurnieCoinflip contract (compile-time constant). This mints tokens before the transfer, which is non-standard ERC-20 behavior. Intentional UX design -- players can spend winnings without a separate claim step. The coinflip contract is immutable and trusted.
 ```
 
-### Deviation #7: BURNIE transfer to VAULT burns
+### Deviation #6: BURNIE transfer to VAULT burns
 
 ```
 **BURNIE sent to VAULT is burned, not transferred.** `_transfer` special-cases `to == ContractAddresses.VAULT` -- tokens are burned (totalSupply reduced) and added to vault's virtual mint allowance. The VAULT uses a virtual reserve model where `balanceOf[VAULT]` is always 0 and the actual reserve is tracked in `_supply.vaultAllowance`. Emits `Transfer(from, address(0))` (burn event). Intentional architecture.
@@ -302,11 +294,11 @@ The following deviations should be added to KNOWN-ISSUES.md. Each entry is forma
 
 | Token | Classification | Verdict | Deviations |
 |-------|---------------|---------|------------|
-| DGNRS | ERC-20 | COMPLIANT | 2 documented (self-address block, no Approval on transferFrom) |
+| DGNRS | ERC-20 | COMPLIANT | 1 documented (self-address block) |
 | BURNIE | ERC-20 | COMPLIANT | 3 documented (game bypass, auto-claim, vault redirect) |
 | sDGNRS | Soulbound | NOT ERC-20 | N/A -- soulbound by design, view-only compatibility |
 | GNRUS | Soulbound | NOT ERC-20 | N/A -- soulbound by design, reverting transfer stubs |
 
-All 4 tokens behave correctly for their intended purpose. The 5 ERC-20 deviations in DGNRS and BURNIE are intentional design decisions with clear rationale. None represent security vulnerabilities. All should be documented in KNOWN-ISSUES.md to pre-empt warden filings.
+All 4 tokens behave correctly for their intended purpose. The 4 ERC-20 deviations in DGNRS and BURNIE are intentional design decisions with clear rationale. None represent security vulnerabilities. All should be documented in KNOWN-ISSUES.md to pre-empt warden filings.
 
 The soulbound tokens (sDGNRS, GNRUS) have airtight restrictions with no bypass paths. Filing ERC-20 compliance issues against these tokens is invalid since they do not claim ERC-20 status.

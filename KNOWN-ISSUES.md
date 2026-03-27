@@ -2,7 +2,7 @@
 
 Pre-disclosure for audit wardens. If you find something listed here, it's already known.
 
-Pre-audited with Slither v0.11.5 + 4naly3er. 113 detector categories triaged (2 Slither DOCUMENT + 3 FIXED, 20 4naly3er DOCUMENT + 2 FIXED, 84 FP + 2 overlapping). Remaining DOCUMENT findings below.
+Pre-audited with Slither v0.11.5 + 4naly3er. 110 detector categories triaged (2 Slither DOCUMENT, 20 4naly3er DOCUMENT, 84 FP + 4 overlapping). DOCUMENT findings below.
 
 ---
 
@@ -30,7 +30,7 @@ These are architectural decisions, not vulnerabilities.
 
 ## Automated Tool Findings (Pre-disclosed)
 
-Slither 0.11.5 (1,959 raw findings, 32 detectors) and 4naly3er (4,453 instances, 81 categories) triaged below. Post-audit fixes applied to 3 Slither findings (DOC-03/04/05) and 2 4naly3er findings (NC-9, NC-11 partial). Full triage: `audit/bot-race/slither-triage.md`, `audit/bot-race/4naly3er-triage.md`.
+Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,453 instances, 78 categories after triage). Full triage: `audit/bot-race/slither-triage.md`, `audit/bot-race/4naly3er-triage.md`.
 
 ### ETH Transfer Safety
 
@@ -90,7 +90,7 @@ Slither 0.11.5 (1,959 raw findings, 32 detectors) and 4naly3er (4,453 instances,
 
 ### Event Missing Old+New Values
 
-**Parameter-change events emit new value only (6 instances; 1 fixed).** Admin operations are infrequent. Adding old value would increase gas for minimal debugging benefit. `LinkEthFeedUpdated` now emits (oldFeed, newFeed) per commit `4c2d9579`. (Detector: `[NC-11]`)
+**Parameter-change events emit new value only (6 instances).** Admin operations are infrequent. Adding old value would increase gas for minimal debugging benefit. (Detector: `[NC-11]`)
 
 ### Long Functions
 
@@ -102,7 +102,7 @@ Slither 0.11.5 (1,959 raw findings, 32 detectors) and 4naly3er (4,453 instances,
 
 ### Missing Parameter Change Events
 
-**27 instances covered by Phase 132 event audit.** 30 INFO findings (24 DOCUMENT, 6 FIXED). Full details: `audit/event-correctness.md`. (Detector: `[NC-17]`)
+**27 instances covered by Phase 132 event audit.** 24 INFO findings (all DOCUMENT). Full details: `audit/event-correctness.md`. (Detector: `[NC-17]`)
 
 ### Unchecked Arithmetic
 
@@ -112,7 +112,7 @@ Slither 0.11.5 (1,959 raw findings, 32 detectors) and 4naly3er (4,453 instances,
 
 ## ERC-20 Deviations
 
-DGNRS and BURNIE are ERC-20 tokens with intentional deviations. sDGNRS and GNRUS are soulbound (not ERC-20) -- filing ERC-20 compliance issues against them is invalid.
+DGNRS and BURNIE are ERC-20 tokens with 4 intentional deviations. sDGNRS and GNRUS are soulbound (not ERC-20) -- filing ERC-20 compliance issues against them is invalid. Full analysis: `audit/erc-20-compliance.md`.
 
 **DGNRS blocks transfer to its own contract address.** `_transfer` reverts with `Unauthorized()` when `to == address(this)`. EIP-20 does not restrict recipients. This prevents accidental token lockup since DGNRS held by the contract is indistinguishable from the sDGNRS-backed reserve. Intentional design.
 
@@ -126,4 +126,4 @@ DGNRS and BURNIE are ERC-20 tokens with intentional deviations. sDGNRS and GNRUS
 
 ## Event Design Decisions
 
-Phase 132 systematic event audit found 30 INFO-level findings across all 26 production contracts. 6 were subsequently FIXED (commit `142efbc0`): EVT-WHALE-02 (DeityPassPurchased), EVT-GAMEOVER-01 (GameOverDrained), EVT-GAMEOVER-02 (FinalSwept), EVT-BOON-01 (BoonConsumed for all 4 consumption functions), EVT-GAME-04 (AdminSwapEthForStEth), EVT-GAME-05 (AdminStakeEthForStEth). Remaining 24 are DOCUMENT disposition. Key categories: 19 missing events for non-critical state changes (admin setters, internal bookkeeping), 2 stale parameter values (cosmetic), 2 missing indexed fields, 1 unused event declaration. Full details: `audit/event-correctness.md`.
+Phase 132 systematic event audit covered all 26 production contracts. 24 INFO-level DOCUMENT findings remain. Key categories: 19 missing events for non-critical state changes (admin setters, internal bookkeeping), 2 stale parameter values (cosmetic), 2 missing indexed fields, 1 unused event declaration. Full details: `audit/event-correctness.md`.
