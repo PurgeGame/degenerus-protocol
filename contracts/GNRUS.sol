@@ -182,7 +182,7 @@ contract GNRUS {
     mapping(uint24 => mapping(address => mapping(uint48 => bool))) public hasVoted;
 
     /// @notice sDGNRS total supply snapshot at level start (set on first proposal)
-    mapping(uint24 => uint128) public levelSdgnrsSnapshot;
+    mapping(uint24 => uint48) public levelSdgnrsSnapshot;
 
     /// @notice Vault owner address snapshot at level start (set on first proposal)
     mapping(uint24 => address) public levelVaultOwner;
@@ -360,11 +360,11 @@ contract GNRUS {
 
         // Snapshot sDGNRS supply on first proposal of this level
         if (levelProposalCount[level] == 0) {
-            levelSdgnrsSnapshot[level] = uint128(sdgnrs.totalSupply());
+            levelSdgnrsSnapshot[level] = uint48(sdgnrs.totalSupply() / 1e18);
         }
 
         address proposer = msg.sender;
-        uint128 snapshot = levelSdgnrsSnapshot[level];
+        uint48 snapshot = levelSdgnrsSnapshot[level];
 
         if (vault.isVaultOwner(proposer)) {
             // Snapshot vault owner on first vault-owner action
@@ -373,7 +373,7 @@ contract GNRUS {
             creatorProposalCount[level]++;
         } else {
             // Community: 0.5% sDGNRS threshold, once per level
-            if (sdgnrs.balanceOf(proposer) * BPS_DENOM < uint256(snapshot) * PROPOSE_THRESHOLD_BPS) revert InsufficientStake();
+            if ((sdgnrs.balanceOf(proposer) / 1e18) * BPS_DENOM < uint256(snapshot) * PROPOSE_THRESHOLD_BPS) revert InsufficientStake();
             if (hasProposed[level][proposer]) revert AlreadyProposed();
             hasProposed[level][proposer] = true;
         }
@@ -418,7 +418,7 @@ contract GNRUS {
         // Vault owner bonus: 5% of snapshot per proposal. Snapshot locks on first vault-owner action.
         if (voter == levelVaultOwner[level] || (levelVaultOwner[level] == address(0) && vault.isVaultOwner(voter))) {
             if (levelVaultOwner[level] == address(0)) levelVaultOwner[level] = voter;
-            weight += uint48((uint256(levelSdgnrsSnapshot[level]) * VAULT_VOTE_BPS) / (BPS_DENOM * 1e18));
+            weight += uint48((uint256(levelSdgnrsSnapshot[level]) * VAULT_VOTE_BPS) / BPS_DENOM);
         }
         if (weight == 0) revert InsufficientStake();
 

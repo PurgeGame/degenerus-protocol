@@ -7,7 +7,9 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
+  advanceTime,
   getEvent,
+  getLastVRFRequestId,
   ZERO_ADDRESS,
 } from "../helpers/testUtils.js";
 
@@ -15,6 +17,36 @@ const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
 const INITIAL_SUPPLY = 1_000_000_000_000n * eth("1");
 const CREATOR_BPS = 2000n;
 const BPS_DENOM = 10_000n;
+
+// 912-day level-0 idle timeout triggers the game-over liveness path
+const SECONDS_912_DAYS = 912 * 86400;
+
+/**
+ * Drive the two-step game-over flow:
+ *   1. advance time past the 912-day level-0 timeout
+ *   2. advanceGame → liveness guard fires, VRF request issued
+ *   3. fulfill VRF
+ *   4. advanceGame → processes word → handleGameOverDrain → gameOver = true
+ */
+async function triggerGameOver(game, caller, mockVRF) {
+  await advanceTime(SECONDS_912_DAYS + 1);
+  await game.connect(caller).advanceGame();
+  const requestId = await getLastVRFRequestId(mockVRF);
+  if (requestId > 0n) {
+    await mockVRF.fulfillRandomWords(requestId, 42n);
+  }
+  await game.connect(caller).advanceGame();
+}
+
+/**
+ * Fixture: full protocol deployed with gameOver already set to true.
+ * Used by any test that calls dgnrs.burn(), which requires gameOver.
+ */
+async function deployWithGameOver() {
+  const ctx = await deployFullProtocol();
+  await triggerGameOver(ctx.game, ctx.deployer, ctx.mockVRF);
+  return ctx;
+}
 
 // Helper: impersonate game contract and transfer sDGNRS from pool to recipient
 async function giveSDGNRS(sdgnrs, game, recipient, amount) {
@@ -266,7 +298,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
     });
 
     it("burns DGNRS and forwards ETH from sDGNRS backing", async function () {
-      const { dgnrs, sdgnrs, game, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { dgnrs, sdgnrs, game, deployer, alice } = await loadFixture(deployWithGameOver);
 
       // Give alice some DGNRS
       const amount = eth("100000");
@@ -291,7 +323,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
     });
 
     it("DGNRS totalSupply decreases after burn", async function () {
-      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
+      const { dgnrs, deployer } = await loadFixture(deployWithGameOver);
       const supplyBefore = await dgnrs.totalSupply();
       const amount = eth("1000");
       await dgnrs.connect(deployer).burn(amount);
@@ -299,7 +331,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
     });
 
     it("sDGNRS totalSupply also decreases (underlying burned)", async function () {
-      const { dgnrs, sdgnrs, deployer } = await loadFixture(deployFullProtocol);
+      const { dgnrs, sdgnrs, deployer } = await loadFixture(deployWithGameOver);
       const sSupplyBefore = await sdgnrs.totalSupply();
       const amount = eth("1000");
       await dgnrs.connect(deployer).burn(amount);
@@ -307,7 +339,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
     });
 
     it("emits BurnThrough event", async function () {
-      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
+      const { dgnrs, deployer } = await loadFixture(deployWithGameOver);
       const tx = await dgnrs.connect(deployer).burn(eth("1000"));
       const ev = await getEvent(tx, dgnrs, "BurnThrough");
       expect(ev.args.from).to.equal(deployer.address);
@@ -315,7 +347,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
     });
 
     it("burn with stETH backing forwards stETH proportionally", async function () {
-      const { dgnrs, sdgnrs, game, mockStETH, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { dgnrs, sdgnrs, game, mockStETH, deployer, alice } = await loadFixture(deployWithGameOver);
       const amount = eth("100000");
       await dgnrs.connect(deployer).transfer(alice.address, amount);
 
@@ -446,7 +478,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
   // ===========================================================================
   describe("Supply accounting", function () {
     it("DGNRS supply + sDGNRS wrapper balance stay in sync", async function () {
-      const { dgnrs, sdgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { dgnrs, sdgnrs, deployer, alice } = await loadFixture(deployWithGameOver);
       const dgnrsAddr = await dgnrs.getAddress();
 
       // Initial state

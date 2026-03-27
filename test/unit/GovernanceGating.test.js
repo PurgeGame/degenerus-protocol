@@ -89,8 +89,12 @@ async function jumpToNextGameDayBoundary(offsetSeconds = 5) {
 
 /**
  * Advance the game through one full day cycle.
- * advanceGame (requests VRF) -> fulfill VRF -> advanceGame (processes word, sets dailyIdx).
+ * advanceGame (requests VRF) -> fulfill VRF -> loop advanceGame until RNG unlocked.
  * Caller must bypass the mint gate (via DGVE majority or gateIdx condition).
+ *
+ * Multiple post-fulfillment advances are required because future ticket processing
+ * (STAGE_FUTURE_TICKETS_WORKING) now takes several advance calls before daily
+ * processing completes and RNG is unlocked.
  */
 async function advanceGameOneDay(game, caller, mockVRF) {
   await game.connect(caller).advanceGame();
@@ -98,7 +102,12 @@ async function advanceGameOneDay(game, caller, mockVRF) {
   if (reqId > 0n) {
     await fulfillVRF(mockVRF, reqId, BigInt(Math.floor(Math.random() * 1e15)));
   }
-  await game.connect(caller).advanceGame();
+  // Loop until RNG is unlocked (daily processing fully complete).
+  for (let i = 0; i < 30; i++) {
+    const locked = await game.rngLocked();
+    if (!locked) break;
+    await game.connect(caller).advanceGame();
+  }
 }
 
 describe("Governance & Gating (Phase 43)", function () {

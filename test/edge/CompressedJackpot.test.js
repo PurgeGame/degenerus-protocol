@@ -351,8 +351,12 @@ describe("CompressedJackpot", function () {
       await heavyPurchases(game, buyers);
 
       await driveTurboCompletion(game, deployer, mockVRF, advanceModule);
+      // After turbo jackpot ends, _endPhase() sets phaseTransitionActive=true but
+      // jackpotPhaseFlag stays true until the transition is processed in the next
+      // day cycle. Drive one more cycle to complete the phase transition.
+      await driveOneCycle(game, deployer, mockVRF, advanceModule, 77n);
       expect(await game.jackpotPhase()).to.equal(false,
-        "Jackpot phase should already be over after turbo");
+        "Jackpot phase should be over after turbo + transition cycle");
     });
 
     it("flag resets to 0 after turbo completion", async function () {
@@ -453,7 +457,9 @@ describe("CompressedJackpot", function () {
       expect(await game.jackpotCompressionTier()).to.equal(1);
 
       // driveToJackpotPhase already consumed jackpot day 1 (counter 0→2).
-      // Remaining: day 2 (counter 2→4) + day 3 (counter 4→5, phase ends) = 2 cycles.
+      // Remaining: day 2 (counter 2→4) + day 3 (counter 4→5, _endPhase, jackpotPhase still true)
+      //           + day 4 (phaseTransitionActive processed, jackpotPhase becomes false) = 3 cycles.
+      // The transition processing day is now a distinct advance cycle after _endPhase.
       const remainingDays = await countJackpotPhaseDays(
         game,
         deployer,
@@ -461,8 +467,8 @@ describe("CompressedJackpot", function () {
         advanceModule
       );
 
-      // Total physical jackpot days: 1 (in driveToJackpotPhase) + remainingDays = 3
-      expect(remainingDays).to.equal(2, "Compressed phase should have 2 remaining cycles after transition");
+      // Total physical jackpot days: 1 (in driveToJackpotPhase) + remainingDays = 4
+      expect(remainingDays).to.equal(3, "Compressed phase should have 3 remaining cycles after transition");
     });
 
     it("compressed flag resets to 0 after jackpot phase ends", async function () {
@@ -550,7 +556,9 @@ describe("CompressedJackpot", function () {
       expect(await game.jackpotCompressionTier()).to.equal(0);
 
       // driveToJackpotPhase consumed jackpot day 1 (counter 0→1).
-      // Remaining: days 2-5 (counter 1→2→3→4→5) = 4 cycles.
+      // Remaining: days 2-5 (counter 1→2→3→4→5, _endPhase, jackpotPhase still true)
+      //           + day 6 (phaseTransitionActive processed, jackpotPhase becomes false) = 5 cycles.
+      // The transition processing day is a distinct advance cycle after _endPhase.
       const normalRemainingDays = await countJackpotPhaseDays(
         game,
         deployer,
@@ -558,9 +566,9 @@ describe("CompressedJackpot", function () {
         advanceModule
       );
 
-      // Total physical jackpot days: 1 (in driveToJackpotPhase) + normalRemainingDays = 5
-      expect(normalRemainingDays).to.equal(4, "Normal phase should have 4 remaining cycles after transition");
-      // Compressed would be 2 remaining days, normal is 4 → normal takes longer
+      // Total physical jackpot days: 1 (in driveToJackpotPhase) + normalRemainingDays = 6
+      expect(normalRemainingDays).to.equal(5, "Normal phase should have 5 remaining cycles after transition");
+      // Compressed would be 3 remaining days, normal is 5 → normal takes longer
     });
   });
 });

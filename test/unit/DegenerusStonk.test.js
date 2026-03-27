@@ -512,11 +512,12 @@ describe("DegenerusStonk", function () {
       const amount = eth("1000");
       await giveSDGNRS(sdgnrs, game, alice.address, amount);
 
-      // Alice burns her own sDGNRS
+      // Alice burns her own sDGNRS — during active game this enters the gambling path
+      // and emits RedemptionSubmitted, not Burn (Burn is only emitted post-gameOver)
       const tx = await sdgnrs.connect(alice).burn(amount);
-      const ev = await getEvent(tx, sdgnrs, "Burn");
-      expect(ev.args.from).to.equal(alice.address);
-      expect(ev.args.amount).to.equal(amount);
+      const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
+      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.sdgnrsAmount).to.equal(amount);
     });
 
     it("burn with ETH backing pays ETH proportionally", async function () {
@@ -545,30 +546,28 @@ describe("DegenerusStonk", function () {
       // Preview before burn
       const [ethOut, stethOut, burnieOut] = await sdgnrs.previewBurn(sdgnrsAmount);
 
-      // Burn
-      const balBefore = await hre.ethers.provider.getBalance(alice.address);
+      // Burn — during active game this enters the gambling path (RedemptionSubmitted).
+      // ETH is segregated but not immediately paid; payout is deferred until redemption is claimed.
       const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
-      const receipt = await tx.wait();
-      const gasUsed = receipt.gasUsed * receipt.gasPrice;
-      const balAfter = await hre.ethers.provider.getBalance(alice.address);
 
-      const ev = await getEvent(tx, sdgnrs, "Burn");
-      expect(ev.args.from).to.equal(alice.address);
-      expect(ev.args.amount).to.equal(sdgnrsAmount);
-      expect(ev.args.ethOut).to.be.gt(0n);
-      // Verify ETH was actually received
-      expect(balAfter + gasUsed - balBefore).to.equal(ev.args.ethOut);
+      const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
+      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.sdgnrsAmount).to.equal(sdgnrsAmount);
+      // ETH value is segregated proportionally and held pending RNG resolution
+      expect(ev.args.ethValueOwed).to.be.gt(0n);
     });
 
-    it("Burn event emitted with correct fields", async function () {
+    it("RedemptionSubmitted event emitted with correct fields during active game", async function () {
       const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("1000");
       await giveSDGNRS(sdgnrs, game, alice.address, amount);
 
+      // During active game, burn() routes to the gambling path and emits RedemptionSubmitted.
+      // The Burn event is only emitted on the deterministic post-gameOver path.
       const tx = await sdgnrs.connect(alice).burn(amount);
-      const ev = await getEvent(tx, sdgnrs, "Burn");
-      expect(ev.args.from).to.equal(alice.address);
-      expect(ev.args.amount).to.equal(amount);
+      const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
+      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.sdgnrsAmount).to.equal(amount);
     });
 
     it("total supply decreases after burn", async function () {
@@ -610,13 +609,19 @@ describe("DegenerusStonk", function () {
       const [, stethPreview] = await sdgnrs.previewBurn(sdgnrsAmount);
       expect(stethPreview).to.be.gt(0n);
 
-      // Burn and verify stETH received
+      // Burn — during active game this enters the gambling path (RedemptionSubmitted).
+      // stETH is counted in ethValueOwed (combined ETH+stETH backing) and held pending RNG
+      // resolution; stETH is not immediately transferred to alice.
       const stethBefore = await mockStETH.balanceOf(alice.address);
       const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
-      const ev = await getEvent(tx, sdgnrs, "Burn");
-      expect(ev.args.stethOut).to.be.gt(0n);
+      const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
+      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.sdgnrsAmount).to.equal(sdgnrsAmount);
+      // Combined ETH+stETH value is segregated proportionally
+      expect(ev.args.ethValueOwed).to.be.gt(0n);
+      // No immediate stETH transfer on the gambling path
       const stethAfter = await mockStETH.balanceOf(alice.address);
-      expect(stethAfter - stethBefore).to.equal(ev.args.stethOut);
+      expect(stethAfter).to.equal(stethBefore);
     });
 
     // BURNIE burn path not testable without fixture modification — fixture does not

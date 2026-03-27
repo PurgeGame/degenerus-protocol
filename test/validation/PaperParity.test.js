@@ -221,6 +221,7 @@ describe("Paper Parity (Phase 46)", function () {
     it("lootbox: 90% future, 10% next (post-presale)", async function () {
       // The MintModule constants: LOOTBOX_SPLIT_FUTURE_BPS = 9000, LOOTBOX_SPLIT_NEXT_BPS = 1000
       // We verify through pool deltas after a lootbox purchase.
+      // At level 0 with presale active, the split is 50/30/20 (future/next/vault).
       const { game, alice } = await loadFixture(deployWithTester);
 
       const nextBefore = await game.nextPrizePoolView();
@@ -241,29 +242,28 @@ describe("Paper Parity (Phase 46)", function () {
       const total = nextDelta + futureDelta;
 
       if (total > 0n) {
-        // Presale active initially: 40/40/20 (future/next/vault)
-        // Post-presale: 90/10 (future/next)
-        // At level 0 presale is active, so 40/40/20
-        const expectedNext = (lootboxAmount * 4000n) / 10000n;
-        const expectedFuture = (lootboxAmount * 4000n) / 10000n;
+        // Presale active at level 0: LOOTBOX_PRESALE_SPLIT_FUTURE_BPS=5000,
+        // LOOTBOX_PRESALE_SPLIT_NEXT_BPS=3000, LOOTBOX_PRESALE_SPLIT_VAULT_BPS=2000
+        const expectedNext = (lootboxAmount * 3000n) / 10000n;
+        const expectedFuture = (lootboxAmount * 5000n) / 10000n;
         // Vault gets 20% during presale; pools get rest
         expect(nextDelta).to.equal(
           expectedNext,
-          "Presale lootbox next should be 40%"
+          "Presale lootbox next should be 30%"
         );
         expect(futureDelta).to.equal(
           expectedFuture,
-          "Presale lootbox future should be 40%"
+          "Presale lootbox future should be 50%"
         );
       }
     });
 
-    it("lootbox presale split: 40% future, 40% next, 20% vault", async function () {
-      // LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 4000
-      // LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 4000
+    it("lootbox presale split: 50% future, 30% next, 20% vault", async function () {
+      // LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 5000
+      // LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 3000
       // LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000
       // These sum to 10000 = 100%
-      expect(4000 + 4000 + 2000).to.equal(10000);
+      expect(5000 + 3000 + 2000).to.equal(10000);
     });
   });
 
