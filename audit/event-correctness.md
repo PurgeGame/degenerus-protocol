@@ -1264,3 +1264,183 @@ All critical parameter changes in non-game contracts emit events. The three admi
 **Libraries with events:** 0 (confirmed pure computation)
 **Periphery with events:** 0 (confirmed view/data only)
 **Slither DOC-02:** Cross-referenced and assessed (non-game _payEth patterns are covered by higher-level events)
+
+---
+
+## Appendix: Bot-Race Findings Disposition (Phase 130 Handoff)
+
+This appendix maps all 108 event-related bot findings (107 from 4naly3er + 1 from Slither) routed to Phase 132 during Phase 130 triage. Each instance is assigned a disposition: **AGREE** (independently found in main audit above), **FP** (false positive), or **DOCUMENT** (valid but intentional/acceptable).
+
+Per D-04, indexed field findings (NC-10/NC-33) are triaged against the indexer-critical standard, not against "every address should be indexed."
+
+---
+
+### NC-9: Event is never emitted (2 instances)
+
+| # | Location | Event | Disposition | Reasoning |
+|---|----------|-------|-------------|-----------|
+| 1 | DegenerusDeityPass.sol:48 | `Approval(address indexed owner, address indexed approved, uint256 indexed tokenId)` | FP | Soulbound ERC721 -- `approve()` reverts with `Soulbound()`. Event is declared for ERC721 interface compliance but correctly never emitted. Removing the declaration would break ERC721 ABI compatibility. |
+| 2 | DegenerusDeityPass.sol:49 | `ApprovalForAll(address indexed owner, address indexed operator, bool approved)` | FP | Same as #1. `setApprovalForAll()` reverts with `Soulbound()`. Declaration required for ERC721 ABI. |
+
+---
+
+### NC-10: Event missing indexed field (4 instances)
+
+| # | Location | Event | Disposition | Reasoning |
+|---|----------|-------|-------------|-----------|
+| 1 | DegenerusDeityPass.sol:52 | `RenderColorsUpdated(string, string, string)` | FP | String fields cannot be indexed in Solidity (indexed strings hash to bytes32, losing the value). Non-indexer-critical cosmetic event. |
+| 2 | DegenerusGame.sol:122 | `LootboxRngThresholdUpdated(uint256 previous, uint256 current)` | DOCUMENT | Admin config change event. Not indexer-critical (admin operations are infrequent). Indexing uint256 values provides limited benefit for filtering. |
+| 3 | DegenerusStonk.sol:244 | `YearSweep(uint256, uint256, uint256, uint256)` | AGREE | Cross-ref EVT-DS-01. Once-per-game permissionless call. Indexed fields not needed for filtering but noted for completeness. |
+| 4 | GNRUS.sol:114 | `GameOverFinalized(uint256, uint256, uint256)` | DOCUMENT | Once-per-game event. Not indexer-critical for filtering. Fields are all uint256 values, not addresses/IDs. |
+
+---
+
+### NC-11: Events should contain old+new value (7 instances)
+
+| # | Location | Event | Disposition | Reasoning |
+|---|----------|-------|-------------|-----------|
+| 1 | DegenerusAdmin.sol:357 | `setLinkEthPriceFeed` -- `LinkEthFeedUpdated(feed)` | DOCUMENT | Emits only new feed address. Old value not included. Valid finding -- parameter change events should show old+new for monitoring. |
+| 2 | DegenerusDeityPass.sol:97 | `setRenderer` -- `RendererUpdated(prev, newRenderer)` | FP | Already emits both old (`prev`) and new (`newRenderer`) values. Bot incorrectly flagged this. |
+| 3 | DegenerusDeityPass.sol:107 | `setRenderColors` -- `RenderColorsUpdated(outline, bg, nonCrypto)` | DOCUMENT | Emits only new color values. Old values not included. Cosmetic parameter -- low impact. |
+| 4 | DegenerusGame.sol:468 | `setOperatorApproval` -- `OperatorApproval(owner, operator, approved)` | FP | This is a boolean toggle, not a parameter change. The event shows the current state (approved: true/false). Old+new is implicit -- the opposite of emitted value. |
+| 5 | DegenerusGame.sol:512 | `setLootboxRngThreshold` -- `LootboxRngThresholdUpdated(prev, newThreshold)` | FP | Already emits both old (`prev`) and new (`newThreshold`) values. Bot incorrectly flagged this. |
+| 6 | DegenerusGame.sol:512 | Duplicate of #5 | FP | Duplicate instance in bot report (same function appears twice in scope). |
+| 7 | DegenerusGame.sol:1466 | `setDecimatorAutoRebuy` -- `DecimatorAutoRebuyToggled(player, enabled)` | FP | Boolean toggle, not parameter change. Same reasoning as #4. |
+
+---
+
+### NC-17: Missing event for critical parameter change (27 instances)
+
+| # | Location | Function | Disposition | Reasoning |
+|---|----------|----------|-------------|-----------|
+| 1 | BurnieCoinflip.sol:215 | `settleFlipModeChange(player)` | AGREE | Cross-ref EVT-CF-01. Internal accounting settlement, no event. |
+| 2 | BurnieCoinflip.sol:674 | `setCoinflipAutoRebuy(player, enabled, takeProfit)` | FP | Function DOES emit `CoinflipAutoRebuyToggled` + `CoinflipAutoRebuyStopSet` events via `_setCoinflipAutoRebuy`. Bot did not trace into private helper. |
+| 3 | BurnieCoinflip.sol:689 | `setCoinflipAutoRebuyTakeProfit(player, takeProfit)` | FP | Function DOES emit `CoinflipAutoRebuyStopSet` via `_setCoinflipAutoRebuyTakeProfit`. Bot did not trace into private helper. |
+| 4 | DegenerusAdmin.sol:71 | `updateVrfCoordinatorAndSub` (interface declaration) | FP | Interface declaration, not an implementation. The implementation in AdvanceModule emits `VrfCoordinatorUpdated`. |
+| 5 | DegenerusAdmin.sol:86 | `setLootboxRngThreshold` (interface declaration) | FP | Interface declaration. The game contract implementation emits `LootboxRngThresholdUpdated`. |
+| 6 | DegenerusAdmin.sol:383 | `setLootboxRngThreshold(newThreshold)` | AGREE | Cross-ref EVT-DA-01. Admin forwarder, no event at admin level. Game emits its own event. |
+| 7 | DegenerusGame.sol:1457 | `setAutoRebuy(player, enabled)` | FP | Function emits `AutoRebuyToggled(player, enabled)` via `_setAutoRebuy`. Bot matched the wrong line (line 1457 is inside the function body, not the emit). |
+| 8 | DegenerusGame.sol:1482 | `setAutoRebuyTakeProfit(player, takeProfit)` | FP | Function emits `AutoRebuyTakeProfitSet(player, takeProfit)` via `_setAutoRebuyTakeProfit`. Same bot issue. |
+| 9 | DegenerusGame.sol:1555 | `setAfKingMode(player, enabled, ethTP, coinTP)` | FP | Function emits `AfKingModeToggled`, `AutoRebuyToggled`, and `AutoRebuyTakeProfitSet` via `_setAfKingMode`. Multiple events for the multi-parameter change. |
+| 10 | DegenerusGame.sol:1879 | `updateVrfCoordinatorAndSub(newCoord, newSub, newKey)` | FP | Delegatecalls to AdvanceModule which emits `VrfCoordinatorUpdated`. Bot cannot trace through delegatecall. |
+| 11 | DegenerusVault.sol:24 (1st) | `setDecimatorAutoRebuy` (interface) | FP | Interface declaration. Game implementation emits events. |
+| 12 | DegenerusVault.sol:24 (2nd) | Duplicate of #11 | FP | Duplicate in bot report. |
+| 13 | DegenerusVault.sol:36 (1st) | `setAutoRebuy` (interface) | FP | Interface declaration. Game implementation emits events. |
+| 14 | DegenerusVault.sol:36 (2nd) | Duplicate of #13 | FP | Duplicate in bot report. |
+| 15 | DegenerusVault.sol:37 (1st) | `setAutoRebuyTakeProfit` (interface) | FP | Interface declaration. |
+| 16 | DegenerusVault.sol:37 (2nd) | Duplicate of #15 | FP | Duplicate in bot report. |
+| 17 | DegenerusVault.sol:38 (1st) | `setAfKingMode` (interface) | FP | Interface declaration. |
+| 18 | DegenerusVault.sol:38 (2nd) | Duplicate of #17 | FP | Duplicate in bot report. |
+| 19 | DegenerusVault.sol:44 (1st) | `setOperatorApproval` (interface) | FP | Interface declaration. Game implementation emits events. |
+| 20 | DegenerusVault.sol:44 (2nd) | Duplicate of #19 | FP | Duplicate in bot report. |
+| 21 | DegenerusVault.sol:58 (1st) | `setCoinflipAutoRebuy` (interface) | FP | Interface declaration. Coinflip implementation emits events. |
+| 22 | DegenerusVault.sol:58 (2nd) | Duplicate of #21 | FP | Duplicate in bot report. |
+| 23 | DegenerusVault.sol:59 (1st) | `setCoinflipAutoRebuyTakeProfit` (interface) | FP | Interface declaration. |
+| 24 | DegenerusVault.sol:59 (2nd) | Duplicate of #23 | FP | Duplicate in bot report. |
+| 25 | Icons32Data.sol:153 | `setPaths(startIndex, paths)` | DOCUMENT | Cosmetic data setter (SVG icon paths). No event emitted. Pre-deploy-only function (reverts after finalization). Low impact. |
+| 26 | Icons32Data.sol:171 | `setSymbols(quadrant, symbols)` | DOCUMENT | Same as #25. Cosmetic data setter, pre-deploy only. |
+| 27 | StakedDegenerusStonk.sol:11 | `setAfKingMode` (interface) | FP | Interface declaration. Game implementation emits events. |
+
+---
+
+### NC-33: Event is missing indexed fields (67 instances)
+
+Per D-04, indexed fields are evaluated against the indexer-critical standard. Events that already index the most useful filter fields (addresses, IDs) are not penalized for leaving value fields unindexed. String fields cannot be meaningfully indexed.
+
+| # | File | Event | Disposition | Reasoning |
+|---|------|-------|-------------|-----------|
+| 1 | BurnieCoin.sol:50 | `Transfer(from indexed, to indexed, amount)` | FP | Already indexes both addresses (2 of 3 fields). `amount` is a value, not a filter key. |
+| 2 | BurnieCoin.sol:53 | `Approval(owner indexed, spender indexed, amount)` | FP | Already indexes both addresses. `amount` is a value. |
+| 3 | BurnieCoin.sol:63 | `DecimatorBurn(player indexed, amountBurned, bucket)` | DOCUMENT | `bucket` could be indexed for filtering burns by bucket. Low priority -- decimator burns are trackable via `player`. |
+| 4 | BurnieCoin.sol:70 | `TerminalDecimatorBurn(player indexed, amountBurned)` | FP | Only 2 fields, 1 indexed. `amountBurned` is a value, not useful as filter. |
+| 5 | BurnieCoin.sol:79 | `DailyQuestRolled(day indexed, questType, highDifficulty)` | DOCUMENT | `questType` could be indexed for quest-type filtering. Low priority. |
+| 6 | BurnieCoin.sol:90 | `QuestCompleted(player indexed, questType, streak, reward)` | DOCUMENT | `questType` could be indexed. Low priority. |
+| 7 | BurnieCoin.sol:100 | `LinkCreditRecorded(player indexed, amount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 8 | BurnieCoin.sol:105 | `VaultEscrowRecorded(sender indexed, amount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 9 | BurnieCoin.sol:109 | `VaultAllowanceSpent(spender indexed, amount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 10 | BurnieCoinflip.sol:41 | `CoinflipDeposit(player indexed, creditedFlip)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 11 | BurnieCoinflip.sol:42 | `CoinflipAutoRebuyToggled(player indexed, enabled)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 12 | BurnieCoinflip.sol:43 | `CoinflipAutoRebuyStopSet(player indexed, stopAmount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 13 | BurnieCoinflip.sol:44 | `QuestCompleted(player indexed, questType, streak, reward)` | DOCUMENT | Same as #6. `questType` could be indexed. |
+| 14 | BurnieCoinflip.sol:55 | `CoinflipStakeUpdated(player indexed, day indexed, amount, newTotal)` | FP | Already indexes 2 of 4 fields (player + day). Sufficient for filtering. |
+| 15 | BurnieCoinflip.sol:68 | `CoinflipDayResolved(day indexed, win, rewardPercent, bountyAfter, bountyPaid, bountyRecipient)` | DOCUMENT | `bountyRecipient` (address) could be indexed. 1 of 6 fields indexed. |
+| 16 | BurnieCoinflip.sol:80 | `CoinflipTopUpdated(day indexed, player indexed, score)` | FP | Already indexes 2 of 3 fields. Sufficient. |
+| 17 | BurnieCoinflip.sol:88 | `BiggestFlipUpdated(player indexed, recordAmount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 18 | BurnieCoinflip.sol:89 | `BountyOwed(player indexed, bounty, recordFlip)` | FP | `player` is indexed. `bounty`/`recordFlip` are values. Sufficient. |
+| 19 | BurnieCoinflip.sol:90 | `BountyPaid(to indexed, amount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 20 | DegenerusAdmin.sol:200 | `SubscriptionShutdown(subId indexed, to indexed, sweptAmount)` | FP | Already indexes 2 of 3 fields. Sufficient. |
+| 21 | DegenerusAdmin.sol:205 | `LinkCreditRecorded(player indexed, amount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 22 | DegenerusAdmin.sol:209 | `ProposalCreated(... proposalId indexed, proposer indexed, ...)` | FP | Already indexes 2 of 5 fields. Key filter fields covered. |
+| 23 | DegenerusAdmin.sol:216 | `VoteCast(proposalId indexed, voter indexed, approve, weight)` | FP | Already indexes 2 of 4 fields. Sufficient. |
+| 24 | DegenerusAdmin.sol:222 | `ProposalExecuted(proposalId indexed, coordinator, newSubId)` | DOCUMENT | `coordinator` (address) could be indexed. Low priority -- proposals are rare governance events. |
+| 25 | DegenerusAffiliate.sol:72 | `Affiliate(amount, code indexed, sender)` | DOCUMENT | `sender` (address) could be indexed. Currently only `code` is indexed. |
+| 26 | DegenerusAffiliate.sol:105 | `AffiliateTopUpdated(level indexed, player indexed, score)` | FP | Already indexes 2 of 3 fields. Sufficient. |
+| 27 | DegenerusDeityPass.sol:49 | `ApprovalForAll(owner indexed, operator indexed, approved)` | FP | Already indexes 2 of 3 fields. Soulbound -- event never emitted anyway. |
+| 28 | DegenerusDeityPass.sol:52 | `RenderColorsUpdated(string, string, string)` | FP | String fields cannot be meaningfully indexed (hashed to bytes32). Cosmetic event. |
+| 29 | DegenerusGame.sol:122 | `LootboxRngThresholdUpdated(uint256, uint256)` | DOCUMENT | Admin config event with no indexed fields. Not indexer-critical. Same as NC-10 #2. |
+| 30 | DegenerusGame.sol:127 | `OperatorApproval(owner indexed, operator indexed, approved)` | FP | Already indexes 2 of 3 fields. Sufficient. |
+| 31 | DegenerusGame.sol:1304 | `WinningsClaimed(player indexed, caller indexed, amount)` | FP | Already indexes 2 of 3 fields. `amount` is a value. Sufficient. |
+| 32 | DegenerusGame.sol:1317 | `ClaimableSpent(player indexed, amount, newBalance, payKind, costWei)` | DOCUMENT | Only 1 of 5 fields indexed. `payKind` could be indexed for filtering by payment type. |
+| 33 | DegenerusGame.sol:1436 | `DecimatorAutoRebuyToggled(player indexed, enabled)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 34 | DegenerusGame.sol:1439 | `AutoRebuyTakeProfitSet(player indexed, takeProfit)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 35 | DegenerusGame.sol:1442 | `AfKingModeToggled(player indexed, enabled)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 36 | DegenerusGame.sol:1445 | `AutoRebuyToggled(player indexed, enabled)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 37 | DegenerusJackpots.sol:64 | `BafFlipRecorded(player indexed, lvl indexed, amount, newTotal)` | FP | Already indexes 2 of 4 fields. Sufficient. |
+| 38 | DegenerusQuests.sol:65 | `QuestSlotRolled(day indexed, slot indexed, questType, flags, version, difficulty)` | DOCUMENT | Already indexes 2 of 6 fields. Could index `questType`. Low priority. |
+| 39 | DegenerusQuests.sol:95 | `QuestStreakShieldUsed(player indexed, used, remaining, currentDay)` | DOCUMENT | Only 1 of 4 indexed. `currentDay` could be indexed. Low priority. |
+| 40 | DegenerusQuests.sol:103 | `QuestStreakBonusAwarded(player indexed, amount, newStreak, currentDay)` | DOCUMENT | Only 1 of 4 indexed. Same as #39. |
+| 41 | DegenerusQuests.sol:111 | `QuestStreakReset(player indexed, previousStreak, currentDay)` | FP | Only 3 fields, 1 indexed. `previousStreak`/`currentDay` are values, not useful filters. |
+| 42 | DegenerusStonk.sol:52 | `Transfer(from indexed, to indexed, amount)` | FP | Already indexes 2 of 3 fields. Standard ERC-20. |
+| 43 | DegenerusStonk.sol:54 | `Approval(owner indexed, spender indexed, amount)` | FP | Already indexes 2 of 3 fields. Standard ERC-20. |
+| 44 | DegenerusStonk.sol:56 | `BurnThrough(from indexed, amount, ethOut, stethOut, burnieOut)` | DOCUMENT | Only 1 of 5 indexed. Could index additional field but `from` is the primary filter. |
+| 45 | DegenerusStonk.sol:58 | `UnwrapTo(recipient indexed, amount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 46 | DegenerusStonk.sol:244 | `YearSweep(uint256, uint256, uint256, uint256)` | AGREE | Cross-ref EVT-DS-01. No indexed fields on a once-per-game event. Same as NC-10 #3. |
+| 47 | DegenerusVault.sol:156 | `Transfer(from indexed, to indexed, amount)` | FP | Already indexes 2 of 3 fields. Standard. |
+| 48 | DegenerusVault.sol:161 | `Approval(owner indexed, spender indexed, amount)` | FP | Already indexes 2 of 3 fields. Standard. |
+| 49 | DegenerusVault.sol:332 | `Deposit(from indexed, ethAmount, stEthAmount, coinAmount)` | DOCUMENT | Only 1 of 4 indexed. Deposit events are indexer-critical. However, `from` is the primary filter key. |
+| 50 | DegenerusVault.sol:339 | `Claim(from indexed, sharesBurned, ethOut, stEthOut, coinOut)` | DOCUMENT | Only 1 of 5 indexed. Same reasoning as #49. |
+| 51 | GNRUS.sol:96 | `Transfer(from indexed, to indexed, amount)` | FP | Already indexes 2 of 3 fields. Standard. |
+| 52 | GNRUS.sol:99 | `Burn(burner indexed, gnrusAmount, ethOut, stethOut)` | FP | Only 1 of 4 indexed, but `burner` is the primary filter. Values are not useful as filters. |
+| 53 | GNRUS.sol:108 | `LevelResolved(level indexed, winningProposalId indexed, recipient, gnrusDistributed)` | DOCUMENT | Already indexes 2 of 4. `recipient` (address) could be indexed as 3rd field. |
+| 54 | GNRUS.sol:114 | `GameOverFinalized(uint256, uint256, uint256)` | DOCUMENT | No indexed fields. Same as NC-10 #4. Once-per-game event. |
+| 55 | StakedDegenerusStonk.sol:101 | `Transfer(from indexed, to indexed, amount)` | FP | Already indexes 2 of 3 fields. Standard. |
+| 56 | StakedDegenerusStonk.sol:109 | `Burn(from indexed, amount, ethOut, stethOut, burnieOut)` | DOCUMENT | Only 1 of 5 indexed. Same as DegenerusStonk BurnThrough. |
+| 57 | StakedDegenerusStonk.sol:116 | `Deposit(from indexed, ethAmount, stethAmount, burnieAmount)` | FP | Only 1 of 4 indexed, but `from` is the only filterable field. Amounts are values. |
+| 58 | StakedDegenerusStonk.sol:122 | `PoolTransfer(pool indexed, to indexed, amount)` | FP | Already indexes 2 of 3 fields. Sufficient. |
+| 59 | StakedDegenerusStonk.sol:128 | `PoolRebalance(from indexed, to indexed, amount)` | FP | Already indexes 2 of 3 fields. Sufficient. |
+| 60 | StakedDegenerusStonk.sol:131 | `RedemptionSubmitted(player indexed, sdgnrsAmount, ethValueOwed, burnieOwed, periodIndex)` | DOCUMENT | Only 1 of 5 indexed. `periodIndex` could be indexed for filtering by period. |
+| 61 | StakedDegenerusStonk.sol:134 | `RedemptionResolved(periodIndex indexed, roll, rolledBurnie, flipDay)` | FP | Primary filter key (`periodIndex`) is indexed. Other fields are values. |
+| 62 | StakedDegenerusStonk.sol:137 | `RedemptionClaimed(player indexed, roll, flipResolved, ethPayout, burniePayout, lootboxEth)` | DOCUMENT | Only 1 of 6 indexed. Indexer-critical event with many value fields. |
+| 63 | WrappedWrappedXRP.sol:51 | `Transfer(from indexed, to indexed, amount)` | FP | Already indexes 2 of 3 fields. Standard. |
+| 64 | WrappedWrappedXRP.sol:57 | `Approval(owner indexed, spender indexed, amount)` | FP | Already indexes 2 of 3 fields. Standard. |
+| 65 | WrappedWrappedXRP.sol:66 | `Unwrapped(user indexed, amount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 66 | WrappedWrappedXRP.sol:71 | `Donated(donor indexed, amount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+| 67 | WrappedWrappedXRP.sol:76 | `VaultAllowanceSpent(spender indexed, amount)` | FP | Only 2 fields, 1 indexed. Sufficient. |
+
+---
+
+### Slither DOC-02: events-maths (1 instance)
+
+| # | Location | Finding | Disposition | Reasoning |
+|---|----------|---------|-------------|-----------|
+| 1 | DegenerusGame.sol:1725-1775 | `resolveRedemptionLootbox` -- `claimablePool -= amount` without dedicated event | AGREE | Cross-ref EVT-GAME-03. The function moves ETH from claimablePool to futurePrizePool without emitting an event for the accounting reclassification. The delegatecalled lootbox module emits resolution events for the higher-level operation. |
+
+---
+
+### Bot-Race Appendix Summary
+
+| Category | Instances | Agree | FP | Document |
+|----------|-----------|-------|----|----------|
+| NC-9: Event never emitted | 2 | 0 | 2 | 0 |
+| NC-10: Event missing indexed field | 4 | 1 | 1 | 2 |
+| NC-11: Old+new value missing | 7 | 0 | 5 | 2 |
+| NC-17: Missing event for parameter change | 27 | 2 | 22 | 3 |
+| NC-33: Event missing indexed fields | 67 | 1 | 42 | 24 |
+| Slither DOC-02: events-maths | 1 | 1 | 0 | 0 |
+| **Total** | **108** | **5** | **72** | **31** |
+
+**Key observations:**
+- **72 of 108 (67%) are false positives** -- the bot cannot trace through delegatecall, interface declarations, or private helper functions.
+- **NC-17 is 81% FP** (22/27) because the bot flags interface declarations and vault forwarding functions, neither of which are implementations.
+- **NC-33 is 63% FP** (42/67) because most events already index the primary filter field(s); the bot applies a blanket "index all fields" rule.
+- **5 AGREE findings** independently confirmed by the main audit above: EVT-DS-01 (YearSweep), EVT-CF-01 (settleFlipModeChange), EVT-DA-01 (admin forwarder), EVT-GAME-03 (resolveRedemptionLootbox).
