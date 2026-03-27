@@ -26,13 +26,21 @@ import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
+/// @notice Interface for BurnieCoinflip contract methods used by BurnieCoin.
 interface IBurnieCoinflip {
+    /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
+    /// @notice Claim coinflip winnings via BurnieCoin to cover token transfers/burns.
     function claimCoinflipsFromBurnie(address player, uint256 amount) external returns (uint256 claimed);
+    /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
     function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
+    /// @notice Get player's current coinflip stake for next day.
     function coinflipAmount(address player) external view returns (uint256);
+    /// @notice Get player's auto-rebuy configuration.
     function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint48 startDay);
+    /// @notice Credit flip stake to a player.
     function creditFlip(address player, uint256 amount) external;
+    /// @notice Credit flip stake to multiple players (batch).
     function creditFlipBatch(address[3] calldata players, uint256[3] calldata amounts) external;
 }
 
