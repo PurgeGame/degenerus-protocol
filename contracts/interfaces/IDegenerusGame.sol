@@ -373,6 +373,7 @@ interface IDegenerusGame {
     /// @return tickets Array of player addresses holding sampled tickets.
     function sampleTraitTicketsAtLevel(uint24 targetLvl, uint256 entropy) external view returns (uint8 trait, address[] memory tickets);
 
+    /// @notice Sample up to 4 far-future ticket holders from ticketQueue.
     /// @dev View function for BAF far-future selection; samples ticketQueue at levels [current+5, current+99].
     /// @param entropy Random entropy for sampling (typically from VRF).
     /// @return tickets Array of player addresses (length 0-4).
