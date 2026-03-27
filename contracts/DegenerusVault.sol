@@ -6,9 +6,11 @@ import {IDegenerusGame, MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 
-/// @notice Interface for game player actions on DegenerusGame contract
+/// @notice Interface for game player actions on DegenerusGame contract used by DegenerusVault.
 interface IDegenerusGamePlayerActions {
+    /// @notice Advance the game to the next level/day.
     function advanceGame() external;
+    /// @notice Purchase tickets and/or lootboxes.
     function purchase(
         address buyer,
         uint256 ticketQuantity,
@@ -16,14 +18,23 @@ interface IDegenerusGamePlayerActions {
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) external payable;
+    /// @notice Open a lootbox for a player.
     function openLootBox(address player, uint48 lootboxIndex) external;
+    /// @notice Claim accumulated ETH winnings for a player.
     function claimWinnings(address player) external;
+    /// @notice Claim winnings preferring stETH over ETH.
     function claimWinningsStethFirst() external;
+    /// @notice Claim whale pass for a player.
     function claimWhalePass(address player) external;
+    /// @notice Claim decimator jackpot for a specific level.
     function claimDecimatorJackpot(uint24 lvl) external;
+    /// @notice Toggle decimator auto-rebuy for a player.
     function setDecimatorAutoRebuy(address player, bool enabled) external;
+    /// @notice Purchase a BURNIE lootbox.
     function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external;
+    /// @notice Purchase a deity pass with ETH.
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
+    /// @notice Place full-ticket bets on degenerette.
     function placeFullTicketBets(
         address player,
         uint8 currency,
@@ -32,17 +43,24 @@ interface IDegenerusGamePlayerActions {
         uint32 customTicket,
         uint8 heroQuadrant
     ) external payable;
+    /// @notice Resolve degenerette bets for a player.
     function resolveDegeneretteBets(address player, uint64[] calldata betIds) external;
+    /// @notice Toggle auto-rebuy for a player.
     function setAutoRebuy(address player, bool enabled) external;
+    /// @notice Set auto-rebuy take-profit threshold.
     function setAutoRebuyTakeProfit(address player, uint256 takeProfit) external;
+    /// @notice Configure afKing mode for a player.
     function setAfKingMode(
         address player,
         bool enabled,
         uint256 ethTakeProfit,
         uint256 coinTakeProfit
     ) external;
+    /// @notice Set operator approval for a player.
     function setOperatorApproval(address operator, bool approved) external;
+    /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
+    /// @notice Purchase tickets using BURNIE.
     function purchaseCoin(
         address buyer,
         uint256 ticketQuantity,
@@ -50,22 +68,31 @@ interface IDegenerusGamePlayerActions {
     ) external;
 }
 
-/// @notice Interface for coin player actions (coinflip mechanics)
+/// @notice Interface for coinflip player actions used by DegenerusVault.
 interface ICoinflipPlayerActions {
+    /// @notice Deposit BURNIE into daily coinflip system.
     function depositCoinflip(address player, uint256 amount) external;
+    /// @notice Claim coinflip winnings (exact amount).
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
+    /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
+    /// @notice Configure auto-rebuy mode for coinflips.
     function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
+    /// @notice Set auto-rebuy take-profit threshold for coinflips.
     function setCoinflipAutoRebuyTakeProfit(address player, uint256 takeProfit) external;
 }
 
+/// @notice Interface for BurnieCoin decimator burn used by DegenerusVault.
 interface ICoinPlayerActions {
+    /// @notice Burn BURNIE for decimator jackpot eligibility.
     function decimatorBurn(address player, uint256 amount) external;
 }
 
-/// @notice Interface for WWXRP vault-minting
+/// @notice Interface for WWXRP vault-minting used by DegenerusVault.
 interface IWWXRPMint {
+    /// @notice Mint WWXRP to a recipient from vault's uncirculating reserve.
     function vaultMintTo(address to, uint256 amount) external;
+    /// @notice Get remaining vault mint allowance.
     function vaultMintAllowance() external view returns (uint256);
 }
 
@@ -531,6 +558,7 @@ contract DegenerusVault {
     /// @notice Purchase a deity pass using an active boon for the vault
     /// @dev Uses vault ETH + claimable winnings; msg.value is retained in the vault.
     /// @param priceWei Expected deity pass price (24 + T(n) ETH where T(n) = n*(n+1)/2)
+    /// @param symbolId The deity symbol to mint (0-based index into deity pass types)
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If price is zero or vault cannot fund the purchase
     function gamePurchaseDeityPassFromBoon(uint256 priceWei, uint8 symbolId) external payable onlyVaultOwner {

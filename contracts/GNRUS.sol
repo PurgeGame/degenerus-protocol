@@ -4,21 +4,27 @@ pragma solidity 0.8.34;
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
-/// @notice Minimal interface for sDGNRS balance/supply snapshots
+/// @notice Minimal interface for sDGNRS balance/supply snapshots used by GNRUS governance.
 interface ISDGNRSSnapshot {
+    /// @notice Get total supply of sDGNRS.
     function totalSupply() external view returns (uint256);
+    /// @notice Get sDGNRS balance for an address.
     function balanceOf(address account) external view returns (uint256);
 }
 
-/// @notice Minimal interface for DegenerusGame donation-facing functions
+/// @notice Minimal interface for DegenerusGame donation-facing functions used by GNRUS.
 interface IDegenerusGameDonations {
+    /// @notice Claim accumulated ETH winnings for a player.
     function claimWinnings(address player) external;
+    /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
+    /// @notice Check if game is over.
     function gameOver() external view returns (bool);
 }
 
-/// @notice Minimal interface for DegenerusVault owner check
+/// @notice Minimal interface for DegenerusVault owner check used by GNRUS governance.
 interface IDegenerusVaultOwner {
+    /// @notice Check if an address is the vault owner (>50.1% DGVE).
     function isVaultOwner(address account) external view returns (bool);
 }
 
