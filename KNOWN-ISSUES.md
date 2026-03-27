@@ -6,19 +6,17 @@ Pre-audited with Slither v0.11.5 + 4naly3er. 110 detector categories triaged (2 
 
 ---
 
-## Intentional Design (Not Bugs)
-
-**stETH rounding strengthens invariant.** 1-2 wei per transfer retained by contract, pushing `balance >= claimablePool` further into safety. Not a leak. Rounding in all BPS calculations favors the protocol (down on payouts, up on burns), further strengthening solvency. (Detectors: `[L-13]`, `[L-14]`)
-
-**Non-VRF entropy for affiliate winner roll.** Deterministic seed (gas optimization). Worst case: player times purchases to direct affiliate credit to a different affiliate. No protocol value extraction.
-
----
-
-## Design Mechanics
+## Design Decisions
 
 These are architectural decisions, not vulnerabilities.
 
+**All rounding favors solvency.** Every BPS calculation rounds down on payouts and up on burns. stETH transfers retain 1-2 wei per operation. The solvency invariant `balance >= claimablePool` is strengthened by rounding, never weakened. (Detectors: `[L-13]`, `[L-14]`)
+
+**Non-VRF entropy for affiliate winner roll.** Deterministic seed (gas optimization). Worst case: player times purchases to direct affiliate credit to a different affiliate. No protocol value extraction.
+
 **VRF swap governance.** Emergency VRF coordinator rotation requires a 20h+ stall and sDGNRS community approval with time-decaying threshold. Execution requires approve weight > reject weight and meeting the threshold -- reject voters holding more sDGNRS than approvers block the proposal. This is the intended trust model.
+
+**Price feed swap governance.** LINK/ETH price feed rotation requires feed unhealthy for 2d+ (admin) or 7d+ (community), then sDGNRS governance vote with defence-weighted threshold (50% → 15% floor over 4 days). If 15% approval with approve > reject cannot be reached, the proposal expires. Prevents attacker-controlled feed from enabling BURNIE hyperinflation via fake LINK valuations. If the feed is down, LINK donations still work -- donors just don't receive BURNIE credit.
 
 **Chainlink VRF V2.5 dependency.** Sole randomness source. If VRF goes down, the game stalls but no funds are lost. Upon governance-gated coordinator swap, gap day RNG words are backfilled via keccak256(vrfWord, gapDay) and orphaned lootbox indices receive fallback words. Coinflips and lootboxes resolve naturally after backfill. Independent recovery paths: governance-based coordinator rotation (20h+ stall threshold) and 120-day inactivity timeout.
 
@@ -42,11 +40,11 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### Centralization Risk
 
-**Admin functions gated by onlyOwner (7 instances).** DegenerusAdmin critical functions (VRF coordinator swap) require sDGNRS governance vote. Remaining onlyOwner functions are operational (price feed, staking) and deity pass metadata. Admin cannot drain game funds -- ETH flows are contract-controlled. (Detector: `[M-2]`)
+**Admin functions gated by onlyOwner (7 instances).** DegenerusAdmin critical functions (VRF coordinator swap, price feed swap) require sDGNRS governance vote. Remaining onlyOwner functions are operational (staking) and deity pass metadata. Admin cannot drain game funds -- ETH flows are contract-controlled. (Detector: `[M-2]`)
 
-### Chainlink Price Feed Staleness
+### Chainlink Price Feed
 
-**LINK/ETH feed has updatedAt freshness check.** Used for VRF cost estimation only, not user-facing pricing. A stale price would slightly misestimate VRF request cost, not create a vulnerability. (Detector: `[M-3]`)
+**LINK/ETH feed used for LINK donation valuation only.** Feed swap is governance-gated (2d+ admin / 7d+ community stall + sDGNRS vote). If the feed is stale or down, LINK donations still process but no BURNIE credit is issued. A compromised feed cannot cause damage without passing governance. (Detector: `[M-3]`)
 
 ### No SafeERC20 Wrappers
 
@@ -67,10 +65,6 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 ### Burn/Zero-Address Handling
 
 **Protocol burn functions are intentional operations (67 instances).** BURNIE burn mechanics, sDGNRS gambling burn, GNRUS burn redemption are all by design. Internal functions use msg.sender/contract-to-contract paths ensuring valid addresses. (Detector: `[L-12]`)
-
-### Rounding/Precision
-
-**All rounding favors protocol -- down on payouts, up on burns (39 instances).** Solvency invariant `balance >= claimablePool` is strengthened by rounding. See "stETH rounding strengthens invariant" above. (Detectors: `[L-13]`, `[L-14]`)
 
 ### Unchecked Downcasting
 
@@ -98,7 +92,7 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### Setter Validation
 
-**Admin-only setters trust admin (23 instances).** Critical setters (VRF swap) have governance checks. Non-critical setters (price feed, renderer) trust the admin. (Detector: `[NC-16]`)
+**Admin-only setters trust admin (23 instances).** Critical setters (VRF swap, price feed swap) have governance checks. Non-critical setters (renderer) trust the admin. (Detector: `[NC-16]`)
 
 ### Missing Parameter Change Events
 

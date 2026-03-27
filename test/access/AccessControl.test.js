@@ -324,12 +324,12 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(admin, "NotAuthorized");
     });
 
-    it("setLinkEthPriceFeed: reverts when called by alice (onlyOwner → NotOwner)", async function () {
+    it("proposeFeedSwap: reverts when called by alice (no sDGNRS → InsufficientStake)", async function () {
       const { admin, alice } = await loadFixture(deployFullProtocol);
-
+      const ZERO = "0x" + "0".repeat(40);
       await expect(
-        admin.connect(alice).setLinkEthPriceFeed(alice.address)
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
+        admin.connect(alice).proposeFeedSwap(ZERO)
+      ).to.be.revertedWithCustomError(admin, "InsufficientStake");
     });
 
     it("stakeGameEthToStEth: reverts when called by alice (onlyOwner → NotOwner)", async function () {

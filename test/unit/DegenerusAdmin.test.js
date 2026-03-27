@@ -13,6 +13,25 @@ import {
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
 
+const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
+
+async function grantSdgnrs(sdgnrs, game, recipient, amount) {
+  const gameAddr = await game.getAddress();
+  await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [gameAddr] });
+  await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0xDE0B6B3A7640000"]);
+  const gameSigner = await hre.ethers.getSigner(gameAddr);
+  try {
+    await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
+  } catch {
+    try {
+      await sdgnrs.connect(gameSigner).transferFromPool(Pool.Whale, recipient, amount);
+    } catch {
+      await sdgnrs.connect(gameSigner).transferFromPool(Pool.Lootbox, recipient, amount);
+    }
+  }
+  await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
+}
+
 describe("DegenerusAdmin", function () {
   after(() => restoreAddresses());
 
@@ -59,57 +78,8 @@ describe("DegenerusAdmin", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 2. setLinkEthPriceFeed
+  // 2. setLinkEthPriceFeed — REMOVED (replaced by feed governance in FeedGovernance.test.js)
   // ---------------------------------------------------------------------------
-  describe("setLinkEthPriceFeed", function () {
-    it("owner can set price feed when current feed is zero (unhealthy)", async function () {
-      const { admin, mockFeed, deployer } = await loadFixture(deployFullProtocol);
-      const feedAddr = await mockFeed.getAddress();
-      const tx = await admin.connect(deployer).setLinkEthPriceFeed(feedAddr);
-      const ev = await getEvent(tx, admin, "LinkEthFeedUpdated");
-      expect(ev.args.feed).to.equal(feedAddr);
-      expect(await admin.linkEthPriceFeed()).to.equal(feedAddr);
-    });
-
-    it("reverts when called by non-owner", async function () {
-      const { admin, mockFeed, alice } = await loadFixture(deployFullProtocol);
-      const feedAddr = await mockFeed.getAddress();
-      await expect(
-        admin.connect(alice).setLinkEthPriceFeed(feedAddr)
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
-    });
-
-    it("can set feed to zero (disables oracle)", async function () {
-      const { admin, deployer } = await loadFixture(deployFullProtocol);
-      // Feed is already zero, setting to zero is allowed (feed is unhealthy = zero address)
-      const tx = await admin.connect(deployer).setLinkEthPriceFeed(ZERO_ADDRESS);
-      const ev = await getEvent(tx, admin, "LinkEthFeedUpdated");
-      expect(ev.args.feed).to.equal(ZERO_ADDRESS);
-    });
-
-    it("reverts when current feed is healthy", async function () {
-      const { admin, mockFeed, deployer } = await loadFixture(deployFullProtocol);
-      const feedAddr = await mockFeed.getAddress();
-      // Set feed first
-      await admin.connect(deployer).setLinkEthPriceFeed(feedAddr);
-      // Try to replace a healthy feed - should revert
-      await expect(
-        admin.connect(deployer).setLinkEthPriceFeed(feedAddr)
-      ).to.be.revertedWithCustomError(admin, "FeedHealthy");
-    });
-
-    it("reverts with InvalidFeedDecimals when feed has wrong decimals", async function () {
-      const { admin, deployer } = await loadFixture(deployFullProtocol);
-      // Deploy a mock feed with wrong decimals (e.g. 8)
-      const MockBadFeed = await hre.ethers.getContractFactory("MockLinkEthFeed");
-      // MockLinkEthFeed uses 18 decimals by default - use a different approach
-      // We need a feed with != 18 decimals; skip if MockLinkEthFeed always returns 18
-      // Instead verify the check exists via a non-contract address (will throw/return 0)
-      // Just verify the test path - if no bad-decimals mock available, this test covers the revert path
-      // via the zero address path
-      expect(await admin.linkEthPriceFeed()).to.equal(ZERO_ADDRESS);
-    });
-  });
 
   // ---------------------------------------------------------------------------
   // 3. onTokenTransfer (LINK ERC-677 callback)
@@ -200,13 +170,15 @@ describe("DegenerusAdmin", function () {
 
     // Helper: donate linkAmount LINK to admin with price feed set and a given sub prefund.
     // Returns { flipBefore, flipAfter, event }.
-    async function donateLink({ admin, mockLINK, mockVRF, mockFeed, deployer, alice, coinflip, subPrefund, linkAmount }) {
+    async function donateLink({ admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, deployer, alice, coinflip, subPrefund, linkAmount }) {
       const adminAddr = await admin.getAddress();
       const feedAddr = await mockFeed.getAddress();
       const subId = await admin.subscriptionId();
 
-      // Set price feed (0.004 ETH/LINK)
-      await admin.connect(deployer).setLinkEthPriceFeed(feedAddr);
+      // Set price feed via governance (propose + vote → auto-executes)
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await admin.connect(deployer).voteFeedSwap(await admin.feedProposalCount(), true);
 
       // Pre-fund subscription to desired level to set multiplier tier
       if (subPrefund > 0n) {
@@ -253,11 +225,11 @@ describe("DegenerusAdmin", function () {
     // ---------------------------------------------------------------------------
 
     it("3x tier (sub empty): 1 LINK → 1200 BURNIE flip stake", async function () {
-      const { admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
+      const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       const { event, flipAfter } = await donateLink({
-        admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
+        admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
         subPrefund: 0n,
         linkAmount: eth("1"),
       });
@@ -269,12 +241,12 @@ describe("DegenerusAdmin", function () {
     });
 
     it("2x tier (100 LINK in sub): 1 LINK → 800 BURNIE flip stake", async function () {
-      const { admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
+      const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       // mult = 3 - (100/200)*2 = 2x
       const { event, flipAfter } = await donateLink({
-        admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
+        admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
         subPrefund: eth("100"),
         linkAmount: eth("1"),
       });
@@ -285,12 +257,12 @@ describe("DegenerusAdmin", function () {
     });
 
     it("1x tier (200 LINK in sub): 1 LINK → 400 BURNIE flip stake", async function () {
-      const { admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
+      const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       // boundary: 200 LINK → exactly 1x
       const { event, flipAfter } = await donateLink({
-        admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
+        admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
         subPrefund: eth("200"),
         linkAmount: eth("1"),
       });
@@ -301,12 +273,12 @@ describe("DegenerusAdmin", function () {
     });
 
     it("0.5x tier (600 LINK in sub): 1 LINK → 200 BURNIE flip stake", async function () {
-      const { admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
+      const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       // excess=400, delta2=400/800=0.5 → mult=0.5x
       const { event, flipAfter } = await donateLink({
-        admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
+        admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
         subPrefund: eth("600"),
         linkAmount: eth("1"),
       });
@@ -317,11 +289,11 @@ describe("DegenerusAdmin", function () {
     });
 
     it("0x tier (1000+ LINK in sub): no flip credit emitted", async function () {
-      const { admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
+      const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       const { event, flipAfter } = await donateLink({
-        admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
+        admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
         subPrefund: eth("1000"),
         linkAmount: eth("1"),
       });
@@ -331,12 +303,12 @@ describe("DegenerusAdmin", function () {
     });
 
     it("scales linearly with LINK amount: 10 LINK at 3x = 12000 BURNIE", async function () {
-      const { admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
+      const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       // 10 LINK × 0.004 / 0.01 × 1000 × 3 = 12000 BURNIE
       const { event, flipAfter } = await donateLink({
-        admin, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
+        admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
         subPrefund: 0n,
         linkAmount: eth("10"),
       });
@@ -393,9 +365,12 @@ describe("DegenerusAdmin", function () {
     });
 
     it("returns non-zero ETH equivalent when feed is set", async function () {
-      const { admin, mockFeed, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, sdgnrs, game, mockFeed, deployer } = await loadFixture(deployFullProtocol);
       const feedAddr = await mockFeed.getAddress();
-      await admin.connect(deployer).setLinkEthPriceFeed(feedAddr);
+      // Set feed via governance (propose + vote → auto-executes)
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await admin.connect(deployer).voteFeedSwap(await admin.feedProposalCount(), true);
       // mockFeed price is 0.004 ETH per LINK
       const result = await admin.linkAmountToEth(eth("1"));
       // 1 LINK * 0.004 ETH/LINK = 0.004 ETH
@@ -403,9 +378,12 @@ describe("DegenerusAdmin", function () {
     });
 
     it("returns 0 when amount is zero", async function () {
-      const { admin, mockFeed, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, sdgnrs, game, mockFeed, deployer } = await loadFixture(deployFullProtocol);
       const feedAddr = await mockFeed.getAddress();
-      await admin.connect(deployer).setLinkEthPriceFeed(feedAddr);
+      // Set feed via governance (propose + vote → auto-executes)
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await admin.connect(deployer).voteFeedSwap(await admin.feedProposalCount(), true);
       const result = await admin.linkAmountToEth(0n);
       expect(result).to.equal(0n);
     });

@@ -167,14 +167,6 @@ async function deploy(contractName, args = []) {
 }
 
 function getConstructorArgs(key, predicted) {
-  if (key === "COINFLIP") {
-    return [
-      predicted.get("COIN"),
-      predicted.get("GAME"),
-      predicted.get("JACKPOTS"),
-      predicted.get("WWXRP"),
-    ];
-  }
   if (key === "AFFILIATE") {
     return [[], [], [], [], []];
   }

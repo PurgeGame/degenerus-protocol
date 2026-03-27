@@ -120,14 +120,14 @@ describe("Governance & Gating (Phase 43)", function () {
     it("deployer (100% DGVE) passes onlyOwner", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        admin.connect(deployer).setLinkEthPriceFeed(ZERO_ADDRESS)
+        admin.connect(deployer).setLootboxRngThreshold(eth("1"))
       ).to.not.be.reverted;
     });
 
     it("alice (0% DGVE) fails onlyOwner with NotOwner", async function () {
       const { admin, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        admin.connect(alice).setLinkEthPriceFeed(ZERO_ADDRESS)
+        admin.connect(alice).setLootboxRngThreshold(eth("1"))
       ).to.be.revertedWithCustomError(admin, "NotOwner");
     });
 
@@ -141,7 +141,7 @@ describe("Governance & Gating (Phase 43)", function () {
 
       // Deployer now has 50% -- should NOT pass onlyOwner (needs >50.1%)
       await expect(
-        admin.connect(deployer).setLinkEthPriceFeed(ZERO_ADDRESS)
+        admin.connect(deployer).setLootboxRngThreshold(eth("1"))
       ).to.be.revertedWithCustomError(admin, "NotOwner");
     });
 
@@ -154,7 +154,7 @@ describe("Governance & Gating (Phase 43)", function () {
       await dgve.connect(deployer).transfer(alice.address, amount);
 
       await expect(
-        admin.connect(alice).setLinkEthPriceFeed(ZERO_ADDRESS)
+        admin.connect(alice).setLootboxRngThreshold(eth("1"))
       ).to.not.be.reverted;
     });
 
@@ -168,7 +168,7 @@ describe("Governance & Gating (Phase 43)", function () {
 
       // CREATOR (deployer) now holds 0% -- no special privilege
       await expect(
-        admin.connect(deployer).setLinkEthPriceFeed(ZERO_ADDRESS)
+        admin.connect(deployer).setLootboxRngThreshold(eth("1"))
       ).to.be.revertedWithCustomError(admin, "NotOwner");
     });
 
@@ -671,11 +671,11 @@ describe("Governance & Gating (Phase 43)", function () {
       expect(await vault.isVaultOwner(deployer.address)).to.be.false;
 
       await expect(
-        admin.connect(alice).setLinkEthPriceFeed(ZERO_ADDRESS)
+        admin.connect(alice).setLootboxRngThreshold(eth("1"))
       ).to.not.be.reverted;
 
       await expect(
-        admin.connect(deployer).setLinkEthPriceFeed(ZERO_ADDRESS)
+        admin.connect(deployer).setLootboxRngThreshold(eth("1"))
       ).to.be.revertedWithCustomError(admin, "NotOwner");
     });
 

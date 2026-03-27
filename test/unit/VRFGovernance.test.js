@@ -164,9 +164,10 @@ describe("VRF Governance", function () {
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
-      const [, , , , , , circulatingSnapshot] = await admin.proposals(1);
+      const [, , circulatingSnapshot] = await admin.proposals(1);
       const liveCirc = await admin.circulatingSupply();
-      expect(circulatingSnapshot).to.equal(liveCirc);
+      // circulatingSnapshot is now uint40 whole tokens (divided by 1e18)
+      expect(circulatingSnapshot).to.equal(liveCirc / eth("1"));
     });
   });
 
@@ -192,17 +193,17 @@ describe("VRF Governance", function () {
       ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
     });
 
-    it("reverts with InsufficientStake if voter has 0 sDGNRS", async function () {
+    it("zero-weight vote succeeds as poke but emits no VoteCast", async function () {
       const { admin, mockVRF, deployer, alice } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(21);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
-      // alice has no sDGNRS
-      await expect(
-        admin.connect(alice).vote(1, true)
-      ).to.be.revertedWithCustomError(admin, "InsufficientStake");
+      // alice has no sDGNRS — vote succeeds as a poke (checks execute/kill) but no VoteCast
+      const tx = await admin.connect(alice).vote(1, true);
+      const events = await getEvents(tx, admin, "VoteCast");
+      expect(events.length).to.equal(0, "No VoteCast event for zero-weight poke");
     });
   });
 
@@ -461,7 +462,7 @@ describe("VRF Governance", function () {
 
       // Kill proposal 1 via reject vote
       await admin.connect(deployer).vote(1, false);
-      const [, , , , , , , , state] = await admin.proposals(1);
+      const [, , , , state] = await admin.proposals(1);
       expect(state).to.equal(2, "Proposal 1 should be Killed");
 
       // Deployer can now propose again
@@ -481,7 +482,7 @@ describe("VRF Governance", function () {
 
       // Execute proposal 1 via approve vote
       await admin.connect(deployer).vote(1, true);
-      const [, , , , , , , , state] = await admin.proposals(1);
+      const [, , , , state] = await admin.proposals(1);
       expect(state).to.equal(1, "Proposal 1 should be Executed");
 
       // Deployer can now propose again (VRF still stalled after swap)
@@ -554,15 +555,15 @@ describe("VRF Governance", function () {
       const tx = await admin.connect(deployer).vote(2, true);
 
       // Verify proposal 2 is Executed (enum value 1)
-      const [, , , , , , , , state2] = await admin.proposals(2);
+      const [, , , , state2] = await admin.proposals(2);
       expect(state2).to.equal(1, "Proposal 2 should be Executed");
 
       // Verify proposal 1 is Killed (enum value 2) by _voidAllActive
-      const [, , , , , , , , state1] = await admin.proposals(1);
+      const [, , , , state1] = await admin.proposals(1);
       expect(state1).to.equal(2, "Proposal 1 should be Killed");
 
       // Verify proposal 3 is Killed (enum value 2) by _voidAllActive
-      const [, , , , , , , , state3] = await admin.proposals(3);
+      const [, , , , state3] = await admin.proposals(3);
       expect(state3).to.equal(2, "Proposal 3 should be Killed");
 
       // Verify ProposalKilled events emitted for proposals 1 and 3
@@ -599,22 +600,22 @@ describe("VRF Governance", function () {
       await admin.connect(deployer).vote(1, false);
 
       // Verify proposal 1 is now Killed
-      const [, , , , , , , , state1Before] = await admin.proposals(1);
+      const [, , , , state1Before] = await admin.proposals(1);
       expect(state1Before).to.equal(2, "Proposal 1 should be Killed after reject vote");
 
       // Now execute proposal 2 — _voidAllActive should skip proposal 1 (already Killed)
       const tx = await admin.connect(deployer).vote(2, true);
 
       // Proposal 2: Executed
-      const [, , , , , , , , state2] = await admin.proposals(2);
+      const [, , , , state2] = await admin.proposals(2);
       expect(state2).to.equal(1, "Proposal 2 should be Executed");
 
       // Proposal 1: still Killed (not changed by _voidAllActive)
-      const [, , , , , , , , state1After] = await admin.proposals(1);
+      const [, , , , state1After] = await admin.proposals(1);
       expect(state1After).to.equal(2, "Proposal 1 should still be Killed");
 
       // Proposal 3: Killed by _voidAllActive
-      const [, , , , , , , , state3] = await admin.proposals(3);
+      const [, , , , state3] = await admin.proposals(3);
       expect(state3).to.equal(2, "Proposal 3 should be Killed");
 
       // Only proposal 3 should be newly killed (proposal 1 was already killed)
@@ -643,8 +644,8 @@ describe("VRF Governance", function () {
       // Execute proposal 1 — voids proposal 2, advances voidedUpTo to 2
       await admin.connect(deployer).vote(1, true);
 
-      const [, , , , , , , , s1] = await admin.proposals(1);
-      const [, , , , , , , , s2] = await admin.proposals(2);
+      const [, , , , s1] = await admin.proposals(1);
+      const [, , , , s2] = await admin.proposals(2);
       expect(s1).to.equal(1, "Proposal 1 Executed");
       expect(s2).to.equal(2, "Proposal 2 Killed");
 
@@ -658,8 +659,8 @@ describe("VRF Governance", function () {
       // Proposals 1 and 2 are NOT re-scanned
       const tx = await admin.connect(deployer).vote(3, true);
 
-      const [, , , , , , , , s3] = await admin.proposals(3);
-      const [, , , , , , , , s4] = await admin.proposals(4);
+      const [, , , , s3] = await admin.proposals(3);
+      const [, , , , s4] = await admin.proposals(4);
       expect(s3).to.equal(1, "Proposal 3 Executed");
       expect(s4).to.equal(2, "Proposal 4 Killed");
 
@@ -692,7 +693,7 @@ describe("VRF Governance", function () {
       const tx = await admin.connect(deployer).vote(1, false);
 
       // Verify proposal state transitions to Killed (enum value 2)
-      const [, , , , , , , , state] = await admin.proposals(1);
+      const [, , , , state] = await admin.proposals(1);
       expect(state).to.equal(2, "Proposal should be Killed");
 
       // Verify ProposalKilled event is emitted
@@ -719,7 +720,7 @@ describe("VRF Governance", function () {
       await admin.connect(alice).vote(1, false);
 
       // Proposal should still be Active (enum value 0)
-      const [, , , , , , , , state] = await admin.proposals(1);
+      const [, , , , state] = await admin.proposals(1);
       expect(state).to.equal(0, "Proposal should still be Active");
     });
   });
@@ -746,7 +747,7 @@ describe("VRF Governance", function () {
       const tx = await admin.connect(deployer).vote(1, true);
 
       // Verify proposal state transitions to Executed (enum value 1)
-      const [, , , , , , , , state] = await admin.proposals(1);
+      const [, , , , state] = await admin.proposals(1);
       expect(state).to.equal(1, "Proposal should be Executed");
 
       // Verify ProposalExecuted event emitted
@@ -782,8 +783,8 @@ describe("VRF Governance", function () {
       // (may or may not execute depending on threshold vs weight ratio)
       // At 60% threshold with deployer holding ~50% of circ, may not execute
       // Let's check and only proceed with tie test if still Active
-      const [, , , , aw1, rw1, , , state1] = await admin.proposals(1);
-      if (Number(state1) !== 0) {
+      const [, , , , tieState1, , aw1, rw1] = await admin.proposals(1);
+      if (Number(tieState1) !== 0) {
         // If already executed (deployer has >60% circ), skip tie test
         // This can happen if deployer is the majority holder
         return;
@@ -793,9 +794,9 @@ describe("VRF Governance", function () {
       await admin.connect(alice).vote(1, false);
 
       // Verify proposal is still Active -- tie means neither execute nor kill
-      const [, , , , approveWeight, rejectWeight, , , state2] = await admin.proposals(1);
+      const [, , , , tieState2, , approveWeight, rejectWeight] = await admin.proposals(1);
       expect(approveWeight).to.equal(rejectWeight, "Weights should be equal (tie)");
-      expect(state2).to.equal(0, "Proposal should remain Active on tie");
+      expect(tieState2).to.equal(0, "Proposal should remain Active on tie");
     });
   });
 
@@ -811,18 +812,21 @@ describe("VRF Governance", function () {
       await createStall(21);
       await admin.connect(deployer).propose(vrfAddr, keyHash);
 
-      const [proposer, coordinator, storedKeyHash, createdAt,
-             approveWeight, rejectWeight, circulatingSnapshot, path, state]
+      const [proposer, createdAt, circulatingSnapshot, path, state,
+             coordinator, approveWeight, rejectWeight, storedKeyHash]
         = await admin.proposals(1);
 
       expect(proposer).to.equal(deployer.address);
-      expect(coordinator).to.equal(vrfAddr);
-      expect(storedKeyHash).to.equal(keyHash);
       expect(createdAt).to.be.gt(0n);
-      expect(approveWeight).to.equal(0n);
-      expect(rejectWeight).to.equal(0n);
+      // circulatingSnapshot is uint40 whole tokens; may be 0 if circ < 1e18
+      const liveCirc = await admin.circulatingSupply();
+      expect(circulatingSnapshot).to.equal(liveCirc / eth("1"));
       expect(path).to.equal(0); // Admin
       expect(state).to.equal(0); // Active
+      expect(coordinator).to.equal(vrfAddr);
+      expect(approveWeight).to.equal(0n);
+      expect(rejectWeight).to.equal(0n);
+      expect(storedKeyHash).to.equal(keyHash);
     });
   });
 });
