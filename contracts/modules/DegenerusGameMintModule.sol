@@ -592,6 +592,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
     /// @notice Purchase a low-EV loot box with BURNIE.
     /// @dev Uses the current lootbox RNG index; rewards are tickets + small BURNIE only.
+    /// @param buyer Recipient of the loot box rewards.
+    /// @param burnieAmount BURNIE amount to burn for the loot box.
     function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external {
         if (buyer == address(0)) revert E();
         _purchaseBurnieLootboxFor(buyer, burnieAmount);

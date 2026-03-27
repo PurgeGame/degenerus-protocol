@@ -818,5 +818,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
 /// @dev Minimal interface for minting deity pass ERC721 tokens.
 interface IDegenerusDeityPassMint {
+    /// @param to Recipient of the minted deity pass.
+    /// @param tokenId Token ID to mint (matches the deity symbol ID).
     function mint(address to, uint256 tokenId) external;
 }
