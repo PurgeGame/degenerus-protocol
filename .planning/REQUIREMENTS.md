@@ -31,7 +31,7 @@ Requirements for pre-audit hardening. Each maps to roadmap phases.
 
 - [x] **CMT-01**: NatSpec accuracy verified across all contracts changed since v3.5
 - [x] **CMT-02**: Inline comments match current code behavior (no drift from v6.0/v7.0 changes)
-- [ ] **CMT-03**: No stale references to removed/renamed functions, variables, or constants
+- [x] **CMT-03**: No stale references to removed/renamed functions, variables, or constants
 
 ## Future Requirements
 
@@ -64,7 +64,7 @@ None — this is the final pre-audit hardening pass.
 | EVT-03 | Phase 132 | Complete |
 | CMT-01 | Phase 133 | Complete |
 | CMT-02 | Phase 133 | Complete |
-| CMT-03 | Phase 133 | Pending |
+| CMT-03 | Phase 133 | Complete |
 
 **Coverage:**
 - v8.0 requirements: 14 total
