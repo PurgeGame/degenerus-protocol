@@ -270,7 +270,7 @@ contract DegenerusAdmin {
         uint256 sweptAmount
     );
     event LinkCreditRecorded(address indexed player, uint256 amount);
-    event LinkEthFeedUpdated(address indexed feed);
+    event LinkEthFeedUpdated(address indexed oldFeed, address indexed newFeed);
 
     // Governance events
     event ProposalCreated(
@@ -431,7 +431,7 @@ contract DegenerusAdmin {
             revert InvalidFeedDecimals();
         }
         linkEthPriceFeed = feed;
-        emit LinkEthFeedUpdated(feed);
+        emit LinkEthFeedUpdated(current, feed);
     }
 
     // =========================================================================
