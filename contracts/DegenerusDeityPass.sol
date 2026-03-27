@@ -52,8 +52,6 @@ contract DegenerusDeityPass {
     // -------------------------------------------------------------------------
 
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-    event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
-    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event RendererUpdated(address indexed previousRenderer, address indexed newRenderer);
     event RenderColorsUpdated(string outlineColor, string backgroundColor, string nonCryptoSymbolColor);

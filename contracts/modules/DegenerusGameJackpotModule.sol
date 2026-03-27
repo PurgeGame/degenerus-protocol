@@ -255,7 +255,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
 
         uint32 winningTraitsPacked = _rollWinningTraits(
-            targetLvl,
             rngWord,
             true
         );
@@ -329,7 +328,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 lvl = lastDailyJackpotLevel;
             } else {
                 // Fresh start: compute and store winning traits
-                winningTraitsPacked = _rollWinningTraits(lvl, randWord, true);
+                winningTraitsPacked = _rollWinningTraits(randWord, true);
                 _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
             }
             // Initialize daily budgets and storage on fresh start
@@ -578,7 +577,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         // Non-daily (early-burn) path - BURNIE and ETH bonuses on non-day-1 levels
-        winningTraitsPacked = _rollWinningTraits(lvl, randWord, false);
+        winningTraitsPacked = _rollWinningTraits(randWord, false);
         _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
 
         bool isEthDay = false;
@@ -2307,7 +2306,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
         if (!valid) {
             bool useBurn = jackpotPhaseFlag;
-            winningTraitsPacked = _rollWinningTraits(lvl, randWord, useBurn);
+            winningTraitsPacked = _rollWinningTraits(randWord, useBurn);
             _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
         }
 
@@ -2537,11 +2536,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Roll or derive the packed winning traits for a given level.
     ///      When burn counts are used, applies hero override (if any).
     function _rollWinningTraits(
-        uint24 lvl,
         uint256 randWord,
         bool useBurnCounts
     ) private view returns (uint32 packed) {
-        lvl;
         if (useBurnCounts) {
             packed = JackpotBucketLib.packWinningTraits(
                 _getWinningTraits(randWord)

@@ -1017,11 +1017,10 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             coin.creditFlip(buyer, bonusCredit);
         }
 
-        uint24 ticketLevel = targetLevel;
         uint256 ticketScaled = adjustedQuantity;
 
         if (ticketScaled != 0) {
-            _queueTicketsScaled(buyer, ticketLevel, uint32(ticketScaled));
+            _queueTicketsScaled(buyer, targetLevel, uint32(ticketScaled));
         }
     }
 
