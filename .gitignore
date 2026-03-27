@@ -6,6 +6,10 @@ forge-out/
 foundry.lock
 out/
 runs/
+scripts/*.db
+audit/bot-race/slither-raw.json
+audit/bot-race/slither-stdout.txt
+audit/bot-race/4naly3er-stdout.txt
 coverage/
 *.sol.bak
 .planning/
