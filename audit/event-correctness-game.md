@@ -317,3 +317,259 @@ No findings. These are internal/view helpers. The streak update is a derived sta
 | EVT-BOON-01 | INFO | BoonModule | No events for any of 5 boon consumption functions | DOCUMENT |
 | EVT-WHALE-01 | INFO | WhaleModule | No top-level purchase event for whale/lazy/deity purchases | DOCUMENT |
 | EVT-WHALE-02 | INFO | WhaleModule | Deity pass purchase (indexer-critical) has no dedicated event | DOCUMENT |
+
+---
+
+## DegenerusGameAdvanceModule (DegenerusGameAdvanceModule.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Purpose |
+|-------|-----------|----------------|---------|
+| Advance | stage, lvl | (none) | Indexer-critical: game advancement stage tracking |
+| ReverseFlip | caller, totalQueued, cost | caller | RNG nudge tracking |
+| DailyRngApplied | day, rawWord, nudges, finalWord | (none) | Indexer-critical: daily RNG lifecycle |
+| LootboxRngApplied | index, word, requestId | (none) | Indexer-critical: lootbox RNG assignment |
+| VrfCoordinatorUpdated | previous, current | previous, current | Admin config change |
+| StEthStakeFailed | amount | (none) | Operational monitoring |
+
+### Function-by-Function Audit
+
+| Function | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|--------------|---------------|------------------------|-----------------|---------|
+| `advanceGame()` | Complex multi-stage: updates dailyIdx, level, prize pools, processes tickets/jackpots, manages RNG lifecycle | Advance(stage, lvl) | Yes -- `stage` matches the computed stage constant (STAGE_GAMEOVER through STAGE_JACKPOT_DAILY_STARTED), `lvl` is the current level at time of emission. Emitted at line 154 (gameover), 181 (mid-day tickets), 401 (main path). All emit the same `lvl` that was read at line 138. | Yes | -- |
+| `wireVrf(...)` | Sets vrfCoordinator, vrfSubscriptionId, vrfKeyHash, lastVrfProcessedTimestamp | VrfCoordinatorUpdated | Yes -- `current` is the old address read at line 425 before the write at line 426, and `coordinator_` is the new address. Emitted at line 430. | Yes | EVT-ADV-01 |
+| `requestLootboxRng()` | Requests VRF, advances lootboxRngIndex, clears pending counters | No dedicated event (VRF request is internal) | N/A | No | EVT-ADV-02 |
+| `reverseFlip()` | Burns BURNIE, increments totalFlipReversals | ReverseFlip | Yes -- `newCount` is `reversals + 1` (line 1455 after line 1456 write), `cost` is the computed burn amount. Emitted at line 1457. | No | -- |
+| `rawFulfillRandomWords(...)` | Stores rngWordCurrent (daily) or directly writes lootboxRngWordByIndex (mid-day) | LootboxRngApplied (mid-day path only) | Yes -- emitted at line 1484 with `index = lootboxRngIndex - 1`, `word` = received VRF word, `requestId` from state. Daily path stores word without emitting (DailyRngApplied emitted later during processing). | Yes | -- |
+| `updateVrfCoordinatorAndSub(...)` | Updates coordinator, subId, keyHash, clears VRF state | VrfCoordinatorUpdated | Yes -- same pattern as wireVrf, emitted at line 1430. | Yes | -- |
+| `_applyDailyRng(day, rawWord)` (private) | Applies nudges, stores rngWordByDay, updates lastVrfProcessedTimestamp | DailyRngApplied | Yes -- emitted at line 1562 with `day`, `rawWord` (original VRF), `nudges` (count consumed), and `finalWord` (rawWord + nudges). All values match post-state. | Yes | -- |
+| `_backfillGapDays(...)` (private) | Fills rngWordByDay for gap days, processes coinflip payouts | DailyRngApplied | Yes -- emitted at line 1514 for each gap day with `derivedWord` as both raw and final (no nudges applied to gap days). | Yes | -- |
+| `_backfillOrphanedLootboxIndices(...)` (private) | Fills lootboxRngWordByIndex for orphaned indices | LootboxRngApplied | Yes -- emitted at line 1538 with `fallbackWord` and `requestId=0` (backfill indicator). | Yes | -- |
+| `_finalizeLootboxRng(rngWord)` (private) | Writes lootboxRngWordByIndex[index] | LootboxRngApplied | Yes -- emitted at line 868 with the stored word and current vrfRequestId. | Yes | -- |
+| `_autoStakeExcessEth()` (private) | Stakes ETH into Lido | StEthStakeFailed (on failure only) | Yes -- emitted at line 1273 with the `stakeable` amount that failed. Success path has no event. | No | -- |
+
+### Findings
+
+**EVT-ADV-01: `wireVrf` VrfCoordinatorUpdated event parameter naming is misleading** -- INFO
+- The event parameters are `previous` and `current`, but the emit at line 430 passes `current` (old) and `coordinator_` (new). The variable name `current` in the function is the OLD coordinator read before the write. This is functionally correct (old address emitted as `previous`, new as `current`) but the local variable name `current` is confusing.
+- Assessment: No actual bug -- the event params match the intended semantics. The local variable naming is a readability issue, not a correctness issue.
+- Disposition: DOCUMENT
+
+**EVT-ADV-02: `requestLootboxRng` emits no event for VRF request or index advancement** -- INFO
+- The function advances `lootboxRngIndex++`, clears `lootboxRngPendingEth`/`lootboxRngPendingBurnie`, and submits a VRF request. No event is emitted for the request itself or the index advancement.
+- Assessment: The subsequent `LootboxRngApplied` event (emitted when VRF fulfills) provides the index and word. An indexer can detect the request by monitoring for VRF coordinator events. The gap is that index advancement is not independently observable.
+- Disposition: DOCUMENT
+
+---
+
+## DegenerusGameJackpotModule (DegenerusGameJackpotModule.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Purpose |
+|-------|-----------|----------------|---------|
+| AutoRebuyProcessed | player, targetLevel, ticketCount, ethSpent, remainder | player | Auto-rebuy conversion tracking |
+| DailyCarryoverStarted | jackpotLevel, carryoverSourceLevel | jackpotLevel | Indexer: carryover source identification |
+| FarFutureCoinJackpotWinner | winner, currentLevel, winnerLevel, amount | winner, currentLevel, winnerLevel | Indexer-critical: BURNIE jackpot winners |
+| JackpotTicketWinner | winner, level, traitId, amount, ticketIndex | winner, level, traitId | Indexer-critical: ETH jackpot winners |
+
+### Function-by-Function Audit
+
+| Function | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|--------------|---------------|------------------------|-----------------|---------|
+| `payDailyJackpotCoinAndTickets(randWord)` | Distributes BURNIE jackpot, processes far-future coin jackpot | FarFutureCoinJackpotWinner, JackpotTicketWinner | FarFutureCoinJackpotWinner: Yes -- emitted at line 2502 with `winners[i]`, `lvl`, `winnerLevels[i]`, `perWinner` matching actual distribution. JackpotTicketWinner: Yes -- emitted at lines 2404 with per-winner amount matching `_creditJackpot` call. | Yes | -- |
+| `awardFinalDayDgnrsReward(lvl, rngWord)` | Transfers DGNRS to winners | None (DGNRS Transfer events from sDGNRS contract) | N/A | No | EVT-JACK-01 |
+| `consolidatePrizePools(lvl, rngWord)` | Merges pendingPools into main pools, unfreezes, resets jackpot state | None | N/A | No | EVT-JACK-02 |
+| `processTicketBatch(lvl)` | Assigns traits to queued tickets, processes batch | TraitsGenerated (via _generateTraitsAndEmit) | Yes -- emitted at line 1991 with `player`, `lvl`, `queueIdx`, `processed`, `take`, `entropy` matching actual trait generation params. | No | -- |
+| `_distributeJackpotEth(...)` (private) | Credits ETH to winners via _addClaimableEth, updates claimablePool | JackpotTicketWinner, PlayerCredited (via _creditClaimable), AutoRebuyProcessed (if auto-rebuy active) | JackpotTicketWinner: Yes -- emitted at lines 1418/1586/1619/1638 with `perWinner` matching the computed `share / totalCount`. PlayerCredited: Yes (via PayoutUtils). AutoRebuyProcessed: Yes (via _addClaimableEth -> auto-rebuy path). | Yes | -- |
+| `payDailyJackpot(...)` (private) | Daily ETH jackpot distribution across trait buckets | DailyCarryoverStarted, JackpotTicketWinner, PlayerCredited, AutoRebuyProcessed | DailyCarryoverStarted: Yes -- emitted at line 545 with computed `carryoverSourceLevel`. All winner events: Yes. | Yes | -- |
+| `payDailyCoinJackpot(lvl, randWord)` | Daily BURNIE jackpot distribution | JackpotTicketWinner | Yes -- emitted at line 2404 with amounts matching distribution. | Yes | -- |
+| `runTerminalJackpot(...)` | Terminal game-over jackpot distribution | JackpotTicketWinner, PlayerCredited | Yes -- uses same `_distributeJackpotEth` path. | Yes | -- |
+
+### Findings
+
+**EVT-JACK-01: `awardFinalDayDgnrsReward` emits no event for DGNRS rewards** -- INFO
+- Awards DGNRS to winners from the reward pool via `dgnrs.transferFromPool()`. The sDGNRS ERC-20 Transfer event provides traceability.
+- Assessment: Low impact. Similar to EVT-GAME-02. Transfer events on sDGNRS suffice for indexers.
+- Disposition: DOCUMENT
+
+**EVT-JACK-02: `consolidatePrizePools` emits no event for pool state transition** -- INFO
+- Merges pending pools into main pools, unfreezes prize pool state, resets jackpot counters. This is a significant internal state transition but emitting an event would be redundant with the `Advance` event emitted by the calling `advanceGame()` function which indicates the phase transition.
+- Assessment: Low impact. The `Advance(STAGE_JACKPOT_PHASE_ENDED, lvl)` event covers the transition.
+- Disposition: DOCUMENT
+
+---
+
+## DegenerusGameLootboxModule (DegenerusGameLootboxModule.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Purpose |
+|-------|-----------|----------------|---------|
+| PlayerCredited | player, recipient, amount | player, recipient | ETH credit tracking |
+| LootBoxOpened | player, index, amount, futureLevel, futureTickets, burnie, bonusBurnie | player, index | Indexer-critical: lootbox resolution |
+| BurnieLootOpen | player, index, burnieAmount, ticketLevel, tickets, burnieReward | player, index | Indexer: BURNIE lootbox resolution |
+| LootBoxWhalePassJackpot | player, day, lootboxAmount, targetLevel, tickets, statsBoost, frozenUntilLevel | player, day | Indexer: whale pass jackpot from lootbox |
+| LootBoxDgnrsReward | player, day, lootboxAmount, dgnrsAmount | player, day | DGNRS reward tracking |
+| LootBoxWwxrpReward | player, day, lootboxAmount, wwxrpAmount | player, day | WWXRP reward tracking |
+| LootBoxReward | player, day, rewardType, lootboxAmount, amount | player, day, rewardType | Unified boon/boost reward |
+| DeityBoonIssued | deity, recipient, day, slot, boonType | deity, recipient, day | Indexer: deity boon tracking |
+
+### Function-by-Function Audit
+
+| Function | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|--------------|---------------|------------------------|-----------------|---------|
+| `openLootBox(player, index)` | Clears lootboxEth/lootboxDay/lootboxBurnie, distributes tickets/BURNIE/boons | LootBoxOpened, LootBoxReward (for boons), LootBoxWhalePassJackpot, LootBoxDgnrsReward, LootBoxWwxrpReward, TicketsQueuedScaled, PlayerCredited | LootBoxOpened: Yes -- emitted at line 1015 with `amount` (total ETH), `targetLevel`, `futureTickets`, `burnieAmount`, `bonusBurnie` all computed during resolution. Emitted after all state changes. | Yes | -- |
+| `openBurnieLootBox(player, index)` | Clears lootboxBurnie, distributes tickets/BURNIE rewards | BurnieLootOpen | Yes -- emitted at line 679 with `burnieAmount` (input), `targetLevel`, `tickets`, `burnieReward` from resolution. | No | -- |
+| `resolveLootboxDirect(player, amount, rngWord)` | Resolves lootbox inline (no storage clear) | LootBoxOpened (via _resolveEthLootbox with emitLootboxEvent=true) | Yes -- same resolution path as openLootBox. | No | -- |
+| `resolveRedemptionLootbox(player, amount, rngWord, activityScore)` | Resolves redemption lootbox with overridden activity score | LootBoxOpened (via _resolveEthLootbox) | Yes -- same resolution path. | No | -- |
+| `issueDeityBoon(deity, recipient, slot)` | Updates deityBoonDay, deityBoonUsedMask, deityBoonRecipientDay, applies boon to recipient | DeityBoonIssued | Yes -- emitted at line 821 after state updates at lines 808-819. `boonType` is the computed boon for the slot. | No | -- |
+
+### Findings
+
+No findings -- LootboxModule has comprehensive event coverage. Every lootbox resolution emits `LootBoxOpened` with full reward details. Boon awards emit `LootBoxReward` with the specific reward type. The module is well-instrumented for indexer reconstruction.
+
+---
+
+## DegenerusGameMintModule (DegenerusGameMintModule.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Purpose |
+|-------|-----------|----------------|---------|
+| LootBoxBuy | buyer, day, amount, presale, level | buyer, day | Indexer: lootbox purchase tracking |
+| LootBoxIdx | buyer, index, day | buyer, index, day | Indexer-critical: lootbox index assignment |
+| BurnieLootBuy | buyer, index, burnieAmount | buyer, index | BURNIE lootbox purchase |
+| BoostUsed | player, day, originalAmount, boostedAmount, boostBps | player, day | Boost consumption tracking |
+
+### Function-by-Function Audit
+
+| Function | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|--------------|---------------|------------------------|-----------------|---------|
+| `purchase(buyer, ticketQuantity, lootBoxAmount, affiliateCode, payKind)` | Records mint via recordMint (delegatecall back to Game), records lootbox entry, processes affiliate rewards | LootBoxIdx (if new index), BoostUsed (if boost active), LootBoxBuy, TicketsQueued (via recordMint -> _recordMintDataModule), ClaimableSpent (if claimable used) | LootBoxIdx: Yes -- emitted at line 706 with current `index` and `day`. LootBoxBuy: Yes -- emitted at line 795 with `lootBoxAmount`, `presale`, `level`. All after state writes. | No | EVT-MINT-01 |
+| `purchaseCoin(buyer, ticketQuantity, lootBoxBurnieAmount)` | Burns BURNIE for ticket purchase, records BURNIE lootbox | BurnieLootBuy, TicketsQueued | BurnieLootBuy: Yes -- emitted at line 1070 with `buyer`, `index`, `burnieAmount`. | No | -- |
+| `purchaseBurnieLootbox(buyer, burnieAmount)` | Burns BURNIE, records BURNIE lootbox entry | BurnieLootBuy | Yes -- emitted at line 1070. | No | -- |
+| `recordMintData(player, lvl, mintUnits)` | Updates mintPacked_ with level, count, streak | TraitsGenerated (if ticket queue populated) | No direct event for the mint data update itself; TraitsGenerated is emitted by the trait generation system if applicable. | No | -- |
+
+### Findings
+
+**EVT-MINT-01: No top-level "TicketPurchased" event for ETH ticket purchases** -- INFO
+- The `purchase()` function can buy both tickets and lootboxes. Ticket purchases go through `recordMint()` which delegates to `_recordMintDataModule`. The `TicketsQueued` event (from Storage) fires for the queued tickets, and `ClaimableSpent` fires if claimable was used. However, there's no single "purchase complete" event with the full purchase summary (total ETH, tickets bought, lootbox amount).
+- Assessment: The component events (TicketsQueued, LootBoxBuy, ClaimableSpent) collectively provide the data, but an indexer must aggregate them. This matches the pattern seen in WhaleModule (EVT-WHALE-01).
+- Disposition: DOCUMENT
+
+---
+
+## DegenerusGameDegeneretteModule (DegenerusGameDegeneretteModule.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Purpose |
+|-------|-----------|----------------|---------|
+| BetPlaced | player, index, betId, packed | player, index, betId | Indexer-critical: bet placement |
+| FullTicketResolved | player, betId, ticketCount, totalPayout, resultTicket | player, betId | Indexer-critical: bet resolution summary |
+| FullTicketResult | player, betId, ticketIndex, playerTicket, matches, payout | player, betId | Indexer: per-spin result detail |
+| PayoutCapped | player, cappedEthPayout, excessConverted | player | Cap event for large wins |
+| ConsolationPrize | player, amount | player | Consolation prize tracking |
+
+### Function-by-Function Audit
+
+| Function | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|--------------|---------------|------------------------|-----------------|---------|
+| `placeFullTicketBets(player, currency, amountPerTicket, ticketCount, customTicket, heroQuadrant)` | Records bet in degeneretteBets mapping, increments nonce, updates hero wagers | BetPlaced | Yes -- emitted at line 502 with `player`, `index` (current lootboxRngIndex), `nonce` (post-increment), `packed` (the stored bet data). | Yes | -- |
+| `resolveBets(player, betIds)` | Resolves each bet using RNG, distributes payouts (ETH/BURNIE/WWXRP), clears bet data | FullTicketResult (per spin), FullTicketResolved (per bet), PayoutCapped (if ETH win exceeds cap), ConsolationPrize (for losing bets) | FullTicketResult: Yes -- emitted at line 674 with `playerTicket`, `matches`, `payout` from resolution computation. FullTicketResolved: Yes -- emitted at line 713 with `totalPayout` accumulated across all spins. PayoutCapped: Yes -- emitted at line 771 with capped values. ConsolationPrize: Yes -- emitted at line 821 with fixed prize amount. | Yes | -- |
+
+### Findings
+
+No findings -- DegeneretteModule has comprehensive event coverage. Every bet placement and resolution is fully instrumented. The per-spin `FullTicketResult` events provide complete reconstruction data, and `FullTicketResolved` provides the summary.
+
+---
+
+## DegenerusGameDecimatorModule (DegenerusGameDecimatorModule.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Purpose |
+|-------|-----------|----------------|---------|
+| AutoRebuyProcessed | player, targetLevel, ticketsAwarded, ethSpent, remainder | player | Auto-rebuy from decimator claim |
+| DecBurnRecorded | player, lvl, bucket, subBucket, effectiveAmount, newTotalBurn | player, lvl | Indexer: decimator burn tracking |
+| TerminalDecBurnRecorded | player, lvl, bucket, subBucket, effectiveAmount, weightedAmount, timeMultBps | player, lvl | Terminal decimator burn tracking |
+
+### Function-by-Function Audit
+
+| Function | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|--------------|---------------|------------------------|-----------------|---------|
+| `recordDecBurn(player, lvl, bucket, baseAmount, multBps)` | Updates decBurn entry, updates subbucket aggregates | DecBurnRecorded | Yes -- emitted at line 177 with `delta` (actual burn increment, not total), `newBurn` (post-update total). The `delta` naming as `effectiveAmount` in the event is slightly misleading but functionally the delta IS the effective amount. | No | -- |
+| `runDecimatorJackpot(poolWei, lvl, rngWord)` | Snapshots decClaimRound, selects winning subbuckets | None | N/A | Yes | EVT-DEC-01 |
+| `recordTerminalDecBurn(player, lvl, baseAmount)` | Updates terminalDecEntries, updates bucket aggregates | TerminalDecBurnRecorded | Yes -- emitted at line 766 with `effectiveAmount`, `weightedAmount` (after time multiplier), `timeMultBps`. All computed values match stored state. | No | -- |
+| `runTerminalDecimatorJackpot(poolWei, lvl, rngWord)` | Snapshots lastTerminalDecClaimRound, selects winning subbuckets | None | N/A | Yes | EVT-DEC-02 |
+| `claimDecimatorJackpot(lvl)` | Marks claim as consumed, credits ETH via _addClaimableEth | PlayerCredited (via _creditClaimable) or AutoRebuyProcessed (if auto-rebuy active) | Yes -- amounts from `_consumeDecClaim` match actual pro-rata calculation. | Yes | EVT-DEC-03 |
+| `consumeDecClaim(player, lvl)` | Same as claimDecimatorJackpot core logic | None (caller handles events) | N/A | No | -- |
+| `claimTerminalDecimatorJackpot()` | Marks claim as consumed, credits ETH | PlayerCredited (via _creditClaimable) | Yes -- same pattern as regular claim. | Yes | EVT-DEC-03 |
+
+### Findings
+
+**EVT-DEC-01: `runDecimatorJackpot` emits no event for jackpot snapshot** -- INFO
+- Selects winning subbuckets and snapshots the claim round (`decClaimRounds[lvl]`), but emits no event indicating which subbuckets won or the total pool size.
+- Assessment: The `RewardJackpotsSettled` event from EndgameModule (the caller) provides the pool-level summary. Individual winning subbucket details are revealed when players claim (each claim emits `PlayerCredited`). However, the winning subbucket selection is not directly observable until claims happen.
+- Disposition: DOCUMENT
+
+**EVT-DEC-02: `runTerminalDecimatorJackpot` emits no event for terminal jackpot snapshot** -- INFO
+- Same pattern as EVT-DEC-01 but for the terminal (game-over) decimator. No event for the winning subbucket selection or pool allocation.
+- Disposition: DOCUMENT
+
+**EVT-DEC-03: `claimDecimatorJackpot` / `claimTerminalDecimatorJackpot` have no dedicated claim event** -- INFO
+- Claims emit `PlayerCredited` (via `_creditClaimable`) or `AutoRebuyProcessed` (via auto-rebuy path), but there's no "DecimatorJackpotClaimed" event with the level, player, and claim amount together.
+- Assessment: `PlayerCredited` provides the credit data. An indexer can correlate credits with decimator claims by context, but cannot distinguish a decimator claim credit from any other ETH credit without additional on-chain state inspection.
+- Disposition: DOCUMENT
+
+---
+
+## Indexer-Critical Transition Coverage (Task 2 Contracts)
+
+| Transition | Contract | Event | Sufficient Data? | Finding |
+|-----------|----------|-------|------------------|---------|
+| Game advancement (all stages) | AdvanceModule | Advance(stage, lvl) | Yes -- stage constant identifies exact progress point | -- |
+| Daily RNG applied | AdvanceModule | DailyRngApplied | Yes -- raw word, nudges, final word | -- |
+| Lootbox RNG applied | AdvanceModule | LootboxRngApplied | Yes -- index, word, requestId | -- |
+| VRF coordinator change | AdvanceModule | VrfCoordinatorUpdated | Yes -- old and new addresses | -- |
+| Daily ETH jackpot winner | JackpotModule | JackpotTicketWinner | Yes -- winner, level, traitId, amount, ticketIndex | -- |
+| Daily BURNIE jackpot winner | JackpotModule | FarFutureCoinJackpotWinner | Yes -- winner, levels, amount | -- |
+| Lootbox opened | LootboxModule | LootBoxOpened | Yes -- full resolution details | -- |
+| Degenerette bet placed | DegeneretteModule | BetPlaced | Yes -- packed bet data | -- |
+| Degenerette bet resolved | DegeneretteModule | FullTicketResolved + FullTicketResult | Yes -- per-spin and summary data | -- |
+| Decimator burn | DecimatorModule | DecBurnRecorded | Yes -- player, level, bucket, amount | -- |
+| Decimator jackpot snapshot | DecimatorModule | None | No dedicated event | EVT-DEC-01 |
+| Decimator claim | DecimatorModule | PlayerCredited (indirect) | Partial (no dedicated claim event) | EVT-DEC-03 |
+
+---
+
+## Combined Finding Summary (All Game System Contracts)
+
+| ID | Severity | Contract | Description | Disposition |
+|----|----------|----------|-------------|-------------|
+| EVT-GAME-01 | INFO | DegenerusGame | `recordMintQuestStreak` emits no event for streak update | DOCUMENT |
+| EVT-GAME-02 | INFO | DegenerusGame | `payCoinflipBountyDgnrs` emits no event (ERC-20 Transfer on sDGNRS suffices) | DOCUMENT |
+| EVT-GAME-03 | INFO | DegenerusGame | `resolveRedemptionLootbox` emits no event for accounting reclassification | DOCUMENT |
+| EVT-GAME-04 | INFO | DegenerusGame | `adminSwapEthForStEth` emits no event (stETH Transfer suffices) | DOCUMENT |
+| EVT-GAME-05 | INFO | DegenerusGame | `adminStakeEthForStEth` emits no event (Lido events suffice) | DOCUMENT |
+| EVT-GAMEOVER-01 | INFO | GameOverModule | No top-level GameOver event; deity pass refund credits are silent | DOCUMENT |
+| EVT-GAMEOVER-02 | INFO | GameOverModule | `handleFinalSweep` emits no event for finalSwept transition | DOCUMENT |
+| EVT-BOON-01 | INFO | BoonModule | No events for any of 5 boon consumption functions | DOCUMENT |
+| EVT-WHALE-01 | INFO | WhaleModule | No top-level purchase event for whale/lazy/deity purchases | DOCUMENT |
+| EVT-WHALE-02 | INFO | WhaleModule | Deity pass purchase (indexer-critical) has no dedicated event | DOCUMENT |
+| EVT-ADV-01 | INFO | AdvanceModule | `wireVrf` event uses confusing local variable name for old coordinator | DOCUMENT |
+| EVT-ADV-02 | INFO | AdvanceModule | `requestLootboxRng` emits no event for VRF request or index advancement | DOCUMENT |
+| EVT-JACK-01 | INFO | JackpotModule | `awardFinalDayDgnrsReward` emits no event (sDGNRS Transfer suffices) | DOCUMENT |
+| EVT-JACK-02 | INFO | JackpotModule | `consolidatePrizePools` emits no event (Advance event covers transition) | DOCUMENT |
+| EVT-MINT-01 | INFO | MintModule | No top-level "TicketPurchased" event for purchase summary | DOCUMENT |
+| EVT-DEC-01 | INFO | DecimatorModule | `runDecimatorJackpot` emits no event for winning subbucket snapshot | DOCUMENT |
+| EVT-DEC-02 | INFO | DecimatorModule | `runTerminalDecimatorJackpot` emits no event for terminal snapshot | DOCUMENT |
+| EVT-DEC-03 | INFO | DecimatorModule | Decimator claims have no dedicated claim event (PlayerCredited only) | DOCUMENT |
+
+**Total: 18 INFO findings across 14 game system files. 0 HIGH, 0 MEDIUM, 0 LOW. All DOCUMENT disposition per D-03.**
+
+**Parameter correctness:** Zero stale-local or pre-update-snapshot bugs found across all ~95 emit statements. All events emit values computed from post-state or from the same computation that produced the state change.
+
+**Indexer-critical coverage:** All major game transitions (advancement, RNG, jackpot winners, lootbox resolution, degenerette bets) have sufficient event data for off-chain reconstruction. The gaps are in secondary transitions (decimator snapshots, admin operations, game-over state flags) where the data is either derivable from other events or readable from on-chain storage.
