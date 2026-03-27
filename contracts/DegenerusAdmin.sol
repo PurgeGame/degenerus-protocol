@@ -46,9 +46,27 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 
 /// @dev Minimal VRF coordinator surface for subscription management.
 interface IVRFCoordinatorV2_5Owner {
+    /// @notice Add a consumer contract to the VRF subscription.
+    /// @param subId Subscription ID.
+    /// @param consumer Address of the consumer contract to add.
     function addConsumer(uint256 subId, address consumer) external;
+
+    /// @notice Cancel a VRF subscription and refund remaining LINK.
+    /// @param subId Subscription ID to cancel.
+    /// @param to Address to receive the LINK refund.
     function cancelSubscription(uint256 subId, address to) external;
+
+    /// @notice Create a new VRF subscription.
+    /// @return subId The newly created subscription ID.
     function createSubscription() external returns (uint256 subId);
+
+    /// @notice Get subscription details.
+    /// @param subId Subscription ID to query.
+    /// @return balance LINK token balance.
+    /// @return nativeBalance Native token balance.
+    /// @return reqCount Total fulfilled request count.
+    /// @return owner Subscription owner address.
+    /// @return consumers List of consumer contract addresses.
     function getSubscription(
         uint256 subId
     )
@@ -65,25 +83,57 @@ interface IVRFCoordinatorV2_5Owner {
 
 /// @dev Game contract admin interface (VRF + liquidity).
 interface IDegenerusGameAdmin {
+    /// @notice Timestamp of the last successfully processed VRF fulfillment.
     function lastVrfProcessed() external view returns (uint48);
+
+    /// @notice Whether the game is in jackpot resolution phase.
     function jackpotPhase() external view returns (bool);
+
+    /// @notice Whether the game has ended.
     function gameOver() external view returns (bool);
+
+    /// @notice Update the VRF coordinator, subscription, and key hash atomically.
+    /// @param newCoordinator New VRF coordinator address.
+    /// @param newSubId New subscription ID.
+    /// @param newKeyHash New VRF key hash.
     function updateVrfCoordinatorAndSub(
         address newCoordinator,
         uint256 newSubId,
         bytes32 newKeyHash
     ) external;
+
+    /// @notice Wire initial VRF configuration during deployment.
+    /// @param coordinator_ VRF coordinator address.
+    /// @param subId Subscription ID.
+    /// @param keyHash_ VRF key hash.
     function wireVrf(
         address coordinator_,
         uint256 subId,
         bytes32 keyHash_
     ) external;
+
+    /// @notice Swap game-held ETH for stETH via external DEX, sending stETH to recipient.
+    /// @param recipient Address to receive stETH.
+    /// @param amount Amount of ETH to swap.
     function adminSwapEthForStEth(
         address recipient,
         uint256 amount
     ) external payable;
+
+    /// @notice Stake game-held ETH directly for stETH via Lido.
+    /// @param amount Amount of ETH to stake.
     function adminStakeEthForStEth(uint256 amount) external;
+
+    /// @notice Set the lootbox RNG pending threshold for triggering mid-day VRF requests.
+    /// @param newThreshold New threshold value.
     function setLootboxRngThreshold(uint256 newThreshold) external;
+
+    /// @notice Get current purchase parameters.
+    /// @return lvl Current game level.
+    /// @return qty Tickets purchased this level.
+    /// @return cap Ticket cap for this level.
+    /// @return jackpotWei Jackpot pool in wei.
+    /// @return priceWei Current ticket price in wei.
     function purchaseInfo()
         external
         view
@@ -98,11 +148,25 @@ interface IDegenerusGameAdmin {
 
 /// @dev LINK token interface (ERC-677 with transferAndCall).
 interface ILinkTokenLike {
+    /// @notice Get LINK balance for an account.
+    /// @param account Address to query.
+    /// @return LINK balance in base units.
     function balanceOf(address account) external view returns (uint256);
+
+    /// @notice Transfer LINK tokens to a recipient.
+    /// @param to Recipient address.
+    /// @param value Amount of LINK to transfer.
+    /// @return success True if transfer succeeded.
     function transfer(
         address to,
         uint256 value
     ) external returns (bool success);
+
+    /// @notice Transfer LINK and call onTokenTransfer on the recipient (ERC-677).
+    /// @param to Recipient contract address.
+    /// @param value Amount of LINK to transfer.
+    /// @param data Additional data passed to the recipient's onTokenTransfer.
+    /// @return success True if transfer and callback succeeded.
     function transferAndCall(
         address to,
         uint256 value,
@@ -112,6 +176,9 @@ interface ILinkTokenLike {
 
 /// @dev Coin contract interface for LINK donation flip credits.
 interface IDegenerusCoinLinkReward {
+    /// @notice Credit BURNIE coinflip tokens to a player as a LINK donation reward.
+    /// @param player Recipient address.
+    /// @param amount Amount of BURNIE to credit (18 decimals).
     function creditLinkReward(address player, uint256 amount) external;
 }
 
@@ -371,15 +438,21 @@ contract DegenerusAdmin {
     // LIQUIDITY MANAGEMENT
     // =========================================================================
 
+    /// @notice Swap game-held ETH for stETH via external DEX, sending stETH to caller.
+    /// @dev Forwards msg.value as the ETH amount to swap.
     function swapGameEthForStEth() external payable onlyOwner {
         if (msg.value == 0) revert InvalidAmount();
         gameAdmin.adminSwapEthForStEth{value: msg.value}(msg.sender, msg.value);
     }
 
+    /// @notice Stake game-held ETH directly for stETH via Lido.
+    /// @param amount Amount of ETH (in wei) to stake from the game contract.
     function stakeGameEthToStEth(uint256 amount) external onlyOwner {
         gameAdmin.adminStakeEthForStEth(amount);
     }
 
+    /// @notice Set the lootbox RNG pending threshold on the game contract.
+    /// @param newThreshold New threshold value for triggering mid-day VRF requests.
     function setLootboxRngThreshold(uint256 newThreshold) external onlyOwner {
         gameAdmin.setLootboxRngThreshold(newThreshold);
     }
@@ -680,6 +753,7 @@ contract DegenerusAdmin {
     /// @notice ERC-677 callback: handles LINK donations to fund VRF subscription.
     /// @param from Address that sent the LINK.
     /// @param amount Amount of LINK received.
+    /// @param --- Unused calldata (required by ERC-677 interface).
     function onTokenTransfer(
         address from,
         uint256 amount,

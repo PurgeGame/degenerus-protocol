@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+/// @dev Data source interface for deity boon state from the game contract.
 interface IDeityBoonDataSource {
+    /// @notice Get the raw boon state for a deity holder.
+    /// @param deity Address of the deity pass holder.
+    /// @return dailySeed VRF-derived daily entropy seed for boon selection.
+    /// @return day Current day index.
+    /// @return usedMask Bitmask of boon slots already consumed today.
+    /// @return decimatorOpen Whether decimator boons are available this level.
+    /// @return deityPassAvailable Whether deity pass boons are eligible.
     function deityBoonData(address deity) external view returns (
         uint256 dailySeed,
         uint48 day,
@@ -106,6 +114,11 @@ contract DeityBoonViewer {
         }
     }
 
+    /// @dev Map a weighted random roll to a boon type ID.
+    /// @param roll Random value in [0, total weight).
+    /// @param decimatorAllowed Whether decimator boon types are in the pool.
+    /// @param deityEligible Whether deity pass boon types are in the pool.
+    /// @return Boon type ID constant.
     function _boonFromRoll(
         uint256 roll,
         bool decimatorAllowed,
