@@ -431,6 +431,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Access: COIN or COINFLIP contract only.
     ///      Pays a share of the remaining DGNRS reward pool.
     /// @param player Recipient of the DGNRS bounty.
+    /// @param winningBet The winning bet amount (must exceed COINFLIP_BOUNTY_DGNRS_MIN_BET).
+    /// @param bountyPool The bounty pool size (must exceed COINFLIP_BOUNTY_DGNRS_MIN_POOL).
     /// @custom:reverts E If caller is not COIN or COINFLIP contract.
     function payCoinflipBountyDgnrs(
         address player,
@@ -1117,6 +1119,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Record a terminal decimator burn.
     /// @dev Delegatecalls to DecimatorModule. Access: coin contract only.
+    /// @param player Address of the player performing the burn.
+    /// @param lvl Current game level.
+    /// @param baseAmount Burn amount before time-weighted multiplier.
     function recordTerminalDecBurn(
         address player,
         uint24 lvl,
@@ -1137,6 +1142,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Resolve terminal decimator at GAMEOVER.
     /// @dev Access: Game-only (self-call from handleGameOverDrain).
+    /// @param poolWei Total ETH prize pool for terminal decimator resolution.
+    /// @param lvl Level number at which gameover was triggered.
+    /// @param rngWord VRF-derived randomness seed for winner selection.
+    /// @return returnAmountWei Amount to return (non-zero if no winners or already resolved).
     function runTerminalDecimatorJackpot(
         uint256 poolWei,
         uint24 lvl,
