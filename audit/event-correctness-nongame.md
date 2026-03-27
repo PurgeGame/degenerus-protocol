@@ -392,3 +392,278 @@ When a user burns the entire supply of DGVB or DGVE, 1T new shares are minted to
 | EVT-GN-01 | GNRUS | INFO | receive() accepts ETH with no event (game emits distribution events) | DOCUMENT |
 | EVT-GN-02 | GNRUS | INFO | GameOverFinalized hardcodes ethClaimed=stethClaimed=0 (accurate) | DOCUMENT |
 | EVT-DV-01 | DegenerusVault | INFO | _payEth helper emits no event (Claim event captures context) | DOCUMENT |
+
+---
+
+## DegenerusAdmin (DegenerusAdmin.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Inherited (OZ) |
+|-------|-----------|----------------|-----------------|
+| CoordinatorUpdated | coordinator, subId | coordinator, subId | Custom |
+| ConsumerAdded | consumer | consumer | Custom |
+| SubscriptionCreated | subId | subId | Custom |
+| SubscriptionCancelled | subId, to | subId, to | Custom |
+| SubscriptionShutdown | subId, to, sweptAmount | subId, to | Custom |
+| LinkCreditRecorded | player, amount | player | Custom |
+| LinkEthFeedUpdated | feed | feed | Custom |
+| ProposalCreated | proposalId, proposer, coordinator, keyHash, path | proposalId, proposer | Custom |
+| VoteCast | proposalId, voter, approve, weight | proposalId, voter | Custom |
+| ProposalExecuted | proposalId, coordinator, newSubId | proposalId | Custom |
+| ProposalKilled | proposalId | proposalId | Custom |
+
+### Function-by-Function Audit
+
+| Function | Visibility | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|-----------|--------------|---------------|------------------------|-----------------|---------|
+| constructor() | -- | VRF sub creation + wiring | SubscriptionCreated + CoordinatorUpdated + ConsumerAdded | YES | YES | OK |
+| setLinkEthPriceFeed(feed) | external | price feed update | LinkEthFeedUpdated(feed) | YES | YES | OK |
+| swapGameEthForStEth() | external payable | forwards to game | None (game emits) | N/A | NO | EVT-DA-01 |
+| stakeGameEthToStEth(amount) | external | forwards to game | None (game emits) | N/A | NO | EVT-DA-01 |
+| setLootboxRngThreshold(newThreshold) | external | forwards to game | None (game emits) | N/A | NO | EVT-DA-01 |
+| propose(newCoordinator, newKeyHash) | external | proposal creation | ProposalCreated(id, sender, coordinator, keyHash, path) | YES | YES | OK |
+| vote(proposalId, approve) | external | vote recording + possible execute/kill | VoteCast(id, voter, approve, weight) + ProposalKilled or _executeSwap events | YES -- weight is live sDGNRS balance | YES | OK |
+| shutdownVrf() | external | VRF subscription cancel | SubscriptionCancelled + SubscriptionShutdown | YES | YES | OK |
+| onTokenTransfer(from, amount, _) | external | LINK forwarding + credit | LinkCreditRecorded(from, credit) | YES -- credit is computed value, not raw LINK amount | YES | OK |
+
+**NC-17 Assessment (Missing event for critical parameter change):**
+
+DegenerusAdmin has three admin setter functions that forward to the game contract:
+1. `swapGameEthForStEth()` -- no event at admin level (game emits)
+2. `stakeGameEthToStEth(amount)` -- no event at admin level (game emits)
+3. `setLootboxRngThreshold(newThreshold)` -- no event at admin level (game emits)
+
+These are thin forwarders. The game contract is responsible for emitting events on parameter changes. Adding redundant events at the admin level would waste gas. The `setLinkEthPriceFeed(feed)` function DOES emit `LinkEthFeedUpdated(feed)` since the state lives in the admin contract itself.
+
+**Special attention: _executeSwap comprehensive event trail**
+The `_executeSwap` function emits: (1) SubscriptionCancelled for old sub, (2) CoordinatorUpdated for new config, (3) SubscriptionCreated for new sub, (4) ConsumerAdded for game, (5) ProposalExecuted for the proposal, plus ProposalKilled for all voided proposals. Complete event trail for indexers to reconstruct the swap.
+
+**Special attention: vote() side effects**
+A single `vote()` call can trigger `_executeSwap` (if threshold met) or emit `ProposalKilled` (if rejection threshold met). The VoteCast event is always emitted before any side effects. Correct ordering.
+
+### Findings
+
+- **EVT-DA-01 (INFO):** Three admin forwarder functions (swapGameEthForStEth, stakeGameEthToStEth, setLootboxRngThreshold) emit no events. These are thin proxies to the game contract which emits its own events. Adding events here would be redundant. However, NC-17 bot findings may flag these as "critical parameter changes without events." -- Disposition: DOCUMENT
+
+---
+
+## DegenerusAffiliate (DegenerusAffiliate.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Inherited (OZ) |
+|-------|-----------|----------------|-----------------|
+| Affiliate | amount, code, sender | code | Custom |
+| ReferralUpdated | player, code, referrer, locked | player, code, referrer | Custom |
+| AffiliateEarningsRecorded | level, affiliate, amount, newTotal, sender, code, isFreshEth | level, affiliate, sender | Custom |
+| AffiliateTopUpdated | level, player, score | level, player | Custom |
+
+### Function-by-Function Audit
+
+| Function | Visibility | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|-----------|--------------|---------------|------------------------|-----------------|---------|
+| constructor(...) | -- | bootstrap codes + referrals | Affiliate(1, code, owner) per code + Affiliate(0, code, player) per referral + ReferralUpdated per referral | YES | NO | OK |
+| createAffiliateCode(code_, kickbackPct) | external | code registration | Affiliate(1, code_, msg.sender) | YES -- amount=1 signals code creation | NO | OK |
+| referPlayer(code_) | external | referral registration | Affiliate(0, code_, msg.sender) + ReferralUpdated(player, code, referrer, locked) | YES | NO | OK |
+| payAffiliate(amount, code, sender, lvl, isFreshEth, lootboxActivityScore) | external | earnings + leaderboard + distribution | AffiliateEarningsRecorded(...) + AffiliateTopUpdated if new top + Affiliate(amount, storedCode, sender) | YES -- scaledAmount is after BPS scaling and commission cap | YES | OK |
+
+**Special attention: Affiliate event overloading**
+The `Affiliate` event uses `amount` to distinguish event types: `1` = code created, `0` = player referred, `>1` = base input amount for payout. This is a single-event-for-multiple-purposes pattern. While unconventional, it works for indexers that check the `amount` field.
+
+**Special attention: payAffiliate referral resolution emits ReferralUpdated**
+When `payAffiliate` resolves a referral for the first time (stored code is bytes32(0)), it calls `_setReferralCode` which emits `ReferralUpdated`. This ensures indexers can track when referrals are locked. All code paths through referral resolution emit this event.
+
+**Special attention: payAffiliate early return**
+If `scaledAmount == 0` after BPS scaling, only `Affiliate(amount, storedCode, sender)` is emitted (no AffiliateEarningsRecorded). This is correct -- no earnings to record.
+
+### Findings
+
+No findings. Event coverage is complete and values match post-state.
+
+---
+
+## DegenerusQuests (DegenerusQuests.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Inherited (OZ) |
+|-------|-----------|----------------|-----------------|
+| QuestSlotRolled | day, slot, questType, flags, version, difficulty | day, slot | Custom |
+| QuestProgressUpdated | player, day, slot, questType, progress, target | player, day, slot | Custom |
+| QuestCompleted | player, day, slot, questType, streak, reward | player, day, slot | Custom |
+| QuestStreakShieldUsed | player, used, remaining, currentDay | player | Custom |
+| QuestStreakBonusAwarded | player, amount, newStreak, currentDay | player | Custom |
+| QuestStreakReset | player, previousStreak, currentDay | player | Custom |
+
+### Function-by-Function Audit
+
+| Function | Visibility | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|-----------|--------------|---------------|------------------------|-----------------|---------|
+| rollDailyQuest(day, entropy) | external | quest slot seeding | QuestSlotRolled(day, slot, ...) x2 | YES -- version/difficulty reflect actual seeded values | NO | OK |
+| handleMint(player, quantity, paidWithEth) | external | progress update | QuestProgressUpdated + QuestCompleted if completed + QuestStreakShieldUsed/QuestStreakReset if needed | YES | NO | OK |
+| handleFlip(player, amount) | external | progress update | QuestProgressUpdated + QuestCompleted if completed | YES | NO | OK |
+| handleAffiliate(player, amount) | external | progress update | QuestProgressUpdated + QuestCompleted if completed | YES | NO | OK |
+| handleDecimator(player, amount) | external | progress update | QuestProgressUpdated + QuestCompleted if completed | YES | NO | OK |
+| handleLootBox(player, amountWei) | external | progress update | QuestProgressUpdated + QuestCompleted if completed | YES | NO | OK |
+| handleDegenerette(player, amount, paidWithEth) | external | progress update | QuestProgressUpdated + QuestCompleted if completed | YES | NO | OK |
+| awardQuestStreakBonus(player, amount, currentDay) | external | streak increase | QuestStreakBonusAwarded(player, amount, newStreak, currentDay) | YES | NO | OK |
+
+**Special attention: streak tracking events**
+Quest completion triggers streak accounting which may emit QuestStreakShieldUsed (if shields consumed for missed days), QuestStreakReset (if missed days exceed shields), or neither (consecutive days). All paths emit appropriate events.
+
+### Findings
+
+No findings. Event coverage is comprehensive with events for every state transition.
+
+---
+
+## DegenerusJackpots (DegenerusJackpots.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Inherited (OZ) |
+|-------|-----------|----------------|-----------------|
+| BafFlipRecorded | player, lvl, amount, newTotal | player, lvl | Custom |
+
+### Function-by-Function Audit
+
+| Function | Visibility | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|-----------|--------------|---------------|------------------------|-----------------|---------|
+| recordBafFlip(player, lvl, amount) | external | BAF total + leaderboard update | BafFlipRecorded(player, lvl, amount, newTotal) | YES -- newTotal is actual post-update value | NO | OK |
+| runBafJackpot(poolWei, lvl, rngWord) | external | BAF epoch increment + leaderboard clear | None | N/A -- returns winners/amounts to game which handles distribution events | YES | EVT-JK-01 |
+
+**Special attention: runBafJackpot has no events**
+`runBafJackpot` returns winner arrays to the game contract, which handles the actual ETH distribution and event emission. The jackpot contract is a computation-only helper. This is consistent with the delegatecall architecture where the game emits all distribution events.
+
+### Findings
+
+- **EVT-JK-01 (INFO):** `runBafJackpot` emits no event despite modifying BAF state (epoch increment, leaderboard reset). The game contract emits jackpot distribution events. An off-chain indexer wanting to track BAF epoch transitions would need to monitor the game contract's jackpot resolution events rather than DegenerusJackpots directly. -- Disposition: DOCUMENT
+
+---
+
+## DegenerusDeityPass (DegenerusDeityPass.sol)
+
+### Event Inventory
+
+| Event | Parameters | Indexed Fields | Inherited (OZ) |
+|-------|-----------|----------------|-----------------|
+| Transfer | from, to, tokenId | from, to, tokenId | Custom (ERC721-compatible) |
+| Approval | owner, approved, tokenId | owner, approved, tokenId | Custom (ERC721-compatible) |
+| ApprovalForAll | owner, operator, approved | owner, operator | Custom (ERC721-compatible) |
+| OwnershipTransferred | previousOwner, newOwner | previousOwner, newOwner | Custom |
+| RendererUpdated | previousRenderer, newRenderer | previousRenderer, newRenderer | Custom |
+| RenderColorsUpdated | outlineColor, backgroundColor, nonCryptoSymbolColor | (none) | Custom |
+
+### Function-by-Function Audit
+
+| Function | Visibility | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
+|----------|-----------|--------------|---------------|------------------------|-----------------|---------|
+| constructor() | -- | owner set | OwnershipTransferred(0, msg.sender) | YES | NO | OK |
+| transferOwnership(newOwner) | external | owner update | OwnershipTransferred(prev, newOwner) | YES -- emits old+new values (NC-11 compliant) | YES | OK |
+| setRenderer(newRenderer) | external | renderer update | RendererUpdated(prev, newRenderer) | YES -- emits old+new values (NC-11 compliant) | NO | OK |
+| setRenderColors(outline, bg, nonCrypto) | external | color strings update | RenderColorsUpdated(outlineColor, backgroundColor, nonCryptoSymbolColor) | YES | NO | OK |
+| approve(_, _) | external pure | reverts (Soulbound) | None | N/A | N/A | OK |
+| setApprovalForAll(_, _) | external pure | reverts (Soulbound) | None | N/A | N/A | OK |
+| transferFrom(_, _, _) | external pure | reverts (Soulbound) | None | N/A | N/A | OK |
+| safeTransferFrom(_, _, _) | external pure | reverts (Soulbound) | None | N/A | N/A | OK |
+| safeTransferFrom(_, _, _, _) | external pure | reverts (Soulbound) | None | N/A | N/A | OK |
+| mint(to, tokenId) | external | NFT mint | Transfer(0, to, tokenId) | YES | YES | OK |
+
+**Special attention: soulbound enforcement**
+All transfer/approve functions revert with `Soulbound()`. No events emitted on reverts. Transfer event only fires on mint. Correct for soulbound ERC721.
+
+**Special attention: NC-11 compliance**
+`transferOwnership` and `setRenderer` both emit old+new values in their events. `setRenderColors` emits all three new color values (no old values -- colors are cosmetic, not critical parameters).
+
+### Findings
+
+No findings. Event coverage is complete. NC-11 (old+new values) is satisfied for critical parameter changes.
+
+---
+
+## Periphery Contracts
+
+### ContractAddresses.sol (39 lines)
+**Type:** Pure library of compile-time constants.
+**State-changing functions:** None.
+**Events:** None.
+**Assessment:** No events needed. Pure constant address registry with no state.
+
+### Icons32Data.sol (228 lines)
+**Type:** Static data contract for icon SVG path data.
+**State-changing functions:** None.
+**Events:** None.
+**Assessment:** No events needed. Pure view functions returning static string data.
+
+### DegenerusTraitUtils.sol (183 lines)
+**Type:** Pure utility library for trait calculations.
+**State-changing functions:** None.
+**Events:** None.
+**Assessment:** No events needed. Pure math functions with no state modifications.
+
+### DeityBoonViewer.sol (171 lines)
+**Type:** View-only contract for aggregating deity boon data.
+**State-changing functions:** None.
+**Events:** None.
+**Assessment:** No events needed. Pure view aggregator.
+
+---
+
+## Libraries
+
+### BitPackingLib.sol (88 lines)
+**Events:** None. Pure bit manipulation library.
+
+### EntropyLib.sol (24 lines)
+**Events:** None. Pure entropy/RNG utility.
+
+### GameTimeLib.sol (35 lines)
+**Events:** None. Pure time calculation utility.
+
+### JackpotBucketLib.sol (307 lines)
+**Events:** None. Pure jackpot math library.
+
+### PriceLookupLib.sol (47 lines)
+**Events:** None. Pure price calculation library.
+
+**Libraries confirmed: All 5 libraries contain zero event declarations and zero emit statements. Pure computation only.**
+
+---
+
+## NC-17 Cross-Reference (Missing event for critical parameter change)
+
+The 4naly3er NC-17 category flagged 27 instances of "missing event for critical parameter change" across the codebase. For non-game contracts:
+
+| Contract | Function | Parameter Changed | Event Emitted | NC-17 Status |
+|----------|----------|-------------------|---------------|-------------|
+| DegenerusAdmin | setLinkEthPriceFeed | linkEthPriceFeed | LinkEthFeedUpdated(feed) | COVERED |
+| DegenerusAdmin | swapGameEthForStEth | (forwards to game) | Game emits | COVERED (forwarded) |
+| DegenerusAdmin | stakeGameEthToStEth | (forwards to game) | Game emits | COVERED (forwarded) |
+| DegenerusAdmin | setLootboxRngThreshold | (forwards to game) | Game emits | COVERED (forwarded) |
+| DegenerusDeityPass | transferOwnership | _contractOwner | OwnershipTransferred | COVERED |
+| DegenerusDeityPass | setRenderer | renderer | RendererUpdated | COVERED |
+| DegenerusDeityPass | setRenderColors | color strings | RenderColorsUpdated | COVERED |
+
+All critical parameter changes in non-game contracts emit events. The three admin forwarders rely on the game contract's events (EVT-DA-01).
+
+---
+
+## Summary of Findings (Task 2)
+
+| ID | Contract | Severity | Description | Disposition |
+|----|----------|----------|-------------|-------------|
+| EVT-DA-01 | DegenerusAdmin | INFO | Three admin forwarder functions emit no events (game emits its own) | DOCUMENT |
+| EVT-JK-01 | DegenerusJackpots | INFO | runBafJackpot emits no event for epoch/leaderboard reset (game handles distribution events) | DOCUMENT |
+
+---
+
+## Combined Summary (All Non-Game Contracts)
+
+**Total contracts audited:** 21 (7 token/vault + 5 admin/governance + 4 periphery + 5 libraries)
+**Total state-changing functions audited:** 108
+**Total findings:** 12 (all INFO, all DOCUMENT disposition)
+**Critical parameter changes without events:** 0 (all covered or forwarded)
+**Libraries with events:** 0 (confirmed pure computation)
+**Periphery with events:** 0 (confirmed view/data only)
+**Slither DOC-02:** Cross-referenced and assessed (non-game _payEth patterns are covered by higher-level events)
