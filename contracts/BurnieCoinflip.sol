@@ -126,9 +126,10 @@ contract BurnieCoinflip {
     uint16 private constant COINFLIP_EXTRA_MIN_PERCENT = 78;
     uint16 private constant COINFLIP_EXTRA_RANGE = 38;
     uint16 private constant BPS_DENOMINATOR = 10_000;
-    uint16 private constant AFKING_RECYCLE_BONUS_BPS = 160;
+    uint16 private constant RECYCLE_BONUS_BPS = 75;
+    uint16 private constant AFKING_RECYCLE_BONUS_BPS = 100;
     uint16 private constant AFKING_DEITY_BONUS_PER_LEVEL_HALF_BPS = 2;
-    uint16 private constant AFKING_DEITY_BONUS_MAX_HALF_BPS = 300;
+    uint16 private constant AFKING_DEITY_BONUS_MAX_HALF_BPS = 200;
     uint256 private constant DEITY_RECYCLE_CAP = 1_000_000 ether;
     uint48 private constant JACKPOT_RESET_TIME = 82620;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
@@ -1034,12 +1035,12 @@ contract BurnieCoinflip {
         locked = (!inJackpotPhase) && !degenerusGame.gameOver() && lastPurchaseDay_ && rngLocked_ && (purchaseLevel_ % 10 == 0);
     }
 
-    /// @dev Calculate recycling bonus for daily flip deposits (1% bonus, capped at 1000 BURNIE).
+    /// @dev Calculate recycling bonus for daily flip deposits (0.75% bonus, capped at 1000 BURNIE).
     function _recyclingBonus(
         uint256 amount
     ) private pure returns (uint256 bonus) {
         if (amount == 0) return 0;
-        bonus = amount / 100;
+        bonus = (amount * uint256(RECYCLE_BONUS_BPS)) / uint256(BPS_DENOMINATOR);
         uint256 bonusCap = 1000 ether;
         if (bonus > bonusCap) bonus = bonusCap;
     }
