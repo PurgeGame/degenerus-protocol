@@ -285,7 +285,7 @@ contract BurnieCoinflip {
         uint256 creditedFlip = amount + questReward;
         uint256 rollAmount = state.autoRebuyEnabled
             ? state.autoRebuyCarry
-            : mintable;
+            : uint256(state.claimableStored);
         uint256 rebetAmount = creditedFlip <= rollAmount
             ? creditedFlip
             : rollAmount;
