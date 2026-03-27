@@ -1566,14 +1566,6 @@ abstract contract DegenerusGameStorage {
         return 0;
     }
 
-    /// @dev Encode lootbox BPS to tier. 500->1, 1500->2, 2500->3, else 0.
-    function _lootboxBpsToTier(uint16 bps) internal pure returns (uint8) {
-        if (bps >= 2500) return 3;
-        if (bps >= 1500) return 2;
-        if (bps >= 500) return 1;
-        return 0;
-    }
-
     /// @dev Encode purchase BPS to tier. 500->1, 1500->2, 2500->3, else 0.
     function _purchaseBpsToTier(uint16 bps) internal pure returns (uint8) {
         if (bps >= 2500) return 3;
