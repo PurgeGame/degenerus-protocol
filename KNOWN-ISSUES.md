@@ -116,8 +116,6 @@ DGNRS and BURNIE are ERC-20 tokens with intentional deviations. sDGNRS and GNRUS
 
 **DGNRS blocks transfer to its own contract address.** `_transfer` reverts with `Unauthorized()` when `to == address(this)`. EIP-20 does not restrict recipients. This prevents accidental token lockup since DGNRS held by the contract is indistinguishable from the sDGNRS-backed reserve. Intentional design.
 
-**DGNRS transferFrom does not emit Approval on allowance change.** EIP-20 says transferFrom SHOULD fire Approval when allowance is updated. DGNRS decrements allowance but does not emit. Standard ERC-20 pattern -- many production tokens omit this (OpenZeppelin's ERC20 added it in v4.1). QA-level at most.
-
 **BURNIE game contract bypasses transferFrom allowance.** The DegenerusGame contract can call `transferFrom` without prior approval. This is the trusted contract pattern -- the game address is a compile-time immutable constant, not upgradeable. Enables seamless gameplay transactions without pre-approval UX. All other callers require standard allowance.
 
 **BURNIE transfer/transferFrom may auto-claim pending coinflip winnings.** Before executing a transfer, `_claimCoinflipShortfall` checks if the sender has insufficient balance and auto-claims pending coinflip BURNIE from the trusted BurnieCoinflip contract (compile-time constant). This mints tokens before the transfer, which is non-standard ERC-20 behavior. Intentional UX design -- players can spend winnings without a separate claim step. The coinflip contract is immutable and trusted.

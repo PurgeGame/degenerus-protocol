@@ -134,9 +134,12 @@ contract DegenerusStonk {
         uint256 allowed = allowance[from][msg.sender];
         if (allowed != type(uint256).max) {
             if (amount > allowed) revert Insufficient();
+            uint256 newAllowance;
             unchecked {
-                allowance[from][msg.sender] = allowed - amount;
+                newAllowance = allowed - amount;
             }
+            allowance[from][msg.sender] = newAllowance;
+            emit Approval(from, msg.sender, newAllowance);
         }
         return _transfer(from, to, amount);
     }
