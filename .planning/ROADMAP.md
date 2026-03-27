@@ -310,7 +310,7 @@ Plans:
   3. Off-chain indexer-critical transitions (level changes, game over, jackpot payouts, token transfers, governance actions) all emit events with sufficient data for reconstruction
 **Plans**: 3 plans
 Plans:
-- [ ] 132-01-PLAN.md — Game system event audit (DegenerusGame + 12 modules) (EVT-01, EVT-02, EVT-03)
+- [x] 132-01-PLAN.md — Game system event audit (DegenerusGame + 12 modules) (EVT-01, EVT-02, EVT-03)
 - [x] 132-02-PLAN.md — Non-game contract event audit (tokens, admin, periphery, libraries) (EVT-01, EVT-02, EVT-03)
 - [ ] 132-03-PLAN.md — Consolidated report assembly + bot-race appendix (EVT-01, EVT-02, EVT-03)
 
@@ -340,7 +340,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 130. Bot Race | 2/2 | Complete    | 2026-03-27 |
 | 131. ERC-20 Compliance | 1/1 | Complete   | 2026-03-27 |
-| 132. Event Correctness | 1/3 | In Progress|  |
+| 132. Event Correctness | 2/3 | In Progress|  |
 | 133. Comment Re-scan | 0/TBD | Not started | - |
 | 134. Consolidation | 0/TBD | Not started | - |
 
