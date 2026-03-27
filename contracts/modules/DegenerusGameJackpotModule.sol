@@ -239,28 +239,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // External Entry Points (delegatecall targets)
     // =========================================================================
 
-    /// @notice Pays early-burn jackpots during purchase phase OR rolling daily jackpots at level end.
-    /// @dev Called by the parent game contract via delegatecall. Two distinct paths:
-    ///
-    ///      DAILY PATH (isDaily=true):
-    ///      - Day 1-4: Distributes a random 6%-14% slice of remaining currentPrizePool.
-    ///      - Day 5: Distributes 100% of remaining currentPrizePool.
-    ///      - Day 1 also runs the early-bird lootbox jackpot (from futurePrizePool).
-    ///      - On day 1, carryover is skipped and replaced by early-bird.
-    ///      - On day 2-4, seeds a carryover jackpot at flat 1% from the unified future pool.
-    ///      - Carryover picks a random eligible source in [lvl+1, lvl+N], where N
-    ///        is the highest offset (up to +5) that has actual winning-trait tickets.
-    ///      - Distributes loot boxes immediately to winners (50% of carryover budget).
-    ///      - Increments jackpotCounter on completion.
-    ///
-    ///      EARLY-BURN PATH (isDaily=false):
-    ///      - Triggered during purchase phase when early burns occur.
-    ///      - Rolls random (non-burn-weighted) winning traits and runs trait-based jackpot.
-    ///      - Every purchase day (except day 1): adds a 1% futurePrizePool ETH slice
-    ///        with 75% converted to lootbox tickets and remainder distributed as ETH.
-    ///      - Day 1 of each level: BURNIE-only distribution via _executeJackpot.
-    ///      - Rolls daily quest at the end.
-    ///
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
     /// @dev Called via IDegenerusGame(address(this)) from EndgameModule and GameOverModule.
     ///      Uses FINAL_DAY_SHARES_PACKED (60/13/13/13) with trait-based bucket distribution.
@@ -307,6 +285,28 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
+    /// @notice Pays early-burn jackpots during purchase phase OR rolling daily jackpots at level end.
+    /// @dev Called by the parent game contract via delegatecall. Two distinct paths:
+    ///
+    ///      DAILY PATH (isDaily=true):
+    ///      - Day 1-4: Distributes a random 6%-14% slice of remaining currentPrizePool.
+    ///      - Day 5: Distributes 100% of remaining currentPrizePool.
+    ///      - Day 1 also runs the early-bird lootbox jackpot (from futurePrizePool).
+    ///      - On day 1, carryover is skipped and replaced by early-bird.
+    ///      - On day 2-4, seeds a carryover jackpot at flat 1% from the unified future pool.
+    ///      - Carryover picks a random eligible source in [lvl+1, lvl+N], where N
+    ///        is the highest offset (up to +5) that has actual winning-trait tickets.
+    ///      - Distributes loot boxes immediately to winners (50% of carryover budget).
+    ///      - Increments jackpotCounter on completion.
+    ///
+    ///      EARLY-BURN PATH (isDaily=false):
+    ///      - Triggered during purchase phase when early burns occur.
+    ///      - Rolls random (non-burn-weighted) winning traits and runs trait-based jackpot.
+    ///      - Every purchase day (except day 1): adds a 1% futurePrizePool ETH slice
+    ///        with 75% converted to lootbox tickets and remainder distributed as ETH.
+    ///      - Day 1 of each level: BURNIE-only distribution via _executeJackpot.
+    ///      - Rolls daily quest at the end.
+    ///
     /// @param isDaily True for scheduled daily jackpot, false for early-burn jackpot.
     /// @param lvl Current game level.
     /// @param randWord VRF entropy for winner selection and trait derivation.
