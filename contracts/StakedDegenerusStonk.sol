@@ -5,40 +5,60 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
 
-/// @notice Interface for game contract player-facing functions
+/// @notice Interface for game contract player-facing functions used by sDGNRS.
 interface IDegenerusGamePlayer {
+    /// @notice Advance the game to the next level/day.
     function advanceGame() external;
+    /// @notice Configure afKing mode for a player.
     function setAfKingMode(
         address player,
         bool enabled,
         uint256 ethTakeProfit,
         uint256 coinTakeProfit
     ) external;
+    /// @notice Claim accumulated ETH winnings for a player.
     function claimWinnings(address player) external;
+    /// @notice Claim whale pass for a player.
     function claimWhalePass(address player) external;
+    /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
+    /// @notice Check if VRF request is pending (RNG locked).
     function rngLocked() external view returns (bool);
+    /// @notice Check if game is over.
     function gameOver() external view returns (bool);
+    /// @notice Get current day index.
     function currentDayView() external view returns (uint48);
+    /// @notice Get RNG word for a specific day.
     function rngWordForDay(uint48 day) external view returns (uint256);
+    /// @notice Get player's activity score.
     function playerActivityScore(address player) external view returns (uint256);
+    /// @notice Resolve a redemption lootbox for a player.
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external;
 }
 
-/// @notice Interface for BURNIE coin contract player-facing functions
+/// @notice Interface for BURNIE coin contract player-facing functions used by sDGNRS.
 interface IDegenerusCoinPlayer {
+    /// @notice Get token balance for an address.
     function balanceOf(address account) external view returns (uint256);
+    /// @notice Transfer tokens to a recipient.
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
+/// @notice Interface for BurnieCoinflip contract methods used by sDGNRS.
 interface IBurnieCoinflipPlayer {
+    /// @notice Claim coinflip winnings for a player.
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
+    /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
+    /// @notice Claim coinflip winnings for sDGNRS redemption (skips RNG lock).
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
+    /// @notice Get the result of a coinflip day.
     function getCoinflipDayResult(uint48 day) external view returns (uint16 rewardPercent, bool win);
 }
 
+/// @notice Interface for DGNRS wrapper contract used by sDGNRS.
 interface IDegenerusStonkWrapper {
+    /// @notice Burn DGNRS from a player on behalf of sDGNRS.
     function burnForSdgnrs(address player, uint256 amount) external;
 }
 

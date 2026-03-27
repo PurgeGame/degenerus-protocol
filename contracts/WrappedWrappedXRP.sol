@@ -27,13 +27,17 @@ pragma solidity 0.8.34;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 
+/// @notice Minimal ERC20 interface for wXRP token interactions.
 interface IERC20 {
+    /// @notice Transfer tokens to a recipient.
     function transfer(address to, uint256 amount) external returns (bool);
+    /// @notice Transfer tokens from sender to recipient using caller's allowance.
     function transferFrom(
         address from,
         address to,
         uint256 amount
     ) external returns (bool);
+    /// @notice Get token balance for an address.
     function balanceOf(address account) external view returns (uint256);
 }
 

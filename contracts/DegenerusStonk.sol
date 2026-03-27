@@ -4,14 +4,21 @@ pragma solidity 0.8.34;
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
+/// @notice Interface for sDGNRS contract methods used by DGNRS.
 interface IStakedDegenerusStonk {
+    /// @notice Burn sDGNRS to claim proportional backing assets.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    /// @notice Get token balance for an address.
     function balanceOf(address account) external view returns (uint256);
+    /// @notice Transfer sDGNRS from wrapper to recipient (wrapper only).
     function wrapperTransferTo(address to, uint256 amount) external;
+    /// @notice Preview ETH, stETH, and BURNIE output for a given burn amount.
     function previewBurn(uint256 amount) external view returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
 }
 
+/// @notice Minimal ERC20 interface for token transfers.
 interface IERC20Minimal {
+    /// @notice Transfer tokens to a recipient.
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
@@ -150,6 +157,8 @@ contract DegenerusStonk {
 
     /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound.
     /// @dev Blocked during VRF stall (>5h) to prevent creator vote-stacking via DGNRS→sDGNRS conversion.
+    /// @param recipient Address to receive the soulbound sDGNRS.
+    /// @param amount Amount of DGNRS to burn and unwrap (18 decimals).
     function unwrapTo(address recipient, uint256 amount) external {
         if (msg.sender != ContractAddresses.CREATOR) revert Unauthorized();
         if (recipient == address(0)) revert ZeroAddress();
@@ -168,6 +177,10 @@ contract DegenerusStonk {
     /// @notice Burn DGNRS to claim proportional ETH + stETH + BURNIE from sDGNRS backing
     /// @dev ETH sent last (checks-effects-interactions). Only available post-gameOver;
     ///      during active game, players must use burnWrapped() via sDGNRS gambling path.
+    /// @param amount Amount of DGNRS to burn (18 decimals).
+    /// @return ethOut ETH received from backing.
+    /// @return stethOut stETH received from backing.
+    /// @return burnieOut BURNIE received from backing.
     /// @custom:reverts GameNotOver If called during active game (Seam-1 fix).
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         _burn(msg.sender, amount);

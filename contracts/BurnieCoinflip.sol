@@ -24,12 +24,17 @@ import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
+/// @notice Interface for BurnieCoin contract methods used by BurnieCoinflip.
 interface IBurnieCoin {
+    /// @notice Burn BURNIE from a player for coinflip deposit.
     function burnForCoinflip(address from, uint256 amount) external;
+    /// @notice Mint BURNIE to a player for coinflip claim.
     function mintForCoinflip(address to, uint256 amount) external;
 }
 
+/// @notice Interface for WWXRP contract methods used by BurnieCoinflip.
 interface IWrappedWrappedXRP {
+    /// @notice Mint WWXRP consolation prize to a player on coinflip loss.
     function mintPrize(address to, uint256 amount) external;
 }
 
@@ -222,6 +227,8 @@ contract BurnieCoinflip {
     }
 
     /// @notice Deposit BURNIE into daily coinflip system.
+    /// @param player The depositor (address(0) or msg.sender for self-deposit, otherwise operator-approved).
+    /// @param amount Amount of BURNIE to deposit (min 100 BURNIE, or 0 to settle pending claims).
     function depositCoinflip(address player, uint256 amount) external {
         address caller;
         bool directDeposit;
@@ -322,6 +329,9 @@ contract BurnieCoinflip {
     /// @notice Claim coinflip winnings (exact amount).
     /// @dev Processes resolved days and claims from claimableStored (accumulated from
     ///      settlements, take-profit, and mode changes). Auto-rebuy carry is never exposed.
+    /// @param player The player to claim for (address(0) for msg.sender, else operator-approved).
+    /// @param amount Maximum BURNIE to claim (actual may be less if insufficient claimable).
+    /// @return claimed Actual amount of BURNIE minted and claimed.
     function claimCoinflips(
         address player,
         uint256 amount
@@ -332,6 +342,9 @@ contract BurnieCoinflip {
     /// @notice Claim coinflip winnings via BurnieCoin to cover token transfers/burns.
     /// @dev Access: BurnieCoin only. Processes resolved days and claims from claimableStored.
     ///      Auto-rebuy carry is never exposed to this path.
+    /// @param player The player whose coinflip winnings to claim.
+    /// @param amount Maximum BURNIE to claim.
+    /// @return claimed Actual amount of BURNIE minted and claimed.
     function claimCoinflipsFromBurnie(
         address player,
         uint256 amount
@@ -342,6 +355,9 @@ contract BurnieCoinflip {
     /// @notice Claim coinflip winnings for sDGNRS redemption (skips RNG lock).
     /// @dev Access: sDGNRS only. Used during claimRedemption() when wallet balance
     ///      is insufficient and coinflip winnings need to be sourced.
+    /// @param player The player whose coinflip winnings to claim.
+    /// @param amount Maximum BURNIE to claim.
+    /// @return claimed Actual amount of BURNIE minted and claimed.
     function claimCoinflipsForRedemption(
         address player,
         uint256 amount
@@ -362,6 +378,9 @@ contract BurnieCoinflip {
     /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
     /// @dev Access: BurnieCoin only. Same safety as claimCoinflipsFromBurnie —
     ///      only claimableStored is consumable, carry stays in autoRebuyCarry.
+    /// @param player The player whose coinflip winnings to consume.
+    /// @param amount Maximum BURNIE to consume.
+    /// @return consumed Actual amount of BURNIE consumed (deducted from claimable, no token mint).
     function consumeCoinflipsForBurn(
         address player,
         uint256 amount
@@ -671,6 +690,9 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     /// @notice Configure auto-rebuy mode for coinflips.
+    /// @param player The player to configure (address(0) for msg.sender).
+    /// @param enabled True to enable auto-rebuy, false to disable and cash out carry.
+    /// @param takeProfit Amount reserved from wins before rolling remainder (0 = roll all).
     function setCoinflipAutoRebuy(
         address player,
         bool enabled,
@@ -686,6 +708,8 @@ contract BurnieCoinflip {
     }
 
     /// @notice Set auto-rebuy take profit.
+    /// @param player The player to configure (address(0) for msg.sender, else operator-approved).
+    /// @param takeProfit New take-profit threshold (0 = roll all winnings).
     function setCoinflipAutoRebuyTakeProfit(
         address player,
         uint256 takeProfit
@@ -775,6 +799,9 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     /// @notice Process coinflip payout for a day (called by game contract).
+    /// @param bonusFlip True if presale lootbox bonus applies to this day.
+    /// @param rngWord VRF-derived random word for determining win/loss and bonus.
+    /// @param epoch The day index being resolved.
     function processCoinflipPayouts(
         bool bonusFlip,
         uint256 rngWord,
@@ -866,6 +893,8 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     /// @notice Credit flip to a player (called by authorized creditors).
+    /// @param player The player receiving the flip credit.
+    /// @param amount Amount of BURNIE-denominated flip stake to credit.
     function creditFlip(
         address player,
         uint256 amount
@@ -875,6 +904,8 @@ contract BurnieCoinflip {
     }
 
     /// @notice Credit flips to multiple players (batch).
+    /// @param players Array of 3 player addresses to credit (address(0) entries are skipped).
+    /// @param amounts Array of 3 BURNIE-denominated flip stake amounts (0 entries are skipped).
     function creditFlipBatch(
         address[3] calldata players,
         uint256[3] calldata amounts
