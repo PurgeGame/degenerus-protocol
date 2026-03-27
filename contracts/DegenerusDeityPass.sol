@@ -5,8 +5,15 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
+/// @dev Icons32 data contract interface for SVG path data and symbol names.
 interface IIcons32 {
+    /// @notice Get the SVG path data for icon at index i.
+    /// @param i Icon index (0-31).
     function data(uint256 i) external view returns (string memory);
+
+    /// @notice Get the human-readable symbol name.
+    /// @param quadrant Quadrant index (0-3, 8 symbols each).
+    /// @param idx Symbol index within the quadrant (0-7).
     function symbol(uint256 quadrant, uint8 idx) external view returns (string memory);
 }
 
@@ -86,6 +93,8 @@ contract DegenerusDeityPass {
     function symbol() external pure returns (string memory) { return "DEITY"; }
     function owner() external view returns (address) { return _contractOwner; }
 
+    /// @notice Transfer contract ownership to a new address.
+    /// @param newOwner Address of the new owner (must not be zero).
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert ZeroAddress();
         address prev = _contractOwner;
@@ -94,6 +103,7 @@ contract DegenerusDeityPass {
     }
 
     /// @notice Set optional external renderer. Set to address(0) to disable.
+    /// @param newRenderer Address of the new renderer contract (or zero to use internal).
     function setRenderer(address newRenderer) external onlyOwner {
         address prev = renderer;
         renderer = newRenderer;
@@ -378,6 +388,8 @@ contract DegenerusDeityPass {
     // -------------------------------------------------------------------------
 
     /// @notice Mint a deity pass. Only callable by the game contract during purchase.
+    /// @param to Recipient address for the minted pass.
+    /// @param tokenId Symbol ID to mint (0-31, must not already exist).
     function mint(address to, uint256 tokenId) external {
         if (msg.sender != ContractAddresses.GAME) revert NotAuthorized();
         if (tokenId >= 32) revert InvalidToken();
