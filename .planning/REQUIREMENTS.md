@@ -12,7 +12,7 @@ Requirements for pre-audit hardening. Each maps to roadmap phases.
 - [x] **BOT-01**: Slither analysis run on all production contracts with findings triaged (fix or document)
 - [x] **BOT-02**: 4naly3er analysis run on all production contracts with findings triaged
 - [x] **BOT-03**: All bot-detectable findings either fixed in code or added to KNOWN-ISSUES.md
-- [ ] **BOT-04**: Known issues file comprehensive enough to invalidate automated warden submissions
+- [x] **BOT-04**: Known issues file comprehensive enough to invalidate automated warden submissions
 
 ### ERC-20 Compliance
 
@@ -54,7 +54,7 @@ None — this is the final pre-audit hardening pass.
 | BOT-01 | Phase 130 | Complete |
 | BOT-02 | Phase 130 | Complete |
 | BOT-03 | Phase 134 | Complete |
-| BOT-04 | Phase 134 | Pending |
+| BOT-04 | Phase 134 | Complete |
 | ERC-01 | Phase 131 | Complete |
 | ERC-02 | Phase 131 | Complete |
 | ERC-03 | Phase 131 | Complete |
