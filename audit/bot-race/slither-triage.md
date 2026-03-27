@@ -10,8 +10,8 @@
 
 | Disposition | Count |
 |-------------|-------|
-| FIX | 0 |
-| DOCUMENT | 5 |
+| FIXED | 3 |
+| DOCUMENT | 2 |
 | FALSE-POSITIVE | 27 |
 | **Total (by detector)** | **32** |
 
@@ -58,7 +58,7 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 - **Detector:** `dead-code`
 - **Location:** `DegenerusGameStorage._lootboxBpsToTier(uint16)` (DegenerusGameStorage.sol L1570-1575)
 - **Description:** This internal function is never called from any code path.
-- **Reasoning:** DOCUMENT -- this is a utility function that was used before the lootbox boon tier simplification (v3.8 Phase 73). It was left in storage for potential future use. Dead code in production contracts is a legitimate gas/cleanliness finding. Pre-disclosing avoids a paid INFO.
+- **Reasoning:** ~~DOCUMENT~~ **FIXED** -- function deleted in commit `bff3c8ed`.
 
 ### DOC-04: shadowing-local -- Local variable shadows state variable (1 instance)
 
@@ -67,7 +67,7 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 - **Detector:** `shadowing-local`
 - **Location:** `DegenerusGameMintModule._callTicketPurchase().ticketLevel` (DegenerusGameMintModule.sol L1018) shadows `DegenerusGameStorage.ticketLevel` (DegenerusGameStorage.sol L472)
 - **Description:** A local variable named `ticketLevel` in `_callTicketPurchase` shadows the storage variable of the same name inherited from `DegenerusGameStorage`.
-- **Reasoning:** DOCUMENT -- the local variable is intentionally named the same as the state variable for clarity (it is a local copy used after the state has been read). The function only reads the state variable once and then operates on the local copy. No actual bug, but shadowing is a legitimate code quality finding. Pre-disclosing avoids a paid LOW.
+- **Reasoning:** ~~DOCUMENT~~ **FIXED** -- local variable inlined as `targetLevel` in commit `026f4dab`, eliminating the shadowing.
 
 ### DOC-05: redundant-statements -- Unused function parameter silencer (1 instance)
 
@@ -76,7 +76,7 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 - **Detector:** `redundant-statements`
 - **Location:** `DegenerusGameJackpotModule._computeBucketCounts()` (DegenerusGameJackpotModule.sol L2544)
 - **Description:** The statement `lvl;` is a no-op expression that has no effect.
-- **Reasoning:** DOCUMENT -- this is a deliberate Solidity pattern to silence "unused parameter" compiler warnings. The `lvl` parameter is required by the function signature for interface compatibility but is not needed in the current implementation branch. Removing it would break the call site. Pre-disclosing avoids a paid INFO.
+- **Reasoning:** ~~DOCUMENT~~ **FIXED** -- `lvl` parameter removed entirely from `_rollWinningTraits` in commit `026f4dab`.
 
 ---
 
@@ -312,10 +312,10 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 | Slither Detector | Prior Finding | Status |
 |-----------------|---------------|--------|
 | reentrancy-eth (advanceGame) | v5.0 I-01 (advanceBounty stale price) | INFO -- documented |
-| dead-code (_lootboxBpsToTier) | v3.8 Phase 73 (boon tier simplification) | Leftover from simplification |
+| dead-code (_lootboxBpsToTier) | v3.8 Phase 73 (boon tier simplification) | FIXED -- deleted in `bff3c8ed` |
 | reentrancy-balance (_deterministicBurnFrom) | v3.3 CP-08 (pending reservation subtraction) | FIXED in v3.3 |
 | arbitrary-send-eth (payout functions) | v5.0 ETH-FLOW-MAP.md | PROVEN -- ETH conservation verified |
-| shadowing-local (ticketLevel) | Not previously flagged | New informational |
+| shadowing-local (ticketLevel) | Not previously flagged | FIXED -- inlined as targetLevel in `026f4dab` |
 
 ---
 
@@ -351,7 +351,7 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 | 16 | reentrancy-benign | Low | Medium | 47 | FALSE-POSITIVE | FP-16 |
 | 17 | timestamp | Low | Medium | 35 | FALSE-POSITIVE | FP-17 |
 | 18 | missing-zero-check | Low | Medium | 14 | FALSE-POSITIVE | FP-18 |
-| 19 | shadowing-local | Low | High | 1 | DOCUMENT | DOC-04 |
+| 19 | shadowing-local | Low | High | 1 | FIXED | DOC-04 |
 | 20 | events-maths | Low | Medium | 1 | DOCUMENT | DOC-02 |
 | 21 | unused-state | Informational | High | 1049 | FALSE-POSITIVE | FP-13 |
 | 22 | naming-convention | Informational | High | 70 | FALSE-POSITIVE | FP-19 |
@@ -360,8 +360,8 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 | 25 | missing-inheritance | Informational | High | 36 | FALSE-POSITIVE | FP-22 |
 | 26 | cyclomatic-complexity | Informational | High | 23 | FALSE-POSITIVE | FP-23 |
 | 27 | assembly | Informational | High | 7 | FALSE-POSITIVE | FP-24 |
-| 28 | dead-code | Informational | Medium | 1 | DOCUMENT | DOC-03 |
-| 29 | redundant-statements | Informational | High | 1 | DOCUMENT | DOC-05 |
+| 28 | dead-code | Informational | Medium | 1 | FIXED | DOC-03 |
+| 29 | redundant-statements | Informational | High | 1 | FIXED | DOC-05 |
 | 30 | too-many-digits | Informational | Medium | 1 | FALSE-POSITIVE | FP-27 |
 | 31 | constable-states | Optimization | High | 48 | FALSE-POSITIVE | FP-25 |
 | 32 | immutable-states | Optimization | High | 1 | FALSE-POSITIVE | FP-26 |
@@ -370,10 +370,10 @@ These are real behaviors that are intentional or acceptable. They should be pre-
 
 ## Key Takeaways
 
-1. **0 FIX findings.** The protocol is clean against Slither's full detector suite. No code changes needed.
+1. **3 FIXED findings.** DOC-03 dead code deleted (`bff3c8ed`), DOC-04 shadowing eliminated (`026f4dab`), DOC-05 unused param removed (`026f4dab`).
 
 2. **Root cause of most FPs: delegatecall module architecture.** The DegenerusGame -> module delegatecall pattern causes Slither to misidentify: uninitialized state (86), unused state (1049), constable state (48), immutable state (1), locked ether (1), reentrancy (6), and unused returns (some). This single architectural decision accounts for ~1200 of 1959 raw findings.
 
-3. **5 DOCUMENT findings should be pre-disclosed** to avoid paid C4A findings: arbitrary-send-eth (payouts to users), events-maths (missing claimablePool event), dead-code (_lootboxBpsToTier), shadowing-local (ticketLevel), redundant-statements (lvl silencer).
+3. **2 DOCUMENT findings should be pre-disclosed** to avoid paid C4A findings: arbitrary-send-eth (payouts to users), events-maths (missing claimablePool event).
 
 4. **All HIGH findings are false positives.** The 105 raw HIGH findings break down to: 86 uninitialized-state (delegatecall FP), 7 weak-prng (VRF is secure), 4 arbitrary-send-eth (documented as intentional), 4 reentrancy-balance (verified safe), 2 incorrect-exp (XOR not exponentiation), 2 reentrancy-eth (delegatecall targets are constant).

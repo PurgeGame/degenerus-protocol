@@ -9,14 +9,14 @@
 
 ## Summary
 
-| Severity | Categories | Instances | FIX | DOCUMENT | FP |
-|----------|------------|-----------|-----|----------|----|
+| Severity | Categories | Instances | FIXED | DOCUMENT | FP |
+|----------|------------|-----------|-------|----------|----|
 | High | 2 | 9 | 0 | 0 | 2 |
 | Medium | 6 | 16 | 0 | 4 | 2 |
 | Low | 20 | 286 | 0 | 7 | 13 |
-| Non-Critical | 35 | 2,471 | 0 | 9 | 26 |
+| Non-Critical | 35 | 2,471 | 1 | 8 | 26 |
 | Gas | 18 | 1,671 | 0 | 2 | 16 |
-| **Total** | **81** | **4,453** | **0** | **22** | **57** |
+| **Total** | **81** | **4,453** | **1** | **21** | **57** |
 
 **Disposition policy (D-05):** Default DOCUMENT, not FIX. No contract code changes this close to audit. All findings reviewed for Phase 134 consolidation.
 
@@ -265,7 +265,7 @@ None. Per D-05, all findings are triaged as DOCUMENT or FALSE-POSITIVE. Phase 13
 
 ### [NC-9] Event is never emitted
 - **Instances:** 2
-- **Reasoning:** DOCUMENT. Needs verification. If events are declared but unused, they should be removed for cleanliness. However, at 2 instances this is cosmetic. Flag for Phase 134 comment re-scan.
+- **Reasoning:** ~~DOCUMENT~~ **FIXED**. Both unused events (Approval, ApprovalForAll) deleted from DegenerusDeityPass in commit `026f4dab`.
 
 ### [NC-10] Event missing indexed field
 - **Instances:** 4
@@ -273,7 +273,7 @@ None. Per D-05, all findings are triaged as DOCUMENT or FALSE-POSITIVE. Phase 13
 
 ### [NC-11] Events that mark critical parameter changes should contain both the old and the new value
 - **Instances:** 7
-- **Reasoning:** DOCUMENT. Valid suggestion for parameter-change events. Flag for Phase 132 event correctness sweep.
+- **Reasoning:** DOCUMENT (6 remaining). 1 instance **FIXED**: `LinkEthFeedUpdated` now emits (oldFeed, newFeed) per commit `4c2d9579`. Remaining 6 instances: 4 are FP (already emit old+new or are boolean toggles), 2 are cosmetic DOCUMENT (RenderColorsUpdated, NC-10 indexed fields).
 
 ### [NC-13] Functions should not be longer than 50 lines
 - **Instances:** 377
@@ -373,7 +373,7 @@ None. Per D-05, all findings are triaged as DOCUMENT or FALSE-POSITIVE. Phase 13
 
 ### [GAS-10] State variables only set in the constructor should be declared `immutable`
 - **Instances:** 10
-- **Reasoning:** DOCUMENT. Valid finding. Some variables set only in the constructor could be `immutable` for gas savings (SLOAD replaced by CODECOPY). However, this protocol uses deterministic deployment where some "constructor-only" variables might be set via initialization functions. Needs case-by-case review in Phase 134.
+- **Reasoning:** DOCUMENT. All 10 reported instances are FP (6 already immutable, 1 string type, 1 mutated post-constructor, 2 duplicates). No code changes needed from the original triage. Separately, BurnieCoinflip immutables were converted to constants via ContractAddresses in commit `822a3d27` as a code quality improvement (not from this finding).
 
 ### [GAS-11] Functions guaranteed to revert when called by normal users can be marked `payable`
 - **Instances:** 39

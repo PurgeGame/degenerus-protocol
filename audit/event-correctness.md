@@ -7,7 +7,7 @@
 2. Emitted parameter values match actual post-state (no stale locals, no pre-update snapshots)
 3. Indexer-critical transitions emit sufficient data for off-chain reconstruction
 
-**Disposition policy:** DOCUMENT per Phase 130 D-05. No contract code changes. All findings will be pre-disclosed in KNOWN-ISSUES.md (Phase 134).
+**Disposition policy:** Originally DOCUMENT per Phase 130 D-05. Post-audit, 6 findings were FIXED in commit `142efbc0`. Remaining 24 are DOCUMENT, pre-disclosed in KNOWN-ISSUES.md.
 
 **Indexed field policy (D-04):** Indexed fields evaluated against the indexer-critical standard -- events used for off-chain reconstruction must index filterable fields (addresses, IDs). Cosmetic/bookkeeping events are not penalized for missing indexes.
 
@@ -19,12 +19,12 @@
 
 | Category | Count | Severity | Disposition |
 |----------|-------|----------|-------------|
-| Missing event for state change | 25 | INFO | DOCUMENT |
+| Missing event for state change | 25 | INFO | 6 FIXED, 19 DOCUMENT |
 | Stale/incorrect event parameter | 2 | INFO | DOCUMENT |
 | Missing indexed field (indexer-critical) | 2 | INFO | DOCUMENT |
 | Missing old+new value in parameter change event | 0 | -- | -- |
 | Unused event declaration | 1 | INFO | DOCUMENT |
-| **Total** | **30** | **INFO** | **DOCUMENT** |
+| **Total** | **30** | **INFO** | **6 FIXED, 24 DOCUMENT** |
 
 **Zero parameter correctness bugs** found across all ~200+ emit statements. All events emit values computed from post-state or from the same computation that produced the state change.
 
@@ -104,9 +104,9 @@ No findings -- events correctly reflect actual queued state.
 | `openBurnieLootBox(...)` | Delegatecalls to LootboxModule | Events emitted inside module | N/A (traced in LootboxModule section) | No | -- |
 | `placeFullTicketBets(...)` | Delegatecalls to DegeneretteModule | Events emitted inside module | N/A (traced in DegeneretteModule section) | No | -- |
 | `resolveDegeneretteBets(...)` | Delegatecalls to DegeneretteModule | Events emitted inside module | N/A (traced in DegeneretteModule section) | Yes | -- |
-| `consumeCoinflipBoon(...)` | Delegatecalls to BoonModule | No event (state-only return) | N/A | No | -- |
-| `consumeDecimatorBoon(...)` | Delegatecalls to BoonModule | No event (state-only return) | N/A | No | -- |
-| `consumePurchaseBoost(...)` | Delegatecalls to BoonModule | No event (state-only return) | N/A | No | -- |
+| `consumeCoinflipBoon(...)` | Delegatecalls to BoonModule | BoonConsumed (FIXED `142efbc0`) | N/A (traced in BoonModule section) | No | -- |
+| `consumeDecimatorBoon(...)` | Delegatecalls to BoonModule | BoonConsumed (FIXED `142efbc0`) | N/A (traced in BoonModule section) | No | -- |
+| `consumePurchaseBoost(...)` | Delegatecalls to BoonModule | BoonConsumed (FIXED `142efbc0`) | N/A (traced in BoonModule section) | No | -- |
 | `issueDeityBoon(...)` | Delegatecalls to LootboxModule | Events emitted inside module | N/A (traced in LootboxModule section) | No | -- |
 | `recordDecBurn(...)` | Delegatecalls to DecimatorModule | Events emitted inside module | N/A (traced in DecimatorModule section) | No | -- |
 | `runDecimatorJackpot(...)` | Delegatecalls to DecimatorModule | Events emitted inside module | N/A (traced in DecimatorModule section) | Yes | -- |
@@ -126,8 +126,8 @@ No findings -- events correctly reflect actual queued state.
 | `syncAfKingLazyPassFromCoin(...)` | Clears afKingMode/afKingActivatedLevel | AfKingModeToggled | Yes -- emitted at line 1670 after state clear at 1668-1669 | No | -- |
 | `claimWhalePass(...)` | Delegatecalls to EndgameModule | Events emitted inside module | N/A (traced in EndgameModule section) | No | -- |
 | `resolveRedemptionLootbox(...)` | Moves ETH from claimable to futurePrizePool, delegatecalls to LootboxModule | No direct event (module events inside) | N/A | No | EVT-GAME-03 |
-| `adminSwapEthForStEth(...)` | Transfers stETH to recipient | None | N/A | No | EVT-GAME-04 |
-| `adminStakeEthForStEth(...)` | Stakes ETH into Lido stETH | None | N/A | No | EVT-GAME-05 |
+| `adminSwapEthForStEth(...)` | Transfers stETH to recipient | AdminSwapEthForStEth (FIXED `142efbc0`) | Yes | No | ~~EVT-GAME-04~~ FIXED |
+| `adminStakeEthForStEth(...)` | Stakes ETH into Lido stETH | AdminStakeEthForStEth (FIXED `142efbc0`) | Yes | No | ~~EVT-GAME-05~~ FIXED |
 | `updateVrfCoordinatorAndSub(...)` | Delegatecalls to AdvanceModule | Events emitted inside module | N/A (traced in AdvanceModule section) | Yes | -- |
 | `requestLootboxRng()` | Delegatecalls to AdvanceModule | Events emitted inside module | N/A (traced in AdvanceModule section) | No | -- |
 | `reverseFlip()` | Delegatecalls to AdvanceModule | Events emitted inside module | N/A (traced in AdvanceModule section) | No | -- |
@@ -153,12 +153,12 @@ No findings -- events correctly reflect actual queued state.
 **EVT-GAME-04: `adminSwapEthForStEth` emits no event** -- INFO
 - Admin-only function that swaps ETH for stETH. The stETH.transfer() emits an ERC-20 Transfer event.
 - Assessment: Low impact. Admin actions are observable via Transfer events on stETH. A dedicated event would aid monitoring dashboards.
-- Disposition: DOCUMENT
+- Disposition: ~~DOCUMENT~~ **FIXED** -- now emits `AdminSwapEthForStEth` (commit `142efbc0`)
 
 **EVT-GAME-05: `adminStakeEthForStEth` emits no event** -- INFO
 - Admin-only function that stakes ETH into Lido. Lido's `submit()` emits its own events.
 - Assessment: Low impact. Lido events provide sufficient traceability.
-- Disposition: DOCUMENT
+- Disposition: ~~DOCUMENT~~ **FIXED** -- now emits `AdminStakeEthForStEth` (commit `142efbc0`)
 
 ---
 
@@ -174,8 +174,8 @@ No findings -- events correctly reflect actual queued state.
 
 | Function | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
 |----------|--------------|---------------|------------------------|-----------------|---------|
-| `handleGameOverDrain(day)` | Sets gameOver, gameOverTime, gameOverFinalJackpotPaid; updates claimablePool, claimableWinnings; clears prize pools; distributes via decimator/terminal jackpot | PlayerCredited (via nested delegatecalls for deity pass refunds at line 101); delegated jackpot events in JackpotModule/DecimatorModule | Partial -- see finding | Yes | EVT-GAMEOVER-01 |
-| `handleFinalSweep()` | Sets finalSwept, clears claimablePool, sweeps funds to vault/DGNRS/GNRUS | None | N/A | Yes | EVT-GAMEOVER-02 |
+| `handleGameOverDrain(day)` | Sets gameOver, gameOverTime, gameOverFinalJackpotPaid; updates claimablePool, claimableWinnings; clears prize pools; distributes via decimator/terminal jackpot | GameOverDrained (FIXED `142efbc0`) + PlayerCredited (via nested delegatecalls for deity pass refunds); delegated jackpot events in JackpotModule/DecimatorModule | Yes | Yes | ~~EVT-GAMEOVER-01~~ FIXED |
+| `handleFinalSweep()` | Sets finalSwept, clears claimablePool, sweeps funds to vault/DGNRS/GNRUS | FinalSwept (FIXED `142efbc0`) | Yes | Yes | ~~EVT-GAMEOVER-02~~ FIXED |
 
 ### Findings
 
@@ -183,12 +183,12 @@ No findings -- events correctly reflect actual queued state.
 - The function sets `gameOver = true` and `gameOverTime` at lines 120-121, then distributes funds. There is no explicit `GameOver` event.
 - Assessment: The `gameOver` flag and `gameOverTime` are readable on-chain, and the nested delegatecalls to `runTerminalDecimatorJackpot` and `runTerminalJackpot` emit their own payout events. However, an indexer monitoring for the game-over transition must poll storage rather than listen for events.
 - For deity pass refunds (lines 91-114): The `claimableWinnings[owner] += refund` writes emit NO event per player. The refund loop credits players without emitting `PlayerCredited`. This is a gap -- deity pass refund credits are silent.
-- Disposition: DOCUMENT (the deity pass refund credit silence is the more notable gap)
+- Disposition: ~~DOCUMENT~~ **FIXED** -- now emits `GameOverDrained` (commit `142efbc0`)
 
 **EVT-GAMEOVER-02: `handleFinalSweep` emits no event** -- INFO
 - Sets `finalSwept = true`, clears `claimablePool`, and sweeps all funds via `_sendToVault`. No event emitted at any point in this function or `_sendToVault`.
 - Assessment: The stETH/ETH transfers emit their own Transfer events, but the final sweep state transition (`finalSwept`) has no dedicated event. An indexer must poll `finalSwept` storage.
-- Disposition: DOCUMENT
+- Disposition: ~~DOCUMENT~~ **FIXED** -- now emits `FinalSwept` (commit `142efbc0`)
 
 ---
 
@@ -229,18 +229,18 @@ No events declared in this module.
 
 | Function | State Changes | Event Emitted | Params Match Post-State | Indexer-Critical | Finding |
 |----------|--------------|---------------|------------------------|-----------------|---------|
-| `consumeCoinflipBoon(player)` | Clears coinflip boon fields in boonPacked[player].slot0 | None | N/A | No | EVT-BOON-01 |
-| `consumePurchaseBoost(player)` | Clears purchase boost fields in boonPacked[player].slot0 | None | N/A | No | EVT-BOON-01 |
-| `consumeDecimatorBoost(player)` | Clears decimator boost fields in boonPacked[player].slot0 | None | N/A | No | EVT-BOON-01 |
+| `consumeCoinflipBoon(player)` | Clears coinflip boon fields in boonPacked[player].slot0 | BoonConsumed (FIXED `142efbc0`) | Yes | No | ~~EVT-BOON-01~~ FIXED |
+| `consumePurchaseBoost(player)` | Clears purchase boost fields in boonPacked[player].slot0 | BoonConsumed (FIXED `142efbc0`) | Yes | No | ~~EVT-BOON-01~~ FIXED |
+| `consumeDecimatorBoost(player)` | Clears decimator boost fields in boonPacked[player].slot0 | BoonConsumed (FIXED `142efbc0`) | Yes | No | ~~EVT-BOON-01~~ FIXED |
 | `checkAndClearExpiredBoon(player)` | Clears expired boon fields across both packed slots | None | N/A | No | EVT-BOON-01 |
-| `consumeActivityBoon(player)` | Clears activity boon, updates mintPacked_ levelCount, awards quest streak bonus | None | N/A | No | EVT-BOON-01 |
+| `consumeActivityBoon(player)` | Clears activity boon, updates mintPacked_ levelCount, awards quest streak bonus | BoonConsumed (FIXED `142efbc0`) | Yes | No | ~~EVT-BOON-01~~ FIXED |
 
 ### Findings
 
 **EVT-BOON-01: No events in BoonModule for boon consumption** -- INFO
 - All 5 external functions modify packed boon state (clearing tiers, days, expiry checks) without emitting events.
 - Assessment: Boon consumption is an internal game mechanic triggered by other contracts (LootboxModule, Coin, Coinflip). The callers of these functions (e.g., `consumeCoinflipBoon` called from DegenerusGame router, which is called by Coinflip) have their own event trails. Boon state changes are low-frequency and not indexer-critical.
-- Disposition: DOCUMENT
+- Disposition: ~~DOCUMENT~~ **FIXED** -- all 4 boon consumption functions (consumeCoinflipBoon, consumePurchaseBoost, consumeDecimatorBoost, consumeActivityBoon) now emit `BoonConsumed` (commit `142efbc0`)
 
 ---
 
@@ -299,7 +299,7 @@ No findings. These are internal/view helpers. The streak update is a derived sta
 |----------|--------------|---------------|------------------------|-----------------|---------|
 | `purchaseWhaleBundle(buyer, quantity)` | Updates mintPacked_, queues tickets (100 levels), distributes DGNRS, splits ETH to pools, records lootbox entry | TicketsQueued (via _queueTickets, 100x), LootBoxIndexAssigned (if new lootbox entry), LootBoxBoostConsumed (if boost active) | TicketsQueued: Yes -- emitted inside _queueTickets with correct level and quantity. LootBoxIndexAssigned: Yes -- emitted at line 734 with current index and dayIndex. | No | EVT-WHALE-01 |
 | `purchaseLazyPass(buyer)` | Updates mintPacked_, activates 10-level pass, queues tickets, splits ETH to pools, records lootbox entry | TicketsQueued (via _activate10LevelPass, 10x), LootBoxIndexAssigned (if new entry), LootBoxBoostConsumed (if boost active) | Yes -- same helper functions as whale bundle | No | EVT-WHALE-01 |
-| `purchaseDeityPass(buyer, symbolId)` | Updates deityPassCount, deityPassPurchasedCount, deityPassOwners, deityPassSymbol, deityBySymbol, deityPassPaidTotal, mintPacked_; mints ERC721; queues tickets; distributes DGNRS; splits ETH to pools; records lootbox entry | TicketsQueued (via _queueTickets, 100x), LootBoxIndexAssigned (if new entry), LootBoxBoostConsumed (if boost active), ERC721 Transfer event from DeityPass.mint() | Yes -- ticket events match queue parameters; ERC721 event is from external contract. | Yes | EVT-WHALE-01, EVT-WHALE-02 |
+| `purchaseDeityPass(buyer, symbolId)` | Updates deityPassCount, deityPassPurchasedCount, deityPassOwners, deityPassSymbol, deityBySymbol, deityPassPaidTotal, mintPacked_; mints ERC721; queues tickets; distributes DGNRS; splits ETH to pools; records lootbox entry | DeityPassPurchased (FIXED `142efbc0`) + TicketsQueued (via _queueTickets, 100x), LootBoxIndexAssigned (if new entry), LootBoxBoostConsumed (if boost active), ERC721 Transfer event from DeityPass.mint() | Yes -- dedicated event + ticket events match queue parameters; ERC721 event is from external contract. | Yes | EVT-WHALE-01, ~~EVT-WHALE-02~~ FIXED |
 
 ### Findings
 
@@ -311,7 +311,7 @@ No findings. These are internal/view helpers. The streak update is a derived sta
 **EVT-WHALE-02: `purchaseDeityPass` is an indexer-critical transition with no dedicated event** -- INFO
 - Deity pass purchase is a significant game event (one of max 32 passes, symbol assignment, ERC721 mint). The state changes include `deityBySymbol[symbolId] = buyer` and `deityPassOwners.push(buyer)`.
 - Assessment: The ERC721 `Transfer` event from `DeityPass.mint(buyer, symbolId)` provides the most critical data (who got which symbol). Additional state like `deityPassPaidTotal` is not emitted but is readable on-chain.
-- Disposition: DOCUMENT
+- Disposition: ~~DOCUMENT~~ **FIXED** -- now emits `DeityPassPurchased` (commit `142efbc0`)
 
 ---
 
@@ -319,15 +319,15 @@ No findings. These are internal/view helpers. The streak update is a derived sta
 
 | Transition | Contract | Event | Sufficient Data? | Finding |
 |-----------|----------|-------|------------------|---------|
-| Game over | GameOverModule | None (gameOver flag set silently) | No dedicated event | EVT-GAMEOVER-01 |
-| Final sweep | GameOverModule | None (finalSwept flag set silently) | No dedicated event | EVT-GAMEOVER-02 |
+| Game over | GameOverModule | GameOverDrained (commit `142efbc0`) | Yes -- dedicated event | ~~EVT-GAMEOVER-01~~ FIXED |
+| Final sweep | GameOverModule | FinalSwept (commit `142efbc0`) | Yes -- dedicated event | ~~EVT-GAMEOVER-02~~ FIXED |
 | ETH credit to claimable | PayoutUtils | PlayerCredited | Yes -- player, recipient, amount | -- |
 | Jackpot payout (BAF/Decimator) | EndgameModule | RewardJackpotsSettled | Yes -- level, futurePool, claimableDelta | -- |
 | Whale pass claim | EndgameModule | WhalePassClaimed | Yes -- player, caller, halfPasses, startLevel | -- |
 | Top affiliate reward | EndgameModule | AffiliateDgnrsReward | Yes -- affiliate, level, dgnrsAmount | -- |
 | ETH winnings claimed | DegenerusGame | WinningsClaimed | Yes -- player, caller, amount | -- |
 | Affiliate DGNRS claimed | DegenerusGame | AffiliateDgnrsClaimed | Yes -- affiliate, level, caller, score, amount | -- |
-| Deity pass purchase | WhaleModule | No dedicated event (ERC721 Transfer from external) | Partial (ERC721 Transfer only) | EVT-WHALE-02 |
+| Deity pass purchase | WhaleModule | DeityPassPurchased (commit `142efbc0`) | Yes -- dedicated event | ~~EVT-WHALE-02~~ FIXED |
 | Lootbox assignment | WhaleModule | LootBoxIndexAssigned | Yes -- buyer, index, day | -- |
 
 ---
@@ -339,13 +339,13 @@ No findings. These are internal/view helpers. The streak update is a derived sta
 | EVT-GAME-01 | INFO | DegenerusGame | `recordMintQuestStreak` emits no event for streak update | DOCUMENT |
 | EVT-GAME-02 | INFO | DegenerusGame | `payCoinflipBountyDgnrs` emits no event (ERC-20 Transfer on sDGNRS suffices) | DOCUMENT |
 | EVT-GAME-03 | INFO | DegenerusGame | `resolveRedemptionLootbox` emits no event for accounting reclassification | DOCUMENT |
-| EVT-GAME-04 | INFO | DegenerusGame | `adminSwapEthForStEth` emits no event (stETH Transfer suffices) | DOCUMENT |
-| EVT-GAME-05 | INFO | DegenerusGame | `adminStakeEthForStEth` emits no event (Lido events suffice) | DOCUMENT |
-| EVT-GAMEOVER-01 | INFO | GameOverModule | No top-level GameOver event; deity pass refund credits are silent | DOCUMENT |
-| EVT-GAMEOVER-02 | INFO | GameOverModule | `handleFinalSweep` emits no event for finalSwept transition | DOCUMENT |
-| EVT-BOON-01 | INFO | BoonModule | No events for any of 5 boon consumption functions | DOCUMENT |
+| EVT-GAME-04 | INFO | DegenerusGame | `adminSwapEthForStEth` emits no event (stETH Transfer suffices) | **FIXED** (`142efbc0`) |
+| EVT-GAME-05 | INFO | DegenerusGame | `adminStakeEthForStEth` emits no event (Lido events suffice) | **FIXED** (`142efbc0`) |
+| EVT-GAMEOVER-01 | INFO | GameOverModule | No top-level GameOver event; deity pass refund credits are silent | **FIXED** (`142efbc0`) |
+| EVT-GAMEOVER-02 | INFO | GameOverModule | `handleFinalSweep` emits no event for finalSwept transition | **FIXED** (`142efbc0`) |
+| EVT-BOON-01 | INFO | BoonModule | No events for any of 5 boon consumption functions | **FIXED** (`142efbc0`) |
 | EVT-WHALE-01 | INFO | WhaleModule | No top-level purchase event for whale/lazy/deity purchases | DOCUMENT |
-| EVT-WHALE-02 | INFO | WhaleModule | Deity pass purchase (indexer-critical) has no dedicated event | DOCUMENT |
+| EVT-WHALE-02 | INFO | WhaleModule | Deity pass purchase (indexer-critical) has no dedicated event | **FIXED** (`142efbc0`) |
 
 ---
 
@@ -581,13 +581,13 @@ No findings -- DegeneretteModule has comprehensive event coverage. Every bet pla
 | EVT-GAME-01 | INFO | DegenerusGame | `recordMintQuestStreak` emits no event for streak update | DOCUMENT |
 | EVT-GAME-02 | INFO | DegenerusGame | `payCoinflipBountyDgnrs` emits no event (ERC-20 Transfer on sDGNRS suffices) | DOCUMENT |
 | EVT-GAME-03 | INFO | DegenerusGame | `resolveRedemptionLootbox` emits no event for accounting reclassification | DOCUMENT |
-| EVT-GAME-04 | INFO | DegenerusGame | `adminSwapEthForStEth` emits no event (stETH Transfer suffices) | DOCUMENT |
-| EVT-GAME-05 | INFO | DegenerusGame | `adminStakeEthForStEth` emits no event (Lido events suffice) | DOCUMENT |
-| EVT-GAMEOVER-01 | INFO | GameOverModule | No top-level GameOver event; deity pass refund credits are silent | DOCUMENT |
-| EVT-GAMEOVER-02 | INFO | GameOverModule | `handleFinalSweep` emits no event for finalSwept transition | DOCUMENT |
-| EVT-BOON-01 | INFO | BoonModule | No events for any of 5 boon consumption functions | DOCUMENT |
+| EVT-GAME-04 | INFO | DegenerusGame | `adminSwapEthForStEth` emits no event (stETH Transfer suffices) | **FIXED** (`142efbc0`) |
+| EVT-GAME-05 | INFO | DegenerusGame | `adminStakeEthForStEth` emits no event (Lido events suffice) | **FIXED** (`142efbc0`) |
+| EVT-GAMEOVER-01 | INFO | GameOverModule | No top-level GameOver event; deity pass refund credits are silent | **FIXED** (`142efbc0`) |
+| EVT-GAMEOVER-02 | INFO | GameOverModule | `handleFinalSweep` emits no event for finalSwept transition | **FIXED** (`142efbc0`) |
+| EVT-BOON-01 | INFO | BoonModule | No events for any of 5 boon consumption functions | **FIXED** (`142efbc0`) |
 | EVT-WHALE-01 | INFO | WhaleModule | No top-level purchase event for whale/lazy/deity purchases | DOCUMENT |
-| EVT-WHALE-02 | INFO | WhaleModule | Deity pass purchase (indexer-critical) has no dedicated event | DOCUMENT |
+| EVT-WHALE-02 | INFO | WhaleModule | Deity pass purchase (indexer-critical) has no dedicated event | **FIXED** (`142efbc0`) |
 | EVT-ADV-01 | INFO | AdvanceModule | `wireVrf` event uses confusing local variable name for old coordinator | DOCUMENT |
 | EVT-ADV-02 | INFO | AdvanceModule | `requestLootboxRng` emits no event for VRF request or index advancement | DOCUMENT |
 | EVT-JACK-01 | INFO | JackpotModule | `awardFinalDayDgnrsReward` emits no event (sDGNRS Transfer suffices) | DOCUMENT |
@@ -597,7 +597,7 @@ No findings -- DegeneretteModule has comprehensive event coverage. Every bet pla
 | EVT-DEC-02 | INFO | DecimatorModule | `runTerminalDecimatorJackpot` emits no event for terminal snapshot | DOCUMENT |
 | EVT-DEC-03 | INFO | DecimatorModule | Decimator claims have no dedicated claim event (PlayerCredited only) | DOCUMENT |
 
-**Total: 18 INFO findings across 14 game system files. 0 HIGH, 0 MEDIUM, 0 LOW. All DOCUMENT disposition per D-03.**
+**Total: 18 INFO findings across 14 game system files. 0 HIGH, 0 MEDIUM, 0 LOW. 6 FIXED (commit `142efbc0`), 12 DOCUMENT.**
 
 **Parameter correctness:** Zero stale-local or pre-update-snapshot bugs found across all ~95 emit statements. All events emit values computed from post-state or from the same computation that produced the state change.
 
@@ -1279,8 +1279,8 @@ Per D-04, indexed field findings (NC-10/NC-33) are triaged against the indexer-c
 
 | # | Location | Event | Disposition | Reasoning |
 |---|----------|-------|-------------|-----------|
-| 1 | DegenerusDeityPass.sol:48 | `Approval(address indexed owner, address indexed approved, uint256 indexed tokenId)` | FP | Soulbound ERC721 -- `approve()` reverts with `Soulbound()`. Event is declared for ERC721 interface compliance but correctly never emitted. Removing the declaration would break ERC721 ABI compatibility. |
-| 2 | DegenerusDeityPass.sol:49 | `ApprovalForAll(address indexed owner, address indexed operator, bool approved)` | FP | Same as #1. `setApprovalForAll()` reverts with `Soulbound()`. Declaration required for ERC721 ABI. |
+| 1 | DegenerusDeityPass.sol:48 | `Approval(address indexed owner, address indexed approved, uint256 indexed tokenId)` | ~~FP~~ **FIXED** | Event declaration deleted in commit `026f4dab`. Originally kept for ERC721 ABI compatibility but soulbound contract does not need approval events. |
+| 2 | DegenerusDeityPass.sol:49 | `ApprovalForAll(address indexed owner, address indexed operator, bool approved)` | ~~FP~~ **FIXED** | Same as #1. Event declaration deleted in commit `026f4dab`. |
 
 ---
 
@@ -1299,7 +1299,7 @@ Per D-04, indexed field findings (NC-10/NC-33) are triaged against the indexer-c
 
 | # | Location | Event | Disposition | Reasoning |
 |---|----------|-------|-------------|-----------|
-| 1 | DegenerusAdmin.sol:357 | `setLinkEthPriceFeed` -- `LinkEthFeedUpdated(feed)` | DOCUMENT | Emits only new feed address. Old value not included. Valid finding -- parameter change events should show old+new for monitoring. |
+| 1 | DegenerusAdmin.sol:357 | `setLinkEthPriceFeed` -- `LinkEthFeedUpdated(feed)` | ~~DOCUMENT~~ **FIXED** | Now emits (oldFeed, newFeed) per commit `4c2d9579`. |
 | 2 | DegenerusDeityPass.sol:97 | `setRenderer` -- `RendererUpdated(prev, newRenderer)` | FP | Already emits both old (`prev`) and new (`newRenderer`) values. Bot incorrectly flagged this. |
 | 3 | DegenerusDeityPass.sol:107 | `setRenderColors` -- `RenderColorsUpdated(outline, bg, nonCrypto)` | DOCUMENT | Emits only new color values. Old values not included. Cosmetic parameter -- low impact. |
 | 4 | DegenerusGame.sol:468 | `setOperatorApproval` -- `OperatorApproval(owner, operator, approved)` | FP | This is a boolean toggle, not a parameter change. The event shows the current state (approved: true/false). Old+new is implicit -- the opposite of emitted value. |
