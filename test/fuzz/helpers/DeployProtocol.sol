@@ -106,13 +106,7 @@ abstract contract DeployProtocol is Test {
 
         coin = new BurnieCoin();                       // N+11 = nonce 17
 
-        // BurnieCoinflip needs constructor args (uses patched ContractAddresses)
-        coinflip = new BurnieCoinflip(
-            ContractAddresses.COIN,
-            ContractAddresses.GAME,
-            ContractAddresses.JACKPOTS,
-            ContractAddresses.WWXRP
-        );                                             // N+12 = nonce 18
+        coinflip = new BurnieCoinflip();                // N+12 = nonce 18
 
         game = new DegenerusGame();                    // N+13 = nonce 19
         wwxrp = new WrappedWrappedXRP();               // N+14 = nonce 20

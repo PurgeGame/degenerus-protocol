@@ -123,7 +123,7 @@ async function main() {
 
 /**
  * Return constructor arguments for contracts that need them.
- * BurnieCoinflip and DegenerusAffiliate take constructor args.
+ * DegenerusAffiliate takes constructor args.
  */
 function getConstructorArgs(
   key,
@@ -131,14 +131,6 @@ function getConstructorArgs(
   affiliateBootstrap,
   affiliatePreReferrals
 ) {
-  if (key === "COINFLIP") {
-    return [
-      predicted.get("COIN"),
-      predicted.get("GAME"),
-      predicted.get("JACKPOTS"),
-      predicted.get("WWXRP"),
-    ];
-  }
   if (key === "AFFILIATE") {
     return [
       affiliateBootstrap.owners,

@@ -28,7 +28,7 @@ export const DEPLOY_ORDER = [
   "GAME_BOON_MODULE",      // N+9:  DegenerusGameBoonModule
   "GAME_DEGENERETTE_MODULE", // N+10: DegenerusGameDegeneretteModule
   "COIN",                  // N+11: BurnieCoin
-  "COINFLIP",              // N+12: BurnieCoinflip (immutable args only)
+  "COINFLIP",              // N+12: BurnieCoinflip (no constructor args)
   "GAME",                  // N+13: DegenerusGame (internal storage only)
   "WWXRP",                 // N+14: WrappedWrappedXRP
   "AFFILIATE",             // N+15: DegenerusAffiliate

@@ -114,11 +114,11 @@ contract BurnieCoinflip {
       |                         STORAGE VARIABLES                            |
       +======================================================================+*/
 
-    // Immutable contract references
-    IBurnieCoin public immutable burnie;
-    IDegenerusGame public immutable degenerusGame;
-    IDegenerusJackpots public immutable jackpots;
-    IWrappedWrappedXRP public immutable wwxrp;
+    // Constant contract references (addresses from ContractAddresses)
+    IBurnieCoin public constant burnie = IBurnieCoin(ContractAddresses.COIN);
+    IDegenerusGame public constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
+    IDegenerusJackpots public constant jackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
+    IWrappedWrappedXRP public constant wwxrp = IWrappedWrappedXRP(ContractAddresses.WWXRP);
 
     // Constants
     uint256 private constant MIN = 100 ether;
@@ -177,16 +177,7 @@ contract BurnieCoinflip {
     }
     mapping(uint48 => PlayerScore) internal coinflipTopByDay;
 
-    /*+======================================================================+
-      |                         CONSTRUCTOR                                  |
-      +======================================================================+*/
-
-    constructor(address _burnie, address _degenerusGame, address _jackpots, address _wwxrp) {
-        burnie = IBurnieCoin(_burnie);
-        degenerusGame = IDegenerusGame(_degenerusGame);
-        jackpots = IDegenerusJackpots(_jackpots);
-        wwxrp = IWrappedWrappedXRP(_wwxrp);
-    }
+    // No constructor needed — all contract references are compile-time constants.
 
     /*+======================================================================+
       |                         MODIFIERS                                    |
