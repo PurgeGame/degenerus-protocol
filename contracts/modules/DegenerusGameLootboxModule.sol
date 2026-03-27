@@ -329,17 +329,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Probability scale for granular boon rolls (ppm = 1e6).
     uint256 private constant BOON_PPM_SCALE = 1_000_000;
 
-    // Active boon categories (lootbox only keeps one active category at a time).
-    uint8 private constant BOON_CAT_NONE = 0;
-    uint8 private constant BOON_CAT_COINFLIP = 1;
-    uint8 private constant BOON_CAT_LOOTBOX = 3;
-    uint8 private constant BOON_CAT_PURCHASE = 4;
-    uint8 private constant BOON_CAT_DECIMATOR = 6;
-    uint8 private constant BOON_CAT_WHALE = 7;
-    uint8 private constant BOON_CAT_ACTIVITY = 9;
-    uint8 private constant BOON_CAT_DEITY_PASS = 10;
-    uint8 private constant BOON_CAT_WHALE_PASS = 11;
-    uint8 private constant BOON_CAT_LAZY_PASS = 12;
+    // Boon categories — players may hold one boon per category simultaneously.
+    // Within a category, upgrade semantics apply (higher tier replaces lower).
 
     // Deity boon constants
     /// @dev Number of boon slots available per deity per day
@@ -1051,7 +1042,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             abi.encodeWithSelector(IDegenerusGameBoonModule.checkAndClearExpiredBoon.selector, player)
         );
         if (!okClr) revert E();
-        uint8 activeCategory = _activeBoonCategory(player);
 
         uint48 currentDay = _simulatedDayIndex();
         uint24 currentLevel = level + 1;
@@ -1092,11 +1082,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             allowWhalePass,
             lazyPassEligible
         );
-
-        uint8 selectedCategory = _boonCategory(boonType);
-        if (activeCategory != BOON_CAT_NONE && activeCategory != selectedCategory) {
-            return;
-        }
 
         _applyBoon(player, boonType, day, currentDay, originalAmount, false);
     }
@@ -1332,61 +1317,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             cursor += BOON_WEIGHT_LAZY_PASS_50;
             if (roll < cursor) return BOON_LAZY_PASS_50;
         }
-    }
-
-    /// @dev Determine which boon category is currently active for the player.
-    ///      Reads from packed boonPacked[player] struct (2 SLOADs max).
-    function _activeBoonCategory(address player) private view returns (uint8 category) {
-        BoonPacked storage bp = boonPacked[player];
-        uint256 s0 = bp.slot0;
-        // Coinflip: tier at bits 48-55
-        if (uint8(s0 >> BP_COINFLIP_TIER_SHIFT) != 0) return BOON_CAT_COINFLIP;
-        // Lootbox: tier at bits 104-111
-        if (uint8(s0 >> BP_LOOTBOX_TIER_SHIFT) != 0) return BOON_CAT_LOOTBOX;
-        // Purchase: tier at bits 160-167
-        if (uint8(s0 >> BP_PURCHASE_TIER_SHIFT) != 0) return BOON_CAT_PURCHASE;
-        // Decimator: tier at bits 168-175
-        if (uint8(s0 >> BP_DECIMATOR_TIER_SHIFT) != 0) return BOON_CAT_DECIMATOR;
-        // Whale: whaleDay at bits 200-223 (nonzero means active)
-        if (uint24(s0 >> BP_WHALE_DAY_SHIFT) != 0) return BOON_CAT_WHALE;
-
-        uint256 s1 = bp.slot1;
-        // Lazy pass: check lazyPassDay (bits 128-151) or lazyPassTier (bits 176-183)
-        if (uint24(s1 >> BP_LAZY_PASS_DAY_SHIFT) != 0 || uint8(s1 >> BP_LAZY_PASS_TIER_SHIFT) != 0) {
-            return BOON_CAT_LAZY_PASS;
-        }
-        // Activity: pending at bits 0-23
-        if (uint24(s1 >> BP_ACTIVITY_PENDING_SHIFT) != 0) return BOON_CAT_ACTIVITY;
-        // Deity pass: tier at bits 72-79
-        if (uint8(s1 >> BP_DEITY_PASS_TIER_SHIFT) != 0) return BOON_CAT_DEITY_PASS;
-        return BOON_CAT_NONE;
-    }
-
-    /// @dev Map a boon type to its category.
-    function _boonCategory(uint8 boonType) private pure returns (uint8 category) {
-        if (boonType <= BOON_COINFLIP_25) return BOON_CAT_COINFLIP;
-        if (boonType == BOON_LOOTBOX_5 || boonType == BOON_LOOTBOX_15 || boonType == BOON_LOOTBOX_25) {
-            return BOON_CAT_LOOTBOX;
-        }
-        if (boonType == BOON_PURCHASE_5 || boonType == BOON_PURCHASE_15 || boonType == BOON_PURCHASE_25) {
-            return BOON_CAT_PURCHASE;
-        }
-        if (boonType == BOON_DECIMATOR_10 || boonType == BOON_DECIMATOR_25 || boonType == BOON_DECIMATOR_50) {
-            return BOON_CAT_DECIMATOR;
-        }
-        if (boonType == BOON_WHALE_10 || boonType == BOON_WHALE_25 || boonType == BOON_WHALE_50) {
-            return BOON_CAT_WHALE;
-        }
-        if (boonType == BOON_ACTIVITY_10 || boonType == BOON_ACTIVITY_25 || boonType == BOON_ACTIVITY_50) {
-            return BOON_CAT_ACTIVITY;
-        }
-        if (boonType == BOON_WHALE_PASS) {
-            return BOON_CAT_WHALE_PASS;
-        }
-        if (boonType == BOON_LAZY_PASS_10 || boonType == BOON_LAZY_PASS_25 || boonType == BOON_LAZY_PASS_50) {
-            return BOON_CAT_LAZY_PASS;
-        }
-        return BOON_CAT_DEITY_PASS;
     }
 
     /// @dev Apply a boon to a player. Handles both lootbox-sourced and deity-sourced boons.
