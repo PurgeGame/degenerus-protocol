@@ -29,11 +29,16 @@ interface IDegenerusGame {
     function gameOverTimestamp() external view returns (uint48);
 }
 
+/// @dev Vault interface for DGVE ownership check (unwrap auth).
+interface IDegenerusVault {
+    function isVaultOwner(address account) external view returns (bool);
+}
+
 /**
  * @title DegenerusStonk (DGNRS)
  * @notice Transferable ERC20 — the liquid face of the DGNRS token
  * @dev Holders burn DGNRS to claim proportional ETH + stETH + BURNIE backing.
- *      Creator can unwrap DGNRS back to soulbound sDGNRS for specific recipients.
+ *      DGVE majority holder can unwrap DGNRS back to soulbound sDGNRS for specific recipients.
  */
 contract DegenerusStonk {
     // =====================================================================
@@ -61,7 +66,7 @@ contract DegenerusStonk {
     event Approval(address indexed owner, address indexed spender, uint256 amount);
     /// @notice Emitted when DGNRS is burned through to sDGNRS for ETH + stETH + BURNIE
     event BurnThrough(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 burnieOut);
-    /// @notice Emitted when creator unwraps DGNRS back to soulbound sDGNRS
+    /// @notice Emitted when DGVE majority holder unwraps DGNRS back to soulbound sDGNRS
     event UnwrapTo(address indexed recipient, uint256 amount);
 
     // =====================================================================
@@ -87,6 +92,7 @@ contract DegenerusStonk {
     IStakedDegenerusStonk private constant stonk = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
     IERC20Minimal private constant burnie = IERC20Minimal(ContractAddresses.COIN);
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
+    IDegenerusVault private constant vault = IDegenerusVault(ContractAddresses.VAULT);
 
     // =====================================================================
     //                          CONSTRUCTOR
@@ -155,17 +161,17 @@ contract DegenerusStonk {
     }
 
     // =====================================================================
-    //                          UNWRAP (Creator Only)
+    //                          UNWRAP (Vault Owner Only)
     // =====================================================================
 
     /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound.
-    /// @dev Blocked during VRF stall (>5h) to prevent creator vote-stacking via DGNRS→sDGNRS conversion.
+    /// @dev Blocked during VRF stall (>5h) to prevent vote-stacking via DGNRS→sDGNRS conversion.
     /// @param recipient Address to receive the soulbound sDGNRS.
     /// @param amount Amount of DGNRS to burn and unwrap (18 decimals).
     function unwrapTo(address recipient, uint256 amount) external {
-        if (msg.sender != ContractAddresses.CREATOR) revert Unauthorized();
+        if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
         if (recipient == address(0)) revert ZeroAddress();
-        // Block unwrap during VRF stall (prevents creator vote-stacking)
+        // Block unwrap during VRF stall (prevents vote-stacking)
         if (block.timestamp - IDegenerusGame(ContractAddresses.GAME).lastVrfProcessed() > 5 hours)
             revert Unauthorized();
         _burn(msg.sender, amount);

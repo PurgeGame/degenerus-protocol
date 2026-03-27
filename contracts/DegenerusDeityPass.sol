@@ -17,6 +17,11 @@ interface IIcons32 {
     function symbol(uint256 quadrant, uint8 idx) external view returns (string memory);
 }
 
+/// @dev Vault interface for DGVE ownership check.
+interface IDegenerusVaultOwner {
+    function isVaultOwner(address account) external view returns (bool);
+}
+
 /// @notice Optional external renderer interface (v1).
 /// @dev Calls are bounded and always fallback to internal renderer on failure.
 interface IDeityPassRendererV1 {
@@ -52,7 +57,6 @@ contract DegenerusDeityPass {
     // -------------------------------------------------------------------------
 
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event RendererUpdated(address indexed previousRenderer, address indexed newRenderer);
     event RenderColorsUpdated(string outlineColor, string backgroundColor, string nonCryptoSymbolColor);
 
@@ -63,7 +67,7 @@ contract DegenerusDeityPass {
     mapping(uint256 => address) private _owners;
     mapping(address => uint256) private _balances;
 
-    address private _contractOwner;
+    IDegenerusVaultOwner private constant vault = IDegenerusVaultOwner(ContractAddresses.VAULT);
     address public renderer;
 
     uint16 private constant ICON_VB = 512;
@@ -74,13 +78,8 @@ contract DegenerusDeityPass {
     string private _nonCryptoSymbolColor = "#111111";
 
     modifier onlyOwner() {
-        if (msg.sender != _contractOwner) revert NotAuthorized();
+        if (!vault.isVaultOwner(msg.sender)) revert NotAuthorized();
         _;
-    }
-
-    constructor() {
-        _contractOwner = msg.sender;
-        emit OwnershipTransferred(address(0), msg.sender);
     }
 
     // -------------------------------------------------------------------------
@@ -89,16 +88,6 @@ contract DegenerusDeityPass {
 
     function name() external pure returns (string memory) { return "Degenerus Deity Pass"; }
     function symbol() external pure returns (string memory) { return "DEITY"; }
-    function owner() external view returns (address) { return _contractOwner; }
-
-    /// @notice Transfer contract ownership to a new address.
-    /// @param newOwner Address of the new owner (must not be zero).
-    function transferOwnership(address newOwner) external onlyOwner {
-        if (newOwner == address(0)) revert ZeroAddress();
-        address prev = _contractOwner;
-        _contractOwner = newOwner;
-        emit OwnershipTransferred(prev, newOwner);
-    }
 
     /// @notice Set optional external renderer. Set to address(0) to disable.
     /// @param newRenderer Address of the new renderer contract (or zero to use internal).

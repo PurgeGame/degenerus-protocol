@@ -222,16 +222,22 @@ contract DegenerusAdmin {
     enum ProposalPath { Admin, Community }
     enum ProposalState { Active, Executed, Killed, Expired }
 
+    /// @dev Packed into 3 storage slots (down from 7).
+    ///      Weights and snapshot stored as whole tokens (wei / 1e18). Max 1T = fits uint40 (1.1T max).
+    ///      createdAt as uint40 = max year ~36,847.
+    ///      Slot 1: proposer(20) + createdAt(5) + circulatingSnapshot(5) + path(1) + state(1) = 32 exact
+    ///      Slot 2: coordinator(20) + approveWeight(5) + rejectWeight(5) = 30 bytes
+    ///      Slot 3: keyHash(32) = 32 bytes
     struct Proposal {
-        address proposer;
-        address coordinator;
-        bytes32 keyHash;
-        uint48 createdAt;
-        uint256 approveWeight;
-        uint256 rejectWeight;
-        uint256 circulatingSnapshot;
-        ProposalPath path;
-        ProposalState state;
+        address proposer;              // slot 1: who proposed
+        uint40 createdAt;              // slot 1: block.timestamp at creation
+        uint40 circulatingSnapshot;    // slot 1: circulating sDGNRS at proposal time (whole tokens)
+        ProposalPath path;             // slot 1: Admin or Community
+        ProposalState state;           // slot 1: Active, Executed, Killed, Expired
+        address coordinator;           // slot 2: proposed VRF coordinator
+        uint40 approveWeight;          // slot 2: cumulative sDGNRS approve weight (whole tokens)
+        uint40 rejectWeight;           // slot 2: cumulative sDGNRS reject weight (whole tokens)
+        bytes32 keyHash;               // slot 3: proposed VRF key hash
     }
 
     // =========================================================================
@@ -334,8 +340,8 @@ contract DegenerusAdmin {
     /// @notice Vote direction per voter per proposal.
     mapping(uint256 => mapping(address => Vote)) public votes;
 
-    /// @notice Vote weight recorded at time of vote.
-    mapping(uint256 => mapping(address => uint256)) public voteWeight;
+    /// @notice Vote weight recorded at time of vote (whole tokens).
+    mapping(uint256 => mapping(address => uint40)) public voteWeight;
 
     /// @notice Tracks each address's current active proposal ID (0 = none).
     mapping(address => uint256) public activeProposalId;
@@ -343,6 +349,59 @@ contract DegenerusAdmin {
     /// @dev Proposal ID up to which all proposals are guaranteed non-Active.
     ///      _voidAllActive starts scanning from this index instead of 1.
     uint256 private voidedUpTo;
+
+    // =========================================================================
+    // FEED GOVERNANCE STATE
+    // =========================================================================
+
+    /// @dev Packed into 2 storage slots (down from 6).
+    ///      Weights and snapshot stored as whole tokens (wei / 1e18). Max 1T = fits uint40 (1.1T max).
+    ///      Slot 1: proposer(20) + createdAt(5) + circulatingSnapshot(5) + path(1) + state(1) = 32 exact
+    ///      Slot 2: feed(20) + approveWeight(5) + rejectWeight(5) = 30 bytes
+    struct FeedProposal {
+        address proposer;              // slot 1: who proposed
+        uint40 createdAt;              // slot 1: block.timestamp at creation
+        uint40 circulatingSnapshot;    // slot 1: circulating sDGNRS at proposal time (whole tokens)
+        ProposalPath path;             // slot 1: Admin or Community
+        ProposalState state;           // slot 1: Active, Executed, Killed, Expired
+        address feed;                  // slot 2: proposed feed address (zero = disable)
+        uint40 approveWeight;          // slot 2: cumulative sDGNRS approve weight (whole tokens)
+        uint40 rejectWeight;           // slot 2: cumulative sDGNRS reject weight (whole tokens)
+    }
+
+    /// @notice Total feed proposals ever created.
+    uint256 public feedProposalCount;
+
+    /// @notice Feed proposal data by ID (1-indexed).
+    mapping(uint256 => FeedProposal) public feedProposals;
+
+    /// @notice Vote direction per voter per feed proposal.
+    mapping(uint256 => mapping(address => Vote)) public feedVotes;
+
+    /// @notice Vote weight recorded at time of feed vote (whole tokens).
+    mapping(uint256 => mapping(address => uint40)) public feedVoteWeight;
+
+    /// @notice Tracks each address's current active feed proposal ID (0 = none).
+    mapping(address => uint256) public activeFeedProposalId;
+
+    /// @dev Feed proposal ID up to which all proposals are guaranteed non-Active.
+    uint256 private feedVoidedUpTo;
+
+    // Feed governance events
+    event FeedProposalCreated(
+        uint256 indexed proposalId,
+        address indexed proposer,
+        address feed,
+        ProposalPath path
+    );
+    event FeedVoteCast(
+        uint256 indexed proposalId,
+        address indexed voter,
+        bool approve,
+        uint256 weight
+    );
+    event FeedProposalExecuted(uint256 indexed proposalId, address feed);
+    event FeedProposalKilled(uint256 indexed proposalId);
 
     // =========================================================================
     // LINK REWARD STATE
@@ -369,6 +428,15 @@ contract DegenerusAdmin {
 
     /// @dev Minimum VRF stall duration before community can propose (7 days).
     uint256 private constant COMMUNITY_STALL_THRESHOLD = 7 days;
+
+    /// @dev Minimum feed-unhealthy duration before admin can propose feed swap (2 days).
+    uint256 private constant FEED_ADMIN_STALL_THRESHOLD = 2 days;
+
+    /// @dev Minimum feed-unhealthy duration before community can propose feed swap (7 days).
+    uint256 private constant FEED_COMMUNITY_STALL_THRESHOLD = 7 days;
+
+    /// @dev Feed swap proposal lifetime before expiry (168 hours = 7 days).
+    uint256 private constant FEED_PROPOSAL_LIFETIME = 168 hours;
 
     /// @dev Minimum sDGNRS stake to propose via community path (0.5% = 50 bps).
     uint256 private constant COMMUNITY_PROPOSE_BPS = 50;
@@ -419,19 +487,160 @@ contract DegenerusAdmin {
     // PRICE FEED MANAGEMENT
     // =========================================================================
 
-    /// @notice Configure the LINK/ETH price feed for LINK donation valuation.
-    /// @param feed New price feed address (zero to disable).
-    function setLinkEthPriceFeed(address feed) external onlyOwner {
-        address current = linkEthPriceFeed;
-        if (_feedHealthy(current)) revert FeedHealthy();
+    // =========================================================================
+    // PRICE FEED SWAP GOVERNANCE
+    // =========================================================================
+
+    /// @notice Propose a LINK/ETH price feed swap.
+    /// @dev Two paths:
+    ///      - Admin path: DGVE >50.1% holder, requires 2d+ feed unhealthy
+    ///      - Community path: 0.5%+ circulating sDGNRS, requires 7d+ feed unhealthy
+    /// @param newFeed Address of the proposed price feed (zero to disable).
+    /// @return proposalId The ID of the created proposal.
+    function proposeFeedSwap(
+        address newFeed
+    ) external returns (uint256 proposalId) {
+        if (gameAdmin.gameOver()) revert GameOver();
+
+        // Feed must be unhealthy and stale long enough for the proposer's path
+        uint256 stall = _feedStallDuration(linkEthPriceFeed);
+        if (stall == 0) revert FeedHealthy();
+
+        // Validate proposed feed (zero = disable, non-zero must have correct decimals)
         if (
-            feed != address(0) &&
-            IAggregatorV3(feed).decimals() != LINK_ETH_FEED_DECIMALS
+            newFeed != address(0) &&
+            IAggregatorV3(newFeed).decimals() != LINK_ETH_FEED_DECIMALS
         ) {
             revert InvalidFeedDecimals();
         }
-        linkEthPriceFeed = feed;
-        emit LinkEthFeedUpdated(current, feed);
+
+        // 1-per-address active proposal limit
+        uint256 existing = activeFeedProposalId[msg.sender];
+        if (existing != 0) {
+            FeedProposal storage ep = feedProposals[existing];
+            if (ep.state == ProposalState.Active &&
+                block.timestamp - uint256(ep.createdAt) < FEED_PROPOSAL_LIFETIME) {
+                revert AlreadyHasActiveProposal();
+            }
+        }
+
+        ProposalPath path;
+        if (vault.isVaultOwner(msg.sender)) {
+            if (stall < FEED_ADMIN_STALL_THRESHOLD) revert NotStalled();
+            path = ProposalPath.Admin;
+        } else {
+            if (stall < FEED_COMMUNITY_STALL_THRESHOLD) revert NotStalled();
+            uint256 circ = circulatingSupply();
+            if (circ == 0 || sDGNRS.balanceOf(msg.sender) * BPS < circ * COMMUNITY_PROPOSE_BPS)
+                revert InsufficientStake();
+            path = ProposalPath.Community;
+        }
+
+        proposalId = ++feedProposalCount;
+        FeedProposal storage p = feedProposals[proposalId];
+        p.proposer = msg.sender;
+        p.createdAt = uint40(block.timestamp);
+        p.path = path;
+        // p.state = ProposalState.Active (default 0)
+        p.feed = newFeed;
+        // approveWeight and rejectWeight start at 0
+        p.circulatingSnapshot = uint40(circulatingSupply() / 1 ether);
+
+        activeFeedProposalId[msg.sender] = proposalId;
+
+        emit FeedProposalCreated(proposalId, msg.sender, newFeed, path);
+    }
+
+    /// @notice Vote on an active feed swap proposal.
+    /// @dev Votes are changeable. After recording, checks execute/kill conditions.
+    ///      Reverts if feed has recovered — auto-cancellation.
+    /// @param proposalId ID of the feed proposal to vote on.
+    /// @param approve True to approve, false to reject.
+    /// @dev Zero-weight calls (no sDGNRS) skip vote recording and just check
+    ///      execute/kill conditions. This allows anyone to "poke" a proposal
+    ///      that has already crossed threshold due to time decay.
+    function voteFeedSwap(uint256 proposalId, bool approve) external {
+        // Feed recovery check: if feed is healthy again, governance is invalid
+        if (_feedHealthy(linkEthPriceFeed)) revert FeedHealthy();
+
+        FeedProposal storage p = feedProposals[proposalId];
+        _requireActiveProposal(p.state, p.createdAt, FEED_PROPOSAL_LIFETIME);
+
+        // Record vote only if caller has sDGNRS; otherwise skip to threshold checks (poke)
+        uint40 weight = _voterWeight();
+        if (weight != 0) {
+            (p.approveWeight, p.rejectWeight) = _applyVote(
+                approve, weight,
+                feedVotes[proposalId][msg.sender],
+                feedVoteWeight[proposalId][msg.sender],
+                p.approveWeight, p.rejectWeight
+            );
+            feedVotes[proposalId][msg.sender] = approve ? Vote.Approve : Vote.Reject;
+            feedVoteWeight[proposalId][msg.sender] = weight;
+            emit FeedVoteCast(proposalId, msg.sender, approve, uint256(weight) * 1 ether);
+        }
+
+        Resolution r = _resolveThreshold(
+            p.approveWeight, p.rejectWeight, p.circulatingSnapshot, feedThreshold(proposalId)
+        );
+        if (r == Resolution.Execute) {
+            _executeFeedSwap(proposalId);
+        } else if (r == Resolution.Kill) {
+            p.state = ProposalState.Killed;
+            emit FeedProposalKilled(proposalId);
+        }
+    }
+
+    /// @notice Current approval threshold for a feed proposal (basis points, decays daily).
+    /// @dev Defence-weighted schedule: 50% → 40% → 25% → 15% over 4 days.
+    ///      Floor is 15% (1500 bps) — if community can't reach 15% with approve > reject,
+    ///      the proposal expires. Defence matters more than restoring LINK rewards.
+    /// @param proposalId ID of the feed proposal.
+    /// @return Threshold in basis points (e.g. 5000 = 50%).
+    function feedThreshold(uint256 proposalId) public view returns (uint16) {
+        uint256 elapsed = block.timestamp - uint256(feedProposals[proposalId].createdAt);
+        if (elapsed >= FEED_PROPOSAL_LIFETIME) return 0;
+        if (elapsed >= 72 hours) return 1500;  // 15%
+        if (elapsed >= 48 hours) return 2500;  // 25%
+        if (elapsed >= 24 hours) return 4000;  // 40%
+        return 5000; // 50%
+    }
+
+    /// @notice Check if a feed proposal can be executed (view-only).
+    /// @param proposalId ID of the feed proposal.
+    /// @return True if all execution conditions are met.
+    function canExecuteFeedSwap(uint256 proposalId) external view returns (bool) {
+        FeedProposal storage p = feedProposals[proposalId];
+        if (!_isActiveProposal(p.state, p.createdAt, FEED_PROPOSAL_LIFETIME)) return false;
+        if (_feedHealthy(linkEthPriceFeed)) return false;
+
+        return _resolveThreshold(
+            p.approveWeight, p.rejectWeight, p.circulatingSnapshot, feedThreshold(proposalId)
+        ) == Resolution.Execute;
+    }
+
+    /// @dev Execute feed swap and void all other active feed proposals.
+    function _executeFeedSwap(uint256 proposalId) internal {
+        FeedProposal storage p = feedProposals[proposalId];
+        p.state = ProposalState.Executed;
+
+        // Void all other active feed proposals
+        uint256 start = feedVoidedUpTo + 1;
+        uint256 count = feedProposalCount;
+        for (uint256 i = start; i <= count; i++) {
+            if (i == proposalId) continue;
+            if (feedProposals[i].state == ProposalState.Active) {
+                feedProposals[i].state = ProposalState.Killed;
+                emit FeedProposalKilled(i);
+            }
+        }
+        feedVoidedUpTo = count;
+
+        address oldFeed = linkEthPriceFeed;
+        linkEthPriceFeed = p.feed;
+
+        emit LinkEthFeedUpdated(oldFeed, p.feed);
+        emit FeedProposalExecuted(proposalId, p.feed);
     }
 
     // =========================================================================
@@ -505,12 +714,12 @@ contract DegenerusAdmin {
         proposalId = ++proposalCount;
         Proposal storage p = proposals[proposalId];
         p.proposer = msg.sender;
-        p.coordinator = newCoordinator;
-        p.keyHash = newKeyHash;
-        p.createdAt = uint48(block.timestamp);
-        p.circulatingSnapshot = circulatingSupply();
+        p.createdAt = uint40(block.timestamp);
         p.path = path;
         // p.state = ProposalState.Active (default 0)
+        p.coordinator = newCoordinator;
+        p.keyHash = newKeyHash;
+        p.circulatingSnapshot = uint40(circulatingSupply() / 1 ether);
 
         activeProposalId[msg.sender] = proposalId;
 
@@ -520,6 +729,8 @@ contract DegenerusAdmin {
     /// @notice Vote on an active VRF swap proposal.
     /// @dev Votes are changeable. After recording, checks execute/kill conditions.
     ///      Reverts if VRF has recovered (stall < 20h) — this IS the auto-cancellation.
+    ///      Zero-weight calls (no sDGNRS) skip vote recording and just check
+    ///      execute/kill conditions — allows anyone to poke a proposal past threshold.
     /// @param proposalId ID of the proposal to vote on.
     /// @param approve True to approve, false to reject.
     function vote(uint256 proposalId, bool approve) external {
@@ -529,61 +740,29 @@ contract DegenerusAdmin {
             revert NotStalled();
 
         Proposal storage p = proposals[proposalId];
-        if (p.state != ProposalState.Active || p.createdAt == 0)
-            revert ProposalNotActive();
+        _requireActiveProposal(p.state, p.createdAt, PROPOSAL_LIFETIME);
 
-        // Check expiry
-        if (block.timestamp - uint256(p.createdAt) >= PROPOSAL_LIFETIME) {
-            p.state = ProposalState.Expired;
-            revert ProposalExpired();
-        }
-
-        // Get voter weight from live sDGNRS balance
+        // Record vote only if caller has sDGNRS; otherwise skip to threshold checks (poke)
         // Safe: VRF dead = supply frozen (no advances, unwrapTo blocked)
-        uint256 weight = sDGNRS.balanceOf(msg.sender);
-        if (weight == 0) revert InsufficientStake();
-
-        // Handle vote change: subtract old weight before adding new
-        Vote currentVote = votes[proposalId][msg.sender];
-        if (currentVote != Vote.None) {
-            uint256 oldWeight = voteWeight[proposalId][msg.sender];
-            if (currentVote == Vote.Approve) {
-                p.approveWeight -= oldWeight;
-            } else {
-                p.rejectWeight -= oldWeight;
-            }
+        uint40 weight = _voterWeight();
+        if (weight != 0) {
+            (p.approveWeight, p.rejectWeight) = _applyVote(
+                approve, weight,
+                votes[proposalId][msg.sender],
+                voteWeight[proposalId][msg.sender],
+                p.approveWeight, p.rejectWeight
+            );
+            votes[proposalId][msg.sender] = approve ? Vote.Approve : Vote.Reject;
+            voteWeight[proposalId][msg.sender] = weight;
+            emit VoteCast(proposalId, msg.sender, approve, uint256(weight) * 1 ether);
         }
 
-        // Record new vote
-        Vote newVote = approve ? Vote.Approve : Vote.Reject;
-        votes[proposalId][msg.sender] = newVote;
-        voteWeight[proposalId][msg.sender] = weight;
-
-        if (approve) {
-            p.approveWeight += weight;
-        } else {
-            p.rejectWeight += weight;
-        }
-
-        emit VoteCast(proposalId, msg.sender, approve, weight);
-
-        // Check execute/kill conditions against decaying threshold
-        uint16 t = threshold(proposalId);
-
-        // Execute: approve% >= threshold AND approve > reject
-        if (
-            p.approveWeight * BPS >= uint256(t) * p.circulatingSnapshot &&
-            p.approveWeight > p.rejectWeight
-        ) {
+        Resolution r = _resolveThreshold(
+            p.approveWeight, p.rejectWeight, p.circulatingSnapshot, threshold(proposalId)
+        );
+        if (r == Resolution.Execute) {
             _executeSwap(proposalId);
-            return;
-        }
-
-        // Kill: reject > approve AND reject% >= threshold
-        if (
-            p.rejectWeight > p.approveWeight &&
-            p.rejectWeight * BPS >= uint256(t) * p.circulatingSnapshot
-        ) {
+        } else if (r == Resolution.Kill) {
             p.state = ProposalState.Killed;
             emit ProposalKilled(proposalId);
         }
@@ -616,16 +795,97 @@ contract DegenerusAdmin {
     /// @return True if all execution conditions are met.
     function canExecute(uint256 proposalId) external view returns (bool) {
         Proposal storage p = proposals[proposalId];
-        if (p.state != ProposalState.Active || p.createdAt == 0) return false;
-        if (block.timestamp - uint256(p.createdAt) >= PROPOSAL_LIFETIME) return false;
+        if (!_isActiveProposal(p.state, p.createdAt, PROPOSAL_LIFETIME)) return false;
 
         // Stall check
         uint48 lastVrf = gameAdmin.lastVrfProcessed();
         if (block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD) return false;
 
-        uint16 t = threshold(proposalId);
-        return p.approveWeight * BPS >= uint256(t) * p.circulatingSnapshot
-            && p.approveWeight > p.rejectWeight;
+        return _resolveThreshold(
+            p.approveWeight, p.rejectWeight, p.circulatingSnapshot, threshold(proposalId)
+        ) == Resolution.Execute;
+    }
+
+    // =========================================================================
+    // SHARED GOVERNANCE HELPERS
+    // =========================================================================
+
+    enum Resolution { None, Execute, Kill }
+
+    /// @dev Calculate new cumulative weights after a vote, handling vote changes.
+    ///      Returns (newApprove, newReject, scaledWeight) — caller applies to storage.
+    function _applyVote(
+        bool approve,
+        uint40 weight,
+        Vote currentVote,
+        uint40 oldWeight,
+        uint40 approveWeight,
+        uint40 rejectWeight
+    ) private pure returns (uint40, uint40) {
+        // Undo previous vote if changing
+        if (currentVote == Vote.Approve) {
+            approveWeight -= oldWeight;
+        } else if (currentVote == Vote.Reject) {
+            rejectWeight -= oldWeight;
+        }
+        // Apply new vote
+        if (approve) {
+            approveWeight += weight;
+        } else {
+            rejectWeight += weight;
+        }
+        return (approveWeight, rejectWeight);
+    }
+
+    /// @dev Get voter's sDGNRS weight as whole tokens (0 if none, floor 1 if dust).
+    function _voterWeight() private view returns (uint40) {
+        uint256 raw = sDGNRS.balanceOf(msg.sender);
+        if (raw == 0) return 0;
+        uint40 w = uint40(raw / 1 ether);
+        return w == 0 ? 1 : w;
+    }
+
+    /// @dev Validate a proposal is active and not expired.
+    ///      Reverts ProposalNotActive or ProposalExpired.
+    function _requireActiveProposal(
+        ProposalState state,
+        uint40 createdAt,
+        uint256 lifetime
+    ) private view {
+        if (state != ProposalState.Active || createdAt == 0)
+            revert ProposalNotActive();
+        if (block.timestamp - uint256(createdAt) >= lifetime)
+            revert ProposalExpired();
+    }
+
+    /// @dev Check if a proposal is active and not expired (view, no revert).
+    function _isActiveProposal(
+        ProposalState state,
+        uint40 createdAt,
+        uint256 lifetime
+    ) private view returns (bool) {
+        if (state != ProposalState.Active || createdAt == 0) return false;
+        if (block.timestamp - uint256(createdAt) >= lifetime) return false;
+        return true;
+    }
+
+    /// @dev Check whether approve or reject weight has crossed the threshold.
+    ///      Returns Execute, Kill, or None. All values promoted to uint256.
+    function _resolveThreshold(
+        uint256 approveWeight,
+        uint256 rejectWeight,
+        uint256 snapshot,
+        uint16 t
+    ) private pure returns (Resolution) {
+        if (
+            approveWeight * BPS >= uint256(t) * snapshot &&
+            approveWeight > rejectWeight
+        ) return Resolution.Execute;
+        if (
+            rejectWeight > approveWeight &&
+            rejectWeight * BPS >= uint256(t) * snapshot
+        ) return Resolution.Kill;
+        return Resolution.None;
     }
 
     // =========================================================================
@@ -844,6 +1104,29 @@ contract DegenerusAdmin {
         if (delta2 >= 1e18) return 0;
         unchecked {
             return 1e18 - delta2;
+        }
+    }
+
+    /// @dev Returns how long the feed has been unhealthy (0 if healthy).
+    ///      Uses the feed's own updatedAt as the last-healthy timestamp.
+    ///      If feed is zero, reverted, or has bad data, returns max stall.
+    function _feedStallDuration(address feed) private view returns (uint256) {
+        if (feed == address(0)) return type(uint256).max;
+        try IAggregatorV3(feed).latestRoundData() returns (
+            uint80 roundId,
+            int256 answer,
+            uint256,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        ) {
+            if (answer <= 0 || updatedAt == 0 || answeredInRound < roundId)
+                return type(uint256).max;
+            if (updatedAt > block.timestamp) return type(uint256).max;
+            uint256 age = block.timestamp - updatedAt;
+            if (age <= LINK_ETH_MAX_STALE) return 0; // healthy
+            return age;
+        } catch {
+            return type(uint256).max;
         }
     }
 
