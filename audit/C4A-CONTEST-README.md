@@ -10,15 +10,13 @@ The protocol deploys 24 contracts: 14 core + 10 delegatecall modules sharing a s
 
 ---
 
-## I Care About Four Things
+## I Care About Three Things
 
-1. **RNG Integrity** -- VRF is the sole randomness source. All inputs to RNG-dependent calculations must be committed before the VRF request. Any path where a player can alter state between request and fulfillment to influence their outcome, or where a block proposer/validator can bias results, is a critical finding.
+1. **RNG Integrity** -- VRF is the sole randomness source. All inputs to RNG-dependent calculations must be committed before the VRF request. Any path where a player can alter state between request and fulfillment to influence their outcome, or where a block proposer/validator can bias results, is a high finding.
 
 2. **Gas Ceiling Safety** -- advanceGame must complete within block gas limit under any achievable on-chain state, not just typical load. Any path an attacker can force to exceed the gas limit is a high finding.
 
-3. **Money Correctness** -- ETH and token accounting must be exact. Any path where where unauthorized extraction occurs is a critical finding.
-
-4. **Admin Resistance** -- Assume a hostile admin. A compromised or malicious admin key must not be able to extract funds, manipulate RNG, or damage the game as long as the sDGNRS community is engaged and monitoring governance. Any path where admin alone can cause critical damage without governance approval is a medium finding.
+3. **Money Correctness** -- ETH and token accounting must be exact. Any path where unauthorized extraction occurs -- whether by a player, external attacker, or compromised admin -- is a high finding. Admin fund theft is in scope here: assume a hostile admin key. A compromised admin must not be able to extract funds or manipulate RNG as long as the sDGNRS community is engaged. Admin governance power is bounded by a DGNRS vesting schedule that scales with game maturity; VRF coordinator swap and price feed swap both require a Chainlink death clock prerequisite before governance can act. Governance manipulation scenarios are pre-documented in KNOWN-ISSUES.md.
 
 Everything else is noise.
 
@@ -42,7 +40,7 @@ Everything else is noise.
 
 ## Known Issues
 
-See `KNOWN-ISSUES.md` in the repository root. Pre-audited with Slither v0.11.5 (1,959 raw findings, 32 detectors) and 4naly3er (4,453 instances, 81 categories). Covers automated tool findings, design decisions (including boon coexistence, recycling bonus economics, VRF/price feed governance, and gameover fallback), 4 ERC-20 deviations, and 30 event audit findings. Post-v8.0 delta adversarial audit (6 INFO findings, 0 actionable) also incorporated.
+See `KNOWN-ISSUES.md` in the repository root. Pre-audited with Slither v0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,453 instances, 78 categories after triage). Covers automated tool findings, design decisions (including boon coexistence, recycling bonus economics, VRF/price feed governance, and gameover fallback), 4 ERC-20 deviations, and 30 event audit findings. Post-v8.0 delta adversarial audit (6 INFO findings, 0 actionable) also incorporated.
 
 If your finding is already documented there, it will be marked as a known issue and will not be eligible for reward.
 
