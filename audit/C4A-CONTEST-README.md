@@ -10,13 +10,15 @@ The protocol deploys 24 contracts: 14 core + 10 delegatecall modules sharing a s
 
 ---
 
-## I Care About Three Things
+## I Care About Four Things
 
-1. **RNG Integrity** -- VRF is the sole randomness source. Any path where a player, block proposer, or validator can predict or influence outcomes is a critical finding.
+1. **RNG Integrity** -- VRF is the sole randomness source. All inputs to RNG-dependent calculations must be committed before the VRF request. Any path where a player can alter state between request and fulfillment to influence their outcome, or where a block proposer/validator can bias results, is a critical finding.
 
-2. **Gas Ceiling Safety** -- The game processes up to N players per advanceGame call. Any path that exceeds block gas limit under realistic load is a high finding.
+2. **Gas Ceiling Safety** -- advanceGame must complete within block gas limit under any achievable on-chain state, not just typical load. Any path an attacker can force to exceed the gas limit is a high finding.
 
-3. **Money Correctness** -- ETH and token accounting must be exact. Any path where `balance < claimablePool` or where unauthorized extraction occurs is a critical finding.
+3. **Money Correctness** -- ETH and token accounting must be exact. Any path where where unauthorized extraction occurs is a critical finding.
+
+4. **Admin Resistance** -- Assume a hostile admin. A compromised or malicious admin key must not be able to extract funds, manipulate RNG, or damage the game as long as the sDGNRS community is engaged and monitoring governance. Any path where admin alone can cause critical damage without governance approval is a medium finding.
 
 Everything else is noise.
 
@@ -71,6 +73,7 @@ If your finding is already documented there, it will be marked as a known issue 
 | DegenerusDeityPass | ERC-721 deity passes, triangular pricing T(n) |
 | DeityBoonViewer | Deity boon data source and roll helper |
 | Icons32Data | On-chain SVG icon data |
+| GNRUS | Soulbound charity token with sDGNRS-governed level-based donations |
 | WrappedWrappedXRP | wXRP utility token |
 
 ### Delegatecall Modules (10)

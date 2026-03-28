@@ -7,7 +7,7 @@ solc_version = "0.8.34"
 auto_detect_solc = false
 via_ir = true
 optimizer = true
-optimizer_runs = 2
+optimizer_runs = 200
 evm_version = "paris"
 
 # Gas limit for integration tests (default 2^64 - 1 for unit tests,

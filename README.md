@@ -30,7 +30,7 @@ Requires Node.js 18+.
 ## Tests
 
 ```bash
-# Hardhat tests (1,463 tests)
+# Hardhat tests (~1,350 tests)
 npx hardhat test
 
 # Foundry invariant fuzzing
@@ -115,10 +115,11 @@ See [`scope.txt`](scope.txt) for the complete in-scope file list.
 ## Audit
 
 - **[`KNOWN-ISSUES.md`](KNOWN-ISSUES.md)** — Pre-disclosed known issues and intentional design decisions for wardens
+- **[`audit/C4A-CONTEST-README.md`](audit/C4A-CONTEST-README.md)** — C4A contest submission README
 
 ### Test Coverage
 
-- **1,463 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
+- **~1,350 Hardhat tests** — unit, integration, access control, edge cases, adversarial, PoC, validation
 - **27 Foundry test harnesses** (24 fuzz/invariant, 3 Halmos) — ETH solvency, supply invariants, VRF lifecycle, vault math, FSM, composition
 - **Slither** static analysis triaged (all HIGH/MEDIUM detections reviewed)
 
