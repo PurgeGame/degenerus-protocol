@@ -26,7 +26,9 @@
 - ✅ **v5.0 Ultimate Adversarial Audit** — Phases 103-119 (shipped 2026-03-25)
 - ✅ **v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity** — Phases 120-125 (shipped 2026-03-26)
 - ✅ **v7.0 Delta Adversarial Audit (v6.0 Changes)** — Phases 126-129 (shipped 2026-03-26)
-- [ ] **v8.0 Pre-Audit Hardening** — Phases 130-134 (in progress)
+- ✅ **v8.0 Pre-Audit Hardening** — Phases 130-134 (shipped 2026-03-27)
+- ✅ **v8.1 Final Audit Prep** — Phases 135-137 (shipped 2026-03-28)
+- [ ] **v9.0 Contest Dry Run** — Phases 138-140 (in progress)
 
 ## Phases
 
@@ -261,97 +263,93 @@
 
 </details>
 
-### v8.0 Pre-Audit Hardening (Phases 130-134)
-
-**Milestone Goal:** Eliminate every finding category that costs money at C4A before wardens touch the code.
+<details>
+<summary>v8.0 Pre-Audit Hardening (Phases 130-134) -- SHIPPED 2026-03-27</summary>
 
 - [x] **Phase 130: Bot Race** - Run Slither + 4naly3er on all production contracts, triage every finding (completed 2026-03-27)
 - [x] **Phase 131: ERC-20 Compliance** - Verify ERC-20 interface compliance across all 4 token contracts (completed 2026-03-27)
 - [x] **Phase 132: Event Correctness** - Systematic event audit across all 29 production contracts + GNRUS (completed 2026-03-27)
 - [x] **Phase 133: Comment Re-scan** - Delta NatSpec/inline comment sweep since v3.5 baseline (completed 2026-03-27)
-- [ ] **Phase 134: Consolidation** - Fix or document all findings, harden KNOWN-ISSUES.md for C4A
+- [x] **Phase 134: Consolidation** - Fix or document all findings, harden KNOWN-ISSUES.md for C4A (completed 2026-03-27)
+
+</details>
+
+<details>
+<summary>v8.1 Final Audit Prep (Phases 135-137) -- SHIPPED 2026-03-28</summary>
+
+- [x] **Phase 135: Delta Adversarial Audit** - 29 functions, 0 VULNERABLE, 6 INFO (completed 2026-03-28)
+- [x] **Phase 136: Test Hygiene** - 5 test files committed, Hardhat 1351 passing (completed 2026-03-28)
+- [x] **Phase 137: Documentation + Consolidation** - KNOWN-ISSUES.md +4 entries, C4A README finalized (completed 2026-03-28)
+
+</details>
+
+### v9.0 Contest Dry Run (In Progress)
+
+**Milestone Goal:** Simulate a C4A competitive audit with fresh-eyes specialist wardens to achieve 99% confidence that zero Medium+ findings exist.
+
+- [x] **Phase 138: KNOWN-ISSUES Triage + Contest README Fixes** - Harden documentation wardens will work from (completed 2026-03-28)
+- [x] **Phase 139: Fresh-Eyes Wardens** - Five parallel specialist wardens audit all attack surfaces (completed 2026-03-28)
+- [x] **Phase 140: Synthesis + Adjudication** - Consolidate warden outputs into C4A-adjudicated findings (completed 2026-03-28)
 
 ## Phase Details
 
-### Phase 130: Bot Race
-**Goal**: Every automated finding that Slither or 4naly3er would surface is triaged before wardens run the same tools
-**Depends on**: Nothing (first v8.0 phase)
-**Requirements**: BOT-01, BOT-02
+### Phase 138: KNOWN-ISSUES Triage + Contest README Fixes
+**Goal**: Wardens receive accurate, precise, and defensible documentation -- no imprecise claims that leave adjacent attack surface gameable
+**Depends on**: Phase 137 (v8.1 documentation finalized)
+**Requirements**: KI-01, KI-02, KI-03, KI-04, KI-05, CR-01, CR-02
 **Success Criteria** (what must be TRUE):
-  1. Slither runs clean on all production contracts with every finding categorized as fixed, documented, or false-positive
-  2. 4naly3er runs clean on all production contracts with every finding categorized as fixed, documented, or false-positive
-  3. A triage spreadsheet/document exists mapping each raw finding to its disposition (fix, document, or FP with reasoning)
-**Plans:** 2/2 plans complete
+  1. Every KNOWN-ISSUES.md entry is classified as KNOWN-ISSUE (warden filing risk, needs judge rejection) or DESIGN-DOC (not a filing risk) with clear rationale
+  2. The admin resistance section reflects the new vesting model (50B initial + 5B/level, fully vested at level 30), distinguishes bootstrap vs post-distribution phases, and notes Chainlink death clock prerequisite for VRF/price-feed governance paths
+  3. Every fuzzy claim in KNOWN-ISSUES.md has a worst-case quantified bound (e.g., cumulative rounding loss in wei, maximum affiliate timing extraction in ETH, prevrandao multi-bit bias characterization)
+  4. The C4A contest README uses "High" (not "Critical") as its highest severity tier, and its admin resistance section matches the vesting-based governance model
+  5. Vesting (claimVested) and unwrapTo guard change (5h timestamp to rngLocked) are documented in KNOWN-ISSUES.md
+**Plans**: 2 plans
 Plans:
-- [x] 130-01-PLAN.md — Slither analysis + triage (BOT-01)
-- [x] 130-02-PLAN.md — 4naly3er analysis + triage (BOT-02)
+- [x] 138-01-PLAN.md — KNOWN-ISSUES.md triage, bootstrap fix, fuzzy claim quantification, new entries
+- [x] 138-02-PLAN.md — C4A contest README severity + priority restructure
 
-### Phase 131: ERC-20 Compliance
-**Goal**: All 4 token contracts pass ERC-20 interface compliance checks with no edge-case deviations that wardens could file
-**Depends on**: Nothing (independent of Phase 130)
-**Requirements**: ERC-01, ERC-02, ERC-03, ERC-04
+### Phase 139: Fresh-Eyes Wardens
+**Goal**: Five independent specialist wardens, each receiving ONLY contract source + C4A README + KNOWN-ISSUES.md, produce PoC exploits or SAFE proofs for every attack surface in their domain
+**Depends on**: Phase 138 (accurate documentation for warden context)
+**Requirements**: WARD-01, WARD-02, WARD-03, WARD-04, WARD-05, WARD-06, WARD-07
 **Success Criteria** (what must be TRUE):
-  1. DGNRS transfer/approve/transferFrom/allowance behave per EIP-20 (zero-amount, self-transfer, max-uint approval edge cases verified)
-  2. sDGNRS soulbound restrictions are documented and view functions (balanceOf, totalSupply, decimals, name, symbol) return correct values
-  3. BURNIE transfer/approve/transferFrom/allowance behave per EIP-20 with edge cases verified
-  4. GNRUS soulbound restrictions are documented and view functions return correct values
-  5. Any intentional ERC-20 deviations are listed in KNOWN-ISSUES.md with rationale so wardens cannot file them
-**Plans:** 1/1 plans complete
+  1. RNG warden has traced every VRF commitment window, request-to-fulfillment path, and RNG consumer cross-contract and produced either a coded Foundry PoC or a SAFE proof with methodology trace for each
+  2. Gas warden has constructed adversarial state for every advanceGame execution path (including all delegatecall modules) and produced either a PoC demonstrating gas ceiling breach or a SAFE proof with gas measurements
+  3. Money warden has traced every ETH/token flow, BPS rounding chain, and cross-token interaction (sDGNRS/DGNRS/BURNIE/GNRUS/wXRP) across all 24 contracts and produced either a PoC demonstrating unauthorized extraction or a SAFE proof
+  4. Admin warden has analyzed every admin-accessible path distinguishing bootstrap (DGNRS-dominant, can unwrap) from post-distribution (governance effective), covering both Chainlink-death-gated governance paths, and produced either a PoC or SAFE proof for each
+  5. Composition warden has tested cross-domain attack sequences (RNG+money, admin+gas, module seam interactions during delegatecall) and produced either a PoC or SAFE proof for each tested sequence
+**Plans**: 5/5 plans complete
 Plans:
-- [x] 131-01-PLAN.md — ERC-20 compliance audit + consolidated report (ERC-01, ERC-02, ERC-03, ERC-04)
+- [x] 139-01-PLAN.md — RNG/VRF warden: commitment windows, request-to-fulfillment, RNG consumers
+- [x] 139-02-PLAN.md — Gas ceiling warden: advanceGame paths, loop bounds, delegatecall gas
+- [x] 139-03-PLAN.md — Money correctness warden: ETH flows, BPS rounding, cross-token interactions
+- [x] 139-04-PLAN.md — Admin resistance warden: admin functions, bootstrap vs post-distribution, Chainlink death clock
+- [x] 139-05-PLAN.md — Composition warden: cross-domain attacks, module seam interactions
 
-### Phase 132: Event Correctness
-**Goal**: Every state-changing function emits correct events and no indexer-critical transition is silent
-**Depends on**: Nothing (independent of Phases 130-131)
-**Requirements**: EVT-01, EVT-02, EVT-03
+### Phase 140: Synthesis + Adjudication
+**Goal**: All warden outputs are consolidated into a single adjudicated report with C4A severity classification, so the project knows exactly what would be payable in a real contest
+**Depends on**: Phase 139 (all warden outputs complete)
+**Requirements**: (derived from WARD-01 through WARD-07 outputs -- no dedicated requirements; this phase validates that the warden phase achieved its goals)
 **Success Criteria** (what must be TRUE):
-  1. Every external/public state-changing function across all production contracts either emits an event or has a documented reason for not emitting
-  2. Every emitted event's parameter values match the actual post-state (no stale locals, no pre-update snapshots)
-  3. Off-chain indexer-critical transitions (level changes, game over, jackpot payouts, token transfers, governance actions) all emit events with sufficient data for reconstruction
-**Plans**: 3 plans
+  1. Every warden finding is classified with C4A severity (High / Medium / QA / Rejected) using official C4A rules, with rationale for each classification
+  2. Duplicate findings across wardens are grouped by root cause, with the duplicate decay formula applied to assess real payout impact
+  3. Every PoC is validated as runnable (Foundry compile + execute) or rejected with explanation
+  4. Any finding classified Medium or higher has a disposition: FIX (with recommendation), DOCUMENT (add to KNOWN-ISSUES.md), or DISPUTE (with rationale for why C4A judge would reject)
+  5. KNOWN-ISSUES.md is updated with any new entries needed to pre-empt payable findings
+**Plans**: 1 plan
 Plans:
-- [x] 132-01-PLAN.md — Game system event audit (DegenerusGame + 12 modules) (EVT-01, EVT-02, EVT-03)
-- [x] 132-02-PLAN.md — Non-game contract event audit (tokens, admin, periphery, libraries) (EVT-01, EVT-02, EVT-03)
-- [x] 132-03-PLAN.md — Consolidated report assembly + bot-race appendix (EVT-01, EVT-02, EVT-03)
-
-### Phase 133: Comment Re-scan
-**Goal**: NatSpec and inline comments across all contracts changed since v3.5 accurately describe current code behavior
-**Depends on**: Nothing (independent of Phases 130-132)
-**Requirements**: CMT-01, CMT-02, CMT-03
-**Success Criteria** (what must be TRUE):
-  1. Every NatSpec tag (@param, @return, @notice, @dev) in contracts changed since v3.5 matches current function signatures and behavior
-  2. Inline comments in v6.0/v7.0-modified functions describe what the code actually does (no stale logic descriptions)
-  3. Zero references to removed/renamed functions, variables, or constants remain anywhere in the codebase
-**Plans:** 5/5 plans complete
-Plans:
-- [x] 133-01-PLAN.md — Game core: DegenerusGame + GameStorage + AdvanceModule + JackpotModule (CMT-01, CMT-02)
-- [x] 133-02-PLAN.md — Game modules: Lootbox, Mint, Decimator, Degenerette, Whale, Endgame, GameOver, Boon, MintStreak, Payout (CMT-01, CMT-02)
-- [x] 133-03-PLAN.md — Token + vault: BurnieCoin, BurnieCoinflip, DGNRS, sDGNRS, GNRUS, WWXRP, Vault (CMT-01, CMT-02)
-- [x] 133-04-PLAN.md — Admin + support: Admin, Affiliate, Quests, DeityPass, Jackpots, TraitUtils, BoonViewer, Icons32, libraries (CMT-01, CMT-02)
-- [x] 133-05-PLAN.md — CMT-03 stale reference sweep + interface NatSpec + summary + bot-race appendix (CMT-03)
-
-### Phase 134: Consolidation
-**Goal**: All bot-race, ERC-20, event, and comment findings are either fixed in code or comprehensively documented in KNOWN-ISSUES.md so wardens cannot file them
-**Depends on**: Phases 130, 131, 132, 133
-**Requirements**: BOT-03, BOT-04
-**Success Criteria** (what must be TRUE):
-  1. Every actionable finding from Phases 130-133 has either a code fix committed or a KNOWN-ISSUES.md entry with severity assessment and rationale
-  2. KNOWN-ISSUES.md is comprehensive enough that re-running Slither/4naly3er produces zero findings not already documented
-  3. A final v8.0 findings summary exists with counts by category (bot/ERC/event/comment) and disposition (fixed/documented/FP)
-**Plans:** 1/2 plans executed
-Plans:
-- [x] 134-01-PLAN.md — KNOWN-ISSUES.md consolidation + dead code fix + GAS-10 review (BOT-03)
-- [ ] 134-02-PLAN.md — v8.0 findings summary + C4A contest README draft (BOT-04)
+- [ ] 140-01-PLAN.md — Consolidated adjudicated findings report + KNOWN-ISSUES update
 
 ## Progress
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 130. Bot Race | 2/2 | Complete    | 2026-03-27 |
-| 131. ERC-20 Compliance | 1/1 | Complete   | 2026-03-27 |
-| 132. Event Correctness | 3/3 | Complete    | 2026-03-27 |
-| 133. Comment Re-scan | 5/5 | Complete    | 2026-03-27 |
-| 134. Consolidation | 1/2 | In Progress|  |
+**Execution Order:**
+Phase 138 (sequential) -> Phase 139 (5 wardens in parallel) -> Phase 140 (sequential)
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 138. KI Triage + README Fixes | v9.0 | 2/2 | Complete    | 2026-03-28 |
+| 139. Fresh-Eyes Wardens | v9.0 | 5/5 | Complete | 2026-03-28 |
+| 140. Synthesis + Adjudication | v9.0 | 0/1 | Complete    | 2026-03-28 |
 
 ## Deferred
 
