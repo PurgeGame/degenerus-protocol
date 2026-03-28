@@ -17,6 +17,9 @@ const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
 const INITIAL_SUPPLY = 1_000_000_000_000n * eth("1");
 const CREATOR_BPS = 2000n;
 const BPS_DENOM = 10_000n;
+const CREATOR_TOTAL = 200_000_000_000n * eth("1");
+const CREATOR_INITIAL = 50_000_000_000n * eth("1");
+const VEST_PER_LEVEL = 5_000_000_000n * eth("1");
 
 // 912-day level-0 idle timeout triggers the game-over liveness path
 const SECONDS_912_DAYS = 912 * 86400;
@@ -56,6 +59,21 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   const gameSigner = await hre.ethers.getSigner(gameAddr);
   await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
+}
+
+// Helper: set game level via storage slot 0 (level is at offset 18, 3 bytes)
+async function setGameLevel(game, level) {
+  const gameAddr = await game.getAddress();
+  const slot0 = await hre.ethers.provider.getStorage(gameAddr, 0);
+  const slot0Bn = BigInt(slot0);
+  // Clear bytes [18..20] (level field) and write new value
+  const mask = ~(0xFFFFFFn << 144n); // 18 bytes * 8 = 144 bits
+  const newSlot0 = (slot0Bn & mask) | (BigInt(level) << 144n);
+  await hre.ethers.provider.send("hardhat_setStorageAt", [
+    gameAddr,
+    "0x0",
+    "0x" + newSlot0.toString(16).padStart(64, "0"),
+  ]);
 }
 
 // Helper: deposit ETH into sDGNRS via game impersonation
@@ -98,10 +116,9 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       expect(await dgnrs.totalSupply()).to.equal(expected);
     });
 
-    it("creator receives all DGNRS at deployment", async function () {
+    it("creator receives 25% of DGNRS at deployment (vesting)", async function () {
       const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
-      const supply = await dgnrs.totalSupply();
-      expect(await dgnrs.balanceOf(deployer.address)).to.equal(supply);
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(CREATOR_INITIAL);
     });
 
     it("sDGNRS contract holds matching sDGNRS balance", async function () {
@@ -228,12 +245,13 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       const amount = eth("1000");
 
       const ownerBefore = await dgnrs.balanceOf(deployer.address);
+      const supplyBefore = await dgnrs.totalSupply();
       await dgnrs.connect(deployer).unwrapTo(alice.address, amount);
 
       // Vault owner's DGNRS decreased
       expect(await dgnrs.balanceOf(deployer.address)).to.equal(ownerBefore - amount);
       // DGNRS totalSupply decreased (burned)
-      expect(await dgnrs.totalSupply()).to.equal(ownerBefore - amount);
+      expect(await dgnrs.totalSupply()).to.equal(supplyBefore - amount);
       // Alice received soulbound sDGNRS
       expect(await sdgnrs.balanceOf(alice.address)).to.equal(amount);
     });
@@ -514,6 +532,100 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       await giveSDGNRS(sdgnrs, game, alice.address, eth("1000"));
       await sdgnrs.connect(alice).burn(eth("500"));
       expect(await sdgnrs.totalSupply()).to.equal(supply0 - eth("500"));
+    });
+  });
+
+  // ===========================================================================
+  // 7. Vesting
+  // ===========================================================================
+  describe("Vesting", function () {
+    it("constructor gives creator 25% (50B), contract holds 75% (150B)", async function () {
+      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
+      const dgnrsAddr = await dgnrs.getAddress();
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(CREATOR_INITIAL);
+      expect(await dgnrs.balanceOf(dgnrsAddr)).to.equal(CREATOR_TOTAL - CREATOR_INITIAL);
+      expect(await dgnrs.totalSupply()).to.equal(CREATOR_TOTAL);
+    });
+
+    it("claimVested reverts at level 0 (nothing new to vest)", async function () {
+      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
+      await expect(dgnrs.connect(deployer).claimVested()).to.be.revertedWithCustomError(dgnrs, "Insufficient");
+    });
+
+    it("claimVested reverts for non-vault-owner", async function () {
+      const { dgnrs, game, alice } = await loadFixture(deployFullProtocol);
+      await setGameLevel(game, 5);
+      await expect(dgnrs.connect(alice).claimVested()).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
+    });
+
+    it("claimVested releases 5B at level 1", async function () {
+      const { dgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await setGameLevel(game, 1);
+      await dgnrs.connect(deployer).claimVested();
+      // Creator still has initial 50B, vault owner (deployer) gets 5B vested
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(CREATOR_INITIAL + VEST_PER_LEVEL);
+    });
+
+    it("claimVested releases 25B at level 5", async function () {
+      const { dgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await setGameLevel(game, 5);
+      await dgnrs.connect(deployer).claimVested();
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(CREATOR_INITIAL + VEST_PER_LEVEL * 5n);
+    });
+
+    it("claimVested caps at 200B total at level 30", async function () {
+      const { dgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await setGameLevel(game, 30);
+      await dgnrs.connect(deployer).claimVested();
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(CREATOR_TOTAL);
+      const dgnrsAddr = await dgnrs.getAddress();
+      expect(await dgnrs.balanceOf(dgnrsAddr)).to.equal(0n);
+    });
+
+    it("claimVested caps at 200B even past level 30", async function () {
+      const { dgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await setGameLevel(game, 100);
+      await dgnrs.connect(deployer).claimVested();
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(CREATOR_TOTAL);
+    });
+
+    it("claimVested is incremental — claim at level 3 then level 7", async function () {
+      const { dgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await setGameLevel(game, 3);
+      await dgnrs.connect(deployer).claimVested();
+      const after3 = await dgnrs.balanceOf(deployer.address);
+      expect(after3).to.equal(CREATOR_INITIAL + VEST_PER_LEVEL * 3n);
+
+      await setGameLevel(game, 7);
+      await dgnrs.connect(deployer).claimVested();
+      const after7 = await dgnrs.balanceOf(deployer.address);
+      expect(after7).to.equal(CREATOR_INITIAL + VEST_PER_LEVEL * 7n);
+    });
+
+    it("claimVested reverts on double-claim at same level", async function () {
+      const { dgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      await setGameLevel(game, 5);
+      await dgnrs.connect(deployer).claimVested();
+      await expect(dgnrs.connect(deployer).claimVested()).to.be.revertedWithCustomError(dgnrs, "Insufficient");
+    });
+
+    it("claimVested emits Transfer from contract to caller", async function () {
+      const { dgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      const dgnrsAddr = await dgnrs.getAddress();
+      await setGameLevel(game, 2);
+      const tx = await dgnrs.connect(deployer).claimVested();
+      const ev = await getEvent(tx, dgnrs, "Transfer");
+      expect(ev.args.from).to.equal(dgnrsAddr);
+      expect(ev.args.to).to.equal(deployer.address);
+      expect(ev.args.amount).to.equal(VEST_PER_LEVEL * 2n);
+    });
+
+    it("totalSupply unchanged by vesting claims", async function () {
+      const { dgnrs, game, deployer } = await loadFixture(deployFullProtocol);
+      const supplyBefore = await dgnrs.totalSupply();
+      await setGameLevel(game, 10);
+      await dgnrs.connect(deployer).claimVested();
+      expect(await dgnrs.totalSupply()).to.equal(supplyBefore);
     });
   });
 });

@@ -22,11 +22,12 @@ interface IERC20Minimal {
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
-/// @dev Game interface for VRF liveness check (unwrap guard) and game-over check (burn guard).
+/// @dev Game interface for RNG lock (unwrap guard), game-over check (burn guard), and level (vesting).
 interface IDegenerusGame {
-    function lastVrfProcessed() external view returns (uint48);
+    function rngLocked() external view returns (bool);
     function gameOver() external view returns (bool);
     function gameOverTimestamp() external view returns (uint48);
+    function level() external view returns (uint24);
 }
 
 /// @dev Vault interface for DGVE ownership check (unwrap auth).
@@ -86,13 +87,24 @@ contract DegenerusStonk {
     mapping(address => mapping(address => uint256)) public allowance;
 
     // =====================================================================
+    //                          VESTING STATE
+    // =====================================================================
+
+    uint256 private _vestingReleased;
+
+    // =====================================================================
     //                          CONSTANTS
     // =====================================================================
+
+    uint256 private constant CREATOR_INITIAL = 50_000_000_000 * 1e18;   // 50B at deploy
+    uint256 private constant VEST_PER_LEVEL  = 5_000_000_000 * 1e18;    // 5B per level
+    uint256 private constant CREATOR_TOTAL   = 200_000_000_000 * 1e18;  // 200B total
 
     IStakedDegenerusStonk private constant stonk = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
     IERC20Minimal private constant burnie = IERC20Minimal(ContractAddresses.COIN);
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     IDegenerusVault private constant vault = IDegenerusVault(ContractAddresses.VAULT);
+    IDegenerusGame private constant game = IDegenerusGame(ContractAddresses.GAME);
 
     // =====================================================================
     //                          CONSTRUCTOR
@@ -102,8 +114,12 @@ contract DegenerusStonk {
         uint256 deposited = stonk.balanceOf(address(this));
         if (deposited == 0) revert Insufficient();
         totalSupply = deposited;
-        balanceOf[ContractAddresses.CREATOR] = deposited;
-        emit Transfer(address(0), ContractAddresses.CREATOR, deposited);
+        uint256 unvested = deposited - CREATOR_INITIAL;
+        balanceOf[ContractAddresses.CREATOR] = CREATOR_INITIAL;
+        balanceOf[address(this)] = unvested;
+        _vestingReleased = CREATOR_INITIAL;
+        emit Transfer(address(0), ContractAddresses.CREATOR, CREATOR_INITIAL);
+        emit Transfer(address(0), address(this), unvested);
     }
 
     /// @notice Accepts ETH from sDGNRS during burn-through
@@ -165,18 +181,35 @@ contract DegenerusStonk {
     // =====================================================================
 
     /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound.
-    /// @dev Blocked during VRF stall (>5h) to prevent vote-stacking via DGNRS→sDGNRS conversion.
+    /// @dev Blocked while RNG is locked to prevent vote-stacking via DGNRS→sDGNRS conversion.
     /// @param recipient Address to receive the soulbound sDGNRS.
     /// @param amount Amount of DGNRS to burn and unwrap (18 decimals).
     function unwrapTo(address recipient, uint256 amount) external {
         if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
         if (recipient == address(0)) revert ZeroAddress();
-        // Block unwrap during VRF stall (prevents vote-stacking)
-        if (block.timestamp - IDegenerusGame(ContractAddresses.GAME).lastVrfProcessed() > 5 hours)
-            revert Unauthorized();
+        if (game.rngLocked()) revert Unauthorized();
         _burn(msg.sender, amount);
         stonk.wrapperTransferTo(recipient, amount);
         emit UnwrapTo(recipient, amount);
+    }
+
+    // =====================================================================
+    //                          VESTING (Vault Owner Only)
+    // =====================================================================
+
+    /// @notice Claim vested DGNRS based on current game level.
+    /// @dev 50B at deploy to CREATOR, then 5B per level to vault owner. Fully vested at level 30.
+    function claimVested() external {
+        if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
+        uint256 vested = CREATOR_INITIAL + game.level() * VEST_PER_LEVEL;
+        if (vested > CREATOR_TOTAL) vested = CREATOR_TOTAL;
+        if (vested <= _vestingReleased) revert Insufficient();
+        uint256 claimable;
+        unchecked { claimable = vested - _vestingReleased; }
+        _vestingReleased = vested;
+        balanceOf[address(this)] -= claimable;
+        balanceOf[msg.sender] += claimable;
+        emit Transfer(address(this), msg.sender, claimable);
     }
 
     // =====================================================================
@@ -193,7 +226,7 @@ contract DegenerusStonk {
     /// @custom:reverts GameNotOver If called during active game (Seam-1 fix).
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
         _burn(msg.sender, amount);
-        if (!IDegenerusGame(ContractAddresses.GAME).gameOver()) revert GameNotOver();
+        if (!game.gameOver()) revert GameNotOver();
 
         (ethOut, stethOut, burnieOut) = stonk.burn(amount);
 
@@ -269,9 +302,8 @@ contract DegenerusStonk {
     /// @dev Permissionless. Burns all sDGNRS held by this contract and forwards the
     ///      ETH/stETH output. stETH sent first, then ETH (CEI).
     function yearSweep() external {
-        IDegenerusGame gameContract = IDegenerusGame(ContractAddresses.GAME);
-        if (!gameContract.gameOver()) revert SweepNotReady();
-        uint48 goTime = gameContract.gameOverTimestamp();
+        if (!game.gameOver()) revert SweepNotReady();
+        uint48 goTime = game.gameOverTimestamp();
         if (goTime == 0 || block.timestamp < uint256(goTime) + 365 days) revert SweepNotReady();
 
         uint256 remaining = stonk.balanceOf(address(this));
