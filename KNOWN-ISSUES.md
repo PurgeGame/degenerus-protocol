@@ -10,28 +10,21 @@ Pre-audited with Slither v0.11.5 + 4naly3er. 110 detector categories triaged (2 
 
 These are architectural decisions, not vulnerabilities.
 
-**All rounding favors solvency.** Every BPS calculation rounds down on payouts and up on burns. stETH transfers retain 1-2 wei per operation. The solvency invariant `balance >= claimablePool` is strengthened by rounding, never weakened. Worst-case cumulative rounding retention: with a 10,000 BPS denominator, maximum rounding loss per division is 1 wei per recipient. Over ~500 levels with ~50 operations per level (~25,000 total operations), worst-case retention is ~25,000 wei (~0.000000000025 ETH) -- dust-level amounts that cannot materially affect any pool balance. (Detectors: `[L-13]`, `[L-14]`)
+**All rounding favors solvency.** Every BPS calculation rounds down on payouts and up on burns. stETH transfers retain 1-2 wei per operation. The solvency invariant `balance >= claimablePool` is strengthened by rounding, never weakened. (Detectors: `[L-13]`, `[L-14]`)
 
-**Non-VRF entropy for affiliate winner roll.** Deterministic seed (gas optimization). Worst case: player times a purchase to direct affiliate credit to a preferred affiliate. The credit is the purchase's affiliate BPS allocation routed to a valid affiliate address -- no protocol ETH extraction is possible since the affiliate share is paid to a valid affiliate either way. The manipulation is equivalent to choosing which friend receives a referral bonus.
+**Non-VRF entropy for affiliate winner roll.** Deterministic seed (gas optimization). Worst case: player times purchases to direct affiliate credit to a different affiliate. No protocol value extraction.
 
-**VRF swap governance.** Emergency VRF coordinator rotation requires a 20h+ VRF stall (Chainlink death clock) and sDGNRS community approval with time-decaying threshold. Execution requires approve weight > reject weight and meeting the threshold -- reject voters holding more sDGNRS than approvers block the proposal. The creator receives DGNRS (not sDGNRS) that vests over 30 levels (50B initial allocation + 5B per level via `claimVested()`). To vote, the creator must unwrap DGNRS to sDGNRS via `unwrapTo` -- but `unwrapTo` is blocked when `rngLocked()` is true (during active VRF request/fulfillment). Admin governance power is bounded by the vesting schedule and decays as community accumulates sDGNRS. Exploitation requires: compromised admin + Chainlink VRF failure (20h+ stall) + community inattention to reject the proposal. This is the intended trust model.
+**VRF swap governance.** Emergency VRF coordinator rotation requires a 20h+ stall and sDGNRS community approval with time-decaying threshold. Execution requires approve weight > reject weight and meeting the threshold -- reject voters holding more sDGNRS than approvers block the proposal. This is the intended trust model.
 
-**Price feed swap governance.** LINK/ETH price feed rotation requires feed unhealthy for 2d+ (admin) or 7d+ (community), then sDGNRS governance vote with defence-weighted threshold (50% to 15% floor over 4 days). If 15% approval with approve > reject cannot be reached, the proposal expires. Prevents attacker-controlled feed from enabling BURNIE hyperinflation via fake LINK valuations. If the feed is down, LINK donations still work -- donors just don't receive BURNIE credit. The creator receives DGNRS (not sDGNRS) that vests over 30 levels (50B initial + 5B per level via `claimVested()`). To participate in governance, the creator must unwrap DGNRS to sDGNRS via `unwrapTo`, which is blocked when `rngLocked()` is true. Admin governance power is bounded by the vesting schedule and decays as community accumulates sDGNRS. Exploitation requires: compromised admin + Chainlink feed failure (2d+/7d+ stall) + community inattention.
+**Price feed swap governance.** LINK/ETH price feed rotation requires feed unhealthy for 2d+ (admin) or 7d+ (community), then sDGNRS governance vote with defence-weighted threshold (50% → 15% floor over 4 days). If 15% approval with approve > reject cannot be reached, the proposal expires. Prevents attacker-controlled feed from enabling BURNIE hyperinflation via fake LINK valuations. If the feed is down, LINK donations still work -- donors just don't receive BURNIE credit.
 
 **Chainlink VRF V2.5 dependency.** Sole randomness source. If VRF goes down, the game stalls but no funds are lost. Upon governance-gated coordinator swap, gap day RNG words are backfilled via keccak256(vrfWord, gapDay) and orphaned lootbox indices receive fallback words. Coinflips and lootboxes resolve naturally after backfill. Independent recovery paths: governance-based coordinator rotation (20h+ stall threshold) and 120-day inactivity timeout.
 
 **Lido stETH dependency.** Prize pool growth depends on staking yield. If yield goes to zero, positive-sum margin disappears. Protocol remains solvent -- the solvency invariant does not depend on yield.
 
-
-**Feed governance uses live circulating supply.** Price feed governance snapshots use live sDGNRS circulating supply (not a frozen snapshot) because the game continues running during feed stalls. This differs intentionally from VRF governance where supply IS frozen at proposal time. The asymmetry is conservative: feed governance operates during normal game activity, so live supply reflects current stakeholder distribution. (Finding: DELTA-F-001)
-
-**Feed validation checks decimals only.** The `proposeFeedSwap` function validates a proposed Chainlink feed by checking `decimals() == 18` but does not verify price data correctness. A feed with correct decimals could return arbitrary prices. Impact is limited: the feed is only used for LINK donation BURNIE credit calculation, not core game economics or ETH flows. Governance approval (sDGNRS vote with defence-weighted threshold) is the real safeguard against malicious feeds. (Finding: DELTA-F-003)
-
 **Gameover prevrandao fallback.** `_getHistoricalRngFallback` uses `block.prevrandao` as supplementary entropy when VRF is unavailable at game over. A block proposer can bias prevrandao (1-bit manipulation on binary outcomes). Edge-of-edge case: gameover + VRF dead 3+ days. 5 committed VRF words provide bulk entropy.
 
-**Creator DGNRS vesting.** The vault owner receives DGNRS tokens on a vesting schedule: 50B initial allocation plus 5B per game level, claimable via `claimVested()`. Fully vested at level 30 (200B total). DGNRS can be unwrapped to sDGNRS via `unwrapTo` for governance participation, but unwrapping is blocked during active VRF windows (`rngLocked()` guard). This vesting schedule determines the admin's maximum governance weight at each stage of the game.
-
-**unwrapTo uses rngLocked guard.** The `unwrapTo` function (DGNRS to sDGNRS conversion) is blocked when `rngLocked()` returns true, which indicates an active VRF request awaiting fulfillment. The guard only blocks during the actual VRF request/fulfillment window (typically seconds to minutes). This prevents governance vote manipulation via just-in-time sDGNRS minting during VRF-dependent game state transitions.
+**EntropyLib XOR-shift PRNG for lootbox outcome rolls.** `EntropyLib.entropyStep()` uses a 256-bit XOR-shift PRNG (shifts 7/9/8) for lootbox outcome derivation (target level, ticket counts, BURNIE amounts, boons). XOR-shift has known theoretical weaknesses (cannot produce zero state, fixed cycle, correlated consecutive outputs). Exploitation is infeasible: the PRNG is seeded per-player, per-day, per-amount via `keccak256(rngWord, player, day, amount)` where `rngWord` is VRF-derived. The small number of entropy steps per resolution (5-10) and modular arithmetic over small ranges further mask any non-uniformity.
 
 ---
 
@@ -41,7 +34,7 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### ETH Transfer Safety
 
-**Payout functions send ETH to user-supplied addresses.** `_payoutWithStethFallback`, `_payoutWithEthFallback`, `_payEth` (4 instances) send ETH via `.call{value:}`. Destinations are `msg.sender` or player addresses from game state -- all paths have access control. ETH conservation invariant holds across all paths. (Detector: `arbitrary-send-eth`)
+**Payout functions send ETH to user-supplied addresses.** `_payoutWithStethFallback`, `_payoutWithEthFallback`, `_payEth` (4 instances) send ETH via `.call{value:}`. Destinations are `msg.sender` or player addresses from game state -- all paths have access control. ETH conservation proven in v5.0 adversarial audit. (Detector: `arbitrary-send-eth`)
 
 ### Missing Event for claimablePool Decrement
 
@@ -65,7 +58,7 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### Division by Zero
 
-**All divisors have implicit guards (27 instances).** BPS constants are non-zero, supply checks revert on zero, level-derived values guarantee non-zero during active game. All divisors verified non-zero by construction. (Detector: `[L-7]`)
+**All divisors have implicit guards (27 instances).** BPS constants are non-zero, supply checks revert on zero, level-derived values guarantee non-zero during active game. Exhaustively audited in v3.3 economic analysis + v5.0 adversarial audit. (Detector: `[L-7]`)
 
 ### External Call Gas Consumption
 
@@ -91,6 +84,10 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 **Some events omit indexed on fields not useful as filter keys.** Key indexer-critical events (player actions, game state transitions) are properly indexed. Bookkeeping events intentionally omit indexes. (Detectors: `[NC-10]`, `[NC-33]`)
 
+### Event Missing Old+New Values
+
+**Parameter-change events emit new value only (6 instances).** Admin operations are infrequent. Adding old value would increase gas for minimal debugging benefit. (Detector: `[NC-11]`)
+
 ### Long Functions
 
 **Complex game logic necessarily exceeds 50 lines (377 instances).** Splitting increases gas via call overhead. Organized with NatSpec section banners for readability. (Detector: `[NC-13]`)
@@ -101,11 +98,11 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### Missing Parameter Change Events
 
-**27 instances across all production contracts.** 24 INFO findings (all DOCUMENT). Full details: `audit/event-correctness.md`. (Detector: `[NC-17]`)
+**27 instances covered by Phase 132 event audit.** 24 INFO findings (all DOCUMENT). Full details: `audit/event-correctness.md`. (Detector: `[NC-17]`)
 
 ### Unchecked Arithmetic
 
-**Protocol uses unchecked blocks strategically (1,054 flagged instances).** Remaining checked arithmetic is intentional safety margin. All critical paths confirmed within block gas limit. (Detector: `[GAS-7]`)
+**Protocol uses unchecked blocks strategically (1,054 flagged instances).** Remaining checked arithmetic is intentional safety margin. Gas ceiling analysis (v3.5 Phase 57) confirmed all critical paths within block gas limit. (Detector: `[GAS-7]`)
 
 ---
 
@@ -125,4 +122,4 @@ DGNRS and BURNIE are ERC-20 tokens with 4 intentional deviations. sDGNRS and GNR
 
 ## Event Design Decisions
 
-24 INFO-level findings across all production contracts. Key categories: 19 missing events for non-critical state changes (admin setters, internal bookkeeping), 2 stale parameter values (cosmetic), 2 missing indexed fields, 1 unused event declaration. Full details: `audit/event-correctness.md`.
+Phase 132 systematic event audit covered all 26 production contracts. 24 INFO-level DOCUMENT findings remain. Key categories: 19 missing events for non-critical state changes (admin setters, internal bookkeeping), 2 stale parameter values (cosmetic), 2 missing indexed fields, 1 unused event declaration. Full details: `audit/event-correctness.md`.
