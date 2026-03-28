@@ -22,9 +22,6 @@ These are architectural decisions, not vulnerabilities.
 
 **Lido stETH dependency.** Prize pool growth depends on staking yield. If yield goes to zero, positive-sum margin disappears. Protocol remains solvent -- the solvency invariant does not depend on yield.
 
-**Multi-category boon coexistence.** Players can hold one boon per category simultaneously (up to 9 categories). Boon state is stored in a 2-slot BoonPacked struct with isolated bit fields per category -- coinflip, lootbox, purchase, decimator, whale, activity, deity pass, whale pass, and lazy pass each occupy non-overlapping bit ranges. Applying a boon in one category cannot affect any other category's bits (targeted bitmask operations: `& ~mask | value`). Within a category, upgrade semantics apply: a higher-tier boon replaces a lower-tier one, but downgrades are rejected (`newTier > existingTier` guard). The storage layout was designed in v3.8 Phase 73 to accommodate all categories simultaneously -- the prior single-category restriction was a removed application-level filter, not a storage constraint.
-
-**Recycling bonus uses total claimable.** BurnieCoinflip's recycling bonus base changed from fresh mintable (current claim cycle wins only) to total claimableStored (all accumulated unclaimed winnings). The rate was simultaneously reduced from 1% to 0.75% (normal) and 1.6% to 1.0% (afKing) to compensate for the larger base. Net effect is economically neutral-to-positive for house edge in all tested scenarios. The bonus is capped at 1000 BURNIE regardless of base. Recycling bonus is BurnieCoinflip-exclusive -- JackpotModule, MintModule, and WhaleModule use separate ETH recycling mechanisms unrelated to this bonus. No feedback loop: bonus feeds into creditedFlip (daily flip deposit), not back into claimableStored.
 
 **Feed governance uses live circulating supply.** Price feed governance snapshots use live sDGNRS circulating supply (not a frozen snapshot) because the game continues running during feed stalls. This differs intentionally from VRF governance where supply IS frozen at proposal time. The asymmetry is conservative: feed governance operates during normal game activity, so live supply reflects current stakeholder distribution. (Finding: DELTA-F-001)
 
@@ -34,7 +31,7 @@ These are architectural decisions, not vulnerabilities.
 
 **Creator DGNRS vesting.** The vault owner receives DGNRS tokens on a vesting schedule: 50B initial allocation plus 5B per game level, claimable via `claimVested()`. Fully vested at level 30 (200B total). DGNRS can be unwrapped to sDGNRS via `unwrapTo` for governance participation, but unwrapping is blocked during active VRF windows (`rngLocked()` guard). This vesting schedule determines the admin's maximum governance weight at each stage of the game.
 
-**unwrapTo uses rngLocked guard.** The `unwrapTo` function (DGNRS to sDGNRS conversion) is blocked when `rngLocked()` returns true, which indicates an active VRF request awaiting fulfillment. This replaced the previous 5-hour `lastVrfProcessed` timestamp check. The new guard is tighter: it only blocks during the actual VRF request/fulfillment window (typically seconds to minutes), not for a fixed 5-hour cooldown. This prevents governance vote manipulation via just-in-time sDGNRS minting during VRF-dependent game state transitions.
+**unwrapTo uses rngLocked guard.** The `unwrapTo` function (DGNRS to sDGNRS conversion) is blocked when `rngLocked()` returns true, which indicates an active VRF request awaiting fulfillment. The guard only blocks during the actual VRF request/fulfillment window (typically seconds to minutes). This prevents governance vote manipulation via just-in-time sDGNRS minting during VRF-dependent game state transitions.
 
 ---
 
@@ -44,7 +41,7 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### ETH Transfer Safety
 
-**Payout functions send ETH to user-supplied addresses.** `_payoutWithStethFallback`, `_payoutWithEthFallback`, `_payEth` (4 instances) send ETH via `.call{value:}`. Destinations are `msg.sender` or player addresses from game state -- all paths have access control. ETH conservation proven in v5.0 adversarial audit. (Detector: `arbitrary-send-eth`)
+**Payout functions send ETH to user-supplied addresses.** `_payoutWithStethFallback`, `_payoutWithEthFallback`, `_payEth` (4 instances) send ETH via `.call{value:}`. Destinations are `msg.sender` or player addresses from game state -- all paths have access control. ETH conservation invariant holds across all paths. (Detector: `arbitrary-send-eth`)
 
 ### Missing Event for claimablePool Decrement
 
@@ -68,7 +65,7 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### Division by Zero
 
-**All divisors have implicit guards (27 instances).** BPS constants are non-zero, supply checks revert on zero, level-derived values guarantee non-zero during active game. Exhaustively audited in v3.3 economic analysis + v5.0 adversarial audit. (Detector: `[L-7]`)
+**All divisors have implicit guards (27 instances).** BPS constants are non-zero, supply checks revert on zero, level-derived values guarantee non-zero during active game. All divisors verified non-zero by construction. (Detector: `[L-7]`)
 
 ### External Call Gas Consumption
 
@@ -94,10 +91,6 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 **Some events omit indexed on fields not useful as filter keys.** Key indexer-critical events (player actions, game state transitions) are properly indexed. Bookkeeping events intentionally omit indexes. (Detectors: `[NC-10]`, `[NC-33]`)
 
-### Event Missing Old+New Values
-
-**Parameter-change events emit new value only (6 instances).** Admin operations are infrequent. Adding old value would increase gas for minimal debugging benefit. (Detector: `[NC-11]`)
-
 ### Long Functions
 
 **Complex game logic necessarily exceeds 50 lines (377 instances).** Splitting increases gas via call overhead. Organized with NatSpec section banners for readability. (Detector: `[NC-13]`)
@@ -108,11 +101,11 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### Missing Parameter Change Events
 
-**27 instances covered by Phase 132 event audit.** 24 INFO findings (all DOCUMENT). Full details: `audit/event-correctness.md`. (Detector: `[NC-17]`)
+**27 instances across all production contracts.** 24 INFO findings (all DOCUMENT). Full details: `audit/event-correctness.md`. (Detector: `[NC-17]`)
 
 ### Unchecked Arithmetic
 
-**Protocol uses unchecked blocks strategically (1,054 flagged instances).** Remaining checked arithmetic is intentional safety margin. Gas ceiling analysis (v3.5 Phase 57) confirmed all critical paths within block gas limit. (Detector: `[GAS-7]`)
+**Protocol uses unchecked blocks strategically (1,054 flagged instances).** Remaining checked arithmetic is intentional safety margin. All critical paths confirmed within block gas limit. (Detector: `[GAS-7]`)
 
 ---
 
@@ -132,4 +125,4 @@ DGNRS and BURNIE are ERC-20 tokens with 4 intentional deviations. sDGNRS and GNR
 
 ## Event Design Decisions
 
-Phase 132 systematic event audit covered all 26 production contracts. 24 INFO-level DOCUMENT findings remain. Key categories: 19 missing events for non-critical state changes (admin setters, internal bookkeeping), 2 stale parameter values (cosmetic), 2 missing indexed fields, 1 unused event declaration. Full details: `audit/event-correctness.md`.
+24 INFO-level findings across all production contracts. Key categories: 19 missing events for non-critical state changes (admin setters, internal bookkeeping), 2 stale parameter values (cosmetic), 2 missing indexed fields, 1 unused event declaration. Full details: `audit/event-correctness.md`.

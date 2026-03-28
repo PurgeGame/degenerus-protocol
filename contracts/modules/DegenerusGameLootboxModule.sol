@@ -1324,6 +1324,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Lootbox boons: emit events, deity day = 0.
     ///      Deity boons: no events, deity day = day.
     ///      All boon state is stored in boonPacked[player] (2-slot packed struct).
+    ///      Players can hold one boon per category simultaneously (up to 9 categories).
+    ///      Isolated bit fields per category -- applying a boon in one category cannot
+    ///      affect another category's bits (targeted bitmask operations: & ~mask | value).
     function _applyBoon(
         address player,
         uint8 boonType,

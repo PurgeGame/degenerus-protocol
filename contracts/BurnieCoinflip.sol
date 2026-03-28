@@ -1036,6 +1036,8 @@ contract BurnieCoinflip {
     }
 
     /// @dev Calculate recycling bonus for daily flip deposits (0.75% bonus, capped at 1000 BURNIE).
+    ///      Base is total claimableStored (all accumulated unclaimed winnings).
+    ///      Bonus feeds into creditedFlip, not back into claimableStored (no feedback loop).
     function _recyclingBonus(
         uint256 amount
     ) private pure returns (uint256 bonus) {

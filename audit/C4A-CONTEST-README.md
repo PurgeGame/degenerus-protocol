@@ -16,7 +16,7 @@ The protocol deploys 24 contracts: 14 core + 10 delegatecall modules sharing a s
 
 2. **Gas Ceiling Safety** -- advanceGame must complete within block gas limit under any achievable on-chain state, not just typical load. Any path an attacker can force to exceed the gas limit is a high finding.
 
-3. **Money Correctness** -- ETH and token accounting must be exact. Any path where unauthorized extraction occurs -- whether by a player, external attacker, or compromised admin -- is a high finding. Admin fund theft is in scope here: assume a hostile admin key. A compromised admin must not be able to extract funds or manipulate RNG as long as the sDGNRS community is engaged. Admin governance power is bounded by a DGNRS vesting schedule that scales with game maturity; VRF coordinator swap and price feed swap both require a Chainlink death clock prerequisite before governance can act. Governance manipulation scenarios are pre-documented in KNOWN-ISSUES.md.
+3. **Money Correctness** -- ETH and token accounting must be exact. Dust-level rounding (wei-scale) is not a finding -- all rounding favors protocol solvency by design. Any path where unauthorized extraction occurs -- whether by a player, external attacker, or compromised admin -- is a high finding. Admin fund theft is in scope here: assume a hostile admin key. A compromised admin must not be able to extract funds or manipulate RNG as long as the sDGNRS community is engaged. Admin governance power is bounded by a DGNRS vesting schedule that scales with game maturity; VRF coordinator swap and price feed swap both require a Chainlink death clock prerequisite before governance can act. Governance manipulation scenarios are pre-documented in KNOWN-ISSUES.md.
 
 Everything else is noise.
 
