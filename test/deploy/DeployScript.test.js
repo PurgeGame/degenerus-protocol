@@ -6,6 +6,7 @@ import {
   restoreAddresses,
 } from "../helpers/deployFixture.js";
 import { DEPLOY_ORDER } from "../../scripts/lib/predictAddresses.js";
+import { ZERO_ADDRESS } from "../helpers/testUtils.js";
 
 describe("Deploy Pipeline", function () {
   after(function () {
@@ -82,9 +83,12 @@ describe("Deploy Pipeline", function () {
       expect(creatorDgnrs).to.equal((totalSupply * 2000n) / 10000n);
     });
 
-    it("DegenerusDeityPass: owner is deployer", async function () {
+    it("DegenerusDeityPass: DGVE majority holder can call admin functions", async function () {
       const f = await loadFixture(deployFullProtocol);
-      expect(await f.deityPass.owner()).to.equal(f.deployer.address);
+      // Deployer holds all DGVE, so they are the vault owner
+      await expect(
+        f.deityPass.connect(f.deployer).setRenderer(ZERO_ADDRESS)
+      ).to.not.be.reverted;
     });
 
     it("DegenerusAdmin: VRF subscription created", async function () {

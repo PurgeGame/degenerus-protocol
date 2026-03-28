@@ -14,7 +14,7 @@ import { eth, getEvent, getEvents, ZERO_ADDRESS } from "../helpers/testUtils.js"
  *
  * Architecture summary:
  *   - Soulbound ERC721 "DEITY" with 32 token slots (tokenId 0-31)
- *   - Ownable (constructor sets _contractOwner = deployer)
+ *   - Admin functions gated by DGVE >50.1% vault ownership (no single-address owner)
  *   - mint() callable only by ContractAddresses.GAME
  *   - All transfers blocked (soulbound) — approve, setApprovalForAll, transferFrom, safeTransferFrom revert
  *   - Optional external renderer (setRenderer) with internal fallback
@@ -67,17 +67,6 @@ describe("DegenerusDeityPass", function () {
   // ---------------------------------------------------------------------------
 
   describe("initial state", function () {
-    it("owner is set to deployer on construction", async function () {
-      const { deityPass, deployer } = await getFixture();
-      expect(await deityPass.owner()).to.equal(deployer.address);
-    });
-
-    it("emits OwnershipTransferred from zero address to deployer on deploy", async function () {
-      // Checked indirectly — owner() returns deployer correctly
-      const { deityPass, deployer } = await getFixture();
-      expect(await deityPass.owner()).to.equal(deployer.address);
-    });
-
     it("name() returns 'Degenerus Deity Pass'", async function () {
       const { deityPass } = await getFixture();
       expect(await deityPass.name()).to.equal("Degenerus Deity Pass");
@@ -131,46 +120,6 @@ describe("DegenerusDeityPass", function () {
     it("does not support unknown interface", async function () {
       const { deityPass } = await getFixture();
       expect(await deityPass.supportsInterface("0xdeadbeef")).to.be.false;
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // Ownership / transferOwnership
-  // ---------------------------------------------------------------------------
-
-  describe("transferOwnership()", function () {
-    it("owner can transfer ownership to a new address", async function () {
-      const { deityPass, deployer, alice } = await getFixture();
-      const tx = await deityPass
-        .connect(deployer)
-        .transferOwnership(alice.address);
-      await expect(tx)
-        .to.emit(deityPass, "OwnershipTransferred")
-        .withArgs(deployer.address, alice.address);
-      expect(await deityPass.owner()).to.equal(alice.address);
-    });
-
-    it("reverts with NotAuthorized when non-owner calls transferOwnership", async function () {
-      const { deityPass, alice, bob } = await getFixture();
-      await expect(
-        deityPass.connect(alice).transferOwnership(bob.address)
-      ).to.be.revertedWithCustomError(deityPass, "NotAuthorized");
-    });
-
-    it("reverts with ZeroAddress when new owner is address(0)", async function () {
-      const { deityPass, deployer } = await getFixture();
-      await expect(
-        deityPass.connect(deployer).transferOwnership(ZERO_ADDRESS)
-      ).to.be.revertedWithCustomError(deityPass, "ZeroAddress");
-    });
-
-    it("new owner can call onlyOwner functions after transfer", async function () {
-      const { deityPass, deployer, alice } = await getFixture();
-      await deityPass.connect(deployer).transferOwnership(alice.address);
-      // Alice should now be able to set renderer
-      await expect(
-        deityPass.connect(alice).setRenderer(ZERO_ADDRESS)
-      ).to.not.be.reverted;
     });
   });
 

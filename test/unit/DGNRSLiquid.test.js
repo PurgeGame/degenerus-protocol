@@ -220,20 +220,20 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
   });
 
   // ===========================================================================
-  // 3. unwrapTo (Creator Only)
+  // 3. unwrapTo (Vault Owner Only)
   // ===========================================================================
   describe("unwrapTo", function () {
-    it("creator can unwrap DGNRS to soulbound sDGNRS for a recipient", async function () {
+    it("vault owner can unwrap DGNRS to soulbound sDGNRS for a recipient", async function () {
       const { dgnrs, sdgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("1000");
 
-      const creatorBefore = await dgnrs.balanceOf(deployer.address);
+      const ownerBefore = await dgnrs.balanceOf(deployer.address);
       await dgnrs.connect(deployer).unwrapTo(alice.address, amount);
 
-      // Creator's DGNRS decreased
-      expect(await dgnrs.balanceOf(deployer.address)).to.equal(creatorBefore - amount);
+      // Vault owner's DGNRS decreased
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(ownerBefore - amount);
       // DGNRS totalSupply decreased (burned)
-      expect(await dgnrs.totalSupply()).to.equal(creatorBefore - amount);
+      expect(await dgnrs.totalSupply()).to.equal(ownerBefore - amount);
       // Alice received soulbound sDGNRS
       expect(await sdgnrs.balanceOf(alice.address)).to.equal(amount);
     });
@@ -247,7 +247,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
       expect(ev.args.amount).to.equal(amount);
     });
 
-    it("reverts when called by non-creator", async function () {
+    it("reverts when called by non-vault-owner", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       // Give alice some DGNRS first
       await dgnrs.connect(deployer).transfer(alice.address, eth("1000"));
