@@ -28,7 +28,8 @@
 - ✅ **v7.0 Delta Adversarial Audit (v6.0 Changes)** — Phases 126-129 (shipped 2026-03-26)
 - ✅ **v8.0 Pre-Audit Hardening** — Phases 130-134 (shipped 2026-03-27)
 - ✅ **v8.1 Final Audit Prep** — Phases 135-137 (shipped 2026-03-28)
-- [ ] **v9.0 Contest Dry Run** — Phases 138-140 (in progress)
+- ✅ **v9.0 Contest Dry Run** — Phases 138-140 (shipped 2026-03-28)
+- [ ] **v10.0 Audit Submission Ready** — Phases 141-142 (in progress)
 
 ## Phases
 
@@ -283,15 +284,26 @@
 
 </details>
 
-### v9.0 Contest Dry Run (In Progress)
-
-**Milestone Goal:** Simulate a C4A competitive audit with fresh-eyes specialist wardens to achieve 99% confidence that zero Medium+ findings exist.
+<details>
+<summary>v9.0 Contest Dry Run (Phases 138-140) -- SHIPPED 2026-03-28</summary>
 
 - [x] **Phase 138: KNOWN-ISSUES Triage + Contest README Fixes** - Harden documentation wardens will work from (completed 2026-03-28)
 - [x] **Phase 139: Fresh-Eyes Wardens** - Five parallel specialist wardens audit all attack surfaces (completed 2026-03-28)
 - [x] **Phase 140: Synthesis + Adjudication** - Consolidate warden outputs into C4A-adjudicated findings (completed 2026-03-28)
 
+</details>
+
+### v10.0 Audit Submission Ready (In Progress)
+
+**Milestone Goal:** Delta audit the dailyIdx/backfill changes, finalize all documentation, and make the repo maximally ready for C4A external audit submission.
+
+- [ ] **Phase 141: Delta Adversarial Audit** - Audit dailyIdx init, backfill cap, and turbo-at-L0 removal in DegenerusGame.sol and DegenerusGameAdvanceModule.sol
+- [ ] **Phase 142: Documentation + Submission Readiness** - Update KNOWN-ISSUES.md, NatSpec, C4A README, verify tests, sweep for stale artifacts
+
 ## Phase Details
+
+<details>
+<summary>Phase 138-140 Details (v9.0)</summary>
 
 ### Phase 138: KNOWN-ISSUES Triage + Contest README Fixes
 **Goal**: Wardens receive accurate, precise, and defensible documentation -- no imprecise claims that leave adjacent attack surface gameable
@@ -338,18 +350,46 @@ Plans:
   5. KNOWN-ISSUES.md is updated with any new entries needed to pre-empt payable findings
 **Plans**: 1 plan
 Plans:
-- [ ] 140-01-PLAN.md — Consolidated adjudicated findings report + KNOWN-ISSUES update
+- [x] 140-01-PLAN.md — Consolidated adjudicated findings report + KNOWN-ISSUES update
+
+</details>
+
+### Phase 141: Delta Adversarial Audit
+**Goal**: Every post-v9.0 code change in DegenerusGame.sol and DegenerusGameAdvanceModule.sol is proven safe -- no security regressions, no gas ceiling impacts, no correctness bugs
+**Depends on**: Phase 140 (v9.0 contest dry run complete, code changes committed post-milestone)
+**Requirements**: DELTA-01, DELTA-02, DELTA-03
+**Success Criteria** (what must be TRUE):
+  1. Every changed line in DegenerusGame.sol and DegenerusGameAdvanceModule.sol has been adversarially reviewed with a per-line security/gas/correctness verdict
+  2. Turbo mode removal at level 0 is traced through all callers of the turbo path, confirming no compressed jackpot or normal jackpot logic depends on turbo being active at L0
+  3. Backfill cap at 120 is verified against worst-case coinflip payout scenarios (maximum pending claims at cap boundary) with explicit proof that no claim is lost or delayed beyond acceptable bounds
+  4. dailyIdx initialization change is verified to produce correct index values for all entry points (first day, mid-game, post-stall resume)
+**Plans**: 1 plan
+Plans:
+- [ ] 141-01-PLAN.md -- Per-line audit, turbo cascade analysis, backfill cap safety proof, dailyIdx correctness
+
+### Phase 142: Documentation + Submission Readiness
+**Goal**: The repository is maximally ready for C4A submission -- all audit documentation follows best practices, tests pass, and every known finding is pre-documented to minimize payable warden submissions
+**Depends on**: Phase 141 (delta audit findings inform documentation updates)
+**Requirements**: DOC-01, DOC-02, DOC-03, SUB-01, SUB-02, SUB-03
+**Success Criteria** (what must be TRUE):
+  1. KNOWN-ISSUES.md follows C4A best practices: every entry has clear severity reasoning, worst-case bounds are quantified, and any new findings from Phase 141 are included
+  2. NatSpec on changed functions accurately describes current behavior; no stale comments referencing removed behavior
+  3. C4A contest README follows submission best practices: scope is precise, priorities guide wardens effectively, out-of-scope is explicit, all contract addresses and deployment info are accurate
+  4. Test suite runs with 0 failures
+  5. Full audit documentation review: no stale references to changed behavior anywhere in submission-facing docs
+**Plans**: 1 plan
+Plans:
+- [ ] 142-01-PLAN.md — Update KNOWN-ISSUES, NatSpec, C4A README with delta findings; verify tests
 
 ## Progress
 
 **Execution Order:**
-Phase 138 (sequential) -> Phase 139 (5 wardens in parallel) -> Phase 140 (sequential)
+Phase 141 (sequential) -> Phase 142 (sequential)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 138. KI Triage + README Fixes | v9.0 | 2/2 | Complete    | 2026-03-28 |
-| 139. Fresh-Eyes Wardens | v9.0 | 5/5 | Complete | 2026-03-28 |
-| 140. Synthesis + Adjudication | v9.0 | 0/1 | Complete    | 2026-03-28 |
+| 141. Delta Adversarial Audit | v10.0 | 0/1 | Complete    | 2026-03-29 |
+| 142. Documentation + Submission Readiness | v10.0 | 0/1 | Not started | - |
 
 ## Deferred
 
