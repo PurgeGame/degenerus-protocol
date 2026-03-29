@@ -238,6 +238,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
      * @notice Initialize the game with precomputed contract references.
      * @dev All addresses and deploy day boundary are compile-time constants from ContractAddresses.
      *      levelStartTime is initialized here to the deploy timestamp.
+     *      dailyIdx is set to the current day index so gap detection starts from deploy day.
      *      Deploy day boundary determines which calendar day is "day 1" in the game.
      */
     constructor() {
