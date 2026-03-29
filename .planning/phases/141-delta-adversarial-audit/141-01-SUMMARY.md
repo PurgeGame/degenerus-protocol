@@ -268,9 +268,9 @@ A >120 day VRF stall requires Chainlink VRF v2.5 to be completely non-functional
 Each task was committed atomically:
 
 1. **Task 1: Per-line audit + turbo cascade analysis** - `9af5def0` (docs)
-2. **Task 2: Backfill cap safety proof + dailyIdx correctness proof** - `TASK2_HASH` (docs)
+2. **Task 2: Backfill cap safety proof + dailyIdx correctness proof** - `0899b5e4` (docs)
 
-**Plan metadata:** `META_HASH` (docs: complete plan)
+**Plan metadata:** `84976eae` (docs: complete plan)
 
 ## Files Created/Modified
 - `.planning/phases/141-delta-adversarial-audit/141-01-SUMMARY.md` - Complete delta audit verdicts
