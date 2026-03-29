@@ -7,6 +7,7 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
+  advanceToNextDay,
   getEvent,
   getEvents,
   ZERO_ADDRESS,
@@ -72,11 +73,11 @@ describe("DegenerusStonk", function () {
       );
     });
 
-    it("creator holds 20% as DGNRS tokens", async function () {
+    it("creator holds initial vesting (50B) as DGNRS tokens", async function () {
       const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
-      const expectedCreator = (INITIAL_SUPPLY * CREATOR_BPS) / BPS_DENOM;
+      const CREATOR_INITIAL = 50_000_000_000n * eth("1");
       expect(await dgnrs.balanceOf(deployer.address)).to.be.closeTo(
-        expectedCreator,
+        CREATOR_INITIAL,
         eth("1")
       );
     });
@@ -696,6 +697,7 @@ describe("DegenerusStonk", function () {
   describe("gameAdvance", function () {
     it("anyone can call gameAdvance", async function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
+      await advanceToNextDay();
       await expect(sdgnrs.connect(alice).gameAdvance()).to.not.be.reverted;
     });
   });

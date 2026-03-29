@@ -8,6 +8,7 @@ import {
 import {
   eth,
   advanceTime,
+  advanceToNextDay,
   getEvents,
   getEvent,
   ZERO_ADDRESS,
@@ -489,6 +490,7 @@ describe("DegenerusGame", function () {
   describe("advanceGame", function () {
     it("can be called by anyone", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
+      await advanceToNextDay();
       await expect(game.connect(alice).advanceGame()).to.not.be.reverted;
     });
 

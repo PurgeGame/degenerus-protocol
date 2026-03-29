@@ -154,6 +154,7 @@ describe("CompressedAffiliateBonus", function () {
 
     // Spread purchases over 4+ advances to avoid compressed/turbo (threshold is ≤3)
     await buyFullTickets(game, alice, 200, 2);
+    await advanceToNextDay();
     await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 100n);
 
     await buyFullTickets(game, bob, 200, 2);
@@ -247,8 +248,8 @@ describe("CompressedAffiliateBonus", function () {
   // Turbo mode (tier=2): bonus never fires
   // ---------------------------------------------------------------------------
 
-  describe("turbo mode (tier=2)", function () {
-    it("affiliate bonus does NOT fire in turbo mode", async function () {
+  describe("compressed early target (tier=1)", function () {
+    it("affiliate bonus does NOT fire on first compressed day", async function () {
       const protocol = await loadFixture(deployFullProtocol);
       const { affiliate, game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } = protocol;
 
@@ -256,37 +257,37 @@ describe("CompressedAffiliateBonus", function () {
       await affiliate.connect(alice).createAffiliateCode(aliceCode, 0);
 
       const buyerPre = others[12];
-      const buyerTurbo = others[13];
+      const buyerCompressed = others[13];
       await affiliate.connect(buyerPre).referPlayer(aliceCode);
-      await affiliate.connect(buyerTurbo).referPlayer(aliceCode);
+      await affiliate.connect(buyerCompressed).referPlayer(aliceCode);
 
-      // Heavy purchases on deploy day → turbo
+      // Heavy purchases → compressed on first advance
       const buyers = [carol, dan, eve, ...others.slice(0, 12)];
       await heavyPurchases(game, buyers);
 
-      // Pre-turbo baseline: buy with affiliate before advancing
+      // Pre-compressed baseline: buy with affiliate before advancing
       const txBaseline = await buyFullTickets(game, buyerPre, 10, 0.1, aliceCode);
       const baseline = await getRawAffiliateBasis(txBaseline, affiliate, buyerPre.address);
       expect(baseline).to.not.be.null;
-      expect(baseline).to.be.gt(0n, "Should have baseline freshBurnie pre-turbo");
+      expect(baseline).to.be.gt(0n, "Should have baseline freshBurnie pre-compressed");
 
-      // Trigger turbo
-      await game.connect(deployer).advanceGame();
-      expect(await game.jackpotCompressionTier()).to.equal(2, "Should be turbo");
+      // Trigger compressed via full cycle (day 2, purchaseDays=2)
+      // Compressed tier is set during daily processing, not at advanceGame entry
+      await advanceToNextDay();
+      await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 42n);
+      expect(await game.jackpotCompressionTier()).to.equal(1, "Should be compressed");
 
-      // Try to buy during turbo (if jackpotPhase is still active)
+      // Buy during compressed jackpot phase — first day should NOT inflate
       if (await game.jackpotPhase()) {
-        const txTurbo = await buyFullTickets(game, buyerTurbo, 10, 0.1, aliceCode);
-        const turboAmount = await getRawAffiliateBasis(txTurbo, affiliate, buyerTurbo.address);
+        const txCompressed = await buyFullTickets(game, buyerCompressed, 10, 0.1, aliceCode);
+        const compressedAmount = await getRawAffiliateBasis(txCompressed, affiliate, buyerCompressed.address);
 
-        if (turboAmount !== null && turboAmount > 0n) {
-          // Turbo freshBurnie should NOT be inflated — ratio should be ~1:1
-          const ratio = (turboAmount * 10000n) / baseline;
-          expect(ratio).to.be.lte(10100n, "Turbo should NOT inflate affiliate freshBurnie");
+        if (compressedAmount !== null && compressedAmount > 0n) {
+          // First compressed day freshBurnie should NOT be inflated — ratio should be ~1:1
+          const ratio = (compressedAmount * 10000n) / baseline;
+          expect(ratio).to.be.lte(10100n, "First compressed day should NOT inflate affiliate freshBurnie");
         }
       }
-      // If jackpotPhase is already false, turbo completed too fast for any purchase —
-      // that's correct behavior (no bonus possible in turbo)
     });
   });
 });

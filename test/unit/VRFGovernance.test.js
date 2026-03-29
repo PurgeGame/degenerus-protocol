@@ -364,19 +364,22 @@ describe("VRF Governance", function () {
   // 8. DegenerusStonk unwrapTo block during VRF stall
   // =========================================================================
   describe("unwrapTo VRF stall guard", function () {
-    it("unwrapTo works normally (no stall)", async function () {
+    it("unwrapTo works normally (rngLocked=false)", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("100");
 
       await dgnrs.connect(deployer).unwrapTo(alice.address, amount);
-      // Should succeed — no stall
+      // Should succeed — rngLockedFlag is false
     });
 
-    it("unwrapTo reverts during VRF stall (>5h)", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+    it("unwrapTo reverts when rngLocked is true", async function () {
+      const { dgnrs, game, deployer, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("100");
 
-      await createStall(6); // 6 hours past lastVrfProcessed
+      // Advance to next day and call advanceGame to trigger VRF request,
+      // which sets rngLockedFlag = true
+      await advanceToNextDay();
+      await game.connect(deployer).advanceGame();
 
       await expect(
         dgnrs.connect(deployer).unwrapTo(alice.address, amount)

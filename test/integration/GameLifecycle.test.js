@@ -194,11 +194,12 @@ describe("GameLifecycle", function () {
   // ---------------------------------------------------------------------------
 
   describe("advanceGame first call", function () {
-    it("succeeds on deploy day (dailyIdx=0 < day=1, so NotTimeYet is not triggered)", async function () {
+    it("succeeds after advancing to next day (dailyIdx initialized to currentDayIndex)", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
-      // dailyIdx starts at 0; day index = 1 on deploy day, so the game immediately
-      // allows advancing. cap=1 bypasses mint gate; deployer is also CREATOR.
+      // dailyIdx is initialized to currentDayIndex in the constructor, so
+      // advanceGame reverts with NotTimeYet on deploy day. Advance to next day first.
+      await advanceToNextDay();
       const tx = await game.connect(deployer).advanceGame();
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);

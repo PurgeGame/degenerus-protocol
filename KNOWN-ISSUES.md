@@ -12,6 +12,8 @@ These are architectural decisions, not vulnerabilities.
 
 **All rounding favors solvency.** Every BPS calculation rounds down on payouts and up on burns. stETH transfers retain 1-2 wei per operation. The solvency invariant `balance >= claimablePool` is strengthened by rounding, never weakened. (Detectors: `[L-13]`, `[L-14]`)
 
+**Daily advance assumption.** The protocol assumes `advanceGame` is called to completion every day when available. The advance bounty (escalating from 0.005 to 0.03 ETH-equivalent over 2 hours), and the fact that this function delivers jackpot payments, incentivizes this but does not guarantee it. If `advanceGame` is not called for multiple days, the next call backfills gap days (capped at 120 iterations for gas safety). Gap days beyond 120 are skipped — coinflip payouts for those days are forfeited. In practice, the incentives make daily calling economically rational.
+
 **Non-VRF entropy for affiliate winner roll.** Deterministic seed (gas optimization). Worst case: player times purchases to direct affiliate credit to a different affiliate. No protocol value extraction.
 
 **VRF swap governance.** Emergency VRF coordinator rotation requires a 20h+ stall and sDGNRS community approval with time-decaying threshold. Execution requires approve weight > reject weight and meeting the threshold -- reject voters holding more sDGNRS than approvers block the proposal. This is the intended trust model.

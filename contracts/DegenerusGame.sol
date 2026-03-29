@@ -49,6 +49,7 @@ import {
 } from "./modules/DegenerusGameMintStreakUtils.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
+import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 /*+==============================================================================+
   |                     EXTERNAL INTERFACE DEFINITIONS                           |
@@ -241,6 +242,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
      */
     constructor() {
         levelStartTime = uint48(block.timestamp);
+        dailyIdx = GameTimeLib.currentDayIndex();
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
         // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners)
         deityPassCount[ContractAddresses.SDGNRS] = 1;

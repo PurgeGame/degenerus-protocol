@@ -8,6 +8,7 @@ import {
 import {
   eth,
   advanceTime,
+  advanceToNextDay,
   getEvent,
   getLastVRFRequestId,
   ZERO_ADDRESS,
@@ -479,6 +480,7 @@ describe("DegenerusStonk (DGNRS Liquid Token)", function () {
 
     it("gameAdvance is permissionless", async function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
+      await advanceToNextDay();
       // Alice has no sDGNRS — should still work
       await expect(sdgnrs.connect(alice).gameAdvance()).to.not.be.reverted;
     });

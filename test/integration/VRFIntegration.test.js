@@ -115,10 +115,11 @@ describe("VRFIntegration", function () {
       ).to.be.reverted;
     });
 
-    it("first advanceGame on deploy day also works (day=1 > dailyIdx=0)", async function () {
+    it("first advanceGame works after advancing to next day", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
-      // No time advancement needed: dailyIdx=0 < day=1 so advance is allowed immediately.
+      // dailyIdx is initialized to currentDayIndex, so must advance to next day first.
+      await advanceToNextDay();
       const tx = await game.connect(deployer).advanceGame();
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);

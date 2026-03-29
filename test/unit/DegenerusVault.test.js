@@ -7,6 +7,7 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
+  advanceToNextDay,
   getEvent,
   getEvents,
   ZERO_ADDRESS,
@@ -430,6 +431,7 @@ describe("DegenerusVault", function () {
 
     it("deployer (vault owner) can call gameAdvance", async function () {
       const { vault, deployer } = await loadFixture(deployFullProtocol);
+      await advanceToNextDay();
       // Deployer holds 100% DGVE initially
       await expect(
         vault.connect(deployer).gameAdvance()

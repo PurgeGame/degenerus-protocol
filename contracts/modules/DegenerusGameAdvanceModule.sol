@@ -1504,6 +1504,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 endDay,
         bool bonusFlip
     ) private {
+        // Cap at 120 gap days to stay within block gas limit (~9M gas).
+        // Backfills oldest days first (most likely to have active coinflips).
+        if (endDay - startDay > 120) endDay = startDay + 120;
         for (uint48 gapDay = startDay; gapDay < endDay; ) {
             uint256 derivedWord = uint256(
                 keccak256(abi.encodePacked(vrfWord, gapDay))
