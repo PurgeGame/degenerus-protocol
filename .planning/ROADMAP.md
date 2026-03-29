@@ -379,7 +379,7 @@ Plans:
   5. Full audit documentation review: no stale references to changed behavior anywhere in submission-facing docs
 **Plans**: 1 plan
 Plans:
-- [ ] 142-01-PLAN.md — Update KNOWN-ISSUES, NatSpec, C4A README with delta findings; verify tests
+- [x] 142-01-PLAN.md — Update KNOWN-ISSUES, NatSpec, C4A README with delta findings; verify tests
 
 ## Progress
 
@@ -389,7 +389,7 @@ Phase 141 (sequential) -> Phase 142 (sequential)
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 141. Delta Adversarial Audit | v10.0 | 0/1 | Complete    | 2026-03-29 |
-| 142. Documentation + Submission Readiness | v10.0 | 0/1 | Not started | - |
+| 142. Documentation + Submission Readiness | v10.0 | 1/1 | Complete   | 2026-03-29 |
 
 ## Deferred
 
