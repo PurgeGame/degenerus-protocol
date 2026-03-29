@@ -88,6 +88,14 @@ interface ICoinPlayerActions {
     function decimatorBurn(address player, uint256 amount) external;
 }
 
+/// @notice Interface for sDGNRS player actions used by DegenerusVault.
+interface IStakedDegenerusStonkBurn {
+    /// @notice Burn sDGNRS to claim proportional backing assets.
+    function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
+    /// @notice Claim a resolved gambling burn redemption.
+    function claimRedemption() external;
+}
+
 /// @notice Interface for WWXRP vault-minting used by DegenerusVault.
 interface IWWXRPMint {
     /// @notice Mint WWXRP to a recipient from vault's uncirculating reserve.
@@ -405,6 +413,9 @@ contract DegenerusVault {
     IWWXRPMint internal constant wwxrpToken = IWWXRPMint(ContractAddresses.WWXRP);
     /// @dev stETH (Lido) token contract
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
+    /// @dev sDGNRS contract for burning vault-held sDGNRS
+    IStakedDegenerusStonkBurn internal constant sdgnrsToken =
+        IStakedDegenerusStonkBurn(ContractAddresses.SDGNRS);
 
     // ---------------------------------------------------------------------
     // RESERVE TRACKING
@@ -758,6 +769,23 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function jackpotsClaimDecimator(uint24 lvl) external onlyVaultOwner {
         gamePlayer.claimDecimatorJackpot(lvl);
+    }
+
+    /// @notice Burn vault-held sDGNRS to claim proportional backing assets
+    /// @dev ETH/stETH received flows into vault reserves, increasing DGVE value.
+    /// @param amount Amount of sDGNRS to burn
+    /// @return ethOut ETH received
+    /// @return stethOut stETH received
+    /// @return burnieOut BURNIE received
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function sdgnrsBurn(uint256 amount) external onlyVaultOwner returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut) {
+        return sdgnrsToken.burn(amount);
+    }
+
+    /// @notice Claim a resolved sDGNRS gambling burn redemption for the vault
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function sdgnrsClaimRedemption() external onlyVaultOwner {
+        sdgnrsToken.claimRedemption();
     }
 
     // ---------------------------------------------------------------------

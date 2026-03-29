@@ -40,7 +40,7 @@ Everything else is noise.
 
 ## Known Issues
 
-See `KNOWN-ISSUES.md` in the repository root. Pre-audited with Slither v0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,453 instances, 78 categories after triage). Covers automated tool findings, design decisions (including boon coexistence, recycling bonus economics, VRF/price feed governance, and gameover fallback), 4 ERC-20 deviations, and 30 event audit findings. Post-v8.0 delta adversarial audit (6 INFO findings, 0 actionable) and v10.0 delta audit (0 vulnerabilities, 2 INFO -- turbo unreachable at L0, backfill cap >120 days) also incorporated.
+See `KNOWN-ISSUES.md` in the repository root. Covers automated tool findings (Slither + 4naly3er), design decisions, ERC-20 deviations, and event audit findings. All entries have been pre-triaged.
 
 If your finding is already documented there, it will be marked as a known issue and will not be eligible for reward.
 

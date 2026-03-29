@@ -405,9 +405,15 @@ contract StakedDegenerusStonk {
         unchecked {
             poolBalances[idx] = available - amount;
             balanceOf[address(this)] -= amount;
-            balanceOf[to] += amount;
         }
-        emit Transfer(address(this), to, amount);
+        if (to == address(this)) {
+            // Self-win: burn instead of no-op transfer, increasing value per remaining token
+            totalSupply -= amount;
+            emit Transfer(address(this), address(0), amount);
+        } else {
+            balanceOf[to] += amount;
+            emit Transfer(address(this), to, amount);
+        }
         emit PoolTransfer(pool, to, amount);
         return amount;
     }

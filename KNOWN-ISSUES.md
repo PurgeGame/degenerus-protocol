@@ -22,8 +22,6 @@ These are architectural decisions, not vulnerabilities.
 
 **Chainlink VRF V2.5 dependency.** Sole randomness source. If VRF goes down, the game stalls but no funds are lost. Upon governance-gated coordinator swap, gap day RNG words are backfilled via keccak256(vrfWord, gapDay) and orphaned lootbox indices receive fallback words. Coinflips and lootboxes resolve naturally after backfill. Independent recovery paths: governance-based coordinator rotation (20h+ stall threshold) and 120-day inactivity timeout.
 
-**Turbo mode unreachable at level 0.** Turbo (compressedJackpotFlag=2) requires `purchaseDays <= 1`, but at level 0 `purchaseStartDay` is the Solidity default (0), making `purchaseDays = currentDay` which exceeds 1 after deploy day. All 5 consumers of `compressedJackpotFlag` traced and verified safe with turbo inert at L0. Turbo remains reachable at levels >= 1 where `purchaseStartDay` is set to the transition day. This is an accepted design consequence of the `dailyIdx` initialization change.
-
 **Backfill cap at 120 gap days.** `_backfillGapDays` caps iteration at 120 days to stay within block gas limit (~9M gas). If a VRF stall exceeds 120 days, gap days beyond the cap are skipped -- coinflip stakes for those days are frozen (not lost or burned). The `skip-unresolved` handling in BurnieCoinflip (rewardPercent=0 && !win) silently advances past unresolved days. This scenario requires a sustained 4-month Chainlink VRF outage with no coordinator migration -- an unprecedented infrastructure failure affecting the entire ecosystem.
 
 **Lido stETH dependency.** Prize pool growth depends on staking yield. If yield goes to zero, positive-sum margin disappears. Protocol remains solvent -- the solvency invariant does not depend on yield.
@@ -40,7 +38,7 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### ETH Transfer Safety
 
-**Payout functions send ETH to user-supplied addresses.** `_payoutWithStethFallback`, `_payoutWithEthFallback`, `_payEth` (4 instances) send ETH via `.call{value:}`. Destinations are `msg.sender` or player addresses from game state -- all paths have access control. ETH conservation proven in v5.0 adversarial audit. (Detector: `arbitrary-send-eth`)
+**Payout functions send ETH to user-supplied addresses.** `_payoutWithStethFallback`, `_payoutWithEthFallback`, `_payEth` (4 instances) send ETH via `.call{value:}`. Destinations are `msg.sender` or player addresses from game state -- all paths have access control. (Detector: `arbitrary-send-eth`)
 
 ### Missing Event for claimablePool Decrement
 
@@ -64,7 +62,7 @@ Slither 0.11.5 (1,959 raw findings, 29 detectors after triage) and 4naly3er (4,4
 
 ### Division by Zero
 
-**All divisors have implicit guards (27 instances).** BPS constants are non-zero, supply checks revert on zero, level-derived values guarantee non-zero during active game. Exhaustively audited in v3.3 economic analysis + v5.0 adversarial audit. (Detector: `[L-7]`)
+**All divisors have implicit guards (27 instances).** BPS constants are non-zero, supply checks revert on zero, level-derived values guarantee non-zero during active game. (Detector: `[L-7]`)
 
 ### External Call Gas Consumption
 
