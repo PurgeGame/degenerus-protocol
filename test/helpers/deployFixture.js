@@ -127,6 +127,7 @@ export async function deployFullProtocol() {
     sdgnrs: contracts.SDGNRS,
     dgnrs: contracts.DGNRS,
     admin: contracts.ADMIN,
+    gnrus: contracts.GNRUS,
 
     // Game modules
     mintModule: contracts.GAME_MINT_MODULE,

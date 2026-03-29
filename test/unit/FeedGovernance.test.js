@@ -122,7 +122,7 @@ describe("Feed Governance", function () {
 
       // Check if alice has sDGNRS; if not, this tests the revert path
       const aliceBal = await sdgnrs.balanceOf(alice.address);
-      const circ = await admin.circulatingSupply();
+      const circ = await sdgnrs.votingSupply();
 
       if (aliceBal > 0n && circ > 0n && aliceBal * 10000n >= circ * 50n) {
         const newFeed = await deployNewFeed();

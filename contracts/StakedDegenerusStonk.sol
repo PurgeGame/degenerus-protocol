@@ -385,6 +385,15 @@ contract StakedDegenerusStonk {
         return poolBalances[_poolIndex(pool)];
     }
 
+    /// @notice sDGNRS supply held by governance-eligible addresses.
+    /// @dev Excludes undistributed pools (held by this contract), DGNRS wrapper, and vault.
+    function votingSupply() external view returns (uint256) {
+        return totalSupply
+            - balanceOf[address(this)]
+            - balanceOf[ContractAddresses.DGNRS]
+            - balanceOf[ContractAddresses.VAULT];
+    }
+
     /// @notice Transfer sDGNRS from a reward pool to a recipient
     /// @dev Only callable by game contract. Transfers up to available balance if requested amount exceeds pool.
     /// @param pool Pool identifier

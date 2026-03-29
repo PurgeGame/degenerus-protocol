@@ -14,4 +14,15 @@ contract MockSDGNRSCharity {
     function setBalance(address account, uint256 amount) external {
         balanceOf[account] = amount;
     }
+
+    uint256 private _votingSupply;
+
+    function setVotingSupply(uint256 supply) external {
+        _votingSupply = supply;
+    }
+
+    function votingSupply() external view returns (uint256) {
+        // If explicitly set, use that; otherwise return totalSupply as fallback
+        return _votingSupply != 0 ? _votingSupply : totalSupply;
+    }
 }

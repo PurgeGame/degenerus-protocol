@@ -157,7 +157,7 @@ describe("VRF Governance", function () {
     });
 
     it("snapshots circulating supply at creation", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(21);
@@ -165,7 +165,7 @@ describe("VRF Governance", function () {
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
 
       const [, , circulatingSnapshot] = await admin.proposals(1);
-      const liveCirc = await admin.circulatingSupply();
+      const liveCirc = await sdgnrs.votingSupply();
       // circulatingSnapshot is now uint40 whole tokens (divided by 1e18)
       expect(circulatingSnapshot).to.equal(liveCirc / eth("1"));
     });
@@ -343,20 +343,22 @@ describe("VRF Governance", function () {
   });
 
   // =========================================================================
-  // 6. circulatingSupply
+  // 6. votingSupply
   // =========================================================================
-  describe("circulatingSupply", function () {
-    it("returns total minus SDGNRS and DGNRS balances", async function () {
-      const { admin, sdgnrs, dgnrs } = await loadFixture(deployFullProtocol);
-      const circ = await admin.circulatingSupply();
+  describe("votingSupply", function () {
+    it("returns total minus SDGNRS, DGNRS, and vault balances", async function () {
+      const { sdgnrs, dgnrs, vault } = await loadFixture(deployFullProtocol);
+      const circ = await sdgnrs.votingSupply();
 
       const total = await sdgnrs.totalSupply();
       const sdgnrsAddr = await sdgnrs.getAddress();
       const dgnrsAddr = await dgnrs.getAddress();
+      const vaultAddr = await vault.getAddress();
       const sdgnrsBal = await sdgnrs.balanceOf(sdgnrsAddr);
       const dgnrsBal = await sdgnrs.balanceOf(dgnrsAddr);
+      const vaultBal = await sdgnrs.balanceOf(vaultAddr);
 
-      expect(circ).to.equal(total - sdgnrsBal - dgnrsBal);
+      expect(circ).to.equal(total - sdgnrsBal - dgnrsBal - vaultBal);
     });
   });
 
@@ -808,7 +810,7 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("proposal storage", function () {
     it("stores correct proposal data", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const keyHash = hre.ethers.id("test-key");
 
@@ -822,7 +824,7 @@ describe("VRF Governance", function () {
       expect(proposer).to.equal(deployer.address);
       expect(createdAt).to.be.gt(0n);
       // circulatingSnapshot is uint40 whole tokens; may be 0 if circ < 1e18
-      const liveCirc = await admin.circulatingSupply();
+      const liveCirc = await sdgnrs.votingSupply();
       expect(circulatingSnapshot).to.equal(liveCirc / eth("1"));
       expect(path).to.equal(0); // Admin
       expect(state).to.equal(0); // Active

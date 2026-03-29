@@ -449,10 +449,10 @@ describe("DegenerusAdmin", function () {
       ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
     });
 
-    it("circulatingSupply returns reasonable value", async function () {
-      const { admin } = await loadFixture(deployFullProtocol);
-      // After deployment, circulating supply may be 0 or positive
-      const supply = await admin.circulatingSupply();
+    it("votingSupply returns reasonable value", async function () {
+      const { sdgnrs } = await loadFixture(deployFullProtocol);
+      // After deployment, voting supply may be 0 or positive
+      const supply = await sdgnrs.votingSupply();
       expect(supply).to.be.gte(0n);
     });
 

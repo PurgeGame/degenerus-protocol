@@ -202,10 +202,11 @@ interface IDegenerusVaultOwner {
     function isVaultOwner(address account) external view returns (bool);
 }
 
-/// @dev sDGNRS interface for governance voting weight and circulating supply.
+/// @dev sDGNRS interface for governance voting weight and voting supply.
 interface IsDGNRS {
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
+    function votingSupply() external view returns (uint256);
 }
 
 /**
@@ -225,13 +226,13 @@ contract DegenerusAdmin {
     /// @dev Packed into 3 storage slots (down from 7).
     ///      Weights and snapshot stored as whole tokens (wei / 1e18). Max 1T = fits uint40 (1.1T max).
     ///      createdAt as uint40 = max year ~36,847.
-    ///      Slot 1: proposer(20) + createdAt(5) + circulatingSnapshot(5) + path(1) + state(1) = 32 exact
+    ///      Slot 1: proposer(20) + createdAt(5) + votingSnapshot(5) + path(1) + state(1) = 32 exact
     ///      Slot 2: coordinator(20) + approveWeight(5) + rejectWeight(5) = 30 bytes
     ///      Slot 3: keyHash(32) = 32 bytes
     struct Proposal {
         address proposer;              // slot 1: who proposed
         uint40 createdAt;              // slot 1: block.timestamp at creation
-        uint40 circulatingSnapshot;    // slot 1: circulating sDGNRS at proposal time (whole tokens)
+        uint40 votingSnapshot;         // slot 1: voting sDGNRS at proposal time (whole tokens)
         ProposalPath path;             // slot 1: Admin or Community
         ProposalState state;           // slot 1: Active, Executed, Killed, Expired
         address coordinator;           // slot 2: proposed VRF coordinator
@@ -356,12 +357,12 @@ contract DegenerusAdmin {
 
     /// @dev Packed into 2 storage slots (down from 6).
     ///      Weights and snapshot stored as whole tokens (wei / 1e18). Max 1T = fits uint40 (1.1T max).
-    ///      Slot 1: proposer(20) + createdAt(5) + circulatingSnapshot(5) + path(1) + state(1) = 32 exact
+    ///      Slot 1: proposer(20) + createdAt(5) + votingSnapshot(5) + path(1) + state(1) = 32 exact
     ///      Slot 2: feed(20) + approveWeight(5) + rejectWeight(5) = 30 bytes
     struct FeedProposal {
         address proposer;              // slot 1: who proposed
         uint40 createdAt;              // slot 1: block.timestamp at creation
-        uint40 circulatingSnapshot;    // slot 1: circulating sDGNRS at proposal time (whole tokens)
+        uint40 votingSnapshot;         // slot 1: voting sDGNRS at proposal time (whole tokens)
         ProposalPath path;             // slot 1: Admin or Community
         ProposalState state;           // slot 1: Active, Executed, Killed, Expired
         address feed;                  // slot 2: proposed feed address (zero = disable)
@@ -494,7 +495,7 @@ contract DegenerusAdmin {
     /// @notice Propose a LINK/ETH price feed swap.
     /// @dev Two paths:
     ///      - Admin path: DGVE >50.1% holder, requires 2d+ feed unhealthy
-    ///      - Community path: 0.5%+ circulating sDGNRS, requires 7d+ feed unhealthy
+    ///      - Community path: 0.5%+ voting sDGNRS, requires 7d+ feed unhealthy
     /// @param newFeed Address of the proposed price feed (zero to disable).
     /// @return proposalId The ID of the created proposal.
     function proposeFeedSwap(
@@ -530,7 +531,7 @@ contract DegenerusAdmin {
             path = ProposalPath.Admin;
         } else {
             if (stall < FEED_COMMUNITY_STALL_THRESHOLD) revert NotStalled();
-            uint256 circ = circulatingSupply();
+            uint256 circ = sDGNRS.votingSupply();
             if (circ == 0 || sDGNRS.balanceOf(msg.sender) * BPS < circ * COMMUNITY_PROPOSE_BPS)
                 revert InsufficientStake();
             path = ProposalPath.Community;
@@ -544,7 +545,7 @@ contract DegenerusAdmin {
         // p.state = ProposalState.Active (default 0)
         p.feed = newFeed;
         // approveWeight and rejectWeight start at 0
-        p.circulatingSnapshot = uint40(circulatingSupply() / 1 ether);
+        p.votingSnapshot = uint40(sDGNRS.votingSupply() / 1 ether);
 
         activeFeedProposalId[msg.sender] = proposalId;
 
@@ -581,7 +582,7 @@ contract DegenerusAdmin {
         }
 
         Resolution r = _resolveThreshold(
-            p.approveWeight, p.rejectWeight, p.circulatingSnapshot, feedThreshold(proposalId)
+            p.approveWeight, p.rejectWeight, p.votingSnapshot, feedThreshold(proposalId)
         );
         if (r == Resolution.Execute) {
             _executeFeedSwap(proposalId);
@@ -615,7 +616,7 @@ contract DegenerusAdmin {
         if (_feedHealthy(linkEthPriceFeed)) return false;
 
         return _resolveThreshold(
-            p.approveWeight, p.rejectWeight, p.circulatingSnapshot, feedThreshold(proposalId)
+            p.approveWeight, p.rejectWeight, p.votingSnapshot, feedThreshold(proposalId)
         ) == Resolution.Execute;
     }
 
@@ -673,7 +674,7 @@ contract DegenerusAdmin {
     /// @notice Propose an emergency VRF coordinator swap.
     /// @dev Two paths:
     ///      - Admin path: DGVE >50.1% holder, requires 20h+ VRF stall
-    ///      - Community path: 0.5%+ circulating sDGNRS, requires 7d+ VRF stall
+    ///      - Community path: 0.5%+ voting sDGNRS, requires 7d+ VRF stall
     /// @param newCoordinator Address of the proposed VRF coordinator.
     /// @param newKeyHash Key hash for the proposed coordinator.
     /// @return proposalId The ID of the created proposal.
@@ -705,7 +706,7 @@ contract DegenerusAdmin {
             path = ProposalPath.Admin;
         } else {
             if (stall < COMMUNITY_STALL_THRESHOLD) revert NotStalled();
-            uint256 circ = circulatingSupply();
+            uint256 circ = sDGNRS.votingSupply();
             if (circ == 0 || sDGNRS.balanceOf(msg.sender) * BPS < circ * COMMUNITY_PROPOSE_BPS)
                 revert InsufficientStake();
             path = ProposalPath.Community;
@@ -719,7 +720,7 @@ contract DegenerusAdmin {
         // p.state = ProposalState.Active (default 0)
         p.coordinator = newCoordinator;
         p.keyHash = newKeyHash;
-        p.circulatingSnapshot = uint40(circulatingSupply() / 1 ether);
+        p.votingSnapshot = uint40(sDGNRS.votingSupply() / 1 ether);
 
         activeProposalId[msg.sender] = proposalId;
 
@@ -758,7 +759,7 @@ contract DegenerusAdmin {
         }
 
         Resolution r = _resolveThreshold(
-            p.approveWeight, p.rejectWeight, p.circulatingSnapshot, threshold(proposalId)
+            p.approveWeight, p.rejectWeight, p.votingSnapshot, threshold(proposalId)
         );
         if (r == Resolution.Execute) {
             _executeSwap(proposalId);
@@ -766,13 +767,6 @@ contract DegenerusAdmin {
             p.state = ProposalState.Killed;
             emit ProposalKilled(proposalId);
         }
-    }
-
-    /// @notice Circulating sDGNRS supply (excludes undistributed pools and DGNRS wrapper).
-    function circulatingSupply() public view returns (uint256) {
-        return sDGNRS.totalSupply()
-            - sDGNRS.balanceOf(ContractAddresses.SDGNRS)
-            - sDGNRS.balanceOf(ContractAddresses.DGNRS);
     }
 
     /// @notice Current approval threshold for a proposal (basis points, decays daily).
@@ -802,7 +796,7 @@ contract DegenerusAdmin {
         if (block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD) return false;
 
         return _resolveThreshold(
-            p.approveWeight, p.rejectWeight, p.circulatingSnapshot, threshold(proposalId)
+            p.approveWeight, p.rejectWeight, p.votingSnapshot, threshold(proposalId)
         ) == Resolution.Execute;
     }
 

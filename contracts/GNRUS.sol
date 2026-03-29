@@ -10,6 +10,8 @@ interface ISDGNRSSnapshot {
     function totalSupply() external view returns (uint256);
     /// @notice Get sDGNRS balance for an address.
     function balanceOf(address account) external view returns (uint256);
+    /// @notice Get voting supply (excludes pools, wrapper, vault).
+    function votingSupply() external view returns (uint256);
 }
 
 /// @notice Minimal interface for DegenerusGame donation-facing functions used by GNRUS.
@@ -366,7 +368,7 @@ contract GNRUS {
 
         // Snapshot sDGNRS supply on first proposal of this level
         if (levelProposalCount[level] == 0) {
-            levelSdgnrsSnapshot[level] = uint48(sdgnrs.totalSupply() / 1e18);
+            levelSdgnrsSnapshot[level] = uint48(sdgnrs.votingSupply() / 1e18);
         }
 
         address proposer = msg.sender;
