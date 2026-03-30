@@ -438,7 +438,12 @@ Plans:
   2. Every approved unused view/pure function is removed from both the contract and its interface
   3. Full test suite (Hardhat + Foundry) passes with 0 new failures after all removals
   4. NatSpec on any rewired caller accurately describes the new call target
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [x] 146-01-PLAN.md — BurnieCoin forwarding wrapper removal + caller rewiring
+- [x] 146-02-PLAN.md — DegenerusAdmin forwarding removal + Game vault-owner access control
+- [ ] 146-03-PLAN.md — Remove 16 unused view functions from DegenerusGame + interfaces
+- [x] 146-04-PLAN.md — Fix test suite + NatSpec updates
 
 ## Progress
 
@@ -448,8 +453,8 @@ Phase 144 (sequential) -> Phase 145 (sequential) -> Phase 146 (sequential)
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 144. Contract Scan | v10.1 | 1/1 | Complete   | 2026-03-30 |
-| 145. Candidate Review | v10.1 | 0/TBD | Not started | - |
-| 146. Execute Removals | v10.1 | 0/TBD | Not started | - |
+| 145. Candidate Review | v10.1 | 1/1 | Complete    | 2026-03-30 |
+| 146. Execute Removals | v10.1 | 3/4 | In Progress|  |
 
 ## Deferred
 
