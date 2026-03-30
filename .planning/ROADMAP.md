@@ -31,7 +31,8 @@
 - ✅ **v9.0 Contest Dry Run** — Phases 138-140 (shipped 2026-03-28)
 - ✅ **v10.0 Audit Submission Ready** — Phases 141-143 (shipped 2026-03-29)
 - ✅ **v10.1 ABI Cleanup** — Phases 144-146 (shipped 2026-03-30)
-- [ ] **v10.2 Ticket Mint Gas Optimization** — Phases 147-148 (in progress)
+- ✅ **v10.2 Ticket Mint Gas Optimization** — Phase 147 (shipped 2026-03-30, Phase 148 skipped — no change needed)
+- [ ] **v10.3 Delta Adversarial Audit (v10.1 Changes)** — Phases 149-150 (in progress)
 
 ## Phases
 
@@ -230,12 +231,20 @@
 
 </details>
 
-### v10.2 Ticket Mint Gas Optimization (In Progress)
+<details>
+<summary>v10.2 Ticket Mint Gas Optimization (Phase 147) -- SHIPPED 2026-03-30</summary>
 
-**Milestone Goal:** Find the optimal advanceGame writes cap that maximizes per-tx throughput while guaranteeing the function never exceeds 14M gas, even under adversarial ticket distributions.
+- [x] **Phase 147: Gas Analysis** - WRITES_BUDGET_SAFE=550 confirmed optimal, 2.0x safety margin (completed 2026-03-30)
+- Phase 148 skipped — no code change needed, current cap is optimal
 
-- [ ] **Phase 147: Gas Analysis** - Profile advanceGame ticket loop, per-iteration breakdown, adversarial distribution analysis, derive optimal cap
-- [ ] **Phase 148: Implementation + Verification** - Update cap constant, verify gas ceiling, run tests
+</details>
+
+### v10.3 Delta Adversarial Audit (v10.1 Changes) (In Progress)
+
+**Milestone Goal:** Adversarial audit of all contract changes from v10.1 ABI Cleanup — verify no unauthorized paths opened by forwarding wrapper removal, caller rewiring, access control changes, and mint function merger.
+
+- [ ] **Phase 149: Delta Adversarial Audit** - Review all changed functions, verify access control changes, storage layout check
+- [ ] **Phase 150: Documentation** - Update KNOWN-ISSUES.md, verify NatSpec on changed functions
 
 ## Phase Details
 
@@ -292,7 +301,7 @@ Plans:
 </details>
 
 <details>
-<summary>Phase 141-146 Details (v10.0, v10.1)</summary>
+<summary>Phase 141-148 Details (v10.0, v10.1, v10.2)</summary>
 
 ### Phase 141: Delta Adversarial Audit
 **Goal**: Every post-v9.0 code change in DegenerusGame.sol and DegenerusGameAdvanceModule.sol is proven safe -- no security regressions, no gas ceiling impacts, no correctness bugs
@@ -372,8 +381,6 @@ Plans:
 - [x] 146-03-PLAN.md — Remove 16 unused view functions from DegenerusGame + interfaces
 - [x] 146-04-PLAN.md — Fix test suite + NatSpec updates
 
-</details>
-
 ### Phase 147: Gas Analysis
 **Goal**: The exact gas cost of every advanceGame ticket-processing path is known, including worst-case adversarial distributions, enabling a mathematically justified cap value
 **Depends on**: Phase 146 (v10.1 complete, codebase stable after ABI cleanup)
@@ -387,25 +394,47 @@ Plans:
 Plans:
 - [x] 147-01-PLAN.md — Gas profile advanceGame ticket loop, adversarial analysis, derive optimal WRITES_BUDGET_SAFE cap
 
-### Phase 148: Implementation + Verification
+### Phase 148: Implementation + Verification (SKIPPED)
 **Goal**: The new cap value is deployed in code, gas ceiling is re-verified under worst-case conditions, and the full test suite passes
 **Depends on**: Phase 147 (cap value determined with mathematical proof)
 **Requirements**: CAP-05, CAP-06, CAP-07
+**Status**: Skipped — Phase 147 confirmed WRITES_BUDGET_SAFE=550 is already optimal with 2.0x safety margin. No code change needed.
+
+</details>
+
+### Phase 149: Delta Adversarial Audit
+**Goal**: Every function changed across all v10.1-modified contracts is proven safe -- no unauthorized paths opened by wrapper removal, caller rewiring, access control migration, or mint function merger
+**Depends on**: Phase 147 (v10.2 complete, codebase stable)
+**Requirements**: DELTA-01, DELTA-02, DELTA-03, DELTA-04, DELTA-05
 **Success Criteria** (what must be TRUE):
-  1. The writes cap constant in code is updated to the Phase 147 derived value
-  2. Gas ceiling is re-verified at the new cap under worst-case state (including adversarial scenarios from Phase 147) and confirmed under 14M
-  3. Full test suite (Hardhat + Foundry) passes with 0 new failures
+  1. Every changed function across all v10.1-modified contracts (DegenerusGame, BurnieCoin, BurnieCoinflip, DegenerusAdmin, DegenerusVault, DegenerusGameDegeneretteModule, and their interfaces) has a per-function security verdict (SAFE / VULNERABLE / INFO)
+  2. BurnieCoinflip.onlyFlipCreditors with expanded caller set (GAME+COIN+AFFILIATE+ADMIN) is verified to admit only legitimate callers -- no contract outside the authorized set can reach creditFlip or creditFlipBatch
+  3. Game.adminStakeEthForStEth and Game.setLootboxRngThreshold vault-owner access control is verified to be equivalent or stricter than the previous Admin-mediated path -- no privilege escalation
+  4. BurnieCoin.mintForGame accepting both COINFLIP and GAME callers is verified to produce identical mint behavior to the previous separate functions -- no unauthorized mint path opened
+  5. Storage layout verified via forge inspect on all changed contracts -- no slot collisions, no gaps from function removals, no storage variable reordering
+**Plans**: 1 plan
+Plans:
+- [ ] 149-01-PLAN.md -- Per-function verdict table, access control traces, storage layout verification
+
+### Phase 150: Documentation
+**Goal**: All audit documentation accurately reflects the v10.1 changes -- KNOWN-ISSUES.md covers new findings, NatSpec on changed functions describes current behavior
+**Depends on**: Phase 149 (delta audit findings inform documentation updates)
+**Requirements**: DOC-01, DOC-02
+**Success Criteria** (what must be TRUE):
+  1. KNOWN-ISSUES.md is updated with any findings from Phase 149 that warrant documentation (INFO or higher)
+  2. NatSpec on every changed function accurately describes current behavior -- no stale references to removed wrappers, old caller restrictions, or previous routing patterns
+  3. No stale inline comments referencing removed functions (creditFlip forwarding, mintForCoinflip, Admin.stakeGameEthToStEth, etc.)
 **Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phase 147 (sequential) -> Phase 148 (sequential)
+Phase 149 (sequential) -> Phase 150 (sequential)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 147. Gas Analysis | v10.2 | 1/1 | Complete   | 2026-03-30 |
-| 148. Implementation + Verification | v10.2 | 0/? | Not started | - |
+| 149. Delta Adversarial Audit | v10.3 | 0/1 | Not started | - |
+| 150. Documentation | v10.3 | 0/? | Not started | - |
 
 ## Deferred
 
