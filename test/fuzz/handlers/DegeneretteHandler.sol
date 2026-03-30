@@ -7,7 +7,7 @@ import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.so
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title DegeneretteHandler -- Handler for Degenerette slot machine betting in invariant tests
-/// @notice Wraps placeFullTicketBets and resolveBets with bounded inputs, multi-actor support,
+/// @notice Wraps placeDegeneretteBet and resolveBets with bounded inputs, multi-actor support,
 ///         and ghost variable tracking for ETH accounting invariants.
 /// @dev Targets the NEVER-FUZZED Degenerette bet accounting: wager in = payout + burn.
 ///      Tracks ETH flows to verify no ETH is created or destroyed during bet lifecycle.
@@ -86,7 +86,7 @@ contract DegeneretteHandler is Test {
         _ensureActivePurchasePhase();
 
         vm.prank(currentActor);
-        try game.placeFullTicketBets{value: totalBet}(
+        try game.placeDegeneretteBet{value: totalBet}(
             currentActor,
             0, // currency = ETH
             amountPerTicket,
@@ -189,7 +189,7 @@ contract DegeneretteHandler is Test {
     /// @dev Ensure we are in purchase phase and have a valid lootbox RNG index
     function _ensureActivePurchasePhase() private {
         // Try a small purchase if needed to populate lootbox state
-        // The placeFullTicketBets will revert if lootbox RNG index is 0
+        // The placeDegeneretteBet will revert if lootbox RNG index is 0
     }
 
     /// @dev Sanitize custom ticket to have valid traits per quadrant

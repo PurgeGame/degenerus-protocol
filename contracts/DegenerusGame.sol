@@ -749,7 +749,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param ticketCount Number of spins (1-10). Each spin resolves independently.
     /// @param customTicket Custom packed traits.
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
-    function placeFullTicketBets(
+    function placeDegeneretteBet(
         address player,
         uint8 currency,
         uint128 amountPerTicket,
@@ -762,7 +762,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameDegeneretteModule
-                        .placeFullTicketBets
+                        .placeDegeneretteBet
                         .selector,
                     _resolvePlayer(player),
                     currency,

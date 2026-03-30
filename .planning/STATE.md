@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v10.0
-milestone_name: Audit Submission Ready
-status: executing
-stopped_at: Completed 141-01-PLAN.md
-last_updated: "2026-03-29T03:07:21.543Z"
-last_activity: 2026-03-29 -- Phase 142 execution started
+milestone: v10.1
+milestone_name: ABI Cleanup
+status: defining-requirements
+stopped_at: null
+last_updated: "2026-03-29T20:00:00.000Z"
+last_activity: 2026-03-29
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 10
-  completed_plans: 9
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-26)
+See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 142 — documentation-submission-readiness
+**Current focus:** Defining requirements for v10.1 ABI Cleanup
 
 ## Current Position
 
-Phase: 142 (documentation-submission-readiness) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 142
-Last activity: 2026-03-29 -- Phase 142 execution started
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-29 — Milestone v10.1 started
 
 Progress: [░░░░░░░░░░] 0%
 

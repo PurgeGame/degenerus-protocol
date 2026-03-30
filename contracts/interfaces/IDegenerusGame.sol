@@ -311,7 +311,7 @@ interface IDegenerusGame {
     /// @param ticketCount Number of spins (1-10). Each spin resolves independently.
     /// @param customTicket Custom packed traits (use 0 for random).
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
-    function placeFullTicketBets(
+    function placeDegeneretteBet(
         address player,
         uint8 currency,
         uint128 amountPerTicket,

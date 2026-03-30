@@ -35,7 +35,7 @@ interface IDegenerusGamePlayerActions {
     /// @notice Purchase a deity pass with ETH.
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
     /// @notice Place full-ticket bets on degenerette.
-    function placeFullTicketBets(
+    function placeDegeneretteBet(
         address player,
         uint8 currency,
         uint128 amountPerTicket,
@@ -605,63 +605,22 @@ contract DegenerusVault {
     /// @param ethValue Additional ETH from vault balance to use (on top of msg.value)
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If msg.value + ethValue exceeds total bet or vault balance
-    function gameDegeneretteBetEth(
+    function gameDegeneretteBet(
+        uint8 currency,
         uint128 amountPerTicket,
         uint8 ticketCount,
         uint32 customTicket,
         uint8 heroQuadrant,
         uint256 ethValue
     ) external payable onlyVaultOwner {
-        uint256 totalBet = uint256(amountPerTicket) * uint256(ticketCount);
-        uint256 totalValue = _combinedValue(ethValue);
-        if (totalValue > totalBet) revert Insufficient();
-        gamePlayer.placeFullTicketBets{value: totalValue}(
+        uint256 value;
+        if (currency == 0) {
+            value = _combinedValue(ethValue);
+            if (value > uint256(amountPerTicket) * ticketCount) revert Insufficient();
+        }
+        gamePlayer.placeDegeneretteBet{value: value}(
             address(this),
-            0,
-            amountPerTicket,
-            ticketCount,
-            customTicket,
-            heroQuadrant
-        );
-    }
-
-    /// @notice Place a Degenerette bet using BURNIE
-    /// @param amountPerTicket Bet amount per ticket
-    /// @param ticketCount Number of tickets (must satisfy game rules)
-    /// @param customTicket Custom packed traits
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameDegeneretteBetBurnie(
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
-        uint8 heroQuadrant
-    ) external onlyVaultOwner {
-        gamePlayer.placeFullTicketBets(
-            address(this),
-            1,
-            amountPerTicket,
-            ticketCount,
-            customTicket,
-            heroQuadrant
-        );
-    }
-
-    /// @notice Place a Degenerette bet using WWXRP
-    /// @param amountPerTicket Bet amount per ticket
-    /// @param ticketCount Number of tickets (must satisfy game rules)
-    /// @param customTicket Custom packed traits
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameDegeneretteBetWwxrp(
-        uint128 amountPerTicket,
-        uint8 ticketCount,
-        uint32 customTicket,
-        uint8 heroQuadrant
-    ) external onlyVaultOwner {
-        gamePlayer.placeFullTicketBets(
-            address(this),
-            3,
+            currency,
             amountPerTicket,
             ticketCount,
             customTicket,

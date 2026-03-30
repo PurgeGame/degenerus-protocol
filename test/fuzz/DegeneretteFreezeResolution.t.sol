@@ -93,7 +93,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint128 betAmount = 0.01 ether;
 
         vm.prank(player);
-        game.placeFullTicketBets{value: betAmount}(
+        game.placeDegeneretteBet{value: betAmount}(
             address(0),     // player = msg.sender
             0,              // currency = ETH
             betAmount,      // amountPerTicket
@@ -177,7 +177,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeFullTicketBets{value: betAmount}(
+        game.placeDegeneretteBet{value: betAmount}(
             address(0), 0, betAmount, 1, customTicket, 0xFF
         );
 
@@ -230,7 +230,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Place bet (goes to live pools since not frozen)
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeFullTicketBets{value: betAmount}(
+        game.placeDegeneretteBet{value: betAmount}(
             address(0), 0, betAmount, 1, customTicket, 0xFF
         );
 

@@ -394,7 +394,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param ticketCount Number of spins (1..MAX_SPINS_PER_BET).
     /// @param customTicket Custom packed traits. Format: [D:24-31][C:16-23][B:8-15][A:0-7].
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
-    function placeFullTicketBets(
+    function placeDegeneretteBet(
         address player,
         uint8 currency,
         uint128 amountPerTicket,
@@ -402,7 +402,7 @@ contract DegenerusGameDegeneretteModule is
         uint32 customTicket,
         uint8 heroQuadrant
     ) external payable {
-        _placeFullTicketBets(
+        _placeDegeneretteBet(
             _resolvePlayer(player),
             currency,
             amountPerTicket,
@@ -433,7 +433,7 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
 
     /// @dev Internal implementation for placing Full Ticket bets.
-    function _placeFullTicketBets(
+    function _placeDegeneretteBet(
         address player,
         uint8 currency,
         uint128 amountPerTicket,
@@ -441,7 +441,7 @@ contract DegenerusGameDegeneretteModule is
         uint32 customTicket,
         uint8 heroQuadrant
     ) private {
-        uint256 totalBet = _placeFullTicketBetsCore(
+        uint256 totalBet = _placeDegeneretteBetCore(
             player,
             currency,
             amountPerTicket,
@@ -460,7 +460,7 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    function _placeFullTicketBetsCore(
+    function _placeDegeneretteBetCore(
         address player,
         uint8 currency,
         uint128 amountPerTicket,

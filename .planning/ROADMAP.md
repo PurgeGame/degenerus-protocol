@@ -297,8 +297,9 @@
 
 **Milestone Goal:** Delta audit the dailyIdx/backfill changes, finalize all documentation, and make the repo maximally ready for C4A external audit submission.
 
-- [ ] **Phase 141: Delta Adversarial Audit** - Audit dailyIdx init, backfill cap, and turbo-at-L0 removal in DegenerusGame.sol and DegenerusGameAdvanceModule.sol
-- [ ] **Phase 142: Documentation + Submission Readiness** - Update KNOWN-ISSUES.md, NatSpec, C4A README, verify tests, sweep for stale artifacts
+- [x] **Phase 141: Delta Adversarial Audit** - Audit dailyIdx init, backfill cap, and turbo-at-L0 removal (completed 2026-03-29)
+- [x] **Phase 142: Documentation + Submission Readiness** - Update KNOWN-ISSUES.md, NatSpec, C4A README, verify tests (completed 2026-03-29)
+- [ ] **Phase 143: Vault + Self-Win Delta Audit** - Audit vault sDGNRS burn/claim additions and transferFromPool self-win burn
 
 ## Phase Details
 
@@ -381,15 +382,26 @@ Plans:
 Plans:
 - [x] 142-01-PLAN.md — Update KNOWN-ISSUES, NatSpec, C4A README with delta findings; verify tests
 
+### Phase 143: Vault + Self-Win Delta Audit
+**Goal**: Every post-Phase-142 contract change is proven safe — vault sDGNRS burn/claim functions and transferFromPool self-win burn
+**Depends on**: Phase 142 (documentation finalized before new changes)
+**Requirements**: DELTA-04, DELTA-05
+**Success Criteria** (what must be TRUE):
+  1. sdgnrsBurn() and sdgnrsClaimRedemption() in DegenerusVault have been adversarially reviewed for access control, reentrancy, and correct integration with StakedDegenerusStonk
+  2. transferFromPool self-win burn path (to == address(this)) is verified to correctly reduce totalSupply, emit Transfer to address(0), and not break pool accounting or solvency invariants
+  3. No existing test regressions (1362 passing)
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phase 141 (sequential) -> Phase 142 (sequential)
+Phase 141 (sequential) -> Phase 142 (sequential) -> Phase 143 (sequential)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 141. Delta Adversarial Audit | v10.0 | 0/1 | Complete    | 2026-03-29 |
-| 142. Documentation + Submission Readiness | v10.0 | 1/1 | Complete   | 2026-03-29 |
+| 141. Delta Adversarial Audit | v10.0 | 1/1 | Complete    | 2026-03-29 |
+| 142. Documentation + Submission Readiness | v10.0 | 1/1 | Complete    | 2026-03-29 |
+| 143. Vault + Self-Win Delta Audit | v10.0 | 0/TBD | Complete    | 2026-03-29 |
 
 ## Deferred
 

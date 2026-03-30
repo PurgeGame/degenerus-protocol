@@ -7,7 +7,7 @@ import {DegeneretteHandler} from "../handlers/DegeneretteHandler.sol";
 import {GameHandler} from "../handlers/GameHandler.sol";
 
 /// @title DegeneretteBetInvariant -- Proves Degenerette ETH bet accounting invariant
-/// @notice NEVER PREVIOUSLY FUZZED. Targets the Degenerette slot machine (placeFullTicketBets /
+/// @notice NEVER PREVIOUSLY FUZZED. Targets the Degenerette slot machine (placeDegeneretteBet /
 ///         resolveBets) to verify:
 ///         1. ETH wager in = ETH in futurePool increase (no ETH created during betting)
 ///         2. ETH payouts from resolve <= pool at time of resolution
