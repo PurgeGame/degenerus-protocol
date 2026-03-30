@@ -201,8 +201,8 @@ describe("Distress-Mode Lootboxes", function () {
       await purchaseLootbox(game, alice, eth("1"));
 
       // lootboxStatus returns (amount, presale) — amount should be > 0
-      const index = await game.lootboxRngIndexView();
-      const [amount] = await game.lootboxStatus(alice.address, index);
+      // lootboxRngIndex starts at 1 (lootboxRngIndexView removed in Phase 146)
+      const [amount] = await game.lootboxStatus(alice.address, 1n);
       expect(amount).to.be.gt(0n);
     });
 
@@ -250,10 +250,9 @@ describe("Distress-Mode Lootboxes", function () {
       // Buy a lootbox in distress mode
       await purchaseLootbox(game, alice, eth("2"));
 
-      const index = await game.lootboxRngIndexView();
-
+      // lootboxRngIndex starts at 1 (lootboxRngIndexView removed in Phase 146)
       // Verify the lootbox was recorded with a non-zero amount
-      const [amount] = await game.lootboxStatus(alice.address, index);
+      const [amount] = await game.lootboxStatus(alice.address, 1n);
       expect(amount).to.be.gt(0n);
 
       // Verify the purchase was routed to the next pool (distress split)
@@ -263,10 +262,9 @@ describe("Distress-Mode Lootboxes", function () {
     it("mixed normal+distress lootbox purchases are both recorded", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
 
-      // Alice buys in normal mode
+      // Alice buys in normal mode (lootboxRngIndex starts at 1)
       await purchaseLootbox(game, alice, eth("1"));
-      const indexAlice = await game.lootboxRngIndexView();
-      const [amountAlice] = await game.lootboxStatus(alice.address, indexAlice);
+      const [amountAlice] = await game.lootboxStatus(alice.address, 1n);
       expect(amountAlice).to.be.gt(0n);
 
       // Warp to distress
@@ -280,8 +278,8 @@ describe("Distress-Mode Lootboxes", function () {
       // Distress: all ETH to next pool
       expect(nextAfter - nextBefore).to.equal(eth("1"));
 
-      const indexBob = await game.lootboxRngIndexView();
-      const [amountBob] = await game.lootboxStatus(bob.address, indexBob);
+      // lootboxRngIndex is still 1 during presale
+      const [amountBob] = await game.lootboxStatus(bob.address, 1n);
       expect(amountBob).to.be.gt(0n);
     });
   });

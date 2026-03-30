@@ -513,58 +513,6 @@ describe("DegenerusAdmin", function () {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // 8. stakeGameEthToStEth
-  // ---------------------------------------------------------------------------
-  describe("stakeGameEthToStEth", function () {
-    it("reverts when called by non-owner", async function () {
-      const { admin, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        admin.connect(alice).stakeGameEthToStEth(eth("1"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 9. setLootboxRngThreshold (via admin)
-  // ---------------------------------------------------------------------------
-  describe("setLootboxRngThreshold", function () {
-    it("owner can call setLootboxRngThreshold which forwards to game", async function () {
-      const { admin, game, deployer } = await loadFixture(deployFullProtocol);
-      const prevThreshold = await game.lootboxRngThresholdView();
-      const newThreshold = eth("2");
-      await admin.connect(deployer).setLootboxRngThreshold(newThreshold);
-      expect(await game.lootboxRngThresholdView()).to.equal(newThreshold);
-    });
-
-    it("reverts when called by non-owner", async function () {
-      const { admin, alice } = await loadFixture(deployFullProtocol);
-      await expect(
-        admin.connect(alice).setLootboxRngThreshold(eth("2"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // 10. isVaultOwner check (onlyOwner modifier)
-  // ---------------------------------------------------------------------------
-  describe("onlyOwner modifier (vault owner path)", function () {
-    it("vault owner (holding >30% DGVE) can call owner functions", async function () {
-      const { admin, vault, deployer, mockFeed } = await loadFixture(
-        deployFullProtocol
-      );
-      // Deployer received the initial DGVE supply from vault constructor
-      // Check if deployer qualifies as vault owner
-      const isOwner = await vault.isVaultOwner(deployer.address);
-      if (isOwner) {
-        // Deployer should be able to call owner-only functions
-        await expect(
-          admin.connect(deployer).setLootboxRngThreshold(eth("3"))
-        ).to.not.be.reverted;
-      } else {
-        // Skip - deployer doesn't hold >30% in this state
-        expect(true).to.be.true;
-      }
-    });
-  });
+  // stakeGameEthToStEth and setLootboxRngThreshold removed from Admin in Phase 146
+  // (now live directly on DegenerusGame with vault-owner access control)
 });

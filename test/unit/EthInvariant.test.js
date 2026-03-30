@@ -179,9 +179,8 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
       if (stakeable > 0n) {
         const stakeAmount = stakeable / 2n; // Stake half the available ETH
         if (stakeAmount > 0n) {
-          // Admin calls stakeGameEthToStEth (which calls game.adminStakeEthForStEth internally)
-          // deployer is CREATOR = onlyOwner on admin
-          await admin.connect(deployer).stakeGameEthToStEth(stakeAmount);
+          // deployer is vault owner (holds 100% DGVE); calls game.adminStakeEthForStEth directly
+          await game.connect(deployer).adminStakeEthForStEth(stakeAmount);
         }
       }
     }

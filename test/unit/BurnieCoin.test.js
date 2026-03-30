@@ -382,18 +382,11 @@ describe("BurnieCoin", function () {
   // burnForCoinflip() and mintForCoinflip()
   // ---------------------------------------------------------------------------
 
-  describe("burnForCoinflip() / mintForCoinflip()", function () {
+  describe("burnForCoinflip()", function () {
     it("burnForCoinflip reverts with OnlyGame when called by non-COINFLIP address", async function () {
       const { coin, alice, bob } = await getFixture();
       await expect(
         coin.connect(alice).burnForCoinflip(bob.address, eth(1))
-      ).to.be.revertedWithCustomError(coin, "OnlyGame");
-    });
-
-    it("mintForCoinflip reverts with OnlyGame when called by non-COINFLIP address", async function () {
-      const { coin, alice, bob } = await getFixture();
-      await expect(
-        coin.connect(alice).mintForCoinflip(bob.address, eth(1))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
@@ -415,71 +408,10 @@ describe("BurnieCoin", function () {
       expect(await coin.balanceOf(alice.address)).to.equal(eth(4000));
     });
 
-    it("mintForCoinflip mints to user when called by COINFLIP", async function () {
-      const { coin, coinflip, alice } = await getFixture();
-      const coinflipAddr = await coinflip.getAddress();
-      const coinflipSigner = await impersonate(coinflipAddr);
-      await coin
-        .connect(coinflipSigner)
-        .mintForCoinflip(alice.address, eth(2000));
-      await stopImpersonate(coinflipAddr);
-
-      expect(await coin.balanceOf(alice.address)).to.equal(eth(2000));
-    });
+    // mintForCoinflip removed in Phase 146 (merged into mintForGame, which now accepts COINFLIP + GAME)
   });
 
-  // ---------------------------------------------------------------------------
-  // creditCoin() — only flip creditors (GAME, AFFILIATE)
-  // ---------------------------------------------------------------------------
-
-  describe("creditCoin()", function () {
-    it("reverts with OnlyFlipCreditors when called by an unauthorized address", async function () {
-      const { coin, alice, bob } = await getFixture();
-      await expect(
-        coin.connect(alice).creditCoin(bob.address, eth(100))
-      ).to.be.revertedWithCustomError(coin, "OnlyFlipCreditors");
-    });
-
-    it("mints BURNIE when called by GAME", async function () {
-      const { coin, game, alice } = await getFixture();
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).creditCoin(alice.address, eth(100));
-      await stopImpersonate(gameAddr);
-
-      expect(await coin.balanceOf(alice.address)).to.equal(eth(100));
-    });
-
-    it("mints BURNIE when called by AFFILIATE", async function () {
-      const { coin, affiliate, alice } = await getFixture();
-      const affiliateAddr = await affiliate.getAddress();
-      const affiliateSigner = await impersonate(affiliateAddr);
-      await coin.connect(affiliateSigner).creditCoin(alice.address, eth(50));
-      await stopImpersonate(affiliateAddr);
-
-      expect(await coin.balanceOf(alice.address)).to.equal(eth(50));
-    });
-
-    it("silently returns when player is zero address", async function () {
-      const { coin, game } = await getFixture();
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-      await expect(
-        coin.connect(gameSigner).creditCoin(ZERO_ADDRESS, eth(100))
-      ).to.not.be.reverted;
-      await stopImpersonate(gameAddr);
-    });
-
-    it("silently returns when amount is zero", async function () {
-      const { coin, game, alice } = await getFixture();
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-      await expect(
-        coin.connect(gameSigner).creditCoin(alice.address, 0)
-      ).to.not.be.reverted;
-      await stopImpersonate(gameAddr);
-    });
-  });
+  // creditCoin() removed from BurnieCoin in Phase 146 ABI cleanup (dead function, zero callers)
 
   // ---------------------------------------------------------------------------
   // vaultEscrow() — only GAME or VAULT
@@ -686,86 +618,16 @@ describe("BurnieCoin", function () {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // creditFlip() and creditFlipBatch() — only flip creditors
-  // ---------------------------------------------------------------------------
-
-  describe("creditFlip() / creditFlipBatch()", function () {
-    it("creditFlip reverts with OnlyFlipCreditors for unauthorized callers", async function () {
-      const { coin, alice, bob } = await getFixture();
-      await expect(
-        coin.connect(alice).creditFlip(bob.address, eth(100))
-      ).to.be.revertedWithCustomError(coin, "OnlyFlipCreditors");
-    });
-
-    it("creditFlipBatch reverts with OnlyFlipCreditors for unauthorized callers", async function () {
-      const { coin, alice, bob, carol, dan } = await getFixture();
-      await expect(
-        coin.connect(alice).creditFlipBatch(
-          [bob.address, carol.address, dan.address],
-          [eth(1), eth(1), eth(1)]
-        )
-      ).to.be.revertedWithCustomError(coin, "OnlyFlipCreditors");
-    });
-
-    it("creditFlip does not revert when called by GAME (forwards to coinflip)", async function () {
-      const { coin, game, alice } = await getFixture();
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-      // We only verify it doesn't revert — actual flip crediting is coinflip's job
-      await expect(
-        coin.connect(gameSigner).creditFlip(alice.address, eth(100))
-      ).to.not.be.reverted;
-      await stopImpersonate(gameAddr);
-    });
-
-    it("creditFlipBatch does not revert when called by AFFILIATE", async function () {
-      const { coin, affiliate, alice, bob, carol } = await getFixture();
-      const affiliateAddr = await affiliate.getAddress();
-      const affiliateSigner = await impersonate(affiliateAddr);
-      await expect(
-        coin.connect(affiliateSigner).creditFlipBatch(
-          [alice.address, bob.address, carol.address],
-          [eth(10), eth(20), eth(30)]
-        )
-      ).to.not.be.reverted;
-      await stopImpersonate(affiliateAddr);
-    });
-  });
+  // creditFlip() and creditFlipBatch() removed from BurnieCoin in Phase 146 ABI cleanup
+  // (forwarding wrappers; callers now call coinflip.creditFlip / coinflip.creditFlipBatch directly)
 
   // ---------------------------------------------------------------------------
   // View helpers — claimableCoin, balanceOfWithClaimable, etc.
   // ---------------------------------------------------------------------------
 
   describe("view helpers", function () {
-    it("claimableCoin returns a uint256 (does not revert)", async function () {
-      const { coin, alice } = await getFixture();
-      // claimableCoin() uses msg.sender internally — call it from alice's signer
-      const claimable = await coin.connect(alice).claimableCoin();
-      expect(claimable).to.be.a("bigint");
-    });
-
-    it("previewClaimCoinflips returns a uint256", async function () {
-      const { coin, alice } = await getFixture();
-      const preview = await coin.previewClaimCoinflips(alice.address);
-      expect(preview).to.be.a("bigint");
-    });
-
-    it("coinflipAmount returns a uint256", async function () {
-      const { coin, alice } = await getFixture();
-      const amount = await coin.coinflipAmount(alice.address);
-      expect(amount).to.be.a("bigint");
-    });
-
-    it("coinflipAutoRebuyInfo returns correct shape", async function () {
-      const { coin, alice } = await getFixture();
-      const [enabled, stopAmount, carry] = await coin.coinflipAutoRebuyInfo(
-        alice.address
-      );
-      expect(enabled).to.be.a("boolean");
-      expect(stopAmount).to.be.a("bigint");
-      expect(carry).to.be.a("bigint");
-    });
+    // claimableCoin, previewClaimCoinflips, coinflipAmount, coinflipAutoRebuyInfo
+    // removed from BurnieCoin in Phase 146 ABI cleanup (forwarding wrappers to coinflip)
 
     it("balanceOfWithClaimable returns at least the on-chain balance", async function () {
       const { coin, game, alice } = await getFixture();

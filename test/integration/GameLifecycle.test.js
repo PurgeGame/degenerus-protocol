@@ -492,37 +492,7 @@ describe("GameLifecycle", function () {
   // ---------------------------------------------------------------------------
 
   describe("mint data tracking", function () {
-    it("ethMintLastLevel records alice's last ETH mint level", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-
-      await purchaseTickets(game, alice);
-
-      // Alice minted at level 0 → active ticket level = 1 during purchase phase.
-      // ethMintLastLevel should reflect the level where she minted.
-      const lastLevel = await game.ethMintLastLevel(alice.address);
-      // Level 1 is the active ticket level for direct purchases during purchase phase.
-      expect(lastLevel).to.equal(1);
-    });
-
-    it("ethMintStreakCount is 0 before any level completes (streak requires level completion)", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-
-      // The streak counts consecutive *completed* levels, not just purchases.
-      // A single purchase at level 0/1 does not complete a level, so streak = 0.
-      await purchaseTickets(game, alice);
-
-      const streak = await game.ethMintStreakCount(alice.address);
-      expect(streak).to.equal(0);
-    });
-
-    it("ethMintLevelCount increments with each level of purchase", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-
-      await purchaseTickets(game, alice);
-
-      const count = await game.ethMintLevelCount(alice.address);
-      expect(count).to.equal(1);
-    });
+    // ethMintLastLevel, ethMintStreakCount, ethMintLevelCount views removed in Phase 146 ABI cleanup
   });
 
   // ---------------------------------------------------------------------------

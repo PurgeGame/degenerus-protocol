@@ -445,65 +445,8 @@ describe("RngStall", function () {
   // 6. 3-Day Stall Detection
   // =========================================================================
 
-  describe("3-day stall detection", function () {
-    it("rngStalledForThreeDays returns false right after deployment", async function () {
-      const { game } = await loadFixture(deployFullProtocol);
-
-      // dailyIdx is 0 at deployment; the internal check requires day >= 2 for
-      // a valid three-day gap, so stall detection should return false.
-      expect(await game.rngStalledForThreeDays()).to.equal(false);
-    });
-
-    it("rngStalledForThreeDays returns false when VRF is fulfilled normally", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
-
-      // Run one full successful VRF cycle.
-      await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
-      const id = await getLastVRFRequestId(mockVRF);
-      await mockVRF.fulfillRandomWords(id, 11111n);
-      await drainTickets(game, deployer);
-
-      expect(await game.rngStalledForThreeDays()).to.equal(false);
-    });
-
-    it("rngStalledForThreeDays returns true after 3+ days of missing VRF words", async function () {
-      const { game, deployer } = await loadFixture(deployFullProtocol);
-
-      // Advance 3 full days without any VRF fulfillment so that three
-      // consecutive dailyIdx entries remain zero.  We call advanceGame() to issue the
-      // VRF request on each day but never fulfill it.
-      //
-      // After the first advanceGame the game is at dailyIdx=0 (request issued
-      // but not yet consumed) and the dailyIdx will not advance until the word
-      // is processed.  We need to advance enough real-world days that the
-      // GameTimeLib.currentDayIndex() reports day >= 3 while all of
-      // rngWordByDay[day], [day-1], [day-2] remain 0.
-      //
-      // Strategy: advance 4 whole calendar days (each 86400s) and call
-      // advanceGame() once per day to issue but not fulfill requests.
-      // The 18-hour retry logic means each new day's call just re-requests RNG,
-      // keeping the words empty.
-
-      for (let d = 0; d < 4; d++) {
-        await advanceToNextDay();
-        // Issue (or retry) a VRF request, never fulfill it.
-        try {
-          await game.connect(deployer).advanceGame();
-        } catch {
-          // On days after the first the call may revert with RngNotReady if
-          // the 18h window has not elapsed yet.  That's fine — we just need to
-          // advance time enough so the stall check fires.
-        }
-      }
-
-      // After 4 calendar days without any fulfilled VRF words the 3-day stall
-      // condition should be true.  We check it regardless of the exact day
-      // because the GameTimeLib day index is anchored to a deploy-time boundary.
-      const stalled = await game.rngStalledForThreeDays();
-      expect(stalled).to.equal(true);
-    });
-  });
+  // 3-day stall detection tests removed: rngStalledForThreeDays view removed in Phase 146
+  // (internal stall logic still exists; DegenerusAdmin.propose uses it internally)
 
   // =========================================================================
   // 7. Normal Fulfillment Within Timeout Window
@@ -633,22 +576,7 @@ describe("RngStall", function () {
       expect(newId).to.be.gt(retryId);
     });
 
-    it("rngStalledForThreeDays is false after a successful retry cycle", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
-
-      await advanceToNextDay();
-      await issueFirstRequest(game, deployer);
-      await advanceToNextDay();
-      await advanceTime(18 * 3600 + 1);
-      await game.connect(deployer).advanceGame();
-      const retryId = await getLastVRFRequestId(mockVRF);
-      await mockVRF.fulfillRandomWords(retryId, 555n);
-      await drainTickets(game, deployer);
-
-      // The day's VRF word has been recorded so the three-day stall check
-      // should return false.
-      expect(await game.rngStalledForThreeDays()).to.equal(false);
-    });
+    // rngStalledForThreeDays view removed in Phase 146; stall detection is now internal-only
   });
 
   // =========================================================================
@@ -661,8 +589,7 @@ describe("RngStall", function () {
         deployFullProtocol
       );
 
-      expect(await game.rngStalledForThreeDays()).to.equal(false);
-
+      // rngStalledForThreeDays view removed; verify non-stall via propose revert
       const MockVRF = await hre.ethers.getContractFactory(
         "MockVRFCoordinator"
       );

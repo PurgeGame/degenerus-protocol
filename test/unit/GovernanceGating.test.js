@@ -117,36 +117,39 @@ describe("Governance & Gating (Phase 43)", function () {
   // ADMIN-01: onlyOwner in DegenerusAdmin requires >50.1% DGVE
   // ===========================================================================
   describe("ADMIN-01: Admin onlyOwner requires >50.1% DGVE", function () {
+    // setLootboxRngThreshold and stakeGameEthToStEth moved from Admin to Game in Phase 146.
+    // swapGameEthForStEth remains on Admin and uses the same onlyOwner modifier.
     it("deployer (100% DGVE) passes onlyOwner", async function () {
-      const { admin, deployer } = await loadFixture(deployFullProtocol);
+      const { game, deployer } = await loadFixture(deployFullProtocol);
+      // setLootboxRngThreshold now on Game, gated by vault.isVaultOwner
       await expect(
-        admin.connect(deployer).setLootboxRngThreshold(eth("1"))
+        game.connect(deployer).setLootboxRngThreshold(eth("1"))
       ).to.not.be.reverted;
     });
 
-    it("alice (0% DGVE) fails onlyOwner with NotOwner", async function () {
-      const { admin, alice } = await loadFixture(deployFullProtocol);
+    it("alice (0% DGVE) fails onlyOwner with E", async function () {
+      const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        admin.connect(alice).setLootboxRngThreshold(eth("1"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
+        game.connect(alice).setLootboxRngThreshold(eth("1"))
+      ).to.be.revertedWithCustomError(game, "E");
     });
 
     it("deployer fails onlyOwner after transferring >49.9% DGVE away", async function () {
-      const { admin, vault, deployer, alice } =
+      const { game, vault, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       const dgve = await getDgveToken(vault);
       const halfSupply = INITIAL_SUPPLY / 2n;
       await dgve.connect(deployer).transfer(alice.address, halfSupply);
 
-      // Deployer now has 50% -- should NOT pass onlyOwner (needs >50.1%)
+      // Deployer now has 50% -- should NOT pass (needs >50.1%)
       await expect(
-        admin.connect(deployer).setLootboxRngThreshold(eth("1"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
+        game.connect(deployer).setLootboxRngThreshold(eth("1"))
+      ).to.be.revertedWithCustomError(game, "E");
     });
 
     it("alice passes onlyOwner after receiving >50.1% DGVE", async function () {
-      const { admin, vault, deployer, alice } =
+      const { game, vault, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       const dgve = await getDgveToken(vault);
@@ -154,12 +157,12 @@ describe("Governance & Gating (Phase 43)", function () {
       await dgve.connect(deployer).transfer(alice.address, amount);
 
       await expect(
-        admin.connect(alice).setLootboxRngThreshold(eth("1"))
+        game.connect(alice).setLootboxRngThreshold(eth("1"))
       ).to.not.be.reverted;
     });
 
     it("CREATOR address alone (0% DGVE) fails onlyOwner", async function () {
-      const { admin, vault, deployer, alice } =
+      const { game, vault, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       const dgve = await getDgveToken(vault);
@@ -168,21 +171,19 @@ describe("Governance & Gating (Phase 43)", function () {
 
       // CREATOR (deployer) now holds 0% -- no special privilege
       await expect(
-        admin.connect(deployer).setLootboxRngThreshold(eth("1"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
+        game.connect(deployer).setLootboxRngThreshold(eth("1"))
+      ).to.be.revertedWithCustomError(game, "E");
     });
 
     it("multiple owner-gated functions all check DGVE majority", async function () {
-      const { admin, alice } = await loadFixture(deployFullProtocol);
+      const { admin, game, alice } = await loadFixture(deployFullProtocol);
 
+      // setLootboxRngThreshold now on Game
       await expect(
-        admin.connect(alice).stakeGameEthToStEth(eth("1"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
+        game.connect(alice).setLootboxRngThreshold(eth("2"))
+      ).to.be.revertedWithCustomError(game, "E");
 
-      await expect(
-        admin.connect(alice).setLootboxRngThreshold(eth("2"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
-
+      // swapGameEthForStEth remains on Admin
       await expect(
         admin.connect(alice).swapGameEthForStEth({ value: eth("1") })
       ).to.be.revertedWithCustomError(admin, "NotOwner");
@@ -656,7 +657,7 @@ describe("Governance & Gating (Phase 43)", function () {
   // ===========================================================================
   describe("Cross-cutting: DGVE transfer changes who controls governance", function () {
     it("ownership transfers from deployer to alice via DGVE transfer", async function () {
-      const { admin, vault, deployer, alice } =
+      const { admin, game, vault, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
       const dgve = await getDgveToken(vault);
@@ -670,13 +671,14 @@ describe("Governance & Gating (Phase 43)", function () {
       expect(await vault.isVaultOwner(alice.address)).to.be.true;
       expect(await vault.isVaultOwner(deployer.address)).to.be.false;
 
+      // setLootboxRngThreshold now on Game, gated by vault.isVaultOwner
       await expect(
-        admin.connect(alice).setLootboxRngThreshold(eth("1"))
+        game.connect(alice).setLootboxRngThreshold(eth("1"))
       ).to.not.be.reverted;
 
       await expect(
-        admin.connect(deployer).setLootboxRngThreshold(eth("1"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
+        game.connect(deployer).setLootboxRngThreshold(eth("1"))
+      ).to.be.revertedWithCustomError(game, "E");
     });
 
     it("no two accounts can simultaneously be vault owner (pigeonhole >50.1%)", async function () {

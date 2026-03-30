@@ -163,9 +163,9 @@ describe("SecurityEconHardening", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
 
-      const before = await game.rewardPoolView();
+      const before = await game.futurePrizePoolView();
       await alice.sendTransaction({ to: gameAddr, value: eth(1) });
-      const after_ = await game.rewardPoolView();
+      const after_ = await game.futurePrizePoolView();
 
       expect(after_ - before).to.equal(eth(1));
     });
@@ -175,12 +175,12 @@ describe("SecurityEconHardening", function () {
   // FIX-05: Deity pass refund clears deityPassPurchasedCount
   // =========================================================================
   describe("FIX-05: Deity pass refund uses purchasedCount for payout", function () {
-    it("deityPassPurchasedCount increments on purchase", async function () {
+    it("deityPassCount increments on purchase", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
       // Before purchase, count is 0
       expect(
-        await game.deityPassPurchasedCountFor(alice.address)
+        await game.deityPassCountFor(alice.address)
       ).to.equal(0);
 
       // Purchase deity pass (symbol 0, base price 24 ETH)
@@ -190,7 +190,7 @@ describe("SecurityEconHardening", function () {
 
       // After purchase, count is 1
       expect(
-        await game.deityPassPurchasedCountFor(alice.address)
+        await game.deityPassCountFor(alice.address)
       ).to.equal(1);
     });
 
@@ -206,12 +206,12 @@ describe("SecurityEconHardening", function () {
         .connect(bob)
         .purchaseDeityPass(bob.address, 1, { value: eth(25) });
 
-      // Check purchased counts
+      // Check pass counts (deityPassPurchasedCountFor removed in Phase 146; use deityPassCountFor)
       expect(
-        await game.deityPassPurchasedCountFor(alice.address)
+        await game.deityPassCountFor(alice.address)
       ).to.equal(1);
       expect(
-        await game.deityPassPurchasedCountFor(bob.address)
+        await game.deityPassCountFor(bob.address)
       ).to.equal(1);
 
       // Record claimable before gameOver
@@ -614,7 +614,7 @@ describe("SecurityEconHardening", function () {
       // The structural guarantee is that 2300+2300+4600 = 9200 BPS,
       // leaving 800 BPS (~8%) as unextracted buffer.
 
-      const futurePoolBefore = await game.rewardPoolView();
+      const futurePoolBefore = await game.futurePrizePoolView();
       // The 10 ETH we sent goes to futurePrizePool via receive()
       expect(futurePoolBefore).to.be.gte(eth(10));
     });

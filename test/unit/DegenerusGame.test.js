@@ -77,8 +77,8 @@ describe("DegenerusGame", function () {
     it("VRF coordinator is wired after deployment (via admin constructor)", async function () {
       const { game } = await loadFixture(deployFullProtocol);
       // Game should have VRF config from the admin wireVrf call in admin constructor
-      // verify via rngStalledForThreeDays (should return false, not revert)
-      expect(await game.rngStalledForThreeDays()).to.be.false;
+      // verify via rngLocked (should return false, not revert)
+      expect(await game.rngLocked()).to.be.false;
     });
 
     it("levelPrizePool[0] is bootstrapped (activeTicketLevel=1 in purchase phase at level 0)", async function () {
@@ -316,30 +316,16 @@ describe("DegenerusGame", function () {
   // 5. setLootboxRngThreshold
   // ---------------------------------------------------------------------------
   describe("setLootboxRngThreshold", function () {
-    it("admin can update threshold and emits LootboxRngThresholdUpdated", async function () {
-      const { game, admin, deployer } = await loadFixture(deployFullProtocol);
-      // The admin contract calls this; we impersonate the admin contract
-      const adminAddr = await admin.getAddress();
-      await hre.network.provider.request({
-        method: "hardhat_impersonateAccount",
-        params: [adminAddr],
-      });
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        adminAddr,
-        "0xDE0B6B3A7640000",
-      ]);
-      const adminSigner = await hre.ethers.getSigner(adminAddr);
+    it("vault owner can update threshold and emits LootboxRngThresholdUpdated", async function () {
+      const { game, deployer } = await loadFixture(deployFullProtocol);
+      // deployer is vault owner (holds 100% DGVE)
       const newThreshold = eth("2");
-      const tx = await game.connect(adminSigner).setLootboxRngThreshold(newThreshold);
+      const tx = await game.connect(deployer).setLootboxRngThreshold(newThreshold);
       const ev = await getEvent(tx, game, "LootboxRngThresholdUpdated");
       expect(ev.args.current).to.equal(newThreshold);
-      await hre.network.provider.request({
-        method: "hardhat_stopImpersonatingAccount",
-        params: [adminAddr],
-      });
     });
 
-    it("reverts when called by non-admin", async function () {
+    it("reverts when called by non-vault-owner", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).setLootboxRngThreshold(eth("2"))
@@ -347,24 +333,10 @@ describe("DegenerusGame", function () {
     });
 
     it("reverts when threshold is zero", async function () {
-      const { game, admin } = await loadFixture(deployFullProtocol);
-      const adminAddr = await admin.getAddress();
-      await hre.network.provider.request({
-        method: "hardhat_impersonateAccount",
-        params: [adminAddr],
-      });
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        adminAddr,
-        "0xDE0B6B3A7640000",
-      ]);
-      const adminSigner = await hre.ethers.getSigner(adminAddr);
+      const { game, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(adminSigner).setLootboxRngThreshold(0n)
+        game.connect(deployer).setLootboxRngThreshold(0n)
       ).to.be.reverted;
-      await hre.network.provider.request({
-        method: "hardhat_stopImpersonatingAccount",
-        params: [adminAddr],
-      });
     });
   });
 
@@ -378,14 +350,14 @@ describe("DegenerusGame", function () {
       const ev = await getEvent(tx, game, "AutoRebuyToggled");
       expect(ev.args.player).to.equal(alice.address);
       expect(ev.args.enabled).to.be.true;
-      expect(await game.autoRebuyEnabledFor(alice.address)).to.be.true;
     });
 
     it("disables auto-rebuy", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await game.connect(alice).setAutoRebuy(ZERO_ADDRESS, true);
-      await game.connect(alice).setAutoRebuy(ZERO_ADDRESS, false);
-      expect(await game.autoRebuyEnabledFor(alice.address)).to.be.false;
+      const tx = await game.connect(alice).setAutoRebuy(ZERO_ADDRESS, false);
+      const ev = await getEvent(tx, game, "AutoRebuyToggled");
+      expect(ev.args.enabled).to.be.false;
     });
   });
 
@@ -417,9 +389,10 @@ describe("DegenerusGame", function () {
   describe("setDecimatorAutoRebuy", function () {
     it("disables decimator auto-rebuy for player", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.decimatorAutoRebuyEnabledFor(alice.address)).to.be.true;
-      await game.connect(alice).setDecimatorAutoRebuy(ZERO_ADDRESS, false);
-      expect(await game.decimatorAutoRebuyEnabledFor(alice.address)).to.be.false;
+      const tx = await game.connect(alice).setDecimatorAutoRebuy(ZERO_ADDRESS, false);
+      const ev = await getEvent(tx, game, "DecimatorAutoRebuyToggled");
+      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.enabled).to.be.false;
     });
 
     it("emits DecimatorAutoRebuyToggled", async function () {
@@ -563,10 +536,9 @@ describe("DegenerusGame", function () {
   // 20. View functions
   // ---------------------------------------------------------------------------
   describe("view functions", function () {
-    it("rngStalledForThreeDays returns false at deployment", async function () {
-      const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.rngStalledForThreeDays()).to.be.false;
-    });
+    // rngStalledForThreeDays, lootboxRngIndexView, lootboxRngThresholdView,
+    // ethMintLevelCount, ethMintStreakCount, hasActiveLazyPass, autoRebuyEnabledFor,
+    // decimatorAutoRebuyEnabledFor, lootboxRngWord removed in Phase 146 ABI cleanup
 
     it("currentDayView returns a non-zero day", async function () {
       const { game } = await loadFixture(deployFullProtocol);
@@ -574,49 +546,14 @@ describe("DegenerusGame", function () {
       expect(day).to.be.gt(0n);
     });
 
-    it("lootboxRngIndexView starts at 1", async function () {
-      const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.lootboxRngIndexView()).to.equal(1n);
-    });
-
-    it("lootboxRngThresholdView returns 1 ETH default", async function () {
-      const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.lootboxRngThresholdView()).to.equal(eth("1"));
-    });
-
     it("futurePrizePoolView is zero before any purchases", async function () {
       const { game } = await loadFixture(deployFullProtocol);
       expect(await game.futurePrizePoolView()).to.equal(0n);
     });
 
-    it("ethMintLevelCount is 0 for new player", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.ethMintLevelCount(alice.address)).to.equal(0n);
-    });
-
-    it("ethMintStreakCount is 0 for new player", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.ethMintStreakCount(alice.address)).to.equal(0n);
-    });
-
-    it("hasActiveLazyPass returns false for new player", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.hasActiveLazyPass(alice.address)).to.be.false;
-    });
-
     it("afKingModeFor returns false for new player", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       expect(await game.afKingModeFor(alice.address)).to.be.false;
-    });
-
-    it("autoRebuyEnabledFor returns false by default", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.autoRebuyEnabledFor(alice.address)).to.be.false;
-    });
-
-    it("decimatorAutoRebuyEnabledFor returns true by default", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.decimatorAutoRebuyEnabledFor(alice.address)).to.be.true;
     });
 
     it("playerActivityScore returns 0 for new player", async function () {
@@ -632,11 +569,6 @@ describe("DegenerusGame", function () {
     it("deityPassCountFor returns 0 for new player", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       expect(await game.deityPassCountFor(alice.address)).to.equal(0n);
-    });
-
-    it("lootboxRngWord returns 0 for unseen index", async function () {
-      const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.lootboxRngWord(1n)).to.equal(0n);
     });
   });
 

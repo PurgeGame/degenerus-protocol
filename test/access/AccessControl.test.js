@@ -39,32 +39,7 @@ describe("AccessControl", function () {
   // ---------------------------------------------------------------------------
 
   describe("BurnieCoin", function () {
-    it("creditFlip: reverts when called by alice (OnlyFlipCreditors)", async function () {
-      const { coin, alice, bob } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        coin.connect(alice).creditFlip(bob.address, eth("100"))
-      ).to.be.revertedWithCustomError(coin, "OnlyFlipCreditors");
-    });
-
-    it("creditFlipBatch: reverts when called by alice (OnlyFlipCreditors)", async function () {
-      const { coin, alice, bob, carol, dan } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        coin.connect(alice).creditFlipBatch(
-          [bob.address, carol.address, dan.address],
-          [eth("100"), eth("100"), eth("100")]
-        )
-      ).to.be.revertedWithCustomError(coin, "OnlyFlipCreditors");
-    });
-
-    it("creditCoin: reverts when called by alice (OnlyFlipCreditors)", async function () {
-      const { coin, alice, bob } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        coin.connect(alice).creditCoin(bob.address, eth("1000"))
-      ).to.be.revertedWithCustomError(coin, "OnlyFlipCreditors");
-    });
+    // creditFlip, creditFlipBatch, creditCoin removed from BurnieCoin in Phase 146 ABI cleanup
 
     it("rollDailyQuest: reverts when called by alice (OnlyGame)", async function () {
       const { coin, alice } = await loadFixture(deployFullProtocol);
@@ -332,21 +307,8 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(admin, "InsufficientStake");
     });
 
-    it("stakeGameEthToStEth: reverts when called by alice (onlyOwner → NotOwner)", async function () {
-      const { admin, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        admin.connect(alice).stakeGameEthToStEth(eth("1"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
-    });
-
-    it("setLootboxRngThreshold: reverts when called by alice (onlyOwner → NotOwner)", async function () {
-      const { admin, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        admin.connect(alice).setLootboxRngThreshold(eth("5"))
-      ).to.be.revertedWithCustomError(admin, "NotOwner");
-    });
+    // stakeGameEthToStEth and setLootboxRngThreshold removed from Admin in Phase 146
+    // (now live directly on DegenerusGame with vault-owner access control)
   });
 
   // ---------------------------------------------------------------------------
@@ -479,13 +441,7 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
-    it("coin.mintForCoinflip reverts when called by alice (not coinflip contract)", async function () {
-      const { coin, alice, bob } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        coin.connect(alice).mintForCoinflip(bob.address, eth("100"))
-      ).to.be.revertedWithCustomError(coin, "OnlyGame");
-    });
+    // coin.mintForCoinflip removed from BurnieCoin in Phase 146 (merged into mintForGame)
 
     it("coin.vaultMintTo reverts when called by alice (onlyVault → OnlyVault)", async function () {
       const { coin, alice } = await loadFixture(deployFullProtocol);
