@@ -30,7 +30,8 @@
 - ✅ **v8.1 Final Audit Prep** — Phases 135-137 (shipped 2026-03-28)
 - ✅ **v9.0 Contest Dry Run** — Phases 138-140 (shipped 2026-03-28)
 - ✅ **v10.0 Audit Submission Ready** — Phases 141-143 (shipped 2026-03-29)
-- [ ] **v10.1 ABI Cleanup** — Phases 144-146 (in progress)
+- ✅ **v10.1 ABI Cleanup** — Phases 144-146 (shipped 2026-03-30)
+- [ ] **v10.2 Ticket Mint Gas Optimization** — Phases 147-148 (in progress)
 
 ## Phases
 
@@ -48,155 +49,72 @@
 <details>
 <summary>v2.1 VRF Governance Audit + Doc Sync (Phases 24-25) -- SHIPPED 2026-03-18</summary>
 
-- [x] **Phase 24: Core Governance Security Audit** — 8 plans, 26 requirements (completed 2026-03-17)
-- [x] **Phase 25: Audit Doc Sync** — 4 plans, 7 requirements (completed 2026-03-17)
-
 </details>
 
 <details>
 <summary>v3.0 Full Contract Audit + Payout Specification (Phases 26-30) -- SHIPPED 2026-03-18</summary>
 
-- [x] **Phase 26: GAMEOVER Path Audit** — 4 plans, 9 requirements (completed 2026-03-18)
-- [x] **Phase 27: Payout/Claim Path Audit** — 6 plans, 19 requirements (completed 2026-03-18)
-- [x] **Phase 28: Cross-Cutting Verification** — 6 plans, 19 requirements (completed 2026-03-18)
-- [x] **Phase 29: Comment/Documentation Correctness** — 6 plans, 5 requirements (completed 2026-03-18)
-- [x] **Phase 30: Payout Specification Document** — 6 plans, 6 requirements (completed 2026-03-18)
-
 </details>
 
 <details>
-<summary>v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification (Phases 31-37) -- SHIPPED 2026-03-19</summary>
-
-- [x] **Phase 31: Core Game Contracts** — 2 plans, 2 requirements (completed 2026-03-19)
-- [x] **Phase 32: Game Modules Batch A** — 3 plans, 2 requirements (completed 2026-03-19)
-- [x] **Phase 33: Game Modules Batch B** — 3 plans, 2 requirements (completed 2026-03-19)
-- [x] **Phase 34: Token Contracts** — 2 plans, 2 requirements (completed 2026-03-19)
-- [x] **Phase 35: Peripheral Contracts** — 4 plans, 2 requirements (completed 2026-03-19)
-- [x] **Phase 36: Consolidated Findings** — 1 plan, 1 requirement (completed 2026-03-19)
-- [x] **Phase 37: Milestone Cleanup** — 1 plan, gap closure (completed 2026-03-19)
+<summary>v3.1 Pre-Audit Polish (Phases 31-37) -- SHIPPED 2026-03-19</summary>
 
 </details>
 
 <details>
 <summary>v3.2 RNG Delta Audit + Comment Re-scan (Phases 38-43) -- SHIPPED 2026-03-19</summary>
 
-- [x] **Phase 38: RNG Delta Security** — 2 plans, 4 requirements (completed 2026-03-19)
-- [x] **Phase 39: Comment Scan -- Game Modules** — 4 plans, 1 requirement (completed 2026-03-19)
-- [x] **Phase 40: Comment Scan -- Core + Token Contracts** — 2 plans, 2 requirements (completed 2026-03-19)
-- [x] **Phase 41: Comment Scan -- Peripheral + Remaining** — 3 plans, 2 requirements (completed 2026-03-19)
-- [x] **Phase 42: Governance Fresh Eyes** — 2 plans, 3 requirements (completed 2026-03-19)
-- [x] **Phase 43: Consolidated Findings** — 1 plan, 2 requirements (completed 2026-03-19)
-
 </details>
 
 <details>
 <summary>v3.3 Gambling Burn Audit + Full Adversarial Sweep (Phases 44-49) -- SHIPPED 2026-03-21</summary>
 
-- [x] **Phase 44: Delta Audit + Redemption Correctness** — 3 plans, 12 requirements (completed 2026-03-21)
-- [x] **Phase 45: Invariant Test Suite** — 3 plans, 7 requirements (completed 2026-03-21)
-- [x] **Phase 46: Adversarial Sweep + Economic Analysis** — 3 plans, 5 requirements (completed 2026-03-21)
-- [x] **Phase 47: Gas Optimization** — 2 plans, 4 requirements (completed 2026-03-21)
-- [x] **Phase 48: Documentation Sync** — 2 plans, 4 requirements (completed 2026-03-21)
-- [x] **Phase 49: Milestone Cleanup** — 2 plans, gap closure (completed 2026-03-21)
+</details>
+
+<details>
+<summary>v3.4 New Feature Audit (Phases 50-53) -- SHIPPED 2026-03-21</summary>
 
 </details>
 
 <details>
-<summary>v3.4 New Feature Audit — Skim Redesign + Redemption Lootbox (Phases 50-53) -- SHIPPED 2026-03-21</summary>
-
-- [x] **Phase 50: Skim Redesign Audit** — 3 plans, 10 requirements (completed 2026-03-21)
-- [x] **Phase 51: Redemption Lootbox Audit** — 4 plans, 7 requirements (completed 2026-03-21)
-- [x] **Phase 52: Invariant Test Suite** — 2 plans, 3 requirements (completed 2026-03-21)
-- [x] **Phase 53: Consolidated Findings** — 1 plan, 3 requirements (completed 2026-03-21)
-
-</details>
-
-<details>
-<summary>v3.5 Final Polish — Comment Correctness + Gas Optimization (Phases 54-58) -- SHIPPED 2026-03-22</summary>
-
-- [x] **Phase 54: Comment Correctness** — 6 plans, 4 requirements (completed 2026-03-22)
-- [x] **Phase 55: Gas Optimization** — 4 plans, 4 requirements (completed 2026-03-22)
-- [x] **Phase 57: Gas Ceiling Analysis** — 2 plans, 5 requirements (completed 2026-03-22)
-- [x] **Phase 58: Consolidated Findings** — 1 plan, 2 requirements (completed 2026-03-22)
+<summary>v3.5 Final Polish (Phases 54-58) -- SHIPPED 2026-03-22</summary>
 
 </details>
 
 <details>
 <summary>v3.6 VRF Stall Resilience (Phases 59-62) -- SHIPPED 2026-03-22</summary>
 
-- [x] **Phase 59: RNG Gap Backfill Implementation** — 2 plans, 5 requirements (completed 2026-03-22)
-- [x] **Phase 60: Coordinator Swap Cleanup** — 1 plan, 2 requirements (completed 2026-03-22)
-- [x] **Phase 61: Stall Resilience Tests** — 1 plan, 3 requirements (completed 2026-03-22)
-- [x] **Phase 62: Audit + Consolidated Findings** — 2 plans, 2 requirements (completed 2026-03-22)
-
 </details>
 
 <details>
 <summary>v3.7 VRF Path Audit (Phases 63-67) -- SHIPPED 2026-03-22</summary>
-
-- [x] **Phase 63: VRF Request/Fulfillment Core** — 2 plans, 4 requirements (completed 2026-03-22)
-- [x] **Phase 64: Lootbox RNG Lifecycle** — 2 plans, 5 requirements (completed 2026-03-22)
-- [x] **Phase 65: VRF Stall Edge Cases** — 2 plans, 7 requirements (completed 2026-03-22)
-- [x] **Phase 66: VRF Path Test Coverage** — 2 plans, 4 requirements (completed 2026-03-22)
-- [x] **Phase 67: Verification + Doc Sync** — 2 plans, 4 requirements (completed 2026-03-22)
 
 </details>
 
 <details>
 <summary>v3.8 VRF Commitment Window Audit (Phases 68-73) -- SHIPPED 2026-03-23</summary>
 
-- [x] **Phase 68: Commitment Window Inventory** - 2 plans, 3 requirements (completed 2026-03-22)
-- [x] **Phase 69: Mutation Verdicts** - 2 plans, 4 requirements (completed 2026-03-22)
-- [x] **Phase 70: Coinflip Commitment Window** - 2 plans, 3 requirements (completed 2026-03-22)
-- [x] **Phase 71: advanceGame Day RNG Window** - 2 plans, 3 requirements (completed 2026-03-22)
-- [x] **Phase 72: Ticket Queue Deep-Dive + Pattern Scan** - 2 plans, 3 requirements (completed 2026-03-23)
-- [x] **Phase 73: Boon Storage Packing** - 3 plans, 6 requirements (completed 2026-03-23)
-
 </details>
 
 <details>
 <summary>v3.9 Far-Future Ticket Fix (Phases 74-80) -- SHIPPED 2026-03-23</summary>
-
-- [x] **Phase 74: Storage Foundation** - 1 plan, 2 requirements (completed 2026-03-23)
-- [x] **Phase 75: Ticket Routing + RNG Guard** - 1 plan, 4 requirements (completed 2026-03-23)
-- [x] **Phase 76: Ticket Processing Extension** - 1 plan, 3 requirements (completed 2026-03-23)
-- [x] **Phase 77: Jackpot Combined Pool + TQ-01 Fix** - 1 plan, 3 requirements (completed 2026-03-23)
-- [x] **Phase 78: Edge Case Handling** - 1 plan, 2 requirements (completed 2026-03-23)
-- [x] **Phase 79: RNG Commitment Window Proof** - 1 plan, 1 requirement (completed 2026-03-23)
-- [x] **Phase 80: Test Suite** - 2 plans, 5 requirements (completed 2026-03-23)
 
 </details>
 
 <details>
 <summary>v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit (Phases 81-91) -- SHIPPED 2026-03-23</summary>
 
-- [x] **Phase 81: Ticket Creation & Queue Mechanics** — 2 plans, 8 requirements (completed 2026-03-23)
-- [x] **Phase 82: Ticket Processing Mechanics** — 2 plans, 6 requirements (completed 2026-03-23)
-- [x] **Phase 83: Ticket Consumption & Winner Selection** — 2 plans, 4 requirements (completed 2026-03-23)
-- [x] **Phase 84: Prize Pool Flow & currentPrizePool Deep Dive** — 1 plan, 6 requirements (completed 2026-03-23)
-- [x] **Phase 85: Daily ETH Jackpot** — 2 plans, 5 requirements (completed 2026-03-23)
-- [x] **Phase 86: Daily Coin + Ticket Jackpot** — 2 plans, 4 requirements (completed 2026-03-23)
-- [x] **Phase 87: Other Jackpots** — 4 plans, 6 requirements (completed 2026-03-23)
-- [x] **Phase 88: RNG-Dependent Variable Re-verification** — 2 plans, 4 requirements (completed 2026-03-23)
-- [x] **Phase 89: Consolidated Findings** — 1 plan, 3 requirements (completed 2026-03-23)
-- [x] **Phase 90: Verification Backfill** — gap closure (completed 2026-03-23)
-- [x] **Phase 91: Consolidated Findings Rewrite** — gap closure (completed 2026-03-23)
-
 </details>
 
 <details>
 <summary>v4.1 Ticket Lifecycle Integration Tests (Phases 92-94) -- SHIPPED 2026-03-24</summary>
-
-- [x] **Phase 92: Integration Scaffold + Source Coverage** — 2 plans, 10 requirements (completed 2026-03-24)
-- [x] **Phase 93: Edge Cases + Zero-Stranding Assertions** — 1 plan, 8 requirements (completed 2026-03-24)
-- [x] **Phase 94: RNG Commitment Window Proofs** — 1 plan, 4 requirements (completed 2026-03-24)
 
 </details>
 
 <details>
 <summary>v4.2 Daily Jackpot Chunk Removal + Gas Optimization (Phases 95-98) -- SHIPPED 2026-03-25</summary>
 
-- [x] **Phase 95: Delta Verification** — 3 plans, 4 requirements (completed 2026-03-25)
+- [x] **Phase 95: Chunk Removal Delta** — 2 plans, 4 requirements (completed 2026-03-25)
 - [x] **Phase 96: Gas Ceiling + Optimization** — 3 plans, 6 requirements (completed 2026-03-25)
 - [x] **Phase 97: Comment Cleanup** — 1 plan, 1 requirement (completed 2026-03-25)
 - [x] **Phase 98: Milestone Documentation Cleanup** — 1 plan, 2 requirements, gap closure (completed 2026-03-25)
@@ -298,21 +216,26 @@
 <summary>v10.0 Audit Submission Ready (Phases 141-143) -- SHIPPED 2026-03-29</summary>
 
 - [x] **Phase 141: Delta Adversarial Audit** - Audit dailyIdx init, backfill cap, and turbo-at-L0 removal (completed 2026-03-29)
-- [x] **Phase 142: Documentation + Submission Readiness** - Update KNOWN-ISSUES.md, NatSpec, C4A README, verify tests (completed 2026-03-29)
+- [x] **Phase 142: Documentation + Submission Readiness** - Update KNOWN-ISSUES, NatSpec, C4A README with delta findings; verify tests (completed 2026-03-29)
 - [x] **Phase 143: Vault + Self-Win Delta Audit** - Audit vault sDGNRS burn/claim additions and transferFromPool self-win burn (completed 2026-03-29)
 
 </details>
 
-### v10.1 ABI Cleanup (In Progress)
+<details>
+<summary>v10.1 ABI Cleanup (Phases 144-146) -- SHIPPED 2026-03-30</summary>
 
-**Milestone Goal:** Identify and remove unnecessary functions (forwarding wrappers, unused views, ABI clutter) across all contracts to reduce deploy gas and simplify the public interface.
+- [x] **Phase 144: Contract Scan** - Sweep all contracts for forwarding wrappers and unused view/pure functions (completed 2026-03-30)
+- [x] **Phase 145: Candidate Review** - User reviews and approves/rejects each candidate (completed 2026-03-30)
+- [x] **Phase 146: Execute Removals** - Remove approved functions, rewire callers, verify tests pass (completed 2026-03-30)
 
-- [ ] **Phase 144: Contract Scan** - Sweep all contracts for forwarding wrappers and unused view/pure functions
-  **Plans:** 1 plan
-  Plans:
-  - [x] 144-01-PLAN.md — Scan all production contracts, produce categorized candidate list
-- [ ] **Phase 145: Candidate Review** - User reviews and approves/rejects each candidate before code changes
-- [ ] **Phase 146: Execute Removals** - Remove approved functions, rewire callers, verify tests pass
+</details>
+
+### v10.2 Ticket Mint Gas Optimization (In Progress)
+
+**Milestone Goal:** Find the optimal advanceGame writes cap that maximizes per-tx throughput while guaranteeing the function never exceeds 14M gas, even under adversarial ticket distributions.
+
+- [ ] **Phase 147: Gas Analysis** - Profile advanceGame ticket loop, per-iteration breakdown, adversarial distribution analysis, derive optimal cap
+- [ ] **Phase 148: Implementation + Verification** - Update cap constant, verify gas ceiling, run tests
 
 ## Phase Details
 
@@ -369,7 +292,7 @@ Plans:
 </details>
 
 <details>
-<summary>Phase 141-143 Details (v10.0)</summary>
+<summary>Phase 141-146 Details (v10.0, v10.1)</summary>
 
 ### Phase 141: Delta Adversarial Audit
 **Goal**: Every post-v9.0 code change in DegenerusGame.sol and DegenerusGameAdvanceModule.sol is proven safe -- no security regressions, no gas ceiling impacts, no correctness bugs
@@ -406,9 +329,9 @@ Plans:
   1. sdgnrsBurn() and sdgnrsClaimRedemption() in DegenerusVault have been adversarially reviewed for access control, reentrancy, and correct integration with StakedDegenerusStonk
   2. transferFromPool self-win burn path (to == address(this)) is verified to correctly reduce totalSupply, emit Transfer to address(0), and not break pool accounting or solvency invariants
   3. No existing test regressions (1362 passing)
-**Plans**: TBD
-
-</details>
+**Plans**: 1 plan
+Plans:
+- [x] 143-01-PLAN.md — Vault sDGNRS burn/claim + self-win burn delta audit
 
 ### Phase 144: Contract Scan
 **Goal**: Every contract's public interface is inventoried and every unnecessary function (forwarding wrapper, unused view) is identified with removal rationale
@@ -418,7 +341,9 @@ Plans:
   1. Every external/public function across all production contracts has been checked for forwarding-only pattern (body is a single delegated call with identical parameters)
   2. Every view/pure function across all production contracts has been checked for on-chain callers by searching all .sol files for cross-contract references
   3. A categorized candidate list exists with function name, source contract, category (forwarding/unused-view), removal rationale, and risk notes for each candidate
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] 144-01-PLAN.md — Scan all production contracts, produce categorized candidate list
 
 ### Phase 145: Candidate Review
 **Goal**: User has reviewed every candidate and made an explicit keep/remove decision before any code is touched
@@ -427,7 +352,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Every candidate from the Phase 144 list has an explicit user verdict (REMOVE or KEEP with rationale)
   2. Interface files (.sol) have been identified for each approved removal so interface updates can be batched with implementation removal
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] 145-01-PLAN.md — User review gate
 
 ### Phase 146: Execute Removals
 **Goal**: All approved removals are applied cleanly -- callers rewired, interfaces updated, tests green, NatSpec current
@@ -442,19 +369,43 @@ Plans:
 Plans:
 - [x] 146-01-PLAN.md — BurnieCoin forwarding wrapper removal + caller rewiring
 - [x] 146-02-PLAN.md — DegenerusAdmin forwarding removal + Game vault-owner access control
-- [ ] 146-03-PLAN.md — Remove 16 unused view functions from DegenerusGame + interfaces
+- [x] 146-03-PLAN.md — Remove 16 unused view functions from DegenerusGame + interfaces
 - [x] 146-04-PLAN.md — Fix test suite + NatSpec updates
+
+</details>
+
+### Phase 147: Gas Analysis
+**Goal**: The exact gas cost of every advanceGame ticket-processing path is known, including worst-case adversarial distributions, enabling a mathematically justified cap value
+**Depends on**: Phase 146 (v10.1 complete, codebase stable after ABI cleanup)
+**Requirements**: CAP-01, CAP-02, CAP-03, CAP-04
+**Success Criteria** (what must be TRUE):
+  1. A full gas profile exists for the advanceGame ticket-processing loop under worst-case conditions (all key spaces active, max queued tickets, jackpot resolution, coinflip settlement) with measured gas values, not estimates
+  2. Per-iteration gas cost is broken down by component (storage reads, storage writes, external calls, computation) so the marginal cost of each additional write is known
+  3. An adversarial ticket distribution analysis demonstrates the worst-case gas when an attacker creates many small purchases across many addresses to maximize per-ticket overhead (new storage slots, cold reads, unique player processing)
+  4. A mathematically proven maximum writes cap value is derived from the profiling data that guarantees advanceGame stays under 14M gas in all paths including adversarial distributions
+**Plans**: 1 plan
+Plans:
+- [ ] 147-01-PLAN.md — Gas profile advanceGame ticket loop, adversarial analysis, derive optimal WRITES_BUDGET_SAFE cap
+
+### Phase 148: Implementation + Verification
+**Goal**: The new cap value is deployed in code, gas ceiling is re-verified under worst-case conditions, and the full test suite passes
+**Depends on**: Phase 147 (cap value determined with mathematical proof)
+**Requirements**: CAP-05, CAP-06, CAP-07
+**Success Criteria** (what must be TRUE):
+  1. The writes cap constant in code is updated to the Phase 147 derived value
+  2. Gas ceiling is re-verified at the new cap under worst-case state (including adversarial scenarios from Phase 147) and confirmed under 14M
+  3. Full test suite (Hardhat + Foundry) passes with 0 new failures
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phase 144 (sequential) -> Phase 145 (sequential) -> Phase 146 (sequential)
+Phase 147 (sequential) -> Phase 148 (sequential)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 144. Contract Scan | v10.1 | 1/1 | Complete   | 2026-03-30 |
-| 145. Candidate Review | v10.1 | 1/1 | Complete    | 2026-03-30 |
-| 146. Execute Removals | v10.1 | 3/4 | In Progress|  |
+| 147. Gas Analysis | v10.2 | 0/1 | Planned | - |
+| 148. Implementation + Verification | v10.2 | 0/? | Not started | - |
 
 ## Deferred
 
