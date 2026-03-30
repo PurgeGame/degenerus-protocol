@@ -179,7 +179,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             midDayTicketRngPending = false;
                         }
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
-                        coin.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price);
+                        coinflip.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price);
                         return;
                     }
                 }
@@ -217,7 +217,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 ) = _runProcessTicketBatch(purchaseLevel);
                 if (ticketWorked || !ticketsFinished) {
                     emit Advance(STAGE_TICKETS_WORKING, lvl);
-                    coin.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
+                    coinflip.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
                     return;
                 }
             }
@@ -399,7 +399,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         } while (false);
 
         emit Advance(stage, lvl);
-        coin.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
+        coinflip.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
     }
 
     /*+========================================================================================+
@@ -834,7 +834,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         flipDay
                     );
                     if (burnieToCredit != 0) {
-                        coin.creditFlip(
+                        coinflip.creditFlip(
                             ContractAddresses.SDGNRS,
                             burnieToCredit
                         );
@@ -906,7 +906,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         flipDay
                     );
                     if (burnieToCredit != 0) {
-                        coin.creditFlip(
+                        coinflip.creditFlip(
                             ContractAddresses.SDGNRS,
                             burnieToCredit
                         );
@@ -945,7 +945,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             flipDay
                         );
                         if (burnieToCredit != 0) {
-                            coin.creditFlip(
+                            coinflip.creditFlip(
                                 ContractAddresses.SDGNRS,
                                 burnieToCredit
                             );

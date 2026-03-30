@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {
-    IDegenerusCoinModule
-} from "../interfaces/DegenerusGameModuleInterfaces.sol";
+import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
+import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
@@ -91,8 +90,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
 
-    IDegenerusCoinModule internal constant coin =
-        IDegenerusCoinModule(ContractAddresses.COIN);
+    /// @notice BurnieCoin contract for quest rolls and vault escrow.
+    IDegenerusCoin internal constant coin =
+        IDegenerusCoin(ContractAddresses.COIN);
+    /// @notice BurnieCoinflip contract for direct flip crediting.
+    IBurnieCoinflip internal constant coinflip =
+        IBurnieCoinflip(ContractAddresses.COINFLIP);
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     IStakedDegenerusStonk internal constant dgnrs =
         IStakedDegenerusStonk(ContractAddresses.SDGNRS);
@@ -186,7 +189,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      system from receiving a cap too small to distribute across 4 trait buckets.
     uint16 private constant DAILY_CARRYOVER_MIN_WINNERS = 20;
 
-    /// @dev Maximum winners for daily coin jackpot (coin.creditFlip is 1 external call each).
+    /// @dev Maximum winners for daily coin jackpot (coinflip.creditFlip is 1 external call each).
     uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
 
     /// @dev Salt base for daily coin jackpot winner selection.
@@ -1672,7 +1675,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 entropy
     ) private returns (uint256 claimableDelta) {
         if (payInCoin) {
-            coin.creditFlip(beneficiary, amount);
+            coinflip.creditFlip(beneficiary, amount);
             return 0;
         } else {
             // Liability is tracked by the caller to avoid per-winner SSTORE cost.
@@ -2276,7 +2279,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (priceWei == 0) return;
         uint256 coinAmount = (prizePoolWei * PRICE_COIN_UNIT) / (priceWei * 20);
         if (coinAmount == 0) return;
-        coin.creditFlip(ContractAddresses.SDGNRS, coinAmount);
+        coinflip.creditFlip(ContractAddresses.SDGNRS, coinAmount);
     }
 
     /// @notice Pays daily BURNIE jackpot to random ticket holders.
@@ -2413,7 +2416,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             ++batchCount;
                         }
                         if (batchCount == 3) {
-                            coin.creditFlipBatch(batchPlayers, batchAmounts);
+                            coinflip.creditFlipBatch(batchPlayers, batchAmounts);
                             batchCount = 0;
                         }
                     }
@@ -2439,7 +2442,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     ++i;
                 }
             }
-            coin.creditFlipBatch(batchPlayers, batchAmounts);
+            coinflip.creditFlipBatch(batchPlayers, batchAmounts);
         }
     }
 
@@ -2512,7 +2515,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
 
             if (batchCount == 3) {
-                coin.creditFlipBatch(batchPlayers, batchAmounts);
+                coinflip.creditFlipBatch(batchPlayers, batchAmounts);
                 batchCount = 0;
             }
 
@@ -2529,7 +2532,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     ++j;
                 }
             }
-            coin.creditFlipBatch(batchPlayers, batchAmounts);
+            coinflip.creditFlipBatch(batchPlayers, batchAmounts);
         }
     }
 

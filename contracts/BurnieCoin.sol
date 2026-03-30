@@ -9,7 +9,7 @@ pragma solidity 0.8.34;
  * @dev ARCHITECTURE:
  *      - ERC20 standard with game contract transfer bypass
  *      - Mint/burn interface for game contract, coinflip contract, and vault
- *      - Flip credit accounting: credits denominated in BURNIE, delegated to BurnieCoinflip.sol
+ *      - Coinflip integration: claims via BurnieCoinflip.sol for transfer shortfall coverage
  *      - Decimator burns: Burn-to-participate for decimator jackpot eligibility
  *      - Quest integration: Daily quest rolls, streak tracking, slot rewards
  *      - Vault escrow: 2M BURNIE virtual reserve, minted only on ContractAddresses.VAULT withdrawal
@@ -18,7 +18,7 @@ pragma solidity 0.8.34;
  *      - totalSupply + vaultAllowance = supplyIncUncirculated
  *
  * @dev SECURITY:
- *      - Access control: onlyDegenerusGameContract, onlyFlipCreditors, onlyVault, onlyAdmin
+ *      - Access control: onlyDegenerusGameContract, onlyFlipCreditors, onlyVault, onlyTrustedContracts
  *      - CEI pattern: burns before external calls
  */
 
@@ -34,14 +34,8 @@ interface IBurnieCoinflip {
     function claimCoinflipsFromBurnie(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Consume coinflip winnings via BurnieCoin for burns (no mint).
     function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
-    /// @notice Get player's current coinflip stake for next day.
-    function coinflipAmount(address player) external view returns (uint256);
-    /// @notice Get player's auto-rebuy configuration.
-    function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint48 startDay);
-    /// @notice Credit flip stake to a player.
+    /// @notice Credit flip stake to a player (used for quest rewards).
     function creditFlip(address player, uint256 amount) external;
-    /// @notice Credit flip stake to multiple players (batch).
-    function creditFlipBatch(address[3] calldata players, uint256[3] calldata amounts) external;
 }
 
 contract BurnieCoin {
@@ -101,11 +95,6 @@ contract BurnieCoin {
         uint32 streak,
         uint256 reward
     );
-
-    /// @notice Emitted when ContractAddresses.ADMIN credits LINK-funded bonus directly.
-    /// @param player The recipient of the credit.
-    /// @param amount The amount credited as flip stake (18 decimals).
-    event LinkCreditRecorded(address indexed player, uint256 amount);
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The contract that escrowed the funds (VAULT or GAME).
@@ -286,13 +275,6 @@ contract BurnieCoin {
       |  Read-only functions for UIs and external contracts to query state.  |
       +======================================================================+*/
 
-    /// @notice View-only helper to estimate claimable coin (flips only) for the caller.
-    /// @dev Proxies to BurnieCoinflip contract for coinflip-related claims.
-    /// @return The total BURNIE claimable from past winning coinflips.
-    function claimableCoin() external view returns (uint256) {
-        return IBurnieCoinflip(coinflipContract).previewClaimCoinflips(msg.sender);
-    }
-
     /// @notice Total spendable BURNIE at the current time (balance + claimable coinflips).
     /// @dev For ContractAddresses.VAULT, includes virtual vault allowance + any actual balance.
     ///      Known: conservatively underreports during RNG lock since previewClaimCoinflips
@@ -308,25 +290,6 @@ contract BurnieCoin {
         unchecked {
             spendable += IBurnieCoinflip(coinflipContract).previewClaimCoinflips(player);
         }
-    }
-
-    /// @notice Preview the amount claimCoinflips(amount) would mint for a player.
-    /// @dev Proxies to BurnieCoinflip contract.
-    /// @param player The player to preview for.
-    /// @return mintable Amount of BURNIE that would be minted on claim.
-    function previewClaimCoinflips(address player) external view returns (uint256 mintable) {
-        return IBurnieCoinflip(coinflipContract).previewClaimCoinflips(player);
-    }
-
-    /// @notice Get coinflip auto-rebuy settings for a player.
-    /// @param player The player's address.
-    /// @return enabled True if auto-rebuy is enabled.
-    /// @return stopAmount The take profit amount reserved on wins (0 = keep everything in auto-rebuy).
-    /// @return carry The current auto-rebuy carry (rolled bankroll).
-    function coinflipAutoRebuyInfo(
-        address player
-    ) external view returns (bool enabled, uint256 stopAmount, uint256 carry) {
-        (enabled, stopAmount, carry, ) = IBurnieCoinflip(coinflipContract).coinflipAutoRebuyInfo(player);
     }
 
     /// @notice Total circulating supply (excludes ContractAddresses.VAULT allowance).
@@ -566,35 +529,6 @@ contract BurnieCoin {
         _mint(player, amount);
     }
 
-    /// @notice Credit FLIP to a player.
-    /// @dev Only callable by trusted contracts (GAME, AFFILIATE).
-    ///      Forwards to BurnieCoinflip which implements the actual flip credit logic.
-    /// @param player Recipient address.
-    /// @param amount Amount of FLIP (18 decimals).
-    function creditFlip(address player, uint256 amount) external onlyFlipCreditors {
-        IBurnieCoinflip(coinflipContract).creditFlip(player, amount);
-    }
-
-    /// @notice Credit FLIP to up to 3 players in a single call (gas optimization).
-    /// @dev Only callable by trusted contracts (GAME, AFFILIATE).
-    /// @param players Array of 3 recipient addresses (unused slots should be address(0)).
-    /// @param amounts Array of 3 amounts corresponding to each player.
-    function creditFlipBatch(address[3] calldata players, uint256[3] calldata amounts) external onlyFlipCreditors {
-        IBurnieCoinflip(coinflipContract).creditFlipBatch(players, amounts);
-    }
-
-    /// @notice Credit BURNIE as flip stake to a player as a reward for donating LINK.
-    /// @dev Only callable by ContractAddresses.ADMIN (called from onTokenTransfer after
-    ///      LINK is forwarded to the VRF subscription). Credits are given as flip stake
-    ///      so the reward is locked into the coinflip system rather than freely transferable.
-    /// @param player The recipient of the credit.
-    /// @param amount Amount of BURNIE to credit as flip stake (18 decimals).
-    function creditLinkReward(address player, uint256 amount) external onlyAdmin {
-        if (player == address(0) || amount == 0) return;
-        IBurnieCoinflip(coinflipContract).creditFlip(player, amount);
-        emit LinkCreditRecorded(player, amount);
-    }
-
     function _claimCoinflipShortfall(address player, uint256 amount) private {
         if (amount == 0) return;
         if (degenerusGame.rngLocked()) return;
@@ -633,9 +567,8 @@ contract BurnieCoin {
       |  +------------------------+----------------------------------------+ |
       |  |  onlyDegenerusGame     | degenerusGame only                     | |
       |  |  onlyTrustedContracts  | GAME, AFFILIATE                        | |
-      |  |  onlyFlipCreditors     | GAME, AFFILIATE                        | |
+      |  |  onlyFlipCreditors     | GAME, AFFILIATE (creditCoin only)      | |
       |  |  onlyVault             | VAULT only                             | |
-      |  |  onlyAdmin             | ADMIN only                             | |
       |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
 
@@ -657,8 +590,8 @@ contract BurnieCoin {
         _;
     }
 
-    /// @dev Restricts access to contracts that can credit flip stakes.
-    ///      Used for: creditFlip, creditFlipBatch.
+    /// @dev Restricts access to contracts that can credit coin directly.
+    ///      Used for: creditCoin.
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
@@ -672,13 +605,6 @@ contract BurnieCoin {
     ///      Used for: vaultMintTo.
     modifier onlyVault() {
         if (msg.sender != ContractAddresses.VAULT) revert OnlyVault();
-        _;
-    }
-
-    /// @dev Restricts access to the ContractAddresses.ADMIN contract only.
-    ///      Used for: creditLinkReward.
-    modifier onlyAdmin() {
-        if (msg.sender != ContractAddresses.ADMIN) revert OnlyGame();
         _;
     }
 
@@ -1012,19 +938,6 @@ contract BurnieCoin {
         );
 
         emit TerminalDecimatorBurn(caller, amount);
-    }
-
-    /*+======================================================================+
-      |                       COINFLIP VIEW FUNCTIONS                        |
-      +======================================================================+
-      |  Read-only functions for querying coinflip stake amounts.            |
-      +======================================================================+*/
-
-    /// @notice Get a player's coinflip stake for the current betting window.
-    /// @param player The player address to query.
-    /// @return The stake amount for the current target day (18 decimals).
-    function coinflipAmount(address player) external view returns (uint256) {
-        return IBurnieCoinflip(coinflipContract).coinflipAmount(player);
     }
 
     /*+======================================================================+

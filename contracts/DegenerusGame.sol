@@ -1430,7 +1430,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 bonus = cap;
             }
             if (bonus != 0) {
-                coin.creditFlip(player, bonus);
+                coinflip.creditFlip(player, bonus);
             }
         }
 

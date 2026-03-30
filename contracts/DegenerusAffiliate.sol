@@ -16,7 +16,7 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
  *        with 0% kickback, no tx required. Custom codes use high bytes (string-encoded),
  *        so the two namespaces cannot collide.
  *      - Kickback: 0-25% of reward returned to referred player (custom codes only)
- *      - Affiliate payouts + quest bonuses via creditFlip; kickback returned to caller
+ *      - Affiliate payouts + quest bonuses via coinflip.creditFlip; kickback returned to caller
  *      - Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+)
  *      - Recycled ETH rewards: 5% (all levels)
  *      - Leaderboard: tracks top affiliate per level for mint trait bonus
@@ -27,29 +27,27 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
  *      - Fixed contract addresses at deploy (no re-pointing)
  */
 
-/// @notice Interface for crediting coinflip credits to players via the coin contract.
-/// @dev Called to distribute affiliate rewards.
+/// @notice Interface for crediting BURNIE directly to players via the coin contract.
+/// @dev Called to distribute affiliate coin rewards and quest bonuses.
 interface IDegenerusCoinAffiliate {
     /// @notice Credit BURNIE directly to a player's wallet balance.
     /// @param player Recipient address.
     /// @param amount Amount of BURNIE (18 decimals).
     function creditCoin(address player, uint256 amount) external;
 
-    /// @notice Credit FLIP to a single player.
-    /// @param player Recipient address.
-    /// @param amount Amount of FLIP (18 decimals).
-    function creditFlip(address player, uint256 amount) external;
-
-    /// @notice Credit FLIP to up to 3 players in a single call (gas optimization).
-    /// @param players Array of 3 recipient addresses (unused slots should be address(0)).
-    /// @param amounts Array of 3 amounts corresponding to each player.
-    function creditFlipBatch(address[3] calldata players, uint256[3] calldata amounts) external;
-
     /// @notice Calculate and record quest progress for affiliate earnings.
     /// @param player The affiliate receiving the base reward.
     /// @param amount The base affiliate amount (before quest bonus).
     /// @return Additional quest reward amount to add to the payout.
     function affiliateQuestReward(address player, uint256 amount) external returns (uint256);
+}
+
+/// @notice Interface for crediting FLIP stakes directly via the coinflip contract.
+interface IBurnieCoinflipAffiliate {
+    /// @notice Credit FLIP to a single player.
+    /// @param player Recipient address.
+    /// @param amount Amount of FLIP (18 decimals).
+    function creditFlip(address player, uint256 amount) external;
 }
 
 /**
@@ -187,8 +185,10 @@ contract DegenerusAffiliate {
     bytes32 private constant AFFILIATE_CODE_VAULT = bytes32("VAULT");
     bytes32 private constant AFFILIATE_CODE_DGNRS = bytes32("DGNRS");
 
-    /// @notice BurnieCoin contract for FLIP token operations (constant).
+    /// @notice BurnieCoin contract for direct coin credit and quest rewards (constant).
     IDegenerusCoinAffiliate internal constant coin = IDegenerusCoinAffiliate(ContractAddresses.COIN);
+    /// @notice BurnieCoinflip contract for direct flip crediting (constant).
+    IBurnieCoinflipAffiliate internal constant coinflip = IBurnieCoinflipAffiliate(ContractAddresses.COINFLIP);
     /// @notice Game contract for presale status checks (constant).
     IDegenerusGame internal constant game = IDegenerusGame(ContractAddresses.GAME);
 
@@ -796,7 +796,7 @@ contract DegenerusAffiliate {
         uint256 amount
     ) private {
         if (player == address(0) || amount == 0) return;
-        coin.creditFlip(player, amount);
+        coinflip.creditFlip(player, amount);
     }
 
     /**

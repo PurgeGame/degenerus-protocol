@@ -174,12 +174,12 @@ interface ILinkTokenLike {
     ) external returns (bool success);
 }
 
-/// @dev Coin contract interface for LINK donation flip credits.
-interface IDegenerusCoinLinkReward {
-    /// @notice Credit BURNIE coinflip tokens to a player as a LINK donation reward.
+/// @dev BurnieCoinflip interface for LINK donation flip credits.
+interface IBurnieCoinflipLinkReward {
+    /// @notice Credit FLIP stake to a player as a LINK donation reward.
     /// @param player Recipient address.
-    /// @param amount Amount of BURNIE to credit (18 decimals).
-    function creditLinkReward(address player, uint256 amount) external;
+    /// @param amount Amount of BURNIE-denominated flip stake to credit (18 decimals).
+    function creditFlip(address player, uint256 amount) external;
 }
 
 /// @dev Chainlink price feed interface (AggregatorV3).
@@ -310,8 +310,8 @@ contract DegenerusAdmin {
         IDegenerusGameAdmin(ContractAddresses.GAME);
     ILinkTokenLike internal constant linkToken =
         ILinkTokenLike(ContractAddresses.LINK_TOKEN);
-    IDegenerusCoinLinkReward internal constant coinLinkReward =
-        IDegenerusCoinLinkReward(ContractAddresses.COIN);
+    IBurnieCoinflipLinkReward internal constant coinflipReward =
+        IBurnieCoinflipLinkReward(ContractAddresses.COINFLIP);
     IsDGNRS internal constant sDGNRS =
         IsDGNRS(ContractAddresses.SDGNRS);
 
@@ -1050,7 +1050,7 @@ contract DegenerusAdmin {
         uint256 credit = (baseCredit * mult) / 1e18;
         if (credit == 0) return;
 
-        coinLinkReward.creditLinkReward(from, credit);
+        coinflipReward.creditFlip(from, credit);
         emit LinkCreditRecorded(from, credit);
     }
 
