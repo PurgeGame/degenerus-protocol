@@ -57,6 +57,11 @@ import {BitPackingLib} from "./libraries/BitPackingLib.sol";
   |  These are defined locally to avoid circular import dependencies.            |
   +==============================================================================+*/
 
+/// @dev Vault interface for DGVE ownership check (admin function access control).
+interface IDegenerusVaultOwnerGame {
+    function isVaultOwner(address account) external view returns (bool);
+}
+
 /// @notice Interface for reading player quest states.
 interface IDegenerusQuestView {
     /// @notice Get a player's quest progress and streak information.
@@ -162,6 +167,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Quest module view interface for streak lookups.
     IDegenerusQuestView internal constant questView =
         IDegenerusQuestView(ContractAddresses.QUESTS);
+
+    /// @notice Vault contract for owner verification.
+    IDegenerusVaultOwnerGame private constant vault =
+        IDegenerusVaultOwnerGame(ContractAddresses.VAULT);
 
     /*+======================================================================+
       |                           CONSTANTS                                  |
@@ -508,11 +517,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Update lootbox RNG request threshold (wei).
-    /// @dev Access: ADMIN only.
+    /// @dev Access: vault owner only (DGVE majority holder).
     /// @param newThreshold New threshold in wei (must be non-zero).
-    /// @custom:reverts E If caller is not ADMIN or newThreshold is zero.
+    /// @custom:reverts E If caller is not vault owner or newThreshold is zero.
     function setLootboxRngThreshold(uint256 newThreshold) external {
-        if (msg.sender != ContractAddresses.ADMIN) revert E();
+        if (!vault.isVaultOwner(msg.sender)) revert E();
         if (newThreshold == 0) revert E();
         uint256 prev = lootboxRngThreshold;
         if (newThreshold == prev) {
@@ -1829,15 +1838,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         emit AdminSwapEthForStEth(recipient, amount);
     }
 
-    /// @notice Admin-only stake of game-held ETH into stETH via Lido.
-    /// @dev Used to earn yield on excess ETH held by the game.
+    /// @notice Stake game-held ETH into stETH via Lido.
+    /// @dev Access: vault owner only (DGVE majority holder).
     ///      SECURITY: Must retain ETH to cover player claims, excluding vault/DGNRS
     ///      claimable (those addresses accept stETH payouts natively).
     /// @param amount ETH amount to stake.
-    /// @custom:reverts E If caller is not ADMIN, amount is zero, insufficient ETH,
+    /// @custom:reverts E If caller is not vault owner, amount is zero, insufficient ETH,
     ///                   or staking would dip into player-claim ETH reserve.
     function adminStakeEthForStEth(uint256 amount) external {
-        if (msg.sender != ContractAddresses.ADMIN) revert E();
+        if (!vault.isVaultOwner(msg.sender)) revert E();
         if (amount == 0) revert E();
 
         uint256 ethBal = address(this).balance;

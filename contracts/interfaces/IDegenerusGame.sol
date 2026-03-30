@@ -352,11 +352,6 @@ interface IDegenerusGame {
     /// @return minBalance Minimum LINK balance in wei.
     function lootboxRngMinLinkBalanceView() external view returns (uint256 minBalance);
 
-    /// @notice Update lootbox RNG request threshold (wei).
-    /// @dev Admin-only.
-    /// @param newThreshold New threshold value in wei.
-    function setLootboxRngThreshold(uint256 newThreshold) external;
-
     /// @notice Sample up to 4 trait burn tickets from a random trait and recent level (last 20).
     /// @dev View function for BAF scatter selection; uses provided entropy.
     /// @param entropy Random entropy for sampling (typically from VRF).
