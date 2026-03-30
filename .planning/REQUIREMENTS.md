@@ -1,60 +1,52 @@
-# Requirements: Degenerus Protocol Audit — v10.1
+# Requirements: Degenerus Protocol Audit — v10.2
 
-**Defined:** 2026-03-29
+**Defined:** 2026-03-30
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v10.1 Requirements
+## v10.2 Requirements
 
-### Scan
+### Analysis
 
-- [x] **SCAN-01**: Every external/public function across all contracts is checked for forwarding-only pattern (body is a single call to another contract's function with identical parameters)
-- [x] **SCAN-02**: Every view/pure function across all contracts is checked for on-chain callers (grep all .sol files for cross-contract references)
-- [x] **SCAN-03**: Categorized candidate list produced with function name, contract, category (forwarding/unused-view), removal rationale, and risk notes
+- [x] **CAP-01**: Full gas profile of advanceGame ticket-processing loop under worst-case conditions (all key spaces active, max queued tickets, jackpot resolution, coinflip settlement)
+- [x] **CAP-02**: Per-iteration gas cost breakdown (storage reads, writes, external calls) to determine the marginal cost of each additional write
+- [x] **CAP-03**: Adversarial ticket distribution analysis — worst-case gas when attacker creates many small purchases across many addresses to maximize per-ticket overhead (new storage slots, cold reads, unique player processing)
 
-### Review
+### Optimization
 
-- [ ] **REV-01**: User approves or rejects each candidate individually before any code changes
-- [ ] **REV-02**: Interface files updated to remove approved function signatures
-
-### Cleanup
-
-- [ ] **CLN-01**: Approved forwarding wrappers removed and callers rewired to call target contract directly
-- [ ] **CLN-02**: Approved unused view functions removed from contracts and interfaces
-- [ ] **CLN-03**: Test suite passes with 0 new failures after all removals
-- [ ] **CLN-04**: NatSpec on any rewired callers updated to reflect new call target
+- [x] **CAP-04**: Mathematically proven maximum writes cap value that guarantees advanceGame stays under 14M gas in all paths including adversarial ticket distributions
+- [ ] **CAP-05**: Updated writes cap constant in code
+- [ ] **CAP-06**: Gas ceiling re-verified at the new cap under worst-case state including adversarial scenarios
+- [ ] **CAP-07**: Test suite passes with 0 new failures
 
 ## Future Requirements
 
-None — this is a one-shot cleanup milestone.
+None.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Internal function optimization | Not ABI clutter — internal functions don't appear in ABI |
-| Storage packing | Separate optimization concern, already documented in deferred |
-| Gas optimization of function bodies | This milestone is about removing functions, not optimizing them |
-| Test function cleanup | Test files are not deployed contracts |
+| Ticket minting path optimization | User scoped to advanceGame processing only |
+| Other advanceGame stages (non-ticket) | Focus is ticket-processing loop and writes cap |
+| Storage packing changes | Separate concern, already documented in deferred |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCAN-01 | Phase 144 | Complete |
-| SCAN-02 | Phase 144 | Complete |
-| SCAN-03 | Phase 144 | Complete |
-| REV-01 | Phase 145 | Pending |
-| REV-02 | Phase 145 | Pending |
-| CLN-01 | Phase 146 | Pending |
-| CLN-02 | Phase 146 | Pending |
-| CLN-03 | Phase 146 | Pending |
-| CLN-04 | Phase 146 | Pending |
+| CAP-01 | Phase 147 | Complete |
+| CAP-02 | Phase 147 | Complete |
+| CAP-03 | Phase 147 | Complete |
+| CAP-04 | Phase 147 | Complete |
+| CAP-05 | Phase 148 | Pending |
+| CAP-06 | Phase 148 | Pending |
+| CAP-07 | Phase 148 | Pending |
 
 **Coverage:**
-- v10.1 requirements: 9 total
-- Mapped to phases: 9/9
+- v10.2 requirements: 7 total
+- Mapped to phases: 7/7
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-29*
-*Last updated: 2026-03-29 after roadmap creation*
+*Requirements defined: 2026-03-30*
+*Last updated: 2026-03-30 after roadmap creation*

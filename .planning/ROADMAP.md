@@ -385,7 +385,7 @@ Plans:
   4. A mathematically proven maximum writes cap value is derived from the profiling data that guarantees advanceGame stays under 14M gas in all paths including adversarial distributions
 **Plans**: 1 plan
 Plans:
-- [ ] 147-01-PLAN.md — Gas profile advanceGame ticket loop, adversarial analysis, derive optimal WRITES_BUDGET_SAFE cap
+- [x] 147-01-PLAN.md — Gas profile advanceGame ticket loop, adversarial analysis, derive optimal WRITES_BUDGET_SAFE cap
 
 ### Phase 148: Implementation + Verification
 **Goal**: The new cap value is deployed in code, gas ceiling is re-verified under worst-case conditions, and the full test suite passes
@@ -404,7 +404,7 @@ Phase 147 (sequential) -> Phase 148 (sequential)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 147. Gas Analysis | v10.2 | 0/1 | Planned | - |
+| 147. Gas Analysis | v10.2 | 1/1 | Complete   | 2026-03-30 |
 | 148. Implementation + Verification | v10.2 | 0/? | Not started | - |
 
 ## Deferred
