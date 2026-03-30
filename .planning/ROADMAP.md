@@ -29,7 +29,8 @@
 - ✅ **v8.0 Pre-Audit Hardening** — Phases 130-134 (shipped 2026-03-27)
 - ✅ **v8.1 Final Audit Prep** — Phases 135-137 (shipped 2026-03-28)
 - ✅ **v9.0 Contest Dry Run** — Phases 138-140 (shipped 2026-03-28)
-- [ ] **v10.0 Audit Submission Ready** — Phases 141-142 (in progress)
+- ✅ **v10.0 Audit Submission Ready** — Phases 141-143 (shipped 2026-03-29)
+- [ ] **v10.1 ABI Cleanup** — Phases 144-146 (in progress)
 
 ## Phases
 
@@ -293,13 +294,25 @@
 
 </details>
 
-### v10.0 Audit Submission Ready (In Progress)
-
-**Milestone Goal:** Delta audit the dailyIdx/backfill changes, finalize all documentation, and make the repo maximally ready for C4A external audit submission.
+<details>
+<summary>v10.0 Audit Submission Ready (Phases 141-143) -- SHIPPED 2026-03-29</summary>
 
 - [x] **Phase 141: Delta Adversarial Audit** - Audit dailyIdx init, backfill cap, and turbo-at-L0 removal (completed 2026-03-29)
 - [x] **Phase 142: Documentation + Submission Readiness** - Update KNOWN-ISSUES.md, NatSpec, C4A README, verify tests (completed 2026-03-29)
-- [ ] **Phase 143: Vault + Self-Win Delta Audit** - Audit vault sDGNRS burn/claim additions and transferFromPool self-win burn
+- [x] **Phase 143: Vault + Self-Win Delta Audit** - Audit vault sDGNRS burn/claim additions and transferFromPool self-win burn (completed 2026-03-29)
+
+</details>
+
+### v10.1 ABI Cleanup (In Progress)
+
+**Milestone Goal:** Identify and remove unnecessary functions (forwarding wrappers, unused views, ABI clutter) across all contracts to reduce deploy gas and simplify the public interface.
+
+- [ ] **Phase 144: Contract Scan** - Sweep all contracts for forwarding wrappers and unused view/pure functions
+  **Plans:** 1 plan
+  Plans:
+  - [x] 144-01-PLAN.md — Scan all production contracts, produce categorized candidate list
+- [ ] **Phase 145: Candidate Review** - User reviews and approves/rejects each candidate before code changes
+- [ ] **Phase 146: Execute Removals** - Remove approved functions, rewire callers, verify tests pass
 
 ## Phase Details
 
@@ -355,6 +368,9 @@ Plans:
 
 </details>
 
+<details>
+<summary>Phase 141-143 Details (v10.0)</summary>
+
 ### Phase 141: Delta Adversarial Audit
 **Goal**: Every post-v9.0 code change in DegenerusGame.sol and DegenerusGameAdvanceModule.sol is proven safe -- no security regressions, no gas ceiling impacts, no correctness bugs
 **Depends on**: Phase 140 (v9.0 contest dry run complete, code changes committed post-milestone)
@@ -366,7 +382,7 @@ Plans:
   4. dailyIdx initialization change is verified to produce correct index values for all entry points (first day, mid-game, post-stall resume)
 **Plans**: 1 plan
 Plans:
-- [ ] 141-01-PLAN.md -- Per-line audit, turbo cascade analysis, backfill cap safety proof, dailyIdx correctness
+- [x] 141-01-PLAN.md -- Per-line audit, turbo cascade analysis, backfill cap safety proof, dailyIdx correctness
 
 ### Phase 142: Documentation + Submission Readiness
 **Goal**: The repository is maximally ready for C4A submission -- all audit documentation follows best practices, tests pass, and every known finding is pre-documented to minimize payable warden submissions
@@ -383,7 +399,7 @@ Plans:
 - [x] 142-01-PLAN.md — Update KNOWN-ISSUES, NatSpec, C4A README with delta findings; verify tests
 
 ### Phase 143: Vault + Self-Win Delta Audit
-**Goal**: Every post-Phase-142 contract change is proven safe — vault sDGNRS burn/claim functions and transferFromPool self-win burn
+**Goal**: Every post-Phase-142 contract change is proven safe -- vault sDGNRS burn/claim functions and transferFromPool self-win burn
 **Depends on**: Phase 142 (documentation finalized before new changes)
 **Requirements**: DELTA-04, DELTA-05
 **Success Criteria** (what must be TRUE):
@@ -392,16 +408,48 @@ Plans:
   3. No existing test regressions (1362 passing)
 **Plans**: TBD
 
+</details>
+
+### Phase 144: Contract Scan
+**Goal**: Every contract's public interface is inventoried and every unnecessary function (forwarding wrapper, unused view) is identified with removal rationale
+**Depends on**: Phase 143 (v10.0 complete, codebase stable)
+**Requirements**: SCAN-01, SCAN-02, SCAN-03
+**Success Criteria** (what must be TRUE):
+  1. Every external/public function across all production contracts has been checked for forwarding-only pattern (body is a single delegated call with identical parameters)
+  2. Every view/pure function across all production contracts has been checked for on-chain callers by searching all .sol files for cross-contract references
+  3. A categorized candidate list exists with function name, source contract, category (forwarding/unused-view), removal rationale, and risk notes for each candidate
+**Plans**: TBD
+
+### Phase 145: Candidate Review
+**Goal**: User has reviewed every candidate and made an explicit keep/remove decision before any code is touched
+**Depends on**: Phase 144 (candidate list produced)
+**Requirements**: REV-01, REV-02
+**Success Criteria** (what must be TRUE):
+  1. Every candidate from the Phase 144 list has an explicit user verdict (REMOVE or KEEP with rationale)
+  2. Interface files (.sol) have been identified for each approved removal so interface updates can be batched with implementation removal
+**Plans**: TBD
+
+### Phase 146: Execute Removals
+**Goal**: All approved removals are applied cleanly -- callers rewired, interfaces updated, tests green, NatSpec current
+**Depends on**: Phase 145 (user approval gate complete)
+**Requirements**: CLN-01, CLN-02, CLN-03, CLN-04
+**Success Criteria** (what must be TRUE):
+  1. Every approved forwarding wrapper is removed and all callers that previously went through the wrapper now call the target contract directly
+  2. Every approved unused view/pure function is removed from both the contract and its interface
+  3. Full test suite (Hardhat + Foundry) passes with 0 new failures after all removals
+  4. NatSpec on any rewired caller accurately describes the new call target
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phase 141 (sequential) -> Phase 142 (sequential) -> Phase 143 (sequential)
+Phase 144 (sequential) -> Phase 145 (sequential) -> Phase 146 (sequential)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 141. Delta Adversarial Audit | v10.0 | 1/1 | Complete    | 2026-03-29 |
-| 142. Documentation + Submission Readiness | v10.0 | 1/1 | Complete    | 2026-03-29 |
-| 143. Vault + Self-Win Delta Audit | v10.0 | 0/TBD | Complete    | 2026-03-29 |
+| 144. Contract Scan | v10.1 | 1/1 | Complete   | 2026-03-30 |
+| 145. Candidate Review | v10.1 | 0/TBD | Not started | - |
+| 146. Execute Removals | v10.1 | 0/TBD | Not started | - |
 
 ## Deferred
 
