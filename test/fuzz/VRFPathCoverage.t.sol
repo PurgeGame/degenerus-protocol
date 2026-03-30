@@ -51,6 +51,17 @@ contract VRFPathCoverage is DeployProtocol {
         }
     }
 
+    /// @dev Read lootboxRngIndex directly from storage slot 45.
+    function _lootboxRngIndex() internal view returns (uint48) {
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(45)))));
+    }
+
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 49).
+    function _lootboxRngWord(uint48 index) internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(49)));
+        return uint256(vm.load(address(game), slot));
+    }
+
     /// @dev Deploy a new MockVRFCoordinator and wire it up via admin prank.
     function _doCoordinatorSwap() internal returns (MockVRFCoordinator newVRF) {
         newVRF = new MockVRFCoordinator();
@@ -228,7 +239,7 @@ contract VRFPathCoverage is DeployProtocol {
         game.requestLootboxRng();
 
         // Record lootboxRngIndex before stall
-        uint48 indexBeforeStall = game.lootboxRngIndexView();
+        uint48 indexBeforeStall = _lootboxRngIndex();
 
         // Stall: warp to day 7 (absolute)
         vm.warp(7 * 86400);
@@ -248,7 +259,7 @@ contract VRFPathCoverage is DeployProtocol {
         }
 
         // lootboxRngIndex should have advanced past the stall
-        uint48 indexAfterRecovery = game.lootboxRngIndexView();
+        uint48 indexAfterRecovery = _lootboxRngIndex();
         assertTrue(
             indexAfterRecovery > indexBeforeStall,
             "lootboxRngIndex must advance after mid-day stall recovery"
@@ -308,11 +319,11 @@ contract VRFPathCoverage is DeployProtocol {
         vrfWord = bound(vrfWord, 1, type(uint256).max);
 
         // Record initial index
-        uint48 initialIndex = game.lootboxRngIndexView();
+        uint48 initialIndex = _lootboxRngIndex();
 
         // Day 1 (ts=86400): complete normally with fixed word
         _completeDay(0xDEAD0001);
-        uint48 indexAfterDay1 = game.lootboxRngIndexView();
+        uint48 indexAfterDay1 = _lootboxRngIndex();
         assertEq(
             indexAfterDay1,
             initialIndex + 1,
@@ -323,7 +334,7 @@ contract VRFPathCoverage is DeployProtocol {
         vm.warp(2 * 86400);
         game.advanceGame();
         assertTrue(game.rngLocked(), "Day 2 VRF pending");
-        uint48 indexAfterDay2Request = game.lootboxRngIndexView();
+        uint48 indexAfterDay2Request = _lootboxRngIndex();
 
         // Index must have increased (fresh daily request increments it)
         assertTrue(
@@ -335,14 +346,14 @@ contract VRFPathCoverage is DeployProtocol {
         vm.warp(5 * 86400);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
         assertEq(
-            game.lootboxRngIndexView(),
+            _lootboxRngIndex(),
             indexAfterDay2Request,
             "Coordinator swap must not change lootboxRngIndex"
         );
 
         // Resume with fuzzed recovery word
         _resumeAfterSwap(newVRF, vrfWord);
-        uint48 finalIndex = game.lootboxRngIndexView();
+        uint48 finalIndex = _lootboxRngIndex();
 
         // Final index must be >= day 2 request index (monotonic)
         assertTrue(
@@ -352,7 +363,7 @@ contract VRFPathCoverage is DeployProtocol {
 
         // Verify lootbox word at the initial index (day 1 slot) is nonzero
         assertTrue(
-            game.lootboxRngWord(initialIndex) != 0,
+            _lootboxRngWord(initialIndex) != 0,
             "Day 1 lootbox index must have nonzero word"
         );
     }

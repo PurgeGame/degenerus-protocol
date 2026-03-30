@@ -18,7 +18,7 @@ pragma solidity 0.8.34;
  *      - totalSupply + vaultAllowance = supplyIncUncirculated
  *
  * @dev SECURITY:
- *      - Access control: onlyDegenerusGameContract, onlyFlipCreditors, onlyVault, onlyTrustedContracts
+ *      - Access control: onlyDegenerusGameContract, onlyTrustedContracts, onlyVault
  *      - CEI pattern: burns before external calls
  */
 
@@ -136,9 +136,6 @@ contract BurnieCoin {
     /// @notice Caller is not authorized (trusted contracts: GAME, AFFILIATE).
     error OnlyTrustedContracts();
 
-    /// @notice Caller is not authorized (flip creditors: GAME, AFFILIATE).
-    error OnlyFlipCreditors();
-
     /// @notice Caller is not approved to act for the player.
     error NotApproved();
 
@@ -242,24 +239,6 @@ contract BurnieCoin {
     IDegenerusQuests internal constant questModule =
         IDegenerusQuests(ContractAddresses.QUESTS);
 
-    /// @notice BurnieCoinflip contract - handles all coinflip wagering logic.
-    /// @dev Fixed at deploy time via ContractAddresses.
-    address internal constant coinflipContract = ContractAddresses.COINFLIP;
-
-    // Deploy day boundary moved to ContractAddresses.DEPLOY_DAY_BOUNDARY (compile-time constant)
-
-    /*+======================================================================+
-      |                         VAULT ESCROW                                 |
-      +======================================================================+
-      |  Virtual mint allowance for the ContractAddresses.VAULT. This represents BURNIE that   |
-      |  exists "on paper" but hasn't entered circulation. The ContractAddresses.VAULT can     |
-      |  mint from this allowance when distributing to players.              |
-      +======================================================================+*/
-    /// @notice Virtual supply the ContractAddresses.VAULT is authorized to mint (not yet circulating).
-    /// @dev Seeded to 2,000,000 BURNIE in `_supply`. Increases via vaultEscrow(), decreases via vaultMintTo().
-    ///      supplyIncUncirculated = totalSupply + vaultAllowance.
-    /// @custom:security Only ContractAddresses.VAULT/game can increase; only ContractAddresses.VAULT can mint from it.
-
     /*+======================================================================+
       |                         CONSTRUCTOR                                  |
       +======================================================================+*/
@@ -288,7 +267,7 @@ contract BurnieCoin {
             spendable += uint256(_supply.vaultAllowance);
         }
         unchecked {
-            spendable += IBurnieCoinflip(coinflipContract).previewClaimCoinflips(player);
+            spendable += IBurnieCoinflip(ContractAddresses.COINFLIP).previewClaimCoinflips(player);
         }
     }
 
@@ -497,36 +476,18 @@ contract BurnieCoin {
     /// @param from The player's address to burn from.
     /// @param amount The amount of BURNIE to burn (18 decimals).
     function burnForCoinflip(address from, uint256 amount) external {
-        if (msg.sender != coinflipContract) revert OnlyGame(); // Reusing error for simplicity
+        if (msg.sender != ContractAddresses.COINFLIP) revert OnlyGame();
         _burn(from, amount);
     }
 
-    /// @notice Mints BURNIE to a player for coinflip claims.
-    /// @dev Only callable by the BurnieCoinflip contract.
-    /// @param to The player's address to mint to.
-    /// @param amount The amount of BURNIE to mint (18 decimals).
-    function mintForCoinflip(address to, uint256 amount) external {
-        if (msg.sender != coinflipContract) revert OnlyGame(); // Reusing error for simplicity
-        _mint(to, amount);
-    }
-
-    /// @notice Mint BURNIE for game payouts (e.g., Degenerette wins).
-    /// @dev Only callable by the DegenerusGame contract.
+    /// @notice Mint BURNIE to a player (coinflip claims, degenerette wins).
+    /// @dev Only callable by COINFLIP or GAME.
     /// @param to The player's address to mint to.
     /// @param amount The amount of BURNIE to mint (18 decimals).
     function mintForGame(address to, uint256 amount) external {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        if (msg.sender != ContractAddresses.COINFLIP && msg.sender != ContractAddresses.GAME) revert OnlyGame();
         if (amount == 0) return;
         _mint(to, amount);
-    }
-
-    /// @notice Credit BURNIE directly to a player's wallet balance.
-    /// @dev Only callable by trusted flip creditors (GAME, AFFILIATE).
-    /// @param player Recipient address.
-    /// @param amount Amount of BURNIE (18 decimals).
-    function creditCoin(address player, uint256 amount) external onlyFlipCreditors {
-        if (player == address(0) || amount == 0) return;
-        _mint(player, amount);
     }
 
     function _claimCoinflipShortfall(address player, uint256 amount) private {
@@ -535,7 +496,7 @@ contract BurnieCoin {
         uint256 balance = balanceOf[player];
         if (balance >= amount) return;
         unchecked {
-            IBurnieCoinflip(coinflipContract).claimCoinflipsFromBurnie(
+            IBurnieCoinflip(ContractAddresses.COINFLIP).claimCoinflipsFromBurnie(
                 player,
                 amount - balance
             );
@@ -548,7 +509,7 @@ contract BurnieCoin {
         uint256 balance = balanceOf[player];
         if (balance >= amount) return 0;
         unchecked {
-            return IBurnieCoinflip(coinflipContract).consumeCoinflipsForBurn(
+            return IBurnieCoinflip(ContractAddresses.COINFLIP).consumeCoinflipsForBurn(
                 player,
                 amount - balance
             );
@@ -567,7 +528,6 @@ contract BurnieCoin {
       |  +------------------------+----------------------------------------+ |
       |  |  onlyDegenerusGame     | degenerusGame only                     | |
       |  |  onlyTrustedContracts  | GAME, AFFILIATE                        | |
-      |  |  onlyFlipCreditors     | GAME, AFFILIATE (creditCoin only)      | |
       |  |  onlyVault             | VAULT only                             | |
       |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
@@ -587,17 +547,6 @@ contract BurnieCoin {
             sender != ContractAddresses.GAME &&
             sender != ContractAddresses.AFFILIATE
         ) revert OnlyTrustedContracts();
-        _;
-    }
-
-    /// @dev Restricts access to contracts that can credit coin directly.
-    ///      Used for: creditCoin.
-    modifier onlyFlipCreditors() {
-        address sender = msg.sender;
-        if (
-            sender != ContractAddresses.GAME &&
-            sender != ContractAddresses.AFFILIATE
-        ) revert OnlyFlipCreditors();
         _;
     }
 
@@ -737,7 +686,7 @@ contract BurnieCoin {
             degenerusGame.recordMintQuestStreak(player);
         }
         if (questReward != 0) {
-            IBurnieCoinflip(coinflipContract).creditFlip(player, questReward);
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, questReward);
         }
     }
 
@@ -763,7 +712,7 @@ contract BurnieCoin {
             completed
         );
         if (questReward != 0) {
-            IBurnieCoinflip(coinflipContract).creditFlip(player, questReward);
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, questReward);
         }
     }
 
@@ -790,7 +739,7 @@ contract BurnieCoin {
             completed
         );
         if (questReward != 0) {
-            IBurnieCoinflip(coinflipContract).creditFlip(player, questReward);
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, questReward);
         }
     }
 
@@ -858,7 +807,7 @@ contract BurnieCoin {
         );
 
         if (questReward != 0) {
-            IBurnieCoinflip(coinflipContract).creditFlip(caller, questReward);
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(caller, questReward);
         }
 
         uint256 baseAmount = amount + questReward;

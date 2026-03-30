@@ -684,7 +684,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Ensure all indices have RNG words (fallback via vm.store)
         for (uint256 i = 0; i < 8; i++) {
-            if (indices[i] > 0 && game.lootboxRngWord(indices[i]) == 0) {
+            if (indices[i] > 0 && _lootboxRngWord(indices[i]) == 0) {
                 _storeLootboxRngWord(indices[i], 1000 + i);
             }
         }
@@ -804,7 +804,7 @@ contract TicketLifecycleTest is DeployProtocol {
         ];
         for (uint256 b = 0; b < 4; b++) {
             for (uint256 i = 0; i < 5; i++) {
-                if (allIndices[b][i] > 0 && game.lootboxRngWord(allIndices[b][i]) == 0) {
+                if (allIndices[b][i] > 0 && _lootboxRngWord(allIndices[b][i]) == 0) {
                     _storeLootboxRngWord(allIndices[b][i], baseSeed[b] + i * 1000);
                 }
             }
@@ -1195,7 +1195,7 @@ contract TicketLifecycleTest is DeployProtocol {
             // Finalize RNG, store words, open
             _driveAdvanceCycle();
             for (uint256 i = 0; i < lboxCount; i++) {
-                if (lboxIndices[i] > 0 && game.lootboxRngWord(lboxIndices[i]) == 0) {
+                if (lboxIndices[i] > 0 && _lootboxRngWord(lboxIndices[i]) == 0) {
                     _storeLootboxRngWord(lboxIndices[i], 5000 + i);
                 }
             }
@@ -1325,13 +1325,13 @@ contract TicketLifecycleTest is DeployProtocol {
             uint256(0xBAADF00D)
         ];
         for (uint256 i = 0; i < validCount && i < 6; i++) {
-            if (game.lootboxRngWord(indices[i]) == 0) {
+            if (_lootboxRngWord(indices[i]) == 0) {
                 _storeLootboxRngWord(indices[i], farSeeds[i]);
             }
         }
         // Remaining indices get sequential seeds
         for (uint256 i = 6; i < validCount; i++) {
-            if (game.lootboxRngWord(indices[i]) == 0) {
+            if (_lootboxRngWord(indices[i]) == 0) {
                 _storeLootboxRngWord(indices[i], 9000 + i);
             }
         }
@@ -1349,7 +1349,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 reverts = 0;
         uint256 successes = 0;
         for (uint256 i = 0; i < validCount; i++) {
-            uint256 rngWord = game.lootboxRngWord(indices[i]);
+            uint256 rngWord = _lootboxRngWord(indices[i]);
             if (rngWord == 0) continue;
 
             vm.prank(buyer3);
@@ -2042,6 +2042,17 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      Checks the current read key for the queue sweep. The write side may have
     ///      nonzero entries from later transitions (vault perpetual writes to past levels).
     ///      The read key being zero proves the level was fully processed during its lifecycle.
+    /// @dev Read lootboxRngIndex directly from storage slot 45.
+    function _lootboxRngIndex() internal view returns (uint48) {
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(45)))));
+    }
+
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 49).
+    function _lootboxRngWord(uint48 index) internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(49)));
+        return uint256(vm.load(address(game), slot));
+    }
+
     function _assertZeroStranding(uint24 fromLevel, uint24 toLevel) internal view {
         for (uint24 lvl = fromLevel; lvl <= toLevel; lvl++) {
             // ZSA-01: read key queue must be empty for processed levels.
@@ -2095,7 +2106,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Record the lootbox RNG index BEFORE purchase (it may increment during purchase
         // via _maybeRequestLootboxRng -> advanceGame path, but the index for our lootbox
         // is the current value at purchase time).
-        lootboxIndex = game.lootboxRngIndexView();
+        lootboxIndex = _lootboxRngIndex();
 
         // Compute ticket cost: (priceWei * ticketQty) / (4 * 100)
         uint256 ticketCost = ticketQty > 0 ? (priceWei * ticketQty) / 400 : 0;
@@ -2116,7 +2127,7 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @param lootboxIndex Lootbox RNG index from purchase
     function _openLootbox(address who, uint48 lootboxIndex) internal {
         // Check if RNG word is available
-        uint256 rngWord = game.lootboxRngWord(lootboxIndex);
+        uint256 rngWord = _lootboxRngWord(lootboxIndex);
         if (rngWord == 0) return; // Skip if RNG not available (caller should have seeded it)
 
         vm.prank(who);

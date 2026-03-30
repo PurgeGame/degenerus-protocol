@@ -26,6 +26,17 @@ contract StallResilience is DeployProtocol {
         }
     }
 
+    /// @dev Read lootboxRngIndex directly from storage slot 45.
+    function _lootboxRngIndex() internal view returns (uint48) {
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(45)))));
+    }
+
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 49).
+    function _lootboxRngWord(uint48 index) internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(49)));
+        return uint256(vm.load(address(game), slot));
+    }
+
     /// @dev Deploy a new MockVRFCoordinator, wire it up, and call
     ///      updateVrfCoordinatorAndSub via admin prank. No time warp.
     function _doCoordinatorSwap() internal returns (MockVRFCoordinator newVRF) {
@@ -175,7 +186,7 @@ contract StallResilience is DeployProtocol {
         _completeDay(0x10070001);
 
         // Record the current lootbox index (should be 2 now)
-        uint48 preStallIndex = game.lootboxRngIndexView();
+        uint48 preStallIndex = _lootboxRngIndex();
 
         // Warp to day 2
         vm.warp(block.timestamp + 1 days);
@@ -194,19 +205,19 @@ contract StallResilience is DeployProtocol {
         uint48 orphanedIndex = preStallIndex;
 
         // Verify no RNG word yet for orphaned index
-        assertEq(game.lootboxRngWord(orphanedIndex), 0, "Orphaned index has no RNG word before swap");
+        assertEq(_lootboxRngWord(orphanedIndex), 0, "Orphaned index has no RNG word before swap");
 
         // Stall + swap (warp 3 days, coordinator swap saves orphaned index but does NOT backfill yet)
         MockVRFCoordinator newVRF = _stallAndSwap(3);
 
         // After swap: orphaned index is still 0 — backfill uses VRF entropy, not on-chain state
-        assertEq(game.lootboxRngWord(orphanedIndex), 0, "Orphaned index NOT yet backfilled (deferred to rngGate)");
+        assertEq(_lootboxRngWord(orphanedIndex), 0, "Orphaned index NOT yet backfilled (deferred to rngGate)");
 
         // Resume: rngGate backfills gap days AND orphaned lootbox index using fresh VRF word
         _resumeAfterSwap(newVRF, 0x1007CAFE);
 
         // After resume: orphaned index should now have a VRF-derived word
-        assertTrue(game.lootboxRngWord(orphanedIndex) != 0, "Orphaned index backfilled after resume with VRF entropy");
+        assertTrue(_lootboxRngWord(orphanedIndex) != 0, "Orphaned index backfilled after resume with VRF entropy");
 
         // Verify openLootBox does not revert for the orphaned index.
         vm.prank(buyer);

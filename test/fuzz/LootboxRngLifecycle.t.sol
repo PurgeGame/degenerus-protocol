@@ -99,14 +99,20 @@ contract LootboxRngLifecycle is DeployProtocol {
         ts = block.timestamp;
     }
 
-    /// @dev Read lootboxRngIndex via the public view.
+    /// @dev Read lootboxRngIndex directly from storage slot 45.
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return game.lootboxRngIndexView();
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(45)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] via the public view.
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 49).
+    function _lootboxRngWord(uint48 index) internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(49)));
+        return uint256(vm.load(address(game), slot));
+    }
+
+    /// @dev Read lootboxRngWordByIndex[index] via storage.
     function _readLootboxWord(uint48 index) internal view returns (uint256) {
-        return game.lootboxRngWord(index);
+        return _lootboxRngWord(index);
     }
 
     /// @dev Make a lootbox purchase for buyer with the given lootbox ETH amount.

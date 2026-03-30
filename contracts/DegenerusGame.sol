@@ -144,7 +144,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +=======================================================================+*/
 
     /// @notice The BURNIE ERC20 token contract.
-    /// @dev Trusted for creditCoin, burnCoin, quest notifications, etc.
+    /// @dev Trusted for burnCoin, quest notifications, etc.
     IDegenerusCoin internal constant coin =
         IDegenerusCoin(ContractAddresses.COIN);
 
@@ -1533,24 +1533,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Check if auto-rebuy is enabled for a player.
-    /// @param player Player address to check.
-    /// @return enabled True if auto-rebuy is enabled for this player.
-    function autoRebuyEnabledFor(
-        address player
-    ) external view returns (bool enabled) {
-        return autoRebuyState[player].autoRebuyEnabled;
-    }
-
-    /// @notice Check if decimator auto-rebuy is enabled for a player.
-    /// @param player Player address to check.
-    /// @return enabled True if decimator auto-rebuy is enabled for this player.
-    function decimatorAutoRebuyEnabledFor(
-        address player
-    ) external view returns (bool enabled) {
-        return !decimatorAutoRebuyDisabled[player];
-    }
-
     /// @notice Check the auto-rebuy take profit for a player.
     /// @param player Player address to check.
     /// @return takeProfit Amount reserved as complete multiples (wei).
@@ -1624,18 +1606,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function _hasAnyLazyPass(address player) private view returns (bool) {
         if (deityPassCount[player] != 0) return true;
 
-        uint24 frozenUntilLevel = uint24(
-            (mintPacked_[player] >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                BitPackingLib.MASK_24
-        );
-        return frozenUntilLevel > level;
-    }
-
-    /// @notice Check if player has an active lazy pass.
-    /// @param player Player address to check.
-    /// @return True if player has frozenUntilLevel > current level OR deity pass.
-    function hasActiveLazyPass(address player) external view returns (bool) {
-        if (deityPassCount[player] != 0) return true;
         uint24 frozenUntilLevel = uint24(
             (mintPacked_[player] >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                 BitPackingLib.MASK_24
@@ -2071,12 +2041,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return _getFuturePrizePool();
     }
 
-    /// @notice Get the aggregate future pool reserve.
-    /// @return The futurePrizePool value (ETH wei).
-    function futurePrizePoolTotalView() external view returns (uint256) {
-        return _getFuturePrizePool();
-    }
-
     /// @notice Get queued future ticket rewards owed for a level.
     /// @param lvl Target level for the queued tickets.
     /// @param player Player address to query.
@@ -2119,51 +2083,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return lootboxPresaleActive;
     }
 
-    /// @notice Get the current lootbox RNG index for new purchases.
-    /// @return index The current lootbox RNG index (1-based).
-    function lootboxRngIndexView() external view returns (uint48 index) {
-        return lootboxRngIndex;
-    }
-
-    /// @notice Get the VRF random word for a lootbox RNG index.
-    /// @param lootboxIndex Lootbox RNG index to query.
-    /// @return word VRF word (0 if not ready).
-    function lootboxRngWord(
-        uint48 lootboxIndex
-    ) external view returns (uint256 word) {
-        return lootboxRngWordByIndex[lootboxIndex];
-    }
-
-    /// @notice Get the lootbox RNG request threshold (wei).
-    /// @return threshold The ETH threshold that triggers a lootbox RNG request.
-    function lootboxRngThresholdView()
-        external
-        view
-        returns (uint256 threshold)
-    {
-        return lootboxRngThreshold;
-    }
-
-    /// @notice Get minimum LINK balance required for manual lootbox RNG rolls.
-    /// @return minBalance The minimum LINK balance required.
-    function lootboxRngMinLinkBalanceView()
-        external
-        view
-        returns (uint256 minBalance)
-    {
-        return lootboxRngMinLinkBalance;
-    }
-
     /// @notice Get the current prize pool (jackpots are paid from this).
     /// @return The currentPrizePool value (ETH wei).
     function currentPrizePoolView() external view returns (uint256) {
         return currentPrizePool;
-    }
-
-    /// @notice Get the unified future pool (reserve for jackpots and carryover).
-    /// @return The futurePrizePool value (ETH wei).
-    function rewardPoolView() external view returns (uint256) {
-        return _getFuturePrizePool();
     }
 
     /// @notice Get the claimable pool (reserved for player winnings claims).
@@ -2219,13 +2142,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return rngWordByDay[day];
     }
 
-    /// @notice Get the most recently recorded RNG word.
-    /// @dev Uses dailyIdx to locate the last completed day.
-    /// @return The random word for the most recent day (0 if none).
-    function lastRngWord() external view returns (uint256) {
-        return rngWordByDay[dailyIdx];
-    }
-
     /// @notice Check if RNG is currently locked (daily jackpot resolution).
     /// @dev When locked, burns and certain operations are blocked.
     /// @return True if RNG lock is active.
@@ -2248,13 +2164,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (rngWordByDay[day - 1] != 0) return false;
         if (day < 2 || rngWordByDay[day - 2] != 0) return false;
         return true;
-    }
-
-    /// @notice Check if VRF has stalled for 3 consecutive days.
-    /// @dev Retained for monitoring/external use. Governance uses lastVrfProcessed() instead.
-    /// @return True if no VRF word has been recorded for the last 3 day slots.
-    function rngStalledForThreeDays() external view returns (bool) {
-        return _threeDayRngGap(_simulatedDayIndex());
     }
 
     /// @notice Timestamp of the last successfully processed VRF word.
@@ -2353,44 +2262,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Unpack player mint history from the bit-packed mintPacked_ storage. |
       |  See MINT PACKED BIT LAYOUT above for field positions.               |
       +======================================================================+*/
-
-    /// @notice Get the last level where player minted with ETH.
-    /// @param player The player address to query.
-    /// @return The level number (0 if never minted).
-    function ethMintLastLevel(address player) external view returns (uint24) {
-        if (deityPassCount[player] != 0) {
-            return level;
-        }
-        return
-            uint24(
-                (mintPacked_[player] >> BitPackingLib.LAST_LEVEL_SHIFT) &
-                    BitPackingLib.MASK_24
-            );
-    }
-
-    /// @notice Get total count of levels where player minted with ETH.
-    /// @param player The player address to query.
-    /// @return Number of distinct levels with ETH mints.
-    function ethMintLevelCount(address player) external view returns (uint24) {
-        if (deityPassCount[player] != 0) {
-            return level;
-        }
-        return
-            uint24(
-                (mintPacked_[player] >> BitPackingLib.LEVEL_COUNT_SHIFT) &
-                    BitPackingLib.MASK_24
-            );
-    }
-
-    /// @notice Get player's current consecutive ETH mint streak.
-    /// @param player The player address to query.
-    /// @return Number of consecutive levels with ETH mints.
-    function ethMintStreakCount(address player) external view returns (uint24) {
-        if (deityPassCount[player] != 0) {
-            return level;
-        }
-        return _mintStreakEffective(player, _activeTicketLevel());
-    }
 
     /// @notice Get combined mint statistics for a player.
     /// @dev Batches multiple stats into single call for gas efficiency.
@@ -2585,21 +2456,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return Count of deity passes owned.
     function deityPassCountFor(address player) external view returns (uint16) {
         return deityPassCount[player];
-    }
-
-    /// @notice Get deity pass count purchased via presale bundle for a player.
-    /// @param player Player address to query.
-    /// @return Count of presale-purchased deity passes.
-    function deityPassPurchasedCountFor(
-        address player
-    ) external view returns (uint16) {
-        return deityPassPurchasedCount[player];
-    }
-
-    /// @notice Get total deity passes issued across all sources.
-    /// @return count Total count (capped at 32).
-    function deityPassTotalIssuedCount() external view returns (uint32 count) {
-        return uint32(deityPassOwners.length);
     }
 
     /*+======================================================================+

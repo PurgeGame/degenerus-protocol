@@ -59,27 +59,6 @@ interface IDegenerusGame {
         view
         returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei);
 
-    /// @notice Get the VRF random word for a lootbox RNG index.
-    /// @param lootboxIndex Lootbox RNG index to query.
-    /// @return word VRF word (0 if not ready).
-    function lootboxRngWord(uint48 lootboxIndex) external view returns (uint256 word);
-
-    /// @notice Get the number of levels a player has minted with fresh ETH.
-    /// @param player The player to query.
-    /// @return Number of levels with ETH mints.
-    function ethMintLevelCount(address player) external view returns (uint24);
-
-    /// @notice Get the player's current ETH mint streak.
-    /// @dev Streak breaks if player misses a level.
-    /// @param player The player to query.
-    /// @return Current ETH mint streak count.
-    function ethMintStreakCount(address player) external view returns (uint24);
-
-    /// @notice Get the last level where player minted with ETH.
-    /// @param player The player to query.
-    /// @return Last ETH mint level (0 if never minted).
-    function ethMintLastLevel(address player) external view returns (uint24);
-
     /// @notice Get the player's activity score multiplier.
     /// @dev Multiplier based on participation and engagement (basis points).
     /// @param player The player to query.
@@ -147,10 +126,6 @@ interface IDegenerusGame {
     /// @notice Get the future prize pool (single pool).
     /// @return Future prize pool amount in wei.
     function futurePrizePoolView() external view returns (uint256);
-
-    /// @notice Get the aggregate future prize pool.
-    /// @return Total future prize pool amount in wei.
-    function futurePrizePoolTotalView() external view returns (uint256);
 
     /// @notice Get the yield accumulator balance (segregated stETH yield reserve).
     /// @return The yield accumulator balance (ETH wei).
@@ -340,18 +315,6 @@ interface IDegenerusGame {
         view
         returns (uint256 packed);
 
-    /// @notice Get the current lootbox RNG index for new purchases.
-    /// @return index Current lootbox RNG index.
-    function lootboxRngIndexView() external view returns (uint48 index);
-
-    /// @notice Get the lootbox RNG request threshold (wei).
-    /// @return threshold Minimum wei accumulation before VRF request triggers.
-    function lootboxRngThresholdView() external view returns (uint256 threshold);
-
-    /// @notice Get minimum LINK balance required for manual lootbox RNG rolls.
-    /// @return minBalance Minimum LINK balance in wei.
-    function lootboxRngMinLinkBalanceView() external view returns (uint256 minBalance);
-
     /// @notice Sample up to 4 trait burn tickets from a random trait and recent level (last 20).
     /// @dev View function for BAF scatter selection; uses provided entropy.
     /// @param entropy Random entropy for sampling (typically from VRF).
@@ -388,15 +351,6 @@ interface IDegenerusGame {
     /// @param player Player address to query.
     /// @return Count of deity passes owned.
     function deityPassCountFor(address player) external view returns (uint16);
-
-    /// @notice Get deity pass count purchased via presale bundle for a player.
-    /// @param player Player address to query.
-    /// @return Count of presale-purchased deity passes.
-    function deityPassPurchasedCountFor(address player) external view returns (uint16);
-
-    /// @notice Get total deity passes issued across all sources.
-    /// @return count Total count (capped at 32).
-    function deityPassTotalIssuedCount() external view returns (uint32 count);
 
     /// @notice Purchase tickets and loot boxes with ETH or claimable.
     /// @dev Main entry point for all ETH/claimable purchases.

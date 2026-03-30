@@ -27,14 +27,9 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
  *      - Fixed contract addresses at deploy (no re-pointing)
  */
 
-/// @notice Interface for crediting BURNIE directly to players via the coin contract.
-/// @dev Called to distribute affiliate coin rewards and quest bonuses.
+/// @notice Interface for coin contract quest reward integration.
+/// @dev Called to distribute affiliate quest bonuses.
 interface IDegenerusCoinAffiliate {
-    /// @notice Credit BURNIE directly to a player's wallet balance.
-    /// @param player Recipient address.
-    /// @param amount Amount of BURNIE (18 decimals).
-    function creditCoin(address player, uint256 amount) external;
-
     /// @notice Calculate and record quest progress for affiliate earnings.
     /// @param player The affiliate receiving the base reward.
     /// @param amount The base affiliate amount (before quest bonus).

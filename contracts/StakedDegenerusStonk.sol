@@ -583,7 +583,7 @@ contract StakedDegenerusStonk {
         pendingRedemptionEthValue = pendingRedemptionEthValue - pendingRedemptionEthBase + rolledEth;
         pendingRedemptionEthBase = 0;
 
-        // Compute rolled BURNIE (game will creditFlip externally)
+        // Compute rolled BURNIE (game will credit via coinflip externally)
         burnieToCredit = (pendingRedemptionBurnieBase * roll) / 100;
 
         // Release BURNIE reservation (it's now in the flip as virtual stake)

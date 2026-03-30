@@ -48,6 +48,11 @@ contract VRFCore is DeployProtocol {
         }
     }
 
+    /// @dev Read lootboxRngIndex directly from storage slot 45.
+    function _lootboxRngIndex() internal view returns (uint48) {
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(45)))));
+    }
+
     /// @dev Read vrfRequestId directly from storage slot 5.
     function _readVrfRequestId() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SLOT_VRF_REQUEST_ID))));
@@ -287,13 +292,13 @@ contract VRFCore is DeployProtocol {
     /// @notice Fresh daily request: isRetry=false, lootboxRngIndex increments by 1.
     function test_retryDetection_fresh() public {
         // Record initial lootboxRngIndex
-        uint48 indexBefore = game.lootboxRngIndexView();
+        uint48 indexBefore = _lootboxRngIndex();
 
         // Trigger fresh daily VRF request
         game.advanceGame();
 
         // lootboxRngIndex should have incremented (fresh request)
-        uint48 indexAfter = game.lootboxRngIndexView();
+        uint48 indexAfter = _lootboxRngIndex();
         assertEq(indexAfter, indexBefore + 1, "Fresh request should increment lootboxRngIndex by 1");
     }
 
@@ -308,7 +313,7 @@ contract VRFCore is DeployProtocol {
         assertTrue(game.rngLocked(), "Day 2 VRF request pending");
 
         // Record lootboxRngIndex after initial request
-        uint48 indexAfterRequest = game.lootboxRngIndexView();
+        uint48 indexAfterRequest = _lootboxRngIndex();
 
         // Do NOT fulfill -- wait 13 hours for timeout
         vm.warp(block.timestamp + 13 hours);
@@ -317,7 +322,7 @@ contract VRFCore is DeployProtocol {
         game.advanceGame();
 
         // lootboxRngIndex should NOT have changed (retry, not fresh)
-        uint48 indexAfterRetry = game.lootboxRngIndexView();
+        uint48 indexAfterRetry = _lootboxRngIndex();
         assertEq(indexAfterRetry, indexAfterRequest, "Retry should NOT increment lootboxRngIndex");
     }
 
@@ -347,12 +352,12 @@ contract VRFCore is DeployProtocol {
             return;
         }
 
-        uint48 indexAfterRequest = game.lootboxRngIndexView();
+        uint48 indexAfterRequest = _lootboxRngIndex();
 
         // Timeout + retry
         vm.warp(block.timestamp + 13 hours);
         game.advanceGame();
-        uint48 indexAfterRetry = game.lootboxRngIndexView();
+        uint48 indexAfterRetry = _lootboxRngIndex();
         assertEq(indexAfterRetry, indexAfterRequest, "Fuzz: retry should not change index");
 
         // Fulfill the retried request and complete the day
@@ -365,7 +370,7 @@ contract VRFCore is DeployProtocol {
         }
 
         // Index should still be the same (no double increment)
-        assertEq(game.lootboxRngIndexView(), indexAfterRequest, "Fuzz: index unchanged after retry+fulfill");
+        assertEq(_lootboxRngIndex(), indexAfterRequest, "Fuzz: index unchanged after retry+fulfill");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -492,7 +497,7 @@ contract VRFCore is DeployProtocol {
         vm.warp(uint256(requestTime) + 12 hours);
 
         // Record lootboxRngIndex before retry
-        uint48 indexBefore = game.lootboxRngIndexView();
+        uint48 indexBefore = _lootboxRngIndex();
 
         // advanceGame should trigger retry (not revert)
         game.advanceGame();
@@ -505,7 +510,7 @@ contract VRFCore is DeployProtocol {
         assertTrue(newReqId != oldReqId, "vrfRequestId should change on retry");
 
         // lootboxRngIndex should be unchanged (retry detection)
-        assertEq(game.lootboxRngIndexView(), indexBefore, "Index unchanged on retry");
+        assertEq(_lootboxRngIndex(), indexBefore, "Index unchanged on retry");
     }
 
     /// @notice Before 12 hours, advanceGame reverts with RngNotReady.
@@ -570,12 +575,12 @@ contract VRFCore is DeployProtocol {
         // Day 2: trigger VRF request
         vm.warp(block.timestamp + 1 days);
         game.advanceGame();
-        uint48 indexAfterRequest = game.lootboxRngIndexView();
+        uint48 indexAfterRequest = _lootboxRngIndex();
 
         // Timeout + retry
         vm.warp(block.timestamp + 13 hours);
         game.advanceGame();
-        assertEq(game.lootboxRngIndexView(), indexAfterRequest, "Index unchanged after retry");
+        assertEq(_lootboxRngIndex(), indexAfterRequest, "Index unchanged after retry");
 
         // Fulfill new request and complete day
         uint256 newReqId = mockVRF.lastRequestId();
@@ -586,7 +591,7 @@ contract VRFCore is DeployProtocol {
         }
 
         // Index should remain the same (retry path, no double increment)
-        assertEq(game.lootboxRngIndexView(), indexAfterRequest, "Index unchanged after retry+fulfill");
+        assertEq(_lootboxRngIndex(), indexAfterRequest, "Index unchanged after retry+fulfill");
     }
 
     /// @notice VRF word from previous day's request: rngGate detects requestDay < day,

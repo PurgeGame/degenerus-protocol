@@ -14,7 +14,7 @@ pragma solidity 0.8.34;
  *
  * @dev INTERACTIONS:
  *      - Burns BURNIE from players on deposit (via BurnieCoin.burnForCoinflip)
- *      - Mints BURNIE to players on claim (via BurnieCoin.mintForCoinflip)
+ *      - Mints BURNIE to players on claim (via BurnieCoin.mintForGame)
  *      - Receives quest flip credits from game contract
  *      - Processes RNG results for payout calculations
  */
@@ -28,8 +28,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 interface IBurnieCoin {
     /// @notice Burn BURNIE from a player for coinflip deposit.
     function burnForCoinflip(address from, uint256 amount) external;
-    /// @notice Mint BURNIE to a player for coinflip claim.
-    function mintForCoinflip(address to, uint256 amount) external;
+    /// @notice Mint BURNIE to a player (coinflip claims, degenerette wins).
+    function mintForGame(address to, uint256 amount) external;
 }
 
 /// @notice Interface for WWXRP contract methods used by BurnieCoinflip.
@@ -185,7 +185,7 @@ contract BurnieCoinflip {
       +======================================================================+*/
 
     modifier onlyDegenerusGameContract() {
-        if (msg.sender != address(degenerusGame)) revert OnlyDegenerusGame();
+        if (msg.sender != ContractAddresses.GAME) revert OnlyDegenerusGame();
         _;
     }
 
@@ -194,8 +194,8 @@ contract BurnieCoinflip {
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
-            sender != address(degenerusGame) &&
-            sender != address(burnie) &&
+            sender != ContractAddresses.GAME &&
+            sender != ContractAddresses.COIN &&
             sender != ContractAddresses.AFFILIATE &&
             sender != ContractAddresses.ADMIN
         ) revert OnlyFlipCreditors();
@@ -203,7 +203,7 @@ contract BurnieCoinflip {
     }
 
     modifier onlyBurnieCoin() {
-        if (msg.sender != address(burnie)) revert OnlyBurnieCoin();
+        if (msg.sender != ContractAddresses.COIN) revert OnlyBurnieCoin();
         _;
     }
 
@@ -406,7 +406,7 @@ contract BurnieCoinflip {
 
         if (toClaim != 0) {
             if (mintTokens) {
-                burnie.mintForCoinflip(player, toClaim);
+                burnie.mintForGame(player, toClaim);
             }
             claimed = toClaim;
         }
@@ -764,7 +764,7 @@ contract BurnieCoinflip {
         }
 
         if (mintable != 0) {
-            burnie.mintForCoinflip(player, mintable);
+            burnie.mintForGame(player, mintable);
         }
     }
 
@@ -783,7 +783,7 @@ contract BurnieCoinflip {
         emit CoinflipAutoRebuyStopSet(player, takeProfit);
 
         if (mintable != 0) {
-            burnie.mintForCoinflip(player, mintable);
+            burnie.mintForGame(player, mintable);
         }
 
         if (takeProfit != 0 && takeProfit < AFKING_KEEP_MIN_COIN) {

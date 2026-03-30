@@ -45,6 +45,17 @@ contract VRFPathHandler is Test {
     uint256 public calls_requestLootboxRng;
     uint256 public calls_warpTime;
 
+    /// @dev Read lootboxRngIndex directly from storage slot 45.
+    function _lootboxRngIndex() internal view returns (uint48) {
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(45)))));
+    }
+
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 49).
+    function _lootboxRngWord(uint48 index) internal view returns (uint256) {
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(49)));
+        return uint256(vm.load(address(game), slot));
+    }
+
     modifier useActor(uint256 seed) {
         currentActor = actors[bound(seed, 0, actors.length - 1)];
         _;
@@ -64,7 +75,7 @@ contract VRFPathHandler is Test {
             actors.push(actor);
             vm.deal(actor, 100 ether);
         }
-        ghost_expectedIndex = game.lootboxRngIndexView();
+        ghost_expectedIndex = _lootboxRngIndex();
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -108,14 +119,14 @@ contract VRFPathHandler is Test {
 
         if (game.gameOver()) return;
 
-        uint48 indexBefore = game.lootboxRngIndexView();
+        uint48 indexBefore = _lootboxRngIndex();
         bool lockedBefore = game.rngLocked();
 
         try game.advanceGame() {} catch {
             return;
         }
 
-        uint48 indexAfter = game.lootboxRngIndexView();
+        uint48 indexAfter = _lootboxRngIndex();
         bool lockedAfter = game.rngLocked();
 
         // TEST-01: double-increment detection
@@ -170,18 +181,18 @@ contract VRFPathHandler is Test {
         (, , bool fulfilled) = vrf.pendingRequests(reqId);
         if (fulfilled) return;
 
-        uint48 indexBefore = game.lootboxRngIndexView();
+        uint48 indexBefore = _lootboxRngIndex();
 
         try vrf.fulfillRandomWords(reqId, randomWord) {} catch {
             return;
         }
 
-        uint48 indexAfter = game.lootboxRngIndexView();
+        uint48 indexAfter = _lootboxRngIndex();
 
         // TEST-01: check for orphaned indices after VRF unlock
         // Only check the most recently unlocked index to avoid re-counting
         if (!game.rngLocked() && indexAfter > 0 && indexAfter > indexBefore) {
-            if (game.lootboxRngWord(indexAfter - 1) == 0) {
+            if (_lootboxRngWord(indexAfter - 1) == 0) {
                 ghost_orphanedIndices++;
             }
         }
@@ -193,13 +204,13 @@ contract VRFPathHandler is Test {
 
         if (game.gameOver() || game.rngLocked()) return;
 
-        uint48 indexBefore = game.lootboxRngIndexView();
+        uint48 indexBefore = _lootboxRngIndex();
 
         try game.requestLootboxRng() {} catch {
             return;
         }
 
-        uint48 indexAfter = game.lootboxRngIndexView();
+        uint48 indexAfter = _lootboxRngIndex();
 
         // TEST-01: skip/double-increment detection
         if (indexAfter > indexBefore + 1) {
