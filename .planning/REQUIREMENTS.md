@@ -1,22 +1,22 @@
-# Requirements: Degenerus Protocol Audit — v10.2
+# Requirements: Degenerus Protocol Audit — v10.3
 
 **Defined:** 2026-03-30
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v10.2 Requirements
+## v10.3 Requirements
 
-### Analysis
+### Delta Audit
 
-- [x] **CAP-01**: Full gas profile of advanceGame ticket-processing loop under worst-case conditions (all key spaces active, max queued tickets, jackpot resolution, coinflip settlement)
-- [x] **CAP-02**: Per-iteration gas cost breakdown (storage reads, writes, external calls) to determine the marginal cost of each additional write
-- [x] **CAP-03**: Adversarial ticket distribution analysis — worst-case gas when attacker creates many small purchases across many addresses to maximize per-ticket overhead (new storage slots, cold reads, unique player processing)
+- [x] **DELTA-01**: Every changed function across all v10.1-modified contracts has been adversarially reviewed for security, access control, and correctness
+- [x] **DELTA-02**: BurnieCoinflip.onlyFlipCreditors expansion (GAME+COIN+AFFILIATE+ADMIN) verified — no unauthorized caller can reach creditFlip/creditFlipBatch
+- [x] **DELTA-03**: Game.adminStakeEthForStEth and Game.setLootboxRngThreshold vault-owner access control verified — no privilege escalation path
+- [x] **DELTA-04**: BurnieCoin.mintForGame merger (accepts COINFLIP+GAME) verified — no unauthorized mint path opened
+- [x] **DELTA-05**: Storage layout verified via forge inspect on all changed contracts — no slot collisions or gaps from removals
 
-### Optimization
+### Documentation
 
-- [x] **CAP-04**: Mathematically proven maximum writes cap value that guarantees advanceGame stays under 14M gas in all paths including adversarial ticket distributions
-- [ ] **CAP-05**: Updated writes cap constant in code
-- [ ] **CAP-06**: Gas ceiling re-verified at the new cap under worst-case state including adversarial scenarios
-- [ ] **CAP-07**: Test suite passes with 0 new failures
+- [ ] **DOC-01**: KNOWN-ISSUES.md updated with any new findings
+- [ ] **DOC-02**: NatSpec on changed functions accurately describes current behavior
 
 ## Future Requirements
 
@@ -26,25 +26,25 @@ None.
 
 | Feature | Reason |
 |---------|--------|
-| Ticket minting path optimization | User scoped to advanceGame processing only |
-| Other advanceGame stages (non-ticket) | Focus is ticket-processing loop and writes cap |
-| Storage packing changes | Separate concern, already documented in deferred |
+| Full contract re-audit | Only v10.1 delta changes are in scope |
+| Gas optimization | Covered in v10.2 |
+| Test changes | Test files were already verified in v10.1 Phase 146 |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CAP-01 | Phase 147 | Complete |
-| CAP-02 | Phase 147 | Complete |
-| CAP-03 | Phase 147 | Complete |
-| CAP-04 | Phase 147 | Complete |
-| CAP-05 | Phase 148 | Pending |
-| CAP-06 | Phase 148 | Pending |
-| CAP-07 | Phase 148 | Pending |
+| DELTA-01 | Phase 149 | Complete |
+| DELTA-02 | Phase 149 | Complete |
+| DELTA-03 | Phase 149 | Complete |
+| DELTA-04 | Phase 149 | Complete |
+| DELTA-05 | Phase 149 | Complete |
+| DOC-01 | Phase 150 | Pending |
+| DOC-02 | Phase 150 | Pending |
 
 **Coverage:**
-- v10.2 requirements: 7 total
-- Mapped to phases: 7/7
+- v10.3 requirements: 7 total
+- Mapped to phases: 7
 - Unmapped: 0
 
 ---

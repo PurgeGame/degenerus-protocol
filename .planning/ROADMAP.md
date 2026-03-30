@@ -414,7 +414,7 @@ Plans:
   5. Storage layout verified via forge inspect on all changed contracts -- no slot collisions, no gaps from function removals, no storage variable reordering
 **Plans**: 1 plan
 Plans:
-- [ ] 149-01-PLAN.md -- Per-function verdict table, access control traces, storage layout verification
+- [x] 149-01-PLAN.md -- Per-function verdict table, access control traces, storage layout verification
 
 ### Phase 150: Documentation
 **Goal**: All audit documentation accurately reflects the v10.1 changes -- KNOWN-ISSUES.md covers new findings, NatSpec on changed functions describes current behavior
@@ -433,7 +433,7 @@ Phase 149 (sequential) -> Phase 150 (sequential)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 149. Delta Adversarial Audit | v10.3 | 0/1 | Not started | - |
+| 149. Delta Adversarial Audit | v10.3 | 1/1 | Complete   | 2026-03-30 |
 | 150. Documentation | v10.3 | 0/? | Not started | - |
 
 ## Deferred
