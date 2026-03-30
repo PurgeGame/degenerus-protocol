@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
+import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 
@@ -166,6 +167,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Reference to the BURNIE coin contract
     IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
+
+    /// @notice BurnieCoinflip contract for direct flip crediting.
+    IBurnieCoinflip internal constant coinflip =
+        IBurnieCoinflip(ContractAddresses.COINFLIP);
 
     /// @notice Reference to the sDGNRS token contract
     IStakedDegenerusStonk internal constant dgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
@@ -1008,7 +1013,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         if (burnieAmount != 0) {
-            coin.creditFlip(player, burnieAmount);
+            coinflip.creditFlip(player, burnieAmount);
         }
 
         if (emitLootboxEvent) {

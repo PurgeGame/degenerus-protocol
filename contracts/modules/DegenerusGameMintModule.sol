@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
+import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
@@ -70,6 +71,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
+    /// @notice BurnieCoinflip contract for direct flip crediting.
+    IBurnieCoinflip internal constant coinflip =
+        IBurnieCoinflip(ContractAddresses.COINFLIP);
     IDegenerusAffiliate internal constant affiliate =
         IDegenerusAffiliate(ContractAddresses.AFFILIATE);
     // -------------------------------------------------------------------------
@@ -791,7 +795,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 );
             }
             if (lootboxKickback != 0) {
-                coin.creditFlip(buyer, lootboxKickback);
+                coinflip.creditFlip(buyer, lootboxKickback);
             }
 
             emit LootBoxBuy(buyer, day, lootBoxAmount, presale, level);
@@ -825,7 +829,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         if (spentAllClaimable && totalClaimableUsed >= priceWei * 3) {
             uint256 bonusAmount = (totalClaimableUsed * PRICE_COIN_UNIT * 10) / (priceWei * 100);
             if (bonusAmount != 0) {
-                coin.creditFlip(buyer, bonusAmount);
+                coinflip.creditFlip(buyer, bonusAmount);
             }
         }
     }
@@ -1014,7 +1018,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         }
 
         if (bonusCredit != 0) {
-            coin.creditFlip(buyer, bonusCredit);
+            coinflip.creditFlip(buyer, bonusCredit);
         }
 
         uint256 ticketScaled = adjustedQuantity;
