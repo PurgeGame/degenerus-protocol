@@ -120,14 +120,6 @@ interface IDegenerusGameAdmin {
         uint256 amount
     ) external payable;
 
-    /// @notice Stake game-held ETH directly for stETH via Lido.
-    /// @param amount Amount of ETH to stake.
-    function adminStakeEthForStEth(uint256 amount) external;
-
-    /// @notice Set the lootbox RNG pending threshold for triggering mid-day VRF requests.
-    /// @param newThreshold New threshold value.
-    function setLootboxRngThreshold(uint256 newThreshold) external;
-
     /// @notice Get current purchase parameters.
     /// @return lvl Current game level.
     /// @return qty Tickets purchased this level.
@@ -653,18 +645,6 @@ contract DegenerusAdmin {
     function swapGameEthForStEth() external payable onlyOwner {
         if (msg.value == 0) revert InvalidAmount();
         gameAdmin.adminSwapEthForStEth{value: msg.value}(msg.sender, msg.value);
-    }
-
-    /// @notice Stake game-held ETH directly for stETH via Lido.
-    /// @param amount Amount of ETH (in wei) to stake from the game contract.
-    function stakeGameEthToStEth(uint256 amount) external onlyOwner {
-        gameAdmin.adminStakeEthForStEth(amount);
-    }
-
-    /// @notice Set the lootbox RNG pending threshold on the game contract.
-    /// @param newThreshold New threshold value for triggering mid-day VRF requests.
-    function setLootboxRngThreshold(uint256 newThreshold) external onlyOwner {
-        gameAdmin.setLootboxRngThreshold(newThreshold);
     }
 
     // =========================================================================
