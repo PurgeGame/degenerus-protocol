@@ -184,11 +184,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Portion of lootbox EV reserved for boon/pass draw (10%)
-    /// @dev Liveness cutoff mirroring MintModule — BURNIE lootbox tickets shift
-    ///      to future levels when opened in the last 30 days before game-over.
-    uint256 private constant BURNIE_LOOT_CUTOFF = 90 days;
-    uint256 private constant BURNIE_LOOT_CUTOFF_LVL0 = 335 days;
-
     uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
     /// @dev Maximum boon/pass budget per lootbox (1 ETH scaled)
     uint256 private constant LOOTBOX_BOON_MAX_BUDGET =
@@ -645,15 +640,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 entropy = uint256(keccak256(abi.encode(rngWord, player, day, amountEth)));
         (uint24 targetLevel, uint256 nextEntropy) = _rollTargetLevel(currentLevel, entropy);
 
-        // BURNIE lootboxes contribute no ETH to the prize pool. In the last 30 days
-        // before game-over, prevent their tickets from competing with ETH-purchased
-        // tickets for the terminal jackpot by shifting current-level tickets to future.
-        if (targetLevel == currentLevel) {
-            uint256 elapsed = block.timestamp - levelStartTime;
-            uint256 cutoff = level == 0 ? BURNIE_LOOT_CUTOFF_LVL0 : BURNIE_LOOT_CUTOFF;
-            if (elapsed > cutoff) {
-                targetLevel = currentLevel + 2;
-            }
+        // ENF-02: When gameOverPossible, redirect current-level BURNIE lootbox
+        // tickets to far-future key space. Near-future rolls land normally.
+        if (gameOverPossible && targetLevel == currentLevel) {
+            targetLevel = currentLevel | TICKET_FAR_FUTURE_BIT;
         }
 
         (uint32 tickets, uint256 burnieReward, ) = _resolveLootboxCommon(

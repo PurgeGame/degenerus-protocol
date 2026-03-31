@@ -63,8 +63,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
-    /// @notice BURNIE ticket purchases are blocked within 30 days of the liveness-guard timeout.
-    error CoinPurchaseCutoff();
+    /// @notice BURNIE ticket purchases are blocked when drip projection cannot cover nextPool deficit.
+    error GameOverPossible();
 
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
@@ -113,11 +113,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_PRESALE_SPLIT_FUTURE_BPS = 5000;
     uint16 private constant LOOTBOX_PRESALE_SPLIT_NEXT_BPS = 3000;
     uint16 private constant LOOTBOX_PRESALE_SPLIT_VAULT_BPS = 2000;
-
-    /// @dev BURNIE ticket purchases are blocked this long after levelStartTime.
-    ///      Prevents cheap positioning in the 30-day window before the liveness guard fires.
-    uint256 private constant COIN_PURCHASE_CUTOFF = 90 days; // 120 - 30
-    uint256 private constant COIN_PURCHASE_CUTOFF_LVL0 = 335 days; // 365 - 30
 
     /// @dev Number of daily jackpots per level (must match AdvanceModule).
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
@@ -612,9 +607,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         address payer = msg.sender;
 
         if (ticketQuantity != 0) {
-            // Block BURNIE tickets within 30 days of liveness-guard game over.
-            uint256 elapsed = block.timestamp - levelStartTime;
-            if (level == 0 ? elapsed > COIN_PURCHASE_CUTOFF_LVL0 : elapsed > COIN_PURCHASE_CUTOFF) revert CoinPurchaseCutoff();
+            // ENF-01: Block BURNIE tickets when drip projection cannot cover nextPool deficit.
+            if (gameOverPossible) revert GameOverPossible();
             _callTicketPurchase(
                 buyer,
                 payer,
