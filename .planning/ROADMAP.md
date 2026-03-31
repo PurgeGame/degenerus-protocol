@@ -32,7 +32,8 @@
 - ✅ **v10.0 Audit Submission Ready** — Phases 141-143 (shipped 2026-03-29)
 - ✅ **v10.1 ABI Cleanup** — Phases 144-146 (shipped 2026-03-30)
 - ✅ **v10.2 Ticket Mint Gas Optimization** — Phase 147 (shipped 2026-03-30, Phase 148 skipped — no change needed)
-- [ ] **v10.3 Delta Adversarial Audit (v10.1 Changes)** — Phases 149-150 (in progress)
+- ✅ **v10.3 Delta Adversarial Audit (v10.1 Changes)** — Phases 149-150 (shipped 2026-03-30)
+- [ ] **v11.0 BURNIE Endgame Gate** — Phases 151-152
 
 ## Phases
 
@@ -239,14 +240,36 @@
 
 </details>
 
-### v10.3 Delta Adversarial Audit (v10.1 Changes) (In Progress)
+<details>
+<summary>v10.3 Delta Adversarial Audit (v10.1 Changes) (Phases 149-150) -- SHIPPED 2026-03-30</summary>
 
-**Milestone Goal:** Adversarial audit of all contract changes from v10.1 ABI Cleanup — verify no unauthorized paths opened by forwarding wrapper removal, caller rewiring, access control changes, and mint function merger.
+- [x] **Phase 149: Delta Adversarial Audit** - 38 functions, 0 VULNERABLE, 8 INFO (completed 2026-03-30)
+- [x] **Phase 150: Documentation** - KNOWN-ISSUES + NatSpec updated (completed 2026-03-30)
 
-- [ ] **Phase 149: Delta Adversarial Audit** - Review all changed functions, verify access control changes, storage layout check
-- [ ] **Phase 150: Documentation** - Update KNOWN-ISSUES.md, verify NatSpec on changed functions
+</details>
+
+### v11.0 BURNIE Endgame Gate (Phases 151-152)
+
+**Milestone Goal:** Replace the 30-day BURNIE ban with a flag-based system that restricts BURNIE tickets when a level could mechanically be the last. Implement the flag lifecycle, geometric drip projection, and enforcement rules, then delta-audit all changes.
+
+- [ ] **Phase 151: Endgame Flag Implementation** - 2 plans, 10 requirements
+- [ ] **Phase 152: Delta Audit** - Adversarial audit, RNG commitment window re-verification, gas ceiling analysis
 
 ## Phase Details
+
+<details>
+<summary>Phase 151 Details (v11.0)</summary>
+
+### Phase 151: Endgame Flag Implementation
+**Goal**: Replace 30-day BURNIE ban with drip-projection-based endgame flag that dynamically restricts BURNIE tickets when a level could mechanically be the last
+**Depends on**: Phase 150 (v10.3 delta audit complete)
+**Requirements**: REM-01, FLAG-01, FLAG-02, FLAG-03, FLAG-04, DRIP-01, DRIP-02, ENF-01, ENF-02, ENF-03
+**Plans**: 2 plans
+Plans:
+- [ ] 151-01-PLAN.md — Storage + WAD projection math + flag lifecycle in AdvanceModule
+- [ ] 151-02-PLAN.md — Remove 30-day ban + wire enforcement in MintModule and LootboxModule
+
+</details>
 
 <details>
 <summary>Phase 138-140 Details (v9.0)</summary>
@@ -301,7 +324,7 @@ Plans:
 </details>
 
 <details>
-<summary>Phase 141-148 Details (v10.0, v10.1, v10.2)</summary>
+<summary>Phase 141-150 Details (v10.0, v10.1, v10.2, v10.3)</summary>
 
 ### Phase 141: Delta Adversarial Audit
 **Goal**: Every post-v9.0 code change in DegenerusGame.sol and DegenerusGameAdvanceModule.sol is proven safe -- no security regressions, no gas ceiling impacts, no correctness bugs
@@ -400,8 +423,6 @@ Plans:
 **Requirements**: CAP-05, CAP-06, CAP-07
 **Status**: Skipped — Phase 147 confirmed WRITES_BUDGET_SAFE=550 is already optimal with 2.0x safety margin. No code change needed.
 
-</details>
-
 ### Phase 149: Delta Adversarial Audit
 **Goal**: Every function changed across all v10.1-modified contracts is proven safe -- no unauthorized paths opened by wrapper removal, caller rewiring, access control migration, or mint function merger
 **Depends on**: Phase 147 (v10.2 complete, codebase stable)
@@ -426,15 +447,39 @@ Plans:
   3. No stale inline comments referencing removed functions (creditFlip forwarding, mintForCoinflip, Admin.stakeGameEthToStEth, etc.)
 **Plans**: TBD
 
+</details>
+
+### Phase 151: Endgame Flag Implementation
+**Goal**: The 30-day BURNIE ban is replaced with a drip-projection-based endgame flag that dynamically restricts BURNIE ticket purchases only when a level could mechanically be the last
+**Depends on**: Phase 150 (v10.3 complete, codebase stable)
+**Requirements**: REM-01, FLAG-01, FLAG-02, FLAG-03, FLAG-04, DRIP-01, DRIP-02, ENF-01, ENF-02, ENF-03
+**Success Criteria** (what must be TRUE):
+  1. The 30-day BURNIE ticket purchase ban code is fully removed -- no level triggers the old ban logic, no storage variable or constant for the ban remains
+  2. On purchase-phase entry at L10+, the geometric drip projection (futurePool * 0.0075 * 0.9925^i summed over remaining days) is computed and compared against the nextPool deficit; flag is set if drip cannot cover the gap
+  3. On each subsequent purchase-phase day while the flag is active, the projection is re-evaluated and the flag clears if drip now covers the gap; flag auto-clears unconditionally at lastPurchaseDay
+  4. When the endgame flag is active, BURNIE ticket purchases revert and BURNIE lootbox purchases redirect current-level ticket chance to far-future tickets; ETH purchases and ETH lootboxes are completely unaffected
+  5. The flag is never checked, set, or evaluated during levels 1-9 or outside the purchase phase
+**Plans**: TBD
+
+### Phase 152: Delta Audit
+**Goal**: Every function changed by the endgame flag implementation is proven safe -- no security regressions, no RNG commitment window violations, no gas ceiling breaches from drip projection math
+**Depends on**: Phase 151 (implementation complete, tests passing)
+**Requirements**: AUD-01, AUD-02, AUD-03
+**Success Criteria** (what must be TRUE):
+  1. Every changed function across all modified contracts has a per-function adversarial security verdict (SAFE / VULNERABLE / INFO) with 0 open HIGH/MEDIUM/LOW
+  2. RNG commitment window is re-verified for any paths that now branch on the endgame flag -- no player-controllable state changes between VRF request and fulfillment that could exploit flag-dependent logic
+  3. Gas ceiling for the geometric drip projection computation is profiled under worst-case conditions (maximum remaining days, largest feasible futurePool) and proven to stay well within block gas limits as part of the advanceGame execution path
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phase 149 (sequential) -> Phase 150 (sequential)
+Phase 151 (sequential) -> Phase 152 (sequential)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 149. Delta Adversarial Audit | v10.3 | 1/1 | Complete   | 2026-03-30 |
-| 150. Documentation | v10.3 | 0/? | Not started | - |
+| 151. Endgame Flag Implementation | v11.0 | 0/2 | Not started | - |
+| 152. Delta Audit | v11.0 | 0/? | Not started | - |
 
 ## Deferred
 

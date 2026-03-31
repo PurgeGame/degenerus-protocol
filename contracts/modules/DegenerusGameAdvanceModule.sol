@@ -99,6 +99,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 3 days;
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
+
+    /// @dev Daily decay factor for drip projection (1 - 0.0075 conservative rate).
+    ///      Projection uses 0.75% daily decay (conservative vs actual 1% drip)
+    ///      to determine whether futurePool drip can cover nextPool deficit.
+    uint256 private constant DECAY_RATE = 0.9925 ether;
+
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
@@ -145,6 +151,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             ) {
                 lastPurchaseDay = true;
                 compressedJackpotFlag = 2;
+                gameOverPossible = false; // FLAG-03: auto-clear when target met
             }
         }
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
@@ -179,7 +186,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             midDayTicketRngPending = false;
                         }
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
-                        coinflip.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price);
+                        coinflip.creditFlip(
+                            caller,
+                            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price
+                        );
                         return;
                     }
                 }
@@ -217,7 +227,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 ) = _runProcessTicketBatch(purchaseLevel);
                 if (ticketWorked || !ticketsFinished) {
                     emit Advance(STAGE_TICKETS_WORKING, lvl);
-                    coinflip.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
+                    coinflip.creditFlip(
+                        caller,
+                        (ADVANCE_BOUNTY_ETH *
+                            PRICE_COIN_UNIT *
+                            bountyMultiplier) / price
+                    );
                     return;
                 }
             }
@@ -248,7 +263,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // No new FF entries can arrive at L+5 (tickets targeting it now route to write key).
                 // purchaseLevel = level + 1, so the FF level is purchaseLevel + 4 = level + 5.
                 uint24 ffLevel = purchaseLevel + 4;
-                bool resumingFF = (ticketLevel == (ffLevel | TICKET_FAR_FUTURE_BIT));
+                bool resumingFF = (ticketLevel ==
+                    (ffLevel | TICKET_FAR_FUTURE_BIT));
                 if (!resumingFF) {
                     if (!_processPhaseTransition(purchaseLevel)) {
                         stage = STAGE_TRANSITION_WORKING;
@@ -258,7 +274,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     ticketLevel = ffLevel | TICKET_FAR_FUTURE_BIT;
                     ticketCursor = 0;
                 }
-                (bool ffWorked, bool ffFinished, ) = _processFutureTicketBatch(ffLevel);
+                (bool ffWorked, bool ffFinished, ) = _processFutureTicketBatch(
+                    ffLevel
+                );
                 if (ffWorked || !ffFinished) {
                     stage = STAGE_TRANSITION_WORKING;
                     break;
@@ -267,6 +285,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _unlockRng(day);
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
+                // FLAG-01: evaluate endgame flag on purchase-phase entry at L10+
+                _evaluateGameOverPossible(lvl, purchaseLevel);
                 stage = STAGE_TRANSITION_DONE;
                 break;
             }
@@ -302,6 +322,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (!lastPurchaseDay) {
                     payDailyJackpot(false, purchaseLevel, rngWord);
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
+                    // FLAG-02: re-check to potentially clear (skip gas if already false)
+                    if (gameOverPossible) {
+                        _evaluateGameOverPossible(lvl, purchaseLevel);
+                    }
                     if (
                         _getNextPrizePool() >= levelPrizePool[purchaseLevel - 1]
                     ) {
@@ -367,10 +391,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Resume Phase 1 carryover ETH distribution.
             // Must match payDailyJackpot's isResuming condition to avoid
             // emitting STAGE_JACKPOT_DAILY_STARTED on what is actually a resume.
-            if (
-                dailyEthPhase != 0 ||
-                dailyEthPoolBudget != 0
-            ) {
+            if (dailyEthPhase != 0 || dailyEthPoolBudget != 0) {
                 payDailyJackpot(true, lastDailyJackpotLevel, rngWord);
                 stage = STAGE_JACKPOT_ETH_RESUME;
                 break;
@@ -399,7 +420,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         } while (false);
 
         emit Advance(stage, lvl);
-        coinflip.creditFlip(caller, (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price);
+        coinflip.creditFlip(
+            caller,
+            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price
+        );
     }
 
     /*+========================================================================================+
@@ -1581,5 +1605,56 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 --reversals;
             }
         }
+    }
+
+    /*+======================================================================+
+      |                    DRIP PROJECTION MATH                             |
+      +======================================================================+*/
+
+    /// @dev Compute base^exp in 1e18 scale via repeated squaring.
+    ///      Max 7 iterations for exp <= 120. ~700 gas.
+    function _wadPow(uint256 base, uint256 exp) private pure returns (uint256) {
+        uint256 result = 1 ether;
+        while (exp > 0) {
+            if (exp & 1 == 1) {
+                result = (result * base) / 1 ether;
+            }
+            base = (base * base) / 1 ether;
+            exp >>= 1;
+        }
+        return result;
+    }
+
+    /// @dev Projected total drip from futurePool over n remaining days.
+    ///      Closed-form geometric series: futurePool * (1 - 0.9925^n).
+    function _projectedDrip(
+        uint256 futurePool,
+        uint256 daysRemaining
+    ) private pure returns (uint256) {
+        if (daysRemaining == 0) return 0;
+        uint256 decayN = _wadPow(DECAY_RATE, daysRemaining);
+        return (futurePool * (1 ether - decayN)) / 1 ether;
+    }
+
+    /// @dev Set or clear gameOverPossible based on drip projection vs nextPool deficit.
+    ///      At L10+: flag is set if projected drip cannot cover the gap.
+    ///      Below L10: flag is always cleared.
+    function _evaluateGameOverPossible(uint24 lvl, uint24 purchaseLevel) private {
+        if (lvl < 10) {
+            gameOverPossible = false;
+            return;
+        }
+        uint256 nextPool = _getNextPrizePool();
+        uint256 target = levelPrizePool[purchaseLevel - 1];
+        if (nextPool >= target) {
+            gameOverPossible = false;
+            return;
+        }
+        uint256 deficit = target - nextPool;
+        // Days remaining until 120-day liveness guard.
+        // Safe from underflow: _handleGameOverPath returns before reaching here
+        // if block.timestamp >= levelStartTime + 120 days.
+        uint256 daysRemaining = (uint256(levelStartTime) + 120 days - block.timestamp) / 1 days;
+        gameOverPossible = _projectedDrip(_getFuturePrizePool(), daysRemaining) < deficit;
     }
 }

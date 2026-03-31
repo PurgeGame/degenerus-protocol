@@ -333,6 +333,13 @@ abstract contract DegenerusGameStorage {
     ///      use pre-freeze pool values. _unfreezePool is the single control point.
     bool internal prizePoolFrozen;
 
+    /// @dev True when drip projection shows futurePool cannot cover nextPool deficit.
+    ///      Evaluated in advanceGame at L10+ purchase-phase days.
+    ///      When active: BURNIE ticket purchases revert, BURNIE lootbox current-level
+    ///      tickets redirect to far-future key space.
+    ///      Cleared when: drip re-covers deficit, lastPurchaseDay is set, or phase transition.
+    bool internal gameOverPossible;
+
     // =========================================================================
     // SLOT 2+: Full-Width Balances and Pools
     // =========================================================================
