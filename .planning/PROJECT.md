@@ -226,15 +226,29 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
+## Current Milestone: v12.0 Level Quests
+
+**Goal:** Design a per-level quest system that rewards engaged players with a harder quest and 800 BURNIE payout.
+
+**Target features:**
+- Per-level quest rolled globally at level start (same quest type for all players)
+- Eligibility: levelStreak >= 5 OR any active pass (deity/lazy/whale), AND ETH mint >= 4 units this level
+- Same 8 quest types and weights as daily quests, but 10x target values
+- 800 BURNIE payout via creditFlip on completion (once per level per player)
+- Active for entire level duration (spans multiple days)
+- Completely independent from daily quest system (separate storage and progress)
+- No streaks or consecutive-level tracking for the quest itself
+- Planning and design only — no contract implementation in this milestone
+
+## Current State
+
+v11.0 complete. gameOverPossible flag replaces the 30-day BURNIE ban across 4 contracts. Delta audit clean (0 VULNERABLE). Gas impact negligible (+0.3%).
+
 ## Completed Milestone: v11.0 BURNIE Endgame Gate
 
 **Status:** Complete (2026-03-31)
 
 **Result:** 2 phases (151-152), 4 plans. 30-day BURNIE ban replaced with gameOverPossible flag — dynamic drip-projection-based endgame detection at L10+ purchase-phase. WAD-scale geometric series (_wadPow + _projectedDrip) in AdvanceModule. MintModule reverts with GameOverPossible when flag active; LootboxModule redirects current-level BURNIE tickets to far-future key space (bit 22). Delta audit: 10 functions, 10 SAFE, 0 VULNERABLE, 1 INFO (V11-001 stale comment). RNG commitment window: 3 paths SAFE. Gas ceiling: +21K gas worst-case (0.3% increase), 2.0x margin preserved. All 13 requirements satisfied.
-
-## Current State
-
-v11.0 complete. gameOverPossible flag replaces the 30-day BURNIE ban across 4 contracts. Delta audit clean (0 VULNERABLE). Gas impact negligible (+0.3%).
 
 **Grand total across all milestones:** 148+ findings (16 LOW, 129+ INFO), 0 MEDIUM/HIGH outstanding. KNOWN-ISSUES.md comprehensive with 35+ entries.
 
@@ -286,4 +300,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 after v11.0 BURNIE Endgame Gate milestone*
+*Last updated: 2026-03-31 after v12.0 Level Quests milestone started*

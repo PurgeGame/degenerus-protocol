@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v11.0
-milestone_name: BURNIE Endgame Gate
-status: verifying
-stopped_at: Completed 152-01-PLAN.md
-last_updated: "2026-03-31T22:24:27.230Z"
-last_activity: 2026-03-31
+milestone: v12.0
+milestone_name: Level Quests
+status: planning
+stopped_at: Defining requirements
+last_updated: "2026-03-31T23:00:00.000Z"
+last_activity: 2026-03-31 -- Milestone v12.0 started
 progress:
-  total_phases: 15
-  completed_phases: 8
-  total_plans: 15
-  completed_plans: 15
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 152 — delta-audit
+**Current focus:** Defining v12.0 Level Quests requirements
 
 ## Current Position
 
-Phase: 152
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-03-31
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-31 — Milestone v12.0 started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,7 +36,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 0 (v11.0 milestone)
+- Total plans completed: 0 (v12.0 milestone)
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -52,8 +52,6 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: New milestone
 
 *Updated after each plan completion*
-| Phase 152 P02 | 158s | 1 tasks | 1 files |
-| Phase 152 P01 | 4min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -62,13 +60,11 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v11.0 Phase 151]: 30-day BURNIE ban replaced with gameOverPossible flag
-- [v11.0 Phase 151]: WAD-scale drip projection (0.9925 decay) for endgame detection at L10+
-- [v11.0 Phase 151]: MintModule reverts with GameOverPossible; LootboxModule redirects to far-future (bit 22)
-- [v10.3]: v10.1 ABI cleanup delta audit complete -- 38 functions, 0 VULNERABLE, 8 INFO
-- [Phase 152]: Gas ceiling analysis: drip projection adds 21K gas (0.3%), 2.0x safety margin preserved, AUD-03 satisfied
-- [Phase 152]: 10 changed functions audited: 10 SAFE, 0 VULNERABLE, 1 INFO (V11-001 stale comment)
-- [Phase 152]: RNG commitment window clean: all 3 flag-dependent paths SAFE via backward-trace methodology
+- [v12.0]: Level quest eligibility: levelStreak >= 5 OR any active pass (deity/lazy/whale) AND ETH mint >= 4 units this level
+- [v12.0]: Global roll at level start, same 8 quest types + weights, 10x daily targets
+- [v12.0]: 800 BURNIE payout via creditFlip, once per level per player
+- [v12.0]: Active for entire level duration, completely independent from daily quests
+- [v12.0]: Planning and design only — no contract implementation this milestone
 
 ### Pending Todos
 
