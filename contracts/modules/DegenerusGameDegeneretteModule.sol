@@ -132,10 +132,6 @@ contract DegenerusGameDegeneretteModule is
         uint256 excessConverted
     );
 
-    /// @notice Emitted when a player receives a consolation prize for a losing bet.
-    /// @param player The player address.
-    /// @param amount The WWXRP consolation prize amount.
-    event ConsolationPrize(address indexed player, uint256 amount);
 
     // -------------------------------------------------------------------------
     // Internal Helpers
@@ -268,13 +264,6 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Maximum spins per bet (encoded as ticketCount in packed bet).
     uint8 private constant MAX_SPINS_PER_BET = 10;
 
-    /// @dev Consolation prize thresholds - minimum bet to qualify for loser prize.
-    uint256 private constant CONSOLATION_MIN_ETH = 10 ether / 1000;
-    uint256 private constant CONSOLATION_MIN_BURNIE = 500 ether; // 500 BURNIE
-    uint256 private constant CONSOLATION_MIN_WWXRP = 20 ether; // 20 WWXRP
-
-    /// @dev Consolation prize amount (1 WWXRP).
-    uint256 private constant CONSOLATION_PRIZE_WWXRP = 1 ether;
 
     // -------------------------------------------------------------------------
     // Quick Play Constants
@@ -718,10 +707,6 @@ contract DegenerusGameDegeneretteModule is
             firstResultTicket
         );
 
-        if (totalPayout == 0) {
-            // Consolation prize for qualifying fully-losing bets
-            _maybeAwardConsolation(player, currency, amountPerTicket);
-        }
     }
 
     /// @dev Distributes payout to player. ETH payouts: 25% as ETH (capped at 10% of pool),
@@ -788,39 +773,6 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Awards consolation prize (1 WWXRP) for qualifying losing bets.
-    ///      Eligible: ETH >= 0.01, BURNIE >= 500, WWXRP >= 20.
-    /// @param player The player to potentially award.
-    /// @param currency The currency type of the bet.
-    /// @param amountPerTicket The bet amount per ticket.
-    function _maybeAwardConsolation(
-        address player,
-        uint8 currency,
-        uint128 amountPerTicket
-    ) private {
-        bool qualifies;
-        if (
-            currency == CURRENCY_ETH && amountPerTicket >= CONSOLATION_MIN_ETH
-        ) {
-            qualifies = true;
-        } else if (
-            currency == CURRENCY_BURNIE &&
-            amountPerTicket >= CONSOLATION_MIN_BURNIE
-        ) {
-            qualifies = true;
-        } else if (
-            currency == CURRENCY_WWXRP &&
-            amountPerTicket >= CONSOLATION_MIN_WWXRP
-        ) {
-            qualifies = true;
-        }
-        // Unsupported currencies do not qualify
-
-        if (qualifies) {
-            wwxrp.mintPrize(player, CONSOLATION_PRIZE_WWXRP);
-            emit ConsolationPrize(player, CONSOLATION_PRIZE_WWXRP);
-        }
-    }
 
     /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly.
     ///      Applies activity-score EV multiplier (80-135%) to match regular lootbox opens.
