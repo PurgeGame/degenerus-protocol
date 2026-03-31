@@ -280,7 +280,7 @@ Plans:
 **Requirements**: AUD-01, AUD-02, AUD-03
 **Plans**: 2 plans
 Plans:
-- [ ] 152-01-PLAN.md — Per-function adversarial audit + storage layout + RNG commitment window re-verification
+- [x] 152-01-PLAN.md — Per-function adversarial audit + storage layout + RNG commitment window re-verification
 - [x] 152-02-PLAN.md — Gas ceiling analysis for drip projection computation
 
 </details>
@@ -493,7 +493,7 @@ Phase 151 (sequential) -> Phase 152 (sequential)
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 151. Endgame Flag Implementation | v11.0 | 2/2 | Complete    | 2026-03-31 |
-| 152. Delta Audit | v11.0 | 1/2 | In Progress|  |
+| 152. Delta Audit | v11.0 | 2/2 | Complete   | 2026-03-31 |
 
 ## Deferred
 

@@ -29,8 +29,8 @@
 
 ### Audit
 
-- [ ] **AUD-01**: Delta adversarial audit of all changed functions — 0 open HIGH/MEDIUM/LOW
-- [ ] **AUD-02**: RNG commitment window re-verification for any changed paths
+- [x] **AUD-01**: Delta adversarial audit of all changed functions — 0 open HIGH/MEDIUM/LOW
+- [x] **AUD-02**: RNG commitment window re-verification for any changed paths
 - [x] **AUD-03**: Gas ceiling analysis for drip projection computation
 
 ## Future Requirements
@@ -59,8 +59,8 @@ None — targeted contract change.
 | ENF-01 | Phase 151 | Pending |
 | ENF-02 | Phase 151 | Pending |
 | ENF-03 | Phase 151 | Pending |
-| AUD-01 | Phase 152 | Pending |
-| AUD-02 | Phase 152 | Pending |
+| AUD-01 | Phase 152 | Complete |
+| AUD-02 | Phase 152 | Complete |
 | AUD-03 | Phase 152 | Complete |
 
 **Coverage:**
