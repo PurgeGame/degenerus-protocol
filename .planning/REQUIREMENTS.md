@@ -1,52 +1,73 @@
-# Requirements: Degenerus Protocol Audit — v10.3
+# Requirements: Degenerus Protocol — v11.0 BURNIE Endgame Gate
 
-**Defined:** 2026-03-30
+**Defined:** 2026-03-31
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v10.3 Requirements
+## v11.0 Requirements
 
-### Delta Audit
+### Removal
 
-- [x] **DELTA-01**: Every changed function across all v10.1-modified contracts has been adversarially reviewed for security, access control, and correctness
-- [x] **DELTA-02**: BurnieCoinflip.onlyFlipCreditors expansion (GAME+COIN+AFFILIATE+ADMIN) verified — no unauthorized caller can reach creditFlip/creditFlipBatch
-- [x] **DELTA-03**: Game.adminStakeEthForStEth and Game.setLootboxRngThreshold vault-owner access control verified — no privilege escalation path
-- [x] **DELTA-04**: BurnieCoin.mintForGame merger (accepts COINFLIP+GAME) verified — no unauthorized mint path opened
-- [x] **DELTA-05**: Storage layout verified via forge inspect on all changed contracts — no slot collisions or gaps from removals
+- [ ] **REM-01**: 30-day BURNIE ticket purchase ban is fully removed from all levels
 
-### Documentation
+### Flag Lifecycle
 
-- [ ] **DOC-01**: KNOWN-ISSUES.md updated with any new findings
-- [ ] **DOC-02**: NatSpec on changed functions accurately describes current behavior
+- [ ] **FLAG-01**: On purchase-phase entry (L10+), compute whether remaining futurePool drip can cover the nextPool gap; if not, set the endgame flag
+- [ ] **FLAG-02**: Each subsequent purchase-phase day, if the flag is active, re-check and clear it if drip projection now covers the gap
+- [ ] **FLAG-03**: Auto-clear the flag at lastPurchaseDay regardless of projection state
+- [ ] **FLAG-04**: Flag is not checked or set during levels 1-9 or outside purchase phase
+
+### Drip Projection
+
+- [ ] **DRIP-01**: Implement geometric series projection: total remaining drip = sum of futurePool * 0.0075 * 0.9925^i for i in 0..daysRemaining-1
+- [ ] **DRIP-02**: Compare projected drip total against nextPool deficit (target - current balance) to determine flag state
+
+### Enforcement
+
+- [ ] **ENF-01**: When flag is active, BURNIE ticket purchases revert
+- [ ] **ENF-02**: When flag is active, BURNIE lootbox purchases succeed but current-level ticket chance is redirected to far-future tickets
+- [ ] **ENF-03**: ETH ticket purchases and ETH lootboxes are unaffected by the flag
+
+### Audit
+
+- [ ] **AUD-01**: Delta adversarial audit of all changed functions — 0 open HIGH/MEDIUM/LOW
+- [ ] **AUD-02**: RNG commitment window re-verification for any changed paths
+- [x] **AUD-03**: Gas ceiling analysis for drip projection computation
 
 ## Future Requirements
 
-None.
+None — targeted contract change.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Full contract re-audit | Only v10.1 delta changes are in scope |
-| Gas optimization | Covered in v10.2 |
-| Test changes | Test files were already verified in v10.1 Phase 146 |
+| Frontend changes | Not in audit scope |
+| Changing drip rate (0.75%) | Existing parameter, not part of this change |
+| BURNIE restrictions during jackpot/play phase | Game can't end once jackpot phase begins |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DELTA-01 | Phase 149 | Complete |
-| DELTA-02 | Phase 149 | Complete |
-| DELTA-03 | Phase 149 | Complete |
-| DELTA-04 | Phase 149 | Complete |
-| DELTA-05 | Phase 149 | Complete |
-| DOC-01 | Phase 150 | Pending |
-| DOC-02 | Phase 150 | Pending |
+| REM-01 | Phase 151 | Pending |
+| FLAG-01 | Phase 151 | Pending |
+| FLAG-02 | Phase 151 | Pending |
+| FLAG-03 | Phase 151 | Pending |
+| FLAG-04 | Phase 151 | Pending |
+| DRIP-01 | Phase 151 | Pending |
+| DRIP-02 | Phase 151 | Pending |
+| ENF-01 | Phase 151 | Pending |
+| ENF-02 | Phase 151 | Pending |
+| ENF-03 | Phase 151 | Pending |
+| AUD-01 | Phase 152 | Pending |
+| AUD-02 | Phase 152 | Pending |
+| AUD-03 | Phase 152 | Complete |
 
 **Coverage:**
-- v10.3 requirements: 7 total
-- Mapped to phases: 7
+- v11.0 requirements: 13 total
+- Mapped to phases: 13
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-30*
-*Last updated: 2026-03-30 after roadmap creation*
+*Requirements defined: 2026-03-31*
+*Last updated: 2026-03-31 after roadmap creation*
