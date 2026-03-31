@@ -57,26 +57,26 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ELIG-01 | TBD | Pending |
-| ELIG-02 | TBD | Pending |
-| MECH-01 | TBD | Pending |
-| MECH-02 | TBD | Pending |
-| MECH-03 | TBD | Pending |
-| MECH-04 | TBD | Pending |
-| STOR-01 | TBD | Pending |
-| STOR-02 | TBD | Pending |
-| INTG-01 | TBD | Pending |
-| INTG-02 | TBD | Pending |
-| ECON-01 | TBD | Pending |
-| ECON-02 | TBD | Pending |
-| GAS-01 | TBD | Pending |
-| GAS-02 | TBD | Pending |
+| ELIG-01 | Phase 153 | Pending |
+| ELIG-02 | Phase 153 | Pending |
+| MECH-01 | Phase 153 | Pending |
+| MECH-02 | Phase 153 | Pending |
+| MECH-03 | Phase 153 | Pending |
+| MECH-04 | Phase 153 | Pending |
+| STOR-01 | Phase 153 | Pending |
+| STOR-02 | Phase 153 | Pending |
+| INTG-01 | Phase 154 | Pending |
+| INTG-02 | Phase 154 | Pending |
+| ECON-01 | Phase 155 | Pending |
+| ECON-02 | Phase 155 | Pending |
+| GAS-01 | Phase 155 | Pending |
+| GAS-02 | Phase 155 | Pending |
 
 **Coverage:**
 - v12.0 requirements: 14 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 14
+- Mapped to phases: 14
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-31*
-*Last updated: 2026-03-31*
+*Last updated: 2026-03-31 -- phase mappings added*
