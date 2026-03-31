@@ -798,7 +798,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // full     Jackpot winner selection    via delegatecall (full word)      JackpotModule (payDailyJackpot)
     // full     Coin jackpot                via delegatecall (full word)      JackpotModule (_payDailyCoinJackpot)
     // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule.sol:826
-    // full     Future take variance        rngWord % (variance * 2 + 1)     AdvanceModule.sol:1033
+    // full     Future take variance        rngWord % (variance * 2 + 1)      AdvanceModule.sol:1033
     // full     Prize pool consolidation    via delegatecall (full word)      JackpotModule (consolidatePrizePools)
     // full     Final day DGNRS reward      via delegatecall (full word)      JackpotModule (awardFinalDayDgnrsReward)
     // full     Reward jackpots             via delegatecall (full word)      JackpotModule (_runRewardJackpots)
