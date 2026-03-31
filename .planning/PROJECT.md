@@ -226,19 +226,17 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current Milestone: v11.0 BURNIE Endgame Gate
+## Completed Milestone: v11.0 BURNIE Endgame Gate
 
-**Goal:** Replace the 30-day BURNIE ban with a flag-based system that restricts BURNIE tickets when a level could mechanically be the last.
+**Status:** Complete (2026-03-31)
 
-**Target features:**
-- Remove existing 30-day BURNIE ticket purchase ban (all levels)
-- Add "potential last level" flag: set on purchase-phase entry (L11+), re-checked daily to potentially clear, auto-cleared at lastPurchaseDay
-- When flag is active: block BURNIE ticket purchases; BURNIE lootboxes allowed but yield zero current-level tickets
-- Geometric drip projection algorithm: sum remaining 0.75%/day futurePool drip vs nextPool gap
+**Result:** 2 phases (151-152), 4 plans. 30-day BURNIE ban replaced with gameOverPossible flag — dynamic drip-projection-based endgame detection at L10+ purchase-phase. WAD-scale geometric series (_wadPow + _projectedDrip) in AdvanceModule. MintModule reverts with GameOverPossible when flag active; LootboxModule redirects current-level BURNIE tickets to far-future key space (bit 22). Delta audit: 10 functions, 10 SAFE, 0 VULNERABLE, 1 INFO (V11-001 stale comment). RNG commitment window: 3 paths SAFE. Gas ceiling: +21K gas worst-case (0.3% increase), 2.0x margin preserved. All 13 requirements satisfied.
 
 ## Current State
 
-Phase 151 (Endgame Flag Implementation) complete — gameOverPossible flag implemented across 4 contracts, 30-day BURNIE ban fully removed. Ready for Phase 152 delta audit.
+v11.0 complete. gameOverPossible flag replaces the 30-day BURNIE ban across 4 contracts. Delta audit clean (0 VULNERABLE). Gas impact negligible (+0.3%).
+
+**Grand total across all milestones:** 148+ findings (16 LOW, 129+ INFO), 0 MEDIUM/HIGH outstanding. KNOWN-ISSUES.md comprehensive with 35+ entries.
 
 ## Completed Milestone: v10.3 Delta Adversarial Audit (v10.1 Changes)
 
@@ -268,7 +266,7 @@ v9.0 Contest Dry Run shipped (2026-03-28). 5 wardens, 152 attack surfaces, 0 Med
 
 **Grand total across all milestones:** 147+ findings (16 LOW, 128+ INFO), 0 MEDIUM/HIGH outstanding. KNOWN-ISSUES.md comprehensive with 35+ entries. C4A contest README finalized.
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests), v4.2 (daily jackpot chunk removal), v4.3 (prizePoolsPacked — closed early), v4.4 (BAF cache-overwrite fix), v5.0 (ultimate adversarial audit), v6.0 (test cleanup + fixes + charity), v7.0 (delta adversarial audit), v8.0 (pre-audit hardening), v8.1 (final audit prep), v9.0 (contest dry run), v10.0 (audit submission ready), v10.1 (ABI cleanup), v10.2 (writes cap analysis — no change needed).
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests), v4.2 (daily jackpot chunk removal), v4.3 (prizePoolsPacked — closed early), v4.4 (BAF cache-overwrite fix), v5.0 (ultimate adversarial audit), v6.0 (test cleanup + fixes + charity), v7.0 (delta adversarial audit), v8.0 (pre-audit hardening), v8.1 (final audit prep), v9.0 (contest dry run), v10.0 (audit submission ready), v10.1 (ABI cleanup), v10.2 (writes cap analysis — no change needed), v10.3 (v10.1 delta audit), v11.0 (BURNIE endgame gate).
 
 ## Evolution
 
@@ -288,4 +286,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 after Phase 151 (Endgame Flag Implementation)*
+*Last updated: 2026-03-31 after v11.0 BURNIE Endgame Gate milestone*

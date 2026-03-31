@@ -1,5 +1,89 @@
 # Milestones
 
+## v11.0 BURNIE Endgame Gate (Shipped: 2026-03-31)
+
+**Phases completed:** 8 phases, 15 plans, 23 tasks
+
+**Key accomplishments:**
+
+- Triaged all 30 KNOWN-ISSUES.md entries, fixed bootstrap assumption (DGNRS not sDGNRS), quantified fuzzy claims with worst-case wei bounds, added creator vesting and rngLocked guard entries
+- Fixed C4A contest README severity language (High not Critical), reduced priorities from 4 to 3 by folding Admin Resistance into Money Correctness with vesting-aware governance framing
+- Fresh-eyes RNG/VRF audit covering 24 attack surfaces with 9 rigorous SAFE proofs, 3 INFO findings, and zero Medium+ vulnerabilities across all VRF commitment windows, request-to-fulfillment paths, and cross-contract RNG consumers
+- Fresh-eyes gas warden audited 31 attack surfaces across all advanceGame paths, finding all SAFE with 52%+ headroom vs 30M block gas limit
+- Fresh-eyes money warden traced 42 ETH/token attack surfaces across 24 contracts with 10 rigorous SAFE proofs -- zero exploitable money correctness issues found
+- Fresh-eyes admin warden audited 30 admin surfaces across 24 contracts: 0 HIGH/MEDIUM/LOW, 3 INFO, 6 SAFE proofs with access control traces, DGNRS vesting governance analysis, both Chainlink death clock paths assessed
+- Fresh-eyes composition warden tested 25 cross-domain attack surfaces (RNG+Money, Admin+Gas, etc.) with zero Medium+ findings -- defense-in-depth via soulbound governance, rngLocked guards, and CEI compliance neutralizes all multi-step exploit chains
+- C4A-adjudicated 14 observations from 5 wardens across 152 surfaces: 0 High, 0 Medium, 11 QA, 3 Rejected -- zero payable severity-based findings, 1 new KNOWN-ISSUES entry (EntropyLib XOR-shift)
+- Per-line audit of 5 changed lines in f15b503a: all SAFE/INFO, turbo-at-L0 unreachable with no cascading effects, 120-day backfill cap proven safe under realistic threat model
+- KNOWN-ISSUES.md updated with turbo-at-L0 and backfill cap design decisions, C4A README references v10.0 delta, constructor NatSpec documents dailyIdx, test suite 1362 passing with 0 failures
+- gameOverPossible bool packed into Slot 1, WAD-scale drip projection via closed-form geometric series, flag lifecycle wired into AdvanceModule L10+ purchase-phase path
+- 30-day BURNIE ban fully removed, MintModule reverts with GameOverPossible when flag active, LootboxModule redirects current-level tickets to far-future key space via bit 22
+- 10 changed/new functions audited across 4 contracts: 10 SAFE, 0 VULNERABLE, 1 INFO; RNG commitment window clean for all 3 flag-dependent paths; storage layout verified via forge inspect
+- Drip projection adds ~21,000 gas worst-case (0.3% increase) to advanceGame; 2.0x safety margin preserved against 14M block ceiling, no regression from Phase 147 baseline
+
+---
+
+## v10.3 Delta Adversarial Audit (v10.1 Changes) (Shipped: 2026-03-30)
+
+**Phases completed:** 8 phases, 12 plans, 17 tasks
+
+**Key accomplishments:**
+
+- Triaged all 30 KNOWN-ISSUES.md entries, fixed bootstrap assumption (DGNRS not sDGNRS), quantified fuzzy claims with worst-case wei bounds, added creator vesting and rngLocked guard entries
+- Fixed C4A contest README severity language (High not Critical), reduced priorities from 4 to 3 by folding Admin Resistance into Money Correctness with vesting-aware governance framing
+- Fresh-eyes RNG/VRF audit covering 24 attack surfaces with 9 rigorous SAFE proofs, 3 INFO findings, and zero Medium+ vulnerabilities across all VRF commitment windows, request-to-fulfillment paths, and cross-contract RNG consumers
+- Fresh-eyes gas warden audited 31 attack surfaces across all advanceGame paths, finding all SAFE with 52%+ headroom vs 30M block gas limit
+- Fresh-eyes money warden traced 42 ETH/token attack surfaces across 24 contracts with 10 rigorous SAFE proofs -- zero exploitable money correctness issues found
+- Fresh-eyes admin warden audited 30 admin surfaces across 24 contracts: 0 HIGH/MEDIUM/LOW, 3 INFO, 6 SAFE proofs with access control traces, DGNRS vesting governance analysis, both Chainlink death clock paths assessed
+- Fresh-eyes composition warden tested 25 cross-domain attack surfaces (RNG+Money, Admin+Gas, etc.) with zero Medium+ findings -- defense-in-depth via soulbound governance, rngLocked guards, and CEI compliance neutralizes all multi-step exploit chains
+- C4A-adjudicated 14 observations from 5 wardens across 152 surfaces: 0 High, 0 Medium, 11 QA, 3 Rejected -- zero payable severity-based findings, 1 new KNOWN-ISSUES entry (EntropyLib XOR-shift)
+- Per-line audit of 5 changed lines in f15b503a: all SAFE/INFO, turbo-at-L0 unreachable with no cascading effects, 120-day backfill cap proven safe under realistic threat model
+- KNOWN-ISSUES.md updated with turbo-at-L0 and backfill cap design decisions, C4A README references v10.0 delta, constructor NatSpec documents dailyIdx, test suite 1362 passing with 0 failures
+- 38 functions audited across 12 contracts + 3 interfaces: 30 SAFE, 8 INFO, 0 VULNERABLE -- v10.1 ABI cleanup introduces no security regressions
+
+---
+
+## v10.2 Ticket Mint Gas Optimization (Shipped: 2026-03-30)
+
+**Phases completed:** 7 phases, 12 plans, 17 tasks
+
+**Key accomplishments:**
+
+- Triaged all 30 KNOWN-ISSUES.md entries, fixed bootstrap assumption (DGNRS not sDGNRS), quantified fuzzy claims with worst-case wei bounds, added creator vesting and rngLocked guard entries
+- Fixed C4A contest README severity language (High not Critical), reduced priorities from 4 to 3 by folding Admin Resistance into Money Correctness with vesting-aware governance framing
+- Fresh-eyes RNG/VRF audit covering 24 attack surfaces with 9 rigorous SAFE proofs, 3 INFO findings, and zero Medium+ vulnerabilities across all VRF commitment windows, request-to-fulfillment paths, and cross-contract RNG consumers
+- Fresh-eyes gas warden audited 31 attack surfaces across all advanceGame paths, finding all SAFE with 52%+ headroom vs 30M block gas limit
+- Fresh-eyes money warden traced 42 ETH/token attack surfaces across 24 contracts with 10 rigorous SAFE proofs -- zero exploitable money correctness issues found
+- Fresh-eyes admin warden audited 30 admin surfaces across 24 contracts: 0 HIGH/MEDIUM/LOW, 3 INFO, 6 SAFE proofs with access control traces, DGNRS vesting governance analysis, both Chainlink death clock paths assessed
+- Fresh-eyes composition warden tested 25 cross-domain attack surfaces (RNG+Money, Admin+Gas, etc.) with zero Medium+ findings -- defense-in-depth via soulbound governance, rngLocked guards, and CEI compliance neutralizes all multi-step exploit chains
+- C4A-adjudicated 14 observations from 5 wardens across 152 surfaces: 0 High, 0 Medium, 11 QA, 3 Rejected -- zero payable severity-based findings, 1 new KNOWN-ISSUES entry (EntropyLib XOR-shift)
+- Per-line audit of 5 changed lines in f15b503a: all SAFE/INFO, turbo-at-L0 unreachable with no cascading effects, 120-day backfill cap proven safe under realistic threat model
+- KNOWN-ISSUES.md updated with turbo-at-L0 and backfill cap design decisions, C4A README references v10.0 delta, constructor NatSpec documents dailyIdx, test suite 1362 passing with 0 failures
+- Static gas profile of advanceGame ticket-processing: 4 paths analyzed, 7 write-units per adversarial entry at ~12,500 gas/wu worst-case, WRITES_BUDGET_SAFE=550 confirmed with 2.0x safety margin under 14M ceiling
+
+---
+
+## v10.1 ABI Cleanup (Shipped: 2026-03-30)
+
+**Phases completed:** 9 phases, 16 plans, 19 tasks
+
+**Key accomplishments:**
+
+- Triaged all 30 KNOWN-ISSUES.md entries, fixed bootstrap assumption (DGNRS not sDGNRS), quantified fuzzy claims with worst-case wei bounds, added creator vesting and rngLocked guard entries
+- Fixed C4A contest README severity language (High not Critical), reduced priorities from 4 to 3 by folding Admin Resistance into Money Correctness with vesting-aware governance framing
+- Fresh-eyes RNG/VRF audit covering 24 attack surfaces with 9 rigorous SAFE proofs, 3 INFO findings, and zero Medium+ vulnerabilities across all VRF commitment windows, request-to-fulfillment paths, and cross-contract RNG consumers
+- Fresh-eyes gas warden audited 31 attack surfaces across all advanceGame paths, finding all SAFE with 52%+ headroom vs 30M block gas limit
+- Fresh-eyes money warden traced 42 ETH/token attack surfaces across 24 contracts with 10 rigorous SAFE proofs -- zero exploitable money correctness issues found
+- Fresh-eyes admin warden audited 30 admin surfaces across 24 contracts: 0 HIGH/MEDIUM/LOW, 3 INFO, 6 SAFE proofs with access control traces, DGNRS vesting governance analysis, both Chainlink death clock paths assessed
+- Fresh-eyes composition warden tested 25 cross-domain attack surfaces (RNG+Money, Admin+Gas, etc.) with zero Medium+ findings -- defense-in-depth via soulbound governance, rngLocked guards, and CEI compliance neutralizes all multi-step exploit chains
+- C4A-adjudicated 14 observations from 5 wardens across 152 surfaces: 0 High, 0 Medium, 11 QA, 3 Rejected -- zero payable severity-based findings, 1 new KNOWN-ISSUES entry (EntropyLib XOR-shift)
+- Per-line audit of 5 changed lines in f15b503a: all SAFE/INFO, turbo-at-L0 unreachable with no cascading effects, 120-day backfill cap proven safe under realistic threat model
+- KNOWN-ISSUES.md updated with turbo-at-L0 and backfill cap design decisions, C4A README references v10.0 delta, constructor NatSpec documents dailyIdx, test suite 1362 passing with 0 failures
+- Systematic ABI sweep of 25 production contracts identifying 8 forwarding wrappers and 54 unused view/pure functions for user review
+- Deleted 7 BurnieCoin forwarding wrappers, expanded BurnieCoinflip access control to 4 callers, rewired 8 contracts to call BurnieCoinflip directly
+
+---
+
 ## v9.0 Contest Dry Run (Shipped: 2026-03-28)
 
 **Phases completed:** 3 phases, 8 plans, 11 tasks
