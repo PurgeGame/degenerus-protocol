@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v11.0
 milestone_name: BURNIE Endgame Gate
-status: defining-requirements
-stopped_at: Milestone v11.0 started
-last_updated: "2026-03-31T00:00:00.000Z"
-last_activity: 2026-03-31
+status: executing
+stopped_at: Phase 151 context gathered
+last_updated: "2026-03-31T21:47:43.145Z"
+last_activity: 2026-03-31 -- Phase 151 execution started
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 15
+  completed_phases: 6
+  total_plans: 13
+  completed_plans: 11
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Defining requirements for v11.0 BURNIE Endgame Gate
+**Current focus:** Phase 151 — endgame-flag-implementation
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-31 — Milestone v11.0 started
+Phase: 151 (endgame-flag-implementation) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 151
+Last activity: 2026-03-31 -- Phase 151 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -63,10 +63,7 @@ Recent decisions affecting current work:
 - [v10.1]: BurnieCoin forwarding wrappers removed, callers rewired directly
 - [v10.1]: Admin middleman replaced with vault-owner access control on Game
 - [v10.1]: mintForCoinflip merged into mintForGame
-- [v10.1]: BurnieCoinflip creditors expanded to GAME+COIN+AFFILIATE+ADMIN
-- [Phase 149]: onlyFlipCreditors expansion justified: expanded set matches prior indirect access
-- [Phase 149]: Vault-owner access control equivalent to old Admin.onlyOwner path
-- [Phase 149]: mintForGame merger safe: dual-caller COINFLIP+GAME with identical _mint logic
+- [v10.3]: v10.1 ABI cleanup delta audit complete -- 38 functions, 0 VULNERABLE, 8 INFO
 
 ### Pending Todos
 
@@ -78,6 +75,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30T17:42:52.239Z
-Stopped at: Completed 149-01-PLAN.md
-Resume file: None
+Last session: 2026-03-31T19:55:40.410Z
+Stopped at: Phase 151 context gathered
+Resume file: .planning/phases/151-endgame-flag-implementation/151-CONTEXT.md

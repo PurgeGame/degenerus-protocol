@@ -266,8 +266,8 @@
 **Requirements**: REM-01, FLAG-01, FLAG-02, FLAG-03, FLAG-04, DRIP-01, DRIP-02, ENF-01, ENF-02, ENF-03
 **Plans**: 2 plans
 Plans:
-- [ ] 151-01-PLAN.md — Storage + WAD projection math + flag lifecycle in AdvanceModule
-- [ ] 151-02-PLAN.md — Remove 30-day ban + wire enforcement in MintModule and LootboxModule
+- [x] 151-01-PLAN.md — Storage + WAD projection math + flag lifecycle in AdvanceModule
+- [x] 151-02-PLAN.md — Remove 30-day ban + wire enforcement in MintModule and LootboxModule
 
 </details>
 
@@ -478,7 +478,7 @@ Phase 151 (sequential) -> Phase 152 (sequential)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 151. Endgame Flag Implementation | v11.0 | 0/2 | Not started | - |
+| 151. Endgame Flag Implementation | v11.0 | 2/2 | Complete   | 2026-03-31 |
 | 152. Delta Audit | v11.0 | 0/? | Not started | - |
 
 ## Deferred
