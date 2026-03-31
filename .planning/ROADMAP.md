@@ -253,7 +253,7 @@
 **Milestone Goal:** Replace the 30-day BURNIE ban with a flag-based system that restricts BURNIE tickets when a level could mechanically be the last. Implement the flag lifecycle, geometric drip projection, and enforcement rules, then delta-audit all changes.
 
 - [ ] **Phase 151: Endgame Flag Implementation** - 2 plans, 10 requirements
-- [ ] **Phase 152: Delta Audit** - Adversarial audit, RNG commitment window re-verification, gas ceiling analysis
+- [ ] **Phase 152: Delta Audit** - 2 plans (AUD-01/AUD-02 adversarial + RNG, AUD-03 gas ceiling)
 
 ## Phase Details
 
@@ -268,6 +268,20 @@
 Plans:
 - [x] 151-01-PLAN.md — Storage + WAD projection math + flag lifecycle in AdvanceModule
 - [x] 151-02-PLAN.md — Remove 30-day ban + wire enforcement in MintModule and LootboxModule
+
+</details>
+
+<details>
+<summary>Phase 152 Details (v11.0)</summary>
+
+### Phase 152: Delta Audit
+**Goal**: Every function changed by the endgame flag implementation is proven safe -- no security regressions, no RNG commitment window violations, no gas ceiling breaches from drip projection math
+**Depends on**: Phase 151 (implementation complete, tests passing)
+**Requirements**: AUD-01, AUD-02, AUD-03
+**Plans**: 2 plans
+Plans:
+- [ ] 152-01-PLAN.md — Per-function adversarial audit + storage layout + RNG commitment window re-verification
+- [ ] 152-02-PLAN.md — Gas ceiling analysis for drip projection computation
 
 </details>
 
