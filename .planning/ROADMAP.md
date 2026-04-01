@@ -217,10 +217,26 @@ Plans:
 - [x] 158-01-PLAN.md — Level quest progress in all 6 handlers + onlyCoin modifier expansion for GAME access
 - [x] 158-02-PLAN.md — BurnieCoin notify* wrapper removal + game module rewiring to call DegenerusQuests directly
 
+### Phase 158.1: Carryover Redesign + Final BurnieCoin Quest Cleanup (INSERTED)
+
+**Goal:** Replace carryover ETH distribution with ticket purchases (0.5% budget, single random source level, no Phase 1 state machine), remove remaining BurnieCoin quest passthroughs (rollDailyQuest hop, recordMintQuestStreak COIN access), and simplify the daily jackpot carryover flow
+**Requirements**: CARRY-01, CARRY-02, CARRY-03, CARRY-04, CLEANUP-02, CLEANUP-03
+**Depends on:** Phase 158
+**Success Criteria** (what must be TRUE):
+  1. Carryover days 2-4 distribute tickets (not ETH) to trait winners at a single random source level, with 0.5% futurePrizePool budget going to nextPrizePool
+  2. Phase 1 carryover state machine removed (dailyCarryoverEthPool, dailyCarryoverWinnerCap, dailyEthPhase storage vars deleted)
+  3. `BurnieCoin.rollDailyQuest` removed; JackpotModule calls `quests.rollDailyQuest()` directly
+  4. `DegenerusGame.recordMintQuestStreak` access control tightened to onlyGame (COIN no longer needs to call it)
+  5. All 62 Solidity files compile cleanly
+**Plans**: 2 plans
+Plans:
+- [ ] 158.1-01-PLAN.md — Carryover ETH state machine removal + ticket-only distribution + storage gap replacement
+- [ ] 158.1-02-PLAN.md — BurnieCoin rollDailyQuest removal + recordMintQuestStreak GAME-only tightening
+
 ## Progress
 
 **Execution Order:**
-Phase 156 -> Phase 157 -> Phase 158 (strictly sequential -- each builds on the prior)
+Phase 156 -> Phase 157 -> Phase 158 -> Phase 158.1 (strictly sequential -- each builds on the prior)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -231,7 +247,8 @@ Phase 156 -> Phase 157 -> Phase 158 (strictly sequential -- each builds on the p
 | 155. Economic + Gas Analysis | v12.0 | 1/1 | Complete | 2026-04-01 |
 | 156. Interfaces, Storage & Access Control | v13.0 | 0/1 | Complete    | 2026-04-01 |
 | 157. Quest Logic & Roll Chain | v13.0 | 3/3 | Complete   | 2026-04-01 |
-| 158. Handler Integration & View | v13.0 | 2/2 | Complete   | 2026-04-01 |
+| 158. Handler Integration & View | v13.0 | 2/2 | Complete    | 2026-04-01 |
+| 158.1. Carryover Redesign + Cleanup | v13.0 | 0/2 | Planned | - |
 
 ## Deferred
 
@@ -241,16 +258,3 @@ Phase 156 -> Phase 157 -> Phase 158 (strictly sequential -- each builds on the p
 - **FVER-01**: Halmos symbolic proof of CHARITY burn math (proportional ETH/stETH)
 - **FVER-02**: stETH shares-based accounting for 1-2 wei rounding precision
 - **FVER-03**: Foundry fuzz invariant tests for governance (vote weight conservation)
-
-### Phase 158.1: Carryover Redesign + Final BurnieCoin Quest Cleanup (INSERTED)
-
-**Goal:** Replace carryover ETH distribution with ticket purchases (0.5% budget, single random source level, no Phase 1 state machine), remove remaining BurnieCoin quest passthroughs (rollDailyQuest hop, recordMintQuestStreak COIN access), and simplify the daily jackpot carryover flow
-**Requirements**: TBD
-**Depends on:** Phase 158
-**Success Criteria** (what must be TRUE):
-  1. Carryover days 2-4 distribute tickets (not ETH) to trait winners at a single random source level, with 0.5% futurePrizePool budget going to nextPrizePool
-  2. Phase 1 carryover state machine removed (dailyCarryoverEthPool, dailyCarryoverWinnerCap, dailyEthPhase storage vars deleted)
-  3. `BurnieCoin.rollDailyQuest` removed; JackpotModule calls `quests.rollDailyQuest()` directly
-  4. `DegenerusGame.recordMintQuestStreak` access control tightened to onlyGame (COIN no longer needs to call it)
-  5. All 62 Solidity files compile cleanly
-**Plans**: TBD
