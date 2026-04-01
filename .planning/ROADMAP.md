@@ -153,7 +153,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. A contract touchpoint map exists listing every contract that needs modification, what interface changes are required, and what new cross-contract calls are introduced
   2. Every handleX() call site in DegenerusQuests.sol is listed with a specification of what level quest progress tracking logic must be added at each site
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 154-01-PLAN.md — Contract touchpoint map + handler site integration specifications
 
 ### Phase 155: Economic + Gas Analysis
 **Goal**: The BURNIE inflation impact and gas overhead of level quests are quantified with worst-case bounds, confirming the feature is economically and computationally viable
@@ -164,7 +166,9 @@ Plans:
   2. The interaction between level quest payouts and the gameOverPossible drip projection is analyzed -- whether creditFlip payouts affect futurePool, and if so, whether the drip projection formula needs adjustment
   3. Gas overhead of the eligibility check in the quest handler hot path is estimated with SLOAD counts and worst-case cost
   4. Gas overhead of the level quest roll in the advanceGame level transition path is estimated, confirming it stays within the existing gas ceiling headroom
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 155-01-PLAN.md — BURNIE inflation modeling + gameOverPossible interaction + gas overhead estimation
 
 ## Progress
 
@@ -176,8 +180,8 @@ Phase 153 (sequential) -> Phase 154 + Phase 155 (can parallel after 153)
 | 151. Endgame Flag Implementation | v11.0 | 2/2 | Complete | 2026-03-31 |
 | 152. Delta Audit | v11.0 | 2/2 | Complete | 2026-03-31 |
 | 153. Core Design | v12.0 | 1/1 | Complete    | 2026-04-01 |
-| 154. Integration Mapping | v12.0 | 0/? | Not started | - |
-| 155. Economic + Gas Analysis | v12.0 | 0/? | Not started | - |
+| 154. Integration Mapping | v12.0 | 0/1 | Planned | - |
+| 155. Economic + Gas Analysis | v12.0 | 0/1 | Planned | - |
 
 ## Deferred
 
