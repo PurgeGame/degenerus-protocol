@@ -142,7 +142,9 @@ Plans:
   3. All 8 quest types have 10x target values defined with edge case analysis for each (e.g., decimator availability across multi-day levels, ETH mint price sensitivity, quest types that may be impossible or trivially easy at 10x)
   4. Per-player progress tracking is fully specified -- storage layout, version invalidation scheme at level boundaries, completion mask, and the once-per-level creditFlip payout trigger
   5. The storage layout document specifies slot assignments, packing strategy, new SLOAD/SSTORE count, and confirms no collision with existing storage
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] 153-01-PLAN.md — Complete level quest design specification (eligibility, mechanics, targets, storage, completion)
 
 ### Phase 154: Integration Mapping
 **Goal**: Every contract and function that must change for level quests is identified, with the exact modification scope documented so implementation touches nothing unexpected
@@ -173,7 +175,7 @@ Phase 153 (sequential) -> Phase 154 + Phase 155 (can parallel after 153)
 |-------|-----------|----------------|--------|-----------|
 | 151. Endgame Flag Implementation | v11.0 | 2/2 | Complete | 2026-03-31 |
 | 152. Delta Audit | v11.0 | 2/2 | Complete | 2026-03-31 |
-| 153. Core Design | v12.0 | 0/? | Not started | - |
+| 153. Core Design | v12.0 | 1/1 | Complete   | 2026-04-01 |
 | 154. Integration Mapping | v12.0 | 0/? | Not started | - |
 | 155. Economic + Gas Analysis | v12.0 | 0/? | Not started | - |
 

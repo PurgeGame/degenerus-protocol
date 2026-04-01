@@ -7,20 +7,20 @@
 
 ### Eligibility Design
 
-- [ ] **ELIG-01**: Define storage layout for level quest eligibility check (levelStreak >= 5 OR any active pass) AND (ETH mint >= 4 units this level)
-- [ ] **ELIG-02**: Specify how eligibility is evaluated — which existing storage reads are needed, gas cost of the eligibility check
+- [x] **ELIG-01**: Define storage layout for level quest eligibility check (levelStreak >= 5 OR any active pass) AND (ETH mint >= 4 units this level)
+- [x] **ELIG-02**: Specify how eligibility is evaluated — which existing storage reads are needed, gas cost of the eligibility check
 
 ### Quest Mechanics Design
 
-- [ ] **MECH-01**: Define global level quest roll mechanism — when during advanceGame level transition, which VRF entropy source, how quest type + target are stored
-- [ ] **MECH-02**: Specify 10x target values for all 8 quest types with edge case analysis (e.g., 10x ETH mint price capped? Decimator availability across level duration?)
-- [ ] **MECH-03**: Define level quest progress tracking storage — per-player state, version invalidation at level boundary, completion mask
-- [ ] **MECH-04**: Specify level quest completion flow — how completion triggers 800 BURNIE creditFlip, once-per-level guard
+- [x] **MECH-01**: Define global level quest roll mechanism — when during advanceGame level transition, which VRF entropy source, how quest type + target are stored
+- [x] **MECH-02**: Specify 10x target values for all 8 quest types with edge case analysis (e.g., 10x ETH mint price capped? Decimator availability across level duration?)
+- [x] **MECH-03**: Define level quest progress tracking storage — per-player state, version invalidation at level boundary, completion mask
+- [x] **MECH-04**: Specify level quest completion flow — how completion triggers 800 BURNIE creditFlip, once-per-level guard
 
 ### Storage Design
 
-- [ ] **STOR-01**: Design storage layout for level quest state (global quest type/target per level, per-player progress/completion)
-- [ ] **STOR-02**: Assess storage slot impact — new slots needed, packing opportunities, SLOAD/SSTORE budget
+- [x] **STOR-01**: Design storage layout for level quest state (global quest type/target per level, per-player progress/completion)
+- [x] **STOR-02**: Assess storage slot impact — new slots needed, packing opportunities, SLOAD/SSTORE budget
 
 ### Integration Design
 
@@ -57,14 +57,14 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ELIG-01 | Phase 153 | Pending |
-| ELIG-02 | Phase 153 | Pending |
-| MECH-01 | Phase 153 | Pending |
-| MECH-02 | Phase 153 | Pending |
-| MECH-03 | Phase 153 | Pending |
-| MECH-04 | Phase 153 | Pending |
-| STOR-01 | Phase 153 | Pending |
-| STOR-02 | Phase 153 | Pending |
+| ELIG-01 | Phase 153 | Complete |
+| ELIG-02 | Phase 153 | Complete |
+| MECH-01 | Phase 153 | Complete |
+| MECH-02 | Phase 153 | Complete |
+| MECH-03 | Phase 153 | Complete |
+| MECH-04 | Phase 153 | Complete |
+| STOR-01 | Phase 153 | Complete |
+| STOR-02 | Phase 153 | Complete |
 | INTG-01 | Phase 154 | Pending |
 | INTG-02 | Phase 154 | Pending |
 | ECON-01 | Phase 155 | Pending |
