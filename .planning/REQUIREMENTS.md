@@ -1,67 +1,72 @@
-# Requirements: Degenerus Protocol — v13.0 Level Quests Implementation
+# Requirements: Degenerus Protocol — v14.0 Activity Score & Quest Gas Optimization
 
-**Defined:** 2026-03-31
+**Defined:** 2026-04-01
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v13.0 Requirements
+## v14.0 Requirements
 
-Implement the v12.0 level quest design spec (Phase 153-155 artifacts) into contracts. Stage all changes for user review before commit.
+Minimize gas cost of activity score computation and quest state handling on the hottest player paths, especially purchases. Everything is on the table — data structure changes, handler consolidation, storage repacking.
 
-### Quest Core (DegenerusQuests.sol)
+### Activity Score Architecture
 
-- [ ] **QUEST-01**: Storage declarations — `levelQuestType` mapping(uint24 => uint8) and `levelQuestPlayerState` mapping(address => uint256) appended after `questVersionCounter`
-- [ ] **QUEST-02**: `rollLevelQuest(uint24 lvl, uint256 entropy)` external function — selects quest type via `_bonusQuestType` with no exclusion, writes `levelQuestType[lvl]`
-- [ ] **QUEST-03**: `_isLevelQuestEligible(address player)` internal view — (levelStreak >= 5 OR pass) AND (levelUnits >= 4 this level)
-- [ ] **QUEST-04**: `_levelQuestTargetValue(uint8 questType, uint256 mintPrice)` internal pure — 10x targets, no ETH cap
-- [ ] **QUEST-05**: Level quest progress block added to all 6 handlers (handleMint, handleFlip, handleDecimator, handleAffiliate, handleLootBox, handleDegenerette) — after daily quest logic, before return
-- [x] **QUEST-06**: Completion flow — once-per-level guard (bit 152), direct `creditFlip(player, 800 ether)` to BurnieCoinflip, `LevelQuestCompleted` event
-- [ ] **QUEST-07**: `getPlayerLevelQuestView(address player)` external view — returns questType, progress, target, completed, eligible
+- [x] **SCORE-01**: Activity score inputs consolidated into minimal storage reads (investigate unified packed struct for score + quest data)
+- [ ] **SCORE-02**: playerActivityScore computed at most once per transaction on purchase path, cached result reused by all consumers
+- [ ] **SCORE-03**: Quest streak readable without cross-contract call from Game to DegenerusQuests (currently external `questView.playerQuestStates()` on every computation)
+- [ ] **SCORE-04**: Affiliate bonus readable without cross-contract call from Game to DegenerusAffiliate (currently external `affiliate.affiliateBonusPointsBest()` on every computation)
+- [ ] **SCORE-05**: DegeneretteModule `_playerActivityScoreInternal` duplicate eliminated — single shared implementation
 
-### Roll Trigger Chain
+### Quest Handler Optimization
 
-- [x] **ROLL-01**: ~~BurnieCoin.rollLevelQuest routing function~~ — SUPERSEDED by D-12: AdvanceModule calls DegenerusQuests.rollLevelQuest directly (no BurnieCoin hop)
-- [x] **ROLL-02**: AdvanceModule insertion — `quests.rollLevelQuest(purchaseLevel, questEntropy)` after FF drain, before `phaseTransitionActive = false`, with keccak256 entropy derivation from `rngWordByDay[day]`
+- [ ] **QUEST-01**: Purchase path makes single quest handler call instead of separate handleMint + handleLootBox (eliminates duplicate state sync, activeQuests load)
+- [ ] **QUEST-02**: mintPrice passed into quest handlers from caller instead of handlers making external callback to Game
+- [ ] **QUEST-03**: Daily quest progress and level quest progress batched into single storage write path per handler invocation
 
-### Access Control
+### Purchase Path SLOAD Deduplication
 
-- [ ] **ACL-01**: BurnieCoinflip `onlyFlipCreditors` modifier expanded to include `ContractAddresses.QUESTS`
+- [ ] **SLOAD-01**: compressedJackpotFlag read once and cached (currently 4 reads in _callTicketPurchase)
+- [ ] **SLOAD-02**: claimableWinnings[buyer] read once and cached (currently 3 reads across _purchaseFor)
+- [ ] **SLOAD-03**: jackpotCounter read once and cached (currently 3 reads in _callTicketPurchase)
+- [ ] **SLOAD-04**: jackpotPhaseFlag read once and cached (currently 2 reads)
+- [ ] **SLOAD-05**: level read once and cached (currently 3 reads across _purchaseFor + _callTicketPurchase)
+- [ ] **SLOAD-06**: price read once and cached (currently 2 reads)
 
-### Interface
+## Future Requirements
 
-- [ ] **INTF-01**: IDegenerusQuests.sol updated with `LevelQuestCompleted` event, `rollLevelQuest` function, `getPlayerLevelQuestView` function
-- [ ] **INTF-02**: IBurnieCoin.sol (or equivalent) updated with `rollLevelQuest` function signature
+None — this milestone is self-contained optimization work.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Frontend display | Not in audit scope |
-| Test suite | User will review code first, tests follow separately |
-| Delta adversarial audit | Separate milestone after implementation |
-| Gas optimization beyond spec | Design spec gas budgets are final |
+| Affiliate handler gas optimization | payAffiliate called up to 5x per purchase but its internal logic is outside this milestone's focus |
+| BoonModule storage restructuring | Already packed into BoonPacked 2-slot struct in v3.8 |
+| Activity score algorithm changes | Optimization only — no changes to what the score represents or how it's consumed |
+| Non-purchase path optimization | Focus on purchase (hottest path); other paths benefit indirectly from structural changes |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| QUEST-01 | Phase 156 | Pending |
-| QUEST-02 | Phase 157 | Pending |
-| QUEST-03 | Phase 157 | Pending |
-| QUEST-04 | Phase 157 | Pending |
-| QUEST-05 | Phase 158 | Pending |
-| QUEST-06 | Phase 157 | Complete |
-| QUEST-07 | Phase 158 | Pending |
-| ROLL-01 | Phase 157 | Complete (superseded by D-12) |
-| ROLL-02 | Phase 157 | Complete |
-| ACL-01 | Phase 156 | Pending |
-| INTF-01 | Phase 156 | Pending |
-| INTF-02 | Phase 156 | Pending |
+| SCORE-01 | Phase 159 | Complete |
+| SCORE-02 | Phase 160 | Pending |
+| SCORE-03 | Phase 160 | Pending |
+| SCORE-04 | Phase 160 | Pending |
+| SCORE-05 | Phase 160 | Pending |
+| QUEST-01 | Phase 161 | Pending |
+| QUEST-02 | Phase 161 | Pending |
+| QUEST-03 | Phase 161 | Pending |
+| SLOAD-01 | Phase 162 | Pending |
+| SLOAD-02 | Phase 162 | Pending |
+| SLOAD-03 | Phase 162 | Pending |
+| SLOAD-04 | Phase 162 | Pending |
+| SLOAD-05 | Phase 162 | Pending |
+| SLOAD-06 | Phase 162 | Pending |
 
 **Coverage:**
-- v13.0 requirements: 12 total
-- Mapped to phases: 12
+- v14.0 requirements: 14 total
+- Mapped to phases: 14
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-03-31*
-*Last updated: 2026-03-31 after roadmap creation*
+*Requirements defined: 2026-04-01*
+*Last updated: 2026-04-01 after roadmap creation*

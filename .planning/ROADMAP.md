@@ -35,7 +35,8 @@
 - ✅ **v10.3 Delta Adversarial Audit (v10.1 Changes)** — Phases 149-150 (shipped 2026-03-30)
 - ✅ **v11.0 BURNIE Endgame Gate** — Phases 151-152 (shipped 2026-03-31)
 - ✅ **v12.0 Level Quests** — Phases 153-155 (shipped 2026-04-01)
-- [ ] **v13.0 Level Quests Implementation** — Phases 156-158
+- ✅ **v13.0 Level Quests Implementation** — Phases 156-158.1 (shipped 2026-04-01)
+- [ ] **v14.0 Activity Score & Quest Gas Optimization** — Phases 159-162
 
 ## Phases
 
@@ -109,13 +110,24 @@ See individual milestone entries above.
 
 </details>
 
-### v13.0 Level Quests Implementation (Phases 156-158)
+<details>
+<summary>v13.0 Level Quests Implementation (Phases 156-158.1) -- SHIPPED 2026-04-01</summary>
 
-**Milestone Goal:** Implement the v12.0 level quest design spec into contracts. 5 contracts modified (DegenerusQuests, IDegenerusQuests, BurnieCoin, DegenerusGameAdvanceModule, BurnieCoinflip). Changes staged for user review before commit.
+- [x] **Phase 156: Interfaces, Storage & Access Control** - 1 plan (completed 2026-04-01)
+- [x] **Phase 157: Quest Logic & Roll Chain** - 3 plans (completed 2026-04-01)
+- [x] **Phase 158: Handler Integration & View** - 2 plans (completed 2026-04-01)
+- [x] **Phase 158.1: Carryover Redesign + Cleanup** - 2 plans (completed 2026-04-01)
 
-- [ ] **Phase 156: Interfaces, Storage & Access Control** - Foundation: interface declarations, storage vars, BurnieCoinflip creditor expansion
-- [ ] **Phase 157: Quest Logic & Roll Chain** - Core quest internals + AdvanceModule roll trigger wiring
-- [ ] **Phase 158: Handler Integration & View** - 6 handler sites get level quest progress tracking + read-only view function
+</details>
+
+### v14.0 Activity Score & Quest Gas Optimization (Phases 159-162)
+
+**Milestone Goal:** Minimize gas cost of activity score computation and quest state handling on the hottest player paths, especially purchases. Everything is on the table -- data structure changes, handler consolidation, storage repacking.
+
+- [ ] **Phase 159: Storage Analysis & Architecture Design** - Investigate unified packed struct for score + quest data; produce design spec that shapes all downstream implementation
+- [ ] **Phase 160: Activity Score Consolidation** - Single-computation cache, eliminate cross-contract calls, remove duplicate implementation
+- [ ] **Phase 161: Quest Handler Merging** - Unified purchase-path handler, mintPrice passthrough, batched storage writes
+- [ ] **Phase 162: Purchase Path SLOAD Deduplication** - Cache compressedJackpotFlag, claimableWinnings, jackpotCounter, jackpotPhaseFlag, level, price
 
 ## Phase Details
 
@@ -171,17 +183,13 @@ Plans:
 
 </details>
 
+<details>
+<summary>Phase 156-158.1 Details (v13.0)</summary>
+
 ### Phase 156: Interfaces, Storage & Access Control
 **Goal**: All interface files, storage declarations, and access control changes compile cleanly so that downstream quest logic and handler integration can build on stable type signatures
 **Depends on**: Phase 155 (v12.0 design spec complete)
 **Requirements**: INTF-01, INTF-02, QUEST-01, ACL-01
-**Success Criteria** (what must be TRUE):
-  1. IDegenerusQuests.sol declares the `LevelQuestCompleted` event, `rollLevelQuest(uint24, uint256)` function signature, and `getPlayerLevelQuestView(address)` function signature
-  2. DegenerusQuests.sol `rollDailyQuest` and `rollLevelQuest` use `onlyGame` modifier (game modules call directly, no BurnieCoin hop)
-  3. DegenerusQuests.sol has `levelQuestType` (mapping(uint24 => uint8)) and `levelQuestPlayerState` (mapping(address => uint256)) storage declarations appended after `questVersionCounter`
-  4. BurnieCoinflip `onlyFlipCreditors` modifier includes `ContractAddresses.QUESTS` as a valid creditor
-  5. BurnieCoin `rollDailyQuest`, `rollLevelQuest`, and `DailyQuestRolled` event removed; JackpotModule calls `quests.rollDailyQuest()` directly
-  6. All modified contracts compile without errors (`npx hardhat compile` succeeds)
 **Plans**: 1 plan
 Plans:
 - [x] 156-01-PLAN.md — Interface declarations + storage mappings + access control + quest roll routing cleanup
@@ -190,12 +198,6 @@ Plans:
 **Goal**: The quest roll, eligibility check, target calculation, and completion flow are implemented in DegenerusQuests.sol, and the AdvanceModule-to-DegenerusQuests roll trigger fires directly at level transitions
 **Depends on**: Phase 156 (interfaces and storage in place)
 **Requirements**: QUEST-02, QUEST-03, QUEST-04, QUEST-06, ROLL-01, ROLL-02
-**Success Criteria** (what must be TRUE):
-  1. `rollLevelQuest(uint24 lvl, uint256 entropy)` selects a quest type via `_bonusQuestType` (no exclusion) and writes `levelQuestType[lvl]`
-  2. `_isLevelQuestEligible(address player)` returns true only when (levelStreak >= 5 OR pass) AND (levelUnits >= 4 this level)
-  3. `_levelQuestTargetValue(uint8 questType, uint256 mintPrice)` returns the correct 10x target for all 8 quest types with no ETH cap
-  4. Completion flow enforces once-per-level via bit 152, calls `creditFlip(player, 800 ether)` on BurnieCoinflip, and emits `LevelQuestCompleted`
-  5. AdvanceModule calls `quests.rollLevelQuest(purchaseLevel, questEntropy)` directly (no BurnieCoin hop) at the correct insertion point (after FF drain, before `phaseTransitionActive = false`) with keccak256 entropy derived from `rngWordByDay[day]`
 **Plans**: 3 plans
 Plans:
 - [x] 157-01-PLAN.md — Quest logic internals: rollLevelQuest, eligibility, target calculation, progress handler, completion flow, mintPackedFor view
@@ -206,37 +208,74 @@ Plans:
 **Goal**: All 6 quest handlers track level quest progress for eligible players, handlers own their reward/event emission (removing BurnieCoin notify* middleman), and a view function exposes complete level quest state
 **Depends on**: Phase 157 (quest logic and completion flow ready)
 **Requirements**: QUEST-05, QUEST-07, CLEANUP-01
-**Success Criteria** (what must be TRUE):
-  1. Each of the 6 handlers (handleMint, handleFlip, handleDecimator, handleAffiliate, handleLootBox, handleDegenerette) contains a level quest progress block after daily quest logic and before return
-  2. Level quest progress only accumulates for players who pass the `_isLevelQuestEligible` check
-  3. When a handler's accumulated progress meets or exceeds the target, the completion flow triggers (creditFlip + event + once-per-level guard)
-  4. `getPlayerLevelQuestView(address player)` returns questType, progress, target, completed status, and eligibility for the queried address
-  5. Handlers emit `QuestCompleted` and call `creditFlip` internally -- `notifyQuestMint`, `notifyQuestLootBox`, `notifyQuestDegenerette`, `_questApplyReward`, and `QuestCompleted` event removed from BurnieCoin. Game modules call DegenerusQuests handlers directly. `decimatorBurn` keeps the burn logic but calls `quests.handleDecimator()` for the quest portion instead of inlining it.
 **Plans**: 2 plans
 Plans:
 - [x] 158-01-PLAN.md — Level quest progress in all 6 handlers + onlyCoin modifier expansion for GAME access
 - [x] 158-02-PLAN.md — BurnieCoin notify* wrapper removal + game module rewiring to call DegenerusQuests directly
 
 ### Phase 158.1: Carryover Redesign + Final BurnieCoin Quest Cleanup (INSERTED)
-
 **Goal:** Replace carryover ETH distribution with ticket purchases (0.5% budget, single random source level, no Phase 1 state machine), remove remaining BurnieCoin quest passthroughs (rollDailyQuest hop, recordMintQuestStreak COIN access), and simplify the daily jackpot carryover flow
 **Requirements**: CARRY-01, CARRY-02, CARRY-03, CARRY-04, CLEANUP-02, CLEANUP-03
 **Depends on:** Phase 158
-**Success Criteria** (what must be TRUE):
-  1. Carryover days 2-4 distribute tickets (not ETH) to trait winners at a single random source level, with 0.5% futurePrizePool budget going to nextPrizePool
-  2. Phase 1 carryover state machine removed (dailyCarryoverEthPool, dailyCarryoverWinnerCap, dailyEthPhase storage vars deleted)
-  3. `BurnieCoin.rollDailyQuest` removed; JackpotModule calls `quests.rollDailyQuest()` directly
-  4. `DegenerusGame.recordMintQuestStreak` access control tightened to onlyGame (COIN no longer needs to call it)
-  5. All 62 Solidity files compile cleanly
 **Plans**: 2 plans
 Plans:
 - [x] 158.1-01-PLAN.md — Carryover ETH state machine removal + ticket-only distribution + storage gap replacement
 - [x] 158.1-02-PLAN.md — BurnieCoin rollDailyQuest removal + recordMintQuestStreak GAME-only tightening
 
+</details>
+
+### Phase 159: Storage Analysis & Architecture Design
+**Goal**: The current storage layout, cross-contract call graph, and SLOAD patterns for activity score and quest handling on the purchase path are fully mapped, and a concrete architecture (packed struct layout, caching strategy, handler consolidation plan) is specified so all downstream implementation has zero design ambiguity
+**Depends on**: Phase 158.1 (v13.0 complete, codebase stable)
+**Requirements**: SCORE-01
+**Success Criteria** (what must be TRUE):
+  1. Every storage slot and cross-contract call involved in playerActivityScore computation is catalogued with current gas cost (SLOADs, external calls, recomputations)
+  2. A concrete packed struct layout (or justified rejection of packing) is specified for score + quest data, with bit allocation map and slot assignments
+  3. The caching strategy for score reuse across consumers within a single transaction is designed (where computed, where cached, who reads the cache)
+  4. Dependencies between SCORE, QUEST, and SLOAD optimizations are documented so implementation phases can proceed without revisiting architectural decisions
+**Plans**: 1 plan
+Plans:
+- [x] 159-01-PLAN.md — Architecture design spec: storage mapping, packed struct analysis, caching strategy, SLOAD catalog, phase dependencies
+
+### Phase 160: Activity Score Consolidation
+**Goal**: playerActivityScore is computed exactly once per purchase transaction, with quest streak and affiliate bonus readable without cross-contract calls, and no duplicate implementation exists across modules
+**Depends on**: Phase 159 (architecture design locked)
+**Requirements**: SCORE-02, SCORE-03, SCORE-04, SCORE-05
+**Success Criteria** (what must be TRUE):
+  1. On the purchase path, playerActivityScore is computed once and its result is reused by every downstream consumer (no second computation in DegeneretteModule or elsewhere)
+  2. Quest streak data is readable by the score computation without an external call from Game to DegenerusQuests (either co-located storage, passed parameter, or cached in caller)
+  3. Affiliate bonus is readable by the score computation without an external call from Game to DegenerusAffiliate (either co-located storage, passed parameter, or cached in caller)
+  4. DegeneretteModule's `_playerActivityScoreInternal` is removed and replaced with the shared single implementation
+  5. All contracts compile and existing tests pass after the consolidation
+**Plans**: TBD
+
+### Phase 161: Quest Handler Merging
+**Goal**: The purchase path makes a single quest handler call that covers both daily and level quest progress, mintPrice is passed from the caller instead of re-fetched, and daily + level quest storage writes are batched
+**Depends on**: Phase 159 (architecture design locked)
+**Requirements**: QUEST-01, QUEST-02, QUEST-03
+**Success Criteria** (what must be TRUE):
+  1. A single handler call on the purchase path replaces the current separate handleMint + handleLootBox calls, eliminating duplicate activeQuests loads and state syncs
+  2. mintPrice is passed into the quest handler from the caller (MintModule / LootboxModule) instead of the handler making an external callback to Game to fetch it
+  3. Daily quest progress and level quest progress are written in a single storage write path per handler invocation (not separate writes for daily then level)
+  4. All contracts compile and quest behavior is functionally identical (same quest types trigger, same targets, same completion rewards)
+**Plans**: TBD
+
+### Phase 162: Purchase Path SLOAD Deduplication
+**Goal**: Each of the 6 identified hot-path storage variables is read exactly once per purchase transaction and cached for all subsequent consumers
+**Depends on**: Phase 159 (architecture design locked)
+**Requirements**: SLOAD-01, SLOAD-02, SLOAD-03, SLOAD-04, SLOAD-05, SLOAD-06
+**Success Criteria** (what must be TRUE):
+  1. compressedJackpotFlag is read once at the top of the purchase flow and passed/cached for all 4 current consumers in _callTicketPurchase
+  2. claimableWinnings[buyer] is read once and cached for all 3 consumers across _purchaseFor
+  3. jackpotCounter is read once and cached for all 3 consumers in _callTicketPurchase
+  4. jackpotPhaseFlag, level, and price are each read once and cached for their respective consumers
+  5. All contracts compile, existing tests pass, and no behavioral changes result from the caching
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phase 156 -> Phase 157 -> Phase 158 -> Phase 158.1 (strictly sequential -- each builds on the prior)
+Phase 159 -> Phase 160 + Phase 161 + Phase 162 (160-162 can proceed in any order after 159; all depend on 159's architectural decisions)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -245,10 +284,14 @@ Phase 156 -> Phase 157 -> Phase 158 -> Phase 158.1 (strictly sequential -- each 
 | 153. Core Design | v12.0 | 1/1 | Complete | 2026-04-01 |
 | 154. Integration Mapping | v12.0 | 1/1 | Complete | 2026-04-01 |
 | 155. Economic + Gas Analysis | v12.0 | 1/1 | Complete | 2026-04-01 |
-| 156. Interfaces, Storage & Access Control | v13.0 | 0/1 | Complete    | 2026-04-01 |
-| 157. Quest Logic & Roll Chain | v13.0 | 3/3 | Complete   | 2026-04-01 |
-| 158. Handler Integration & View | v13.0 | 2/2 | Complete    | 2026-04-01 |
-| 158.1. Carryover Redesign + Cleanup | v13.0 | 2/2 | Complete    | 2026-04-01 |
+| 156. Interfaces, Storage & Access Control | v13.0 | 1/1 | Complete | 2026-04-01 |
+| 157. Quest Logic & Roll Chain | v13.0 | 3/3 | Complete | 2026-04-01 |
+| 158. Handler Integration & View | v13.0 | 2/2 | Complete | 2026-04-01 |
+| 158.1. Carryover Redesign + Cleanup | v13.0 | 2/2 | Complete | 2026-04-01 |
+| 159. Storage Analysis & Architecture Design | v14.0 | 1/1 | Complete   | 2026-04-01 |
+| 160. Activity Score Consolidation | v14.0 | 0/? | Not started | - |
+| 161. Quest Handler Merging | v14.0 | 0/? | Not started | - |
+| 162. Purchase Path SLOAD Deduplication | v14.0 | 0/? | Not started | - |
 
 ## Deferred
 

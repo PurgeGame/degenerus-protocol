@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v13.0
-milestone_name: Level Quests Implementation
+milestone: v14.0
+milestone_name: Activity Score & Quest Gas Optimization
 status: verifying
-stopped_at: Completed 158.1-01-PLAN.md
-last_updated: "2026-04-01T20:34:41.188Z"
+stopped_at: Completed 159-01-PLAN.md
+last_updated: "2026-04-01T21:32:00.765Z"
 last_activity: 2026-04-01
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 15
-  completed_plans: 15
+  total_phases: 13
+  completed_phases: 10
+  total_plans: 16
+  completed_plans: 16
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 158.1 — replace-carryover-eth-with-ticket-purchase
+**Current focus:** Phase 159 — Storage Analysis & Architecture Design
 
 ## Current Position
 
-Phase: 158.1
-Plan: Not started
+Phase: 159 (Storage Analysis & Architecture Design) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-04-01
 
@@ -36,7 +36,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 0 (v13.0 milestone)
+- Total plans completed: 0 (v14.0 milestone)
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -46,20 +46,18 @@ Progress: [░░░░░░░░░░] 0%
 |-------|-------|-------|----------|
 | - | - | - | - |
 
-**Recent Trend (from v12.0):**
+**Recent Trend (from v13.0):**
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
-| Phase 153 P01 | 5min | 2 tasks | 1 files |
-| Phase 154 P01 | 5min | 1 tasks | 1 files |
-| Phase 155 P01 | 11min | 1 tasks | 1 files |
-
-*Updated after each plan completion*
 | Phase 157 P03 | 4min | 2 tasks | 2 files |
 | Phase 158 P01 | 4min | 1 tasks | 2 files |
 | Phase 158 P02 | 2min | 2 tasks | 7 files |
-| Phase 158.1 P02 | 4min | 2 tasks | 4 files |
 | Phase 158.1 P01 | 7min | 2 tasks | 3 files |
+| Phase 158.1 P02 | 4min | 2 tasks | 4 files |
+
+*Updated after each plan completion*
+| Phase 159 P01 | 6min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -68,39 +66,13 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v12.0]: Level quest eligibility: levelStreak >= 5 OR any active pass (deity/lazy/whale) AND ETH mint >= 4 units this level
-- [v12.0]: Global roll at level start, same 8 quest types + weights, 10x daily targets
-- [v12.0]: 800 BURNIE payout via creditFlip, once per level per player
-- [v12.0]: Active for entire level duration, completely independent from daily quests
-- [v12.0]: Planning and design only -- no contract implementation this milestone
-- [Phase 153]: Store quest TYPE only per level -- targets derive from type + mintPrice, saving 22K gas SSTORE
-- [Phase 153]: Level-based invalidation over version counters -- levels are monotonic, saves 1 SLOAD per handler
-- [Phase 153]: No ETH target cap for level quests -- daily 0.5 ETH cap explicitly not applied
-- [Phase 154]: Storage in DegenerusQuests.sol -- handlers already live there, avoids cross-contract reads
-- [Phase 154]: Option C reward path: direct creditFlip from quest contract, zero handler signature changes
-- [Phase 154]: Roll trigger via AdvanceModule -> BurnieCoin.rollLevelQuest -> DegenerusQuests.rollLevelQuest (mirrors daily quest pattern)
-- [Phase 155]: Level quest BURNIE inflation bounded: worst-case 12M/month at 1K players, <16% of ticket mints. coinflip mechanism provides ~50% natural burn-back.
-- [Phase 155]: creditFlip and gameOverPossible proven disjoint -- BURNIE ledger vs ETH prize pools, zero state overlap. No drip adjustment needed.
-- [Phase 155]: Quest roll adds +22,430 gas to advanceGame worst-case (0.32% increase), safety margin 1.99x preserved against 14M ceiling.
-- [v13.0 roadmap]: 3 phases (156-158): foundation -> core logic -> handler wiring. Strictly sequential.
-- [v13.0 roadmap]: Changes staged only (git add), not committed. User reviews diff before deciding to commit.
-- [Phase 157]: MINT_BURNIE moved from 0 to 9; value 0 now unambiguously means unrolled quest
-- [Phase 157]: levelQuestType mapping replaced with levelQuestGlobal packed uint256 (level + type), saves ~2,600 gas per handler call
-- [Phase 157]: ROLL-01 superseded by D-12 direct call pattern; ROLL-02 updated to reflect quests.rollLevelQuest
-- [Phase 158]: Level quest progress call placed before every return in all 6 handlers (handleMint uses post-loop single call)
-- [Phase 158]: onlyCoin modifier expanded to COIN + COINFLIP + GAME + AFFILIATE (prep for Plan 02 routing cleanup)
-- [Phase 158]: mintPrice load hoisted before no-slot early return in handleLootBox and handleDegenerette
-- [Phase 158]: MintModule _questMint helper deduplicates quests.handleMint + creditFlip + recordMintQuestStreak across 4 call sites
-- [Phase 158]: DegenerusAffiliate uses inline IDegenerusQuestsAffiliate interface (minimizes import surface vs full IDegenerusQuests)
-- [Phase 158]: BurnieCoin notify* wrappers, affiliateQuestReward, _questApplyReward, QuestCompleted event all removed -- game modules call DegenerusQuests directly
-- [Phase 158.1]: OnlyGame error and questModule retained in BurnieCoin -- verified callers still exist (burnForCoinflip/mintForGame, decimatorBurn)
-- [Phase 158.1]: recordMintQuestStreak tightened to GAME-only -- COIN access path no longer exists after notify* wrapper removal
-- [Phase 158.1]: 0.5% futurePrizePool carryover budget (/ 200) replaces 1% with BPS split
-- [Phase 158.1]: Phase 1 carryover ETH state machine removed; single-pass ticket distribution in Phase 0
-
-### Roadmap Evolution
-
-- Phase 158.1 inserted after Phase 158: Replace Carryover ETH with Ticket Purchase (URGENT)
+- [v13.0]: BurnieCoin notify* wrappers removed -- game modules call DegenerusQuests handlers directly
+- [v13.0]: Phase 1 carryover ETH state machine replaced with single-pass ticket distribution
+- [v13.0]: onlyCoin expanded to COIN + COINFLIP + GAME + AFFILIATE
+- [v14.0 roadmap]: 4 phases (159-162): analysis/design first, then 3 parallel-capable implementation phases
+- [v14.0 roadmap]: Phase 159 analysis must lock architecture before 160-162 proceed
+- [v14.0 roadmap]: SLOAD dedup (Phase 162) is mechanical caching, independent of score/quest structure
+- [Phase 159]: deityPassCount packed into mintPacked_ bits 184-199; combined score+quest packing rejected; affiliate STATICCALL accepted; phase ordering locked 160->161->162
 
 ### Pending Todos
 
@@ -112,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T19:07:34.278Z
-Stopped at: Completed 158.1-01-PLAN.md
+Last session: 2026-04-01T21:32:00.763Z
+Stopped at: Completed 159-01-PLAN.md
 Resume file: None
