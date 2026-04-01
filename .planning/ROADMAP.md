@@ -230,8 +230,8 @@ Plans:
   5. All 62 Solidity files compile cleanly
 **Plans**: 2 plans
 Plans:
-- [ ] 158.1-01-PLAN.md — Carryover ETH state machine removal + ticket-only distribution + storage gap replacement
-- [ ] 158.1-02-PLAN.md — BurnieCoin rollDailyQuest removal + recordMintQuestStreak GAME-only tightening
+- [x] 158.1-01-PLAN.md — Carryover ETH state machine removal + ticket-only distribution + storage gap replacement
+- [x] 158.1-02-PLAN.md — BurnieCoin rollDailyQuest removal + recordMintQuestStreak GAME-only tightening
 
 ## Progress
 
@@ -248,7 +248,7 @@ Phase 156 -> Phase 157 -> Phase 158 -> Phase 158.1 (strictly sequential -- each 
 | 156. Interfaces, Storage & Access Control | v13.0 | 0/1 | Complete    | 2026-04-01 |
 | 157. Quest Logic & Roll Chain | v13.0 | 3/3 | Complete   | 2026-04-01 |
 | 158. Handler Integration & View | v13.0 | 2/2 | Complete    | 2026-04-01 |
-| 158.1. Carryover Redesign + Cleanup | v13.0 | 0/2 | Planned | - |
+| 158.1. Carryover Redesign + Cleanup | v13.0 | 2/2 | Complete   | 2026-04-01 |
 
 ## Deferred
 

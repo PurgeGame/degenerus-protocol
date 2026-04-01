@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v13.0
 milestone_name: Level Quests Implementation
-status: executing
-stopped_at: Phase 158.1 context gathered
-last_updated: "2026-04-01T18:40:25.284Z"
+status: verifying
+stopped_at: Completed 158.1-01-PLAN.md
+last_updated: "2026-04-01T19:07:34.281Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 9
-  completed_phases: 8
-  total_plans: 13
-  completed_plans: 13
+  completed_phases: 9
+  total_plans: 15
+  completed_plans: 15
   percent: 0
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 
 ## Current Position
 
-Phase: 158.1
-Plan: Not started
-Status: Ready to execute
+Phase: 158.1 (replace-carryover-eth-with-ticket-purchase) — EXECUTING
+Plan: 2 of 2
+Status: Phase complete — ready for verification
 Last activity: 2026-04-01
 
 Progress: [░░░░░░░░░░] 0%
@@ -58,6 +58,8 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 157 P03 | 4min | 2 tasks | 2 files |
 | Phase 158 P01 | 4min | 1 tasks | 2 files |
 | Phase 158 P02 | 2min | 2 tasks | 7 files |
+| Phase 158.1 P02 | 4min | 2 tasks | 4 files |
+| Phase 158.1 P01 | 7min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -91,6 +93,10 @@ Recent decisions affecting current work:
 - [Phase 158]: MintModule _questMint helper deduplicates quests.handleMint + creditFlip + recordMintQuestStreak across 4 call sites
 - [Phase 158]: DegenerusAffiliate uses inline IDegenerusQuestsAffiliate interface (minimizes import surface vs full IDegenerusQuests)
 - [Phase 158]: BurnieCoin notify* wrappers, affiliateQuestReward, _questApplyReward, QuestCompleted event all removed -- game modules call DegenerusQuests directly
+- [Phase 158.1]: OnlyGame error and questModule retained in BurnieCoin -- verified callers still exist (burnForCoinflip/mintForGame, decimatorBurn)
+- [Phase 158.1]: recordMintQuestStreak tightened to GAME-only -- COIN access path no longer exists after notify* wrapper removal
+- [Phase 158.1]: 0.5% futurePrizePool carryover budget (/ 200) replaces 1% with BPS split
+- [Phase 158.1]: Phase 1 carryover ETH state machine removed; single-pass ticket distribution in Phase 0
 
 ### Roadmap Evolution
 
@@ -106,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T18:40:25.282Z
-Stopped at: Phase 158.1 context gathered
-Resume file: .planning/phases/158.1-replace-carryover-eth-with-ticket-purchase/158.1-CONTEXT.md
+Last session: 2026-04-01T19:07:34.278Z
+Stopped at: Completed 158.1-01-PLAN.md
+Resume file: None
