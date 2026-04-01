@@ -11,7 +11,7 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
  * @notice Multi-tier affiliate referral system with configurable kickback.
  *
  * @dev ARCHITECTURE:
- *      - 3-tier referral: Player → Affiliate (base) → Upline1 (20%) → Upline2 (4%)
+ *      - 3-tier referral: Player → Affiliate (75%) / Upline1 (20%) / Upline2 (5%) winner-takes-all roll
  *      - Default codes: every address has an implicit code (bytes32(uint256(uint160(addr))))
  *        with 0% kickback, no tx required. Custom codes use high bytes (string-encoded),
  *        so the two namespaces cannot collide.
@@ -360,13 +360,11 @@ contract DegenerusAffiliate {
      * +--------------------------------------------------------------------+
      * | 1. Resolve referral code (stored or provided)                      |
      * | 2. Apply reward percentage based on ETH type and level             |
-     * | 3. Update leaderboard (full untapered amount)                      |
-     * | 4. Apply lootbox activity taper if applicable                      |
+     * | 3. Apply lootbox activity taper if applicable                      |
+     * | 4. Update leaderboard (post-taper amount)                          |
      * | 5. Calculate kickback (returned to caller for player credit)       |
-     * | 6. Pay direct affiliate (base - kickback)                          |
-     * | 7. Pay upline1 (20% of scaled amount)                              |
-     * | 8. Pay upline2 (20% of upline1 share = 4%)                         |
-     * | 9. Quest rewards added on top                                     |
+     * | 6. Roll 75/20/5 between affiliate, upline1, upline2               |
+     * | 7. Winner gets full pot (scaled - kickback) + quest reward         |
      * +--------------------------------------------------------------------+
      *
      * REWARD RATES:
@@ -378,7 +376,6 @@ contract DegenerusAffiliate {
      * - Activity score < 10,000: no taper (100% payout)
      * - Activity score 10,000-25,500: linear taper from 100% to 25%
      * - Activity score >= 25,500: 25% payout floor (LOOTBOX_TAPER_MIN_BPS = 2500)
-     * - Leaderboard tracking always uses full untapered amount.
      *
      * @param amount Base reward amount (18 decimals).
      * @param code Affiliate code provided with the transaction (may be bytes32(0)).
@@ -530,7 +527,12 @@ contract DegenerusAffiliate {
             affiliateCommissionFromSender[lvl][affiliateAddr][sender] = alreadyEarned + scaledAmount;
         }
 
-        // Update leaderboard tracking (full amount, before any lootbox taper).
+        // Taper payout for high-activity lootbox buyers before leaderboard tracking.
+        if (lootboxActivityScore >= LOOTBOX_TAPER_START_SCORE) {
+            scaledAmount = _applyLootboxTaper(scaledAmount, lootboxActivityScore);
+        }
+
+        // Update leaderboard tracking (post-taper amount).
         uint256 newTotal = earned[affiliateAddr] + scaledAmount;
         earned[affiliateAddr] = newTotal;
         _totalAffiliateScore[lvl] += scaledAmount;
@@ -545,11 +547,6 @@ contract DegenerusAffiliate {
         );
         _updateTopAffiliate(affiliateAddr, newTotal, lvl);
 
-        // Taper payout for high-activity lootbox buyers (leaderboard already recorded full amount).
-        if (lootboxActivityScore >= LOOTBOX_TAPER_START_SCORE) {
-            scaledAmount = _applyLootboxTaper(scaledAmount, lootboxActivityScore);
-        }
-
         // Calculate kickback (returned to player) and affiliate share.
         uint256 affiliateShareBase;
         uint256 kickbackShare;
@@ -561,16 +558,13 @@ contract DegenerusAffiliate {
         }
 
         playerKickback = kickbackShare;
-        // Upline rewards are paid out but not tracked for leaderboard scores (gas).
 
         // -----------------------------------------------------------------
-        // DISTRIBUTION
+        // DISTRIBUTION — winner-takes-all weighted roll
         // -----------------------------------------------------------------
-        if (noReferrer) {
-            // No real referrer — 50/50 flip between VAULT and DGNRS.
-            // Skip quest reward calls (VAULT has no quest state).
-            uint256 totalAmount = scaledAmount + scaledAmount / 5 + scaledAmount / 25;
-            if (totalAmount != 0) {
+        if (affiliateShareBase != 0) {
+            if (noReferrer) {
+                // No real referrer — 50/50 flip between VAULT and DGNRS.
                 uint256 entropy = uint256(
                     keccak256(
                         abi.encodePacked(
@@ -584,49 +578,34 @@ contract DegenerusAffiliate {
                 address winner = (entropy % 2 == 0)
                     ? ContractAddresses.VAULT
                     : ContractAddresses.DGNRS;
-                _routeAffiliateReward(winner, totalAmount);
-            }
-        } else {
-            // Real affiliate — normal 3-recipient weighted roll.
-            // PRNG is known — accepted design tradeoff (EV-neutral, manipulation only redistributive between affiliates).
-            // Always 3 recipients: affiliate + upline tier 1 (VAULT fallback) + upline tier 2 (VAULT fallback).
-            address[3] memory players;
-            uint256[3] memory amounts;
+                _routeAffiliateReward(winner, affiliateShareBase);
+            } else {
+                // 75/20/5 weighted roll: affiliate, upline1, upline2.
+                // PRNG is known — accepted design tradeoff (EV-neutral, manipulation only redistributive between affiliates).
+                uint256 roll = uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            AFFILIATE_ROLL_TAG,
+                            GameTimeLib.currentDayIndex(),
+                            sender,
+                            storedCode
+                        )
+                    )
+                ) % 20;
 
-            // Affiliate share + quest bonus
-            uint256 questReward = coin.affiliateQuestReward(affiliateAddr, affiliateShareBase);
-            players[0] = affiliateAddr;
-            amounts[0] = affiliateShareBase + questReward;
+                // 0-14 = affiliate (75%), 15-18 = upline1 (20%), 19 = upline2 (5%)
+                address winner;
+                if (roll < 15) {
+                    winner = affiliateAddr;
+                } else {
+                    address upline1 = _referrerAddress(affiliateAddr);
+                    winner = roll < 19 ? upline1 : _referrerAddress(upline1);
+                }
 
-            // Upline tier 1 (20% of scaled amount)
-            address upline = _referrerAddress(affiliateAddr);
-            uint256 baseBonus = scaledAmount / 5;
-            uint256 questRewardUpline = coin.affiliateQuestReward(upline, baseBonus);
-            players[1] = upline;
-            amounts[1] = baseBonus + questRewardUpline;
-
-            // Upline tier 2 (20% of tier 1 = 4% of original)
-            address upline2 = _referrerAddress(upline);
-            uint256 bonus2 = scaledAmount / 25;
-            uint256 questReward2 = coin.affiliateQuestReward(upline2, bonus2);
-            players[2] = upline2;
-            amounts[2] = bonus2 + questReward2;
-
-            // Roll weighted winner and pay combined amount.
-            // Preserves each recipient's EV: P(win_i) = amount_i / totalAmount.
-            uint256 totalAmount = amounts[0] + amounts[1] + amounts[2];
-            if (totalAmount != 0) {
-                address winner = _rollWeightedAffiliateWinner(
-                    players,
-                    amounts,
-                    3,
-                    totalAmount,
-                    sender,
-                    storedCode
-                );
-                // Don't pay the buyer from their own purchase
+                // Winner gets the full pot + quest credit for the full amount.
                 if (winner != sender) {
-                    _routeAffiliateReward(winner, totalAmount);
+                    uint256 questReward = coin.affiliateQuestReward(winner, affiliateShareBase);
+                    _routeAffiliateReward(winner, affiliateShareBase + questReward);
                 }
             }
         }
@@ -838,38 +817,4 @@ contract DegenerusAffiliate {
         return (amt * (BPS_DENOMINATOR - reductionBps)) / BPS_DENOMINATOR;
     }
 
-    /// @dev Select one recipient with probability proportional to their amount.
-    function _rollWeightedAffiliateWinner(
-        address[3] memory players,
-        uint256[3] memory amounts,
-        uint256 count,
-        uint256 totalAmount,
-        address sender,
-        bytes32 storedCode
-    ) private view returns (address winner) {
-        uint48 currentDay = GameTimeLib.currentDayIndex();
-
-        uint256 entropy = uint256(
-            keccak256(
-                abi.encodePacked(
-                    AFFILIATE_ROLL_TAG,
-                    currentDay,
-                    sender,
-                    storedCode
-                )
-            )
-        );
-        uint256 roll = entropy % totalAmount;
-
-        uint256 running;
-        for (uint256 i; i < count; ) {
-            running += amounts[i];
-            if (roll < running) return players[i];
-            unchecked {
-                ++i;
-            }
-        }
-        // Should be unreachable for totalAmount > 0, but keep deterministic fallback.
-        return players[0];
-    }
 }

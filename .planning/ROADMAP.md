@@ -34,7 +34,8 @@
 - ✅ **v10.2 Ticket Mint Gas Optimization** — Phase 147 (shipped 2026-03-30, Phase 148 skipped — no change needed)
 - ✅ **v10.3 Delta Adversarial Audit (v10.1 Changes)** — Phases 149-150 (shipped 2026-03-30)
 - ✅ **v11.0 BURNIE Endgame Gate** — Phases 151-152 (shipped 2026-03-31)
-- [ ] **v12.0 Level Quests** — Phases 153-155
+- ✅ **v12.0 Level Quests** — Phases 153-155 (shipped 2026-04-01)
+- [ ] **v13.0 Level Quests Implementation** — Phases 156-158
 
 ## Phases
 
@@ -99,13 +100,22 @@ See individual milestone entries above.
 
 </details>
 
-### v12.0 Level Quests (Phases 153-155)
+<details>
+<summary>v12.0 Level Quests (Phases 153-155) -- SHIPPED 2026-04-01</summary>
 
-**Milestone Goal:** Produce a complete design specification for a per-level quest system -- eligibility rules, mechanics, storage layout, integration touchpoints, economic impact, and gas budget -- so implementation can proceed with zero ambiguity.
+- [x] **Phase 153: Core Design** - 1 plan (completed 2026-04-01)
+- [x] **Phase 154: Integration Mapping** - 1 plan (completed 2026-04-01)
+- [x] **Phase 155: Economic + Gas Analysis** - 1 plan (completed 2026-04-01)
 
-- [ ] **Phase 153: Core Design** - Eligibility, mechanics, and storage specification for level quests
-- [ ] **Phase 154: Integration Mapping** - Contract touchpoints and handler site identification
-- [ ] **Phase 155: Economic + Gas Analysis** - BURNIE inflation modeling and gas overhead estimation
+</details>
+
+### v13.0 Level Quests Implementation (Phases 156-158)
+
+**Milestone Goal:** Implement the v12.0 level quest design spec into contracts. 5 contracts modified (DegenerusQuests, IDegenerusQuests, BurnieCoin, DegenerusGameAdvanceModule, BurnieCoinflip). Changes staged for user review before commit.
+
+- [ ] **Phase 156: Interfaces, Storage & Access Control** - Foundation: interface declarations, storage vars, BurnieCoinflip creditor expansion
+- [ ] **Phase 157: Quest Logic & Roll Chain** - Core quest internals + AdvanceModule roll trigger wiring
+- [ ] **Phase 158: Handler Integration & View** - 6 handler sites get level quest progress tracking + read-only view function
 
 ## Phase Details
 
@@ -132,56 +142,92 @@ Plans:
 
 </details>
 
+<details>
+<summary>Phase 153-155 Details (v12.0)</summary>
+
 ### Phase 153: Core Design
 **Goal**: A complete specification exists for level quest eligibility, mechanics, and storage such that an implementer can write the Solidity with zero design ambiguity
 **Depends on**: Phase 152 (v11.0 complete, codebase stable)
 **Requirements**: ELIG-01, ELIG-02, MECH-01, MECH-02, MECH-03, MECH-04, STOR-01, STOR-02
-**Success Criteria** (what must be TRUE):
-  1. The eligibility check is fully specified -- which storage slots are read for levelStreak, pass status, and ETH mint count; the exact boolean expression combining them; and the gas cost of the full eligibility evaluation
-  2. The global quest roll mechanism is specified -- the exact point in advanceGame level transition where the roll occurs, which VRF entropy word is consumed, and how quest type + target are packed into storage
-  3. All 8 quest types have 10x target values defined with edge case analysis for each (e.g., decimator availability across multi-day levels, ETH mint price sensitivity, quest types that may be impossible or trivially easy at 10x)
-  4. Per-player progress tracking is fully specified -- storage layout, version invalidation scheme at level boundaries, completion mask, and the once-per-level creditFlip payout trigger
-  5. The storage layout document specifies slot assignments, packing strategy, new SLOAD/SSTORE count, and confirms no collision with existing storage
 **Plans**: 1 plan
 Plans:
-- [x] 153-01-PLAN.md — Complete level quest design specification (eligibility, mechanics, targets, storage, completion)
+- [x] 153-01-PLAN.md — Complete level quest design specification
 
 ### Phase 154: Integration Mapping
 **Goal**: Every contract and function that must change for level quests is identified, with the exact modification scope documented so implementation touches nothing unexpected
 **Depends on**: Phase 153 (storage layout and mechanics design locked)
 **Requirements**: INTG-01, INTG-02
-**Success Criteria** (what must be TRUE):
-  1. A contract touchpoint map exists listing every contract that needs modification, what interface changes are required, and what new cross-contract calls are introduced
-  2. Every handleX() call site in DegenerusQuests.sol is listed with a specification of what level quest progress tracking logic must be added at each site
 **Plans**: 1 plan
 Plans:
 - [x] 154-01-PLAN.md — Contract touchpoint map + handler site integration specifications
 
 ### Phase 155: Economic + Gas Analysis
 **Goal**: The BURNIE inflation impact and gas overhead of level quests are quantified with worst-case bounds, confirming the feature is economically and computationally viable
-**Depends on**: Phase 153 (storage layout needed for gas estimation, mechanics needed for economic modeling)
+**Depends on**: Phase 153
 **Requirements**: ECON-01, ECON-02, GAS-01, GAS-02
-**Success Criteria** (what must be TRUE):
-  1. BURNIE inflation from 800 BURNIE/level/player is modeled for worst-case (all eligible players complete every level) and expected case, with comparison to existing BURNIE mint/burn rates
-  2. The interaction between level quest payouts and the gameOverPossible drip projection is analyzed -- whether creditFlip payouts affect futurePool, and if so, whether the drip projection formula needs adjustment
-  3. Gas overhead of the eligibility check in the quest handler hot path is estimated with SLOAD counts and worst-case cost
-  4. Gas overhead of the level quest roll in the advanceGame level transition path is estimated, confirming it stays within the existing gas ceiling headroom
 **Plans**: 1 plan
 Plans:
 - [x] 155-01-PLAN.md — BURNIE inflation modeling + gameOverPossible interaction + gas overhead estimation
 
+</details>
+
+### Phase 156: Interfaces, Storage & Access Control
+**Goal**: All interface files, storage declarations, and access control changes compile cleanly so that downstream quest logic and handler integration can build on stable type signatures
+**Depends on**: Phase 155 (v12.0 design spec complete)
+**Requirements**: INTF-01, INTF-02, QUEST-01, ACL-01
+**Success Criteria** (what must be TRUE):
+  1. IDegenerusQuests.sol declares the `LevelQuestCompleted` event, `rollLevelQuest(uint24, uint256)` function signature, and `getPlayerLevelQuestView(address)` function signature
+  2. DegenerusQuests.sol `rollDailyQuest` and `rollLevelQuest` use `onlyGame` modifier (game modules call directly, no BurnieCoin hop)
+  3. DegenerusQuests.sol has `levelQuestType` (mapping(uint24 => uint8)) and `levelQuestPlayerState` (mapping(address => uint256)) storage declarations appended after `questVersionCounter`
+  4. BurnieCoinflip `onlyFlipCreditors` modifier includes `ContractAddresses.QUESTS` as a valid creditor
+  5. BurnieCoin `rollDailyQuest`, `rollLevelQuest`, and `DailyQuestRolled` event removed; JackpotModule calls `quests.rollDailyQuest()` directly
+  6. All modified contracts compile without errors (`npx hardhat compile` succeeds)
+**Plans**: 1 plan
+Plans:
+- [x] 156-01-PLAN.md — Interface declarations + storage mappings + access control + quest roll routing cleanup
+
+### Phase 157: Quest Logic & Roll Chain
+**Goal**: The quest roll, eligibility check, target calculation, and completion flow are implemented in DegenerusQuests.sol, and the AdvanceModule-to-DegenerusQuests roll trigger fires directly at level transitions
+**Depends on**: Phase 156 (interfaces and storage in place)
+**Requirements**: QUEST-02, QUEST-03, QUEST-04, QUEST-06, ROLL-01, ROLL-02
+**Success Criteria** (what must be TRUE):
+  1. `rollLevelQuest(uint24 lvl, uint256 entropy)` selects a quest type via `_bonusQuestType` (no exclusion) and writes `levelQuestType[lvl]`
+  2. `_isLevelQuestEligible(address player)` returns true only when (levelStreak >= 5 OR pass) AND (levelUnits >= 4 this level)
+  3. `_levelQuestTargetValue(uint8 questType, uint256 mintPrice)` returns the correct 10x target for all 8 quest types with no ETH cap
+  4. Completion flow enforces once-per-level via bit 152, calls `creditFlip(player, 800 ether)` on BurnieCoinflip, and emits `LevelQuestCompleted`
+  5. AdvanceModule calls `quests.rollLevelQuest(purchaseLevel, questEntropy)` directly (no BurnieCoin hop) at the correct insertion point (after FF drain, before `phaseTransitionActive = false`) with keccak256 entropy derived from `rngWordByDay[day]`
+**Plans**: 2 plans
+Plans:
+- [ ] 157-01-PLAN.md — Quest logic internals: rollLevelQuest, eligibility, target calculation, progress handler, completion flow, mintPackedFor view
+- [ ] 157-02-PLAN.md — AdvanceModule roll trigger wiring: import, constant, entropy derivation, call insertion
+
+### Phase 158: Handler Integration, View & Quest Routing Cleanup
+**Goal**: All 6 quest handlers track level quest progress for eligible players, handlers own their reward/event emission (removing BurnieCoin notify* middleman), and a view function exposes complete level quest state
+**Depends on**: Phase 157 (quest logic and completion flow ready)
+**Requirements**: QUEST-05, QUEST-07, CLEANUP-01
+**Success Criteria** (what must be TRUE):
+  1. Each of the 6 handlers (handleMint, handleFlip, handleDecimator, handleAffiliate, handleLootBox, handleDegenerette) contains a level quest progress block after daily quest logic and before return
+  2. Level quest progress only accumulates for players who pass the `_isLevelQuestEligible` check
+  3. When a handler's accumulated progress meets or exceeds the target, the completion flow triggers (creditFlip + event + once-per-level guard)
+  4. `getPlayerLevelQuestView(address player)` returns questType, progress, target, completed status, and eligibility for the queried address
+  5. Handlers emit `QuestCompleted` and call `creditFlip` internally -- `notifyQuestMint`, `notifyQuestLootBox`, `notifyQuestDegenerette`, `_questApplyReward`, and `QuestCompleted` event removed from BurnieCoin. Game modules call DegenerusQuests handlers directly. `decimatorBurn` keeps the burn logic but calls `quests.handleDecimator()` for the quest portion instead of inlining it.
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phase 153 (sequential) -> Phase 154 + Phase 155 (can parallel after 153)
+Phase 156 -> Phase 157 -> Phase 158 (strictly sequential -- each builds on the prior)
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 151. Endgame Flag Implementation | v11.0 | 2/2 | Complete | 2026-03-31 |
 | 152. Delta Audit | v11.0 | 2/2 | Complete | 2026-03-31 |
-| 153. Core Design | v12.0 | 1/1 | Complete    | 2026-04-01 |
-| 154. Integration Mapping | v12.0 | 1/1 | Complete    | 2026-04-01 |
-| 155. Economic + Gas Analysis | v12.0 | 1/1 | Complete    | 2026-04-01 |
+| 153. Core Design | v12.0 | 1/1 | Complete | 2026-04-01 |
+| 154. Integration Mapping | v12.0 | 1/1 | Complete | 2026-04-01 |
+| 155. Economic + Gas Analysis | v12.0 | 1/1 | Complete | 2026-04-01 |
+| 156. Interfaces, Storage & Access Control | v13.0 | 0/1 | Complete    | 2026-04-01 |
+| 157. Quest Logic & Roll Chain | v13.0 | 0/2 | Not started | - |
+| 158. Handler Integration & View | v13.0 | 0/? | Not started | - |
 
 ## Deferred
 
