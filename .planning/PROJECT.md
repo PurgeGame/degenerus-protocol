@@ -226,23 +226,15 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current Milestone: v12.0 Level Quests
-
-**Goal:** Design a per-level quest system that rewards engaged players with a harder quest and 800 BURNIE payout.
-
-**Target features:**
-- Per-level quest rolled globally at level start (same quest type for all players)
-- Eligibility: levelStreak >= 5 OR any active pass (deity/lazy/whale), AND ETH mint >= 4 units this level
-- Same 8 quest types and weights as daily quests, but 10x target values
-- 800 BURNIE payout via creditFlip on completion (once per level per player)
-- Active for entire level duration (spans multiple days)
-- Completely independent from daily quest system (separate storage and progress)
-- No streaks or consecutive-level tracking for the quest itself
-- Planning and design only — no contract implementation in this milestone
-
 ## Current State
 
-v11.0 complete. gameOverPossible flag replaces the 30-day BURNIE ban across 4 contracts. Delta audit clean (0 VULNERABLE). Gas impact negligible (+0.3%).
+v12.0 Level Quests design complete. 536-line spec, 852-line integration map, economic + gas analysis all verified. Ready for implementation milestone.
+
+## Completed Milestone: v12.0 Level Quests
+
+**Status:** Complete (2026-04-01)
+
+**Result:** 3 phases (153-155), 3 plans. Planning-only milestone — produced design specification for per-level quest system. 536-line spec (eligibility, mechanics, 10x targets, storage, completion flow). 852-line integration map (10 contracts, 6 handler sites). Economic analysis: BURNIE inflation bounded at 12M/month worst-case (<16% ticket volume). Gas analysis: +22.4K quest roll (0.32%), eligibility 150-280 hot. 1.99x safety margin preserved. gameOverPossible interaction disproven (disjoint state domains). All 14 requirements satisfied.
 
 ## Completed Milestone: v11.0 BURNIE Endgame Gate
 
@@ -280,7 +272,7 @@ v9.0 Contest Dry Run shipped (2026-03-28). 5 wardens, 152 attack surfaces, 0 Med
 
 **Grand total across all milestones:** 147+ findings (16 LOW, 128+ INFO), 0 MEDIUM/HIGH outstanding. KNOWN-ISSUES.md comprehensive with 35+ entries. C4A contest README finalized.
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests), v4.2 (daily jackpot chunk removal), v4.3 (prizePoolsPacked — closed early), v4.4 (BAF cache-overwrite fix), v5.0 (ultimate adversarial audit), v6.0 (test cleanup + fixes + charity), v7.0 (delta adversarial audit), v8.0 (pre-audit hardening), v8.1 (final audit prep), v9.0 (contest dry run), v10.0 (audit submission ready), v10.1 (ABI cleanup), v10.2 (writes cap analysis — no change needed), v10.3 (v10.1 delta audit), v11.0 (BURNIE endgame gate).
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests), v4.2 (daily jackpot chunk removal), v4.3 (prizePoolsPacked — closed early), v4.4 (BAF cache-overwrite fix), v5.0 (ultimate adversarial audit), v6.0 (test cleanup + fixes + charity), v7.0 (delta adversarial audit), v8.0 (pre-audit hardening), v8.1 (final audit prep), v9.0 (contest dry run), v10.0 (audit submission ready), v10.1 (ABI cleanup), v10.2 (writes cap analysis — no change needed), v10.3 (v10.1 delta audit), v11.0 (BURNIE endgame gate), v12.0 (level quests design).
 
 ## Evolution
 
@@ -300,4 +292,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 after v12.0 Level Quests milestone started*
+*Last updated: 2026-04-01 after v12.0 Level Quests milestone*

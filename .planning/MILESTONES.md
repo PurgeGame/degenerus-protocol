@@ -1,5 +1,21 @@
 # Milestones
 
+## v12.0 Level Quests (Shipped: 2026-04-01)
+
+**Phases completed:** 5 phases, 7 plans, 11 tasks
+
+**Key accomplishments:**
+
+- gameOverPossible bool packed into Slot 1, WAD-scale drip projection via closed-form geometric series, flag lifecycle wired into AdvanceModule L10+ purchase-phase path
+- 30-day BURNIE ban fully removed, MintModule reverts with GameOverPossible when flag active, LootboxModule redirects current-level tickets to far-future key space via bit 22
+- 10 changed/new functions audited across 4 contracts: 10 SAFE, 0 VULNERABLE, 1 INFO; RNG commitment window clean for all 3 flag-dependent paths; storage layout verified via forge inspect
+- Drip projection adds ~21,000 gas worst-case (0.3% increase) to advanceGame; 2.0x safety margin preserved against 14M block ceiling, no regression from Phase 147 baseline
+- 536-line design spec covering eligibility (levelStreak/pass + 4 ETH units), global VRF quest roll, 10x targets for 8 types, packed uint256 per-player state with level invalidation, and 800 BURNIE creditFlip completion
+- Complete integration map covering 10 contracts (5 modified, 5 unchanged), all 6 handleX handler sites with level quest tracking specs, 3 Phase 153 open questions resolved, Option C reward path recommended
+- BURNIE inflation bounded (worst-case 12M/month at 1K players, <16% of ticket mints), gameOverPossible interaction disproven via state domain trace, quest roll +22,430 gas to advanceGame with 1.99x safety margin preserved
+
+---
+
 ## v11.0 BURNIE Endgame Gate (Shipped: 2026-03-31)
 
 **Phases completed:** 8 phases, 15 plans, 23 tasks
