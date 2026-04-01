@@ -226,9 +226,21 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
+## Current Milestone: v13.0 Level Quests Implementation
+
+**Goal:** Implement the v12.0 level quest design spec into contracts and stage for review.
+
+**Target features:**
+- DegenerusQuests storage + quest roll logic
+- Handler site integration (6 sites across 5 contracts)
+- Eligibility checks (levelStreak/pass + 4 ETH units)
+- Completion flow with 800 BURNIE creditFlip payout
+- AdvanceModule direct roll trigger to DegenerusQuests
+- BurnieCoin notify* middleman removal — game modules call quest handlers directly
+
 ## Current State
 
-v12.0 Level Quests design complete. 536-line spec, 852-line integration map, economic + gas analysis all verified. Ready for implementation milestone.
+v13.0 Phases 156-158 complete. All level quest logic implemented: storage, interfaces, roll chain, eligibility, 6 handler sites with level quest progress, view function. BurnieCoin notify* wrappers removed; MintModule, DegeneretteModule, and DegenerusAffiliate call DegenerusQuests directly. Phase 158.1 (carryover redesign + final BurnieCoin quest routing cleanup) remains.
 
 ## Completed Milestone: v12.0 Level Quests
 
@@ -292,4 +304,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after v12.0 Level Quests milestone*
+*Last updated: 2026-03-31 after v13.0 Level Quests Implementation milestone started*
