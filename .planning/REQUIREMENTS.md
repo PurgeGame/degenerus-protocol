@@ -29,13 +29,13 @@
 
 ### Economic Analysis
 
-- [ ] **ECON-01**: Model BURNIE inflation impact of 800 BURNIE/level/player — worst-case (all eligible players complete every level) and expected case
-- [ ] **ECON-02**: Assess interaction with gameOverPossible flag — does level quest payout affect endgame drip projection?
+- [x] **ECON-01**: Model BURNIE inflation impact of 800 BURNIE/level/player — worst-case (all eligible players complete every level) and expected case
+- [x] **ECON-02**: Assess interaction with gameOverPossible flag — does level quest payout affect endgame drip projection?
 
 ### Gas Analysis
 
-- [ ] **GAS-01**: Estimate gas overhead of eligibility check in the quest handler hot path
-- [ ] **GAS-02**: Estimate gas overhead of level quest roll in advanceGame level transition path
+- [x] **GAS-01**: Estimate gas overhead of eligibility check in the quest handler hot path
+- [x] **GAS-02**: Estimate gas overhead of level quest roll in advanceGame level transition path
 
 ## Future Requirements
 
@@ -67,10 +67,10 @@
 | STOR-02 | Phase 153 | Complete |
 | INTG-01 | Phase 154 | Complete |
 | INTG-02 | Phase 154 | Complete |
-| ECON-01 | Phase 155 | Pending |
-| ECON-02 | Phase 155 | Pending |
-| GAS-01 | Phase 155 | Pending |
-| GAS-02 | Phase 155 | Pending |
+| ECON-01 | Phase 155 | Complete |
+| ECON-02 | Phase 155 | Complete |
+| GAS-01 | Phase 155 | Complete |
+| GAS-02 | Phase 155 | Complete |
 
 **Coverage:**
 - v12.0 requirements: 14 total
