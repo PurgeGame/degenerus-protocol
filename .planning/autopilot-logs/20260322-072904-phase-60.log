@@ -1,0 +1,27 @@
+Both changes verified in the contract:
+- Line 1358: `emit LootboxRngApplied(orphanedIndex, fallbackWord, outgoingRequestId);` — correctly placed inside the orphan backfill block, before `vrfRequestId = 0`
+- Lines 1373-1376: NatSpec documenting totalFlipReversals carry-over — correctly placed between `midDayTicketRngPending = false;` and `emit VrfCoordinatorUpdated`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ GSD ► PHASE 60 COMPLETE ✓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Phase 60: Coordinator Swap Cleanup** — 1 plan, 1 wave
+
+| Wave | Plans | What it built |
+|------|-------|---------------|
+| 1 | 60-01 | LootboxRngApplied event for orphaned index + totalFlipReversals NatSpec |
+
+Research: Completed (15 VRF state variables inventoried, 2 findings)
+Verification: Passed (3/3 must-haves)
+
+**Requirements:**
+- SWAP-01: All stale VRF state properly handled — event parity with normal VRF path ✓
+- SWAP-02: totalFlipReversals carry-over documented as design decision ✓
+
+**Commits:**
+- `e23e743d` feat(60-01): add LootboxRngApplied event for orphaned index backfill
+- `bb7e05ca` chore(60-01): document totalFlipReversals carry-over in coordinator swap
+- `55f96a54` docs(60-01): complete coordinator swap cleanup plan
+
+AUTOPILOT_STATUS: PHASE_COMPLETE

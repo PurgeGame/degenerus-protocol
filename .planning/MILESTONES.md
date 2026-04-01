@@ -1,5 +1,29 @@
 # Milestones
 
+## v13.0 Level Quests Implementation (Shipped: 2026-04-01)
+
+**Phases completed:** 9 phases, 15 plans, 25 tasks
+
+**Key accomplishments:**
+
+- gameOverPossible bool packed into Slot 1, WAD-scale drip projection via closed-form geometric series, flag lifecycle wired into AdvanceModule L10+ purchase-phase path
+- 30-day BURNIE ban fully removed, MintModule reverts with GameOverPossible when flag active, LootboxModule redirects current-level tickets to far-future key space via bit 22
+- 10 changed/new functions audited across 4 contracts: 10 SAFE, 0 VULNERABLE, 1 INFO; RNG commitment window clean for all 3 flag-dependent paths; storage layout verified via forge inspect
+- Drip projection adds ~21,000 gas worst-case (0.3% increase) to advanceGame; 2.0x safety margin preserved against 14M block ceiling, no regression from Phase 147 baseline
+- 536-line design spec covering eligibility (levelStreak/pass + 4 ETH units), global VRF quest roll, 10x targets for 8 types, packed uint256 per-player state with level invalidation, and 800 BURNIE creditFlip completion
+- Complete integration map covering 10 contracts (5 modified, 5 unchanged), all 6 handleX handler sites with level quest tracking specs, 3 Phase 153 open questions resolved, Option C reward path recommended
+- BURNIE inflation bounded (worst-case 12M/month at 1K players, <16% of ticket mints), gameOverPossible interaction disproven via state domain trace, quest roll +22,430 gas to advanceGame with 1.99x safety margin preserved
+- Level quest interface declarations, storage mappings, access control expansion, and routing stub across 5 Solidity files -- all compiling cleanly
+- Level quest core logic: rollLevelQuest, eligibility check (streak/pass + 4-unit gate), 10x targets, shared progress handler with creditFlip completion, mintPackedFor cross-contract view
+- AdvanceModule wired to call quests.rollLevelQuest(purchaseLevel, questEntropy) at every level transition, using keccak256(rngWordByDay[day], "LEVEL_QUEST") entropy
+- 1. [Rule 1 - Bug] _bonusQuestType orphan type 0 selection
+- Level quest progress wired into all 6 handlers with per-return-path coverage, onlyCoin expanded for GAME + AFFILIATE callers
+- Removed BurnieCoin quest notification middleman (5 functions + event), rewired MintModule/DegeneretteModule/Affiliate to call DegenerusQuests handlers directly with local creditFlip
+- Phase 1 multi-call ETH carryover state machine replaced with single-pass ticket distribution; 3 storage vars gapped, dailyEthPhase removed from all contracts, carryover budget halved to 0.5% of futurePrizePool
+- Removed BurnieCoin.rollDailyQuest dead code (function, event, modifier) and tightened recordMintQuestStreak to GAME-only access
+
+---
+
 ## v12.0 Level Quests (Shipped: 2026-04-01)
 
 **Phases completed:** 5 phases, 7 plans, 11 tasks
