@@ -24,8 +24,8 @@
 
 ### Integration Design
 
-- [ ] **INTG-01**: Map all contract touchpoints — which contracts need modification, which interfaces change
-- [ ] **INTG-02**: Identify all handleX() call sites in DegenerusQuests.sol that need level quest progress tracking added
+- [x] **INTG-01**: Map all contract touchpoints — which contracts need modification, which interfaces change
+- [x] **INTG-02**: Identify all handleX() call sites in DegenerusQuests.sol that need level quest progress tracking added
 
 ### Economic Analysis
 
@@ -65,8 +65,8 @@
 | MECH-04 | Phase 153 | Complete |
 | STOR-01 | Phase 153 | Complete |
 | STOR-02 | Phase 153 | Complete |
-| INTG-01 | Phase 154 | Pending |
-| INTG-02 | Phase 154 | Pending |
+| INTG-01 | Phase 154 | Complete |
+| INTG-02 | Phase 154 | Complete |
 | ECON-01 | Phase 155 | Pending |
 | ECON-02 | Phase 155 | Pending |
 | GAS-01 | Phase 155 | Pending |

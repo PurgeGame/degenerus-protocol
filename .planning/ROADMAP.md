@@ -155,7 +155,7 @@ Plans:
   2. Every handleX() call site in DegenerusQuests.sol is listed with a specification of what level quest progress tracking logic must be added at each site
 **Plans**: 1 plan
 Plans:
-- [ ] 154-01-PLAN.md — Contract touchpoint map + handler site integration specifications
+- [x] 154-01-PLAN.md — Contract touchpoint map + handler site integration specifications
 
 ### Phase 155: Economic + Gas Analysis
 **Goal**: The BURNIE inflation impact and gas overhead of level quests are quantified with worst-case bounds, confirming the feature is economically and computationally viable
@@ -180,7 +180,7 @@ Phase 153 (sequential) -> Phase 154 + Phase 155 (can parallel after 153)
 | 151. Endgame Flag Implementation | v11.0 | 2/2 | Complete | 2026-03-31 |
 | 152. Delta Audit | v11.0 | 2/2 | Complete | 2026-03-31 |
 | 153. Core Design | v12.0 | 1/1 | Complete    | 2026-04-01 |
-| 154. Integration Mapping | v12.0 | 0/1 | Planned | - |
+| 154. Integration Mapping | v12.0 | 1/1 | Complete   | 2026-04-01 |
 | 155. Economic + Gas Analysis | v12.0 | 0/1 | Planned | - |
 
 ## Deferred
