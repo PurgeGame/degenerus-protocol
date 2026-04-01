@@ -248,7 +248,7 @@ Phase 156 -> Phase 157 -> Phase 158 -> Phase 158.1 (strictly sequential -- each 
 | 156. Interfaces, Storage & Access Control | v13.0 | 0/1 | Complete    | 2026-04-01 |
 | 157. Quest Logic & Roll Chain | v13.0 | 3/3 | Complete   | 2026-04-01 |
 | 158. Handler Integration & View | v13.0 | 2/2 | Complete    | 2026-04-01 |
-| 158.1. Carryover Redesign + Cleanup | v13.0 | 2/2 | Complete   | 2026-04-01 |
+| 158.1. Carryover Redesign + Cleanup | v13.0 | 2/2 | Complete    | 2026-04-01 |
 
 ## Deferred
 
