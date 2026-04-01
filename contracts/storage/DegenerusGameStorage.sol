@@ -47,10 +47,9 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [27:28] phaseTransitionActive    bool     Level transition in progress       |
  * | [28:29] gameOver                 bool     Terminal state flag                |
  * | [29:30] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [30:31] dailyEthPhase            uint8    0=current level, 1=carryover       |
- * | [31:32] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
+ * | [30:31] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
  * +-----------------------------------------------------------------------------+
- *   Total: 32 bytes used (0 bytes padding)
+ *   Total: 31 bytes used (1 byte padding)
  *
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 1 (32 bytes) — Price and Double-Buffer Fields                     |
@@ -275,13 +274,6 @@ abstract contract DegenerusGameStorage {
     ///      stay under 15M gas block limit. Cleared after coin+ticket distribution.
     bool internal dailyJackpotCoinTicketsPending;
 
-    // Note: dailyJackpotCoinTicketsPending ends at Slot 0 byte 29.
-    // dailyEthPhase (byte 30) and compressedJackpotFlag (byte 31) fill the remaining Slot 0 space. No padding.
-
-    /// @dev Daily jackpot ETH phase.
-    ///      0 = current level, 1 = carryover.
-    uint8 internal dailyEthPhase;
-
     /// @dev Jackpot compression tier: 0=normal (5d), 1=compressed (3d), 2=turbo (1d).
     ///      Set when purchase-phase target is met quickly, signaling high player interest.
     ///      Turbo (2): target met within 1 day — entire jackpot in 1 physical day.
@@ -380,10 +372,6 @@ abstract contract DegenerusGameStorage {
     ///      Gas optimization: allows splitting daily jackpot across multiple advanceGame calls.
     uint256 internal dailyTicketBudgetsPacked;
 
-    /// @dev Daily jackpot ETH pool budget for current-level distribution.
-    ///      Stored to keep bucket sizing deterministic across split calls.
-    uint256 internal dailyEthPoolBudget;
-
     // =========================================================================
     // Token State and Jackpot Mechanics
     // =========================================================================
@@ -479,16 +467,6 @@ abstract contract DegenerusGameStorage {
     uint24 internal ticketLevel;
 
     // =========================================================================
-    // Daily Jackpot Carryover State
-    // =========================================================================
-
-    /// @dev Carryover ETH pool reserved after daily phase 0 completes.
-    ///      Stored to avoid re-deducting the future pool across split calls.
-    uint256 internal dailyCarryoverEthPool;
-
-    /// @dev Remaining winner cap for carryover buckets (DAILY_ETH_MAX_WINNERS - daily winners).
-    uint16 internal dailyCarryoverWinnerCap;
-
     // =========================================================================
     // Ticket Queue Helpers
     // =========================================================================

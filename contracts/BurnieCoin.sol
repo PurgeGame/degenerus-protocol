@@ -18,7 +18,7 @@ pragma solidity 0.8.34;
  *      - totalSupply + vaultAllowance = supplyIncUncirculated
  *
  * @dev SECURITY:
- *      - Access control: onlyDegenerusGameContract, onlyTrustedContracts, onlyVault
+ *      - Access control: onlyGame, onlyVault
  *      - CEI pattern: burns before external calls
  */
 
@@ -74,28 +74,6 @@ contract BurnieCoin {
         uint256 amountBurned
     );
 
-    /// @notice Emitted when the daily quest is rolled for a new day.
-    /// @param day The day index (1-indexed, day 1 = deploy day).
-    /// @param questType The type of quest rolled (see IDegenerusQuests).
-    /// @param highDifficulty Always false (difficulty removed).
-    event DailyQuestRolled(
-        uint48 indexed day,
-        uint8 questType,
-        bool highDifficulty
-    );
-
-    /// @notice Emitted when a player completes a quest.
-    /// @param player The player who completed the quest.
-    /// @param questType The type of quest completed.
-    /// @param streak The player's current completion streak.
-    /// @param reward The reward amount credited (as flip stake).
-    event QuestCompleted(
-        address indexed player,
-        uint8 questType,
-        uint32 streak,
-        uint256 reward
-    );
-
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The contract that escrowed the funds (VAULT or GAME).
     /// @param amount The amount added to vault mint allowance (18 decimals).
@@ -129,12 +107,6 @@ contract BurnieCoin {
 
     /// @notice Decimator burn attempted outside an active decimator window.
     error NotDecimatorWindow();
-
-    /// @notice Caller is not the authorized affiliate contract.
-    error OnlyAffiliate();
-
-    /// @notice Caller is not authorized (trusted contracts: GAME, AFFILIATE).
-    error OnlyTrustedContracts();
 
     /// @notice Caller is not approved to act for the player.
     error NotApproved();
@@ -179,9 +151,6 @@ contract BurnieCoin {
 
     /// @dev Max base amount eligible for decimator boon boost.
     uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
-
-    /// @dev Quest type ids (must match DegenerusQuests).
-    uint8 private constant QUEST_TYPE_MINT_ETH = 1;
 
     /// @dev Basis points denominator (10000 = 1x).
     uint16 private constant BPS_DENOMINATOR = 10_000;
@@ -526,27 +495,15 @@ contract BurnieCoin {
       |  +-----------------------------------------------------------------+ |
       |  |  Modifier              | Allowed Callers                        | |
       |  +------------------------+----------------------------------------+ |
-      |  |  onlyDegenerusGame     | degenerusGame only                     | |
-      |  |  onlyTrustedContracts  | GAME, AFFILIATE                        | |
+      |  |  onlyGame              | GAME only                              | |
       |  |  onlyVault             | VAULT only                             | |
       |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
 
-    /// @dev Restricts access to the DegenerusGame contract only.
-    ///      Used for: processCoinflipPayouts, rollDailyQuest.
-    modifier onlyDegenerusGameContract() {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        _;
-    }
-
-    /// @dev Restricts access to game or affiliate contracts.
+    /// @dev Restricts access to game contract.
     ///      Used for: burnCoin (gameplay burns).
-    modifier onlyTrustedContracts() {
-        address sender = msg.sender;
-        if (
-            sender != ContractAddresses.GAME &&
-            sender != ContractAddresses.AFFILIATE
-        ) revert OnlyTrustedContracts();
+    modifier onlyGame() {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         _;
     }
 
@@ -599,150 +556,6 @@ contract BurnieCoin {
         emit Transfer(address(0), to, amount);
     }
 
-    /// @notice Compute affiliate quest rewards while preserving quest module access control.
-    /// @dev Access: affiliate contract only. Routes through coin contract to enforce access.
-    /// @param player The player who triggered the affiliate action.
-    /// @param amount The base amount for quest calculation.
-    /// @return questReward The bonus reward earned (if any quest completed).
-    function affiliateQuestReward(
-        address player,
-        uint256 amount
-    ) external returns (uint256 questReward) {
-        if (msg.sender != ContractAddresses.AFFILIATE) revert OnlyAffiliate();
-        IDegenerusQuests module = questModule;
-        if (player == address(0) || amount == 0) return 0;
-        (
-            uint256 reward,
-            uint8 questType,
-            uint32 streak,
-            bool completed
-        ) = module.handleAffiliate(player, amount);
-        questReward = _questApplyReward(
-            player,
-            reward,
-            questType,
-            streak,
-            completed
-        );
-        return questReward;
-    }
-
-    /*+======================================================================+
-      |                       QUEST INTEGRATION                              |
-      +======================================================================+
-      |  Daily quest lifecycle functions. The coin contract acts as a hub    |
-      |  to route quest-related calls to the quest module while maintaining  |
-      |  access control and emitting events for indexers.                    |
-      +======================================================================+*/
-
-    /// @notice Roll the daily quest for a given day using VRF entropy.
-    /// @dev Access: game contract only. Emits DailyQuestRolled for each quest type.
-    /// @param day The day index to roll for.
-    /// @param entropy VRF-sourced randomness for quest selection.
-    function rollDailyQuest(
-        uint48 day,
-        uint256 entropy
-    ) external onlyDegenerusGameContract {
-        IDegenerusQuests module = questModule;
-        (bool rolled, uint8[2] memory questTypes, bool highDifficulty) = module
-            .rollDailyQuest(day, entropy);
-        if (rolled) {
-            for (uint256 i; i < 2; ) {
-                emit DailyQuestRolled(day, questTypes[i], highDifficulty);
-                unchecked {
-                    ++i;
-                }
-            }
-        }
-    }
-
-    /// @notice Notify quest module of a mint action.
-    /// @dev Access: game contract only. Credits quest rewards as flip stakes and
-    ///      notifies the game to update mint streak on slot-0 (MINT_ETH) completion.
-    /// @param player The player who minted.
-    /// @param quantity Number of mint units.
-    /// @param paidWithEth Whether the mint was paid with ETH (vs BURNIE).
-    function notifyQuestMint(
-        address player,
-        uint32 quantity,
-        bool paidWithEth
-    ) external {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        IDegenerusQuests module = questModule;
-        (
-            uint256 reward,
-            uint8 questType,
-            uint32 streak,
-            bool completed
-        ) = module.handleMint(player, quantity, paidWithEth);
-        uint256 questReward = _questApplyReward(
-            player,
-            reward,
-            questType,
-            streak,
-            completed
-        );
-        if (completed && paidWithEth && questType == QUEST_TYPE_MINT_ETH) {
-            degenerusGame.recordMintQuestStreak(player);
-        }
-        if (questReward != 0) {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, questReward);
-        }
-    }
-
-    /// @notice Notify quest module of a loot box purchase.
-    /// @dev Access: GAME only. Called from LootboxModule via delegatecall (msg.sender == GAME).
-    /// @param player The player who purchased the loot box.
-    /// @param amountWei ETH amount spent on the loot box (in wei).
-    function notifyQuestLootBox(address player, uint256 amountWei) external {
-        address sender = msg.sender;
-        if (sender != ContractAddresses.GAME) revert OnlyGame();
-        IDegenerusQuests module = questModule;
-        (
-            uint256 reward,
-            uint8 questType,
-            uint32 streak,
-            bool completed
-        ) = module.handleLootBox(player, amountWei);
-        uint256 questReward = _questApplyReward(
-            player,
-            reward,
-            questType,
-            streak,
-            completed
-        );
-        if (questReward != 0) {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, questReward);
-        }
-    }
-
-    /// @notice Notify quest module of a Degenerette bet.
-    /// @dev Access: game contract only. Credits quest rewards as flip stakes.
-    /// @param player The player who placed the bet.
-    /// @param amount Bet amount (wei for ETH, base units for BURNIE).
-    /// @param paidWithEth True if bet was paid with ETH, false for BURNIE.
-    function notifyQuestDegenerette(address player, uint256 amount, bool paidWithEth) external {
-        address sender = msg.sender;
-        if (sender != ContractAddresses.GAME) revert OnlyGame();
-        IDegenerusQuests module = questModule;
-        (
-            uint256 reward,
-            uint8 questType,
-            uint32 streak,
-            bool completed
-        ) = module.handleDegenerette(player, amount, paidWithEth);
-        uint256 questReward = _questApplyReward(
-            player,
-            reward,
-            questType,
-            streak,
-            completed
-        );
-        if (questReward != 0) {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, questReward);
-        }
-    }
-
     /// @notice Burn BURNIE from `target` during gameplay/affiliate flows.
     /// @dev Access: DegenerusGame, game, or affiliate.
     ///      Used for purchases, fees, and affiliate utilities.
@@ -752,7 +565,7 @@ contract BurnieCoin {
     function burnCoin(
         address target,
         uint256 amount
-    ) external onlyTrustedContracts {
+    ) external onlyGame {
         uint256 consumed = _consumeCoinflipShortfall(target, amount);
         _burn(target, amount - consumed);
     }
@@ -783,34 +596,16 @@ contract BurnieCoin {
 
         if (amount < DECIMATOR_MIN) revert AmountLTMin();
 
-        (bool open, uint24 lvl) = degenerusGame.decWindow();
-        if (!open) revert NotDecimatorWindow();
+        if (!degenerusGame.decWindow()) revert NotDecimatorWindow();
+        uint24 lvl = degenerusGame.level();
 
         uint256 consumed = _consumeCoinflipShortfall(caller, amount);
         // CEI: burn before any downstream calls after coinflip consumption
         _burn(caller, amount - consumed);
 
-        // Quest processing (bonus applies to decimator weight and coinflip credit)
-        (
-            uint256 reward,
-            uint8 questType,
-            uint32 streak,
-            bool completed
-        ) = questModule.handleDecimator(caller, amount);
-
-        uint256 questReward = _questApplyReward(
-            caller,
-            reward,
-            questType,
-            streak,
-            completed
-        );
-
-        if (questReward != 0) {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(caller, questReward);
-        }
-
-        uint256 baseAmount = amount + questReward;
+        // Quest processing (reward creditFlipped internally; bonus boosts decimator weight)
+        (uint256 questReward,,, bool completed) = questModule.handleDecimator(caller, amount);
+        uint256 baseAmount = amount + (completed ? questReward : 0);
 
         // Activity score bonus (raw bps), capped for decimator scaling.
         uint256 bonusBps = degenerusGame.playerActivityScore(caller);
@@ -890,7 +685,7 @@ contract BurnieCoin {
     }
 
     /*+======================================================================+
-      |                    QUEST INTEGRATION HELPERS                         |
+      |                       DECIMATOR HELPERS                              |
       +======================================================================+*/
 
     /// @dev Adjust decimator bucket based on activity score bonus.
@@ -919,27 +714,4 @@ contract BurnieCoin {
         return BPS_DENOMINATOR + (bonusBps / 3);
     }
 
-    /// @dev Apply quest reward if quest was completed. Emits QuestCompleted event.
-    /// @param player The player who completed the quest.
-    /// @param reward The raw reward amount.
-    /// @param questType The type of quest completed.
-    /// @param streak The player's current streak.
-    /// @param completed Whether the quest was actually completed.
-    /// @return The reward amount (0 if not completed).
-    function _questApplyReward(
-        address player,
-        uint256 reward,
-        uint8 questType,
-        uint32 streak,
-        bool completed
-    ) private returns (uint256) {
-        if (!completed) return 0;
-        // Event captures quest progress for indexers/UI; raw reward is returned to the caller.
-        emit QuestCompleted(
-            player,
-            questType,
-            streak,
-            reward
-        );
-        return reward;
-    }}
+}

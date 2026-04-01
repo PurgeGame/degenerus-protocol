@@ -389,11 +389,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 costWei,
         uint32 mintUnits,
         MintPaymentKind payKind
-    )
-        external
-        payable
-        returns (uint256 newClaimableBalance)
-    {
+    ) external payable returns (uint256 newClaimableBalance) {
         if (msg.sender != address(this)) revert E();
         uint256 prizeContribution;
         (prizeContribution, newClaimableBalance) = _processMintPayment(
@@ -431,10 +427,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Record mint streak completion after a 1x price ETH quest completes.
-    /// @dev Access: COIN contract only.
+    /// @dev Access: GAME contract only (via MintModule delegatecall).
     /// @param player The player who completed the quest.
     function recordMintQuestStreak(address player) external {
-        if (msg.sender != ContractAddresses.COIN) revert E();
+        if (msg.sender != ContractAddresses.GAME) revert E();
         uint24 mintLevel = _activeTicketLevel();
         _recordMintStreakForLevel(player, mintLevel);
     }
@@ -1143,7 +1139,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_DECIMATOR_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule.recordTerminalDecBurn.selector,
+                    IDegenerusGameDecimatorModule
+                        .recordTerminalDecBurn
+                        .selector,
                     player,
                     lvl,
                     baseAmount
@@ -1168,7 +1166,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_DECIMATOR_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule.runTerminalDecimatorJackpot.selector,
+                    IDegenerusGameDecimatorModule
+                        .runTerminalDecimatorJackpot
+                        .selector,
                     poolWei,
                     lvl,
                     rngWord
@@ -1284,9 +1284,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint8 winningSub = _unpackDecWinningSubbucket(packedOffsets, denom);
         if (sub != winningSub) return (0, false);
 
-        amountWei =
-            (round.poolWei * uint256(entryBurn)) /
-            totalBurn;
+        amountWei = (round.poolWei * uint256(entryBurn)) / totalBurn;
         winner = amountWei != 0;
     }
 
@@ -1369,7 +1367,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Claim accrued ETH winnings with stETH-first payout.
-    /// @dev Restricted to self-claims by the vault or DGNRS contract.
+    /// @dev Restricted to self-claims by the vault contract.
     function claimWinningsStethFirst() external {
         if (msg.sender != ContractAddresses.VAULT) revert E();
         _claimWinningsInternal(msg.sender, true);
@@ -2155,17 +2153,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return rngWordCurrent != 0;
     }
 
-    /// @dev Check if there's a 3-consecutive-day gap in VRF words.
-    ///      Used to detect VRF coordinator failures requiring emergency rotation.
-    /// @param day The day index to check from.
-    /// @return True if day, day-1, and day-2 all have no recorded VRF word.
-    function _threeDayRngGap(uint48 day) private view returns (bool) {
-        if (rngWordByDay[day] != 0) return false;
-        if (rngWordByDay[day - 1] != 0) return false;
-        if (day < 2 || rngWordByDay[day - 2] != 0) return false;
-        return true;
-    }
-
     /// @notice Timestamp of the last successfully processed VRF word.
     /// @dev Used by governance contracts to detect VRF stalls (time-based).
     function lastVrfProcessed() external view returns (uint48) {
@@ -2178,44 +2165,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Status views for decimator window and purchase state.               |
       +======================================================================+*/
 
-    /// @notice Check if decimator window is open and accessible.
-    /// @dev Window is "on" if flag is set or gameover is imminent.
-    ///      RNG lock only blocks during lastPurchaseDay (when jackpots resolve).
-    ///      For x5 levels, window closes before lastPurchaseDay, so gate is redundant.
-    ///      For x00 levels, window stays open until lastPurchaseDay, so gate is needed.
-    /// @return on True if decimator entries are currently allowed.
-    /// @return lvl Current game level.
-    function decWindow() external view returns (bool on, uint24 lvl) {
-        lvl = level;
-        on =
-            (decWindowOpen || _isGameoverImminent()) &&
-            !(lastPurchaseDay && rngLockedFlag);
-    }
-
-    /// @notice Raw check of decimator window flag (ignores RNG lock).
-    /// @return open True if decimator window flag is set or gameover is imminent.
-    function decWindowOpenFlag() external view returns (bool open) {
-        return decWindowOpen || _isGameoverImminent();
+    /// @notice Check if decimator window is currently open.
+    function decWindow() external view returns (bool) {
+        return decWindowOpen;
     }
 
     /// @notice Jackpot compression tier: 0=normal, 1=compressed (3d), 2=turbo (1d).
     function jackpotCompressionTier() external view returns (uint8) {
         return compressedJackpotFlag;
-    }
-
-    /// @dev True when gameover would trigger within ~5 days.
-    ///      Used to allow decimator burns near liveness timeout.
-    function _isGameoverImminent() private view returns (bool) {
-        if (gameOver) return false;
-        uint48 lst = levelStartTime;
-        uint48 ts = uint48(block.timestamp);
-
-        if (level == 0) {
-            return
-                uint256(ts) + 10 days >
-                uint256(lst) + uint256(DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days;
-        }
-        return uint256(ts) + 5 days > uint256(lst) + 120 days;
     }
 
     /// @dev Returns the active ticket level for direct ticket purchases.

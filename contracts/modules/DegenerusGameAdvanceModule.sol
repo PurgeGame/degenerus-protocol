@@ -13,6 +13,7 @@ import {
     IVRFCoordinator,
     VRFRandomWordsRequest
 } from "../interfaces/IVRFCoordinator.sol";
+import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
@@ -57,7 +58,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_TICKETS_WORKING = 5;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
     uint8 private constant STAGE_ENTERED_JACKPOT = 7;
-    uint8 private constant STAGE_JACKPOT_ETH_RESUME = 8;
     uint8 private constant STAGE_JACKPOT_COIN_TICKETS = 9;
     uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 10;
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 11;
@@ -87,6 +87,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         IDegenerusCoin(ContractAddresses.COIN);
     IBurnieCoinflip internal constant coinflip =
         IBurnieCoinflip(ContractAddresses.COINFLIP);
+    IDegenerusQuests internal constant quests =
+        IDegenerusQuests(ContractAddresses.QUESTS);
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     /// @notice GNRUS contract for governance resolution at level transitions
     IGNRUSResolve private constant charityResolve =
@@ -252,9 +254,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
             if (rngWord == 1) {
                 _swapAndFreeze(purchaseLevel);
+                quests.clearLevelQuest();
                 stage = STAGE_RNG_REQUESTED;
                 break;
             }
+
+            // Roll daily quest once per day when RNG word is available
+            quests.rollDailyQuest(day, rngWord);
 
             // Phase transition housekeeping + FF promotion
             if (phaseTransitionActive) {
@@ -293,11 +299,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // Process near-future ticket queues before daily draws
             // to include fresh lootbox-driven tickets
-            if (
-                !dailyJackpotCoinTicketsPending &&
-                dailyEthPoolBudget == 0 &&
-                dailyEthPhase == 0
-            ) {
+            if (!dailyJackpotCoinTicketsPending) {
                 if (!_prepareFutureTickets(inJackpot ? lvl : purchaseLevel)) {
                     stage = STAGE_FUTURE_TICKETS_WORKING;
                     break;
@@ -380,6 +382,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 lastPurchaseDay = false;
                 levelStartTime = ts;
                 _drawDownFuturePrizePool(lvl);
+
+                // Roll level quest at level transition so it's active during jackpot phase
+                uint256 questEntropy = uint256(keccak256(abi.encodePacked(rngWordByDay[day], "LEVEL_QUEST")));
+                quests.rollLevelQuest(questEntropy);
+
                 // Do not unlock here: allows day-1 jackpot processing to run on
                 // the same day as the transition day.
                 stage = STAGE_ENTERED_JACKPOT;
@@ -387,15 +394,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // === JACKPOT PHASE ===
-
-            // Resume Phase 1 carryover ETH distribution.
-            // Must match payDailyJackpot's isResuming condition to avoid
-            // emitting STAGE_JACKPOT_DAILY_STARTED on what is actually a resume.
-            if (dailyEthPhase != 0 || dailyEthPoolBudget != 0) {
-                payDailyJackpot(true, lastDailyJackpotLevel, rngWord);
-                stage = STAGE_JACKPOT_ETH_RESUME;
-                break;
-            }
 
             // Complete coin+ticket distribution
             if (dailyJackpotCoinTicketsPending) {

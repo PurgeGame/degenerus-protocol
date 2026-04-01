@@ -31,15 +31,9 @@ interface IDegenerusGame {
     /// @return Base price unit in wei.
     function mintPrice() external view returns (uint256);
 
-    /// @notice Get the decimator window status.
-    /// @dev Decimator window opens during specific level transitions.
-    /// @return on True if decimator window is currently open.
-    /// @return lvl The level at which the window is open (0 if closed).
-    function decWindow() external view returns (bool on, uint24 lvl);
-
-    /// @notice Check if decimator window is currently open (flag only).
-    /// @return True if decimator window is open.
-    function decWindowOpenFlag() external view returns (bool);
+    /// @notice Check if decimator window is currently open.
+    /// @return True if decimator entries are allowed.
+    function decWindow() external view returns (bool);
 
     /// @notice Check if the current jackpot phase is compressed (3 days instead of 5).
     /// @dev Compressed mode activates when the purchase-phase target is met within the
@@ -220,7 +214,7 @@ interface IDegenerusGame {
     function decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner);
 
     /// @notice Record mint streak completion after a 1x price ETH quest completes.
-    /// @dev Called by COIN contract.
+    /// @dev Called by GAME contract (via MintModule delegatecall).
     /// @param player The player who completed the quest.
     function recordMintQuestStreak(address player) external;
 
@@ -351,6 +345,11 @@ interface IDegenerusGame {
     /// @param player Player address to query.
     /// @return Count of deity passes owned.
     function deityPassCountFor(address player) external view returns (uint16);
+
+    /// @notice Get raw bit-packed mint data for a player.
+    /// @param player Player address to query.
+    /// @return Raw packed uint256 containing mint counts, streak, pass status.
+    function mintPackedFor(address player) external view returns (uint256);
 
     /// @notice Purchase tickets and loot boxes with ETH or claimable.
     /// @dev Main entry point for all ETH/claimable purchases.

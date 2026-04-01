@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
+import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
@@ -60,13 +61,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 remainder
     );
 
-    /// @dev Emitted when daily jackpot Phase 1 (carryover) begins, indicating the
-    ///      source level whose trait pool is used for winner selection.
-    event DailyCarryoverStarted(
-        uint24 indexed jackpotLevel,
-        uint24 carryoverSourceLevel
-    );
-
     /// @dev Emitted when a far-future ticket holder (5-99 levels ahead) wins the daily BURNIE jackpot.
     ///      These winners are drawn from ticketQueue (traits not yet assigned).
     event FarFutureCoinJackpotWinner(
@@ -90,12 +84,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
 
-    /// @notice BurnieCoin contract for quest rolls and vault escrow.
+    /// @notice BurnieCoin contract for vault escrow.
     IDegenerusCoin internal constant coin =
         IDegenerusCoin(ContractAddresses.COIN);
     /// @notice BurnieCoinflip contract for direct flip crediting.
     IBurnieCoinflip internal constant coinflip =
         IBurnieCoinflip(ContractAddresses.COINFLIP);
+    /// @notice DegenerusQuests contract for quest rolling.
+    IDegenerusQuests internal constant quests =
+        IDegenerusQuests(ContractAddresses.QUESTS);
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     IStakedDegenerusStonk internal constant dgnrs =
         IStakedDegenerusStonk(ContractAddresses.SDGNRS);
@@ -165,9 +162,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Portion of DGNRS reward pool paid to the day-5 solo bucket winner (1%).
     uint16 private constant FINAL_DAY_DGNRS_BPS = 100;
 
-    /// @dev Portion of reward-pool-funded daily jackpot ETH converted to loot boxes (50%).
-    uint16 private constant DAILY_REWARD_JACKPOT_LOOTBOX_BPS = 5000;
-
     /// @dev Portion of purchase-phase reward-pool jackpots converted to loot boxes (3/4).
     uint16 private constant PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS = 7500;
 
@@ -184,10 +178,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Maximum total ETH winners across daily + carryover jackpots.
     uint16 private constant DAILY_ETH_MAX_WINNERS = 321;
-
-    /// @dev Minimum carryover winners when carryover is active. Prevents the bucket
-    ///      system from receiving a cap too small to distribute across 4 trait buckets.
-    uint16 private constant DAILY_CARRYOVER_MIN_WINNERS = 20;
 
     /// @dev Maximum winners for daily coin jackpot (coinflip.creditFlip is 1 external call each).
     uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
@@ -321,21 +311,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint32 winningTraitsPacked;
 
         if (isDaily) {
-            // Check if resuming an interrupted daily jackpot (Phase 1 carryover)
-            bool isResuming = dailyEthPoolBudget != 0 ||
-                dailyEthPhase != 0;
+            winningTraitsPacked = _rollWinningTraits(randWord, true);
+            _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
 
-            if (isResuming) {
-                // Resume: restore stored state (don't re-roll traits)
-                winningTraitsPacked = lastDailyJackpotWinningTraits;
-                lvl = lastDailyJackpotLevel;
-            } else {
-                // Fresh start: compute and store winning traits
-                winningTraitsPacked = _rollWinningTraits(randWord, true);
-                _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
-            }
-            // Initialize daily budgets and storage on fresh start
-            if (!isResuming) {
+            uint256 dailyEthBudget;
+            {
                 uint8 counter = jackpotCounter;
                 uint8 counterStep = 1;
                 // Turbo (flag=2): all 5 logical days in 1 physical day.
@@ -381,8 +361,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     budget -= dailyLootboxBudget;
                 }
 
-                dailyEthPoolBudget = budget;
-
                 // Calculate daily ticket units (distributed in Phase 2 via payDailyJackpotCoinAndTickets)
                 uint256 dailyTicketUnits = _budgetToTicketUnits(
                     dailyLootboxBudget,
@@ -410,38 +388,28 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     }
                 }
 
-                // Gas optimization: 1% = 1/100 (cheaper than * 100 / 10000)
-                // Unified reserve slice
+                // 0.5% of futurePrizePool reserved for carryover tickets
                 uint256 reserveSlice;
                 if (!isEarlyBirdDay && initCarryoverSourceOffset != 0) {
-                    reserveSlice = _getFuturePrizePool() / 100;
+                    reserveSlice = _getFuturePrizePool() / 200;
 
                     // Deduct immediately (upfront model)
                     _setFuturePrizePool(_getFuturePrizePool() - reserveSlice);
                 }
 
-                uint256 futureEthPool = reserveSlice;
-                uint16 carryoverLootboxBps = DAILY_REWARD_JACKPOT_LOOTBOX_BPS;
-
-                // Calculate loot box budget instead of tickets
-                uint256 carryoverLootboxBudget = _validateTicketBudget(
-                    (futureEthPool * carryoverLootboxBps) / 10_000,
-                    carryoverSourceLevel,
-                    winningTraitsPacked
-                );
-                if (carryoverLootboxBudget != 0) {
-                    futureEthPool -= carryoverLootboxBudget;
-                    // Pools already deducted upfront; just add lootbox budget to nextPrizePool
-                    _setNextPrizePool(
-                        _getNextPrizePool() + carryoverLootboxBudget
-                    );
+                // Reserve slice always flows to nextPool (ETH backing)
+                if (reserveSlice != 0) {
+                    _setNextPrizePool(_getNextPrizePool() + reserveSlice);
                 }
 
-                // Calculate carryover ticket units (distributed in Phase 2 via payDailyJackpotCoinAndTickets)
-                uint256 carryoverTicketUnits = _budgetToTicketUnits(
-                    carryoverLootboxBudget,
-                    carryoverSourceLevel + 1
-                );
+                // Ticket distribution only if source level has trait holders
+                uint256 carryoverTicketUnits;
+                if (reserveSlice != 0 && _hasTraitTickets(carryoverSourceLevel, winningTraitsPacked)) {
+                    carryoverTicketUnits = _budgetToTicketUnits(
+                        reserveSlice,
+                        carryoverSourceLevel + 1
+                    );
+                }
 
                 // Store ticket units for Phase 2 distribution
                 // Packing: [counterStep (8 bits)] [dailyTicketUnits (64 bits @ 8)]
@@ -453,130 +421,51 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     initCarryoverSourceOffset
                 );
 
-                // Store carryover pool; remaining winner cap derived after bucket sizing
-                dailyCarryoverEthPool = futureEthPool;
-
-                dailyEthPhase = 0;
+                dailyEthBudget = budget;
             }
 
             uint256 entropyDaily = randWord ^ (uint256(lvl) << 192);
             uint8[4] memory traitIdsDaily = JackpotBucketLib
                 .unpackWinningTraits(winningTraitsPacked);
-            (
-                uint8 counterStep_,
-                ,
-                ,
-                uint8 carryoverSourceOffset
-            ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
+            (uint8 counterStep_, , , ) = _unpackDailyTicketBudgets(
+                dailyTicketBudgetsPacked
+            );
             bool isFinalPhysicalDay_ = (jackpotCounter + counterStep_ >=
                 JACKPOT_LEVEL_CAP);
 
-            // Phase 0: current level daily ETH distribution
-            if (dailyEthPhase == 0) {
-                uint256 budget = dailyEthPoolBudget;
-                if (budget != 0) {
-                    uint16[4] memory bucketCountsDaily = JackpotBucketLib
-                        .bucketCountsForPoolCap(
-                            budget,
-                            entropyDaily,
-                            DAILY_ETH_MAX_WINNERS,
-                            DAILY_JACKPOT_SCALE_MAX_BPS
-                        );
-
-                    // Final physical day uses weighted shares (60/13/13/13) for the big payout;
-                    // other days use equal shares (20/20/20/20).
-                    uint64 sharesPacked = isFinalPhysicalDay_
-                        ? FINAL_DAY_SHARES_PACKED
-                        : DAILY_JACKPOT_SHARES_PACKED;
-                    uint16[4] memory shareBpsDaily = JackpotBucketLib
-                        .shareBpsByBucket(
-                            sharesPacked,
-                            uint8(entropyDaily & 3)
-                        );
-
-                    uint256 paidDailyEth = _processDailyEth(
-                        lvl,
-                        budget,
+            if (dailyEthBudget != 0) {
+                uint16[4] memory bucketCountsDaily = JackpotBucketLib
+                    .bucketCountsForPoolCap(
+                        dailyEthBudget,
                         entropyDaily,
-                        traitIdsDaily,
-                        shareBpsDaily,
-                        bucketCountsDaily
+                        DAILY_ETH_MAX_WINNERS,
+                        DAILY_JACKPOT_SCALE_MAX_BPS
                     );
-                    currentPrizePool -= paidDailyEth;
 
-                    uint256 totalDailyWinners = JackpotBucketLib
-                        .sumBucketCounts(bucketCountsDaily);
-                    if (totalDailyWinners >= DAILY_ETH_MAX_WINNERS) {
-                        dailyCarryoverWinnerCap = 0;
-                    } else {
-                        uint16 remaining = uint16(
-                            DAILY_ETH_MAX_WINNERS - totalDailyWinners
-                        );
-                        dailyCarryoverWinnerCap = remaining <
-                            DAILY_CARRYOVER_MIN_WINNERS
-                            ? DAILY_CARRYOVER_MIN_WINNERS
-                            : remaining;
-                    }
-                } else {
-                    dailyCarryoverWinnerCap = DAILY_ETH_MAX_WINNERS;
-                }
+                // Final physical day uses weighted shares (60/13/13/13) for the big payout;
+                // other days use equal shares (20/20/20/20).
+                uint64 sharesPacked = isFinalPhysicalDay_
+                    ? FINAL_DAY_SHARES_PACKED
+                    : DAILY_JACKPOT_SHARES_PACKED;
+                uint16[4] memory shareBpsDaily = JackpotBucketLib
+                    .shareBpsByBucket(
+                        sharesPacked,
+                        uint8(entropyDaily & 3)
+                    );
 
-                // If no carryover work, finalize immediately
-                if (
-                    dailyCarryoverEthPool == 0 || dailyCarryoverWinnerCap == 0
-                ) {
-                    _clearDailyEthState();
-                    return;
-                }
-
-                dailyEthPhase = 1;
-                return;
+                uint256 paidDailyEth = _processDailyEth(
+                    lvl,
+                    dailyEthBudget,
+                    entropyDaily,
+                    traitIdsDaily,
+                    shareBpsDaily,
+                    bucketCountsDaily
+                );
+                currentPrizePool -= paidDailyEth;
             }
 
-            // Phase 1: carryover ETH distribution
-            if (dailyEthPhase == 1) {
-                uint256 carryPool = dailyCarryoverEthPool;
-                uint16 carryCap = dailyCarryoverWinnerCap;
-                if (carryPool != 0 && carryCap != 0) {
-                    uint24 carryoverSourceLevel = lvl + 1;
-                    if (carryoverSourceOffset != 0) {
-                        carryoverSourceLevel =
-                            lvl +
-                            uint24(carryoverSourceOffset);
-                    }
-                    emit DailyCarryoverStarted(lvl, carryoverSourceLevel);
-                    uint256 entropyNext = randWord ^
-                        (uint256(carryoverSourceLevel) << 192);
-                    uint16[4] memory bucketCountsNext = JackpotBucketLib
-                        .bucketCountsForPoolCap(
-                            carryPool,
-                            entropyNext,
-                            carryCap,
-                            DAILY_JACKPOT_SCALE_MAX_BPS
-                        );
-
-                    uint64 carrySharesPacked = isFinalPhysicalDay_
-                        ? FINAL_DAY_SHARES_PACKED
-                        : DAILY_JACKPOT_SHARES_PACKED;
-                    uint16[4] memory shareBpsNext = JackpotBucketLib
-                        .shareBpsByBucket(
-                            carrySharesPacked,
-                            uint8(entropyNext & 3)
-                        );
-
-                    _processDailyEth(
-                        carryoverSourceLevel,
-                        carryPool,
-                        entropyNext,
-                        traitIdsDaily,
-                        shareBpsNext,
-                        bucketCountsNext
-                    );
-                }
-
-                _clearDailyEthState();
-                return;
-            }
+            dailyJackpotCoinTicketsPending = true;
+            return;
         }
 
         // Non-daily (early-burn) path - BURNIE and ETH bonuses on non-day-1 levels
@@ -637,7 +526,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 5_000 // 50% ticket conversion — improves pool/ticket backing ratio
             );
         }
-        coin.rollDailyQuest(questDay, randWord);
     }
 
     /// @notice Phase 2 of daily jackpot: distributes coin jackpot AND tickets to trait winners.
@@ -663,7 +551,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint8 carryoverSourceOffset
         ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
 
-        // Retrieve stored state from Phase 1
+        // Retrieve stored state from ETH phase
         uint24 lvl = lastDailyJackpotLevel;
         uint32 winningTraitsPacked = lastDailyJackpotWinningTraits;
         uint256 entropyDaily = randWord ^ (uint256(lvl) << 192);
@@ -734,9 +622,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Clear pending state
         dailyJackpotCoinTicketsPending = false;
         dailyTicketBudgetsPacked = 0;
-
-        // Roll quest for jackpot
-        coin.rollDailyQuest(_calculateDayIndex(), randWord);
     }
 
     /// @notice Award DGNRS reward to the solo bucket winner on the final daily jackpot.
@@ -2708,14 +2593,5 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         dailyTicketUnits = uint64(packed >> 8);
         carryoverTicketUnits = uint64(packed >> 72);
         carryoverSourceOffset = uint8(packed >> 136);
-    }
-
-    /// @dev Reset all daily ETH distribution state after jackpot day completes.
-    function _clearDailyEthState() private {
-        dailyEthPhase = 0;
-        dailyEthPoolBudget = 0;
-        dailyCarryoverEthPool = 0;
-        dailyCarryoverWinnerCap = 0;
-        dailyJackpotCoinTicketsPending = true;
     }
 }

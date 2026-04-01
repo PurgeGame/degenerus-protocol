@@ -190,12 +190,12 @@ contract BurnieCoinflip {
     }
 
     /// @notice Restricts access to authorized flip creditors.
-    /// @dev Allowed callers: GAME (delegatecall modules), BURNIE, AFFILIATE, ADMIN.
+    /// @dev Allowed callers: GAME (delegatecall modules), BURNIE, AFFILIATE, ADMIN, QUESTS (level quest rewards).
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
             sender != ContractAddresses.GAME &&
-            sender != ContractAddresses.COIN &&
+            sender != ContractAddresses.QUESTS &&
             sender != ContractAddresses.AFFILIATE &&
             sender != ContractAddresses.ADMIN
         ) revert OnlyFlipCreditors();

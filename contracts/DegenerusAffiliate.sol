@@ -27,14 +27,14 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
  *      - Fixed contract addresses at deploy (no re-pointing)
  */
 
-/// @notice Interface for coin contract quest reward integration.
-/// @dev Called to distribute affiliate quest bonuses.
-interface IDegenerusCoinAffiliate {
-    /// @notice Calculate and record quest progress for affiliate earnings.
+/// @notice Interface for quest handler calls from the affiliate contract.
+interface IDegenerusQuestsAffiliate {
+    /// @notice Record affiliate quest progress and return reward.
     /// @param player The affiliate receiving the base reward.
     /// @param amount The base affiliate amount (before quest bonus).
-    /// @return Additional quest reward amount to add to the payout.
-    function affiliateQuestReward(address player, uint256 amount) external returns (uint256);
+    /// @return reward Quest reward amount earned (0 if quest not completed).
+    function handleAffiliate(address player, uint256 amount)
+        external returns (uint256 reward, uint8, uint32, bool);
 }
 
 /// @notice Interface for crediting FLIP stakes directly via the coinflip contract.
@@ -180,8 +180,8 @@ contract DegenerusAffiliate {
     bytes32 private constant AFFILIATE_CODE_VAULT = bytes32("VAULT");
     bytes32 private constant AFFILIATE_CODE_DGNRS = bytes32("DGNRS");
 
-    /// @notice BurnieCoin contract for direct coin credit and quest rewards (constant).
-    IDegenerusCoinAffiliate internal constant coin = IDegenerusCoinAffiliate(ContractAddresses.COIN);
+    /// @notice DegenerusQuests contract for direct quest handler calls (constant).
+    IDegenerusQuestsAffiliate internal constant quests = IDegenerusQuestsAffiliate(ContractAddresses.QUESTS);
     /// @notice BurnieCoinflip contract for direct flip crediting (constant).
     IBurnieCoinflipAffiliate internal constant coinflip = IBurnieCoinflipAffiliate(ContractAddresses.COINFLIP);
     /// @notice Game contract for presale status checks (constant).
@@ -604,7 +604,7 @@ contract DegenerusAffiliate {
 
                 // Winner gets the full pot + quest credit for the full amount.
                 if (winner != sender) {
-                    uint256 questReward = coin.affiliateQuestReward(winner, affiliateShareBase);
+                    (uint256 questReward,,,) = quests.handleAffiliate(winner, affiliateShareBase);
                     _routeAffiliateReward(winner, affiliateShareBase + questReward);
                 }
             }

@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import "./interfaces/IDegenerusQuests.sol";
 import "./interfaces/IDegenerusGame.sol";
+import {IBurnieCoinflip} from "./interfaces/IBurnieCoinflip.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 /**
@@ -113,6 +114,15 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 previousStreak,
         uint48 currentDay
     );
+
+    /// @notice Emitted when a player completes the level quest.
+    event LevelQuestCompleted(
+        address indexed player,
+        uint24 indexed level,
+        uint8 questType,
+        uint256 reward
+    );
+
     // =========================================================================
     //                              CONSTANTS
     // =========================================================================
@@ -136,9 +146,6 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @dev Fixed reward for the random (slot 1) quest.
     uint256 private constant QUEST_RANDOM_REWARD = 200 ether;
-
-    /// @dev Quest type: mint tickets using BURNIE tokens.
-    uint8 private constant QUEST_TYPE_MINT_BURNIE = 0;
 
     /// @dev Quest type: mint tickets using ETH.
     uint8 private constant QUEST_TYPE_MINT_ETH = 1;
@@ -164,8 +171,12 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Quest type: place Degenerette bets using BURNIE.
     uint8 private constant QUEST_TYPE_DEGENERETTE_BURNIE = 8;
 
+    /// @dev Quest type: mint tickets using BURNIE tokens. Value 9 avoids collision
+    ///      with Solidity's default mapping value (0), which signals "no quest rolled".
+    uint8 private constant QUEST_TYPE_MINT_BURNIE = 9;
+
     /// @dev Total number of quest types for iteration bounds.
-    uint8 private constant QUEST_TYPE_COUNT = 9;
+    uint8 private constant QUEST_TYPE_COUNT = 10;
 
     // -------------------------------------------------------------------------
     // Streak Constants
@@ -273,17 +284,35 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Quest streak shields per player (stackable, consumed on missed days).
     mapping(address => uint16) private questStreakShieldCount;
 
-    /// @notice Monotonically increasing version counter for quest invalidation.
+    /// @notice Monotonically increasing version counter for daily quest invalidation.
     uint24 private questVersionCounter = 1;
+
+    /// @notice Active level quest type (1-9). Zero means no quest active.
+    ///         Zeroed at level transition RNG request, set when RNG arrives.
+    ///         Packs with questVersionCounter and levelQuestVersion in one slot.
+    uint8 private levelQuestType;
+
+    /// @notice Version counter for level quest invalidation. Bumps on each rollLevelQuest.
+    ///         Player state stores this value; mismatch resets progress + completed.
+    uint8 private levelQuestVersion;
+
+    /// @notice Per-player level quest state.
+    ///         Packed: version (8b) | progress (128b) | completed (1b at bit 136).
+    mapping(address => uint256) private levelQuestPlayerState;
 
     // =========================================================================
     //                              MODIFIERS
     // =========================================================================
 
-    /// @dev Restricts access to the authorized COIN or COINFLIP contract.
+    /// @dev Restricts access to authorized COIN, COINFLIP, GAME, or AFFILIATE contracts.
     modifier onlyCoin() {
         address sender = msg.sender;
-        if (sender != ContractAddresses.COIN && sender != ContractAddresses.COINFLIP) revert OnlyCoin();
+        if (
+            sender != ContractAddresses.COIN &&
+            sender != ContractAddresses.COINFLIP &&
+            sender != ContractAddresses.GAME &&
+            sender != ContractAddresses.AFFILIATE
+        ) revert OnlyCoin();
         _;
     }
 
@@ -293,28 +322,31 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     // =========================================================================
-    //                         QUEST ROLLING (COIN-ONLY)
+    //                            QUEST ROLLING
     // =========================================================================
 
-    /**
-     * @notice Roll the daily quest set using VRF entropy.
-     * @dev Access: COIN or COINFLIP contract only.
-     *      Entropy Usage:
-     *      - Slot 0 uses `entropy` directly for type selection
-     *      - Slot 1 uses `(entropy >> 128) | (entropy << 128)` (swapped halves)
-     *      - Difficulty is fixed (no variance)
-     * @param day Quest day identifier (monotonicity enforced by caller).
-     * @param entropy VRF entropy word; second slot reuses swapped halves.
-     * @return rolled Always true on success.
-     * @return questTypes The two quest types rolled [slot0, slot1].
-     * @return highDifficulty Always false (difficulty removed).
-     * @custom:reverts OnlyCoin When caller is not COIN or COINFLIP contract.
-     */
-    function rollDailyQuest(
-        uint48 day,
-        uint256 entropy
-    ) external onlyCoin returns (bool rolled, uint8[2] memory questTypes, bool highDifficulty) {
-        return _rollDailyQuest(day, entropy);
+    /// @notice Roll the daily quest set. Slot 0 is always MINT_ETH; slot 1 is random.
+    /// @dev Idempotent per day. Called by AdvanceModule when RNG word is available.
+    /// @param day Quest day identifier.
+    /// @param entropy VRF entropy word.
+    function rollDailyQuest(uint48 day, uint256 entropy) external onlyGame {
+        DailyQuest[QUEST_SLOT_COUNT] storage quests = activeQuests;
+        if (quests[0].day == day) return;
+
+        // Slot 0: always MINT_ETH — just bump day+version
+        _seedQuestType(quests[0], day, QUEST_TYPE_MINT_ETH);
+
+        // Slot 1: weighted random (distinct from slot 0)
+        uint256 bonusEntropy = (entropy >> 128) | (entropy << 128);
+        uint8 bonusType = _bonusQuestType(
+            bonusEntropy,
+            QUEST_TYPE_MINT_ETH,
+            _canRollDecimatorQuest()
+        );
+        _seedQuestType(quests[1], day, bonusType);
+
+        emit QuestSlotRolled(day, 0, QUEST_TYPE_MINT_ETH, 0, quests[0].version, 0);
+        emit QuestSlotRolled(day, 1, bonusType, 0, quests[1].version, 0);
     }
 
     /**
@@ -347,63 +379,6 @@ contract DegenerusQuests is IDegenerusQuests {
             state.lastActiveDay = currentDay24;
         }
         emit QuestStreakBonusAwarded(player, amount, state.streak, currentDay);
-    }
-
-    /**
-     * @dev Internal quest rolling logic shared by public entry points.
-     *
-     * Flow:
-     * 1. Check game state for decimator quest eligibility
-     * 2. Slot 0 is fixed to MINT_ETH ("deposit new ETH")
-     * 3. Slot 1 is a weighted-random quest distinct from slot 0
-     * 4. Seed both quest slots with fixed difficulty and versioning
-     * @param day Quest day identifier.
-     * @param entropy VRF entropy word.
-     * @return rolled Always true on success.
-     * @return questTypes The two quest types rolled [slot0, slot1].
-     * @return highDifficulty Always false (difficulty removed).
-     */
-    function _rollDailyQuest(
-        uint48 day,
-        uint256 entropy
-    ) private returns (bool rolled, uint8[2] memory questTypes, bool highDifficulty) {
-        DailyQuest[QUEST_SLOT_COUNT] storage quests = activeQuests;
-        bool decAllowed = _canRollDecimatorQuest();
-
-        // Swap 128-bit halves to derive independent entropy for slot 1
-        uint256 bonusEntropy = (entropy >> 128) | (entropy << 128);
-
-        uint8 primaryType = QUEST_TYPE_MINT_ETH;
-        uint8 bonusType = _bonusQuestType(
-            bonusEntropy,
-            primaryType,
-            decAllowed
-        );
-
-        _seedQuestType(quests[0], day, primaryType);
-        _seedQuestType(quests[1], day, bonusType);
-
-        emit QuestSlotRolled(
-            day,
-            0,
-            quests[0].questType,
-            quests[0].flags,
-            quests[0].version,
-            quests[0].difficulty
-        );
-        emit QuestSlotRolled(
-            day,
-            1,
-            quests[1].questType,
-            quests[1].flags,
-            quests[1].version,
-            quests[1].difficulty
-        );
-
-        questTypes[0] = primaryType;
-        questTypes[1] = bonusType;
-        highDifficulty = false;
-        return (true, questTypes, highDifficulty);
     }
 
     // =========================================================================
@@ -517,7 +492,17 @@ contract DegenerusQuests is IDegenerusQuests {
                 ++slot;
             }
         }
+        // --- Level Quest Progress ---
+        if (paidWithEth) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, uint256(quantity) * mintPrice, mintPrice);
+        } else {
+            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, quantity, 0);
+        }
+
         if (anyCompleted) {
+            if (!paidWithEth && totalReward != 0) {
+                IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, totalReward);
+            }
             return (totalReward, outQuestType, outStreak, true);
         }
         return (0, outQuestType, state.streak, false);
@@ -553,6 +538,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_FLIP);
         if (slotIndex == type(uint8).max) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
             return (0, QUEST_TYPE_FLIP, state.streak, false);
         }
 
@@ -569,12 +555,15 @@ contract DegenerusQuests is IDegenerusQuests {
             target
         );
         if (progressAfter < target) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
             return (0, quest.questType, state.streak, false);
         }
 
+        _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
         return _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
     }
 
@@ -608,6 +597,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_DECIMATOR);
         if (slotIndex == type(uint8).max) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
             return (0, QUEST_TYPE_DECIMATOR, state.streak, false);
         }
         _questSyncProgress(state, slotIndex, currentDay, quest.version);
@@ -622,12 +612,18 @@ contract DegenerusQuests is IDegenerusQuests {
             target
         );
         if (state.progress[slotIndex] < target) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
             return (0, quest.questType, state.streak, false);
         }
-        return _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
+        _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
+        (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
+        if (completed && reward != 0) {
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
+        }
     }
 
     /**
@@ -659,6 +655,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_AFFILIATE);
         if (slotIndex == type(uint8).max) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
             return (0, QUEST_TYPE_AFFILIATE, state.streak, false);
         }
         _questSyncProgress(state, slotIndex, currentDay, quest.version);
@@ -673,11 +670,14 @@ contract DegenerusQuests is IDegenerusQuests {
             target
         );
         if (state.progress[slotIndex] < target) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
             return (0, quest.questType, state.streak, false);
         }
+        _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
         return _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
     }
 
@@ -711,12 +711,13 @@ contract DegenerusQuests is IDegenerusQuests {
         _questSyncState(state, player, currentDay);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
+        uint256 currentPrice = questGame.mintPrice();
         if (slotIndex == type(uint8).max) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
             return (0, QUEST_TYPE_LOOTBOX, state.streak, false);
         }
         _questSyncProgress(state, slotIndex, currentDay, quest.version);
         state.progress[slotIndex] = _clampedAdd128(state.progress[slotIndex], amountWei);
-        uint256 currentPrice = questGame.mintPrice();
         uint256 target = _questTargetValue(quest, slotIndex, currentPrice);
         emit QuestProgressUpdated(
             player,
@@ -727,12 +728,18 @@ contract DegenerusQuests is IDegenerusQuests {
             target
         );
         if (state.progress[slotIndex] < target) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
             return (0, quest.questType, state.streak, false);
         }
-        return _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, currentPrice);
+        _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
+        (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, currentPrice);
+        if (completed && reward != 0) {
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
+        }
     }
 
     /**
@@ -766,16 +773,18 @@ contract DegenerusQuests is IDegenerusQuests {
 
         uint8 targetType = paidWithEth ? QUEST_TYPE_DEGENERETTE_ETH : QUEST_TYPE_DEGENERETTE_BURNIE;
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, targetType);
-        if (slotIndex == type(uint8).max) {
-            return (0, targetType, state.streak, false);
-        }
-
-        uint256 mintPrice = 0;
+        uint256 mintPrice;
         if (paidWithEth) {
             mintPrice = questGame.mintPrice();
         }
+        if (slotIndex == type(uint8).max) {
+            _handleLevelQuestProgress(player, targetType, amount, mintPrice);
+            return (0, targetType, state.streak, false);
+        }
+
         uint256 target = _questTargetValue(quest, slotIndex, mintPrice);
-        return _questHandleProgressSlot(
+        _handleLevelQuestProgress(player, targetType, amount, mintPrice);
+        (reward, questType, streak, completed) = _questHandleProgressSlot(
             player,
             state,
             quests,
@@ -786,6 +795,9 @@ contract DegenerusQuests is IDegenerusQuests {
             currentDay,
             mintPrice
         );
+        if (completed && reward != 0) {
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
+        }
     }
 
     // =========================================================================
@@ -994,14 +1006,14 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Decimator quests are unlocked at specific level boundaries.
      *
      *      Availability Rules:
-     *      1. decWindowOpenFlag must be true (set by game during decimator windows)
+     *      1. decWindow() must be true (set by game during decimator windows)
      *      2. Level 100, 200, 300... (multiples of DECIMATOR_SPECIAL_LEVEL)
      *      3. Level 5, 15, 25, 35... ending in 5 (except 95, 195, etc.)
      * @return True if decimator quests can be rolled.
      */
     function _canRollDecimatorQuest() private view returns (bool) {
         IDegenerusGame game_ = questGame;
-        if (!game_.decWindowOpenFlag()) return false;
+        if (!game_.decWindow()) return false;
         uint24 lvl = game_.level();
         // Always available at 100-level milestones
         if (lvl != 0 && (lvl % DECIMATOR_SPECIAL_LEVEL) == 0) return true;
@@ -1306,7 +1318,8 @@ contract DegenerusQuests is IDegenerusQuests {
                 }
                 continue;
             }
-            if (candidate == QUEST_TYPE_RESERVED) {
+            // Skip sentinel value 0 (unrolled marker) and retired type 4
+            if (candidate == 0 || candidate == QUEST_TYPE_RESERVED) {
                 unchecked {
                     ++candidate;
                 }
@@ -1594,5 +1607,152 @@ contract DegenerusQuests is IDegenerusQuests {
         uint48 day0 = quests[0].day;
         if (day0 != 0) return day0;
         return quests[1].day;
+    }
+
+    // =========================================================================
+    //                         LEVEL QUESTS
+    // =========================================================================
+
+    /// @notice Roll the level quest for the current level.
+    /// @dev Selects a quest type, bumps version to invalidate stale player progress.
+    /// @param entropy VRF-derived entropy for quest type selection.
+    function rollLevelQuest(uint256 entropy) external override onlyGame {
+        bool decAllowed = _canRollDecimatorQuest();
+        levelQuestType = _bonusQuestType(entropy, type(uint8).max, decAllowed);
+        unchecked { ++levelQuestVersion; }
+    }
+
+    /// @notice Clear the active level quest (called at level transition before RNG arrives).
+    function clearLevelQuest() external override onlyGame {
+        levelQuestType = 0;
+    }
+
+    /// @dev Checks if a player is eligible for the level quest.
+    ///      Requires (levelStreak >= 5 OR any active pass) AND (levelUnits >= 4 this level).
+    /// @param player The player address to check.
+    /// @return True if the player meets both gates.
+    function _isLevelQuestEligible(address player) internal view returns (bool) {
+        uint256 packed = questGame.mintPackedFor(player);
+
+        // Activity gate: 4+ units minted this level
+        uint24 unitsLvl = uint24(packed >> 104);
+        if (unitsLvl != questGame.level() + 1) return false;
+        uint16 units = uint16(packed >> 228);
+        if (units < 4) return false;
+
+        // Loyalty gate: levelStreak >= 5 OR any active pass
+        uint24 streak = uint24(packed >> 48);
+        if (streak >= 5) return true;
+
+        // Whale/lazy pass from mintPacked_
+        uint24 frozen = uint24(packed >> 128);
+        uint8 bundle = uint8((packed >> 152) & 0x3);
+        if (frozen > 0 && bundle != 0) return true;
+
+        // Deity pass fallback (separate SLOAD)
+        return questGame.deityPassCountFor(player) > 0;
+    }
+
+    /// @dev Returns the 10x target for a level quest type.
+    ///      MINT_BURNIE targets 10 tickets, MINT_ETH targets mintPrice * 10,
+    ///      LOOTBOX and DEGENERETTE_ETH target mintPrice * 20,
+    ///      BURNIE-denominated types target 20,000 BURNIE.
+    ///      No ETH cap applied (unlike daily quests).
+    /// @param questType The quest type constant (1-9, 0 reserved as unrolled sentinel).
+    /// @param mintPrice Current mint price in wei.
+    /// @return Target value in the same units as handler progress deltas.
+    function _levelQuestTargetValue(uint8 questType, uint256 mintPrice) internal pure returns (uint256) {
+        if (questType == QUEST_TYPE_MINT_BURNIE) return 10;
+        if (questType == QUEST_TYPE_MINT_ETH) return mintPrice * 10;
+        if (questType == QUEST_TYPE_LOOTBOX || questType == QUEST_TYPE_DEGENERETTE_ETH) {
+            return mintPrice * 20;
+        }
+        if (
+            questType == QUEST_TYPE_FLIP ||
+            questType == QUEST_TYPE_DECIMATOR ||
+            questType == QUEST_TYPE_AFFILIATE ||
+            questType == QUEST_TYPE_DEGENERETTE_BURNIE
+        ) {
+            return 20_000 ether;
+        }
+        return 0;
+    }
+
+    /// @dev Shared level quest progress handler called by each of the 6 handlers.
+    ///      Reads levelQuestGlobal (single SLOAD, shares slot with questVersionCounter)
+    ///      to get both level and type. Short-circuits on type mismatch before any
+    ///      player state read. Eligibility is deferred to the completion boundary —
+    ///      ineligible players accumulate phantom progress that can never complete.
+    /// @param player The player earning progress.
+    /// @param handlerQuestType The quest type this handler tracks.
+    /// @param delta The progress delta (units match quest type).
+    /// @param mintPrice Current mint price in wei (for ETH-based targets; 0 for BURNIE types).
+    function _handleLevelQuestProgress(
+        address player,
+        uint8 handlerQuestType,
+        uint256 delta,
+        uint256 mintPrice
+    ) internal {
+        uint8 lqType = levelQuestType;
+
+        // Type mismatch or no quest active — exit before any player SLOAD
+        if (lqType != handlerQuestType) return;
+
+        uint8 currentVersion = levelQuestVersion;
+        uint256 packed = levelQuestPlayerState[player];
+        uint8 playerVersion = uint8(packed);
+
+        // Version mismatch: reset stale progress from previous level's quest
+        if (playerVersion != currentVersion) {
+            packed = uint256(currentVersion);
+        }
+
+        // Already completed this level's quest
+        if ((packed >> 136) & 1 == 1) return;
+
+        uint128 progress = uint128(packed >> 8);
+        progress = _clampedAdd128(progress, delta);
+
+        uint256 target = _levelQuestTargetValue(lqType, mintPrice);
+        if (uint256(progress) >= target) {
+            // Gate eligibility only at completion
+            if (!_isLevelQuestEligible(player)) {
+                packed = uint256(currentVersion) | (uint256(progress) << 8);
+                levelQuestPlayerState[player] = packed;
+                return;
+            }
+            packed = uint256(currentVersion)
+                   | (uint256(progress) << 8)
+                   | (uint256(1) << 136);
+            levelQuestPlayerState[player] = packed;
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, 800 ether);
+            emit LevelQuestCompleted(player, questGame.level() + 1, lqType, 800 ether);
+        } else {
+            packed = uint256(currentVersion) | (uint256(progress) << 8);
+            levelQuestPlayerState[player] = packed;
+        }
+    }
+
+    /// @notice Returns a player's level quest state for frontend display.
+    /// @dev Reads levelQuestGlobal and levelQuestPlayerState for the player's current level.
+    /// @param player The player address to query.
+    function getPlayerLevelQuestView(address player)
+        external
+        view
+        override
+        returns (uint8 questType, uint128 progress, uint256 target, bool completed, bool eligible)
+    {
+        questType = levelQuestType;
+
+        uint256 packed = levelQuestPlayerState[player];
+        uint8 playerVersion = uint8(packed);
+
+        if (playerVersion == levelQuestVersion && questType != 0) {
+            progress = uint128(packed >> 8);
+            completed = (packed >> 136) & 1 == 1;
+        }
+
+        target = _levelQuestTargetValue(questType, questGame.mintPrice());
+        eligible = _isLevelQuestEligible(player);
     }
 }

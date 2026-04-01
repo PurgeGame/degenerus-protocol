@@ -5,6 +5,7 @@ import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
@@ -74,6 +75,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     /// @notice BurnieCoinflip contract for direct flip crediting.
     IBurnieCoinflip internal constant coinflip =
         IBurnieCoinflip(ContractAddresses.COINFLIP);
+    /// @notice DegenerusQuests contract for direct quest handler calls.
+    IDegenerusQuests internal constant quests =
+        IDegenerusQuests(ContractAddresses.QUESTS);
     IDegenerusAffiliate internal constant affiliate =
         IDegenerusAffiliate(ContractAddresses.AFFILIATE);
     // -------------------------------------------------------------------------
@@ -604,14 +608,13 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 lootBoxBurnieAmount
     ) private {
         if (gameOver) revert E();
-        address payer = msg.sender;
 
         if (ticketQuantity != 0) {
             // ENF-01: Block BURNIE tickets when drip projection cannot cover nextPool deficit.
             if (gameOverPossible) revert GameOverPossible();
             _callTicketPurchase(
                 buyer,
-                payer,
+                msg.sender,
                 ticketQuantity,
                 MintPaymentKind.DirectEth,
                 true,
@@ -633,6 +636,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         MintPaymentKind payKind
     ) private {
         if (gameOver) revert E();
+        uint256 lootboxFlipCredit;
         uint24 purchaseLevel = level + 1;
         uint256 priceWei = price;
 
@@ -678,7 +682,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         }
 
         if (ticketCost != 0) {
-            _callTicketPurchase(
+            lootboxFlipCredit += _callTicketPurchase(
                 buyer,
                 buyer,
                 ticketQuantity,
@@ -767,9 +771,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             }
 
             // Always call affiliate - contract handles bytes32(0) by using stored code
-            uint256 lootboxKickback;
             if (lootboxFreshEth != 0) {
-                lootboxKickback = affiliate.payAffiliate(
+                lootboxFlipCredit = affiliate.payAffiliate(
                     _ethToBurnieValue(lootboxFreshEth, priceWei),
                     affiliateCode,
                     buyer,
@@ -779,7 +782,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 );
             }
             if (lootboxClaimableUsed != 0) {
-                lootboxKickback += affiliate.payAffiliate(
+                lootboxFlipCredit += affiliate.payAffiliate(
                     _ethToBurnieValue(lootboxClaimableUsed, priceWei),
                     affiliateCode,
                     buyer,
@@ -788,10 +791,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     0
                 );
             }
-            if (lootboxKickback != 0) {
-                coinflip.creditFlip(buyer, lootboxKickback);
-            }
-
             emit LootBoxBuy(buyer, day, lootBoxAmount, presale, level);
 
             // Match ticket purchase behavior: mint quest progress uses whole ticket-equivalent
@@ -801,13 +800,18 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 if (questUnitsRaw != 0 && lootboxFreshEth != 0) {
                     uint256 scaled = (questUnitsRaw * lootboxFreshEth) / lootBoxAmount;
                     if (scaled != 0) {
-                        coin.notifyQuestMint(buyer, uint32(scaled), true);
+                        lootboxFlipCredit += _questMint(buyer, uint32(scaled), true);
                     }
                 }
             }
 
             // Lootbox quests continue tracking full lootbox spend (fresh + recycled).
-            coin.notifyQuestLootBox(buyer, lootBoxAmount);
+            {
+                (uint256 lbReward,,, bool lbCompleted) = quests.handleLootBox(buyer, lootBoxAmount);
+                if (lbCompleted) {
+                    lootboxFlipCredit += lbReward;
+                }
+            }
             _awardEarlybirdDgnrs(buyer, lootboxFreshEth, purchaseLevel);
         }
 
@@ -821,10 +825,11 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             (availableClaimable == 0 || (minTicketUnitCost != 0 && availableClaimable < minTicketUnitCost));
 
         if (spentAllClaimable && totalClaimableUsed >= priceWei * 3) {
-            uint256 bonusAmount = (totalClaimableUsed * PRICE_COIN_UNIT * 10) / (priceWei * 100);
-            if (bonusAmount != 0) {
-                coinflip.creditFlip(buyer, bonusAmount);
-            }
+            lootboxFlipCredit += (totalClaimableUsed * PRICE_COIN_UNIT * 10) / (priceWei * 100);
+        }
+
+        if (lootboxFlipCredit != 0) {
+            coinflip.creditFlip(buyer, lootboxFlipCredit);
         }
     }
 
@@ -836,7 +841,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         bool payInCoin,
         bytes32 affiliateCode,
         uint256 value
-    ) private {
+    ) private returns (uint256 bonusCredit) {
         if (quantity == 0) revert E();
         if (gameOver) revert E();
         uint24 targetLevel = jackpotPhaseFlag ? level : level + 1;
@@ -899,7 +904,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             }
         }
 
-        uint256 bonusCredit;
         if (payInCoin) {
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
             _coinReceive(payer, coinCost);
@@ -907,11 +911,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             {
                 uint32 questQty = uint32(quantity / (4 * TICKET_SCALE));
                 if (questQty != 0) {
-                    coin.notifyQuestMint(payer, questQty, false);
+                    bonusCredit += _questMint(buyer, questQty, false);
                 }
             }
-
-            bonusCredit = coinCost / 10;
         } else {
             uint32 mintUnits = adjustedQty32;
 
@@ -941,7 +943,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             if (questUnits != 0 && freshEth != 0) {
                 uint256 scaled = (uint256(questUnits) * freshEth) / costWei;
                 if (scaled != 0) {
-                    coin.notifyQuestMint(payer, uint32(scaled), true);
+                    bonusCredit += _questMint(buyer, uint32(scaled), true);
                 }
             }
 
@@ -1011,10 +1013,6 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
         }
 
-        if (bonusCredit != 0) {
-            coinflip.creditFlip(buyer, bonusCredit);
-        }
-
         uint256 ticketScaled = adjustedQuantity;
 
         if (ticketScaled != 0) {
@@ -1046,7 +1044,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         {
             uint256 questUnitsRaw = burnieAmount / PRICE_COIN_UNIT;
             if (questUnitsRaw != 0) {
-                coin.notifyQuestMint(buyer, uint32(questUnitsRaw), false);
+                _questMint(buyer, uint32(questUnitsRaw), false);
             }
         }
 
@@ -1108,6 +1106,20 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
 
         emit BoostUsed(player, day, amount, boostedAmount, boostBps);
+    }
+
+    /// @dev Route quest progress to DegenerusQuests.
+    ///      ETH mints: returns reward for caller to batch with kickbacks.
+    ///      BURNIE mints: reward creditFlipped internally by handler (nothing to batch).
+    function _questMint(address player, uint32 quantity, bool paidWithEth) private returns (uint256) {
+        (uint256 reward, uint8 questType,, bool completed) = quests.handleMint(player, quantity, paidWithEth);
+        if (completed) {
+            if (paidWithEth && questType == 1) {
+                IDegenerusGame(address(this)).recordMintQuestStreak(player);
+            }
+            if (paidWithEth) return reward;
+        }
+        return 0;
     }
 
 }

@@ -39,16 +39,11 @@ struct PlayerQuestView {
 /// @notice Interface for the daily quest system that rewards players for game actions
 /// @dev Quests reset daily and track player progress across mint, flip, and other actions
 interface IDegenerusQuests {
-    /// @notice Rolls the daily quest for a given day using provided entropy
-    /// @dev Called by the game contract to determine which quests are active
+    /// @notice Rolls the daily quest for a given day using provided entropy.
+    /// @dev Called by JackpotModule (via GAME delegatecall) to determine which quests are active.
     /// @param day The unix day to roll quests for
-    /// @param entropy Random entropy used to determine quest types and difficulty
-    /// @return rolled Whether a new quest was rolled (false if already rolled for this day)
-    /// @return questTypes The two quest types that were selected
-    /// @return highDifficulty Whether this is a high difficulty day
-    function rollDailyQuest(uint48 day, uint256 entropy)
-        external
-        returns (bool rolled, uint8[2] memory questTypes, bool highDifficulty);
+    /// @param entropy Random entropy used to determine the slot 1 quest type
+    function rollDailyQuest(uint48 day, uint256 entropy) external;
 
     /// @notice Records player minting activity and checks quest completion
     /// @dev Called by the game contract when a player mints tickets
@@ -146,5 +141,25 @@ interface IDegenerusQuests {
             uint128[2] memory progress,
             bool[2] memory completed
         );
+
+    /// @notice Roll the level quest using provided entropy.
+    /// @dev Called by AdvanceModule (via GAME delegatecall) during level transition.
+    /// @param entropy VRF-derived entropy for quest type selection.
+    function rollLevelQuest(uint256 entropy) external;
+
+    /// @notice Clear active level quest (called at level transition before RNG arrives).
+    function clearLevelQuest() external;
+
+    /// @notice Returns a player's level quest state for frontend display.
+    /// @param player The player address to query.
+    /// @return questType The active level quest type (0-8).
+    /// @return progress The player's accumulated progress.
+    /// @return target The target value for completion.
+    /// @return completed Whether the player has completed the quest this level.
+    /// @return eligible Whether the player is eligible for level quests.
+    function getPlayerLevelQuestView(address player)
+        external
+        view
+        returns (uint8 questType, uint128 progress, uint256 target, bool completed, bool eligible);
 
 }

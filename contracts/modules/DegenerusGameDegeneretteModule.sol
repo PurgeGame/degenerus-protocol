@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
+import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {
     IDegenerusGameLootboxModule
@@ -179,6 +180,9 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Reference to the quests contract for reading player quest streaks.
     IDegenerusQuestView internal constant questView =
         IDegenerusQuestView(ContractAddresses.QUESTS);
+    /// @dev Reference to the quests contract for direct quest handler calls.
+    IDegenerusQuests internal constant quests =
+        IDegenerusQuests(ContractAddresses.QUESTS);
 
     /// @dev Reference to the affiliate contract for bonus point calculations.
     IDegenerusAffiliate internal constant affiliate =
@@ -442,10 +446,8 @@ contract DegenerusGameDegeneretteModule is
         _collectBetFunds(player, currency, totalBet, msg.value);
 
         // Quest progress for Degenerette bets (slot 1 only).
-        if (currency == CURRENCY_ETH) {
-            coin.notifyQuestDegenerette(player, totalBet, true);
-        } else if (currency == CURRENCY_BURNIE) {
-            coin.notifyQuestDegenerette(player, totalBet, false);
+        if (currency == CURRENCY_ETH || currency == CURRENCY_BURNIE) {
+            quests.handleDegenerette(player, totalBet, currency == CURRENCY_ETH);
         }
     }
 
