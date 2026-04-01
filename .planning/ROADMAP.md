@@ -196,10 +196,11 @@ Plans:
   3. `_levelQuestTargetValue(uint8 questType, uint256 mintPrice)` returns the correct 10x target for all 8 quest types with no ETH cap
   4. Completion flow enforces once-per-level via bit 152, calls `creditFlip(player, 800 ether)` on BurnieCoinflip, and emits `LevelQuestCompleted`
   5. AdvanceModule calls `quests.rollLevelQuest(purchaseLevel, questEntropy)` directly (no BurnieCoin hop) at the correct insertion point (after FF drain, before `phaseTransitionActive = false`) with keccak256 entropy derived from `rngWordByDay[day]`
-**Plans**: 2 plans
+**Plans**: 3 plans
 Plans:
-- [ ] 157-01-PLAN.md — Quest logic internals: rollLevelQuest, eligibility, target calculation, progress handler, completion flow, mintPackedFor view
-- [ ] 157-02-PLAN.md — AdvanceModule roll trigger wiring: import, constant, entropy derivation, call insertion
+- [x] 157-01-PLAN.md — Quest logic internals: rollLevelQuest, eligibility, target calculation, progress handler, completion flow, mintPackedFor view
+- [x] 157-02-PLAN.md — AdvanceModule roll trigger wiring: import, constant, entropy derivation, call insertion
+- [x] 157-03-PLAN.md — Gap closure: MINT_BURNIE sentinel fix + levelQuestGlobal packing + ROLL-01 docs
 
 ### Phase 158: Handler Integration, View & Quest Routing Cleanup
 **Goal**: All 6 quest handlers track level quest progress for eligible players, handlers own their reward/event emission (removing BurnieCoin notify* middleman), and a view function exposes complete level quest state
@@ -211,7 +212,10 @@ Plans:
   3. When a handler's accumulated progress meets or exceeds the target, the completion flow triggers (creditFlip + event + once-per-level guard)
   4. `getPlayerLevelQuestView(address player)` returns questType, progress, target, completed status, and eligibility for the queried address
   5. Handlers emit `QuestCompleted` and call `creditFlip` internally -- `notifyQuestMint`, `notifyQuestLootBox`, `notifyQuestDegenerette`, `_questApplyReward`, and `QuestCompleted` event removed from BurnieCoin. Game modules call DegenerusQuests handlers directly. `decimatorBurn` keeps the burn logic but calls `quests.handleDecimator()` for the quest portion instead of inlining it.
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [x] 158-01-PLAN.md — Level quest progress in all 6 handlers + onlyCoin modifier expansion for GAME access
+- [ ] 158-02-PLAN.md — BurnieCoin notify* wrapper removal + game module rewiring to call DegenerusQuests directly
 
 ## Progress
 
@@ -226,8 +230,8 @@ Phase 156 -> Phase 157 -> Phase 158 (strictly sequential -- each builds on the p
 | 154. Integration Mapping | v12.0 | 1/1 | Complete | 2026-04-01 |
 | 155. Economic + Gas Analysis | v12.0 | 1/1 | Complete | 2026-04-01 |
 | 156. Interfaces, Storage & Access Control | v13.0 | 0/1 | Complete    | 2026-04-01 |
-| 157. Quest Logic & Roll Chain | v13.0 | 0/2 | Not started | - |
-| 158. Handler Integration & View | v13.0 | 0/? | Not started | - |
+| 157. Quest Logic & Roll Chain | v13.0 | 3/3 | Complete   | 2026-04-01 |
+| 158. Handler Integration & View | v13.0 | 1/2 | Executing | - |
 
 ## Deferred
 
@@ -237,3 +241,13 @@ Phase 156 -> Phase 157 -> Phase 158 (strictly sequential -- each builds on the p
 - **FVER-01**: Halmos symbolic proof of CHARITY burn math (proportional ETH/stETH)
 - **FVER-02**: stETH shares-based accounting for 1-2 wei rounding precision
 - **FVER-03**: Foundry fuzz invariant tests for governance (vote weight conservation)
+
+### Phase 158.1: Replace Carryover ETH with Ticket Purchase (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 158
+**Plans:** 3/3 plans complete
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 158.1 to break down)
