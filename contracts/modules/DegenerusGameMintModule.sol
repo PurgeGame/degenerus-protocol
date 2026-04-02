@@ -12,6 +12,7 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /**
  * @title DegenerusGameMintModule
@@ -621,8 +622,8 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     ) private {
         if (gameOver) revert E();
         uint256 lootboxFlipCredit;
-        uint24 purchaseLevel = level + 1;
-        uint256 priceWei = price;
+        uint24 purchaseLevel = jackpotPhaseFlag ? level : level + 1;
+        uint256 priceWei = PriceLookupLib.priceForLevel(purchaseLevel);
 
         if (lootBoxAmount != 0 && lootBoxAmount < LOOTBOX_MIN) revert E();
 
@@ -691,7 +692,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             if (existingAmount == 0) {
                 lbFirstDeposit = true;
                 lootboxDay[lbIndex][buyer] = lbDay;
-                lootboxBaseLevelPacked[lbIndex][buyer] = uint24(level + 2);
+                lootboxBaseLevelPacked[lbIndex][buyer] = uint24(level + 1);
                 // lootboxEvScorePacked written after score computation below
                 emit LootBoxIdx(buyer, lbIndex, lbDay);
             } else {
@@ -706,7 +707,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             lootboxEthBase[lbIndex][buyer] = existingBase + lootBoxAmount;
 
             uint256 newAmount = existingAmount + boostedAmount;
-            lootboxEth[lbIndex][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
+            lootboxEth[lbIndex][buyer] = (uint256(level + 1) << 232) | newAmount;
             _maybeRequestLootboxRng(lootBoxAmount);
 
             if (presale) {
@@ -765,7 +766,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint32 questStreak;
         {
             (uint256 questReward, uint8 questType, uint32 streak, bool questCompleted) =
-                quests.handlePurchase(buyer, ethMintUnits, burnieMintUnits, lootBoxAmount, priceWei);
+                quests.handlePurchase(buyer, ethMintUnits, burnieMintUnits, lootBoxAmount, priceWei, PriceLookupLib.priceForLevel(level + 1));
             questStreak = streak;
             if (questCompleted) {
                 lootboxFlipCredit += questReward;
@@ -808,7 +809,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                     _ethToBurnieValue(lootboxFreshEth, priceWei),
                     affiliateCode,
                     buyer,
-                    purchaseLevel,
+                    level + 1,
                     true,
                     uint16(cachedScore)
                 );
@@ -818,7 +819,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                     _ethToBurnieValue(lootboxClaimableUsed, priceWei),
                     affiliateCode,
                     buyer,
-                    purchaseLevel,
+                    level + 1,
                     false,
                     0
                 );
@@ -826,7 +827,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             if (lbFirstDeposit) {
                 lootboxEvScorePacked[lbIndex][buyer] = uint16(cachedScore + 1);
             }
-            _awardEarlybirdDgnrs(buyer, lootboxFreshEth, purchaseLevel);
+            _awardEarlybirdDgnrs(buyer, lootboxFreshEth, level + 1);
         }
 
         uint256 finalClaimable = payKind == MintPaymentKind.DirectEth
@@ -879,7 +880,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         // level transition and can be claimed against a fixed snapshot.
         uint24 affiliateLevel = level + 1;
 
-        uint256 priceWei = price;
+        uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         uint256 costWei = (priceWei * quantity) / (4 * TICKET_SCALE);
         if (costWei == 0) revert E();
         if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
@@ -1048,7 +1049,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
         lootboxRngPendingBurnie += burnieAmount;
 
-        uint256 priceWei = price;
+        uint256 priceWei = PriceLookupLib.priceForLevel(level + 1);
         if (priceWei != 0) {
             uint256 virtualEth = (burnieAmount * priceWei) / PRICE_COIN_UNIT;
             if (virtualEth != 0) {

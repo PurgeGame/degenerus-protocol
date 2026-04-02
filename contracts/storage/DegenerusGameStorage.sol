@@ -56,16 +56,15 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  *   Total: 31 bytes used (1 byte padding)
  *
  * +-----------------------------------------------------------------------------+
- * | EVM SLOT 1 (32 bytes) — Price and Double-Buffer Fields                     |
+ * | EVM SLOT 1 (32 bytes) — Double-Buffer Fields                                |
  * +-----------------------------------------------------------------------------+
  * | [0:6]   purchaseStartDay         uint48   Day index when purchase phase began|
- * | [6:22]  price                    uint128  Current mint price in wei          |
- * | [22:23] ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
- * | [23:24] ticketsFullyProcessed    bool     Read slot fully drained flag       |
- * | [24:25] prizePoolFrozen          bool     Prize pool freeze active flag      |
- * | [25:32] <padding>                         7 bytes unused                     |
+ * | [6:7]   ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
+ * | [7:8]   ticketsFullyProcessed    bool     Read slot fully drained flag       |
+ * | [8:9]   prizePoolFrozen          bool     Prize pool freeze active flag      |
+ * | [9:32]  <padding>                         23 bytes unused                    |
  * +-----------------------------------------------------------------------------+
- *   Total: 25 bytes used (7 bytes padding)
+ *   Total: 9 bytes used (23 bytes padding)
  *
  * +-----------------------------------------------------------------------------+
  * | EVM SLOT 2 (32 bytes) — Current Prize Pool                                  |
@@ -95,7 +94,6 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  *    - levelStartTime = deploy timestamp (set in constructor)
  *    - jackpotPhaseFlag = false (purchase phase)
  *    - decWindowOpen = false (opens at level 4 jackpot phase start)
- *    - price = 0.01 ether (initial mint price)
  *    - levelPrizePool uses BOOTSTRAP_PRIZE_POOL (50 ether) as fallback for level 0
  *
  * 5. OVERFLOW PROTECTION: Solidity 0.8+ provides automatic overflow checks.
@@ -325,17 +323,6 @@ abstract contract DegenerusGameStorage {
     ///      to trigger compressed jackpot mode. Default 0 works for level 0 since
     ///      the first daily advance is day 1, giving day - 0 = 1 ≤ 3.
     uint48 internal purchaseStartDay;
-
-    /// @dev Base price unit in wei. One unit covers 4 scaled ticket entries.
-    ///      uint128 supports up to ~340 undecillion wei (~3.4e20 ETH) — far
-    ///      beyond any realistic price point.
-    ///
-    ///      Default 0.01 ether = 10 finney = initial launch price.
-    ///
-    ///      SECURITY: Price updates are game-controlled. uint128 prevents
-    ///      overflow in multiplication with reasonable quantities.
-    uint128 internal price =
-        uint128(0.01 ether);
 
     /// @dev Active write buffer index for ticket queue double-buffering (0 or 1).
     ///      Toggled via XOR (`ticketWriteSlot ^= 1`) during queue slot swaps.

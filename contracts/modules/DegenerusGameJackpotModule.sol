@@ -2148,7 +2148,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     function _creditDgnrsCoinflip(uint256 prizePoolWei) private {
-        uint256 priceWei = price;
+        uint256 priceWei = PriceLookupLib.priceForLevel(level);
         if (priceWei == 0) return;
         uint256 coinAmount = (prizePoolWei * PRICE_COIN_UNIT) / (priceWei * 20);
         if (coinAmount == 0) return;
@@ -2450,7 +2450,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Calculate 0.5% of prize pool target in BURNIE.
     function _calcDailyCoinBudget(uint24 lvl) private view returns (uint256) {
-        uint256 priceWei = price;
+        uint256 priceWei = PriceLookupLib.priceForLevel(level);
         if (priceWei == 0) return 0;
         return (levelPrizePool[lvl - 1] * PRICE_COIN_UNIT) / (priceWei * 200);
     }

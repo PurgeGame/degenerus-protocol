@@ -617,7 +617,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         lootboxBurnie[index][player] = 0;
 
         // Resolve using ETH-equivalent value at 80% rate without whale/presale bonuses
-        uint256 priceWei = price;
+        uint256 priceWei = PriceLookupLib.priceForLevel(level);
         if (priceWei == 0) revert E();
         uint256 amountEth = (burnieAmount * priceWei * 80) / (PRICE_COIN_UNIT * 100);
         if (amountEth == 0) revert E();
@@ -1115,7 +1115,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 lazyPassValue
     ) private view returns (uint256 totalWeight, uint256 avgMaxValue) {
         uint256 weightedMax = 0;
-        uint256 priceWei = price;
+        uint256 priceWei = PriceLookupLib.priceForLevel(level);
 
         // Coinflip boons (max bonus on 100k BURNIE deposit)
         uint256 coinflipMax5 = _burnieToEthValue(

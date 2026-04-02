@@ -50,6 +50,7 @@ import {
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
+import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 
 /*+==============================================================================+
   |                     EXTERNAL INTERFACE DEFINITIONS                           |
@@ -1380,7 +1381,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (isDeityHolder && score != 0) {
             uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) / 10_000;
             uint256 cap = (AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH *
-                PRICE_COIN_UNIT) / price;
+                PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(level);
             if (bonus > cap) {
                 bonus = cap;
             }
@@ -2078,7 +2079,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Price tiers: intro 0.01/0.02, then cycle 0.04/0.08/0.12/0.16/0.24 ETH.
     /// @return Current price in wei.
     function mintPrice() external view returns (uint256) {
-        return price;
+        return PriceLookupLib.priceForLevel(level);
     }
 
     /// @notice Get the VRF random word recorded for a specific day.
@@ -2152,7 +2153,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         lastPurchaseDay_ = (!inJackpotPhase) && lastPurchaseDay;
         lvl = _activeTicketLevel();
         rngLocked_ = rngLockedFlag;
-        priceWei = price;
+        priceWei = PriceLookupLib.priceForLevel(level);
     }
 
     /*+======================================================================+

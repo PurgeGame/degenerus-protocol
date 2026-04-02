@@ -129,7 +129,8 @@ interface IDegenerusQuests {
     /// @param ethMintQty ETH-paid ticket-equivalent mint units (fresh-ETH scaled)
     /// @param burnieMintQty BURNIE-paid ticket-equivalent mint units
     /// @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled)
-    /// @param mintPrice Current ticket price in wei
+    /// @param mintPrice Current ticket price in wei (purchaseLevel price for daily targets)
+    /// @param levelQuestPrice Price for level quest targets (level+1 price)
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was processed
     /// @return streak The player's current quest streak (for score forwarding)
@@ -139,7 +140,8 @@ interface IDegenerusQuests {
         uint32 ethMintQty,
         uint32 burnieMintQty,
         uint256 lootBoxAmount,
-        uint256 mintPrice
+        uint256 mintPrice,
+        uint256 levelQuestPrice
     ) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
     /// @notice Awards bonus streak days to a player

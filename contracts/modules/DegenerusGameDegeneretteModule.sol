@@ -13,6 +13,7 @@ import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /// @notice Minimal interface for WWXRP game burn/mint operations.
 interface IWrappedWrappedXRP {
@@ -406,7 +407,7 @@ contract DegenerusGameDegeneretteModule is
                 player,
                 totalBet,
                 currency == CURRENCY_ETH,
-                currency == CURRENCY_ETH ? price : 0
+                currency == CURRENCY_ETH ? PriceLookupLib.priceForLevel(level) : 0
             );
         }
     }

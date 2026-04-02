@@ -20,6 +20,7 @@ import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /// @dev Vault interface for DGVE ownership check (advanceGame mint-gate bypass).
 interface IDegenerusVaultOwner {
@@ -184,7 +185,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
                         coinflip.creditFlip(
                             caller,
-                            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / price
+                            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(lvl)
                         );
                         return;
                     }
@@ -227,7 +228,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         caller,
                         (ADVANCE_BOUNTY_ETH *
                             PRICE_COIN_UNIT *
-                            bountyMultiplier) / price
+                            bountyMultiplier) / PriceLookupLib.priceForLevel(lvl)
                     );
                     return;
                 }
@@ -414,7 +415,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         emit Advance(stage, lvl);
         coinflip.creditFlip(
             caller,
-            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / price
+            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / PriceLookupLib.priceForLevel(lvl)
         );
     }
 
@@ -737,7 +738,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (pendingBurnie < BURNIE_RNG_TRIGGER) {
             uint256 totalEthEquivalent = pendingEth;
             if (pendingBurnie != 0) {
-                uint256 priceWei = price;
+                uint256 priceWei = PriceLookupLib.priceForLevel(level);
                 if (priceWei != 0) {
                     totalEthEquivalent +=
                         (pendingBurnie * priceWei) /
@@ -1378,34 +1379,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // The game's level 0->1 transition means level 0 gameplay is complete,
             // so we resolve governance for level 0 = lvl - 1.
             charityResolve.pickCharity(lvl - 1);
-
-            // Set price for the new level based on intro tiers then 100-level cycle
-            if (lvl == 5) {
-                price = uint128(0.02 ether);
-            } else if (lvl == 10) {
-                price = uint128(0.04 ether);
-            } else if (lvl == 30) {
-                price = uint128(0.08 ether);
-            } else if (lvl == 60) {
-                price = uint128(0.12 ether);
-            } else if (lvl == 90) {
-                price = uint128(0.16 ether);
-            } else if (lvl == 100) {
-                price = uint128(0.24 ether);
-            } else if (lvl > 100) {
-                uint24 cycleOffset = lvl % 100;
-                if (cycleOffset == 1) {
-                    price = uint128(0.04 ether);
-                } else if (cycleOffset == 30) {
-                    price = uint128(0.08 ether);
-                } else if (cycleOffset == 60) {
-                    price = uint128(0.12 ether);
-                } else if (cycleOffset == 90) {
-                    price = uint128(0.16 ether);
-                } else if (cycleOffset == 0) {
-                    price = uint128(0.24 ether);
-                }
-            }
         }
     }
 

@@ -467,7 +467,8 @@ contract DegenerusQuests is IDegenerusQuests {
                         currentDay,
                         mintPrice,
                         QUEST_TYPE_MINT_ETH,
-                        levelQuestHandled ? 0 : delta
+                        levelQuestHandled ? 0 : delta,
+                        mintPrice
                     );
                 } else {
                     uint256 target = _questTargetValue(quest, slot, mintPrice);
@@ -482,7 +483,8 @@ contract DegenerusQuests is IDegenerusQuests {
                         currentDay,
                         mintPrice,
                         QUEST_TYPE_MINT_BURNIE,
-                        levelQuestHandled ? 0 : quantity
+                        levelQuestHandled ? 0 : quantity,
+                        mintPrice
                     );
                 }
                 levelQuestHandled = true;
@@ -747,7 +749,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param ethMintQty ETH-paid ticket-equivalent mint units (fresh-ETH scaled).
      * @param burnieMintQty BURNIE-paid ticket-equivalent mint units.
      * @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled).
-     * @param mintPrice Current ticket price in wei.
+     * @param mintPrice Current ticket price in wei (purchaseLevel price for daily targets).
+     * @param levelQuestPrice Price for level quest targets (level+1 price).
      * @return reward BURNIE tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
@@ -759,7 +762,8 @@ contract DegenerusQuests is IDegenerusQuests {
         uint32 ethMintQty,
         uint32 burnieMintQty,
         uint256 lootBoxAmount,
-        uint256 mintPrice
+        uint256 mintPrice,
+        uint256 levelQuestPrice
     )
         external
         onlyCoin
@@ -796,7 +800,8 @@ contract DegenerusQuests is IDegenerusQuests {
                     (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
                         player, state, quests, quest, slot,
                         delta, target, currentDay, mintPrice,
-                        QUEST_TYPE_MINT_ETH, levelQuestHandled ? 0 : delta
+                        QUEST_TYPE_MINT_ETH, levelQuestHandled ? 0 : delta,
+                        levelQuestPrice
                     );
                     levelQuestHandled = true;
                     if (c) {
@@ -809,7 +814,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 unchecked { ++slot; }
             }
             if (!levelQuestHandled) {
-                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, delta, mintPrice);
+                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, delta, levelQuestPrice);
             }
         }
 
@@ -824,7 +829,8 @@ contract DegenerusQuests is IDegenerusQuests {
                     (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
                         player, state, quests, quest, slot,
                         burnieMintQty, target, currentDay, 0,
-                        QUEST_TYPE_MINT_BURNIE, levelQuestHandled ? 0 : burnieMintQty
+                        QUEST_TYPE_MINT_BURNIE, levelQuestHandled ? 0 : burnieMintQty,
+                        levelQuestPrice
                     );
                     levelQuestHandled = true;
                     if (c) {
@@ -837,13 +843,13 @@ contract DegenerusQuests is IDegenerusQuests {
                 unchecked { ++slot; }
             }
             if (!levelQuestHandled) {
-                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, burnieMintQty, 0);
+                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, burnieMintQty, levelQuestPrice);
             }
         }
 
         // --- Lootbox quest progress ---
         if (lootBoxAmount != 0) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, lootBoxAmount, mintPrice);
+            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, lootBoxAmount, levelQuestPrice);
 
             (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
             if (slotIndex != type(uint8).max) {
@@ -937,7 +943,8 @@ contract DegenerusQuests is IDegenerusQuests {
             currentDay,
             mintPrice,
             targetType,
-            amount
+            amount,
+            mintPrice
         );
         if (completed && reward != 0) {
             IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
@@ -1210,7 +1217,10 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param delta Progress delta to add (units depend on quest type).
      * @param target Target to complete the quest (units depend on quest type).
      * @param currentDay Current quest day (for paired completion checks).
-     * @param mintPrice Cached mint price (wei) for ETH-based quests, 0 if unused.
+     * @param mintPrice Cached mint price (wei) for daily ETH-based quests, 0 if unused.
+     * @param handlerQuestType The quest type this handler tracks for level quest routing.
+     * @param levelDelta Progress delta to forward to level quest handler (0 to skip).
+     * @param levelQuestPrice Price for level quest target (level+1 price during purchase).
      * @return reward BURNIE tokens earned (in base units).
      * @return questType The completed quest type.
      * @return streak Player's streak after completion.
@@ -1227,7 +1237,8 @@ contract DegenerusQuests is IDegenerusQuests {
         uint48 currentDay,
         uint256 mintPrice,
         uint8 handlerQuestType,
-        uint256 levelDelta
+        uint256 levelDelta,
+        uint256 levelQuestPrice
     ) private returns (uint256 reward, uint8 questType, uint32 streak, bool completed) {
         _questSyncProgress(state, slot, quest.day, quest.version);
         state.progress[slot] = _clampedAdd128(state.progress[slot], delta);
@@ -1239,7 +1250,7 @@ contract DegenerusQuests is IDegenerusQuests {
             state.progress[slot],
             target
         );
-        _handleLevelQuestProgress(player, handlerQuestType, levelDelta, mintPrice);
+        _handleLevelQuestProgress(player, handlerQuestType, levelDelta, levelQuestPrice);
         if (state.progress[slot] >= target) {
             if (slot == 1 && (state.completionMask & 1) == 0) {
                 return (0, quest.questType, state.streak, false);
