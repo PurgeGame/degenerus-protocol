@@ -15,11 +15,11 @@ contract LootboxRngLifecycle is DeployProtocol {
     /// @dev Storage slot constants for direct state inspection via vm.load.
     ///      Verified via `forge inspect DegenerusGame storage-layout`.
     ///      Slot 0: packed timing/flags (see DegenerusGameStorage layout).
-    ///      Slot 4: rngWordCurrent (uint256).
-    ///      Slot 5: vrfRequestId (uint256).
+    ///      Slot 3: rngWordCurrent (uint256).
+    ///      Slot 4: vrfRequestId (uint256).
     uint256 constant SLOT_PACKED_0 = 0;
-    uint256 constant SLOT_RNG_WORD_CURRENT = 4;
-    uint256 constant SLOT_VRF_REQUEST_ID = 5;
+    uint256 constant SLOT_RNG_WORD_CURRENT = 3;
+    uint256 constant SLOT_VRF_REQUEST_ID = 4;
 
     function setUp() public {
         _deployProtocol();
@@ -99,14 +99,14 @@ contract LootboxRngLifecycle is DeployProtocol {
         ts = block.timestamp;
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 45.
+    /// @dev Read lootboxRngIndex directly from storage slot 40.
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(45)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(40)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 49).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 44).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(49)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(44)));
         return uint256(vm.load(address(game), slot));
     }
 

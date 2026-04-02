@@ -12,8 +12,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Storage slot constants verified via `forge inspect DegenerusGame storage-layout`.
     uint256 constant SLOT_PACKED_0 = 0;
-    uint256 constant SLOT_RNG_WORD_CURRENT = 4;
-    uint256 constant SLOT_VRF_REQUEST_ID = 5;
+    uint256 constant SLOT_RNG_WORD_CURRENT = 3;
+    uint256 constant SLOT_VRF_REQUEST_ID = 4;
 
     function setUp() public {
         _deployProtocol();
@@ -67,14 +67,14 @@ contract VRFStallEdgeCases is DeployProtocol {
         }
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 45.
+    /// @dev Read lootboxRngIndex directly from storage slot 40.
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(45)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(40)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 49).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 44).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(49)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(44)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -334,10 +334,9 @@ contract VRFStallEdgeCases is DeployProtocol {
     // ══════════════════════════════════════════════════════════════════════
 
     /// @dev Storage slot for totalFlipReversals (verified via forge inspect).
-    uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 6;
-    /// @dev Storage slot for midDayTicketRngPending (verified via forge inspect DegenerusGame storage-layout).
-    ///      Shifted from slot 56 to 55 after FIX-01 redundant storage variable deletion.
-    uint256 constant SLOT_MID_DAY_PENDING = 55;
+    uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5;
+    /// @dev Storage slot for midDayTicketRngPending (verified via forge inspect).
+    uint256 constant SLOT_MID_DAY_PENDING = 50;
 
     /// @notice Unit: coordinator swap resets all VRF state and preserves intentionally-kept variables.
     function test_coordinatorSwapResetsAllVrfState() public {

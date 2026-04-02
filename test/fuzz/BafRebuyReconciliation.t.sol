@@ -36,7 +36,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract BafRebuyReconciliationTest is DeployProtocol {
     /// @dev Storage slot of prizePoolsPacked in DegenerusGameStorage (confirmed via forge inspect).
     ///      Layout: [upper 128 bits: futurePrizePool] [lower 128 bits: nextPrizePool]
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 3;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
     address private buyer;
 

@@ -68,9 +68,9 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev EVM slot 1: packed price/buffer fields
     uint256 private constant SLOT_1 = 1;
 
-    uint256 private constant TICKET_QUEUE_SLOT = 15;
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 16;
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 3;
+    uint256 private constant TICKET_QUEUE_SLOT = 13;
+    uint256 private constant TICKETS_OWED_PACKED_SLOT = 14;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
     // =========================================================================
     // Bit offsets within packed slots (byte offset * 8)
@@ -86,14 +86,14 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev jackpotCounter is uint8 at slot 0 offset 22 bytes = bits 176-183
     uint256 private constant JACKPOT_COUNTER_SHIFT = 176;
 
-    /// @dev rngLockedFlag is bool at slot 0 offset 26 bytes = bit 208
-    uint256 private constant RNG_LOCKED_SHIFT = 208;
+    /// @dev rngLockedFlag is bool at slot 0 offset 25 bytes = bit 200
+    uint256 private constant RNG_LOCKED_SHIFT = 200;
 
-    /// @dev ticketWriteSlot is uint8 at slot 1 offset 22 bytes = bits 176-183
-    uint256 private constant WRITE_SLOT_SHIFT = 176;
+    /// @dev ticketWriteSlot is uint8 at slot 1 offset 6 bytes = bits 48-55
+    uint256 private constant WRITE_SLOT_SHIFT = 48;
 
-    /// @dev compressedJackpotFlag is uint8 at slot 0 offset 31 bytes = bits 248-255
-    uint256 private constant COMPRESSED_FLAG_SHIFT = 248;
+    /// @dev compressedJackpotFlag is uint8 at slot 0 offset 29 bytes = bits 232-239
+    uint256 private constant COMPRESSED_FLAG_SHIFT = 232;
 
     // =========================================================================
     // Constants matching production code
@@ -2042,14 +2042,14 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      Checks the current read key for the queue sweep. The write side may have
     ///      nonzero entries from later transitions (vault perpetual writes to past levels).
     ///      The read key being zero proves the level was fully processed during its lifecycle.
-    /// @dev Read lootboxRngIndex directly from storage slot 45.
+    /// @dev Read lootboxRngIndex directly from storage slot 40.
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(45)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(40)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 49).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 44).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(49)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(44)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -2089,7 +2089,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // ==================== Lootbox Helpers ====================
 
     /// @dev Storage slot for lootboxRngWordByIndex mapping (confirmed via forge inspect)
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 49;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 44;
 
     /// @notice Purchase tickets with a lootbox ETH allocation. Returns the lootbox RNG index.
     /// @param who Buyer address
@@ -2135,8 +2135,8 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     /// @notice Store a deterministic lootbox RNG word via vm.store.
-    /// @dev lootboxRngWordByIndex is mapping(uint48 => uint256) at slot 49.
-    ///      mapping slot = keccak256(abi.encode(uint256(index), uint256(49)))
+    /// @dev lootboxRngWordByIndex is mapping(uint48 => uint256) at slot 44.
+    ///      mapping slot = keccak256(abi.encode(uint256(index), uint256(44)))
     function _storeLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
@@ -2193,8 +2193,8 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @notice Read ticketsOwedPacked[key][who] from game contract storage.
     ///         Returns the raw uint40 packed value: upper 32 bits = tickets owed, lower 8 = remainder.
     function _ticketsOwed(uint24 key, address who) internal view returns (uint32 owed) {
-        // ticketsOwedPacked is mapping(uint24 => mapping(address => uint40)) at SLOT 16.
-        // First level: keccak256(abi.encode(key, 16))
+        // ticketsOwedPacked is mapping(uint24 => mapping(address => uint40)) at SLOT 14.
+        // First level: keccak256(abi.encode(key, 14))
         // Second level: keccak256(abi.encode(who, firstLevelSlot))
         bytes32 firstLevel = keccak256(abi.encode(uint256(key), uint256(TICKETS_OWED_PACKED_SLOT)));
         bytes32 secondLevel = keccak256(abi.encode(uint256(uint160(who)), uint256(firstLevel)));

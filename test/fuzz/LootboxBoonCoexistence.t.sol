@@ -19,13 +19,13 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // Storage slot constants (from `forge inspect DegenerusGame storage-layout`)
     // ──────────────────────────────────────────────────────────────────────
 
-    uint256 constant SLOT_BOON_PACKED     = 77;   // mapping(address => BoonPacked)
-    uint256 constant SLOT_LOOTBOX_ETH     = 20;   // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 45;   // uint48 lootboxRngIndex
-    uint256 constant SLOT_LOOTBOX_WORD    = 49;   // mapping(uint48 => uint256) lootboxRngWordByIndex
-    uint256 constant SLOT_LOOTBOX_DAY     = 50;   // mapping(uint48 => mapping(address => uint48))
-    uint256 constant SLOT_LOOTBOX_BASE    = 28;   // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_LOOTBOX_EV      = 52;   // mapping(uint48 => mapping(address => uint16))
+    uint256 constant SLOT_BOON_PACKED     = 72;   // mapping(address => BoonPacked)
+    uint256 constant SLOT_LOOTBOX_ETH     = 16;   // mapping(uint48 => mapping(address => uint256))
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = 40;   // uint48 lootboxRngIndex
+    uint256 constant SLOT_LOOTBOX_WORD    = 44;   // mapping(uint48 => uint256) lootboxRngWordByIndex
+    uint256 constant SLOT_LOOTBOX_DAY     = 45;   // mapping(uint48 => mapping(address => uint48))
+    uint256 constant SLOT_LOOTBOX_BASE    = 24;   // mapping(uint48 => mapping(address => uint256))
+    uint256 constant SLOT_LOOTBOX_EV      = 47;   // mapping(uint48 => mapping(address => uint16))
 
     // BoonPacked bit layout (slot0)
     uint256 constant BP_COINFLIP_DAY_SHIFT  = 0;

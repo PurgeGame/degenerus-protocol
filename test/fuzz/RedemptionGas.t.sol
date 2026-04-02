@@ -28,11 +28,11 @@ contract RedemptionGasTest is DeployProtocol {
         // Fund the Game with ETH and credit sDGNRS via claimableWinnings
         // (during active game, all sDGNRS ETH backing is in claimableWinnings on the Game)
         vm.deal(address(game), 100 ether);
-        // claimableWinnings mapping is at slot 9; compute slot for sDGNRS's entry
-        bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(9)));
+        // claimableWinnings mapping is at slot 7; compute slot for sDGNRS's entry
+        bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
         vm.store(address(game), claimableSlot, bytes32(uint256(100 ether)));
-        // claimablePool is at slot 10
-        vm.store(address(game), bytes32(uint256(10)), bytes32(uint256(100 ether)));
+        // claimablePool is at slot 8
+        vm.store(address(game), bytes32(uint256(8)), bytes32(uint256(100 ether)));
     }
 
     // =====================================================================

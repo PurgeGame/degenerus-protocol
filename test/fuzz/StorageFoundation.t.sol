@@ -90,44 +90,45 @@ contract StorageFoundationTest is Test {
     // STOR-01: Field Placement Tests
     // =====================================================================
 
-    /// @dev Verify ticketWriteSlot at Slot 1, offset 22; ticketsFullyProcessed at offset 23; prizePoolFrozen at offset 24.
+    /// @dev Verify ticketWriteSlot at Slot 1, offset 6; prizePoolFrozen at offset 7.
+    ///      ticketsFullyProcessed moved to Slot 0 offset 30; gameOverPossible to Slot 0 offset 31.
     function testSlot1FieldOffsets() public {
         // Set ticketWriteSlot = 1
         harness.setTicketWriteSlot(1);
         bytes32 slot1 = vm.load(address(harness), bytes32(uint256(1)));
-        // offset 22 means byte 22 from the RIGHT in the 32-byte word (little-endian packing)
+        // offset 6 means byte 6 from the RIGHT in the 32-byte word (little-endian packing)
         // In EVM storage packing, offset N means bits [N*8, (N+1)*8)
-        // So ticketWriteSlot at offset 22 = bits [176, 184)
-        assertEq(uint8(uint256(slot1) >> 176), 1, "ticketWriteSlot not at offset 22");
+        // So ticketWriteSlot at offset 6 = bits [48, 56)
+        assertEq(uint8(uint256(slot1) >> 48), 1, "ticketWriteSlot not at offset 6");
 
-        // Reset and set ticketsFullyProcessed = true (offset 23 = bits [184, 192))
+        // Reset and set prizePoolFrozen = true (offset 7 = bits [56, 64))
         harness.setTicketWriteSlot(0);
-        harness.setTicketsFullyProcessed(true);
-        slot1 = vm.load(address(harness), bytes32(uint256(1)));
-        assertEq(uint8(uint256(slot1) >> 184), 1, "ticketsFullyProcessed not at offset 23");
-
-        // Reset and set prizePoolFrozen = true (offset 24 = bits [192, 200))
-        harness.setTicketsFullyProcessed(false);
         harness.setPrizePoolFrozen(true);
         slot1 = vm.load(address(harness), bytes32(uint256(1)));
-        assertEq(uint8(uint256(slot1) >> 192), 1, "prizePoolFrozen not at offset 24");
+        assertEq(uint8(uint256(slot1) >> 56), 1, "prizePoolFrozen not at offset 7");
+
+        // Verify ticketsFullyProcessed is in slot 0 at offset 30 = bits [240, 248)
+        harness.setPrizePoolFrozen(false);
+        harness.setTicketsFullyProcessed(true);
+        bytes32 slot0 = vm.load(address(harness), bytes32(uint256(0)));
+        assertEq(uint8(uint256(slot0) >> 240), 1, "ticketsFullyProcessed not at slot 0 offset 30");
     }
 
-    /// @dev Verify prizePoolsPacked at Slot 3 and prizePoolPendingPacked at Slot 14.
+    /// @dev Verify prizePoolsPacked at Slot 2 and prizePoolPendingPacked at Slot 12.
     function testPackedPoolSlotsUnshifted() public {
-        // Write a known value to Slot 3 via vm.store, then read back via harness getter
-        uint256 sentinel3 = 0xDEADBEEF00000000000000000000000100000000000000000000000000000002;
-        vm.store(address(harness), bytes32(uint256(3)), bytes32(sentinel3));
-        (uint128 next3, uint128 future3) = harness.exposed_getPrizePools();
-        assertEq(uint256(next3), sentinel3 & type(uint128).max, "prizePoolsPacked not at slot 3 (next)");
-        assertEq(uint256(future3), sentinel3 >> 128, "prizePoolsPacked not at slot 3 (future)");
+        // Write a known value to Slot 2 via vm.store, then read back via harness getter
+        uint256 sentinel2 = 0xDEADBEEF00000000000000000000000100000000000000000000000000000002;
+        vm.store(address(harness), bytes32(uint256(2)), bytes32(sentinel2));
+        (uint128 next2, uint128 future2) = harness.exposed_getPrizePools();
+        assertEq(uint256(next2), sentinel2 & type(uint128).max, "prizePoolsPacked not at slot 2 (next)");
+        assertEq(uint256(future2), sentinel2 >> 128, "prizePoolsPacked not at slot 2 (future)");
 
-        // Write a known value to Slot 14 via vm.store, then read back via harness getter
-        uint256 sentinel14 = 0x0000000000000000000000000000000300000000000000000000000000000004;
-        vm.store(address(harness), bytes32(uint256(14)), bytes32(sentinel14));
-        (uint128 next14, uint128 future14) = harness.exposed_getPendingPools();
-        assertEq(uint256(next14), sentinel14 & type(uint128).max, "prizePoolPendingPacked not at slot 14 (next)");
-        assertEq(uint256(future14), sentinel14 >> 128, "prizePoolPendingPacked not at slot 14 (future)");
+        // Write a known value to Slot 12 via vm.store, then read back via harness getter
+        uint256 sentinel12 = 0x0000000000000000000000000000000300000000000000000000000000000004;
+        vm.store(address(harness), bytes32(uint256(12)), bytes32(sentinel12));
+        (uint128 next12, uint128 future12) = harness.exposed_getPendingPools();
+        assertEq(uint256(next12), sentinel12 & type(uint128).max, "prizePoolPendingPacked not at slot 12 (next)");
+        assertEq(uint256(future12), sentinel12 >> 128, "prizePoolPendingPacked not at slot 12 (future)");
     }
 
     // =====================================================================

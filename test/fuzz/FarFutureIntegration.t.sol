@@ -34,13 +34,13 @@ contract FFKeyComputer is DegenerusGameStorage {
 /// @dev To fast-track level transitions, this test seeds the nextPrizePool via vm.store
 ///      to just below the BOOTSTRAP_PRIZE_POOL target (50 ETH). A small purchase then triggers
 ///      the level transition without burning gas on prize pool accumulation.
-///      Storage layout: prizePoolsPacked at slot 3 = [128:256] future | [0:128] next.
+///      Storage layout: prizePoolsPacked at slot 2 = [128:256] future | [0:128] next.
 contract FarFutureIntegrationTest is DeployProtocol {
     /// @dev Storage slot of ticketQueue mapping in DegenerusGameStorage (confirmed via forge inspect)
-    uint256 private constant TICKET_QUEUE_SLOT = 15;
+    uint256 private constant TICKET_QUEUE_SLOT = 13;
 
     /// @dev Storage slot of prizePoolsPacked in DegenerusGameStorage (confirmed via forge inspect)
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 3;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
     FFKeyComputer private ffComputer;
     address private buyer;

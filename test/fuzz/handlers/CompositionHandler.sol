@@ -33,8 +33,8 @@ contract CompositionHandler is Test {
     address internal currentActor;
 
     // --- Constants ---
-    // mintPacked_ is at storage slot 12 (from forge inspect)
-    uint256 private constant MINT_PACKED_SLOT = 12;
+    // mintPacked_ is at storage slot 10 (from forge inspect)
+    uint256 private constant MINT_PACKED_SLOT = 10;
     // Gap bits are in TWO ranges (NOT continuous):
     //   Gap 1: bits 154-159 (6 bits) -- between WHALE_BUNDLE_TYPE(152-153) and MINT_STREAK_LAST_COMPLETED(160-183)
     //   Gap 2: bits 184-227 (44 bits) -- between MINT_STREAK_LAST_COMPLETED(160-183) and LEVEL_UNITS(228-243)

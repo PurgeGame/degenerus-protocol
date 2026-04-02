@@ -23,18 +23,18 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // --- Storage slot constants (confirmed via `forge inspect DegenerusGameStorage storage`) ---
 
-    /// @dev Slot 1, byte offset 24: prizePoolFrozen (bool, 1 byte).
+    /// @dev Slot 1, byte offset 7: prizePoolFrozen (bool, 1 byte).
     uint256 private constant SLOT_1 = 1;
-    uint256 private constant FROZEN_BYTE_OFFSET = 24;
+    uint256 private constant FROZEN_BYTE_OFFSET = 7;
 
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool]
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 3;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
     /// @dev prizePoolPendingPacked: [upper 128: futurePending] [lower 128: nextPending]
-    uint256 private constant PENDING_PACKED_SLOT = 14;
+    uint256 private constant PENDING_PACKED_SLOT = 12;
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 49;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 44;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
