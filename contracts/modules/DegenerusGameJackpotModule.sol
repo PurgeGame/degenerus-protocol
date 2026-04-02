@@ -128,8 +128,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     bytes32 private constant DAILY_CARRYOVER_SOURCE_TAG =
         keccak256("daily-carryover-source");
 
-    /// @dev Max forward offset for carryover source selection (lvl+1..lvl+5).
-    uint8 private constant DAILY_CARRYOVER_MAX_OFFSET = 5;
+    /// @dev Max forward offset for carryover source selection (lvl+1..lvl+4).
+    uint8 private constant DAILY_CARRYOVER_MAX_OFFSET = 4;
 
     /// @dev Current-pool daily jackpot percentage bounds for days 1-4 (6%-14%).
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
@@ -179,7 +179,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Number of far-future levels to sample for BURNIE jackpot (10 winners max).
     uint8 private constant FAR_FUTURE_COIN_SAMPLES = 10;
-
 
     /// @dev Domain separator for far-future coin jackpot entropy derivation.
     bytes32 private constant FAR_FUTURE_COIN_TAG = keccak256("far-future-coin");
@@ -236,10 +235,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) external returns (uint256 paidWei) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
 
-        uint32 winningTraitsPacked = _rollWinningTraits(
-            rngWord,
-            true
-        );
+        uint32 winningTraitsPacked = _rollWinningTraits(rngWord, true);
         uint256 entropy = rngWord ^ (uint256(targetLvl) << 192);
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
@@ -273,11 +269,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Day 1-4: Distributes a random 6%-14% slice of remaining currentPrizePool.
     ///      - Day 5: Distributes 100% of remaining currentPrizePool.
     ///      - Day 1 also runs the early-bird lootbox jackpot (from futurePrizePool).
-    ///      - On day 1, carryover is skipped and replaced by early-bird.
-    ///      - On day 2-4, seeds a carryover jackpot at flat 1% from the unified future pool.
-    ///      - Carryover picks a random eligible source in [lvl+1, lvl+N], where N
-    ///        is the highest offset (up to +5) that has actual winning-trait tickets.
-    ///      - Distributes loot boxes immediately to winners (50% of carryover budget).
+    ///      - On day 2-4, takes 0.5% of futurePrizePool and buys current-level tickets
+    ///        for winners from a random source level in [lvl+1, lvl+4], deposited into nextPool.
     ///      - Increments jackpotCounter on completion.
     ///
     ///      EARLY-BURN PATH (isDaily=false):
@@ -393,10 +386,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
                 // Ticket distribution only if source level has trait holders
                 uint256 carryoverTicketUnits;
-                if (reserveSlice != 0 && _hasTraitTickets(carryoverSourceLevel, winningTraitsPacked)) {
+                if (
+                    reserveSlice != 0 &&
+                    _hasTraitTickets(carryoverSourceLevel, winningTraitsPacked)
+                ) {
                     carryoverTicketUnits = _budgetToTicketUnits(
                         reserveSlice,
-                        carryoverSourceLevel + 1
+                        lvl
                     );
                 }
 
@@ -437,10 +433,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     ? FINAL_DAY_SHARES_PACKED
                     : DAILY_JACKPOT_SHARES_PACKED;
                 uint16[4] memory shareBpsDaily = JackpotBucketLib
-                    .shareBpsByBucket(
-                        sharesPacked,
-                        uint8(entropyDaily & 3)
-                    );
+                    .shareBpsByBucket(sharesPacked, uint8(entropyDaily & 3));
 
                 uint256 paidDailyEth = _processDailyEth(
                     lvl,
@@ -583,6 +576,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (dailyTicketUnits != 0) {
             _distributeTicketJackpot(
                 lvl,
+                lvl + 1,
                 winningTraitsPacked,
                 dailyTicketUnits,
                 entropyDaily,
@@ -591,10 +585,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             );
         }
 
-        // Distribute carryover tickets to selected future-level trait winners.
+        // Distribute carryover tickets: winners from source level, tickets at current level
+        // (or lvl+1 on final day since current level is about to end).
         if (carryoverTicketUnits != 0 && carryoverSourceOffset != 0) {
+            bool isFinalDay = jackpotCounter + counterStep >= JACKPOT_LEVEL_CAP;
             _distributeTicketJackpot(
                 carryoverSourceLevel,
+                isFinalDay ? lvl + 1 : lvl,
                 winningTraitsPacked,
                 carryoverTicketUnits,
                 entropyNext,
@@ -619,7 +616,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param lvl Current level.
     /// @param rngWord VRF random word.
     function awardFinalDayDgnrsReward(uint24 lvl, uint256 rngWord) external {
-        uint256 dgnrsPool = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Reward);
+        uint256 dgnrsPool = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Reward
+        );
         uint256 reward = (dgnrsPool * FINAL_DAY_DGNRS_BPS) / 10_000;
         if (reward == 0) return;
 
@@ -945,6 +944,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (ticketUnits != 0) {
             _distributeTicketJackpot(
                 lvl,
+                lvl + 1,
                 winningTraitsPacked,
                 ticketUnits,
                 randWord ^ (uint256(lvl) << 192),
@@ -956,7 +956,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Distributes ticket rewards to winners drawn from winning trait pools.
     function _distributeTicketJackpot(
-        uint24 lvl,
+        uint24 sourceLvl,
+        uint24 queueLvl,
         uint32 winningTraitsPacked,
         uint256 ticketUnits,
         uint256 entropy,
@@ -972,7 +973,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (ticketUnits < cap) cap = uint16(ticketUnits);
 
         (uint16[4] memory counts, uint8 activeCount) = _computeBucketCounts(
-            lvl,
+            sourceLvl,
             traitIds,
             cap,
             entropy
@@ -980,7 +981,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (activeCount == 0) return;
 
         _distributeTicketsToBuckets(
-            lvl,
+            sourceLvl,
+            queueLvl,
             traitIds,
             counts,
             ticketUnits,
@@ -992,7 +994,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Distributes tickets across all buckets.
     function _distributeTicketsToBuckets(
-        uint24 lvl,
+        uint24 sourceLvl,
+        uint24 queueLvl,
         uint8[4] memory traitIds,
         uint16[4] memory counts,
         uint256 ticketUnits,
@@ -1010,7 +1013,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     entropy ^ (uint256(traitIdx) << 64) ^ ticketUnits
                 );
                 globalIdx = _distributeTicketsToBucket(
-                    lvl,
+                    sourceLvl,
+                    queueLvl,
                     traitIds[traitIdx],
                     counts[traitIdx],
                     entropy,
@@ -1029,7 +1033,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Distributes tickets to winners in a single bucket.
     function _distributeTicketsToBucket(
-        uint24 lvl,
+        uint24 sourceLvl,
+        uint24 queueLvl,
         uint8 traitId,
         uint16 count,
         uint256 entropy,
@@ -1041,7 +1046,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) private returns (uint256 endIdx) {
         if (count > MAX_BUCKET_WINNERS) count = MAX_BUCKET_WINNERS;
         address[] memory winners = _randTraitTicket(
-            traitBurnTicket[lvl],
+            traitBurnTicket[sourceLvl],
             entropy,
             traitId,
             uint8(count),
@@ -1059,7 +1064,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 units += 1;
             }
             if (winner != address(0) && units != 0) {
-                _queueTickets(winner, lvl + 1, uint32(units));
+                _queueTickets(winner, queueLvl, uint32(units));
             }
             unchecked {
                 ++cursor;
@@ -1337,13 +1342,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
 
         for (uint8 traitIdx; traitIdx < 4; ) {
-            _processOneBucket(
-                ctx,
-                traitIdx,
-                traitIds,
-                shares,
-                bucketCounts
-            );
+            _processOneBucket(ctx, traitIdx, traitIds, shares, bucketCounts);
             unchecked {
                 ++traitIdx;
             }
@@ -2290,7 +2289,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             ++batchCount;
                         }
                         if (batchCount == 3) {
-                            coinflip.creditFlipBatch(batchPlayers, batchAmounts);
+                            coinflip.creditFlipBatch(
+                                batchPlayers,
+                                batchAmounts
+                            );
                             batchCount = 0;
                         }
                     }
