@@ -314,7 +314,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 bool isFinalPhysicalDay = (counter + counterStep >=
                     JACKPOT_LEVEL_CAP);
                 bool isEarlyBirdDay = (counter == 0);
-                uint256 poolSnapshot = currentPrizePool;
+                uint256 poolSnapshot = _getCurrentPrizePool();
                 uint16 dailyBps;
                 if (isFinalPhysicalDay) {
                     dailyBps = 10_000; // Final physical day: 100% of remaining pool
@@ -350,7 +350,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 );
                 if (dailyTicketUnits != 0) {
                     // Deduct from current pool and add to next pool to back tickets
-                    currentPrizePool -= dailyLootboxBudget;
+                    _setCurrentPrizePool(_getCurrentPrizePool() - dailyLootboxBudget);
                     _setNextPrizePool(_getNextPrizePool() + dailyLootboxBudget);
                 }
 
@@ -430,7 +430,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     shareBpsDaily,
                     bucketCountsDaily
                 );
-                currentPrizePool -= paidDailyEth;
+                _setCurrentPrizePool(_getCurrentPrizePool() - paidDailyEth);
             }
 
             dailyJackpotCoinTicketsPending = true;
@@ -718,7 +718,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         // Consolidate pools for this level's jackpot calculations.
-        currentPrizePool += _getNextPrizePool();
+        _setCurrentPrizePool(_getCurrentPrizePool() + _getNextPrizePool());
         _setNextPrizePool(0);
 
         if ((lvl % 100) == 0) {
@@ -729,12 +729,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint256 moveWei = fp - keepWei;
                 if (moveWei != 0) {
                     _setFuturePrizePool(keepWei);
-                    currentPrizePool += moveWei;
+                    _setCurrentPrizePool(_getCurrentPrizePool() + moveWei);
                 }
             }
         }
 
-        _creditDgnrsCoinflip(currentPrizePool);
+        _creditDgnrsCoinflip(_getCurrentPrizePool());
 
         _distributeYieldSurplus(rngWord);
     }
@@ -744,7 +744,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     function _distributeYieldSurplus(uint256 rngWord) private {
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalBal = address(this).balance + stBal;
-        uint256 obligations = currentPrizePool +
+        uint256 obligations = _getCurrentPrizePool() +
             _getNextPrizePool() +
             claimablePool +
             _getFuturePrizePool() +

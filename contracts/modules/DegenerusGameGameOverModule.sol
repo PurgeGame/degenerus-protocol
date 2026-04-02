@@ -130,7 +130,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             gameOverFinalJackpotPaid = true;
             _setNextPrizePool(0);
             _setFuturePrizePool(0);
-            currentPrizePool = 0;
+            _setCurrentPrizePool(0);
             yieldAccumulator = 0;
             return;
         }
@@ -142,7 +142,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         gameOverFinalJackpotPaid = true;
         _setNextPrizePool(0);
         _setFuturePrizePool(0);
-        currentPrizePool = 0;
+        _setCurrentPrizePool(0);
         yieldAccumulator = 0;
 
         emit GameOverDrained(lvl, available, claimablePool);

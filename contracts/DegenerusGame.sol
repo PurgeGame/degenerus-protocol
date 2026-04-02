@@ -2034,7 +2034,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Get the current prize pool (jackpots are paid from this).
     /// @return The currentPrizePool value (ETH wei).
     function currentPrizePoolView() external view returns (uint256) {
-        return currentPrizePool;
+        return _getCurrentPrizePool();
     }
 
     /// @notice Get the claimable pool (reserved for player winnings claims).
@@ -2060,7 +2060,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function yieldPoolView() external view returns (uint256) {
         uint256 totalBalance = address(this).balance +
             steth.balanceOf(address(this));
-        uint256 obligations = currentPrizePool +
+        uint256 obligations = _getCurrentPrizePool() +
             _getNextPrizePool() +
             claimablePool +
             _getFuturePrizePool() +
