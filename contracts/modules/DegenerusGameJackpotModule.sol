@@ -354,42 +354,29 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     _setNextPrizePool(_getNextPrizePool() + dailyLootboxBudget);
                 }
 
-                uint8 initCarryoverSourceOffset;
-                uint24 carryoverSourceLevel = lvl + 1;
-                if (!isEarlyBirdDay) {
-                    initCarryoverSourceOffset = _selectCarryoverSourceOffset(
-                        lvl,
-                        winningTraitsPacked,
-                        randWord,
-                        counter
-                    );
-                    if (initCarryoverSourceOffset != 0) {
-                        carryoverSourceLevel =
-                            lvl +
-                            uint24(initCarryoverSourceOffset);
-                    }
-                }
-
-                // 0.5% of futurePrizePool reserved for carryover tickets
+                uint8 sourceLevelOffset;
+                uint24 sourceLevel;
                 uint256 reserveSlice;
-                if (!isEarlyBirdDay && initCarryoverSourceOffset != 0) {
-                    reserveSlice = _getFuturePrizePool() / 200;
-
-                    // Deduct immediately (upfront model)
-                    _setFuturePrizePool(_getFuturePrizePool() - reserveSlice);
-                }
-
-                // Reserve slice always flows to nextPool (ETH backing)
-                if (reserveSlice != 0) {
-                    _setNextPrizePool(_getNextPrizePool() + reserveSlice);
-                }
-
-                // Ticket distribution only if source level has trait holders
                 uint256 carryoverTicketUnits;
-                if (
-                    reserveSlice != 0 &&
-                    _hasTraitTickets(carryoverSourceLevel, winningTraitsPacked)
-                ) {
+                if (!isEarlyBirdDay) {
+                    sourceLevelOffset = uint8(
+                        (uint256(
+                            keccak256(
+                                abi.encodePacked(
+                                    randWord,
+                                    DAILY_CARRYOVER_SOURCE_TAG,
+                                    counter
+                                )
+                            )
+                        ) % DAILY_CARRYOVER_MAX_OFFSET) + 1
+                    );
+                    sourceLevel = lvl + uint24(sourceLevelOffset);
+
+                    // 0.5% of futurePrizePool reserved for carryover tickets
+                    uint256 futurePool = _getFuturePrizePool();
+                    reserveSlice = futurePool / 200;
+                    _setFuturePrizePool(futurePool - reserveSlice);
+                    _setNextPrizePool(_getNextPrizePool() + reserveSlice);
                     carryoverTicketUnits = _budgetToTicketUnits(
                         reserveSlice,
                         lvl
@@ -403,7 +390,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     counterStep,
                     dailyTicketUnits,
                     carryoverTicketUnits,
-                    initCarryoverSourceOffset
+                    sourceLevelOffset
                 );
 
                 dailyEthBudget = budget;
@@ -537,11 +524,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl = lastDailyJackpotLevel;
         uint32 winningTraitsPacked = lastDailyJackpotWinningTraits;
         uint256 entropyDaily = randWord ^ (uint256(lvl) << 192);
-        uint24 carryoverSourceLevel = lvl + 1;
-        if (carryoverSourceOffset != 0) {
-            carryoverSourceLevel = lvl + uint24(carryoverSourceOffset);
-        }
-        uint256 entropyNext = randWord ^ (uint256(carryoverSourceLevel) << 192);
+        uint24 sourceLevel = lvl + uint24(carryoverSourceOffset);
+        uint256 entropyNext = randWord ^ (uint256(sourceLevel) << 192);
 
         // --- Coin Jackpot ---
         uint256 coinBudget = _calcDailyCoinBudget(lvl);
@@ -587,10 +571,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // Distribute carryover tickets: winners from source level, tickets at current level
         // (or lvl+1 on final day since current level is about to end).
-        if (carryoverTicketUnits != 0 && carryoverSourceOffset != 0) {
+        if (carryoverTicketUnits != 0) {
             bool isFinalDay = jackpotCounter + counterStep >= JACKPOT_LEVEL_CAP;
             _distributeTicketJackpot(
-                carryoverSourceLevel,
+                sourceLevel,
                 isFinalDay ? lvl + 1 : lvl,
                 winningTraitsPacked,
                 carryoverTicketUnits,
@@ -2471,88 +2455,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             )
         );
         return uint16(DAILY_CURRENT_BPS_MIN + (seed % range));
-    }
-
-    /// @dev Return true if any winning trait has actual (non-virtual) tickets at `lvl`.
-    function _hasActualTraitTickets(
-        uint24 lvl,
-        uint32 packedTraits
-    ) private view returns (bool) {
-        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
-            packedTraits
-        );
-        for (uint8 i; i < 4; ) {
-            if (traitBurnTicket[lvl][traitIds[i]].length != 0) return true;
-            unchecked {
-                ++i;
-            }
-        }
-        return false;
-    }
-
-    /// @dev Return highest eligible carryover source offset in [1..DAILY_CARRYOVER_MAX_OFFSET]
-    ///      with actual winning-trait tickets. Returns 0 if none are eligible.
-    function _highestCarryoverSourceOffset(
-        uint24 lvl,
-        uint32 winningTraitsPacked
-    ) private view returns (uint8 offset) {
-        for (uint8 o = DAILY_CARRYOVER_MAX_OFFSET; o != 0; ) {
-            if (_hasActualTraitTickets(lvl + uint24(o), winningTraitsPacked)) {
-                return o;
-            }
-            unchecked {
-                --o;
-            }
-        }
-        return 0;
-    }
-
-    /// @dev Select a random eligible carryover source offset in [1..highestEligible],
-    ///      where highestEligible is the highest offset with actual winning-trait tickets.
-    ///      Returns 0 if no offsets are eligible.
-    function _selectCarryoverSourceOffset(
-        uint24 lvl,
-        uint32 winningTraitsPacked,
-        uint256 randWord,
-        uint8 counter
-    ) private view returns (uint8 offset) {
-        uint8 highestEligible = _highestCarryoverSourceOffset(
-            lvl,
-            winningTraitsPacked
-        );
-        if (highestEligible == 0) return 0;
-        if (highestEligible == 1) return 1;
-
-        uint8 startOffset = uint8(
-            (uint256(
-                keccak256(
-                    abi.encodePacked(
-                        randWord,
-                        DAILY_CARRYOVER_SOURCE_TAG,
-                        counter
-                    )
-                )
-            ) % highestEligible) + 1
-        );
-
-        // Probe all offsets in [1..highestEligible] starting from a random point.
-        for (uint8 i; i < highestEligible; ) {
-            uint8 candidate = uint8(
-                ((startOffset - 1 + i) % highestEligible) + 1
-            );
-            if (
-                _hasActualTraitTickets(
-                    lvl + uint24(candidate),
-                    winningTraitsPacked
-                )
-            ) {
-                return candidate;
-            }
-            unchecked {
-                ++i;
-            }
-        }
-        return 0;
     }
 
     function _packDailyTicketBudgets(
