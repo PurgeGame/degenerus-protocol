@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v15.0
-milestone_name: Delta Audit
+milestone: v13.0
+milestone_name: Level Quests Implementation
 status: verifying
-stopped_at: Completed 164-01-PLAN.md
-last_updated: "2026-04-02T05:33:21.353Z"
-last_activity: 2026-04-02
+stopped_at: Completed 155-01-PLAN.md
+last_updated: "2026-04-02T06:07:26.493Z"
+last_activity: 2026-04-01
 progress:
-  total_phases: 19
-  completed_phases: 15
-  total_plans: 22
-  completed_plans: 23
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -18,25 +18,25 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-02)
+See: .planning/PROJECT.md (updated 2026-03-31)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 164 — jackpot-carryover-audit
+**Current focus:** Phase 165 — per-function-adversarial-audit
 
 ## Current Position
 
-Phase: 164 (jackpot-carryover-audit) — EXECUTING
-Plan: 1 of 1
-Status: Phase complete — ready for verification
+Phase: 165
+Plan: 01 complete
+Status: Executing
 Last activity: 2026-04-02
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [##........] 25% (1/4 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0 (v15.0 milestone)
+- Total plans completed: 0 (v12.0 milestone)
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -46,17 +46,16 @@ Progress: [░░░░░░░░░░] 0%
 |-------|-------|-------|----------|
 | - | - | - | - |
 
-**Recent Trend (from v14.0):**
+**Recent Trend:**
 
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| Phase 159 P01 | 6min | 2 tasks | 1 files |
-| Phase 160.1 P02 | 17min | 3 tasks | 9 files |
+- Last 5 plans: -
+- Trend: New milestone
 
 *Updated after each plan completion*
-| Phase 162 P01 | 10min | 2 tasks | 1 files |
-| Phase 163 P01 | 5min | 2 tasks | 1 files |
-| Phase 164 P01 | 4min | 2 tasks | 1 files |
+| Phase 153 P01 | 5min | 2 tasks | 1 files |
+| Phase 154 P01 | 5min | 1 tasks | 1 files |
+| Phase 155 P01 | 11min | 1 tasks | 1 files |
+| Phase 165 P01 | 11min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -65,19 +64,24 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v13.0]: BurnieCoin notify* wrappers removed -- game modules call DegenerusQuests handlers directly
-- [v13.0]: Phase 1 carryover ETH state machine replaced with single-pass ticket distribution
-- [v14.0]: deityPassCount packed into mintPacked_ bits 184-199
-- [v14.0]: price storage variable fully removed -- all pricing deterministic from PriceLookupLib.priceForLevel
-- [v14.0]: Quest handlePurchase split -- mintPrice for daily targets, levelQuestPrice for level quest targets
-- [Phase 162]: BurnieCoin changes traced to v13.0 single commit despite interface effects in v14.0 files
-- [Phase 163]: Level system reference reads current contract source directly (not git history); includes worked examples for auditor clarity
-- [Phase 164]: All 11 carryover functions/logic paths SAFE -- no findings, no vulnerabilities
+- [v12.0]: Level quest eligibility: levelStreak >= 5 OR any active pass (deity/lazy/whale) AND ETH mint >= 4 units this level
+- [v12.0]: Global roll at level start, same 8 quest types + weights, 10x daily targets
+- [v12.0]: 800 BURNIE payout via creditFlip, once per level per player
+- [v12.0]: Active for entire level duration, completely independent from daily quests
+- [v12.0]: Planning and design only -- no contract implementation this milestone
+- [Phase 153]: Store quest TYPE only per level -- targets derive from type + mintPrice, saving 22K gas SSTORE
+- [Phase 153]: Level-based invalidation over version counters -- levels are monotonic, saves 1 SLOAD per handler
+- [Phase 153]: No ETH target cap for level quests -- daily 0.5 ETH cap explicitly not applied
+- [Phase 154]: Storage in DegenerusQuests.sol -- handlers already live there, avoids cross-contract reads
+- [Phase 154]: Option C reward path: direct creditFlip from quest contract, zero handler signature changes
+- [Phase 154]: Roll trigger via AdvanceModule -> BurnieCoin.rollLevelQuest -> DegenerusQuests.rollLevelQuest (mirrors daily quest pattern)
+- [Phase 155]: Level quest BURNIE inflation bounded: worst-case 12M/month at 1K players, <16% of ticket mints. coinflip mechanism provides ~50% natural burn-back.
+- [Phase 155]: creditFlip and gameOverPossible proven disjoint -- BURNIE ledger vs ETH prize pools, zero state overlap. No drip adjustment needed.
+- [Phase 155]: Quest roll adds +22,430 gas to advanceGame worst-case (0.32% increase), safety margin 1.99x preserved against 14M ceiling.
 
-### Roadmap Evolution
-
-- v15.0 roadmap: 6 phases (162-167) derived from 11 requirements
-- Phase ordering: changelog -> level docs -> jackpot carryover -> per-function audit -> RNG+gas -> integration+tests
+- [Phase 165]: price storage variable and PriceLookupLib.priceForLevel(level) produce identical values at all tier levels -- v14.0 substitution confirmed safe
+- [Phase 165]: v14.0 changes (deity pass bit shift, PriceLookupLib in AdvanceModule, simplified decWindow) not yet merged in this snapshot -- documented for future delta audit
+- [Phase 165]: _processPhaseTransition plan description incorrectly attributes price-setting chain; it resides in _finalizeRngRequest
 
 ### Pending Todos
 
@@ -89,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T05:33:21.350Z
-Stopped at: Completed 164-01-PLAN.md
+Last session: 2026-04-02T06:06:24Z
+Stopped at: Completed 165-01-PLAN.md
 Resume file: None

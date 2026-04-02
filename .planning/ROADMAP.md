@@ -142,6 +142,15 @@ See individual milestone entries above.
 - [ ] **Phase 166: RNG & Gas Verification** - Re-verify RNG commitment windows and gas ceilings for new paths
 - [ ] **Phase 167: Integration & Test Baseline** - Verify cross-contract call graph and confirm all tests pass
 
+### v13.0+ Per-Function Adversarial Audit (Phase 165)
+
+**Milestone Goal:** Per-function adversarial audit of all new and modified functions from v10.3..HEAD changelog. 4 plans covering AdvanceModule + DegenerusGame, DegenerusQuests, remaining contracts, and consolidated findings.
+
+- [x] **Phase 165 Plan 01: AdvanceModule + DegenerusGame** - 17 functions audited, all SAFE (completed 2026-04-02)
+- [ ] **Phase 165 Plan 02: DegenerusQuests**
+- [ ] **Phase 165 Plan 03: Remaining Contracts**
+- [ ] **Phase 165 Plan 04: Consolidated Findings**
+
 ## Phase Details
 
 <details>
