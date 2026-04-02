@@ -10,7 +10,7 @@ Delta audit covering all functional changes since v10.3 (last audit).
 ### Changelog & Documentation
 
 - [x] **CHLOG-01**: Every functional change across v11.0-v14.0 is catalogued with contract, function, and nature of change (new/modified/removed)
-- [ ] **DOC-01**: Complete level system documentation covering: level advancement, price derivation (PriceLookupLib), purchaseLevel (jackpot vs purchase phase), quest target calculation (daily vs level), lootbox baseline, jackpot ticket routing
+- [x] **DOC-01**: Complete level system documentation covering: level advancement, price derivation (PriceLookupLib), purchaseLevel (jackpot vs purchase phase), quest target calculation (daily vs level), lootbox baseline, jackpot ticket routing
 
 ### Jackpot Carryover Audit
 
@@ -46,7 +46,7 @@ Delta audit covering all functional changes since v10.3 (last audit).
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CHLOG-01 | Phase 162 | Complete |
-| DOC-01 | Phase 163 | Pending |
+| DOC-01 | Phase 163 | Complete |
 | JACK-01 | Phase 164 | Pending |
 | JACK-02 | Phase 164 | Pending |
 | AUD-01 | Phase 165 | Pending |
