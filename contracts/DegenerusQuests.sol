@@ -68,8 +68,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint8 indexed slot,
         uint8 questType,
         uint8 flags,
-        uint24 version,
-        uint16 difficulty
+        uint24 version
     );
 
     /// @notice Emitted when player quest progress is updated.
@@ -223,9 +222,9 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Stored in the `activeQuests` array (one per slot).
      *
      * Layout (memory):
-     * +-------------+----------+-------+---------+-----------------------------+
-     * | day (48b)   | type(8b) | flags | version | difficulty (16b)            |
-     * +-------------+----------+-------+---------+-----------------------------+
+     * +-------------+----------+-------+---------+
+     * | day (48b)   | type(8b) | flags | version |
+     * +-------------+----------+-------+---------+
      *
      * Version Semantics:
      * - Increments when quest is first seeded each day
@@ -236,7 +235,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint8 questType;  // One of the QUEST_TYPE_* constants
         uint8 flags;      // Difficulty flags (HIGH/VERY_HIGH)
         uint24 version;     // Bumped when quest mutates mid-day to reset stale player progress
-        uint16 difficulty;  // Unused (fixed to 0); retained for storage compatibility
+        // 16 bits free
     }
 
     /**
@@ -345,8 +344,8 @@ contract DegenerusQuests is IDegenerusQuests {
         );
         _seedQuestType(quests[1], day, bonusType);
 
-        emit QuestSlotRolled(day, 0, QUEST_TYPE_MINT_ETH, 0, quests[0].version, 0);
-        emit QuestSlotRolled(day, 1, bonusType, 0, quests[1].version, 0);
+        emit QuestSlotRolled(day, 0, QUEST_TYPE_MINT_ETH, 0, quests[0].version);
+        emit QuestSlotRolled(day, 1, bonusType, 0, quests[1].version);
     }
 
     /**
