@@ -1,72 +1,67 @@
-# Requirements: Degenerus Protocol — v14.0 Activity Score & Quest Gas Optimization
+# Requirements: Degenerus Protocol Audit — v15.0
 
-**Defined:** 2026-04-01
+**Defined:** 2026-04-02
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v14.0 Requirements
+## v15.0 Requirements
 
-Minimize gas cost of activity score computation and quest state handling on the hottest player paths, especially purchases. Everything is on the table — data structure changes, handler consolidation, storage repacking.
+Delta audit covering all functional changes since v10.3 (last audit).
 
-### Activity Score Architecture
+### Changelog & Documentation
 
-- [x] **SCORE-01**: Activity score inputs consolidated into minimal storage reads (investigate unified packed struct for score + quest data)
-- [ ] **SCORE-02**: playerActivityScore computed at most once per transaction on purchase path, cached result reused by all consumers
-- [ ] **SCORE-03**: Quest streak readable without cross-contract call from Game to DegenerusQuests (currently external `questView.playerQuestStates()` on every computation)
-- [ ] **SCORE-04**: Affiliate bonus readable without cross-contract call from Game to DegenerusAffiliate (currently external `affiliate.affiliateBonusPointsBest()` on every computation)
-- [ ] **SCORE-05**: DegeneretteModule `_playerActivityScoreInternal` duplicate eliminated — single shared implementation
+- [x] **CHLOG-01**: Every functional change across v11.0-v14.0 is catalogued with contract, function, and nature of change (new/modified/removed)
+- [ ] **DOC-01**: Complete level system documentation covering: level advancement, price derivation (PriceLookupLib), purchaseLevel (jackpot vs purchase phase), quest target calculation (daily vs level), lootbox baseline, jackpot ticket routing
 
-### Quest Handler Optimization
+### Jackpot Carryover Audit
 
-- [ ] **QUEST-01**: Purchase path makes single quest handler call instead of separate handleMint + handleLootBox (eliminates duplicate state sync, activeQuests load)
-- [ ] **QUEST-02**: mintPrice passed into quest handlers from caller instead of handlers making external callback to Game
-- [ ] **QUEST-03**: Daily quest progress and level quest progress batched into single storage write path per handler invocation
+- [ ] **JACK-01**: Carryover ticket distribution logic is proven correct — single-pass distribution, source range 1-4, budget 0.5% of futurePrizePool
+- [ ] **JACK-02**: Final-day jackpot behavior verified — tickets route to level+1 when last purchase day detected
 
-### Purchase Path SLOAD Deduplication
+### Per-Function Adversarial Audit
 
-- [ ] **SLOAD-01**: compressedJackpotFlag read once and cached (currently 4 reads in _callTicketPurchase)
-- [ ] **SLOAD-02**: claimableWinnings[buyer] read once and cached (currently 3 reads across _purchaseFor)
-- [ ] **SLOAD-03**: jackpotCounter read once and cached (currently 3 reads in _callTicketPurchase)
-- [ ] **SLOAD-04**: jackpotPhaseFlag read once and cached (currently 2 reads)
-- [ ] **SLOAD-05**: level read once and cached (currently 3 reads across _purchaseFor + _callTicketPurchase)
-- [ ] **SLOAD-06**: price read once and cached (currently 2 reads)
+- [ ] **AUD-01**: Every new function introduced in v11.0-v14.0 is audited for security (reentrancy, access control, overflow, state corruption)
+- [ ] **AUD-02**: Every modified function is audited for regressions (behavioral equivalence where intended, correct new behavior where changed)
+- [ ] **AUD-03**: Storage layout verified via forge inspect for every contract with storage changes
 
-## Future Requirements
+### RNG & Gas
 
-None — this milestone is self-contained optimization work.
+- [ ] **RNG-01**: RNG commitment window re-verified for all new/modified paths that depend on VRF words
+- [ ] **GAS-01**: Gas ceiling verified for new computation paths (score calculation, quest roll, drip projection, PriceLookupLib calls)
+
+### Cross-Cutting
+
+- [ ] **INTEG-01**: Cross-contract call graph verified — no broken interfaces, no stale references after quest consolidation and price removal
+- [ ] **INTEG-02**: All tests pass (forge test baseline matches pre-v11.0 pass/fail counts with no new failures)
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Affiliate handler gas optimization | payAffiliate called up to 5x per purchase but its internal logic is outside this milestone's focus |
-| BoonModule storage restructuring | Already packed into BoonPacked 2-slot struct in v3.8 |
-| Activity score algorithm changes | Optimization only — no changes to what the score represents or how it's consumed |
-| Non-purchase path optimization | Focus on purchase (hottest path); other paths benefit indirectly from structural changes |
+| Formal verification (Halmos) | Deferred — tracked in FORMAL-01/02/03 |
+| New feature development | This milestone is audit-only |
+| Test suite expansion | Verify existing tests pass, don't write new ones |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCORE-01 | Phase 159 | Complete |
-| SCORE-02 | Phase 160 | Pending |
-| SCORE-03 | Phase 160 | Pending |
-| SCORE-04 | Phase 160 | Pending |
-| SCORE-05 | Phase 160 | Pending |
-| QUEST-01 | Phase 161 | Pending |
-| QUEST-02 | Phase 161 | Pending |
-| QUEST-03 | Phase 161 | Pending |
-| SLOAD-01 | Phase 162 | Pending |
-| SLOAD-02 | Phase 162 | Pending |
-| SLOAD-03 | Phase 162 | Pending |
-| SLOAD-04 | Phase 162 | Pending |
-| SLOAD-05 | Phase 162 | Pending |
-| SLOAD-06 | Phase 162 | Pending |
+| CHLOG-01 | Phase 162 | Complete |
+| DOC-01 | Phase 163 | Pending |
+| JACK-01 | Phase 164 | Pending |
+| JACK-02 | Phase 164 | Pending |
+| AUD-01 | Phase 165 | Pending |
+| AUD-02 | Phase 165 | Pending |
+| AUD-03 | Phase 165 | Pending |
+| RNG-01 | Phase 166 | Pending |
+| GAS-01 | Phase 166 | Pending |
+| INTEG-01 | Phase 167 | Pending |
+| INTEG-02 | Phase 167 | Pending |
 
 **Coverage:**
-- v14.0 requirements: 14 total
-- Mapped to phases: 14
+- v15.0 requirements: 11 total
+- Mapped to phases: 11
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after roadmap creation*
+*Requirements defined: 2026-04-02*
+*Last updated: 2026-04-02 after roadmap creation*

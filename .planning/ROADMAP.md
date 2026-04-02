@@ -36,7 +36,8 @@
 - ✅ **v11.0 BURNIE Endgame Gate** — Phases 151-152 (shipped 2026-03-31)
 - ✅ **v12.0 Level Quests** — Phases 153-155 (shipped 2026-04-01)
 - ✅ **v13.0 Level Quests Implementation** — Phases 156-158.1 (shipped 2026-04-01)
-- [ ] **v14.0 Activity Score & Quest Gas Optimization** — Phases 159-162
+- ✅ **v14.0 Activity Score & Quest Gas Optimization** — Phases 159-161 (shipped 2026-04-02)
+- [ ] **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167
 
 ## Phases
 
@@ -120,14 +121,26 @@ See individual milestone entries above.
 
 </details>
 
-### v14.0 Activity Score & Quest Gas Optimization (Phases 159-162)
+<details>
+<summary>v14.0 Activity Score & Quest Gas Optimization (Phases 159-161) -- SHIPPED 2026-04-02</summary>
 
-**Milestone Goal:** Minimize gas cost of activity score computation and quest state handling on the hottest player paths, especially purchases. Everything is on the table -- data structure changes, handler consolidation, storage repacking.
+- [x] **Phase 159: Storage Analysis & Architecture Design** - 1 plan (completed 2026-04-01)
+- [x] **Phase 160: Score & Quest Handler Consolidation** - 3 plans (completed 2026-04-02)
+- [x] **Phase 160.1: Purchase Path Correctness** - 2 plans (completed 2026-04-02)
+- [x] **Phase 161: Purchase Path SLOAD Deduplication** - 1 plan (completed 2026-04-02)
 
-- [ ] **Phase 159: Storage Analysis & Architecture Design** - Investigate unified packed struct for score + quest data; produce design spec that shapes all downstream implementation
-- [ ] **Phase 160: Activity Score Consolidation** - Single-computation cache, eliminate cross-contract calls, remove duplicate implementation
-- [ ] **Phase 161: Quest Handler Merging** - Unified purchase-path handler, mintPrice passthrough, batched storage writes
-- [ ] **Phase 162: Purchase Path SLOAD Deduplication** - Cache compressedJackpotFlag, claimableWinnings, jackpotCounter, jackpotPhaseFlag, level, price
+</details>
+
+### v15.0 Delta Audit (v11.0-v14.0) (Phases 162-167)
+
+**Milestone Goal:** Every functional change since v10.3 is catalogued and proven safe -- no security regressions, no correctness bugs, no RNG commitment window violations, no gas ceiling breaches.
+
+- [ ] **Phase 162: Changelog Extraction** - Catalogue every functional change across v11.0-v14.0
+- [ ] **Phase 163: Level System Documentation** - Complete reference for level advancement, pricing, quests, jackpot routing
+- [ ] **Phase 164: Jackpot Carryover Audit** - Prove carryover ticket distribution and final-day behavior correct
+- [ ] **Phase 165: Per-Function Adversarial Audit** - Audit every new/modified function + verify storage layouts
+- [ ] **Phase 166: RNG & Gas Verification** - Re-verify RNG commitment windows and gas ceilings for new paths
+- [ ] **Phase 167: Integration & Test Baseline** - Verify cross-contract call graph and confirm all tests pass
 
 ## Phase Details
 
@@ -224,6 +237,9 @@ Plans:
 
 </details>
 
+<details>
+<summary>Phase 159-161 Details (v14.0)</summary>
+
 ### Phase 159: Storage Analysis & Architecture Design
 **Goal**: The current storage layout, cross-contract call graph, and SLOAD patterns for activity score and quest handling on the purchase path are fully mapped, and a concrete architecture (packed struct layout, caching strategy, handler consolidation plan) is specified so all downstream implementation has zero design ambiguity
 **Depends on**: Phase 158.1 (v13.0 complete, codebase stable)
@@ -237,61 +253,116 @@ Plans:
 Plans:
 - [x] 159-01-PLAN.md — Architecture design spec: storage mapping, packed struct analysis, caching strategy, SLOAD catalog, phase dependencies
 
-### Phase 160: Activity Score Consolidation
-**Goal**: playerActivityScore is computed exactly once per purchase transaction, with quest streak and affiliate bonus readable without cross-contract calls, and no duplicate implementation exists across modules
+### Phase 160: Score & Quest Handler Consolidation
+**Goal**: playerActivityScore is computed exactly once per purchase transaction with quest streak forwarded from handlers (no cross-contract call), the purchase path uses a unified quest handler covering both daily and level quest progress, mintPrice is passed from the caller, daily + level quest storage writes are batched, and the DegeneretteModule duplicate is eliminated
 **Depends on**: Phase 159 (architecture design locked)
-**Requirements**: SCORE-02, SCORE-03, SCORE-04, SCORE-05
-**Success Criteria** (what must be TRUE):
-  1. On the purchase path, playerActivityScore is computed once and its result is reused by every downstream consumer (no second computation in DegeneretteModule or elsewhere)
-  2. Quest streak data is readable by the score computation without an external call from Game to DegenerusQuests (either co-located storage, passed parameter, or cached in caller)
-  3. Affiliate bonus is readable by the score computation without an external call from Game to DegenerusAffiliate (either co-located storage, passed parameter, or cached in caller)
-  4. DegeneretteModule's `_playerActivityScoreInternal` is removed and replaced with the shared single implementation
-  5. All contracts compile and existing tests pass after the consolidation
-**Plans**: TBD
+**Requirements**: SCORE-02, SCORE-03, SCORE-04, SCORE-05, QUEST-01, QUEST-02, QUEST-03
+**Plans**: 3 plans (completed 2026-04-02)
 
-### Phase 161: Quest Handler Merging
-**Goal**: The purchase path makes a single quest handler call that covers both daily and level quest progress, mintPrice is passed from the caller instead of re-fetched, and daily + level quest storage writes are batched
-**Depends on**: Phase 159 (architecture design locked)
-**Requirements**: QUEST-01, QUEST-02, QUEST-03
-**Success Criteria** (what must be TRUE):
-  1. A single handler call on the purchase path replaces the current separate handleMint + handleLootBox calls, eliminating duplicate activeQuests loads and state syncs
-  2. mintPrice is passed into the quest handler from the caller (MintModule / LootboxModule) instead of the handler making an external callback to Game to fetch it
-  3. Daily quest progress and level quest progress are written in a single storage write path per handler invocation (not separate writes for daily then level)
-  4. All contracts compile and quest behavior is functionally identical (same quest types trigger, same targets, same completion rewards)
-**Plans**: TBD
+### Phase 160.1: Purchase Path Correctness (INSERTED)
+**Goal**: purchaseLevel correctly reflects ticket target level (level during jackpot, level+1 during purchase phase), all lootbox level references use level+1 regardless of phase, and MintModule uses PriceLookupLib.priceForLevel instead of the price storage variable
+**Depends on**: Phase 160
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06
+**Plans**: 2 plans
+Plans:
+- [x] 160.1-01-PLAN.md — Fix purchaseLevel jackpot-awareness + lootbox level baseline + MintModule price reads to PriceLookupLib
+- [x] 160.1-02-PLAN.md — Replace all non-MintModule price reads with PriceLookupLib + remove price storage variable and writes
 
-### Phase 162: Purchase Path SLOAD Deduplication
-**Goal**: Each of the 6 identified hot-path storage variables is read exactly once per purchase transaction and cached for all subsequent consumers
-**Depends on**: Phase 159 (architecture design locked)
-**Requirements**: SLOAD-01, SLOAD-02, SLOAD-03, SLOAD-04, SLOAD-05, SLOAD-06
+### Phase 161: Purchase Path SLOAD Deduplication
+**Goal**: Each of the 5 remaining hot-path storage variables is read exactly once per purchase transaction and cached for all subsequent consumers (price was removed by Phase 160.1)
+**Depends on**: Phase 160.1 (purchase path correctness complete)
+**Requirements**: SLOAD-01, SLOAD-02, SLOAD-03, SLOAD-04, SLOAD-05
 **Success Criteria** (what must be TRUE):
-  1. compressedJackpotFlag is read once at the top of the purchase flow and passed/cached for all 4 current consumers in _callTicketPurchase
-  2. claimableWinnings[buyer] is read once and cached for all 3 consumers across _purchaseFor
-  3. jackpotCounter is read once and cached for all 3 consumers in _callTicketPurchase
-  4. jackpotPhaseFlag, level, and price are each read once and cached for their respective consumers
+  1. compressedJackpotFlag is read once at the top of _callTicketPurchase and cached for all consumers
+  2. claimableWinnings[buyer] is read once and cached for shortfall branch in _purchaseFor
+  3. jackpotCounter is read once and cached for all consumers in _callTicketPurchase
+  4. jackpotPhaseFlag and level are each read once and cached for their respective consumers
   5. All contracts compile, existing tests pass, and no behavioral changes result from the caching
+**Plans**: 1 plan
+Plans:
+- [x] 161-01-PLAN.md — Cache level/jackpotPhaseFlag/claimableWinnings in _purchaseFor + compressedJackpotFlag/jackpotCounter in _callTicketPurchase
+
+</details>
+
+### Phase 162: Changelog Extraction
+**Goal**: Every functional change across v11.0-v14.0 is catalogued by contract, function, and nature (new/modified/removed) so the audit scope is precisely bounded
+**Depends on**: Phase 161 (v14.0 complete, codebase stable)
+**Requirements**: CHLOG-01
+**Success Criteria** (what must be TRUE):
+  1. Every contract file touched in v11.0-v14.0 is listed with the specific functions that changed
+  2. Each function is classified as new, modified, or removed with a one-line description of the change
+  3. The changelog is organized by contract so auditors can work through it systematically
+**Plans**: 1 plan
+Plans:
+- [x] 162-01-PLAN.md — Extract and classify all function-level changes from v10.3..HEAD into structured changelog
+
+### Phase 163: Level System Documentation
+**Goal**: A complete reference exists for the level system so auditors can trace any level-dependent behavior from input to output without reading contract source
+**Depends on**: Phase 162 (changelog identifies all level-related changes)
+**Requirements**: DOC-01
+**Success Criteria** (what must be TRUE):
+  1. Level advancement trigger and state transitions are documented (what causes level change, what state updates)
+  2. Price derivation via PriceLookupLib is documented (level-to-price mapping, pure function behavior)
+  3. purchaseLevel semantics are documented (jackpot phase vs purchase phase, ticket target level)
+  4. Quest target calculation is documented (daily targets, level quest targets, 10x multiplier source)
+  5. Lootbox baseline and jackpot ticket routing are documented (level+1 baseline, source range, carryover behavior)
+**Plans**: TBD
+
+### Phase 164: Jackpot Carryover Audit
+**Goal**: The carryover ticket distribution logic and final-day jackpot behavior are proven correct with no edge cases that could strand tickets, misroute prizes, or violate budget constraints
+**Depends on**: Phase 162 (changelog identifies carryover changes)
+**Requirements**: JACK-01, JACK-02
+**Success Criteria** (what must be TRUE):
+  1. Single-pass ticket distribution is traced end-to-end with correct source range (1-4) and budget (0.5% of futurePrizePool)
+  2. No edge case exists where carryover tickets are stranded (zero-budget, zero-source, boundary levels)
+  3. Final-day detection logic is verified (how last purchase day is detected, what triggers level+1 routing)
+  4. Tickets routed on the final day land in the correct key space for the next level
+**Plans**: TBD
+
+### Phase 165: Per-Function Adversarial Audit
+**Goal**: Every new and modified function across v11.0-v14.0 is proven safe against reentrancy, access control bypass, overflow, and state corruption, and every contract with storage changes has its layout verified
+**Depends on**: Phase 162 (changelog provides the function list), Phase 163 (level docs provide reference), Phase 164 (carryover audit provides focused coverage)
+**Requirements**: AUD-01, AUD-02, AUD-03
+**Success Criteria** (what must be TRUE):
+  1. Every new function introduced in v11.0-v14.0 has a SAFE/VULNERABLE verdict with reasoning
+  2. Every modified function has behavioral equivalence confirmed (where intended) or correct new behavior verified (where changed)
+  3. Storage layouts verified via forge inspect for every contract with storage changes -- zero unexpected slot shifts
+  4. Zero open HIGH or MEDIUM findings at phase completion
+**Plans**: TBD
+
+### Phase 166: RNG & Gas Verification
+**Goal**: All new or modified VRF-dependent paths have commitment windows re-verified, and new computation paths (score calculation, quest roll, drip projection, PriceLookupLib) are proven within gas ceilings
+**Depends on**: Phase 165 (function audit identifies all VRF-dependent and gas-heavy paths)
+**Requirements**: RNG-01, GAS-01
+**Success Criteria** (what must be TRUE):
+  1. Every new or modified path that consumes a VRF word has its commitment window traced (input committed before word known)
+  2. Score calculation, quest roll, drip projection, and PriceLookupLib gas costs are profiled under worst-case inputs
+  3. advanceGame gas ceiling maintains safety margin against 14M block limit (no regression from Phase 147 baseline)
+**Plans**: TBD
+
+### Phase 167: Integration & Test Baseline
+**Goal**: The cross-contract call graph has no broken interfaces or stale references after v11.0-v14.0 changes, and the test suite passes with no new failures
+**Depends on**: Phase 166 (all audit phases complete)
+**Requirements**: INTEG-01, INTEG-02
+**Success Criteria** (what must be TRUE):
+  1. Cross-contract call graph is verified -- no function calls to removed or renamed functions, no stale interface references
+  2. All Hardhat tests pass with no new failures compared to pre-v11.0 baseline
+  3. All Foundry tests pass with no new failures compared to pre-v11.0 baseline
 **Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phase 159 -> Phase 160 + Phase 161 + Phase 162 (160-162 can proceed in any order after 159; all depend on 159's architectural decisions)
+Phase 162 -> Phase 163 -> Phase 164 (can parallel with 165) -> Phase 165 -> Phase 166 -> Phase 167
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 151. Endgame Flag Implementation | v11.0 | 2/2 | Complete | 2026-03-31 |
-| 152. Delta Audit | v11.0 | 2/2 | Complete | 2026-03-31 |
-| 153. Core Design | v12.0 | 1/1 | Complete | 2026-04-01 |
-| 154. Integration Mapping | v12.0 | 1/1 | Complete | 2026-04-01 |
-| 155. Economic + Gas Analysis | v12.0 | 1/1 | Complete | 2026-04-01 |
-| 156. Interfaces, Storage & Access Control | v13.0 | 1/1 | Complete | 2026-04-01 |
-| 157. Quest Logic & Roll Chain | v13.0 | 3/3 | Complete | 2026-04-01 |
-| 158. Handler Integration & View | v13.0 | 2/2 | Complete | 2026-04-01 |
-| 158.1. Carryover Redesign + Cleanup | v13.0 | 2/2 | Complete | 2026-04-01 |
-| 159. Storage Analysis & Architecture Design | v14.0 | 1/1 | Complete   | 2026-04-01 |
-| 160. Activity Score Consolidation | v14.0 | 0/? | Not started | - |
-| 161. Quest Handler Merging | v14.0 | 0/? | Not started | - |
-| 162. Purchase Path SLOAD Deduplication | v14.0 | 0/? | Not started | - |
+| 162. Changelog Extraction | v15.0 | 1/1 | Complete   | 2026-04-02 |
+| 163. Level System Documentation | v15.0 | 0/TBD | Not started | - |
+| 164. Jackpot Carryover Audit | v15.0 | 0/TBD | Not started | - |
+| 165. Per-Function Adversarial Audit | v15.0 | 0/TBD | Not started | - |
+| 166. RNG & Gas Verification | v15.0 | 0/TBD | Not started | - |
+| 167. Integration & Test Baseline | v15.0 | 0/TBD | Not started | - |
 
 ## Deferred
 

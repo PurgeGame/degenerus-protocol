@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v14.0
-milestone_name: Activity Score & Quest Gas Optimization
+milestone: v15.0
+milestone_name: Delta Audit
 status: verifying
-stopped_at: Completed 159-01-PLAN.md
-last_updated: "2026-04-01T21:32:00.765Z"
-last_activity: 2026-04-01
+stopped_at: Completed 162-01-PLAN.md
+last_updated: "2026-04-02T05:00:57.999Z"
+last_activity: 2026-04-02
 progress:
-  total_phases: 13
-  completed_phases: 10
-  total_plans: 16
-  completed_plans: 16
+  total_phases: 19
+  completed_phases: 13
+  total_plans: 20
+  completed_plans: 21
   percent: 0
 ---
 
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-01)
+See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 159 — Storage Analysis & Architecture Design
+**Current focus:** Phase 162 — changelog-extraction
 
 ## Current Position
 
-Phase: 159 (Storage Analysis & Architecture Design) — EXECUTING
+Phase: 162 (changelog-extraction) — EXECUTING
 Plan: 1 of 1
 Status: Phase complete — ready for verification
-Last activity: 2026-04-01
+Last activity: 2026-04-02
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,7 +36,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 0 (v14.0 milestone)
+- Total plans completed: 0 (v15.0 milestone)
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -46,18 +46,15 @@ Progress: [░░░░░░░░░░] 0%
 |-------|-------|-------|----------|
 | - | - | - | - |
 
-**Recent Trend (from v13.0):**
+**Recent Trend (from v14.0):**
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
-| Phase 157 P03 | 4min | 2 tasks | 2 files |
-| Phase 158 P01 | 4min | 1 tasks | 2 files |
-| Phase 158 P02 | 2min | 2 tasks | 7 files |
-| Phase 158.1 P01 | 7min | 2 tasks | 3 files |
-| Phase 158.1 P02 | 4min | 2 tasks | 4 files |
+| Phase 159 P01 | 6min | 2 tasks | 1 files |
+| Phase 160.1 P02 | 17min | 3 tasks | 9 files |
 
 *Updated after each plan completion*
-| Phase 159 P01 | 6min | 2 tasks | 1 files |
+| Phase 162 P01 | 10min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -68,11 +65,15 @@ Recent decisions affecting current work:
 
 - [v13.0]: BurnieCoin notify* wrappers removed -- game modules call DegenerusQuests handlers directly
 - [v13.0]: Phase 1 carryover ETH state machine replaced with single-pass ticket distribution
-- [v13.0]: onlyCoin expanded to COIN + COINFLIP + GAME + AFFILIATE
-- [v14.0 roadmap]: 4 phases (159-162): analysis/design first, then 3 parallel-capable implementation phases
-- [v14.0 roadmap]: Phase 159 analysis must lock architecture before 160-162 proceed
-- [v14.0 roadmap]: SLOAD dedup (Phase 162) is mechanical caching, independent of score/quest structure
-- [Phase 159]: deityPassCount packed into mintPacked_ bits 184-199; combined score+quest packing rejected; affiliate STATICCALL accepted; phase ordering locked 160->161->162
+- [v14.0]: deityPassCount packed into mintPacked_ bits 184-199
+- [v14.0]: price storage variable fully removed -- all pricing deterministic from PriceLookupLib.priceForLevel
+- [v14.0]: Quest handlePurchase split -- mintPrice for daily targets, levelQuestPrice for level quest targets
+- [Phase 162]: BurnieCoin changes traced to v13.0 single commit despite interface effects in v14.0 files
+
+### Roadmap Evolution
+
+- v15.0 roadmap: 6 phases (162-167) derived from 11 requirements
+- Phase ordering: changelog -> level docs -> jackpot carryover -> per-function audit -> RNG+gas -> integration+tests
 
 ### Pending Todos
 
@@ -84,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T21:32:00.763Z
-Stopped at: Completed 159-01-PLAN.md
+Last session: 2026-04-02T05:00:57.997Z
+Stopped at: Completed 162-01-PLAN.md
 Resume file: None
