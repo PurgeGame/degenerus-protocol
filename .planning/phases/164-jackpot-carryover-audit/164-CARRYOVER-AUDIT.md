@@ -273,3 +273,242 @@ Line 375:  if (!isEarlyBirdDay && initCarryoverSourceOffset != 0) {  // budget s
 | `_packDailyTicketBudgets` | 2558-2569 | **SAFE** |
 | `_unpackDailyTicketBudgets` | 2571-2587 | **SAFE** |
 | `payDailyJackpotCoinAndTickets` (carryover path) | 588-601 | **SAFE** |
+
+---
+
+## Part 2: Final-Day Ticket Routing (JACK-02)
+
+### 2.1 Final-Day Detection in Phase 2
+
+**Function:** `payDailyJackpotCoinAndTickets` (JackpotModule line 591)
+
+```
+Line 591:  bool isFinalDay = jackpotCounter + counterStep >= JACKPOT_LEVEL_CAP;
+```
+
+**Constant:** `JACKPOT_LEVEL_CAP = 5` (JackpotModule line 97).
+
+**Consistency with Phase 1:** Phase 1 uses the same formula at line 314-315:
+```
+Line 314:  bool isFinalPhysicalDay = (counter + counterStep >= JACKPOT_LEVEL_CAP);
+```
+
+Phase 1 captures `counter` from `jackpotCounter` (line 301). Phase 2 reads `jackpotCounter` directly. Since `jackpotCounter` is only incremented at line 605 (AFTER the isFinalDay check at line 591), the values are equivalent. **Consistent.**
+
+**counterStep value trace:**
+
+| Mode | compressedJackpotFlag | counter | counterStep | Formula |
+|------|-----------------------|---------|-------------|---------|
+| Normal | 0 | 0 | 1 | 0+1=1 < 5 (not final) |
+| Normal | 0 | 1 | 1 | 1+1=2 < 5 (not final) |
+| Normal | 0 | 2 | 1 | 2+1=3 < 5 (not final) |
+| Normal | 0 | 3 | 1 | 3+1=4 < 5 (not final) |
+| Normal | 0 | 4 | 1 | 4+1=5 >= 5 (**final**) |
+| Compressed | 1 | 0 | 1 | 0+1=1 < 5 (early-bird, carryover skipped) |
+| Compressed | 1 | 1 | 2 | 1+2=3 < 5 (not final) |
+| Compressed | 1 | 3 | 2 | 3+2=5 >= 5 (**final**) |
+| Turbo | 2 | 0 | 5 | 0+5=5 >= 5 (**final**, but early-bird) |
+
+**Turbo analysis:** counter=0 means `isEarlyBirdDay = true`, so carryover is skipped entirely (line 375). The isFinalDay check at line 591 is never reached because `carryoverTicketUnits == 0` and `carryoverSourceOffset == 0`, so the guard at line 590 prevents entry. No gap -- turbo has exactly 1 physical day which runs the early-bird lootbox jackpot, not carryover. **SAFE**.
+
+**Verdict: SAFE**
+
+---
+
+### 2.2 Ticket Routing on Final Day
+
+**Lines 592-600 (payDailyJackpotCoinAndTickets):**
+
+```
+Line 592:  _distributeTicketJackpot(
+Line 593:      carryoverSourceLevel,              // sourceLvl
+Line 594:      isFinalDay ? lvl + 1 : lvl,        // queueLvl
+Line 595:      winningTraitsPacked,
+Line 596:      carryoverTicketUnits,
+Line 597:      entropyNext,
+Line 598:      LOOTBOX_MAX_WINNERS,
+Line 599:      240
+Line 600:  );
+```
+
+**Routing logic:**
+- Non-final days: `queueLvl = lvl` (current level). Tickets are queued at the current level where they will be eligible for the remaining jackpot days.
+- Final day: `queueLvl = lvl + 1`. Tickets are queued at the next level's key space.
+
+**sourceLvl is independent of final-day status:** Line 593 always uses `carryoverSourceLevel` regardless of isFinalDay. This is correct -- the source level (from which winners are drawn) is determined by the random offset selection, not by which day it is.
+
+**Data flow from queueLvl to _queueTickets confirmed (Part 1, Section 1.5):** The queueLvl parameter flows through `_distributeTicketJackpot` -> `_distributeTicketsToBuckets` -> `_distributeTicketsToBucket` -> `_queueTickets(winner, queueLvl, units)` at line 1067. Tickets are stored in the key space corresponding to queueLvl.
+
+**Verdict: SAFE**
+
+---
+
+### 2.3 Why lvl+1 on Final Day Is Correct
+
+**Lifecycle after final jackpot day:**
+1. `payDailyJackpotCoinAndTickets` completes, incrementing `jackpotCounter` to >= 5 (line 605)
+2. AdvanceModule checks `jackpotCounter >= JACKPOT_LEVEL_CAP` (line 396): true
+3. Calls `_awardFinalDayDgnrsReward`, `_rewardTopAffiliate`, `_runRewardJackpots`
+4. Calls `_endPhase()` (line 400) which:
+   - Sets `phaseTransitionActive = true` (line 512)
+   - Resets `jackpotCounter = 0` (line 516)
+   - Resets `compressedJackpotFlag = 0` (line 517)
+5. On subsequent advanceGame calls, `jackpotPhaseFlag = true` triggers the jackpot-phase branch
+6. Eventually transitions: `jackpotPhaseFlag = false`, `lastPurchaseDay = false` (line 377)
+7. Level was already incremented at RNG request time (line 1374) before the jackpot phase started
+
+**Why old-level tickets would be stranded:** After `_endPhase`, no more daily jackpot draws occur at the old level. The game transitions to the purchase phase for the next level. Tickets queued at the old level's key space would never participate in a jackpot draw again. By routing to `lvl + 1`, the tickets land in the key space for the next level's purchase/jackpot cycle.
+
+**Cross-reference with MintModule final-day override (line 878-881):**
+```
+Line 878:  if (cachedJpFlag && rngLockedFlag) {
+Line 879:      uint8 step = cachedComp == 2 ? JACKPOT_LEVEL_CAP
+Line 880:          : (cachedComp == 1 && cachedCnt > 0 && cachedCnt < JACKPOT_LEVEL_CAP - 1) ? 2 : 1;
+Line 881:      if (cachedCnt + step >= JACKPOT_LEVEL_CAP) targetLevel = cachedLevel + 1;
+Line 882:  }
+```
+
+The MintModule uses the same `counter + step >= JACKPOT_LEVEL_CAP` formula to detect the final day. When detected, `targetLevel = cachedLevel + 1`, routing purchased tickets to the next level. This is consistent with the carryover routing: both systems route to `lvl + 1` on the final day to prevent stranding.
+
+**Verdict: SAFE**
+
+---
+
+### 2.4 lastPurchaseDay Lifecycle
+
+**Set (AdvanceModule lines 327-333):**
+```
+Line 327:  if (_getNextPrizePool() >= levelPrizePool[purchaseLevel - 1]) {
+Line 329:      lastPurchaseDay = true;
+Line 330:      if (day - purchaseStartDay <= 3) {
+Line 331:          compressedJackpotFlag = 1;
+Line 332:      }
+Line 333:  }
+```
+Set when `nextPrizePool` meets or exceeds the level target. Also sets compressed mode if target met within 3 days.
+
+**Early set -- turbo (AdvanceModule lines 144-152):**
+```
+Line 144:  if (!inJackpot && !lastPurchaseDay) {
+Line 147:      if (purchaseDays <= 1 && _getNextPrizePool() >= levelPrizePool[lvl]) {
+Line 149:          lastPurchaseDay = true;
+Line 150:          compressedJackpotFlag = 2;
+```
+Set when target met within first 2 days (turbo mode).
+
+**Consumed (AdvanceModule line 1373-1374):**
+```
+Line 1373:  if (isTicketJackpotDay && !isRetry) {
+Line 1374:      level = lvl;
+```
+The level increment is triggered at RNG request time when `isTicketJackpotDay` (which requires `lastPurchaseDay` to have been true when the purchase-to-jackpot transition occurred). The `!isRetry` guard prevents double-increment on VRF retry.
+
+**Reset (AdvanceModule line 377):**
+```
+Line 377:  lastPurchaseDay = false;
+```
+Reset at the jackpot-to-purchase transition (inside the `!inJackpot && lastPurchaseDay` block, after `jackpotPhaseFlag = true`).
+
+**Lifecycle: set -> consumed (level incremented) -> reset. Single-use per level transition. SAFE.**
+
+**Verdict: SAFE**
+
+---
+
+### 2.5 Level Increment Timing
+
+**AdvanceModule line 1370-1374:**
+```
+Line 1370:  // Increment level at RNG request time when lastPurchaseDay = true.
+Line 1371:  // lvl is already purchaseLevel (= level + 1), so set directly.
+Line 1372:  // Only on fresh request - retry would double-increment.
+Line 1373:  if (isTicketJackpotDay && !isRetry) {
+Line 1374:      level = lvl;
+```
+
+**Timing:** Level is incremented at VRF _request_ time, not at VRF fulfillment. This happens before the first jackpot day runs. By the time `payDailyJackpot` executes, `level` already reflects the new value. The `lvl` parameter passed to `payDailyJackpot` (line 411: `payDailyJackpot(true, lvl, rngWord)`) is the level at call time.
+
+In the jackpot phase, `lvl = level` (AdvanceModule line 141), which has already been incremented. So during the jackpot phase, `lvl` is the new level (the one just transitioned to), and `lvl + 1` is the next level after that.
+
+For carryover on the final day: `queueLvl = lvl + 1` routes tickets to the level _after_ the current jackpot sequence. This is correct because the current jackpot sequence is about to end.
+
+**Verdict: SAFE**
+
+---
+
+### 2.6 Final-Day Edge Cases
+
+**Final day with zero carryover budget:** If `futurePrizePool` is very small or zero, `reserveSlice = 0`, and `carryoverTicketUnits = 0`. Guard at line 590 (`carryoverTicketUnits != 0`) prevents `_distributeTicketJackpot` call. No tickets queued, none stranded. **SAFE**.
+
+**Final day with zero eligible source levels:** `_selectCarryoverSourceOffset` returns 0, so `carryoverSourceOffset = 0`. Guard at line 590 (`carryoverSourceOffset != 0`) prevents call. **SAFE**.
+
+**Final day + compressed mode (counter=3, step=2):** `isFinalDay = 3+2=5 >= 5 = true`. Carryover runs because counter=3 > 0 (not early-bird), and source selection proceeds normally. Tickets route to `lvl + 1`. **SAFE**.
+
+**Consecutive final days (impossible):** `jackpotCounter` resets to 0 at level transition via `_endPhase` (AdvanceModule line 516). Each level has an independent counter starting from 0. The final day is always the last day of a level's jackpot sequence. Two consecutive final days cannot occur within the same level. **SAFE**.
+
+**Daily ticket (non-carryover) routing on final day:** Daily tickets at line 576-586 always use `queueLvl = lvl + 1` (line 579), regardless of isFinalDay. Carryover tickets use `lvl + 1` only on the final day. On the final day, both distributions queue at `lvl + 1`. On non-final days, daily tickets queue at `lvl + 1` while carryover tickets queue at `lvl`. No key space conflict -- `lvl` and `lvl + 1` are distinct key spaces. **SAFE**.
+
+---
+
+### 2.7 Cross-Check: Phase 1 vs Phase 2 isFinalDay Consistency
+
+Phase 1 (`payDailyJackpot` lines 314-315):
+```
+bool isFinalPhysicalDay = (counter + counterStep >= JACKPOT_LEVEL_CAP);
+```
+
+Phase 2 (`payDailyJackpotCoinAndTickets` line 591):
+```
+bool isFinalDay = jackpotCounter + counterStep >= JACKPOT_LEVEL_CAP;
+```
+
+- Phase 1 `counter` = local copy of `jackpotCounter` (line 301)
+- Phase 2 `counterStep` = unpacked from `dailyTicketBudgetsPacked` which was packed in Phase 1
+- `jackpotCounter` is not modified between Phase 1 and Phase 2 (only incremented at end of Phase 2, line 605)
+
+These two checks produce the same boolean. **Consistent.**
+
+---
+
+## Part 2 Function Verdicts
+
+| Function / Logic | Lines | Verdict |
+|------------------|-------|---------|
+| Final-day detection (`isFinalDay`) | 591 | **SAFE** |
+| Final-day carryover routing (`queueLvl = lvl+1`) | 592-600 | **SAFE** |
+| `lastPurchaseDay` lifecycle | AdvanceModule 144-377 | **SAFE** |
+| Level increment timing | AdvanceModule 1370-1374 | **SAFE** |
+
+---
+
+## Summary
+
+### All Function Verdicts
+
+| Function | Lines | Verdict | Notes |
+|----------|-------|---------|-------|
+| `payDailyJackpot` (carryover path) | JM 357-407 | **SAFE** | 0.5% budget, upfront deduction, current-level pricing |
+| `_selectCarryoverSourceOffset` | JM 2513-2556 | **SAFE** | Random probe in [1..highestEligible], exhaustive |
+| `_highestCarryoverSourceOffset` | JM 2495-2508 | **SAFE** | Descending scan 4..1, returns 0 if none |
+| `_budgetToTicketUnits` | JM 915-922 | **SAFE** | Correct formula, div-by-zero guarded |
+| `_packDailyTicketBudgets` | JM 2558-2569 | **SAFE** | 144-bit layout, no overlap |
+| `_unpackDailyTicketBudgets` | JM 2571-2587 | **SAFE** | Round-trip preserves all 4 fields |
+| `payDailyJackpotCoinAndTickets` (carryover) | JM 588-601 | **SAFE** | Source level reconstructed, guard correct |
+| Final-day detection | JM 591 | **SAFE** | Consistent with Phase 1, all modes verified |
+| Final-day carryover routing | JM 592-600 | **SAFE** | lvl+1 prevents ticket stranding |
+| `lastPurchaseDay` lifecycle | AM 144-377 | **SAFE** | Single-use set/consume/reset |
+| Level increment timing | AM 1370-1374 | **SAFE** | At RNG request, before jackpot phase |
+
+JM = DegenerusGameJackpotModule.sol, AM = DegenerusGameAdvanceModule.sol
+
+### Findings
+
+No findings. All audited functions are **SAFE**. The carryover ticket distribution correctly implements:
+
+1. **Budget:** Exactly 0.5% of futurePrizePool with upfront deduction
+2. **Source range:** [1..4] with random eligible offset selection
+3. **Current-level queueing:** Tickets priced and queued at `lvl` (current level) during normal days
+4. **Final-day routing:** Tickets route to `lvl + 1` when `jackpotCounter + counterStep >= JACKPOT_LEVEL_CAP`
+5. **No stranding edge cases:** Zero budget, zero sources, and boundary levels all handled by guards
+6. **Pack/unpack fidelity:** 144-bit packed storage preserves all 4 fields through Phase 1 to Phase 2
+7. **Detection consistency:** `isFinalDay` uses the same formula in both phases and in the MintModule
