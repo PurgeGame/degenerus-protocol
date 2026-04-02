@@ -14,8 +14,8 @@ Delta audit covering all functional changes since v10.3 (last audit).
 
 ### Jackpot Carryover Audit
 
-- [ ] **JACK-01**: Carryover ticket distribution logic is proven correct — single-pass distribution, source range 1-4, budget 0.5% of futurePrizePool
-- [ ] **JACK-02**: Final-day jackpot behavior verified — tickets route to level+1 when last purchase day detected
+- [x] **JACK-01**: Carryover ticket distribution logic is proven correct — single-pass distribution, source range 1-4, budget 0.5% of futurePrizePool
+- [x] **JACK-02**: Final-day jackpot behavior verified — tickets route to level+1 when last purchase day detected
 
 ### Per-Function Adversarial Audit
 
@@ -47,8 +47,8 @@ Delta audit covering all functional changes since v10.3 (last audit).
 |-------------|-------|--------|
 | CHLOG-01 | Phase 162 | Complete |
 | DOC-01 | Phase 163 | Complete |
-| JACK-01 | Phase 164 | Pending |
-| JACK-02 | Phase 164 | Pending |
+| JACK-01 | Phase 164 | Complete |
+| JACK-02 | Phase 164 | Complete |
 | AUD-01 | Phase 165 | Pending |
 | AUD-02 | Phase 165 | Pending |
 | AUD-03 | Phase 165 | Pending |

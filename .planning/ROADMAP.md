@@ -319,7 +319,9 @@ Plans:
   2. No edge case exists where carryover tickets are stranded (zero-budget, zero-source, boundary levels)
   3. Final-day detection logic is verified (how last purchase day is detected, what triggers level+1 routing)
   4. Tickets routed on the final day land in the correct key space for the next level
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] 164-01-PLAN.md — Trace carryover distribution + final-day routing, produce audit report
 
 ### Phase 165: Per-Function Adversarial Audit
 **Goal**: Every new and modified function across v11.0-v14.0 is proven safe against reentrancy, access control bypass, overflow, and state corruption, and every contract with storage changes has its layout verified
@@ -360,8 +362,8 @@ Phase 162 -> Phase 163 -> Phase 164 (can parallel with 165) -> Phase 165 -> Phas
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 162. Changelog Extraction | v15.0 | 1/1 | Complete    | 2026-04-02 |
-| 163. Level System Documentation | v15.0 | 1/1 | Complete   | 2026-04-02 |
-| 164. Jackpot Carryover Audit | v15.0 | 0/TBD | Not started | - |
+| 163. Level System Documentation | v15.0 | 1/1 | Complete    | 2026-04-02 |
+| 164. Jackpot Carryover Audit | v15.0 | 1/1 | Complete   | 2026-04-02 |
 | 165. Per-Function Adversarial Audit | v15.0 | 0/TBD | Not started | - |
 | 166. RNG & Gas Verification | v15.0 | 0/TBD | Not started | - |
 | 167. Integration & Test Baseline | v15.0 | 0/TBD | Not started | - |
