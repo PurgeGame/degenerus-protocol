@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v15.0
 milestone_name: Delta Audit
 status: executing
-stopped_at: Completed 168-01-PLAN.md
-last_updated: "2026-04-02T19:40:20.312Z"
+stopped_at: Completed 168-02-PLAN.md
+last_updated: "2026-04-02T20:26:23.948Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 26
   completed_phases: 18
-  total_plans: 34
-  completed_plans: 44
+  total_plans: 31
+  completed_plans: 45
   percent: 0
 ---
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 155 P01 | 11min | 1 tasks | 1 files |
 | Phase 165 P02 | 11min | 2 tasks | 1 files |
 | Phase 168 P01 | 9min | 2 tasks | 5 files |
+| Phase 168 P02 | 20min | 1 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,7 @@ Recent decisions affecting current work:
 - [Phase 155]: Quest roll adds +22,430 gas to advanceGame worst-case (0.32% increase), safety margin 1.99x preserved against 14M ceiling.
 - [Phase 165]: openBurnieLootBox priceForLevel(level) is valuation-only, SAFE for BURNIE-to-ETH conversion
 - [Phase 168]: currentPrizePool helpers use Solidity variable access (not assembly) per Pitfall 8; return uint256 for ABI compatibility
+- [Phase 168]: Test slot constants corrected to forge inspect values -- several pre-existing off-by-N errors also fixed
 
 ### Pending Todos
 
@@ -92,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T19:40:20.309Z
-Stopped at: Completed 168-01-PLAN.md
+Last session: 2026-04-02T20:26:23.945Z
+Stopped at: Completed 168-02-PLAN.md
 Resume file: None
