@@ -605,7 +605,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         if (ticketQuantity != 0) {
             // ENF-01: Block BURNIE tickets when drip projection cannot cover nextPool deficit.
             if (gameOverPossible) revert GameOverPossible();
-            _callTicketPurchase(buyer, msg.sender, ticketQuantity, MintPaymentKind.DirectEth, true, bytes32(0), 0);
+            _callTicketPurchase(buyer, msg.sender, ticketQuantity, MintPaymentKind.DirectEth, true, bytes32(0), 0, level, jackpotPhaseFlag);
         }
 
         if (lootBoxBurnieAmount != 0) {
@@ -622,7 +622,9 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     ) private {
         if (gameOver) revert E();
         uint256 lootboxFlipCredit;
-        uint24 purchaseLevel = jackpotPhaseFlag ? level : level + 1;
+        bool cachedJpFlag = jackpotPhaseFlag;
+        uint24 cachedLevel = level;
+        uint24 purchaseLevel = cachedJpFlag ? cachedLevel : cachedLevel + 1;
         uint256 priceWei = PriceLookupLib.priceForLevel(purchaseLevel);
 
         if (lootBoxAmount != 0 && lootBoxAmount < LOOTBOX_MIN) revert E();
@@ -655,7 +657,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 uint256 shortfall = lootBoxAmount - remainingEth;
                 remainingEth = 0;
 
-                uint256 claimable = claimableWinnings[buyer];
+                uint256 claimable = initialClaimable;
                 // Preserve 1 wei sentinel (same as mint payments).
                 if (claimable <= shortfall) revert E();
                 unchecked {
@@ -673,7 +675,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint24 targetLevel;
         if (ticketCost != 0) {
             (lootboxFlipCredit, adjustedQty, targetLevel, ethMintUnits, burnieMintUnits) =
-                _callTicketPurchase(buyer, buyer, ticketQuantity, payKind, false, affiliateCode, remainingEth);
+                _callTicketPurchase(buyer, buyer, ticketQuantity, payKind, false, affiliateCode, remainingEth, cachedLevel, cachedJpFlag);
         }
 
         // --- Lootbox setup (pool splits, RNG request, presale/distress tracking) ---
@@ -692,7 +694,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             if (existingAmount == 0) {
                 lbFirstDeposit = true;
                 lootboxDay[lbIndex][buyer] = lbDay;
-                lootboxBaseLevelPacked[lbIndex][buyer] = uint24(level + 1);
+                lootboxBaseLevelPacked[lbIndex][buyer] = uint24(cachedLevel + 1);
                 // lootboxEvScorePacked written after score computation below
                 emit LootBoxIdx(buyer, lbIndex, lbDay);
             } else {
@@ -707,7 +709,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             lootboxEthBase[lbIndex][buyer] = existingBase + lootBoxAmount;
 
             uint256 newAmount = existingAmount + boostedAmount;
-            lootboxEth[lbIndex][buyer] = (uint256(level + 1) << 232) | newAmount;
+            lootboxEth[lbIndex][buyer] = (uint256(cachedLevel + 1) << 232) | newAmount;
             _maybeRequestLootboxRng(lootBoxAmount);
 
             if (presale) {
@@ -726,7 +728,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 nextBps = 10_000;
                 vaultBps = 0;
             } else {
-                bool presaleSplit = level == 0 && _getNextPrizePool() <= 50 ether;
+                bool presaleSplit = cachedLevel == 0 && _getNextPrizePool() <= 50 ether;
                 futureBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS : LOOTBOX_SPLIT_FUTURE_BPS;
                 nextBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS : LOOTBOX_SPLIT_NEXT_BPS;
                 vaultBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_VAULT_BPS : 0;
@@ -759,14 +761,14 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 }
             }
 
-            emit LootBoxBuy(buyer, lbDay, lootBoxAmount, presale, level);
+            emit LootBoxBuy(buyer, lbDay, lootBoxAmount, presale, cachedLevel);
         }
 
         // --- Single quest handler call (post-action: handlers execute before score) ---
         uint32 questStreak;
         {
             (uint256 questReward, uint8 questType, uint32 streak, bool questCompleted) =
-                quests.handlePurchase(buyer, ethMintUnits, burnieMintUnits, lootBoxAmount, priceWei, PriceLookupLib.priceForLevel(level + 1));
+                quests.handlePurchase(buyer, ethMintUnits, burnieMintUnits, lootBoxAmount, priceWei, PriceLookupLib.priceForLevel(cachedLevel + 1));
             questStreak = streak;
             if (questCompleted) {
                 lootboxFlipCredit += questReward;
@@ -809,7 +811,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                     _ethToBurnieValue(lootboxFreshEth, priceWei),
                     affiliateCode,
                     buyer,
-                    level + 1,
+                    cachedLevel + 1,
                     true,
                     uint16(cachedScore)
                 );
@@ -819,7 +821,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                     _ethToBurnieValue(lootboxClaimableUsed, priceWei),
                     affiliateCode,
                     buyer,
-                    level + 1,
+                    cachedLevel + 1,
                     false,
                     0
                 );
@@ -827,7 +829,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             if (lbFirstDeposit) {
                 lootboxEvScorePacked[lbIndex][buyer] = uint16(cachedScore + 1);
             }
-            _awardEarlybirdDgnrs(buyer, lootboxFreshEth, level + 1);
+            _awardEarlybirdDgnrs(buyer, lootboxFreshEth, cachedLevel + 1);
         }
 
         uint256 finalClaimable = payKind == MintPaymentKind.DirectEth
@@ -862,23 +864,25 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         MintPaymentKind payKind,
         bool payInCoin,
         bytes32 affiliateCode,
-        uint256 value
+        uint256 value,
+        uint24 cachedLevel,
+        bool cachedJpFlag
     ) private returns (uint256 bonusCredit, uint32 adjustedQty32, uint24 targetLevel, uint32 ethMintUnits, uint32 burnieMintUnits) {
         if (quantity == 0) revert E();
         if (gameOver) revert E();
-        targetLevel = jackpotPhaseFlag ? level : level + 1;
+        uint8 cachedComp = compressedJackpotFlag;
+        uint8 cachedCnt = jackpotCounter;
+        targetLevel = cachedJpFlag ? cachedLevel : cachedLevel + 1;
         // Last jackpot day fix: route to level+1 to prevent stranded tickets
         // (_endPhase breaks before _unlockRng, so no future daily draw at this level)
-        if (jackpotPhaseFlag && rngLockedFlag) {
-            uint8 cnt = jackpotCounter;
-            uint8 comp = compressedJackpotFlag;
-            uint8 step = comp == 2 ? JACKPOT_LEVEL_CAP
-                : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1) ? 2 : 1;
-            if (cnt + step >= JACKPOT_LEVEL_CAP) targetLevel = level + 1;
+        if (cachedJpFlag && rngLockedFlag) {
+            uint8 step = cachedComp == 2 ? JACKPOT_LEVEL_CAP
+                : (cachedComp == 1 && cachedCnt > 0 && cachedCnt < JACKPOT_LEVEL_CAP - 1) ? 2 : 1;
+            if (cachedCnt + step >= JACKPOT_LEVEL_CAP) targetLevel = cachedLevel + 1;
         }
         // Affiliate scores always route to level + 1 so they freeze at
         // level transition and can be claimed against a fixed snapshot.
-        uint24 affiliateLevel = level + 1;
+        uint24 affiliateLevel = cachedLevel + 1;
 
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         uint256 costWei = (priceWei * quantity) / (4 * TICKET_SCALE);
@@ -951,11 +955,10 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             uint256 freshBurnie = freshEth != 0
                 ? _ethToBurnieValue(freshEth, priceWei)
                 : 0;
-            if (freshBurnie != 0 && jackpotPhaseFlag && compressedJackpotFlag != 2) {
+            if (freshBurnie != 0 && cachedJpFlag && cachedComp != 2) {
                 // Compute next step size (mirrors JackpotModule logic)
-                uint8 _cnt = jackpotCounter;
-                uint8 _nextStep = (compressedJackpotFlag == 1 && _cnt > 0 && _cnt < JACKPOT_LEVEL_CAP - 1) ? 2 : 1;
-                if (_cnt + _nextStep >= JACKPOT_LEVEL_CAP) {
+                uint8 _nextStep = (cachedComp == 1 && cachedCnt > 0 && cachedCnt < JACKPOT_LEVEL_CAP - 1) ? 2 : 1;
+                if (cachedCnt + _nextStep >= JACKPOT_LEVEL_CAP) {
                     freshBurnie = targetLevel <= 3
                         ? (freshBurnie * 7) / 5
                         : (freshBurnie * 3) / 2;
