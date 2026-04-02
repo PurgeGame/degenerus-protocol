@@ -369,7 +369,10 @@ Plans:
   1. Cross-contract call graph is verified -- no function calls to removed or renamed functions, no stale interface references
   2. All Hardhat tests pass with no new failures compared to pre-v11.0 baseline
   3. All Foundry tests pass with no new failures compared to pre-v11.0 baseline
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 167-01-PLAN.md — Cross-contract call graph audit (stale reference scan + interface consistency)
+- [ ] 167-02-PLAN.md — Test baseline verification (Hardhat + Foundry suite execution)
 
 ## Progress
 
@@ -383,7 +386,7 @@ Phase 162 -> Phase 163 -> Phase 164 (can parallel with 165) -> Phase 165 -> Phas
 | 164. Jackpot Carryover Audit | v15.0 | 1/1 | Complete   | 2026-04-02 |
 | 165. Per-Function Adversarial Audit | v15.0 | 0/TBD | Complete    | 2026-04-02 |
 | 166. RNG & Gas Verification | v15.0 | 0/2 | Complete    | 2026-04-02 |
-| 167. Integration & Test Baseline | v15.0 | 0/TBD | Not started | - |
+| 167. Integration & Test Baseline | v15.0 | 0/2 | Not started | - |
 
 ## Deferred
 
