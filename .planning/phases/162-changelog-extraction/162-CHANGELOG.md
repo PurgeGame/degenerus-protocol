@@ -36,7 +36,7 @@
 
 ### contracts/BurnieCoin.sol
 
-**Stats:** +254 / -254 lines (net: significant removals) | Milestones: v13.0, v14.0
+**Stats:** +254 / -254 lines (net: significant removals) | Milestones: v13.0
 
 #### New Functions
 
@@ -47,7 +47,7 @@ _None_
 | Function | Line | Milestone | Description | Risk |
 |----------|------|-----------|-------------|------|
 | `burnCoin(address,uint256)` | ~565 | v13.0 | Modifier changed from `onlyTrustedContracts` to `onlyGame` -- AFFILIATE no longer a direct caller | **Access control** |
-| `burnDecimator()` | ~596 | v14.0 | `decWindow()` return changed from `(bool,uint24)` to `(bool)` -- separate `level()` call added; quest reward routing simplified (reward returned directly, creditFlip moved to DegenerusQuests internally); `_questApplyReward` inlined away; activity score bonus applied to `baseAmount` only when quest completed | **ETH flow** |
+| `burnDecimator()` | ~596 | v13.0 | `decWindow()` return changed from `(bool,uint24)` to `(bool)` -- separate `level()` call added; quest reward routing simplified (reward returned directly, creditFlip moved to DegenerusQuests internally); `_questApplyReward` inlined away; activity score bonus applied to `baseAmount` only when quest completed | **ETH flow** |
 | `modifier onlyGame()` | ~555 | v13.0 | Renamed from `onlyDegenerusGameContract`; replaces `onlyTrustedContracts` (was GAME+AFFILIATE, now GAME only) | **Access control** |
 
 #### Removed Functions
@@ -77,14 +77,14 @@ _None_
 | Location | Milestone | Description |
 |----------|-----------|-------------|
 | Contract-level NatSpec (access control list) | v13.0 | Updated to reflect `onlyGame, onlyVault` replacing `onlyDegenerusGame, onlyTrustedContracts, onlyVault` |
-| Section header `QUEST INTEGRATION HELPERS` | v14.0 | Renamed to `DECIMATOR HELPERS` |
+| Section header `QUEST INTEGRATION HELPERS` | v13.0 | Renamed to `DECIMATOR HELPERS` |
 | `burnCoin` NatSpec | v13.0 | Updated caller description |
 
 ---
 
 ### contracts/BurnieCoinflip.sol
 
-**Stats:** +8 / -8 lines (net: 0) | Milestones: v14.0
+**Stats:** +8 / -8 lines (net: 0) | Milestones: v13.0, v14.0
 
 #### New Functions
 
