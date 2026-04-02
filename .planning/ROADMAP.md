@@ -382,7 +382,7 @@ Phase 162 -> Phase 163 -> Phase 164 (can parallel with 165) -> Phase 165 -> Phas
 | 163. Level System Documentation | v15.0 | 1/1 | Complete    | 2026-04-02 |
 | 164. Jackpot Carryover Audit | v15.0 | 1/1 | Complete   | 2026-04-02 |
 | 165. Per-Function Adversarial Audit | v15.0 | 0/TBD | Complete    | 2026-04-02 |
-| 166. RNG & Gas Verification | v15.0 | 0/2 | Planned | - |
+| 166. RNG & Gas Verification | v15.0 | 0/2 | Complete    | 2026-04-02 |
 | 167. Integration & Test Baseline | v15.0 | 0/TBD | Not started | - |
 
 ## Deferred
