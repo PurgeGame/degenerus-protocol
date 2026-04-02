@@ -59,4 +59,108 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             (packed >> BitPackingLib.LEVEL_STREAK_SHIFT) & BitPackingLib.MASK_24
         );
     }
+
+    // =========================================================================
+    // Activity Score (shared across DegenerusGame and DegeneretteModule)
+    // =========================================================================
+
+    /// @dev Returns the active ticket level for direct ticket purchases.
+    ///      During jackpot phase, direct tickets target the current level.
+    ///      During purchase phase, direct tickets target the next level.
+    function _activeTicketLevel() internal view returns (uint24) {
+        return jackpotPhaseFlag ? level : level + 1;
+    }
+
+    /// @dev Shared activity score computation with explicit quest streak and streak base level.
+    ///      Accepts pre-fetched questStreak (eliminating STATICCALL to DegenerusQuests on hot path)
+    ///      and streakBaseLevel (allowing DegeneretteModule to pass level + 1 instead of _activeTicketLevel()).
+    /// @param player The player address to calculate score for.
+    /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
+    /// @param streakBaseLevel Level used for mint streak calculation (typically _activeTicketLevel() or level + 1).
+    /// @return scoreBps Total activity score in basis points.
+    function _playerActivityScore(
+        address player,
+        uint32 questStreak,
+        uint24 streakBaseLevel
+    ) internal view returns (uint256 scoreBps) {
+        if (player == address(0)) return 0;
+
+        uint256 packed = mintPacked_[player];
+        bool hasDeityPass = packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
+        uint24 levelCount = uint24(
+            (packed >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24
+        );
+        uint24 streak = _mintStreakEffective(player, streakBaseLevel);
+        uint24 currLevel = level;
+        uint24 frozenUntilLevel = uint24(
+            (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+        uint8 bundleType = uint8(
+            (packed >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
+        );
+        bool passActive = frozenUntilLevel > currLevel &&
+            (bundleType == 1 || bundleType == 3);
+
+        uint256 bonusBps;
+
+        unchecked {
+            if (hasDeityPass) {
+                bonusBps = 50 * 100;
+                bonusBps += 25 * 100;
+            } else {
+                // Mint streak: 1% per consecutive level minted, max 50%
+                uint256 streakPoints = streak > 50 ? 50 : uint256(streak);
+                // Mint count bonus: 1% each
+                uint256 mintCountPoints = _mintCountBonusPoints(
+                    levelCount,
+                    currLevel
+                );
+                // Active pass = full participation credit
+                if (passActive) {
+                    if (streakPoints < PASS_STREAK_FLOOR_POINTS) {
+                        streakPoints = PASS_STREAK_FLOOR_POINTS;
+                    }
+                    if (mintCountPoints < PASS_MINT_COUNT_FLOOR_POINTS) {
+                        mintCountPoints = PASS_MINT_COUNT_FLOOR_POINTS;
+                    }
+                }
+                bonusBps = streakPoints * 100;
+                bonusBps += mintCountPoints * 100;
+            }
+
+            // Quest streak: 1% per quest streak, max 100%
+            uint256 questStreakCapped = questStreak > 100 ? 100 : uint256(questStreak);
+            bonusBps += questStreakCapped * 100;
+
+            // Affiliate bonus
+            bonusBps +=
+                affiliate.affiliateBonusPointsBest(currLevel, player) *
+                100;
+
+            if (hasDeityPass) {
+                bonusBps += DEITY_PASS_ACTIVITY_BONUS_BPS;
+            } else if (frozenUntilLevel > currLevel) {
+                // Whale pass bonus: varies by bundle type (only active while frozen)
+                if (bundleType == 1) {
+                    bonusBps += 1000; // +10% for 10-level bundle
+                } else if (bundleType == 3) {
+                    bonusBps += 4000; // +40% for 100-level bundle
+                }
+            }
+        }
+
+        scoreBps = bonusBps;
+    }
+
+    /// @dev Convenience wrapper using _activeTicketLevel() as streakBaseLevel.
+    /// @param player The player address to calculate score for.
+    /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
+    /// @return scoreBps Total activity score in basis points.
+    function _playerActivityScore(
+        address player,
+        uint32 questStreak
+    ) internal view returns (uint256 scoreBps) {
+        return _playerActivityScore(player, questStreak, _activeTicketLevel());
+    }
 }

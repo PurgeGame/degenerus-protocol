@@ -4,6 +4,10 @@ pragma solidity 0.8.34;
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {IVRFCoordinator} from "../interfaces/IVRFCoordinator.sol";
 import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
+import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
+import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
+import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
+import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 
@@ -111,10 +115,40 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * -----------------------------------------------------------------------------
  * See inline comments for each variable group below.
  */
+
+interface IDegenerusQuestView {
+    function playerQuestStates(
+        address player
+    )
+        external
+        view
+        returns (
+            uint32 streak,
+            uint32 lastCompletedDay,
+            uint128[2] memory progress,
+            bool[2] memory completed
+        );
+}
 abstract contract DegenerusGameStorage {
     // =========================================================================
     // CONSTANTS
     // =========================================================================
+
+    IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
+    IBurnieCoinflip internal constant coinflip = IBurnieCoinflip(ContractAddresses.COINFLIP);
+    IDegenerusQuests internal constant quests = IDegenerusQuests(ContractAddresses.QUESTS);
+    IDegenerusQuestView internal constant questView = IDegenerusQuestView(ContractAddresses.QUESTS);
+    IDegenerusAffiliate internal constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
+    IStakedDegenerusStonk internal constant dgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+
+    /// @dev Deity pass activity bonus (+80% in basis points).
+    uint16 internal constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8000;
+
+    /// @dev Floor streak points for active pass holders (50 = 50%).
+    uint16 internal constant PASS_STREAK_FLOOR_POINTS = 50;
+
+    /// @dev Floor mint count points for active pass holders (25 = 25%).
+    uint16 internal constant PASS_MINT_COUNT_FLOOR_POINTS = 25;
 
     /// @dev Conversion factor for BURNIE token amounts.
     ///      BURNIE uses 18 decimals, so 1000 BURNIE = 1e21 base units.
@@ -876,9 +910,6 @@ abstract contract DegenerusGameStorage {
     // Deity Pass (Perma Whale) Grants
     // =========================================================================
 
-    /// @dev Count of deity passes per player (0 or 1).
-    mapping(address => uint16) internal deityPassCount;
-
     /// @dev Count of deity passes purchased (excludes grants).
     mapping(address => uint16) internal deityPassPurchasedCount;
 
@@ -1599,5 +1630,19 @@ abstract contract DegenerusGameStorage {
         if (bps >= 2500) return 2;
         if (bps >= 1000) return 1;
         return 0;
+    }
+
+    /// @dev Calculate mint count bonus points (max 25% for perfect participation).
+    ///      Perfect participation (100% mints) always = 25 points (25%).
+    /// @param mintCount Player's total level mint count.
+    /// @param currLevel Current game level.
+    /// @return Bonus points (0-25) scaled by participation percentage (integer division).
+    function _mintCountBonusPoints(
+        uint24 mintCount,
+        uint24 currLevel
+    ) internal pure returns (uint256) {
+        if (currLevel == 0) return 0;
+        if (mintCount >= currLevel) return 25;
+        return (uint256(mintCount) * 25) / uint256(currLevel);
     }
 }

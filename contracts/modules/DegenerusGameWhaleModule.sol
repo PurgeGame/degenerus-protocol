@@ -58,13 +58,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
 
-    /// @dev Affiliate contract for referral tracking.
-    IDegenerusAffiliate internal constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
-
-    /// @dev sDGNRS token contract for pool rewards.
-    IStakedDegenerusStonk internal constant dgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
-
-
     // -------------------------------------------------------------------------
     // Constants
     // -------------------------------------------------------------------------
@@ -153,7 +146,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Deity pass base price (24 ETH, unscaled). Actual price = 24 + T(n) where T(n) = n*(n+1)/2, n = passes sold so far.
     uint256 private constant DEITY_PASS_BASE = 24 ether;
 
-
     /// @dev Deity pass boon expiry (4 game days, expires at jackpot reset).
     uint48 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
@@ -180,14 +172,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @custom:reverts E When quantity is 0 or exceeds 100.
      * @custom:reverts E When msg.value does not match required price.
      */
-    function purchaseWhaleBundle(address buyer, uint256 quantity) external payable {
+    function purchaseWhaleBundle(
+        address buyer,
+        uint256 quantity
+    ) external payable {
         _purchaseWhaleBundle(buyer, quantity);
     }
 
-    function _purchaseWhaleBundle(
-        address buyer,
-        uint256 quantity
-    ) private {
+    function _purchaseWhaleBundle(address buyer, uint256 quantity) private {
         if (gameOver) revert E();
         uint24 passLevel = level + 1;
 
@@ -206,8 +198,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 prevData = mintPacked_[buyer];
 
         // Unpack current values
-        uint24 frozenUntilLevel = uint24((prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24);
-        uint24 levelCount = uint24((prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24);
+        uint24 frozenUntilLevel = uint24(
+            (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+        uint24 levelCount = uint24(
+            (prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) &
+                BitPackingLib.MASK_24
+        );
 
         // Bundle covers 100 levels starting from current level
         uint24 ticketStartLevel = passLevel;
@@ -232,14 +230,20 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             uint8 wTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
             uint16 discountBps = _whaleTierToBps(wTier);
             if (discountBps == 0) discountBps = 1000; // Default 10% for legacy boons
-            uint256 discountedPrice = (WHALE_BUNDLE_STANDARD_PRICE * (10_000 - discountBps)) / 10_000;
+            uint256 discountedPrice = (WHALE_BUNDLE_STANDARD_PRICE *
+                (10_000 - discountBps)) / 10_000;
             // Clear whale fields (consumed)
             bp.slot0 = s0 & BP_WHALE_CLEAR;
-            totalPrice = discountedPrice + WHALE_BUNDLE_STANDARD_PRICE * (quantity - 1);
+            totalPrice =
+                discountedPrice +
+                WHALE_BUNDLE_STANDARD_PRICE *
+                (quantity - 1);
         } else {
             // x99 levels: minimum 2 bundles (8 ETH) to deter fresh-account century bonus farming
             if (passLevel % 100 == 0 && quantity < 2) revert E();
-            uint256 unitPrice = passLevel <= 4 ? WHALE_BUNDLE_EARLY_PRICE : WHALE_BUNDLE_STANDARD_PRICE;
+            uint256 unitPrice = passLevel <= 4
+                ? WHALE_BUNDLE_EARLY_PRICE
+                : WHALE_BUNDLE_STANDARD_PRICE;
             totalPrice = unitPrice * quantity;
         }
 
@@ -250,25 +254,54 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Update mint data
         uint256 data = prevData;
-        data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_COUNT_SHIFT, BitPackingLib.MASK_24, newLevelCount);
-        data = BitPackingLib.setPacked(data, BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT, BitPackingLib.MASK_24, newFrozenLevel);
-        data = BitPackingLib.setPacked(data, BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT, 3, 3); // 3 = 100-level bundle
-        data = BitPackingLib.setPacked(data, BitPackingLib.LAST_LEVEL_SHIFT, BitPackingLib.MASK_24, newFrozenLevel);
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LEVEL_COUNT_SHIFT,
+            BitPackingLib.MASK_24,
+            newLevelCount
+        );
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
+            BitPackingLib.MASK_24,
+            newFrozenLevel
+        );
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
+            3,
+            3
+        ); // 3 = 100-level bundle
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LAST_LEVEL_SHIFT,
+            BitPackingLib.MASK_24,
+            newFrozenLevel
+        );
 
         // Update mint day
         uint32 day = _currentMintDay();
-        data = _setMintDay(data, day, BitPackingLib.DAY_SHIFT, BitPackingLib.MASK_32);
+        data = _setMintDay(
+            data,
+            day,
+            BitPackingLib.DAY_SHIFT,
+            BitPackingLib.MASK_32
+        );
 
         mintPacked_[buyer] = data;
 
         // Queue tickets: 40/lvl for bonus levels (passLevel to 10), 2/lvl for the rest
         uint32 bonusTickets = uint32(WHALE_BONUS_TICKETS_PER_LEVEL * quantity);
-        uint32 standardTickets = uint32(WHALE_STANDARD_TICKETS_PER_LEVEL * quantity);
+        uint32 standardTickets = uint32(
+            WHALE_STANDARD_TICKETS_PER_LEVEL * quantity
+        );
         for (uint24 i = 0; i < 100; ) {
             uint24 lvl = ticketStartLevel + i;
             bool isBonus = (lvl >= passLevel && lvl <= WHALE_BONUS_END_LEVEL);
             _queueTickets(buyer, lvl, isBonus ? bonusTickets : standardTickets);
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         address affiliateAddr = affiliate.getReferrer(buyer);
@@ -283,7 +316,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         for (uint256 i = 0; i < quantity; ) {
             _rewardWhaleBundleDgnrs(buyer, affiliateAddr, upline, upline2);
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         // Split payment: pre-game 70/30, post-game 95/5 (future/next)
@@ -297,14 +332,22 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         if (prizePoolFrozen) {
             (uint128 pNext, uint128 pFuture) = _getPendingPools();
-            _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(totalPrice - nextShare));
+            _setPendingPools(
+                pNext + uint128(nextShare),
+                pFuture + uint128(totalPrice - nextShare)
+            );
         } else {
             (uint128 next, uint128 future) = _getPrizePools();
-            _setPrizePools(next + uint128(nextShare), future + uint128(totalPrice - nextShare));
+            _setPrizePools(
+                next + uint128(nextShare),
+                future + uint128(totalPrice - nextShare)
+            );
         }
 
         // Lootbox: 20% of price during presale, 10% after
-        uint16 whaleLootboxBps = lootboxPresaleActive ? WHALE_LOOTBOX_PRESALE_BPS : WHALE_LOOTBOX_POST_BPS;
+        uint16 whaleLootboxBps = lootboxPresaleActive
+            ? WHALE_LOOTBOX_PRESALE_BPS
+            : WHALE_LOOTBOX_POST_BPS;
         uint256 lootboxAmount = (totalPrice * whaleLootboxBps) / 10_000;
         _recordLootboxEntry(buyer, lootboxAmount, passLevel, data);
     }
@@ -354,11 +397,17 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
             boonDiscountBps = 0;
         }
-        if (currentLevel > 2 && (currentLevel % 10 != 9 || currentLevel % 100 == 99) && !hasValidBoon) revert E();
+        if (
+            currentLevel > 2 &&
+            (currentLevel % 10 != 9 || currentLevel % 100 == 99) &&
+            !hasValidBoon
+        ) revert E();
 
         // Cap 1: disallow if player has deity pass or active frozen pass
-        if (deityPassCount[buyer] != 0) revert E();
         uint256 prevData = mintPacked_[buyer];
+        if (
+            prevData >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0
+        ) revert E();
         uint24 frozenUntilLevel = uint24(
             (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                 BitPackingLib.MASK_24
@@ -388,7 +437,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 if (boonDiscountBps == 0) {
                     boonDiscountBps = LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS;
                 }
-                totalPrice = (benefitValue * (10_000 - boonDiscountBps)) / 10_000;
+                totalPrice =
+                    (benefitValue * (10_000 - boonDiscountBps)) /
+                    10_000;
             } else {
                 totalPrice = benefitValue;
             }
@@ -398,9 +449,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 if (boonDiscountBps == 0) {
                     boonDiscountBps = LAZY_PASS_BOON_DEFAULT_DISCOUNT_BPS;
                 }
-                totalPrice =
-                    (baseCost * (10_000 - boonDiscountBps)) /
-                    10_000;
+                totalPrice = (baseCost * (10_000 - boonDiscountBps)) / 10_000;
             } else {
                 totalPrice = baseCost;
             }
@@ -414,11 +463,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         _awardEarlybirdDgnrs(buyer, benefitValue, startLevel);
 
-        _activate10LevelPass(
-            buyer,
-            startLevel,
-            LAZY_PASS_TICKETS_PER_LEVEL
-        );
+        _activate10LevelPass(buyer, startLevel, LAZY_PASS_TICKETS_PER_LEVEL);
 
         // Queue bonus tickets from flat-price overpayment at early levels
         if (bonusTickets != 0) {
@@ -433,10 +478,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         if (prizePoolFrozen) {
             (uint128 pNext, uint128 pFuture) = _getPendingPools();
-            _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(futureShare));
+            _setPendingPools(
+                pNext + uint128(nextShare),
+                pFuture + uint128(futureShare)
+            );
         } else {
             (uint128 next, uint128 future) = _getPrizePools();
-            _setPrizePools(next + uint128(nextShare), future + uint128(futureShare));
+            _setPrizePools(
+                next + uint128(nextShare),
+                future + uint128(futureShare)
+            );
         }
 
         // Award lootbox as a percentage of pass value (presale 20%, post 10%)
@@ -446,7 +497,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 lootboxAmount = (benefitValue * lootboxBps) / 10_000;
         if (lootboxAmount == 0) return;
 
-        _recordLootboxEntry(buyer, lootboxAmount, currentLevel + 1, mintPacked_[buyer]);
+        _recordLootboxEntry(
+            buyer,
+            lootboxAmount,
+            currentLevel + 1,
+            mintPacked_[buyer]
+        );
     }
 
     /**
@@ -476,7 +532,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (gameOver) revert E();
         if (symbolId >= 32) revert E();
         if (deityBySymbol[symbolId] != address(0)) revert E();
-        if (deityPassCount[buyer] != 0) revert E();
+        if (
+            mintPacked_[buyer] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0
+        ) revert E();
 
         uint256 k = deityPassOwners.length;
         uint256 basePrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
@@ -494,10 +552,15 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 expired = uint24(_simulatedDayIndex()) > deityDay;
             } else {
                 uint24 stampDay = uint24(s1Deity >> BP_DEITY_PASS_DAY_SHIFT);
-                expired = stampDay > 0 && uint24(_simulatedDayIndex()) > stampDay + DEITY_PASS_BOON_EXPIRY_DAYS;
+                expired =
+                    stampDay > 0 &&
+                    uint24(_simulatedDayIndex()) >
+                    stampDay + DEITY_PASS_BOON_EXPIRY_DAYS;
             }
             if (!expired) {
-                uint16 discountBps = boonTier == 3 ? uint16(5000) : (boonTier == 2 ? uint16(2500) : uint16(1000));
+                uint16 discountBps = boonTier == 3
+                    ? uint16(5000)
+                    : (boonTier == 2 ? uint16(2500) : uint16(1000));
                 totalPrice = (basePrice * (10_000 - discountBps)) / 10_000;
             }
             // Consume boon regardless of expiry — clear deity pass fields
@@ -511,14 +574,22 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         deityPassPaidTotal[buyer] += totalPrice;
         _awardEarlybirdDgnrs(buyer, totalPrice, passLevel);
 
-        deityPassCount[buyer] = 1;
+        mintPacked_[buyer] = BitPackingLib.setPacked(
+            mintPacked_[buyer],
+            BitPackingLib.HAS_DEITY_PASS_SHIFT,
+            1,
+            1
+        );
         deityPassPurchasedCount[buyer] += 1;
         deityPassOwners.push(buyer);
         deityPassSymbol[buyer] = symbolId;
         deityBySymbol[symbolId] = buyer;
 
         // Mint ERC721 token (tokenId = symbolId)
-        IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(buyer, symbolId);
+        IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(
+            buyer,
+            symbolId
+        );
 
         // DGNRS rewards
         address affiliateAddr = affiliate.getReferrer(buyer);
@@ -533,12 +604,22 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _rewardDeityPassDgnrs(buyer, affiliateAddr, upline, upline2);
 
         // Queue whale-equivalent tickets: 40/lvl bonus (1-10), 2/lvl standard (11-100)
-        uint24 ticketStartLevel = passLevel <= 4 ? 1 : uint24(((passLevel + 1) / 50) * 50 + 1);
+        uint24 ticketStartLevel = passLevel <= 4
+            ? 1
+            : uint24(((passLevel + 1) / 50) * 50 + 1);
         for (uint24 i = 0; i < 100; ) {
             uint24 lvl = ticketStartLevel + i;
             bool isBonus = (lvl >= passLevel && lvl <= WHALE_BONUS_END_LEVEL);
-            _queueTickets(buyer, lvl, isBonus ? WHALE_BONUS_TICKETS_PER_LEVEL : WHALE_STANDARD_TICKETS_PER_LEVEL);
-            unchecked { ++i; }
+            _queueTickets(
+                buyer,
+                lvl,
+                isBonus
+                    ? WHALE_BONUS_TICKETS_PER_LEVEL
+                    : WHALE_STANDARD_TICKETS_PER_LEVEL
+            );
+            unchecked {
+                ++i;
+            }
         }
 
         // Fund distribution: pre-game 70/30, post-game 95/5 (future/next)
@@ -550,17 +631,30 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         if (prizePoolFrozen) {
             (uint128 pNext, uint128 pFuture) = _getPendingPools();
-            _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(totalPrice - nextShare));
+            _setPendingPools(
+                pNext + uint128(nextShare),
+                pFuture + uint128(totalPrice - nextShare)
+            );
         } else {
             (uint128 next, uint128 future) = _getPrizePools();
-            _setPrizePools(next + uint128(nextShare), future + uint128(totalPrice - nextShare));
+            _setPrizePools(
+                next + uint128(nextShare),
+                future + uint128(totalPrice - nextShare)
+            );
         }
 
         // Lootbox: 20% presale, 10% post
-        uint16 deityLootboxBps = lootboxPresaleActive ? DEITY_LOOTBOX_PRESALE_BPS : DEITY_LOOTBOX_POST_BPS;
+        uint16 deityLootboxBps = lootboxPresaleActive
+            ? DEITY_LOOTBOX_PRESALE_BPS
+            : DEITY_LOOTBOX_POST_BPS;
         uint256 lootboxAmount = (totalPrice * deityLootboxBps) / 10_000;
         if (lootboxAmount != 0) {
-            _recordLootboxEntry(buyer, lootboxAmount, passLevel, mintPacked_[buyer]);
+            _recordLootboxEntry(
+                buyer,
+                lootboxAmount,
+                passLevel,
+                mintPacked_[buyer]
+            );
         }
 
         emit DeityPassPurchased(buyer, symbolId, totalPrice, passLevel);
@@ -572,7 +666,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /// @dev Compute the total ETH cost of a 10-level lazy pass starting at startLevel.
     ///      Cost equals the sum of per-level ticket prices (4 tickets per level).
-    function _lazyPassCost(uint24 startLevel) private pure returns (uint256 total) {
+    function _lazyPassCost(
+        uint24 startLevel
+    ) private pure returns (uint256 total) {
         for (uint24 i = 0; i < LAZY_PASS_LEVELS; ) {
             total += PriceLookupLib.priceForLevel(startLevel + i);
             unchecked {
@@ -592,7 +688,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         address upline,
         address upline2
     ) private {
-        uint256 whaleReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Whale);
+        uint256 whaleReserve = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Whale
+        );
         if (whaleReserve != 0) {
             uint256 minterShare = (whaleReserve * DGNRS_WHALE_MINTER_PPM) /
                 DGNRS_WHALE_REWARD_PPM_SCALE;
@@ -605,11 +703,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        uint256 affiliateReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
+        uint256 affiliateReserve = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Affiliate
+        );
         if (affiliateReserve == 0) return;
         // Reserve the outstanding level claim allocation so whale purchases
         // cannot drain tokens owed to affiliate claimants.
-        uint256 reserved = levelDgnrsAllocation[level] - levelDgnrsClaimed[level];
+        uint256 reserved = levelDgnrsAllocation[level] -
+            levelDgnrsClaimed[level];
         if (reserved >= affiliateReserve) return;
         affiliateReserve -= reserved;
 
@@ -626,8 +727,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        uint256 uplineShare = (affiliateReserve * DGNRS_AFFILIATE_UPLINE_WHALE_PPM) /
-            DGNRS_WHALE_REWARD_PPM_SCALE;
+        uint256 uplineShare = (affiliateReserve *
+            DGNRS_AFFILIATE_UPLINE_WHALE_PPM) / DGNRS_WHALE_REWARD_PPM_SCALE;
         if (upline != address(0) && uplineShare != 0) {
             dgnrs.transferFromPool(
                 IStakedDegenerusStonk.Pool.Affiliate,
@@ -657,9 +758,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         address upline,
         address upline2
     ) private returns (uint96 buyerDgnrs) {
-        uint256 whaleReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Whale);
+        uint256 whaleReserve = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Whale
+        );
         if (whaleReserve != 0) {
-            uint256 totalReward = (whaleReserve * DEITY_WHALE_POOL_BPS) / 10_000;
+            uint256 totalReward = (whaleReserve * DEITY_WHALE_POOL_BPS) /
+                10_000;
             if (totalReward != 0) {
                 uint256 paid = dgnrs.transferFromPool(
                     IStakedDegenerusStonk.Pool.Whale,
@@ -667,16 +771,21 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     totalReward
                 );
                 if (paid != 0) {
-                    buyerDgnrs = paid > type(uint96).max ? type(uint96).max : uint96(paid);
+                    buyerDgnrs = paid > type(uint96).max
+                        ? type(uint96).max
+                        : uint96(paid);
                 }
             }
         }
 
-        uint256 affiliateReserve = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
+        uint256 affiliateReserve = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Affiliate
+        );
         if (affiliateReserve == 0) return buyerDgnrs;
         // Reserve the outstanding level claim allocation so deity purchases
         // cannot drain tokens owed to affiliate claimants.
-        uint256 reserved = levelDgnrsAllocation[level] - levelDgnrsClaimed[level];
+        uint256 reserved = levelDgnrsAllocation[level] -
+            levelDgnrsClaimed[level];
         if (reserved >= affiliateReserve) return buyerDgnrs;
         affiliateReserve -= reserved;
 
@@ -693,8 +802,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        uint256 uplineShare = (affiliateReserve * DGNRS_AFFILIATE_UPLINE_DEITY_PPM) /
-            DGNRS_WHALE_REWARD_PPM_SCALE;
+        uint256 uplineShare = (affiliateReserve *
+            DGNRS_AFFILIATE_UPLINE_DEITY_PPM) / DGNRS_WHALE_REWARD_PPM_SCALE;
         if (upline != address(0) && uplineShare != 0) {
             dgnrs.transferFromPool(
                 IStakedDegenerusStonk.Pool.Affiliate,
@@ -731,8 +840,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (existingAmount == 0) {
             lootboxDay[index][buyer] = dayIndex;
             lootboxBaseLevelPacked[index][buyer] = uint24(level + 2);
-            lootboxEvScorePacked[index][buyer] =
-                uint16(IDegenerusGame(address(this)).playerActivityScore(buyer) + 1);
+            lootboxEvScorePacked[index][buyer] = uint16(
+                IDegenerusGame(address(this)).playerActivityScore(buyer) + 1
+            );
             emit LootBoxIndexAssigned(buyer, index, dayIndex);
         } else {
             if (storedDay != dayIndex) revert E();
@@ -785,7 +895,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Check expiry
         uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
-        if (stampDay > 0 && uint24(day) > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
+        if (
+            stampDay > 0 && uint24(day) > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS
+        ) {
             // Expired: clear lootbox fields
             bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
             return boostedAmount;
@@ -793,7 +905,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Apply boost
         uint16 boostBps = _lootboxTierToBps(tier);
-        uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
+        uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE
+            ? LOOTBOX_BOOST_MAX_VALUE
+            : amount;
         uint256 boost = (cappedAmount * boostBps) / 10_000;
         boostedAmount += boost;
 
@@ -807,15 +921,23 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param player The player address.
     /// @param day The current day index.
     /// @param cachedPacked The caller's cached mintPacked_ value to avoid a redundant SLOAD.
-    function _recordLootboxMintDay(address player, uint32 day, uint256 cachedPacked) private {
-        uint32 prevDay = uint32((cachedPacked >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32);
+    function _recordLootboxMintDay(
+        address player,
+        uint32 day,
+        uint256 cachedPacked
+    ) private {
+        uint32 prevDay = uint32(
+            (cachedPacked >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32
+        );
         if (prevDay == day) {
             return;
         }
-        uint256 clearedDay = cachedPacked & ~(BitPackingLib.MASK_32 << BitPackingLib.DAY_SHIFT);
-        mintPacked_[player] = clearedDay | (uint256(day) << BitPackingLib.DAY_SHIFT);
+        uint256 clearedDay = cachedPacked &
+            ~(BitPackingLib.MASK_32 << BitPackingLib.DAY_SHIFT);
+        mintPacked_[player] =
+            clearedDay |
+            (uint256(day) << BitPackingLib.DAY_SHIFT);
     }
-
 }
 
 /// @dev Minimal interface for minting deity pass ERC721 tokens.

@@ -341,10 +341,8 @@ interface IDegenerusGame {
     /// @param buyer Player address to receive pass (address(0) = msg.sender).
     function purchaseLazyPass(address buyer) external payable;
 
-    /// @notice Get deity pass count for a player.
-    /// @param player Player address to query.
-    /// @return Count of deity passes owned.
-    function deityPassCountFor(address player) external view returns (uint16);
+    /// @notice Whether a player holds a deity pass.
+    function hasDeityPass(address player) external view returns (bool);
 
     /// @notice Get raw bit-packed mint data for a player.
     /// @param player Player address to query.

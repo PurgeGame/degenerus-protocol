@@ -37,9 +37,6 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @notice stETH token contract for liquid staking rewards
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
-    /// @notice sDGNRS token contract for fund deposits
-    IStakedDegenerusStonk internal constant dgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
-
     /// @notice Admin contract for VRF shutdown
     IDegenerusAdminShutdown private constant admin =
         IDegenerusAdminShutdown(ContractAddresses.ADMIN);

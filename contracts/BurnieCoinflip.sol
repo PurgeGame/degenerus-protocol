@@ -299,7 +299,7 @@ contract BurnieCoinflip {
             uint256 bonus;
             bool isAfKing = game.afKingModeFor(caller);
             if (isAfKing) {
-                uint16 deityBonusHalfBps = game.deityPassCountFor(caller) != 0
+                uint16 deityBonusHalfBps = game.hasDeityPass(caller)
                     ? _afKingDeityBonusHalfBpsWithLevel(caller, game.level())
                     : 0;
                 bonus = _afKingRecyclingBonus(rebetAmount, deityBonusHalfBps);
@@ -432,7 +432,7 @@ contract BurnieCoinflip {
         bool bafResolvedDayCached;
         uint256 lossCount;
         bool afKingActive = rebuyActive && afKingMode;
-        bool hasDeityPass = afKingActive && game.deityPassCountFor(player) != 0;
+        bool hasDeityPass = afKingActive && game.hasDeityPass(player);
         uint16 deityBonusHalfBps;
         bool levelCached;
         uint24 cachedLevel;

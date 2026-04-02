@@ -439,7 +439,10 @@ contract DegenerusQuests is IDegenerusQuests {
             mintPrice = questGame.mintPrice();
         }
 
-        // Check both slots for matching mint quest type
+        // Check both slots for matching mint quest type.
+        // Level quest progress is batched into the first matching slot call;
+        // subsequent slots pass zero levelDelta to avoid double-counting.
+        bool levelQuestHandled;
         for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
             DailyQuest memory quest = quests[slot];
             if (quest.day != currentDay) {
@@ -465,7 +468,9 @@ contract DegenerusQuests is IDegenerusQuests {
                         delta,
                         target,
                         currentDay,
-                        mintPrice
+                        mintPrice,
+                        QUEST_TYPE_MINT_ETH,
+                        levelQuestHandled ? 0 : delta
                     );
                 } else {
                     uint256 target = _questTargetValue(quest, slot, mintPrice);
@@ -478,9 +483,12 @@ contract DegenerusQuests is IDegenerusQuests {
                         quantity,
                         target,
                         currentDay,
-                        mintPrice
+                        mintPrice,
+                        QUEST_TYPE_MINT_BURNIE,
+                        levelQuestHandled ? 0 : quantity
                     );
                 }
+                levelQuestHandled = true;
                 if (completed) {
                     totalReward += reward;
                     outQuestType = questType;
@@ -492,13 +500,14 @@ contract DegenerusQuests is IDegenerusQuests {
                 ++slot;
             }
         }
-        // --- Level Quest Progress ---
-        if (paidWithEth) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, uint256(quantity) * mintPrice, mintPrice);
-        } else {
-            _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, quantity, 0);
+        // If no daily quest slot matched, still credit level quest progress
+        if (!levelQuestHandled) {
+            if (paidWithEth) {
+                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, uint256(quantity) * mintPrice, mintPrice);
+            } else {
+                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, quantity, 0);
+            }
         }
-
         if (anyCompleted) {
             if (!paidWithEth && totalReward != 0) {
                 IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, totalReward);
@@ -535,10 +544,10 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quests[0].questType, state.streak, false);
         }
         _questSyncState(state, player, currentDay);
+        _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_FLIP);
         if (slotIndex == type(uint8).max) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
             return (0, QUEST_TYPE_FLIP, state.streak, false);
         }
 
@@ -555,15 +564,12 @@ contract DegenerusQuests is IDegenerusQuests {
             target
         );
         if (progressAfter < target) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
             return (0, quest.questType, state.streak, false);
         }
 
-        _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
         return _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
     }
 
@@ -594,10 +600,10 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quests[0].questType, state.streak, false);
         }
         _questSyncState(state, player, currentDay);
+        _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_DECIMATOR);
         if (slotIndex == type(uint8).max) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
             return (0, QUEST_TYPE_DECIMATOR, state.streak, false);
         }
         _questSyncProgress(state, slotIndex, currentDay, quest.version);
@@ -612,14 +618,11 @@ contract DegenerusQuests is IDegenerusQuests {
             target
         );
         if (state.progress[slotIndex] < target) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
             return (0, quest.questType, state.streak, false);
         }
-        _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
         (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
         if (completed && reward != 0) {
             IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
@@ -652,10 +655,10 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quests[0].questType, state.streak, false);
         }
         _questSyncState(state, player, currentDay);
+        _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_AFFILIATE);
         if (slotIndex == type(uint8).max) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
             return (0, QUEST_TYPE_AFFILIATE, state.streak, false);
         }
         _questSyncProgress(state, slotIndex, currentDay, quest.version);
@@ -670,14 +673,11 @@ contract DegenerusQuests is IDegenerusQuests {
             target
         );
         if (state.progress[slotIndex] < target) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
             return (0, quest.questType, state.streak, false);
         }
-        _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
         return _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
     }
 
@@ -709,11 +709,11 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quests[0].questType, state.streak, false);
         }
         _questSyncState(state, player, currentDay);
+        uint256 currentPrice = questGame.mintPrice();
+        _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
-        uint256 currentPrice = questGame.mintPrice();
         if (slotIndex == type(uint8).max) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
             return (0, QUEST_TYPE_LOOTBOX, state.streak, false);
         }
         _questSyncProgress(state, slotIndex, currentDay, quest.version);
@@ -728,14 +728,11 @@ contract DegenerusQuests is IDegenerusQuests {
             target
         );
         if (state.progress[slotIndex] < target) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
             return (0, quest.questType, state.streak, false);
         }
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
             return (0, quest.questType, state.streak, false);
         }
-        _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
         (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, currentPrice);
         if (completed && reward != 0) {
             IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
@@ -783,7 +780,6 @@ contract DegenerusQuests is IDegenerusQuests {
         }
 
         uint256 target = _questTargetValue(quest, slotIndex, mintPrice);
-        _handleLevelQuestProgress(player, targetType, amount, mintPrice);
         (reward, questType, streak, completed) = _questHandleProgressSlot(
             player,
             state,
@@ -793,7 +789,9 @@ contract DegenerusQuests is IDegenerusQuests {
             amount,
             target,
             currentDay,
-            mintPrice
+            mintPrice,
+            targetType,
+            amount
         );
         if (completed && reward != 0) {
             IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
@@ -1081,7 +1079,9 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 delta,
         uint256 target,
         uint48 currentDay,
-        uint256 mintPrice
+        uint256 mintPrice,
+        uint8 handlerQuestType,
+        uint256 levelDelta
     ) private returns (uint256 reward, uint8 questType, uint32 streak, bool completed) {
         _questSyncProgress(state, slot, quest.day, quest.version);
         state.progress[slot] = _clampedAdd128(state.progress[slot], delta);
@@ -1093,6 +1093,7 @@ contract DegenerusQuests is IDegenerusQuests {
             state.progress[slot],
             target
         );
+        _handleLevelQuestProgress(player, handlerQuestType, levelDelta, mintPrice);
         if (state.progress[slot] >= target) {
             if (slot == 1 && (state.completionMask & 1) == 0) {
                 return (0, quest.questType, state.streak, false);
@@ -1650,7 +1651,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (frozen > 0 && bundle != 0) return true;
 
         // Deity pass fallback (separate SLOAD)
-        return questGame.deityPassCountFor(player) > 0;
+        return questGame.hasDeityPass(player);
     }
 
     /// @dev Returns the 10x target for a level quest type.

@@ -29,8 +29,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint24 private constant PURCHASE_BOOST_EXPIRY_DAYS = 4;
     uint24 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
-    IDegenerusQuests internal constant quests = IDegenerusQuests(ContractAddresses.QUESTS);
-
     // =========================================================================
     // Boon Consumption Functions
     // =========================================================================

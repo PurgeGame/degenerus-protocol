@@ -93,12 +93,8 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
 
-    IDegenerusAffiliate internal constant affiliate =
-        IDegenerusAffiliate(ContractAddresses.AFFILIATE);
     IDegenerusJackpots internal constant jackpots =
         IDegenerusJackpots(ContractAddresses.JACKPOTS);
-    IStakedDegenerusStonk internal constant dgnrs =
-        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     // -------------------------------------------------------------------------
     // Constants
@@ -131,7 +127,9 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
         (address top, ) = affiliate.affiliateTop(lvl);
 
         if (top != address(0)) {
-            uint256 poolBalance = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
+            uint256 poolBalance = dgnrs.poolBalance(
+                IStakedDegenerusStonk.Pool.Affiliate
+            );
             uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) /
                 10_000;
             uint256 paid = dgnrs.transferFromPool(
@@ -144,8 +142,12 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
 
         // Segregate 5% of remaining affiliate pool for per-affiliate claims.
         // Scores at index lvl are frozen (new scores go to lvl + 1).
-        uint256 remainingPool = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Affiliate);
-        levelDgnrsAllocation[lvl] = (remainingPool * AFFILIATE_DGNRS_LEVEL_BPS) / 10_000;
+        uint256 remainingPool = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Affiliate
+        );
+        levelDgnrsAllocation[lvl] =
+            (remainingPool * AFFILIATE_DGNRS_LEVEL_BPS) /
+            10_000;
     }
 
     /// @notice Run reward jackpots (BAF/Decimator) during the level transition RNG period.
@@ -250,7 +252,11 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
             claimablePool += claimableDelta;
         }
         if (futurePoolLocal != baseFuturePool || claimableDelta != 0) {
-            emit RewardJackpotsSettled(lvl, futurePoolLocal + rebuyDelta, claimableDelta);
+            emit RewardJackpotsSettled(
+                lvl,
+                futurePoolLocal + rebuyDelta,
+                claimableDelta
+            );
         }
     }
 
@@ -562,5 +568,4 @@ contract DegenerusGameEndgameModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
     // Utility Functions
     // -------------------------------------------------------------------------
-
 }

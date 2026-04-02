@@ -63,27 +63,6 @@ interface IDegenerusVaultOwnerGame {
     function isVaultOwner(address account) external view returns (bool);
 }
 
-/// @notice Interface for reading player quest states.
-interface IDegenerusQuestView {
-    /// @notice Get a player's quest progress and streak information.
-    /// @param player The player address to query.
-    /// @return streak The player's consecutive quest completion streak.
-    /// @return lastCompletedDay The day index when the player last completed a quest.
-    /// @return progress Array of progress values for active quests.
-    /// @return completed Array of completion flags for active quests.
-    function playerQuestStates(
-        address player
-    )
-        external
-        view
-        returns (
-            uint32 streak,
-            uint32 lastCompletedDay,
-            uint128[2] memory progress,
-            bool[2] memory completed
-        );
-}
-
 // ===========================================================================
 // Contract
 // ===========================================================================
@@ -143,31 +122,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  into bytecode. They cannot change after deployment.                  |
       +=======================================================================+*/
 
-    /// @notice The BURNIE ERC20 token contract.
-    /// @dev Trusted for burnCoin, quest notifications, etc.
-    IDegenerusCoin internal constant coin =
-        IDegenerusCoin(ContractAddresses.COIN);
-
-    /// @notice The BurnieCoinflip contract for coinflip wagering.
-    /// @dev Trusted for processCoinflipPayouts, recordAfKingRng, creditFlip, etc.
-    IBurnieCoinflip internal constant coinflip =
-        IBurnieCoinflip(ContractAddresses.COINFLIP);
-
-    /// @notice Lido stETH token contract.
-    /// @dev Used for staking ETH and managing yield.
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
-
-    /// @notice Affiliate program contract for bonus points and referrers.
-    IDegenerusAffiliate internal constant affiliate =
-        IDegenerusAffiliate(ContractAddresses.AFFILIATE);
-
-    /// @notice sDGNRS token contract for affiliate pool rewards.
-    IStakedDegenerusStonk internal constant dgnrs =
-        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
-
-    /// @notice Quest module view interface for streak lookups.
-    IDegenerusQuestView internal constant questView =
-        IDegenerusQuestView(ContractAddresses.QUESTS);
 
     /// @notice Vault contract for owner verification.
     IDegenerusVaultOwnerGame private constant vault =
@@ -209,13 +164,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Minimum affiliate score (approx 10 ETH of referral volume).
     uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10 ether;
 
-    /// @dev Deity pass activity score bonus (80%).
-    uint16 private constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8000;
-    /// @dev Active pass minimum streak points (max streak, assumes always active).
-    uint16 private constant PASS_STREAK_FLOOR_POINTS = 50;
-    /// @dev Active pass minimum mint count points (max participation, assumes always active).
-    uint16 private constant PASS_MINT_COUNT_FLOOR_POINTS = 25;
-
     /*+======================================================================+
       |                    MINT PACKED BIT LAYOUT                            |
       +======================================================================+
@@ -255,8 +203,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         dailyIdx = GameTimeLib.currentDayIndex();
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
         // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners)
-        deityPassCount[ContractAddresses.SDGNRS] = 1;
-        deityPassCount[ContractAddresses.VAULT] = 1;
+        mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.SDGNRS], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
+        mintPacked_[ContractAddresses.VAULT] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.VAULT], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
         // Pre-queue vault perpetual tickets for levels 1-100 (advance module handles 101+)
         for (uint24 i = 1; i <= 100; ) {
             _queueTickets(ContractAddresses.SDGNRS, i, 16);
@@ -1409,8 +1357,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (affiliateDgnrsClaimedBy[currLevel][player]) revert E();
 
         uint256 score = affiliate.affiliateScore(currLevel, player);
-        bool hasDeityPass = deityPassCount[player] != 0;
-        if (!hasDeityPass && score < AFFILIATE_DGNRS_MIN_SCORE) revert E();
+        bool isDeityHolder = mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
+        if (!isDeityHolder && score < AFFILIATE_DGNRS_MIN_SCORE) revert E();
 
         uint256 denominator = affiliate.totalAffiliateScore(currLevel);
         if (denominator == 0) revert E();
@@ -1429,7 +1377,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
         levelDgnrsClaimed[currLevel] += paid;
 
-        if (hasDeityPass && score != 0) {
+        if (isDeityHolder && score != 0) {
             uint256 bonus = (score * AFFILIATE_DGNRS_DEITY_BONUS_BPS) / 10_000;
             uint256 cap = (AFFILIATE_DGNRS_DEITY_BONUS_CAP_ETH *
                 PRICE_COIN_UNIT) / price;
@@ -1602,10 +1550,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     function _hasAnyLazyPass(address player) private view returns (bool) {
-        if (deityPassCount[player] != 0) return true;
+        uint256 packed = mintPacked_[player];
+        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return true;
 
         uint24 frozenUntilLevel = uint24(
-            (mintPacked_[player] >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+            (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                 BitPackingLib.MASK_24
         );
         return frozenUntilLevel > level;
@@ -2175,13 +2124,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return compressedJackpotFlag;
     }
 
-    /// @dev Returns the active ticket level for direct ticket purchases.
-    ///      During jackpot phase, direct tickets target the current level.
-    ///      During purchase phase, direct tickets target the next level.
-    function _activeTicketLevel() private view returns (uint24) {
-        return jackpotPhaseFlag ? level : level + 1;
-    }
-
     /// @notice Returns true when jackpot phase is active.
     function jackpotPhase() external view returns (bool) {
         return jackpotPhaseFlag;
@@ -2229,11 +2171,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function ethMintStats(
         address player
     ) external view returns (uint24 lvl, uint24 levelCount, uint24 streak) {
-        if (deityPassCount[player] != 0) {
+        uint256 packed = mintPacked_[player];
+        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) {
             uint24 currLevel = level;
             return (currLevel, currLevel, currLevel);
         }
-        uint256 packed = mintPacked_[player];
         lvl = level;
         levelCount = uint24(
             (packed >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24
@@ -2267,108 +2209,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function playerActivityScore(
         address player
     ) external view returns (uint256 scoreBps) {
-        return _playerActivityScore(player);
-    }
-
-    function _playerActivityScore(
-        address player
-    ) internal view returns (uint256 scoreBps) {
-        if (player == address(0)) return 0;
-
-        bool hasDeityPass = deityPassCount[player] != 0;
-        uint256 packed = mintPacked_[player];
-        uint24 levelCount = uint24(
-            (packed >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24
-        );
-        uint24 streak = _mintStreakEffective(player, _activeTicketLevel());
-        uint24 currLevel = level;
-        uint24 frozenUntilLevel = uint24(
-            (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                BitPackingLib.MASK_24
-        );
-        uint8 bundleType = uint8(
-            (packed >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
-        );
-        bool passActive = frozenUntilLevel > currLevel &&
-            (bundleType == 1 || bundleType == 3);
-
-        uint256 bonusBps;
-
-        unchecked {
-            if (hasDeityPass) {
-                bonusBps = 50 * 100;
-                bonusBps += 25 * 100;
-            } else {
-                // Mint streak: 1% per consecutive level minted, max 50%
-                uint256 streakPoints = streak > 50 ? 50 : uint256(streak);
-                // Mint count bonus: 1% each
-                uint256 mintCountPoints = _mintCountBonusPoints(
-                    levelCount,
-                    currLevel
-                );
-                // Active pass = full participation credit (always had pass active)
-                if (passActive) {
-                    if (streakPoints < PASS_STREAK_FLOOR_POINTS) {
-                        streakPoints = PASS_STREAK_FLOOR_POINTS;
-                    }
-                    if (mintCountPoints < PASS_MINT_COUNT_FLOOR_POINTS) {
-                        mintCountPoints = PASS_MINT_COUNT_FLOOR_POINTS;
-                    }
-                }
-                bonusBps = streakPoints * 100;
-                bonusBps += mintCountPoints * 100;
-            }
-
-            // Quest streak: 1% per quest streak, max 100%
-
-            (uint32 questStreakRaw, , , ) = questView.playerQuestStates(player);
-            uint256 questStreak = questStreakRaw > 100
-                ? 100
-                : uint256(questStreakRaw);
-            bonusBps += questStreak * 100;
-
-            // Affiliate bonus: only if currLevel >= 1 and affiliate is set
-
-            bonusBps +=
-                affiliate.affiliateBonusPointsBest(currLevel, player) *
-                100;
-
-            if (hasDeityPass) {
-                bonusBps += DEITY_PASS_ACTIVITY_BONUS_BPS;
-            } else if (frozenUntilLevel > currLevel) {
-                // Whale pass bonus: varies by bundle type (only active while frozen)
-                if (bundleType == 1) {
-                    bonusBps += 1000; // +10% for 10-level bundle
-                } else if (bundleType == 3) {
-                    bonusBps += 4000; // +40% for 100-level bundle
-                }
-            }
-        }
-
-        scoreBps = bonusBps;
-    }
-
-    /// @dev Calculate mint count bonus points (max 25% for perfect participation).
-    ///      Perfect participation (100% mints) always = 25 points (25%).
-    ///      Level 2 with 2 mints (100%): 25 points
-    ///      Level 10 with 10 mints (100%): 25 points
-    ///      Level 10 with 7 mints (70%): (7 * 25) / 10 = 17 points
-    ///      Level 30 with 30 mints (100%): 25 points
-    /// @param mintCount Player's total level mint count.
-    /// @param currLevel Current game level.
-    /// @return Bonus points (0-25) scaled by participation percentage (integer division).
-    function _mintCountBonusPoints(
-        uint24 mintCount,
-        uint24 currLevel
-    ) private pure returns (uint256) {
-        if (currLevel == 0) return 0;
-
-        // Perfect participation (mintCount >= currLevel) = 25 points
-        if (mintCount >= currLevel) return 25;
-
-        // Otherwise: (mintCount * 25) / currLevel (truncates)
-        // Example: level 10, 7 mints = (7 * 25) / 10 = 17 points
-        return (uint256(mintCount) * 25) / uint256(currLevel);
+        (uint32 streak, , , ) = questView.playerQuestStates(player);
+        return _playerActivityScore(player, streak);
     }
 
     /*+======================================================================+
@@ -2408,11 +2250,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return whalePassClaims[player];
     }
 
-    /// @notice Get deity pass count for a player.
-    /// @param player Player address to query.
-    /// @return Count of deity passes owned.
-    function deityPassCountFor(address player) external view returns (uint16) {
-        return deityPassCount[player];
+    /// @notice Whether a player holds a deity pass.
+    function hasDeityPass(address player) external view returns (bool) {
+        return mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
     }
 
     /*+======================================================================+

@@ -9,6 +9,7 @@ import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
 import {IDegenerusGameBoonModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
@@ -164,16 +165,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
     // External Contract References
     // =========================================================================
-
-    /// @notice Reference to the BURNIE coin contract
-    IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
-
-    /// @notice BurnieCoinflip contract for direct flip crediting.
-    IBurnieCoinflip internal constant coinflip =
-        IBurnieCoinflip(ContractAddresses.COINFLIP);
-
-    /// @notice Reference to the sDGNRS token contract
-    IStakedDegenerusStonk internal constant dgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     /// @notice Reference to the WWXRP token contract
     IWrappedWrappedXRP internal constant wwxrp = IWrappedWrappedXRP(ContractAddresses.WWXRP);
@@ -1046,7 +1037,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         bool decimatorAllowed = _isDecimatorWindow();
         bool deityEligible =
-            (deityPassCount[player] == 0 && deityPassOwners.length < DEITY_PASS_MAX_TOTAL);
+            (mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0 && deityPassOwners.length < DEITY_PASS_MAX_TOTAL);
         bool lazyPassEligible = allowLazyPass && lazyPassValue != 0;
 
         (uint256 totalWeight, uint256 avgMaxValue) = _boonPoolStats(

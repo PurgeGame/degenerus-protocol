@@ -14,27 +14,6 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 
-/// @notice Interface for reading player quest states.
-interface IDegenerusQuestView {
-    /// @notice Returns the quest state for a player.
-    /// @param player The player address to query.
-    /// @return streak The player's current quest streak count.
-    /// @return lastCompletedDay The day number of the last completed quest.
-    /// @return progress Progress values for the two active quests.
-    /// @return completed Completion flags for the two active quests.
-    function playerQuestStates(
-        address player
-    )
-        external
-        view
-        returns (
-            uint32 streak,
-            uint32 lastCompletedDay,
-            uint128[2] memory progress,
-            bool[2] memory completed
-        );
-}
-
 /// @notice Minimal interface for WWXRP game burn/mint operations.
 interface IWrappedWrappedXRP {
     /// @notice Mints WWXRP tokens as a prize to the recipient.
@@ -133,7 +112,6 @@ contract DegenerusGameDegeneretteModule is
         uint256 excessConverted
     );
 
-
     // -------------------------------------------------------------------------
     // Internal Helpers
     // -------------------------------------------------------------------------
@@ -172,21 +150,6 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
-
-    /// @dev Reference to the BURNIE coin contract for burn/mint operations.
-    IDegenerusCoin internal constant coin =
-        IDegenerusCoin(ContractAddresses.COIN);
-
-    /// @dev Reference to the quests contract for reading player quest streaks.
-    IDegenerusQuestView internal constant questView =
-        IDegenerusQuestView(ContractAddresses.QUESTS);
-    /// @dev Reference to the quests contract for direct quest handler calls.
-    IDegenerusQuests internal constant quests =
-        IDegenerusQuests(ContractAddresses.QUESTS);
-
-    /// @dev Reference to the affiliate contract for bonus point calculations.
-    IDegenerusAffiliate internal constant affiliate =
-        IDegenerusAffiliate(ContractAddresses.AFFILIATE);
 
     /// @dev Reference to the WWXRP token contract for burn/mint operations.
     IWrappedWrappedXRP internal constant wwxrp =
@@ -231,13 +194,6 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Maximum ETH payout as percentage of futurePool in basis points (10%).
     uint16 private constant ETH_WIN_CAP_BPS = 1_000;
 
-    /// @dev Activity bonus for deity pass holders in basis points (80%).
-    uint16 private constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8_000;
-    /// @dev Whale pass minimum streak points while frozen (1 point = 1%).
-    uint16 private constant WHALE_PASS_STREAK_FLOOR_POINTS = 50;
-    /// @dev Whale pass minimum mint count points while frozen (1 point = 1%).
-    uint16 private constant WHALE_PASS_MINT_COUNT_FLOOR_POINTS = 25;
-
     /// @dev sDGNRS contract reference for degenerette DGNRS rewards
     IStakedDegenerusStonk private constant sdgnrs =
         IStakedDegenerusStonk(ContractAddresses.SDGNRS);
@@ -267,7 +223,6 @@ contract DegenerusGameDegeneretteModule is
 
     /// @dev Maximum spins per bet (encoded as ticketCount in packed bet).
     uint8 private constant MAX_SPINS_PER_BET = 10;
-
 
     // -------------------------------------------------------------------------
     // Quick Play Constants
@@ -447,7 +402,11 @@ contract DegenerusGameDegeneretteModule is
 
         // Quest progress for Degenerette bets (slot 1 only).
         if (currency == CURRENCY_ETH || currency == CURRENCY_BURNIE) {
-            quests.handleDegenerette(player, totalBet, currency == CURRENCY_ETH);
+            quests.handleDegenerette(
+                player,
+                totalBet,
+                currency == CURRENCY_ETH
+            );
         }
     }
 
@@ -470,7 +429,10 @@ contract DegenerusGameDegeneretteModule is
         _validateMinBet(currency, amountPerTicket);
 
         totalBet = uint256(amountPerTicket) * uint256(ticketCount);
-        uint16 activityScore = uint16(_playerActivityScoreInternal(player));
+        (uint32 questStreak, , , ) = questView.playerQuestStates(player);
+        uint16 activityScore = uint16(
+            _playerActivityScore(player, questStreak, level + 1)
+        );
 
         // Pack the bet (isRandom=false, hasCustom=true always)
         uint256 packed = _packFullTicketBet(
@@ -708,7 +670,6 @@ contract DegenerusGameDegeneretteModule is
             totalPayout,
             firstResultTicket
         );
-
     }
 
     /// @dev Distributes payout to player. ETH payouts: 25% as ETH (capped at 10% of pool),
@@ -774,7 +735,6 @@ contract DegenerusGameDegeneretteModule is
             wwxrp.mintPrize(player, payout);
         }
     }
-
 
     /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly.
     ///      Applies activity-score EV multiplier (80-135%) to match regular lootbox opens.
@@ -1060,99 +1020,6 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
     // Payout Math
     // -------------------------------------------------------------------------
-
-    /// @dev Calculates a player's activity score based on various engagement metrics.
-    ///      Components: level streak/count, quest streak, affiliate bonus,
-    ///      deity pass bonus, and whale bundle bonus.
-    /// @param player The player address to calculate score for.
-    /// @return scoreBps The activity score in basis points.
-    function _playerActivityScoreInternal(
-        address player
-    ) private view returns (uint256 scoreBps) {
-        if (player == address(0)) return 0;
-
-        bool hasDeityPass = deityPassCount[player] != 0;
-        uint256 packed = mintPacked_[player];
-        uint24 levelCount = uint24(
-            (packed >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24
-        );
-        uint24 streak = _mintStreakEffective(player, level + 1);
-        uint24 currLevel = level;
-        uint24 frozenUntilLevel = uint24(
-            (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                BitPackingLib.MASK_24
-        );
-        uint8 bundleType = uint8(
-            (packed >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
-        );
-        bool passActive = frozenUntilLevel > currLevel &&
-            (bundleType == 1 || bundleType == 3);
-
-        uint256 bonusBps;
-
-        unchecked {
-            if (hasDeityPass) {
-                // Deity pass holders get flat 50 streak points + 25 mint count points
-                bonusBps = 50 * 100;
-                bonusBps += 25 * 100;
-            } else {
-                // Non-deity: streak capped at 50 points, plus proportional mint count bonus
-                uint256 streakPoints = streak > 50 ? 50 : uint256(streak);
-                uint256 mintCountPoints = _mintCountBonusPoints(
-                    levelCount,
-                    currLevel
-                );
-                if (passActive) {
-                    if (streakPoints < WHALE_PASS_STREAK_FLOOR_POINTS) {
-                        streakPoints = WHALE_PASS_STREAK_FLOOR_POINTS;
-                    }
-                    if (mintCountPoints < WHALE_PASS_MINT_COUNT_FLOOR_POINTS) {
-                        mintCountPoints = WHALE_PASS_MINT_COUNT_FLOOR_POINTS;
-                    }
-                }
-                bonusBps = streakPoints * 100;
-                bonusBps += mintCountPoints * 100;
-            }
-
-            // Quest streak bonus: up to 100 points
-            (uint32 questStreakRaw, , , ) = questView.playerQuestStates(player);
-            uint256 questStreak = questStreakRaw > 100
-                ? 100
-                : uint256(questStreakRaw);
-            bonusBps += questStreak * 100;
-
-            // Affiliate bonus points
-            bonusBps +=
-                affiliate.affiliateBonusPointsBest(currLevel, player) *
-                100;
-
-            // Deity pass or whale bundle bonus
-            if (hasDeityPass) {
-                bonusBps += DEITY_PASS_ACTIVITY_BONUS_BPS;
-            } else if (frozenUntilLevel > currLevel) {
-                if (bundleType == 1) {
-                    bonusBps += 1000;
-                } else if (bundleType == 3) {
-                    bonusBps += 4000;
-                }
-            }
-        }
-
-        scoreBps = bonusBps;
-    }
-
-    /// @dev Calculates bonus points from mint count relative to current level.
-    /// @param mintCount The player's mint count.
-    /// @param currLevel The current game level.
-    /// @return Bonus points (0-25).
-    function _mintCountBonusPoints(
-        uint24 mintCount,
-        uint24 currLevel
-    ) private pure returns (uint256) {
-        if (currLevel == 0) return 0;
-        if (mintCount >= currLevel) return 25;
-        return (uint256(mintCount) * 25) / uint256(currLevel);
-    }
 
     /// @dev Computes ROI in basis points based on activity score.
     ///      Curve: quadratic 90%→95% (0-75% activity), linear 95%→99.5% (75-255% activity),

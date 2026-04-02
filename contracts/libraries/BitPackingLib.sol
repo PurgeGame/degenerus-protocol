@@ -16,7 +16,8 @@ pragma solidity 0.8.34;
  *      [152-153] WHALE_BUNDLE_TYPE_SHIFT     - Bundle type (2 bits: 0=none, 1=10-lvl, 3=100-lvl)
  *      [154-159] (unused)
  *      [160-183] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
- *      [184-227] (unused)
+ *      [184]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
+ *      [185-227] (unused)
  *      [228-243] LEVEL_UNITS_SHIFT           - Units purchased at current level (16 bits)
  *      [244-255] (reserved)
  */
@@ -58,6 +59,9 @@ library BitPackingLib {
 
     /// @notice Bit position for whale bundle type (bits 152-153)
     uint256 internal constant WHALE_BUNDLE_TYPE_SHIFT = 152;
+
+    /// @notice Bit position for deity pass flag (bit 184)
+    uint256 internal constant HAS_DEITY_PASS_SHIFT = 184;
 
     /// @notice Bit position for level units count (bits 228-243)
     uint256 internal constant LEVEL_UNITS_SHIFT = 228;

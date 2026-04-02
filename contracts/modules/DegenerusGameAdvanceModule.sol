@@ -83,12 +83,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                   PRECOMPUTED ADDRESSES (CONSTANT)                    |
       +=======================================================================+*/
 
-    IDegenerusCoin internal constant coin =
-        IDegenerusCoin(ContractAddresses.COIN);
-    IBurnieCoinflip internal constant coinflip =
-        IBurnieCoinflip(ContractAddresses.COINFLIP);
-    IDegenerusQuests internal constant quests =
-        IDegenerusQuests(ContractAddresses.QUESTS);
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     /// @notice GNRUS contract for governance resolution at level transitions
     IGNRUSResolve private constant charityResolve =
@@ -687,7 +681,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Allow mints from current day or previous day
         if (lastEthDay + 1 < gateIdx) {
             // Deity pass — always bypasses
-            if (deityPassCount[caller] != 0) return;
+            if (mintData >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return;
 
             // Time elapsed since today's day boundary (pure arithmetic, no SLOAD)
             // 82620 = 22:57 UTC = JACKPOT_RESET_TIME

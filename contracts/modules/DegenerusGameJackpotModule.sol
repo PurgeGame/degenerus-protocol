@@ -84,18 +84,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
 
-    /// @notice BurnieCoin contract for vault escrow.
-    IDegenerusCoin internal constant coin =
-        IDegenerusCoin(ContractAddresses.COIN);
-    /// @notice BurnieCoinflip contract for direct flip crediting.
-    IBurnieCoinflip internal constant coinflip =
-        IBurnieCoinflip(ContractAddresses.COINFLIP);
-    /// @notice DegenerusQuests contract for quest rolling.
-    IDegenerusQuests internal constant quests =
-        IDegenerusQuests(ContractAddresses.QUESTS);
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
-    IStakedDegenerusStonk internal constant dgnrs =
-        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     // -------------------------------------------------------------------------
     // Constants — Timing & Thresholds
