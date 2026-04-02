@@ -341,7 +341,12 @@ Plans:
   2. Every modified function has behavioral equivalence confirmed (where intended) or correct new behavior verified (where changed)
   3. Storage layouts verified via forge inspect for every contract with storage changes -- zero unexpected slot shifts
   4. Zero open HIGH or MEDIUM findings at phase completion
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [x] 165-01-PLAN.md — AdvanceModule + DegenerusGame adversarial audit (17 functions)
+- [x] 165-02-PLAN.md — MintModule + MintStreakUtils + LootboxModule audit (10 functions)
+- [x] 165-03-PLAN.md — DegenerusQuests + BurnieCoin + external contracts audit (28 functions)
+- [x] 165-04-PLAN.md — JackpotModule + WhaleModule + storage layout + consolidated findings
 
 ### Phase 166: RNG & Gas Verification
 **Goal**: All new or modified VRF-dependent paths have commitment windows re-verified, and new computation paths (score calculation, quest roll, drip projection, PriceLookupLib) are proven within gas ceilings
@@ -351,7 +356,10 @@ Plans:
   1. Every new or modified path that consumes a VRF word has its commitment window traced (input committed before word known)
   2. Score calculation, quest roll, drip projection, and PriceLookupLib gas costs are profiled under worst-case inputs
   3. advanceGame gas ceiling maintains safety margin against 14M block limit (no regression from Phase 147 baseline)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 166-01-PLAN.md — VRF commitment window audit for all new/modified entropy consumers
+- [ ] 166-02-PLAN.md — Gas ceiling static analysis for new computation paths
 
 ### Phase 167: Integration & Test Baseline
 **Goal**: The cross-contract call graph has no broken interfaces or stale references after v11.0-v14.0 changes, and the test suite passes with no new failures
@@ -374,7 +382,7 @@ Phase 162 -> Phase 163 -> Phase 164 (can parallel with 165) -> Phase 165 -> Phas
 | 163. Level System Documentation | v15.0 | 1/1 | Complete    | 2026-04-02 |
 | 164. Jackpot Carryover Audit | v15.0 | 1/1 | Complete   | 2026-04-02 |
 | 165. Per-Function Adversarial Audit | v15.0 | 0/TBD | Complete    | 2026-04-02 |
-| 166. RNG & Gas Verification | v15.0 | 0/TBD | Not started | - |
+| 166. RNG & Gas Verification | v15.0 | 0/2 | Planned | - |
 | 167. Integration & Test Baseline | v15.0 | 0/TBD | Not started | - |
 
 ## Deferred
