@@ -132,7 +132,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         IDegenerusVaultOwner(ContractAddresses.VAULT);
 
     /// @notice Advance game state. Called daily to process jackpots, mints, and phase transitions.
-    ///         Caller receives ~0.01 ETH worth of BURNIE as flip credit.
+    ///         Caller receives ~0.005 ETH worth of BURNIE as flip credit.
     function advanceGame() external {
         address caller = msg.sender;
         uint48 ts = uint48(block.timestamp);
@@ -185,7 +185,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
                         coinflip.creditFlip(
                             caller,
-                            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(lvl)
+                            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT) /
+                                PriceLookupLib.priceForLevel(lvl)
                         );
                         return;
                     }
@@ -228,7 +229,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         caller,
                         (ADVANCE_BOUNTY_ETH *
                             PRICE_COIN_UNIT *
-                            bountyMultiplier) / PriceLookupLib.priceForLevel(lvl)
+                            bountyMultiplier) /
+                            PriceLookupLib.priceForLevel(lvl)
                     );
                     return;
                 }
@@ -379,7 +381,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _drawDownFuturePrizePool(lvl);
 
                 // Roll level quest at level transition so it's active during jackpot phase
-                uint256 questEntropy = uint256(keccak256(abi.encodePacked(rngWordByDay[day], "LEVEL_QUEST")));
+                uint256 questEntropy = uint256(
+                    keccak256(
+                        abi.encodePacked(rngWordByDay[day], "LEVEL_QUEST")
+                    )
+                );
                 quests.rollLevelQuest(questEntropy);
 
                 // Do not unlock here: allows day-1 jackpot processing to run on
@@ -415,7 +421,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         emit Advance(stage, lvl);
         coinflip.creditFlip(
             caller,
-            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) / PriceLookupLib.priceForLevel(lvl)
+            (ADVANCE_BOUNTY_ETH * PRICE_COIN_UNIT * bountyMultiplier) /
+                PriceLookupLib.priceForLevel(lvl)
         );
     }
 
@@ -682,7 +689,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Allow mints from current day or previous day
         if (lastEthDay + 1 < gateIdx) {
             // Deity pass — always bypasses
-            if (mintData >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return;
+            if ((mintData >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0)
+                return;
 
             // Time elapsed since today's day boundary (pure arithmetic, no SLOAD)
             // 82620 = 22:57 UTC = JACKPOT_RESET_TIME
@@ -972,7 +980,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _finalizeLootboxRng(fallbackWord);
                 return fallbackWord;
             }
-            return 0;
+            revert RngNotReady();
         }
 
         if (_tryRequestRng(isTicketJackpotDay, lvl)) {
@@ -1604,7 +1612,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Set or clear gameOverPossible based on drip projection vs nextPool deficit.
     ///      At L10+: flag is set if projected drip cannot cover the gap.
     ///      Below L10: flag is always cleared.
-    function _evaluateGameOverPossible(uint24 lvl, uint24 purchaseLevel) private {
+    function _evaluateGameOverPossible(
+        uint24 lvl,
+        uint24 purchaseLevel
+    ) private {
         if (lvl < 10) {
             gameOverPossible = false;
             return;
@@ -1619,7 +1630,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Days remaining until 120-day liveness guard.
         // Safe from underflow: _handleGameOverPath returns before reaching here
         // if block.timestamp >= levelStartTime + 120 days.
-        uint256 daysRemaining = (uint256(levelStartTime) + 120 days - block.timestamp) / 1 days;
-        gameOverPossible = _projectedDrip(_getFuturePrizePool(), daysRemaining) < deficit;
+        uint256 daysRemaining = (uint256(levelStartTime) +
+            120 days -
+            block.timestamp) / 1 days;
+        gameOverPossible =
+            _projectedDrip(_getFuturePrizePool(), daysRemaining) < deficit;
     }
 }
