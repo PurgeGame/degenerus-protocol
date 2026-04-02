@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v12.0
-milestone_name: Level Quests
+milestone: v13.0
+milestone_name: Level Quests Implementation
 status: verifying
-stopped_at: Completed 155-01-PLAN.md
-last_updated: "2026-04-01T01:40:51.535Z"
+stopped_at: Completed 165-02-PLAN.md
+last_updated: "2026-04-02T06:07:49.258Z"
 last_activity: 2026-04-01
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 7
+  total_phases: 8
+  completed_phases: 1
+  total_plans: 2
   completed_plans: 7
   percent: 0
 ---
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 153 P01 | 5min | 2 tasks | 1 files |
 | Phase 154 P01 | 5min | 1 tasks | 1 files |
 | Phase 155 P01 | 11min | 1 tasks | 1 files |
+| Phase 165 P02 | 11min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,7 @@ Recent decisions affecting current work:
 - [Phase 155]: Level quest BURNIE inflation bounded: worst-case 12M/month at 1K players, <16% of ticket mints. coinflip mechanism provides ~50% natural burn-back.
 - [Phase 155]: creditFlip and gameOverPossible proven disjoint -- BURNIE ledger vs ETH prize pools, zero state overlap. No drip adjustment needed.
 - [Phase 155]: Quest roll adds +22,430 gas to advanceGame worst-case (0.32% increase), safety margin 1.99x preserved against 14M ceiling.
+- [Phase 165]: openBurnieLootBox priceForLevel(level) is valuation-only, SAFE for BURNIE-to-ETH conversion
 
 ### Pending Todos
 
@@ -88,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T01:24:09.978Z
-Stopped at: Completed 155-01-PLAN.md
+Last session: 2026-04-02T06:07:49.256Z
+Stopped at: Completed 165-02-PLAN.md
 Resume file: None
