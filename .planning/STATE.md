@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v15.0
 milestone_name: Delta Audit
 status: executing
-stopped_at: Phase 166 context gathered
-last_updated: "2026-04-02T15:49:50.853Z"
+stopped_at: Completed 168-01-PLAN.md
+last_updated: "2026-04-02T19:40:20.312Z"
 last_activity: 2026-04-02
 progress:
-  total_phases: 28
-  completed_phases: 27
-  total_plans: 46
-  completed_plans: 47
+  total_phases: 26
+  completed_phases: 18
+  total_plans: 34
+  completed_plans: 44
   percent: 0
 ---
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 154 P01 | 5min | 1 tasks | 1 files |
 | Phase 155 P01 | 11min | 1 tasks | 1 files |
 | Phase 165 P02 | 11min | 2 tasks | 1 files |
+| Phase 168 P01 | 9min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,7 @@ Recent decisions affecting current work:
 - [Phase 155]: creditFlip and gameOverPossible proven disjoint -- BURNIE ledger vs ETH prize pools, zero state overlap. No drip adjustment needed.
 - [Phase 155]: Quest roll adds +22,430 gas to advanceGame worst-case (0.32% increase), safety margin 1.99x preserved against 14M ceiling.
 - [Phase 165]: openBurnieLootBox priceForLevel(level) is valuation-only, SAFE for BURNIE-to-ETH conversion
+- [Phase 168]: currentPrizePool helpers use Solidity variable access (not assembly) per Pitfall 8; return uint256 for ABI compatibility
 
 ### Pending Todos
 
@@ -90,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T14:12:32.940Z
-Stopped at: Phase 166 context gathered
-Resume file: .planning/phases/166-rng-gas-verification/166-CONTEXT.md
+Last session: 2026-04-02T19:40:20.309Z
+Stopped at: Completed 168-01-PLAN.md
+Resume file: None

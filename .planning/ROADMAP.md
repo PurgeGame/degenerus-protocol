@@ -387,6 +387,11 @@ Phase 162 -> Phase 163 -> Phase 164 (can parallel with 165) -> Phase 165 -> Phas
 | 165. Per-Function Adversarial Audit | v15.0 | 0/TBD | Complete    | 2026-04-02 |
 | 166. RNG & Gas Verification | v15.0 | 0/2 | Complete    | 2026-04-02 |
 | 167. Integration & Test Baseline | v15.0 | 0/2 | Complete    | 2026-04-02 |
+| 168. Storage Repack | v16.0 | 1/3 | In Progress | — |
+| 169. Inline rewardTopAffiliate | v16.0 | 0/TBD | Not started | — |
+| 170. Migrate runRewardJackpots | v16.0 | 0/TBD | Not started | — |
+| 171. Migrate claimWhalePass + Delete EndgameModule | v16.0 | 0/TBD | Not started | — |
+| 172. Delta Verification | v16.0 | 0/TBD | Not started | — |
 
 ## Deferred
 
