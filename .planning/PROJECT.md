@@ -8,6 +8,16 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
+## Current State
+
+v15.0 Delta Audit complete (2026-04-02). All functional changes since v10.3 catalogued and proven safe. Ready for next milestone or C4A submission.
+
+## Completed Milestone: v15.0 Delta Audit (v11.0-v14.0)
+
+**Status:** Complete (2026-04-02)
+
+**Result:** 6 phases (162-167), 11 plans. Function-level changelog (134 items across 21 contracts), level system reference (462 lines), jackpot carryover audit (11 functions SAFE), per-function adversarial audit (76 functions, 76 SAFE, 0 VULNERABLE, 3 INFO), RNG commitment window verification (5 paths, 4 SAFE, 1 KNOWN TRADEOFF), gas ceiling analysis (advanceGame 7,023,530 gas, 1.99x margin), call graph audit (36/36 CLEAN), test baseline (1455 passing, 124 expected failures, 0 unexpected). All 11/11 requirements satisfied.
+
 ## Requirements
 
 ### Validated
@@ -86,6 +96,11 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v9.0 Contest Dry Run — 3 phases (138-140), 8 plans. 5 fresh-eyes wardens, 152 attack surfaces, 0 Medium+ findings, $0 projected payout — v9.0 Phases 138-140
 - ✓ v10.0 Audit Submission Ready — 3 phases (141-143). Delta audit of dailyIdx/backfill/turbo changes, documentation finalized, vault sDGNRS burn/claim verified — v10.0 Phases 141-143
 - ✓ v10.1 ABI Cleanup — 3 phases (144-146). 9 forwarding wrappers removed, 16 unused views removed, 3 bonus removals, BurnieCoinflip creditors expanded, vault-owner access control on Game, ~238 lines removed — v10.1 Phases 144-146
+- ✓ v11.0 BURNIE Endgame Gate — gameOverPossible flag, drip projection, MintModule/LootboxModule enforcement — v11.0 Phases 151-152
+- ✓ v12.0 Level Quests — core design, integration mapping, economic + gas analysis — v12.0 Phases 153-155
+- ✓ v13.0 Level Quests Implementation — interfaces, storage, quest logic, handler integration, carryover redesign — v13.0 Phases 156-158.1
+- ✓ v14.0 Activity Score & Quest Gas Optimization — compute-once score, handler consolidation, price removal, SLOAD dedup — v14.0 Phases 159-161
+- ✓ v15.0 Delta Audit — 76 functions audited (all SAFE), RNG commitment windows verified, gas ceiling 1.99x margin, call graph clean, 1455 tests passing — v15.0 Phases 162-167
 
 ## Completed Milestone: v8.1 Final Audit Prep
 

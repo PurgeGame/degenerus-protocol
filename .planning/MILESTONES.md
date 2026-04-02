@@ -1,5 +1,87 @@
 # Milestones
 
+## v15.0 Delta Audit (Shipped: 2026-04-02)
+
+**Phases completed:** 28 phases, 46 plans, 74 tasks
+
+**Key accomplishments:**
+
+- Three-agent adversarial audit of ~400 new lines of price feed governance: 18 functions, 0 VULNERABLE, 4 INFO findings, 100% Taskmaster coverage
+- Storage layout verified via forge inspect for all 5 changed contracts (0 collisions, 0 gaps), 6 INFO findings consolidated from Plans 01+02 with all 4 requirements (DELTA-01 through DELTA-04) explicitly traced to evidence
+- KNOWN-ISSUES.md updated with 4 new design decision entries from Phase 135 delta audit, C4A contest README finalized with DRAFT removed, delta findings document verified complete
+- Triaged all 30 KNOWN-ISSUES.md entries, fixed bootstrap assumption (DGNRS not sDGNRS), quantified fuzzy claims with worst-case wei bounds, added creator vesting and rngLocked guard entries
+- Fixed C4A contest README severity language (High not Critical), reduced priorities from 4 to 3 by folding Admin Resistance into Money Correctness with vesting-aware governance framing
+- Fresh-eyes RNG/VRF audit covering 24 attack surfaces with 9 rigorous SAFE proofs, 3 INFO findings, and zero Medium+ vulnerabilities across all VRF commitment windows, request-to-fulfillment paths, and cross-contract RNG consumers
+- Fresh-eyes gas warden audited 31 attack surfaces across all advanceGame paths, finding all SAFE with 52%+ headroom vs 30M block gas limit
+- Fresh-eyes money warden traced 42 ETH/token attack surfaces across 24 contracts with 10 rigorous SAFE proofs -- zero exploitable money correctness issues found
+- Fresh-eyes admin warden audited 30 admin surfaces across 24 contracts: 0 HIGH/MEDIUM/LOW, 3 INFO, 6 SAFE proofs with access control traces, DGNRS vesting governance analysis, both Chainlink death clock paths assessed
+- Fresh-eyes composition warden tested 25 cross-domain attack surfaces (RNG+Money, Admin+Gas, etc.) with zero Medium+ findings -- defense-in-depth via soulbound governance, rngLocked guards, and CEI compliance neutralizes all multi-step exploit chains
+- C4A-adjudicated 14 observations from 5 wardens across 152 surfaces: 0 High, 0 Medium, 11 QA, 3 Rejected -- zero payable severity-based findings, 1 new KNOWN-ISSUES entry (EntropyLib XOR-shift)
+- Per-line audit of 5 changed lines in f15b503a: all SAFE/INFO, turbo-at-L0 unreachable with no cascading effects, 120-day backfill cap proven safe under realistic threat model
+- KNOWN-ISSUES.md updated with turbo-at-L0 and backfill cap design decisions, C4A README references v10.0 delta, constructor NatSpec documents dailyIdx, test suite 1362 passing with 0 failures
+- gameOverPossible bool packed into Slot 1, WAD-scale drip projection via closed-form geometric series, flag lifecycle wired into AdvanceModule L10+ purchase-phase path
+- 30-day BURNIE ban fully removed, MintModule reverts with GameOverPossible when flag active, LootboxModule redirects current-level tickets to far-future key space via bit 22
+- 10 changed/new functions audited across 4 contracts: 10 SAFE, 0 VULNERABLE, 1 INFO; RNG commitment window clean for all 3 flag-dependent paths; storage layout verified via forge inspect
+- Drip projection adds ~21,000 gas worst-case (0.3% increase) to advanceGame; 2.0x safety margin preserved against 14M block ceiling, no regression from Phase 147 baseline
+- 536-line design spec covering eligibility (levelStreak/pass + 4 ETH units), global VRF quest roll, 10x targets for 8 types, packed uint256 per-player state with level invalidation, and 800 BURNIE creditFlip completion
+- Complete integration map covering 10 contracts (5 modified, 5 unchanged), all 6 handleX handler sites with level quest tracking specs, 3 Phase 153 open questions resolved, Option C reward path recommended
+- BURNIE inflation bounded (worst-case 12M/month at 1K players, <16% of ticket mints), gameOverPossible interaction disproven via state domain trace, quest roll +22,430 gas to advanceGame with 1.99x safety margin preserved
+- Level quest interface declarations, storage mappings, access control expansion, and routing stub across 5 Solidity files -- all compiling cleanly
+- Level quest core logic: rollLevelQuest, eligibility check (streak/pass + 4-unit gate), 10x targets, shared progress handler with creditFlip completion, mintPackedFor cross-contract view
+- AdvanceModule wired to call quests.rollLevelQuest(purchaseLevel, questEntropy) at every level transition, using keccak256(rngWordByDay[day], "LEVEL_QUEST") entropy
+- 1. [Rule 1 - Bug] _bonusQuestType orphan type 0 selection
+- Level quest progress wired into all 6 handlers with per-return-path coverage, onlyCoin expanded for GAME + AFFILIATE callers
+- Removed BurnieCoin quest notification middleman (5 functions + event), rewired MintModule/DegeneretteModule/Affiliate to call DegenerusQuests handlers directly with local creditFlip
+- Phase 1 multi-call ETH carryover state machine replaced with single-pass ticket distribution; 3 storage vars gapped, dailyEthPhase removed from all contracts, carryover budget halved to 0.5% of futurePrizePool
+- Removed BurnieCoin.rollDailyQuest dead code (function, event, modifier) and tightened recordMintQuestStreak to GAME-only access
+- 467-line architecture spec locking all gas optimization decisions: compute-once score caching (22K-36K gas savings per purchase), deityPassCount bit-packing, quest streak parameter forwarding, and SLOAD dedup catalog for Phases 160-162
+- deityPassCount packed into mintPacked_ bits 184-199 eliminating 1 cold SLOAD per score call, shared 3-arg _playerActivityScore in MintStreakUtils replacing DegeneretteModule's 80-line duplicate
+- Status:
+- Eliminated price storage variable entirely; all 14 price reads replaced with PriceLookupLib.priceForLevel pure calls; quest pricing split for jackpot-phase correctness
+- Status:
+- Function-level changelog covering 21 contracts, 134 audit items (17 new, 37 modified, 60 removed, 19 storage, 21 comment-only) across v11.0-v14.0, with 20 high-risk items flagged for Phase 165 priority review
+- 462-line reference document tracing level through 6 subsystems: advancement trigger, PriceLookupLib price tiers, purchaseLevel ternary, daily+level quest targets with multipliers, lootbox level+1 baseline, and jackpot ticket routing with carryover/final-day behavior
+- 11 carryover functions traced end-to-end: 0.5% budget, source range [1..4], current-level queueing, final-day lvl+1 routing -- all SAFE, no findings
+- 17 functions audited (7 AdvanceModule + 10 DegenerusGame), all SAFE, 0 VULNERABLE -- gameOverPossible lifecycle verified across all 3 call sites, price/PriceLookupLib equivalence proven
+- 10 functions audited (MintModule 4 + MintStreakUtils 3 + LootboxModule 3): 10/10 SAFE, 0 VULNERABLE -- v14.0 purchase path restructure introduces no exploitable vectors
+- 28 functions audited across 5 contracts (DegenerusQuests 18, BurnieCoin 3, BurnieCoinflip 3, DegenerusAffiliate 1, DegeneretteModule 3) -- all SAFE, 0 VULNERABLE, 3 INFO
+- 76 functions audited across 4 plans + Phase 164 with 76/76 SAFE, 0 VULNERABLE, 3 INFO; storage layouts verified via forge inspect with zero slot shifts; all 20 high-risk changelog items covered
+- VRF commitment window verification for 5 new/modified v11.0-v14.0 paths -- 4 SAFE, 1 KNOWN TRADEOFF, 0 VULNERABLE, plus 6 unchanged path categories cited from v3.7
+- Static gas analysis of 6 new v11.0-v14.0 computation paths confirming advanceGame worst-case at 7,023,530 gas with 1.99x safety margin against 14M block limit
+- 36 removed/renamed symbols verified CLEAN across all contracts, 5 interface consistency checks PASS, both compilers confirm zero broken references
+- Full Hardhat + Foundry baseline: 1455/1579 passing, 124 expected failures from v11.0-v14.0 time-gating and taper formula changes, all 11 invariant suites green
+
+---
+
+## v14.0 Activity Score & Quest Gas Optimization (Shipped: 2026-04-02)
+
+**Phases completed:** 13 phases, 19 plans, 32 tasks
+
+**Key accomplishments:**
+
+- gameOverPossible bool packed into Slot 1, WAD-scale drip projection via closed-form geometric series, flag lifecycle wired into AdvanceModule L10+ purchase-phase path
+- 30-day BURNIE ban fully removed, MintModule reverts with GameOverPossible when flag active, LootboxModule redirects current-level tickets to far-future key space via bit 22
+- 10 changed/new functions audited across 4 contracts: 10 SAFE, 0 VULNERABLE, 1 INFO; RNG commitment window clean for all 3 flag-dependent paths; storage layout verified via forge inspect
+- Drip projection adds ~21,000 gas worst-case (0.3% increase) to advanceGame; 2.0x safety margin preserved against 14M block ceiling, no regression from Phase 147 baseline
+- 536-line design spec covering eligibility (levelStreak/pass + 4 ETH units), global VRF quest roll, 10x targets for 8 types, packed uint256 per-player state with level invalidation, and 800 BURNIE creditFlip completion
+- Complete integration map covering 10 contracts (5 modified, 5 unchanged), all 6 handleX handler sites with level quest tracking specs, 3 Phase 153 open questions resolved, Option C reward path recommended
+- BURNIE inflation bounded (worst-case 12M/month at 1K players, <16% of ticket mints), gameOverPossible interaction disproven via state domain trace, quest roll +22,430 gas to advanceGame with 1.99x safety margin preserved
+- Level quest interface declarations, storage mappings, access control expansion, and routing stub across 5 Solidity files -- all compiling cleanly
+- Level quest core logic: rollLevelQuest, eligibility check (streak/pass + 4-unit gate), 10x targets, shared progress handler with creditFlip completion, mintPackedFor cross-contract view
+- AdvanceModule wired to call quests.rollLevelQuest(purchaseLevel, questEntropy) at every level transition, using keccak256(rngWordByDay[day], "LEVEL_QUEST") entropy
+- 1. [Rule 1 - Bug] _bonusQuestType orphan type 0 selection
+- Level quest progress wired into all 6 handlers with per-return-path coverage, onlyCoin expanded for GAME + AFFILIATE callers
+- Removed BurnieCoin quest notification middleman (5 functions + event), rewired MintModule/DegeneretteModule/Affiliate to call DegenerusQuests handlers directly with local creditFlip
+- Phase 1 multi-call ETH carryover state machine replaced with single-pass ticket distribution; 3 storage vars gapped, dailyEthPhase removed from all contracts, carryover budget halved to 0.5% of futurePrizePool
+- Removed BurnieCoin.rollDailyQuest dead code (function, event, modifier) and tightened recordMintQuestStreak to GAME-only access
+- 467-line architecture spec locking all gas optimization decisions: compute-once score caching (22K-36K gas savings per purchase), deityPassCount bit-packing, quest streak parameter forwarding, and SLOAD dedup catalog for Phases 160-162
+- deityPassCount packed into mintPacked_ bits 184-199 eliminating 1 cold SLOAD per score call, shared 3-arg _playerActivityScore in MintStreakUtils replacing DegeneretteModule's 80-line duplicate
+- Status:
+- Eliminated price storage variable entirely; all 14 price reads replaced with PriceLookupLib.priceForLevel pure calls; quest pricing split for jackpot-phase correctness
+- Status:
+
+---
+
 ## v13.0 Level Quests Implementation (Shipped: 2026-04-01)
 
 **Phases completed:** 9 phases, 15 plans, 25 tasks
