@@ -405,7 +405,8 @@ contract DegenerusGameDegeneretteModule is
             quests.handleDegenerette(
                 player,
                 totalBet,
-                currency == CURRENCY_ETH
+                currency == CURRENCY_ETH,
+                currency == CURRENCY_ETH ? price : 0
             );
         }
     }

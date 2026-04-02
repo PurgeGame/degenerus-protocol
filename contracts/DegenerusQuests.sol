@@ -415,7 +415,8 @@ contract DegenerusQuests is IDegenerusQuests {
     function handleMint(
         address player,
         uint32 quantity,
-        bool paidWithEth
+        bool paidWithEth,
+        uint256 mintPrice
     )
         external
         onlyCoin
@@ -434,10 +435,6 @@ contract DegenerusQuests is IDegenerusQuests {
         bool anyCompleted;
         uint8 outQuestType = paidWithEth ? QUEST_TYPE_MINT_ETH : QUEST_TYPE_MINT_BURNIE;
         uint32 outStreak = state.streak;
-        uint256 mintPrice;
-        if (paidWithEth) {
-            mintPrice = questGame.mintPrice();
-        }
 
         // Check both slots for matching mint quest type.
         // Level quest progress is batched into the first matching slot call;
@@ -696,7 +693,8 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function handleLootBox(
         address player,
-        uint256 amountWei
+        uint256 amountWei,
+        uint256 mintPrice
     )
         external
         onlyCoin
@@ -709,8 +707,7 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quests[0].questType, state.streak, false);
         }
         _questSyncState(state, player, currentDay);
-        uint256 currentPrice = questGame.mintPrice();
-        _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, currentPrice);
+        _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, amountWei, mintPrice);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
         if (slotIndex == type(uint8).max) {
@@ -718,7 +715,7 @@ contract DegenerusQuests is IDegenerusQuests {
         }
         _questSyncProgress(state, slotIndex, currentDay, quest.version);
         state.progress[slotIndex] = _clampedAdd128(state.progress[slotIndex], amountWei);
-        uint256 target = _questTargetValue(quest, slotIndex, currentPrice);
+        uint256 target = _questTargetValue(quest, slotIndex, mintPrice);
         emit QuestProgressUpdated(
             player,
             currentDay,
@@ -733,10 +730,161 @@ contract DegenerusQuests is IDegenerusQuests {
         if (slotIndex == 1 && (state.completionMask & 1) == 0) {
             return (0, quest.questType, state.streak, false);
         }
-        (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, currentPrice);
+        (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, mintPrice);
         if (completed && reward != 0) {
             IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
         }
+    }
+
+    /**
+     * @notice Handle combined purchase-path activity (mint tickets + lootbox) in a single call.
+     * @dev Access: COIN or COINFLIP contract only.
+     *      Combines handleMint + handleLootBox quest logic for the purchase path.
+     *      ETH mint rewards are returned for caller batching. BURNIE mint and lootbox
+     *      rewards are creditFlipped internally (matching standalone handler behavior).
+     *      Returns streak for compute-once score forwarding.
+     * @param player The player who purchased.
+     * @param ethMintQty ETH-paid ticket-equivalent mint units (fresh-ETH scaled).
+     * @param burnieMintQty BURNIE-paid ticket-equivalent mint units.
+     * @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled).
+     * @param mintPrice Current ticket price in wei.
+     * @return reward BURNIE tokens earned (in base units, 18 decimals).
+     * @return questType The type of quest that was processed.
+     * @return streak Player's current streak after this action.
+     * @return completed True if a quest was completed by this action.
+     * @custom:reverts OnlyCoin When caller is not COIN or COINFLIP contract.
+     */
+    function handlePurchase(
+        address player,
+        uint32 ethMintQty,
+        uint32 burnieMintQty,
+        uint256 lootBoxAmount,
+        uint256 mintPrice
+    )
+        external
+        onlyCoin
+        returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
+    {
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = activeQuests;
+        uint48 currentDay = _currentQuestDay(quests);
+        PlayerQuestState storage state = questPlayerState[player];
+        if (player == address(0) || currentDay == 0) {
+            return (0, quests[0].questType, state.streak, false);
+        }
+        if (ethMintQty == 0 && burnieMintQty == 0 && lootBoxAmount == 0) {
+            return (0, quests[0].questType, state.streak, false);
+        }
+
+        _questSyncState(state, player, currentDay);
+
+        uint256 ethMintReward;
+        uint256 burnieMintReward;
+        uint256 lootboxReward;
+        bool anyCompleted;
+        uint8 outQuestType;
+        uint32 outStreak = state.streak;
+
+        // --- ETH mint quest progress ---
+        if (ethMintQty != 0) {
+            bool levelQuestHandled;
+            uint256 delta = uint256(ethMintQty) * mintPrice;
+            for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
+                DailyQuest memory quest = quests[slot];
+                if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_ETH) {
+                    outQuestType = QUEST_TYPE_MINT_ETH;
+                    uint256 target = _questTargetValue(quest, slot, mintPrice);
+                    (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
+                        player, state, quests, quest, slot,
+                        delta, target, currentDay, mintPrice,
+                        QUEST_TYPE_MINT_ETH, levelQuestHandled ? 0 : delta
+                    );
+                    levelQuestHandled = true;
+                    if (c) {
+                        ethMintReward += r;
+                        outQuestType = qt;
+                        outStreak = s;
+                        anyCompleted = true;
+                    }
+                }
+                unchecked { ++slot; }
+            }
+            if (!levelQuestHandled) {
+                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, delta, mintPrice);
+            }
+        }
+
+        // --- BURNIE mint quest progress ---
+        if (burnieMintQty != 0) {
+            bool levelQuestHandled;
+            for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
+                DailyQuest memory quest = quests[slot];
+                if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_BURNIE) {
+                    outQuestType = QUEST_TYPE_MINT_BURNIE;
+                    uint256 target = _questTargetValue(quest, slot, 0);
+                    (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
+                        player, state, quests, quest, slot,
+                        burnieMintQty, target, currentDay, 0,
+                        QUEST_TYPE_MINT_BURNIE, levelQuestHandled ? 0 : burnieMintQty
+                    );
+                    levelQuestHandled = true;
+                    if (c) {
+                        burnieMintReward += r;
+                        outQuestType = qt;
+                        outStreak = s;
+                        anyCompleted = true;
+                    }
+                }
+                unchecked { ++slot; }
+            }
+            if (!levelQuestHandled) {
+                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_BURNIE, burnieMintQty, 0);
+            }
+        }
+
+        // --- Lootbox quest progress ---
+        if (lootBoxAmount != 0) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, lootBoxAmount, mintPrice);
+
+            (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
+            if (slotIndex != type(uint8).max) {
+                _questSyncProgress(state, slotIndex, currentDay, quest.version);
+                state.progress[slotIndex] = _clampedAdd128(state.progress[slotIndex], lootBoxAmount);
+                uint256 target = _questTargetValue(quest, slotIndex, mintPrice);
+                emit QuestProgressUpdated(player, currentDay, slotIndex, quest.questType, state.progress[slotIndex], target);
+
+                if (state.progress[slotIndex] >= target) {
+                    bool canComplete = !(slotIndex == 1 && (state.completionMask & 1) == 0);
+                    if (canComplete) {
+                        (uint256 r, uint8 qt, uint32 s, bool c) = _questCompleteWithPair(
+                            player, state, quests, slotIndex, quest, currentDay, mintPrice
+                        );
+                        if (c) {
+                            lootboxReward += r;
+                            outQuestType = qt;
+                            outStreak = s;
+                            anyCompleted = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Reward routing (match standalone handler behavior):
+        // - BURNIE mint rewards: creditFlip internally (handleMint behavior for !paidWithEth)
+        // - Lootbox rewards: creditFlip internally (handleLootBox behavior)
+        // - ETH mint rewards: returned to caller (handleMint behavior for paidWithEth)
+        if (burnieMintReward != 0) {
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, burnieMintReward);
+        }
+        if (lootboxReward != 0) {
+            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, lootboxReward);
+        }
+        // Return ETH mint reward + lootbox reward (caller adds lootbox to lootboxFlipCredit)
+        uint256 totalReturned = ethMintReward + lootboxReward;
+        if (anyCompleted) {
+            return (totalReturned, outQuestType, outStreak, true);
+        }
+        return (0, outQuestType != 0 ? outQuestType : quests[0].questType, state.streak, false);
     }
 
     /**
@@ -745,6 +893,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param player The player who placed the Degenerette bet.
      * @param amount The bet amount (wei for ETH, base units for BURNIE).
      * @param paidWithEth True if bet was paid with ETH, false for BURNIE.
+     * @param mintPrice Current ticket price in wei (0 for BURNIE bets).
      * @return reward BURNIE tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
@@ -754,7 +903,8 @@ contract DegenerusQuests is IDegenerusQuests {
     function handleDegenerette(
         address player,
         uint256 amount,
-        bool paidWithEth
+        bool paidWithEth,
+        uint256 mintPrice
     )
         external
         onlyCoin
@@ -770,10 +920,6 @@ contract DegenerusQuests is IDegenerusQuests {
 
         uint8 targetType = paidWithEth ? QUEST_TYPE_DEGENERETTE_ETH : QUEST_TYPE_DEGENERETTE_BURNIE;
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, targetType);
-        uint256 mintPrice;
-        if (paidWithEth) {
-            mintPrice = questGame.mintPrice();
-        }
         if (slotIndex == type(uint8).max) {
             _handleLevelQuestProgress(player, targetType, amount, mintPrice);
             return (0, targetType, state.streak, false);

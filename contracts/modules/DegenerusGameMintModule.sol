@@ -4,13 +4,11 @@ pragma solidity 0.8.34;
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
-import {
-    IDegenerusGame,
-    MintPaymentKind
-} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
@@ -61,7 +59,7 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
  * - Uses 8×8 weighted grid for non-uniform distribution
  * - Higher-numbered sub-traits within each category are slightly rarer
  */
-contract DegenerusGameMintModule is DegenerusGameStorage {
+contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -69,6 +67,10 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     // error E() — inherited from DegenerusGameStorage
     /// @notice BURNIE ticket purchases are blocked when drip projection cannot cover nextPool deficit.
     error GameOverPossible();
+
+    // -------------------------------------------------------------------------
+    // External Contract References (compile-time constants)
+    // -------------------------------------------------------------------------
 
     // -------------------------------------------------------------------------
     // Constants
@@ -95,7 +97,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500;
     uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;
     uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
-    uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
+    uint256 private constant LOOTBOX_BOOST_MAX_VALUE =
+        10 ether;
     uint48 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
 
     /// @dev Loot box pool split: 90% future, 10% next.
@@ -177,17 +180,9 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         // Unpack previous state
         // ---------------------------------------------------------------------
 
-        uint24 prevLevel = uint24(
-            (prevData >> BitPackingLib.LAST_LEVEL_SHIFT) & BitPackingLib.MASK_24
-        );
-        uint24 total = uint24(
-            (prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) &
-                BitPackingLib.MASK_24
-        );
-        uint24 unitsLevel = uint24(
-            (prevData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT) &
-                BitPackingLib.MASK_24
-        );
+        uint24 prevLevel = uint24((prevData >> BitPackingLib.LAST_LEVEL_SHIFT) & BitPackingLib.MASK_24);
+        uint24 total = uint24((prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24);
+        uint24 unitsLevel = uint24((prevData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT) & BitPackingLib.MASK_24);
 
         bool sameLevel = prevLevel == lvl;
         bool sameUnitsLevel = unitsLevel == lvl;
@@ -197,10 +192,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         // ---------------------------------------------------------------------
 
         // Get previous level units (reset on level change)
-        uint256 levelUnitsBefore = sameUnitsLevel
-            ? ((prevData >> BitPackingLib.LEVEL_UNITS_SHIFT) &
-                BitPackingLib.MASK_16)
-            : 0;
+        uint256 levelUnitsBefore = sameUnitsLevel ? ((prevData >> BitPackingLib.LEVEL_UNITS_SHIFT) & BitPackingLib.MASK_16) : 0;
 
         // Calculate new level units (capped at 16-bit max)
         uint256 levelUnitsAfter = levelUnitsBefore + uint256(mintUnits);
@@ -214,18 +206,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
         if (!sameLevel && levelUnitsAfter < 4) {
             // Just update units, don't update level/streak/total
-            data = BitPackingLib.setPacked(
-                prevData,
-                BitPackingLib.LEVEL_UNITS_SHIFT,
-                BitPackingLib.MASK_16,
-                levelUnitsAfter
-            );
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT,
-                BitPackingLib.MASK_24,
-                lvl
-            );
+            data = BitPackingLib.setPacked(prevData, BitPackingLib.LEVEL_UNITS_SHIFT, BitPackingLib.MASK_16, levelUnitsAfter);
+            data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT, BitPackingLib.MASK_24, lvl);
             if (data != prevData) {
                 mintPacked_[player] = data;
             }
@@ -237,30 +219,15 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         // ---------------------------------------------------------------------
 
         uint32 day = _currentMintDay();
-        data = _setMintDay(
-            prevData,
-            day,
-            BitPackingLib.DAY_SHIFT,
-            BitPackingLib.MASK_32
-        );
+        data = _setMintDay(prevData, day, BitPackingLib.DAY_SHIFT, BitPackingLib.MASK_32);
 
         // ---------------------------------------------------------------------
         // Same level: Just update units
         // ---------------------------------------------------------------------
 
         if (sameLevel) {
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.LEVEL_UNITS_SHIFT,
-                BitPackingLib.MASK_16,
-                levelUnitsAfter
-            );
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT,
-                BitPackingLib.MASK_24,
-                lvl
-            );
+            data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_UNITS_SHIFT, BitPackingLib.MASK_16, levelUnitsAfter);
+            data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT, BitPackingLib.MASK_24, lvl);
             if (data != prevData) {
                 mintPacked_[player] = data;
             }
@@ -272,28 +239,15 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         // ---------------------------------------------------------------------
 
         // Check for whale bundle frozen state
-        uint24 frozenUntilLevel = uint24(
-            (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
-                BitPackingLib.MASK_24
-        );
+        uint24 frozenUntilLevel = uint24((prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24);
         bool isFrozen = frozenUntilLevel > 0 && lvl < frozenUntilLevel;
 
         // If frozen, skip updating total (it's pre-set by whale bundle)
         // If we've reached the frozen level, clear the flag and resume normal tracking
         if (frozenUntilLevel > 0 && lvl >= frozenUntilLevel) {
             // Clear frozen flag and whale bundle type - resume normal tracking from here
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
-                BitPackingLib.MASK_24,
-                0
-            );
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
-                3,
-                0
-            ); // Clear bundle type
+            data = BitPackingLib.setPacked(data, BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT, BitPackingLib.MASK_24, 0);
+            data = BitPackingLib.setPacked(data, BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT, 3, 0); // Clear bundle type
             frozenUntilLevel = 0;
             isFrozen = false;
         }
@@ -308,30 +262,10 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         }
 
         // Pack all updated fields
-        data = BitPackingLib.setPacked(
-            data,
-            BitPackingLib.LAST_LEVEL_SHIFT,
-            BitPackingLib.MASK_24,
-            lvl
-        );
-        data = BitPackingLib.setPacked(
-            data,
-            BitPackingLib.LEVEL_COUNT_SHIFT,
-            BitPackingLib.MASK_24,
-            total
-        );
-        data = BitPackingLib.setPacked(
-            data,
-            BitPackingLib.LEVEL_UNITS_SHIFT,
-            BitPackingLib.MASK_16,
-            levelUnitsAfter
-        );
-        data = BitPackingLib.setPacked(
-            data,
-            BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT,
-            BitPackingLib.MASK_24,
-            lvl
-        );
+        data = BitPackingLib.setPacked(data, BitPackingLib.LAST_LEVEL_SHIFT, BitPackingLib.MASK_24, lvl);
+        data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_COUNT_SHIFT, BitPackingLib.MASK_24, total);
+        data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_UNITS_SHIFT, BitPackingLib.MASK_16, levelUnitsAfter);
+        data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT, BitPackingLib.MASK_24, lvl);
         // Frozen flag is already set in data if it was modified above
 
         // ---------------------------------------------------------------------
@@ -404,19 +338,13 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     }
                     // Charge one budget unit for skip/cleanup progress so sparse
                     // queues cannot consume unbounded work in one call.
-                    unchecked {
-                        ++idx;
-                        ++used;
-                    }
+                    unchecked { ++idx; ++used; }
                     processed = 0;
                     continue;
                 }
                 if (!_rollRemainder(entropy, baseKey, rem)) {
                     ticketsOwedPacked[rk][player] = 0;
-                    unchecked {
-                        ++idx;
-                        ++used;
-                    }
+                    unchecked { ++idx; ++used; }
                     processed = 0;
                     continue;
                 }
@@ -472,9 +400,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             }
 
             if (remainingOwed == 0) {
-                unchecked {
-                    ++idx;
-                }
+                unchecked { ++idx; }
                 processed = 0;
             }
         }
@@ -546,8 +472,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     s = s * TICKET_LCG_MULT + 1; // LCG step
 
                     // Generate trait using weighted distribution, add quadrant offset.
-                    uint8 traitId = DegenerusTraitUtils.traitFromWord(s) +
-                        (uint8(i & 3) << 6);
+                    uint8 traitId = DegenerusTraitUtils.traitFromWord(s) + (uint8(i & 3) << 6);
 
                     // Track first occurrence of each trait for batch writing.
                     if (counts[traitId]++ == 0) {
@@ -653,17 +578,18 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 ticketQuantity,
         uint256 lootBoxBurnieAmount
     ) external {
-        _purchaseCoinFor(buyer, ticketQuantity, lootBoxBurnieAmount);
+        _purchaseCoinFor(
+            buyer,
+            ticketQuantity,
+            lootBoxBurnieAmount
+        );
     }
 
     /// @notice Purchase a low-EV loot box with BURNIE.
     /// @dev Uses the current lootbox RNG index; rewards are tickets + small BURNIE only.
     /// @param buyer Recipient of the loot box rewards.
     /// @param burnieAmount BURNIE amount to burn for the loot box.
-    function purchaseBurnieLootbox(
-        address buyer,
-        uint256 burnieAmount
-    ) external {
+    function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external {
         if (buyer == address(0)) revert E();
         _purchaseBurnieLootboxFor(buyer, burnieAmount);
     }
@@ -678,15 +604,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         if (ticketQuantity != 0) {
             // ENF-01: Block BURNIE tickets when drip projection cannot cover nextPool deficit.
             if (gameOverPossible) revert GameOverPossible();
-            _callTicketPurchase(
-                buyer,
-                msg.sender,
-                ticketQuantity,
-                MintPaymentKind.DirectEth,
-                true,
-                bytes32(0),
-                0
-            );
+            _callTicketPurchase(buyer, msg.sender, ticketQuantity, MintPaymentKind.DirectEth, true, bytes32(0), 0);
         }
 
         if (lootBoxBurnieAmount != 0) {
@@ -747,66 +665,57 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             }
         }
 
+        // --- Ticket purchase (returns quest units, defers x00 bonus + ticket queuing) ---
+        uint32 ethMintUnits;
+        uint32 burnieMintUnits;
+        uint32 adjustedQty;
+        uint24 targetLevel;
         if (ticketCost != 0) {
-            lootboxFlipCredit += _callTicketPurchase(
-                buyer,
-                buyer,
-                ticketQuantity,
-                payKind,
-                false,
-                affiliateCode,
-                remainingEth
-            );
+            (lootboxFlipCredit, adjustedQty, targetLevel, ethMintUnits, burnieMintUnits) =
+                _callTicketPurchase(buyer, buyer, ticketQuantity, payKind, false, affiliateCode, remainingEth);
         }
 
+        // --- Lootbox setup (pool splits, RNG request, presale/distress tracking) ---
+        uint48 lbDay;
+        uint48 lbIndex;
+        bool lbFirstDeposit;
         if (lootBoxAmount != 0) {
-            uint48 day = _simulatedDayIndex();
-            uint48 index = lootboxRngIndex;
+            lbDay = _simulatedDayIndex();
+            lbIndex = lootboxRngIndex;
             bool presale = lootboxPresaleActive;
 
-            uint256 packed = lootboxEth[index][buyer];
+            uint256 packed = lootboxEth[lbIndex][buyer];
             uint256 existingAmount = packed & ((1 << 232) - 1);
-            uint48 storedDay = lootboxDay[index][buyer];
+            uint48 storedDay = lootboxDay[lbIndex][buyer];
 
             if (existingAmount == 0) {
-                lootboxDay[index][buyer] = day;
-                lootboxBaseLevelPacked[index][buyer] = uint24(level + 2);
-                lootboxEvScorePacked[index][buyer] = uint16(
-                    IDegenerusGame(address(this)).playerActivityScore(buyer) + 1
-                );
-                emit LootBoxIdx(buyer, index, day);
+                lbFirstDeposit = true;
+                lootboxDay[lbIndex][buyer] = lbDay;
+                lootboxBaseLevelPacked[lbIndex][buyer] = uint24(level + 2);
+                // lootboxEvScorePacked written after score computation below
+                emit LootBoxIdx(buyer, lbIndex, lbDay);
             } else {
-                if (storedDay != day) revert E();
+                if (storedDay != lbDay) revert E();
             }
 
-            uint256 boostedAmount = _applyLootboxBoostOnPurchase(
-                buyer,
-                day,
-                lootBoxAmount
-            );
-            uint256 existingBase = lootboxEthBase[index][buyer];
+            uint256 boostedAmount = _applyLootboxBoostOnPurchase(buyer, lbDay, lootBoxAmount);
+            uint256 existingBase = lootboxEthBase[lbIndex][buyer];
             if (existingAmount != 0 && existingBase == 0) {
                 existingBase = existingAmount;
             }
-            lootboxEthBase[index][buyer] = existingBase + lootBoxAmount;
+            lootboxEthBase[lbIndex][buyer] = existingBase + lootBoxAmount;
 
-            // Pack: [232 bits: amount] [24 bits: purchase level]
             uint256 newAmount = existingAmount + boostedAmount;
-            lootboxEth[index][buyer] =
-                (uint256(purchaseLevel) << 232) |
-                newAmount;
+            lootboxEth[lbIndex][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
             _maybeRequestLootboxRng(lootBoxAmount);
 
-            // Track mint-only lootbox ETH for presale cap (checked at phase transition)
             if (presale) {
                 lootboxPresaleMintEth += lootBoxAmount;
             }
 
             bool distress = _isDistressMode();
-
-            // Track distress-mode portion for proportional ticket bonus at open time
             if (distress) {
-                lootboxDistressEth[index][buyer] += boostedAmount;
+                lootboxDistressEth[lbIndex][buyer] += boostedAmount;
             }
             uint256 futureBps;
             uint256 nextBps;
@@ -816,53 +725,92 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 nextBps = 10_000;
                 vaultBps = 0;
             } else {
-                bool presaleSplit = level == 0 &&
-                    _getNextPrizePool() <= 50 ether;
-                futureBps = presaleSplit
-                    ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS
-                    : LOOTBOX_SPLIT_FUTURE_BPS;
-                nextBps = presaleSplit
-                    ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS
-                    : LOOTBOX_SPLIT_NEXT_BPS;
+                bool presaleSplit = level == 0 && _getNextPrizePool() <= 50 ether;
+                futureBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_FUTURE_BPS : LOOTBOX_SPLIT_FUTURE_BPS;
+                nextBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_NEXT_BPS : LOOTBOX_SPLIT_NEXT_BPS;
                 vaultBps = presaleSplit ? LOOTBOX_PRESALE_SPLIT_VAULT_BPS : 0;
             }
 
             uint256 futureShare = (lootBoxAmount * futureBps) / 10_000;
             uint256 nextShare = (lootBoxAmount * nextBps) / 10_000;
             uint256 vaultShare = (lootBoxAmount * vaultBps) / 10_000;
-            // Rounding dust (a few wei) stays in the contract as yield buffer.
 
             if (prizePoolFrozen) {
                 (uint128 pNext, uint128 pFuture) = _getPendingPools();
-                _setPendingPools(
-                    pNext + uint128(nextShare),
-                    pFuture + uint128(futureShare)
-                );
+                _setPendingPools(pNext + uint128(nextShare), pFuture + uint128(futureShare));
             } else {
                 (uint128 next, uint128 future) = _getPrizePools();
-                _setPrizePools(
-                    next + uint128(nextShare),
-                    future + uint128(futureShare)
-                );
+                _setPrizePools(next + uint128(nextShare), future + uint128(futureShare));
             }
             if (vaultShare != 0) {
-                (bool ok, ) = payable(ContractAddresses.VAULT).call{
-                    value: vaultShare
-                }("");
+                (bool ok, ) = payable(ContractAddresses.VAULT).call{value: vaultShare}("");
                 if (!ok) revert E();
             }
 
-            // Always call affiliate - contract handles bytes32(0) by using stored code
+            // Accumulate lootbox mint-equivalent quest units (fresh-ETH portion only)
+            if (priceWei != 0) {
+                uint256 questUnitsRaw = lootBoxAmount / priceWei;
+                if (questUnitsRaw != 0 && lootboxFreshEth != 0) {
+                    uint256 scaled = (questUnitsRaw * lootboxFreshEth) / lootBoxAmount;
+                    if (scaled != 0) {
+                        ethMintUnits += uint32(scaled);
+                    }
+                }
+            }
+
+            emit LootBoxBuy(buyer, lbDay, lootBoxAmount, presale, level);
+        }
+
+        // --- Single quest handler call (post-action: handlers execute before score) ---
+        uint32 questStreak;
+        {
+            (uint256 questReward, uint8 questType, uint32 streak, bool questCompleted) =
+                quests.handlePurchase(buyer, ethMintUnits, burnieMintUnits, lootBoxAmount, priceWei);
+            questStreak = streak;
+            if (questCompleted) {
+                lootboxFlipCredit += questReward;
+                if (ethMintUnits > 0 && questType == 1) {
+                    IDegenerusGame(address(this)).recordMintQuestStreak(buyer);
+                }
+            }
+        }
+
+        // --- Compute score ONCE (post-action, per D-08) ---
+        uint256 cachedScore = _playerActivityScore(buyer, questStreak);
+
+        // --- x00 century bonus (uses cached post-action score) ---
+        if (ticketCost != 0 && targetLevel % 100 == 0 && cachedScore != 0) {
+            uint256 _score = cachedScore > 30_500 ? 30_500 : cachedScore;
+            uint256 bonusQty = (uint256(adjustedQty) * _score) / 30_500;
+            if (bonusQty != 0) {
+                uint256 maxBonus = (20 ether) / (priceWei >> 2);
+                uint256 used = centuryBonusLevel == targetLevel
+                    ? centuryBonusUsed[buyer] : 0;
+                uint256 remaining = maxBonus > used ? maxBonus - used : 0;
+                if (bonusQty > remaining) bonusQty = remaining;
+                if (bonusQty != 0) {
+                    centuryBonusLevel = targetLevel;
+                    centuryBonusUsed[buyer] = used + bonusQty;
+                    adjustedQty += uint32(bonusQty);
+                }
+            }
+        }
+
+        // --- Queue tickets (moved from _callTicketPurchase) ---
+        if (adjustedQty != 0) {
+            _queueTicketsScaled(buyer, targetLevel, adjustedQty);
+        }
+
+        // --- Lootbox affiliate calls + EV score write (uses cached score) ---
+        if (lootBoxAmount != 0) {
             if (lootboxFreshEth != 0) {
-                lootboxFlipCredit = affiliate.payAffiliate(
+                lootboxFlipCredit += affiliate.payAffiliate(
                     _ethToBurnieValue(lootboxFreshEth, priceWei),
                     affiliateCode,
                     buyer,
                     purchaseLevel,
                     true,
-                    uint16(
-                        IDegenerusGame(address(this)).playerActivityScore(buyer)
-                    )
+                    uint16(cachedScore)
                 );
             }
             if (lootboxClaimableUsed != 0) {
@@ -875,34 +823,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                     0
                 );
             }
-            emit LootBoxBuy(buyer, day, lootBoxAmount, presale, level);
-
-            // Match ticket purchase behavior: mint quest progress uses whole ticket-equivalent
-            // units and only the fresh-ETH portion when claimable is mixed in.
-            if (priceWei != 0) {
-                uint256 questUnitsRaw = lootBoxAmount / priceWei;
-                if (questUnitsRaw != 0 && lootboxFreshEth != 0) {
-                    uint256 scaled = (questUnitsRaw * lootboxFreshEth) /
-                        lootBoxAmount;
-                    if (scaled != 0) {
-                        lootboxFlipCredit += _questMint(
-                            buyer,
-                            uint32(scaled),
-                            true
-                        );
-                    }
-                }
-            }
-
-            // Lootbox quests continue tracking full lootbox spend (fresh + recycled).
-            {
-                (uint256 lbReward, , , bool lbCompleted) = quests.handleLootBox(
-                    buyer,
-                    lootBoxAmount
-                );
-                if (lbCompleted) {
-                    lootboxFlipCredit += lbReward;
-                }
+            if (lbFirstDeposit) {
+                lootboxEvScorePacked[lbIndex][buyer] = uint16(cachedScore + 1);
             }
             _awardEarlybirdDgnrs(buyer, lootboxFreshEth, purchaseLevel);
         }
@@ -910,22 +832,14 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         uint256 finalClaimable = payKind == MintPaymentKind.DirectEth
             ? initialClaimable
             : claimableWinnings[buyer];
-        uint256 totalClaimableUsed = initialClaimable > finalClaimable
-            ? initialClaimable - finalClaimable
-            : 0;
-        uint256 availableClaimable = finalClaimable > 1
-            ? finalClaimable - 1
-            : 0;
+        uint256 totalClaimableUsed = initialClaimable > finalClaimable ? initialClaimable - finalClaimable : 0;
+        uint256 availableClaimable = finalClaimable > 1 ? finalClaimable - 1 : 0;
         uint256 minTicketUnitCost = priceWei / (4 * TICKET_SCALE);
         bool spentAllClaimable = totalClaimableUsed != 0 &&
-            (availableClaimable == 0 ||
-                (minTicketUnitCost != 0 &&
-                    availableClaimable < minTicketUnitCost));
+            (availableClaimable == 0 || (minTicketUnitCost != 0 && availableClaimable < minTicketUnitCost));
 
         if (spentAllClaimable && totalClaimableUsed >= priceWei * 3) {
-            lootboxFlipCredit +=
-                (totalClaimableUsed * PRICE_COIN_UNIT * 10) /
-                (priceWei * 100);
+            lootboxFlipCredit += (totalClaimableUsed * PRICE_COIN_UNIT * 10) / (priceWei * 100);
         }
 
         if (lootboxFlipCredit != 0) {
@@ -933,6 +847,13 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         }
     }
 
+    /// @dev Execute ticket purchase: payment, boost, affiliate routing, quest unit accumulation.
+    ///      x00 century bonus and ticket queuing are handled by _purchaseFor after score computation.
+    /// @return bonusCredit Affiliate kickback + bulk bonus flip credit
+    /// @return adjustedQty32 Adjusted ticket quantity (with boost, without x00 bonus)
+    /// @return targetLevel The level tickets are queued to
+    /// @return ethMintUnits ETH-paid mint quest units (fresh-ETH scaled)
+    /// @return burnieMintUnits BURNIE-paid mint quest units
     function _callTicketPurchase(
         address buyer,
         address payer,
@@ -941,20 +862,17 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         bool payInCoin,
         bytes32 affiliateCode,
         uint256 value
-    ) private returns (uint256 bonusCredit) {
+    ) private returns (uint256 bonusCredit, uint32 adjustedQty32, uint24 targetLevel, uint32 ethMintUnits, uint32 burnieMintUnits) {
         if (quantity == 0) revert E();
         if (gameOver) revert E();
-        uint24 targetLevel = jackpotPhaseFlag ? level : level + 1;
+        targetLevel = jackpotPhaseFlag ? level : level + 1;
         // Last jackpot day fix: route to level+1 to prevent stranded tickets
         // (_endPhase breaks before _unlockRng, so no future daily draw at this level)
         if (jackpotPhaseFlag && rngLockedFlag) {
             uint8 cnt = jackpotCounter;
             uint8 comp = compressedJackpotFlag;
-            uint8 step = comp == 2
-                ? JACKPOT_LEVEL_CAP
-                : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1)
-                    ? 2
-                    : 1;
+            uint8 step = comp == 2 ? JACKPOT_LEVEL_CAP
+                : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1) ? 2 : 1;
             if (cnt + step >= JACKPOT_LEVEL_CAP) targetLevel = level + 1;
         }
         // Affiliate scores always route to level + 1 so they freeze at
@@ -968,10 +886,12 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
         uint256 adjustedQuantity = quantity;
         if (!payInCoin) {
-            uint16 boostBps = IDegenerusGame(address(this))
-                .consumePurchaseBoost(payer);
+            uint16 boostBps = IDegenerusGame(address(this)).consumePurchaseBoost(
+                payer
+            );
             if (boostBps != 0) {
-                uint256 cappedValue = costWei > LOOTBOX_BOOST_MAX_VALUE
+                uint256 cappedValue = costWei >
+                    LOOTBOX_BOOST_MAX_VALUE
                     ? LOOTBOX_BOOST_MAX_VALUE
                     : costWei;
                 uint256 cappedQty = priceWei == 0
@@ -980,44 +900,16 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 adjustedQuantity += (cappedQty * boostBps) / 10_000;
             }
         }
-        uint32 adjustedQty32 = uint32(adjustedQuantity);
-
-        // x00 century bonus: up to 2x tickets scaling with activity score, 20 ETH cap per player.
-        if (targetLevel % 100 == 0) {
-            uint256 score = IDegenerusGame(address(this)).playerActivityScore(
-                buyer
-            );
-            if (score != 0) {
-                if (score > 30_500) score = 30_500;
-                uint256 bonusQty = (uint256(adjustedQty32) * score) / 30_500;
-
-                // Per-player 20 ETH cap across multiple purchases at this x00 level
-                if (bonusQty != 0) {
-                    uint256 maxBonus = (20 ether) / (priceWei >> 2);
-                    uint256 used = centuryBonusLevel == targetLevel
-                        ? centuryBonusUsed[buyer]
-                        : 0;
-                    uint256 remaining = maxBonus > used ? maxBonus - used : 0;
-                    if (bonusQty > remaining) bonusQty = remaining;
-                    if (bonusQty != 0) {
-                        centuryBonusLevel = targetLevel;
-                        centuryBonusUsed[buyer] = used + bonusQty;
-                        adjustedQty32 += uint32(bonusQty);
-                    }
-                }
-            }
-        }
+        adjustedQty32 = uint32(adjustedQuantity);
 
         if (payInCoin) {
-            uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) /
-                TICKET_SCALE;
+            uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
             _coinReceive(payer, coinCost);
 
-            {
-                uint32 questQty = uint32(quantity / (4 * TICKET_SCALE));
-                if (questQty != 0) {
-                    bonusCredit += _questMint(buyer, questQty, false);
-                }
+            // Accumulate BURNIE mint quest units (deferred to handlePurchase)
+            uint32 questQty = uint32(quantity / (4 * TICKET_SCALE));
+            if (questQty != 0) {
+                burnieMintUnits += questQty;
             }
         } else {
             uint32 mintUnits = adjustedQty32;
@@ -1044,11 +936,12 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
                 revert E();
             }
 
+            // Accumulate ETH mint quest units (fresh-ETH scaled, deferred to handlePurchase)
             uint32 questUnits = uint32(quantity / (4 * TICKET_SCALE));
             if (questUnits != 0 && freshEth != 0) {
                 uint256 scaled = (uint256(questUnits) * freshEth) / costWei;
                 if (scaled != 0) {
-                    bonusCredit += _questMint(buyer, uint32(scaled), true);
+                    ethMintUnits += uint32(scaled);
                 }
             }
 
@@ -1057,18 +950,10 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             uint256 freshBurnie = freshEth != 0
                 ? _ethToBurnieValue(freshEth, priceWei)
                 : 0;
-            if (
-                freshBurnie != 0 &&
-                jackpotPhaseFlag &&
-                compressedJackpotFlag != 2
-            ) {
+            if (freshBurnie != 0 && jackpotPhaseFlag && compressedJackpotFlag != 2) {
                 // Compute next step size (mirrors JackpotModule logic)
                 uint8 _cnt = jackpotCounter;
-                uint8 _nextStep = (compressedJackpotFlag == 1 &&
-                    _cnt > 0 &&
-                    _cnt < JACKPOT_LEVEL_CAP - 1)
-                    ? 2
-                    : 1;
+                uint8 _nextStep = (compressedJackpotFlag == 1 && _cnt > 0 && _cnt < JACKPOT_LEVEL_CAP - 1) ? 2 : 1;
                 if (_cnt + _nextStep >= JACKPOT_LEVEL_CAP) {
                     freshBurnie = targetLevel <= 3
                         ? (freshBurnie * 7) / 5
@@ -1118,40 +1003,29 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
             }
 
             bonusCredit = kickback;
-            uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) /
-                TICKET_SCALE;
+            uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE;
             bonusCredit += coinCost / 10;
             if (quantity >= 10 * 4 * TICKET_SCALE) {
-                bonusCredit +=
-                    (quantity * PRICE_COIN_UNIT) /
-                    (40 * TICKET_SCALE);
+                bonusCredit += (quantity * PRICE_COIN_UNIT) / (40 * TICKET_SCALE);
             }
-        }
 
-        uint256 ticketScaled = adjustedQuantity;
-
-        if (ticketScaled != 0) {
-            _queueTicketsScaled(buyer, targetLevel, uint32(ticketScaled));
         }
     }
 
-    function _coinReceive(address payer, uint256 amount) private {
+    function _coinReceive(
+        address payer,
+        uint256 amount
+    ) private {
         coin.burnCoin(payer, amount);
     }
 
     /// @dev Convert ETH-denominated spend to BURNIE base units at current ticket price.
-    function _ethToBurnieValue(
-        uint256 amountWei,
-        uint256 priceWei
-    ) private pure returns (uint256) {
+    function _ethToBurnieValue(uint256 amountWei, uint256 priceWei) private pure returns (uint256) {
         if (amountWei == 0 || priceWei == 0) return 0;
         return (amountWei * PRICE_COIN_UNIT) / priceWei;
     }
 
-    function _purchaseBurnieLootboxFor(
-        address buyer,
-        uint256 burnieAmount
-    ) private {
+    function _purchaseBurnieLootboxFor(address buyer, uint256 burnieAmount) private {
         if (gameOver) revert E();
         if (burnieAmount < BURNIE_LOOTBOX_MIN) revert E();
         uint48 index = lootboxRngIndex;
@@ -1162,7 +1036,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         {
             uint256 questUnitsRaw = burnieAmount / PRICE_COIN_UNIT;
             if (questUnitsRaw != 0) {
-                _questMint(buyer, uint32(questUnitsRaw), false);
+                _questMint(buyer, uint32(questUnitsRaw), false, 0);
             }
         }
 
@@ -1190,13 +1064,8 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
     }
 
     /// @dev Calculate boost amount given base amount and bonus bps
-    function _calculateBoost(
-        uint256 amount,
-        uint16 bonusBps
-    ) private pure returns (uint256) {
-        uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE
-            ? LOOTBOX_BOOST_MAX_VALUE
-            : amount;
+    function _calculateBoost(uint256 amount, uint16 bonusBps) private pure returns (uint256) {
+        uint256 cappedAmount = amount > LOOTBOX_BOOST_MAX_VALUE ? LOOTBOX_BOOST_MAX_VALUE : amount;
         unchecked {
             return (cappedAmount * bonusBps) / 10_000;
         }
@@ -1215,9 +1084,7 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
 
         // Check expiry
         uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
-        if (
-            stampDay != 0 && uint24(day) > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS
-        ) {
+        if (stampDay != 0 && uint24(day) > stampDay + LOOTBOX_BOOST_EXPIRY_DAYS) {
             // Expired: clear lootbox fields
             bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
             return boostedAmount;
@@ -1233,19 +1100,11 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         emit BoostUsed(player, day, amount, boostedAmount, boostBps);
     }
 
-    /// @dev Route quest progress to DegenerusQuests.
+    /// @dev Route quest progress to DegenerusQuests (standalone mint path only).
     ///      ETH mints: returns reward for caller to batch with kickbacks.
     ///      BURNIE mints: reward creditFlipped internally by handler (nothing to batch).
-    function _questMint(
-        address player,
-        uint32 quantity,
-        bool paidWithEth
-    ) private returns (uint256) {
-        (uint256 reward, uint8 questType, , bool completed) = quests.handleMint(
-            player,
-            quantity,
-            paidWithEth
-        );
+    function _questMint(address player, uint32 quantity, bool paidWithEth, uint256 mintPrice) private returns (uint256) {
+        (uint256 reward, uint8 questType,, bool completed) = quests.handleMint(player, quantity, paidWithEth, mintPrice);
         if (completed) {
             if (paidWithEth && questType == 1) {
                 IDegenerusGame(address(this)).recordMintQuestStreak(player);
@@ -1254,4 +1113,5 @@ contract DegenerusGameMintModule is DegenerusGameStorage {
         }
         return 0;
     }
+
 }

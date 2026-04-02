@@ -50,11 +50,12 @@ interface IDegenerusQuests {
     /// @param player The address of the player who minted
     /// @param quantity The number of tickets minted
     /// @param paidWithEth Whether the mint was paid for with ETH (vs tokens)
+    /// @param mintPrice Current ticket price in wei (0 for BURNIE mints)
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleMint(address player, uint32 quantity, bool paidWithEth)
+    function handleMint(address player, uint32 quantity, bool paidWithEth, uint256 mintPrice)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
@@ -98,11 +99,12 @@ interface IDegenerusQuests {
     /// @dev Called by the game contract when a player opens a lootbox
     /// @param player The address of the player
     /// @param amountWei The amount of ETH spent on the lootbox in wei
+    /// @param mintPrice Current ticket price in wei (for target scaling)
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleLootBox(address player, uint256 amountWei)
+    function handleLootBox(address player, uint256 amountWei, uint256 mintPrice)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
@@ -111,13 +113,34 @@ interface IDegenerusQuests {
     /// @param player The address of the player
     /// @param amount The bet amount (wei for ETH, base units for BURNIE)
     /// @param paidWithEth True if the bet was paid with ETH, false if paid with BURNIE
+    /// @param mintPrice Current ticket price in wei (0 for BURNIE bets)
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleDegenerette(address player, uint256 amount, bool paidWithEth)
+    function handleDegenerette(address player, uint256 amount, bool paidWithEth, uint256 mintPrice)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
+
+    /// @notice Records combined purchase-path activity (mint tickets + lootbox) and checks quest completion
+    /// @dev Called by MintModule for the unified purchase path. Combines handleMint + handleLootBox
+    ///      into a single cross-contract call. Returns streak for compute-once score forwarding.
+    /// @param player The address of the player
+    /// @param ethMintQty ETH-paid ticket-equivalent mint units (fresh-ETH scaled)
+    /// @param burnieMintQty BURNIE-paid ticket-equivalent mint units
+    /// @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled)
+    /// @param mintPrice Current ticket price in wei
+    /// @return reward The quest reward amount earned (0 if quest not completed)
+    /// @return questType The type of quest that was processed
+    /// @return streak The player's current quest streak (for score forwarding)
+    /// @return completed Whether a quest was completed by this action
+    function handlePurchase(
+        address player,
+        uint32 ethMintQty,
+        uint32 burnieMintQty,
+        uint256 lootBoxAmount,
+        uint256 mintPrice
+    ) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
     /// @notice Awards bonus streak days to a player
     /// @dev Directly increases the player's streak count
