@@ -353,12 +353,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 }
 
                 // Consolidate prize pools for level transition
-                if (!poolConsolidationDone) {
-                    levelPrizePool[purchaseLevel] = _getNextPrizePool();
-                    _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);
-                    _consolidatePrizePools(purchaseLevel, rngWord);
-                    poolConsolidationDone = true;
-                }
+                levelPrizePool[purchaseLevel] = _getNextPrizePool();
+                _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);
+                _consolidatePrizePools(purchaseLevel, rngWord);
+                _runRewardJackpots(lvl, rngWord);
 
                 if (
                     lootboxPresaleActive &&
@@ -375,7 +373,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     decWindowOpen = true;
                 }
 
-                poolConsolidationDone = false;
                 lastPurchaseDay = false;
                 levelStartTime = ts;
                 _drawDownFuturePrizePool(lvl);
@@ -402,7 +399,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
                     _awardFinalDayDgnrsReward(lvl, rngWord);
                     _rewardTopAffiliate(lvl);
-                    _runRewardJackpots(lvl, rngWord);
                     _endPhase();
                     _unlockRng(day);
                     stage = STAGE_JACKPOT_PHASE_ENDED;

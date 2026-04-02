@@ -21,9 +21,16 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * This contract defines the canonical storage layout for the Degenerus game ecosystem.
  * It is inherited by:
  *   - DegenerusGame (main contract, holds actual state)
- *   - DegenerusGameEndgameModule (delegatecall module)
+ *   - DegenerusGameAdvanceModule (delegatecall module)
  *   - DegenerusGameJackpotModule (delegatecall module)
  *   - DegenerusGameMintModule (delegatecall module)
+ *   - DegenerusGameLootboxModule (delegatecall module)
+ *   - DegenerusGameWhaleModule (delegatecall module)
+ *   - DegenerusGameBoonModule (delegatecall module)
+ *   - DegenerusGameDecimatorModule (delegatecall module)
+ *   - DegenerusGameDegeneretteModule (delegatecall module)
+ *   - DegenerusGameGameOverModule (delegatecall module)
+ *   - DegenerusGameEndgameModule (delegatecall module)
  *
  * DELEGATECALL PATTERN:
  * When DegenerusGame calls `module.delegatecall(...)`, the module's code executes
@@ -44,35 +51,30 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [18:21] level                    uint24   Current jackpot level (starts at 0) |
  * | [21:22] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT|
  * | [22:23] jackpotCounter           uint8    Jackpots processed this level      |
- * | [23:24] poolConsolidationDone    bool     Pool consolidation executed flag   |
- * | [24:25] lastPurchaseDay          bool     Prize target met flag              |
- * | [25:26] decWindowOpen            bool     Decimator window latch             |
- * | [26:27] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
- * | [27:28] phaseTransitionActive    bool     Level transition in progress       |
- * | [28:29] gameOver                 bool     Terminal state flag                |
- * | [29:30] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [30:31] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
+ * | [23:24] lastPurchaseDay          bool     Prize target met flag              |
+ * | [24:25] decWindowOpen            bool     Decimator window latch             |
+ * | [25:26] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
+ * | [26:27] phaseTransitionActive    bool     Level transition in progress       |
+ * | [27:28] gameOver                 bool     Terminal state flag                |
+ * | [28:29] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
+ * | [29:30] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
+ * | [30:31] ticketsFullyProcessed    bool     Read slot fully drained flag       |
+ * | [31:32] gameOverPossible         bool     Drip projection endgame flag       |
  * +-----------------------------------------------------------------------------+
- *   Total: 31 bytes used (1 byte padding)
+ *   Total: 32 bytes used (0 bytes padding — FULL)
  *
  * +-----------------------------------------------------------------------------+
- * | EVM SLOT 1 (32 bytes) — Double-Buffer Fields                                |
+ * | EVM SLOT 1 (32 bytes) — Double-Buffer Fields + Current Prize Pool          |
  * +-----------------------------------------------------------------------------+
  * | [0:6]   purchaseStartDay         uint48   Day index when purchase phase began|
  * | [6:7]   ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
- * | [7:8]   ticketsFullyProcessed    bool     Read slot fully drained flag       |
- * | [8:9]   prizePoolFrozen          bool     Prize pool freeze active flag      |
- * | [9:32]  <padding>                         23 bytes unused                    |
+ * | [7:8]   prizePoolFrozen          bool     Prize pool freeze active flag      |
+ * | [8:24]  currentPrizePool         uint128  Active prize pool for current level|
+ * | [24:32] <padding>                         8 bytes unused                     |
  * +-----------------------------------------------------------------------------+
- *   Total: 9 bytes used (23 bytes padding)
+ *   Total: 24 bytes used (8 bytes padding)
  *
- * +-----------------------------------------------------------------------------+
- * | EVM SLOT 2 (32 bytes) — Current Prize Pool                                  |
- * +-----------------------------------------------------------------------------+
- * | [0:32]  currentPrizePool         uint256  Active prize pool for current level|
- * +-----------------------------------------------------------------------------+
- *
- * SLOTS 3+ — Full-width variables, arrays, and mappings
+ * SLOTS 2+ — Full-width variables, arrays, and mappings
  * -----------------------------------------------------------------------------
  * Each uint256, array length, or mapping root occupies its own slot.
  * Dynamic arrays: length at slot N, data at keccak256(N).
@@ -273,12 +275,6 @@ abstract contract DegenerusGameStorage {
     ///      SECURITY: uint8 is sufficient (max 255, only need 0-5).
     uint8 internal jackpotCounter;
 
-    /// @dev True once prize pool consolidation has been executed for the
-    ///      current purchase phase. Prevents double-execution.
-    ///
-    ///      SECURITY: Critical for pool integrity. Reset at level transition.
-    bool internal poolConsolidationDone;
-
     /// @dev True once the prize target is met for current level.
     ///      When true, next tick skips normal daily/jackpot prep and proceeds
     ///      to jackpot window. Allows early level completion on high activity.
@@ -313,10 +309,24 @@ abstract contract DegenerusGameStorage {
     ///      Cleared at phase end.
     uint8 internal compressedJackpotFlag;
 
+    /// @dev True when the read slot has been fully drained (all tickets processed).
+    ///      Gate for RNG requests and jackpot logic in advanceGame daily path.
+    ///
+    ///      SECURITY: Must be set to true before any jackpot/phase logic executes.
+    ///      Reset to false on every queue slot swap.
+    bool internal ticketsFullyProcessed;
+
+    /// @dev True when drip projection shows futurePool cannot cover nextPool deficit.
+    ///      Evaluated in advanceGame at L10+ purchase-phase days.
+    ///      When active: BURNIE ticket purchases revert, BURNIE lootbox current-level
+    ///      tickets redirect to far-future key space.
+    ///      Cleared when: drip re-covers deficit, lastPurchaseDay is set, or phase transition.
+    bool internal gameOverPossible;
+
     // =========================================================================
-    // EVM SLOT 1: Price and Double-Buffer Fields
+    // EVM SLOT 1: Double-Buffer Fields + Current Prize Pool
     // =========================================================================
-    // Packs into EVM Slot 1: purchaseStartDay through prizePoolFrozen (25 bytes used, 7 bytes padding).
+    // Packs into EVM Slot 1: purchaseStartDay, ticketWriteSlot, prizePoolFrozen, currentPrizePool (24 bytes used, 8 bytes padding).
 
     /// @dev Game day index when the current purchase phase opened.
     ///      Used to determine whether the purchase target was met quickly enough
@@ -332,13 +342,6 @@ abstract contract DegenerusGameStorage {
     ///      Only values 0 and 1 are valid; _swapTicketSlot enforces this.
     uint8 internal ticketWriteSlot;
 
-    /// @dev True when the read slot has been fully drained (all tickets processed).
-    ///      Gate for RNG requests and jackpot logic in advanceGame daily path.
-    ///
-    ///      SECURITY: Must be set to true before any jackpot/phase logic executes.
-    ///      Reset to false on every queue slot swap.
-    bool internal ticketsFullyProcessed;
-
     /// @dev True when purchase revenue redirects to pending accumulators.
     ///      Set at daily RNG request time; cleared by _unfreezePool().
     ///
@@ -346,21 +349,16 @@ abstract contract DegenerusGameStorage {
     ///      use pre-freeze pool values. _unfreezePool is the single control point.
     bool internal prizePoolFrozen;
 
-    /// @dev True when drip projection shows futurePool cannot cover nextPool deficit.
-    ///      Evaluated in advanceGame at L10+ purchase-phase days.
-    ///      When active: BURNIE ticket purchases revert, BURNIE lootbox current-level
-    ///      tickets redirect to far-future key space.
-    ///      Cleared when: drip re-covers deficit, lastPurchaseDay is set, or phase transition.
-    bool internal gameOverPossible;
+    /// @dev Active prize pool for the current level.
+    ///      Accumulated from mint fees and distributed via jackpots.
+    ///      Packed into slot 1 as uint128 (max ~3.4e20 ETH, far exceeds total supply).
+    ///      Access through _getCurrentPrizePool()/_setCurrentPrizePool() helpers.
+    uint128 internal currentPrizePool;
 
     // =========================================================================
     // SLOT 2+: Full-Width Balances and Pools
     // =========================================================================
     // Each uint256 occupies its own 32-byte slot. These track ETH/token flows.
-
-    /// @dev Active prize pool for the current level.
-    ///      Accumulated from mint fees and distributed via jackpots.
-    uint256 internal currentPrizePool;
 
     /// @dev Packed live prize pools: [128:256] futurePrizePool | [0:128] nextPrizePool
     ///      uint128 max ~= 3.4e20 ETH -- far exceeds total ETH supply.
@@ -776,6 +774,23 @@ abstract contract DegenerusGameStorage {
     function _setFuturePrizePool(uint256 val) internal {
         (uint128 next, ) = _getPrizePools();
         _setPrizePools(next, uint128(val));
+    }
+
+    // =========================================================================
+    // Current Prize Pool Helpers
+    // =========================================================================
+
+    /// @dev Returns the current prize pool value as uint256.
+    ///      Reads the uint128 packed variable and widens to uint256.
+    function _getCurrentPrizePool() internal view returns (uint256) {
+        return uint256(currentPrizePool);
+    }
+
+    /// @dev Sets the current prize pool value.
+    ///      Narrows from uint256 to uint128. Safe because currentPrizePool
+    ///      can never exceed total ETH supply (~1.2e26 wei << uint128 max ~3.4e38 wei).
+    function _setCurrentPrizePool(uint256 val) internal {
+        currentPrizePool = uint128(val);
     }
 
     // =========================================================================
