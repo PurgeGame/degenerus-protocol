@@ -656,7 +656,8 @@ contract DegenerusAffiliate {
     /**
      * @notice Calculate the affiliate bonus points for a player.
      * @dev Sums the player's affiliate scores for the previous 5 levels.
-     *      Awards 1 point (1%) per 0.5 ETH of summed score, capped at 50.
+     *      Tiered rate: 4 points per ETH for the first 5 ETH (20 pts),
+     *      then 1.5 points per ETH for the next 20 ETH (30 pts). Cap: 50 at 25 ETH.
      *
      * @param currLevel The current game level.
      * @param player The player to calculate bonus for.
@@ -675,8 +676,11 @@ contract DegenerusAffiliate {
         }
 
         if (sum == 0) return 0;
-        uint256 ethUnit = 1 ether;
-        points = sum / (ethUnit / 2);
+        if (sum <= 5 ether) {
+            points = (sum * 4) / 1 ether;
+        } else {
+            points = 20 + ((sum - 5 ether) * 3) / 2 ether;
+        }
         return points > AFFILIATE_BONUS_MAX ? AFFILIATE_BONUS_MAX : points;
     }
 
