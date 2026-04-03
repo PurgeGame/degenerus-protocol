@@ -39,6 +39,8 @@
 - ✅ **v14.0 Activity Score & Quest Gas Optimization** — Phases 159-161 (shipped 2026-04-02)
 - ✅ **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167 (shipped 2026-04-02)
 - ✅ **v16.0 Module Consolidation & Storage Repack** — Phases 168-172 (shipped 2026-04-03)
+- ✅ **v17.0 Affiliate Bonus Cache** — Phases 173-174 (shipped 2026-04-03)
+- **v17.1 Comment Correctness Sweep** — Phases 175-178 (in progress)
 
 ## Phases
 
@@ -150,47 +152,81 @@ See individual milestone entries above.
 
 </details>
 
-### v17.0 Affiliate Bonus Cache (Phases 173-174)
+<details>
+<summary>v17.0 Affiliate Bonus Cache (Phases 173-174) -- SHIPPED 2026-04-03</summary>
 
-**Milestone Goal:** Cache affiliate bonus points in mintPacked_ unused bits to eliminate cold SLOADs from activity score computation.
+- [x] **Phase 173: Implementation** - 2 plans (completed 2026-04-03)
+- [x] **Phase 174: Delta Audit & Verification** - 1 plan (completed 2026-04-03)
 
-- [ ] **Phase 173: Implementation** - 2 plans
-- [ ] **Phase 174: Delta Audit & Verification** - Prove no bit collisions, storage layout unchanged, cache correctness, both test suites green
+</details>
+
+<details>
+<summary>v17.1 Comment Correctness Sweep (Phases 175-178) -- IN PROGRESS</summary>
+
+- [ ] **Phase 175: Game Module Comment Sweep** - 5 plans
+- [ ] **Phase 176: Core Game + Token Contract Comment Sweep** - TBD plans
+- [ ] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - TBD plans
+- [ ] **Phase 178: Consolidation & Regression Check** - TBD plans
+
+</details>
 
 ## Phase Details
 
-### Phase 173: Implementation
-**Goal**: Affiliate bonus level and points are cached in mintPacked_ so _playerActivityScore skips the expensive cross-contract SLOAD on cache hit
-**Depends on**: v16.0 complete (mintPacked_ bit layout stable after repack)
-**Requirements**: IMPL-01, IMPL-02, IMPL-03, IMPL-04
+### Phase 175: Game Module Comment Sweep
+**Goal**: All game module contracts have accurate inline comments and NatSpec — every discrepancy between comment and code behavior logged as a finding
+**Depends on**: Phase 174
+**Requirements**: CMT-01
 **Success Criteria** (what must be TRUE):
-  1. BitPackingLib declares AFFILIATE_BONUS_LEVEL_SHIFT (24 bits at 185) and AFFILIATE_BONUS_POINTS_SHIFT (6 bits at 209) with corresponding masks, and the contract compiles cleanly
-  2. _playerActivityScore reads cached level+points from packed word and returns cached points when cachedLevel matches current level, bypassing affiliateBonusPointsBest
-  3. recordMintData writes computed affiliate bonus into mintPacked_ on the !sameLevel branch, piggybacking on the existing SSTORE with zero additional storage writes
-  4. affiliateBonusPointsBest awards 1 point per 0.5 ETH of referral volume (was 1 per 1 ETH); cap remains at AFFILIATE_BONUS_MAX (50)
-**Plans:** 2 plans
+  1. Every inline comment and NatSpec entry in AdvanceModule, MintModule, MintStreakUtils, JackpotModule, LootboxModule, BoonModule, DegeneretteModule, DecimatorModule, WhaleModule, GameOverModule, and PayoutUtils has been read against the actual code
+  2. Any comment that misstates a parameter, logic branch, return value, or side effect is recorded as a LOW or INFO finding with contract name, line reference, and a plain-English description of the discrepancy
+  3. The findings list for this phase is self-contained and could be reviewed independently without re-reading source
+**Plans**: 5 plans
 Plans:
-- [ ] 173-01-PLAN.md -- BitPackingLib constants + affiliate bonus rate change
-- [ ] 173-02-PLAN.md -- Cache write (recordMintData) + cache read (_playerActivityScore)
+- [ ] 175-01-PLAN.md — AdvanceModule + MintModule comment sweep
+- [ ] 175-02-PLAN.md — JackpotModule comment sweep
+- [ ] 175-03-PLAN.md — LootboxModule + MintStreakUtils comment sweep
+- [ ] 175-04-PLAN.md — BoonModule + DegeneretteModule + DecimatorModule comment sweep
+- [ ] 175-05-PLAN.md — WhaleModule + GameOverModule + PayoutUtils comment sweep
 
-### Phase 174: Delta Audit & Verification
-**Goal**: Every existing mintPacked_ consumer produces identical results after the cache bits are added, and the cache itself is proven correct
-**Depends on**: Phase 173
-**Requirements**: VRFY-01, VRFY-02, VRFY-03, VRFY-04, VRFY-05
+### Phase 176: Core Game + Token Contract Comment Sweep
+**Goal**: Core game storage and all token contracts have accurate inline comments and NatSpec — every discrepancy logged as a finding
+**Depends on**: Phase 175
+**Requirements**: CMT-02, CMT-03
 **Success Criteria** (what must be TRUE):
-  1. All existing mintPacked_ field extractions across ~20 call sites produce identical values before and after the change (no bit collision)
-  2. forge inspect confirms identical storage layout for all contracts inheriting DegenerusGameStorage (no slot displacement)
-  3. Activity score cache produces identical results to uncached computation for all reachable inputs (cache correctness proven)
-  4. Foundry test suite passes with zero regressions compared to v16.0 baseline (same pass/fail counts)
-  5. Hardhat test suite passes with zero regressions compared to v16.0 baseline
+  1. Every inline comment and NatSpec entry in DegenerusGame and DegenerusGameStorage has been read against the actual code
+  2. Every inline comment and NatSpec entry in BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, and GNRUS has been read against the actual code
+  3. Any comment that misstates state variable semantics, packed-bit layouts, access control assumptions, or token math is recorded as a LOW or INFO finding with full location reference
 **Plans**: TBD
 
-## Progress
+### Phase 177: Infrastructure, Libraries & Misc Comment Sweep
+**Goal**: All infrastructure contracts, libraries, interfaces, and miscellaneous contracts have accurate inline comments and NatSpec — every discrepancy logged as a finding
+**Depends on**: Phase 176
+**Requirements**: CMT-04, CMT-05, CMT-06
+**Success Criteria** (what must be TRUE):
+  1. Every inline comment and NatSpec entry in DegenerusAdmin, DegenerusVault, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, and DeityBoonViewer has been read against the actual code
+  2. Every inline comment and NatSpec entry in EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib, and all I* interfaces has been read against the actual code; interface NatSpec is verified to match implementing contract behavior
+  3. Every inline comment and NatSpec entry in WrappedWrappedXRP, DegenerusTraitUtils, and Icons32Data has been read against the actual code
+  4. Any discrepancy — including interface NatSpec that diverges from implementation — is recorded as a LOW or INFO finding with full location reference
+**Plans**: TBD
+
+### Phase 178: Consolidation & Regression Check
+**Goal**: All per-phase findings are merged into one document, severities are assigned, and prior sweep regressions are confirmed absent
+**Depends on**: Phase 177
+**Requirements**: CON-01, CON-02
+**Success Criteria** (what must be TRUE):
+  1. A single findings document exists containing all LOW/INFO findings from Phases 175-177, deduplicated and formatted consistently (matching v3.1/v3.5 format)
+  2. Every finding has a severity (LOW or INFO), a contract and line reference, and a description of what the comment says versus what the code does
+  3. Every finding from the v3.1 and v3.5 sweeps that was marked fixed has been spot-checked against the current contract source; any regression is added as a new finding
+**Plans**: TBD
+
+## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 173. Implementation | 0/2 | Planned | - |
-| 174. Delta Audit & Verification | 0/? | Not started | - |
+| 175. Game Module Comment Sweep | 0/5 | In progress | - |
+| 176. Core Game + Token Comment Sweep | 0/? | Not started | - |
+| 177. Infrastructure, Libraries & Misc Comment Sweep | 0/? | Not started | - |
+| 178. Consolidation & Regression Check | 0/? | Not started | - |
 
 ## Deferred
 
