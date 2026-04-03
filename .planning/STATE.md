@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 175-game-module-comment-sweep 175-02-PLAN.md
-last_updated: "2026-04-03T21:29:43.278Z"
+stopped_at: Completed 175-game-module-comment-sweep 175-01-PLAN.md
+last_updated: "2026-04-03T21:31:24.268Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -60,6 +60,8 @@ Recent decisions affecting current work:
 - [Phase 175-03]: Finding 4 (INFO not LOW): _rollLootboxBoons comment misleads about boon category restriction but does not affect security
 - [Phase 175-05]: GameOverModule _sendToVault sends to SDGNRS not DGNRS — 3 comment sites mislabeled (LOW W05-01/G05-01)
 - [Phase 175-game-module-comment-sweep]: runTerminalJackpot caller attribution stale: EndgameModule listed but only GameOverModule calls it — logged LOW
+- [Phase 175-01]: ADV-CMT-03 rated LOW: _runRewardJackpots call site moved from jackpot-phase end to purchase-phase close — semantically significant, would mislead audit readers about BAF/Decimator timing
+- [Phase 175-01]: MINT-CMT-01 rated LOW: mintPacked_ now caches affiliate bonus (bits 185-214); note saying 'tracked separately in DegenerusAffiliate' is actively misleading
 
 ### Pending Todos
 
@@ -71,5 +73,5 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T21:29:43.276Z
-Stopped at: Completed 175-game-module-comment-sweep 175-02-PLAN.md
+Last session: 2026-04-03T21:31:09.492Z
+Stopped at: Completed 175-game-module-comment-sweep 175-01-PLAN.md

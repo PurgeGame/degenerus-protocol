@@ -182,7 +182,7 @@ See individual milestone entries above.
   3. The findings list for this phase is self-contained and could be reviewed independently without re-reading source
 **Plans**: 5 plans
 Plans:
-- [ ] 175-01-PLAN.md — AdvanceModule + MintModule comment sweep
+- [x] 175-01-PLAN.md — AdvanceModule + MintModule comment sweep
 - [x] 175-02-PLAN.md — JackpotModule comment sweep
 - [x] 175-03-PLAN.md — LootboxModule + MintStreakUtils comment sweep
 - [x] 175-04-PLAN.md — BoonModule + DegeneretteModule + DecimatorModule comment sweep
@@ -223,7 +223,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 175. Game Module Comment Sweep | 4/5 | In Progress|  |
+| 175. Game Module Comment Sweep | 5/5 | Complete   | 2026-04-03 |
 | 176. Core Game + Token Comment Sweep | 0/? | Not started | - |
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 0/? | Not started | - |
 | 178. Consolidation & Regression Check | 0/? | Not started | - |
