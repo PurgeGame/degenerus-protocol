@@ -200,7 +200,7 @@ Plans:
 Plans:
 - [ ] 176-01-PLAN.md — DegenerusGame + DegenerusGameStorage comment sweep (CMT-02)
 - [ ] 176-02-PLAN.md — BurnieCoin + BurnieCoinflip comment sweep (CMT-03)
-- [ ] 176-03-PLAN.md — DegenerusStonk + StakedDegenerusStonk + GNRUS comment sweep (CMT-03)
+- [x] 176-03-PLAN.md — DegenerusStonk + StakedDegenerusStonk + GNRUS comment sweep (CMT-03)
 
 ### Phase 177: Infrastructure, Libraries & Misc Comment Sweep
 **Goal**: All infrastructure contracts, libraries, interfaces, and miscellaneous contracts have accurate inline comments and NatSpec — every discrepancy logged as a finding
@@ -228,7 +228,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 175. Game Module Comment Sweep | 5/5 | Complete    | 2026-04-03 |
-| 176. Core Game + Token Comment Sweep | 0/3 | Not started | - |
+| 176. Core Game + Token Comment Sweep | 1/3 | In Progress|  |
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 0/? | Not started | - |
 | 178. Consolidation & Regression Check | 0/? | Not started | - |
 

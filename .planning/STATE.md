@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 175-game-module-comment-sweep 175-01-PLAN.md
-last_updated: "2026-04-03T21:31:24.268Z"
+stopped_at: Completed 176-03-PLAN.md
+last_updated: "2026-04-03T21:55:38.505Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 175 — Game Module Comment Sweep
+**Current focus:** Phase 176 — Core Game + Token Contract Comment Sweep
 
 ## Current Position
 
-Phase: 175 (Game Module Comment Sweep) — EXECUTING
-Plan: 5 of 5
+Phase: 176 (Core Game + Token Contract Comment Sweep) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
 Last activity: 2026-04-03
 
@@ -62,6 +62,8 @@ Recent decisions affecting current work:
 - [Phase 175-game-module-comment-sweep]: runTerminalJackpot caller attribution stale: EndgameModule listed but only GameOverModule calls it — logged LOW
 - [Phase 175-01]: ADV-CMT-03 rated LOW: _runRewardJackpots call site moved from jackpot-phase end to purchase-phase close — semantically significant, would mislead audit readers about BAF/Decimator timing
 - [Phase 175-01]: MINT-CMT-01 rated LOW: mintPacked_ now caches affiliate bonus (bits 185-214); note saying 'tracked separately in DegenerusAffiliate' is actively misleading
+- [Phase 176-03]: G03-01: burnAtGameOver NatSpec in GNRUS says 'VAULT, DGNRS, and GNRUS' but correct is VAULT/sDGNRS/GNRUS — LOW finding cross-confirmed against Phase 175 G05-01
+- [Phase 176-03]: G03-02: vote() vault owner weight is balance + 5% bonus (not fixed at 5%) — LOW finding, directly affects governance security analysis
 
 ### Pending Todos
 
@@ -73,5 +75,5 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T21:31:09.492Z
-Stopped at: Completed 175-game-module-comment-sweep 175-01-PLAN.md
+Last session: 2026-04-03T21:55:38.502Z
+Stopped at: Completed 176-03-PLAN.md
