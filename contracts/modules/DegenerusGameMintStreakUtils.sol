@@ -133,10 +133,17 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             uint256 questStreakCapped = questStreak > 100 ? 100 : uint256(questStreak);
             bonusBps += questStreakCapped * 100;
 
-            // Affiliate bonus
-            bonusBps +=
-                affiliate.affiliateBonusPointsBest(currLevel, player) *
-                100;
+            // Affiliate bonus (cached in mintPacked_ on level transitions)
+            {
+                uint256 cachedLevel = (packed >> BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT) & BitPackingLib.MASK_24;
+                uint256 affPoints;
+                if (cachedLevel == uint256(currLevel)) {
+                    affPoints = (packed >> BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT) & BitPackingLib.MASK_6;
+                } else {
+                    affPoints = affiliate.affiliateBonusPointsBest(currLevel, player);
+                }
+                bonusBps += affPoints * 100;
+            }
 
             if (hasDeityPass) {
                 bonusBps += DEITY_PASS_ACTIVITY_BONUS_BPS;
