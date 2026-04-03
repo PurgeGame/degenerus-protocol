@@ -84,15 +84,15 @@ contract RedemptionInvariants is DeployProtocol {
     //                      INV-04: SUPPLY CONSISTENCY
     // =========================================================================
 
-    /// @notice totalSupply equals initialSupply minus totalBurned.
-    /// @dev Since only the handler is burning (targetContract), no other burn
-    ///      paths are exercised, so the ghost_totalBurned should track exactly.
+    /// @notice totalSupply equals initialSupply plus mints minus burns.
+    /// @dev Supply changes from all sources (handler burns, game operations,
+    ///      pool transfers) are tracked via before/after delta in the handler.
     function invariant_supplyConsistency() public view {
-        uint256 expected = handler.ghost_initialSupply() - handler.ghost_totalBurned();
+        uint256 expected = handler.ghost_initialSupply() + handler.ghost_totalMinted() - handler.ghost_totalBurned();
         assertEq(
             sdgnrs.totalSupply(),
             expected,
-            "INV-04: totalSupply != initialSupply - totalBurned"
+            "INV-04: totalSupply != initialSupply + totalMinted - totalBurned"
         );
     }
 

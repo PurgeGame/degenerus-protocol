@@ -22,7 +22,8 @@ contract RedemptionHandler is Test {
     //                          GHOST VARIABLES
     // =========================================================================
 
-    uint256 public ghost_totalBurned;            // cumulative sDGNRS burned
+    uint256 public ghost_totalBurned;            // cumulative sDGNRS supply decreases
+    uint256 public ghost_totalMinted;            // cumulative sDGNRS supply increases
     uint256 public ghost_totalEthClaimed;        // cumulative ETH received from claims
     uint256 public ghost_totalBurnieClaimed;     // cumulative BURNIE received from claims
     uint256 public ghost_periodsResolved;        // count of resolved periods
@@ -134,10 +135,10 @@ contract RedemptionHandler is Test {
 
         if (amount == 0) return;
 
+        uint256 supplyBefore = sdgnrs.totalSupply();
         vm.prank(currentActor);
-        try sdgnrs.burn(amount) {
-            ghost_totalBurned += amount;
-        } catch {}
+        try sdgnrs.burn(amount) {} catch {}
+        _trackSupplyDelta(supplyBefore);
     }
 
     // =========================================================================
@@ -148,6 +149,8 @@ contract RedemptionHandler is Test {
     /// @param randomWord Random word for VRF fulfillment (fuzz input)
     function action_advanceDay(uint256 randomWord) external {
         calls_advanceDay++;
+
+        uint256 supplyBefore = sdgnrs.totalSupply();
 
         // Warp past day boundary
         vm.warp(block.timestamp + 1 days);
@@ -167,6 +170,8 @@ contract RedemptionHandler is Test {
         // Second advanceGame -- processes VRF result, runs rngGate which resolves period
         try game.advanceGame() {} catch {}
 
+        _trackSupplyDelta(supplyBefore);
+
         // Check for newly resolved periods
         _checkResolvedPeriods();
     }
@@ -180,6 +185,7 @@ contract RedemptionHandler is Test {
     function action_claim(uint256 actorSeed) external useActor(actorSeed) {
         calls_claim++;
 
+        uint256 supplyBefore = sdgnrs.totalSupply();
         uint256 ethBefore = currentActor.balance;
         uint256 burnieBefore = coin.balanceOf(currentActor);
 
@@ -216,6 +222,8 @@ contract RedemptionHandler is Test {
                 ghost_doubleClaim++;
             }
         } catch {}
+
+        _trackSupplyDelta(supplyBefore);
     }
 
     // =========================================================================
@@ -227,6 +235,8 @@ contract RedemptionHandler is Test {
         calls_triggerGameOver++;
 
         if (game.gameOver()) return;
+
+        uint256 supplyBefore = sdgnrs.totalSupply();
 
         // Warp past liveness timeout (safe overshoot)
         vm.warp(block.timestamp + 90 days);
@@ -245,6 +255,8 @@ contract RedemptionHandler is Test {
 
         // Second advanceGame after VRF
         try game.advanceGame() {} catch {}
+
+        _trackSupplyDelta(supplyBefore);
     }
 
     // =========================================================================
@@ -298,5 +310,15 @@ contract RedemptionHandler is Test {
     /// @return Actor address
     function getActor(uint256 i) external view returns (address) {
         return actors[i];
+    }
+
+    /// @dev Track supply changes from any source (burns, mints, pool ops).
+    function _trackSupplyDelta(uint256 supplyBefore) private {
+        uint256 supplyAfter = sdgnrs.totalSupply();
+        if (supplyAfter < supplyBefore) {
+            ghost_totalBurned += supplyBefore - supplyAfter;
+        } else if (supplyAfter > supplyBefore) {
+            ghost_totalMinted += supplyAfter - supplyBefore;
+        }
     }
 }

@@ -50,6 +50,12 @@ contract VRFPathHandler is Test {
         return uint48(uint256(vm.load(address(game), bytes32(uint256(40)))));
     }
 
+    /// @dev Read dailyIdx from storage slot 0 (uint48 at byte offset 6 = bits 48-95).
+    function _dailyIdx() internal view returns (uint48) {
+        uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
+        return uint48(raw >> 48);
+    }
+
     /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 44).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(44)));
@@ -121,6 +127,9 @@ contract VRFPathHandler is Test {
 
         uint48 indexBefore = _lootboxRngIndex();
         bool lockedBefore = game.rngLocked();
+        // Capture dailyIdx BEFORE advanceGame updates it — this is the contract's
+        // gap start reference (rngGate backfills from dailyIdx+1 to currentDay).
+        uint48 dailyIdxBefore = _dailyIdx();
 
         try game.advanceGame() {} catch {
             return;
@@ -143,16 +152,17 @@ contract VRFPathHandler is Test {
         // Only check gap days after the FULL recovery cycle completes:
         // advanceGame transitioned the game from locked to unlocked, meaning
         // the VRF word was consumed and gap days were backfilled in this call.
-        if (ghost_swapPending && lockedBefore && !lockedAfter) {
+        // Skip check if game ended via liveness timeout — the game-over path
+        // uses _gameOverEntropy which does NOT call _backfillGapDays.
+        if (ghost_swapPending && lockedBefore && !lockedAfter && !game.gameOver()) {
             uint48 dayAfter = game.currentDayView();
 
-            if (dayAfter > ghost_dayBeforeSwap) {
-                // Full recovery cycle completed -- check gap days
-                // Gap days are from (dayBeforeSwap+1) to (dayAfter-1).
-                // The current day (dayAfter) is processed normally, not a gap day.
-                if (dayAfter > ghost_dayBeforeSwap + 1) {
-                    uint48 gapStart = ghost_dayBeforeSwap + 1;
-                    // Contract caps backfill at 120 gap days
+            if (dayAfter > dailyIdxBefore) {
+                // Full recovery cycle completed -- check gap days.
+                // The contract backfills from dailyIdx+1 to currentDay (capped at 120).
+                // We mirror this range exactly.
+                if (dayAfter > dailyIdxBefore + 1) {
+                    uint48 gapStart = dailyIdxBefore + 1;
                     uint48 gapEnd = dayAfter;
                     if (gapEnd - gapStart > 120) gapEnd = gapStart + 120;
                     for (uint48 d = gapStart; d < gapEnd; d++) {
@@ -170,6 +180,10 @@ contract VRFPathHandler is Test {
                 ghost_swapPending = false;
                 ghost_recoveryCount++;
             }
+        }
+        // Clear swap flag if game ended (no recovery possible)
+        if (ghost_swapPending && game.gameOver()) {
+            ghost_swapPending = false;
         }
     }
 
