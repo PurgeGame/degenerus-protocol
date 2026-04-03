@@ -54,6 +54,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint48 indexed day
     );
 
+    /// @notice Emitted when whale pass rewards are claimed.
+    /// @param player Player receiving tickets.
+    /// @param caller Address that initiated the claim.
+    /// @param halfPasses Half-pass count used for ticket awards.
+    /// @param startLevel Level where ticket awards begin.
+    event WhalePassClaimed(
+        address indexed player,
+        address indexed caller,
+        uint256 halfPasses,
+        uint24 startLevel
+    );
+
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
@@ -937,6 +949,35 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         mintPacked_[player] =
             clearedDay |
             (uint256(day) << BitPackingLib.DAY_SHIFT);
+    }
+
+    // =========================================================================
+    // Whale Pass Claims
+    // =========================================================================
+
+    /// @notice Claim deferred whale pass rewards for a player.
+    /// @dev Awards deterministic tickets based on pre-calculated half-pass count.
+    ///      Tickets start at current level + 1 to avoid giving tickets for an already-active level.
+    /// @param player Player address to claim for.
+    function claimWhalePass(address player) external {
+        if (gameOver) revert E();
+        uint256 halfPasses = whalePassClaims[player];
+        if (halfPasses == 0) return;
+
+        // Clear before awarding to avoid double-claiming
+        whalePassClaims[player] = 0;
+
+        // Award tickets for 100 levels, with N tickets per level (where N = half-passes)
+        // Start level depends on game state:
+        // - Jackpot phase: tickets won't be processed this level, start at level+1
+        // - Otherwise: tickets can be processed this level, start at current level
+        // Example: 3 half-passes = 3 tickets/level x 100 levels = 300 tickets
+        // Safe: halfPasses fits in uint32 (ETH supply limits prevent overflow)
+        uint24 startLevel = level + 1;
+
+        _applyWhalePassStats(player, startLevel);
+        emit WhalePassClaimed(player, msg.sender, halfPasses, startLevel);
+        _queueTicketRange(player, startLevel, 100, uint32(halfPasses));
     }
 }
 

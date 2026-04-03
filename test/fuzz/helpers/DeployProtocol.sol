@@ -11,7 +11,6 @@ import {DegenerusGameAdvanceModule} from "../../../contracts/modules/DegenerusGa
 import {DegenerusGameWhaleModule} from "../../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {DegenerusGameJackpotModule} from "../../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameDecimatorModule} from "../../../contracts/modules/DegenerusGameDecimatorModule.sol";
-import {DegenerusGameEndgameModule} from "../../../contracts/modules/DegenerusGameEndgameModule.sol";
 import {DegenerusGameGameOverModule} from "../../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {DegenerusGameLootboxModule} from "../../../contracts/modules/DegenerusGameLootboxModule.sol";
 import {DegenerusGameBoonModule} from "../../../contracts/modules/DegenerusGameBoonModule.sol";
@@ -57,7 +56,7 @@ abstract contract DeployProtocol is Test {
     DegenerusGameWhaleModule public whaleModule;
     DegenerusGameJackpotModule public jackpotModule;
     DegenerusGameDecimatorModule public decimatorModule;
-    DegenerusGameEndgameModule public endgameModule;
+    address public endgameModuleSlot; // Nonce placeholder — EndgameModule deleted in Phase 171
     DegenerusGameGameOverModule public gameOverModule;
     DegenerusGameLootboxModule public lootboxModule;
     DegenerusGameBoonModule public boonModule;
@@ -98,7 +97,7 @@ abstract contract DeployProtocol is Test {
         whaleModule = new DegenerusGameWhaleModule();  // N+3 = nonce 9
         jackpotModule = new DegenerusGameJackpotModule(); // N+4 = nonce 10
         decimatorModule = new DegenerusGameDecimatorModule(); // N+5 = nonce 11
-        endgameModule = new DegenerusGameEndgameModule(); // N+6 = nonce 12
+        endgameModuleSlot = address(new NonceBurner()); // N+6 = nonce 12 (EndgameModule deleted)
         gameOverModule = new DegenerusGameGameOverModule(); // N+7 = nonce 13
         lootboxModule = new DegenerusGameLootboxModule(); // N+8 = nonce 14
         boonModule = new DegenerusGameBoonModule();    // N+9 = nonce 15
@@ -141,3 +140,7 @@ abstract contract DeployProtocol is Test {
         gnrus = new GNRUS();                            // N+23 = nonce 29
     }
 }
+
+/// @dev Minimal contract deployed solely to consume a CREATE nonce.
+///      Preserves nonce ordering after EndgameModule deletion.
+contract NonceBurner {}

@@ -10,7 +10,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v15.0 Delta Audit complete (2026-04-02). All functional changes since v10.3 catalogued and proven safe. Ready for next milestone or C4A submission.
+v16.0 Module Consolidation & Storage Repack started (2026-04-02). Eliminating EndgameModule and repacking storage slots 0-2.
 
 ## Completed Milestone: v15.0 Delta Audit (v11.0-v14.0)
 
@@ -241,21 +241,18 @@ v15.0 Delta Audit complete (2026-04-02). All functional changes since v10.3 cata
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current Milestone: v13.0 Level Quests Implementation
+## Current Milestone: v16.0 Module Consolidation & Storage Repack
 
-**Goal:** Implement the v12.0 level quest design spec into contracts and stage for review.
+**Goal:** Eliminate EndgameModule and repack storage slots 0-2 for gas savings and structural simplification.
 
 **Target features:**
-- DegenerusQuests storage + quest roll logic
-- Handler site integration (6 sites across 5 contracts)
-- Eligibility checks (levelStreak/pass + 4 ETH units)
-- Completion flow with 800 BURNIE creditFlip payout
-- AdvanceModule direct roll trigger to DegenerusQuests
-- BurnieCoin notify* middleman removal — game modules call quest handlers directly
+- Eliminate EndgameModule — redistribute runRewardJackpots, rewardTopAffiliate, claimWhalePass into existing modules
+- Storage repack — move ticketsFullyProcessed + gameOverPossible into slot 0, downsize currentPrizePool to uint128 in slot 1, kill slot 2
+- Fix stale slot header comments throughout DegenerusGameStorage.sol
 
 ## Current State
 
-v13.0 Phases 156-158 complete. All level quest logic implemented: storage, interfaces, roll chain, eligibility, 6 handler sites with level quest progress, view function. BurnieCoin notify* wrappers removed; MintModule, DegeneretteModule, and DegenerusAffiliate call DegenerusQuests directly. Phase 158.1 (carryover redesign + final BurnieCoin quest routing cleanup) remains.
+v16.0 milestone started (2026-04-02). Defining requirements.
 
 ## Completed Milestone: v12.0 Level Quests
 

@@ -30,7 +30,6 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  *   - DegenerusGameDecimatorModule (delegatecall module)
  *   - DegenerusGameDegeneretteModule (delegatecall module)
  *   - DegenerusGameGameOverModule (delegatecall module)
- *   - DegenerusGameEndgameModule (delegatecall module)
  *
  * DELEGATECALL PATTERN:
  * When DegenerusGame calls `module.delegatecall(...)`, the module's code executes

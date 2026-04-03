@@ -19,7 +19,7 @@ import {
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 const QUEST_TYPE_MINT_ETH = 1;
 
-async function rollQuestAsGame(coin, game, day, entropy) {
+async function rollQuestAsGame(quests, game, day, entropy) {
   const gameAddr = await game.getAddress();
   await hre.network.provider.request({
     method: "hardhat_impersonateAccount",
@@ -30,7 +30,7 @@ async function rollQuestAsGame(coin, game, day, entropy) {
     "0x1000000000000000000",
   ]);
   const gameSigner = await hre.ethers.getSigner(gameAddr);
-  await coin.connect(gameSigner).rollDailyQuest(day, entropy);
+  await quests.connect(gameSigner).rollDailyQuest(day, entropy);
   await hre.network.provider.request({
     method: "hardhat_stopImpersonatingAccount",
     params: [gameAddr],
@@ -112,9 +112,8 @@ describe("DegenerusGame", function () {
 
     it("decimator window is closed initially", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      const [on] = await game.decWindow();
+      const on = await game.decWindow();
       expect(on).to.be.false;
-      expect(await game.decWindowOpenFlag()).to.be.false;
     });
   });
 
@@ -277,7 +276,7 @@ describe("DegenerusGame", function () {
 
     it("lootbox purchase also completes slot-0 MINT_ETH quest like ticket purchases", async function () {
       const { game, coin, quests, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsGame(coin, game, 1n, 99n);
+      await rollQuestAsGame(quests, game, 1n, 99n);
 
       const active = await quests.getActiveQuests();
       expect(active[0].questType).to.equal(QUEST_TYPE_MINT_ETH);
@@ -566,9 +565,9 @@ describe("DegenerusGame", function () {
       expect(await game.ticketsOwedView(1, alice.address)).to.equal(0n);
     });
 
-    it("deityPassCountFor returns 0 for new player", async function () {
+    it("hasDeityPass returns false for new player", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.deityPassCountFor(alice.address)).to.equal(0n);
+      expect(await game.hasDeityPass(alice.address)).to.equal(false);
     });
   });
 

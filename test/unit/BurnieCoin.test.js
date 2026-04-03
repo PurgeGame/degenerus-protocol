@@ -565,15 +565,15 @@ describe("BurnieCoin", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // burnCoin() — only trusted contracts (GAME, AFFILIATE)
+  // burnCoin() — only GAME
   // ---------------------------------------------------------------------------
 
   describe("burnCoin()", function () {
-    it("reverts with OnlyTrustedContracts when called by an unauthorized address", async function () {
+    it("reverts with OnlyGame when called by an unauthorized address", async function () {
       const { coin, alice, bob } = await getFixture();
       await expect(
         coin.connect(alice).burnCoin(bob.address, eth(1))
-      ).to.be.revertedWithCustomError(coin, "OnlyTrustedContracts");
+      ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
     it("burns from target when called by GAME", async function () {
@@ -588,9 +588,8 @@ describe("BurnieCoin", function () {
       expect(await coin.balanceOf(alice.address)).to.equal(eth(700));
     });
 
-    it("burns from target when called by AFFILIATE", async function () {
+    it("reverts with OnlyGame when called by AFFILIATE", async function () {
       const { coin, game, affiliate, alice } = await getFixture();
-      // Mint via game
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
       await coin.connect(gameSigner).mintForGame(alice.address, eth(500));
@@ -598,10 +597,10 @@ describe("BurnieCoin", function () {
 
       const affiliateAddr = await affiliate.getAddress();
       const affiliateSigner = await impersonate(affiliateAddr);
-      await coin.connect(affiliateSigner).burnCoin(alice.address, eth(100));
+      await expect(
+        coin.connect(affiliateSigner).burnCoin(alice.address, eth(100))
+      ).to.be.revertedWithCustomError(coin, "OnlyGame");
       await stopImpersonate(affiliateAddr);
-
-      expect(await coin.balanceOf(alice.address)).to.equal(eth(400));
     });
 
     it("decreases totalSupply after burn", async function () {
@@ -650,70 +649,9 @@ describe("BurnieCoin", function () {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // affiliateQuestReward() — only AFFILIATE
-  // ---------------------------------------------------------------------------
-
-  describe("affiliateQuestReward()", function () {
-    it("reverts with OnlyAffiliate when called by non-AFFILIATE address", async function () {
-      const { coin, alice, bob } = await getFixture();
-      await expect(
-        coin.connect(alice).affiliateQuestReward(bob.address, eth(100))
-      ).to.be.revertedWithCustomError(coin, "OnlyAffiliate");
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // rollDailyQuest() — only GAME
-  // ---------------------------------------------------------------------------
-
-  describe("rollDailyQuest()", function () {
-    it("reverts with OnlyGame when called by a non-GAME address", async function () {
-      const { coin, alice } = await getFixture();
-      await expect(
-        coin.connect(alice).rollDailyQuest(1, 12345)
-      ).to.be.revertedWithCustomError(coin, "OnlyGame");
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // notifyQuestMint() — only GAME
-  // ---------------------------------------------------------------------------
-
-  describe("notifyQuestMint()", function () {
-    it("reverts with OnlyGame when called by a non-GAME address", async function () {
-      const { coin, alice } = await getFixture();
-      await expect(
-        coin.connect(alice).notifyQuestMint(alice.address, 1, true)
-      ).to.be.revertedWithCustomError(coin, "OnlyGame");
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // notifyQuestLootBox() — only GAME
-  // ---------------------------------------------------------------------------
-
-  describe("notifyQuestLootBox()", function () {
-    it("reverts with OnlyGame when called by a non-GAME address", async function () {
-      const { coin, alice } = await getFixture();
-      await expect(
-        coin.connect(alice).notifyQuestLootBox(alice.address, eth(1))
-      ).to.be.revertedWithCustomError(coin, "OnlyGame");
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // notifyQuestDegenerette() — only GAME
-  // ---------------------------------------------------------------------------
-
-  describe("notifyQuestDegenerette()", function () {
-    it("reverts with OnlyGame when called by a non-GAME address", async function () {
-      const { coin, alice } = await getFixture();
-      await expect(
-        coin.connect(alice).notifyQuestDegenerette(alice.address, eth(1), true)
-      ).to.be.revertedWithCustomError(coin, "OnlyGame");
-    });
-  });
+  // affiliateQuestReward, rollDailyQuest, notifyQuestMint, notifyQuestLootBox,
+  // notifyQuestDegenerette removed from BurnieCoin — quest handling moved to
+  // DegenerusQuests.sol (v13.0 Phase 158.1)
 
   // ---------------------------------------------------------------------------
   // Supply invariants

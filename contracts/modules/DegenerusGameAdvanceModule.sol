@@ -4,7 +4,6 @@ pragma solidity 0.8.34;
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
 import {
-    IDegenerusGameEndgameModule,
     IDegenerusGameGameOverModule,
     IDegenerusGameJackpotModule,
     IDegenerusGameMintModule
@@ -80,6 +79,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     );
     event StEthStakeFailed(uint256 amount);
 
+    /// @notice Emitted when DGNRS is rewarded to the top affiliate.
+    /// @param affiliate Address of the top affiliate.
+    /// @param level Level for which they were top affiliate.
+    /// @param dgnrsAmount Amount of DGNRS paid from the affiliate pool.
+    event AffiliateDgnrsReward(
+        address indexed affiliate,
+        uint24 indexed level,
+        uint256 dgnrsAmount
+    );
+
     /*+=======================================================================+
       |                   PRECOMPUTED ADDRESSES (CONSTANT)                    |
       +=======================================================================+*/
@@ -123,6 +132,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH, unscaled).
     uint256 private constant LOOTBOX_PRESALE_ETH_CAP = 200 ether;
+
+    /// @notice DGNRS reward for top affiliate: 1% of remaining affiliate pool.
+    uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;
+
+    /// @notice Max share of affiliate DGNRS pool segregated per level for claims (5%).
+    uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 500;
 
     /// @dev ETH-equivalent target for advanceGame bounty (~0.005 ETH worth of BURNIE).
     uint256 private constant ADVANCE_BOUNTY_ETH = 0.005 ether;
@@ -398,7 +413,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 payDailyJackpotCoinAndTickets(rngWord);
                 if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
                     _awardFinalDayDgnrsReward(lvl, rngWord);
-                    _rewardTopAffiliate(lvl);
                     _endPhase();
                     _unlockRng(day);
                     stage = STAGE_JACKPOT_PHASE_ENDED;
@@ -528,35 +542,56 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                                                                                                                |
       |  Modules:                                                                                                      |
       |  • ContractAddresses.GAME_DECIMATOR_MODULE - Decimator claim credits and lootbox payouts                       |
-      |  • ContractAddresses.GAME_ENDGAME_MODULE  - Endgame settlement (payouts, wipes, ContractAddresses.JACKPOTS)    |
       |  • ContractAddresses.GAME_MINT_MODULE     - Mint data recording, airdrop multipliers                           |
-      |  • ContractAddresses.GAME_WHALE_MODULE    - Whale bundle purchases                                              |
+      |  • ContractAddresses.GAME_WHALE_MODULE    - Whale bundle purchases and whale pass claims                       |
       |  • ContractAddresses.GAME_JACKPOT_MODULE  - Jackpot calculations and payouts                                   |
       |                                                                                                                |
       |  SECURITY: delegatecall executes module code in this contract's                                                |
       |  context, with access to all storage. Modules are constant.                                                    |
       +================================================================================================================+*/
 
-    /// @dev Reward the top affiliate for a level during level transition.
+    /// @dev Reward the top affiliate for a level and segregate per-level DGNRS allocation.
+    ///      After the 1% top-affiliate draw, snapshots 5% of the remaining affiliate
+    ///      pool into levelDgnrsAllocation[lvl]. Affiliate scores always route to
+    ///      level + 1 during gameplay, so at transition time (when level becomes lvl),
+    ///      all scores at index lvl are frozen — new scores go to lvl + 1.
+    ///      Claims read levelDgnrsAllocation[currLevel] directly.
+    ///      Unclaimed tokens are never physically moved — they remain in the pool
+    ///      and naturally roll into the next level's snapshot.
     function _rewardTopAffiliate(uint24 lvl) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ENDGAME_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameEndgameModule.rewardTopAffiliate.selector,
-                    lvl
-                )
+        (address top, ) = affiliate.affiliateTop(lvl);
+
+        if (top != address(0)) {
+            uint256 poolBalance = dgnrs.poolBalance(
+                IStakedDegenerusStonk.Pool.Affiliate
             );
-        if (!ok) _revertDelegate(data);
+            uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) /
+                10_000;
+            uint256 paid = dgnrs.transferFromPool(
+                IStakedDegenerusStonk.Pool.Affiliate,
+                top,
+                dgnrsReward
+            );
+            emit AffiliateDgnrsReward(top, lvl, paid);
+        }
+
+        // Segregate 5% of remaining affiliate pool for per-affiliate claims.
+        // Scores at index lvl are frozen (new scores go to lvl + 1).
+        uint256 remainingPool = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Affiliate
+        );
+        levelDgnrsAllocation[lvl] =
+            (remainingPool * AFFILIATE_DGNRS_LEVEL_BPS) /
+            10_000;
     }
 
     /// @dev Resolve BAF/Decimator jackpots during the level transition RNG period.
     function _runRewardJackpots(uint24 lvl, uint256 rngWord) private {
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ENDGAME_MODULE
+            .GAME_JACKPOT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameEndgameModule.runRewardJackpots.selector,
+                    IDegenerusGameJackpotModule.runRewardJackpots.selector,
                     lvl,
                     rngWord
                 )
@@ -1375,6 +1410,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // lvl is already purchaseLevel (= level + 1), so set directly.
         // Only on fresh request - retry would double-increment.
         if (isTicketJackpotDay && !isRetry) {
+            // Snapshot affiliate reward before level increment.
+            // Scores routed to lvl (= level + 1) during the purchase phase just ended.
+            _rewardTopAffiliate(lvl);
             level = lvl;
 
             // Resolve charity governance for the completed level.

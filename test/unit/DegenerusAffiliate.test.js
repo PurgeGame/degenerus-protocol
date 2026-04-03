@@ -1032,7 +1032,7 @@ describe("DegenerusAffiliate", function () {
       expect(result).to.equal(eth("0.015625"));
     });
 
-    it("linear taper at midpoint (score 20250)", async function () {
+    it("linear taper in range (score 20250)", async function () {
       const { affiliate, coin, alice, bob } = await loadFixture(
         deployFullProtocol
       );
@@ -1040,19 +1040,19 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(alice).createAffiliateCode(code, 0);
       await affiliate.connect(bob).referPlayer(code);
 
-      // Midpoint between 15000 and 25500: excess = 5250, range = 10500
-      // reductionBps = 5000 * 5250 / 10500 = 2500
-      // effectiveBps = 10000 - 2500 = 7500 (75% payout)
-      // Scaled = 0.25 * 7500 / 10000 = 0.1875
+      // score=20250: excess = 20250 - 10000 = 10250, range = 15500
+      // reductionBps = 7500 * 10250 / 15500 = 4959 (integer division)
+      // effectiveBps = 10000 - 4959 = 5041
+      // Scaled = 0.25 * 5041 / 10000 = 0.126025
       const tx = await payAffiliateAsCoin(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 20250
       );
-      // Leaderboard should still record the full untapered amount
+      // Event records the post-taper amount
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
-      expect(evs[0].args.amount).to.equal(eth("0.25")); // full, untapered
+      expect(evs[0].args.amount).to.equal(eth("0.126025")); // post-taper
     });
 
-    it("leaderboard tracks full untapered amount regardless of taper", async function () {
+    it("leaderboard tracks post-taper amount", async function () {
       const { affiliate, coin, alice, bob } = await loadFixture(
         deployFullProtocol
       );
@@ -1060,13 +1060,13 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(alice).createAffiliateCode(code, 0);
       await affiliate.connect(bob).referPlayer(code);
 
-      // Max taper
+      // Max taper: score=25500 triggers 25% floor
       await payAffiliateAsCoin(
         hre.ethers, coin, affiliate, eth(1), code, bob.address, 1, true, 25500
       );
 
-      // Score should be 0.25 (full), not 0.125 (tapered)
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("0.25"));
+      // score=25500: 0.25 ETH scaled * 25% floor = 0.0625 ETH recorded
+      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("0.0625"));
     });
 
     it("taper reduces kickback proportionally", async function () {
@@ -1146,11 +1146,11 @@ describe("DegenerusAffiliate", function () {
       );
       expect(result).to.equal(eth("0.03125"));
 
-      // Leaderboard should record the full capped amount (before taper): 0.5 ETH
+      // Leaderboard records the post-taper amount: 0.5 ETH capped * 25% floor = 0.125 ETH
       await payAffiliateAsCoin(
         hre.ethers, coin, affiliate, eth(100), code, bob.address, 1, true, 25500
       );
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("0.5"));
+      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("0.125"));
     });
   });
 });

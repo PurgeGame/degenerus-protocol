@@ -1,67 +1,56 @@
-# Requirements: Degenerus Protocol Audit — v15.0
+# Requirements: v16.0 Module Consolidation & Storage Repack
 
 **Defined:** 2026-04-02
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v15.0 Requirements
+## Storage Repack
 
-Delta audit covering all functional changes since v10.3 (last audit).
+- [ ] **STOR-01**: ticketsFullyProcessed and gameOverPossible moved from slot 1 to slot 0 (filling 2-byte padding to 32/32)
+- [ ] **STOR-02**: currentPrizePool downsized from uint256 (slot 2) to uint128 packed into slot 1
+- [ ] **STOR-03**: All slot header comments in DegenerusGameStorage.sol match actual layout
+- [ ] **STOR-04**: All `_get`/`_set` helpers for currentPrizePool updated for uint128 packing
+- [ ] **STOR-05**: forge inspect confirms identical layout across DegenerusGameStorage, DegenerusGame, and all modules
 
-### Changelog & Documentation
+## Module Redistribution
 
-- [x] **CHLOG-01**: Every functional change across v11.0-v14.0 is catalogued with contract, function, and nature of change (new/modified/removed)
-- [x] **DOC-01**: Complete level system documentation covering: level advancement, price derivation (PriceLookupLib), purchaseLevel (jackpot vs purchase phase), quest target calculation (daily vs level), lootbox baseline, jackpot ticket routing
+- [ ] **MOD-01**: rewardTopAffiliate inlined directly in AdvanceModule (no delegatecall)
+- [x] **MOD-02**: runRewardJackpots + all private helpers moved to JackpotModule
+- [x] **MOD-03**: claimWhalePass moved to JackpotModule
+- [x] **MOD-04**: DegenerusGame delegatecall targets updated (claimWhalePass -> JackpotModule)
+- [x] **MOD-05**: EndgameModule contract, interface, and GAME_ENDGAME_MODULE address deleted
+- [x] **MOD-06**: All references to EndgameModule removed (imports, comments, NatSpec)
 
-### Jackpot Carryover Audit
+## Verification
 
-- [x] **JACK-01**: Carryover ticket distribution logic is proven correct — single-pass distribution, source range 1-4, budget 0.5% of futurePrizePool
-- [x] **JACK-02**: Final-day jackpot behavior verified — tickets route to level+1 when last purchase day detected
+- [ ] **VER-01**: All hardcoded slot offsets in Foundry tests updated for new layout
+- [ ] **VER-02**: Full test suite green (Hardhat + Foundry)
+- [ ] **VER-03**: Delta audit of all moved/modified functions confirms behavioral equivalence
 
-### Per-Function Adversarial Audit
+## Future Requirements
 
-- [x] **AUD-01**: Every new function introduced in v11.0-v14.0 is audited for security (reentrancy, access control, overflow, state corruption)
-- [x] **AUD-02**: Every modified function is audited for regressions (behavioral equivalence where intended, correct new behavior where changed)
-- [x] **AUD-03**: Storage layout verified via forge inspect for every contract with storage changes
-
-### RNG & Gas
-
-- [x] **RNG-01**: RNG commitment window re-verified for all new/modified paths that depend on VRF words
-- [x] **GAS-01**: Gas ceiling verified for new computation paths (score calculation, quest roll, drip projection, PriceLookupLib calls)
-
-### Cross-Cutting
-
-- [x] **INTEG-01**: Cross-contract call graph verified — no broken interfaces, no stale references after quest consolidation and price removal
-- [x] **INTEG-02**: All tests pass (forge test baseline matches pre-v11.0 pass/fail counts with no new failures)
+None deferred.
 
 ## Out of Scope
 
-| Feature | Reason |
-|---------|--------|
-| Formal verification (Halmos) | Deferred — tracked in FORMAL-01/02/03 |
-| New feature development | This milestone is audit-only |
-| Test suite expansion | Verify existing tests pass, don't write new ones |
+- Gas optimization beyond the storage repack (no new packing opportunities this milestone)
+- Refactoring internal logic of moved functions (verbatim copy, no behavioral changes)
+- ContractAddresses.sol management (user-managed, GAME_ENDGAME_MODULE removal only)
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| CHLOG-01 | Phase 162 | Complete |
-| DOC-01 | Phase 163 | Complete |
-| JACK-01 | Phase 164 | Complete |
-| JACK-02 | Phase 164 | Complete |
-| AUD-01 | Phase 165 | Complete |
-| AUD-02 | Phase 165 | Complete |
-| AUD-03 | Phase 165 | Complete |
-| RNG-01 | Phase 166 | Complete |
-| GAS-01 | Phase 166 | Complete |
-| INTEG-01 | Phase 167 | Complete |
-| INTEG-02 | Phase 167 | Complete |
-
-**Coverage:**
-- v15.0 requirements: 11 total
-- Mapped to phases: 11
-- Unmapped: 0
-
----
-*Requirements defined: 2026-04-02*
-*Last updated: 2026-04-02 after roadmap creation*
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| STOR-01 | 168 | Pending |
+| STOR-02 | 168 | Pending |
+| STOR-03 | 168 | Pending |
+| STOR-04 | 168 | Pending |
+| STOR-05 | 168 | Pending |
+| MOD-01 | 169 | Pending |
+| MOD-02 | 170 | Complete |
+| MOD-03 | 171 | Complete |
+| MOD-04 | 171 | Complete |
+| MOD-05 | 171 | Complete |
+| MOD-06 | 171 | Complete |
+| VER-01 | 172 | Pending |
+| VER-02 | 172 | Pending |
+| VER-03 | 172 | Pending |

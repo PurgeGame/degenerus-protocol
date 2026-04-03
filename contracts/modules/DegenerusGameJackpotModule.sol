@@ -12,6 +12,8 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
+import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
+import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 
 /**
  * @title DegenerusGameJackpotModule
@@ -80,11 +82,25 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 ticketIndex
     );
 
+    /// @notice Emitted after BAF/decimator jackpot resolution with final pool values.
+    /// @dev Enables indexers to track pool changes from reward jackpots without
+    ///      replaying on-chain leaderboard/ticket state. Only emitted when pools change.
+    /// @param lvl The level that just completed (indexed for Advance event correlation).
+    /// @param futurePool Authoritative post-resolution future prize pool value.
+    /// @param claimableDelta Total ETH moved to claimable during resolution.
+    event RewardJackpotsSettled(
+        uint24 indexed lvl,
+        uint256 futurePool,
+        uint256 claimableDelta
+    );
+
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
 
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
+    IDegenerusJackpots internal constant jackpots =
+        IDegenerusJackpots(ContractAddresses.JACKPOTS);
 
     // -------------------------------------------------------------------------
     // Constants — Timing & Thresholds
@@ -95,6 +111,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Maximum number of daily jackpots per level before forcing level transition.
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
+
+    uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
 
     // -------------------------------------------------------------------------
     // Constants — Share Distribution (Basis Points)
@@ -221,7 +239,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // =========================================================================
 
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
-    /// @dev Called via IDegenerusGame(address(this)) from EndgameModule and GameOverModule.
+    /// @dev Called via IDegenerusGame(address(this)) from JackpotModule (runRewardJackpots) and GameOverModule.
     ///      Uses FINAL_DAY_SHARES_PACKED (60/13/13/13) with trait-based bucket distribution.
     ///      Updates claimablePool internally — callers must NOT double-count.
     /// @param poolWei Total ETH to distribute.
@@ -2486,5 +2504,310 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         dailyTicketUnits = uint64(packed >> 8);
         carryoverTicketUnits = uint64(packed >> 72);
         carryoverSourceOffset = uint8(packed >> 136);
+    }
+
+    // -------------------------------------------------------------------------
+    // Reward Jackpots (BAF + Decimator Dispatch)
+    // -------------------------------------------------------------------------
+
+    /// @notice Resolve reward jackpots (BAF + Decimator) during level transition.
+    /// @dev Entry point for AdvanceModule delegatecall. Pulls % of future pool per jackpot type,
+    ///      distributes to winners, reconciles auto-rebuy delta, and commits pool changes.
+    ///
+    /// Pool: 10% of future pool (level 100 uses 30% special)
+    function runRewardJackpots(uint24 lvl, uint256 rngWord) external {
+        uint256 futurePoolLocal = _getFuturePrizePool();
+        // Snapshot at entry: used as (1) BAF/Decimator pool sizing baseline and
+        // (2) rebuyDelta reference to detect auto-rebuy writes to storage.
+        uint256 baseFuturePool = futurePoolLocal;
+        uint24 prevMod10 = lvl % 10;
+        uint24 prevMod100 = lvl % 100;
+        uint256 claimableDelta;
+
+        // ---------------------------------------------------------------------
+        // BAF Jackpot (every 10 levels)
+        // ---------------------------------------------------------------------
+
+        if (prevMod10 == 0) {
+            uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
+            uint256 bafPoolWei = (baseFuturePool * bafPct) / 100;
+
+            // Pull the full BAF pool out first; refunds/lootbox recycle back in after resolution.
+            futurePoolLocal -= bafPoolWei;
+            (
+                uint256 netSpend,
+                uint256 claimed,
+                uint256 lootboxToFuture
+            ) = _runBafJackpot(bafPoolWei, lvl, rngWord);
+            claimableDelta += claimed;
+
+            if (netSpend != bafPoolWei) {
+                futurePoolLocal += (bafPoolWei - netSpend);
+            }
+
+            if (lootboxToFuture != 0) {
+                futurePoolLocal += lootboxToFuture;
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Decimator Jackpot (level 100 special)
+        // ---------------------------------------------------------------------
+
+        if (prevMod100 == 0) {
+            uint256 decPoolWei = (baseFuturePool * 30) / 100;
+            if (decPoolWei != 0) {
+                uint256 returnWei = IDegenerusGame(address(this))
+                    .runDecimatorJackpot(decPoolWei, lvl, rngWord);
+                uint256 spend = decPoolWei - returnWei;
+                futurePoolLocal -= spend;
+                claimableDelta += spend;
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Decimator Jackpot (levels ending in 5, except 95)
+        // ---------------------------------------------------------------------
+
+        if (prevMod10 == 5 && prevMod100 != 95) {
+            // Fire decimator midway through each decile (5, 15, 25... not 95)
+            uint256 decPoolWei = (futurePoolLocal * 10) / 100;
+            if (decPoolWei != 0) {
+                uint256 returnWei = IDegenerusGame(address(this))
+                    .runDecimatorJackpot(decPoolWei, lvl, rngWord);
+                uint256 spend = decPoolWei - returnWei;
+                futurePoolLocal -= spend;
+                // Decimator pool is reserved in claimablePool; per-player credits happen on claim
+                claimableDelta += spend;
+            }
+        }
+
+        // Commit future pool update only when changed (saves an SSTORE on non-jackpot levels).
+        // Reconcile any auto-rebuy contributions that wrote directly to futurePrizePool
+        // storage during _runBafJackpot / runDecimatorJackpot. baseFuturePool is the
+        // futurePrizePool value at function entry; rebuyDelta captures every increment
+        // written by _processAutoRebuy between cache and write-back.
+        uint256 rebuyDelta;
+        if (futurePoolLocal != baseFuturePool) {
+            rebuyDelta = _getFuturePrizePool() - baseFuturePool;
+            _setFuturePrizePool(futurePoolLocal + rebuyDelta);
+        }
+        if (claimableDelta != 0) {
+            claimablePool += claimableDelta;
+        }
+        if (futurePoolLocal != baseFuturePool || claimableDelta != 0) {
+            emit RewardJackpotsSettled(
+                lvl,
+                futurePoolLocal + rebuyDelta,
+                claimableDelta
+            );
+        }
+    }
+
+    /**
+     * @notice Execute BAF (Big-Ass Flip) jackpot distribution.
+     * @dev Large winners (>=5% of pool) receive 50% ETH / 50% lootbox.
+     *      Small winners (<5% of pool) alternate: even-index gets 100% ETH,
+     *      odd-index gets 100% lootbox (gas-efficient batching).
+     *
+     * @param poolWei Total ETH for BAF distribution.
+     * @param lvl Level triggering the BAF.
+     * @param rngWord VRF entropy for winner selection.
+     * @return netSpend Amount consumed from future pool.
+     * @return claimableDelta ETH credited to claimable balances.
+     * @return lootboxToFuture Lootbox ETH recycled into future pool.
+     *
+     * ## Payout Split
+     *
+     * | Winner Size        | Portion | Reward Type                              |
+     * |--------------------|---------|------------------------------------------|
+     * | Large (>=5% pool)  | 50%     | Claimable ETH (immediate)                |
+     * | Large (>=5% pool)  | 50%     | Lootbox future tickets (claimWhalePass)  |
+     * | Small even-index   | 100%    | Claimable ETH (immediate)                |
+     * | Small odd-index    | 100%    | Lootbox future tickets                   |
+     *
+     * ## Lootbox Flow (Tiered by Amount)
+     *
+     * **All payouts:**
+     * - Large lootbox payouts defer via `claimWhalePass` for gas safety
+     *
+     * All lootbox ETH stays in futurePrizePool (source pool).
+     *
+     */
+    function _runBafJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    )
+        private
+        returns (
+            uint256 netSpend,
+            uint256 claimableDelta,
+            uint256 lootboxToFuture
+        )
+    {
+        // Get winners and payout info from jackpots contract
+        (
+            address[] memory winnersArr,
+            uint256[] memory amountsArr,
+            uint256 refund
+        ) = jackpots.runBafJackpot(poolWei, lvl, rngWord);
+
+        uint256 lootboxTotal;
+
+        // ---------------------------------------------------------------------
+        // Process each winner with gas-optimized payout structure
+        // Large winners (>=5% of pool): 50% ETH, 50% lootbox (balanced)
+        // Small winners (<5% of pool): alternate 100% ETH or 100% lootbox (gas-efficient)
+        // ---------------------------------------------------------------------
+
+        uint256 largeWinnerThreshold = poolWei / 20; // 5% of total BAF pool
+
+        uint256 winnersLen = winnersArr.length;
+        for (uint256 i; i < winnersLen; ) {
+            address winner = winnersArr[i];
+            uint256 amount = amountsArr[i];
+
+            // Large winners: keep 50/50 split for balanced payout
+            if (amount >= largeWinnerThreshold) {
+                uint256 ethPortion = amount / 2;
+                uint256 lootboxPortion = amount - ethPortion;
+
+                // Credit ETH half to claimable balance
+                claimableDelta += _addClaimableEth(winner, ethPortion, rngWord);
+
+                // Lootbox half: small amounts awarded immediately, large deferred
+                if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
+                    // Small lootbox: award immediately (2 rolls, probabilistic targeting)
+                    rngWord = _awardJackpotTickets(
+                        winner,
+                        lootboxPortion,
+                        lvl,
+                        rngWord
+                    );
+                } else {
+                    // Large lootbox: defer to claim (whale pass equivalent)
+                    _queueWhalePassClaimCore(winner, lootboxPortion);
+                }
+                lootboxTotal += lootboxPortion;
+            }
+            // Small winners: alternate between 100% ETH and 100% lootbox for gas efficiency
+            else if (i % 2 == 0) {
+                // Even index: 100% ETH (immediate liquidity)
+                claimableDelta += _addClaimableEth(winner, amount, rngWord);
+            } else {
+                // Odd index: 100% lootbox (upside exposure)
+                rngWord = _awardJackpotTickets(winner, amount, lvl, rngWord);
+                lootboxTotal += amount;
+            }
+
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Lootbox ETH stays in future pool (it came from there)
+        lootboxToFuture = lootboxTotal;
+
+        netSpend = poolWei - refund;
+        return (netSpend, claimableDelta, lootboxToFuture);
+    }
+
+    /**
+     * @notice Unified jackpot ticket award function for all jackpots.
+     * @dev Awards tickets using two-tier system:
+     *      Small (0.5-5 ETH): Split in half, 2 probabilistic rolls
+     *      Large (> 5 ETH): Whale pass equivalent (100-ticket chunks)
+     *      Uses actual game ticket pricing for target levels.
+     *
+     * @param winner Address to receive rewards.
+     * @param amount ETH amount for ticket conversion.
+     * @param minTargetLevel Minimum target level for tickets.
+     * @param entropy RNG state.
+     * @return Updated entropy state.
+     */
+    function _awardJackpotTickets(
+        address winner,
+        uint256 amount,
+        uint24 minTargetLevel,
+        uint256 entropy
+    ) private returns (uint256) {
+        // Large amounts (> 5 ETH): defer to whale pass claim system
+        if (amount > LOOTBOX_CLAIM_THRESHOLD) {
+            _queueWhalePassClaimCore(winner, amount);
+            return entropy;
+        }
+
+        // Very small amounts (<= 0.5 ETH): single roll
+        if (amount <= SMALL_LOOTBOX_THRESHOLD) {
+            return _jackpotTicketRoll(winner, amount, minTargetLevel, entropy);
+        }
+
+        // Medium amounts (0.5-5 ETH): split in half, 2 rolls
+        uint256 halfAmount = amount / 2;
+
+        // First roll
+        entropy = _jackpotTicketRoll(
+            winner,
+            halfAmount,
+            minTargetLevel,
+            entropy
+        );
+
+        // Second roll (with remainder if amount was odd)
+        uint256 secondAmount = amount - halfAmount;
+        entropy = _jackpotTicketRoll(
+            winner,
+            secondAmount,
+            minTargetLevel,
+            entropy
+        );
+
+        return entropy;
+    }
+
+    /**
+     * @notice Resolve a single jackpot ticket roll into ticket awards.
+     * @dev Selects target level based on probability, then awards tickets.
+     *      Uses actual game pricing for the selected target level.
+     * @param winner Address to receive tickets.
+     * @param amount ETH amount for this roll.
+     * @param minTargetLevel Minimum target level (usually current level during SETUP phase).
+     * @param entropy RNG state.
+     * @return Updated entropy state.
+     */
+    function _jackpotTicketRoll(
+        address winner,
+        uint256 amount,
+        uint24 minTargetLevel,
+        uint256 entropy
+    ) private returns (uint256) {
+        entropy = EntropyLib.entropyStep(entropy);
+
+        // Roll for outcome (0-99 for percentage-based probabilities)
+        uint256 entropyDiv100 = entropy / 100;
+        uint256 roll = entropy - (entropyDiv100 * 100);
+        uint24 targetLevel;
+
+        if (roll < 30) {
+            // 30% chance: minimum level ticket
+            targetLevel = minTargetLevel;
+        } else if (roll < 95) {
+            // 65% chance: +1 to +4 levels ahead
+            uint256 offset = 1 + (entropyDiv100 % 4); // 1-4 inclusive
+            targetLevel = minTargetLevel + uint24(offset);
+        } else {
+            // 5% chance: +5 to +50 levels ahead (rare)
+            uint256 offset = 5 + (entropyDiv100 % 46); // 5-50 inclusive
+            targetLevel = minTargetLevel + uint24(offset);
+        }
+
+        // Calculate tickets for target level
+        uint256 targetPrice = PriceLookupLib.priceForLevel(targetLevel);
+
+        uint256 quantityScaled = (amount * TICKET_SCALE) / targetPrice;
+        _queueLootboxTickets(winner, targetLevel, quantityScaled);
+
+        return entropy;
     }
 }

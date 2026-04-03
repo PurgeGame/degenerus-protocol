@@ -20,7 +20,7 @@ contract DeployCanary is DeployProtocol {
         assertEq(address(whaleModule), ContractAddresses.GAME_WHALE_MODULE, "GAME_WHALE_MODULE mismatch");
         assertEq(address(jackpotModule), ContractAddresses.GAME_JACKPOT_MODULE, "GAME_JACKPOT_MODULE mismatch");
         assertEq(address(decimatorModule), ContractAddresses.GAME_DECIMATOR_MODULE, "GAME_DECIMATOR_MODULE mismatch");
-        assertEq(address(endgameModule), ContractAddresses.GAME_ENDGAME_MODULE, "GAME_ENDGAME_MODULE mismatch");
+        assertEq(endgameModuleSlot, ContractAddresses.GAME_ENDGAME_MODULE, "GAME_ENDGAME_MODULE nonce slot mismatch");
         assertEq(address(gameOverModule), ContractAddresses.GAME_GAMEOVER_MODULE, "GAME_GAMEOVER_MODULE mismatch");
         assertEq(address(lootboxModule), ContractAddresses.GAME_LOOTBOX_MODULE, "GAME_LOOTBOX_MODULE mismatch");
         assertEq(address(boonModule), ContractAddresses.GAME_BOON_MODULE, "GAME_BOON_MODULE mismatch");

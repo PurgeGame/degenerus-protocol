@@ -37,7 +37,8 @@
 - ✅ **v12.0 Level Quests** — Phases 153-155 (shipped 2026-04-01)
 - ✅ **v13.0 Level Quests Implementation** — Phases 156-158.1 (shipped 2026-04-01)
 - ✅ **v14.0 Activity Score & Quest Gas Optimization** — Phases 159-161 (shipped 2026-04-02)
-- [ ] **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167
+- ✅ **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167 (shipped 2026-04-02)
+- [ ] **v16.0 Module Consolidation & Storage Repack** — Phases 168-172
 
 ## Phases
 
@@ -374,10 +375,73 @@ Plans:
 - [ ] 167-01-PLAN.md — Cross-contract call graph audit (stale reference scan + interface consistency)
 - [ ] 167-02-PLAN.md — Test baseline verification (Hardhat + Foundry suite execution)
 
+### v16.0 Module Consolidation & Storage Repack (Phases 168-172)
+
+**Milestone Goal:** Eliminate EndgameModule and repack storage slots 0-2 for gas savings and structural simplification.
+
+### Phase 168: Storage Repack
+**Goal**: Repack EVM slots 0-2 — move ticketsFullyProcessed + gameOverPossible to slot 0, downsize currentPrizePool to uint128 in slot 1, kill slot 2
+**Depends on**: Phase 167 (v15.0 complete)
+**Requirements**: STOR-01, STOR-02, STOR-03, STOR-04, STOR-05
+**Success Criteria** (what must be TRUE):
+  1. ticketsFullyProcessed and gameOverPossible read/write correctly from slot 0 alongside all other slot 0 fields
+  2. currentPrizePool reads/writes via updated helpers with uint128 packing in slot 1
+  3. Slot 1 contains purchaseStartDay + ticketWriteSlot + prizePoolFrozen + currentPrizePool with no byte gaps
+  4. All slot header comments in DegenerusGameStorage.sol match actual layout
+  5. forge inspect confirms identical layout across DegenerusGameStorage, DegenerusGame, and all modules
+
+### Phase 169: Inline rewardTopAffiliate
+**Goal**: Inline rewardTopAffiliate directly in AdvanceModule — no delegatecall to EndgameModule
+**Depends on**: Phase 168 (storage layout finalized)
+**Requirements**: MOD-01
+**Success Criteria** (what must be TRUE):
+  1. AdvanceModule's _rewardTopAffiliate executes affiliate reward logic directly without delegatecall
+  2. AffiliateDgnrsReward event emits with correct parameters during level transition
+  3. No reference to EndgameModule remains in AdvanceModule's affiliate reward path
+**Plans**: 1 plan
+Plans:
+- [ ] 169-01-PLAN.md — Inline EndgameModule's rewardTopAffiliate logic into AdvanceModule's _rewardTopAffiliate
+
+### Phase 170: Migrate runRewardJackpots
+**Goal**: Move runRewardJackpots + all private helpers (~400 lines) from EndgameModule to JackpotModule
+**Depends on**: Phase 169 (first function removed from EndgameModule)
+**Requirements**: MOD-02
+**Success Criteria** (what must be TRUE):
+  1. JackpotModule contains runRewardJackpots, _runBafJackpot, _addClaimableEth, _awardJackpotTickets, _jackpotTicketRoll
+  2. AdvanceModule's _runRewardJackpots wrapper targets GAME_JACKPOT_MODULE
+  3. Decimator self-call trampoline (IDegenerusGame(address(this)).runDecimatorJackpot()) routes correctly
+  4. IDegenerusGameJackpotModule interface includes runRewardJackpots signature
+**Plans**: 1 plan
+Plans:
+- [x] 170-01-PLAN.md — Move runRewardJackpots + helpers to JackpotModule, update interface, rewire AdvanceModule
+
+### Phase 171: Migrate claimWhalePass + Delete EndgameModule
+**Goal**: Move claimWhalePass to JackpotModule, then fully eliminate EndgameModule
+**Depends on**: Phase 170 (all heavy functions moved)
+**Requirements**: MOD-03, MOD-04, MOD-05, MOD-06
+**Success Criteria** (what must be TRUE):
+  1. DegenerusGame's _claimWhalePassFor delegatecalls GAME_JACKPOT_MODULE
+  2. DegenerusGameEndgameModule.sol and IDegenerusGameEndgameModule deleted
+  3. GAME_ENDGAME_MODULE removed from ContractAddresses.sol
+  4. Zero references to EndgameModule in any Solidity file (imports, comments, NatSpec)
+**Plans**: 1 plan
+Plans:
+- [x] 171-01-PLAN.md — Move claimWhalePass to JackpotModule, rewire delegatecall, delete EndgameModule, scrub references
+
+### Phase 172: Delta Verification
+**Goal**: Full test suite green + delta audit confirms behavioral equivalence for all moved functions
+**Depends on**: Phase 171 (all code changes complete)
+**Requirements**: VER-01, VER-02, VER-03
+**Success Criteria** (what must be TRUE):
+  1. All hardcoded slot offsets in Foundry tests match the new storage layout
+  2. Hardhat test suite passes with zero new failures vs pre-v16.0 baseline
+  3. Foundry test suite passes with zero new failures vs pre-v16.0 baseline
+  4. Delta audit confirms behavioral equivalence for every moved function
+
 ## Progress
 
 **Execution Order:**
-Phase 162 -> Phase 163 -> Phase 164 (can parallel with 165) -> Phase 165 -> Phase 166 -> Phase 167
+Phase 168 -> Phase 169 -> Phase 170 -> Phase 171 -> Phase 172
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -387,10 +451,10 @@ Phase 162 -> Phase 163 -> Phase 164 (can parallel with 165) -> Phase 165 -> Phas
 | 165. Per-Function Adversarial Audit | v15.0 | 0/TBD | Complete    | 2026-04-02 |
 | 166. RNG & Gas Verification | v15.0 | 0/2 | Complete    | 2026-04-02 |
 | 167. Integration & Test Baseline | v15.0 | 0/2 | Complete    | 2026-04-02 |
-| 168. Storage Repack | v16.0 | 1/3 | In Progress | — |
-| 169. Inline rewardTopAffiliate | v16.0 | 0/TBD | Not started | — |
-| 170. Migrate runRewardJackpots | v16.0 | 0/TBD | Not started | — |
-| 171. Migrate claimWhalePass + Delete EndgameModule | v16.0 | 0/TBD | Not started | — |
+| 168. Storage Repack | v16.0 | 3/3 | Complete | 2026-04-02 |
+| 169. Inline rewardTopAffiliate | v16.0 | 1/1 | Complete | 2026-04-02 |
+| 170. Migrate runRewardJackpots | v16.0 | 1/1 | Complete   | 2026-04-03 |
+| 171. Migrate claimWhalePass + Delete EndgameModule | v16.0 | 1/1 | Complete   | 2026-04-03 |
 | 172. Delta Verification | v16.0 | 0/TBD | Not started | — |
 
 ## Deferred

@@ -34,7 +34,6 @@ import {IStakedDegenerusStonk} from "./interfaces/IStakedDegenerusStonk.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {
     IDegenerusGameAdvanceModule,
-    IDegenerusGameEndgameModule,
     IDegenerusGameDecimatorModule,
     IDegenerusGameJackpotModule,
     IDegenerusGameMintModule,
@@ -964,11 +963,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • GAME_BOON_MODULE         - Deity boon effects and activation                                                |
       |  • GAME_DECIMATOR_MODULE    - Decimator claim credits and lootbox payouts                                       |
       |  • GAME_DEGENERETTE_MODULE  - Degenerette bet placement and resolution                                          |
-      |  • GAME_ENDGAME_MODULE      - Endgame settlement (payouts, wipes, jackpots)                                     |
       |  • GAME_JACKPOT_MODULE      - Jackpot calculations and payouts                                                  |
       |  • GAME_LOOTBOX_MODULE      - Lootbox open, credit, and payout                                                  |
       |  • GAME_MINT_MODULE         - Mint data recording, airdrop multipliers                                          |
-      |  • GAME_WHALE_MODULE        - Whale bundle purchases                                                            |
+      |  • GAME_WHALE_MODULE        - Whale bundle purchases and whale pass claims                                      |
       |                                                                                                                |
       |  SECURITY: delegatecall executes module code in this contract's                                                |
       |  context, with access to all storage. Modules are constant addresses.                                          |
@@ -1630,7 +1628,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Claim deferred whale pass rewards from large lootbox wins (>5 ETH).
     /// @dev Unified claim function for all large lootbox rewards.
-    ///      Delegates to endgame module which uses whale pass pricing.
+    ///      Delegates to whale module for deferred whale pass ticket awards.
     /// @param player Player address to claim for (address(0) = msg.sender).
     function claimWhalePass(address player) external {
         player = _resolvePlayer(player);
@@ -1639,10 +1637,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     function _claimWhalePassFor(address player) private {
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ENDGAME_MODULE
+            .GAME_WHALE_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameEndgameModule.claimWhalePass.selector,
+                    IDegenerusGameWhaleModule.claimWhalePass.selector,
                     player
                 )
             );

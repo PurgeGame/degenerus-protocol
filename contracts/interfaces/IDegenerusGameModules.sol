@@ -45,23 +45,6 @@ interface IDegenerusGameAdvanceModule {
     ) external;
 }
 
-/// @title IDegenerusGameEndgameModule
-/// @notice Interface for handling endgame finalization and rewards
-interface IDegenerusGameEndgameModule {
-    /// @notice Distributes reward jackpots at endgame
-    /// @param lvl The level for jackpot distribution
-    /// @param rngWord Random word for winner selection
-    function runRewardJackpots(uint24 lvl, uint256 rngWord) external;
-
-    /// @notice Rewards the top affiliate for a given level
-    /// @param lvl The level to reward the top affiliate for
-    function rewardTopAffiliate(uint24 lvl) external;
-
-    /// @notice Allows a player to claim their whale pass
-    /// @param player Address of the player claiming the pass
-    function claimWhalePass(address player) external;
-}
-
 /// @title IDegenerusGameGameOverModule
 /// @notice Interface for handling game over state and final fund distribution
 interface IDegenerusGameGameOverModule {
@@ -126,6 +109,11 @@ interface IDegenerusGameJackpotModule {
         uint24 targetLvl,
         uint256 rngWord
     ) external returns (uint256 paidWei);
+
+    /// @notice Run reward jackpots (BAF/Decimator) during level transition.
+    /// @param lvl Level to resolve jackpots for.
+    /// @param rngWord VRF entropy for jackpot selection.
+    function runRewardJackpots(uint24 lvl, uint256 rngWord) external;
 }
 
 /// @title IDegenerusGameDecimatorModule
@@ -214,6 +202,9 @@ interface IDegenerusGameWhaleModule {
     /// @param symbolId Symbol index (0-31) to bind the pass to
     function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
 
+    /// @notice Claim deferred whale pass rewards for a player.
+    /// @param player Player address to claim for.
+    function claimWhalePass(address player) external;
 }
 
 /// @title IDegenerusGameMintModule

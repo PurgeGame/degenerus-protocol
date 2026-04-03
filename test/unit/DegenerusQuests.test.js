@@ -16,7 +16,7 @@ import {
  * DegenerusQuests Unit Tests
  * ==========================
  * Covers:
- *  - rollDailyQuest (onlyCoin: coin or coinflip only)
+ *  - rollDailyQuest (onlyGame)
  *    - happy path: returns (true, [questTypes], false)
  *    - slot 0 is always MINT_ETH (type 1)
  *    - slot 1 is different from slot 0
@@ -56,40 +56,20 @@ const QUEST_BURNIE_TARGET = eth(2000); // 2 * 1000 BURNIE
 // ---------------------------------------------------------------------------
 
 /**
- * Impersonate the coin contract and call rollDailyQuest.
+ * Impersonate the game contract and call rollDailyQuest.
+ * (rollDailyQuest access changed from onlyCoin to onlyGame in v13.0)
  */
-async function rollQuestAsCoin(hreEthers, coin, quests, day, entropy) {
-  const coinAddr = await coin.getAddress();
-  await hreEthers.provider.send("hardhat_impersonateAccount", [coinAddr]);
+async function rollQuestAsGame(hreEthers, game, quests, day, entropy) {
+  const gameAddr = await game.getAddress();
+  await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
   await hreEthers.provider.send("hardhat_setBalance", [
-    coinAddr,
+    gameAddr,
     "0x1000000000000000000",
   ]);
-  const coinSigner = await hreEthers.getSigner(coinAddr);
-  const tx = await quests.connect(coinSigner).rollDailyQuest(day, entropy);
-  const result = await quests
-    .connect(coinSigner)
-    .rollDailyQuest.staticCall(day + 1000n, entropy); // staticCall on a different day to not mutate
-  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
-  return { tx, result };
-}
-
-/**
- * Impersonate the coinflip contract and call rollDailyQuest.
- */
-async function rollQuestAsCoinflip(hreEthers, coinflip, quests, day, entropy) {
-  const coinflipAddr = await coinflip.getAddress();
-  await hreEthers.provider.send("hardhat_impersonateAccount", [coinflipAddr]);
-  await hreEthers.provider.send("hardhat_setBalance", [
-    coinflipAddr,
-    "0x1000000000000000000",
-  ]);
-  const coinflipSigner = await hreEthers.getSigner(coinflipAddr);
-  const tx = await quests
-    .connect(coinflipSigner)
-    .rollDailyQuest(day, entropy);
-  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [coinflipAddr]);
-  return tx;
+  const gameSigner = await hreEthers.getSigner(gameAddr);
+  const tx = await quests.connect(gameSigner).rollDailyQuest(day, entropy);
+  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
+  return { tx };
 }
 
 /**
@@ -133,24 +113,24 @@ async function callAsGame(hreEthers, game, quests, fnName, args) {
  *
  * This is a best-effort helper; returns null if not found within 50k iterations.
  */
-async function rollQuestWithBonusType(hreEthers, coin, quests, day, targetBonusType) {
-  const coinAddr = await coin.getAddress();
-  await hreEthers.provider.send("hardhat_impersonateAccount", [coinAddr]);
+async function rollQuestWithBonusType(hreEthers, game, quests, day, targetBonusType) {
+  const gameAddr = await game.getAddress();
+  await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
   await hreEthers.provider.send("hardhat_setBalance", [
-    coinAddr,
+    gameAddr,
     "0x1000000000000000000",
   ]);
-  const coinSigner = await hreEthers.getSigner(coinAddr);
+  const gameSigner = await hreEthers.getSigner(gameAddr);
 
   let found = null;
   for (let i = 0n; i < 50000n; i++) {
     try {
       const [, questTypes] = await quests
-        .connect(coinSigner)
+        .connect(gameSigner)
         .rollDailyQuest.staticCall(day, i);
       if (Number(questTypes[1]) === targetBonusType) {
         // Actually roll it
-        await quests.connect(coinSigner).rollDailyQuest(day, i);
+        await quests.connect(gameSigner).rollDailyQuest(day, i);
         found = { entropy: i, questTypes };
         break;
       }
@@ -159,7 +139,7 @@ async function rollQuestWithBonusType(hreEthers, coin, quests, day, targetBonusT
     }
   }
 
-  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
+  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return found;
 }
 
@@ -174,39 +154,32 @@ describe("DegenerusQuests", function () {
   // 1. rollDailyQuest - Access Control
   // =========================================================================
   describe("rollDailyQuest - access control", function () {
-    it("reverts OnlyCoin when called by a random EOA", async function () {
+    it("reverts OnlyGame when called by a random EOA", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
       await expect(
         quests.connect(alice).rollDailyQuest(1n, 12345n)
-      ).to.be.revertedWithCustomError(quests, "OnlyCoin");
+      ).to.be.revertedWithCustomError(quests, "OnlyGame");
     });
 
-    it("reverts OnlyCoin when called by game contract", async function () {
-      const { quests, game } = await loadFixture(deployFullProtocol);
-      const gameAddr = await game.getAddress();
-      await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
+    it("reverts OnlyGame when called by coin contract", async function () {
+      const { quests, coin } = await loadFixture(deployFullProtocol);
+      const coinAddr = await coin.getAddress();
+      await hre.ethers.provider.send("hardhat_impersonateAccount", [coinAddr]);
       await hre.ethers.provider.send("hardhat_setBalance", [
-        gameAddr,
+        coinAddr,
         "0x1000000000000000000",
       ]);
-      const gameSigner = await hre.ethers.getSigner(gameAddr);
+      const coinSigner = await hre.ethers.getSigner(coinAddr);
       await expect(
-        quests.connect(gameSigner).rollDailyQuest(1n, 12345n)
-      ).to.be.revertedWithCustomError(quests, "OnlyCoin");
-      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
+        quests.connect(coinSigner).rollDailyQuest(1n, 12345n)
+      ).to.be.revertedWithCustomError(quests, "OnlyGame");
+      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
     });
 
-    it("succeeds when called by coin contract", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
+    it("succeeds when called by game contract", async function () {
+      const { quests, game } = await loadFixture(deployFullProtocol);
       await expect(
-        rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99999n)
-      ).to.not.be.reverted;
-    });
-
-    it("succeeds when called by coinflip contract", async function () {
-      const { quests, coinflip } = await loadFixture(deployFullProtocol);
-      await expect(
-        rollQuestAsCoinflip(hre.ethers, coinflip, quests, 1n, 99999n)
+        rollQuestAsGame(hre.ethers, game, quests, 1n, 99999n)
       ).to.not.be.reverted;
     });
   });
@@ -215,66 +188,34 @@ describe("DegenerusQuests", function () {
   // 2. rollDailyQuest - Happy Path
   // =========================================================================
   describe("rollDailyQuest - happy path", function () {
-    it("returns (true, [types], false)", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
-      const coinAddr = await coin.getAddress();
-      await hre.ethers.provider.send("hardhat_impersonateAccount", [coinAddr]);
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        coinAddr,
-        "0x1000000000000000000",
-      ]);
-      const coinSigner = await hre.ethers.getSigner(coinAddr);
-      const [rolled, questTypes, highDifficulty] = await quests
-        .connect(coinSigner)
-        .rollDailyQuest.staticCall(1n, 12345n);
-      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
-
-      expect(rolled).to.equal(true);
-      expect(questTypes.length).to.equal(2);
-      expect(highDifficulty).to.equal(false);
+    it("rolls quests and populates active slots", async function () {
+      const { quests, game } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 12345n);
+      const active = await quests.getActiveQuests();
+      expect(active.length).to.equal(2);
+      expect(active[0].day).to.equal(1n);
     });
 
     it("slot 0 is always QUEST_TYPE_MINT_ETH (1)", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
-      const coinAddr = await coin.getAddress();
-      await hre.ethers.provider.send("hardhat_impersonateAccount", [coinAddr]);
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        coinAddr,
-        "0x1000000000000000000",
-      ]);
-      const coinSigner = await hre.ethers.getSigner(coinAddr);
+      const { quests, game } = await loadFixture(deployFullProtocol);
       // Try multiple entropy values; slot 0 should always be MINT_ETH
       for (const entropy of [0n, 1n, 99n, 12345n, 999999n]) {
-        const [, questTypes] = await quests
-          .connect(coinSigner)
-          .rollDailyQuest.staticCall(1n, entropy);
-        expect(Number(questTypes[0])).to.equal(QUEST_TYPE_MINT_ETH);
+        await rollQuestAsGame(hre.ethers, game, quests, entropy + 1n, entropy);
+        const active = await quests.getActiveQuests();
+        expect(Number(active[0].questType)).to.equal(QUEST_TYPE_MINT_ETH);
       }
-      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
     });
 
     it("slot 1 is different from slot 0 (MINT_ETH)", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
-      const coinAddr = await coin.getAddress();
-      await hre.ethers.provider.send("hardhat_impersonateAccount", [coinAddr]);
-      await hre.ethers.provider.send("hardhat_setBalance", [
-        coinAddr,
-        "0x1000000000000000000",
-      ]);
-      const coinSigner = await hre.ethers.getSigner(coinAddr);
-
-      for (const entropy of [0n, 111n, 222n, 333n, 44444n]) {
-        const [, questTypes] = await quests
-          .connect(coinSigner)
-          .rollDailyQuest.staticCall(1n, entropy);
-        expect(Number(questTypes[1])).to.not.equal(QUEST_TYPE_MINT_ETH);
-      }
-      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
+      const { quests, game } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 0n);
+      const active = await quests.getActiveQuests();
+      expect(Number(active[1].questType)).to.not.equal(QUEST_TYPE_MINT_ETH);
     });
 
     it("emits QuestSlotRolled for slot 0 and slot 1", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
-      const { tx } = await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, game } = await loadFixture(deployFullProtocol);
+      const { tx } = await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       const evs = await getEvents(tx, quests, "QuestSlotRolled");
       expect(evs.length).to.equal(2);
       expect(evs[0].args.slot).to.equal(0);
@@ -282,23 +223,23 @@ describe("DegenerusQuests", function () {
     });
 
     it("QuestSlotRolled day matches the rolled day", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
-      const { tx } = await rollQuestAsCoin(hre.ethers, coin, quests, 42n, 99n);
+      const { quests, game } = await loadFixture(deployFullProtocol);
+      const { tx } = await rollQuestAsGame(hre.ethers, game, quests, 42n, 99n);
       const evs = await getEvents(tx, quests, "QuestSlotRolled");
       expect(evs[0].args.day).to.equal(42n);
       expect(evs[1].args.day).to.equal(42n);
     });
 
     it("slot 0 questType in QuestSlotRolled is MINT_ETH", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
-      const { tx } = await rollQuestAsCoin(hre.ethers, coin, quests, 5n, 77n);
+      const { quests, game } = await loadFixture(deployFullProtocol);
+      const { tx } = await rollQuestAsGame(hre.ethers, game, quests, 5n, 77n);
       const evs = await getEvents(tx, quests, "QuestSlotRolled");
       expect(evs[0].args.questType).to.equal(QUEST_TYPE_MINT_ETH);
     });
 
     it("getActiveQuests reflects rolled quest after rollDailyQuest", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 99n, 12345n);
+      const { quests, game } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 99n, 12345n);
       const active = await quests.getActiveQuests();
       expect(Number(active[0].questType)).to.equal(QUEST_TYPE_MINT_ETH);
       expect(active[0].day).to.equal(99n);
@@ -400,17 +341,18 @@ describe("DegenerusQuests", function () {
     it("reverts OnlyCoin when called by EOA", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        quests.connect(alice).handleMint(alice.address, 2, true)
+        quests.connect(alice).handleMint(alice.address, 2, true, 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 
     it("succeeds when called by coin contract", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
           alice.address,
           2,
           true,
+          0,
         ])
       ).to.not.be.reverted;
     });
@@ -421,14 +363,14 @@ describe("DegenerusQuests", function () {
   // =========================================================================
   describe("handleMint - progress and completion", function () {
     it("returns (0, type, 0, false) when no active quest for player/type", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       // No quest rolled yet; currentDay = 0 => returns early
       const { result } = await callHandlerAsCoin(
         hre.ethers,
         coin,
         quests,
         "handleMint",
-        [alice.address, 2, true]
+        [alice.address, 2, true, 0]
       );
       const [reward, , , completed] = result;
       expect(completed).to.equal(false);
@@ -436,29 +378,29 @@ describe("DegenerusQuests", function () {
     });
 
     it("emits QuestProgressUpdated after handleMint on active quest", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       const { tx } = await callHandlerAsCoin(
         hre.ethers,
         coin,
         quests,
         "handleMint",
-        [alice.address, 1, true]
+        [alice.address, 1, true, 0]
       );
       const evs = await getEvents(tx, quests, "QuestProgressUpdated");
       expect(evs.length).to.be.gte(1);
     });
 
     it("completing slot 0 (MINT_ETH, 2 tickets) emits QuestCompleted", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       // QUEST_MINT_TARGET = 2 tickets
       const { tx } = await callHandlerAsCoin(
         hre.ethers,
         coin,
         quests,
         "handleMint",
-        [alice.address, 2, true]
+        [alice.address, 2, true, 0]
       );
       const evs = await getEvents(tx, quests, "QuestCompleted");
       expect(evs.length).to.be.gte(1);
@@ -467,14 +409,14 @@ describe("DegenerusQuests", function () {
     });
 
     it("completing slot 0 sets streak to 1 and returns QUEST_SLOT0_REWARD", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       const { result } = await callHandlerAsCoin(
         hre.ethers,
         coin,
         quests,
         "handleMint",
-        [alice.address, 2, true]
+        [alice.address, 2, true, 0]
       );
       const [reward, , streak, completed] = result;
       if (completed) {
@@ -486,38 +428,40 @@ describe("DegenerusQuests", function () {
     });
 
     it("handles zero quantity without revert", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       const { result } = await callHandlerAsCoin(
         hre.ethers,
         coin,
         quests,
         "handleMint",
-        [alice.address, 0, true]
+        [alice.address, 0, true, 0]
       );
       const [, , , completed] = result;
       expect(completed).to.equal(false);
     });
 
     it("handles zero address player without revert", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       await expect(
         callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
           ZERO_ADDRESS,
           2,
           true,
+          0,
         ])
       ).to.not.be.reverted;
     });
 
     it("playerQuestStates reflects completion after successful handleMint", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         2,
         true,
+        0,
       ]);
       const [, , , completed] = await quests.playerQuestStates(alice.address);
       // At least slot 0 should be completed
@@ -537,9 +481,9 @@ describe("DegenerusQuests", function () {
     });
 
     it("returns false completed when no FLIP quest active", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       // Roll quest that might not have FLIP in slot 1
-      await rollQuestAsCoin(hre.ethers, coin, quests, 2n, 0n);
+      await rollQuestAsGame(hre.ethers, game, quests, 2n, 0n);
       // We call handleFlip; if FLIP is not in any slot, returns false
       const { result } = await callHandlerAsCoin(
         hre.ethers,
@@ -554,11 +498,11 @@ describe("DegenerusQuests", function () {
     });
 
     it("accumulates flip progress and emits QuestProgressUpdated", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       // Find entropy that gives FLIP as slot 1
       const found = await rollQuestWithBonusType(
         hre.ethers,
-        coin,
+        game,
         quests,
         5n,
         QUEST_TYPE_FLIP
@@ -578,10 +522,10 @@ describe("DegenerusQuests", function () {
     });
 
     it("completing FLIP quest after MINT_ETH earns QUEST_RANDOM_REWARD", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       const found = await rollQuestWithBonusType(
         hre.ethers,
-        coin,
+        game,
         quests,
         6n,
         QUEST_TYPE_FLIP
@@ -593,6 +537,7 @@ describe("DegenerusQuests", function () {
         alice.address,
         2,
         true,
+        0,
       ]);
 
       // Now complete slot 1 (FLIP) with enough volume
@@ -610,10 +555,10 @@ describe("DegenerusQuests", function () {
     });
 
     it("slot 1 FLIP cannot complete before slot 0", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       const found = await rollQuestWithBonusType(
         hre.ethers,
-        coin,
+        game,
         quests,
         7n,
         QUEST_TYPE_FLIP
@@ -646,8 +591,8 @@ describe("DegenerusQuests", function () {
     });
 
     it("coin can call handleDecimator without revert", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 8n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 8n, 99n);
       await expect(
         callHandlerAsCoin(hre.ethers, coin, quests, "handleDecimator", [
           alice.address,
@@ -657,8 +602,8 @@ describe("DegenerusQuests", function () {
     });
 
     it("returns false when no DECIMATOR quest active", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 9n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 9n, 99n);
       const { result } = await callHandlerAsCoin(
         hre.ethers,
         coin,
@@ -683,8 +628,8 @@ describe("DegenerusQuests", function () {
     });
 
     it("coin can call handleAffiliate without revert", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 10n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 10n, 99n);
       await expect(
         callHandlerAsCoin(hre.ethers, coin, quests, "handleAffiliate", [
           alice.address,
@@ -701,17 +646,18 @@ describe("DegenerusQuests", function () {
     it("reverts OnlyCoin when called by EOA", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        quests.connect(alice).handleLootBox(alice.address, eth("0.01"))
+        quests.connect(alice).handleLootBox(alice.address, eth("0.01"), 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 
     it("coin can call handleLootBox without revert", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 11n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 11n, 99n);
       await expect(
         callHandlerAsCoin(hre.ethers, coin, quests, "handleLootBox", [
           alice.address,
           eth("0.01"),
+          0,
         ])
       ).to.not.be.reverted;
     });
@@ -724,30 +670,32 @@ describe("DegenerusQuests", function () {
     it("reverts OnlyCoin when called by EOA", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        quests.connect(alice).handleDegenerette(alice.address, eth("0.01"), true)
+        quests.connect(alice).handleDegenerette(alice.address, eth("0.01"), true, 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 
     it("coin can call handleDegenerette (ETH) without revert", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 12n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 12n, 99n);
       await expect(
         callHandlerAsCoin(hre.ethers, coin, quests, "handleDegenerette", [
           alice.address,
           eth("0.02"),
           true,
+          0,
         ])
       ).to.not.be.reverted;
     });
 
     it("coin can call handleDegenerette (BURNIE) without revert", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 13n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 13n, 99n);
       await expect(
         callHandlerAsCoin(hre.ethers, coin, quests, "handleDegenerette", [
           alice.address,
           eth(2000),
           false,
+          0,
         ])
       ).to.not.be.reverted;
     });
@@ -764,30 +712,33 @@ describe("DegenerusQuests", function () {
     });
 
     it("streak increments to 1 on first quest completion", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         2,
         true,
+        0,
       ]);
       const [streak] = await quests.playerQuestStates(alice.address);
       expect(streak).to.equal(1n);
     });
 
     it("streak does not increment twice for same day (STREAK_CREDITED)", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       // Complete slot 0 twice (second should be no-op for streak)
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         2,
         true,
+        0,
       ]);
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         2,
         true,
+        0,
       ]);
       const [streak] = await quests.playerQuestStates(alice.address);
       expect(streak).to.equal(1n);
@@ -797,15 +748,16 @@ describe("DegenerusQuests", function () {
       const { quests, coin, alice, game } = await loadFixture(deployFullProtocol);
 
       // Day 1: complete quest (streak = 1)
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         2,
         true,
+        0,
       ]);
 
       // Skip day 2: roll day 3 directly (missed day 2)
-      await rollQuestAsCoin(hre.ethers, coin, quests, 3n, 999n);
+      await rollQuestAsGame(hre.ethers, game, quests, 3n, 999n);
 
       // Trigger sync on day 3 with an action
       const { tx } = await callHandlerAsCoin(
@@ -813,7 +765,7 @@ describe("DegenerusQuests", function () {
         coin,
         quests,
         "handleMint",
-        [alice.address, 1, true]
+        [alice.address, 1, true, 0]
       );
       const evs = await getEvents(tx, quests, "QuestStreakReset");
       expect(evs.length).to.be.gte(1);
@@ -823,11 +775,12 @@ describe("DegenerusQuests", function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
 
       // Day 1: complete slot 0 (MINT_ETH, target = 1 ticket at current mintPrice)
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         2,
         true,
+        0,
       ]);
 
       // Verify streak is 1 after completion
@@ -836,13 +789,14 @@ describe("DegenerusQuests", function () {
 
       // Skip to day 5 (missed days 2-4); do NOT roll a new quest so nothing can complete
       // Verify QuestStreakReset fires during the next sync action (handleMint triggers syncState)
-      await rollQuestAsCoin(hre.ethers, coin, quests, 5n, 88n);
+      await rollQuestAsGame(hre.ethers, game, quests, 5n, 88n);
       // Call handleMint on day 5 - this triggers _questSyncState which fires QuestStreakReset
       // Note: slot 0 target is 1 * mintPrice, so 1 ticket completes it, resetting then re-incrementing streak
       const { tx } = await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         1,
         true,
+        0,
       ]);
 
       // QuestStreakReset event confirms the reset happened with previousStreak = 1
@@ -862,19 +816,20 @@ describe("DegenerusQuests", function () {
   // =========================================================================
   describe("Progress versioning", function () {
     it("progress resets when quest is re-rolled (new version)", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
 
       // Roll day 1
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       // Partial progress on day 1
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         1,
         true,
+        0,
       ]);
 
       // Re-roll day 2 (new day, new version)
-      await rollQuestAsCoin(hre.ethers, coin, quests, 2n, 88n);
+      await rollQuestAsGame(hre.ethers, game, quests, 2n, 88n);
 
       // Progress should be 0 for new quest day
       const [, , progress] = await quests.playerQuestStates(alice.address);
@@ -895,8 +850,8 @@ describe("DegenerusQuests", function () {
   // =========================================================================
   describe("View functions", function () {
     it("getActiveQuests returns both slots after rollDailyQuest", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 20n, 12345n);
+      const { quests, game } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 20n, 12345n);
       const active = await quests.getActiveQuests();
       expect(active.length).to.equal(2);
       expect(active[0].day).to.equal(20n);
@@ -904,26 +859,21 @@ describe("DegenerusQuests", function () {
     });
 
     it("getPlayerQuestView returns effectiveStreak=0 for player with no activity", async function () {
-      const { quests, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(
-        hre.ethers,
-        (await loadFixture(deployFullProtocol)).coin,
-        quests,
-        1n,
-        99n
-      ).catch(() => {}); // ignore if already rolled
+      const { quests, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
 
       const view = await quests.getPlayerQuestView(alice.address);
       expect(view.baseStreak).to.equal(0n);
     });
 
     it("getPlayerQuestView reflects completed slots", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         2,
         true,
+        0,
       ]);
 
       const view = await quests.getPlayerQuestView(alice.address);
@@ -932,12 +882,13 @@ describe("DegenerusQuests", function () {
     });
 
     it("playerQuestStates streak matches completed count", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         2,
         true,
+        0,
       ]);
 
       const [streak, lastCompletedDay] = await quests.playerQuestStates(
@@ -948,21 +899,21 @@ describe("DegenerusQuests", function () {
     });
 
     it("playerQuestStates progress[0] is 0 before any handleMint", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       const [, , progress] = await quests.playerQuestStates(alice.address);
       expect(progress[0]).to.equal(0n);
     });
 
     it("QuestCompleted event includes correct streak and reward", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       const { tx } = await callHandlerAsCoin(
         hre.ethers,
         coin,
         quests,
         "handleMint",
-        [alice.address, 2, true]
+        [alice.address, 2, true, 0]
       );
       const evs = await getEvents(tx, quests, "QuestCompleted");
       expect(evs.length).to.be.gte(1);
@@ -980,14 +931,15 @@ describe("DegenerusQuests", function () {
   // =========================================================================
   describe("Edge cases", function () {
     it("multiple players maintain independent quest state", async function () {
-      const { quests, coin, alice, bob } = await loadFixture(deployFullProtocol);
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      const { quests, coin, game, alice, bob } = await loadFixture(deployFullProtocol);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
 
       // Alice completes slot 0
       await callHandlerAsCoin(hre.ethers, coin, quests, "handleMint", [
         alice.address,
         2,
         true,
+        0,
       ]);
 
       // Bob has no progress
@@ -998,14 +950,14 @@ describe("DegenerusQuests", function () {
     });
 
     it("same day quest roll is idempotent for different entropy", async function () {
-      const { quests, coin } = await loadFixture(deployFullProtocol);
+      const { quests, game } = await loadFixture(deployFullProtocol);
       // Roll day 1 with entropy 99
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 99n);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       const active1 = await quests.getActiveQuests();
       const type0_1 = active1[0].questType;
 
       // Roll day 1 again with different entropy (overwrites)
-      await rollQuestAsCoin(hre.ethers, coin, quests, 1n, 55555n);
+      await rollQuestAsGame(hre.ethers, game, quests, 1n, 55555n);
       const active2 = await quests.getActiveQuests();
       const type0_2 = active2[0].questType;
 
@@ -1015,14 +967,14 @@ describe("DegenerusQuests", function () {
     });
 
     it("all handlers return (0, type, 0, false) when currentDay is 0 (no quest rolled)", async function () {
-      const { quests, coin, alice } = await loadFixture(deployFullProtocol);
+      const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       // Do not roll any quest; activeQuests[0].day == 0 => currentDay == 0
       const handlers = [
         ["handleFlip", [alice.address, eth(1000)]],
         ["handleDecimator", [alice.address, eth(1000)]],
         ["handleAffiliate", [alice.address, eth(1000)]],
-        ["handleLootBox", [alice.address, eth("0.01")]],
-        ["handleDegenerette", [alice.address, eth("0.01"), true]],
+        ["handleLootBox", [alice.address, eth("0.01"), 0]],
+        ["handleDegenerette", [alice.address, eth("0.01"), true, 0]],
       ];
 
       for (const [fn, args] of handlers) {

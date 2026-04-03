@@ -41,13 +41,7 @@ describe("AccessControl", function () {
   describe("BurnieCoin", function () {
     // creditFlip, creditFlipBatch, creditCoin removed from BurnieCoin in Phase 146 ABI cleanup
 
-    it("rollDailyQuest: reverts when called by alice (OnlyGame)", async function () {
-      const { coin, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        coin.connect(alice).rollDailyQuest(1n, 12345n)
-      ).to.be.revertedWithCustomError(coin, "OnlyGame");
-    });
+    // rollDailyQuest removed from BurnieCoin — moved to DegenerusQuests (v13.0)
 
     it("vaultEscrow: reverts when called by alice (OnlyVault)", async function () {
       const { coin, alice } = await loadFixture(deployFullProtocol);
@@ -65,12 +59,12 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
-    it("burnCoin: reverts when called by alice (OnlyTrustedContracts)", async function () {
+    it("burnCoin: reverts when called by alice (OnlyGame)", async function () {
       const { coin, alice, bob } = await loadFixture(deployFullProtocol);
 
       await expect(
         coin.connect(alice).burnCoin(bob.address, eth("100"))
-      ).to.be.revertedWithCustomError(coin, "OnlyTrustedContracts");
+      ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
   });
 
@@ -251,19 +245,19 @@ describe("AccessControl", function () {
   // ---------------------------------------------------------------------------
 
   describe("DegenerusQuests", function () {
-    it("rollDailyQuest: reverts when called by alice (onlyCoin → OnlyCoin)", async function () {
+    it("rollDailyQuest: reverts when called by alice (onlyGame → OnlyGame)", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
         quests.connect(alice).rollDailyQuest(1n, 12345n)
-      ).to.be.revertedWithCustomError(quests, "OnlyCoin");
+      ).to.be.revertedWithCustomError(quests, "OnlyGame");
     });
 
     it("handleMint: reverts when called by alice (onlyCoin → OnlyCoin)", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        quests.connect(alice).handleMint(alice.address, 1, true)
+        quests.connect(alice).handleMint(alice.address, 1, true, 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 

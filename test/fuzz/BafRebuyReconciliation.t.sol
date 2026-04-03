@@ -12,7 +12,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         _setFuturePrizePool (writing auto-rebuy ETH directly to storage). The pre-fix code
 ///         then wrote the stale futurePoolLocal back, overwriting the auto-rebuy contribution.
 ///
-///         The fix (lines 238-240 in DegenerusGameEndgameModule.sol):
+///         The fix (in DegenerusGameJackpotModule.sol runRewardJackpots):
 ///           uint256 rebuyDelta = _getFuturePrizePool() - baseFuturePool;
 ///           _setFuturePrizePool(futurePoolLocal + rebuyDelta);
 ///
@@ -62,7 +62,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
     ///   5. Assert: game reached level 11, BAF fired, pool is nonzero
     ///
     ///   The core regression guarantee: if the rebuyDelta fix is removed from
-    ///   DegenerusGameEndgameModule.sol line 239, the auto-rebuy contribution written
+    ///   DegenerusGameJackpotModule.sol runRewardJackpots, the auto-rebuy contribution written
     ///   to futurePrizePool storage during _runBafJackpot would be silently overwritten
     ///   by the stale futurePoolLocal. This test ensures the full code path executes
     ///   correctly with auto-rebuy active during BAF resolution.

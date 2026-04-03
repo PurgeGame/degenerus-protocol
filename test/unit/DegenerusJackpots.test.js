@@ -666,14 +666,14 @@ describe("DegenerusJackpots", function () {
   describe("runBafJackpot - full slate with trait tickets + FF tickets", function () {
     /**
      * Compute the storage slot for traitBurnTicket[level][trait].length
-     * traitBurnTicket is at slot 11. It's mapping(uint24 => address[][256]).
-     * Slot for level's fixed array: keccak256(abi.encode(level, 11))
+     * traitBurnTicket is at slot 9. It's mapping(uint24 => address[][256]).
+     * Slot for level's fixed array: keccak256(abi.encode(level, 9))
      * Slot for trait index within that array: baseSlot + trait
      * The .length lives at that slot. Array data starts at keccak256(slot).
      */
     function traitBurnTicketSlot(level, trait) {
       const baseSlot = hre.ethers.keccak256(
-        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [level, 11])
+        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [level, 9])
       );
       return hre.ethers.toBeHex(BigInt(baseSlot) + BigInt(trait), 32);
     }
@@ -685,11 +685,11 @@ describe("DegenerusJackpots", function () {
 
     /**
      * Compute the storage slot for ticketQueue[key].length
-     * ticketQueue is at slot 15. mapping(uint24 => address[]).
+     * ticketQueue is at slot 13. mapping(uint24 => address[]).
      */
     function ticketQueueSlot(key) {
       return hre.ethers.keccak256(
-        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [key, 15])
+        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [key, 13])
       );
     }
 

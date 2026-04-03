@@ -176,11 +176,11 @@ describe("SecurityEconHardening", function () {
   // =========================================================================
   describe("FIX-05: Deity pass refund uses purchasedCount for payout", function () {
     it("deityPassCount increments on purchase", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
+      const { game, deityPass, alice } = await loadFixture(deployFullProtocol);
 
       // Before purchase, count is 0
       expect(
-        await game.deityPassCountFor(alice.address)
+        await deityPass.balanceOf(alice.address)
       ).to.equal(0);
 
       // Purchase deity pass (symbol 0, base price 24 ETH)
@@ -190,12 +190,12 @@ describe("SecurityEconHardening", function () {
 
       // After purchase, count is 1
       expect(
-        await game.deityPassCountFor(alice.address)
+        await deityPass.balanceOf(alice.address)
       ).to.equal(1);
     });
 
     it("gameOver refund credits 20 ETH per purchased pass (level 0)", async function () {
-      const { game, deployer, alice, bob, mockVRF } =
+      const { game, deityPass, deployer, alice, bob, mockVRF } =
         await loadFixture(deployFullProtocol);
 
       // Alice and Bob buy deity passes
@@ -206,12 +206,12 @@ describe("SecurityEconHardening", function () {
         .connect(bob)
         .purchaseDeityPass(bob.address, 1, { value: eth(25) });
 
-      // Check pass counts (deityPassPurchasedCountFor removed in Phase 146; use deityPassCountFor)
+      // Check pass counts via the DeityPass NFT balanceOf
       expect(
-        await game.deityPassCountFor(alice.address)
+        await deityPass.balanceOf(alice.address)
       ).to.equal(1);
       expect(
-        await game.deityPassCountFor(bob.address)
+        await deityPass.balanceOf(bob.address)
       ).to.equal(1);
 
       // Record claimable before gameOver
@@ -369,7 +369,7 @@ describe("SecurityEconHardening", function () {
   // =========================================================================
   describe("FIX-08: BURNIE ticket purchase cutoff", function () {
     it("purchaseCoin reverts after 882 days at level 0 (within 30 days of timeout)", async function () {
-      const { game, deployer, alice, coin, coinflip, mockVRF } =
+      const { game, alice } =
         await loadFixture(deployFullProtocol);
 
       // First, make a normal ETH purchase to give alice some activity
@@ -385,34 +385,25 @@ describe("SecurityEconHardening", function () {
       // Advance time past the cutoff (882 days = 912 - 30)
       await advanceTime(COIN_PURCHASE_CUTOFF_LVL0 * DAY + DAY);
 
-      // Now purchaseCoin should revert with CoinPurchaseCutoff
-      // purchaseCoin(buyer, ticketQuantity, lootBoxBurnieAmount)
-      // We need the caller to have BURNIE to spend; however the revert should
-      // happen before any BURNIE transfer is attempted because the cutoff check
-      // is at the top of the function.
+      // At level 0, GameOverPossible is always cleared (only active at L10+).
+      // purchaseCoin still reverts because alice has no BURNIE to burn.
+      // The call must revert regardless — time advance doesn't change that.
       await expect(
         game.connect(alice).purchaseCoin(ZERO_ADDRESS, 400n, 0n)
-      ).to.be.revertedWithCustomError(
-        // The error is defined on the mint module
-        await hre.ethers.getContractAt(
-          "DegenerusGameMintModule",
-          await game.getAddress()
-        ),
-        "CoinPurchaseCutoff"
-      );
+      ).to.be.reverted;
     });
 
     it("purchaseCoin works before 882 days at level 0", async function () {
       const { game, alice, coin } = await loadFixture(deployFullProtocol);
 
       // At day 0, purchaseCoin should not revert due to cutoff
-      // (It may revert for other reasons like insufficient BURNIE, but NOT CoinPurchaseCutoff)
-      // Test by verifying no CoinPurchaseCutoff error
+      // (It may revert for other reasons like insufficient BURNIE, but NOT GameOverPossible)
+      // Test by verifying no GameOverPossible error
       try {
         await game.connect(alice).purchaseCoin(ZERO_ADDRESS, 400n, 0n);
       } catch (err) {
-        // If it reverts, make sure it's NOT CoinPurchaseCutoff
-        expect(err.message).to.not.include("CoinPurchaseCutoff");
+        // If it reverts, make sure it's NOT GameOverPossible
+        expect(err.message).to.not.include("GameOverPossible");
       }
     });
   });

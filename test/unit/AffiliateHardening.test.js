@@ -24,10 +24,10 @@ import {
  *   - Independent caps per affiliate
  *
  * Lootbox Activity Taper (AFF-05 through AFF-09):
- *   - No taper below 15000 BPS score
- *   - Linear taper from 100% to 50% between 15000 and 25500 BPS
- *   - Floor at 50% payout above 25500 BPS
- *   - Leaderboard tracking uses full untapered amount
+ *   - No taper below 10000 BPS score
+ *   - Linear taper from 100% to 25% between 10000 and 25500 BPS
+ *   - Floor at 25% payout above 25500 BPS
+ *   - Leaderboard tracking uses post-taper amount
  *   - lootboxActivityScore parameter flows correctly
  */
 
@@ -547,8 +547,8 @@ describe("AffiliateHardening", function () {
   // =========================================================================
   describe("Lootbox Activity Taper", function () {
 
-    // AFF-05: No taper below 15000 BPS
-    describe("AFF-05: No taper when score < 15000 BPS", function () {
+    // AFF-05: No taper below 10000 BPS
+    describe("AFF-05: No taper when score < 10000 BPS", function () {
 
       it("score 0: full payout, no taper", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
@@ -565,17 +565,17 @@ describe("AffiliateHardening", function () {
         expect(score).to.equal(expected);
       });
 
-      it("score 14999: still full payout, no taper", async function () {
+      it("score 9999: still full payout, no taper", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
         const amount = eth("1");
         await payAffiliateAsCoin(
           hre.ethers, coin, affiliate,
-          amount, aliceCode, bob.address, 1, true, 14999
+          amount, aliceCode, bob.address, 1, true, 9999
         );
 
-        // Leaderboard records full untapered amount regardless
+        // Leaderboard records full amount (9999 < 10000, so no taper applies)
         const score = await affiliate.affiliateScore(1, alice.address);
         const expected = computeScaledAmount(amount, 1n, true);
         expect(score).to.equal(expected);
@@ -597,10 +597,10 @@ describe("AffiliateHardening", function () {
       });
     });
 
-    // AFF-06: Linear taper from 100% to 50% between 15000-25500 BPS
-    describe("AFF-06: Linear taper in 15000-25500 BPS range", function () {
+    // AFF-06: Linear taper from 100% to 25% between 10000-25500 BPS
+    describe("AFF-06: Linear taper in 10000-25500 BPS range", function () {
 
-      it("score exactly 15000: no reduction (taper just starts)", async function () {
+      it("score exactly 10000: no reduction (taper just starts)", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
@@ -620,9 +620,9 @@ describe("AffiliateHardening", function () {
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), true);
         expect(score).to.equal(fullScaled);
 
-        // At exactly 15000, excess=0 so reductionBps=0, full payout
+        // At exactly 10000, excess=0 so reductionBps=0, full payout
         // The taper condition is: score >= LOOTBOX_TAPER_START_SCORE
-        // At 15000: excess=0, so (5000*0)/10500 = 0, taper = amt * 10000/10000 = full
+        // At 10000: excess=0, so (7500*0)/15500 = 0, taper = amt * 10000/10000 = full
         // So payout equals untapered amount
       });
 
@@ -648,9 +648,9 @@ describe("AffiliateHardening", function () {
           amount, aliceCode, bob.address, lvl, true, midScore
         );
 
-        // Leaderboard still shows full untapered amount
+        // Leaderboard records the post-taper amount
         const score = await affiliate.affiliateScore(lvl, alice.address);
-        expect(score).to.equal(fullScaled);
+        expect(score).to.equal(expectedTapered);
       });
 
       it("score 10001: very small reduction from 100%", async function () {
@@ -702,11 +702,11 @@ describe("AffiliateHardening", function () {
           amount, aliceCode, bob.address, 1, true, LOOTBOX_TAPER_END_SCORE
         );
 
-        // Leaderboard: full untapered
+        // Leaderboard records the post-taper (25% floor) amount
         const score = await affiliate.affiliateScore(1, alice.address);
-        expect(score).to.equal(fullScaled);
+        expect(score).to.equal(expected25pct);
 
-        // Verify the tapered output via our helper math
+        // Confirm the 25% floor: tapered = fullScaled / 4
         expect(expected25pct).to.equal(fullScaled / 4n);
       });
 
@@ -717,9 +717,9 @@ describe("AffiliateHardening", function () {
         const amount = eth("0.1");
         const fullScaled = computeScaledAmount(amount, 1n, true);
         const tapered = computeTaperedAmount(fullScaled, 30000);
-        const expected50pct = (fullScaled * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
+        const expected25pct = (fullScaled * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
 
-        expect(tapered).to.equal(expected50pct);
+        expect(tapered).to.equal(expected25pct);
       });
 
       it("score 65535 (max uint16): still 25% floor", async function () {
@@ -729,9 +729,9 @@ describe("AffiliateHardening", function () {
         const amount = eth("0.1");
         const fullScaled = computeScaledAmount(amount, 1n, true);
         const tapered = computeTaperedAmount(fullScaled, 65535);
-        const expected50pct = (fullScaled * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
+        const expected25pct = (fullScaled * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
 
-        expect(tapered).to.equal(expected50pct);
+        expect(tapered).to.equal(expected25pct);
 
         // Also execute on-chain to verify it does not revert
         await payAffiliateAsCoin(
@@ -740,21 +740,21 @@ describe("AffiliateHardening", function () {
         );
 
         const score = await affiliate.affiliateScore(1, alice.address);
-        expect(score).to.equal(fullScaled);
+        expect(score).to.equal(expected25pct);
       });
     });
 
-    // AFF-08: Leaderboard tracking uses full untapered amount
-    describe("AFF-08: Leaderboard uses untapered amount", function () {
+    // AFF-08: Leaderboard tracking uses post-taper amount
+    describe("AFF-08: Leaderboard uses post-taper amount", function () {
 
-      it("leaderboard score matches full scaled amount even when heavily tapered", async function () {
+      it("leaderboard score matches post-taper scaled amount when heavily tapered", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
         const amount = eth("0.1");
         const lvl = 1;
 
-        // Pay with maximum taper (score >= 25500 -> 50% payout)
+        // Pay with maximum taper (score >= 25500 -> 25% floor)
         await payAffiliateAsCoin(
           hre.ethers, coin, affiliate,
           amount, aliceCode, bob.address, lvl, true, LOOTBOX_TAPER_END_SCORE
@@ -762,20 +762,23 @@ describe("AffiliateHardening", function () {
 
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), true);
         const score = await affiliate.affiliateScore(lvl, alice.address);
+        const expected25pct = (fullScaled * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
 
-        // Leaderboard should reflect FULL untapered amount
-        expect(score).to.equal(fullScaled);
-        // Not the tapered 50%
-        expect(score).to.not.equal(fullScaled / 2n);
+        // Leaderboard reflects the post-taper (25% floor) amount
+        expect(score).to.equal(expected25pct);
+        // Not the full untapered amount
+        expect(score).to.not.equal(fullScaled);
       });
 
-      it("AffiliateEarningsRecorded event emits full untapered amount", async function () {
+      it("AffiliateEarningsRecorded event emits post-taper amount", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
         const amount = eth("0.1");
         const lvl = 2;
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), true);
+        // score=25500 triggers 25% floor: tapered = fullScaled * 2500 / 10000
+        const taperedScaled = computeTaperedAmount(fullScaled, 25500);
 
         const tx = await payAffiliateAsCoin(
           hre.ethers, coin, affiliate,
@@ -784,18 +787,21 @@ describe("AffiliateHardening", function () {
 
         const events = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
         expect(events.length).to.equal(1);
-        // The emitted amount is the full scaled (post-cap but pre-taper)
-        expect(events[0].args.amount).to.equal(fullScaled);
-        expect(events[0].args.newTotal).to.equal(fullScaled);
+        // The emitted amount is the post-taper scaled amount
+        expect(events[0].args.amount).to.equal(taperedScaled);
+        expect(events[0].args.newTotal).to.equal(taperedScaled);
       });
 
-      it("top affiliate tracks untapered cumulative across multiple tapered calls", async function () {
+      it("top affiliate tracks post-taper cumulative across multiple tapered calls", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
         const amount = eth("0.1");
         const lvl = 1;
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), true);
+        // score=25000: excess=15000, range=15500, reductionBps=7500*15000/15500=7258
+        // effectiveBps=2742, tapered = fullScaled * 2742 / 10000
+        const taperedOnce = computeTaperedAmount(fullScaled, 25000);
 
         // 3 purchases each with heavy taper
         for (let i = 0; i < 3; i++) {
@@ -806,8 +812,8 @@ describe("AffiliateHardening", function () {
         }
 
         const score = await affiliate.affiliateScore(lvl, alice.address);
-        // Should be 3 x fullScaled (untapered accumulation)
-        expect(score).to.equal(fullScaled * 3n);
+        // Should be 3 x taperedOnce (post-taper accumulation)
+        expect(score).to.equal(taperedOnce * 3n);
       });
     });
 
@@ -831,7 +837,7 @@ describe("AffiliateHardening", function () {
         expect(score).to.equal(fullScaled);
       });
 
-      it("taper does not apply to recycled ETH purchases (still valid parameter)", async function () {
+      it("taper applies to recycled ETH purchases (parameter is always respected)", async function () {
         const { affiliate, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
@@ -846,8 +852,9 @@ describe("AffiliateHardening", function () {
 
         const score = await affiliate.affiliateScore(lvl, alice.address);
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), false);
-        // Leaderboard always tracks full amount (taper is applied but only to payout)
-        expect(score).to.equal(fullScaled);
+        // score=25500 triggers 25% floor: leaderboard records post-taper amount
+        const taperedScaled = computeTaperedAmount(fullScaled, 25500);
+        expect(score).to.equal(taperedScaled);
       });
 
       it("different taper scores produce different payout amounts for same input", async function () {
@@ -873,7 +880,7 @@ describe("AffiliateHardening", function () {
           amount, code, bob.address, lvl, true, 0
         );
 
-        // Carol pays with max taper (score=25500 -> 50%)
+        // Carol pays with max taper (score=25500 -> 25% floor)
         const kickbackMaxTaper = await payAffiliateAsCoinStatic(
           hre.ethers, coin, affiliate,
           amount, code, carol.address, lvl, true, LOOTBOX_TAPER_END_SCORE
@@ -898,15 +905,15 @@ describe("AffiliateHardening", function () {
         // Now: remaining cap = 0.3 ETH
         // Send 4 ETH at 25% = 1.0 scaled, capped to 0.3 ETH
         // With taper score 25500: tapered payout = 0.3 * 25% = 0.075 ETH
-        // But leaderboard should record 0.3 (the capped but untapered amount)
+        // Leaderboard records the post-taper amount: 0.075 ETH
         await payAffiliateAsCoin(
           hre.ethers, coin, affiliate,
           eth("4"), aliceCode, bob.address, 1, true, LOOTBOX_TAPER_END_SCORE
         );
 
         const score = await affiliate.affiliateScore(1, alice.address);
-        // 0.2 + 0.3 = 0.5 ETH (cap)
-        expect(score).to.equal(MAX_COMMISSION_PER_REFERRER_PER_LEVEL);
+        // 0.2 (untapered from call 1) + 0.075 (tapered from call 2) = 0.275 ETH
+        expect(score).to.equal(eth("0.275"));
       });
     });
   });
