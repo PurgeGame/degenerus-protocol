@@ -214,9 +214,9 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [ ] 177-01-PLAN.md — DegenerusAdmin + DegenerusVault + DegenerusAffiliate + DegenerusDeityPass comment sweep (CMT-04)
-- [ ] 177-02-PLAN.md — DegenerusQuests + DegenerusJackpots + DeityBoonViewer comment sweep (CMT-04)
+- [x] 177-02-PLAN.md — DegenerusQuests + DegenerusJackpots + DeityBoonViewer comment sweep (CMT-04)
 - [ ] 177-03-PLAN.md — All 5 libraries + all 11 interfaces comment sweep and implementation cross-check (CMT-05)
-- [ ] 177-04-PLAN.md — WrappedWrappedXRP + DegenerusTraitUtils + Icons32Data comment sweep (CMT-06)
+- [x] 177-04-PLAN.md — WrappedWrappedXRP + DegenerusTraitUtils + Icons32Data comment sweep (CMT-06)
 
 ### Phase 178: Consolidation & Regression Check
 **Goal**: All per-phase findings are merged into one document, severities are assigned, and prior sweep regressions are confirmed absent
@@ -234,7 +234,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 175. Game Module Comment Sweep | 5/5 | Complete    | 2026-04-03 |
 | 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
-| 177. Infrastructure, Libraries & Misc Comment Sweep | 0/4 | Not started | - |
+| 177. Infrastructure, Libraries & Misc Comment Sweep | 2/4 | In Progress|  |
 | 178. Consolidation & Regression Check | 0/? | Not started | - |
 
 ## Deferred
