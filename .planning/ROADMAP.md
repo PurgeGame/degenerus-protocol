@@ -229,7 +229,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 178-01-PLAN.md — Merge all Phase 175-177 findings into consolidated document
-- [ ] 178-02-PLAN.md — Spot-check v3.1/v3.5 fixed findings for regressions
+- [x] 178-02-PLAN.md — Spot-check v3.1/v3.5 fixed findings for regressions
 
 ## Progress Table
 
@@ -238,7 +238,7 @@ Plans:
 | 175. Game Module Comment Sweep | 5/5 | Complete    | 2026-04-03 |
 | 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
-| 178. Consolidation & Regression Check | 1/2 | In Progress|  |
+| 178. Consolidation & Regression Check | 2/2 | Complete   | 2026-04-03 |
 
 ## Deferred
 
