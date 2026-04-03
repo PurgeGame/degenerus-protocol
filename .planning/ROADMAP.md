@@ -183,10 +183,10 @@ See individual milestone entries above.
 **Plans**: 5 plans
 Plans:
 - [ ] 175-01-PLAN.md — AdvanceModule + MintModule comment sweep
-- [ ] 175-02-PLAN.md — JackpotModule comment sweep
+- [x] 175-02-PLAN.md — JackpotModule comment sweep
 - [x] 175-03-PLAN.md — LootboxModule + MintStreakUtils comment sweep
 - [x] 175-04-PLAN.md — BoonModule + DegeneretteModule + DecimatorModule comment sweep
-- [ ] 175-05-PLAN.md — WhaleModule + GameOverModule + PayoutUtils comment sweep
+- [x] 175-05-PLAN.md — WhaleModule + GameOverModule + PayoutUtils comment sweep
 
 ### Phase 176: Core Game + Token Contract Comment Sweep
 **Goal**: Core game storage and all token contracts have accurate inline comments and NatSpec — every discrepancy logged as a finding
@@ -223,7 +223,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 175. Game Module Comment Sweep | 2/5 | In Progress|  |
+| 175. Game Module Comment Sweep | 4/5 | In Progress|  |
 | 176. Core Game + Token Comment Sweep | 0/? | Not started | - |
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 0/? | Not started | - |
 | 178. Consolidation & Regression Check | 0/? | Not started | - |
