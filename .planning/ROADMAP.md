@@ -164,7 +164,7 @@ See individual milestone entries above.
 <summary>v17.1 Comment Correctness Sweep (Phases 175-178) -- IN PROGRESS</summary>
 
 - [ ] **Phase 175: Game Module Comment Sweep** - 5 plans
-- [ ] **Phase 176: Core Game + Token Contract Comment Sweep** - TBD plans
+- [ ] **Phase 176: Core Game + Token Contract Comment Sweep** - 3 plans
 - [ ] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - TBD plans
 - [ ] **Phase 178: Consolidation & Regression Check** - TBD plans
 
@@ -196,7 +196,11 @@ Plans:
   1. Every inline comment and NatSpec entry in DegenerusGame and DegenerusGameStorage has been read against the actual code
   2. Every inline comment and NatSpec entry in BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, and GNRUS has been read against the actual code
   3. Any comment that misstates state variable semantics, packed-bit layouts, access control assumptions, or token math is recorded as a LOW or INFO finding with full location reference
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 176-01-PLAN.md — DegenerusGame + DegenerusGameStorage comment sweep (CMT-02)
+- [ ] 176-02-PLAN.md — BurnieCoin + BurnieCoinflip comment sweep (CMT-03)
+- [ ] 176-03-PLAN.md — DegenerusStonk + StakedDegenerusStonk + GNRUS comment sweep (CMT-03)
 
 ### Phase 177: Infrastructure, Libraries & Misc Comment Sweep
 **Goal**: All infrastructure contracts, libraries, interfaces, and miscellaneous contracts have accurate inline comments and NatSpec — every discrepancy logged as a finding
@@ -223,8 +227,8 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 175. Game Module Comment Sweep | 5/5 | Complete   | 2026-04-03 |
-| 176. Core Game + Token Comment Sweep | 0/? | Not started | - |
+| 175. Game Module Comment Sweep | 5/5 | Complete    | 2026-04-03 |
+| 176. Core Game + Token Comment Sweep | 0/3 | Not started | - |
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 0/? | Not started | - |
 | 178. Consolidation & Regression Check | 0/? | Not started | - |
 
