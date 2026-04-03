@@ -1,30 +1,21 @@
-# Requirements: v16.0 Module Consolidation & Storage Repack
+# Requirements: v17.1 Comment Correctness Sweep
 
-**Defined:** 2026-04-02
+**Defined:** 2026-04-03
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Storage Repack
+## Comment Sweep
 
-- [ ] **STOR-01**: ticketsFullyProcessed and gameOverPossible moved from slot 1 to slot 0 (filling 2-byte padding to 32/32)
-- [ ] **STOR-02**: currentPrizePool downsized from uint256 (slot 2) to uint128 packed into slot 1
-- [ ] **STOR-03**: All slot header comments in DegenerusGameStorage.sol match actual layout
-- [ ] **STOR-04**: All `_get`/`_set` helpers for currentPrizePool updated for uint128 packing
-- [ ] **STOR-05**: forge inspect confirms identical layout across DegenerusGameStorage, DegenerusGame, and all modules
+- [x] **CMT-01**: All game module inline comments and NatSpec verified accurate (AdvanceModule, MintModule, MintStreakUtils, JackpotModule, LootboxModule, BoonModule, DegeneretteModule, DecimatorModule, WhaleModule, GameOverModule, PayoutUtils)
+- [ ] **CMT-02**: All core game + storage inline comments and NatSpec verified accurate (DegenerusGame, DegenerusGameStorage)
+- [ ] **CMT-03**: All token contract inline comments and NatSpec verified accurate (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, GNRUS)
+- [ ] **CMT-04**: All infrastructure contract inline comments and NatSpec verified accurate (DegenerusAdmin, DegenerusVault, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DeityBoonViewer)
+- [ ] **CMT-05**: All library and interface comments verified accurate; interface NatSpec matches implementations (EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib + all I* interfaces)
+- [ ] **CMT-06**: All misc contracts verified (WrappedWrappedXRP, DegenerusTraitUtils, Icons32Data)
 
-## Module Redistribution
+## Consolidation
 
-- [ ] **MOD-01**: rewardTopAffiliate inlined directly in AdvanceModule (no delegatecall)
-- [x] **MOD-02**: runRewardJackpots + all private helpers moved to JackpotModule
-- [x] **MOD-03**: claimWhalePass moved to JackpotModule
-- [x] **MOD-04**: DegenerusGame delegatecall targets updated (claimWhalePass -> JackpotModule)
-- [x] **MOD-05**: EndgameModule contract, interface, and GAME_ENDGAME_MODULE address deleted
-- [x] **MOD-06**: All references to EndgameModule removed (imports, comments, NatSpec)
-
-## Verification
-
-- [ ] **VER-01**: All hardcoded slot offsets in Foundry tests updated for new layout
-- [ ] **VER-02**: Full test suite green (Hardhat + Foundry)
-- [ ] **VER-03**: Delta audit of all moved/modified functions confirms behavioral equivalence
+- [ ] **CON-01**: Findings consolidated into single document with LOW/INFO severities
+- [ ] **CON-02**: v3.1/v3.5 prior findings verified still fixed (no regressions)
 
 ## Future Requirements
 
@@ -32,25 +23,31 @@ None deferred.
 
 ## Out of Scope
 
-- Gas optimization beyond the storage repack (no new packing opportunities this milestone)
-- Refactoring internal logic of moved functions (verbatim copy, no behavioral changes)
-- ContractAddresses.sol management (user-managed, GAME_ENDGAME_MODULE removal only)
+| Feature | Reason |
+|---------|--------|
+| Auto-fixing comments | Findings doc is the deliverable; user decides what to fix |
+| Code logic changes | Comment correctness only, no behavioral changes |
+| Mock/test contracts | Not in audit scope |
+| ContractAddresses.sol | User-managed |
 
 ## Traceability
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| STOR-01 | 168 | Pending |
-| STOR-02 | 168 | Pending |
-| STOR-03 | 168 | Pending |
-| STOR-04 | 168 | Pending |
-| STOR-05 | 168 | Pending |
-| MOD-01 | 169 | Pending |
-| MOD-02 | 170 | Complete |
-| MOD-03 | 171 | Complete |
-| MOD-04 | 171 | Complete |
-| MOD-05 | 171 | Complete |
-| MOD-06 | 171 | Complete |
-| VER-01 | 172 | Pending |
-| VER-02 | 172 | Pending |
-| VER-03 | 172 | Pending |
+| CMT-01 | Phase 175 | Complete |
+| CMT-02 | Phase 176 | Pending |
+| CMT-03 | Phase 176 | Pending |
+| CMT-04 | Phase 177 | Pending |
+| CMT-05 | Phase 177 | Pending |
+| CMT-06 | Phase 177 | Pending |
+| CON-01 | Phase 178 | Pending |
+| CON-02 | Phase 178 | Pending |
+
+**Coverage:**
+- v17.1 requirements: 8 total
+- Mapped to phases: 8
+- Unmapped: 0
+
+---
+*Requirements defined: 2026-04-03*
+*Last updated: 2026-04-03 after roadmap creation*
