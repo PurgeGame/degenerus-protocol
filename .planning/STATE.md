@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 175-05-PLAN.md
-last_updated: "2026-04-03T21:29:17.918Z"
+stopped_at: Completed 175-game-module-comment-sweep 175-02-PLAN.md
+last_updated: "2026-04-03T21:29:43.278Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 4
@@ -59,6 +59,7 @@ Recent decisions affecting current work:
 - [Phase 175-game-module-comment-sweep]: 4 LOW + 5 INFO findings in BoonModule/DegeneretteModule/DecimatorModule; terminal decimator rescaling comments are accurate
 - [Phase 175-03]: Finding 4 (INFO not LOW): _rollLootboxBoons comment misleads about boon category restriction but does not affect security
 - [Phase 175-05]: GameOverModule _sendToVault sends to SDGNRS not DGNRS — 3 comment sites mislabeled (LOW W05-01/G05-01)
+- [Phase 175-game-module-comment-sweep]: runTerminalJackpot caller attribution stale: EndgameModule listed but only GameOverModule calls it — logged LOW
 
 ### Pending Todos
 
@@ -70,5 +71,5 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T21:29:07.087Z
-Stopped at: Completed 175-05-PLAN.md
+Last session: 2026-04-03T21:29:43.276Z
+Stopped at: Completed 175-game-module-comment-sweep 175-02-PLAN.md
