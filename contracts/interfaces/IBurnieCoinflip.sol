@@ -107,7 +107,7 @@ interface IBurnieCoinflip {
       +======================================================================+*/
 
     /// @notice Credit flip stake to a player without burning tokens.
-    /// @dev Called by authorized creditors (LazyPass, DegenerusGame, or BurnieCoin) for rewards.
+    /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN) for rewards.
     ///      Does not set bounty records or trigger bounty eligibility.
     /// @param player The player receiving the flip credit.
     /// @param amount Amount of flip credit to add to next day's stake.

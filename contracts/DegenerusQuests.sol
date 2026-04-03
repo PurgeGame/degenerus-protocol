@@ -52,7 +52,7 @@ contract DegenerusQuests is IDegenerusQuests {
     //                              CUSTOM ERRORS
     // =========================================================================
 
-    /// @notice Thrown when caller is not the authorized COIN or COINFLIP contract.
+    /// @notice Thrown when caller is not an authorized contract (COIN, COINFLIP, GAME, or AFFILIATE).
     error OnlyCoin();
 
     /// @notice Thrown when caller is not the authorized GAME contract.
@@ -876,7 +876,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
         // Reward routing (match standalone handler behavior):
         // - BURNIE mint rewards: creditFlip internally (handleMint behavior for !paidWithEth)
-        // - Lootbox rewards: creditFlip internally (handleLootBox behavior)
+        // - Lootbox rewards: creditFlip internally AND returned to caller (caller adds to lootboxFlipCredit)
         // - ETH mint rewards: returned to caller (handleMint behavior for paidWithEth)
         if (burnieMintReward != 0) {
             IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, burnieMintReward);
@@ -1836,7 +1836,7 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Shared level quest progress handler called by each of the 6 handlers.
-    ///      Reads levelQuestGlobal (single SLOAD, shares slot with questVersionCounter)
+    ///      Reads levelQuestType and levelQuestVersion (share slot with questVersionCounter)
     ///      to get both level and type. Short-circuits on type mismatch before any
     ///      player state read. Eligibility is deferred to the completion boundary —
     ///      ineligible players accumulate phantom progress that can never complete.
@@ -1891,7 +1891,7 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @notice Returns a player's level quest state for frontend display.
-    /// @dev Reads levelQuestGlobal and levelQuestPlayerState for the player's current level.
+    /// @dev Reads levelQuestType, levelQuestVersion, and levelQuestPlayerState for the player's current level.
     /// @param player The player address to query.
     function getPlayerLevelQuestView(address player)
         external

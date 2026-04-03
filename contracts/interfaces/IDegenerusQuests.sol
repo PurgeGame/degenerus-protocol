@@ -40,7 +40,7 @@ struct PlayerQuestView {
 /// @dev Quests reset daily and track player progress across mint, flip, and other actions
 interface IDegenerusQuests {
     /// @notice Rolls the daily quest for a given day using provided entropy.
-    /// @dev Called by JackpotModule (via GAME delegatecall) to determine which quests are active.
+    /// @dev Called by AdvanceModule (via GAME delegatecall) to determine which quests are active.
     /// @param day The unix day to roll quests for
     /// @param entropy Random entropy used to determine the slot 1 quest type
     function rollDailyQuest(uint48 day, uint256 entropy) external;

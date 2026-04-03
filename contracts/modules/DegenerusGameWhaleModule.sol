@@ -302,7 +302,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         mintPacked_[buyer] = data;
 
-        // Queue tickets: 40/lvl for bonus levels (passLevel to 10), 2/lvl for the rest
+        // Queue tickets: 40*quantity/lvl for bonus levels (passLevel to 10), 2*quantity/lvl for the rest
         uint32 bonusTickets = uint32(WHALE_BONUS_TICKETS_PER_LEVEL * quantity);
         uint32 standardTickets = uint32(
             WHALE_STANDARD_TICKETS_PER_LEVEL * quantity
@@ -968,9 +968,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         whalePassClaims[player] = 0;
 
         // Award tickets for 100 levels, with N tickets per level (where N = half-passes)
-        // Start level depends on game state:
-        // - Jackpot phase: tickets won't be processed this level, start at level+1
-        // - Otherwise: tickets can be processed this level, start at current level
+        // Tickets start at level+1 to avoid giving tickets for an already-active level
         // Example: 3 half-passes = 3 tickets/level x 100 levels = 300 tickets
         // Safe: halfPasses fits in uint32 (ETH supply limits prevent overflow)
         uint24 startLevel = level + 1;

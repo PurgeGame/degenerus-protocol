@@ -124,7 +124,7 @@ contract WrappedWrappedXRP {
     /// @notice Token symbol
     string public constant symbol = "WWXRP";
 
-    /// @notice Number of decimals (matching wXRP standard)
+    /// @notice Number of decimals
     uint8 public constant decimals = 18;
 
     /// @notice Total circulating supply of WWXRP (excludes vault allowance)
@@ -171,7 +171,11 @@ contract WrappedWrappedXRP {
       |  Tracks the actual wXRP backing held by this contract               |
       +======================================================================+*/
 
-    /// @notice Actual wXRP reserves held by this contract
+    /// @dev Scaling factor between WWXRP (18 decimals) and wXRP (6 decimals).
+    ///      1 face-value wXRP = 1e6 units; 1 face-value WWXRP = 1e18 units.
+    uint256 private constant WXRP_SCALING = 1e12;
+
+    /// @notice Actual wXRP reserves held by this contract (in WWXRP-equivalent 18-decimal units)
     /// @dev This may be LESS than totalSupply (undercollateralized joke token!)
     ///      Or MORE than totalSupply if generous souls donate
     uint256 public wXRPReserves;
@@ -283,10 +287,10 @@ contract WrappedWrappedXRP {
       |  Wrap not implemented; unwrap/donate are enabled.                     |
       +======================================================================+*/
 
-    /// @notice Unwrap WWXRP back to wXRP at 1:1 ratio (if reserves allow!)
-    /// @dev Burns WWXRP from caller, transfers wXRP to caller.
+    /// @notice Unwrap WWXRP back to wXRP (if reserves allow!)
+    /// @dev Burns WWXRP (18 decimals) from caller, transfers equivalent wXRP (6 decimals).
     ///      Uses CEI pattern: burns before external transfer.
-    /// @param amount Amount of WWXRP to unwrap (18 decimals)
+    /// @param amount Amount of WWXRP to unwrap (18 decimals). Must be >= 1e12 (1 wXRP unit).
     /// @custom:reverts ZeroAmount When amount is zero
     /// @custom:reverts InsufficientReserves When wXRP reserves are insufficient
     /// @custom:reverts InsufficientBalance When caller has insufficient WWXRP
@@ -294,15 +298,19 @@ contract WrappedWrappedXRP {
     function unwrap(uint256 amount) external {
         if (amount == 0) revert ZeroAmount();
 
-        // Check if we actually have enough wXRP (probably not!)
+        // Check if we actually have enough reserves (probably not!)
         if (wXRPReserves < amount) revert InsufficientReserves();
+
+        // Convert WWXRP (18 dec) to wXRP (6 dec) — truncates sub-unit dust
+        uint256 wXRPAmount = amount / WXRP_SCALING;
+        if (wXRPAmount == 0) revert ZeroAmount();
 
         // CEI pattern: burn first, transfer after
         _burn(msg.sender, amount);
         wXRPReserves -= amount;
 
         // Transfer wXRP back to user
-        if (!wXRP.transfer(msg.sender, amount)) {
+        if (!wXRP.transfer(msg.sender, wXRPAmount)) {
             revert TransferFailed();
         }
 
@@ -311,20 +319,21 @@ contract WrappedWrappedXRP {
 
     /// @notice Donate wXRP to increase reserves without minting WWXRP
     /// @dev For generous souls who want to improve the backing ratio
-    ///      or for game contracts to add prize pool reserves
-    /// @param amount Amount of wXRP to donate (18 decimals)
+    ///      or for game contracts to add prize pool reserves.
+    ///      Reserves are tracked in WWXRP-equivalent units (18 decimals).
+    /// @param amount Amount of wXRP to donate (6 decimals)
     /// @custom:reverts ZeroAmount When amount is zero
     /// @custom:reverts TransferFailed When wXRP transferFrom fails
     function donate(uint256 amount) external {
         if (amount == 0) revert ZeroAmount();
 
-        // Transfer wXRP from donor to this contract
+        // Transfer wXRP (6 dec) from donor to this contract
         if (!wXRP.transferFrom(msg.sender, address(this), amount)) {
             revert TransferFailed();
         }
 
-        // Increase reserves without minting (improves backing ratio!)
-        wXRPReserves += amount;
+        // Scale to 18-decimal reserves and increase (improves backing ratio!)
+        wXRPReserves += amount * WXRP_SCALING;
 
         emit Donated(msg.sender, amount);
     }

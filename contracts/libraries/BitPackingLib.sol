@@ -64,9 +64,13 @@ library BitPackingLib {
 
     /// @notice Bit position for whale bundle type (bits 152-153)
     uint256 internal constant WHALE_BUNDLE_TYPE_SHIFT = 152;
+    /// @notice Mask for 2-bit whale bundle type field
+    uint256 internal constant MASK_2 = 0x3;
 
     /// @notice Bit position for deity pass flag (bit 184)
     uint256 internal constant HAS_DEITY_PASS_SHIFT = 184;
+    /// @notice Mask for 1-bit flag field
+    uint256 internal constant MASK_1 = 0x1;
 
     /// @notice Bit position for cached affiliate bonus level (bits 185-208)
     uint256 internal constant AFFILIATE_BONUS_LEVEL_SHIFT = 185;

@@ -9,9 +9,9 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 /**
  * @title DegenerusGameBoonModule
  * @author Burnie Degenerus
- * @notice Delegatecall module for boon consumption and lootbox view functions.
+ * @notice Delegatecall module for boon consumption.
  *
- * @dev Split from DegenerusGameLootboxModule to stay under EIP-170 size limit.
+ * @dev Boon consumption logic for coinflip, purchase, decimator, activity, and deity pass boons.
  *      Called via `delegatecall` from DegenerusGame -- all storage reads/writes
  *      operate on the game contract's storage.
  *

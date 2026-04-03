@@ -425,12 +425,12 @@ abstract contract DegenerusGameStorage {
     mapping(uint24 => address[][256]) internal traitBurnTicket;
 
     /// @dev Bit-packed mint history per player.
-    ///      Layout defined by ETH_* constants in DegenerusGame:
-    ///      - Tracks mint counts, bonuses, and eligibility flags.
-    ///      - Single SLOAD/SSTORE for all mint-related player data.
+    ///      Layout defined by constants in BitPackingLib and MintStreakUtils.
+    ///      Tracks mint counts, bonuses, eligibility flags, deity pass, and affiliate bonus cache.
+    ///      Single SLOAD/SSTORE for all mint-related player data.
     ///
     ///      SECURITY: Packing reduces gas and storage footprint.
-    ///      Bit manipulation requires careful masking (done in DegenerusGame).
+    ///      Bit manipulation requires careful masking (done via BitPackingLib shifts and masks).
     mapping(address => uint256) internal mintPacked_;
 
     // =========================================================================

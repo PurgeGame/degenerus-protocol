@@ -117,7 +117,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ///      Subbucket is deterministically assigned from hash(player, lvl, bucket).
     ///      Subsequent burns accumulate in that bucket unless a strictly better
     ///      bucket (lower denominator) is provided. On improvement, previous burn
-    ///      is removed from old aggregate, player burn resets, and entry migrates.
+    ///      is removed from old aggregate, carried over to the new bucket, and entry migrates.
     ///      Burn amount capped at uint192.max with saturation.
     /// @param player Address of the player.
     /// @param lvl Current game level.
@@ -653,7 +653,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /*+======================================================================+
       |                    TERMINAL DECIMATOR (DEATH BET)                    |
       +======================================================================+
-      |  Always-open burn for GAMEOVER. Time multiplier rewards early        |
+      |  Burn for GAMEOVER (blocked within 7 days of death clock).           |
+      |  Time multiplier rewards early                                       |
       |  conviction. 200k cap equalizes bankroll — timing differentiates.   |
       +======================================================================+*/
 

@@ -787,7 +787,7 @@ contract DegenerusAdmin {
     enum Resolution { None, Execute, Kill }
 
     /// @dev Calculate new cumulative weights after a vote, handling vote changes.
-    ///      Returns (newApprove, newReject, scaledWeight) — caller applies to storage.
+    ///      Returns (newApprove, newReject) — caller applies to storage.
     function _applyVote(
         bool approve,
         uint40 weight,

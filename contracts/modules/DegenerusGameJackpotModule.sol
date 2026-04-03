@@ -30,6 +30,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
  *      JACKPOT FLOW OVERVIEW:
  *      1. Pool consolidation at level transition (prize pool splits and merges).
  *      2. `payDailyJackpot` — Handles early-burn rewards during purchase phase and rolling dailies at EOL.
+ *      3. `payDailyCoinJackpot` — BURNIE jackpot distribution to near-future ticket holders.
  *      4. `processTicketBatch` — Batched airdrop processing with gas budgeting to stay block-safe.
  *
  *      FUND ACCOUNTING:
@@ -296,8 +297,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Rolls random (non-burn-weighted) winning traits and runs trait-based jackpot.
     ///      - Every purchase day (except day 1): adds a 1% futurePrizePool ETH slice
     ///        with 75% converted to lootbox tickets and remainder distributed as ETH.
-    ///      - Day 1 of each level: BURNIE-only distribution via _executeJackpot.
-    ///      - Rolls daily quest at the end.
+    ///      - Day 1 of each level: no early-burn distribution (ethDaySlice=0, _executeJackpot no-ops on empty pool).
     ///
     /// @param isDaily True for scheduled daily jackpot, false for early-burn jackpot.
     /// @param lvl Current game level.
@@ -758,7 +758,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Distributes yield surplus (stETH appreciation) to stakeholders.
-    ///      23% each to DGNRS, vault, and charity claimable, 23% yield accumulator (~8% buffer).
+    ///      23% each to sDGNRS, vault, and charity (GNRUS) claimable, 23% yield accumulator (~8% buffer).
     function _distributeYieldSurplus(uint256 rngWord) private {
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalBal = address(this).balance + stBal;
@@ -1599,9 +1599,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Distributes jackpot loot box rewards to winners based on trait buckets.
-    ///      Awards tickets only (no BURNIE) using jackpot loot box mechanics.
-
     /// @dev Derives daily winning traits.
     ///      Base path uses fixed symbol-0 with random color in Q0/Q1/Q2 and
     ///      fully random in Q3.
@@ -1984,7 +1981,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl = uint24(baseKey >> 224);
 
         // Calculate the storage slot for this level's trait arrays.
-        // Layout assumption: traitBurnTicket is mapping(uint24 => address[256]).
+        // Layout assumption: traitBurnTicket is mapping(uint24 => address[][256]).
         // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
         // with dynamic array elements at keccak256(keccak256(key . slot) + index).
         // This relies on the standard Solidity storage layout (stable since 0.4.x).

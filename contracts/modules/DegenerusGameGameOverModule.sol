@@ -70,10 +70,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///        FIFO by purchase order, budget-capped to available funds minus claimablePool
     ///      - Remaining funds: 10% to Decimator, 90% to next-level ticketholders
     ///      - Decimator refunds flow to terminal jackpot pool
-    ///      - Any uncredited remainder swept to vault and DGNRS
+    ///      - Any uncredited remainder swept to vault and sDGNRS
     ///
-    ///      VRF fallback: Uses rngWordByDay which may use historical VRF word as secure
-    ///      fallback if Chainlink VRF is stalled (after 3 day wait period).
+    ///      Reads rngWordByDay[day] for entropy; returns early if word is not yet available.
+    ///      VRF fallback logic (historical word, stall timeout) is in AdvanceModule._gameOverEntropy.
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
     /// @custom:reverts E When stETH transfer fails
     function handleGameOverDrain(uint48 day) external {
@@ -179,7 +179,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
     /// @notice Final sweep of all remaining funds after 30 days post-gameover.
     /// @dev Forfeits all unclaimed winnings and sweeps entire balance.
-    ///      Funds are split 33% DGNRS / 33% vault / 34% GNRUS.
+    ///      Funds are split 33% sDGNRS / 33% vault / 34% GNRUS.
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts E When ETH or stETH transfer fails
     function handleFinalSweep() external {
@@ -204,7 +204,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         _sendToVault(totalFunds, stBal);
     }
 
-    /// @dev Send funds to DGNRS (33%), vault (33%), and GNRUS (34%), stETH-first for all.
+    /// @dev Send funds to sDGNRS (33%), vault (33%), and GNRUS (34%), stETH-first for all.
     ///      IMPORTANT: Hard-reverts on stETH/ETH transfer failure. Because game-over
     ///      sets terminal state flags that roll back on revert, a stuck stETH transfer
     ///      would block game-over processing until the transfer succeeds.

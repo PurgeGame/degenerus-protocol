@@ -180,14 +180,6 @@ contract BurnieCoin {
       |  a single 32-byte slot where possible.                               |
       +======================================================================+*/
 
-    /// @notice Leaderboard entry for tracking top day flip bettors.
-    /// @dev Packed into single slot: address (20 bytes) + uint96 (12 bytes) = 32 bytes.
-    ///      Score is stored in whole BURNIE tokens (divided by 1 ether) to fit uint96.
-
-    /// @notice Outcome record for a single coinflip day window.
-    /// @dev Packed into single slot: uint16 (2 bytes) + bool (1 byte) = 3 bytes.
-    ///      rewardPercent is the bonus percentage (not total), e.g., 150 = 150% bonus = 2.5x total payout.
-
     /*+======================================================================+
       |                    WIRED CONTRACTS & MODULE STATE                    |
       +======================================================================+
@@ -261,33 +253,9 @@ contract BurnieCoin {
 
     /*+======================================================================+
       |                         BOUNTY STATE                                 |
-      +======================================================================+
-      |  Global bounty pool for record-breaking flips. The bounty pool       |
-      |  accumulates 1000 BURNIE per coinflip window. When a player sets     |
-      |  a new all-time high flip, they arm the bounty. On their next        |
-      |  coinflip resolution, half the pool is removed; if they win, that    |
-      |  half is credited to their stake, plus a DGNRS reward pool share.    |
-      |                                                                      |
-      |  STORAGE LAYOUT (packed in slots):                                   |
-      |  +-----------------------------------------------------------------+ |
-      |  | Slot | Variable         | Type     | Size     | Notes           | |
-      |  +------+------------------+----------+----------+-----------------+ |
-      |  |  17  | currentBounty    | uint128  | 16 bytes | Pool size       | |
-      |  |      | biggestFlipEver  | uint128  | 16 bytes | All-time record | |
-      |  |  18  | bountyOwedTo     | address  | 20 bytes | Armed recipient | |
-      |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
 
-    /// @notice Current bounty pool size in BURNIE (18 decimals).
-    /// @dev Increases by 1000 BURNIE each coinflip window. Half removed per resolution (paid on win).
-    ///      Wraps on overflow (effectively resets to small value).
-
-    /// @notice All-time record for biggest raw coinflip deposit (excludes bonuses).
-    /// @dev Updated only by direct deposit calls; used as threshold for arming bounty.
-    ///      Frozen during RNG lock to prevent manipulation.
-
-    /// @notice Address that has armed the bounty (set new record).
-    /// @dev Cleared after payout. Only one player can hold bounty right at a time.
+    // Bounty state (currentBounty, biggestFlipEver, bountyOwedTo) is in BurnieCoinflip.
 
     /*+======================================================================+
       |                       ERC20 DECIMALS                                 |
@@ -523,7 +491,7 @@ contract BurnieCoin {
       +======================================================================+*/
 
     /// @notice Increase the vault's mint allowance without transferring tokens.
-    /// @dev Called by game contract and modules to credit virtual BURNIE to the vault.
+    /// @dev Called by GAME (delegatecall modules) or VAULT to credit virtual BURNIE to the vault.
     /// @param amount Amount to add to vault's mint allowance.
     function vaultEscrow(uint256 amount) external {
         address sender = msg.sender;
@@ -557,7 +525,7 @@ contract BurnieCoin {
     }
 
     /// @notice Burn BURNIE from `target` during gameplay/affiliate flows.
-    /// @dev Access: DegenerusGame, game, or affiliate.
+    /// @dev Access: GAME only (onlyGame modifier).
     ///      Used for purchases, fees, and affiliate utilities.
     ///      Reverts on zero address or insufficient balance.
     /// @param target The address to burn from.

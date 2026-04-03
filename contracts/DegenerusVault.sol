@@ -567,7 +567,7 @@ contract DegenerusVault {
     }
 
     /// @notice Purchase a deity pass using an active boon for the vault
-    /// @dev Uses vault ETH + claimable winnings; msg.value is retained in the vault.
+    /// @dev Uses vault ETH + claimable winnings; forwards priceWei to the deity pass contract.
     /// @param priceWei Expected deity pass price (24 + T(n) ETH where T(n) = n*(n+1)/2)
     /// @param symbolId The deity symbol to mint (0-based index into deity pass types)
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE

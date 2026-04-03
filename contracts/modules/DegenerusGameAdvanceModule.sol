@@ -101,7 +101,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                           CONSTANTS                                  |
       +======================================================================+*/
 
-    uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365;
+    uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // Level-0 only; level 1+ uses hardcoded 120 days
     uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 3 days;
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
@@ -683,7 +683,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Pay daily BURNIE jackpot via jackpot module delegatecall.
     ///      Called each day during purchase phase in its own transaction.
-    ///      Awards 0.5% of prize pool target in BURNIE to current and future ticket holders.
+    ///      Awards 0.5% of prize pool target in BURNIE to one randomly selected near-future level [lvl, lvl+4].
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
     function _payDailyCoinJackpot(uint24 lvl, uint256 randWord) private {
@@ -824,13 +824,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     //
     // Bit(s)   Consumer                    Operation                         Location
     // ------   --------                    ---------                         --------
-    // 0        Coinflip win/loss           rngWord & 1                       BurnieCoinflip.sol:809
-    // 8+       Redemption roll             (currentWord >> 8) % 151 + 25     AdvanceModule.sol:795
-    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    BurnieCoinflip.sol:783-788
+    // 0        Coinflip win/loss           rngWord & 1                       BurnieCoinflip._resolveDay
+    // 8+       Redemption roll             (currentWord >> 8) % 151 + 25     AdvanceModule.rngGate
+    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    BurnieCoinflip._resolveDay
     // full     Jackpot winner selection    via delegatecall (full word)      JackpotModule (payDailyJackpot)
     // full     Coin jackpot                via delegatecall (full word)      JackpotModule (_payDailyCoinJackpot)
-    // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule.sol:826
-    // full     Future take variance        rngWord % (variance * 2 + 1)      AdvanceModule.sol:1033
+    // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule._applyDailyRng
+    // full     Future take variance        rngWord % (variance * 2 + 1)      AdvanceModule._takeFuturePrizePoolSlice
     // full     Prize pool consolidation    via delegatecall (full word)      JackpotModule (consolidatePrizePools)
     // full     Final day DGNRS reward      via delegatecall (full word)      JackpotModule (awardFinalDayDgnrsReward)
     // full     Reward jackpots             via delegatecall (full word)      JackpotModule (_runRewardJackpots)
@@ -947,7 +947,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     day
                 );
             }
-            // Resolve gambling burn period if pending (mirrors rngGate lines 792-802)
+            // Resolve gambling burn period if pending (mirrors rngGate redemption resolution)
             {
                 IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
                     ContractAddresses.SDGNRS
@@ -986,7 +986,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         day
                     );
                 }
-                // Resolve gambling burn period if pending (mirrors rngGate lines 792-802)
+                // Resolve gambling burn period if pending (mirrors rngGate redemption resolution)
                 {
                     IStakedDegenerusStonk sdgnrs = IStakedDegenerusStonk(
                         ContractAddresses.SDGNRS
@@ -1288,8 +1288,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Process jackpot→purchase transition housekeeping (vault perpetual tickets + auto-stake).
-    ///      Deity pass holders get virtual trait-targeted tickets at jackpot resolution time
-    ///      (zero gas cost here). Vault addresses (DGNRS, VAULT) get generic queued tickets.
+    ///      Vault addresses (SDGNRS, VAULT) get generic queued tickets.
     /// @param purchaseLevel Current purchase level (level + 1).
     /// @return finished True if all transition work completed this call.
     function _processPhaseTransition(

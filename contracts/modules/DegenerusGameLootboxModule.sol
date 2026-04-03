@@ -107,9 +107,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 frozenUntilLevel
     );
 
-    /// @notice Emitted when a lootbox awards a lazy pass
-    /// @param player The player who received the lazy pass
-
     /// @notice Emitted when a lootbox awards DGNRS tokens
     /// @param player The player who received the reward
     /// @param day The day index of the reward
@@ -137,7 +134,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Unified lootbox reward event for boon awards
     /// @param player The player receiving the reward
     /// @param day The day index of the reward
-    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon)
+    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon)
     /// @param lootboxAmount The lootbox amount spent (ETH-equivalent for BURNIE lootboxes)
     /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons)
     event LootBoxReward(
@@ -311,7 +308,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_EV_MIN_BPS = 8_000;
     /// @dev Neutral EV at 60% activity (100%)
     uint16 private constant LOOTBOX_EV_NEUTRAL_BPS = 10_000;
-    /// @dev Maximum EV at 260%+ activity (135%)
+    /// @dev Maximum EV at 255%+ activity (135%)
     uint16 private constant LOOTBOX_EV_MAX_BPS = 13_500;
     /// @dev Maximum EV benefit cap per account per level (10 ETH scaled)
     uint256 private constant LOOTBOX_EV_BENEFIT_CAP =

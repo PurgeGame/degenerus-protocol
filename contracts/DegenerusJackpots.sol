@@ -158,11 +158,11 @@ contract DegenerusJackpots is IDegenerusJackpots {
       +======================================================================+*/
 
     /// @notice Record a coinflip stake for BAF leaderboard tracking.
-    /// @dev Called by coin contract on every manual coinflip. Silently ignores vault address.
+    /// @dev Called by COIN or COINFLIP contract on every manual coinflip. Silently ignores vault address.
     /// @param player Address of the player.
     /// @param lvl Current game level (BAF bracket).
     /// @param amount Raw coinflip stake amount.
-    /// @custom:access Restricted to coin contract via onlyCoin modifier.
+    /// @custom:access Restricted to COIN or COINFLIP via onlyCoin modifier.
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external override onlyCoin {
         if (player == ContractAddresses.VAULT || player == ContractAddresses.SDGNRS) return;
 

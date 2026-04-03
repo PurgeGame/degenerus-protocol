@@ -5,7 +5,7 @@ pragma solidity 0.8.34;
 contract MockWXRP {
     string public constant name = "Mock WXRP";
     string public constant symbol = "WXRP";
-    uint8 public constant decimals = 18;
+    uint8 public constant decimals = 6;
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;

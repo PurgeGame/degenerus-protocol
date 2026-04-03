@@ -66,7 +66,7 @@ interface IDegenerusGame {
     function isOperatorApproved(address owner, address operator) external view returns (bool);
 
     /// @notice Record a ticket purchase and calculate rewards.
-    /// @dev Access restricted to authorized contracts (COIN or GAME self-call).
+    /// @dev Access restricted to GAME self-call only (delegatecall modules via address(this)).
     /// @param player The player making the purchase.
     /// @param lvl The current game level.
     /// @param costWei Total cost in wei.

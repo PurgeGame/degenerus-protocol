@@ -486,7 +486,7 @@ contract StakedDegenerusStonk {
     }
 
     /// @notice Burn wrapped DGNRS (held in the DGNRS contract) to claim proportional backing assets
-    /// @dev Calls dgnrsWrapper to convert DGNRS to sDGNRS credit, then burns the resulting sDGNRS.
+    /// @dev Burns the DGNRS wrapper tokens, then burns the corresponding sDGNRS backing held by the DGNRS contract.
     ///      Post-gameOver: deterministic payout. During game: gambling path.
     /// @param amount Amount of sDGNRS-equivalent to burn (from DGNRS wrapper balance)
     /// @return ethOut ETH received (deterministic path only)

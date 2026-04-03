@@ -55,8 +55,8 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * Bit 244:      (deprecated)       - Previously used for bonus tracking
  * ```
  *
- * Note: Quest Streak and Affiliate Points are tracked separately in their respective contracts
- * (DegenerusQuests.questPlayerState and DegenerusAffiliate.affiliateBonusPointsBest).
+ * Note: Quest Streak is tracked in DegenerusQuests.questPlayerState.
+ * Affiliate Points are tracked in DegenerusAffiliate and cached in mintPacked_ bits 185-214 on level transitions.
  *
  * ## Trait Generation
  *
@@ -158,20 +158,19 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
      *      Updates the player's Activity Score metrics for tracking engagement.
      *
      * @param player Address of the player making the purchase.
-     * @param lvl Current game level.
+     * @param lvl Target level for this purchase (level+1 during purchase phase, level during jackpot phase).
      * @param mintUnits Scaled ticket units purchased.
      *
      * ## Activity Score State Updates
      *
-     * - `mintPacked_[player]` updated with level count, whale bonuses, milestones
+     * - `mintPacked_[player]` updated with level count, units, frozen-flag clearance, and affiliate bonus cache
      * - Only writes to storage if data actually changed
      *
      * ## Level Transition Logic
      *
      * - Same level: Just update units
      * - New level with <4 units: Only track units, don't count as "minted"
-     * - New level with ≥4 units: Update level count total
-     * - Century boundary (level 100, 200...): Total continues to accumulate
+     * - New level with ≥4 units: Update level count total and refresh affiliate bonus cache
      */
     function recordMintData(
         address player,
@@ -582,7 +581,8 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Purchase tickets and optional BURNIE loot boxes.
-    /// @dev BURNIE ticket and loot box purchases are allowed whenever RNG is unlocked.
+    /// @dev BURNIE ticket purchases require RNG unlocked and gameOverPossible=false.
+    ///      BURNIE loot boxes require RNG unlocked only.
     /// @param buyer Recipient of the purchased items.
     /// @param ticketQuantity Number of tickets to purchase (2 decimals, scaled by 100).
     /// @param lootBoxBurnieAmount BURNIE amount to burn for loot boxes.

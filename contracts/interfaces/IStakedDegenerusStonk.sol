@@ -44,11 +44,12 @@ interface IStakedDegenerusStonk {
     /// @notice Burn all undistributed pool tokens at game over
     function burnAtGameOver() external;
 
-    /// @notice Burn sDGNRS to claim proportional share of backing assets
+    /// @notice Burn sDGNRS. Post-gameOver: immediate proportional payout. During game: enters
+    ///         gambling claim queue (returns 0,0,0) — call claimRedemption() after resolution.
     /// @param amount Amount of sDGNRS to burn
-    /// @return ethOut ETH received
-    /// @return stethOut stETH received
-    /// @return burnieOut BURNIE received
+    /// @return ethOut ETH received (0 during active game)
+    /// @return stethOut stETH received (0 during active game)
+    /// @return burnieOut BURNIE received (0 during active game)
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 burnieOut);
 
     /// @notice Transfer sDGNRS from the wrapper to a recipient (DGNRS wrapper only)

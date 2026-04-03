@@ -48,7 +48,7 @@ interface IDegenerusAffiliate {
 
     /// @notice Calculate the affiliate bonus points for a player.
     /// @dev Sums the player's affiliate scores for the previous 5 levels.
-    ///      Awards 1 point (1%) per 1 ETH of summed score, capped at 50.
+    ///      Awards 4 points per ETH for the first 5 ETH, 1.5 points per ETH for the next 20 ETH, capped at 50.
     /// @param currLevel The current game level.
     /// @param player The player to calculate bonus for.
     /// @return points Bonus points (0 to 50).

@@ -4,7 +4,9 @@ pragma solidity 0.8.34;
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 
-/// @dev Shared mint streak helpers (credits on completed 1x price ETH quest).
+/// @dev Shared mint streak and activity score utilities. Contains _playerActivityScore
+///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
+///      and mint streak helpers (credits on completed 1x price ETH quest).
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @dev Packed mint data field storing last level credited for mint streak (24 bits).
     uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 160;

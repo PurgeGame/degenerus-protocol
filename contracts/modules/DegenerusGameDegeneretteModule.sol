@@ -260,7 +260,7 @@ contract DegenerusGameDegeneretteModule is
     //   - 30% of bonus EV → each of buckets 6, 7, 8
     //
     // Factors below are derived from uniform-ticket probabilities (all weights=10)
-    // and the new payout table (0, 0, 1.78x, 4.75x, 15x, 54x, 248x, 1280x, 100000x).
+    // and the payout table (0, 0, 1.90x, 4.75x, 15x, 54x, 248x, 1280x, 100000x).
     uint256 private constant WWXRP_BONUS_FACTOR_SCALE = 1_000_000;
     uint256 private constant WWXRP_BONUS_FACTOR_BUCKET5 = 1_531_388;
     uint256 private constant WWXRP_BONUS_FACTOR_BUCKET6 = 13_016_797;
@@ -361,7 +361,6 @@ contract DegenerusGameDegeneretteModule is
         );
     }
 
-    /// @notice Places Full Ticket bets using pending affiliate Degenerette credit.
     /// @notice Resolves one or more pending bets for a player.
     /// @dev Requires RNG word to be available. Processes wins by minting tokens or crediting ETH.
     /// @param player The player address (use zero address for msg.sender).
@@ -588,7 +587,7 @@ contract DegenerusGameDegeneretteModule is
 
         for (uint8 spinIdx; spinIdx < ticketCount; ) {
             // Spin results are derived deterministically from the lootbox RNG word + index.
-            // For backwards compatibility, spin 0 uses the legacy seed (no spinIdx mixed in).
+            // Spin 0 uses a shorter preimage (no spinIdx mixed in) to produce a distinct seed.
             uint256 resultSeed = spinIdx == 0
                 ? uint256(
                     keccak256(abi.encodePacked(rngWord, index, QUICK_PLAY_SALT))
@@ -953,7 +952,7 @@ contract DegenerusGameDegeneretteModule is
         }
 
         // Apply ROI scaling: payout = betAmount * basePayout * roiBps / 10000 / 100
-        // basePayout is in "centi-x" (178 = 1.78x), roiBps is in bps (9000 = 90%)
+        // basePayout is in "centi-x" (190 = 1.90x), roiBps is in bps (9000 = 90%)
         // Final: betAmount * basePayout * roiBps / 1_000_000
         payout =
             (uint256(betAmount) * basePayoutBps * effectiveRoi) /

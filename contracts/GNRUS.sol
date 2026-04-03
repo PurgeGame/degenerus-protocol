@@ -275,7 +275,7 @@ contract GNRUS {
     /// @notice Burn GNRUS to receive proportional ETH and stETH
     /// @dev Burns `amount` GNRUS from msg.sender and transfers proportional shares of
     ///      both ETH and stETH held by this contract. Last-holder sweep: if the caller's
-    ///      entire balance equals `amount` or all non-contract GNRUS equals `amount`,
+    ///      entire balance equals `amount` or all externally-held GNRUS equals `amount`,
     ///      sweeps the full caller balance to avoid dust.
     ///      CEI: state updates and events before external transfers. stETH before ETH (ETH last).
     /// @param amount Amount of GNRUS to burn (minimum 1 GNRUS)
@@ -334,7 +334,7 @@ contract GNRUS {
 
     /// @notice Finalize at gameover: burn all remaining unallocated GNRUS
     /// @dev Only callable by the game contract. Can only be called once.
-    ///      The game contract pushes final ETH/stETH to VAULT, DGNRS, and GNRUS
+    ///      The game contract pushes final ETH/stETH to VAULT, sDGNRS, and GNRUS
     ///      during gameover processing. This function handles the GNRUS-side cleanup
     ///      of burning unallocated tokens.
     function burnAtGameOver() external onlyGame {
@@ -407,8 +407,8 @@ contract GNRUS {
     // =====================================================================
 
     /// @notice Cast an approve or reject vote on a proposal for the current level
-    /// @dev Vote weight equals the voter's sDGNRS balance, except the vault owner
-    ///      (>50.1% DGVE) whose weight is fixed at 5% of the sDGNRS snapshot.
+    /// @dev Vote weight equals the voter's sDGNRS balance. The vault owner
+    ///      (>50.1% DGVE) receives an additional 5% of the sDGNRS snapshot as bonus weight.
     ///      Voters can vote on every proposal independently but only once per proposal per level.
     /// @param proposalId The global proposal ID to vote on
     /// @param approveVote True to approve, false to reject

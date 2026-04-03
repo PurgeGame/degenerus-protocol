@@ -25,7 +25,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 |  |   _paths[24-31] -► Quadrant 3 (Dice):     1-8                                                   | |
 |  |   _paths[32]    -► Affiliate Badge:       Special icon for affiliate trophies                   | |
 |  |                                                                                                  | |
-|  |   _diamond      -► Flame icon:            Center glyph for all token renders                    | |
+|  |   _paths[32]    -► Flame icon:             Center glyph for all token renders                    | |
 |  |                                                                                                  | |
 |  |   _symQ1[0-7]   -► Crypto symbol names:   "Bitcoin", "Ethereum", etc.                           | |
 |  |   _symQ2[0-7]   -► Zodiac symbol names:   "Aries", "Taurus", etc.                               | |

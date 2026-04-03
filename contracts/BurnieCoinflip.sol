@@ -190,7 +190,7 @@ contract BurnieCoinflip {
     }
 
     /// @notice Restricts access to authorized flip creditors.
-    /// @dev Allowed callers: GAME (delegatecall modules), BURNIE, AFFILIATE, ADMIN, QUESTS (level quest rewards).
+    /// @dev Allowed callers: GAME (delegatecall modules), QUESTS (level quest rewards), AFFILIATE, ADMIN.
     modifier onlyFlipCreditors() {
         address sender = msg.sender;
         if (
@@ -889,7 +889,7 @@ contract BurnieCoinflip {
       |                    FLIP CREDITING                                    |
       +======================================================================+*/
 
-    /// @notice Credit flip to a player (called directly by GAME modules, AFFILIATE, or ADMIN).
+    /// @notice Credit flip to a player (called by GAME modules, QUESTS, AFFILIATE, or ADMIN).
     /// @param player The player receiving the flip credit.
     /// @param amount Amount of BURNIE-denominated flip stake to credit.
     function creditFlip(
@@ -900,7 +900,7 @@ contract BurnieCoinflip {
         _addDailyFlip(player, amount, 0, false, false);
     }
 
-    /// @notice Credit flips to multiple players (called directly by GAME modules, AFFILIATE, or ADMIN).
+    /// @notice Credit flips to multiple players (called by GAME modules, QUESTS, AFFILIATE, or ADMIN).
     /// @param players Array of 3 player addresses to credit (address(0) entries are skipped).
     /// @param amounts Array of 3 BURNIE-denominated flip stake amounts (0 entries are skipped).
     function creditFlipBatch(

@@ -11,7 +11,7 @@ pragma solidity 0.8.34;
  *      - gameOver flag is terminal
  *      - Presale is a toggle (lootboxPresaleActive), not a state
  *      - Chainlink VRF for randomness with RNG lock to prevent manipulation
- *      - Delegatecall modules: endgame, jackpot, mint (must inherit DegenerusGameStorage)
+ *      - Delegatecall modules: advance, boon, decimator, degenerette, jackpot, lootbox, mint, whale (must inherit DegenerusGameStorage)
  *      - Prize pool flow: futurePrizePool (unified reserve) → nextPrizePool → currentPrizePool → claimableWinnings
  *
  * @dev CRITICAL INVARIANTS:
@@ -73,7 +73,7 @@ interface IDegenerusVaultOwnerGame {
  * @notice Core game contract implementing the game state machine, VRF integration,
  *         and orchestration of all gameplay mechanics.
  * @dev Inherits DegenerusGameStorage for shared storage layout with delegate modules.
- *      Uses delegatecall pattern for complex logic (endgame, jackpot, mint modules).
+ *      Uses delegatecall pattern for complex logic (8 modules: advance, boon, decimator, degenerette, jackpot, lootbox, mint, whale).
  * @custom:security-contact burnie@degener.us
  */
 contract DegenerusGame is DegenerusGameMintStreakUtils {
@@ -179,7 +179,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [152-153] whaleBundleType  - Bundle type (0=none,1=10,3=100)        |
       |  [154-159] (reserved)       - 6 unused bits                           |
       |  [160-183] mintStreakLast  - Mint streak last completed level (24b)   |
-      |  [184-227] (reserved)      - 44 unused bits                          |
+      |  [184]    hasDeityPass     - Deity pass holder flag (1b)             |
+      |  [185-208] affBonusLevel   - Cached affiliate bonus level (24b)     |
+      |  [209-214] affBonusPoints  - Cached affiliate bonus points (6b)     |
+      |  [215-227] (reserved)      - 13 unused bits                          |
       |  [228-243] unitsAtLevel    - Mints at current level                  |
       |  [244]    (deprecated)     - Previously used for bonus tracking      |
       +======================================================================+*/
@@ -236,7 +239,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • Anyone — bypasses after 30+ min since level start                                   |
       |  • Pass holder (lazy/whale) — bypasses after 15+ min                                   |
       |  • DGVE majority holder — always bypasses (last resort, external call)                 |
-      |  • RNG must be ready (not locked) or recently stale (18h timeout)                      |
+      |  • RNG must be ready (not locked) or recently stale (12h timeout)                      |
       |                                                                                        |
       |  Presale: lootboxPresaleActive toggle (orthogonal to state machine)                    |
       |  • Starts active: 62% bonus BURNIE from loot boxes, bonusFlip active                    |
