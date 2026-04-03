@@ -1,3 +1,11 @@
+# Phase 175 Comment Audit — Plan 03 Findings
+**Contracts:** DegenerusGameLootboxModule, DegenerusGameMintStreakUtils
+**Requirement:** CMT-01
+**Date:** 2026-04-03
+**Total findings this plan:** 1 LOW, 4 INFO
+
+---
+
 ## DegenerusGameLootboxModule
 
 Contract: `contracts/modules/DegenerusGameLootboxModule.sol` (1778 lines)
@@ -99,3 +107,78 @@ Lines 634-638 correctly redirect current-level BURNIE lootbox tickets to far-fut
 
 Line 1040 uses `BitPackingLib.HAS_DEITY_PASS_SHIFT` directly in a shift expression with no adjacent comment. There is no misleading comment to flag. The symbolic name is self-documenting. No findings.
 
+---
+
+## DegenerusGameMintStreakUtils
+
+Contract: `contracts/modules/DegenerusGameMintStreakUtils.sol` (173 lines)
+Swept: full contract, end-to-end
+
+---
+
+### Finding 5
+
+**Severity:** INFO
+**Location:** `DegenerusGameMintStreakUtils.sol` line 7
+
+**Comment says:**
+```
+/// @dev Shared mint streak helpers (credits on completed 1x price ETH quest).
+```
+
+**Code does:**
+The contract contains more than mint streak helpers. It also houses the complete `_playerActivityScore` computation (lines 81-161) — a significant multi-component scoring function covering mint streak, mint count, quest streak, affiliate bonus cache, deity pass bonus, and whale pass bonus. Describing the contract solely as "mint streak helpers" understates its actual scope. A reader expecting to find activity score logic here would need to search to discover it. The parenthetical "(credits on completed 1x price ETH quest)" is also opaque — it is unclear what quest or credit mechanism is being referenced.
+
+---
+
+### Affiliate Bonus Cache Reader (Phase 173) Verification
+
+Lines 136-146 contain the affiliate bonus cache block:
+
+```solidity
+// Affiliate bonus (cached in mintPacked_ on level transitions)
+{
+    uint256 cachedLevel = (packed >> BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT) & BitPackingLib.MASK_24;
+    uint256 affPoints;
+    if (cachedLevel == uint256(currLevel)) {
+        affPoints = (packed >> BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT) & BitPackingLib.MASK_6;
+    } else {
+        affPoints = affiliate.affiliateBonusPointsBest(currLevel, player);
+    }
+    bonusBps += affPoints * 100;
+}
+```
+
+The comment accurately describes the cache: hit when `cachedLevel == currLevel`, miss falls through to the live `affiliateBonusPointsBest` call. The comment does not claim the path always calls the affiliate contract; the fallback live-lookup on miss is explicitly shown in the `else` branch. No finding.
+
+### Activity Score Components Verification
+
+The `_playerActivityScore` function comments accurately describe all components:
+- Mint streak: `// Mint streak: 1% per consecutive level minted, max 50%` — code caps at 50 (`streak > 50 ? 50 : streak`). Accurate.
+- Mint count: `// Mint count bonus: 1% each` — accurate; `_mintCountBonusPoints` returns a count added at 100 bps each.
+- Quest streak: `// Quest streak: 1% per quest streak, max 100%` — code caps at 100 (`questStreak > 100 ? 100 : questStreak`). Accurate.
+- Affiliate bonus: `// Affiliate bonus (cached in mintPacked_ on level transitions)` — accurate (see above).
+No findings.
+
+### _updateMintStreak / _recordMintStreakForLevel Verification
+
+The function name in the contract is `_recordMintStreakForLevel` (not `_updateMintStreak`). The NatSpec at line 16: `/// @dev Record a mint streak completion for a given level (idempotent per level).` is accurate:
+- Idempotency: `if (lastCompleted == mintLevel) return;` at line 23. Correct.
+- Streak increment condition: `lastCompleted != 0 && lastCompleted + 1 == mintLevel` — increment only if previous level was exactly one behind. Correct.
+- Streak reset: else branch sets `newStreak = 1`. Correct.
+No findings.
+
+### Frozen Level Handling Verification
+
+`frozenUntilLevel` is read at lines 95-98 and used at line 102:
+```solidity
+bool passActive = frozenUntilLevel > currLevel &&
+    (bundleType == 1 || bundleType == 3);
+```
+No comment describes the frozen level handling specifically. The `passActive` flag is used to enforce floor values on streak and mint count points (lines 121-127). The inline comment `// Active pass = full participation credit` at line 119 accurately describes the effect. No misleading comment present. No finding.
+
+### General NatSpec Verification
+
+- `_mintStreakEffective` (line 48): `/// @dev Effective mint streak (resets if a level was missed).` — accurate; returns 0 if `currentMintLevel > lastCompleted + 1`. No finding.
+- `_activeTicketLevel` (line 67): `/// @dev Returns the active ticket level for direct ticket purchases.` — accurate; returns `level` during jackpot phase, `level + 1` during purchase phase. No finding.
+- Convenience `_playerActivityScore(player, questStreak)` wrapper (line 163): NatSpec matches the delegation to the three-argument form. No finding.
