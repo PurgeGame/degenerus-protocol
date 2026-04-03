@@ -165,7 +165,7 @@ See individual milestone entries above.
 
 - [ ] **Phase 175: Game Module Comment Sweep** - 5 plans
 - [ ] **Phase 176: Core Game + Token Contract Comment Sweep** - 3 plans
-- [ ] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - TBD plans
+- [ ] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - 4 plans
 - [ ] **Phase 178: Consolidation & Regression Check** - TBD plans
 
 </details>
@@ -198,7 +198,7 @@ Plans:
   3. Any comment that misstates state variable semantics, packed-bit layouts, access control assumptions, or token math is recorded as a LOW or INFO finding with full location reference
 **Plans**: 3 plans
 Plans:
-- [ ] 176-01-PLAN.md — DegenerusGame + DegenerusGameStorage comment sweep (CMT-02)
+- [x] 176-01-PLAN.md — DegenerusGame + DegenerusGameStorage comment sweep (CMT-02)
 - [x] 176-02-PLAN.md — BurnieCoin + BurnieCoinflip comment sweep (CMT-03)
 - [x] 176-03-PLAN.md — DegenerusStonk + StakedDegenerusStonk + GNRUS comment sweep (CMT-03)
 
@@ -211,7 +211,12 @@ Plans:
   2. Every inline comment and NatSpec entry in EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib, and all I* interfaces has been read against the actual code; interface NatSpec is verified to match implementing contract behavior
   3. Every inline comment and NatSpec entry in WrappedWrappedXRP, DegenerusTraitUtils, and Icons32Data has been read against the actual code
   4. Any discrepancy — including interface NatSpec that diverges from implementation — is recorded as a LOW or INFO finding with full location reference
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 177-01-PLAN.md — DegenerusAdmin + DegenerusVault + DegenerusAffiliate + DegenerusDeityPass comment sweep (CMT-04)
+- [ ] 177-02-PLAN.md — DegenerusQuests + DegenerusJackpots + DeityBoonViewer comment sweep (CMT-04)
+- [ ] 177-03-PLAN.md — All 5 libraries + all 11 interfaces comment sweep and implementation cross-check (CMT-05)
+- [ ] 177-04-PLAN.md — WrappedWrappedXRP + DegenerusTraitUtils + Icons32Data comment sweep (CMT-06)
 
 ### Phase 178: Consolidation & Regression Check
 **Goal**: All per-phase findings are merged into one document, severities are assigned, and prior sweep regressions are confirmed absent
@@ -228,8 +233,8 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 175. Game Module Comment Sweep | 5/5 | Complete    | 2026-04-03 |
-| 176. Core Game + Token Comment Sweep | 2/3 | In Progress|  |
-| 177. Infrastructure, Libraries & Misc Comment Sweep | 0/? | Not started | - |
+| 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
+| 177. Infrastructure, Libraries & Misc Comment Sweep | 0/4 | Not started | - |
 | 178. Consolidation & Regression Check | 0/? | Not started | - |
 
 ## Deferred
