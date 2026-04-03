@@ -9,7 +9,7 @@
 - [ ] **CMT-02**: All core game + storage inline comments and NatSpec verified accurate (DegenerusGame, DegenerusGameStorage)
 - [x] **CMT-03**: All token contract inline comments and NatSpec verified accurate (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, GNRUS)
 - [x] **CMT-04**: All infrastructure contract inline comments and NatSpec verified accurate (DegenerusAdmin, DegenerusVault, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DeityBoonViewer)
-- [ ] **CMT-05**: All library and interface comments verified accurate; interface NatSpec matches implementations (EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib + all I* interfaces)
+- [x] **CMT-05**: All library and interface comments verified accurate; interface NatSpec matches implementations (EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib + all I* interfaces)
 - [x] **CMT-06**: All misc contracts verified (WrappedWrappedXRP, DegenerusTraitUtils, Icons32Data)
 
 ## Consolidation
@@ -38,7 +38,7 @@ None deferred.
 | CMT-02 | Phase 176 | Pending |
 | CMT-03 | Phase 176 | Complete |
 | CMT-04 | Phase 177 | Complete |
-| CMT-05 | Phase 177 | Pending |
+| CMT-05 | Phase 177 | Complete |
 | CMT-06 | Phase 177 | Complete |
 | CON-01 | Phase 178 | Pending |
 | CON-02 | Phase 178 | Pending |

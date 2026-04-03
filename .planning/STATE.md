@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 177-04-PLAN.md
-last_updated: "2026-04-03T22:29:20.467Z"
+status: verifying
+stopped_at: Completed 177-01-PLAN.md and 177-03-PLAN.md
+last_updated: "2026-04-03T22:39:10.164Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 7
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 
 Phase: 177 (Infrastructure, Libraries & Misc Comment Sweep) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-03
 
 Progress: 0/4 phases complete [          ] 0%
@@ -71,6 +71,8 @@ Recent decisions affecting current work:
 - [Phase 177-03]: AFF-01 LOW: IDegenerusAffiliate affiliateBonusPointsBest says 1pt/ETH flat but implementation uses tiered rate (4pt/ETH first 5 ETH, 1.5pt/ETH next 20 ETH)
 - [Phase 177-03]: QST-02 LOW: IDegenerusQuests handler @dev says 'Called by game contract' but onlyCoin allows COIN/COINFLIP/GAME/AFFILIATE; primary callers are BurnieCoin/Coinflip/Affiliate
 - [Phase 177-03]: BCF-01 LOW: creditFlip creditors in IBurnieCoinflip name LazyPass/DegenerusGame/BurnieCoin but actual modifier allows GAME/QUESTS/AFFILIATE/ADMIN
+- [Phase 177]: ADM-01 LOW: _applyVote NatSpec claims 3 returns but function returns 2 (newApprove, newReject only)
+- [Phase 177]: VLT-01 LOW: gamePurchaseDeityPassFromBoon NatSpec says msg.value retained but vault sends priceWei out
 
 ### Pending Todos
 
@@ -82,5 +84,5 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T22:29:20.465Z
-Stopped at: Completed 177-04-PLAN.md
+Last session: 2026-04-03T22:39:10.161Z
+Stopped at: Completed 177-01-PLAN.md and 177-03-PLAN.md
