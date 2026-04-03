@@ -68,6 +68,9 @@ Recent decisions affecting current work:
 - [Phase 177-02]: levelQuestGlobal variable name is stale in DegenerusQuests @dev comments (lines 1838, 1894); correct names are levelQuestType + levelQuestVersion
 - [Phase 177-04]: DegenerusTraitUtils has zero comment discrepancies — all bit layout documentation is precisely correct including TRAIT ID STRUCTURE, PACKED TRAITS layout, weighted distribution table, and random seed usage
 - [Phase 177-04]: DegenerusTraitUtils has zero comment discrepancies — all bit layout documentation precisely correct
+- [Phase 177-03]: AFF-01 LOW: IDegenerusAffiliate affiliateBonusPointsBest says 1pt/ETH flat but implementation uses tiered rate (4pt/ETH first 5 ETH, 1.5pt/ETH next 20 ETH)
+- [Phase 177-03]: QST-02 LOW: IDegenerusQuests handler @dev says 'Called by game contract' but onlyCoin allows COIN/COINFLIP/GAME/AFFILIATE; primary callers are BurnieCoin/Coinflip/Affiliate
+- [Phase 177-03]: BCF-01 LOW: creditFlip creditors in IBurnieCoinflip name LazyPass/DegenerusGame/BurnieCoin but actual modifier allows GAME/QUESTS/AFFILIATE/ADMIN
 
 ### Pending Todos
 
