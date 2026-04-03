@@ -166,7 +166,7 @@ See individual milestone entries above.
 - [ ] **Phase 175: Game Module Comment Sweep** - 5 plans
 - [ ] **Phase 176: Core Game + Token Contract Comment Sweep** - 3 plans
 - [ ] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - 4 plans
-- [ ] **Phase 178: Consolidation & Regression Check** - TBD plans
+- [ ] **Phase 178: Consolidation & Regression Check** - 2 plans
 
 </details>
 
@@ -226,7 +226,10 @@ Plans:
   1. A single findings document exists containing all LOW/INFO findings from Phases 175-177, deduplicated and formatted consistently (matching v3.1/v3.5 format)
   2. Every finding has a severity (LOW or INFO), a contract and line reference, and a description of what the comment says versus what the code does
   3. Every finding from the v3.1 and v3.5 sweeps that was marked fixed has been spot-checked against the current contract source; any regression is added as a new finding
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [x] 178-01-PLAN.md — Merge all Phase 175-177 findings into consolidated document
+- [ ] 178-02-PLAN.md — Spot-check v3.1/v3.5 fixed findings for regressions
 
 ## Progress Table
 
@@ -234,8 +237,8 @@ Plans:
 |-------|----------------|--------|-----------|
 | 175. Game Module Comment Sweep | 5/5 | Complete    | 2026-04-03 |
 | 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
-| 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete   | 2026-04-03 |
-| 178. Consolidation & Regression Check | 0/? | Not started | - |
+| 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
+| 178. Consolidation & Regression Check | 1/2 | In Progress|  |
 
 ## Deferred
 

@@ -14,7 +14,7 @@
 
 ## Consolidation
 
-- [ ] **CON-01**: Findings consolidated into single document with LOW/INFO severities
+- [x] **CON-01**: Findings consolidated into single document with LOW/INFO severities
 - [ ] **CON-02**: v3.1/v3.5 prior findings verified still fixed (no regressions)
 
 ## Future Requirements
@@ -40,7 +40,7 @@ None deferred.
 | CMT-04 | Phase 177 | Complete |
 | CMT-05 | Phase 177 | Complete |
 | CMT-06 | Phase 177 | Complete |
-| CON-01 | Phase 178 | Pending |
+| CON-01 | Phase 178 | Complete |
 | CON-02 | Phase 178 | Pending |
 
 **Coverage:**
