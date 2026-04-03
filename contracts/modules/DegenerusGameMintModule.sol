@@ -45,7 +45,12 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * Bits 104-127: unitsLevel         - Level index for levelUnits tracking
  * Bits 128-151: frozenUntilLevel   - Whale bundle: freeze stats until this level (0 = not frozen)
  * Bits 152-153: whaleBundleType    - Active bundle type (0=none, 1=10-lvl, 3=100-lvl) [Activity Score]
- * Bits 154-227: (reserved)         - Future use
+ * Bits 154-159: (unused)
+ * Bits 160-183: mintStreakLast      - Last level credited for mint streak
+ * Bit  184:     hasDeityPass        - Deity pass flag
+ * Bits 185-208: affBonusLevel       - Cached affiliate bonus level
+ * Bits 209-214: affBonusPoints      - Cached affiliate bonus points (0-50)
+ * Bits 215-227: (unused)
  * Bits 228-243: levelUnits         - Units minted this level
  * Bit 244:      (deprecated)       - Previously used for bonus tracking
  * ```
@@ -268,6 +273,13 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_UNITS_SHIFT, BitPackingLib.MASK_16, levelUnitsAfter);
         data = BitPackingLib.setPacked(data, BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT, BitPackingLib.MASK_24, lvl);
         // Frozen flag is already set in data if it was modified above
+
+        // Cache affiliate bonus for activity score (piggybacks on existing SSTORE)
+        {
+            uint256 affPoints = affiliate.affiliateBonusPointsBest(lvl, player);
+            data = BitPackingLib.setPacked(data, BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT, BitPackingLib.MASK_24, lvl);
+            data = BitPackingLib.setPacked(data, BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT, BitPackingLib.MASK_6, affPoints);
+        }
 
         // ---------------------------------------------------------------------
         // Commit to storage (only if changed)
