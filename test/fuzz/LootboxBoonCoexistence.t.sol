@@ -46,6 +46,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
     }
 
     // ──────────────────────────────────────────────────────────────────────

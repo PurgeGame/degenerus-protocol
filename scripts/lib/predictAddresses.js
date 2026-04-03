@@ -9,11 +9,11 @@ const JACKPOT_RESET_TIME = 82620n;
  * must appear AFTER their dependencies.
  *
  * Constraints:
- *  - COIN (N+11) before VAULT (N+19): vault reads vaultMintAllowance()
- *  - GAME (N+13) + modules (N+1..10) before SDGNRS (N+20): stonk calls claimWhalePass/setAfKingMode
- *  - SDGNRS (N+20) before DGNRS (N+21): DGNRS reads SDGNRS balance
- *  - GAME (N+13) before ADMIN (N+22): admin calls wireVrf()
- *  - GNRUS (N+23) last: no constructor cross-calls, reads compile-time constants only
+ *  - COIN (N+10) before VAULT (N+18): vault reads vaultMintAllowance()
+ *  - GAME (N+12) + modules (N+1..9) before SDGNRS (N+19): stonk calls claimWhalePass/setAfKingMode
+ *  - SDGNRS (N+19) before DGNRS (N+20): DGNRS reads SDGNRS balance
+ *  - GAME (N+12) before ADMIN (N+21): admin calls wireVrf()
+ *  - GNRUS (N+22) last: no constructor cross-calls, reads compile-time constants only
  */
 export const DEPLOY_ORDER = [
   "ICONS_32",              // N+0:  Icons32Data
@@ -22,24 +22,23 @@ export const DEPLOY_ORDER = [
   "GAME_WHALE_MODULE",     // N+3:  DegenerusGameWhaleModule
   "GAME_JACKPOT_MODULE",   // N+4:  DegenerusGameJackpotModule
   "GAME_DECIMATOR_MODULE", // N+5:  DegenerusGameDecimatorModule
-  "GAME_ENDGAME_MODULE",   // N+6:  DegenerusGameEndgameModule
-  "GAME_GAMEOVER_MODULE",  // N+7:  DegenerusGameGameOverModule
-  "GAME_LOOTBOX_MODULE",   // N+8:  DegenerusGameLootboxModule
-  "GAME_BOON_MODULE",      // N+9:  DegenerusGameBoonModule
-  "GAME_DEGENERETTE_MODULE", // N+10: DegenerusGameDegeneretteModule
-  "COIN",                  // N+11: BurnieCoin
-  "COINFLIP",              // N+12: BurnieCoinflip (no constructor args)
-  "GAME",                  // N+13: DegenerusGame (internal storage only)
-  "WWXRP",                 // N+14: WrappedWrappedXRP
-  "AFFILIATE",             // N+15: DegenerusAffiliate
-  "JACKPOTS",              // N+16: DegenerusJackpots
-  "QUESTS",                // N+17: DegenerusQuests
-  "DEITY_PASS",            // N+18: DegenerusDeityPass
-  "VAULT",                 // N+19: DegenerusVault (calls COIN)
-  "SDGNRS",                // N+20: StakedDegenerusStonk (calls GAME, mints to DGNRS)
-  "DGNRS",                 // N+21: DegenerusStonk (reads SDGNRS balance)
-  "ADMIN",                 // N+22: DegenerusAdmin (calls VRF + GAME)
-  "GNRUS",                 // N+23: GNRUS (self-mint only, no cross-calls)
+  "GAME_GAMEOVER_MODULE",  // N+6:  DegenerusGameGameOverModule
+  "GAME_LOOTBOX_MODULE",   // N+7:  DegenerusGameLootboxModule
+  "GAME_BOON_MODULE",      // N+8:  DegenerusGameBoonModule
+  "GAME_DEGENERETTE_MODULE", // N+9:  DegenerusGameDegeneretteModule
+  "COIN",                  // N+10: BurnieCoin
+  "COINFLIP",              // N+11: BurnieCoinflip (no constructor args)
+  "GAME",                  // N+12: DegenerusGame (internal storage only)
+  "WWXRP",                 // N+13: WrappedWrappedXRP
+  "AFFILIATE",             // N+14: DegenerusAffiliate
+  "JACKPOTS",              // N+15: DegenerusJackpots
+  "QUESTS",                // N+16: DegenerusQuests
+  "DEITY_PASS",            // N+17: DegenerusDeityPass
+  "VAULT",                 // N+18: DegenerusVault (calls COIN)
+  "SDGNRS",                // N+19: StakedDegenerusStonk (calls GAME, mints to DGNRS)
+  "DGNRS",                 // N+20: DegenerusStonk (reads SDGNRS balance)
+  "ADMIN",                 // N+21: DegenerusAdmin (calls VRF + GAME)
+  "GNRUS",                 // N+22: GNRUS (self-mint only, no cross-calls)
 ];
 
 /**
@@ -52,7 +51,6 @@ export const KEY_TO_CONTRACT = {
   GAME_WHALE_MODULE: "DegenerusGameWhaleModule",
   GAME_JACKPOT_MODULE: "DegenerusGameJackpotModule",
   GAME_DECIMATOR_MODULE: "DegenerusGameDecimatorModule",
-  GAME_ENDGAME_MODULE: "DegenerusGameEndgameModule",
   GAME_GAMEOVER_MODULE: "DegenerusGameGameOverModule",
   GAME_LOOTBOX_MODULE: "DegenerusGameLootboxModule",
   GAME_BOON_MODULE: "DegenerusGameBoonModule",

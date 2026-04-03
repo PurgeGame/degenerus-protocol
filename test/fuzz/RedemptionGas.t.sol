@@ -16,6 +16,7 @@ contract RedemptionGasTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         // Create a test player distinct from any protocol address
         player = makeAddr("gasPlayer");

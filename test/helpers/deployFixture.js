@@ -135,7 +135,6 @@ export async function deployFullProtocol() {
     whaleModule: contracts.GAME_WHALE_MODULE,
     jackpotModule: contracts.GAME_JACKPOT_MODULE,
     decimatorModule: contracts.GAME_DECIMATOR_MODULE,
-    endgameModule: contracts.GAME_ENDGAME_MODULE,
     gameOverModule: contracts.GAME_GAMEOVER_MODULE,
     lootboxModule: contracts.GAME_LOOTBOX_MODULE,
     boonModule: contracts.GAME_BOON_MODULE,

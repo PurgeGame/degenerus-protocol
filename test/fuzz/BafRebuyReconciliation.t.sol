@@ -42,6 +42,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         // Create and fund buyer
         buyer = makeAddr("baf_rebuy_buyer");

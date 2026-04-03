@@ -26,6 +26,7 @@ contract VaultShareMathInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         // Game handler drives purchases (ETH flows into protocol, eventually to vault via jackpots)
         gameHandler = new GameHandler(game, 10);

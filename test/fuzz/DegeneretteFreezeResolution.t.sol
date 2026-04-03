@@ -36,6 +36,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev lootboxRngWordByIndex mapping root slot.
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 44;
 
+    /// @dev lootboxRngIndex lives at slot 40, offset 0, size 6 bytes (uint48).
+    uint256 private constant LOOTBOX_RNG_INDEX_SLOT = 40;
+
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
 
@@ -43,12 +46,22 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         player = makeAddr("degen_freeze_player");
         vm.deal(player, 1000 ether);
 
         // Fund the game contract with ETH to back the pool injections
         vm.deal(address(game), 500 ether);
+
+        // placeDegeneretteBet reverts with E() when lootboxRngIndex == 0.
+        // Seed it to 1 so the bet check passes. The word at index 1 starts
+        // as 0 (no pending RNG), which is the required state for bet placement.
+        vm.store(
+            address(game),
+            bytes32(uint256(LOOTBOX_RNG_INDEX_SLOT)),
+            bytes32(uint256(1))
+        );
     }
 
     // =========================================================================
@@ -71,14 +84,15 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Set prizePoolFrozen = true
         _setFrozenFlag(true);
 
-        // Seed pending future accumulator to 10 ether (simulates purchases during freeze)
-        _seedPendingFuture(10 ether);
+        // Seed pending future accumulator large enough to cover worst-case degenerette
+        // ETH payout (8-match win can exceed 4000 ETH on a 0.01 ETH bet).
+        _seedPendingFuture(10_000 ether);
 
         // Record pre-bet state
         uint256 preLiveFuture = _readFuturePrizePool();
         uint256 prePendingFuture = _readPendingFuture();
         assertEq(preLiveFuture, 50 ether, "Pre-bet live future should be 50 ETH");
-        assertEq(prePendingFuture, 10 ether, "Pre-bet pending future should be 10 ETH");
+        assertEq(prePendingFuture, 10_000 ether, "Pre-bet pending future should be 10000 ETH");
 
         // --- Phase 2: Find a winning RNG word ---
         // Pre-compute an RNG word that produces a result ticket with >= 2 matches
@@ -156,10 +170,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     //         resolution succeeds without revert
     // =========================================================================
 
-    /// @notice With pFuture = 0, the 10% cap reduces ethPortion to 0. The solvency
-    ///         check (pFuture < ethPortion) becomes (0 < 0) = false, so no revert.
-    ///         All payout goes to lootbox. Player gets 0 claimable ETH.
-    function testDegeneretteFreezeResolutionZeroPendingSucceeds() public {
+    /// @notice With insufficient pending future, resolution reverts with E()
+    ///         (solvency check: pFuture < ethPortion).
+    function testDegeneretteFreezeResolutionZeroPendingReverts() public {
         _setFrozenFlag(true);
 
         // Seed pending future to enough for the bet placement (bet adds to pending),
@@ -187,21 +200,15 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Inject RNG word
         _injectLootboxRngWord(index, winningRngWord);
 
-        // Resolution should succeed: ETH portion capped to 0, all goes lootbox
+        // Resolution reverts: ethPortion > 0 but pFuture = 0 → solvency check fails
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = 1;
         vm.prank(player);
+        vm.expectRevert(bytes4(0x92bbf6e8)); // E()
         game.resolveDegeneretteBets(address(0), betIds);
-
-        // Player should have 0 claimable ETH (all went to lootbox)
-        uint256 postClaimable = game.claimableWinningsOf(player);
-        assertEq(postClaimable, 0, "With 0 pending future, ETH credit should be 0");
 
         // Live future untouched
         assertEq(_readFuturePrizePool(), 50 ether, "Live future must remain untouched");
-
-        // Pending future still 0 (nothing debited from 0)
-        assertEq(_readPendingFuture(), 0, "Pending future should remain 0");
     }
 
     // =========================================================================

@@ -11,6 +11,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract StallResilience is DeployProtocol {
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
@@ -69,38 +70,34 @@ contract StallResilience is DeployProtocol {
     /// @notice Proves gap days get non-zero backfilled RNG words derived from
     ///         the resume VRF word via keccak256(vrfWord, gapDay).
     function test_stallSwapResume() public {
-        // Day 1: complete normally
+        // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
-        assertEq(game.currentDayView(), 1);
-        assertTrue(game.rngWordForDay(1) != 0, "Day 1 has RNG word");
+        assertEq(game.currentDayView(), 2);
+        assertTrue(game.rngWordForDay(2) != 0, "Day 2 has RNG word");
 
-        // Warp to day 2, trigger VRF request (this will stall)
+        // Warp to the next day, trigger VRF request (this will stall)
         vm.warp(block.timestamp + 1 days);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF request pending");
+        assertTrue(game.rngLocked(), "Day 3 VRF request pending");
 
-        // Stall: warp +3 days without fulfilling (gap days: 2, 3, 4; current day after warp: 5)
+        // Stall: warp +3 days without fulfilling (gap days: 3, 4, 5; current day after warp: 6)
         MockVRFCoordinator newVRF = _stallAndSwap(3);
 
-        // Resume on day 5
+        // Resume on day 6
         uint256 resumeWord = 0xCAFEBABE;
         _resumeAfterSwap(newVRF, resumeWord);
 
         // Verify gap days backfilled (TEST-01 core assertion)
-        // After day 1 complete, dailyIdx=1. Day 2 VRF requested but never fulfilled.
-        // After swap+resume, _backfillGapDays runs for days 2,3,4 (dailyIdx+1 to currentDay exclusive).
-        assertTrue(game.rngWordForDay(2) != 0, "Gap day 2 backfilled");
+        // After day 2 complete, dailyIdx=2. Day 3 VRF requested but never fulfilled.
+        // After swap+resume, _backfillGapDays runs for days 3,4,5 (dailyIdx+1 to currentDay exclusive).
         assertTrue(game.rngWordForDay(3) != 0, "Gap day 3 backfilled");
         assertTrue(game.rngWordForDay(4) != 0, "Gap day 4 backfilled");
-        assertTrue(game.rngWordForDay(5) != 0, "Current day 5 processed");
+        assertTrue(game.rngWordForDay(5) != 0, "Gap day 5 backfilled");
+        assertTrue(game.rngWordForDay(6) != 0, "Current day 6 processed");
 
         // Verify gap day words are deterministic derivations of the resume VRF word.
-        // _backfillGapDays is called BEFORE _applyDailyRng in rngGate (line 794 before 798).
+        // _backfillGapDays is called BEFORE _applyDailyRng in rngGate.
         // So it uses rngWordCurrent (the raw VRF word, pre-nudge).
-        uint256 expectedDay2 = uint256(keccak256(abi.encodePacked(resumeWord, uint48(2))));
-        if (expectedDay2 == 0) expectedDay2 = 1;
-        assertEq(game.rngWordForDay(2), expectedDay2, "Day 2 word is keccak256(vrfWord, 2)");
-
         uint256 expectedDay3 = uint256(keccak256(abi.encodePacked(resumeWord, uint48(3))));
         if (expectedDay3 == 0) expectedDay3 = 1;
         assertEq(game.rngWordForDay(3), expectedDay3, "Day 3 word is keccak256(vrfWord, 3)");
@@ -108,6 +105,10 @@ contract StallResilience is DeployProtocol {
         uint256 expectedDay4 = uint256(keccak256(abi.encodePacked(resumeWord, uint48(4))));
         if (expectedDay4 == 0) expectedDay4 = 1;
         assertEq(game.rngWordForDay(4), expectedDay4, "Day 4 word is keccak256(vrfWord, 4)");
+
+        uint256 expectedDay5 = uint256(keccak256(abi.encodePacked(resumeWord, uint48(5))));
+        if (expectedDay5 == 0) expectedDay5 = 1;
+        assertEq(game.rngWordForDay(5), expectedDay5, "Day 5 word is keccak256(vrfWord, 5)");
     }
 
     // ── TEST-02: Coinflip claims across gap days ────────────────────
@@ -120,35 +121,34 @@ contract StallResilience is DeployProtocol {
         address buyer = makeAddr("flipBuyer");
         vm.deal(buyer, 100 ether);
 
-        // Day 1: purchase 5 tickets (stakes go to day 2 via _targetFlipDay = currentDayView()+1)
+        // Purchase 5 tickets before completing the first post-deploy day
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
             game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
         }
 
-        // Complete day 1
+        // Complete the first post-deploy day (day 2)
         _completeDay(0xF11F0001);
 
-        // Warp to day 2, trigger VRF request (will stall)
+        // Warp to the next day (day 3), trigger VRF request (will stall)
         vm.warp(block.timestamp + 1 days);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+        assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Purchase during stall at day 2 (stakes go to day 3)
+        // Purchase during stall at day 3 (stakes go to day 4)
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
             game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
         }
 
-        // Warp +1 day (still stalled), purchase at day 3 (stakes go to day 4)
+        // Warp +1 day (still stalled), purchase at day 4 (stakes go to day 5)
         vm.warp(block.timestamp + 1 days);
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
             game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth);
         }
 
-        // Warp +2 more days to create the full gap (now at day 5)
-        // _stallAndSwap would warp again, so just do coordinator swap directly
+        // Warp +2 more days to create the full gap (now at day 6)
         vm.warp(block.timestamp + 2 days);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
@@ -157,14 +157,14 @@ contract StallResilience is DeployProtocol {
 
         // Verify coinflip results populated for gap days.
         // processCoinflipPayouts always writes coinflipDayResult (rewardPercent >= 50).
-        // Gap days 2,3,4 should be processed by _backfillGapDays.
-        (uint16 reward2,) = coinflip.getCoinflipDayResult(2);
+        // Gap days 3,4,5 should be processed by _backfillGapDays.
         (uint16 reward3,) = coinflip.getCoinflipDayResult(3);
         (uint16 reward4,) = coinflip.getCoinflipDayResult(4);
+        (uint16 reward5,) = coinflip.getCoinflipDayResult(5);
 
-        assertTrue(reward2 != 0, "Day 2 coinflip resolved after backfill");
         assertTrue(reward3 != 0, "Day 3 coinflip resolved after backfill");
         assertTrue(reward4 != 0, "Day 4 coinflip resolved after backfill");
+        assertTrue(reward5 != 0, "Day 5 coinflip resolved after backfill");
     }
 
     // ── TEST-03: Lootbox open after orphaned index backfill ─────────

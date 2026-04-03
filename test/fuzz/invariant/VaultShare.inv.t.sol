@@ -18,6 +18,7 @@ contract VaultShareInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         gameHandler = new GameHandler(game, 10);
         vrfHandler = new VRFHandler(mockVRF, game);

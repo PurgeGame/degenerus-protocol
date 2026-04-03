@@ -37,7 +37,7 @@ import {MockWXRP} from "../../../contracts/mocks/MockWXRP.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 5 mocks + 24 protocol contracts in setUp().
+/// @notice Deploys all 5 mocks + 23 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 /// @dev Address correctness depends on patchForFoundry.js having patched
 ///      ContractAddresses.sol before forge build.
@@ -56,7 +56,6 @@ abstract contract DeployProtocol is Test {
     DegenerusGameWhaleModule public whaleModule;
     DegenerusGameJackpotModule public jackpotModule;
     DegenerusGameDecimatorModule public decimatorModule;
-    address public endgameModuleSlot; // Nonce placeholder — EndgameModule deleted in Phase 171
     DegenerusGameGameOverModule public gameOverModule;
     DegenerusGameLootboxModule public lootboxModule;
     DegenerusGameBoonModule public boonModule;
@@ -82,7 +81,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 5 mocks (nonces 1-5) ---
-        // Then 24 protocol contracts (nonces 6-29) ---
+        // Then 23 protocol contracts (nonces 6-28) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -97,18 +96,17 @@ abstract contract DeployProtocol is Test {
         whaleModule = new DegenerusGameWhaleModule();  // N+3 = nonce 9
         jackpotModule = new DegenerusGameJackpotModule(); // N+4 = nonce 10
         decimatorModule = new DegenerusGameDecimatorModule(); // N+5 = nonce 11
-        endgameModuleSlot = address(new NonceBurner()); // N+6 = nonce 12 (EndgameModule deleted)
-        gameOverModule = new DegenerusGameGameOverModule(); // N+7 = nonce 13
-        lootboxModule = new DegenerusGameLootboxModule(); // N+8 = nonce 14
-        boonModule = new DegenerusGameBoonModule();    // N+9 = nonce 15
-        degeneretteModule = new DegenerusGameDegeneretteModule(); // N+10 = nonce 16
+        gameOverModule = new DegenerusGameGameOverModule(); // N+6 = nonce 12
+        lootboxModule = new DegenerusGameLootboxModule(); // N+7 = nonce 13
+        boonModule = new DegenerusGameBoonModule();    // N+8 = nonce 14
+        degeneretteModule = new DegenerusGameDegeneretteModule(); // N+9 = nonce 15
 
-        coin = new BurnieCoin();                       // N+11 = nonce 17
+        coin = new BurnieCoin();                       // N+10 = nonce 16
 
-        coinflip = new BurnieCoinflip();                // N+12 = nonce 18
+        coinflip = new BurnieCoinflip();                // N+11 = nonce 17
 
-        game = new DegenerusGame();                    // N+13 = nonce 19
-        wwxrp = new WrappedWrappedXRP();               // N+14 = nonce 20
+        game = new DegenerusGame();                    // N+12 = nonce 18
+        wwxrp = new WrappedWrappedXRP();               // N+13 = nonce 19
 
         // DegenerusAffiliate needs empty arrays
         affiliate = new DegenerusAffiliate(
@@ -117,30 +115,26 @@ abstract contract DeployProtocol is Test {
             new uint8[](0),
             new address[](0),
             new bytes32[](0)
-        );                                             // N+15 = nonce 21
+        );                                             // N+14 = nonce 20
 
-        jackpots = new DegenerusJackpots();            // N+16 = nonce 22
-        quests = new DegenerusQuests();                // N+17 = nonce 23
-        deityPass = new DegenerusDeityPass();          // N+18 = nonce 24
+        jackpots = new DegenerusJackpots();            // N+15 = nonce 21
+        quests = new DegenerusQuests();                // N+16 = nonce 22
+        deityPass = new DegenerusDeityPass();          // N+17 = nonce 23
 
         // Vault constructor calls COIN.vaultMintAllowance()
-        vault = new DegenerusVault();                  // N+19 = nonce 25
+        vault = new DegenerusVault();                  // N+18 = nonce 24
 
         // Stonk constructor calls GAME.claimWhalePass() + GAME.setAfKingMode()
         // Mints creator's 20% to DGNRS address
-        sdgnrs = new StakedDegenerusStonk();           // N+20 = nonce 26
+        sdgnrs = new StakedDegenerusStonk();           // N+19 = nonce 25
 
         // DGNRS reads its sDGNRS balance and mints DGNRS to CREATOR
-        dgnrs = new DegenerusStonk();                  // N+21 = nonce 27
+        dgnrs = new DegenerusStonk();                  // N+20 = nonce 26
 
         // Admin constructor calls VRF.createSubscription() + GAME.wireVrf()
-        admin = new DegenerusAdmin();                  // N+22 = nonce 28
+        admin = new DegenerusAdmin();                  // N+21 = nonce 27
 
         // GNRUS: self-mints 1T to address(this), no cross-contract constructor calls
-        gnrus = new GNRUS();                            // N+23 = nonce 29
+        gnrus = new GNRUS();                            // N+22 = nonce 28
     }
 }
-
-/// @dev Minimal contract deployed solely to consume a CREATE nonce.
-///      Preserves nonce ordering after EndgameModule deletion.
-contract NonceBurner {}

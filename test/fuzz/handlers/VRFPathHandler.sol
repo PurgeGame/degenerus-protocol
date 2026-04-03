@@ -152,7 +152,9 @@ contract VRFPathHandler is Test {
                 // The current day (dayAfter) is processed normally, not a gap day.
                 if (dayAfter > ghost_dayBeforeSwap + 1) {
                     uint48 gapStart = ghost_dayBeforeSwap + 1;
+                    // Contract caps backfill at 120 gap days
                     uint48 gapEnd = dayAfter;
+                    if (gapEnd - gapStart > 120) gapEnd = gapStart + 120;
                     for (uint48 d = gapStart; d < gapEnd; d++) {
                         if (game.rngWordForDay(d) == 0) {
                             ghost_gapBackfillFailures++;

@@ -24,6 +24,7 @@ contract VRFPathCoverage is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -103,27 +104,27 @@ contract VRFPathCoverage is DeployProtocol {
     function test_gapBackfillSingleDay_fuzz(uint256 vrfWord) public {
         vrfWord = bound(vrfWord, 1, type(uint256).max);
 
-        // Day 1 (ts=86400): complete normally with fixed word
+        // Complete the first post-deploy day normally with fixed word
         _completeDay(0xDEAD0001);
 
-        // Warp to day 2, trigger VRF request (will stall)
-        vm.warp(2 * 86400);
+        // Warp to the next day, trigger VRF request (will stall)
+        vm.warp(3 * 86400);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+        assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Stall: warp to day 4 (absolute), swap coordinator
-        vm.warp(4 * 86400);
+        // Stall: warp to day 5 (absolute), swap coordinator
+        vm.warp(5 * 86400);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
         // Resume with fuzzed word on new coordinator
         _resumeAfterSwap(newVRF, vrfWord);
 
-        // Gap days 2 and 3 should be backfilled
-        assertTrue(game.rngWordForDay(2) != 0, "Gap day 2 must be backfilled");
+        // Gap days 3 and 4 should be backfilled
         assertTrue(game.rngWordForDay(3) != 0, "Gap day 3 must be backfilled");
+        assertTrue(game.rngWordForDay(4) != 0, "Gap day 4 must be backfilled");
 
-        // Current day view should be at least 4
-        assertTrue(game.currentDayView() >= 4, "Current day must be at least 4");
+        // Current day view should be at least 5
+        assertTrue(game.currentDayView() >= 5, "Current day must be at least 5");
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -136,29 +137,30 @@ contract VRFPathCoverage is DeployProtocol {
         vrfWord = bound(vrfWord, 1, type(uint256).max);
         rawGapDays = uint8(bound(rawGapDays, 3, 30));
 
-        // Day 1 (ts=86400): complete normally with fixed word
+        // Complete the first post-deploy day normally with fixed word
         _completeDay(0xDEAD0001);
 
-        // Warp to day 2, trigger VRF request (will stall)
-        vm.warp(2 * 86400);
+        // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
+        vm.warp(3 * 86400);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+        assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Stall: warp to day (2 + rawGapDays), swap coordinator
-        uint256 resumeDay = uint256(rawGapDays) + 2;
+        // Stall: warp to day (3 + rawGapDays), swap coordinator
+        uint256 stallDay = 3;
+        uint256 resumeDay = stallDay + uint256(rawGapDays);
         vm.warp(resumeDay * 86400);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
         // Resume with fuzzed word
         _resumeAfterSwap(newVRF, vrfWord);
 
-        // Collect and verify all gap day words (from day 2 to resumeDay-1)
-        uint256 gapCount = resumeDay - 2;
+        // Collect and verify all gap day words (from stallDay to resumeDay-1)
+        uint256 gapCount = resumeDay - stallDay;
         uint256[] memory words = new uint256[](gapCount);
-        for (uint256 d = 2; d < resumeDay; d++) {
+        for (uint256 d = stallDay; d < resumeDay; d++) {
             uint256 w = game.rngWordForDay(uint48(d));
             assertTrue(w != 0, "Gap day word must be nonzero");
-            words[d - 2] = w;
+            words[d - stallDay] = w;
         }
 
         // Assert all gap day words are unique (pairwise comparison)
@@ -178,16 +180,16 @@ contract VRFPathCoverage is DeployProtocol {
     function test_gapBackfillMaxGap_fuzz(uint256 vrfWord) public {
         vrfWord = bound(vrfWord, 1, type(uint256).max);
 
-        // Day 1 (ts=86400): complete normally with fixed word
+        // Complete the first post-deploy day normally with fixed word
         _completeDay(0xDEAD0001);
 
-        // Warp to day 2, trigger VRF request (will stall)
-        vm.warp(2 * 86400);
+        // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
+        vm.warp(3 * 86400);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+        assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Stall: warp to day 122 (120-day gap = death clock maximum)
-        vm.warp(122 * 86400);
+        // Stall: warp to day 123 (120-day gap = death clock maximum)
+        vm.warp(123 * 86400);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
         // Measure gas for the resume cycle (includes gap backfill)
@@ -198,8 +200,8 @@ contract VRFPathCoverage is DeployProtocol {
         // Gas ceiling: 25M (from STALL-03)
         assertTrue(gasUsed < 25_000_000, "120-day gap backfill must use < 25M gas");
 
-        // Verify all 120 gap days (2..121) have nonzero words
-        for (uint48 d = 2; d <= 121; d++) {
+        // Verify all 120 gap days (3..122) have nonzero words
+        for (uint48 d = 3; d <= 122; d++) {
             assertTrue(
                 game.rngWordForDay(d) != 0,
                 "120-day gap: all gap days must have nonzero words"
@@ -216,11 +218,11 @@ contract VRFPathCoverage is DeployProtocol {
     function test_gapBackfillWithMidDayPending_fuzz(uint256 vrfWord) public {
         vrfWord = bound(vrfWord, 1, type(uint256).max);
 
-        // Day 1 (ts=86400): complete normally
+        // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
 
-        // Warp to day 2, complete it so we have a daily word for mid-day request
-        vm.warp(2 * 86400);
+        // Warp to day 3, complete it so we have a daily word for mid-day request
+        vm.warp(3 * 86400);
         _completeDay(0xDEAD0002);
 
         // Make a purchase with lootbox amount (triggers lootbox RNG state)
@@ -241,8 +243,8 @@ contract VRFPathCoverage is DeployProtocol {
         // Record lootboxRngIndex before stall
         uint48 indexBeforeStall = _lootboxRngIndex();
 
-        // Stall: warp to day 7 (absolute)
-        vm.warp(7 * 86400);
+        // Stall: warp to day 8 (absolute)
+        vm.warp(8 * 86400);
 
         // Coordinator swap (should clear midDayTicketRngPending)
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
@@ -250,8 +252,8 @@ contract VRFPathCoverage is DeployProtocol {
         // Resume with fuzzed vrfWord
         _resumeAfterSwap(newVRF, vrfWord);
 
-        // Verify gap days have nonzero words (days 3..6 are the gap)
-        for (uint48 d = 3; d <= 6; d++) {
+        // Verify gap days have nonzero words (days 4..7 are the gap)
+        for (uint48 d = 4; d <= 7; d++) {
             assertTrue(
                 game.rngWordForDay(d) != 0,
                 "Gap day must have nonzero word after mid-day stall recovery"
@@ -275,27 +277,27 @@ contract VRFPathCoverage is DeployProtocol {
     function test_gapBackfillEntropyUnique_fuzz(uint256 vrfWord) public {
         vrfWord = bound(vrfWord, 1, type(uint256).max);
 
-        // Day 1 (ts=86400): complete normally with fixed word
+        // Complete the first post-deploy day normally with fixed word
         _completeDay(0xDEAD0001);
 
-        // Warp to day 2, trigger VRF request (will stall)
-        vm.warp(2 * 86400);
+        // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
+        vm.warp(3 * 86400);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+        assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Stall: warp to day 12 (10-day gap)
-        vm.warp(12 * 86400);
+        // Stall: warp to day 13 (10-day gap)
+        vm.warp(13 * 86400);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
         // Resume with fuzzed word
         _resumeAfterSwap(newVRF, vrfWord);
 
-        // Collect all gap day words (days 2..11)
+        // Collect all gap day words (days 3..12)
         uint256[10] memory words;
-        for (uint48 d = 2; d <= 11; d++) {
+        for (uint48 d = 3; d <= 12; d++) {
             uint256 w = game.rngWordForDay(d);
             assertTrue(w != 0, "Gap day word must be nonzero");
-            words[d - 2] = w;
+            words[d - 3] = w;
         }
 
         // Assert every pair of words is distinct
@@ -321,33 +323,33 @@ contract VRFPathCoverage is DeployProtocol {
         // Record initial index
         uint48 initialIndex = _lootboxRngIndex();
 
-        // Day 1 (ts=86400): complete normally with fixed word
+        // Complete the first post-deploy day normally with fixed word
         _completeDay(0xDEAD0001);
-        uint48 indexAfterDay1 = _lootboxRngIndex();
+        uint48 indexAfterFirstDay = _lootboxRngIndex();
         assertEq(
-            indexAfterDay1,
+            indexAfterFirstDay,
             initialIndex + 1,
-            "Day 1: index should increment by exactly 1"
+            "First day: index should increment by exactly 1"
         );
 
-        // Warp to day 2, trigger VRF request (will stall)
-        vm.warp(2 * 86400);
+        // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
+        vm.warp(3 * 86400);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF pending");
-        uint48 indexAfterDay2Request = _lootboxRngIndex();
+        assertTrue(game.rngLocked(), "Day 3 VRF pending");
+        uint48 indexAfterDay3Request = _lootboxRngIndex();
 
         // Index must have increased (fresh daily request increments it)
         assertTrue(
-            indexAfterDay2Request >= indexAfterDay1,
-            "Day 2 request: index must not decrease"
+            indexAfterDay3Request >= indexAfterFirstDay,
+            "Day 3 request: index must not decrease"
         );
 
         // Coordinator swap (should NOT change index)
-        vm.warp(5 * 86400);
+        vm.warp(6 * 86400);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
         assertEq(
             _lootboxRngIndex(),
-            indexAfterDay2Request,
+            indexAfterDay3Request,
             "Coordinator swap must not change lootboxRngIndex"
         );
 
@@ -355,16 +357,16 @@ contract VRFPathCoverage is DeployProtocol {
         _resumeAfterSwap(newVRF, vrfWord);
         uint48 finalIndex = _lootboxRngIndex();
 
-        // Final index must be >= day 2 request index (monotonic)
+        // Final index must be >= day 3 request index (monotonic)
         assertTrue(
-            finalIndex >= indexAfterDay2Request,
-            "Final index must be >= index after day 2 request (monotonic)"
+            finalIndex >= indexAfterDay3Request,
+            "Final index must be >= index after day 3 request (monotonic)"
         );
 
-        // Verify lootbox word at the initial index (day 1 slot) is nonzero
+        // Verify lootbox word at the initial index (first day slot) is nonzero
         assertTrue(
             _lootboxRngWord(initialIndex) != 0,
-            "Day 1 lootbox index must have nonzero word"
+            "First day lootbox index must have nonzero word"
         );
     }
 }

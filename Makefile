@@ -1,23 +1,36 @@
-.PHONY: invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat invariant-test invariant-build invariant-clean
 
-# Full cycle: patch -> build -> test -> restore (always restores, even on failure)
-invariant-test:
+# ── Unified test targets ────────────────────────────────────────────────
+# Patches ContractAddresses.sol with Foundry-predicted addresses before
+# compilation, then restores the user's version after tests complete.
+# User's local ContractAddresses.sol is never lost.
+
+# Run all Foundry fuzz tests (patch → test → restore)
+# forge test handles its own compilation with the patched addresses in place.
+test-foundry:
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
-	@echo "Building with forge..."
-	@forge build --force 2>&1 || { node -e "import('./scripts/lib/patchContractAddresses.js').then(m => m.restoreContractAddresses())"; exit 1; }
 	@echo "Running Foundry tests..."
-	@forge test --match-path "test/fuzz/**" -vvv 2>&1; TEST_EXIT=$$?; \
+	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge test $(ARGS) 2>&1; TEST_EXIT=$$?; \
 		echo "Restoring ContractAddresses.sol..."; \
 		node -e "import('./scripts/lib/patchContractAddresses.js').then(m => m.restoreContractAddresses())"; \
 		exit $$TEST_EXIT
 
-# Just build (for development iteration)
+# Run Hardhat tests (no patching needed — Hardhat deploys fresh)
+test-hardhat:
+	@npx hardhat test $(ARGS)
+
+# Run both suites
+test: test-foundry test-hardhat
+
+# ── Legacy aliases ──────────────────────────────────────────────────────
+
+invariant-test: test-foundry
+
 invariant-build:
 	@node scripts/lib/patchForFoundry.js
-	@forge build --force
+	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --force
 	@node -e "import('./scripts/lib/patchContractAddresses.js').then(m => m.restoreContractAddresses())"
 
-# Clean forge artifacts
 invariant-clean:
 	@rm -rf forge-out cache

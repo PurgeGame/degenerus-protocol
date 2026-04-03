@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title DeployCanary -- Validates all 24+5 addresses match patched constants
+/// @title DeployCanary -- Validates all 23+5 addresses match patched constants
 /// @notice If any assertion fails, the nonce prediction or deploy order is wrong.
 contract DeployCanary is DeployProtocol {
     function setUp() public {
@@ -13,14 +13,13 @@ contract DeployCanary is DeployProtocol {
 
     /// @notice Every deployed contract address must match its ContractAddresses constant
     function test_allAddressesMatch() public view {
-        // Protocol contracts (24)
+        // Protocol contracts (23)
         assertEq(address(icons32), ContractAddresses.ICONS_32, "ICONS_32 mismatch");
         assertEq(address(mintModule), ContractAddresses.GAME_MINT_MODULE, "GAME_MINT_MODULE mismatch");
         assertEq(address(advanceModule), ContractAddresses.GAME_ADVANCE_MODULE, "GAME_ADVANCE_MODULE mismatch");
         assertEq(address(whaleModule), ContractAddresses.GAME_WHALE_MODULE, "GAME_WHALE_MODULE mismatch");
         assertEq(address(jackpotModule), ContractAddresses.GAME_JACKPOT_MODULE, "GAME_JACKPOT_MODULE mismatch");
         assertEq(address(decimatorModule), ContractAddresses.GAME_DECIMATOR_MODULE, "GAME_DECIMATOR_MODULE mismatch");
-        assertEq(endgameModuleSlot, ContractAddresses.GAME_ENDGAME_MODULE, "GAME_ENDGAME_MODULE nonce slot mismatch");
         assertEq(address(gameOverModule), ContractAddresses.GAME_GAMEOVER_MODULE, "GAME_GAMEOVER_MODULE mismatch");
         assertEq(address(lootboxModule), ContractAddresses.GAME_LOOTBOX_MODULE, "GAME_LOOTBOX_MODULE mismatch");
         assertEq(address(boonModule), ContractAddresses.GAME_BOON_MODULE, "GAME_BOON_MODULE mismatch");

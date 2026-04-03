@@ -11,6 +11,7 @@ contract GameFSMInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         fsmHandler = new FSMHandler(game, mockVRF, 10);
 

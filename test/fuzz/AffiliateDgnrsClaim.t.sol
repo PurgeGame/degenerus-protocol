@@ -30,6 +30,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
         alice = makeAddr("alice");
         bob   = makeAddr("bob");
         carol = makeAddr("carol");

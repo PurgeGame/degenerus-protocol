@@ -110,6 +110,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         keyComputer = new TLKeyComputer();
 
@@ -1044,6 +1045,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 simTime = block.timestamp;
         bool foundJackpot = false;
         uint256 jackpotLevel;
+        uint8 wsAtJackpot; // write slot captured at the moment we find jackpot phase
 
         for (uint256 day = 0; day < 300; day++) {
             if (game.gameOver()) break;
@@ -1057,6 +1059,13 @@ contract TicketLifecycleTest is DeployProtocol {
             if (inJackpot && !rngLocked_) {
                 foundJackpot = true;
                 jackpotLevel = game.level();
+
+                // Snapshot the write slot NOW so we can derive the read key later.
+                // After _swapAndFreeze toggles the slot, the old write slot becomes
+                // the read slot. _readKeyForLevel reads the CURRENT slot, which may
+                // have toggled many more times by the time we assert, giving the
+                // wrong key. We capture it here and use tqWriteKey below.
+                wsAtJackpot = _getWriteSlot();
 
                 // Buy tickets with buyer3 during jackpot phase -> routes to level J
                 _buyTickets(buyer3, 4000);
@@ -1094,8 +1103,14 @@ contract TicketLifecycleTest is DeployProtocol {
         // drained after processing. ticketsOwedPacked records the allocation (nonzero
         // is expected -- it tracks awarded tickets, not pending). The queue length
         // reaching zero proves: write -> swapAndFreeze -> read -> _runProcessTicketBatch.
+        //
+        // The read key is the OLD write key (before _swapAndFreeze toggled the slot).
+        // We use wsAtJackpot (captured when jackpot was found) with tqWriteKey because
+        // that is the key where the jackpot-phase tickets were written. After the swap
+        // that key becomes the read slot. _readKeyForLevel(jLvl) uses the CURRENT write
+        // slot, which may have toggled multiple times since then and would give the wrong key.
         uint24 jLvl = uint24(jackpotLevel);
-        uint24 rk = _readKeyForLevel(jLvl);
+        uint24 rk = keyComputer.tqWriteKey(jLvl, wsAtJackpot);
         assertEq(_queueLength(rk), 0,
             "EDGE-04: read queue at jackpot level must be empty after processing");
 

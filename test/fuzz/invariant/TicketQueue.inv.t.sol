@@ -16,6 +16,7 @@ contract TicketQueueInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         ticketHandler = new TicketTrackingHandler(game, 10);
         vrfHandler = new VRFHandler(mockVRF, game);

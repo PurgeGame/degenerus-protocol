@@ -16,6 +16,7 @@ contract EthSolvencyInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         // Create handlers
         gameHandler = new GameHandler(game, 10);

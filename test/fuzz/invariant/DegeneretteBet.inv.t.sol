@@ -20,6 +20,7 @@ contract DegeneretteBetInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         // Game handler drives purchases (needed to set up lootbox RNG index)
         gameHandler = new GameHandler(game, 10);

@@ -19,6 +19,7 @@ contract CompositionInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         compositionHandler = new CompositionHandler(game, mockVRF, 8);
 

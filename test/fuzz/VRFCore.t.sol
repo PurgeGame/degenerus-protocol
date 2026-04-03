@@ -23,6 +23,7 @@ contract VRFCore is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
         vrfHandler = new VRFHandler(mockVRF, game);
     }
 
@@ -599,14 +600,14 @@ contract VRFCore is DeployProtocol {
     ///         the day using a derived or sentinel word. The game may process the stale-day
     ///         and current-day inline without firing a fresh VRF request.
     function test_crossDayStaleWord() public {
-        // Day 1: complete normally (at deploy ts=86400)
+        // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
 
-        // Day 2: trigger VRF request using absolute timestamp
-        uint256 day2Start = 2 * 86400; // 172800
-        vm.warp(day2Start);
+        // Trigger VRF request for the next day using absolute timestamp
+        uint256 nextDayStart = 3 * 86400;
+        vm.warp(nextDayStart);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+        assertTrue(game.rngLocked(), "Next day VRF pending");
         uint256 reqId = mockVRF.lastRequestId();
 
         // Fulfill the VRF (word stored in rngWordCurrent)
@@ -614,12 +615,12 @@ contract VRFCore is DeployProtocol {
         _lastFulfilledReqId = reqId;
         assertEq(_readRngWordCurrent(), 0xC0FFEE, "Word should be stored");
 
-        // Warp PAST day boundary to day 3 using absolute timestamp
-        uint256 day3Start = 3 * 86400; // 259200
-        vm.warp(day3Start);
+        // Warp PAST day boundary to the following day using absolute timestamp
+        uint256 followingDayStart = 4 * 86400;
+        vm.warp(followingDayStart);
 
-        // advanceGame on day 3: rngGate sees rngWordCurrent != 0 but requestDay (day 2) < current day (day 3).
-        // The game redirects the stale word to lootbox and processes day 2+3 inline.
+        // advanceGame on the following day: rngGate sees rngWordCurrent != 0 but requestDay < current day.
+        // The game redirects the stale word to lootbox and processes both days inline.
         // A new VRF request may or may not be fired depending on the contract's rngGate logic.
         game.advanceGame();
 
@@ -636,7 +637,7 @@ contract VRFCore is DeployProtocol {
         }
         assertFalse(game.rngLocked(), "Should be unlocked after processing");
 
-        // Day 2 should have an RNG word recorded (from the fulfilled stale word)
-        assertTrue(game.rngWordForDay(2) != 0, "Day 2 should have RNG word from stale redirect");
+        // The day with the in-flight VRF should have an RNG word recorded (from the stale redirect)
+        assertTrue(game.rngWordForDay(3) != 0, "Day 3 should have RNG word from stale redirect");
     }
 }

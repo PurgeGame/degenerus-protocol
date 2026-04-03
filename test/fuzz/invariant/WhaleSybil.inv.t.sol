@@ -20,6 +20,7 @@ contract WhaleSybilInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         // 3 whales + 20 sybils = high concurrent pressure
         wsHandler = new WhaleSybilHandler(game, mockVRF, 3, 20);

@@ -24,6 +24,7 @@ contract RedemptionInvariants is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
         handler = new RedemptionHandler(sdgnrs, game, mockVRF, coin, 5);
         vrfHandler = new VRFHandler(mockVRF, game);
         targetContract(address(handler));

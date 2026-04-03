@@ -11,6 +11,7 @@ contract SimAdvanceOverflow is DeployProtocol {
         // Use the sim's actual timestamp range instead of 86400
         vm.warp(1774654000); // ~March 27 2026, before 22:57 UTC
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
     }
 
     function test_dayCalcSanity() public view {

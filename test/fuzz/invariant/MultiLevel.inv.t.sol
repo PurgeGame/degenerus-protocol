@@ -20,6 +20,7 @@ contract MultiLevelInvariant is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
 
         mlHandler = new MultiLevelHandler(game, mockVRF, 15);
 

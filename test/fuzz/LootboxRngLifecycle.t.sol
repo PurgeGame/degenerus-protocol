@@ -23,6 +23,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
         vrfHandler = new VRFHandler(mockVRF, game);
     }
 
@@ -206,8 +207,8 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         uint48 indexBefore = _readLootboxRngIndex();
 
-        // Complete each day using absolute timestamps
-        for (uint8 d = 1; d <= numDays; d++) {
+        // Complete each day using absolute timestamps, starting from day 2 (setUp already warped there)
+        for (uint8 d = 2; d <= numDays + 1; d++) {
             vm.warp(uint256(d) * 86400);
             _completeDay(uint256(0xDEAD0000 + d));
         }
@@ -274,17 +275,17 @@ contract LootboxRngLifecycle is DeployProtocol {
     function test_wordWriteStaleRedirect(uint256 vrfWord) public {
         vm.assume(vrfWord != 0);
 
-        // Day 1: complete normally
+        // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
 
-        // Day 2 (absolute): trigger VRF request
-        uint256 day2Start = 2 * 86400;
-        vm.warp(day2Start);
+        // Next day (day 3 absolute): trigger VRF request
+        uint256 day3Start = 3 * 86400;
+        vm.warp(day3Start);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+        assertTrue(game.rngLocked(), "Day 3 VRF pending");
         uint256 reqId = mockVRF.lastRequestId();
 
-        // Record the index that day 2's request reserved
+        // Record the index that the day 3 request reserved
         // Index was incremented by advanceGame, so the reserved slot is (currentIndex - 1)
         uint48 reservedIndex = _readLootboxRngIndex() - 1;
 
@@ -292,12 +293,12 @@ contract LootboxRngLifecycle is DeployProtocol {
         mockVRF.fulfillRandomWords(reqId, vrfWord);
         _lastFulfilledReqId = reqId;
 
-        // Warp past day boundary to day 3 WITHOUT calling advanceGame
-        uint256 day3Start = 3 * 86400;
-        vm.warp(day3Start);
+        // Warp past day boundary to day 4 WITHOUT calling advanceGame
+        uint256 day4Start = 4 * 86400;
+        vm.warp(day4Start);
 
-        // advanceGame on day 3: rngGate sees requestDay < day, redirects stale word
-        // to lootbox via _finalizeLootboxRng. The game processes both day 2 and day 3.
+        // advanceGame on day 4: rngGate sees requestDay < day, redirects stale word
+        // to lootbox via _finalizeLootboxRng. The game processes both days inline.
         game.advanceGame();
 
         // Process until unlocked
@@ -320,15 +321,15 @@ contract LootboxRngLifecycle is DeployProtocol {
 
     /// @notice Orphaned index from coordinator swap gets backfilled with nonzero word.
     function test_wordWriteBackfill() public {
-        // Day 1 (ts=86400): complete normally -> lootboxRngIndex = 2, word at index 1
+        // Complete the first post-deploy day (day 2) normally
         _completeDay(0xDEAD0001);
 
-        // Day 2 (absolute ts): trigger VRF request -> lootboxRngIndex becomes 3
-        vm.warp(2 * 86400);
+        // Next day (day 3 absolute): trigger VRF request
+        vm.warp(3 * 86400);
         game.advanceGame();
-        assertTrue(game.rngLocked(), "Day 2 VRF pending");
+        assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Record the orphaned index (reserved by day 2's request)
+        // Record the orphaned index (reserved by the day 3 request)
         uint48 orphanedIndex = _readLootboxRngIndex() - 1;
 
         // Coordinator swap: abandons the in-flight VRF, clears state
@@ -338,12 +339,12 @@ contract LootboxRngLifecycle is DeployProtocol {
         // The orphaned index has no word written (VRF never fulfilled)
         assertEq(_readLootboxWord(orphanedIndex), 0, "Orphaned index should have no word yet");
 
-        // Warp to day 4 (absolute): day 2 and 3 become gap days.
-        // When advanceGame runs, rngGate detects gap (dailyIdx=1, day=4) and calls
+        // Warp to day 5 (absolute): days 3 and 4 become gap days.
+        // When advanceGame runs, rngGate detects gap (dailyIdx=2, day=5) and calls
         // _backfillOrphanedLootboxIndices with the fresh VRF word.
-        vm.warp(4 * 86400);
+        vm.warp(5 * 86400);
         newVRF.fundSubscription(1, 100e18);
-        _completeDay(0xDEAD0004);
+        _completeDay(0xDEAD0005);
 
         // Orphaned index should now be backfilled with a nonzero word
         uint256 backfilledWord = _readLootboxWord(orphanedIndex);
@@ -401,21 +402,21 @@ contract LootboxRngLifecycle is DeployProtocol {
 
     /// @notice Backfill of orphaned indices produces nonzero words (zero guard in keccak256 path).
     function test_zeroGuardBackfill() public {
-        // Day 1: complete
+        // Complete the first post-deploy day (day 2)
         _completeDay(0xDEAD0001);
 
-        // Day 2 (absolute): trigger VRF, then coordinator swap (orphans the index)
-        vm.warp(2 * 86400);
+        // Next day (day 3 absolute): trigger VRF, then coordinator swap (orphans the index)
+        vm.warp(3 * 86400);
         game.advanceGame();
         uint48 orphanedIndex = _readLootboxRngIndex() - 1;
 
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
         mockVRF = newVRF;
 
-        // Warp to day 4 (absolute): days 2+3 are gap days, triggers backfill
-        vm.warp(4 * 86400);
+        // Warp to day 5 (absolute): days 3+4 are gap days, triggers backfill
+        vm.warp(5 * 86400);
         newVRF.fundSubscription(1, 100e18);
-        _completeDay(0xDEAD0004);
+        _completeDay(0xDEAD0005);
 
         // All backfilled indices must be nonzero
         uint256 backfilledWord = _readLootboxWord(orphanedIndex);
@@ -476,8 +477,8 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Compute entropy for each buyer using the contract's formula:
         // entropy = keccak256(abi.encode(rngWord, player, day, amount))
-        // Day is 1 (deploy starts at ts=86400, day index = 1)
-        uint48 day = 1;
+        // Day is 2 (setUp warps to day 2, so purchases happen on day 2)
+        uint48 day = 2;
         uint256 entropy1 = uint256(keccak256(abi.encode(storedWord, buyer1, day, amount1)));
         uint256 entropy2 = uint256(keccak256(abi.encode(storedWord, buyer2, day, amount2)));
 
@@ -493,15 +494,15 @@ contract LootboxRngLifecycle is DeployProtocol {
         address buyer = makeAddr("amountBuyer");
         uint48 index1 = _readLootboxRngIndex();
 
-        // Day 1: purchase 1 ether lootbox
+        // First purchase: 1 ether lootbox on day 2 (setUp already warped to day 2)
         _makePurchase(buyer, 1 ether);
         _completeDay(vrfWord);
 
         uint256 word1 = _readLootboxWord(index1);
         (uint256 amount1, ) = game.lootboxStatus(buyer, index1);
 
-        // Warp to day 2: purchase 2 ether lootbox
-        vm.warp(2 * 86400);
+        // Warp to day 3: purchase 2 ether lootbox
+        vm.warp(3 * 86400);
         uint48 index2 = _readLootboxRngIndex();
         _makePurchase(buyer, 2 ether);
         uint256 word2Seed = vrfWord ^ 0xBEEF;
@@ -512,8 +513,8 @@ contract LootboxRngLifecycle is DeployProtocol {
         (uint256 amount2, ) = game.lootboxStatus(buyer, index2);
 
         // Compute entropy for each
-        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint48(1), amount1)));
-        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint48(2), amount2)));
+        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint48(2), amount1)));
+        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint48(3), amount2)));
 
         // Different amounts AND different VRF words -> different entropy
         assertTrue(entropy1 != entropy2, "Different amounts must produce different entropy");
@@ -527,15 +528,15 @@ contract LootboxRngLifecycle is DeployProtocol {
         address buyer = makeAddr("dayBuyer");
         uint48 index1 = _readLootboxRngIndex();
 
-        // Day 1: purchase
+        // First purchase on day 2 (setUp already warped to day 2)
         _makePurchase(buyer, 1 ether);
         _completeDay(vrfWord);
 
         uint256 word1 = _readLootboxWord(index1);
         (uint256 amount1, ) = game.lootboxStatus(buyer, index1);
 
-        // Warp to day 2: purchase same amount
-        vm.warp(2 * 86400);
+        // Warp to day 3: purchase same amount
+        vm.warp(3 * 86400);
         uint48 index2 = _readLootboxRngIndex();
         _makePurchase(buyer, 1 ether);
         // Use same VRF word to isolate the day variable
@@ -545,9 +546,9 @@ contract LootboxRngLifecycle is DeployProtocol {
         (uint256 amount2, ) = game.lootboxStatus(buyer, index2);
 
         // Compute entropy using the recorded day for each purchase
-        // Day 1 purchase is day=1, Day 2 purchase is day=2
-        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint48(1), amount1)));
-        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint48(2), amount2)));
+        // First purchase is day=2, second purchase is day=3
+        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint48(2), amount1)));
+        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint48(3), amount2)));
 
         // Different day values in preimage -> different entropy
         assertTrue(entropy1 != entropy2, "Different days must produce different entropy");
@@ -584,10 +585,10 @@ contract LootboxRngLifecycle is DeployProtocol {
         // The entropy derivation will use the accumulated total, not individual purchase amounts
         uint256 storedWord = _readLootboxWord(purchaseIndex);
         uint256 entropyWithAccumulated = uint256(
-            keccak256(abi.encode(storedWord, buyer, uint48(1), amountAfterSecond))
+            keccak256(abi.encode(storedWord, buyer, uint48(2), amountAfterSecond))
         );
         uint256 entropyWithFirstOnly = uint256(
-            keccak256(abi.encode(storedWord, buyer, uint48(1), amountAfterFirst))
+            keccak256(abi.encode(storedWord, buyer, uint48(2), amountAfterFirst))
         );
 
         // Since accumulated amount differs from first-only, entropy must differ
@@ -690,21 +691,21 @@ contract LootboxRngLifecycle is DeployProtocol {
     function test_fullLifecycleMultipleIndices() public {
         address buyer = makeAddr("multiBuyer");
 
-        // Day 1: purchase at index N
+        // First index: purchase at index N on day 2 (setUp already warped to day 2)
         uint48 indexN = _readLootboxRngIndex();
         _makePurchase(buyer, 1 ether);
 
-        // Complete day 1 (stores word at indexN)
+        // Complete the first post-deploy day (stores word at indexN)
         _completeDay(0xDEAD0001);
 
-        // Day 2: purchase at index N+1
-        vm.warp(2 * 86400);
+        // Next day (day 3 absolute): purchase at index N+1
+        vm.warp(3 * 86400);
         uint48 indexN1 = _readLootboxRngIndex();
-        assertEq(indexN1, indexN + 1, "Index should have incremented after day 1");
+        assertEq(indexN1, indexN + 1, "Index should have incremented after first day");
 
         _makePurchase(buyer, 1 ether);
 
-        // Complete day 2 (stores word at indexN1)
+        // Complete the second day (stores word at indexN1)
         _completeDay(0xDEAD0002);
 
         // Verify both words are stored and different
