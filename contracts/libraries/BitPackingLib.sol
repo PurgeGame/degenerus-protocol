@@ -17,7 +17,9 @@ pragma solidity 0.8.34;
  *      [154-159] (unused)
  *      [160-183] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
  *      [184]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
- *      [185-227] (unused)
+ *      [185-208] AFFILIATE_BONUS_LEVEL_SHIFT - Cached affiliate bonus level (24 bits)
+ *      [209-214] AFFILIATE_BONUS_POINTS_SHIFT - Cached affiliate bonus points (6 bits)
+ *      [215-227] (unused)
  *      [228-243] LEVEL_UNITS_SHIFT           - Units purchased at current level (16 bits)
  *      [244-255] (reserved)
  */
@@ -34,6 +36,9 @@ library BitPackingLib {
 
     /// @notice 32-bit mask for day field
     uint256 internal constant MASK_32 = (uint256(1) << 32) - 1;
+
+    /// @notice 6-bit mask for affiliate bonus points field
+    uint256 internal constant MASK_6 = (uint256(1) << 6) - 1;
 
     // -------------------------------------------------------------------------
     // Bit Shift Positions
@@ -62,6 +67,12 @@ library BitPackingLib {
 
     /// @notice Bit position for deity pass flag (bit 184)
     uint256 internal constant HAS_DEITY_PASS_SHIFT = 184;
+
+    /// @notice Bit position for cached affiliate bonus level (bits 185-208)
+    uint256 internal constant AFFILIATE_BONUS_LEVEL_SHIFT = 185;
+
+    /// @notice Bit position for cached affiliate bonus points (bits 209-214)
+    uint256 internal constant AFFILIATE_BONUS_POINTS_SHIFT = 209;
 
     /// @notice Bit position for level units count (bits 228-243)
     uint256 internal constant LEVEL_UNITS_SHIFT = 228;

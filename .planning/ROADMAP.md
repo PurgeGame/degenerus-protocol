@@ -38,7 +38,7 @@
 - ✅ **v13.0 Level Quests Implementation** — Phases 156-158.1 (shipped 2026-04-01)
 - ✅ **v14.0 Activity Score & Quest Gas Optimization** — Phases 159-161 (shipped 2026-04-02)
 - ✅ **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167 (shipped 2026-04-02)
-- [ ] **v16.0 Module Consolidation & Storage Repack** — Phases 168-172
+- ✅ **v16.0 Module Consolidation & Storage Repack** — Phases 168-172 (shipped 2026-04-03)
 
 ## Phases
 
@@ -132,330 +132,65 @@ See individual milestone entries above.
 
 </details>
 
-### v15.0 Delta Audit (v11.0-v14.0) (Phases 162-167)
+<details>
+<summary>v11.0-v15.0 (Phases 151-167) -- SHIPPED</summary>
 
-**Milestone Goal:** Every functional change since v10.3 is catalogued and proven safe -- no security regressions, no correctness bugs, no RNG commitment window violations, no gas ceiling breaches.
+See individual milestone entries above.
 
-- [ ] **Phase 162: Changelog Extraction** - Catalogue every functional change across v11.0-v14.0
-- [ ] **Phase 163: Level System Documentation** - Complete reference for level advancement, pricing, quests, jackpot routing
-- [ ] **Phase 164: Jackpot Carryover Audit** - Prove carryover ticket distribution and final-day behavior correct
-- [ ] **Phase 165: Per-Function Adversarial Audit** - Audit every new/modified function + verify storage layouts
-- [ ] **Phase 166: RNG & Gas Verification** - Re-verify RNG commitment windows and gas ceilings for new paths
-- [ ] **Phase 167: Integration & Test Baseline** - Verify cross-contract call graph and confirm all tests pass
+</details>
 
-### v13.0+ Per-Function Adversarial Audit (Phase 165)
+<details>
+<summary>v16.0 Module Consolidation & Storage Repack (Phases 168-172) -- SHIPPED 2026-04-03</summary>
 
-**Milestone Goal:** Per-function adversarial audit of all new and modified functions from v10.3..HEAD changelog. 4 plans covering AdvanceModule + DegenerusGame, DegenerusQuests, remaining contracts, and consolidated findings.
+- [x] **Phase 168: Storage Repack** - 3 plans (completed 2026-04-02)
+- [x] **Phase 169: Inline rewardTopAffiliate** - 1 plan (completed 2026-04-02)
+- [x] **Phase 170: Migrate runRewardJackpots** - 1 plan (completed 2026-04-03)
+- [x] **Phase 171: Delete EndgameModule** - 1 plan (completed 2026-04-03)
+- [x] **Phase 172: Delta Verification** - ad-hoc (completed 2026-04-03)
 
-- [x] **Phase 165 Plan 01: AdvanceModule + DegenerusGame** - 17 functions audited, all SAFE (completed 2026-04-02)
-- [ ] **Phase 165 Plan 02: DegenerusQuests**
-- [ ] **Phase 165 Plan 03: Remaining Contracts**
-- [ ] **Phase 165 Plan 04: Consolidated Findings**
+</details>
+
+### v17.0 Affiliate Bonus Cache (Phases 173-174)
+
+**Milestone Goal:** Cache affiliate bonus points in mintPacked_ unused bits to eliminate cold SLOADs from activity score computation.
+
+- [ ] **Phase 173: Implementation** - 2 plans
+- [ ] **Phase 174: Delta Audit & Verification** - Prove no bit collisions, storage layout unchanged, cache correctness, both test suites green
 
 ## Phase Details
 
-<details>
-<summary>Phase 151-152 Details (v11.0)</summary>
-
-### Phase 151: Endgame Flag Implementation
-**Goal**: The 30-day BURNIE ban is replaced with a drip-projection-based endgame flag that dynamically restricts BURNIE ticket purchases only when a level could mechanically be the last
-**Depends on**: Phase 150 (v10.3 complete, codebase stable)
-**Requirements**: REM-01, FLAG-01, FLAG-02, FLAG-03, FLAG-04, DRIP-01, DRIP-02, ENF-01, ENF-02, ENF-03
-**Plans**: 2 plans
-Plans:
-- [x] 151-01-PLAN.md — Storage + WAD projection math + flag lifecycle in AdvanceModule
-- [x] 151-02-PLAN.md — Remove 30-day ban + wire enforcement in MintModule and LootboxModule
-
-### Phase 152: Delta Audit
-**Goal**: Every function changed by the endgame flag implementation is proven safe -- no security regressions, no RNG commitment window violations, no gas ceiling breaches from drip projection math
-**Depends on**: Phase 151 (implementation complete, tests passing)
-**Requirements**: AUD-01, AUD-02, AUD-03
-**Plans**: 2 plans
-Plans:
-- [x] 152-01-PLAN.md — Per-function adversarial audit + storage layout + RNG commitment window re-verification
-- [x] 152-02-PLAN.md — Gas ceiling analysis for drip projection computation
-
-</details>
-
-<details>
-<summary>Phase 153-155 Details (v12.0)</summary>
-
-### Phase 153: Core Design
-**Goal**: A complete specification exists for level quest eligibility, mechanics, and storage such that an implementer can write the Solidity with zero design ambiguity
-**Depends on**: Phase 152 (v11.0 complete, codebase stable)
-**Requirements**: ELIG-01, ELIG-02, MECH-01, MECH-02, MECH-03, MECH-04, STOR-01, STOR-02
-**Plans**: 1 plan
-Plans:
-- [x] 153-01-PLAN.md — Complete level quest design specification
-
-### Phase 154: Integration Mapping
-**Goal**: Every contract and function that must change for level quests is identified, with the exact modification scope documented so implementation touches nothing unexpected
-**Depends on**: Phase 153 (storage layout and mechanics design locked)
-**Requirements**: INTG-01, INTG-02
-**Plans**: 1 plan
-Plans:
-- [x] 154-01-PLAN.md — Contract touchpoint map + handler site integration specifications
-
-### Phase 155: Economic + Gas Analysis
-**Goal**: The BURNIE inflation impact and gas overhead of level quests are quantified with worst-case bounds, confirming the feature is economically and computationally viable
-**Depends on**: Phase 153
-**Requirements**: ECON-01, ECON-02, GAS-01, GAS-02
-**Plans**: 1 plan
-Plans:
-- [x] 155-01-PLAN.md — BURNIE inflation modeling + gameOverPossible interaction + gas overhead estimation
-
-</details>
-
-<details>
-<summary>Phase 156-158.1 Details (v13.0)</summary>
-
-### Phase 156: Interfaces, Storage & Access Control
-**Goal**: All interface files, storage declarations, and access control changes compile cleanly so that downstream quest logic and handler integration can build on stable type signatures
-**Depends on**: Phase 155 (v12.0 design spec complete)
-**Requirements**: INTF-01, INTF-02, QUEST-01, ACL-01
-**Plans**: 1 plan
-Plans:
-- [x] 156-01-PLAN.md — Interface declarations + storage mappings + access control + quest roll routing cleanup
-
-### Phase 157: Quest Logic & Roll Chain
-**Goal**: The quest roll, eligibility check, target calculation, and completion flow are implemented in DegenerusQuests.sol, and the AdvanceModule-to-DegenerusQuests roll trigger fires directly at level transitions
-**Depends on**: Phase 156 (interfaces and storage in place)
-**Requirements**: QUEST-02, QUEST-03, QUEST-04, QUEST-06, ROLL-01, ROLL-02
-**Plans**: 3 plans
-Plans:
-- [x] 157-01-PLAN.md — Quest logic internals: rollLevelQuest, eligibility, target calculation, progress handler, completion flow, mintPackedFor view
-- [x] 157-02-PLAN.md — AdvanceModule roll trigger wiring: import, constant, entropy derivation, call insertion
-- [x] 157-03-PLAN.md — Gap closure: MINT_BURNIE sentinel fix + levelQuestGlobal packing + ROLL-01 docs
-
-### Phase 158: Handler Integration, View & Quest Routing Cleanup
-**Goal**: All 6 quest handlers track level quest progress for eligible players, handlers own their reward/event emission (removing BurnieCoin notify* middleman), and a view function exposes complete level quest state
-**Depends on**: Phase 157 (quest logic and completion flow ready)
-**Requirements**: QUEST-05, QUEST-07, CLEANUP-01
-**Plans**: 2 plans
-Plans:
-- [x] 158-01-PLAN.md — Level quest progress in all 6 handlers + onlyCoin modifier expansion for GAME access
-- [x] 158-02-PLAN.md — BurnieCoin notify* wrapper removal + game module rewiring to call DegenerusQuests directly
-
-### Phase 158.1: Carryover Redesign + Final BurnieCoin Quest Cleanup (INSERTED)
-**Goal:** Replace carryover ETH distribution with ticket purchases (0.5% budget, single random source level, no Phase 1 state machine), remove remaining BurnieCoin quest passthroughs (rollDailyQuest hop, recordMintQuestStreak COIN access), and simplify the daily jackpot carryover flow
-**Requirements**: CARRY-01, CARRY-02, CARRY-03, CARRY-04, CLEANUP-02, CLEANUP-03
-**Depends on:** Phase 158
-**Plans**: 2 plans
-Plans:
-- [x] 158.1-01-PLAN.md — Carryover ETH state machine removal + ticket-only distribution + storage gap replacement
-- [x] 158.1-02-PLAN.md — BurnieCoin rollDailyQuest removal + recordMintQuestStreak GAME-only tightening
-
-</details>
-
-<details>
-<summary>Phase 159-161 Details (v14.0)</summary>
-
-### Phase 159: Storage Analysis & Architecture Design
-**Goal**: The current storage layout, cross-contract call graph, and SLOAD patterns for activity score and quest handling on the purchase path are fully mapped, and a concrete architecture (packed struct layout, caching strategy, handler consolidation plan) is specified so all downstream implementation has zero design ambiguity
-**Depends on**: Phase 158.1 (v13.0 complete, codebase stable)
-**Requirements**: SCORE-01
+### Phase 173: Implementation
+**Goal**: Affiliate bonus level and points are cached in mintPacked_ so _playerActivityScore skips the expensive cross-contract SLOAD on cache hit
+**Depends on**: v16.0 complete (mintPacked_ bit layout stable after repack)
+**Requirements**: IMPL-01, IMPL-02, IMPL-03, IMPL-04
 **Success Criteria** (what must be TRUE):
-  1. Every storage slot and cross-contract call involved in playerActivityScore computation is catalogued with current gas cost (SLOADs, external calls, recomputations)
-  2. A concrete packed struct layout (or justified rejection of packing) is specified for score + quest data, with bit allocation map and slot assignments
-  3. The caching strategy for score reuse across consumers within a single transaction is designed (where computed, where cached, who reads the cache)
-  4. Dependencies between SCORE, QUEST, and SLOAD optimizations are documented so implementation phases can proceed without revisiting architectural decisions
-**Plans**: 1 plan
+  1. BitPackingLib declares AFFILIATE_BONUS_LEVEL_SHIFT (24 bits at 185) and AFFILIATE_BONUS_POINTS_SHIFT (6 bits at 209) with corresponding masks, and the contract compiles cleanly
+  2. _playerActivityScore reads cached level+points from packed word and returns cached points when cachedLevel matches current level, bypassing affiliateBonusPointsBest
+  3. recordMintData writes computed affiliate bonus into mintPacked_ on the !sameLevel branch, piggybacking on the existing SSTORE with zero additional storage writes
+  4. affiliateBonusPointsBest awards 1 point per 0.5 ETH of referral volume (was 1 per 1 ETH); cap remains at AFFILIATE_BONUS_MAX (50)
+**Plans:** 2 plans
 Plans:
-- [x] 159-01-PLAN.md — Architecture design spec: storage mapping, packed struct analysis, caching strategy, SLOAD catalog, phase dependencies
+- [ ] 173-01-PLAN.md -- BitPackingLib constants + affiliate bonus rate change
+- [ ] 173-02-PLAN.md -- Cache write (recordMintData) + cache read (_playerActivityScore)
 
-### Phase 160: Score & Quest Handler Consolidation
-**Goal**: playerActivityScore is computed exactly once per purchase transaction with quest streak forwarded from handlers (no cross-contract call), the purchase path uses a unified quest handler covering both daily and level quest progress, mintPrice is passed from the caller, daily + level quest storage writes are batched, and the DegeneretteModule duplicate is eliminated
-**Depends on**: Phase 159 (architecture design locked)
-**Requirements**: SCORE-02, SCORE-03, SCORE-04, SCORE-05, QUEST-01, QUEST-02, QUEST-03
-**Plans**: 3 plans (completed 2026-04-02)
-
-### Phase 160.1: Purchase Path Correctness (INSERTED)
-**Goal**: purchaseLevel correctly reflects ticket target level (level during jackpot, level+1 during purchase phase), all lootbox level references use level+1 regardless of phase, and MintModule uses PriceLookupLib.priceForLevel instead of the price storage variable
-**Depends on**: Phase 160
-**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06
-**Plans**: 2 plans
-Plans:
-- [x] 160.1-01-PLAN.md — Fix purchaseLevel jackpot-awareness + lootbox level baseline + MintModule price reads to PriceLookupLib
-- [x] 160.1-02-PLAN.md — Replace all non-MintModule price reads with PriceLookupLib + remove price storage variable and writes
-
-### Phase 161: Purchase Path SLOAD Deduplication
-**Goal**: Each of the 5 remaining hot-path storage variables is read exactly once per purchase transaction and cached for all subsequent consumers (price was removed by Phase 160.1)
-**Depends on**: Phase 160.1 (purchase path correctness complete)
-**Requirements**: SLOAD-01, SLOAD-02, SLOAD-03, SLOAD-04, SLOAD-05
+### Phase 174: Delta Audit & Verification
+**Goal**: Every existing mintPacked_ consumer produces identical results after the cache bits are added, and the cache itself is proven correct
+**Depends on**: Phase 173
+**Requirements**: VRFY-01, VRFY-02, VRFY-03, VRFY-04, VRFY-05
 **Success Criteria** (what must be TRUE):
-  1. compressedJackpotFlag is read once at the top of _callTicketPurchase and cached for all consumers
-  2. claimableWinnings[buyer] is read once and cached for shortfall branch in _purchaseFor
-  3. jackpotCounter is read once and cached for all consumers in _callTicketPurchase
-  4. jackpotPhaseFlag and level are each read once and cached for their respective consumers
-  5. All contracts compile, existing tests pass, and no behavioral changes result from the caching
-**Plans**: 1 plan
-Plans:
-- [x] 161-01-PLAN.md — Cache level/jackpotPhaseFlag/claimableWinnings in _purchaseFor + compressedJackpotFlag/jackpotCounter in _callTicketPurchase
-
-</details>
-
-### Phase 162: Changelog Extraction
-**Goal**: Every functional change across v11.0-v14.0 is catalogued by contract, function, and nature (new/modified/removed) so the audit scope is precisely bounded
-**Depends on**: Phase 161 (v14.0 complete, codebase stable)
-**Requirements**: CHLOG-01
-**Success Criteria** (what must be TRUE):
-  1. Every contract file touched in v11.0-v14.0 is listed with the specific functions that changed
-  2. Each function is classified as new, modified, or removed with a one-line description of the change
-  3. The changelog is organized by contract so auditors can work through it systematically
-**Plans**: 1 plan
-Plans:
-- [x] 162-01-PLAN.md — Extract and classify all function-level changes from v10.3..HEAD into structured changelog
-
-### Phase 163: Level System Documentation
-**Goal**: A complete reference exists for the level system so auditors can trace any level-dependent behavior from input to output without reading contract source
-**Depends on**: Phase 162 (changelog identifies all level-related changes)
-**Requirements**: DOC-01
-**Success Criteria** (what must be TRUE):
-  1. Level advancement trigger and state transitions are documented (what causes level change, what state updates)
-  2. Price derivation via PriceLookupLib is documented (level-to-price mapping, pure function behavior)
-  3. purchaseLevel semantics are documented (jackpot phase vs purchase phase, ticket target level)
-  4. Quest target calculation is documented (daily targets, level quest targets, 10x multiplier source)
-  5. Lootbox baseline and jackpot ticket routing are documented (level+1 baseline, source range, carryover behavior)
-**Plans**: 1 plan
-Plans:
-- [x] 163-01-PLAN.md — Read 6 contracts and produce complete level system reference document
-
-### Phase 164: Jackpot Carryover Audit
-**Goal**: The carryover ticket distribution logic and final-day jackpot behavior are proven correct with no edge cases that could strand tickets, misroute prizes, or violate budget constraints
-**Depends on**: Phase 162 (changelog identifies carryover changes)
-**Requirements**: JACK-01, JACK-02
-**Success Criteria** (what must be TRUE):
-  1. Single-pass ticket distribution is traced end-to-end with correct source range (1-4) and budget (0.5% of futurePrizePool)
-  2. No edge case exists where carryover tickets are stranded (zero-budget, zero-source, boundary levels)
-  3. Final-day detection logic is verified (how last purchase day is detected, what triggers level+1 routing)
-  4. Tickets routed on the final day land in the correct key space for the next level
-**Plans**: 1 plan
-Plans:
-- [x] 164-01-PLAN.md — Trace carryover distribution + final-day routing, produce audit report
-
-### Phase 165: Per-Function Adversarial Audit
-**Goal**: Every new and modified function across v11.0-v14.0 is proven safe against reentrancy, access control bypass, overflow, and state corruption, and every contract with storage changes has its layout verified
-**Depends on**: Phase 162 (changelog provides the function list), Phase 163 (level docs provide reference), Phase 164 (carryover audit provides focused coverage)
-**Requirements**: AUD-01, AUD-02, AUD-03
-**Success Criteria** (what must be TRUE):
-  1. Every new function introduced in v11.0-v14.0 has a SAFE/VULNERABLE verdict with reasoning
-  2. Every modified function has behavioral equivalence confirmed (where intended) or correct new behavior verified (where changed)
-  3. Storage layouts verified via forge inspect for every contract with storage changes -- zero unexpected slot shifts
-  4. Zero open HIGH or MEDIUM findings at phase completion
-**Plans**: 4 plans
-Plans:
-- [x] 165-01-PLAN.md — AdvanceModule + DegenerusGame adversarial audit (17 functions)
-- [x] 165-02-PLAN.md — MintModule + MintStreakUtils + LootboxModule audit (10 functions)
-- [x] 165-03-PLAN.md — DegenerusQuests + BurnieCoin + external contracts audit (28 functions)
-- [x] 165-04-PLAN.md — JackpotModule + WhaleModule + storage layout + consolidated findings
-
-### Phase 166: RNG & Gas Verification
-**Goal**: All new or modified VRF-dependent paths have commitment windows re-verified, and new computation paths (score calculation, quest roll, drip projection, PriceLookupLib) are proven within gas ceilings
-**Depends on**: Phase 165 (function audit identifies all VRF-dependent and gas-heavy paths)
-**Requirements**: RNG-01, GAS-01
-**Success Criteria** (what must be TRUE):
-  1. Every new or modified path that consumes a VRF word has its commitment window traced (input committed before word known)
-  2. Score calculation, quest roll, drip projection, and PriceLookupLib gas costs are profiled under worst-case inputs
-  3. advanceGame gas ceiling maintains safety margin against 14M block limit (no regression from Phase 147 baseline)
-**Plans**: 2 plans
-Plans:
-- [ ] 166-01-PLAN.md — VRF commitment window audit for all new/modified entropy consumers
-- [ ] 166-02-PLAN.md — Gas ceiling static analysis for new computation paths
-
-### Phase 167: Integration & Test Baseline
-**Goal**: The cross-contract call graph has no broken interfaces or stale references after v11.0-v14.0 changes, and the test suite passes with no new failures
-**Depends on**: Phase 166 (all audit phases complete)
-**Requirements**: INTEG-01, INTEG-02
-**Success Criteria** (what must be TRUE):
-  1. Cross-contract call graph is verified -- no function calls to removed or renamed functions, no stale interface references
-  2. All Hardhat tests pass with no new failures compared to pre-v11.0 baseline
-  3. All Foundry tests pass with no new failures compared to pre-v11.0 baseline
-**Plans**: 2 plans
-Plans:
-- [ ] 167-01-PLAN.md — Cross-contract call graph audit (stale reference scan + interface consistency)
-- [ ] 167-02-PLAN.md — Test baseline verification (Hardhat + Foundry suite execution)
-
-### v16.0 Module Consolidation & Storage Repack (Phases 168-172)
-
-**Milestone Goal:** Eliminate EndgameModule and repack storage slots 0-2 for gas savings and structural simplification.
-
-### Phase 168: Storage Repack
-**Goal**: Repack EVM slots 0-2 — move ticketsFullyProcessed + gameOverPossible to slot 0, downsize currentPrizePool to uint128 in slot 1, kill slot 2
-**Depends on**: Phase 167 (v15.0 complete)
-**Requirements**: STOR-01, STOR-02, STOR-03, STOR-04, STOR-05
-**Success Criteria** (what must be TRUE):
-  1. ticketsFullyProcessed and gameOverPossible read/write correctly from slot 0 alongside all other slot 0 fields
-  2. currentPrizePool reads/writes via updated helpers with uint128 packing in slot 1
-  3. Slot 1 contains purchaseStartDay + ticketWriteSlot + prizePoolFrozen + currentPrizePool with no byte gaps
-  4. All slot header comments in DegenerusGameStorage.sol match actual layout
-  5. forge inspect confirms identical layout across DegenerusGameStorage, DegenerusGame, and all modules
-
-### Phase 169: Inline rewardTopAffiliate
-**Goal**: Inline rewardTopAffiliate directly in AdvanceModule — no delegatecall to EndgameModule
-**Depends on**: Phase 168 (storage layout finalized)
-**Requirements**: MOD-01
-**Success Criteria** (what must be TRUE):
-  1. AdvanceModule's _rewardTopAffiliate executes affiliate reward logic directly without delegatecall
-  2. AffiliateDgnrsReward event emits with correct parameters during level transition
-  3. No reference to EndgameModule remains in AdvanceModule's affiliate reward path
-**Plans**: 1 plan
-Plans:
-- [ ] 169-01-PLAN.md — Inline EndgameModule's rewardTopAffiliate logic into AdvanceModule's _rewardTopAffiliate
-
-### Phase 170: Migrate runRewardJackpots
-**Goal**: Move runRewardJackpots + all private helpers (~400 lines) from EndgameModule to JackpotModule
-**Depends on**: Phase 169 (first function removed from EndgameModule)
-**Requirements**: MOD-02
-**Success Criteria** (what must be TRUE):
-  1. JackpotModule contains runRewardJackpots, _runBafJackpot, _addClaimableEth, _awardJackpotTickets, _jackpotTicketRoll
-  2. AdvanceModule's _runRewardJackpots wrapper targets GAME_JACKPOT_MODULE
-  3. Decimator self-call trampoline (IDegenerusGame(address(this)).runDecimatorJackpot()) routes correctly
-  4. IDegenerusGameJackpotModule interface includes runRewardJackpots signature
-**Plans**: 1 plan
-Plans:
-- [x] 170-01-PLAN.md — Move runRewardJackpots + helpers to JackpotModule, update interface, rewire AdvanceModule
-
-### Phase 171: Migrate claimWhalePass + Delete EndgameModule
-**Goal**: Move claimWhalePass to JackpotModule, then fully eliminate EndgameModule
-**Depends on**: Phase 170 (all heavy functions moved)
-**Requirements**: MOD-03, MOD-04, MOD-05, MOD-06
-**Success Criteria** (what must be TRUE):
-  1. DegenerusGame's _claimWhalePassFor delegatecalls GAME_JACKPOT_MODULE
-  2. DegenerusGameEndgameModule.sol and IDegenerusGameEndgameModule deleted
-  3. GAME_ENDGAME_MODULE removed from ContractAddresses.sol
-  4. Zero references to EndgameModule in any Solidity file (imports, comments, NatSpec)
-**Plans**: 1 plan
-Plans:
-- [x] 171-01-PLAN.md — Move claimWhalePass to JackpotModule, rewire delegatecall, delete EndgameModule, scrub references
-
-### Phase 172: Delta Verification
-**Goal**: Full test suite green + delta audit confirms behavioral equivalence for all moved functions
-**Depends on**: Phase 171 (all code changes complete)
-**Requirements**: VER-01, VER-02, VER-03
-**Success Criteria** (what must be TRUE):
-  1. All hardcoded slot offsets in Foundry tests match the new storage layout
-  2. Hardhat test suite passes with zero new failures vs pre-v16.0 baseline
-  3. Foundry test suite passes with zero new failures vs pre-v16.0 baseline
-  4. Delta audit confirms behavioral equivalence for every moved function
+  1. All existing mintPacked_ field extractions across ~20 call sites produce identical values before and after the change (no bit collision)
+  2. forge inspect confirms identical storage layout for all contracts inheriting DegenerusGameStorage (no slot displacement)
+  3. Activity score cache produces identical results to uncached computation for all reachable inputs (cache correctness proven)
+  4. Foundry test suite passes with zero regressions compared to v16.0 baseline (same pass/fail counts)
+  5. Hardhat test suite passes with zero regressions compared to v16.0 baseline
+**Plans**: TBD
 
 ## Progress
 
-**Execution Order:**
-Phase 168 -> Phase 169 -> Phase 170 -> Phase 171 -> Phase 172
-
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 162. Changelog Extraction | v15.0 | 1/1 | Complete    | 2026-04-02 |
-| 163. Level System Documentation | v15.0 | 1/1 | Complete    | 2026-04-02 |
-| 164. Jackpot Carryover Audit | v15.0 | 1/1 | Complete   | 2026-04-02 |
-| 165. Per-Function Adversarial Audit | v15.0 | 0/TBD | Complete    | 2026-04-02 |
-| 166. RNG & Gas Verification | v15.0 | 0/2 | Complete    | 2026-04-02 |
-| 167. Integration & Test Baseline | v15.0 | 0/2 | Complete    | 2026-04-02 |
-| 168. Storage Repack | v16.0 | 3/3 | Complete | 2026-04-02 |
-| 169. Inline rewardTopAffiliate | v16.0 | 1/1 | Complete | 2026-04-02 |
-| 170. Migrate runRewardJackpots | v16.0 | 1/1 | Complete   | 2026-04-03 |
-| 171. Migrate claimWhalePass + Delete EndgameModule | v16.0 | 1/1 | Complete   | 2026-04-03 |
-| 172. Delta Verification | v16.0 | 0/TBD | Not started | — |
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 173. Implementation | 0/2 | Planned | - |
+| 174. Delta Audit & Verification | 0/? | Not started | - |
 
 ## Deferred
 

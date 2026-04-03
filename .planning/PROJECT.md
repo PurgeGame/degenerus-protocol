@@ -10,7 +10,13 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v16.0 Module Consolidation & Storage Repack started (2026-04-02). Eliminating EndgameModule and repacking storage slots 0-2.
+v16.0 Module Consolidation & Storage Repack shipped (2026-04-03). EndgameModule eliminated, storage slots 0-2 repacked, all tests passing.
+
+## Completed Milestone: v16.0 Module Consolidation & Storage Repack
+
+**Status:** Complete (2026-04-03)
+
+**Result:** 5 phases (168-172), 6 plans. Storage repack: slot 0 filled to 32/32 bytes, currentPrizePool downsized to uint128 in slot 1, old slot 2 eliminated. EndgameModule fully deleted — rewardTopAffiliate inlined into AdvanceModule, runRewardJackpots migrated to JackpotModule, claimWhalePass moved to WhaleModule. All 15 Foundry test files updated for new layout. forge inspect confirms identical layout across 11 contracts. 3 fuzz test invariants repaired (TicketLifecycle double-buffer, RedemptionHandler supply tracking, VRFPathHandler gap backfill). All 14/14 requirements satisfied.
 
 ## Completed Milestone: v15.0 Delta Audit (v11.0-v14.0)
 
@@ -101,6 +107,7 @@ v16.0 Module Consolidation & Storage Repack started (2026-04-02). Eliminating En
 - ✓ v13.0 Level Quests Implementation — interfaces, storage, quest logic, handler integration, carryover redesign — v13.0 Phases 156-158.1
 - ✓ v14.0 Activity Score & Quest Gas Optimization — compute-once score, handler consolidation, price removal, SLOAD dedup — v14.0 Phases 159-161
 - ✓ v15.0 Delta Audit — 76 functions audited (all SAFE), RNG commitment windows verified, gas ceiling 1.99x margin, call graph clean, 1455 tests passing — v15.0 Phases 162-167
+- ✓ v16.0 Module Consolidation & Storage Repack — EndgameModule eliminated (3 functions redistributed), storage slots 0-2 repacked (slot 0 32/32, currentPrizePool uint128 in slot 1, slot 2 killed), 14/14 requirements satisfied — v16.0 Phases 168-172
 
 ## Completed Milestone: v8.1 Final Audit Prep
 
@@ -222,6 +229,11 @@ v16.0 Module Consolidation & Storage Repack started (2026-04-02). Eliminating En
 | Replace 30-day BURNIE ban with gameOverPossible flag | Static elapsed-time ban replaced by dynamic drip-projection check; flag set at L10+ purchase-phase entry when futurePool drip cannot cover nextPool deficit | ✓ v11.0 Phase 151 |
 | WAD-scale geometric drip projection (0.9925 decay) | Conservative 0.75% daily decay rate via closed-form series futurePool*(1-0.9925^n); ~700 gas for _wadPow | ✓ v11.0 Phase 151 |
 | BURNIE lootbox far-future redirect (bit 22) when flag active | Current-level tickets redirect to far-future key space; near-future rolls (currentLevel+1..+6) land normally | ✓ v11.0 Phase 151 |
+| Repack slot 0 to 32/32 bytes (add ticketsFullyProcessed + gameOverPossible) | Fill 2-byte padding in slot 0 to eliminate wasted space | ✓ v16.0 Phase 168 |
+| Downsize currentPrizePool from uint256 to uint128 | 340B ETH exceeds total supply; uint128 saves a full slot | ✓ v16.0 Phase 168 |
+| Eliminate EndgameModule entirely | 3 functions redistributed to existing modules; reduces delegatecall overhead and deploy complexity | ✓ v16.0 Phases 169-171 |
+| claimWhalePass to WhaleModule (not JackpotModule) | WhaleModule already has whale-related logic; better semantic fit | ✓ v16.0 Phase 171 |
+| NonceBurner placeholder in fuzz test deploy | Empty contract preserves nonce ordering after EndgameModule deletion | ✓ v16.0 Phase 171 |
 
 ## Known Issues (Documented, Not Blocking)
 
@@ -241,18 +253,20 @@ v16.0 Module Consolidation & Storage Repack started (2026-04-02). Eliminating En
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current Milestone: v16.0 Module Consolidation & Storage Repack
+## Current Milestone: v17.0 Affiliate Bonus Cache
 
-**Goal:** Eliminate EndgameModule and repack storage slots 0-2 for gas savings and structural simplification.
+**Goal:** Cache affiliate bonus points in `mintPacked_` to eliminate 5 cold SLOADs from every activity score computation, then delta-audit the change to verify nothing breaks.
 
 **Target features:**
-- Eliminate EndgameModule — redistribute runRewardJackpots, rewardTopAffiliate, claimWhalePass into existing modules
-- Storage repack — move ticketsFullyProcessed + gameOverPossible into slot 0, downsize currentPrizePool to uint128 in slot 1, kill slot 2
-- Fix stale slot header comments throughout DegenerusGameStorage.sol
+- Add cached affiliate bonus level + points fields to `mintPacked_` (bits 185-214)
+- `_playerActivityScore` reads cache from already-loaded packed word, skips cross-contract call on hit
+- `recordMintData` populates cache on level change (piggybacking on existing SSTORE)
+- Delta audit of all changed functions and `mintPacked_` consumers
+- Verify gas savings and no regressions (Foundry + Hardhat suites green)
 
 ## Current State
 
-v16.0 milestone started (2026-04-02). Defining requirements.
+v17.0 in progress (2026-04-03). Caching affiliate bonus in `mintPacked_` unused bits [185-214].
 
 ## Completed Milestone: v12.0 Level Quests
 
@@ -296,7 +310,7 @@ v9.0 Contest Dry Run shipped (2026-03-28). 5 wardens, 152 attack surfaces, 0 Med
 
 **Grand total across all milestones:** 147+ findings (16 LOW, 128+ INFO), 0 MEDIUM/HIGH outstanding. KNOWN-ISSUES.md comprehensive with 35+ entries. C4A contest README finalized.
 
-Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests), v4.2 (daily jackpot chunk removal), v4.3 (prizePoolsPacked — closed early), v4.4 (BAF cache-overwrite fix), v5.0 (ultimate adversarial audit), v6.0 (test cleanup + fixes + charity), v7.0 (delta adversarial audit), v8.0 (pre-audit hardening), v8.1 (final audit prep), v9.0 (contest dry run), v10.0 (audit submission ready), v10.1 (ABI cleanup), v10.2 (writes cap analysis — no change needed), v10.3 (v10.1 delta audit), v11.0 (BURNIE endgame gate), v12.0 (level quests design).
+Prior milestones: v1.0-v1.2 (RNG), v1.3 (sDGNRS split), v2.0 (C4A prep), v2.1 (governance), v3.0 (full audit), v3.1 (comments), v3.2 (delta + re-scan), v3.3 (gambling burn audit), v3.4 (skim + lootbox audit), v3.5 (final polish), v3.6 (VRF stall resilience), v3.7 (VRF path audit), v3.8 (VRF commitment window), v3.9 (far-future ticket fix), v4.0 (ticket lifecycle + RNG re-audit), v4.1 (ticket lifecycle integration tests), v4.2 (daily jackpot chunk removal), v4.3 (prizePoolsPacked — closed early), v4.4 (BAF cache-overwrite fix), v5.0 (ultimate adversarial audit), v6.0 (test cleanup + fixes + charity), v7.0 (delta adversarial audit), v8.0 (pre-audit hardening), v8.1 (final audit prep), v9.0 (contest dry run), v10.0 (audit submission ready), v10.1 (ABI cleanup), v10.2 (writes cap analysis — no change needed), v10.3 (v10.1 delta audit), v11.0 (BURNIE endgame gate), v12.0 (level quests design), v13.0 (level quests implementation), v14.0 (activity score + gas optimization), v15.0 (delta audit), v16.0 (module consolidation + storage repack).
 
 ## Evolution
 
@@ -316,4 +330,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 after v13.0 Level Quests Implementation milestone started*
+*Last updated: 2026-04-03 after v16.0 Module Consolidation & Storage Repack milestone*
