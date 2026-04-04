@@ -40,7 +40,8 @@
 - ✅ **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167 (shipped 2026-04-02)
 - ✅ **v16.0 Module Consolidation & Storage Repack** — Phases 168-172 (shipped 2026-04-03)
 - ✅ **v17.0 Affiliate Bonus Cache** — Phases 173-174 (shipped 2026-04-03)
-- **v17.1 Comment Correctness Sweep** — Phases 175-178 (in progress)
+- ✅ **v17.1 Comment Correctness Sweep** — Phases 175-178 (shipped 2026-04-03)
+- **v18.0 Delta Audit & AdvanceGame Revert Safety** — Phases 179-182 (in progress)
 
 ## Phases
 
@@ -161,84 +162,77 @@ See individual milestone entries above.
 </details>
 
 <details>
-<summary>v17.1 Comment Correctness Sweep (Phases 175-178) -- IN PROGRESS</summary>
+<summary>v17.1 Comment Correctness Sweep (Phases 175-178) -- SHIPPED 2026-04-03</summary>
 
-- [ ] **Phase 175: Game Module Comment Sweep** - 5 plans
-- [ ] **Phase 176: Core Game + Token Contract Comment Sweep** - 3 plans
-- [ ] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - 4 plans
-- [ ] **Phase 178: Consolidation & Regression Check** - 2 plans
+- [x] **Phase 175: Game Module Comment Sweep** - 5 plans (completed 2026-04-03)
+- [x] **Phase 176: Core Game + Token Contract Comment Sweep** - 3 plans (completed 2026-04-03)
+- [x] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - 4 plans (completed 2026-04-03)
+- [x] **Phase 178: Consolidation & Regression Check** - 2 plans (completed 2026-04-03)
 
 </details>
 
+### v18.0 Delta Audit & AdvanceGame Revert Safety (In Progress)
+
+**Milestone Goal:** Audit all code changes since v15.0 audit baseline (EndgameModule deletion, storage repack, affiliate bonus cache, rngBypass refactor) and systematically prove every advanceGame execution path cannot revert under normal operation.
+
+- [ ] **Phase 179: Change Surface Inventory** - Full git diff review and function-level delta trace
+- [ ] **Phase 180: Storage & Infrastructure Verification** - Storage layout, rngBypass correctness, ContractAddresses alignment
+- [ ] **Phase 181: AdvanceGame Revert Safety** - Prove every advanceGame path non-reverting under normal operation
+- [ ] **Phase 182: Regression Check** - v15.0 findings spot-check and test suite validation
+
 ## Phase Details
 
-### Phase 175: Game Module Comment Sweep
-**Goal**: All game module contracts have accurate inline comments and NatSpec — every discrepancy between comment and code behavior logged as a finding
-**Depends on**: Phase 174
-**Requirements**: CMT-01
+### Phase 179: Change Surface Inventory
+**Goal**: Every line changed in contracts/ since the v15.0 audit baseline is identified and every added/modified function has a traced verdict
+**Depends on**: Phase 178
+**Requirements**: DELTA-05, DELTA-01
 **Success Criteria** (what must be TRUE):
-  1. Every inline comment and NatSpec entry in AdvanceModule, MintModule, MintStreakUtils, JackpotModule, LootboxModule, BoonModule, DegeneretteModule, DecimatorModule, WhaleModule, GameOverModule, and PayoutUtils has been read against the actual code
-  2. Any comment that misstates a parameter, logic branch, return value, or side effect is recorded as a LOW or INFO finding with contract name, line reference, and a plain-English description of the discrepancy
-  3. The findings list for this phase is self-contained and could be reviewed independently without re-reading source
-**Plans**: 5 plans
-Plans:
-- [x] 175-01-PLAN.md — AdvanceModule + MintModule comment sweep
-- [x] 175-02-PLAN.md — JackpotModule comment sweep
-- [x] 175-03-PLAN.md — LootboxModule + MintStreakUtils comment sweep
-- [x] 175-04-PLAN.md — BoonModule + DegeneretteModule + DecimatorModule comment sweep
-- [x] 175-05-PLAN.md — WhaleModule + GameOverModule + PayoutUtils comment sweep
+  1. A complete git diff from v15.0 audit baseline to HEAD exists covering every changed line in contracts/, organized by contract file
+  2. Every changed line is attributed to its originating milestone or manual edit (v16.0 storage repack, v16.0 EndgameModule deletion, v17.0 affiliate cache, rngBypass refactor, v17.1 comment fixes)
+  3. Every function that was added or modified has a file:line citation and a verdict (SAFE / INFO / LOW+), with rationale for each verdict
+  4. No changed line in contracts/ is unaccounted for -- the diff is exhaustive
+**Plans**: TBD
 
-### Phase 176: Core Game + Token Contract Comment Sweep
-**Goal**: Core game storage and all token contracts have accurate inline comments and NatSpec — every discrepancy logged as a finding
-**Depends on**: Phase 175
-**Requirements**: CMT-02, CMT-03
+### Phase 180: Storage & Infrastructure Verification
+**Goal**: Storage layout, rngBypass parameter semantics, and ContractAddresses registry are proven correct after all v16.0-v17.1 changes
+**Depends on**: Phase 179
+**Requirements**: DELTA-02, DELTA-03, DELTA-04
 **Success Criteria** (what must be TRUE):
-  1. Every inline comment and NatSpec entry in DegenerusGame and DegenerusGameStorage has been read against the actual code
-  2. Every inline comment and NatSpec entry in BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, and GNRUS has been read against the actual code
-  3. Any comment that misstates state variable semantics, packed-bit layouts, access control assumptions, or token math is recorded as a LOW or INFO finding with full location reference
-**Plans**: 3 plans
-Plans:
-- [x] 176-01-PLAN.md — DegenerusGame + DegenerusGameStorage comment sweep (CMT-02)
-- [x] 176-02-PLAN.md — BurnieCoin + BurnieCoinflip comment sweep (CMT-03)
-- [x] 176-03-PLAN.md — DegenerusStonk + StakedDegenerusStonk + GNRUS comment sweep (CMT-03)
+  1. forge inspect confirms identical storage layout across all DegenerusGameStorage inheritors -- no slot shifts, no collisions, no gaps introduced by repack or rngBypass changes
+  2. Every call site passing rngBypass=true is proven to be internal to the advanceGame call tree (no external entry point can reach rngBypass=true), and every call site passing rngBypass=false is proven to be on an external-facing path
+  3. Every label in ContractAddresses maps to the correct deployed contract, and the GAME_ENDGAME_MODULE slot is confirmed absent with no stale references anywhere in contracts/
+**Plans**: TBD
 
-### Phase 177: Infrastructure, Libraries & Misc Comment Sweep
-**Goal**: All infrastructure contracts, libraries, interfaces, and miscellaneous contracts have accurate inline comments and NatSpec — every discrepancy logged as a finding
-**Depends on**: Phase 176
-**Requirements**: CMT-04, CMT-05, CMT-06
+### Phase 181: AdvanceGame Revert Safety
+**Goal**: Every execution path reachable from advanceGame is proven non-reverting under normal game progression -- no revert can kill the game
+**Depends on**: Phase 180
+**Requirements**: AGSAFE-01, AGSAFE-02, AGSAFE-03, AGSAFE-04, AGSAFE-05
 **Success Criteria** (what must be TRUE):
-  1. Every inline comment and NatSpec entry in DegenerusAdmin, DegenerusVault, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, and DeityBoonViewer has been read against the actual code
-  2. Every inline comment and NatSpec entry in EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib, and all I* interfaces has been read against the actual code; interface NatSpec is verified to match implementing contract behavior
-  3. Every inline comment and NatSpec entry in WrappedWrappedXRP, DegenerusTraitUtils, and Icons32Data has been read against the actual code
-  4. Any discrepancy — including interface NatSpec that diverges from implementation — is recorded as a LOW or INFO finding with full location reference
-**Plans**: 4 plans
-Plans:
-- [x] 177-01-PLAN.md — DegenerusAdmin + DegenerusVault + DegenerusAffiliate + DegenerusDeityPass comment sweep (CMT-04)
-- [x] 177-02-PLAN.md — DegenerusQuests + DegenerusJackpots + DeityBoonViewer comment sweep (CMT-04)
-- [x] 177-03-PLAN.md — All 5 libraries + all 11 interfaces comment sweep and implementation cross-check (CMT-05)
-- [x] 177-04-PLAN.md — WrappedWrappedXRP + DegenerusTraitUtils + Icons32Data comment sweep (CMT-06)
+  1. Every require/revert in advanceGame's direct code is classified as either unreachable under normal operation (with proof) or intentional-and-correct (NotTimeYet, RngNotReady)
+  2. Every function reachable via delegatecall from advanceGame (JackpotModule, MintModule, GameOverModule) has been traced -- no revert in any delegatecall target can fire during normal game progression
+  3. Every external call from advanceGame (runDecimatorJackpot, quests, VRF) is proven either non-reverting or wrapped in failure-tolerant handling (try/catch, success check)
+  4. Every guard pattern (RngLocked, prizePoolFrozen, access control) in advanceGame-reachable code is verified to not block internal operations -- the rngBypass pattern has no remaining gaps
+  5. State machine transitions are proven complete -- no combination of flags, counters, or timing can leave advanceGame stuck in an unrecoverable state
+**Plans**: TBD
 
-### Phase 178: Consolidation & Regression Check
-**Goal**: All per-phase findings are merged into one document, severities are assigned, and prior sweep regressions are confirmed absent
-**Depends on**: Phase 177
-**Requirements**: CON-01, CON-02
+### Phase 182: Regression Check
+**Goal**: All v15.0 adversarial findings are confirmed still valid in current code and the full test suite passes clean
+**Depends on**: Phase 181
+**Requirements**: REG-01, REG-02
 **Success Criteria** (what must be TRUE):
-  1. A single findings document exists containing all LOW/INFO findings from Phases 175-177, deduplicated and formatted consistently (matching v3.1/v3.5 format)
-  2. Every finding has a severity (LOW or INFO), a contract and line reference, and a description of what the comment says versus what the code does
-  3. Every finding from the v3.1 and v3.5 sweeps that was marked fixed has been spot-checked against the current contract source; any regression is added as a new finding
-**Plans**: 2 plans
-Plans:
-- [x] 178-01-PLAN.md — Merge all Phase 175-177 findings into consolidated document
-- [x] 178-02-PLAN.md — Spot-check v3.1/v3.5 fixed findings for regressions
+  1. The 76 function-level SAFE verdicts from v15.0 Phase 165 have been spot-checked against current source -- no v16.0/v17.0/v17.1 refactor has introduced a regression in any previously-cleared function
+  2. Foundry test suite passes with zero unexpected failures (expected failures from time-gating or taper formula documented)
+  3. Hardhat test suite passes with zero unexpected failures
+**Plans**: TBD
 
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 175. Game Module Comment Sweep | 5/5 | Complete    | 2026-04-03 |
-| 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
-| 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
-| 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
+| 179. Change Surface Inventory | 0/TBD | Not started | - |
+| 180. Storage & Infrastructure Verification | 0/TBD | Not started | - |
+| 181. AdvanceGame Revert Safety | 0/TBD | Not started | - |
+| 182. Regression Check | 0/TBD | Not started | - |
 
 ## Deferred
 

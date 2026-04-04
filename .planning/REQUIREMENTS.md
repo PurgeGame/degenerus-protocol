@@ -43,24 +43,24 @@ None — this is an audit milestone, not a feature milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DELTA-01 | — | Pending |
-| DELTA-02 | — | Pending |
-| DELTA-03 | — | Pending |
-| DELTA-04 | — | Pending |
-| DELTA-05 | — | Pending |
-| AGSAFE-01 | — | Pending |
-| AGSAFE-02 | — | Pending |
-| AGSAFE-03 | — | Pending |
-| AGSAFE-04 | — | Pending |
-| AGSAFE-05 | — | Pending |
-| REG-01 | — | Pending |
-| REG-02 | — | Pending |
+| DELTA-01 | Phase 179 | Pending |
+| DELTA-02 | Phase 180 | Pending |
+| DELTA-03 | Phase 180 | Pending |
+| DELTA-04 | Phase 180 | Pending |
+| DELTA-05 | Phase 179 | Pending |
+| AGSAFE-01 | Phase 181 | Pending |
+| AGSAFE-02 | Phase 181 | Pending |
+| AGSAFE-03 | Phase 181 | Pending |
+| AGSAFE-04 | Phase 181 | Pending |
+| AGSAFE-05 | Phase 181 | Pending |
+| REG-01 | Phase 182 | Pending |
+| REG-02 | Phase 182 | Pending |
 
 **Coverage:**
 - v18.0 requirements: 12 total
-- Mapped to phases: 0
-- Unmapped: 12 (pending roadmap)
+- Mapped to phases: 12
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 after initial definition*
+*Last updated: 2026-04-03 after roadmap creation*
