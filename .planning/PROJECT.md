@@ -8,16 +8,9 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v18.0 Delta Audit & AdvanceGame Revert Safety
+## Current State
 
-**Goal:** Audit all code changes since v15.0 and prove every advanceGame path cannot revert under normal operation.
-
-**Target features:**
-- Delta audit of v16.0 (EndgameModule deletion, storage repack), v17.0 (affiliate bonus cache), and rngBypass refactor changes
-- AdvanceGame revert-safety proof: every delegatecall, guard, external call, and state transition proven non-reverting or gracefully handled
-- Regression check: no v15.0 findings have regressed through the code changes
-
-**Key context:** The rngBypass bug (BAF far-future tickets reverting advanceGame with RngLocked) was a game-killer found by simulation. The phaseTransitionActive guard has been replaced with an explicit rngBypass parameter. This audit must systematically verify no similar patterns exist anywhere in the advanceGame call tree.
+v16.0 Module Consolidation & Storage Repack shipped (2026-04-03). EndgameModule eliminated, storage slots 0-2 repacked, all tests passing.
 
 ## Completed Milestone: v17.0 Affiliate Bonus Cache
 

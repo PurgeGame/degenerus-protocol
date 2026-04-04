@@ -51,12 +51,12 @@ import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 
-/*+======================================================================+
-  |                  EXTERNAL INTERFACE DEFINITIONS                      |
-  +======================================================================+
-  |  Minimal interfaces for external contracts this contract interacts   |
-  |  with. Defined locally to avoid circular import dependencies.        |
-  +======================================================================+*/
+/*+==============================================================================+
+  |                     EXTERNAL INTERFACE DEFINITIONS                           |
+  +==============================================================================+
+  |  Minimal interfaces for external contracts this contract interacts with.     |
+  |  These are defined locally to avoid circular import dependencies.            |
+  +==============================================================================+*/
 
 /// @dev Vault interface for DGVE ownership check (admin function access control).
 interface IDegenerusVaultOwnerGame {
@@ -115,12 +115,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         bool approved
     );
 
-    /*+======================================================================+
-      |                   PRECOMPUTED ADDRESSES (CONSTANT)                   |
-      +======================================================================+
-      |  Core contract references are read from ContractAddresses and baked  |
-      |  into bytecode. They cannot change after deployment.                 |
-      +======================================================================+*/
+    /*+=======================================================================+
+      |                   PRECOMPUTED ADDRESSES (CONSTANT)                    |
+      +=======================================================================+
+      |  Core contract references are read from ContractAddresses and baked   |
+      |  into bytecode. They cannot change after deployment.                  |
+      +=======================================================================+*/
 
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
@@ -177,11 +177,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [104-127] unitsLevel      - Level index for unitsAtLevel tracking   |
       |  [128-151] frozenUntilLevel - Whale bundle freeze level (0 = none)   |
       |  [152-153] whaleBundleType  - Bundle type (0=none,1=10,3=100)        |
-      |  [154-159] (reserved)      - 6 unused bits                           |
-      |  [160-183] mintStreakLast - Mint streak last completed level (24b)   |
-      |  [184]    hasDeityPass    - Deity pass holder flag (1b)              |
-      |  [185-208] affBonusLevel  - Cached affiliate bonus level (24b)       |
-      |  [209-214] affBonusPoints - Cached affiliate bonus points (6b)       |
+      |  [154-159] (reserved)       - 6 unused bits                           |
+      |  [160-183] mintStreakLast  - Mint streak last completed level (24b)   |
+      |  [184]    hasDeityPass     - Deity pass holder flag (1b)             |
+      |  [185-208] affBonusLevel   - Cached affiliate bonus level (24b)     |
+      |  [209-214] affBonusPoints  - Cached affiliate bonus points (6b)     |
       |  [215-227] (reserved)      - 13 unused bits                          |
       |  [228-243] unitsAtLevel    - Mints at current level                  |
       |  [244]    (deprecated)     - Previously used for bonus tracking      |
@@ -206,50 +206,45 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         dailyIdx = GameTimeLib.currentDayIndex();
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
         // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners)
-        mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(
-            mintPacked_[ContractAddresses.SDGNRS],
-            BitPackingLib.HAS_DEITY_PASS_SHIFT,
-            1,
-            1
-        );
-        mintPacked_[ContractAddresses.VAULT] = BitPackingLib.setPacked(
-            mintPacked_[ContractAddresses.VAULT],
-            BitPackingLib.HAS_DEITY_PASS_SHIFT,
-            1,
-            1
-        );
+        mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.SDGNRS], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
+        mintPacked_[ContractAddresses.VAULT] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.VAULT], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
         // Pre-queue vault perpetual tickets for levels 1-100 (advance module handles 101+)
-        _queueTicketRange(ContractAddresses.SDGNRS, 1, 100, 16, false);
-        _queueTicketRange(ContractAddresses.VAULT, 1, 100, 16, false);
+        for (uint24 i = 1; i <= 100; ) {
+            _queueTickets(ContractAddresses.SDGNRS, i, 16, false);
+            _queueTickets(ContractAddresses.VAULT, i, 16, false);
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /*+======================================================================+
       |                           MODIFIERS                                  |
       +======================================================================+*/
 
-    /*+======================================================================+
-      |              CORE STATE MACHINE: advanceGame()                       |
-      +======================================================================+
-      |  Progresses the state machine through 2 active phases:               |
-      |  PURCHASE (jackpotPhaseFlag=false) and JACKPOT (true).               |
-      |  Each call performs one "tick" of work. gameOver is terminal.        |
-      |                                                                      |
-      |  State Transitions:                                                  |
-      |  - PURCHASE: Process ticket batches until target, then JACKPOT       |
-      |  - JACKPOT: Pay daily jackpots, wait for burns, then PURCHASE        |
-      |  - GAMEOVER: Terminal state, no transitions                          |
-      |                                                                      |
-      |  Gating (tiered bypass):                                             |
-      |  - Deity pass holder: always bypasses                                |
-      |  - Anyone: bypasses after 30+ min since level start                  |
-      |  - Pass holder (lazy/whale): bypasses after 15+ min                  |
-      |  - DGVE majority holder: always bypasses (external call)             |
-      |  - RNG must be ready (not locked) or stale (12h timeout)             |
-      |                                                                      |
-      |  Presale: lootboxPresaleActive (orthogonal to state machine)         |
-      |  - 62% bonus BURNIE from loot boxes, bonusFlip active                |
-      |  - Auto-ends at PURCHASE->JACKPOT, or admin ends (one-way)           |
-      +======================================================================+*/
+    /*+========================================================================================+
+      |                    CORE STATE MACHINE: advanceGame()                                   |
+      +========================================================================================+
+      |  The heart of the game. This function progresses the state machine                     |
+      |  through its 2 active phases: PURCHASE (jackpotPhaseFlag=false), JACKPOT (jackpotPhaseFlag=true). |
+      |  Each call performs one "tick" of work. gameOver is terminal.                          |
+      |                                                                                        |
+      |  State Transitions:                                                                    |
+      |  • PURCHASE (jackpotPhaseFlag=false): Process ticket batches until target met, then → JACKPOT|
+      |  • JACKPOT (jackpotPhaseFlag=true): Pay daily jackpots, wait for burns, then → PURCHASE      |
+      |  • GAMEOVER (gameOver=true): Terminal state, no transitions                             |
+      |                                                                                        |
+      |  Gating (tiered bypass):                                                                |
+      |  • Deity pass holder — always bypasses                                                 |
+      |  • Anyone — bypasses after 30+ min since level start                                   |
+      |  • Pass holder (lazy/whale) — bypasses after 15+ min                                   |
+      |  • DGVE majority holder — always bypasses (last resort, external call)                 |
+      |  • RNG must be ready (not locked) or recently stale (12h timeout)                      |
+      |                                                                                        |
+      |  Presale: lootboxPresaleActive toggle (orthogonal to state machine)                    |
+      |  • Starts active: 62% bonus BURNIE from loot boxes, bonusFlip active                    |
+      |  • Auto-ends when PURCHASE→JACKPOT, or admin can end manually (one-way, cannot re-enable) |
+      +========================================================================================+*/
 
     /// @notice Advance the game state machine by one tick.
     /// @dev Anyone can call, but standard flows require an ETH mint today.
@@ -284,11 +279,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /*+======================================================================+
-      |                    ADMIN VRF FUNCTIONS                               |
-      +======================================================================+
-      |  One-time VRF setup called by ADMIN during deployment phase.         |
-      +======================================================================+*/
+    /*+========================================================================================+
+      |                    ADMIN VRF FUNCTIONS                                                 |
+      +========================================================================================+
+      |  One-time VRF setup function called by ADMIN during deployment phase.                  |
+      +========================================================================================+*/
 
     /// @notice Wire VRF config from the VRF ADMIN contract.
     /// @dev Access: ADMIN only. Overwrites any existing config on each call.
@@ -318,7 +313,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /*+======================================================================+
       |                       MINT RECORDING                                 |
       +======================================================================+
-      |  Functions called by the game contract to record mints and process   |
+      |  Functions called by the game contract to record mints and process         |
       |  payments. ETH and claimable winnings can both fund purchases.       |
       +======================================================================+*/
 
@@ -424,7 +419,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                       OPERATOR APPROVALS                             |
+      |                      OPERATOR APPROVALS                             |
       +======================================================================+*/
 
     /// @notice Approve or revoke an operator to act on your behalf.
@@ -463,7 +458,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                       LOOT BOX CONTROLS                              |
+      |                       LOOT BOX CONTROLS                             |
       +======================================================================+*/
 
     /// @notice Current day index.
@@ -703,7 +698,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Place Degenerette bets (4 traits, match-based payouts).
+    /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
     /// @param player The betting player (address(0) = msg.sender).
     /// @param currency Currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP).
     /// @param amountPerTicket Bet amount per ticket.
@@ -956,29 +951,29 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /*+======================================================================+
       |                       TICKET QUEUEING                                |
       +======================================================================+
-      |  Tickets are queued for batch processing rather than minted          |
-      |  immediately. This prevents gas exhaustion from large purchases.     |
+      |  Tickets are queued for batch processing rather than minted immediately.|
+      |  This prevents gas exhaustion from large purchases.                  |
       +======================================================================+*/
 
-    /*+======================================================================+
-      |                    DELEGATE MODULE HELPERS                           |
-      +======================================================================+
-      |  Internal functions that delegatecall into specialized modules.      |
-      |  All modules MUST inherit DegenerusGameStorage for slot alignment.   |
-      |                                                                      |
-      |  Modules:                                                            |
-      |  - ADVANCE_MODULE   : Daily advance, VRF, daily processing           |
-      |  - BOON_MODULE      : Deity boon effects and activation              |
-      |  - DECIMATOR_MODULE : Decimator credits and lootbox payouts          |
-      |  - DEGENERETTE_MODULE: Bet placement and resolution                  |
-      |  - JACKPOT_MODULE   : Jackpot calculations and payouts               |
-      |  - LOOTBOX_MODULE   : Lootbox open, credit, and payout               |
-      |  - MINT_MODULE      : Mint data recording, airdrop multipliers       |
-      |  - WHALE_MODULE     : Whale bundles and whale pass claims            |
-      |                                                                      |
-      |  SECURITY: delegatecall executes module code in this contract's      |
-      |  context, with access to all storage. Modules are constants.         |
-      +======================================================================+*/
+    /*+================================================================================================================+
+      |                    DELEGATE MODULE HELPERS                                                                     |
+      +================================================================================================================+
+      |  Internal functions that delegatecall into specialized modules.                                                |
+      |  All modules MUST inherit DegenerusGameStorage for slot alignment.                                             |
+      |                                                                                                                |
+      |  Modules:                                                                                                      |
+      |  • GAME_ADVANCE_MODULE      - Daily advance, VRF, daily processing                                             |
+      |  • GAME_BOON_MODULE         - Deity boon effects and activation                                                |
+      |  • GAME_DECIMATOR_MODULE    - Decimator claim credits and lootbox payouts                                       |
+      |  • GAME_DEGENERETTE_MODULE  - Degenerette bet placement and resolution                                          |
+      |  • GAME_JACKPOT_MODULE      - Jackpot calculations and payouts                                                  |
+      |  • GAME_LOOTBOX_MODULE      - Lootbox open, credit, and payout                                                  |
+      |  • GAME_MINT_MODULE         - Mint data recording, airdrop multipliers                                          |
+      |  • GAME_WHALE_MODULE        - Whale bundle purchases and whale pass claims                                      |
+      |                                                                                                                |
+      |  SECURITY: delegatecall executes module code in this contract's                                                |
+      |  context, with access to all storage. Modules are constant addresses.                                          |
+      +================================================================================================================+*/
 
     /// @dev Bubble up revert reason from delegatecall failure.
     ///      Uses assembly to preserve original error data.
@@ -1013,9 +1008,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /*+======================================================================+
-      |                    DECIMATOR JACKPOT LOGIC                           |
-      +======================================================================+*/
+    /*+========================================================================================+
+      |                    DECIMATOR JACKPOT LOGIC                                             |
+      +========================================================================================+*/
 
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @dev Access: COIN contract only (enforced in module).
@@ -1256,18 +1251,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return uint8((packed >> shift) & 0xF);
     }
 
-    /*+======================================================================+
-      |                    CLAIMING WINNINGS (ETH)                           |
-      +======================================================================+
-      |  Players claim winnings from jackpots, affiliates, and game-over     |
-      |  payouts through claimWinnings().                                    |
-      |                                                                      |
-      |  SECURITY:                                                           |
-      |  - Uses CEI pattern (Checks-Effects-Interactions)                    |
-      |  - Leaves 1 wei sentinel for gas optimization on future credits      |
-      |  - Falls back to stETH if ETH balance insufficient                   |
-      |  - claimablePool decremented before external call                    |
-      +======================================================================+*/
+    /*+========================================================================================+
+      |                    CLAIMING WINNINGS (ETH)                                             |
+      +========================================================================================+
+      |  Players claim accumulated winnings from ContractAddresses.JACKPOTS, affiliates,       |
+      |  and endgame payouts through the claimWinnings() function.                              |
+      |                                                                                        |
+      |  SECURITY:                                                                             |
+      |  • Uses CEI pattern (Checks-Effects-Interactions)                                      |
+      |  • Leaves 1 wei sentinel for gas optimization on future credits                        |
+      |  • Falls back to stETH if ETH balance insufficient                                     |
+      |  • claimablePool is decremented before external call                                   |
+      +========================================================================================+*/
 
     /// @notice Emitted when claimable ETH winnings are paid out.
     /// @param player Player whose balance is claimed.
@@ -1364,10 +1359,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (affiliateDgnrsClaimedBy[currLevel][player]) revert E();
 
         uint256 score = affiliate.affiliateScore(currLevel, player);
-        bool isDeityHolder = (mintPacked_[player] >>
-            BitPackingLib.HAS_DEITY_PASS_SHIFT) &
-            1 !=
-            0;
+        bool isDeityHolder = mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
         if (!isDeityHolder && score < AFFILIATE_DGNRS_MIN_SCORE) revert E();
 
         uint256 denominator = affiliate.totalAffiliateScore(currLevel);
@@ -1404,7 +1396,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                    AUTO-REBUY TOGGLE                                 |
+      |                    AUTO-REBUY TOGGLE                                |
       +======================================================================+*/
 
     /// @notice Emitted when a player toggles auto-rebuy on or off.
@@ -1561,8 +1553,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     function _hasAnyLazyPass(address player) private view returns (bool) {
         uint256 packed = mintPacked_[player];
-        if ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0)
-            return true;
+        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return true;
 
         uint24 frozenUntilLevel = uint24(
             (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
@@ -1635,7 +1626,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                      LOOTBOX CLAIMS                                  |
+      |                    LOOTBOX CLAIMS                                   |
       +======================================================================+*/
 
     /// @notice Claim deferred whale pass rewards from large lootbox wins (>5 ETH).
@@ -1660,7 +1651,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                    REDEMPTION LOOTBOX                                |
+      |                    REDEMPTION LOOTBOX                               |
       +======================================================================+*/
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
@@ -1723,17 +1714,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /*+======================================================================+
-      |                    JACKPOT PAYOUT FUNCTIONS                          |
-      +======================================================================+
-      |  Distributes jackpot winnings. Most logic lives in                   |
-      |  GAME_JACKPOT_MODULE (via delegatecall).                             |
-      |                                                                      |
-      |  Jackpot Types:                                                      |
-      |  - Daily: paid each day to burn ticket holders (day 5 = full)        |
-      |  - Decimator: 100-level milestone jackpot (30% of pool)              |
-      |  - BAF: big-ass-flip jackpot (20% of pool at L%100=0)                |
-      +======================================================================+*/
+    /*+===============================================================================================+
+      |                    JACKPOT PAYOUT FUNCTIONS                                                   |
+      +===============================================================================================+
+      |  Functions for distributing jackpot winnings. Most jackpot logic                              |
+      |  lives in the ContractAddresses.GAME_JACKPOT_MODULE (via delegatecall).                       |
+      |                                                                                               |
+      |  Jackpot Types:                                                                               |
+      |  • Daily jackpot - Paid each day to burn ticket holders (day 5 = full pool payout)             |
+      |  • Decimator - Special 100-level milestone jackpot (30% of pool)                              |
+      |  • BAF - Big-ass-flip jackpot (20% of pool at L%100=0)                                        |
+      +===============================================================================================+*/
 
     /*+======================================================================+
       |                    ADMIN: REWARD VAULT & LIQUIDITY                   |
@@ -2183,7 +2174,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         address player
     ) external view returns (uint24 lvl, uint24 levelCount, uint24 streak) {
         uint256 packed = mintPacked_[player];
-        if ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0) {
+        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) {
             uint24 currLevel = level;
             return (currLevel, currLevel, currLevel);
         }
@@ -2263,9 +2254,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Whether a player holds a deity pass.
     function hasDeityPass(address player) external view returns (bool) {
-        return
-            (mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 !=
-            0;
+        return mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
     }
 
     /*+======================================================================+
@@ -2395,7 +2384,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /*+======================================================================+
-      |                    VIEW: TRAIT TICKET QUERIES                        |
+      |                    VIEW: TRAIT TICKET QUERIES                         |
       +======================================================================+
       |  Read-only functions for querying trait state and game history.      |
       +======================================================================+*/

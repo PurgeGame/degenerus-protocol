@@ -40,8 +40,7 @@
 - ✅ **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167 (shipped 2026-04-02)
 - ✅ **v16.0 Module Consolidation & Storage Repack** — Phases 168-172 (shipped 2026-04-03)
 - ✅ **v17.0 Affiliate Bonus Cache** — Phases 173-174 (shipped 2026-04-03)
-- ✅ **v17.1 Comment Correctness Sweep** — Phases 175-178 (shipped 2026-04-03)
-- ✅ **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (shipped 2026-04-04)
+- **v17.1 Comment Correctness Sweep** — Phases 175-178 (in progress)
 
 ## Phases
 
@@ -162,12 +161,12 @@ See individual milestone entries above.
 </details>
 
 <details>
-<summary>v17.1 Comment Correctness Sweep (Phases 175-178) -- SHIPPED 2026-04-03</summary>
+<summary>v17.1 Comment Correctness Sweep (Phases 175-178) -- IN PROGRESS</summary>
 
-- [x] **Phase 175: Game Module Comment Sweep** - 5 plans (completed 2026-04-03)
-- [x] **Phase 176: Core Game + Token Contract Comment Sweep** - 3 plans (completed 2026-04-03)
-- [x] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - 4 plans (completed 2026-04-03)
-- [x] **Phase 178: Consolidation & Regression Check** - 2 plans (completed 2026-04-03)
+- [ ] **Phase 175: Game Module Comment Sweep** - 5 plans
+- [ ] **Phase 176: Core Game + Token Contract Comment Sweep** - 3 plans
+- [ ] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - 4 plans
+- [ ] **Phase 178: Consolidation & Regression Check** - 2 plans
 
 </details>
 
@@ -232,47 +231,6 @@ Plans:
 - [x] 178-01-PLAN.md — Merge all Phase 175-177 findings into consolidated document
 - [x] 178-02-PLAN.md — Spot-check v3.1/v3.5 fixed findings for regressions
 
-### Phase 180: Storage Layout & Configuration Verification
-**Goal**: Storage layout verified identical across all DegenerusGameStorage inheritors after repack and rngBypass changes; rngBypass usage verified correct; ContractAddresses alignment confirmed
-**Depends on**: Phase 179
-**Requirements**: DELTA-02, DELTA-03, DELTA-04
-**Success Criteria** (what must be TRUE):
-  1. Storage layout is verified identical across all DegenerusGameStorage inheritors after v16.0 repack and rngBypass changes
-  2. Every rngBypass=true caller is proven internal to advanceGame; every rngBypass=false caller is proven external-facing
-  3. Every ContractAddresses label maps to the correct deployed contract after GAME_ENDGAME_MODULE removal
-**Plans**: 2 plans
-Plans:
-- [x] 180-01-PLAN.md — Storage layout verification + ContractAddresses alignment (DELTA-02, DELTA-04)
-- [x] 180-02-PLAN.md — rngBypass parameter verification (DELTA-03)
-
-### Phase 181: AdvanceGame Revert Safety Audit
-**Goal**: Every revert path reachable from advanceGame is proven unreachable under normal operation or intentionally guarded
-**Depends on**: Phase 180
-**Requirements**: AGSAFE-01, AGSAFE-02, AGSAFE-03, AGSAFE-04, AGSAFE-05
-**Success Criteria** (what must be TRUE):
-  1. Every revert/require in advanceGame's direct code is proven unreachable under normal operation, or intentional (NotTimeYet, RngNotReady)
-  2. Every delegatecall target (JackpotModule, MintModule, GameOverModule) audited — no revert in any function reachable from advanceGame can fire during normal game progression
-  3. Every external call from advanceGame (runDecimatorJackpot, quests, VRF) is proven non-reverting or failure-tolerant
-  4. Every guard pattern (RngLocked, prizePoolFrozen, access control) in advanceGame-reachable code is verified to not block internal operations
-  5. State machine transitions proven complete — no combination of flags/counters can leave advanceGame stuck in an unrecoverable state
-**Plans**: 3 plans
-Plans:
-- [x] 181-01-PLAN.md — Direct advanceGame revert/require audit (AGSAFE-01)
-- [x] 181-02-PLAN.md — Delegatecall target revert audit (AGSAFE-02, AGSAFE-04)
-- [x] 181-03-PLAN.md — External calls + state machine completeness (AGSAFE-03, AGSAFE-05)
-
-### Phase 182: Regression Check
-**Goal**: All prior adversarial findings confirmed intact; test suites pass clean
-**Depends on**: Phase 181
-**Requirements**: REG-01, REG-02
-**Success Criteria** (what must be TRUE):
-  1. All v15.0 adversarial findings (76 functions SAFE) spot-checked against current code — no regressions from v16.0/v17.0 refactors
-  2. Foundry + Hardhat test suites pass with zero unexpected failures
-**Plans**: 2 plans
-Plans:
-- [x] 182-01-PLAN.md — Spot-check 76 v15.0 adversarial SAFE verdicts against current code (REG-01)
-- [x] 182-02-PLAN.md — Run Foundry + Hardhat test suites and classify results (REG-02)
-
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
@@ -281,10 +239,6 @@ Plans:
 | 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
 | 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
-| 179. Change Surface Inventory | 2/2 | Complete    | 2026-04-04 |
-| 180. Storage Layout & Configuration Verification | 2/2 | Complete   | 2026-04-04 |
-| 181. AdvanceGame Revert Safety Audit | 3/3 | Complete    | 2026-04-04 |
-| 182. Regression Check | 2/2 | Complete   | 2026-04-04 |
 
 ## Deferred
 

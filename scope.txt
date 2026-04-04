@@ -20,11 +20,12 @@ contracts/GNRUS.sol
 contracts/Icons32Data.sol
 contracts/WrappedWrappedXRP.sol
 
-## In Scope — Delegatecall Game Modules (11)
+## In Scope — Delegatecall Game Modules (12)
 contracts/modules/DegenerusGameAdvanceModule.sol
 contracts/modules/DegenerusGameBoonModule.sol
 contracts/modules/DegenerusGameDecimatorModule.sol
 contracts/modules/DegenerusGameDegeneretteModule.sol
+contracts/modules/DegenerusGameEndgameModule.sol
 contracts/modules/DegenerusGameGameOverModule.sol
 contracts/modules/DegenerusGameJackpotModule.sol
 contracts/modules/DegenerusGameLootboxModule.sol

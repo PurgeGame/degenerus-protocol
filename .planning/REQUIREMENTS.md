@@ -1,64 +1,51 @@
-# Requirements: v18.0 Delta Audit & AdvanceGame Revert Safety
+# Requirements: v17.1 Comment Correctness Sweep
 
 **Defined:** 2026-04-03
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v18.0 Requirements
+## Comment Sweep
 
-### Delta Audit
+- [x] **CMT-01**: All game module inline comments and NatSpec verified accurate (AdvanceModule, MintModule, MintStreakUtils, JackpotModule, LootboxModule, BoonModule, DegeneretteModule, DecimatorModule, WhaleModule, GameOverModule, PayoutUtils)
+- [ ] **CMT-02**: All core game + storage inline comments and NatSpec verified accurate (DegenerusGame, DegenerusGameStorage)
+- [x] **CMT-03**: All token contract inline comments and NatSpec verified accurate (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, GNRUS)
+- [x] **CMT-04**: All infrastructure contract inline comments and NatSpec verified accurate (DegenerusAdmin, DegenerusVault, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DeityBoonViewer)
+- [x] **CMT-05**: All library and interface comments verified accurate; interface NatSpec matches implementations (EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib + all I* interfaces)
+- [x] **CMT-06**: All misc contracts verified (WrappedWrappedXRP, DegenerusTraitUtils, Icons32Data)
 
-- [x] **DELTA-01**: Every function added or modified since v15.0 is traced with file:line citations and verdict (SAFE/INFO/LOW+)
-- [x] **DELTA-02**: Storage layout verified identical across all DegenerusGameStorage inheritors after repack and rngBypass changes
-- [x] **DELTA-03**: rngBypass parameter usage verified correct — all `true` callers proven internal to advanceGame, all `false` callers proven external-facing
-- [x] **DELTA-04**: ContractAddresses alignment verified — every label maps to correct deployed contract after ENDGAME_MODULE removal
-- [x] **DELTA-05**: Full `git diff` from v15.0 audit baseline to HEAD reviewed — every changed line in `contracts/` accounted for, regardless of which milestone or manual edit introduced it
+## Consolidation
 
-### AdvanceGame Revert Safety
-
-- [x] **AGSAFE-01**: Every revert/require in advanceGame's direct code proven unreachable under normal operation, or intentional (NotTimeYet, RngNotReady)
-- [x] **AGSAFE-02**: Every delegatecall target (JackpotModule, MintModule, GameOverModule) audited — no revert in any function reachable from advanceGame can fire during normal game progression
-- [x] **AGSAFE-03**: Every external call from advanceGame (runDecimatorJackpot, quests, VRF) proven non-reverting or failure-tolerant
-- [x] **AGSAFE-04**: Every guard pattern (RngLocked, prizePoolFrozen, access control) in advanceGame-reachable code verified to not block internal operations
-- [x] **AGSAFE-05**: State machine transitions proven complete — no combination of flags/counters can leave advanceGame stuck in an unrecoverable state
-
-### Regression Check
-
-- [x] **REG-01**: All v15.0 adversarial findings (76 functions SAFE) spot-checked against current code — no regressions from v16.0/v17.0 refactors
-- [x] **REG-02**: Foundry + Hardhat test suites pass with zero unexpected failures
+- [x] **CON-01**: Findings consolidated into single document with LOW/INFO severities
+- [x] **CON-02**: v3.1/v3.5 prior findings verified still fixed (no regressions)
 
 ## Future Requirements
 
-None — this is an audit milestone, not a feature milestone.
+None deferred.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Gas optimization | Separate concern, not part of correctness audit |
-| Comment correctness | Already covered by v17.1 |
-| New feature implementation | Audit-only milestone |
-| Frontend/off-chain code | Not in audit scope |
+| Auto-fixing comments | Findings doc is the deliverable; user decides what to fix |
+| Code logic changes | Comment correctness only, no behavioral changes |
+| Mock/test contracts | Not in audit scope |
+| ContractAddresses.sol | User-managed |
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| DELTA-01 | Phase 179 | Complete |
-| DELTA-02 | Phase 180 | Complete |
-| DELTA-03 | Phase 180 | Complete |
-| DELTA-04 | Phase 180 | Complete |
-| DELTA-05 | Phase 179 | Complete |
-| AGSAFE-01 | Phase 181 | Complete |
-| AGSAFE-02 | Phase 181 | Complete |
-| AGSAFE-03 | Phase 181 | Complete |
-| AGSAFE-04 | Phase 181 | Complete |
-| AGSAFE-05 | Phase 181 | Complete |
-| REG-01 | Phase 182 | Complete |
-| REG-02 | Phase 182 | Complete |
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| CMT-01 | Phase 175 | Complete |
+| CMT-02 | Phase 176 | Pending |
+| CMT-03 | Phase 176 | Complete |
+| CMT-04 | Phase 177 | Complete |
+| CMT-05 | Phase 177 | Complete |
+| CMT-06 | Phase 177 | Complete |
+| CON-01 | Phase 178 | Complete |
+| CON-02 | Phase 178 | Complete |
 
 **Coverage:**
-- v18.0 requirements: 12 total
-- Mapped to phases: 12
+- v17.1 requirements: 8 total
+- Mapped to phases: 8
 - Unmapped: 0
 
 ---

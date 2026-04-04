@@ -662,10 +662,11 @@ abstract contract DegenerusGameStorage {
     function _queueLootboxTickets(
         address buyer,
         uint24 targetLevel,
-        uint256 quantityScaled
+        uint256 quantityScaled,
+        bool rngBypass
     ) internal {
         if (quantityScaled == 0) return;
-        _queueTicketsScaled(buyer, targetLevel, uint32(quantityScaled), true);
+        _queueTicketsScaled(buyer, targetLevel, uint32(quantityScaled), rngBypass);
     }
 
     // =========================================================================

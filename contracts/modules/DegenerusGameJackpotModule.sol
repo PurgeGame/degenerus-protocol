@@ -2804,7 +2804,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 targetPrice = PriceLookupLib.priceForLevel(targetLevel);
 
         uint256 quantityScaled = (amount * TICKET_SCALE) / targetPrice;
-        _queueLootboxTickets(winner, targetLevel, quantityScaled);
+        _queueLootboxTickets(winner, targetLevel, quantityScaled, true);
 
         return entropy;
     }
