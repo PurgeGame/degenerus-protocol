@@ -250,4 +250,91 @@
 
 ---
 
-## END OF futurePool AUDIT -- Task 2 (currentPool) follows below
+---
+
+## currentPool Mutation Sites
+
+---
+
+### SITE-CP-01: JackpotModule:payDailyJackpot (daily lootbox budget) line 371
+- **Operation:** currentPool -= dailyLootboxBudget
+- **Source/Dest:** dailyLootboxBudget moves to nextPool via `_setNextPrizePool(_getNextPrizePool() + dailyLootboxBudget)` at line 372. This funds lootbox ticket rewards for the daily jackpot phase.
+- **Counterpart verified:** YES -- line 372 `_setNextPrizePool(_getNextPrizePool() + dailyLootboxBudget)` credits nextPool by the exact same amount. The debit-credit pair is on adjacent lines (371-372).
+- **Remainder risk:** `dailyLootboxBudget` comes from `_validateTicketBudget(budget / 5, ...)` which may truncate `budget / 5`. Truncation dust stays in `budget` (line 361: `budget -= dailyLootboxBudget`). The deducted amount is exact. No untracked wei.
+- **Notes:** Guard: `if (dailyTicketUnits != 0)` at line 369 -- the deduction only happens when tickets would actually be queued. If `_budgetToTicketUnits` returns 0 (budget too small for any tickets), the pool transfer is skipped entirely and the budget remains in dailyEthBudget for ETH distribution.
+
+---
+
+### SITE-CP-02: JackpotModule:payDailyJackpot (daily ETH payout) line 451
+- **Operation:** currentPool -= paidDailyEth
+- **Source/Dest:** paidDailyEth is the actual ETH distributed to daily jackpot winners via `_processDailyEth`. Winners receive ETH via `_addClaimableEth` which credits `claimableWinnings[winner]` and `claimablePool`.
+- **Counterpart verified:** YES -- `_processDailyEth` returns paidEth = sum of all `_addClaimableEth` credits across the 4 trait buckets. `paidDailyEth <= dailyEthBudget` (may be less if trait buckets are empty). The currentPool debit exactly matches the total claimablePool credits from `_addClaimableEth` calls.
+- **Remainder risk:** `dailyEthBudget - paidDailyEth` represents unspent ETH from empty trait buckets. This unspent amount remains in currentPool (not deducted). No untracked wei.
+- **Notes:** Guard: `if (dailyEthBudget != 0)` at line 426. The `_processDailyEth` function handles the `bucketShares` calculation which can produce phantom shares in empty buckets, but `_processDailyEth` only pays actual winners (skips empty buckets at line 1261: `if (count == 0 || share == 0) continue`). The currentPool debit uses the actual `paidDailyEth` return value, not the budget, so phantom shares do not cause a leak here.
+
+---
+
+### SITE-CP-03: JackpotModule:consolidatePrizePools (nextPool merge) line 740
+- **Operation:** currentPool += _getNextPrizePool()
+- **Source/Dest:** The entire nextPool balance is added to currentPool. nextPool is then zeroed at line 741: `_setNextPrizePool(0)`.
+- **Counterpart verified:** YES -- `_setNextPrizePool(0)` at line 741 zeros nextPool. The full nextPool value is read via `_getNextPrizePool()` and added to currentPool. This is a balanced swap: `currentPool_new = currentPool_old + nextPool_old`, `nextPool_new = 0`. Total ETH conserved: `currentPool_new + nextPool_new = currentPool_old + nextPool_old`.
+- **Remainder risk:** None -- exact value transfer, no division.
+- **Notes:** This is the primary pool consolidation at level transitions. It runs on every level (not just x00). The nextPool accumulates ETH from purchases during the level, and at the next jackpot phase it becomes available in currentPool for daily distribution.
+
+---
+
+### SITE-CP-04: JackpotModule:consolidatePrizePools (keep-roll spillover) line 751
+- **Operation:** currentPool += moveWei
+- **Source/Dest:** moveWei = `fp - keepWei` where fp is futurePool. keepWei stays in futurePool (SITE-FP-05). moveWei flows from futurePool to currentPool.
+- **Counterpart verified:** YES -- Cross-referenced with SITE-FP-05. `_setFuturePrizePool(keepWei)` at line 750 sets futurePool to keepWei. `_setCurrentPrizePool(_getCurrentPrizePool() + moveWei)` at line 751 adds moveWei to currentPool. `keepWei + moveWei = fp`. Full futurePool value accounted.
+- **Remainder risk:** `keepWei = (fp * keepBps) / 10_000` truncates. moveWei = `fp - keepWei` captures the truncation. No untracked wei. See SITE-FP-05 for full analysis.
+- **Notes:** Only fires on x00 levels when `keepBps < 10_000 && fp != 0 && moveWei != 0`.
+
+---
+
+### SITE-CP-05: GameOverModule:_runFinalJackpot (no-funds path) line 133
+- **Operation:** currentPool = 0
+- **Source/Dest:** Zeroing during game-over when `available == 0`. All pool ETH has already been distributed or was never present.
+- **Counterpart verified:** YES -- Cross-referenced with SITE-FP-14. All four pools (next, future, current) and yieldAccumulator are zeroed simultaneously. The `available == 0` condition (line 129) means `totalFunds <= claimablePool`, so all ETH is already in claimablePool (player-withdrawable).
+- **Remainder risk:** None -- zeroing to 0.
+- **Notes:** `gameOverFinalJackpotPaid = true` (line 130) prevents re-entry.
+
+---
+
+### SITE-CP-06: GameOverModule:_runFinalJackpot (normal path) line 145
+- **Operation:** currentPool = 0
+- **Source/Dest:** Zeroing during game-over when `available != 0`. The `available` amount is then distributed via terminal decimator, terminal jackpot, and refund flows.
+- **Counterpart verified:** YES -- Cross-referenced with SITE-FP-15. All pools zeroed (lines 143-146). `available = totalFunds - claimablePool` was computed at line 120 before zeroing. `remaining` variable (line 151) tracks `available` through the distribution cascade. Any undistributed `remaining` goes to claimablePool.
+- **Remainder risk:** None -- zeroing to 0. The distribution of `available` uses various percentages (10% decimator, etc.) with truncation, but all remainder is tracked via the `remaining` variable.
+- **Notes:** The `remaining` accumulator pattern ensures no ETH is lost during terminal distribution. After all distributions, any leftover `remaining` is added to claimablePool for pro-rata refund.
+
+---
+
+## Summary: futurePool + currentPool Audit
+
+| Pool | Total Sites | Verified YES | Verified PARTIAL | Gaps Found |
+|------|-------------|--------------|------------------|------------|
+| futurePool | 23 | 22 | 1 (FP-02 committed code) | 0 (with Phase 183 fix) |
+| currentPool | 6 | 6 | 0 | 0 |
+| **Total** | **29** | **28** | **1** | **0** |
+
+### Gaps
+
+**SITE-FP-02 (committed code only):** In the pre-Phase-183 committed code, `_executeJackpot` return value `paidEth` is discarded. When trait buckets are empty, `ethPool - paidEth` exits futurePool but enters no tracked pool. **With Phase 183 fix applied (unstaged on main), this gap is closed.** The fix defers the futurePool deduction to after `_executeJackpot` returns, deducting only `lootboxBudget + paidEth`.
+
+No other gaps found.
+
+### Key Findings
+
+- **All 23 futurePool sites and all 6 currentPool sites have verified counterparts** (with Phase 183 fix for FP-02)
+- **Reserve contribution flows (SWEEP-04) fully traced:**
+  - SITE-FP-01: reserveSlice (0.5% daily carryover) -> nextPool (line 397)
+  - SITE-FP-03: reserveContribution (3% early-bird lootbox) -> nextPool (line 714)
+  - SITE-FP-10: reserved (15% drawdown) -> nextPool (line 1192)
+- **Phase 183 fix confirmed correct as baseline:** Deferred deduction `futurePool - lootboxBudget - paidEth` accounts for all consumed ETH. Unspent ETH from empty trait buckets remains in futurePool.
+- **runRewardJackpots accumulator pattern (FP-08) is correctly reconciled:** Local accumulator tracks BAF/Decimator debits, rebuyDelta captures concurrent auto-rebuy writes to storage, final write merges both.
+- **consolidatePrizePools (CP-03/CP-04 + FP-04/FP-05) is a balanced multi-step transfer:** nextPool -> currentPool (exact), futurePool -> currentPool (via keep-roll, truncation captured in moveWei), yieldAccumulator -> futurePool (half, truncation retained).
+- **GameOver zeroing (FP-14/FP-15, CP-05/CP-06) is safe:** All pools zeroed atomically, `available` amount computed before zeroing and fully distributed via `remaining` accumulator.
+- **INFO finding in MintModule (FP-20):** Triple-division truncation in lootbox split can leave up to 2 wei per purchase untracked in contract balance. This is captured by `_distributeYieldSurplus` which treats any `totalBal - obligations` surplus as yield. No practical risk.
+- **Freeze-state accounting is consistent:** All dual-path sites (frozen/unfrozen) use equivalent amounts via `_setPendingPools`/`_setPrizePools`. `_unfreezePool` applies pending atomically. No accounting divergence between paths.
+- **Auto-rebuy concurrent write reconciliation (FP-06, FP-08, FP-12):** Auto-rebuy paths can write to futurePool/nextPool storage during delegatecall execution. `runRewardJackpots` captures this via the rebuyDelta pattern. DecimatorModule auto-rebuy deducts from pre-reserved claimablePool.
