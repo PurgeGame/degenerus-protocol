@@ -495,6 +495,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 )
             );
             if (!ok) _revertDelegate(data);
+            if (!finalSwept) revert NotTimeYet();
             return true;
         }
 
