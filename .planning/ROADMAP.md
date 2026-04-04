@@ -40,7 +40,9 @@
 - ✅ **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167 (shipped 2026-04-02)
 - ✅ **v16.0 Module Consolidation & Storage Repack** — Phases 168-172 (shipped 2026-04-03)
 - ✅ **v17.0 Affiliate Bonus Cache** — Phases 173-174 (shipped 2026-04-03)
-- **v17.1 Comment Correctness Sweep** — Phases 175-178 (in progress)
+- ✅ **v17.1 Comment Correctness Sweep** — Phases 175-178 (shipped 2026-04-03)
+- ✅ **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (shipped 2026-04-04)
+- [ ] **v19.0 Pool Accounting Fix & Sweep** — Phases 183-185
 
 ## Phases
 
@@ -231,14 +233,54 @@ Plans:
 - [x] 178-01-PLAN.md — Merge all Phase 175-177 findings into consolidated document
 - [x] 178-02-PLAN.md — Spot-check v3.1/v3.5 fixed findings for regressions
 
+### Phase 183: Jackpot ETH Fix
+**Goal**: The jackpot payout path correctly accounts for every wei — unspent ETH from empty trait buckets returns to futurePool instead of vanishing
+**Depends on**: Phase 182
+**Requirements**: JFIX-01, JFIX-02
+**Success Criteria** (what must be TRUE):
+  1. `_executeJackpot` return value (`paidEth`) is captured by the caller and `ethPool - paidEth` is credited back to futurePool
+  2. `bucketShares()` phantom share accounting is verified — empty non-remainder buckets contribute shares to `distributed` without receiving ETH, and the fix prevents those phantom shares from reducing the remainder bucket allocation
+  3. A worked example with at least one empty trait bucket demonstrates that pre-fix ETH leaks and post-fix ETH is fully conserved across futurePool + winner payouts
+**Plans**: 1 plan
+Plans:
+- [x] 183-01-PLAN.md — Deferred futurePool SSTORE + paidEth capture + bucketShares NatSpec + worked example
+
+### Phase 184: Pool Accounting Sweep
+**Goal**: Every ETH pool transition across all modules is traced to a matching counterpart — no untracked remainders, no orphaned credits, no phantom debits
+**Depends on**: Phase 183
+**Requirements**: SWEEP-01, SWEEP-02, SWEEP-03, SWEEP-04
+**Success Criteria** (what must be TRUE):
+  1. Every futurePool debit is traced to a corresponding credit in claimablePool, nextPool, reservePool, or a player balance — no untracked remainders from any module (SWEEP-01)
+  2. Every nextPool debit/credit pair is verified — ticket backing, lootbox distribution, and carryover flows all balance with no remainder leaks (SWEEP-02)
+  3. Every claimablePool debit/credit pair is verified — no orphaned credits from skipped distributions, empty winner sets, or early exits (SWEEP-03)
+  4. Every reservePool flow is verified — reserve contributions and game-over distribution paths account for every wei (SWEEP-04)
+  5. A summary table lists every pool transition found, its source module, and its verified counterpart (or flags it as a gap)
+**Plans**: 3 plans
+Plans:
+- [x] 184-01-PLAN.md — futurePool + currentPool debit/credit audit (SWEEP-01, SWEEP-04)
+- [x] 184-02-PLAN.md — nextPool + claimablePool debit/credit audit (SWEEP-02, SWEEP-03)
+- [x] 184-03-PLAN.md — GameOver verification + cross-pool flows + master summary table
+
+### Phase 185: Delta Audit
+**Goal**: Every line changed by the JFIX fixes is proven to introduce no new attack surface, no regressions, and acceptable gas overhead
+**Depends on**: Phase 184
+**Requirements**: DELTA-01, DELTA-02, DELTA-03
+**Success Criteria** (what must be TRUE):
+  1. Every changed line from the Phase 183 fix is audited adversarially — no new reentrancy, no new overflow, no new state corruption, no accounting regressions (DELTA-01)
+  2. Gas impact of the refund path is measured — additional SLOAD/SSTORE cost is quantified and confirmed acceptable vs. zero overhead on the normal (no-empty-bucket) path (DELTA-02)
+  3. Foundry + Hardhat test suites pass with zero unexpected failures after all fixes applied (DELTA-03)
+**Plans**: 2 plans
+Plans:
+- [x] 185-01-PLAN.md — Adversarial line-by-line audit + gas analysis (DELTA-01, DELTA-02)
+- [x] 185-02-PLAN.md — Foundry + Hardhat test suite regression check (DELTA-03)
+
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 175. Game Module Comment Sweep | 5/5 | Complete    | 2026-04-03 |
-| 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
-| 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
-| 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
+| 183. Jackpot ETH Fix | 1/1 | Complete | 2026-04-04 |
+| 184. Pool Accounting Sweep | 3/3 | Complete | 2026-04-04 |
+| 185. Delta Audit | 2/2 | Complete    | 2026-04-04 |
 
 ## Deferred
 
