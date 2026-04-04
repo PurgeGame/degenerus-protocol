@@ -7,23 +7,23 @@
 
 ### Delta Audit
 
-- [ ] **DELTA-01**: Every function added or modified since v15.0 is traced with file:line citations and verdict (SAFE/INFO/LOW+)
-- [ ] **DELTA-02**: Storage layout verified identical across all DegenerusGameStorage inheritors after repack and rngBypass changes
+- [x] **DELTA-01**: Every function added or modified since v15.0 is traced with file:line citations and verdict (SAFE/INFO/LOW+)
+- [x] **DELTA-02**: Storage layout verified identical across all DegenerusGameStorage inheritors after repack and rngBypass changes
 - [x] **DELTA-03**: rngBypass parameter usage verified correct — all `true` callers proven internal to advanceGame, all `false` callers proven external-facing
-- [ ] **DELTA-04**: ContractAddresses alignment verified — every label maps to correct deployed contract after ENDGAME_MODULE removal
-- [ ] **DELTA-05**: Full `git diff` from v15.0 audit baseline to HEAD reviewed — every changed line in `contracts/` accounted for, regardless of which milestone or manual edit introduced it
+- [x] **DELTA-04**: ContractAddresses alignment verified — every label maps to correct deployed contract after ENDGAME_MODULE removal
+- [x] **DELTA-05**: Full `git diff` from v15.0 audit baseline to HEAD reviewed — every changed line in `contracts/` accounted for, regardless of which milestone or manual edit introduced it
 
 ### AdvanceGame Revert Safety
 
 - [x] **AGSAFE-01**: Every revert/require in advanceGame's direct code proven unreachable under normal operation, or intentional (NotTimeYet, RngNotReady)
-- [ ] **AGSAFE-02**: Every delegatecall target (JackpotModule, MintModule, GameOverModule) audited — no revert in any function reachable from advanceGame can fire during normal game progression
-- [ ] **AGSAFE-03**: Every external call from advanceGame (runDecimatorJackpot, quests, VRF) proven non-reverting or failure-tolerant
+- [x] **AGSAFE-02**: Every delegatecall target (JackpotModule, MintModule, GameOverModule) audited — no revert in any function reachable from advanceGame can fire during normal game progression
+- [x] **AGSAFE-03**: Every external call from advanceGame (runDecimatorJackpot, quests, VRF) proven non-reverting or failure-tolerant
 - [x] **AGSAFE-04**: Every guard pattern (RngLocked, prizePoolFrozen, access control) in advanceGame-reachable code verified to not block internal operations
 - [x] **AGSAFE-05**: State machine transitions proven complete — no combination of flags/counters can leave advanceGame stuck in an unrecoverable state
 
 ### Regression Check
 
-- [ ] **REG-01**: All v15.0 adversarial findings (76 functions SAFE) spot-checked against current code — no regressions from v16.0/v17.0 refactors
+- [x] **REG-01**: All v15.0 adversarial findings (76 functions SAFE) spot-checked against current code — no regressions from v16.0/v17.0 refactors
 - [ ] **REG-02**: Foundry + Hardhat test suites pass with zero unexpected failures
 
 ## Future Requirements
@@ -43,17 +43,17 @@ None — this is an audit milestone, not a feature milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DELTA-01 | Phase 179 | Pending |
-| DELTA-02 | Phase 180 | Pending |
+| DELTA-01 | Phase 179 | Complete |
+| DELTA-02 | Phase 180 | Complete |
 | DELTA-03 | Phase 180 | Complete |
-| DELTA-04 | Phase 180 | Pending |
-| DELTA-05 | Phase 179 | Pending |
+| DELTA-04 | Phase 180 | Complete |
+| DELTA-05 | Phase 179 | Complete |
 | AGSAFE-01 | Phase 181 | Complete |
-| AGSAFE-02 | Phase 181 | Pending |
-| AGSAFE-03 | Phase 181 | Pending |
+| AGSAFE-02 | Phase 181 | Complete |
+| AGSAFE-03 | Phase 181 | Complete |
 | AGSAFE-04 | Phase 181 | Complete |
 | AGSAFE-05 | Phase 181 | Complete |
-| REG-01 | Phase 182 | Pending |
+| REG-01 | Phase 182 | Complete |
 | REG-02 | Phase 182 | Pending |
 
 **Coverage:**

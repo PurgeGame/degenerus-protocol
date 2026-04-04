@@ -255,7 +255,11 @@ Plans:
   3. Every external call from advanceGame (runDecimatorJackpot, quests, VRF) is proven non-reverting or failure-tolerant
   4. Every guard pattern (RngLocked, prizePoolFrozen, access control) in advanceGame-reachable code is verified to not block internal operations
   5. State machine transitions proven complete — no combination of flags/counters can leave advanceGame stuck in an unrecoverable state
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] 181-01-PLAN.md — Direct advanceGame revert/require audit (AGSAFE-01)
+- [x] 181-02-PLAN.md — Delegatecall target revert audit (AGSAFE-02, AGSAFE-04)
+- [x] 181-03-PLAN.md — External calls + state machine completeness (AGSAFE-03, AGSAFE-05)
 
 ### Phase 182: Regression Check
 **Goal**: All prior adversarial findings confirmed intact; test suites pass clean
@@ -264,7 +268,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. All v15.0 adversarial findings (76 functions SAFE) spot-checked against current code — no regressions from v16.0/v17.0 refactors
   2. Foundry + Hardhat test suites pass with zero unexpected failures
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [x] 182-01-PLAN.md — Spot-check 76 v15.0 adversarial SAFE verdicts against current code (REG-01)
+- [ ] 182-02-PLAN.md — Run Foundry + Hardhat test suites and classify results (REG-02)
 
 ## Progress Table
 
@@ -276,8 +283,8 @@ Plans:
 | 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
 | 179. Change Surface Inventory | 2/2 | Complete    | 2026-04-04 |
 | 180. Storage Layout & Configuration Verification | 2/2 | Complete   | 2026-04-04 |
-| 181. AdvanceGame Revert Safety Audit | 1/3 | In progress | - |
-| 182. Regression Check | 0/0 | Not started | - |
+| 181. AdvanceGame Revert Safety Audit | 3/3 | Complete    | 2026-04-04 |
+| 182. Regression Check | 1/2 | In Progress|  |
 
 ## Deferred
 

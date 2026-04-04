@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 181-03 external call revert audit
-last_updated: "2026-04-04T05:17:58.076Z"
-last_activity: 2026-04-03
+status: executing
+stopped_at: Completed 182-01-PLAN.md
+last_updated: "2026-04-04T07:00:51.505Z"
+last_activity: 2026-04-04
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 7
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 6
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 178 — Consolidation & Regression Check
+**Current focus:** Phase 182 — Regression Check
 
 ## Current Position
 
-Phase: 178
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-03
+Phase: 182 (Regression Check) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-04
 
 Progress: 0/4 phases complete [          ] 0%
 
@@ -76,7 +76,10 @@ Recent decisions affecting current work:
 - [Phase 178-01]: BCF-01 disambiguation: Phase 176-02 implementation finding becomes BCF-IMPL-01; Phase 177-03 interface finding becomes BCF-IFACE-01 to avoid ID collision
 - [Phase 178-01]: Consolidated findings register: 30 LOW + 42 INFO across 12 swept files; 175-02-002 confirmed false positive (fixed in commit 4f13ab83 before sweep)
 - [Phase 178-02]: All 7 priority v3.1/v3.5 regression checks passed — no regressions found; all Phase 133 fixes remain intact through v17.1
-- [Phase 181]: AGSAFE-03: 19 external calls from advanceGame path audited -- 17 SAFE, 1 INTENTIONAL (VRF), 2 WRAPPED, 0 findings
+- [Phase 180]: AST node IDs in forge inspect output are compiler artifacts -- normalization required for accurate storage layout comparison
+- [Phase 180]: GAME_ENDGAME_MODULE dead label in ContractAddresses.sol is harmless (compile-time constant eliminated by compiler) -- no cleanup needed
+- [Phase 180]: JackpotModule has 4 rngBypass=true call sites (not 3 as initially estimated); _jackpotTicketRoll via _queueLootboxTickets wrapper is the 4th
+- [Phase 182]: 76 v15.0 adversarial SAFE verdicts confirmed intact through v17.1: 17 HIGH RISK deep-validated, 0 regressions
 
 ### Pending Todos
 
@@ -88,5 +91,5 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T05:17:58.074Z
-Stopped at: Completed 181-03 external call revert audit
+Last session: 2026-04-04T07:00:51.502Z
+Stopped at: Completed 182-01-PLAN.md
