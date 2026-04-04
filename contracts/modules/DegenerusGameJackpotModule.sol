@@ -698,7 +698,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         _queueTickets(
                             winner,
                             baseLevel + levelOffset,
-                            ticketCount
+                            ticketCount,
+                            true
                         );
                     }
                 }
@@ -859,7 +860,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             return newAmount;
         }
 
-        _queueTickets(player, calc.targetLevel, calc.ticketCount);
+        _queueTickets(player, calc.targetLevel, calc.ticketCount, true);
 
         if (calc.toFuture) {
             _setFuturePrizePool(_getFuturePrizePool() + calc.ethSpent);
@@ -1066,7 +1067,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 units += 1;
             }
             if (winner != address(0) && units != 0) {
-                _queueTickets(winner, queueLvl, uint32(units));
+                _queueTickets(winner, queueLvl, uint32(units), true);
             }
             unchecked {
                 ++cursor;
@@ -2803,7 +2804,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 targetPrice = PriceLookupLib.priceForLevel(targetLevel);
 
         uint256 quantityScaled = (amount * TICKET_SCALE) / targetPrice;
-        _queueLootboxTickets(winner, targetLevel, quantityScaled);
+        _queueLootboxTickets(winner, targetLevel, quantityScaled, true);
 
         return entropy;
     }

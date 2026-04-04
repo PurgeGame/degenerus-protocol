@@ -310,7 +310,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         for (uint24 i = 0; i < 100; ) {
             uint24 lvl = ticketStartLevel + i;
             bool isBonus = (lvl >= passLevel && lvl <= WHALE_BONUS_END_LEVEL);
-            _queueTickets(buyer, lvl, isBonus ? bonusTickets : standardTickets);
+            _queueTickets(buyer, lvl, isBonus ? bonusTickets : standardTickets, false);
             unchecked {
                 ++i;
             }
@@ -479,7 +479,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Queue bonus tickets from flat-price overpayment at early levels
         if (bonusTickets != 0) {
-            _queueTickets(buyer, startLevel, bonusTickets);
+            _queueTickets(buyer, startLevel, bonusTickets, false);
         }
 
         // Split actual payment into pools (future + next)
@@ -627,7 +627,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 lvl,
                 isBonus
                     ? WHALE_BONUS_TICKETS_PER_LEVEL
-                    : WHALE_STANDARD_TICKETS_PER_LEVEL
+                    : WHALE_STANDARD_TICKETS_PER_LEVEL,
+                false
             );
             unchecked {
                 ++i;
@@ -975,7 +976,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         _applyWhalePassStats(player, startLevel);
         emit WhalePassClaimed(player, msg.sender, halfPasses, startLevel);
-        _queueTicketRange(player, startLevel, 100, uint32(halfPasses));
+        _queueTicketRange(player, startLevel, 100, uint32(halfPasses), false);
     }
 }
 

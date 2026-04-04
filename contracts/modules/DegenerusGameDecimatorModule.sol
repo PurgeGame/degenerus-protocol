@@ -388,7 +388,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         } else {
             _setNextPrizePool(_getNextPrizePool() + calc.ethSpent);
         }
-        _queueTickets(beneficiary, calc.targetLevel, calc.ticketCount);
+        _queueTickets(beneficiary, calc.targetLevel, calc.ticketCount, false);
 
         if (calc.reserved != 0) {
             _creditClaimable(beneficiary, calc.reserved);

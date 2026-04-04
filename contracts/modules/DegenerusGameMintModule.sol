@@ -813,7 +813,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
         // --- Queue tickets (moved from _callTicketPurchase) ---
         if (adjustedQty != 0) {
-            _queueTicketsScaled(buyer, targetLevel, adjustedQty);
+            _queueTicketsScaled(buyer, targetLevel, adjustedQty, false);
         }
 
         // --- Lootbox affiliate calls + EV score write (uses cached score) ---

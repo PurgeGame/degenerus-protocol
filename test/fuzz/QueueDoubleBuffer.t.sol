@@ -8,15 +8,15 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 contract QueueHarness is DegenerusGameStorage {
     // --- Queue write functions ---
     function exposed_queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueTickets(buyer, targetLevel, quantity);
+        _queueTickets(buyer, targetLevel, quantity, false);
     }
 
     function exposed_queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
-        _queueTicketsScaled(buyer, targetLevel, quantityScaled);
+        _queueTicketsScaled(buyer, targetLevel, quantityScaled, false);
     }
 
     function exposed_queueTicketRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
-        _queueTicketRange(buyer, startLevel, numLevels, ticketsPerLevel);
+        _queueTicketRange(buyer, startLevel, numLevels, ticketsPerLevel, false);
     }
 
     // --- Swap ---

@@ -549,12 +549,13 @@ abstract contract DegenerusGameStorage {
     function _queueTickets(
         address buyer,
         uint24 targetLevel,
-        uint32 quantity
+        uint32 quantity,
+        bool rngBypass
     ) internal {
         if (quantity == 0) return;
         emit TicketsQueued(buyer, targetLevel, quantity);
         bool isFarFuture = targetLevel > level + 5;
-        if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
+        if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
         uint24 wk = isFarFuture ? _tqFarFutureKey(targetLevel) : _tqWriteKey(targetLevel);
         uint40 packed = ticketsOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
@@ -577,12 +578,13 @@ abstract contract DegenerusGameStorage {
     function _queueTicketsScaled(
         address buyer,
         uint24 targetLevel,
-        uint32 quantityScaled
+        uint32 quantityScaled,
+        bool rngBypass
     ) internal {
         if (quantityScaled == 0) return;
         emit TicketsQueuedScaled(buyer, targetLevel, quantityScaled);
         bool isFarFuture = targetLevel > level + 5;
-        if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
+        if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
         uint24 wk = isFarFuture ? _tqFarFutureKey(targetLevel) : _tqWriteKey(targetLevel);
         uint40 packed = ticketsOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
@@ -624,14 +626,15 @@ abstract contract DegenerusGameStorage {
         address buyer,
         uint24 startLevel,
         uint24 numLevels,
-        uint32 ticketsPerLevel
+        uint32 ticketsPerLevel,
+        bool rngBypass
     ) internal {
         emit TicketsQueuedRange(buyer, startLevel, numLevels, ticketsPerLevel);
         uint24 currentLevel = level; // cache outside loop to avoid repeated SLOAD
         uint24 lvl = startLevel;
         for (uint24 i = 0; i < numLevels; ) {
             bool isFarFuture = lvl > currentLevel + 5;
-            if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
+            if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
             uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
             uint40 packed = ticketsOwedPacked[wk][buyer];
             uint32 owed = uint32(packed >> 8);
@@ -659,10 +662,11 @@ abstract contract DegenerusGameStorage {
     function _queueLootboxTickets(
         address buyer,
         uint24 targetLevel,
-        uint256 quantityScaled
+        uint256 quantityScaled,
+        bool rngBypass
     ) internal {
         if (quantityScaled == 0) return;
-        _queueTicketsScaled(buyer, targetLevel, uint32(quantityScaled));
+        _queueTicketsScaled(buyer, targetLevel, uint32(quantityScaled), rngBypass);
     }
 
     // =========================================================================
@@ -1093,7 +1097,7 @@ abstract contract DegenerusGameStorage {
 
         mintPacked_[player] = data;
 
-        _queueTicketRange(player, ticketStartLevel, 10, ticketsPerLevel);
+        _queueTicketRange(player, ticketStartLevel, 10, ticketsPerLevel, false);
     }
 
     /// @dev Apply whale pass stats (levelCount/freeze/bundleType/lastLevel/day) without queueing tickets.

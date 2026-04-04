@@ -971,7 +971,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     futureTickets = uint32(boosted);
                 }
             }
-            _queueTicketsScaled(player, targetLevel, futureTickets);
+            _queueTicketsScaled(player, targetLevel, futureTickets, false);
         }
 
         burnieAmount = burnieNoMultiplier + burniePresale;
@@ -1097,7 +1097,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             _queueTickets(
                 player,
                 lvl,
-                isBonus ? WHALE_PASS_BONUS_TICKETS_PER_LEVEL : WHALE_PASS_TICKETS_PER_LEVEL
+                isBonus ? WHALE_PASS_BONUS_TICKETS_PER_LEVEL : WHALE_PASS_TICKETS_PER_LEVEL,
+                false
             );
             unchecked { ++i; }
         }

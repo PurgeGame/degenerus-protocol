@@ -371,9 +371,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 levelPrizePool[purchaseLevel] = _getNextPrizePool();
                 _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);
                 _consolidatePrizePools(purchaseLevel, rngWord);
-                phaseTransitionActive = true;
                 _runRewardJackpots(lvl, rngWord);
-                phaseTransitionActive = false;
 
                 if (
                     lootboxPresaleActive &&
@@ -1301,12 +1299,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         _queueTickets(
             ContractAddresses.SDGNRS,
             targetLevel,
-            VAULT_PERPETUAL_TICKETS
+            VAULT_PERPETUAL_TICKETS,
+            true
         );
         _queueTickets(
             ContractAddresses.VAULT,
             targetLevel,
-            VAULT_PERPETUAL_TICKETS
+            VAULT_PERPETUAL_TICKETS,
+            true
         );
 
         // Auto-stake all non-claimable ETH into stETH for yield generation.

@@ -14,7 +14,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
     // -- Routing wrapper (from TicketRoutingHarness pattern) --
 
     function queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueTickets(buyer, targetLevel, quantity);
+        _queueTickets(buyer, targetLevel, quantity, false);
     }
 
     // -- State setters --

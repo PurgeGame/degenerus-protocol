@@ -9,15 +9,15 @@ contract TicketRoutingHarness is DegenerusGameStorage {
     // error RngLocked() — inherited from DegenerusGameStorage
 
     function queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueTickets(buyer, targetLevel, quantity);
+        _queueTickets(buyer, targetLevel, quantity, false);
     }
 
     function queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
-        _queueTicketsScaled(buyer, targetLevel, quantityScaled);
+        _queueTicketsScaled(buyer, targetLevel, quantityScaled, false);
     }
 
     function queueTicketRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
-        _queueTicketRange(buyer, startLevel, numLevels, ticketsPerLevel);
+        _queueTicketRange(buyer, startLevel, numLevels, ticketsPerLevel, false);
     }
 
     function setLevel(uint24 lvl) external {
