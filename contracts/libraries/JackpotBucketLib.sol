@@ -208,6 +208,9 @@ library JackpotBucketLib {
 
     /// @dev Computes ETH/COIN shares for each bucket.
     ///      Round non-solo buckets to unit * winnerCount; remainder goes to the override bucket.
+    ///      Empty non-remainder buckets (count==0) contribute their computed share to
+    ///      `distributed` without receiving ETH, reducing the remainder bucket allocation.
+    ///      The caller is responsible for refunding ethPool - paidEth to the source pool.
     function bucketShares(
         uint256 pool,
         uint16[4] memory shareBps,

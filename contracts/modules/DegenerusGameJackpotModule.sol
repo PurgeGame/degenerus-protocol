@@ -368,7 +368,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 );
                 if (dailyTicketUnits != 0) {
                     // Deduct from current pool and add to next pool to back tickets
-                    _setCurrentPrizePool(_getCurrentPrizePool() - dailyLootboxBudget);
+                    _setCurrentPrizePool(
+                        _getCurrentPrizePool() - dailyLootboxBudget
+                    );
                     _setNextPrizePool(_getNextPrizePool() + dailyLootboxBudget);
                 }
 
@@ -391,9 +393,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     sourceLevel = lvl + uint24(sourceLevelOffset);
 
                     // 0.5% of futurePrizePool reserved for carryover tickets
-                    uint256 futurePool = _getFuturePrizePool();
-                    reserveSlice = futurePool / 200;
-                    _setFuturePrizePool(futurePool - reserveSlice);
+                    uint256 futurePoolBal = _getFuturePrizePool();
+                    reserveSlice = futurePoolBal / 200;
+                    _setFuturePrizePool(futurePoolBal - reserveSlice);
                     _setNextPrizePool(_getNextPrizePool() + reserveSlice);
                     carryoverTicketUnits = _budgetToTicketUnits(
                         reserveSlice,
@@ -476,11 +478,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 ethDaySlice;
         if (isEthDay) {
             uint256 poolBps = 100; // 1% daily drip from futurePool
-            uint256 futurePool = _getFuturePrizePool();
-            ethDaySlice = (futurePool * poolBps) / 10_000;
-
-            // Deduct immediately (upfront model)
-            _setFuturePrizePool(futurePool - ethDaySlice);
+            ethDaySlice = (_getFuturePrizePool() * poolBps) / 10_000;
         }
 
         uint256 ethPool = ethDaySlice;
@@ -493,7 +491,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             );
             if (lootboxBudget != 0) ethPool -= lootboxBudget;
         }
-        _executeJackpot(
+        uint256 paidEth = _executeJackpot(
             JackpotParams({
                 lvl: lvl,
                 ethPool: ethPool,
@@ -503,7 +501,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             })
         );
 
-        // Pools already deducted upfront; no additional deduction needed
+        // Deferred deduction: deduct only what was actually consumed
+        if (ethDaySlice != 0) {
+            _setFuturePrizePool(_getFuturePrizePool() - lootboxBudget - paidEth);
+        }
+
         if (lootboxBudget != 0) {
             _distributeLootboxAndTickets(
                 lvl,
@@ -649,12 +651,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Execute the early-bird lootbox jackpot from the unified future pool.
     function _runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) private {
         // Take 3% from unified reserve
-        uint256 futurePool = _getFuturePrizePool();
-        uint256 reserveContribution = (futurePool * 300) / 10_000; // 3%
+        uint256 futurePoolLocal = _getFuturePrizePool();
+        uint256 reserveContribution = (futurePoolLocal * 300) / 10_000; // 3%
         uint256 totalBudget = reserveContribution;
 
         // Deduct from reserve
-        _setFuturePrizePool(futurePool - reserveContribution);
+        _setFuturePrizePool(futurePoolLocal - reserveContribution);
 
         if (totalBudget == 0) {
             return;
