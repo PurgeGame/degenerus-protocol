@@ -2789,9 +2789,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (roll < 30) {
             // 30% chance: minimum level ticket
             targetLevel = minTargetLevel;
+        } else if (roll < 95) {
+            // 65% chance: +1 to +4 levels ahead
+            uint256 offset = 1 + (entropyDiv100 % 4); // 1-4 inclusive
+            targetLevel = minTargetLevel + uint24(offset);
         } else {
-            // 70% chance: +1 to +5 levels ahead (near-future only)
-            uint256 offset = 1 + (entropyDiv100 % 5); // 1-5 inclusive
+            // 5% chance: +5 to +50 levels ahead (rare)
+            uint256 offset = 5 + (entropyDiv100 % 46); // 5-50 inclusive
             targetLevel = minTargetLevel + uint24(offset);
         }
 

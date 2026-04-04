@@ -371,7 +371,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 levelPrizePool[purchaseLevel] = _getNextPrizePool();
                 _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);
                 _consolidatePrizePools(purchaseLevel, rngWord);
+                phaseTransitionActive = true;
                 _runRewardJackpots(lvl, rngWord);
+                phaseTransitionActive = false;
 
                 if (
                     lootboxPresaleActive &&
