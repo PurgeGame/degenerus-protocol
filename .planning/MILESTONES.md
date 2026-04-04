@@ -1,5 +1,37 @@
 # Milestones
 
+## v17.1 Comment Correctness Sweep (Shipped: 2026-04-03)
+
+**Phases completed:** 3 phases, 9 plans, 15 tasks
+
+**Key accomplishments:**
+
+- Full end-to-end comment sweep of DegenerusGameStorage (1649 lines) and DegenerusGame (2524 lines) finding 2 LOW + 2 INFO findings; slot 0 layout (32/32 bytes), slot 1 layout, boon tiers, and access control comments all verified accurate
+- BurnieCoin and BurnieCoinflip comment sweep — 5 LOW (access control misstatements + error name mismatches) and 7 INFO (orphaned sections, missing callers, minor inaccuracies); creditor expansion and mintForGame merger verified clean
+- 3 LOW + 4 INFO findings across 1,780 lines of token/governance/staking contracts, with gambling burn system and vault interaction explicitly verified accurate
+- 2 LOW + 2 INFO findings across 4 core infrastructure contracts — v17.1 tiered affiliate bonus rate verified correct; DegenerusDeityPass fully clean
+- 6 comment discrepancies found (1 LOW, 5 INFO): stale levelQuestGlobal variable name in DegenerusQuests level quest @dev comments, misleading lootbox reward routing comment in handlePurchase, and caller-description gaps across OnlyCoin error and recordBafFlip NatSpec; DeityBoonViewer has no discrepancies.
+- 3 LOW + 7 INFO findings across 5 libraries and 11 interfaces — key issues: tiered affiliate bonus rate misrepresented as flat in IDegenerusAffiliate, creditFlip creditor list completely wrong in IBurnieCoinflip, and all 6 IDegenerusQuests handlers mislabeled as "game contract" callers
+- Comment audit of three miscellaneous contracts yielding 2 LOW and 3 INFO findings: WrappedWrappedXRP decimals mismatch claim, non-existent Icons32Data `_diamond` variable in header, and two INFO-level NatSpec omissions; DegenerusTraitUtils has zero discrepancies.
+- 72-finding master register for v17.1 comment correctness sweep: 30 LOW + 42 INFO across 12 contracts/interfaces/libraries, with 5 cross-cutting systemic patterns
+- One-liner:
+
+---
+
+## v17.0 Affiliate Bonus Cache (Shipped: 2026-04-03)
+
+**Phases completed:** 2 phases, 3 plans, 4 tasks
+
+**Key accomplishments:**
+
+- Cached affiliate bonus level+points in mintPacked_ bits [185-214], eliminating 5 cold SLOADs (~10,500 gas) from every activity score read across mint/burn/lootbox/degenerette/decimator/whale paths
+- Affiliate bonus rate doubled from 1 point per 1 ETH to 1 point per 0.5 ETH (cap remains at 50 points)
+- 105 mintPacked_ operations audited across 8 contracts — zero bit collisions with new [185-214] range
+- Storage layout verified identical (slot 10) across all 10 DegenerusGameStorage inheritors via forge inspect
+- Cache correctness proven for all 3 execution paths (hit/miss/uninitialized); Foundry 176/27 and Hardhat 1267/42 — zero regressions vs v16.0 baseline
+
+---
+
 ## v15.0 Delta Audit (Shipped: 2026-04-02)
 
 **Phases completed:** 28 phases, 46 plans, 74 tasks

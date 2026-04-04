@@ -12,6 +12,12 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 v16.0 Module Consolidation & Storage Repack shipped (2026-04-03). EndgameModule eliminated, storage slots 0-2 repacked, all tests passing.
 
+## Completed Milestone: v17.0 Affiliate Bonus Cache
+
+**Status:** Complete (2026-04-03)
+
+**Result:** 2 phases (173-174), 3 plans. Affiliate bonus cached in mintPacked_ bits [185-214] — eliminates 5 cold SLOADs (~10,500 gas) from every activity score computation. Cache write piggybacks on existing SSTORE in recordMintData. Bonus rate doubled to 1 point per 0.5 ETH (cap remains 50). 105 mintPacked_ operations audited across 8 contracts (0 collisions). Storage layout identical across 10 contracts. Foundry 176/27 and Hardhat 1267/42 — zero regressions vs v16.0. All 9/9 requirements satisfied.
+
 ## Completed Milestone: v16.0 Module Consolidation & Storage Repack
 
 **Status:** Complete (2026-04-03)
@@ -108,6 +114,8 @@ v16.0 Module Consolidation & Storage Repack shipped (2026-04-03). EndgameModule 
 - ✓ v14.0 Activity Score & Quest Gas Optimization — compute-once score, handler consolidation, price removal, SLOAD dedup — v14.0 Phases 159-161
 - ✓ v15.0 Delta Audit — 76 functions audited (all SAFE), RNG commitment windows verified, gas ceiling 1.99x margin, call graph clean, 1455 tests passing — v15.0 Phases 162-167
 - ✓ v16.0 Module Consolidation & Storage Repack — EndgameModule eliminated (3 functions redistributed), storage slots 0-2 repacked (slot 0 32/32, currentPrizePool uint128 in slot 1, slot 2 killed), 14/14 requirements satisfied — v16.0 Phases 168-172
+- ✓ v17.0 Affiliate Bonus Cache — cached affiliate bonus in mintPacked_ bits [185-214] eliminating 5 cold SLOADs from activity score, rate doubled to 1 point per 0.5 ETH, 105 mintPacked_ operations audited (0 collisions), both test suites zero regressions, 9/9 requirements satisfied — v17.0 Phases 173-174
+- ✓ v17.1 Comment Correctness Sweep — 40 contracts swept, 72 findings (30 LOW, 42 INFO), 56 fixed, 0 regressions from v3.1/v3.5, WWXRP decimal scaling added — v17.1 Phases 175-178
 
 ## Completed Milestone: v8.1 Final Audit Prep
 
@@ -234,6 +242,8 @@ v16.0 Module Consolidation & Storage Repack shipped (2026-04-03). EndgameModule 
 | Eliminate EndgameModule entirely | 3 functions redistributed to existing modules; reduces delegatecall overhead and deploy complexity | ✓ v16.0 Phases 169-171 |
 | claimWhalePass to WhaleModule (not JackpotModule) | WhaleModule already has whale-related logic; better semantic fit | ✓ v16.0 Phase 171 |
 | NonceBurner placeholder in fuzz test deploy | Empty contract preserves nonce ordering after EndgameModule deletion | ✓ v16.0 Phase 171 |
+| Cache affiliate bonus in mintPacked_ bits [185-214] | Eliminate 5 cold SLOADs (~10,500 gas) from every activity score read; write piggybacks on existing SSTORE | ✓ v17.0 Phase 173 |
+| Affiliate bonus rate 1 point per 0.5 ETH (was 1 per 1 ETH) | Easier to reach cap; doubles reward for moderate affiliates | ✓ v17.0 Phase 173 |
 
 ## Known Issues (Documented, Not Blocking)
 
@@ -253,20 +263,15 @@ v16.0 Module Consolidation & Storage Repack shipped (2026-04-03). EndgameModule 
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current Milestone: v17.0 Affiliate Bonus Cache
-
-**Goal:** Cache affiliate bonus points in `mintPacked_` to eliminate 5 cold SLOADs from every activity score computation, then delta-audit the change to verify nothing breaks.
-
-**Target features:**
-- Add cached affiliate bonus level + points fields to `mintPacked_` (bits 185-214)
-- `_playerActivityScore` reads cache from already-loaded packed word, skips cross-contract call on hit
-- `recordMintData` populates cache on level change (piggybacking on existing SSTORE)
-- Delta audit of all changed functions and `mintPacked_` consumers
-- Verify gas savings and no regressions (Foundry + Hardhat suites green)
-
 ## Current State
 
-v17.0 in progress (2026-04-03). Caching affiliate bonus in `mintPacked_` unused bits [185-214].
+v17.1 shipped (2026-04-03). No active milestone — ready for `/gsd:new-milestone`.
+
+## Completed Milestone: v17.1 Comment Correctness Sweep
+
+**Status:** Complete (2026-04-03)
+
+**Result:** 4 phases (175-178), 14 plans. Full comment sweep of all 40 production contracts (modules, core game, tokens, infrastructure, libraries, interfaces, misc). 72 findings identified (30 LOW, 42 INFO), 56 fixed in commit 9c3e31bd. 0 regressions from v3.1/v3.5 prior sweeps. Key fixes: DGNRS→sDGNRS recipient corrections, stale module lists (EndgameModule removed), mintPacked_ bit layout updated for v17.0 cache fields, affiliate bonus tiered rate docs, WWXRP decimal scaling for real 6-decimal wXRP. All 8/8 requirements satisfied.
 
 ## Completed Milestone: v12.0 Level Quests
 
