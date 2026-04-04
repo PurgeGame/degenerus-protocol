@@ -276,7 +276,7 @@ Plans:
 | 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
 | 179. Change Surface Inventory | 2/2 | Complete    | 2026-04-04 |
 | 180. Storage Layout & Configuration Verification | 2/2 | Complete   | 2026-04-04 |
-| 181. AdvanceGame Revert Safety Audit | 0/0 | Not started | - |
+| 181. AdvanceGame Revert Safety Audit | 1/3 | In progress | - |
 | 182. Regression Check | 0/0 | Not started | - |
 
 ## Deferred

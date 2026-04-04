@@ -15,11 +15,11 @@
 
 ### AdvanceGame Revert Safety
 
-- [ ] **AGSAFE-01**: Every revert/require in advanceGame's direct code proven unreachable under normal operation, or intentional (NotTimeYet, RngNotReady)
+- [x] **AGSAFE-01**: Every revert/require in advanceGame's direct code proven unreachable under normal operation, or intentional (NotTimeYet, RngNotReady)
 - [ ] **AGSAFE-02**: Every delegatecall target (JackpotModule, MintModule, GameOverModule) audited — no revert in any function reachable from advanceGame can fire during normal game progression
 - [ ] **AGSAFE-03**: Every external call from advanceGame (runDecimatorJackpot, quests, VRF) proven non-reverting or failure-tolerant
-- [ ] **AGSAFE-04**: Every guard pattern (RngLocked, prizePoolFrozen, access control) in advanceGame-reachable code verified to not block internal operations
-- [ ] **AGSAFE-05**: State machine transitions proven complete — no combination of flags/counters can leave advanceGame stuck in an unrecoverable state
+- [x] **AGSAFE-04**: Every guard pattern (RngLocked, prizePoolFrozen, access control) in advanceGame-reachable code verified to not block internal operations
+- [x] **AGSAFE-05**: State machine transitions proven complete — no combination of flags/counters can leave advanceGame stuck in an unrecoverable state
 
 ### Regression Check
 
@@ -48,11 +48,11 @@ None — this is an audit milestone, not a feature milestone.
 | DELTA-03 | Phase 180 | Complete |
 | DELTA-04 | Phase 180 | Pending |
 | DELTA-05 | Phase 179 | Pending |
-| AGSAFE-01 | Phase 181 | Pending |
+| AGSAFE-01 | Phase 181 | Complete |
 | AGSAFE-02 | Phase 181 | Pending |
 | AGSAFE-03 | Phase 181 | Pending |
-| AGSAFE-04 | Phase 181 | Pending |
-| AGSAFE-05 | Phase 181 | Pending |
+| AGSAFE-04 | Phase 181 | Complete |
+| AGSAFE-05 | Phase 181 | Complete |
 | REG-01 | Phase 182 | Pending |
 | REG-02 | Phase 182 | Pending |
 
