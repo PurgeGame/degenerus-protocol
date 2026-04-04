@@ -255,7 +255,11 @@ Plans:
   3. Every external call from advanceGame (runDecimatorJackpot, quests, VRF) is proven non-reverting or failure-tolerant
   4. Every guard pattern (RngLocked, prizePoolFrozen, access control) in advanceGame-reachable code is verified to not block internal operations
   5. State machine transitions proven complete — no combination of flags/counters can leave advanceGame stuck in an unrecoverable state
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 181-01-PLAN.md — AdvanceModule direct reverts + guard patterns + state machine (AGSAFE-01, AGSAFE-04, AGSAFE-05)
+- [ ] 181-02-PLAN.md — Delegatecall target revert audit: JackpotModule, MintModule, GameOverModule (AGSAFE-02)
+- [ ] 181-03-PLAN.md — External call revert audit: coinflip, quests, sdgnrs, VRF, charity (AGSAFE-03)
 
 ### Phase 182: Regression Check
 **Goal**: All prior adversarial findings confirmed intact; test suites pass clean
@@ -275,8 +279,8 @@ Plans:
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
 | 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
 | 179. Change Surface Inventory | 2/2 | Complete    | 2026-04-04 |
-| 180. Storage Layout & Configuration Verification | 2/2 | Complete   | 2026-04-04 |
-| 181. AdvanceGame Revert Safety Audit | 0/0 | Not started | - |
+| 180. Storage Layout & Configuration Verification | 2/2 | Complete    | 2026-04-04 |
+| 181. AdvanceGame Revert Safety Audit | 0/3 | Planned     | - |
 | 182. Regression Check | 0/0 | Not started | - |
 
 ## Deferred

@@ -50,7 +50,6 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
   ├── MintModule           Ticket purchasing, ETH splitting
   ├── AdvanceModule        Level advancement, VRF requests
   ├── JackpotModule        Daily/weekly/grand jackpots
-  ├── EndgameModule        Final-round resolution
   ├── GameOverModule       Game-over distribution and sweep
   ├── LootboxModule        Lootbox drops and claims
   ├── WhaleModule          Whale bundles, lazy passes, deity passes

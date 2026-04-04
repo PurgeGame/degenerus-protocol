@@ -85,7 +85,6 @@ All share `DegenerusGameStorage`. Execute in DegenerusGame's context.
 | WhaleModule | Whale bundles, lazy passes, deity passes |
 | JackpotModule | Daily ETH/coin/ticket jackpot drawings |
 | DecimatorModule | Decimator mechanics, terminal decimator (death bet) |
-| EndgameModule | Endgame logic, BAF scatter, reward jackpots |
 | GameOverModule | Game over distribution, deity pass refunds |
 | LootboxModule | Lootbox opening, EV calculation, RNG lifecycle |
 | BoonModule | Deity boon effects |
