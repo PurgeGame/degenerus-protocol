@@ -1,5 +1,20 @@
 # Milestones
 
+## v19.0 Pool Accounting Fix & Sweep (Shipped: 2026-04-04)
+
+**Phases completed:** 3 phases, 6 plans, 11 tasks
+
+**Key accomplishments:**
+
+- Deferred futurePool SSTORE in early-burn jackpot path to capture paidEth return value and refund unspent ETH from empty trait buckets
+- Complete debit/credit trace of 29 pool mutation sites (23 futurePool + 6 currentPool) across 8 contracts with 0 accounting gaps when Phase 183 fix is applied
+- Complete debit/credit trace of 45 pool mutation sites across 9 contracts -- 0 gaps found, claimablePool invariant verified
+- Complete Phase 184 deliverable: 81 mutation sites across 9 contracts, 17 cross-pool flows verified, 0 gaps with Phase 183 fix -- pool accounting is clean
+- Line-by-line adversarial audit of Phase 183 JFIX fix found HIGH severity finding: deferred SSTORE overwrites intermediate futurePool writes from whale pass conversion and auto-rebuy paths
+- Foundry 382/384 + Hardhat 1304/1312 passing -- zero unexpected regressions from Phase 183 deferred SSTORE fix and variable renames (DELTA-03 VERIFIED)
+
+---
+
 ## v17.1 Comment Correctness Sweep (Shipped: 2026-04-03)
 
 **Phases completed:** 3 phases, 9 plans, 15 tasks

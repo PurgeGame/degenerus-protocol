@@ -10,7 +10,21 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v16.0 Module Consolidation & Storage Repack shipped (2026-04-03). EndgameModule eliminated, storage slots 0-2 repacked, all tests passing.
+v19.0 Pool Accounting Fix & Sweep shipped (2026-04-04). Deferred futurePool SSTORE captures paidEth to refund unspent ETH from empty trait buckets. F-185-01 HIGH caught and fixed: deferred SSTORE was overwriting intermediate futurePool writes from whale pass and auto-rebuy paths. 81 pool mutation sites traced with 0 gaps. All tests passing.
+
+## Completed Milestone: v19.0 Pool Accounting Fix & Sweep
+
+**Status:** Complete (2026-04-04)
+
+**Result:** 3 phases (183-185), 6 plans. Phase 183 fixed the jackpot payout path to defer the futurePool SSTORE and capture paidEth, refunding unspent ETH from empty trait buckets. Phase 184 swept all 81 pool mutation sites across 9 contracts — 0 accounting gaps. Phase 185 delta audit found F-185-01 HIGH (deferred SSTORE overwrote whale pass + auto-rebuy futurePool additions) — fixed by re-reading storage after _executeJackpot (+100 gas warm SLOAD). Foundry + Hardhat: zero unexpected regressions. All 9/9 requirements satisfied.
+
+## Completed Milestone: v18.0 Delta Audit (v16.0-v17.1)
+
+**Status:** Complete (2026-04-04)
+
+## Completed Milestone: v17.1 Comment Correctness Sweep
+
+**Status:** Complete (2026-04-03)
 
 ## Completed Milestone: v17.0 Affiliate Bonus Cache
 
