@@ -209,13 +209,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.SDGNRS], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
         mintPacked_[ContractAddresses.VAULT] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.VAULT], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
         // Pre-queue vault perpetual tickets for levels 1-100 (advance module handles 101+)
-        for (uint24 i = 1; i <= 100; ) {
-            _queueTickets(ContractAddresses.SDGNRS, i, 16, false);
-            _queueTickets(ContractAddresses.VAULT, i, 16, false);
-            unchecked {
-                ++i;
-            }
-        }
+        _queueTicketRange(ContractAddresses.SDGNRS, 1, 100, 16, false);
+        _queueTicketRange(ContractAddresses.VAULT, 1, 100, 16, false);
     }
 
     /*+======================================================================+
