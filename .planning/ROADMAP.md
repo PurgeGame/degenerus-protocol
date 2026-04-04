@@ -41,6 +41,7 @@
 - ✅ **v16.0 Module Consolidation & Storage Repack** — Phases 168-172 (shipped 2026-04-03)
 - ✅ **v17.0 Affiliate Bonus Cache** — Phases 173-174 (shipped 2026-04-03)
 - **v17.1 Comment Correctness Sweep** — Phases 175-178 (in progress)
+- **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179+ (in progress)
 
 ## Phases
 
@@ -239,6 +240,7 @@ Plans:
 | 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
 | 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
+| 179. Change Surface Inventory | 1/2 | In Progress | - |
 
 ## Deferred
 
