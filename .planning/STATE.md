@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 179 context gathered
-last_updated: "2026-04-04T03:40:05.428Z"
-last_activity: 2026-04-04
+status: verifying
+stopped_at: Completed 180-01-PLAN.md
+last_updated: "2026-04-04T04:28:46.723Z"
+last_activity: 2026-04-03
 progress:
   total_phases: 4
   completed_phases: 0
@@ -21,33 +21,40 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 179 — change-surface-inventory
+**Current focus:** Phase 178 — Consolidation & Regression Check
 
 ## Current Position
 
-Phase: 179
+Phase: 178
 Plan: Not started
-Status: Executing Phase 179
-Last activity: 2026-04-04
+Status: Phase complete — ready for verification
+Last activity: 2026-04-03
 
-Progress: [░░░░░░░░░░] 0%
+Progress: 0/4 phases complete [          ] 0%
+
+## Performance Metrics
+
+**Velocity:**
+
+- Total plans completed: 0 (v17.1 milestone)
+- Average duration: -
+- Total execution time: 0 hours
+
+**Recent Trend:**
+
+- Last 5 plans: -
+- Trend: New milestone
 
 ## Accumulated Context
 
 ### Decisions
 
+Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
 - [v16.0]: Eliminate EndgameModule — redistribute 3 functions into existing modules
 - [v16.0]: Storage slots 0-2 repacked, currentPrizePool downsized to uint128
 - [v17.0]: Cache affiliate bonus in mintPacked_ bits [185-214] to eliminate 5 cold SLOADs from activity score
-
-<<<<<<< HEAD
-
-- [v18.0-pre]: rngBypass parameter replaces phaseTransitionActive guard in _queueTickets/_queueTicketsScaled/_queueTicketRange
-- [v18.0-pre]: GAME_ENDGAME_MODULE slot removed from ContractAddresses (dead after v16.0 EndgameModule deletion)
-- [v18.0-pre]: BAF far-future ticket rolls (+5 to +50) restored with rngBypass=true; was reverting advanceGame with RngLocked
-
-=======
-
 - [v17.1]: Deliverable is findings list only (LOW/INFO severities) — no auto-fixes; same format as v3.1 and v3.5 sweeps
 - [Phase 175-game-module-comment-sweep]: 4 LOW + 5 INFO findings in BoonModule/DegeneretteModule/DecimatorModule; terminal decimator rescaling comments are accurate
 - [Phase 175-03]: Finding 4 (INFO not LOW): _rollLootboxBoons comment misleads about boon category restriction but does not affect security
@@ -69,9 +76,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 178-01]: BCF-01 disambiguation: Phase 176-02 implementation finding becomes BCF-IMPL-01; Phase 177-03 interface finding becomes BCF-IFACE-01 to avoid ID collision
 - [Phase 178-01]: Consolidated findings register: 30 LOW + 42 INFO across 12 swept files; 175-02-002 confirmed false positive (fixed in commit 4f13ab83 before sweep)
 - [Phase 178-02]: All 7 priority v3.1/v3.5 regression checks passed — no regressions found; all Phase 133 fixes remain intact through v17.1
-- [Phase 179]: All 50 logic-modified functions since v15.0 rated SAFE -- no new security concerns
-
->>>>>>> worktree-agent-adce5dc2
+- [Phase 180]: AST node IDs in forge inspect output are compiler artifacts -- normalization required for accurate storage layout comparison
+- [Phase 180]: GAME_ENDGAME_MODULE dead label in ContractAddresses.sol is harmless (compile-time constant eliminated by compiler) -- no cleanup needed
 
 ### Pending Todos
 
@@ -79,14 +85,9 @@ None yet.
 
 ### Blockers/Concerns
 
-None.
+- ContractAddresses.sol has unstaged changes (different deploy addresses) — stash before test/tool runs
 
 ## Session Continuity
 
-<<<<<<< HEAD
-Last session: 2026-04-04T03:02:19.903Z
-Stopped at: Phase 179 context gathered
-=======
-Last session: 2026-04-04T03:33:29.398Z
-Stopped at: Completed 179-02-PLAN.md
->>>>>>> worktree-agent-adce5dc2
+Last session: 2026-04-04T04:28:46.721Z
+Stopped at: Completed 180-01-PLAN.md
