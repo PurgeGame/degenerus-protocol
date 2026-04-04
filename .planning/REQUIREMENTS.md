@@ -9,7 +9,7 @@
 
 - [ ] **DELTA-01**: Every function added or modified since v15.0 is traced with file:line citations and verdict (SAFE/INFO/LOW+)
 - [ ] **DELTA-02**: Storage layout verified identical across all DegenerusGameStorage inheritors after repack and rngBypass changes
-- [ ] **DELTA-03**: rngBypass parameter usage verified correct — all `true` callers proven internal to advanceGame, all `false` callers proven external-facing
+- [x] **DELTA-03**: rngBypass parameter usage verified correct — all `true` callers proven internal to advanceGame, all `false` callers proven external-facing
 - [ ] **DELTA-04**: ContractAddresses alignment verified — every label maps to correct deployed contract after ENDGAME_MODULE removal
 - [ ] **DELTA-05**: Full `git diff` from v15.0 audit baseline to HEAD reviewed — every changed line in `contracts/` accounted for, regardless of which milestone or manual edit introduced it
 
@@ -45,7 +45,7 @@ None — this is an audit milestone, not a feature milestone.
 |-------------|-------|--------|
 | DELTA-01 | Phase 179 | Pending |
 | DELTA-02 | Phase 180 | Pending |
-| DELTA-03 | Phase 180 | Pending |
+| DELTA-03 | Phase 180 | Complete |
 | DELTA-04 | Phase 180 | Pending |
 | DELTA-05 | Phase 179 | Pending |
 | AGSAFE-01 | Phase 181 | Pending |

@@ -242,8 +242,8 @@ Plans:
   3. Every ContractAddresses label maps to the correct deployed contract after GAME_ENDGAME_MODULE removal
 **Plans**: 2 plans
 Plans:
-- [ ] 180-01-PLAN.md — Storage layout verification + ContractAddresses alignment (DELTA-02, DELTA-04)
-- [ ] 180-02-PLAN.md — rngBypass parameter verification (DELTA-03)
+- [x] 180-01-PLAN.md — Storage layout verification + ContractAddresses alignment (DELTA-02, DELTA-04)
+- [x] 180-02-PLAN.md — rngBypass parameter verification (DELTA-03)
 
 ### Phase 181: AdvanceGame Revert Safety Audit
 **Goal**: Every revert path reachable from advanceGame is proven unreachable under normal operation or intentionally guarded
@@ -275,7 +275,7 @@ Plans:
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
 | 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
 | 179. Change Surface Inventory | 2/2 | Complete    | 2026-04-04 |
-| 180. Storage Layout & Configuration Verification | 0/2 | Planning    | - |
+| 180. Storage Layout & Configuration Verification | 2/2 | Complete   | 2026-04-04 |
 | 181. AdvanceGame Revert Safety Audit | 0/0 | Not started | - |
 | 182. Regression Check | 0/0 | Not started | - |
 

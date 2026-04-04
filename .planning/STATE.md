@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 180-01-PLAN.md
-last_updated: "2026-04-04T04:28:46.723Z"
+stopped_at: Completed 180-02-PLAN.md
+last_updated: "2026-04-04T04:37:33.298Z"
 last_activity: 2026-04-03
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 7
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
   percent: 0
 ---
 
@@ -78,6 +78,7 @@ Recent decisions affecting current work:
 - [Phase 178-02]: All 7 priority v3.1/v3.5 regression checks passed — no regressions found; all Phase 133 fixes remain intact through v17.1
 - [Phase 180]: AST node IDs in forge inspect output are compiler artifacts -- normalization required for accurate storage layout comparison
 - [Phase 180]: GAME_ENDGAME_MODULE dead label in ContractAddresses.sol is harmless (compile-time constant eliminated by compiler) -- no cleanup needed
+- [Phase 180]: JackpotModule has 4 rngBypass=true call sites (not 3 as initially estimated); _jackpotTicketRoll via _queueLootboxTickets wrapper is the 4th
 
 ### Pending Todos
 
@@ -89,5 +90,5 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T04:28:46.721Z
-Stopped at: Completed 180-01-PLAN.md
+Last session: 2026-04-04T04:37:33.296Z
+Stopped at: Completed 180-02-PLAN.md
