@@ -240,7 +240,7 @@ Plans:
 | 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
 | 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
 | 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
-| 179. Change Surface Inventory | 1/2 | In Progress | - |
+| 179. Change Surface Inventory | 1/2 | Complete    | 2026-04-04 |
 
 ## Deferred
 
