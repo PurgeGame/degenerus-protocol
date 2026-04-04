@@ -175,7 +175,7 @@ See individual milestone entries above.
 
 **Milestone Goal:** Audit all code changes since v15.0 audit baseline (EndgameModule deletion, storage repack, affiliate bonus cache, rngBypass refactor) and systematically prove every advanceGame execution path cannot revert under normal operation.
 
-- [ ] **Phase 179: Change Surface Inventory** - Full git diff review and function-level delta trace
+- [ ] **Phase 179: Change Surface Inventory** - 2 plans
 - [ ] **Phase 180: Storage & Infrastructure Verification** - Storage layout, rngBypass correctness, ContractAddresses alignment
 - [ ] **Phase 181: AdvanceGame Revert Safety** - Prove every advanceGame path non-reverting under normal operation
 - [ ] **Phase 182: Regression Check** - v15.0 findings spot-check and test suite validation
@@ -191,7 +191,10 @@ See individual milestone entries above.
   2. Every changed line is attributed to its originating milestone or manual edit (v16.0 storage repack, v16.0 EndgameModule deletion, v17.0 affiliate cache, rngBypass refactor, v17.1 comment fixes)
   3. Every function that was added or modified has a file:line citation and a verdict (SAFE / INFO / LOW+), with rationale for each verdict
   4. No changed line in contracts/ is unaccounted for -- the diff is exhaustive
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 179-01-PLAN.md — Full diff extraction + milestone attribution (DELTA-05)
+- [ ] 179-02-PLAN.md — Function-level security verdicts (DELTA-01)
 
 ### Phase 180: Storage & Infrastructure Verification
 **Goal**: Storage layout, rngBypass parameter semantics, and ContractAddresses registry are proven correct after all v16.0-v17.1 changes
@@ -229,7 +232,7 @@ See individual milestone entries above.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 179. Change Surface Inventory | 0/TBD | Not started | - |
+| 179. Change Surface Inventory | 0/2 | Planned | - |
 | 180. Storage & Infrastructure Verification | 0/TBD | Not started | - |
 | 181. AdvanceGame Revert Safety | 0/TBD | Not started | - |
 | 182. Regression Check | 0/TBD | Not started | - |
