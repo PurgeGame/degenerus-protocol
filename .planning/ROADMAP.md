@@ -41,7 +41,7 @@
 - ✅ **v16.0 Module Consolidation & Storage Repack** — Phases 168-172 (shipped 2026-04-03)
 - ✅ **v17.0 Affiliate Bonus Cache** — Phases 173-174 (shipped 2026-04-03)
 - ✅ **v17.1 Comment Correctness Sweep** — Phases 175-178 (shipped 2026-04-03)
-- **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (in progress)
+- ✅ **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (shipped 2026-04-04)
 
 ## Phases
 
@@ -271,7 +271,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 182-01-PLAN.md — Spot-check 76 v15.0 adversarial SAFE verdicts against current code (REG-01)
-- [ ] 182-02-PLAN.md — Run Foundry + Hardhat test suites and classify results (REG-02)
+- [x] 182-02-PLAN.md — Run Foundry + Hardhat test suites and classify results (REG-02)
 
 ## Progress Table
 
@@ -284,7 +284,7 @@ Plans:
 | 179. Change Surface Inventory | 2/2 | Complete    | 2026-04-04 |
 | 180. Storage Layout & Configuration Verification | 2/2 | Complete   | 2026-04-04 |
 | 181. AdvanceGame Revert Safety Audit | 3/3 | Complete    | 2026-04-04 |
-| 182. Regression Check | 1/2 | In Progress|  |
+| 182. Regression Check | 2/2 | Complete   | 2026-04-04 |
 
 ## Deferred
 

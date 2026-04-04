@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: verifying
 stopped_at: Completed 182-02-PLAN.md
-last_updated: "2026-04-04T07:16:27.039Z"
-last_activity: 2026-04-03
+last_updated: "2026-04-04T07:28:19.066Z"
+last_activity: 2026-04-04
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 7
+  completed_phases: 3
+  total_plans: 7
+  completed_plans: 7
   percent: 0
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 178 — Consolidation & Regression Check
+**Current focus:** Phase 182 — Regression Check (Complete)
 
 ## Current Position
 
-Phase: 178
+Phase: 182
 Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-04-03
+Last activity: 2026-04-04
 
-Progress: 0/4 phases complete [          ] 0%
+Progress: 7/7 plans complete [##########] 100%
 
 ## Performance Metrics
 
@@ -77,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 178-01]: Consolidated findings register: 30 LOW + 42 INFO across 12 swept files; 175-02-002 confirmed false positive (fixed in commit 4f13ab83 before sweep)
 - [Phase 178-02]: All 7 priority v3.1/v3.5 regression checks passed — no regressions found; all Phase 133 fixes remain intact through v17.1
 - [Phase 182]: Combined test verdict: PASS -- 1568 passing, 7 expected failures, zero unexpected regressions across Hardhat+Foundry; all 124 v15.0 baseline failures resolved
+- [Phase 182]: Foundry tests require make test-foundry (address patching) -- bare forge test causes setUp() reverts in 28/47 suites
+- [Phase 182]: All 124 v15.0 baseline expected failures resolved; 9 new expected failures from v16.0-v17.1 intentional changes; combined verdict PASS with zero unexpected
 
 ### Pending Todos
 
@@ -88,5 +90,5 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T07:16:27.037Z
+Last session: 2026-04-04T07:28:19.064Z
 Stopped at: Completed 182-02-PLAN.md

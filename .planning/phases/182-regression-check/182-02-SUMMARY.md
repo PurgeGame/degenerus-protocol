@@ -2,22 +2,20 @@
 phase: 182-regression-check
 plan: 02
 subsystem: testing
-tags: [hardhat, foundry, regression, fuzz, invariant, solidity]
+tags: [hardhat, foundry, regression, fuzz, invariant, baseline]
 
-# Dependency graph
 requires:
   - phase: 167-integration-test-baseline
     provides: v15.0 test baseline (1455 passing, 124 expected failures)
 provides:
-  - v17.1 test regression results -- 1568 passing, 7 expected failures, 0 unexpected
-  - Full failure classification with root cause analysis for all 7 expected failures
-  - Verification that all 124 v15.0 expected failures are resolved
-affects: [test-update, v18-planning]
+  - v17.1 test regression verification with zero unexpected failures
+  - Complete test results document covering both Hardhat and Foundry
+  - Updated failure baseline (9 expected failures replacing 124)
+affects: [future-test-updates, v18.0-audit-readiness]
 
-# Tech tracking
 tech-stack:
   added: []
-  patterns: [regression-classification-against-baseline]
+  patterns: [make test-foundry for Foundry address patching, per-directory Hardhat analysis]
 
 key-files:
   created:
@@ -25,67 +23,87 @@ key-files:
   modified: []
 
 key-decisions:
-  - "All 7 failures classified EXPECTED: 5 Hardhat (1 bonus rate, 4 WWXRP scaling), 2 Foundry (1 rngBypass refactor, 1 gap bits cache conflict)"
-  - "All 124 v15.0 baseline expected failures resolved (+113 net passing tests)"
-  - "Combined verdict: PASS -- zero unexpected failures across both frameworks"
+  - "Foundry tests require make test-foundry (address patching) -- bare forge test causes setUp() reverts in 28/47 suites due to ContractAddresses.sol mismatch"
+  - "All 124 v15.0 baseline expected failures are now resolved -- tests were updated in prior phases"
+  - "9 new expected failures documented: 1 affiliate bonus rate (v17.0), 4 WWXRP decimals (post-v15.0), 2 GameOver NotTimeYet (v16.0), 1 rngBypass refactor (v16.0), 1 gap-bit invariant (v17.0)"
 
 patterns-established:
-  - "Test regression classification: compare per-suite counts against prior baseline document"
+  - "Regression check pattern: run both frameworks, classify every failure against baseline, produce combined verdict"
 
 requirements-completed: [REG-02]
 
-# Metrics
-duration: 32min
+duration: 34min
 completed: 2026-04-04
 ---
 
-# Phase 182 Plan 02: Hardhat + Foundry Regression Check Summary
+# Phase 182 Plan 02: Test Suite Regression Check Summary
 
-**1568 passing tests (Hardhat 1186 + Foundry 382), 7 expected failures, zero unexpected regressions across v16.0-v17.1 delta**
+**Hardhat 1184/1194 + Foundry 382/384 = 1566 combined passing, 9 expected failures, zero unexpected regressions vs v15.0 baseline**
 
 ## Performance
 
-- **Duration:** 32 min
-- **Started:** 2026-04-04T06:42:59Z
-- **Completed:** 2026-04-04T07:15:00Z
+- **Duration:** 34 min
+- **Started:** 2026-04-04T06:51:52Z
+- **Completed:** 2026-04-04T07:26:43Z
 - **Tasks:** 2
-- **Files modified:** 1
+- **Files created:** 1
 
 ## Accomplishments
-- Ran Hardhat test suite: 1186/1194 passing, 5 expected failures (1 affiliate bonus rate, 4 WWXRP decimal scaling), all 13 v15.0 expected failures now pass
-- Ran Foundry test suite (standard + invariant): 382/384 passing, 2 expected failures (1 rngBypass refactor, 1 gap bits cache conflict), all 111 v15.0 expected failures now pass
-- Combined verdict: PASS -- zero unexpected failures, net +113 passing tests vs v15.0 baseline
+- Both Hardhat and Foundry test suites run to completion with all tests classified
+- Zero unexpected failures across both frameworks -- no regressions from v16.0-v17.1 refactors
+- All 124 v15.0 baseline expected failures now pass (tests updated in prior phases)
+- 9 new expected failures fully documented with root cause, version, and classification
+- Net improvement: +111 passing tests vs v15.0 baseline
 
 ## Task Commits
 
 Each task was committed atomically:
 
-1. **Task 1: Run Hardhat test suite and classify results** - `5c538448` (feat)
-2. **Task 2: Run Foundry test suite and produce combined results** - `1f83082a` (feat)
+1. **Task 1: Run Hardhat test suite and classify results against v15.0 baseline** - `76e39f09` (docs)
+2. **Task 2: Run Foundry test suite and produce combined results document** - `d2da8d5a` (docs)
 
 ## Files Created/Modified
-- `.planning/phases/182-regression-check/182-02-TEST-RESULTS.md` - Complete test results with per-framework breakdown, failure classification, and combined verdict
+- `.planning/phases/182-regression-check/182-02-TEST-RESULTS.md` - Complete test results with Hardhat section, Foundry section, and combined verdict
 
 ## Decisions Made
-- All 5 Hardhat failures classified EXPECTED: 1 affiliate bonus rate change (v17.0), 4 WWXRP decimal scaling fix (v17.1)
-- All 2 Foundry failures classified EXPECTED: 1 TicketRouting rngBypass parameter refactor (v16.0), 1 Composition invariant gap bits overlap with affiliate bonus cache (v17.0)
-- All 124 v15.0 baseline expected failures confirmed resolved -- no expected failures carried forward
+- Foundry tests must be run via `make test-foundry` to patch ContractAddresses.sol with predicted Foundry nonce addresses; bare `forge test` causes setUp() reverts in 28/47 suites
+- All 9 failures classified as EXPECTED based on traceability to specific intentional changes in v16.0-v17.1 delta
+- GameOver edge test NotTimeYet() failures share the same root cause as v15.0 Foundry baseline Category 1 (time-gating guard requires warp)
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Auto-fixed Issues
+
+**1. [Rule 3 - Blocking] Foundry tests required make test-foundry instead of bare forge test**
+- **Found during:** Task 2 (Foundry test execution)
+- **Issue:** Running `forge test` directly caused setUp() reverts in 28/47 suites because ContractAddresses.sol has local changes that don't match Foundry's predicted nonce-based addresses
+- **Fix:** Used `make test-foundry` which patches ContractAddresses.sol, runs tests, and restores the original file automatically
+- **Verification:** All 47 suites executed successfully with patching (382 pass, 2 expected fail)
+- **Committed in:** d2da8d5a (Task 2 commit)
+
+**2. [Rule 3 - Blocking] Hardhat adversarial test directory missing**
+- **Found during:** Task 1 (Hardhat test execution)
+- **Issue:** `npm test` references `test/adversarial/*.test.js` but the directory no longer exists, causing MODULE_NOT_FOUND
+- **Fix:** Ran tests with explicit globs excluding the adversarial directory
+- **Verification:** 1194 tests discovered and executed across 6 remaining directories
+- **Committed in:** 76e39f09 (Task 1 commit)
+
+---
+
+**Total deviations:** 2 auto-fixed (2 blocking issues)
+**Impact on plan:** Both fixes necessary to complete test execution. No scope creep.
 
 ## Issues Encountered
-- `npm test` script references nonexistent `test/adversarial/` directory, causing Mocha error. Workaround: ran tests by explicitly specifying existing directories (access, deploy, unit, integration, edge, gas). Does not affect test coverage -- adversarial directory never existed in this codebase.
+- Mocha file-unloader throws a MODULE_NOT_FOUND error after all tests complete (cosmetic -- does not affect test results, occurs during cleanup phase)
+- Foundry compiler cache serialization warnings (`invalid type: sequence, expected a map`) when run without patching -- resolved by using `make test-foundry` which force-recompiles
 
 ## User Setup Required
-
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Test regression check complete with zero unexpected failures
-- 7 test files need updating to match intentional contract changes (not regressions)
-- Ready for any further verification or next milestone planning
+- Regression check complete: zero unexpected failures confirms v16.0-v17.1 changes are safe
+- 9 expected test failures documented for future test update work
+- Ready for audit readiness assessment
 
 ---
 *Phase: 182-regression-check*

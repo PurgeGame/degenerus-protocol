@@ -24,7 +24,7 @@
 ### Regression Check
 
 - [x] **REG-01**: All v15.0 adversarial findings (76 functions SAFE) spot-checked against current code — no regressions from v16.0/v17.0 refactors
-- [ ] **REG-02**: Foundry + Hardhat test suites pass with zero unexpected failures
+- [x] **REG-02**: Foundry + Hardhat test suites pass with zero unexpected failures
 
 ## Future Requirements
 
@@ -54,7 +54,7 @@ None — this is an audit milestone, not a feature milestone.
 | AGSAFE-04 | Phase 181 | Complete |
 | AGSAFE-05 | Phase 181 | Complete |
 | REG-01 | Phase 182 | Complete |
-| REG-02 | Phase 182 | Pending |
+| REG-02 | Phase 182 | Complete |
 
 **Coverage:**
 - v18.0 requirements: 12 total
