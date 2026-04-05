@@ -396,9 +396,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 levelStartTime = ts;
 
                 // Roll level quest at level transition so it's active during jackpot phase
-                quests.rollLevelQuest(
-                    uint256(keccak256(abi.encodePacked(rngWord, "LEVEL_QUEST")))
-                );
+                quests.rollLevelQuest(rngWord);
 
                 // Do not unlock here: allows day-1 jackpot processing to run on
                 // the same day as the transition day.
