@@ -175,14 +175,17 @@ Plans:
   1. Pool values are identical for all level transition paths (normal advance, x10 skip, x100 skip) when compared against pre-restructuring behavior -- worked examples or diff-based trace confirms equivalence
   2. A pool mutation trace of the new AdvanceModule consolidation flow shows every debit has a matching credit with no untracked remainders or orphaned values
   3. Foundry and Hardhat test suites pass with zero unexpected regressions after all Phase 186 changes applied
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 187-01-PLAN.md — Full variable sweep audit of consolidated pool flow (DELTA-01, DELTA-02)
+- [ ] 187-02-PLAN.md — Peripheral changes audit + test regression (DELTA-03)
 
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 186. Pool Consolidation & Write Batching | 4/4 | Complete    | 2026-04-05 |
-| 187. Delta Audit | 0/0 | Not started | - |
+| 187. Delta Audit | 0/2 | Not started | - |
 
 ## Deferred
 
