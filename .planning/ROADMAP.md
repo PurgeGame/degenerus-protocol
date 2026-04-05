@@ -160,12 +160,12 @@ See individual milestone entries above.
   3. All intermediate pool values (futurePool, currentPool, nextPool deltas) are computed in memory variables and written to storage in a single batch at the end of the consolidation flow
   4. JackpotModule exposes a callable entry point for BAF jackpot execution (replacing the currently private `_runBafJackpot`), and all migrated functions are removed from JackpotModule
   5. Both modules compile under 24KB (`forge build` succeeds with no contract-size errors) and quest entropy reads `rngWord` instead of `rngWordByDay[day]`
-**Plans:** 4 plans (3 complete + 1 gap closure)
+**Plans:** 4/4 plans complete
 Plans:
 - [x] 186-01-PLAN.md — JackpotModule entry points + body gutting + interface update + Game passthrough + quest entropy fix
 - [x] 186-02-PLAN.md — Inline consolidation + orchestration + drawdown into AdvanceModule with SSTORE batching
 - [x] 186-03-PLAN.md — Remove dead code from JackpotModule + clean interface
-- [ ] 186-04-PLAN.md — Gap closure: add runBafJackpot passthrough to DegenerusGame.sol + self-call guard to JackpotModule
+- [x] 186-04-PLAN.md — Gap closure: add runBafJackpot passthrough to DegenerusGame.sol + self-call guard to JackpotModule
 
 ### Phase 187: Delta Audit
 **Goal**: Every behavioral change from Phase 186 is proven equivalent to pre-restructuring behavior -- no pool accounting regressions, no new attack surface
@@ -181,7 +181,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 186. Pool Consolidation & Write Batching | 3/4 | Gap closure | 2026-04-05 |
+| 186. Pool Consolidation & Write Batching | 4/4 | Complete    | 2026-04-05 |
 | 187. Delta Audit | 0/0 | Not started | - |
 
 ## Deferred
