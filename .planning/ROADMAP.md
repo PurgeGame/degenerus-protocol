@@ -44,7 +44,8 @@
 - ✅ **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (shipped 2026-04-04)
 - ✅ **v19.0 Pool Accounting Fix & Sweep** — Phases 183-185 (shipped 2026-04-04)
 - ✅ **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (shipped 2026-04-05)
-- 🚧 **v21.0 Day-Index Clock Migration** — Phases 188-189 (in progress)
+- ✅ **v21.0 Day-Index Clock Migration** — Phases 188-189 (shipped 2026-04-05)
+- 🚧 **v22.0 BAF Simplification Delta Audit** — Phases 190-191 (in progress)
 
 ## Phases
 
@@ -150,50 +151,51 @@ See individual milestone entries above.
 
 </details>
 
-### v21.0 Day-Index Clock Migration (In Progress)
+<details>
+<summary>v21.0 Day-Index Clock Migration (Phases 188-189) -- SHIPPED 2026-04-05</summary>
 
-**Milestone Goal:** Replace timestamp-based `levelStartTime` with day-index `purchaseStartDay`, repack storage to close the freed slot, and verify behavioral equivalence across all consumer sites.
+- [x] **Phase 188: Clock Migration & Storage Repack** - 3 plans (completed 2026-04-05)
+- [x] **Phase 189: Delta Audit** - 2 plans (completed 2026-04-05)
 
-- [x] **Phase 188: Clock Migration & Storage Repack** - 3 plans in 2 waves (completed 2026-04-05)
-- [x] **Phase 189: Delta Audit** - 2 plans in 1 wave (completed 2026-04-05)
+</details>
+
+### v22.0 BAF Simplification Delta Audit (In Progress)
+
+**Milestone Goal:** Verify that the BAF simplification (runBafJackpot reduced from 3 returns to 1 claimableDelta, rebuy delta removed, RewardJackpotsSettled emitted unconditionally) produces identical ETH flow outcomes for every winner path, with no storage layout drift or test regressions.
+
+- [ ] **Phase 190: ETH Flow + Rebuy Delta + Event Audit** - Code-level behavioral equivalence verification
+- [ ] **Phase 191: Layout + Regression Testing** - Mechanical verification via forge inspect and test suites
 
 ## Phase Details
 
-### Phase 188: Clock Migration & Storage Repack
-**Goal**: All death clock, distress mode, future take, and gap extension logic uses day-index arithmetic via `purchaseStartDay` instead of timestamp-based `levelStartTime` -- storage is repacked with the freed bits reclaimed
-**Depends on**: Phase 187
-**Requirements**: CLK-01, CLK-02, CLK-03, CLK-04, CLK-05, CLK-06, CLK-07, CLK-08, STG-01, STG-02, STG-03, STG-04
+### Phase 190: ETH Flow + Rebuy Delta + Event Audit
+**Goal**: Every ETH flow path through the simplified BAF produces identical outcomes to the pre-simplification code -- claimable amounts, ticket counts, pool balances, whale pass claims, and event emissions are all behaviorally equivalent
+**Depends on**: Phase 189
+**Requirements**: FLOW-01, FLOW-02, FLOW-03, FLOW-04, FLOW-05, DELTA-01, DELTA-02, EVT-01
 **Success Criteria** (what must be TRUE):
-  1. Constructor initializes `purchaseStartDay` via `GameTimeLib.currentDayIndex()` and no `levelStartTime` field exists anywhere in storage declarations
-  2. Distress mode, game-over liveness check, future take curve, gap extension, days-remaining calculation, and decimator days-remaining all produce equivalent outcomes using day-based arithmetic (same trigger points, same thresholds, same durations)
-  3. `purchaseStartDay` lives in slot 0 bits [0:6] and slot 1 has no gap from the removed field -- `forge inspect` confirms identical layout across all delegatecall modules
-  4. The dead `levelStartTime = ts` write at jackpot-phase entry is removed with no replacement
-**Plans:** 3/3 plans complete
-Plans:
-- [x] 188-01-PLAN.md -- AdvanceModule clock migration (6 consumer sites)
-- [x] 188-02-PLAN.md -- Constructor, _isDistressMode, DecimatorModule clock migration
-- [x] 188-03-PLAN.md -- Storage repack + layout verification
+  1. For a non-auto-rebuy winner, the new single-return `claimableDelta` exactly equals the old `claimableDelta` for all prize tier combinations (normal jackpot, trait jackpot, decimator payout)
+  2. For an auto-rebuy winner, the ticket count purchased and pool state after `_setPrizePools` are identical to pre-simplification -- the removed rebuy delta storage write during BAF is provably overwritten by the batched SSTORE at function end
+  3. For lootbox ticket and whale pass paths, ticket entries and `whalePassClaims` plus dust remainders are identical -- no ETH leaks or double-credits from the return value change
+  4. The unconditional `RewardJackpotsSettled` emit has no downstream consumer (off-chain indexer, other contract, or test assertion) that depended on the old conditional emission pattern
+  5. No futurePool storage writes exist in the BAF/decimator self-call chain that silently depended on the removed rebuy delta -- the only writes are those safely overwritten by `_setPrizePools`
+**Plans**: TBD
 
-### Phase 189: Delta Audit
-**Goal**: Every behavioral change from Phase 188 is proven equivalent to pre-migration behavior -- no death clock regressions, no storage accounting gaps, no test failures, all modules under size limit
-**Depends on**: Phase 188
-**Requirements**: DELTA-01, DELTA-02, DELTA-03, DELTA-04
+### Phase 191: Layout + Regression Testing
+**Goal**: All changed contracts have identical storage layout to their pre-simplification versions, and both test suites pass with zero new failures
+**Depends on**: Phase 190
+**Requirements**: LAYOUT-01, TEST-01, TEST-02
 **Success Criteria** (what must be TRUE):
-  1. Worked examples or trace-based proof confirms death clock, future take curve, and distress mode produce identical outcomes for all level transition paths (normal advance, x10 skip, x100 skip, gap backfill) when compared against pre-migration timestamp behavior
-  2. Storage layout diff shows no unintended slot shifts or accounting gaps -- every bit range in slots 0 and 1 is accounted for
-  3. Foundry and Hardhat test suites pass with zero unexpected regressions
-  4. All 10 delegatecall modules compile under 24KB
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 189-01-PLAN.md -- Behavioral equivalence proofs + storage accounting verification
-- [x] 189-02-PLAN.md -- Stale test reference fixes + full test suite run + module size compliance
+  1. `forge inspect` output for every changed contract (DegenerusGame, DegenerusGameAdvanceModule, DegenerusGameJackpotModule, DegenerusGameDecimatorModule, DegenerusGamePayoutUtils, and their interfaces) shows identical storage slot assignments to the pre-commit baseline
+  2. Foundry test suite runs to completion with zero new failures beyond the known pre-existing baseline
+  3. Hardhat test suite runs to completion with zero new failures beyond the known pre-existing baseline
+**Plans**: TBD
 
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 188. Clock Migration & Storage Repack | 3/3 | Complete    | 2026-04-05 |
-| 189. Delta Audit | 2/2 | Complete    | 2026-04-05 |
+| 190. ETH Flow + Rebuy Delta + Event Audit | 0/? | Not started | - |
+| 191. Layout + Regression Testing | 0/? | Not started | - |
 
 ## Deferred
 
