@@ -50,6 +50,16 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 newTotalBurn
     );
 
+    /// @dev Emitted when decimator winning subbuckets are resolved for a level.
+    ///      packedOffsets encodes the winning subbucket for each denom 2-12
+    ///      (same packing as decBucketOffsetPacked).
+    event DecimatorResolved(
+        uint24 indexed lvl,
+        uint64 packedOffsets,
+        uint256 poolWei,
+        uint256 totalBurn
+    );
+
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -246,6 +256,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         // Store packed winning subbuckets for claim validation
         decBucketOffsetPacked[lvl] = packedOffsets;
+        emit DecimatorResolved(lvl, packedOffsets, poolWei, totalBurn);
 
         // Snapshot claim round for this level (persistent — no expiry)
         decClaimRounds[lvl].poolWei = poolWei;

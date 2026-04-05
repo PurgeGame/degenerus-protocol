@@ -73,14 +73,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 amount
     );
 
-    /// @dev Emitted for each jackpot winner draw with the exact winning ticket reference.
-    ///      ticketIndex is the index in traitBurnTicket[level][traitId], or uint256.max for deity virtual entries.
+    /// @dev Emitted for each jackpot winner draw.
+    ///      ticketIndex is the index in traitBurnTicket[level][traitId], uint256.max for deity, 0 for non-trait paths.
+    ///      awardType: 0=ETH, 1=BURNIE, 2=TICKETS, 3=DGNRS, 4=WHALE_PASS
     event JackpotTicketWinner(
         address indexed winner,
         uint24 indexed level,
         uint8 indexed traitId,
         uint256 amount,
-        uint256 ticketIndex
+        uint256 ticketIndex,
+        uint8 awardType
     );
 
     /// @notice Emitted after BAF/decimator jackpot resolution with final pool values.
@@ -170,6 +172,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Max winners per single trait bucket (must fit in uint8 for _randTraitTicket).
     ///      Set to 250 to allow all ticket winners in single trait if others are empty.
     uint8 private constant MAX_BUCKET_WINNERS = 250;
+
+    /// @dev Award type constants for JackpotTicketWinner event.
+    uint8 private constant AWARD_ETH = 0;
+    uint8 private constant AWARD_BURNIE = 1;
+    uint8 private constant AWARD_TICKETS = 2;
+    uint8 private constant AWARD_DGNRS = 3;
+    uint8 private constant AWARD_WHALE_PASS = 4;
 
     // -------------------------------------------------------------------------
     // Constants — Jackpot Bucket Scaling (Gas Guardrails)
@@ -634,6 +643,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 winners[0],
                 reward
             );
+            emit JackpotTicketWinner(
+                winners[0],
+                lvl,
+                traitIds[soloIdx],
+                reward,
+                0,
+                AWARD_DGNRS
+            );
         }
     }
 
@@ -691,6 +708,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             baseLevel + levelOffset,
                             ticketCount,
                             true
+                        );
+                        emit JackpotTicketWinner(
+                            winner,
+                            baseLevel + levelOffset,
+                            traitId,
+                            ticketCount,
+                            0,
+                            AWARD_TICKETS
                         );
                     }
                 }
@@ -1016,6 +1041,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
             if (winner != address(0) && units != 0) {
                 _queueTickets(winner, queueLvl, uint32(units), true);
+                emit JackpotTicketWinner(
+                    winner,
+                    queueLvl,
+                    traitId,
+                    units,
+                    0,
+                    AWARD_TICKETS
+                );
             }
             unchecked {
                 ++cursor;
@@ -1230,7 +1263,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         lvl,
                         traitIds[traitIdx],
                         perWinner,
-                        ticketIndexes[i]
+                        ticketIndexes[i],
+                        AWARD_ETH
                     );
                     paidEth += perWinner;
                     liabilityDelta += claimableDelta;
@@ -1392,7 +1426,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         lvl,
                         traitId,
                         perWinner,
-                        ticketIndexes[i]
+                        ticketIndexes[i],
+                        AWARD_BURNIE
                     );
                 }
 
@@ -1425,7 +1460,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             lvl,
                             traitId,
                             paid,
-                            ticketIndexes[i]
+                            ticketIndexes[i],
+                            AWARD_ETH
                         );
                     }
                     totalLiability += claimDelta;
@@ -1444,7 +1480,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         lvl,
                         traitId,
                         perWinner,
-                        ticketIndexes[i]
+                        ticketIndexes[i],
+                        AWARD_ETH
                     );
                     totalPayout += perWinner;
                     totalLiability += claimableDelta;
@@ -2187,7 +2224,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             lvl,
                             traitIds[traitIdx],
                             amount,
-                            bucketTicketIndexes[i]
+                            bucketTicketIndexes[i],
+                            AWARD_BURNIE
                         );
                         batchPlayers[batchCount] = winner;
                         batchAmounts[batchCount] = amount;
@@ -2486,6 +2524,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
                 // Credit ETH half to claimable balance
                 claimableDelta += _addClaimableEth(winner, ethPortion, rngWord);
+                emit JackpotTicketWinner(winner, lvl, 0, ethPortion, 0, AWARD_ETH);
 
                 // Lootbox half: small amounts awarded immediately, large deferred
                 if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
@@ -2496,9 +2535,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         lvl,
                         rngWord
                     );
+                    emit JackpotTicketWinner(winner, lvl, 0, lootboxPortion, 0, AWARD_TICKETS);
                 } else {
                     // Large lootbox: defer to claim (whale pass equivalent)
                     _queueWhalePassClaimCore(winner, lootboxPortion);
+                    emit JackpotTicketWinner(winner, lvl, 0, lootboxPortion, 0, AWARD_WHALE_PASS);
                 }
                 lootboxTotal += lootboxPortion;
             }
@@ -2506,9 +2547,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             else if (i % 2 == 0) {
                 // Even index: 100% ETH (immediate liquidity)
                 claimableDelta += _addClaimableEth(winner, amount, rngWord);
+                emit JackpotTicketWinner(winner, lvl, 0, amount, 0, AWARD_ETH);
             } else {
                 // Odd index: 100% lootbox (upside exposure)
                 rngWord = _awardJackpotTickets(winner, amount, lvl, rngWord);
+                emit JackpotTicketWinner(winner, lvl, 0, amount, 0, AWARD_TICKETS);
                 lootboxTotal += amount;
             }
 
