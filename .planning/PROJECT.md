@@ -8,11 +8,11 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v21.0 Day-Index Clock Migration
+## Completed Milestone: v21.0 Day-Index Clock Migration
 
-**Status:** Phase 188 complete (2026-04-05), Phase 189 pending
+**Status:** Complete (2026-04-05)
 
-**Phase 188 result:** 3 plans in 2 waves. Replaced all timestamp-based `levelStartTime` arithmetic with day-index `purchaseStartDay` across 4 contracts. Storage repacked: `purchaseStartDay` moved to slot 0 [0:6], slot 1 gap closed. All 12 contracts verified via `forge inspect` — identical layout. JackpotModule `isEthDay` consumer also converted (deviation). All modules under 24KB. 12/12 requirements satisfied. 1 human verification item pending (day boundary behavioral equivalence). Stale test refs in `test/fuzz/FuturepoolSkim.t.sol` deferred to Phase 189 (DELTA-03).
+**Result:** 2 phases (188-189), 5 plans. Phase 188 replaced all timestamp-based `levelStartTime` arithmetic with day-index `purchaseStartDay` across 4 contracts; storage repacked (`purchaseStartDay` to slot 0 [0:6], slot 1 gap closed); all 12 contracts verified identical via `forge inspect`; JackpotModule `isEthDay` also converted (deviation). Phase 189 delta audit: 10 consumer sites verified (9 EQUIVALENT, 1 KNOWN/ACCEPTABLE — distress mode boundary widened from ~6h to ~24h on boundary day, conservative/player-favoring). Storage slot layout confirmed identical across 12/12 contracts. Stale test refs fixed in 5 files (including StorageFoundation.t.sol slot offset deviation). Foundry 150/28 pre-existing, Hardhat 1231/13 pre-existing — zero Phase 188 regressions. All modules under 24KB (JackpotModule tightest at 22,700B). 4/4 requirements satisfied (DELTA-01 through DELTA-04).
 
 ## Completed Milestone: v20.0 Pool Consolidation & Write Batching
 
@@ -138,6 +138,10 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v16.0 Module Consolidation & Storage Repack — EndgameModule eliminated (3 functions redistributed), storage slots 0-2 repacked (slot 0 32/32, currentPrizePool uint128 in slot 1, slot 2 killed), 14/14 requirements satisfied — v16.0 Phases 168-172
 - ✓ v17.0 Affiliate Bonus Cache — cached affiliate bonus in mintPacked_ bits [185-214] eliminating 5 cold SLOADs from activity score, rate doubled to 1 point per 0.5 ETH, 105 mintPacked_ operations audited (0 collisions), both test suites zero regressions, 9/9 requirements satisfied — v17.0 Phases 173-174
 - ✓ v17.1 Comment Correctness Sweep — 40 contracts swept, 72 findings (30 LOW, 42 INFO), 56 fixed, 0 regressions from v3.1/v3.5, WWXRP decimal scaling added — v17.1 Phases 175-178
+- ✓ v18.0 Delta Audit (v16.0-v17.1) — behavioral equivalence verified across all module consolidation + storage repack + affiliate cache changes — v18.0 Phases 179-182
+- ✓ v19.0 Pool Accounting Fix & Sweep — jackpot payout defer fix, 81 pool mutation sites swept (0 gaps), delta audit found+fixed deferred SSTORE overwrite — v19.0 Phases 183-185
+- ✓ v20.0 Pool Consolidation & Write Batching — consolidatePrizePools + runRewardJackpots + _drawDownFuturePrizePool inlined, batched SSTOREs, delta audit 9/9 SAFE — v20.0 Phases 186-187
+- ✓ v21.0 Day-Index Clock Migration — levelStartTime→purchaseStartDay across 10 consumer sites, storage repack, delta audit 10/10 verified (9 EQUIVALENT + 1 KNOWN/ACCEPTABLE) — v21.0 Phases 188-189
 
 ## Completed Milestone: v8.1 Final Audit Prep
 
