@@ -178,7 +178,10 @@ See individual milestone entries above.
   3. For lootbox ticket and whale pass paths, ticket entries and `whalePassClaims` plus dust remainders are identical -- no ETH leaks or double-credits from the return value change
   4. The unconditional `RewardJackpotsSettled` emit has no downstream consumer (off-chain indexer, other contract, or test assertion) that depended on the old conditional emission pattern
   5. No futurePool storage writes exist in the BAF/decimator self-call chain that silently depended on the removed rebuy delta -- the only writes are those safely overwritten by `_setPrizePools`
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 190-01-PLAN.md -- ETH flow path algebraic equivalence (FLOW-01 through FLOW-05)
+- [ ] 190-02-PLAN.md -- Rebuy delta removal + event audit (DELTA-01, DELTA-02, EVT-01)
 
 ### Phase 191: Layout + Regression Testing
 **Goal**: All changed contracts have identical storage layout to their pre-simplification versions, and both test suites pass with zero new failures
@@ -194,7 +197,7 @@ See individual milestone entries above.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 190. ETH Flow + Rebuy Delta + Event Audit | 0/? | Not started | - |
+| 190. ETH Flow + Rebuy Delta + Event Audit | 0/2 | Planning complete | - |
 | 191. Layout + Regression Testing | 0/? | Not started | - |
 
 ## Deferred
