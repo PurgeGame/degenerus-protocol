@@ -2472,12 +2472,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
      * All lootbox ETH stays in futurePrizePool (source pool).
      *
      */
-    function _runBafJackpot(
+    function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
     )
-        private
+        external
         returns (
             uint256 netSpend,
             uint256 claimableDelta,
