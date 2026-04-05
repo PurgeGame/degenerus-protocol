@@ -1779,11 +1779,6 @@ contract DegenerusQuests is IDegenerusQuests {
         unchecked { ++levelQuestVersion; }
     }
 
-    /// @notice Clear the active level quest (called at level transition before RNG arrives).
-    function clearLevelQuest() external override onlyGame {
-        levelQuestType = 0;
-    }
-
     /// @dev Checks if a player is eligible for the level quest.
     ///      Requires (levelStreak >= 5 OR any active pass) AND (levelUnits >= 4 this level).
     /// @param player The player address to check.

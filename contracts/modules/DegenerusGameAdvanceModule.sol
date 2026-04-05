@@ -273,7 +273,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             );
             if (rngWord == 1) {
                 _swapAndFreeze(purchaseLevel);
-                quests.clearLevelQuest();
                 stage = STAGE_RNG_REQUESTED;
                 break;
             }
