@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v22.0
 milestone_name: BAF Simplification Delta Audit
-status: ready_to_plan
-stopped_at: null
-last_updated: "2026-04-05T21:30:00.000Z"
-last_activity: 2026-04-05
+status: planning
+stopped_at: Phase 190 context gathered
+last_updated: "2026-04-05T23:34:09.718Z"
+last_activity: 2026-04-05 -- Roadmap created for v22.0 BAF Simplification Delta Audit
 progress:
   total_phases: 2
   completed_phases: 0
@@ -69,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05
-Stopped at: Roadmap created for v22.0 -- ready to plan Phase 190
-Resume file: None
+Last session: 2026-04-05T23:34:09.716Z
+Stopped at: Phase 190 context gathered
+Resume file: .planning/phases/190-eth-flow-rebuy-delta-event-audit/190-CONTEXT.md
