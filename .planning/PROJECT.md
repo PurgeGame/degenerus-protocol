@@ -8,6 +8,12 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
+## Current Milestone: v22.0 BAF Simplification Delta Audit
+
+**Status:** In progress (Phase 190 complete, Phase 191 pending)
+
+**Phase 190 Result:** 2 plans, 1 wave. Algebraic proof that `runBafJackpot` returning only `claimableDelta` (was 3 values) produces identical memFuture at `_setPrizePools` for all 5 winner paths. Master identity: old `-bafPoolWei + (bafPoolWei - netSpend) + lootboxToFuture` = `-claimableDelta` = new `memFuture -= claimed`. Rebuy delta removal safe — `_processAutoRebuy` line 839 is the only futurePool SSTORE reachable from BAF self-call, overwritten by `_setPrizePools` at function end. Unconditional `RewardJackpotsSettled` is log-only with no on-chain consumer. 8/8 requirements satisfied (FLOW-01 through EVT-01), all EQUIVALENT.
+
 ## Completed Milestone: v21.0 Day-Index Clock Migration
 
 **Status:** Complete (2026-04-05)
