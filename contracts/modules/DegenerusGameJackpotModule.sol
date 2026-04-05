@@ -2484,6 +2484,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 lootboxToFuture
         )
     {
+        if (msg.sender != address(this)) revert E();
         // Get winners and payout info from jackpots contract
         (
             address[] memory winnersArr,
