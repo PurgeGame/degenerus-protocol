@@ -40,7 +40,10 @@
 - ✅ **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167 (shipped 2026-04-02)
 - ✅ **v16.0 Module Consolidation & Storage Repack** — Phases 168-172 (shipped 2026-04-03)
 - ✅ **v17.0 Affiliate Bonus Cache** — Phases 173-174 (shipped 2026-04-03)
-- **v17.1 Comment Correctness Sweep** — Phases 175-178 (in progress)
+- ✅ **v17.1 Comment Correctness Sweep** — Phases 175-178 (shipped 2026-04-03)
+- ✅ **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (shipped 2026-04-04)
+- ✅ **v19.0 Pool Accounting Fix & Sweep** — Phases 183-185 (shipped 2026-04-04)
+- 🚧 **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (in progress)
 
 ## Phases
 
@@ -98,43 +101,6 @@ See individual milestone entries above.
 </details>
 
 <details>
-<summary>v11.0 BURNIE Endgame Gate (Phases 151-152) -- SHIPPED 2026-03-31</summary>
-
-- [x] **Phase 151: Endgame Flag Implementation** - 2 plans, 10 requirements (completed 2026-03-31)
-- [x] **Phase 152: Delta Audit** - 2 plans, 3 requirements (completed 2026-03-31)
-
-</details>
-
-<details>
-<summary>v12.0 Level Quests (Phases 153-155) -- SHIPPED 2026-04-01</summary>
-
-- [x] **Phase 153: Core Design** - 1 plan (completed 2026-04-01)
-- [x] **Phase 154: Integration Mapping** - 1 plan (completed 2026-04-01)
-- [x] **Phase 155: Economic + Gas Analysis** - 1 plan (completed 2026-04-01)
-
-</details>
-
-<details>
-<summary>v13.0 Level Quests Implementation (Phases 156-158.1) -- SHIPPED 2026-04-01</summary>
-
-- [x] **Phase 156: Interfaces, Storage & Access Control** - 1 plan (completed 2026-04-01)
-- [x] **Phase 157: Quest Logic & Roll Chain** - 3 plans (completed 2026-04-01)
-- [x] **Phase 158: Handler Integration & View** - 2 plans (completed 2026-04-01)
-- [x] **Phase 158.1: Carryover Redesign + Cleanup** - 2 plans (completed 2026-04-01)
-
-</details>
-
-<details>
-<summary>v14.0 Activity Score & Quest Gas Optimization (Phases 159-161) -- SHIPPED 2026-04-02</summary>
-
-- [x] **Phase 159: Storage Analysis & Architecture Design** - 1 plan (completed 2026-04-01)
-- [x] **Phase 160: Score & Quest Handler Consolidation** - 3 plans (completed 2026-04-02)
-- [x] **Phase 160.1: Purchase Path Correctness** - 2 plans (completed 2026-04-02)
-- [x] **Phase 161: Purchase Path SLOAD Deduplication** - 1 plan (completed 2026-04-02)
-
-</details>
-
-<details>
 <summary>v11.0-v15.0 (Phases 151-167) -- SHIPPED</summary>
 
 See individual milestone entries above.
@@ -153,92 +119,70 @@ See individual milestone entries above.
 </details>
 
 <details>
-<summary>v17.0 Affiliate Bonus Cache (Phases 173-174) -- SHIPPED 2026-04-03</summary>
+<summary>v17.0-v17.1 (Phases 173-178) -- SHIPPED 2026-04-03</summary>
 
-- [x] **Phase 173: Implementation** - 2 plans (completed 2026-04-03)
-- [x] **Phase 174: Delta Audit & Verification** - 1 plan (completed 2026-04-03)
+See individual milestone entries above.
 
 </details>
 
 <details>
-<summary>v17.1 Comment Correctness Sweep (Phases 175-178) -- IN PROGRESS</summary>
+<summary>v18.0 Delta Audit (Phases 179-182) -- SHIPPED 2026-04-04</summary>
 
-- [ ] **Phase 175: Game Module Comment Sweep** - 5 plans
-- [ ] **Phase 176: Core Game + Token Contract Comment Sweep** - 3 plans
-- [ ] **Phase 177: Infrastructure, Libraries & Misc Comment Sweep** - 4 plans
-- [ ] **Phase 178: Consolidation & Regression Check** - 2 plans
+See individual milestone entries above.
 
 </details>
 
+<details>
+<summary>v19.0 Pool Accounting Fix & Sweep (Phases 183-185) -- SHIPPED 2026-04-04</summary>
+
+- [x] **Phase 183: Jackpot ETH Fix** - 1 plan (completed 2026-04-04)
+- [x] **Phase 184: Pool Accounting Sweep** - 3 plans (completed 2026-04-04)
+- [x] **Phase 185: Delta Audit** - 2 plans (completed 2026-04-04)
+
+</details>
+
+### v20.0 Pool Consolidation & Write Batching (In Progress)
+
+**Milestone Goal:** Merge pool transition logic from JackpotModule into AdvanceModule, batch SSTOREs, and free bytecode space in JackpotModule.
+
+- [x] **Phase 186: Pool Consolidation & Write Batching** - Move pool transition functions to AdvanceModule, inline pool math in memory, batch SSTOREs, expose BAF entry point, fix quest entropy (completed 2026-04-05)
+- [ ] **Phase 187: Delta Audit** - Behavioral equivalence verification, pool mutation trace, test suite regression check
+
 ## Phase Details
 
-### Phase 175: Game Module Comment Sweep
-**Goal**: All game module contracts have accurate inline comments and NatSpec — every discrepancy between comment and code behavior logged as a finding
-**Depends on**: Phase 174
-**Requirements**: CMT-01
+### Phase 186: Pool Consolidation & Write Batching
+**Goal**: All pool transition logic lives in AdvanceModule with pool math computed in memory and SSTOREs batched -- JackpotModule is smaller and exposes BAF jackpot as a callable entry point
+**Depends on**: Phase 185
+**Requirements**: POOL-01, POOL-02, POOL-03, POOL-04, POOL-05, POOL-06, GAS-01, SIZE-01, SIZE-02, SIZE-03
 **Success Criteria** (what must be TRUE):
-  1. Every inline comment and NatSpec entry in AdvanceModule, MintModule, MintStreakUtils, JackpotModule, LootboxModule, BoonModule, DegeneretteModule, DecimatorModule, WhaleModule, GameOverModule, and PayoutUtils has been read against the actual code
-  2. Any comment that misstates a parameter, logic branch, return value, or side effect is recorded as a LOW or INFO finding with contract name, line reference, and a plain-English description of the discrepancy
-  3. The findings list for this phase is self-contained and could be reviewed independently without re-reading source
-**Plans**: 5 plans
+  1. `consolidatePrizePools` logic executes inside AdvanceModule -- pool merge, x00 yield dump, keep roll, and `_drawDownFuturePrizePool` are a single inlined flow with no cross-module delegatecall for pool consolidation
+  2. `runRewardJackpots` orchestration (pool tracking, rebuy delta reconciliation) executes inside AdvanceModule, calling back into JackpotModule only for individual jackpot execution
+  3. All intermediate pool values (futurePool, currentPool, nextPool deltas) are computed in memory variables and written to storage in a single batch at the end of the consolidation flow
+  4. JackpotModule exposes a callable entry point for BAF jackpot execution (replacing the currently private `_runBafJackpot`), and all migrated functions are removed from JackpotModule
+  5. Both modules compile under 24KB (`forge build` succeeds with no contract-size errors) and quest entropy reads `rngWord` instead of `rngWordByDay[day]`
+**Plans:** 4 plans (3 complete + 1 gap closure)
 Plans:
-- [x] 175-01-PLAN.md — AdvanceModule + MintModule comment sweep
-- [x] 175-02-PLAN.md — JackpotModule comment sweep
-- [x] 175-03-PLAN.md — LootboxModule + MintStreakUtils comment sweep
-- [x] 175-04-PLAN.md — BoonModule + DegeneretteModule + DecimatorModule comment sweep
-- [x] 175-05-PLAN.md — WhaleModule + GameOverModule + PayoutUtils comment sweep
+- [x] 186-01-PLAN.md — JackpotModule entry points + body gutting + interface update + Game passthrough + quest entropy fix
+- [x] 186-02-PLAN.md — Inline consolidation + orchestration + drawdown into AdvanceModule with SSTORE batching
+- [x] 186-03-PLAN.md — Remove dead code from JackpotModule + clean interface
+- [ ] 186-04-PLAN.md — Gap closure: add runBafJackpot passthrough to DegenerusGame.sol + self-call guard to JackpotModule
 
-### Phase 176: Core Game + Token Contract Comment Sweep
-**Goal**: Core game storage and all token contracts have accurate inline comments and NatSpec — every discrepancy logged as a finding
-**Depends on**: Phase 175
-**Requirements**: CMT-02, CMT-03
+### Phase 187: Delta Audit
+**Goal**: Every behavioral change from Phase 186 is proven equivalent to pre-restructuring behavior -- no pool accounting regressions, no new attack surface
+**Depends on**: Phase 186
+**Requirements**: DELTA-01, DELTA-02, DELTA-03
 **Success Criteria** (what must be TRUE):
-  1. Every inline comment and NatSpec entry in DegenerusGame and DegenerusGameStorage has been read against the actual code
-  2. Every inline comment and NatSpec entry in BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, and GNRUS has been read against the actual code
-  3. Any comment that misstates state variable semantics, packed-bit layouts, access control assumptions, or token math is recorded as a LOW or INFO finding with full location reference
-**Plans**: 3 plans
-Plans:
-- [x] 176-01-PLAN.md — DegenerusGame + DegenerusGameStorage comment sweep (CMT-02)
-- [x] 176-02-PLAN.md — BurnieCoin + BurnieCoinflip comment sweep (CMT-03)
-- [x] 176-03-PLAN.md — DegenerusStonk + StakedDegenerusStonk + GNRUS comment sweep (CMT-03)
-
-### Phase 177: Infrastructure, Libraries & Misc Comment Sweep
-**Goal**: All infrastructure contracts, libraries, interfaces, and miscellaneous contracts have accurate inline comments and NatSpec — every discrepancy logged as a finding
-**Depends on**: Phase 176
-**Requirements**: CMT-04, CMT-05, CMT-06
-**Success Criteria** (what must be TRUE):
-  1. Every inline comment and NatSpec entry in DegenerusAdmin, DegenerusVault, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, and DeityBoonViewer has been read against the actual code
-  2. Every inline comment and NatSpec entry in EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib, and all I* interfaces has been read against the actual code; interface NatSpec is verified to match implementing contract behavior
-  3. Every inline comment and NatSpec entry in WrappedWrappedXRP, DegenerusTraitUtils, and Icons32Data has been read against the actual code
-  4. Any discrepancy — including interface NatSpec that diverges from implementation — is recorded as a LOW or INFO finding with full location reference
-**Plans**: 4 plans
-Plans:
-- [x] 177-01-PLAN.md — DegenerusAdmin + DegenerusVault + DegenerusAffiliate + DegenerusDeityPass comment sweep (CMT-04)
-- [x] 177-02-PLAN.md — DegenerusQuests + DegenerusJackpots + DeityBoonViewer comment sweep (CMT-04)
-- [x] 177-03-PLAN.md — All 5 libraries + all 11 interfaces comment sweep and implementation cross-check (CMT-05)
-- [x] 177-04-PLAN.md — WrappedWrappedXRP + DegenerusTraitUtils + Icons32Data comment sweep (CMT-06)
-
-### Phase 178: Consolidation & Regression Check
-**Goal**: All per-phase findings are merged into one document, severities are assigned, and prior sweep regressions are confirmed absent
-**Depends on**: Phase 177
-**Requirements**: CON-01, CON-02
-**Success Criteria** (what must be TRUE):
-  1. A single findings document exists containing all LOW/INFO findings from Phases 175-177, deduplicated and formatted consistently (matching v3.1/v3.5 format)
-  2. Every finding has a severity (LOW or INFO), a contract and line reference, and a description of what the comment says versus what the code does
-  3. Every finding from the v3.1 and v3.5 sweeps that was marked fixed has been spot-checked against the current contract source; any regression is added as a new finding
-**Plans**: 2 plans
-Plans:
-- [x] 178-01-PLAN.md — Merge all Phase 175-177 findings into consolidated document
-- [x] 178-02-PLAN.md — Spot-check v3.1/v3.5 fixed findings for regressions
+  1. Pool values are identical for all level transition paths (normal advance, x10 skip, x100 skip) when compared against pre-restructuring behavior -- worked examples or diff-based trace confirms equivalence
+  2. A pool mutation trace of the new AdvanceModule consolidation flow shows every debit has a matching credit with no untracked remainders or orphaned values
+  3. Foundry and Hardhat test suites pass with zero unexpected regressions after all Phase 186 changes applied
+**Plans**: TBD
 
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 175. Game Module Comment Sweep | 5/5 | Complete    | 2026-04-03 |
-| 176. Core Game + Token Comment Sweep | 3/3 | Complete    | 2026-04-03 |
-| 177. Infrastructure, Libraries & Misc Comment Sweep | 4/4 | Complete    | 2026-04-03 |
-| 178. Consolidation & Regression Check | 2/2 | Complete    | 2026-04-03 |
+| 186. Pool Consolidation & Write Batching | 3/4 | Gap closure | 2026-04-05 |
+| 187. Delta Audit | 0/0 | Not started | - |
 
 ## Deferred
 
