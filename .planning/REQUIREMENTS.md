@@ -29,8 +29,8 @@ Requirements for replacing timestamp-based `levelStartTime` with day-index `purc
 
 - [x] **DELTA-01**: Behavioral equivalence verified — death clock, future take, distress mode produce same outcomes for all level transition paths
 - [x] **DELTA-02**: No storage accounting gaps introduced
-- [ ] **DELTA-03**: Test suites green (Foundry + Hardhat, zero unexpected regressions)
-- [ ] **DELTA-04**: All modules compile under 24KB
+- [x] **DELTA-03**: Test suites green (Foundry + Hardhat, zero unexpected regressions)
+- [x] **DELTA-04**: All modules compile under 24KB
 
 ## Future Requirements
 
@@ -63,8 +63,8 @@ None — this is a scoped mechanical migration.
 | STG-04 | 188 | Pending |
 | DELTA-01 | 189 | Complete |
 | DELTA-02 | 189 | Complete |
-| DELTA-03 | 189 | Pending |
-| DELTA-04 | 189 | Pending |
+| DELTA-03 | 189 | Complete |
+| DELTA-04 | 189 | Complete |
 
 **Coverage:**
 - v21.0 requirements: 16 total
