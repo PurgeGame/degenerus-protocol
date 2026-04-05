@@ -1,76 +1,68 @@
-# Requirements: v21.0 Day-Index Clock Migration
+# Requirements: v22.0 BAF Simplification Delta Audit
 
 **Defined:** 2026-04-05
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v21.0 Requirements
+## v22.0 Requirements
 
-Requirements for replacing timestamp-based `levelStartTime` with day-index `purchaseStartDay`.
+Requirements for BAF Simplification Delta Audit. Each maps to roadmap phases.
 
-### Clock Migration
+### ETH Flow Verification
 
-- [ ] **CLK-01**: Replace `levelStartTime` constructor init with `purchaseStartDay = GameTimeLib.currentDayIndex()`
-- [ ] **CLK-02**: `_isDistressMode` uses day-based arithmetic with 6-hour precision preserved
-- [ ] **CLK-03**: `_handleGameOverPath` uses day-based liveness check (no timestamp params)
-- [ ] **CLK-04**: Future take curve (`_nextToFutureBps`) thresholds convert from seconds to days
-- [ ] **CLK-05**: Gap day extension uses `purchaseStartDay += gapCount` (not timestamp)
-- [ ] **CLK-06**: `_evaluateGameOverAndTarget` uses day-based days-remaining calculation
-- [ ] **CLK-07**: `_terminalDecDaysRemaining` in DecimatorModule uses day-based arithmetic
-- [ ] **CLK-08**: Dead `levelStartTime = ts` write at jackpot-phase entry removed
+- [ ] **FLOW-01**: BAF claimable path produces identical `claimableDelta` for non-auto-rebuy winners
+- [ ] **FLOW-02**: BAF auto-rebuy path produces identical ticket counts and pool state post-`_setPrizePools`
+- [ ] **FLOW-03**: BAF lootbox ticket path produces identical ticket entries (stays in futurePool implicitly)
+- [ ] **FLOW-04**: BAF whale pass path produces identical `whalePassClaims` and dust remainder
+- [ ] **FLOW-05**: BAF refund path — unused pool ETH stays in futurePool correctly
 
-### Storage Repack
+### Rebuy Delta Removal
 
-- [ ] **STG-01**: `levelStartTime` removed from slot 0 declaration
-- [ ] **STG-02**: `purchaseStartDay` moved from slot 1 into slot 0 [0:6]
-- [ ] **STG-03**: Slot 1 gap closed after `purchaseStartDay` removal
-- [ ] **STG-04**: Storage layout identical across all 10 delegatecall modules (verified via `forge inspect`)
+- [ ] **DELTA-01**: Auto-rebuy storage write during BAF is safely overwritten by `_setPrizePools` at function end
+- [ ] **DELTA-02**: No other futurePool storage writes exist in the BAF/decimator self-call chain that depended on the delta
 
-### Delta Audit
+### Event + Layout
 
-- [x] **DELTA-01**: Behavioral equivalence verified — death clock, future take, distress mode produce same outcomes for all level transition paths
-- [x] **DELTA-02**: No storage accounting gaps introduced
-- [x] **DELTA-03**: Test suites green (Foundry + Hardhat, zero unexpected regressions)
-- [x] **DELTA-04**: All modules compile under 24KB
+- [ ] **EVT-01**: Unconditional `RewardJackpotsSettled` emit has no downstream consumer that depends on conditional behavior
+- [ ] **LAYOUT-01**: Storage layout identical across all changed contracts via `forge inspect`
+
+### Regression
+
+- [ ] **TEST-01**: Foundry test suite green with zero new failures
+- [ ] **TEST-02**: Hardhat test suite green with zero new failures
 
 ## Future Requirements
 
-None — this is a scoped mechanical migration.
+None — delta audit is self-contained.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Changing distress mode precision beyond 6-hour | Existing behavior preserved intentionally |
-| Modifying death clock day counts (120 days, DEPLOY_IDLE_TIMEOUT_DAYS) | Constants unchanged, only arithmetic method changes |
-| Changing future take curve BPS values | Only converting thresholds from seconds to days |
-| purchaseStartDay semantic change | Clock still resets at level transitions; shift from jackpot-phase to purchase-phase entry is the only behavioral change |
+| Transient guard refactor | Gas analysis showed net negative savings; abandoned |
+| MintModule self-call optimization | Separate scope, not part of BAF simplification |
+| Auto-rebuy nextPool write loss (pre-existing) | Pre-existing issue unchanged by this commit |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLK-01 | 188 | Pending |
-| CLK-02 | 188 | Pending |
-| CLK-03 | 188 | Pending |
-| CLK-04 | 188 | Pending |
-| CLK-05 | 188 | Pending |
-| CLK-06 | 188 | Pending |
-| CLK-07 | 188 | Pending |
-| CLK-08 | 188 | Pending |
-| STG-01 | 188 | Pending |
-| STG-02 | 188 | Pending |
-| STG-03 | 188 | Pending |
-| STG-04 | 188 | Pending |
-| DELTA-01 | 189 | Complete |
-| DELTA-02 | 189 | Complete |
-| DELTA-03 | 189 | Complete |
-| DELTA-04 | 189 | Complete |
+| FLOW-01 | Phase 190 | Pending |
+| FLOW-02 | Phase 190 | Pending |
+| FLOW-03 | Phase 190 | Pending |
+| FLOW-04 | Phase 190 | Pending |
+| FLOW-05 | Phase 190 | Pending |
+| DELTA-01 | Phase 190 | Pending |
+| DELTA-02 | Phase 190 | Pending |
+| EVT-01 | Phase 190 | Pending |
+| LAYOUT-01 | Phase 191 | Pending |
+| TEST-01 | Phase 191 | Pending |
+| TEST-02 | Phase 191 | Pending |
 
 **Coverage:**
-- v21.0 requirements: 16 total
-- Mapped to phases: 16
-- Unmapped: 0
+- v22.0 requirements: 11 total
+- Mapped to phases: 11
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after roadmap creation*
+*Last updated: 2026-04-05 after initial definition*
