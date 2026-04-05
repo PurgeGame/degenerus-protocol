@@ -40,9 +40,9 @@ import {
  * limit is reached.
  *
  * NOTE: With DEPLOY_DAY_BOUNDARY=0 in tests, the first advanceGame()
- * backfills ~20k gap days and inflates levelStartTime far into the
+ * backfills ~20k gap days and extends purchaseStartDay far into the
  * future. If a second call is needed (odd number of _swapAndFreeze
- * toggles), it reverts with panic 0x11 (ts - levelStartTime underflow).
+ * toggles), day-index arithmetic is underflow-safe with ternary guard.
  * This is a test-env artifact — production DEPLOY_DAY_BOUNDARY makes
  * gaps 0–3 days. We catch and stop rather than propagating.
  */
@@ -273,7 +273,7 @@ describe("RngStall", function () {
       expect(await game.isRngFulfilled()).to.equal(true);
 
       // Drain processes the word. May not fully unlock due to
-      // DEPLOY_DAY_BOUNDARY=0 gap backfill inflating levelStartTime.
+      // DEPLOY_DAY_BOUNDARY=0 gap backfill extending purchaseStartDay.
       await drainTickets(game, deployer);
     });
 
