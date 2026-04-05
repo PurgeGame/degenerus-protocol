@@ -2080,7 +2080,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Price tiers: intro 0.01/0.02, then cycle 0.04/0.08/0.12/0.16/0.24 ETH.
     /// @return Current price in wei.
     function mintPrice() external view returns (uint256) {
-        return PriceLookupLib.priceForLevel(level);
+        return PriceLookupLib.priceForLevel(_activeTicketLevel());
     }
 
     /// @notice Get the VRF random word recorded for a specific day.
@@ -2154,7 +2154,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         lastPurchaseDay_ = (!inJackpotPhase) && lastPurchaseDay;
         lvl = _activeTicketLevel();
         rngLocked_ = rngLockedFlag;
-        priceWei = PriceLookupLib.priceForLevel(level);
+        priceWei = PriceLookupLib.priceForLevel(lvl);
     }
 
     /*+======================================================================+

@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
 import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
+import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {
     IDegenerusGameGameOverModule,
     IDegenerusGameJackpotModule,
@@ -48,6 +49,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     event Advance(uint8 stage, uint24 lvl);
+    event RewardJackpotsSettled(
+        uint24 indexed lvl,
+        uint256 futurePool,
+        uint256 claimableDelta
+    );
 
     // Advance stage constants (sequential, matching advanceGame flow)
     uint8 private constant STAGE_GAMEOVER = 0;
@@ -128,6 +134,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint16 private constant OVERSHOOT_COEFF = 4000; // numerator coefficient (0.40 in bps)
     uint16 private constant NEXT_TO_FUTURE_BPS_MAX = 8000; // 80% total skim hard cap
     uint16 private constant ADDITIVE_RANDOM_BPS = 1000; // 0–10% additive random on bps
+    bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
 
     /// @dev Presale auto-ends after this much mint-only lootbox ETH (200 ETH, unscaled).
@@ -163,7 +170,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             ) {
                 lastPurchaseDay = true;
                 compressedJackpotFlag = 2;
-                gameOverPossible = false; // FLAG-03: auto-clear when target met
+                if (gameOverPossible) gameOverPossible = false; // FLAG-03: auto-clear when target met
             }
         }
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
@@ -304,7 +311,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
                 // FLAG-01: evaluate endgame flag on purchase-phase entry at L10+
-                _evaluateGameOverPossible(lvl, purchaseLevel);
+                _evaluateGameOverAndTarget(lvl, purchaseLevel);
                 stage = STAGE_TRANSITION_DONE;
                 break;
             }
@@ -336,13 +343,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (!lastPurchaseDay) {
                     payDailyJackpot(false, purchaseLevel, rngWord);
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
-                    // FLAG-02: re-check to potentially clear (skip gas if already false)
-                    if (gameOverPossible) {
-                        _evaluateGameOverPossible(lvl, purchaseLevel);
-                    }
-                    if (
-                        _getNextPrizePool() >= levelPrizePool[purchaseLevel - 1]
-                    ) {
+                    // FLAG-02: combined target + game-over check (shares SLOADs when flag is set)
+                    bool targetMet = gameOverPossible
+                        ? _evaluateGameOverAndTarget(lvl, purchaseLevel)
+                        : _getNextPrizePool() >=
+                            levelPrizePool[purchaseLevel - 1];
+                    if (targetMet) {
                         lastPurchaseDay = true;
                         if (day - purchaseStartDay <= 3) {
                             compressedJackpotFlag = 1;
@@ -369,9 +375,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
                 // Consolidate prize pools for level transition
                 levelPrizePool[purchaseLevel] = _getNextPrizePool();
-                _applyTimeBasedFutureTake(ts, purchaseLevel, rngWord);
-                _consolidatePrizePools(purchaseLevel, rngWord);
-                _runRewardJackpots(lvl, rngWord);
+                _distributeYieldSurplus(rngWord);
+                _consolidatePoolsAndRewardJackpots(
+                    lvl,
+                    purchaseLevel,
+                    ts,
+                    rngWord
+                );
 
                 if (
                     lootboxPresaleActive &&
@@ -382,23 +392,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // Transition to jackpot phase
                 jackpotPhaseFlag = true;
 
-                // Open decimator window: levels x4 (not x94) or x99
-                uint24 mod100 = lvl % 100;
-                if ((lvl % 10 == 4 && mod100 != 94) || mod100 == 99) {
-                    decWindowOpen = true;
-                }
-
                 lastPurchaseDay = false;
                 levelStartTime = ts;
-                _drawDownFuturePrizePool(lvl);
 
                 // Roll level quest at level transition so it's active during jackpot phase
-                uint256 questEntropy = uint256(
-                    keccak256(
-                        abi.encodePacked(rngWordByDay[day], "LEVEL_QUEST")
-                    )
+                quests.rollLevelQuest(
+                    uint256(keccak256(abi.encodePacked(rngWord, "LEVEL_QUEST")))
                 );
-                quests.rollLevelQuest(questEntropy);
 
                 // Do not unlock here: allows day-1 jackpot processing to run on
                 // the same day as the transition day.
@@ -585,14 +585,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             10_000;
     }
 
-    /// @dev Resolve BAF/Decimator jackpots during the level transition RNG period.
-    function _runRewardJackpots(uint24 lvl, uint256 rngWord) private {
+    /// @dev Distribute yield surplus via JackpotModule delegatecall.
+    ///      Runs BEFORE pool consolidation — obligations sum is conserved
+    ///      regardless of which pool ETH is in, so ordering is safe.
+    function _distributeYieldSurplus(uint256 rngWord) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.runRewardJackpots.selector,
-                    lvl,
+                    IDegenerusGameJackpotModule.distributeYieldSurplus.selector,
                     rngWord
                 )
             );
@@ -609,19 +610,205 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Consolidate prize pools via jackpot module delegatecall.
-    ///      Merges next→current, rebalances future/current, credits coinflip, distributes yield.
-    function _consolidatePrizePools(uint24 lvl, uint256 rngWord) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.consolidatePrizePools.selector,
+    /// @dev All pool transition logic: time-based future take, pool consolidation,
+    ///      coinflip credit, reward jackpots (BAF/Decimator), and future→next drawdown.
+    ///      All intermediate pool values computed in memory; storage written in batches.
+    function _consolidatePoolsAndRewardJackpots(
+        uint24 lvl,
+        uint24 purchaseLevel,
+        uint48 ts,
+        uint256 rngWord
+    ) private {
+        uint256 memFuture = _getFuturePrizePool();
+        uint256 memCurrent = _getCurrentPrizePool();
+        uint256 memNext = _getNextPrizePool();
+        uint256 memYieldAcc = yieldAccumulator;
+
+        // --- Time-based future take (batched) ---
+        {
+            uint48 start = levelStartTime + 11 days;
+            uint48 reachedAt = ts;
+            if (reachedAt < start) reachedAt = start;
+
+            uint256 bps = _nextToFutureBps(reachedAt - start, purchaseLevel);
+            if (purchaseLevel % 10 == 9) bps += NEXT_TO_FUTURE_BPS_X9_BONUS;
+
+            uint256 lastPool = levelPrizePool[purchaseLevel - 1];
+
+            // Ratio adjust: ±4% based on future/next ratio (target 2:1)
+            uint256 ratioPct = (memFuture * 100) / memNext;
+            if (ratioPct < 200) {
+                bps += (200 - ratioPct) * 2;
+            } else {
+                uint256 penalty = ratioPct - 200;
+                penalty = penalty > 400 ? 400 : penalty;
+                bps = penalty >= bps ? 0 : bps - penalty;
+            }
+
+            // Overshoot surcharge
+            if (lastPool != 0) {
+                uint256 rBps = (memNext * 10_000) / lastPool;
+                if (rBps > OVERSHOOT_THRESHOLD_BPS) {
+                    uint256 excess = rBps - OVERSHOOT_THRESHOLD_BPS;
+                    uint256 surcharge = (excess * OVERSHOOT_COEFF) /
+                        (excess + 10_000);
+                    if (surcharge > OVERSHOOT_CAP_BPS)
+                        surcharge = OVERSHOOT_CAP_BPS;
+                    bps += surcharge;
+                }
+            }
+
+            // Additive random 0–10%
+            bps += rngWord % (ADDITIVE_RANDOM_BPS + 1);
+
+            // Compute take
+            uint256 take = (memNext * bps) / 10_000;
+
+            // ±25% multiplicative variance (triangular: avg of two uniform VRF rolls)
+            if (take != 0) {
+                uint256 halfWidth = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000;
+                uint256 minWidth = (memNext * NEXT_SKIM_VARIANCE_MIN_BPS) /
+                    10_000;
+                if (halfWidth < minWidth) halfWidth = minWidth;
+                if (halfWidth > take) halfWidth = take;
+
+                uint256 range = halfWidth * 2 + 1;
+                uint256 roll1 = (rngWord >> 64) % range;
+                uint256 roll2 = (rngWord >> 192) % range;
+                uint256 combined = (roll1 + roll2) / 2;
+
+                if (combined >= halfWidth) {
+                    take += combined - halfWidth;
+                } else {
+                    take -= halfWidth - combined;
+                }
+            }
+
+            // Cap at 80%
+            uint256 maxTake = (memNext * NEXT_TO_FUTURE_BPS_MAX) / 10_000;
+            if (take > maxTake) take = maxTake;
+
+            uint256 insuranceSkim = (memNext * INSURANCE_SKIM_BPS) / 10_000;
+            memNext -= take + insuranceSkim;
+            memFuture += take;
+            memYieldAcc += insuranceSkim;
+        }
+
+        // --- x00 yield accumulator dump: 50% into futurePool (memory) ---
+        if ((lvl % 100) == 0) {
+            uint256 half = memYieldAcc >> 1;
+            memFuture += half;
+            memYieldAcc -= half;
+        }
+
+        // --- BAF + Decimator x00: draw from futurePool BEFORE keep roll ---
+        // Snapshot storage for rebuy delta (auto-rebuy writes to STORAGE during BAF).
+        uint256 storageBaseFuture = _getFuturePrizePool();
+        uint256 baseMemFuture = memFuture;
+        uint24 prevMod10 = lvl % 10;
+        uint24 prevMod100 = lvl % 100;
+        uint256 claimableDelta;
+
+        // BAF Jackpot (every 10 levels)
+        if (prevMod10 == 0) {
+            uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
+            uint256 bafPoolWei = (baseMemFuture * bafPct) / 100;
+
+            memFuture -= bafPoolWei;
+            (
+                uint256 netSpend,
+                uint256 claimed,
+                uint256 lootboxToFuture
+            ) = IDegenerusGame(address(this)).runBafJackpot(
+                    bafPoolWei,
                     lvl,
                     rngWord
-                )
+                );
+            claimableDelta += claimed;
+
+            if (netSpend != bafPoolWei) {
+                memFuture += (bafPoolWei - netSpend);
+            }
+            if (lootboxToFuture != 0) {
+                memFuture += lootboxToFuture;
+            }
+        }
+
+        // Decimator Jackpot (level 100 special — uses pre-jackpot snapshot)
+        if (prevMod100 == 0) {
+            uint256 decPoolWei = (baseMemFuture * 30) / 100;
+            uint256 returnWei = IDegenerusGame(address(this))
+                .runDecimatorJackpot(decPoolWei, lvl, rngWord);
+            uint256 spend = decPoolWei - returnWei;
+            memFuture -= spend;
+            claimableDelta += spend;
+        }
+
+        // Decimator Jackpot (levels ending in 5, except 95 — uses current tracking)
+        if (prevMod10 == 5 && prevMod100 != 95) {
+            uint256 decPoolWei = (memFuture * 10) / 100;
+            uint256 returnWei = IDegenerusGame(address(this))
+                .runDecimatorJackpot(decPoolWei, lvl, rngWord);
+            uint256 spend = decPoolWei - returnWei;
+            memFuture -= spend;
+            claimableDelta += spend;
+        }
+
+        // Rebuy delta: auto-rebuy writes to futurePool STORAGE during BAF execution.
+        // Fold into memFuture immediately so all subsequent math uses one variable.
+        memFuture += _getFuturePrizePool() - storageBaseFuture;
+
+        // --- x00 keep roll (5d4 dice: 30-65% keep, avg ~47.5%) ---
+        // Operates on post-jackpot memFuture — all reward jackpots drew first.
+        if ((lvl % 100) == 0) {
+            uint256 seed = uint256(
+                keccak256(abi.encodePacked(rngWord, FUTURE_KEEP_TAG))
             );
-        if (!ok) _revertDelegate(data);
+            uint256 total;
+            unchecked {
+                total =
+                    (seed % 4) +
+                    ((seed >> 16) % 4) +
+                    ((seed >> 32) % 4) +
+                    ((seed >> 48) % 4) +
+                    ((seed >> 64) % 4);
+            }
+            uint256 keepBps = 3000 + (total * 3500) / 15;
+            if (keepBps < 10_000) {
+                uint256 moveWei = memFuture - (memFuture * keepBps) / 10_000;
+                memFuture -= moveWei;
+                memCurrent += moveWei;
+            }
+        }
+
+        // --- Merge next → current ---
+        memCurrent += memNext;
+        memNext = 0;
+
+        // --- Coinflip credit ---
+        coinflip.creditFlip(
+            ContractAddresses.SDGNRS,
+            (memCurrent * PRICE_COIN_UNIT) /
+                (PriceLookupLib.priceForLevel(level) * 20)
+        );
+
+        // --- Future→next drawdown (15% on non-x00 levels) ---
+        if ((lvl % 100) != 0) {
+            uint256 reserved = (memFuture * 15) / 100;
+            memFuture -= reserved;
+            memNext = reserved;
+        }
+
+        // --- Single SSTORE batch: all pool values ---
+        _setPrizePools(uint128(memNext), uint128(memFuture));
+        currentPrizePool = uint128(memCurrent);
+        yieldAccumulator = memYieldAcc;
+        if (claimableDelta != 0) {
+            claimablePool += claimableDelta;
+        }
+        if (memFuture != storageBaseFuture || claimableDelta != 0) {
+            emit RewardJackpotsSettled(lvl, memFuture, claimableDelta);
+        }
     }
 
     /// @dev Award DGNRS reward to the solo bucket winner after final daily jackpot.
@@ -1102,97 +1289,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         return uint16(bps > 10_000 ? 10_000 : bps);
     }
 
-    function _applyTimeBasedFutureTake(
-        uint48 reachedAt,
-        uint24 lvl,
-        uint256 rngWord
-    ) internal {
-        uint48 start = levelStartTime + 11 days;
-        if (reachedAt < start) reachedAt = start;
-
-        uint256 bps = _nextToFutureBps(reachedAt - start, lvl);
-        if (lvl % 10 == 9) bps += NEXT_TO_FUTURE_BPS_X9_BONUS;
-
-        uint256 nextPoolBefore = _getNextPrizePool();
-        uint256 futurePoolBefore = _getFuturePrizePool();
-        uint256 lastPool = levelPrizePool[lvl - 1];
-
-        // Ratio adjust: ±4% based on future/next ratio (target 2:1)
-        uint256 ratioPct = (futurePoolBefore * 100) / nextPoolBefore;
-        if (ratioPct < 200) {
-            uint256 bump = (200 - ratioPct) * 2;
-            bps += bump;
-        } else {
-            uint256 penalty = ratioPct - 200;
-            penalty = penalty > 400 ? 400 : penalty;
-            bps = penalty >= bps ? 0 : bps - penalty;
-        }
-
-        // Overshoot surcharge: hyperbolic, kicks in when nextPool > 1.25x previous level's target
-        if (lastPool != 0) {
-            uint256 rBps = (nextPoolBefore * 10_000) / lastPool;
-            if (rBps > OVERSHOOT_THRESHOLD_BPS) {
-                uint256 excess = rBps - OVERSHOOT_THRESHOLD_BPS;
-                uint256 surcharge = (excess * OVERSHOOT_COEFF) /
-                    (excess + 10_000);
-                if (surcharge > OVERSHOOT_CAP_BPS)
-                    surcharge = OVERSHOOT_CAP_BPS;
-                bps += surcharge;
-            }
-        }
-
-        // Step 2: Additive random 0–10% on bps (full 256-bit modulo; functionally uniform)
-        bps += rngWord % (ADDITIVE_RANDOM_BPS + 1);
-
-        // Step 3: Compute take from uncapped bps
-        uint256 take = (nextPoolBefore * bps) / 10_000;
-
-        // Step 4: ±25% multiplicative variance (triangular: avg of two uniform VRF rolls).
-        // roll1 uses bits [64:255], roll2 uses bits [192:255] — overlap at [192:255] is
-        // irrelevant because modulo by range (small) makes outputs independent.
-        if (take != 0) {
-            uint256 halfWidth = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000;
-            uint256 minWidth = (nextPoolBefore * NEXT_SKIM_VARIANCE_MIN_BPS) /
-                10_000;
-            if (halfWidth < minWidth) halfWidth = minWidth;
-            if (halfWidth > take) halfWidth = take;
-
-            uint256 range = halfWidth * 2 + 1;
-            uint256 roll1 = (rngWord >> 64) % range;
-            uint256 roll2 = (rngWord >> 192) % range;
-            uint256 combined = (roll1 + roll2) / 2;
-
-            if (combined >= halfWidth) {
-                take += combined - halfWidth;
-            } else {
-                take -= halfWidth - combined;
-            }
-        }
-
-        // Step 5: Cap take at 80% of nextPool
-        uint256 maxTake = (nextPoolBefore * NEXT_TO_FUTURE_BPS_MAX) / 10_000;
-        if (take > maxTake) take = maxTake;
-
-        uint256 insuranceSkim = (nextPoolBefore * INSURANCE_SKIM_BPS) / 10_000;
-        _setNextPrizePool(nextPoolBefore - take - insuranceSkim);
-        _setFuturePrizePool(futurePoolBefore + take);
-        yieldAccumulator += insuranceSkim;
-    }
-
-    function _drawDownFuturePrizePool(uint24 lvl) private {
-        uint256 reserved;
-        if ((lvl % 100) == 0) {
-            reserved = 0; // Skip extra future->next move on x00 levels
-        } else {
-            reserved = (_getFuturePrizePool() * 15) / 100; // 15% on normal levels
-        }
-
-        if (reserved != 0) {
-            _setFuturePrizePool(_getFuturePrizePool() - reserved);
-            _setNextPrizePool(_getNextPrizePool() + reserved);
-        }
-    }
-
     /*+======================================================================+
       |                    FUTURE TICKET ACTIVATION                         |
       +======================================================================+
@@ -1401,12 +1497,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngRequestTime = uint48(block.timestamp);
         rngLockedFlag = true;
 
-        // Close decimator window when RNG requested during lastPurchaseDay at resolution levels (5, 15...85, 100, 105...185, 200, etc.)
-        bool decClose = decWindowOpen &&
-            isTicketJackpotDay &&
-            ((lvl % 10 == 5 && lvl % 100 != 95) || lvl % 100 == 0);
-        if (decClose) decWindowOpen = false;
-
         // Increment level at RNG request time when lastPurchaseDay = true.
         // lvl is already purchaseLevel (= level + 1), so set directly.
         // Only on fresh request - retry would double-increment.
@@ -1415,6 +1505,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Scores routed to lvl (= level + 1) during the purchase phase just ended.
             _rewardTopAffiliate(lvl);
             level = lvl;
+
+            // Decimator window: open at x4/x99, close at x5/x00
+            uint24 mod100 = lvl % 100;
+            uint24 mod10 = lvl % 10;
+            if ((mod10 == 4 && mod100 != 94) || mod100 == 99) {
+                decWindowOpen = true;
+            } else if (
+                decWindowOpen && ((mod10 == 5 && mod100 != 95) || mod100 == 0)
+            ) {
+                decWindowOpen = false;
+            }
 
             // Resolve charity governance for the completed level.
             // lvl is the NEW level (old level + 1). CHARITY.currentLevel tracks
@@ -1645,26 +1746,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Set or clear gameOverPossible based on drip projection vs nextPool deficit.
+    /// @dev Evaluates gameOverPossible flag and returns whether nextPool >= target.
     ///      At L10+: flag is set if projected drip cannot cover the gap.
     ///      Below L10: flag is always cleared.
-    function _evaluateGameOverPossible(
+    function _evaluateGameOverAndTarget(
         uint24 lvl,
         uint24 purchaseLevel
-    ) private {
-        if (lvl < 10) {
-            gameOverPossible = false;
-            return;
-        }
+    ) private returns (bool targetMet) {
         uint256 nextPool = _getNextPrizePool();
         uint256 target = levelPrizePool[purchaseLevel - 1];
-        if (nextPool >= target) {
+        targetMet = nextPool >= target;
+        if (lvl < 10 || targetMet) {
             gameOverPossible = false;
-            return;
+            return targetMet;
         }
         uint256 deficit = target - nextPool;
-        // Days remaining until 120-day liveness guard.
-        // Safe from underflow: _handleGameOverPath returns before reaching here
-        // if block.timestamp >= levelStartTime + 120 days.
         uint256 daysRemaining = (uint256(levelStartTime) +
             120 days -
             block.timestamp) / 1 days;

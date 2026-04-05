@@ -154,9 +154,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
     uint16 private constant DAILY_CURRENT_BPS_MAX = 1400;
 
-    /// @dev Domain separator for level-100 future pool keep roll derivation.
-    bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
-
     // -------------------------------------------------------------------------
     // Constants — Gas Budgeting (Ticket Batch Processing)
     // -------------------------------------------------------------------------
@@ -240,7 +237,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // =========================================================================
 
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
-    /// @dev Called via IDegenerusGame(address(this)) from JackpotModule (runRewardJackpots) and GameOverModule.
+    /// @dev Called via IDegenerusGame(address(this)) from GameOverModule.
     ///      Uses FINAL_DAY_SHARES_PACKED (60/13/13/13) with trait-based bucket distribution.
     ///      Updates claimablePool internally — callers must NOT double-count.
     /// @param poolWei Total ETH to distribute.
@@ -450,7 +447,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     shareBpsDaily,
                     bucketCountsDaily
                 );
-                _setCurrentPrizePool(_getCurrentPrizePool() - paidDailyEth);
+                if (isFinalPhysicalDay_) {
+                    uint256 unpaidDailyEth = dailyEthBudget - paidDailyEth;
+                    _setCurrentPrizePool(_getCurrentPrizePool() - dailyEthBudget);
+                    if (unpaidDailyEth != 0) {
+                        _setFuturePrizePool(_getFuturePrizePool() + unpaidDailyEth);
+                    }
+                } else {
+                    _setCurrentPrizePool(_getCurrentPrizePool() - paidDailyEth);
+                }
             }
 
             dailyJackpotCoinTicketsPending = true;
@@ -716,53 +721,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         _setNextPrizePool(_getNextPrizePool() + totalBudget);
     }
 
-    /// @notice Computes and applies prize pool splits at the start of a new level's jackpot phase.
-    /// @dev This is the "budgeting" function that determines how ETH flows between pools:
-    ///
-    ///      FLOW:
-    ///      1. Merge nextPrizePool into currentPrizePool.
-    ///      2. On x00 levels: roll 5-dice keep percentage (30-65%, avg ~47.5%) to move future->current.
-    ///      3. Credit coinflip and distribute yield surplus.
-    ///
-    ///      The entire currentPrizePool stays available for daily jackpots
-    ///      (no separate level-transition split).
-    ///
-    /// @param lvl Current game level.
-    /// @param rngWord VRF entropy for percentage rolls.
-    function consolidatePrizePools(uint24 lvl, uint256 rngWord) external {
-        // x00 yield accumulator dump: 50% into futurePool before keep-roll, 50% retained
-        if ((lvl % 100) == 0) {
-            uint256 acc = yieldAccumulator;
-            uint256 half = acc >> 1;
-            _setFuturePrizePool(_getFuturePrizePool() + half);
-            yieldAccumulator = acc - half; // rounds in favor of retention
-        }
-
-        // Consolidate pools for this level's jackpot calculations.
-        _setCurrentPrizePool(_getCurrentPrizePool() + _getNextPrizePool());
-        _setNextPrizePool(0);
-
-        if ((lvl % 100) == 0) {
-            uint256 keepBps = _futureKeepBps(rngWord);
-            uint256 fp = _getFuturePrizePool();
-            if (keepBps < 10_000 && fp != 0) {
-                uint256 keepWei = (fp * keepBps) / 10_000;
-                uint256 moveWei = fp - keepWei;
-                if (moveWei != 0) {
-                    _setFuturePrizePool(keepWei);
-                    _setCurrentPrizePool(_getCurrentPrizePool() + moveWei);
-                }
-            }
-        }
-
-        _creditDgnrsCoinflip(_getCurrentPrizePool());
-
-        _distributeYieldSurplus(rngWord);
-    }
-
-    /// @dev Distributes yield surplus (stETH appreciation) to stakeholders.
+    /// @notice Distribute yield surplus (stETH appreciation) to stakeholders.
+    /// @dev Entry point for AdvanceModule delegatecall.
     ///      23% each to sDGNRS, vault, and charity (GNRUS) claimable, 23% yield accumulator (~8% buffer).
-    function _distributeYieldSurplus(uint256 rngWord) private {
+    /// @param rngWord VRF entropy for auto-rebuy targeting.
+    function distributeYieldSurplus(uint256 rngWord) external {
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalBal = address(this).balance + stBal;
         uint256 obligations = _getCurrentPrizePool() +
@@ -774,11 +737,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (totalBal <= obligations) return;
 
         uint256 yieldPool = totalBal - obligations;
-        uint256 quarterShare = (yieldPool * 2300) / 10_000; // 23% each (~8% buffer left unextracted)
+        uint256 quarterShare = (yieldPool * 2300) / 10_000;
 
-        uint256 claimableDelta;
         if (quarterShare != 0) {
-            claimableDelta =
+            uint256 claimableDelta =
                 _addClaimableEth(
                     ContractAddresses.VAULT,
                     quarterShare,
@@ -1134,28 +1096,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 idx = uint8((idx + 1) & 3);
             }
         }
-    }
-
-    // =========================================================================
-    // Internal Helpers — Dice Rolls
-    // =========================================================================
-
-    /// @dev Level-100 keep roll: 5 dice with zeros (0-3), mapped to 30-65% keep (avg ~47.5%).
-    function _futureKeepBps(uint256 rngWord) private pure returns (uint256) {
-        // Inlined _rollZeroSum(rngWord, FUTURE_KEEP_TAG, 4, 5)
-        uint256 seed = uint256(
-            keccak256(abi.encodePacked(rngWord, FUTURE_KEEP_TAG))
-        );
-        uint256 total;
-        unchecked {
-            total =
-                (seed % 4) +
-                ((seed >> 16) % 4) +
-                ((seed >> 32) % 4) +
-                ((seed >> 48) % 4) +
-                ((seed >> 64) % 4);
-        }
-        return 3000 + (total * 3500) / 15;
     }
 
     // =========================================================================
@@ -2149,14 +2089,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         return _simulatedDayIndex();
     }
 
-    function _creditDgnrsCoinflip(uint256 prizePoolWei) private {
-        uint256 priceWei = PriceLookupLib.priceForLevel(level);
-        if (priceWei == 0) return;
-        uint256 coinAmount = (prizePoolWei * PRICE_COIN_UNIT) / (priceWei * 20);
-        if (coinAmount == 0) return;
-        coinflip.creditFlip(ContractAddresses.SDGNRS, coinAmount);
-    }
-
     /// @notice Pays daily BURNIE jackpot to random ticket holders.
     /// @dev Runs every day in its own transaction. Awards 0.5% of prize pool target in BURNIE.
     ///      75% goes to near-future trait-matched winners ([lvl, lvl+4]).
@@ -2509,100 +2441,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
     // Reward Jackpots (BAF + Decimator Dispatch)
     // -------------------------------------------------------------------------
-
-    /// @notice Resolve reward jackpots (BAF + Decimator) during level transition.
-    /// @dev Entry point for AdvanceModule delegatecall. Pulls % of future pool per jackpot type,
-    ///      distributes to winners, reconciles auto-rebuy delta, and commits pool changes.
-    ///
-    /// Pool: 10% of future pool (level 100 uses 30% special)
-    function runRewardJackpots(uint24 lvl, uint256 rngWord) external {
-        uint256 futurePoolLocal = _getFuturePrizePool();
-        // Snapshot at entry: used as (1) BAF/Decimator pool sizing baseline and
-        // (2) rebuyDelta reference to detect auto-rebuy writes to storage.
-        uint256 baseFuturePool = futurePoolLocal;
-        uint24 prevMod10 = lvl % 10;
-        uint24 prevMod100 = lvl % 100;
-        uint256 claimableDelta;
-
-        // ---------------------------------------------------------------------
-        // BAF Jackpot (every 10 levels)
-        // ---------------------------------------------------------------------
-
-        if (prevMod10 == 0) {
-            uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
-            uint256 bafPoolWei = (baseFuturePool * bafPct) / 100;
-
-            // Pull the full BAF pool out first; refunds/lootbox recycle back in after resolution.
-            futurePoolLocal -= bafPoolWei;
-            (
-                uint256 netSpend,
-                uint256 claimed,
-                uint256 lootboxToFuture
-            ) = _runBafJackpot(bafPoolWei, lvl, rngWord);
-            claimableDelta += claimed;
-
-            if (netSpend != bafPoolWei) {
-                futurePoolLocal += (bafPoolWei - netSpend);
-            }
-
-            if (lootboxToFuture != 0) {
-                futurePoolLocal += lootboxToFuture;
-            }
-        }
-
-        // ---------------------------------------------------------------------
-        // Decimator Jackpot (level 100 special)
-        // ---------------------------------------------------------------------
-
-        if (prevMod100 == 0) {
-            uint256 decPoolWei = (baseFuturePool * 30) / 100;
-            if (decPoolWei != 0) {
-                uint256 returnWei = IDegenerusGame(address(this))
-                    .runDecimatorJackpot(decPoolWei, lvl, rngWord);
-                uint256 spend = decPoolWei - returnWei;
-                futurePoolLocal -= spend;
-                claimableDelta += spend;
-            }
-        }
-
-        // ---------------------------------------------------------------------
-        // Decimator Jackpot (levels ending in 5, except 95)
-        // ---------------------------------------------------------------------
-
-        if (prevMod10 == 5 && prevMod100 != 95) {
-            // Fire decimator midway through each decile (5, 15, 25... not 95)
-            uint256 decPoolWei = (futurePoolLocal * 10) / 100;
-            if (decPoolWei != 0) {
-                uint256 returnWei = IDegenerusGame(address(this))
-                    .runDecimatorJackpot(decPoolWei, lvl, rngWord);
-                uint256 spend = decPoolWei - returnWei;
-                futurePoolLocal -= spend;
-                // Decimator pool is reserved in claimablePool; per-player credits happen on claim
-                claimableDelta += spend;
-            }
-        }
-
-        // Commit future pool update only when changed (saves an SSTORE on non-jackpot levels).
-        // Reconcile any auto-rebuy contributions that wrote directly to futurePrizePool
-        // storage during _runBafJackpot / runDecimatorJackpot. baseFuturePool is the
-        // futurePrizePool value at function entry; rebuyDelta captures every increment
-        // written by _processAutoRebuy between cache and write-back.
-        uint256 rebuyDelta;
-        if (futurePoolLocal != baseFuturePool) {
-            rebuyDelta = _getFuturePrizePool() - baseFuturePool;
-            _setFuturePrizePool(futurePoolLocal + rebuyDelta);
-        }
-        if (claimableDelta != 0) {
-            claimablePool += claimableDelta;
-        }
-        if (futurePoolLocal != baseFuturePool || claimableDelta != 0) {
-            emit RewardJackpotsSettled(
-                lvl,
-                futurePoolLocal + rebuyDelta,
-                claimableDelta
-            );
-        }
-    }
 
     /**
      * @notice Execute BAF (Big-Ass Flip) jackpot distribution.
