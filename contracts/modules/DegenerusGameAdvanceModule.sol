@@ -312,7 +312,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
                 // FLAG-01: evaluate endgame flag on purchase-phase entry at L10+
-                _evaluateGameOverAndTarget(lvl, purchaseLevel, day, day);
+                _evaluateGameOverAndTarget(lvl, day, day);
                 stage = STAGE_TRANSITION_DONE;
                 break;
             }
@@ -346,7 +346,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
                     // FLAG-02: combined target + game-over check (shares SLOADs when flag is set)
                     bool targetMet = gameOverPossible
-                        ? _evaluateGameOverAndTarget(lvl, purchaseLevel, psd, day)
+                        ? _evaluateGameOverAndTarget(lvl, psd, day)
                         : _getNextPrizePool() >=
                             levelPrizePool[purchaseLevel - 1];
                     if (targetMet) {
@@ -1749,12 +1749,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Below L10: flag is always cleared.
     function _evaluateGameOverAndTarget(
         uint24 lvl,
-        uint24 purchaseLevel,
         uint48 psd,
         uint48 day
     ) private returns (bool targetMet) {
         uint256 nextPool = _getNextPrizePool();
-        uint256 target = levelPrizePool[purchaseLevel - 1];
+        uint256 target = levelPrizePool[lvl];
         targetMet = nextPool >= target;
         if (lvl < 10 || targetMet) {
             gameOverPossible = false;
