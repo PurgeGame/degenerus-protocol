@@ -4,14 +4,14 @@ milestone: v22.0
 milestone_name: BAF Simplification Delta Audit
 status: executing
 stopped_at: Phase 190 context gathered
-last_updated: "2026-04-05T23:43:52.682Z"
-last_activity: 2026-04-05 -- Phase 190 planning complete
+last_updated: "2026-04-05T23:59:08.131Z"
+last_activity: 2026-04-05
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 190 -- ETH Flow + Rebuy Delta + Event Audit
+**Current focus:** Phase 190 — ETH Flow + Rebuy Delta + Event Audit
 
 ## Current Position
 
-Phase: 190 (ETH Flow + Rebuy Delta + Event Audit)
+Phase: 191
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-05 -- Phase 190 planning complete
+Status: Executing Phase 190
+Last activity: 2026-04-05
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,7 +36,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 2
 - Average duration: --
 - Total execution time: --
 
@@ -44,7 +44,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 190 | 0 | - | - |
+| 190 | 2 | - | - |
 | 191 | 0 | - | - |
 
 ## Accumulated Context

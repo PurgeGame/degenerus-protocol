@@ -163,7 +163,7 @@ See individual milestone entries above.
 
 **Milestone Goal:** Verify that the BAF simplification (runBafJackpot reduced from 3 returns to 1 claimableDelta, rebuy delta removed, RewardJackpotsSettled emitted unconditionally) produces identical ETH flow outcomes for every winner path, with no storage layout drift or test regressions.
 
-- [ ] **Phase 190: ETH Flow + Rebuy Delta + Event Audit** - Code-level behavioral equivalence verification
+- [x] **Phase 190: ETH Flow + Rebuy Delta + Event Audit** - Code-level behavioral equivalence verification (completed 2026-04-05)
 - [ ] **Phase 191: Layout + Regression Testing** - Mechanical verification via forge inspect and test suites
 
 ## Phase Details
@@ -178,10 +178,10 @@ See individual milestone entries above.
   3. For lootbox ticket and whale pass paths, ticket entries and `whalePassClaims` plus dust remainders are identical -- no ETH leaks or double-credits from the return value change
   4. The unconditional `RewardJackpotsSettled` emit has no downstream consumer (off-chain indexer, other contract, or test assertion) that depended on the old conditional emission pattern
   5. No futurePool storage writes exist in the BAF/decimator self-call chain that silently depended on the removed rebuy delta -- the only writes are those safely overwritten by `_setPrizePools`
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
-- [ ] 190-01-PLAN.md -- ETH flow path algebraic equivalence (FLOW-01 through FLOW-05)
-- [ ] 190-02-PLAN.md -- Rebuy delta removal + event audit (DELTA-01, DELTA-02, EVT-01)
+- [x] 190-01-PLAN.md -- ETH flow path algebraic equivalence (FLOW-01 through FLOW-05)
+- [x] 190-02-PLAN.md -- Rebuy delta removal + event audit (DELTA-01, DELTA-02, EVT-01)
 
 ### Phase 191: Layout + Regression Testing
 **Goal**: All changed contracts have identical storage layout to their pre-simplification versions, and both test suites pass with zero new failures
@@ -197,7 +197,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 190. ETH Flow + Rebuy Delta + Event Audit | 0/2 | Planning complete | - |
+| 190. ETH Flow + Rebuy Delta + Event Audit | 2/2 | Complete    | 2026-04-05 |
 | 191. Layout + Regression Testing | 0/? | Not started | - |
 
 ## Deferred
