@@ -107,9 +107,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Constants — Timing & Thresholds
     // -------------------------------------------------------------------------
 
-    /// @dev Seconds offset from midnight UTC for daily jackpot reset boundary (22:57 UTC).
-    uint48 private constant JACKPOT_RESET_TIME = 82620;
-
     /// @dev Maximum number of daily jackpots per level before forcing level transition.
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
@@ -466,20 +463,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         winningTraitsPacked = _rollWinningTraits(randWord, false);
         _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
 
-        bool isEthDay = false;
-        uint48 startTime = levelStartTime;
-        if (startTime != type(uint48).max) {
-            uint48 startDayBoundary = uint48(
-                (startTime - JACKPOT_RESET_TIME) / 1 days
-            );
-            uint48 startDay = startDayBoundary -
-                ContractAddresses.DEPLOY_DAY_BOUNDARY +
-                1;
-            if (questDay > startDay) {
-                uint48 daysSince = questDay - startDay;
-                isEthDay = daysSince > 0 && lvl > 1; // daily 1% drip from futurePrizePool
-            }
-        }
+        bool isEthDay = questDay > purchaseStartDay && lvl > 1; // daily 1% drip from futurePrizePool
         uint256 ethDaySlice;
         if (isEthDay) {
             uint256 poolBps = 100; // 1% daily drip from futurePool

@@ -197,13 +197,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /**
      * @notice Initialize the game with precomputed contract references.
      * @dev All addresses and deploy day boundary are compile-time constants from ContractAddresses.
-     *      levelStartTime is initialized here to the deploy timestamp.
+     *      purchaseStartDay is initialized to the deploy day index.
      *      dailyIdx is set to the current day index so gap detection starts from deploy day.
      *      Deploy day boundary determines which calendar day is "day 1" in the game.
      */
     constructor() {
-        levelStartTime = uint48(block.timestamp);
-        dailyIdx = GameTimeLib.currentDayIndex();
+        uint48 currentDay = GameTimeLib.currentDayIndex();
+        purchaseStartDay = currentDay;
+        dailyIdx = currentDay;
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
         // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners)
         mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.SDGNRS], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
