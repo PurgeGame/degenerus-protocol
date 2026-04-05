@@ -1994,17 +1994,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         winners = new address[](numWinners);
-        // XOR in trait and salt to create unique entropy per call.
-        uint256 slice = randomWord ^
-            (uint256(trait) << 128) ^
-            (uint256(salt) << 192);
         for (uint256 i; i < numWinners; ) {
-            uint256 idx = slice % effectiveLen;
+            uint256 idx = uint256(keccak256(abi.encode(randomWord, trait, salt, i))) % effectiveLen;
             winners[i] = idx < len ? holders[idx] : deity;
             unchecked {
                 ++i;
-                // Rotate bits to get different indices for subsequent winners.
-                slice = (slice >> 16) | (slice << 240);
             }
         }
     }
@@ -2045,12 +2039,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         winners = new address[](numWinners);
         ticketIndexes = new uint256[](numWinners);
-        // XOR in trait and salt to create unique entropy per call.
-        uint256 slice = randomWord ^
-            (uint256(trait) << 128) ^
-            (uint256(salt) << 192);
         for (uint256 i; i < numWinners; ) {
-            uint256 idx = slice % effectiveLen;
+            uint256 idx = uint256(keccak256(abi.encode(randomWord, trait, salt, i))) % effectiveLen;
             if (idx < len) {
                 winners[i] = holders[idx];
                 ticketIndexes[i] = idx;
@@ -2060,8 +2050,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
             unchecked {
                 ++i;
-                // Rotate bits to get different indices for subsequent winners.
-                slice = (slice >> 16) | (slice << 240);
             }
         }
     }
