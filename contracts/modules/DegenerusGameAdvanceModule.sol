@@ -704,8 +704,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // --- BAF + Decimator x00: draw from futurePool BEFORE keep roll ---
-        // Snapshot storage for rebuy delta (auto-rebuy writes to STORAGE during BAF).
-        uint256 storageBaseFuture = _getFuturePrizePool();
         uint256 baseMemFuture = memFuture;
         uint24 prevMod10 = lvl % 10;
         uint24 prevMod100 = lvl % 100;
@@ -716,24 +714,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
             uint256 bafPoolWei = (baseMemFuture * bafPct) / 100;
 
-            memFuture -= bafPoolWei;
-            (
-                uint256 netSpend,
-                uint256 claimed,
-                uint256 lootboxToFuture
-            ) = IDegenerusGame(address(this)).runBafJackpot(
-                    bafPoolWei,
-                    lvl,
-                    rngWord
-                );
+            uint256 claimed = IDegenerusGame(address(this)).runBafJackpot(
+                bafPoolWei,
+                lvl,
+                rngWord
+            );
+            memFuture -= claimed;
             claimableDelta += claimed;
-
-            if (netSpend != bafPoolWei) {
-                memFuture += (bafPoolWei - netSpend);
-            }
-            if (lootboxToFuture != 0) {
-                memFuture += lootboxToFuture;
-            }
         }
 
         // Decimator Jackpot (level 100 special — uses pre-jackpot snapshot)
@@ -755,10 +742,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             memFuture -= spend;
             claimableDelta += spend;
         }
-
-        // Rebuy delta: auto-rebuy writes to futurePool STORAGE during BAF execution.
-        // Fold into memFuture immediately so all subsequent math uses one variable.
-        memFuture += _getFuturePrizePool() - storageBaseFuture;
 
         // --- x00 keep roll (5d4 dice: 30-65% keep, avg ~47.5%) ---
         // Operates on post-jackpot memFuture — all reward jackpots drew first.
@@ -808,9 +791,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (claimableDelta != 0) {
             claimablePool += claimableDelta;
         }
-        if (memFuture != storageBaseFuture || claimableDelta != 0) {
-            emit RewardJackpotsSettled(lvl, memFuture, claimableDelta);
-        }
+        emit RewardJackpotsSettled(lvl, memFuture, claimableDelta);
     }
 
     /// @dev Award DGNRS reward to the solo bucket winner after final daily jackpot.

@@ -161,14 +161,12 @@ interface IDegenerusGame {
     /// @param poolWei Total ETH prize pool for BAF.
     /// @param lvl Level number being resolved.
     /// @param rngWord VRF-derived randomness seed.
-    /// @return netSpend ETH spent from pool.
     /// @return claimableDelta ETH moved to claimable.
-    /// @return lootboxToFuture ETH recycled to future pool via lootbox.
     function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
-    ) external returns (uint256 netSpend, uint256 claimableDelta, uint256 lootboxToFuture);
+    ) external returns (uint256 claimableDelta);
 
     // Terminal Decimator (Death Bet)
 

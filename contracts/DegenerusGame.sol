@@ -1077,21 +1077,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param poolWei ETH allocated to this BAF tier.
     /// @param lvl Level being resolved.
     /// @param rngWord VRF-derived randomness seed.
-    /// @return netSpend ETH consumed by jackpot payouts.
     /// @return claimableDelta ETH added to claimable pool.
-    /// @return lootboxToFuture ETH recycled to future pool via lootbox.
     function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
-    )
-        external
-        returns (
-            uint256 netSpend,
-            uint256 claimableDelta,
-            uint256 lootboxToFuture
-        )
-    {
+    ) external returns (uint256 claimableDelta) {
         if (msg.sender != address(this)) revert E();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
@@ -1105,7 +1096,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             );
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
-        return abi.decode(data, (uint256, uint256, uint256));
+        return abi.decode(data, (uint256));
     }
 
     // -------------------------------------------------------------------------

@@ -2461,9 +2461,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
      * @param poolWei Total ETH for BAF distribution.
      * @param lvl Level triggering the BAF.
      * @param rngWord VRF entropy for winner selection.
-     * @return netSpend Amount consumed from future pool.
      * @return claimableDelta ETH credited to claimable balances.
-     * @return lootboxToFuture Lootbox ETH recycled into future pool.
+     *         Refund, lootbox, and whale pass ETH stay in futurePool implicitly.
      *
      * ## Payout Split
      *
@@ -2486,23 +2485,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
-    )
-        external
-        returns (
-            uint256 netSpend,
-            uint256 claimableDelta,
-            uint256 lootboxToFuture
-        )
-    {
+    ) external returns (uint256 claimableDelta) {
         if (msg.sender != address(this)) revert E();
         // Get winners and payout info from jackpots contract
         (
             address[] memory winnersArr,
             uint256[] memory amountsArr,
-            uint256 refund
-        ) = jackpots.runBafJackpot(poolWei, lvl, rngWord);
 
-        uint256 lootboxTotal;
+        ) = jackpots.runBafJackpot(poolWei, lvl, rngWord);
 
         // ---------------------------------------------------------------------
         // Process each winner with gas-optimized payout structure
@@ -2541,7 +2531,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     _queueWhalePassClaimCore(winner, lootboxPortion);
                     emit JackpotTicketWinner(winner, lvl, 0, lootboxPortion, 0, AWARD_WHALE_PASS);
                 }
-                lootboxTotal += lootboxPortion;
             }
             // Small winners: alternate between 100% ETH and 100% lootbox for gas efficiency
             else if (i % 2 == 0) {
@@ -2552,7 +2541,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 // Odd index: 100% lootbox (upside exposure)
                 rngWord = _awardJackpotTickets(winner, amount, lvl, rngWord);
                 emit JackpotTicketWinner(winner, lvl, 0, amount, 0, AWARD_TICKETS);
-                lootboxTotal += amount;
             }
 
             unchecked {
@@ -2560,11 +2548,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
         }
 
-        // Lootbox ETH stays in future pool (it came from there)
-        lootboxToFuture = lootboxTotal;
-
-        netSpend = poolWei - refund;
-        return (netSpend, claimableDelta, lootboxToFuture);
+        // Refund + lootbox + whale pass ETH stays in futurePool implicitly:
+        // caller only deducts claimableDelta from memFuture. No storage write needed.
     }
 
     /**
