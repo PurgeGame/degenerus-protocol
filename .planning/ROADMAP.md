@@ -43,7 +43,8 @@
 - ✅ **v17.1 Comment Correctness Sweep** — Phases 175-178 (shipped 2026-04-03)
 - ✅ **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (shipped 2026-04-04)
 - ✅ **v19.0 Pool Accounting Fix & Sweep** — Phases 183-185 (shipped 2026-04-04)
-- 🚧 **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (in progress)
+- ✅ **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (shipped 2026-04-05)
+- 🚧 **v21.0 Day-Index Clock Migration** — Phases 188-189 (in progress)
 
 ## Phases
 
@@ -141,51 +142,55 @@ See individual milestone entries above.
 
 </details>
 
-### v20.0 Pool Consolidation & Write Batching (In Progress)
+<details>
+<summary>v20.0 Pool Consolidation & Write Batching (Phases 186-187) -- SHIPPED 2026-04-05</summary>
 
-**Milestone Goal:** Merge pool transition logic from JackpotModule into AdvanceModule, batch SSTOREs, and free bytecode space in JackpotModule.
+- [x] **Phase 186: Pool Consolidation & Write Batching** - 4 plans (completed 2026-04-05)
+- [x] **Phase 187: Delta Audit** - 2 plans (completed 2026-04-05)
 
-- [x] **Phase 186: Pool Consolidation & Write Batching** - Move pool transition functions to AdvanceModule, inline pool math in memory, batch SSTOREs, expose BAF entry point, fix quest entropy (completed 2026-04-05)
-- [x] **Phase 187: Delta Audit** - Behavioral equivalence verification, pool mutation trace, test suite regression check (completed 2026-04-05)
+</details>
+
+### v21.0 Day-Index Clock Migration (In Progress)
+
+**Milestone Goal:** Replace timestamp-based `levelStartTime` with day-index `purchaseStartDay`, repack storage to close the freed slot, and verify behavioral equivalence across all consumer sites.
+
+- [x] **Phase 188: Clock Migration & Storage Repack** - 3 plans in 2 waves (completed 2026-04-05)
+- [ ] **Phase 189: Delta Audit** - Verify behavioral equivalence, storage accounting, test suite regression, module size compliance
 
 ## Phase Details
 
-### Phase 186: Pool Consolidation & Write Batching
-**Goal**: All pool transition logic lives in AdvanceModule with pool math computed in memory and SSTOREs batched -- JackpotModule is smaller and exposes BAF jackpot as a callable entry point
-**Depends on**: Phase 185
-**Requirements**: POOL-01, POOL-02, POOL-03, POOL-04, POOL-05, POOL-06, GAS-01, SIZE-01, SIZE-02, SIZE-03
+### Phase 188: Clock Migration & Storage Repack
+**Goal**: All death clock, distress mode, future take, and gap extension logic uses day-index arithmetic via `purchaseStartDay` instead of timestamp-based `levelStartTime` -- storage is repacked with the freed bits reclaimed
+**Depends on**: Phase 187
+**Requirements**: CLK-01, CLK-02, CLK-03, CLK-04, CLK-05, CLK-06, CLK-07, CLK-08, STG-01, STG-02, STG-03, STG-04
 **Success Criteria** (what must be TRUE):
-  1. `consolidatePrizePools` logic executes inside AdvanceModule -- pool merge, x00 yield dump, keep roll, and `_drawDownFuturePrizePool` are a single inlined flow with no cross-module delegatecall for pool consolidation
-  2. `runRewardJackpots` orchestration (pool tracking, rebuy delta reconciliation) executes inside AdvanceModule, calling back into JackpotModule only for individual jackpot execution
-  3. All intermediate pool values (futurePool, currentPool, nextPool deltas) are computed in memory variables and written to storage in a single batch at the end of the consolidation flow
-  4. JackpotModule exposes a callable entry point for BAF jackpot execution (replacing the currently private `_runBafJackpot`), and all migrated functions are removed from JackpotModule
-  5. Both modules compile under 24KB (`forge build` succeeds with no contract-size errors) and quest entropy reads `rngWord` instead of `rngWordByDay[day]`
-**Plans:** 4/4 plans complete
+  1. Constructor initializes `purchaseStartDay` via `GameTimeLib.currentDayIndex()` and no `levelStartTime` field exists anywhere in storage declarations
+  2. Distress mode, game-over liveness check, future take curve, gap extension, days-remaining calculation, and decimator days-remaining all produce equivalent outcomes using day-based arithmetic (same trigger points, same thresholds, same durations)
+  3. `purchaseStartDay` lives in slot 0 bits [0:6] and slot 1 has no gap from the removed field -- `forge inspect` confirms identical layout across all delegatecall modules
+  4. The dead `levelStartTime = ts` write at jackpot-phase entry is removed with no replacement
+**Plans:** 3/3 plans complete
 Plans:
-- [x] 186-01-PLAN.md — JackpotModule entry points + body gutting + interface update + Game passthrough + quest entropy fix
-- [x] 186-02-PLAN.md — Inline consolidation + orchestration + drawdown into AdvanceModule with SSTORE batching
-- [x] 186-03-PLAN.md — Remove dead code from JackpotModule + clean interface
-- [x] 186-04-PLAN.md — Gap closure: add runBafJackpot passthrough to DegenerusGame.sol + self-call guard to JackpotModule
+- [x] 188-01-PLAN.md -- AdvanceModule clock migration (6 consumer sites)
+- [x] 188-02-PLAN.md -- Constructor, _isDistressMode, DecimatorModule clock migration
+- [x] 188-03-PLAN.md -- Storage repack + layout verification
 
-### Phase 187: Delta Audit
-**Goal**: Every behavioral change from Phase 186 is proven equivalent to pre-restructuring behavior -- no pool accounting regressions, no new attack surface
-**Depends on**: Phase 186
-**Requirements**: DELTA-01, DELTA-02, DELTA-03
+### Phase 189: Delta Audit
+**Goal**: Every behavioral change from Phase 188 is proven equivalent to pre-migration behavior -- no death clock regressions, no storage accounting gaps, no test failures, all modules under size limit
+**Depends on**: Phase 188
+**Requirements**: DELTA-01, DELTA-02, DELTA-03, DELTA-04
 **Success Criteria** (what must be TRUE):
-  1. Pool values are identical for all level transition paths (normal advance, x10 skip, x100 skip) when compared against pre-restructuring behavior -- worked examples or diff-based trace confirms equivalence
-  2. A pool mutation trace of the new AdvanceModule consolidation flow shows every debit has a matching credit with no untracked remainders or orphaned values
-  3. Foundry and Hardhat test suites pass with zero unexpected regressions after all Phase 186 changes applied
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 187-01-PLAN.md — Full variable sweep audit of consolidated pool flow (DELTA-01, DELTA-02)
-- [x] 187-02-PLAN.md — Peripheral changes audit + test regression (DELTA-03)
+  1. Worked examples or trace-based proof confirms death clock, future take curve, and distress mode produce identical outcomes for all level transition paths (normal advance, x10 skip, x100 skip, gap backfill) when compared against pre-migration timestamp behavior
+  2. Storage layout diff shows no unintended slot shifts or accounting gaps -- every bit range in slots 0 and 1 is accounted for
+  3. Foundry and Hardhat test suites pass with zero unexpected regressions
+  4. All 10 delegatecall modules compile under 24KB
+**Plans**: TBD
 
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 186. Pool Consolidation & Write Batching | 4/4 | Complete    | 2026-04-05 |
-| 187. Delta Audit | 2/2 | Complete    | 2026-04-05 |
+| 188. Clock Migration & Storage Repack | 3/3 | Complete    | 2026-04-05 |
+| 189. Delta Audit | 0/0 | Not started | - |
 
 ## Deferred
 

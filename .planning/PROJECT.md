@@ -8,6 +8,12 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
+## Current Milestone: v21.0 Day-Index Clock Migration
+
+**Status:** Phase 188 complete (2026-04-05), Phase 189 pending
+
+**Phase 188 result:** 3 plans in 2 waves. Replaced all timestamp-based `levelStartTime` arithmetic with day-index `purchaseStartDay` across 4 contracts. Storage repacked: `purchaseStartDay` moved to slot 0 [0:6], slot 1 gap closed. All 12 contracts verified via `forge inspect` — identical layout. JackpotModule `isEthDay` consumer also converted (deviation). All modules under 24KB. 12/12 requirements satisfied. 1 human verification item pending (day boundary behavioral equivalence). Stale test refs in `test/fuzz/FuturepoolSkim.t.sol` deferred to Phase 189 (DELTA-03).
+
 ## Completed Milestone: v20.0 Pool Consolidation & Write Batching
 
 **Status:** Complete (2026-04-05)
@@ -279,9 +285,16 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current State
+## Current Milestone: v21.0 Day-Index Clock Migration
 
-v20.0 Pool Consolidation & Write Batching in progress (2026-04-04). Merging pool transition logic from JackpotModule into AdvanceModule to batch SSTOREs and free JackpotModule bytecode.
+**Goal:** Replace timestamp-based `levelStartTime` with day-index `purchaseStartDay` in slot 0 — eliminates timestamp math, saves gas, simplifies all death clock / future-take / distress consumers.
+
+**Target features:**
+- Replace all `levelStartTime` consumer sites with `purchaseStartDay` day arithmetic across AdvanceModule, DecimatorModule, GameStorage, Game constructor
+- Storage repack: move `purchaseStartDay` from slot 1 into slot 0 [0:6] (replacing `levelStartTime`), close slot 1 gap
+- `_nextToFutureBps` thresholds convert from seconds to days
+- `_isDistressMode` converts to day-based + 6-hour precision
+- Delta audit: behavioral equivalence, storage layout verified via forge inspect, test suites green
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -351,4 +364,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 after v20.0 Pool Consolidation & Write Batching milestone start*
+*Last updated: 2026-04-05 after v21.0 Day-Index Clock Migration milestone start*
