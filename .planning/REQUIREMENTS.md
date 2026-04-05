@@ -27,8 +27,8 @@ Requirements for replacing timestamp-based `levelStartTime` with day-index `purc
 
 ### Delta Audit
 
-- [ ] **DELTA-01**: Behavioral equivalence verified — death clock, future take, distress mode produce same outcomes for all level transition paths
-- [ ] **DELTA-02**: No storage accounting gaps introduced
+- [x] **DELTA-01**: Behavioral equivalence verified — death clock, future take, distress mode produce same outcomes for all level transition paths
+- [x] **DELTA-02**: No storage accounting gaps introduced
 - [ ] **DELTA-03**: Test suites green (Foundry + Hardhat, zero unexpected regressions)
 - [ ] **DELTA-04**: All modules compile under 24KB
 
@@ -61,8 +61,8 @@ None — this is a scoped mechanical migration.
 | STG-02 | 188 | Pending |
 | STG-03 | 188 | Pending |
 | STG-04 | 188 | Pending |
-| DELTA-01 | 189 | Pending |
-| DELTA-02 | 189 | Pending |
+| DELTA-01 | 189 | Complete |
+| DELTA-02 | 189 | Complete |
 | DELTA-03 | 189 | Pending |
 | DELTA-04 | 189 | Pending |
 
