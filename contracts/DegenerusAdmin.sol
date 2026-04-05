@@ -120,22 +120,8 @@ interface IDegenerusGameAdmin {
         uint256 amount
     ) external payable;
 
-    /// @notice Get current purchase parameters.
-    /// @return lvl Current game level.
-    /// @return qty Tickets purchased this level.
-    /// @return cap Ticket cap for this level.
-    /// @return jackpotWei Jackpot pool in wei.
-    /// @return priceWei Current ticket price in wei.
-    function purchaseInfo()
-        external
-        view
-        returns (
-            uint256 lvl,
-            uint256 qty,
-            uint256 cap,
-            uint256 jackpotWei,
-            uint256 priceWei
-        );
+    /// @notice Current mint price in wei.
+    function mintPrice() external view returns (uint256);
 }
 
 /// @dev LINK token interface (ERC-677 with transferAndCall).
@@ -1024,7 +1010,7 @@ contract DegenerusAdmin {
         }
         if (ethEquivalent == 0) return;
 
-        (, , , , uint256 priceWei) = gameAdmin.purchaseInfo();
+        uint256 priceWei = gameAdmin.mintPrice();
         if (priceWei == 0) return;
         uint256 baseCredit = (ethEquivalent * PRICE_COIN_UNIT) / priceWei;
         uint256 credit = (baseCredit * mult) / 1e18;
