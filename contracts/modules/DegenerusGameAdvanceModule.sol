@@ -311,7 +311,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _unlockRng(day);
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
-                // FLAG-01: evaluate endgame flag on purchase-phase entry at L10+
+                // evaluate endgame flag on purchase-phase entry at L10+
                 _evaluateGameOverAndTarget(lvl, day, day);
                 stage = STAGE_TRANSITION_DONE;
                 break;
@@ -501,11 +501,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             return false;
         }
 
-        // Pre-gameover: acquire RNG and drain to gameover state
+        // Pre-gameover: acquire RNG, drain, then unlock
         if (rngWordByDay[day] == 0) {
-            uint256 rngWord = _gameOverEntropy(uint48(block.timestamp), day, lvl, lastPurchaseDay);
+            uint256 rngWord = _gameOverEntropy(
+                uint48(block.timestamp),
+                day,
+                lvl,
+                lastPurchaseDay
+            );
             if (rngWord == 1 || rngWord == 0) return true;
-            _unlockRng(day);
         }
 
         (ok, data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
@@ -515,6 +519,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             )
         );
         if (!ok) _revertDelegate(data);
+        _unlockRng(day);
         return true;
     }
 
