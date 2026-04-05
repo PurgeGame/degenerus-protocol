@@ -8,9 +8,25 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current State
+## Completed Milestone: v20.0 Pool Consolidation & Write Batching
 
-v16.0 Module Consolidation & Storage Repack shipped (2026-04-03). EndgameModule eliminated, storage slots 0-2 repacked, all tests passing.
+**Status:** Complete (2026-04-05)
+
+**Result:** 2 phases (186-187), 6 plans. Phase 186 inlined consolidatePrizePools + runRewardJackpots + _drawDownFuturePrizePool into AdvanceModule as single `_consolidatePoolsAndRewardJackpots` flow with batched SSTOREs. JackpotModule exposes `runBafJackpot` as external entry point with self-call guard. Dead code removed (5 functions + 2 helpers). Quest entropy fixed. All modules under 24KB (JackpotModule 22,858B, AdvanceModule 18,196B). Phase 187 delta audit: full variable sweep across normal/x10/x100 paths, 9/9 correctness checks pass, pool ETH conservation proven algebraically, all peripheral changes verified (self-call guard, passthrough, entropy, dead code, interfaces). Foundry 149/29, Hardhat 1304/5 — zero new regressions. 1 INFO finding (F-187-01: x100 yield dump/keep roll trigger shifted — design improvement). All 13/13 requirements satisfied.
+
+## Completed Milestone: v19.0 Pool Accounting Fix & Sweep
+
+**Status:** Complete (2026-04-04)
+
+**Result:** 3 phases (183-185), 6 plans. Phase 183 fixed the jackpot payout path to defer the futurePool SSTORE and capture paidEth, refunding unspent ETH from empty trait buckets. Phase 184 swept all 81 pool mutation sites across 9 contracts — 0 accounting gaps. Phase 185 delta audit found F-185-01 HIGH (deferred SSTORE overwrote whale pass + auto-rebuy futurePool additions) — fixed by re-reading storage after _executeJackpot (+100 gas warm SLOAD). Foundry + Hardhat: zero unexpected regressions. All 9/9 requirements satisfied.
+
+## Completed Milestone: v18.0 Delta Audit (v16.0-v17.1)
+
+**Status:** Complete (2026-04-04)
+
+## Completed Milestone: v17.1 Comment Correctness Sweep
+
+**Status:** Complete (2026-04-03)
 
 ## Completed Milestone: v17.0 Affiliate Bonus Cache
 
@@ -265,7 +281,7 @@ v16.0 Module Consolidation & Storage Repack shipped (2026-04-03). EndgameModule 
 
 ## Current State
 
-v17.1 shipped (2026-04-03). No active milestone — ready for `/gsd:new-milestone`.
+v20.0 Pool Consolidation & Write Batching in progress (2026-04-04). Merging pool transition logic from JackpotModule into AdvanceModule to batch SSTOREs and free JackpotModule bytecode.
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -335,4 +351,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-03 after v16.0 Module Consolidation & Storage Repack milestone*
+*Last updated: 2026-04-04 after v20.0 Pool Consolidation & Write Batching milestone start*
