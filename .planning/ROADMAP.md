@@ -181,7 +181,7 @@ See individual milestone entries above.
 
 **Milestone Goal:** Split daily jackpot and early-burn ETH distribution across two advanceGame calls so no single call can exceed 16M gas under worst-case conditions (321 unique autorebuy winners). Verify the fix with a true worst-case gas benchmark.
 
-- [ ] **Phase 195: Jackpot Two-Call Split** - Split _processDailyEth and _distributeJackpotEth into two advanceGame stages (large+solo buckets, then mid buckets)
+- [ ] **Phase 195: Jackpot Two-Call Split** - 2 plans
 - [ ] **Phase 196: Worst-Case Gas Benchmark** - Build true worst-case test (321 unique autorebuy players, 200+ ETH pool, final jackpot day) and verify both calls stay under 16M
 - [ ] **Phase 197: Payout Reference & Event Catalog** - Standalone documentation of jackpot payout flows and event emissions (post-split)
 
@@ -191,6 +191,10 @@ See individual milestone entries above.
 **Goal**: No single advanceGame call processes more than 160 jackpot winners -- daily jackpot and early-burn ETH distribution split across two stages by lowering scaling constants so bucket counts naturally fit two-call boundaries
 **Depends on**: Phase 193
 **Requirements**: GAS-02, GAS-03
+**Plans:** 2 plans
+Plans:
+- [ ] 195-01-PLAN.md — Lower scaling constants, split _processDailyEth and _distributeJackpotEth iteration, add resumeEthPool storage
+- [ ] 195-02-PLAN.md — Wire STAGE_JACKPOT_ETH_RESUME (stage 8) in AdvanceModule, add resume entry point, verify test regression
 **Success Criteria** (what must be TRUE):
   1. `_processDailyEth` (daily jackpot path) processes largest+solo buckets in STAGE_JACKPOT_DAILY_STARTED, then two mid buckets in a new STAGE_JACKPOT_ETH_RESUME (stage 8) on the next advanceGame call
   2. `DAILY_JACKPOT_SCALE_MAX_BPS` lowered from 66_667 to 63_600 (6.36x); `DAILY_ETH_MAX_WINNERS` lowered from 321 to 305; at max scale: largest=159, mid=95, small=50, solo=1 — call 1 ≤160, call 2 ≤145
@@ -222,7 +226,7 @@ See individual milestone entries above.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 195. Jackpot Two-Call Split | 0/TBD | Not started | - |
+| 195. Jackpot Two-Call Split | 0/2 | Not started | - |
 | 196. Worst-Case Gas Benchmark | 0/TBD | Not started | - |
 | 197. Payout Reference & Event Catalog | 0/TBD | Not started | - |
 
