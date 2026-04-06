@@ -104,18 +104,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 halfPassCount
     );
 
-    /// @notice Emitted after BAF/decimator jackpot resolution with final pool values.
-    /// @dev Enables indexers to track pool changes from reward jackpots without
-    ///      replaying on-chain leaderboard/ticket state. Only emitted when pools change.
-    /// @param lvl The level that just completed (indexed for Advance event correlation).
-    /// @param futurePool Authoritative post-resolution future prize pool value.
-    /// @param claimableDelta Total ETH moved to claimable during resolution.
-    event RewardJackpotsSettled(
-        uint24 indexed lvl,
-        uint256 futurePool,
-        uint256 claimableDelta
-    );
-
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
     // -------------------------------------------------------------------------
@@ -968,7 +956,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16 cap,
         uint256 startIdx
     ) private returns (uint256 endIdx) {
-        if (count > MAX_BUCKET_WINNERS) count = MAX_BUCKET_WINNERS;
         (
             address[] memory winners,
             uint256[] memory ticketIndexes
@@ -1356,7 +1343,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 bucketLiability,
             uint256 ticketSpent
         ) = _resolveTraitWinners(
-                false,
                 ctx.lvl,
                 traitIds[traitIdx],
                 traitIdx,
@@ -1374,18 +1360,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Internal Helpers — Winner Resolution
     // =========================================================================
 
-    /// @dev Resolves winners for a single trait bucket and distributes ETH or COIN.
+    /// @dev Resolves winners for a single trait bucket and distributes ETH.
     ///
     ///      FLOW:
     ///      1. Early exit if no share or no winners.
     ///      2. Select random ticket holders from the trait's burn ticket pool.
     ///      3. Credit ETH payouts to claimableWinnings (with optional loot box conversion).
     ///
-    /// @param payCoin If true, pay COIN; if false, pay ETH.
     /// @param lvl Current level for ticket pool lookup.
     /// @param traitId Which trait's ticket pool to draw from.
     /// @param traitIdx Bucket index (0-3) for entropy derivation.
-    /// @param traitShare Total ETH/COIN allocated to this bucket.
+    /// @param traitShare Total ETH allocated to this bucket.
     /// @param entropy Current entropy state.
     /// @param winnerCount Number of winners to select.
     /// @return entropyState Updated entropy after selection.
@@ -1393,7 +1378,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @return liabilityDelta Total claimable liability added.
     /// @return ticketSpent Whale pass ETH routed to futurePrizePool.
     function _resolveTraitWinners(
-        bool payCoin,
         uint24 lvl,
         uint8 traitId,
         uint8 traitIdx,
@@ -1440,25 +1424,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (perWinner == 0) return (entropyState, 0, 0, 0);
 
         uint256 len = winners.length;
-        if (payCoin) {
-            for (uint256 i; i < len; ) {
-                coinflip.creditFlip(winners[i], perWinner);
-                if (winners[i] != address(0)) {
-                    emit JackpotBurnieWin(
-                        winners[i],
-                        lvl,
-                        traitId,
-                        perWinner,
-                        ticketIndexes[i]
-                    );
-                }
-
-                unchecked {
-                    ++i;
-                }
-            }
-            return (entropyState, 0, 0, 0);
-        }
 
         uint256 totalPayout;
         uint256 totalLiability;
@@ -2208,7 +2173,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     entropy ^ (uint256(traitIdx) << 64) ^ coinBudget
                 );
 
-                if (count > MAX_BUCKET_WINNERS) count = MAX_BUCKET_WINNERS;
                 (
                     address[] memory bucketWinners,
                     uint256[] memory bucketTicketIndexes
