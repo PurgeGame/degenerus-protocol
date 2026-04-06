@@ -8,11 +8,17 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v23.0 JackpotModule Delta Audit & Payout Reference
+## Current Milestone: v24.0 Jackpot Gas Safety Split
 
-**Status:** In Progress (Phase 192 complete, 193-194 remaining)
+**Status:** Not started — pending `/gsd-new-milestone`
 
-**Phase 192 Result:** 2 plans. Complete function-level changelog of 38 changes across 5 files from commits 93c05869 and 520249a2. All 9 REFACTOR-classified functions proven EQUIVALENT. All 8 deleted item groups proven unreachable. 4 INTENTIONAL behavioral changes (whale pass daily-only restriction, DGNRS solo reward fold, coin target level simplification, ticket budget removal) proven correct with code-level traces. Event migration from JackpotTicketWinner to 5 specialized events fully mapped. 0 findings. DELTA-01 PASS, DELTA-02 PASS.
+**Context:** v23.0 gas ceiling analysis found worst-case advanceGame with 321 unique autorebuy winners reaches ~25M gas, exceeding the 16M hard cap. v24.0 splits jackpot distribution across two advanceGame calls to keep each under 16M.
+
+## Completed Milestone: v23.0 JackpotModule Delta Audit & Payout Reference
+
+**Status:** Complete (2026-04-06)
+
+**Result:** 2 phases (192-193), 3 plans. Phase 192: function-level changelog of 38 changes across 5 files (commits 93c05869, 520249a2) — 9 REFACTOR functions proven EQUIVALENT, 8 deleted item groups proven unreachable, 4 INTENTIONAL changes (whale pass, DGNRS fold, coin target, ticket budget) proven correct, event migration to 5 specialized events mapped. Phase 193: advanceGame peak 6.28M gas (4.78x margin), but GAP FOUND — worst-case 321 autorebuy winners ~25M gas. Test regression: Foundry 150/28, Hardhat 1232/13/3 — zero new failures. 4/4 requirements satisfied.
 
 ## Completed Milestone: v22.0 BAF Simplification Delta Audit
 
@@ -378,4 +384,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-06 after v23.0 JackpotModule Delta Audit & Payout Reference milestone start*
+*Last updated: 2026-04-06 after v23.0 milestone completion*

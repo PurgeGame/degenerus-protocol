@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v23.0
-milestone_name: JackpotModule Delta Audit & Payout Reference
-status: executing
-stopped_at: Phase 192 context gathered
-last_updated: "2026-04-06T17:00:49.294Z"
+milestone: v24.0
+milestone_name: Jackpot Gas Safety Split
+status: not_started
+last_updated: "2026-04-06T19:15:00.000Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 100
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,13 +20,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 192 — Delta Extraction & Behavioral Verification
+**Current focus:** v24.0 — Jackpot Gas Safety Split (not yet started)
 
 ## Current Position
 
-Phase: 193
+Phase: 195
 Plan: Not started
-Status: Executing Phase 192
+Status: Milestone v23.0 complete, v24.0 pending
 Last activity: 2026-04-06
 
 Progress: [░░░░░░░░░░] 0%
@@ -36,7 +35,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 2
+- Total plans completed: 0
 - Average duration: --
 - Total execution time: --
 
@@ -47,9 +46,9 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [v23.0]: Gas ceiling gap found — worst-case 321 autorebuy winners ~25M gas, requires two-call split
 - [v22.0]: runBafJackpot simplified from 3 returns to 1 (claimableDelta only); rebuy delta removed; RewardJackpotsSettled emitted unconditionally
 - [v21.0]: Day-index clock migration complete -- purchaseStartDay replaces levelStartTime
-- [v20.0]: Pool consolidation into AdvanceModule with batched SSTOREs; JackpotModule exposes runBafJackpot with self-call guard
 
 ### Pending Todos
 
@@ -62,6 +61,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-06T16:13:05.148Z
-Stopped at: Phase 192 context gathered
-Resume file: .planning/phases/192-delta-extraction-behavioral-verification/192-CONTEXT.md
+Last session: 2026-04-06
+Stopped at: v23.0 milestone complete
+Resume file: .planning/ROADMAP.md
