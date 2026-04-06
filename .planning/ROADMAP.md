@@ -188,12 +188,12 @@ See individual milestone entries above.
 ## Phase Details
 
 ### Phase 195: Jackpot Two-Call Split
-**Goal**: No single advanceGame call processes more than 160 jackpot winners -- daily jackpot and early-burn ETH distribution split across two stages with differentiated per-bucket caps so worst-case gas stays under 16M
+**Goal**: No single advanceGame call processes more than 160 jackpot winners -- daily jackpot and early-burn ETH distribution split across two stages by lowering scaling constants so bucket counts naturally fit two-call boundaries
 **Depends on**: Phase 193
 **Requirements**: GAS-02, GAS-03
 **Success Criteria** (what must be TRUE):
   1. `_processDailyEth` (daily jackpot path) processes largest+solo buckets in STAGE_JACKPOT_DAILY_STARTED, then two mid buckets in a new STAGE_JACKPOT_ETH_RESUME (stage 8) on the next advanceGame call
-  2. Per-bucket winner caps replace MAX_BUCKET_WINNERS=250: largest=159, mid1=100, mid2=60, solo=1 (each call ≤160 winners)
+  2. `DAILY_JACKPOT_SCALE_MAX_BPS` lowered from 66_667 to 63_600 (6.36x); `DAILY_ETH_MAX_WINNERS` lowered from 321 to 305; at max scale: largest=159, mid=95, small=50, solo=1 — call 1 ≤160, call 2 ≤145
   3. `_distributeJackpotEth` (early-burn path) uses the same two-call pattern for its 4-bucket iteration
   4. Inter-call state: original ethPool stored as uint128 in a single storage slot; non-zero = resume pending; bucket parameters recomputed from deterministic RNG word + stored ethPool
   5. Both modules compile under 24KB after changes

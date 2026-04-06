@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Split daily jackpot and early-burn ETH distribution across two advanceGame calls so no single call exceeds 16M gas under worst-case conditions. The split is bucket-based with differentiated per-bucket winner caps.
+Split daily jackpot and early-burn ETH distribution across two advanceGame calls so no single call exceeds 16M gas under worst-case conditions. The split is bucket-based, achieved by lowering the scaling constants so the natural bucket counts fit within two-call boundaries.
 
 </domain>
 
@@ -17,21 +17,18 @@ Split daily jackpot and early-burn ETH distribution across two advanceGame calls
 - **D-01:** Call 1 processes the largest bucket + solo bucket. Call 2 processes the two mid buckets.
 - **D-02:** Bucket iteration order remains largest-first (`bucketOrderLargestFirst`). Call 1 takes order[0] (largest) + the solo/remainder bucket. Call 2 takes the remaining 2 buckets.
 
-### Per-Bucket Winner Caps
-- **D-03:** Replace the single MAX_BUCKET_WINNERS=250 with differentiated caps per bucket position in size order:
-  - Largest bucket: cap at 159 winners
-  - Mid bucket 1 (order[1] or order[2], whichever is larger of the non-largest, non-solo): cap at 100
-  - Mid bucket 2 (remaining): cap at 60
-  - Solo bucket: always 1 winner (unchanged)
-- **D-04:** This ensures each call processes at most 160 winners: call 1 = 159 + 1 = 160, call 2 = 100 + 60 = 160.
+### Scaling Constants (replaces per-bucket hard caps)
+- **D-03:** Lower `DAILY_JACKPOT_SCALE_MAX_BPS` from 66_667 (6.67x) to 63_600 (6.36x). This makes the largest bucket scale to 159 instead of 167 at max pool (200+ ETH). No per-bucket hard caps needed — the scaling naturally produces safe counts.
+- **D-04:** Lower `DAILY_ETH_MAX_WINNERS` from 321 to 305 to match the new max total (159+95+50+1=305).
+- **D-05 (supersedes old D-04):** At max scale, call 1 processes 159+1=160 winners, call 2 processes 95+50=145 winners. Both under 160. At lower pools, counts are much smaller (e.g., 49 total at base, 97 at 50 ETH). `MAX_BUCKET_WINNERS=250` becomes a safety net that never triggers.
 
 ### Inter-Call State
-- **D-05:** Store original ethPool as uint128 in a single storage slot. Non-zero value = resume pending (call 2 needed). Call 2 reads it to recompute identical bucket shares from RNG word + stored ethPool, processes mid buckets, then clears the slot.
-- **D-06:** No paidEthSoFar needed — per-winner payouts update claimable balances inline during each call. The stored ethPool snapshot ensures call 2 computes the same bucket shares as call 1.
+- **D-06:** Store original ethPool as uint128 in a single storage slot. Non-zero value = resume pending (call 2 needed). Call 2 reads it to recompute identical bucket shares from RNG word + stored ethPool, processes mid buckets, then clears the slot.
+- **D-07:** No paidEthSoFar needed — per-winner payouts update claimable balances inline during each call. The stored ethPool snapshot ensures call 2 computes the same bucket shares as call 1.
 
 ### Stage Design
-- **D-07:** New STAGE_JACKPOT_ETH_RESUME = 8 (currently unused gap between STAGE_ENTERED_JACKPOT=7 and STAGE_JACKPOT_COIN_TICKETS=9). Call 2 enters via this stage.
-- **D-08:** Both `_processDailyEth` and `_distributeJackpotEth` use the same resume pattern and stage 8.
+- **D-08:** New STAGE_JACKPOT_ETH_RESUME = 8 (currently unused gap between STAGE_ENTERED_JACKPOT=7 and STAGE_JACKPOT_COIN_TICKETS=9). Call 2 enters via this stage.
+- **D-09:** Both `_processDailyEth` and `_distributeJackpotEth` use the same resume pattern and stage 8.
 
 ### Claude's Discretion
 - Exact implementation of how the solo bucket is identified in the split (it may or may not be the smallest — it's RNG-determined)
@@ -56,6 +53,11 @@ Split daily jackpot and early-burn ETH distribution across two advanceGame calls
 
 ### Bucket Library
 - `contracts/libraries/JackpotBucketLib.sol` — `bucketShares`, `bucketOrderLargestFirst`, `soloBucketIndex`
+- `contracts/libraries/JackpotBucketLib.sol` lines 16-22 — Scaling constants (`JACKPOT_SCALE_MIN_WEI=10 ETH`, `FIRST_WEI=50 ETH`, `SECOND_WEI=200 ETH`)
+- `contracts/libraries/JackpotBucketLib.sol` lines 36-51 — `traitBucketCounts` base values (25/15/8/1)
+- `contracts/libraries/JackpotBucketLib.sol` lines 55-95 — `scaleTraitBucketCountsWithCap` scaling logic
+- `contracts/modules/DegenerusGameJackpotModule.sol` line 203 — `DAILY_ETH_MAX_WINNERS = 321` (to become 305)
+- `contracts/modules/DegenerusGameJackpotModule.sol` line 228 — `DAILY_JACKPOT_SCALE_MAX_BPS = 66_667` (to become 63_600)
 
 ### Prior Audit
 - `.planning/milestones/v23.0-phases/193-gas-ceiling-test-regression/WORST-CASE-ANALYSIS.md` — Worst-case gas derivation (321 autorebuy winners, ~25M gas)
@@ -85,8 +87,9 @@ Split daily jackpot and early-burn ETH distribution across two advanceGame calls
 <specifics>
 ## Specific Ideas
 
-- User explicitly chose differentiated per-bucket caps (159/100/60/1) over dynamic cumulative splitting — simpler, no mid-bucket resume logic
-- User prefers storing original ethPool (uint128) over pre-computed shares — less storage, more recomputation but recomputation is cheap
+- User chose lowering scaling constants over per-bucket hard caps — cleaner, no winners ever excluded by a cap that fights the scaling curve
+- Scaling analysis: base counts 25/15/8/1, at 6.36x max → 159/95/50/1 = 305 total. Under 10 ETH: 49 total (no scaling). At 50 ETH: ~97 total. Caps only matter at 200+ ETH.
+- User prefers storing original ethPool (uint128) over pre-computed shares — less storage, recomputation is cheap
 
 </specifics>
 
