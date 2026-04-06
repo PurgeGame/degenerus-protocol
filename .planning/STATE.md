@@ -2,8 +2,9 @@
 gsd_state_version: 1.0
 milestone: v24.0
 milestone_name: Jackpot Gas Safety Split
-status: not_started
-last_updated: "2026-04-06T19:15:00.000Z"
+status: completed
+stopped_at: Phase 195 context gathered
+last_updated: "2026-04-06T19:24:45.596Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 3
@@ -61,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-06
-Stopped at: v23.0 milestone complete
-Resume file: .planning/ROADMAP.md
+Last session: 2026-04-06T19:24:45.591Z
+Stopped at: Phase 195 context gathered
+Resume file: .planning/phases/195-jackpot-two-call-split/195-CONTEXT.md
