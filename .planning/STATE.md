@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v24.0
 milestone_name: Jackpot Gas Safety Split
-status: completed
+status: executing
 stopped_at: Phase 195 context gathered
-last_updated: "2026-04-06T19:24:45.596Z"
+last_updated: "2026-04-06T21:56:35.503Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v24.0 — Jackpot Gas Safety Split (not yet started)
+**Current focus:** Phase 195 — jackpot-two-call-split
 
 ## Current Position
 
-Phase: 195
+Phase: 196
 Plan: Not started
-Status: Milestone v23.0 complete, v24.0 pending
+Status: Executing Phase 195
 Last activity: 2026-04-06
 
 Progress: [░░░░░░░░░░] 0%
@@ -36,7 +36,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 2
 - Average duration: --
 - Total execution time: --
 

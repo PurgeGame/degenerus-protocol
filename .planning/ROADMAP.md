@@ -181,8 +181,8 @@ See individual milestone entries above.
 
 **Milestone Goal:** Split daily jackpot and early-burn ETH distribution across two advanceGame calls so no single call can exceed 16M gas under worst-case conditions (321 unique autorebuy winners). Verify the fix with a true worst-case gas benchmark.
 
-- [ ] **Phase 195: Jackpot Two-Call Split** - 2 plans
-- [ ] **Phase 196: Worst-Case Gas Benchmark** - Build true worst-case test (321 unique autorebuy players, 200+ ETH pool, final jackpot day) and verify both calls stay under 16M
+- [x] **Phase 195: Jackpot Two-Call Split** - 2 plans (completed 2026-04-06)
+- [ ] **Phase 196: Post-Split Audit** - Full worst-case gas audit, logic parity, variable state audit, JackpotModule bytecode optimization
 - [ ] **Phase 197: Payout Reference & Event Catalog** - Standalone documentation of jackpot payout flows and event emissions (post-split)
 
 ## Phase Details
@@ -191,27 +191,28 @@ See individual milestone entries above.
 **Goal**: No single advanceGame call processes more than 160 jackpot winners -- daily jackpot and early-burn ETH distribution split across two stages by lowering scaling constants so bucket counts naturally fit two-call boundaries
 **Depends on**: Phase 193
 **Requirements**: GAS-02, GAS-03
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
-- [ ] 195-01-PLAN.md — Lower scaling constants, split _processDailyEth and _distributeJackpotEth iteration, add resumeEthPool storage
-- [ ] 195-02-PLAN.md — Wire STAGE_JACKPOT_ETH_RESUME (stage 8) in AdvanceModule, add resume entry point, verify test regression
+- [x] 195-01-PLAN.md — Lower scaling constants, split _processDailyEth and _distributeJackpotEth iteration, add resumeEthPool storage
+- [x] 195-02-PLAN.md — Wire STAGE_JACKPOT_ETH_RESUME (stage 8) in AdvanceModule, add resume entry point, verify test regression
 **Success Criteria** (what must be TRUE):
   1. `_processDailyEth` (daily jackpot path) processes largest+solo buckets in STAGE_JACKPOT_DAILY_STARTED, then two mid buckets in a new STAGE_JACKPOT_ETH_RESUME (stage 8) on the next advanceGame call
   2. `DAILY_JACKPOT_SCALE_MAX_BPS` lowered from 66_667 to 63_600 (6.36x); `DAILY_ETH_MAX_WINNERS` lowered from 321 to 305; at max scale: largest=159, mid=95, small=50, solo=1 — call 1 ≤160, call 2 ≤145
-  3. `_distributeJackpotEth` (early-burn path) uses the same two-call pattern for its 4-bucket iteration
+  3. `_distributeJackpotEth` (early-burn path) capped at 160 winners via JACKPOT_MAX_WINNERS — single call, no split needed (override: autorebuy disabled at game over makes 305 terminal winners safe)
   4. Inter-call state: original ethPool stored as uint128 in a single storage slot; non-zero = resume pending; bucket parameters recomputed from deterministic RNG word + stored ethPool
   5. Both modules compile under 24KB after changes
   6. Existing Hardhat and Foundry test suites pass with zero new regressions
 
-### Phase 196: Worst-Case Gas Benchmark
-**Goal**: A true worst-case gas benchmark proves both split calls stay under 16M gas with 321 unique autorebuy winners
+### Phase 196: Post-Split Audit — Gas, Logic Parity, State, Bytecode
+**Goal**: Full worst-case gas audit, logic parity verification, storage state audit, and JackpotModule bytecode optimization
 **Depends on**: Phase 195
-**Requirements**: GAS-04
+**Requirements**: GAS-04, AUDIT-01
 **Success Criteria** (what must be TRUE):
-  1. A Hardhat test constructs the absolute worst case: 321 unique players with autorebuy enabled, all with trait-matching tickets, pool >= 200 ETH, final jackpot day
-  2. Both advanceGame calls (large+solo buckets, then mid buckets) are individually measured
-  3. Neither call exceeds 16M gas
-  4. The early-burn path is also measured under equivalent worst-case conditions and stays under 16M
+  1. A Hardhat test constructs the absolute worst case: 305 unique players with autorebuy enabled, all with trait-matching tickets, pool >= 200 ETH, final jackpot day — both split calls individually measured, neither exceeds 16M gas
+  2. The early-burn path (160 winners) and terminal jackpot path (305 winners, no autorebuy) are also measured under worst-case conditions
+  3. Logic parity: both split calls produce equivalent economic outcomes as the pre-split single call (different RNG chain is acceptable — still deterministic and random)
+  4. Variable state audit: every storage write in the two-call flow is traced — no stale writes, no orphaned state, no variable that changes between calls without being accounted for
+  5. JackpotModule bytecode savings identified and applied — currently at 99.2% of 24KB limit, find inefficiencies to create headroom
 
 ### Phase 197: Payout Reference & Event Catalog
 **Goal**: A reader can look up any jackpot type and immediately understand who wins, how much, and which events fire -- without reading contract source code
@@ -226,8 +227,8 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 195. Jackpot Two-Call Split | 0/2 | Not started | - |
-| 196. Worst-Case Gas Benchmark | 0/TBD | Not started | - |
+| 195. Jackpot Two-Call Split | 2/2 | Complete    | 2026-04-06 |
+| 196. Post-Split Audit | 0/TBD | Not started | - |
 | 197. Payout Reference & Event Catalog | 0/TBD | Not started | - |
 
 ## Deferred
