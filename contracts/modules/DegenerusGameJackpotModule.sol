@@ -1295,7 +1295,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Distributes early-burn / terminal jackpot ETH across trait buckets.
-    ///      Processes all 4 buckets in a single call (capped at 160 winners).
+    ///      Processes all 4 buckets in a single call. Caller controls winner cap
+    ///      via bucketCounts (160 for early-burn, 305 for terminal).
     /// @param lvl The level whose winners are being paid.
     /// @param ethPool Total ETH to distribute.
     /// @param entropy VRF-derived random word for winner selection.
