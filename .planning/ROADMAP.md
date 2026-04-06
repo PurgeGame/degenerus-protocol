@@ -173,7 +173,7 @@ See individual milestone entries above.
 **Milestone Goal:** Audit the two post-v22.0 commits (93c05869: DGNRS solo reward fold into daily ETH payout; 520249a2: specialized jackpot events, whale pass to daily path, cleanup) for behavioral correctness, verify gas safety, and produce standalone payout reference documentation.
 
 - [x] **Phase 192: Delta Extraction & Behavioral Verification** - 2 plans (completed 2026-04-06)
-- [ ] **Phase 193: Gas Ceiling & Test Regression** - Worst-case advanceGame gas analysis with new jackpot paths, plus test suite verification
+- [ ] **Phase 193: Gas Ceiling & Test Regression** - 1 plan
 - [ ] **Phase 194: Payout Reference & Event Catalog** - Standalone documentation of jackpot payout flows and event emissions
 
 ## Phase Details
@@ -200,7 +200,9 @@ Plans:
   1. Worst-case advanceGame gas consumption with all new jackpot paths (specialized events, whale pass daily path, DGNRS fold) is measured and documented, showing at least 1.5x safety margin against the 30M block gas limit
   2. Foundry test suite runs to completion with zero new failures beyond the known pre-existing baseline
   3. Hardhat test suite runs to completion with zero new failures beyond the known pre-existing baseline
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 193-01-PLAN.md -- Gas ceiling analysis (advanceGame benchmark) and test regression verification (Foundry + Hardhat)
 
 ### Phase 194: Payout Reference & Event Catalog
 **Goal**: A reader can look up any jackpot type and immediately understand who wins, how much, and which events fire -- without reading contract source code
@@ -217,7 +219,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 192. Delta Extraction & Behavioral Verification | 2/2 | Complete    | 2026-04-06 |
-| 193. Gas Ceiling & Test Regression | 0/TBD | Not started | - |
+| 193. Gas Ceiling & Test Regression | 0/1 | Not started | - |
 | 194. Payout Reference & Event Catalog | 0/TBD | Not started | - |
 
 ## Deferred
