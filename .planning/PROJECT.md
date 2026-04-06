@@ -8,11 +8,11 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v22.0 BAF Simplification Delta Audit
+## Completed Milestone: v22.0 BAF Simplification Delta Audit
 
-**Status:** In progress (Phase 190 complete, Phase 191 pending)
+**Status:** Complete (2026-04-06)
 
-**Phase 190 Result:** 2 plans, 1 wave. Algebraic proof that `runBafJackpot` returning only `claimableDelta` (was 3 values) produces identical memFuture at `_setPrizePools` for all 5 winner paths. Master identity: old `-bafPoolWei + (bafPoolWei - netSpend) + lootboxToFuture` = `-claimableDelta` = new `memFuture -= claimed`. Rebuy delta removal safe — `_processAutoRebuy` line 839 is the only futurePool SSTORE reachable from BAF self-call, overwritten by `_setPrizePools` at function end. Unconditional `RewardJackpotsSettled` is log-only with no on-chain consumer. 8/8 requirements satisfied (FLOW-01 through EVT-01), all EQUIVALENT.
+**Result:** 2 phases (190-191), 3 plans. Phase 190 proved algebraic equivalence of all 5 ETH flow paths through simplified `runBafJackpot` (master identity: old multi-step = `-claimableDelta` = new single-step). Rebuy delta removal safe (`_processAutoRebuy` line 839 overwritten by `_setPrizePools`). Unconditional `RewardJackpotsSettled` log-only, no on-chain consumer. 8/8 requirements EQUIVALENT. Phase 191 verified storage layout identical across all 7 contracts via `forge inspect`. Foundry 150/28, Hardhat 1225/19/3 — zero new regressions vs baseline. 11/11 requirements satisfied (FLOW-01 through TEST-02).
 
 ## Completed Milestone: v21.0 Day-Index Clock Migration
 
