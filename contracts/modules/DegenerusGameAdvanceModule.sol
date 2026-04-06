@@ -411,7 +411,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (dailyJackpotCoinTicketsPending) {
                 payDailyJackpotCoinAndTickets(rngWord);
                 if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
-                    _awardFinalDayDgnrsReward(lvl, rngWord);
                     _endPhase();
                     _unlockRng(day);
                     stage = STAGE_JACKPOT_PHASE_ENDED;
@@ -794,22 +793,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         emit RewardJackpotsSettled(lvl, memFuture, claimableDelta);
     }
 
-    /// @dev Award DGNRS reward to the solo bucket winner after final daily jackpot.
-    function _awardFinalDayDgnrsReward(uint24 lvl, uint256 rngWord) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule
-                        .awardFinalDayDgnrsReward
-                        .selector,
-                    lvl,
-                    rngWord
-                )
-            );
-        if (!ok) _revertDelegate(data);
-    }
-
     /// @dev Pay daily jackpot via jackpot module delegatecall.
     ///      Called each day during purchase phase and jackpot phase.
     /// @param isDaily True for jackpot phase, false for purchase phase (early-burn).
@@ -1002,7 +985,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule._applyDailyRng
     // full     Future take variance        rngWord % (variance * 2 + 1)      AdvanceModule._takeFuturePrizePoolSlice
     // full     Prize pool consolidation    via delegatecall (full word)      JackpotModule (consolidatePrizePools)
-    // full     Final day DGNRS reward      via delegatecall (full word)      JackpotModule (awardFinalDayDgnrsReward)
     // full     Reward jackpots             via delegatecall (full word)      JackpotModule (_runRewardJackpots)
     //
     // NOTE: Bits 0 and 8+ are the only direct bit-level consumers.

@@ -451,7 +451,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     entropyDaily,
                     traitIdsDaily,
                     shareBpsDaily,
-                    bucketCountsDaily
+                    bucketCountsDaily,
+                    isFinalPhysicalDay_
                 );
                 if (isFinalPhysicalDay_) {
                     uint256 unpaidDailyEth = dailyEthBudget - paidDailyEth;
@@ -610,48 +611,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Clear pending state
         dailyJackpotCoinTicketsPending = false;
         dailyTicketBudgetsPacked = 0;
-    }
-
-    /// @notice Award DGNRS reward to the solo bucket winner on the final daily jackpot.
-    /// @dev Called after Day 5 coin+tickets are distributed. Re-derives the solo bucket
-    ///      from the stored winning traits and awards 1% of the DGNRS reward pool.
-    /// @param lvl Current level.
-    /// @param rngWord VRF random word.
-    function awardFinalDayDgnrsReward(uint24 lvl, uint256 rngWord) external {
-        uint256 dgnrsPool = dgnrs.poolBalance(
-            IStakedDegenerusStonk.Pool.Reward
-        );
-        uint256 reward = (dgnrsPool * FINAL_DAY_DGNRS_BPS) / 10_000;
-        if (reward == 0) return;
-
-        // Re-derive solo bucket from the Day 5 winning traits
-        uint256 entropy = rngWord ^ (uint256(lvl) << 192);
-        uint8 soloIdx = JackpotBucketLib.soloBucketIndex(entropy);
-        uint32 packed = lastDailyJackpotWinningTraits;
-        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(packed);
-
-        address[] memory winners = _randTraitTicket(
-            traitBurnTicket[lvl],
-            entropy,
-            traitIds[soloIdx],
-            1,
-            254
-        );
-        if (winners.length > 0 && winners[0] != address(0)) {
-            dgnrs.transferFromPool(
-                IStakedDegenerusStonk.Pool.Reward,
-                winners[0],
-                reward
-            );
-            emit JackpotTicketWinner(
-                winners[0],
-                lvl,
-                traitIds[soloIdx],
-                reward,
-                0,
-                AWARD_DGNRS
-            );
-        }
     }
 
     /// @dev Execute the early-bird lootbox jackpot from the unified future pool.
@@ -1190,7 +1149,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 entropy,
         uint8[4] memory traitIds,
         uint16[4] memory shareBps,
-        uint16[4] memory bucketCounts
+        uint16[4] memory bucketCounts,
+        bool isFinalDay
     ) private returns (uint256 paidEth) {
         if (ethPool == 0) {
             return 0;
@@ -1268,6 +1228,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     );
                     paidEth += perWinner;
                     liabilityDelta += claimableDelta;
+
+                    if (isFinalDay && traitIdx == remainderIdx) {
+                        uint256 dgnrsPool = dgnrs.poolBalance(IStakedDegenerusStonk.Pool.Reward);
+                        uint256 reward = (dgnrsPool * FINAL_DAY_DGNRS_BPS) / 10_000;
+                        if (reward != 0) {
+                            dgnrs.transferFromPool(IStakedDegenerusStonk.Pool.Reward, w, reward);
+                            emit JackpotTicketWinner(w, lvl, traitIds[traitIdx], reward, ticketIndexes[i], AWARD_DGNRS);
+                        }
+                    }
                 }
 
                 unchecked {
