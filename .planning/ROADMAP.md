@@ -164,7 +164,7 @@ See individual milestone entries above.
 **Milestone Goal:** Verify that the BAF simplification (runBafJackpot reduced from 3 returns to 1 claimableDelta, rebuy delta removed, RewardJackpotsSettled emitted unconditionally) produces identical ETH flow outcomes for every winner path, with no storage layout drift or test regressions.
 
 - [x] **Phase 190: ETH Flow + Rebuy Delta + Event Audit** - Code-level behavioral equivalence verification (completed 2026-04-05)
-- [ ] **Phase 191: Layout + Regression Testing** - Mechanical verification via forge inspect and test suites
+- [x] **Phase 191: Layout + Regression Testing** - Mechanical verification via forge inspect and test suites (completed 2026-04-06)
 
 ## Phase Details
 
@@ -191,16 +191,16 @@ Plans:
   1. `forge inspect` output for every changed contract (DegenerusGame, DegenerusGameAdvanceModule, DegenerusGameJackpotModule, DegenerusGameDecimatorModule, DegenerusGamePayoutUtils, and their interfaces) shows identical storage slot assignments to the pre-commit baseline
   2. Foundry test suite runs to completion with zero new failures beyond the known pre-existing baseline
   3. Hardhat test suite runs to completion with zero new failures beyond the known pre-existing baseline
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
-- [ ] 191-01-PLAN.md -- Storage layout diff + Foundry/Hardhat regression checks (LAYOUT-01, TEST-01, TEST-02)
+- [x] 191-01-PLAN.md -- Storage layout diff + Foundry/Hardhat regression checks (LAYOUT-01, TEST-01, TEST-02)
 
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 190. ETH Flow + Rebuy Delta + Event Audit | 2/2 | Complete    | 2026-04-05 |
-| 191. Layout + Regression Testing | 0/1 | Not started | - |
+| 191. Layout + Regression Testing | 1/1 | Complete    | 2026-04-06 |
 
 ## Deferred
 
