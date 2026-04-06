@@ -191,14 +191,16 @@ Plans:
   1. `forge inspect` output for every changed contract (DegenerusGame, DegenerusGameAdvanceModule, DegenerusGameJackpotModule, DegenerusGameDecimatorModule, DegenerusGamePayoutUtils, and their interfaces) shows identical storage slot assignments to the pre-commit baseline
   2. Foundry test suite runs to completion with zero new failures beyond the known pre-existing baseline
   3. Hardhat test suite runs to completion with zero new failures beyond the known pre-existing baseline
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 191-01-PLAN.md -- Storage layout diff + Foundry/Hardhat regression checks (LAYOUT-01, TEST-01, TEST-02)
 
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 190. ETH Flow + Rebuy Delta + Event Audit | 2/2 | Complete    | 2026-04-05 |
-| 191. Layout + Regression Testing | 0/? | Not started | - |
+| 191. Layout + Regression Testing | 0/1 | Not started | - |
 
 ## Deferred
 
