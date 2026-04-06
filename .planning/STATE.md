@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v22.0
 milestone_name: BAF Simplification Delta Audit
 status: executing
-stopped_at: Phase 190 context gathered
-last_updated: "2026-04-05T23:59:08.131Z"
+stopped_at: Phase 191 context gathered
+last_updated: "2026-04-06T00:25:34.161Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 2
@@ -69,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T23:34:09.716Z
-Stopped at: Phase 190 context gathered
-Resume file: .planning/phases/190-eth-flow-rebuy-delta-event-audit/190-CONTEXT.md
+Last session: 2026-04-06T00:25:34.159Z
+Stopped at: Phase 191 context gathered
+Resume file: .planning/phases/191-layout-regression-testing/191-CONTEXT.md
