@@ -64,6 +64,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_TICKETS_WORKING = 5;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
     uint8 private constant STAGE_ENTERED_JACKPOT = 7;
+    /// @dev Stage for completing the second half of a two-call ETH distribution
+    ///      (mid buckets). Entered when resumeEthPool is non-zero after call 1.
+    uint8 private constant STAGE_JACKPOT_ETH_RESUME = 8;
     uint8 private constant STAGE_JACKPOT_COIN_TICKETS = 9;
     uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 10;
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 11;
@@ -406,6 +409,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // === JACKPOT PHASE ===
+
+            // Complete ETH distribution (call 2 of two-call split)
+            if (resumeEthPool != 0) {
+                payDailyJackpot(true, lvl, rngWord);
+                _unlockRng(day);
+                stage = STAGE_JACKPOT_ETH_RESUME;
+                break;
+            }
 
             // Complete coin+ticket distribution
             if (dailyJackpotCoinTicketsPending) {
