@@ -53,3 +53,65 @@ All 7 plan targets (5 concrete contracts + IDegenerusGame + IDegenerusGameModule
 
 ---
 
+## TEST-01: Foundry Test Suite Regression Check
+
+**Command:** `forge test --summary`
+**Test directory:** `test/fuzz/` (per foundry.toml)
+**Configuration:** via_ir=true, optimizer_runs=200, fuzz.runs=1000
+
+### Results
+
+| Metric | Baseline (v21.0) | Current (HEAD) | Delta |
+|--------|------------------|----------------|-------|
+| Passed | 150 | 150 | 0 |
+| Failed | 28 | 28 | 0 |
+| Total | 178 | 178 | 0 |
+
+### Failing Tests (all 28 pre-existing, setUp() reverts)
+
+All 28 failures are `setUp() (gas: 0)` reverts -- deployment-related failures that have been present since the v21.0 baseline. No test logic is reached; these fail during test contract construction.
+
+**Fuzz tests (12):**
+1. AffiliateDgnrsClaim.t.sol:AffiliateDgnrsClaim
+2. BafFarFutureTickets.t.sol:BafFarFutureTicketsTest
+3. BafRebuyReconciliation.t.sol:BafRebuyReconciliationTest
+4. DegeneretteFreezeResolution.t.sol:DegeneretteFreezeResolutionTest
+5. DeployCanary.t.sol:DeployCanary
+6. FarFutureIntegration.t.sol:FarFutureIntegrationTest
+7. LootboxBoonCoexistence.t.sol:LootboxBoonCoexistence
+8. LootboxRngLifecycle.t.sol:LootboxRngLifecycle
+9. RedemptionGas.t.sol:RedemptionGasTest
+10. SimAdvanceOverflow.t.sol:SimAdvanceOverflow
+11. StallResilience.t.sol:StallResilience
+12. TicketLifecycle.t.sol:TicketLifecycleTest
+
+**VRF tests (4):**
+13. VRFCore.t.sol:VRFCore
+14. VRFLifecycle.t.sol:VRFLifecycle
+15. VRFPathCoverage.t.sol:VRFPathCoverage
+16. VRFStallEdgeCases.t.sol:VRFStallEdgeCases
+
+**Invariant tests (12):**
+17. CoinSupply.inv.t.sol:CoinSupplyInvariant
+18. Composition.inv.t.sol:CompositionInvariant
+19. DegeneretteBet.inv.t.sol:DegeneretteBetInvariant
+20. EthSolvency.inv.t.sol:EthSolvencyInvariant
+21. GameFSM.inv.t.sol:GameFSMInvariant
+22. MultiLevel.inv.t.sol:MultiLevelInvariant
+23. RedemptionInvariants.inv.t.sol:RedemptionInvariants
+24. TicketQueue.inv.t.sol:TicketQueueInvariant
+25. VRFPathInvariants.inv.t.sol:VRFPathInvariants
+26. VaultShare.inv.t.sol:VaultShareInvariant
+27. VaultShareMath.inv.t.sol:VaultShareMathInvariant
+28. WhaleSybil.inv.t.sol:WhaleSybilInvariant
+
+### New Regressions: NONE
+
+All 28 failures are identical to the v21.0 baseline. No previously-passing test now fails.
+
+### TEST-01 Verdict: PASS
+
+Foundry suite: 150 pass / 28 fail. Exactly matches baseline. Zero new regressions introduced by the BAF simplification commit.
+
+---
+
