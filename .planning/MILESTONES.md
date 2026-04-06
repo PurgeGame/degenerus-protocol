@@ -1,30 +1,5 @@
 # Milestones
 
-## v23.0 JackpotModule Delta Audit & Payout Reference (Shipped: 2026-04-06)
-
-**Phases completed:** 2 phases, 3 plans
-
-**Key accomplishments:**
-
-- Function-level changelog of 38 changes across 5 files (commits 93c05869, 520249a2) — 9 REFACTOR functions proven EQUIVALENT, 8 deleted item groups proven unreachable, event migration from JackpotTicketWinner to 5 specialized events fully mapped
-- Correctness proofs for 4 intentional behavioral changes: whale pass daily-only restriction, DGNRS same-winner fold, coin target level simplification (pure), unconditional ticket budget allocation
-- Gas ceiling: advanceGame peak 6,275,799 (4.78x margin vs 30M limit); GAP FOUND — worst-case 321 autorebuy winners ~25M gas, requires jackpot two-call split (v24.0)
-- Test regression: Foundry 150/28 exact match, Hardhat 1232/13/3 — zero new failures
-
----
-
-## v22.0 BAF Simplification Delta Audit (Shipped: 2026-04-06)
-
-**Phases completed:** 2 phases, 3 plans, 2 tasks
-
-**Key accomplishments:**
-
-- Algebraic proof that commit a2d1c585's BAF return simplification (3 returns to 1) produces identical memFuture values at _setPrizePools for all 5 winner paths
-- Proved _setPrizePools overwrite safety for auto-rebuy storage writes, enumerated all futurePool write sites in self-call chains (1 in BAF, 0 in decimator), confirmed no consumer depends on conditional RewardJackpotsSettled emission
-- Baseline commit:
-
----
-
 ## v17.1 Comment Correctness Sweep (Shipped: 2026-04-03)
 
 **Phases completed:** 3 phases, 9 plans, 15 tasks

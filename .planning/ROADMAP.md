@@ -43,11 +43,7 @@
 - ✅ **v17.1 Comment Correctness Sweep** — Phases 175-178 (shipped 2026-04-03)
 - ✅ **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (shipped 2026-04-04)
 - ✅ **v19.0 Pool Accounting Fix & Sweep** — Phases 183-185 (shipped 2026-04-04)
-- ✅ **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (shipped 2026-04-05)
-- ✅ **v21.0 Day-Index Clock Migration** — Phases 188-189 (shipped 2026-04-05)
-- ✅ **v22.0 BAF Simplification Delta Audit** — Phases 190-191 (shipped 2026-04-06)
-- ✅ **v23.0 JackpotModule Delta Audit & Payout Reference** — Phases 192-193 (shipped 2026-04-06)
-- **v24.0 Jackpot Gas Safety Split** — Phases 195-197
+- 🚧 **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (in progress)
 
 ## Phases
 
@@ -145,96 +141,51 @@ See individual milestone entries above.
 
 </details>
 
-<details>
-<summary>v20.0 Pool Consolidation & Write Batching (Phases 186-187) -- SHIPPED 2026-04-05</summary>
+### v20.0 Pool Consolidation & Write Batching (In Progress)
 
-- [x] **Phase 186: Pool Consolidation & Write Batching** - 4 plans (completed 2026-04-05)
-- [x] **Phase 187: Delta Audit** - 2 plans (completed 2026-04-05)
+**Milestone Goal:** Merge pool transition logic from JackpotModule into AdvanceModule, batch SSTOREs, and free bytecode space in JackpotModule.
 
-</details>
-
-<details>
-<summary>v21.0 Day-Index Clock Migration (Phases 188-189) -- SHIPPED 2026-04-05</summary>
-
-- [x] **Phase 188: Clock Migration & Storage Repack** - 3 plans (completed 2026-04-05)
-- [x] **Phase 189: Delta Audit** - 2 plans (completed 2026-04-05)
-
-</details>
-
-<details>
-<summary>v22.0 BAF Simplification Delta Audit (Phases 190-191) -- SHIPPED 2026-04-06</summary>
-
-- [x] **Phase 190: ETH Flow + Rebuy Delta + Event Audit** - 2 plans (completed 2026-04-05)
-- [x] **Phase 191: Layout + Regression Testing** - 1 plan (completed 2026-04-06)
-
-</details>
-
-<details>
-<summary>v23.0 JackpotModule Delta Audit & Payout Reference (Phases 192-193) -- SHIPPED 2026-04-06</summary>
-
-- [x] **Phase 192: Delta Extraction & Behavioral Verification** - 2 plans (completed 2026-04-06)
-- [x] **Phase 193: Gas Ceiling & Test Regression** - 1 plan (completed 2026-04-06, GAS-01 gap found: worst-case ~25M gas with 321 autorebuy winners)
-
-</details>
-
-### v24.0 Jackpot Gas Safety Split
-
-**Milestone Goal:** Split daily jackpot and early-burn ETH distribution across two advanceGame calls so no single call can exceed 16M gas under worst-case conditions (321 unique autorebuy winners). Verify the fix with a true worst-case gas benchmark.
-
-- [x] **Phase 195: Jackpot Two-Call Split** - 2 plans (completed 2026-04-06)
-- [ ] **Phase 196: Post-Split Audit** - 3 plans
-- [ ] **Phase 197: Payout Reference & Event Catalog** - Standalone documentation of jackpot payout flows and event emissions (post-split)
+- [x] **Phase 186: Pool Consolidation & Write Batching** - Move pool transition functions to AdvanceModule, inline pool math in memory, batch SSTOREs, expose BAF entry point, fix quest entropy (completed 2026-04-05)
+- [x] **Phase 187: Delta Audit** - Behavioral equivalence verification, pool mutation trace, test suite regression check (completed 2026-04-05)
 
 ## Phase Details
 
-### Phase 195: Jackpot Two-Call Split
-**Goal**: No single advanceGame call processes more than 160 jackpot winners -- daily jackpot and early-burn ETH distribution split across two stages by lowering scaling constants so bucket counts naturally fit two-call boundaries
-**Depends on**: Phase 193
-**Requirements**: GAS-02, GAS-03
+### Phase 186: Pool Consolidation & Write Batching
+**Goal**: All pool transition logic lives in AdvanceModule with pool math computed in memory and SSTOREs batched -- JackpotModule is smaller and exposes BAF jackpot as a callable entry point
+**Depends on**: Phase 185
+**Requirements**: POOL-01, POOL-02, POOL-03, POOL-04, POOL-05, POOL-06, GAS-01, SIZE-01, SIZE-02, SIZE-03
+**Success Criteria** (what must be TRUE):
+  1. `consolidatePrizePools` logic executes inside AdvanceModule -- pool merge, x00 yield dump, keep roll, and `_drawDownFuturePrizePool` are a single inlined flow with no cross-module delegatecall for pool consolidation
+  2. `runRewardJackpots` orchestration (pool tracking, rebuy delta reconciliation) executes inside AdvanceModule, calling back into JackpotModule only for individual jackpot execution
+  3. All intermediate pool values (futurePool, currentPool, nextPool deltas) are computed in memory variables and written to storage in a single batch at the end of the consolidation flow
+  4. JackpotModule exposes a callable entry point for BAF jackpot execution (replacing the currently private `_runBafJackpot`), and all migrated functions are removed from JackpotModule
+  5. Both modules compile under 24KB (`forge build` succeeds with no contract-size errors) and quest entropy reads `rngWord` instead of `rngWordByDay[day]`
+**Plans:** 4/4 plans complete
+Plans:
+- [x] 186-01-PLAN.md — JackpotModule entry points + body gutting + interface update + Game passthrough + quest entropy fix
+- [x] 186-02-PLAN.md — Inline consolidation + orchestration + drawdown into AdvanceModule with SSTORE batching
+- [x] 186-03-PLAN.md — Remove dead code from JackpotModule + clean interface
+- [x] 186-04-PLAN.md — Gap closure: add runBafJackpot passthrough to DegenerusGame.sol + self-call guard to JackpotModule
+
+### Phase 187: Delta Audit
+**Goal**: Every behavioral change from Phase 186 is proven equivalent to pre-restructuring behavior -- no pool accounting regressions, no new attack surface
+**Depends on**: Phase 186
+**Requirements**: DELTA-01, DELTA-02, DELTA-03
+**Success Criteria** (what must be TRUE):
+  1. Pool values are identical for all level transition paths (normal advance, x10 skip, x100 skip) when compared against pre-restructuring behavior -- worked examples or diff-based trace confirms equivalence
+  2. A pool mutation trace of the new AdvanceModule consolidation flow shows every debit has a matching credit with no untracked remainders or orphaned values
+  3. Foundry and Hardhat test suites pass with zero unexpected regressions after all Phase 186 changes applied
 **Plans:** 2/2 plans complete
 Plans:
-- [x] 195-01-PLAN.md — Lower scaling constants, split _processDailyEth and _distributeJackpotEth iteration, add resumeEthPool storage
-- [x] 195-02-PLAN.md — Wire STAGE_JACKPOT_ETH_RESUME (stage 8) in AdvanceModule, add resume entry point, verify test regression
-**Success Criteria** (what must be TRUE):
-  1. `_processDailyEth` (daily jackpot path) processes largest+solo buckets in STAGE_JACKPOT_DAILY_STARTED, then two mid buckets in a new STAGE_JACKPOT_ETH_RESUME (stage 8) on the next advanceGame call
-  2. `DAILY_JACKPOT_SCALE_MAX_BPS` lowered from 66_667 to 63_600 (6.36x); `DAILY_ETH_MAX_WINNERS` lowered from 321 to 305; at max scale: largest=159, mid=95, small=50, solo=1 — call 1 ≤160, call 2 ≤145
-  3. `_distributeJackpotEth` (early-burn path) capped at 160 winners via JACKPOT_MAX_WINNERS — single call, no split needed (override: autorebuy disabled at game over makes 305 terminal winners safe)
-  4. Inter-call state: original ethPool stored as uint128 in a single storage slot; non-zero = resume pending; bucket parameters recomputed from deterministic RNG word + stored ethPool
-  5. Both modules compile under 24KB after changes
-  6. Existing Hardhat and Foundry test suites pass with zero new regressions
-
-### Phase 196: Post-Split Audit — Gas, Logic Parity, State, Bytecode
-**Goal**: Full worst-case gas audit, logic parity verification, storage state audit, and JackpotModule bytecode optimization
-**Depends on**: Phase 195
-**Requirements**: GAS-04, AUDIT-01
-**Plans:** 3 plans
-Plans:
-- [ ] 196-01-PLAN.md — Fix failing gas test + true worst-case gas benchmarks (305 players, autorebuy, 200+ ETH, split calls + early-burn + terminal)
-- [ ] 196-02-PLAN.md — Logic parity verification (split vs single-call equivalence) + variable state audit (storage write trace)
-- [ ] 196-03-PLAN.md — JackpotModule bytecode optimization analysis + user-approved changes
-**Success Criteria** (what must be TRUE):
-  1. A Hardhat test constructs the absolute worst case: 305 unique players with autorebuy enabled, all with trait-matching tickets, pool >= 200 ETH, final jackpot day — both split calls individually measured, neither exceeds 16M gas
-  2. The early-burn path (160 winners) and terminal jackpot path (305 winners, no autorebuy) are also measured under worst-case conditions
-  3. Logic parity: both split calls produce equivalent economic outcomes as the pre-split single call (different RNG chain is acceptable — still deterministic and random)
-  4. Variable state audit: every storage write in the two-call flow is traced — no stale writes, no orphaned state, no variable that changes between calls without being accounted for
-  5. JackpotModule bytecode savings identified and applied — currently at 99.2% of 24KB limit, find inefficiencies to create headroom
-
-### Phase 197: Payout Reference & Event Catalog
-**Goal**: A reader can look up any jackpot type and immediately understand who wins, how much, and which events fire -- without reading contract source code
-**Depends on**: Phase 195
-**Requirements**: DOC-01, DOC-02
-**Success Criteria** (what must be TRUE):
-  1. The payout reference document covers every jackpot type (daily normal, daily x10, daily x100, trait jackpot, decimator, BAF) with winner selection criteria, payout calculation formulas, and the ETH flow from pool to recipient
-  2. The event catalog lists every jackpot-related event with its Solidity signature, field descriptions, and which code paths emit it -- including the new specialized events from commit 520249a2
-  3. Both documents are internally consistent with each other and with the current contract source code (post-split)
+- [x] 187-01-PLAN.md — Full variable sweep audit of consolidated pool flow (DELTA-01, DELTA-02)
+- [x] 187-02-PLAN.md — Peripheral changes audit + test regression (DELTA-03)
 
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 195. Jackpot Two-Call Split | 2/2 | Complete    | 2026-04-06 |
-| 196. Post-Split Audit | 0/3 | Planned | - |
-| 197. Payout Reference & Event Catalog | 0/TBD | Not started | - |
+| 186. Pool Consolidation & Write Batching | 4/4 | Complete    | 2026-04-05 |
+| 187. Delta Audit | 2/2 | Complete    | 2026-04-05 |
 
 ## Deferred
 

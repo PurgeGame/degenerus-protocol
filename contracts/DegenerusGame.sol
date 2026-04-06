@@ -197,14 +197,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /**
      * @notice Initialize the game with precomputed contract references.
      * @dev All addresses and deploy day boundary are compile-time constants from ContractAddresses.
-     *      purchaseStartDay is initialized to the deploy day index.
+     *      levelStartTime is initialized here to the deploy timestamp.
      *      dailyIdx is set to the current day index so gap detection starts from deploy day.
      *      Deploy day boundary determines which calendar day is "day 1" in the game.
      */
     constructor() {
-        uint48 currentDay = GameTimeLib.currentDayIndex();
-        purchaseStartDay = currentDay;
-        dailyIdx = currentDay;
+        levelStartTime = uint48(block.timestamp);
+        dailyIdx = GameTimeLib.currentDayIndex();
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
         // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners)
         mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(mintPacked_[ContractAddresses.SDGNRS], BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
@@ -1077,12 +1076,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param poolWei ETH allocated to this BAF tier.
     /// @param lvl Level being resolved.
     /// @param rngWord VRF-derived randomness seed.
+    /// @return netSpend ETH consumed by jackpot payouts.
     /// @return claimableDelta ETH added to claimable pool.
+    /// @return lootboxToFuture ETH recycled to future pool via lootbox.
     function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
-    ) external returns (uint256 claimableDelta) {
+    )
+        external
+        returns (
+            uint256 netSpend,
+            uint256 claimableDelta,
+            uint256 lootboxToFuture
+        )
+    {
         if (msg.sender != address(this)) revert E();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
@@ -1096,7 +1104,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             );
         if (!ok) _revertDelegate(data);
         if (data.length == 0) revert E();
-        return abi.decode(data, (uint256));
+        return abi.decode(data, (uint256, uint256, uint256));
     }
 
     // -------------------------------------------------------------------------

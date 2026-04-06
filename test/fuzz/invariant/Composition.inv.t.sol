@@ -26,16 +26,16 @@ contract CompositionInvariant is DeployProtocol {
         targetContract(address(compositionHandler));
     }
 
-    /// @notice Gap bits (154-159 and 215-227) in mintPacked_ must always be zero
+    /// @notice Gap bits (154-159 and 184-227) in mintPacked_ must always be zero
     /// @dev If any setPacked call site writes to gap bits, this catches it.
-    ///      Real fields: MINT_STREAK(160-183), DEITY_PASS(184), AFFILIATE_BONUS_LEVEL(185-208), AFFILIATE_BONUS_POINTS(209-214).
+    ///      Note: bits 160-183 are MINT_STREAK_LAST_COMPLETED (a real field, not gap).
     ///      Ghost counter increments each time gap bits are found nonzero
     ///      after any cross-module action sequence.
     function invariant_gapBitsAlwaysZero() public view {
         assertEq(
             compositionHandler.ghost_gapBitsNonZero(),
             0,
-            "COMPOSITION BUG: mintPacked_ gap bits (154-159, 215-227) found nonzero"
+            "COMPOSITION BUG: mintPacked_ gap bits (154-227) found nonzero"
         );
     }
 

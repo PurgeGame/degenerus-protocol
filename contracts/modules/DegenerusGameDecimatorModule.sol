@@ -50,16 +50,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 newTotalBurn
     );
 
-    /// @dev Emitted when decimator winning subbuckets are resolved for a level.
-    ///      packedOffsets encodes the winning subbucket for each denom 2-12
-    ///      (same packing as decBucketOffsetPacked).
-    event DecimatorResolved(
-        uint24 indexed lvl,
-        uint64 packedOffsets,
-        uint256 poolWei,
-        uint256 totalBurn
-    );
-
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -256,7 +246,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         // Store packed winning subbuckets for claim validation
         decBucketOffsetPacked[lvl] = packedOffsets;
-        emit DecimatorResolved(lvl, packedOffsets, poolWei, totalBurn);
 
         // Snapshot claim round for this level (persistent — no expiry)
         decClaimRounds[lvl].poolWei = poolWei;
@@ -697,7 +686,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
 
     uint48 private constant TERMINAL_DEC_IDLE_TIMEOUT_DAYS = 365;
-    uint48 private constant TERMINAL_DEC_DEATH_CLOCK_DAYS = 120;
+    uint256 private constant TERMINAL_DEC_DEATH_CLOCK = 120 days;
 
     // -------------------------------------------------------------------------
     // Terminal Decimator Burn Tracking
@@ -928,14 +917,13 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         return uint8(b);
     }
 
-    /// @dev Calculate days remaining on death clock using day-index arithmetic. Returns 0 if expired.
+    /// @dev Calculate days remaining on death clock. Returns 0 if expired.
     function _terminalDecDaysRemaining() private view returns (uint256) {
-        uint48 currentDay = _simulatedDayIndex();
-        uint48 psd = purchaseStartDay;
-        uint256 deadlineDay = uint256(psd) + (level == 0
-            ? uint256(TERMINAL_DEC_IDLE_TIMEOUT_DAYS)
-            : TERMINAL_DEC_DEATH_CLOCK_DAYS);
-        if (currentDay >= deadlineDay) return 0;
-        return deadlineDay - currentDay;
+        uint256 timeout = level == 0
+            ? uint256(TERMINAL_DEC_IDLE_TIMEOUT_DAYS) * 1 days
+            : TERMINAL_DEC_DEATH_CLOCK;
+        uint256 deadline = uint256(levelStartTime) + timeout;
+        if (block.timestamp >= deadline) return 0;
+        return (deadline - block.timestamp) / 1 days;
     }
 }

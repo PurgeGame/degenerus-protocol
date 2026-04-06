@@ -279,41 +279,6 @@
 
 ---
 
-## Milestone: v23.0 — JackpotModule Delta Audit & Payout Reference
-
-**Shipped:** 2026-04-06
-**Phases:** 2 | **Plans:** 3
-
-### What Was Built
-- Function-level changelog of 38 changes across 5 files (commits 93c05869, 520249a2) with refactor/intentional classification
-- 9 REFACTOR equivalence proofs, 8 deleted-item unreachability proofs, event migration mapping (JackpotTicketWinner to 5 specialized events)
-- Correctness proofs for 4 intentional behavioral changes (whale pass, DGNRS fold, coin target, ticket budget)
-- Gas ceiling analysis: peak 6.28M (4.78x margin), worst-case gap identified (~25M with 321 autorebuy winners)
-- Test regression baseline: Foundry 150/28, Hardhat 1232/13/3
-
-### What Worked
-- Lean 2-phase structure for a focused delta audit — no wasted phases
-- Splitting delta extraction (192-01) from intentional change proofs (192-02) allowed each plan to stay focused
-- Gas analysis correctly identified the theoretical worst-case gap that existing benchmarks missed — this is the GAS-01 methodology paying off
-
-### What Was Inefficient
-- CLI milestone-complete tool counted stale on-disk phase directories from prior milestones (190, 191) — inflated stats needed manual correction
-- Phase 193 PLAN file was deleted from disk (visible in git status) but summary exists — cleanup inconsistency
-
-### Patterns Established
-- "Derive worst case FIRST, then test" methodology (from feedback_gas_worst_case) proven essential — existing benchmarks showed comfortable 4.78x margin but missed the 321-winner scenario entirely
-
-### Key Lessons
-1. Gas benchmarks that only test typical cases create false confidence — worst-case derivation must precede any "margin" claims
-2. A 2-phase audit milestone (extract+classify, then verify+gas) is the right granularity for focused delta audits of 2-3 commits
-
-### Cost Observations
-- Model mix: 100% opus (quality profile)
-- Single-session execution (~3 hours wall clock)
-- Notable: 38 function changes fully classified and proven in 3 plans — efficient for the scope
-
----
-
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -333,7 +298,6 @@
 | v4.1 | 3 | 4 | Accumulating test file; analytical proof + Foundry test pairing; zero-stranding sweep helper |
 | v6.0 | 6 | 12 | Implementation milestone: test cleanup, storage/gas fixes, DegenerusCharity contract, game integration |
 | v7.0 | 4 | 11 | Delta audit methodology; formatting-only triage; plan-vs-reality reconciliation; parallel adversarial audits |
-| v23.0 | 2 | 3 | Worst-case-first gas analysis; lean 2-phase delta audit; theoretical gap identification (321-winner scenario) |
 
 ### Top Lessons (Verified Across Milestones)
 

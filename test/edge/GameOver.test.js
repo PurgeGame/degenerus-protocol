@@ -26,8 +26,8 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  *   3. advanceGame again → processes the word → handleGameOverDrain → gameOver = true
  *
  * Two liveness guards:
- *   - level==0 && currentDay - purchaseStartDay > DEPLOY_IDLE_TIMEOUT_DAYS  (pre-game 365-day idle timeout)
- *   - level!=0 && currentDay - purchaseStartDay > 120                       (post-game 120-day death clock)
+ *   - level==0 && (ts - levelStartTime) > 912 days     (pre-game 2.5yr timeout)
+ *   - level!=0 && (ts - 365 days) > levelStartTime     (post-game 365-day inactivity)
  *
  * Deity pass refunds:
  *   - Level 0, not jackpot phase: Full refund of deityPassPaidTotal[owner]

@@ -90,22 +90,22 @@ contract StorageFoundationTest is Test {
     // STOR-01: Field Placement Tests
     // =====================================================================
 
-    /// @dev Verify ticketWriteSlot at Slot 1, offset 0; prizePoolFrozen at offset 1.
+    /// @dev Verify ticketWriteSlot at Slot 1, offset 6; prizePoolFrozen at offset 7.
     ///      ticketsFullyProcessed moved to Slot 0 offset 30; gameOverPossible to Slot 0 offset 31.
     function testSlot1FieldOffsets() public {
         // Set ticketWriteSlot = 1
         harness.setTicketWriteSlot(1);
         bytes32 slot1 = vm.load(address(harness), bytes32(uint256(1)));
-        // offset 0 means byte 0 from the RIGHT in the 32-byte word (little-endian packing)
+        // offset 6 means byte 6 from the RIGHT in the 32-byte word (little-endian packing)
         // In EVM storage packing, offset N means bits [N*8, (N+1)*8)
-        // So ticketWriteSlot at offset 0 = bits [0, 8)
-        assertEq(uint8(uint256(slot1)), 1, "ticketWriteSlot not at offset 0");
+        // So ticketWriteSlot at offset 6 = bits [48, 56)
+        assertEq(uint8(uint256(slot1) >> 48), 1, "ticketWriteSlot not at offset 6");
 
-        // Reset and set prizePoolFrozen = true (offset 1 = bits [8, 16))
+        // Reset and set prizePoolFrozen = true (offset 7 = bits [56, 64))
         harness.setTicketWriteSlot(0);
         harness.setPrizePoolFrozen(true);
         slot1 = vm.load(address(harness), bytes32(uint256(1)));
-        assertEq(uint8(uint256(slot1) >> 8), 1, "prizePoolFrozen not at offset 1");
+        assertEq(uint8(uint256(slot1) >> 56), 1, "prizePoolFrozen not at offset 7");
 
         // Verify ticketsFullyProcessed is in slot 0 at offset 30 = bits [240, 248)
         harness.setPrizePoolFrozen(false);

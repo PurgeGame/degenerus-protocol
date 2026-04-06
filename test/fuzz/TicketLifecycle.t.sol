@@ -28,12 +28,10 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///         last-day jackpot routing fix (level+1 when rngLocked + jackpotCounter+step >= CAP).
 ///
 /// @dev Storage slots confirmed via `forge inspect DegenerusGame storage-layout`:
-///      - Slot 0: [0:6]purchaseStartDay [6:12]dailyIdx [12:18]rngRequestTime [18:21]level
-///                [21:22]jackpotPhaseFlag [22:23]jackpotCounter [23:24]lastPurchaseDay
-///                [24:25]decWindowOpen [25:26]rngLockedFlag [26:27]phaseTransitionActive
-///                [27:28]gameOver [28:29]dailyJackpotCoinTicketsPending
-///                [29:30]compressedJackpotFlag [30:31]ticketsFullyProcessed [31:32]gameOverPossible
-///      - Slot 1: [0:1]ticketWriteSlot [1:2]prizePoolFrozen [2:18]currentPrizePool
+///      - Slot 0: [0:6]levelStartTime [6:12]dailyIdx [12:18]rngRequestTime [18:21]level
+///                [21:22]jackpotPhaseFlag [22:23]jackpotCounter [26:27]rngLockedFlag
+///      - Slot 0 continued: [30:31]dailyEthPhase [31:32]compressedJackpotFlag
+///      - Slot 1: [0:6]purchaseStartDay [6:22]price [22:23]ticketWriteSlot
 ///      - ticketQueue: slot 15 (mapping(uint24 => address[]))
 ///      - ticketsOwedPacked: slot 16 (mapping(uint24 => mapping(address => uint40)))
 ///      - prizePoolsPacked: slot 3 ([future:128][next:128])

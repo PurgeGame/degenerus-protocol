@@ -55,6 +55,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Events
     // -------------------------------------------------------------------------
 
+    /// @param remainder Amount returned to claimableWinnings (reserved + dust).
+    event AutoRebuyProcessed(
+        address indexed player,
+        uint24 targetLevel,
+        uint32 ticketCount,
+        uint256 ethSpent,
+        uint256 remainder
+    );
+
     /// @dev Emitted when a far-future ticket holder (5-99 levels ahead) wins the daily BURNIE jackpot.
     ///      These winners are drawn from ticketQueue (traits not yet assigned).
     event FarFutureCoinJackpotWinner(
@@ -64,29 +73,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 amount
     );
 
-    /// @dev ETH jackpot win. rebuyLevel/rebuyTickets are 0 when auto-rebuy didn't fire.
-    event JackpotEthWin(
-        address indexed winner,
-        uint24 indexed level,
-        uint8 indexed traitId,
-        uint256 amount,
-        uint256 ticketIndex,
-        uint24 rebuyLevel,
-        uint32 rebuyTickets
-    );
-
-    /// @dev Ticket jackpot win.
-    event JackpotTicketWin(
-        address indexed winner,
-        uint24 indexed ticketLevel,
-        uint8 indexed traitId,
-        uint32 ticketCount,
-        uint24 sourceLevel,
-        uint256 ticketIndex
-    );
-
-    /// @dev BURNIE coin win (near-future, trait-matched).
-    event JackpotBurnieWin(
+    /// @dev Emitted for each jackpot winner draw with the exact winning ticket reference.
+    ///      ticketIndex is the index in traitBurnTicket[level][traitId], or uint256.max for deity virtual entries.
+    event JackpotTicketWinner(
         address indexed winner,
         uint24 indexed level,
         uint8 indexed traitId,
@@ -94,14 +83,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 ticketIndex
     );
 
-    /// @dev DGNRS reward to solo bucket winner on final day.
-    event JackpotDgnrsWin(address indexed winner, uint256 amount);
-
-    /// @dev Whale pass awarded to solo bucket winner.
-    event JackpotWhalePassWin(
-        address indexed winner,
-        uint24 indexed level,
-        uint256 halfPassCount
+    /// @notice Emitted after BAF/decimator jackpot resolution with final pool values.
+    /// @dev Enables indexers to track pool changes from reward jackpots without
+    ///      replaying on-chain leaderboard/ticket state. Only emitted when pools change.
+    /// @param lvl The level that just completed (indexed for Advance event correlation).
+    /// @param futurePool Authoritative post-resolution future prize pool value.
+    /// @param claimableDelta Total ETH moved to claimable during resolution.
+    event RewardJackpotsSettled(
+        uint24 indexed lvl,
+        uint256 futurePool,
+        uint256 claimableDelta
     );
 
     // -------------------------------------------------------------------------
@@ -115,6 +106,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
     // Constants — Timing & Thresholds
     // -------------------------------------------------------------------------
+
+    /// @dev Seconds offset from midnight UTC for daily jackpot reset boundary (22:57 UTC).
+    uint48 private constant JACKPOT_RESET_TIME = 82620;
 
     /// @dev Maximum number of daily jackpots per level before forcing level transition.
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
@@ -185,11 +179,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
 
     /// @dev Maximum total winners per jackpot payout (including solo bucket).
-    uint16 private constant JACKPOT_MAX_WINNERS = 160;
+    uint16 private constant JACKPOT_MAX_WINNERS = 300;
 
     /// @dev Maximum total ETH winners across daily + carryover jackpots.
-    ///      At max scale (6.36x, 200+ ETH pool): 159 + 95 + 50 + 1 = 305.
-    uint16 private constant DAILY_ETH_MAX_WINNERS = 305;
+    uint16 private constant DAILY_ETH_MAX_WINNERS = 321;
 
     /// @dev Maximum winners for daily coin jackpot (coinflip.creditFlip is 1 external call each).
     uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
@@ -213,10 +206,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Maximum scale for bucket sizing (4x at 200 ETH+).
     uint16 private constant JACKPOT_SCALE_MAX_BPS = 40_000;
 
-    /// @dev Daily jackpot max scale (6.36x) producing bucket counts 159/95/50/1 at 200+ ETH.
-    ///      Two-call split: call 1 processes largest (159) + solo (1) = 160 winners,
-    ///      call 2 processes mid buckets (95 + 50) = 145 winners.
-    uint32 private constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;
+    /// @dev Daily jackpot max scale (6.6667x) to allow up to DAILY_ETH_MAX_WINNERS.
+    uint32 private constant DAILY_JACKPOT_SCALE_MAX_BPS = 66_667;
 
     // -------------------------------------------------------------------------
     // Structs
@@ -317,12 +308,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint32 winningTraitsPacked;
 
         if (isDaily) {
-            // Resume check: call 2 of two-call daily ETH split.
-            if (resumeEthPool != 0) {
-                _resumeDailyEth(lvl, randWord);
-                return;
-            }
-
             winningTraitsPacked = _rollWinningTraits(randWord, true);
             _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
 
@@ -364,7 +349,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 }
 
                 // Gas optimization: 20% = 1/5 (cheaper than * 2000 / 10000)
-                uint256 dailyLootboxBudget = budget / 5;
+                uint256 dailyLootboxBudget = _validateTicketBudget(
+                    budget / 5,
+                    lvl,
+                    winningTraitsPacked
+                );
                 if (dailyLootboxBudget != 0) {
                     budget -= dailyLootboxBudget;
                 }
@@ -456,19 +445,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     entropyDaily,
                     traitIdsDaily,
                     shareBpsDaily,
-                    bucketCountsDaily,
-                    isFinalPhysicalDay_,
-                    false // call 1: largest + solo buckets
+                    bucketCountsDaily
                 );
                 if (isFinalPhysicalDay_) {
                     uint256 unpaidDailyEth = dailyEthBudget - paidDailyEth;
-                    _setCurrentPrizePool(
-                        _getCurrentPrizePool() - dailyEthBudget
-                    );
+                    _setCurrentPrizePool(_getCurrentPrizePool() - dailyEthBudget);
                     if (unpaidDailyEth != 0) {
-                        _setFuturePrizePool(
-                            _getFuturePrizePool() + unpaidDailyEth
-                        );
+                        _setFuturePrizePool(_getFuturePrizePool() + unpaidDailyEth);
                     }
                 } else {
                     _setCurrentPrizePool(_getCurrentPrizePool() - paidDailyEth);
@@ -483,7 +466,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         winningTraitsPacked = _rollWinningTraits(randWord, false);
         _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
 
-        bool isEthDay = questDay > purchaseStartDay && lvl > 1; // daily 1% drip from futurePrizePool
+        bool isEthDay = false;
+        uint48 startTime = levelStartTime;
+        if (startTime != type(uint48).max) {
+            uint48 startDayBoundary = uint48(
+                (startTime - JACKPOT_RESET_TIME) / 1 days
+            );
+            uint48 startDay = startDayBoundary -
+                ContractAddresses.DEPLOY_DAY_BOUNDARY +
+                1;
+            if (questDay > startDay) {
+                uint48 daysSince = questDay - startDay;
+                isEthDay = daysSince > 0 && lvl > 1; // daily 1% drip from futurePrizePool
+            }
+        }
         uint256 ethDaySlice;
         if (isEthDay) {
             uint256 poolBps = 100; // 1% daily drip from futurePool
@@ -493,7 +489,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 ethPool = ethDaySlice;
         uint256 lootboxBudget;
         if (ethPool != 0) {
-            lootboxBudget = (ethPool * PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS) / 10_000;
+            lootboxBudget = _validateTicketBudget(
+                (ethPool * PURCHASE_REWARD_JACKPOT_LOOTBOX_BPS) / 10_000,
+                lvl,
+                winningTraitsPacked
+            );
             if (lootboxBudget != 0) ethPool -= lootboxBudget;
         }
         uint256 paidEth = _executeJackpot(
@@ -508,9 +508,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // Deferred deduction: deduct only what was actually consumed
         if (ethDaySlice != 0) {
-            _setFuturePrizePool(
-                _getFuturePrizePool() - lootboxBudget - paidEth
-            );
+            _setFuturePrizePool(_getFuturePrizePool() - lootboxBudget - paidEth);
         }
 
         if (lootboxBudget != 0) {
@@ -568,9 +566,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     uint256(COIN_JACKPOT_TAG);
                 uint24 targetLevel = _selectDailyCoinTargetLevel(
                     lvl,
+                    winningTraitsPacked,
                     coinEntropy
                 );
-                {
+                if (targetLevel != 0) {
                     _awardDailyCoinToTraitWinners(
                         targetLevel,
                         winningTraitsPacked,
@@ -620,6 +619,40 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         dailyTicketBudgetsPacked = 0;
     }
 
+    /// @notice Award DGNRS reward to the solo bucket winner on the final daily jackpot.
+    /// @dev Called after Day 5 coin+tickets are distributed. Re-derives the solo bucket
+    ///      from the stored winning traits and awards 1% of the DGNRS reward pool.
+    /// @param lvl Current level.
+    /// @param rngWord VRF random word.
+    function awardFinalDayDgnrsReward(uint24 lvl, uint256 rngWord) external {
+        uint256 dgnrsPool = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Reward
+        );
+        uint256 reward = (dgnrsPool * FINAL_DAY_DGNRS_BPS) / 10_000;
+        if (reward == 0) return;
+
+        // Re-derive solo bucket from the Day 5 winning traits
+        uint256 entropy = rngWord ^ (uint256(lvl) << 192);
+        uint8 soloIdx = JackpotBucketLib.soloBucketIndex(entropy);
+        uint32 packed = lastDailyJackpotWinningTraits;
+        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(packed);
+
+        address[] memory winners = _randTraitTicket(
+            traitBurnTicket[lvl],
+            entropy,
+            traitIds[soloIdx],
+            1,
+            254
+        );
+        if (winners.length > 0 && winners[0] != address(0)) {
+            dgnrs.transferFromPool(
+                IStakedDegenerusStonk.Pool.Reward,
+                winners[0],
+                reward
+            );
+        }
+    }
+
     /// @dev Execute the early-bird lootbox jackpot from the unified future pool.
     function _runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) private {
         // Take 3% from unified reserve
@@ -653,16 +686,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         for (uint256 i; i < maxWinners; ) {
             entropy = EntropyLib.entropyStep(entropy);
             uint8 traitId = uint8(entropy);
-            (
-                address[] memory winners,
-                uint256[] memory ticketIndexes
-            ) = _randTraitTicket(
-                    traitBurnTicket[lvl],
-                    entropy,
-                    traitId,
-                    1,
-                    uint8(i)
-                );
+            address[] memory winners = _randTraitTicket(
+                traitBurnTicket[lvl],
+                entropy,
+                traitId,
+                1,
+                uint8(i)
+            );
             address winner = winners.length != 0 ? winners[0] : address(0);
             if (winner != address(0)) {
                 // Roll for level offset 0-4 (20% chance each)
@@ -677,14 +707,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                             baseLevel + levelOffset,
                             ticketCount,
                             true
-                        );
-                        emit JackpotTicketWin(
-                            winner,
-                            baseLevel + levelOffset,
-                            traitId,
-                            ticketCount,
-                            baseLevel,
-                            ticketIndexes[0]
                         );
                     }
                 }
@@ -718,22 +740,22 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 quarterShare = (yieldPool * 2300) / 10_000;
 
         if (quarterShare != 0) {
-            (uint256 d0, , ) = _addClaimableEth(
-                ContractAddresses.VAULT,
-                quarterShare,
-                rngWord
-            );
-            (uint256 d1, , ) = _addClaimableEth(
-                ContractAddresses.SDGNRS,
-                quarterShare,
-                rngWord
-            );
-            (uint256 d2, , ) = _addClaimableEth(
-                ContractAddresses.GNRUS,
-                quarterShare,
-                rngWord
-            );
-            uint256 claimableDelta = d0 + d1 + d2;
+            uint256 claimableDelta =
+                _addClaimableEth(
+                    ContractAddresses.VAULT,
+                    quarterShare,
+                    rngWord
+                ) +
+                _addClaimableEth(
+                    ContractAddresses.SDGNRS,
+                    quarterShare,
+                    rngWord
+                ) +
+                _addClaimableEth(
+                    ContractAddresses.GNRUS,
+                    quarterShare,
+                    rngWord
+                );
             if (claimableDelta != 0) claimablePool += claimableDelta;
             yieldAccumulator += quarterShare;
         }
@@ -755,11 +777,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         address beneficiary,
         uint256 weiAmount,
         uint256 entropy
-    )
-        private
-        returns (uint256 claimableDelta, uint24 rebuyLevel, uint32 rebuyTickets)
-    {
-        if (weiAmount == 0) return (0, 0, 0);
+    ) private returns (uint256 claimableDelta) {
+        if (weiAmount == 0) return 0;
 
         // Auto-rebuy: convert winnings to tickets if enabled.
         // Skip when game is over — tickets are worthless post-game.
@@ -774,7 +793,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Normal claimable winnings path
         // SAFETY: uint256 max is ~10^77 wei; overflow impossible in practice.
         _creditClaimable(beneficiary, weiAmount);
-        return (weiAmount, 0, 0);
+        return weiAmount;
     }
 
     /// @dev Converts winnings to tickets for next level or next+1 (50/50).
@@ -790,10 +809,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 newAmount,
         uint256 entropy,
         AutoRebuyState memory state
-    )
-        private
-        returns (uint256 claimableDelta, uint24 rebuyLevel, uint32 rebuyTickets)
-    {
+    ) private returns (uint256 claimableDelta) {
         AutoRebuyCalc memory calc = _calcAutoRebuy(
             player,
             newAmount,
@@ -805,7 +821,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
         if (!calc.hasTickets) {
             _creditClaimable(player, newAmount);
-            return (newAmount, 0, 0);
+            return newAmount;
         }
 
         _queueTickets(player, calc.targetLevel, calc.ticketCount, true);
@@ -820,7 +836,46 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             _creditClaimable(player, calc.reserved);
         }
 
-        return (calc.reserved, calc.targetLevel, calc.ticketCount);
+        emit AutoRebuyProcessed(
+            player,
+            calc.targetLevel,
+            calc.ticketCount,
+            calc.ethSpent,
+            calc.reserved
+        );
+        return calc.reserved;
+    }
+
+    /// @dev Returns true if any of the packed traits have tickets (or virtual deity entries) at the given level.
+    function _hasTraitTickets(
+        uint24 lvl,
+        uint32 packedTraits
+    ) private view returns (bool) {
+        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
+            packedTraits
+        );
+        for (uint8 i; i < 4; ) {
+            uint8 trait = traitIds[i];
+            if (traitBurnTicket[lvl][trait].length != 0) return true;
+            // Check virtual deity entries
+            uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
+            if (fullSymId < 32 && deityBySymbol[fullSymId] != address(0))
+                return true;
+            unchecked {
+                ++i;
+            }
+        }
+        return false;
+    }
+
+    /// @dev Zeros budget if no trait tickets exist for the given level/traits.
+    function _validateTicketBudget(
+        uint256 budget,
+        uint24 lvl,
+        uint32 packedTraits
+    ) private view returns (uint256) {
+        return
+            (budget != 0 && !_hasTraitTickets(lvl, packedTraits)) ? 0 : budget;
     }
 
     /// @dev Converts an ETH budget to ticket units. Tickets cost ticketPrice/4.
@@ -956,16 +1011,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16 cap,
         uint256 startIdx
     ) private returns (uint256 endIdx) {
-        (
-            address[] memory winners,
-            uint256[] memory ticketIndexes
-        ) = _randTraitTicket(
-                traitBurnTicket[sourceLvl],
-                entropy,
-                traitId,
-                uint8(count),
-                salt
-            );
+        if (count > MAX_BUCKET_WINNERS) count = MAX_BUCKET_WINNERS;
+        address[] memory winners = _randTraitTicket(
+            traitBurnTicket[sourceLvl],
+            entropy,
+            traitId,
+            uint8(count),
+            salt
+        );
 
         uint256 extra = distParams & type(uint128).max;
         uint256 offset = distParams >> 128;
@@ -979,14 +1032,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
             if (winner != address(0) && units != 0) {
                 _queueTickets(winner, queueLvl, uint32(units), true);
-                emit JackpotTicketWin(
-                    winner,
-                    queueLvl,
-                    traitId,
-                    uint32(units),
-                    sourceLvl,
-                    ticketIndexes[i]
-                );
             }
             unchecked {
                 ++cursor;
@@ -1112,61 +1157,24 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Daily Jackpot ETH — Distribution
     // =========================================================================
 
-    /// @dev Call 2 of the daily ETH two-call split. Reconstructs params from
-    ///      stored state and processes the mid buckets that call 1 skipped.
-    function _resumeDailyEth(uint24 lvl, uint256 randWord) private {
-        uint256 entropy = randWord ^ (uint256(lvl) << 192);
-        (uint8 cs, , , ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
-        bool isFinal = (jackpotCounter + cs >= JACKPOT_LEVEL_CAP);
-        uint256 paidEth2 = _processDailyEth(
-            lvl, 0, entropy,
-            JackpotBucketLib.unpackWinningTraits(lastDailyJackpotWinningTraits),
-            JackpotBucketLib.shareBpsByBucket(
-                isFinal ? FINAL_DAY_SHARES_PACKED : DAILY_JACKPOT_SHARES_PACKED,
-                uint8(entropy & 3)
-            ),
-            JackpotBucketLib.bucketCountsForPoolCap(
-                uint256(resumeEthPool), entropy,
-                DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
-            ),
-            isFinal, true
-        );
-        if (paidEth2 != 0) {
-            if (isFinal) {
-                _setFuturePrizePool(_getFuturePrizePool() - paidEth2);
-            } else {
-                _setCurrentPrizePool(_getCurrentPrizePool() - paidEth2);
-            }
-        }
-    }
-
-    /// @dev Processes daily jackpot ETH distribution across trait buckets.
-    ///      Two-call split: call 1 (isResume=false) processes the largest + solo buckets
-    ///      and stores ethPool in resumeEthPool. Call 2 (isResume=true) processes the
-    ///      remaining 2 mid buckets and clears resumeEthPool.
+    /// @dev Processes daily jackpot ETH distribution across all 4 trait buckets.
+    ///      Iterates each bucket, selects winners proportional to shareBps,
+    ///      pays out ETH via _addClaimableEth, and processes auto-rebuy.
     /// @param lvl The level whose winners are being paid.
-    /// @param ethPool Total ETH to distribute (ignored when isResume=true; read from storage).
+    /// @param ethPool Total ETH to distribute across all buckets.
     /// @param entropy VRF-derived random word for winner selection.
     /// @param traitIds The 4 winning trait IDs for this daily jackpot.
     /// @param shareBps Basis-point share for each of the 4 buckets.
     /// @param bucketCounts Number of holders in each trait bucket.
-    /// @param isFinalDay True on the last physical jackpot day (affects solo bucket payout).
-    /// @param isResume False for call 1 (largest+solo), true for call 2 (mid buckets).
-    /// @return paidEth Total ETH actually paid out in this call.
+    /// @return paidEth Total ETH actually paid out (may be less than ethPool if buckets empty).
     function _processDailyEth(
         uint24 lvl,
         uint256 ethPool,
         uint256 entropy,
         uint8[4] memory traitIds,
         uint16[4] memory shareBps,
-        uint16[4] memory bucketCounts,
-        bool isFinalDay,
-        bool isResume
+        uint16[4] memory bucketCounts
     ) private returns (uint256 paidEth) {
-        if (isResume) {
-            ethPool = uint256(resumeEthPool);
-            resumeEthPool = 0;
-        }
         if (ethPool == 0) {
             return 0;
         }
@@ -1185,26 +1193,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bucketCounts
         );
 
-        // Build mask: call1Bucket[i] = true means bucket i is processed in call 1.
-        // Call 1: order[0] (largest) + remainderIdx (solo).
-        // Edge case: if largest IS the solo bucket, call 1 takes order[0] + order[1].
-        bool[4] memory call1Bucket;
-        call1Bucket[order[0]] = true;
-        if (order[0] == remainderIdx) {
-            call1Bucket[order[1]] = true;
-        } else {
-            call1Bucket[remainderIdx] = true;
-        }
-
         uint256 entropyState = entropy;
         uint256 liabilityDelta;
 
         for (uint8 j; j < 4; ++j) {
             uint8 traitIdx = order[j];
-
-            // Skip buckets not assigned to this call.
-            if (isResume == call1Bucket[traitIdx]) continue;
-
             uint16 count = bucketCounts[traitIdx];
             uint256 share = shares[traitIdx];
             if (count == 0 || share == 0) {
@@ -1222,7 +1215,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             (
                 address[] memory winners,
                 uint256[] memory ticketIndexes
-            ) = _randTraitTicket(
+            ) = _randTraitTicketWithIndices(
                     traitBurnTicket[lvl],
                     entropyState,
                     traitIds[traitIdx],
@@ -1238,59 +1231,39 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 continue;
             }
 
-            if (traitIdx == remainderIdx) {
-                // Solo bucket: 75% ETH, 25% whale pass (single winner)
-                address w = winners[0];
+            uint256 len = winners.length;
+            for (uint256 i; i < len; ) {
+                address w = winners[i];
+
                 if (w != address(0)) {
-                    (
-                        uint256 claimDelta,
-                        uint256 paidDelta,
-                        uint256 newEntropy
-                    ) = _handleSoloBucketWinner(
-                            w,
-                            lvl,
-                            traitIds[traitIdx],
-                            ticketIndexes[0],
-                            perWinner,
-                            entropyState,
-                            isFinalDay
-                        );
-                    entropyState = newEntropy;
-                    paidEth += paidDelta;
-                    liabilityDelta += claimDelta;
+                    uint256 claimableDelta = _addClaimableEth(
+                        w,
+                        perWinner,
+                        entropyState
+                    );
+                    emit JackpotTicketWinner(
+                        w,
+                        lvl,
+                        traitIds[traitIdx],
+                        perWinner,
+                        ticketIndexes[i]
+                    );
+                    paidEth += perWinner;
+                    liabilityDelta += claimableDelta;
                 }
-            } else {
-                // Normal bucket: 100% ETH
-                (uint256 bucketPaid, uint256 bucketLiability) = _payNormalBucket(
-                    winners, ticketIndexes, perWinner, lvl, traitIds[traitIdx], entropyState
-                );
-                paidEth += bucketPaid;
-                liabilityDelta += bucketLiability;
+
+                unchecked {
+                    ++i;
+                }
             }
         }
 
         if (liabilityDelta != 0) {
             claimablePool += liabilityDelta;
         }
-
-        // Call 1: store ethPool snapshot for resume call.
-        if (!isResume) {
-            resumeEthPool = uint128(ethPool);
-        }
-
         return paidEth;
     }
 
-    /// @dev Distributes early-burn / terminal jackpot ETH across trait buckets.
-    ///      Processes all 4 buckets in a single call. Caller controls winner cap
-    ///      via bucketCounts (160 for early-burn, 305 for terminal).
-    /// @param lvl The level whose winners are being paid.
-    /// @param ethPool Total ETH to distribute.
-    /// @param entropy VRF-derived random word for winner selection.
-    /// @param traitIds The 4 winning trait IDs for this jackpot.
-    /// @param shareBps Basis-point share for each of the 4 buckets.
-    /// @param bucketCounts Number of holders in each trait bucket.
-    /// @return totalPaidEth Total ETH actually paid out.
     function _distributeJackpotEth(
         uint24 lvl,
         uint256 ethPool,
@@ -1299,10 +1272,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16[4] memory shareBps,
         uint16[4] memory bucketCounts
     ) private returns (uint256 totalPaidEth) {
-        if (ethPool == 0) {
-            return 0;
-        }
-
         JackpotEthCtx memory ctx;
         ctx.entropyState = entropy;
         ctx.lvl = lvl;
@@ -1310,7 +1279,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 unit = PriceLookupLib.priceForLevel(lvl + 1) >> 2;
         uint8 remainderIdx = JackpotBucketLib.soloBucketIndex(entropy);
         uint256[4] memory shares = JackpotBucketLib.bucketShares(
-            ethPool, shareBps, bucketCounts, remainderIdx, unit
+            ethPool,
+            shareBps,
+            bucketCounts,
+            remainderIdx,
+            unit
         );
 
         for (uint8 traitIdx; traitIdx < 4; ) {
@@ -1323,7 +1296,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (ctx.liabilityDelta != 0) {
             claimablePool += ctx.liabilityDelta;
         }
-
         return ctx.totalPaidEth;
     }
 
@@ -1343,6 +1315,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 bucketLiability,
             uint256 ticketSpent
         ) = _resolveTraitWinners(
+                false,
                 ctx.lvl,
                 traitIds[traitIdx],
                 traitIdx,
@@ -1360,17 +1333,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Internal Helpers — Winner Resolution
     // =========================================================================
 
-    /// @dev Resolves winners for a single trait bucket and distributes ETH.
+    /// @dev Resolves winners for a single trait bucket and distributes ETH or COIN.
     ///
     ///      FLOW:
     ///      1. Early exit if no share or no winners.
     ///      2. Select random ticket holders from the trait's burn ticket pool.
     ///      3. Credit ETH payouts to claimableWinnings (with optional loot box conversion).
     ///
+    /// @param payCoin If true, pay COIN; if false, pay ETH.
     /// @param lvl Current level for ticket pool lookup.
     /// @param traitId Which trait's ticket pool to draw from.
     /// @param traitIdx Bucket index (0-3) for entropy derivation.
-    /// @param traitShare Total ETH allocated to this bucket.
+    /// @param traitShare Total ETH/COIN allocated to this bucket.
     /// @param entropy Current entropy state.
     /// @param winnerCount Number of winners to select.
     /// @return entropyState Updated entropy after selection.
@@ -1378,6 +1352,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @return liabilityDelta Total claimable liability added.
     /// @return ticketSpent Whale pass ETH routed to futurePrizePool.
     function _resolveTraitWinners(
+        bool payCoin,
         uint24 lvl,
         uint8 traitId,
         uint8 traitIdx,
@@ -1411,7 +1386,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         (
             address[] memory winners,
             uint256[] memory ticketIndexes
-        ) = _randTraitTicket(
+        ) = _randTraitTicketWithIndices(
                 traitBurnTicket[lvl],
                 entropyState,
                 traitId,
@@ -1424,124 +1399,105 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (perWinner == 0) return (entropyState, 0, 0, 0);
 
         uint256 len = winners.length;
+        if (payCoin) {
+            for (uint256 i; i < len; ) {
+                _creditJackpot(true, winners[i], perWinner, entropyState);
+                if (winners[i] != address(0)) {
+                    emit JackpotTicketWinner(
+                        winners[i],
+                        lvl,
+                        traitId,
+                        perWinner,
+                        ticketIndexes[i]
+                    );
+                }
+
+                unchecked {
+                    ++i;
+                }
+            }
+            return (entropyState, 0, 0, 0);
+        }
+
+        // Special handling for solo bucket (winnerCount == 1)
+        bool isSoloBucket = (winnerCount == 1);
 
         uint256 totalPayout;
+        uint256 totalWhalePassSpent;
         uint256 totalLiability;
         for (uint256 i; i < len; ) {
             address w = winners[i];
             if (w != address(0)) {
-                (
-                    uint256 claimableDelta,
-                    uint24 rebuyLevel,
-                    uint32 rebuyTickets
-                ) = _addClaimableEth(w, perWinner, entropyState);
-                emit JackpotEthWin(
-                    w,
-                    lvl,
-                    traitId,
-                    perWinner,
-                    ticketIndexes[i],
-                    rebuyLevel,
-                    rebuyTickets
-                );
-                totalPayout += perWinner;
-                totalLiability += claimableDelta;
+                if (isSoloBucket) {
+                    (
+                        uint256 claimDelta,
+                        uint256 paid,
+                        uint256 wpSpent,
+                        uint256 newEntropy
+                    ) = _processSoloBucketWinner(w, perWinner, entropyState);
+                    if (paid != 0) {
+                        emit JackpotTicketWinner(
+                            w,
+                            lvl,
+                            traitId,
+                            paid,
+                            ticketIndexes[i]
+                        );
+                    }
+                    totalLiability += claimDelta;
+                    totalPayout += paid;
+                    totalWhalePassSpent += wpSpent;
+                    entropyState = newEntropy;
+                } else {
+                    // Normal bucket: pay full amount
+                    uint256 claimableDelta = _addClaimableEth(
+                        w,
+                        perWinner,
+                        entropyState
+                    );
+                    emit JackpotTicketWinner(
+                        w,
+                        lvl,
+                        traitId,
+                        perWinner,
+                        ticketIndexes[i]
+                    );
+                    totalPayout += perWinner;
+                    totalLiability += claimableDelta;
+                }
             }
             unchecked {
                 ++i;
             }
         }
-        if (totalPayout == 0) return (entropyState, 0, 0, 0);
+        if (totalPayout == 0 && totalWhalePassSpent == 0)
+            return (entropyState, 0, 0, 0);
 
         liabilityDelta = totalLiability;
         ethDelta = totalPayout;
+        ticketSpent = totalWhalePassSpent;
 
-        return (entropyState, ethDelta, liabilityDelta, 0);
+        return (entropyState, ethDelta, liabilityDelta, ticketSpent);
     }
 
     // =========================================================================
     // Internal Helpers — Quest & Credit
     // =========================================================================
 
-    /// @dev Thin wrapper called from _processDailyEth to avoid stack-too-deep.
-    ///      Calls _processSoloBucketWinner, emits specialized events, and returns
-    ///      only the three values the outer loop needs.
-    function _handleSoloBucketWinner(
-        address w,
-        uint24 lvl,
-        uint8 traitId,
-        uint256 ticketIndex,
-        uint256 perWinner,
-        uint256 entropy,
-        bool isFinalDay
-    )
-        private
-        returns (uint256 claimDelta, uint256 paidDelta, uint256 newEntropy)
-    {
-        (
-            uint256 claimableDelta,
-            uint256 paid,
-            uint256 wpSpent,
-            uint256 newEnt,
-            uint24 rebuyLevel,
-            uint32 rebuyTickets
-        ) = _processSoloBucketWinner(w, perWinner, entropy);
-        newEntropy = newEnt;
-        claimDelta = claimableDelta;
-        if (paid != 0) {
-            emit JackpotEthWin(
-                w,
-                lvl,
-                traitId,
-                paid,
-                ticketIndex,
-                rebuyLevel,
-                rebuyTickets
-            );
-            paidDelta += paid;
-        }
-        if (wpSpent != 0) {
-            emit JackpotWhalePassWin(w, lvl, wpSpent / HALF_WHALE_PASS_PRICE);
-            paidDelta += wpSpent;
-        }
-        if (isFinalDay) {
-            uint256 dgnrsPool = dgnrs.poolBalance(
-                IStakedDegenerusStonk.Pool.Reward
-            );
-            uint256 reward = (dgnrsPool * FINAL_DAY_DGNRS_BPS) / 10_000;
-            if (reward != 0) {
-                dgnrs.transferFromPool(
-                    IStakedDegenerusStonk.Pool.Reward,
-                    w,
-                    reward
-                );
-                emit JackpotDgnrsWin(w, reward);
-            }
-        }
-    }
-
-    /// @dev Pays normal (non-solo) bucket winners. Extracted to avoid stack-too-deep in _processDailyEth.
-    function _payNormalBucket(
-        address[] memory winners,
-        uint256[] memory ticketIndexes,
-        uint256 perWinner,
-        uint24 lvl,
-        uint8 traitId,
+    /// @dev Credits a jackpot winner with COIN or ETH; no-op if beneficiary is invalid.
+    /// @return claimableDelta Amount to add to claimablePool for this credit.
+    function _creditJackpot(
+        bool payInCoin,
+        address beneficiary,
+        uint256 amount,
         uint256 entropy
-    ) private returns (uint256 totalPaid, uint256 totalLiability) {
-        uint256 len = winners.length;
-        for (uint256 i; i < len; ) {
-            address w = winners[i];
-            if (w != address(0)) {
-                (uint256 claimableDelta, uint24 rebuyLevel, uint32 rebuyTickets) =
-                    _addClaimableEth(w, perWinner, entropy);
-                emit JackpotEthWin(w, lvl, traitId, perWinner, ticketIndexes[i], rebuyLevel, rebuyTickets);
-                totalPaid += perWinner;
-                totalLiability += claimableDelta;
-            }
-            unchecked {
-                ++i;
-            }
+    ) private returns (uint256 claimableDelta) {
+        if (payInCoin) {
+            coinflip.creditFlip(beneficiary, amount);
+            return 0;
+        } else {
+            // Liability is tracked by the caller to avoid per-winner SSTORE cost.
+            return _addClaimableEth(beneficiary, amount, entropy);
         }
     }
 
@@ -1561,9 +1517,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 claimableDelta,
             uint256 ethPaid,
             uint256 whalePassSpent,
-            uint256 newEntropy,
-            uint24 rebuyLevel,
-            uint32 rebuyTickets
+            uint256 newEntropy
         )
     {
         // 75/25 split: whale pass only if 25% covers at least one half-pass
@@ -1575,11 +1529,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 whalePassCost = whalePassCount * HALF_WHALE_PASS_PRICE;
             uint256 ethAmount = perWinner - whalePassCost;
 
-            (claimableDelta, rebuyLevel, rebuyTickets) = _addClaimableEth(
-                winner,
-                ethAmount,
-                entropy
-            );
+            claimableDelta = _creditJackpot(false, winner, ethAmount, entropy);
             ethPaid = ethAmount;
 
             whalePassClaims[winner] += whalePassCount;
@@ -1587,11 +1537,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             whalePassSpent = whalePassCost;
         } else {
             // 25% too small for a whale pass — pay full amount as ETH
-            (claimableDelta, rebuyLevel, rebuyTickets) = _addClaimableEth(
-                winner,
-                perWinner,
-                entropy
-            );
+            claimableDelta = _creditJackpot(false, winner, perWinner, entropy);
             ethPaid = perWinner;
         }
     }
@@ -2025,8 +1971,62 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Internal Helpers — Winner Selection
     // =========================================================================
 
-    /// @dev Selects random winners from a trait's ticket pool, returning both addresses and indices.
+    /// @dev Selects random winners from a trait's ticket pool.
+    ///      NOTE: Duplicates are intentionally allowed — more tickets = more chances to win multiple times.
+    ///
+    /// @param traitBurnTicket_ Storage reference to the trait ticket mapping.
+    /// @param randomWord VRF entropy for selection.
+    /// @param trait Trait ID to select from.
+    /// @param numWinners Number of winners to select.
+    /// @param salt Additional entropy to differentiate calls.
+    /// @return winners Array of selected winner addresses (may contain duplicates).
     function _randTraitTicket(
+        address[][256] storage traitBurnTicket_,
+        uint256 randomWord,
+        uint8 trait,
+        uint8 numWinners,
+        uint8 salt
+    ) private view returns (address[] memory winners) {
+        address[] storage holders = traitBurnTicket_[trait];
+        uint256 len = holders.length;
+
+        // Virtual deity entries: floor(2% of bucket tickets), minimum 2, if a deity exists for this symbol.
+        // traitId layout: (quadrant << 6) | (color << 3) | symIdx
+        // fullSymId = quadrant * 8 + symIdx
+        uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
+        address deity;
+        uint256 virtualCount;
+        if (fullSymId < 32) {
+            deity = deityBySymbol[fullSymId];
+            if (deity != address(0)) {
+                virtualCount = len / 50;
+                if (virtualCount < 2) virtualCount = 2;
+            }
+        }
+
+        uint256 effectiveLen = len + virtualCount;
+        if (effectiveLen == 0 || numWinners == 0) {
+            return new address[](0);
+        }
+
+        winners = new address[](numWinners);
+        // XOR in trait and salt to create unique entropy per call.
+        uint256 slice = randomWord ^
+            (uint256(trait) << 128) ^
+            (uint256(salt) << 192);
+        for (uint256 i; i < numWinners; ) {
+            uint256 idx = slice % effectiveLen;
+            winners[i] = idx < len ? holders[idx] : deity;
+            unchecked {
+                ++i;
+                // Rotate bits to get different indices for subsequent winners.
+                slice = (slice >> 16) | (slice << 240);
+            }
+        }
+    }
+
+    /// @dev Same selection as _randTraitTicket plus winner ticket indices.
+    function _randTraitTicketWithIndices(
         address[][256] storage traitBurnTicket_,
         uint256 randomWord,
         uint8 trait,
@@ -2061,10 +2061,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         winners = new address[](numWinners);
         ticketIndexes = new uint256[](numWinners);
+        // XOR in trait and salt to create unique entropy per call.
+        uint256 slice = randomWord ^
+            (uint256(trait) << 128) ^
+            (uint256(salt) << 192);
         for (uint256 i; i < numWinners; ) {
-            uint256 idx = uint256(
-                keccak256(abi.encode(randomWord, trait, salt, i))
-            ) % effectiveLen;
+            uint256 idx = slice % effectiveLen;
             if (idx < len) {
                 winners[i] = holders[idx];
                 ticketIndexes[i] = idx;
@@ -2074,6 +2076,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
             unchecked {
                 ++i;
+                // Rotate bits to get different indices for subsequent winners.
+                slice = (slice >> 16) | (slice << 240);
             }
         }
     }
@@ -2121,8 +2125,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256(COIN_JACKPOT_TAG);
         uint24 targetLevel = _selectDailyCoinTargetLevel(
             lvl,
+            winningTraitsPacked,
             entropy
         );
+        if (targetLevel == 0) return;
 
         _awardDailyCoinToTraitWinners(
             targetLevel,
@@ -2133,11 +2139,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Pick one random level in [lvl, lvl+4] — pure 1-in-5 chance per level.
+    ///      Returns 0 (skip) if the chosen level has no eligible trait tickets.
     function _selectDailyCoinTargetLevel(
         uint24 lvl,
+        uint32 winningTraitsPacked,
         uint256 entropy
-    ) private pure returns (uint24 targetLevel) {
-        return lvl + uint24(entropy % 5);
+    ) private view returns (uint24 targetLevel) {
+        uint24 candidate = lvl + uint24(entropy % 5);
+        if (_hasTraitTickets(candidate, winningTraitsPacked)) {
+            return candidate;
+        }
+        return 0;
     }
 
     /// @dev Awards BURNIE to random winners from the packed winning traits at a target level.
@@ -2166,6 +2178,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 extra = coinBudget % cap;
         uint256 cursor = entropy % cap;
 
+        address[3] memory batchPlayers;
+        uint256[3] memory batchAmounts;
+        uint256 batchCount;
+
         for (uint8 traitIdx; traitIdx < 4; ) {
             uint16 count = counts[traitIdx];
             if (count != 0) {
@@ -2173,10 +2189,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     entropy ^ (uint256(traitIdx) << 64) ^ coinBudget
                 );
 
+                if (count > MAX_BUCKET_WINNERS) count = MAX_BUCKET_WINNERS;
                 (
                     address[] memory bucketWinners,
                     uint256[] memory bucketTicketIndexes
-                ) = _randTraitTicket(
+                ) = _randTraitTicketWithIndices(
                         traitBurnTicket[lvl],
                         entropy,
                         traitIds[traitIdx],
@@ -2193,14 +2210,25 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
                     address winner = bucketWinners[i];
                     if (winner != address(0) && amount != 0) {
-                        emit JackpotBurnieWin(
+                        emit JackpotTicketWinner(
                             winner,
                             lvl,
                             traitIds[traitIdx],
                             amount,
                             bucketTicketIndexes[i]
                         );
-                        coinflip.creditFlip(winner, amount);
+                        batchPlayers[batchCount] = winner;
+                        batchAmounts[batchCount] = amount;
+                        unchecked {
+                            ++batchCount;
+                        }
+                        if (batchCount == 3) {
+                            coinflip.creditFlipBatch(
+                                batchPlayers,
+                                batchAmounts
+                            );
+                            batchCount = 0;
+                        }
                     }
 
                     unchecked {
@@ -2214,6 +2242,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             unchecked {
                 ++traitIdx;
             }
+        }
+
+        if (batchCount != 0) {
+            for (uint256 i = batchCount; i < 3; ) {
+                batchPlayers[i] = address(0);
+                batchAmounts[i] = 0;
+                unchecked {
+                    ++i;
+                }
+            }
+            coinflip.creditFlipBatch(batchPlayers, batchAmounts);
         }
     }
 
@@ -2267,8 +2306,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 perWinner = farBudget / found;
         if (perWinner == 0) return;
 
-        address[] memory batchPlayers = new address[](found);
-        uint256[] memory batchAmounts = new uint256[](found);
+        address[3] memory batchPlayers;
+        uint256[3] memory batchAmounts;
+        uint256 batchCount;
 
         for (uint8 i; i < found; ) {
             emit FarFutureCoinJackpotWinner(
@@ -2278,15 +2318,32 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 perWinner
             );
 
-            batchPlayers[i] = winners[i];
-            batchAmounts[i] = perWinner;
+            batchPlayers[batchCount] = winners[i];
+            batchAmounts[batchCount] = perWinner;
+            unchecked {
+                ++batchCount;
+            }
+
+            if (batchCount == 3) {
+                coinflip.creditFlipBatch(batchPlayers, batchAmounts);
+                batchCount = 0;
+            }
 
             unchecked {
                 ++i;
             }
         }
 
-        coinflip.creditFlipBatch(batchPlayers, batchAmounts);
+        if (batchCount != 0) {
+            for (uint256 j = batchCount; j < 3; ) {
+                batchPlayers[j] = address(0);
+                batchAmounts[j] = 0;
+                unchecked {
+                    ++j;
+                }
+            }
+            coinflip.creditFlipBatch(batchPlayers, batchAmounts);
+        }
     }
 
     /// @dev Roll or derive the packed winning traits for a given level.
@@ -2394,8 +2451,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
      * @param poolWei Total ETH for BAF distribution.
      * @param lvl Level triggering the BAF.
      * @param rngWord VRF entropy for winner selection.
+     * @return netSpend Amount consumed from future pool.
      * @return claimableDelta ETH credited to claimable balances.
-     *         Refund, lootbox, and whale pass ETH stay in futurePool implicitly.
+     * @return lootboxToFuture Lootbox ETH recycled into future pool.
      *
      * ## Payout Split
      *
@@ -2418,11 +2476,23 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
-    ) external returns (uint256 claimableDelta) {
+    )
+        external
+        returns (
+            uint256 netSpend,
+            uint256 claimableDelta,
+            uint256 lootboxToFuture
+        )
+    {
         if (msg.sender != address(this)) revert E();
         // Get winners and payout info from jackpots contract
-        (address[] memory winnersArr, uint256[] memory amountsArr, ) = jackpots
-            .runBafJackpot(poolWei, lvl, rngWord);
+        (
+            address[] memory winnersArr,
+            uint256[] memory amountsArr,
+            uint256 refund
+        ) = jackpots.runBafJackpot(poolWei, lvl, rngWord);
+
+        uint256 lootboxTotal;
 
         // ---------------------------------------------------------------------
         // Process each winner with gas-optimized payout structure
@@ -2443,15 +2513,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint256 lootboxPortion = amount - ethPortion;
 
                 // Credit ETH half to claimable balance
-                {
-                    (uint256 cd, uint24 rl, uint32 rt) = _addClaimableEth(
-                        winner,
-                        ethPortion,
-                        rngWord
-                    );
-                    claimableDelta += cd;
-                    emit JackpotEthWin(winner, lvl, 0, ethPortion, 0, rl, rt);
-                }
+                claimableDelta += _addClaimableEth(winner, ethPortion, rngWord);
 
                 // Lootbox half: small amounts awarded immediately, large deferred
                 if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
@@ -2462,31 +2524,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         lvl,
                         rngWord
                     );
-                    emit JackpotTicketWin(winner, lvl, 0, 0, lvl, 0);
                 } else {
                     // Large lootbox: defer to claim (whale pass equivalent)
                     _queueWhalePassClaimCore(winner, lootboxPortion);
-                    emit JackpotWhalePassWin(
-                        winner,
-                        lvl,
-                        lootboxPortion / HALF_WHALE_PASS_PRICE
-                    );
                 }
+                lootboxTotal += lootboxPortion;
             }
             // Small winners: alternate between 100% ETH and 100% lootbox for gas efficiency
             else if (i % 2 == 0) {
                 // Even index: 100% ETH (immediate liquidity)
-                (uint256 cd, uint24 rl, uint32 rt) = _addClaimableEth(
-                    winner,
-                    amount,
-                    rngWord
-                );
-                claimableDelta += cd;
-                emit JackpotEthWin(winner, lvl, 0, amount, 0, rl, rt);
+                claimableDelta += _addClaimableEth(winner, amount, rngWord);
             } else {
                 // Odd index: 100% lootbox (upside exposure)
                 rngWord = _awardJackpotTickets(winner, amount, lvl, rngWord);
-                emit JackpotTicketWin(winner, lvl, 0, 0, lvl, 0);
+                lootboxTotal += amount;
             }
 
             unchecked {
@@ -2494,8 +2545,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
         }
 
-        // Refund + lootbox + whale pass ETH stays in futurePool implicitly:
-        // caller only deducts claimableDelta from memFuture. No storage write needed.
+        // Lootbox ETH stays in future pool (it came from there)
+        lootboxToFuture = lootboxTotal;
+
+        netSpend = poolWei - refund;
+        return (netSpend, claimableDelta, lootboxToFuture);
     }
 
     /**

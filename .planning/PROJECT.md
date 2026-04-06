@@ -8,30 +8,6 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v24.0 Jackpot Gas Safety Split
-
-**Status:** Not started — pending `/gsd-new-milestone`
-
-**Context:** v23.0 gas ceiling analysis found worst-case advanceGame with 321 unique autorebuy winners reaches ~25M gas, exceeding the 16M hard cap. v24.0 splits jackpot distribution across two advanceGame calls to keep each under 16M.
-
-## Completed Milestone: v23.0 JackpotModule Delta Audit & Payout Reference
-
-**Status:** Complete (2026-04-06)
-
-**Result:** 2 phases (192-193), 3 plans. Phase 192: function-level changelog of 38 changes across 5 files (commits 93c05869, 520249a2) — 9 REFACTOR functions proven EQUIVALENT, 8 deleted item groups proven unreachable, 4 INTENTIONAL changes (whale pass, DGNRS fold, coin target, ticket budget) proven correct, event migration to 5 specialized events mapped. Phase 193: advanceGame peak 6.28M gas (4.78x margin), but GAP FOUND — worst-case 321 autorebuy winners ~25M gas. Test regression: Foundry 150/28, Hardhat 1232/13/3 — zero new failures. 4/4 requirements satisfied.
-
-## Completed Milestone: v22.0 BAF Simplification Delta Audit
-
-**Status:** Complete (2026-04-06)
-
-**Result:** 2 phases (190-191), 3 plans. Phase 190 proved algebraic equivalence of all 5 ETH flow paths through simplified `runBafJackpot` (master identity: old multi-step = `-claimableDelta` = new single-step). Rebuy delta removal safe (`_processAutoRebuy` line 839 overwritten by `_setPrizePools`). Unconditional `RewardJackpotsSettled` log-only, no on-chain consumer. 8/8 requirements EQUIVALENT. Phase 191 verified storage layout identical across all 7 contracts via `forge inspect`. Foundry 150/28, Hardhat 1225/19/3 — zero new regressions vs baseline. 11/11 requirements satisfied (FLOW-01 through TEST-02).
-
-## Completed Milestone: v21.0 Day-Index Clock Migration
-
-**Status:** Complete (2026-04-05)
-
-**Result:** 2 phases (188-189), 5 plans. Phase 188 replaced all timestamp-based `levelStartTime` arithmetic with day-index `purchaseStartDay` across 4 contracts; storage repacked (`purchaseStartDay` to slot 0 [0:6], slot 1 gap closed); all 12 contracts verified identical via `forge inspect`; JackpotModule `isEthDay` also converted (deviation). Phase 189 delta audit: 10 consumer sites verified (9 EQUIVALENT, 1 KNOWN/ACCEPTABLE — distress mode boundary widened from ~6h to ~24h on boundary day, conservative/player-favoring). Storage slot layout confirmed identical across 12/12 contracts. Stale test refs fixed in 5 files (including StorageFoundation.t.sol slot offset deviation). Foundry 150/28 pre-existing, Hardhat 1231/13 pre-existing — zero Phase 188 regressions. All modules under 24KB (JackpotModule tightest at 22,700B). 4/4 requirements satisfied (DELTA-01 through DELTA-04).
-
 ## Completed Milestone: v20.0 Pool Consolidation & Write Batching
 
 **Status:** Complete (2026-04-05)
@@ -156,10 +132,6 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v16.0 Module Consolidation & Storage Repack — EndgameModule eliminated (3 functions redistributed), storage slots 0-2 repacked (slot 0 32/32, currentPrizePool uint128 in slot 1, slot 2 killed), 14/14 requirements satisfied — v16.0 Phases 168-172
 - ✓ v17.0 Affiliate Bonus Cache — cached affiliate bonus in mintPacked_ bits [185-214] eliminating 5 cold SLOADs from activity score, rate doubled to 1 point per 0.5 ETH, 105 mintPacked_ operations audited (0 collisions), both test suites zero regressions, 9/9 requirements satisfied — v17.0 Phases 173-174
 - ✓ v17.1 Comment Correctness Sweep — 40 contracts swept, 72 findings (30 LOW, 42 INFO), 56 fixed, 0 regressions from v3.1/v3.5, WWXRP decimal scaling added — v17.1 Phases 175-178
-- ✓ v18.0 Delta Audit (v16.0-v17.1) — behavioral equivalence verified across all module consolidation + storage repack + affiliate cache changes — v18.0 Phases 179-182
-- ✓ v19.0 Pool Accounting Fix & Sweep — jackpot payout defer fix, 81 pool mutation sites swept (0 gaps), delta audit found+fixed deferred SSTORE overwrite — v19.0 Phases 183-185
-- ✓ v20.0 Pool Consolidation & Write Batching — consolidatePrizePools + runRewardJackpots + _drawDownFuturePrizePool inlined, batched SSTOREs, delta audit 9/9 SAFE — v20.0 Phases 186-187
-- ✓ v21.0 Day-Index Clock Migration — levelStartTime→purchaseStartDay across 10 consumer sites, storage repack, delta audit 10/10 verified (9 EQUIVALENT + 1 KNOWN/ACCEPTABLE) — v21.0 Phases 188-189
 
 ## Completed Milestone: v8.1 Final Audit Prep
 
@@ -307,14 +279,9 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current Milestone: v23.0 JackpotModule Delta Audit & Payout Reference
+## Current State
 
-**Goal:** Verify committed JackpotModule changes are safe (correctness + gas ceiling) and produce a comprehensive payout reference document.
-
-**Target features:**
-- Delta audit of committed JackpotModule changes against last clean baseline
-- advanceGame worst-case gas ceiling analysis with new jackpot code paths
-- New standalone document describing all jackpot payout types, recipients, amounts, and emitted events
+v20.0 Pool Consolidation & Write Batching in progress (2026-04-04). Merging pool transition logic from JackpotModule into AdvanceModule to batch SSTOREs and free JackpotModule bytecode.
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -384,4 +351,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-06 after v23.0 milestone completion*
+*Last updated: 2026-04-04 after v20.0 Pool Consolidation & Write Batching milestone start*

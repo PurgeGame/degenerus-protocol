@@ -42,9 +42,9 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * -----------------------------------------------------------------------------
  *
  * +-----------------------------------------------------------------------------+
- * | EVM SLOT 0 (32 bytes) -- Timing, FSM, Counters, Flags, ETH Phase           |
+ * | EVM SLOT 0 (32 bytes) — Timing, FSM, Counters, Flags, ETH Phase           |
  * +-----------------------------------------------------------------------------+
- * | [0:6]   purchaseStartDay         uint48   Day index when purchase/deploy began|
+ * | [0:6]   levelStartTime           uint48   Timestamp when level opened       |
  * | [6:12]  dailyIdx                 uint48   Monotonic day counter             |
  * | [12:18] rngRequestTime           uint48   When last VRF request was fired   |
  * | [18:21] level                    uint24   Current jackpot level (starts at 0) |
@@ -60,17 +60,18 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * | [30:31] ticketsFullyProcessed    bool     Read slot fully drained flag       |
  * | [31:32] gameOverPossible         bool     Drip projection endgame flag       |
  * +-----------------------------------------------------------------------------+
- *   Total: 32 bytes used (0 bytes padding -- FULL)
+ *   Total: 32 bytes used (0 bytes padding — FULL)
  *
  * +-----------------------------------------------------------------------------+
- * | EVM SLOT 1 (32 bytes) -- Double-Buffer Fields + Current Prize Pool          |
+ * | EVM SLOT 1 (32 bytes) — Double-Buffer Fields + Current Prize Pool          |
  * +-----------------------------------------------------------------------------+
- * | [0:1]   ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
- * | [1:2]   prizePoolFrozen          bool     Prize pool freeze active flag      |
- * | [2:18]  currentPrizePool         uint128  Active prize pool for current level|
- * | [18:32] <padding>                         14 bytes unused                    |
+ * | [0:6]   purchaseStartDay         uint48   Day index when purchase phase began|
+ * | [6:7]   ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
+ * | [7:8]   prizePoolFrozen          bool     Prize pool freeze active flag      |
+ * | [8:24]  currentPrizePool         uint128  Active prize pool for current level|
+ * | [24:32] <padding>                         8 bytes unused                     |
  * +-----------------------------------------------------------------------------+
- *   Total: 18 bytes used (14 bytes padding)
+ *   Total: 24 bytes used (8 bytes padding)
  *
  * SLOTS 2+ — Full-width variables, arrays, and mappings
  * -----------------------------------------------------------------------------
@@ -91,7 +92,7 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  *    Public getters in DegenerusGame expose only what's needed.
  *
  * 4. INITIALIZATION: Default values are set inline. For critical variables:
- *    - purchaseStartDay = deploy day index (set in constructor via GameTimeLib.currentDayIndex())
+ *    - levelStartTime = deploy timestamp (set in constructor)
  *    - jackpotPhaseFlag = false (purchase phase)
  *    - decWindowOpen = false (opens at level 4 jackpot phase start)
  *    - levelPrizePool uses BOOTSTRAP_PRIZE_POOL (50 ether) as fallback for level 0
@@ -132,18 +133,12 @@ abstract contract DegenerusGameStorage {
     // CONSTANTS
     // =========================================================================
 
-    IDegenerusCoin internal constant coin =
-        IDegenerusCoin(ContractAddresses.COIN);
-    IBurnieCoinflip internal constant coinflip =
-        IBurnieCoinflip(ContractAddresses.COINFLIP);
-    IDegenerusQuests internal constant quests =
-        IDegenerusQuests(ContractAddresses.QUESTS);
-    IDegenerusQuestView internal constant questView =
-        IDegenerusQuestView(ContractAddresses.QUESTS);
-    IDegenerusAffiliate internal constant affiliate =
-        IDegenerusAffiliate(ContractAddresses.AFFILIATE);
-    IStakedDegenerusStonk internal constant dgnrs =
-        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+    IDegenerusCoin internal constant coin = IDegenerusCoin(ContractAddresses.COIN);
+    IBurnieCoinflip internal constant coinflip = IBurnieCoinflip(ContractAddresses.COINFLIP);
+    IDegenerusQuests internal constant quests = IDegenerusQuests(ContractAddresses.QUESTS);
+    IDegenerusQuestView internal constant questView = IDegenerusQuestView(ContractAddresses.QUESTS);
+    IDegenerusAffiliate internal constant affiliate = IDegenerusAffiliate(ContractAddresses.AFFILIATE);
+    IStakedDegenerusStonk internal constant dgnrs = IStakedDegenerusStonk(ContractAddresses.SDGNRS);
 
     /// @dev Deity pass activity bonus (+80% in basis points).
     uint16 internal constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8000;
@@ -164,17 +159,20 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant TICKET_SCALE = 100;
 
     /// @dev ETH threshold for whale pass claim eligibility from lootbox wins.
-    uint256 internal constant LOOTBOX_CLAIM_THRESHOLD = 5 ether;
+    uint256 internal constant LOOTBOX_CLAIM_THRESHOLD =
+        5 ether;
 
     /// @dev Bootstrap value for prize pool target at level 1 (before any level completes).
     ///      levelPrizePool[0] is initialized to this value conceptually.
-    uint256 internal constant BOOTSTRAP_PRIZE_POOL = 50 ether;
+    uint256 internal constant BOOTSTRAP_PRIZE_POOL =
+        50 ether;
 
     /// @dev Level at which earlybird DGNRS rewards end (exclusive).
     uint24 internal constant EARLYBIRD_END_LEVEL = 3;
 
     /// @dev Total ETH target for earlybird DGNRS emission curve.
-    uint256 internal constant EARLYBIRD_TARGET_ETH = 1_000 ether;
+    uint256 internal constant EARLYBIRD_TARGET_ETH =
+        1_000 ether;
 
     /// @dev Current-pool daily jackpot percentage is rolled in JackpotModule.
     ///      Days 1-4 use a random 6%-14% slice of remaining currentPrizePool.
@@ -193,8 +191,25 @@ abstract contract DegenerusGameStorage {
     ///      Slot1 [0x800000-0xBFFFFF]. Disjoint for all lvl < 2^22.
     uint24 internal constant TICKET_FAR_FUTURE_BIT = 1 << 22;
 
+    /// @dev Hours before gameover liveness guard at which distress mode activates.
+    uint48 internal constant DISTRESS_MODE_HOURS = 6;
+
     /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
     uint48 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 365;
+
+    /// @dev True when gameover liveness guard would fire within DISTRESS_MODE_HOURS.
+    ///      Used to activate distress-mode lootbox behaviour: 100% nextpool allocation
+    ///      and 25% ticket bonus on the distress-bought portion.
+    function _isDistressMode() internal view returns (bool) {
+        if (gameOver) return false;
+        uint48 lst = levelStartTime;
+        uint48 ts = uint48(block.timestamp);
+        if (level == 0) {
+            return uint256(ts) + uint256(DISTRESS_MODE_HOURS) * 1 hours >
+                uint256(lst) + uint256(_DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days;
+        }
+        return uint256(ts) + uint256(DISTRESS_MODE_HOURS) * 1 hours > uint256(lst) + 120 days;
+    }
 
     // =========================================================================
     // Errors
@@ -212,12 +227,13 @@ abstract contract DegenerusGameStorage {
     // These variables pack into a single 32-byte storage slot for gas efficiency.
     // Order matters: EVM packs from low to high within a slot.
 
-    /// @dev Game day index when the purchase phase (or deploy) began.
-    ///      Initialized to GameTimeLib.currentDayIndex() in the constructor.
-    ///      Used for death clock, distress mode, future take curve, and gap extension.
+    /// @dev Timestamp when the current level opened for purchase phase.
+    ///      Initialized to block.timestamp in the constructor (deploy time).
+    ///      Used for inactivity guard timing and purchase-phase daily jackpots.
     ///
-    ///      SECURITY: uint48 holds day indices up to ~281 trillion — effectively unlimited.
-    uint48 internal purchaseStartDay;
+    ///      SECURITY: uint48 holds timestamps until year 8.9 million — safe for any
+    ///      realistic game lifetime. Overflow is not a concern.
+    uint48 internal levelStartTime;
 
     /// @dev Monotonically increasing "day" counter derived from block timestamps.
     ///      Incremented during game progression; used to key RNG words and track
@@ -309,7 +325,13 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // EVM SLOT 1: Double-Buffer Fields + Current Prize Pool
     // =========================================================================
-    // Packs into EVM Slot 1: ticketWriteSlot, prizePoolFrozen, currentPrizePool (18 bytes used, 14 bytes padding).
+    // Packs into EVM Slot 1: purchaseStartDay, ticketWriteSlot, prizePoolFrozen, currentPrizePool (24 bytes used, 8 bytes padding).
+
+    /// @dev Game day index when the current purchase phase opened.
+    ///      Used to determine whether the purchase target was met quickly enough
+    ///      to trigger compressed jackpot mode. Default 0 works for level 0 since
+    ///      the first daily advance is day 1, giving day - 0 = 1 ≤ 3.
+    uint48 internal purchaseStartDay;
 
     /// @dev Active write buffer index for ticket queue double-buffering (0 or 1).
     ///      Toggled via XOR (`ticketWriteSlot ^= 1`) during queue slot swaps.
@@ -501,19 +523,10 @@ abstract contract DegenerusGameStorage {
     );
 
     /// @notice Emitted when a deity pass is purchased.
-    event DeityPassPurchased(
-        address indexed buyer,
-        uint8 symbolId,
-        uint256 price,
-        uint24 level
-    );
+    event DeityPassPurchased(address indexed buyer, uint8 symbolId, uint256 price, uint24 level);
 
     /// @notice Emitted when game-over drain processes terminal jackpots.
-    event GameOverDrained(
-        uint24 level,
-        uint256 available,
-        uint256 claimablePool
-    );
+    event GameOverDrained(uint24 level, uint256 available, uint256 claimablePool);
 
     /// @notice Emitted when final sweep forfeits unclaimed winnings 30 days post-gameover.
     event FinalSwept(uint256 totalFunds);
@@ -526,20 +539,6 @@ abstract contract DegenerusGameStorage {
 
     /// @notice Emitted when admin stakes game ETH into Lido stETH.
     event AdminStakeEthForStEth(uint256 amount);
-
-    /// @dev True when gameover liveness guard would fire within ~1 day (day-granularity).
-    ///      Used to activate distress-mode lootbox behaviour: 100% nextpool allocation
-    ///      and 25% ticket bonus on the distress-bought portion.
-    function _isDistressMode() internal view returns (bool) {
-        if (gameOver) return false;
-        uint48 psd = purchaseStartDay;
-        uint48 currentDay = _simulatedDayIndex();
-        if (level == 0) {
-            // Distress fires on the final day before the liveness guard would trigger.
-            return currentDay >= psd + _DEPLOY_IDLE_TIMEOUT_DAYS;
-        }
-        return currentDay >= psd + 120;
-    }
 
     /// @dev Queues whole tickets for a buyer at a target level.
     ///      If buyer has no existing tickets at that level, adds them to the queue.
@@ -557,9 +556,7 @@ abstract contract DegenerusGameStorage {
         emit TicketsQueued(buyer, targetLevel, quantity);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
-        uint24 wk = isFarFuture
-            ? _tqFarFutureKey(targetLevel)
-            : _tqWriteKey(targetLevel);
+        uint24 wk = isFarFuture ? _tqFarFutureKey(targetLevel) : _tqWriteKey(targetLevel);
         uint40 packed = ticketsOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
@@ -569,7 +566,8 @@ abstract contract DegenerusGameStorage {
         unchecked {
             owed += quantity;
         }
-        ticketsOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
+        ticketsOwedPacked[wk][buyer] =
+            (uint40(owed) << 8) | uint40(rem);
     }
 
     /// @dev Queues scaled tickets (with 2 decimal places) for fractional ticket purchases.
@@ -587,9 +585,7 @@ abstract contract DegenerusGameStorage {
         emit TicketsQueuedScaled(buyer, targetLevel, quantityScaled);
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
-        uint24 wk = isFarFuture
-            ? _tqFarFutureKey(targetLevel)
-            : _tqWriteKey(targetLevel);
+        uint24 wk = isFarFuture ? _tqFarFutureKey(targetLevel) : _tqWriteKey(targetLevel);
         uint40 packed = ticketsOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
@@ -609,9 +605,7 @@ abstract contract DegenerusGameStorage {
                 newRem = uint16(rem) + uint16(frac);
             }
             if (newRem >= TICKET_SCALE) {
-                unchecked {
-                    owed += 1;
-                }
+                unchecked { owed += 1; }
                 newRem -= uint16(TICKET_SCALE);
             }
             rem = uint8(newRem);
@@ -651,7 +645,8 @@ abstract contract DegenerusGameStorage {
             unchecked {
                 owed += ticketsPerLevel;
             }
-            ticketsOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
+            ticketsOwedPacked[wk][buyer] =
+                (uint40(owed) << 8) | uint40(rem);
 
             unchecked {
                 ++lvl;
@@ -671,12 +666,7 @@ abstract contract DegenerusGameStorage {
         bool rngBypass
     ) internal {
         if (quantityScaled == 0) return;
-        _queueTicketsScaled(
-            buyer,
-            targetLevel,
-            uint32(quantityScaled),
-            rngBypass
-        );
+        _queueTicketsScaled(buyer, targetLevel, uint32(quantityScaled), rngBypass);
     }
 
     // =========================================================================
@@ -684,28 +674,20 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     function _setPrizePools(uint128 next, uint128 future) internal {
-        prizePoolsPacked = (uint256(future) << 128) | uint256(next);
+        prizePoolsPacked = uint256(future) << 128 | uint256(next);
     }
 
-    function _getPrizePools()
-        internal
-        view
-        returns (uint128 next, uint128 future)
-    {
+    function _getPrizePools() internal view returns (uint128 next, uint128 future) {
         uint256 packed = prizePoolsPacked;
         next = uint128(packed);
         future = uint128(packed >> 128);
     }
 
     function _setPendingPools(uint128 next, uint128 future) internal {
-        prizePoolPendingPacked = (uint256(future) << 128) | uint256(next);
+        prizePoolPendingPacked = uint256(future) << 128 | uint256(next);
     }
 
-    function _getPendingPools()
-        internal
-        view
-        returns (uint128 next, uint128 future)
-    {
+    function _getPendingPools() internal view returns (uint128 next, uint128 future) {
         uint256 packed = prizePoolPendingPacked;
         next = uint128(packed);
         future = uint128(packed >> 128);
@@ -959,15 +941,6 @@ abstract contract DegenerusGameStorage {
     uint256 internal earlybirdEthIn;
 
     // =========================================================================
-    // Jackpot ETH Resume State
-    // =========================================================================
-
-    /// @dev Snapshot of ethPool for two-call jackpot ETH distribution.
-    ///      Non-zero means a resume call is pending (largest+solo buckets done,
-    ///      mid buckets remain). Cleared to zero after the resume call completes.
-    uint128 internal resumeEthPool;
-
-    // =========================================================================
     // Internal Helpers
     // =========================================================================
 
@@ -1007,9 +980,8 @@ abstract contract DegenerusGameStorage {
 
         uint256 poolStart = earlybirdDgnrsPoolStart;
         if (poolStart == 0) {
-            uint256 poolBalance = IStakedDegenerusStonk(
-                ContractAddresses.SDGNRS
-            ).poolBalance(IStakedDegenerusStonk.Pool.Earlybird);
+            uint256 poolBalance = IStakedDegenerusStonk(ContractAddresses.SDGNRS)
+                .poolBalance(IStakedDegenerusStonk.Pool.Earlybird);
             if (poolBalance == 0) return;
             poolStart = poolBalance;
             earlybirdDgnrsPoolStart = poolBalance;
@@ -1256,7 +1228,8 @@ abstract contract DegenerusGameStorage {
     uint256 internal lootboxRngPendingEth;
 
     /// @dev ETH threshold that triggers a lootbox RNG request (wei).
-    uint256 internal lootboxRngThreshold = 1 ether;
+    uint256 internal lootboxRngThreshold =
+        1 ether;
 
     /// @dev Minimum LINK balance required to allow manual lootbox RNG rolls.
     ///      Defaults to ~2 weeks of daily VRF (assumes ~1 LINK/day).
@@ -1457,11 +1430,11 @@ abstract contract DegenerusGameStorage {
     ///      subBucket: deterministic from keccak256(player, level, bucket).
     ///      burnLevel: which level this entry belongs to (stale detection for lazy reset).
     struct TerminalDecEntry {
-        uint80 totalBurn;
-        uint88 weightedBurn;
-        uint8 bucket;
-        uint8 subBucket;
-        uint48 burnLevel;
+        uint80  totalBurn;
+        uint88  weightedBurn;
+        uint8   bucket;
+        uint8   subBucket;
+        uint48  burnLevel;
     }
     mapping(address => TerminalDecEntry) internal terminalDecEntries;
 
@@ -1473,8 +1446,8 @@ abstract contract DegenerusGameStorage {
     ///      Packed into a single 256-bit slot (248/256 bits).
     ///      No rngWord needed — claims are 100% ETH post-GAMEOVER (auto-rebuy skipped).
     struct TerminalDecClaimRound {
-        uint24 lvl;
-        uint96 poolWei;
+        uint24  lvl;
+        uint96  poolWei;
         uint128 totalBurn;
     }
     TerminalDecClaimRound internal lastTerminalDecClaimRound;
@@ -1522,48 +1495,45 @@ abstract contract DegenerusGameStorage {
     mapping(address => BoonPacked) internal boonPacked;
 
     // ---- Slot 0 shifts ----
-    uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
-    uint256 internal constant BP_DEITY_COINFLIP_DAY_SHIFT = 24;
-    uint256 internal constant BP_COINFLIP_TIER_SHIFT = 48;
-    uint256 internal constant BP_LOOTBOX_DAY_SHIFT = 56;
-    uint256 internal constant BP_DEITY_LOOTBOX_DAY_SHIFT = 80;
-    uint256 internal constant BP_LOOTBOX_TIER_SHIFT = 104;
-    uint256 internal constant BP_PURCHASE_DAY_SHIFT = 112;
-    uint256 internal constant BP_DEITY_PURCHASE_DAY_SHIFT = 136;
-    uint256 internal constant BP_PURCHASE_TIER_SHIFT = 160;
-    uint256 internal constant BP_DECIMATOR_TIER_SHIFT = 168;
-    uint256 internal constant BP_DEITY_DECIMATOR_DAY_SHIFT = 176;
-    uint256 internal constant BP_WHALE_DAY_SHIFT = 200;
-    uint256 internal constant BP_DEITY_WHALE_DAY_SHIFT = 224;
-    uint256 internal constant BP_WHALE_TIER_SHIFT = 248;
+    uint256 internal constant BP_COINFLIP_DAY_SHIFT        = 0;
+    uint256 internal constant BP_DEITY_COINFLIP_DAY_SHIFT   = 24;
+    uint256 internal constant BP_COINFLIP_TIER_SHIFT        = 48;
+    uint256 internal constant BP_LOOTBOX_DAY_SHIFT          = 56;
+    uint256 internal constant BP_DEITY_LOOTBOX_DAY_SHIFT    = 80;
+    uint256 internal constant BP_LOOTBOX_TIER_SHIFT         = 104;
+    uint256 internal constant BP_PURCHASE_DAY_SHIFT         = 112;
+    uint256 internal constant BP_DEITY_PURCHASE_DAY_SHIFT   = 136;
+    uint256 internal constant BP_PURCHASE_TIER_SHIFT        = 160;
+    uint256 internal constant BP_DECIMATOR_TIER_SHIFT       = 168;
+    uint256 internal constant BP_DEITY_DECIMATOR_DAY_SHIFT  = 176;
+    uint256 internal constant BP_WHALE_DAY_SHIFT            = 200;
+    uint256 internal constant BP_DEITY_WHALE_DAY_SHIFT      = 224;
+    uint256 internal constant BP_WHALE_TIER_SHIFT           = 248;
 
     // ---- Slot 1 shifts ----
-    uint256 internal constant BP_ACTIVITY_PENDING_SHIFT = 0;
-    uint256 internal constant BP_ACTIVITY_DAY_SHIFT = 24;
-    uint256 internal constant BP_DEITY_ACTIVITY_DAY_SHIFT = 48;
-    uint256 internal constant BP_DEITY_PASS_TIER_SHIFT = 72;
-    uint256 internal constant BP_DEITY_PASS_DAY_SHIFT = 80;
+    uint256 internal constant BP_ACTIVITY_PENDING_SHIFT     = 0;
+    uint256 internal constant BP_ACTIVITY_DAY_SHIFT         = 24;
+    uint256 internal constant BP_DEITY_ACTIVITY_DAY_SHIFT   = 48;
+    uint256 internal constant BP_DEITY_PASS_TIER_SHIFT      = 72;
+    uint256 internal constant BP_DEITY_PASS_DAY_SHIFT       = 80;
     uint256 internal constant BP_DEITY_DEITY_PASS_DAY_SHIFT = 104;
-    uint256 internal constant BP_LAZY_PASS_DAY_SHIFT = 128;
-    uint256 internal constant BP_DEITY_LAZY_PASS_DAY_SHIFT = 152;
-    uint256 internal constant BP_LAZY_PASS_TIER_SHIFT = 176;
+    uint256 internal constant BP_LAZY_PASS_DAY_SHIFT        = 128;
+    uint256 internal constant BP_DEITY_LAZY_PASS_DAY_SHIFT  = 152;
+    uint256 internal constant BP_LAZY_PASS_TIER_SHIFT       = 176;
 
     // ---- Masks ----
     uint256 internal constant BP_MASK_24 = 0xFFFFFF;
-    uint256 internal constant BP_MASK_8 = 0xFF;
+    uint256 internal constant BP_MASK_8  = 0xFF;
 
     // ---- Clear masks for boon categories (slot 0) ----
     // Coinflip: bits 0-55 (coinflipDay[24] + deityCoinflipDay[24] + coinflipTier[8])
     uint256 internal constant BP_COINFLIP_CLEAR = ~uint256((1 << 56) - 1);
     // Lootbox: bits 56-111 (lootboxDay[24] + deityLootboxDay[24] + lootboxTier[8])
-    uint256 internal constant BP_LOOTBOX_CLEAR =
-        ~(uint256((1 << 56) - 1) << 56);
+    uint256 internal constant BP_LOOTBOX_CLEAR = ~(uint256((1 << 56) - 1) << 56);
     // Purchase: bits 112-167 (purchaseDay[24] + deityPurchaseDay[24] + purchaseTier[8])
-    uint256 internal constant BP_PURCHASE_CLEAR =
-        ~(uint256((1 << 56) - 1) << 112);
+    uint256 internal constant BP_PURCHASE_CLEAR = ~(uint256((1 << 56) - 1) << 112);
     // Decimator: bits 168-199 (decimatorTier[8] + deityDecimatorDay[24])
-    uint256 internal constant BP_DECIMATOR_CLEAR =
-        ~(uint256((1 << 32) - 1) << 168);
+    uint256 internal constant BP_DECIMATOR_CLEAR = ~(uint256((1 << 32) - 1) << 168);
     // Whale: bits 200-255 (whaleDay[24] + deityWhaleDay[24] + whaleTier[8])
     uint256 internal constant BP_WHALE_CLEAR = ~(uint256((1 << 56) - 1) << 200);
 
@@ -1571,11 +1541,9 @@ abstract contract DegenerusGameStorage {
     // Activity: bits 0-71 (activityPending[24] + activityDay[24] + deityActivityDay[24])
     uint256 internal constant BP_ACTIVITY_CLEAR = ~uint256((1 << 72) - 1);
     // Deity pass: bits 72-127 (deityPassTier[8] + deityPassDay[24] + deityDeityPassDay[24])
-    uint256 internal constant BP_DEITY_PASS_CLEAR =
-        ~(uint256((1 << 56) - 1) << 72);
+    uint256 internal constant BP_DEITY_PASS_CLEAR = ~(uint256((1 << 56) - 1) << 72);
     // Lazy pass: bits 128-183 (lazyPassDay[24] + deityLazyPassDay[24] + lazyPassTier[8])
-    uint256 internal constant BP_LAZY_PASS_CLEAR =
-        ~(uint256((1 << 56) - 1) << 128);
+    uint256 internal constant BP_LAZY_PASS_CLEAR = ~(uint256((1 << 56) - 1) << 128);
 
     // =========================================================================
     // Boon Tier <-> BPS Decode/Encode Helpers

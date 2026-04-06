@@ -12,10 +12,6 @@ contract TicketRoutingHarness is DegenerusGameStorage {
         _queueTickets(buyer, targetLevel, quantity, false);
     }
 
-    function queueTicketsWithBypass(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueTickets(buyer, targetLevel, quantity, true);
-    }
-
     function queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
         _queueTicketsScaled(buyer, targetLevel, quantityScaled, false);
     }
@@ -163,12 +159,13 @@ contract TicketRoutingTest is Test {
         harness.queueTickets(buyer, 17, 1);
     }
 
-    function testRngGuardAllowsWithBypass() public {
-        // rngLocked=true, rngBypass=true (advanceGame passes true during phase transition)
+    function testRngGuardAllowsWithPhaseTransition() public {
+        // rngLocked=true, phaseTransitionActive=true (advanceGame exemption), far-future
         harness.setRngLockedFlag(true);
-        harness.queueTicketsWithBypass(buyer, 17, 1);
+        harness.setPhaseTransitionActive(true);
+        harness.queueTickets(buyer, 17, 1);
         uint24 ffKey = harness.tqFarFutureKey(17);
-        assertEq(harness.getQueueLength(ffKey), 1, "rngBypass should exempt from guard");
+        assertEq(harness.getQueueLength(ffKey), 1, "phaseTransitionActive should exempt from guard");
     }
 
     function testRngGuardIgnoresNearFuture() public {

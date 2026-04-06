@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v24.0
-milestone_name: Jackpot Gas Safety Split
+milestone: v20.0
+milestone_name: Pool Consolidation & Write Batching
 status: executing
-stopped_at: Phase 195 context gathered
-last_updated: "2026-04-06T21:56:35.503Z"
-last_activity: 2026-04-06
+stopped_at: Phase 187 context gathered
+last_updated: "2026-04-05T04:52:09.848Z"
+last_activity: 2026-04-05
 progress:
-  total_phases: 3
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 6
+  completed_plans: 6
   percent: 100
 ---
 
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-06)
+See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 195 — jackpot-two-call-split
+**Current focus:** Phase 187 — Delta Audit
 
 ## Current Position
 
-Phase: 196
+Phase: 187
 Plan: Not started
-Status: Executing Phase 195
-Last activity: 2026-04-06
+Status: Executing Phase 187
+Last activity: 2026-04-05
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,9 +36,14 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 2
-- Average duration: --
-- Total execution time: --
+- Total plans completed: 8 (v20.0 milestone)
+- Average duration: -
+- Total execution time: 0 hours
+
+**Recent Trend:**
+
+- Last 5 plans: -
+- Trend: New milestone
 
 ## Accumulated Context
 
@@ -47,9 +52,9 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v23.0]: Gas ceiling gap found — worst-case 321 autorebuy winners ~25M gas, requires two-call split
-- [v22.0]: runBafJackpot simplified from 3 returns to 1 (claimableDelta only); rebuy delta removed; RewardJackpotsSettled emitted unconditionally
-- [v21.0]: Day-index clock migration complete -- purchaseStartDay replaces levelStartTime
+- [v19.0]: Deferred futurePool SSTORE in jackpot payout path to capture paidEth; re-read storage after _executeJackpot to avoid overwriting auto-rebuy writes
+- [v16.0]: Eliminate EndgameModule — redistribute 3 functions into existing modules
+- [v16.0]: Storage slots 0-2 repacked, currentPrizePool downsized to uint128
 
 ### Pending Todos
 
@@ -57,11 +62,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- ContractAddresses.sol has unstaged changes (different deploy addresses) -- stash before test/tool runs
-- JackpotModule at 22,858B after v20.0 -- comfortable headroom
+- ContractAddresses.sol has unstaged changes (different deploy addresses) — stash before test/tool runs
+- JackpotModule at 23.8KB (0.2KB free) — near contract size limit; Phase 186 must shrink it
+- Auto-rebuy writes to futurePool storage mid-execution during BAF/decimator jackpots — constrains how much future pool SSTORE can be deferred
 
 ## Session Continuity
 
-Last session: 2026-04-06T19:24:45.591Z
-Stopped at: Phase 195 context gathered
-Resume file: .planning/phases/195-jackpot-two-call-split/195-CONTEXT.md
+Last session: 2026-04-05T03:52:33.464Z
+Stopped at: Phase 187 context gathered

@@ -34,7 +34,7 @@ describe("Deploy Pipeline", function () {
   });
 
   describe("Constructor side effects", function () {
-    it("DegenerusGame: purchaseStartDay is set", async function () {
+    it("DegenerusGame: levelStartTime is set", async function () {
       const f = await loadFixture(deployFullProtocol);
       const game = f.game;
       // level() should return 0 initially

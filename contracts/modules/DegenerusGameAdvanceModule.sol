@@ -64,9 +64,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_TICKETS_WORKING = 5;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
     uint8 private constant STAGE_ENTERED_JACKPOT = 7;
-    /// @dev Stage for completing the second half of a two-call ETH distribution
-    ///      (mid buckets). Entered when resumeEthPool is non-zero after call 1.
-    uint8 private constant STAGE_JACKPOT_ETH_RESUME = 8;
     uint8 private constant STAGE_JACKPOT_COIN_TICKETS = 9;
     uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 10;
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 11;
@@ -127,7 +124,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint32 private constant VAULT_PERPETUAL_TICKETS = 16;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1300;
-    uint16 private constant NEXT_TO_FUTURE_BPS_DAY_STEP = 14;
+    uint16 private constant NEXT_TO_FUTURE_BPS_WEEK_STEP = 100;
     uint16 private constant NEXT_TO_FUTURE_BPS_X9_BONUS = 200;
     uint16 private constant NEXT_SKIM_VARIANCE_BPS = 2500;
     uint16 private constant NEXT_SKIM_VARIANCE_MIN_BPS = 1000;
@@ -164,11 +161,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 day = _simulatedDayIndexAt(ts);
         bool inJackpot = jackpotPhaseFlag;
         uint24 lvl = level;
-        uint48 psd = purchaseStartDay;
         // Turbo: if target already met on day ≤1, flag now so _requestRng
         // does the level pre-increment (matching normal lastPurchaseDay flow).
         if (!inJackpot && !lastPurchaseDay) {
-            uint48 purchaseDays = day - psd;
+            uint48 purchaseDays = day - purchaseStartDay;
             if (
                 purchaseDays <= 1 && _getNextPrizePool() >= levelPrizePool[lvl]
             ) {
@@ -180,7 +176,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
         // Level already incremented at RNG request when lastPurchase=true
         uint24 purchaseLevel = (lastPurchase && rngLockedFlag) ? lvl : lvl + 1;
-        if (!inJackpot && !lastPurchase && _handleGameOverPath(day, lvl, psd)) {
+        if (_handleGameOverPath(ts, day, levelStartTime, lvl, lastPurchase)) {
             emit Advance(STAGE_GAMEOVER, lvl);
             return;
         }
@@ -268,16 +264,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         do {
             // RNG: use existing word or request new one
             bool bonusFlip = (inJackpot && jackpotCounter == 0) || lvl == 0;
-            (uint256 rngWord, uint48 gapDays) = rngGate(
+            uint256 rngWord = rngGate(
                 ts,
                 day,
                 purchaseLevel,
                 lastPurchase,
                 bonusFlip
             );
-            psd += gapDays;
             if (rngWord == 1) {
                 _swapAndFreeze(purchaseLevel);
+                quests.clearLevelQuest();
                 stage = STAGE_RNG_REQUESTED;
                 break;
             }
@@ -314,8 +310,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _unlockRng(day);
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
-                // evaluate endgame flag on purchase-phase entry at L10+
-                _evaluateGameOverAndTarget(lvl, day, day);
+                // FLAG-01: evaluate endgame flag on purchase-phase entry at L10+
+                _evaluateGameOverAndTarget(lvl, purchaseLevel);
                 stage = STAGE_TRANSITION_DONE;
                 break;
             }
@@ -349,12 +345,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     _payDailyCoinJackpot(purchaseLevel, rngWord);
                     // FLAG-02: combined target + game-over check (shares SLOADs when flag is set)
                     bool targetMet = gameOverPossible
-                        ? _evaluateGameOverAndTarget(lvl, psd, day)
+                        ? _evaluateGameOverAndTarget(lvl, purchaseLevel)
                         : _getNextPrizePool() >=
                             levelPrizePool[purchaseLevel - 1];
                     if (targetMet) {
                         lastPurchaseDay = true;
-                        if (day - psd <= 3) {
+                        if (day - purchaseStartDay <= 3) {
                             compressedJackpotFlag = 1;
                         }
                     }
@@ -383,9 +379,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _consolidatePoolsAndRewardJackpots(
                     lvl,
                     purchaseLevel,
-                    day,
-                    rngWord,
-                    psd
+                    ts,
+                    rngWord
                 );
 
                 if (
@@ -398,6 +393,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 jackpotPhaseFlag = true;
 
                 lastPurchaseDay = false;
+                levelStartTime = ts;
 
                 // Roll level quest at level transition so it's active during jackpot phase
                 quests.rollLevelQuest(rngWord);
@@ -410,18 +406,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // === JACKPOT PHASE ===
 
-            // Complete ETH distribution (call 2 of two-call split)
-            if (resumeEthPool != 0) {
-                payDailyJackpot(true, lvl, rngWord);
-                _unlockRng(day);
-                stage = STAGE_JACKPOT_ETH_RESUME;
-                break;
-            }
-
             // Complete coin+ticket distribution
             if (dailyJackpotCoinTicketsPending) {
                 payDailyJackpotCoinAndTickets(rngWord);
                 if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
+                    _awardFinalDayDgnrsReward(lvl, rngWord);
                     _endPhase();
                     _unlockRng(day);
                     stage = STAGE_JACKPOT_PHASE_ENDED;
@@ -480,15 +469,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Handles gameover state and liveness guard checks.
     ///      Returns true if advanceGame should exit early.
     function _handleGameOverPath(
+        uint48 ts,
         uint48 day,
+        uint48 lst,
         uint24 lvl,
-        uint48 psd
+        bool lastPurchase
     ) private returns (bool shouldReturn) {
         // Liveness guard: prevent permanent lockup if game is abandoned
-        uint48 currentDay = day;
         bool livenessTriggered = (lvl == 0 &&
-            currentDay - psd > DEPLOY_IDLE_TIMEOUT_DAYS) ||
-            (lvl != 0 && currentDay - psd > 120);
+            ts - lst > uint256(DEPLOY_IDLE_TIMEOUT_DAYS) * 1 days) ||
+            (lvl != 0 && ts - 120 days > lst);
 
         if (!livenessTriggered) return false;
 
@@ -508,18 +498,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // Safety: don't activate game over if nextPool requirement is already met
         if (lvl != 0 && _getNextPrizePool() >= levelPrizePool[lvl]) {
+            levelStartTime = ts;
             return false;
         }
 
-        // Pre-gameover: acquire RNG, drain, then unlock
+        // Pre-gameover: acquire RNG and drain to gameover state
         if (rngWordByDay[day] == 0) {
-            uint256 rngWord = _gameOverEntropy(
-                uint48(block.timestamp),
-                day,
-                lvl,
-                lastPurchaseDay
-            );
+            uint256 rngWord = _gameOverEntropy(ts, day, lvl, lastPurchase);
             if (rngWord == 1 || rngWord == 0) return true;
+            _unlockRng(day);
         }
 
         (ok, data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
@@ -529,7 +516,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             )
         );
         if (!ok) _revertDelegate(data);
-        _unlockRng(day);
         return true;
     }
 
@@ -628,9 +614,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _consolidatePoolsAndRewardJackpots(
         uint24 lvl,
         uint24 purchaseLevel,
-        uint48 day,
-        uint256 rngWord,
-        uint48 psd
+        uint48 ts,
+        uint256 rngWord
     ) private {
         uint256 memFuture = _getFuturePrizePool();
         uint256 memCurrent = _getCurrentPrizePool();
@@ -639,10 +624,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // --- Time-based future take (batched) ---
         {
-            uint48 start = psd + 7;
-            uint48 elapsed = day > start ? day - start : 0;
+            uint48 start = levelStartTime + 11 days;
+            uint48 reachedAt = ts;
+            if (reachedAt < start) reachedAt = start;
 
-            uint256 bps = _nextToFutureBps(elapsed, purchaseLevel);
+            uint256 bps = _nextToFutureBps(reachedAt - start, purchaseLevel);
             if (purchaseLevel % 10 == 9) bps += NEXT_TO_FUTURE_BPS_X9_BONUS;
 
             uint256 lastPool = levelPrizePool[purchaseLevel - 1];
@@ -714,6 +700,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
 
         // --- BAF + Decimator x00: draw from futurePool BEFORE keep roll ---
+        // Snapshot storage for rebuy delta (auto-rebuy writes to STORAGE during BAF).
+        uint256 storageBaseFuture = _getFuturePrizePool();
         uint256 baseMemFuture = memFuture;
         uint24 prevMod10 = lvl % 10;
         uint24 prevMod100 = lvl % 100;
@@ -724,13 +712,24 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
             uint256 bafPoolWei = (baseMemFuture * bafPct) / 100;
 
-            uint256 claimed = IDegenerusGame(address(this)).runBafJackpot(
-                bafPoolWei,
-                lvl,
-                rngWord
-            );
-            memFuture -= claimed;
+            memFuture -= bafPoolWei;
+            (
+                uint256 netSpend,
+                uint256 claimed,
+                uint256 lootboxToFuture
+            ) = IDegenerusGame(address(this)).runBafJackpot(
+                    bafPoolWei,
+                    lvl,
+                    rngWord
+                );
             claimableDelta += claimed;
+
+            if (netSpend != bafPoolWei) {
+                memFuture += (bafPoolWei - netSpend);
+            }
+            if (lootboxToFuture != 0) {
+                memFuture += lootboxToFuture;
+            }
         }
 
         // Decimator Jackpot (level 100 special — uses pre-jackpot snapshot)
@@ -752,6 +751,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             memFuture -= spend;
             claimableDelta += spend;
         }
+
+        // Rebuy delta: auto-rebuy writes to futurePool STORAGE during BAF execution.
+        // Fold into memFuture immediately so all subsequent math uses one variable.
+        memFuture += _getFuturePrizePool() - storageBaseFuture;
 
         // --- x00 keep roll (5d4 dice: 30-65% keep, avg ~47.5%) ---
         // Operates on post-jackpot memFuture — all reward jackpots drew first.
@@ -801,7 +804,25 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (claimableDelta != 0) {
             claimablePool += claimableDelta;
         }
-        emit RewardJackpotsSettled(lvl, memFuture, claimableDelta);
+        if (memFuture != storageBaseFuture || claimableDelta != 0) {
+            emit RewardJackpotsSettled(lvl, memFuture, claimableDelta);
+        }
+    }
+
+    /// @dev Award DGNRS reward to the solo bucket winner after final daily jackpot.
+    function _awardFinalDayDgnrsReward(uint24 lvl, uint256 rngWord) private {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_JACKPOT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameJackpotModule
+                        .awardFinalDayDgnrsReward
+                        .selector,
+                    lvl,
+                    rngWord
+                )
+            );
+        if (!ok) _revertDelegate(data);
     }
 
     /// @dev Pay daily jackpot via jackpot module delegatecall.
@@ -922,7 +943,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 currentDay = _simulatedDayIndexAt(nowTs);
 
         // Block in the 15-minute pre-reset window to avoid competing with daily jackpot RNG flow.
-        if ((nowTs - 82620) % 1 days >= 1 days - 15 minutes) revert E();
+        if (_simulatedDayIndexAt(nowTs + 15 minutes) > currentDay) revert E();
         // Block until today's daily RNG has been consumed and recorded.
         if (rngWordByDay[currentDay] == 0) revert E();
 
@@ -996,6 +1017,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // full     Lootbox RNG                 stored as lootboxRngWordByIndex   AdvanceModule._applyDailyRng
     // full     Future take variance        rngWord % (variance * 2 + 1)      AdvanceModule._takeFuturePrizePoolSlice
     // full     Prize pool consolidation    via delegatecall (full word)      JackpotModule (consolidatePrizePools)
+    // full     Final day DGNRS reward      via delegatecall (full word)      JackpotModule (awardFinalDayDgnrsReward)
     // full     Reward jackpots             via delegatecall (full word)      JackpotModule (_runRewardJackpots)
     //
     // NOTE: Bits 0 and 8+ are the only direct bit-level consumers.
@@ -1011,9 +1033,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint24 lvl,
         bool isTicketJackpotDay,
         bool bonusFlip
-    ) internal returns (uint256 word, uint48 gapDays) {
+    ) internal returns (uint256 word) {
         // Already recorded for today
-        if (rngWordByDay[day] != 0) return (rngWordByDay[day], 0);
+        if (rngWordByDay[day] != 0) return rngWordByDay[day];
 
         uint256 currentWord = rngWordCurrent;
 
@@ -1029,10 +1051,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // Uses fresh VRF entropy, not predictable on-chain state.
                 _backfillOrphanedLootboxIndices(currentWord);
 
-                // Extend death clock by the stall duration -- gap days don't count toward
+                // Extend death clock by the stall duration — gap days don't count toward
                 // the 120-day inactivity timeout since the game was stalled, not abandoned.
-                purchaseStartDay += gapCount;
-                gapDays = gapCount;
+                levelStartTime += gapCount * 1 days;
             }
 
             // Normal daily RNG processing (request from current day)
@@ -1063,7 +1084,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             _finalizeLootboxRng(currentWord);
-            return (currentWord, gapDays);
+            return currentWord;
         }
 
         // Waiting for VRF - check for timeout retry
@@ -1071,14 +1092,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint48 elapsed = ts - rngRequestTime;
             if (elapsed >= 12 hours) {
                 _requestRng(isTicketJackpotDay, lvl);
-                return (1, 0);
+                return 1;
             }
             revert RngNotReady();
         }
 
         // Need fresh RNG
         _requestRng(isTicketJackpotDay, lvl);
-        return (1, 0);
+        return 1;
     }
 
     function _finalizeLootboxRng(uint256 rngWord) private {
@@ -1238,10 +1259,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ) internal pure returns (uint16) {
         uint256 lvlBonus = (uint256(lvl % 100) / 10) * 100; // +1% per 10 levels within cycle
         uint256 bps;
-        if (elapsed <= 1) {
+        if (elapsed <= 1 days) {
             bps = NEXT_TO_FUTURE_BPS_FAST + lvlBonus;
-        } else if (elapsed <= 14) {
-            uint256 elapsedAfterDay = elapsed - 1;
+        } else if (elapsed <= 14 days) {
+            uint256 elapsedAfterDay = elapsed - 1 days;
             uint256 delta = NEXT_TO_FUTURE_BPS_FAST +
                 lvlBonus -
                 NEXT_TO_FUTURE_BPS_MIN;
@@ -1249,19 +1270,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 NEXT_TO_FUTURE_BPS_FAST +
                 lvlBonus -
                 (delta * elapsedAfterDay) /
-                13;
-        } else if (elapsed <= 28) {
-            uint256 elapsedAfterMin = elapsed - 14;
+                13 days;
+        } else if (elapsed <= 28 days) {
+            uint256 elapsedAfterMin = elapsed - 14 days;
             uint256 delta = NEXT_TO_FUTURE_BPS_FAST +
                 lvlBonus -
                 NEXT_TO_FUTURE_BPS_MIN;
-            bps = NEXT_TO_FUTURE_BPS_MIN + (delta * elapsedAfterMin) / 14;
+            bps = NEXT_TO_FUTURE_BPS_MIN + (delta * elapsedAfterMin) / 14 days;
         } else {
             bps =
                 NEXT_TO_FUTURE_BPS_FAST +
                 lvlBonus +
-                (elapsed - 28) *
-                NEXT_TO_FUTURE_BPS_DAY_STEP;
+                ((elapsed - 28 days) / 1 weeks) *
+                NEXT_TO_FUTURE_BPS_WEEK_STEP;
         }
         return uint16(bps > 10_000 ? 10_000 : bps);
     }
@@ -1728,18 +1749,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Below L10: flag is always cleared.
     function _evaluateGameOverAndTarget(
         uint24 lvl,
-        uint48 psd,
-        uint48 day
+        uint24 purchaseLevel
     ) private returns (bool targetMet) {
         uint256 nextPool = _getNextPrizePool();
-        uint256 target = levelPrizePool[lvl];
+        uint256 target = levelPrizePool[purchaseLevel - 1];
         targetMet = nextPool >= target;
         if (lvl < 10 || targetMet) {
             gameOverPossible = false;
             return targetMet;
         }
         uint256 deficit = target - nextPool;
-        uint256 daysRemaining = psd + 120 > day ? psd + 120 - day : 0;
+        uint256 daysRemaining = (uint256(levelStartTime) +
+            120 days -
+            block.timestamp) / 1 days;
         gameOverPossible =
             _projectedDrip(_getFuturePrizePool(), daysRemaining) < deficit;
     }

@@ -172,6 +172,9 @@ interface IDegenerusQuests {
     /// @param entropy VRF-derived entropy for quest type selection.
     function rollLevelQuest(uint256 entropy) external;
 
+    /// @notice Clear active level quest (called at level transition before RNG arrives).
+    function clearLevelQuest() external;
+
     /// @notice Returns a player's level quest state for frontend display.
     /// @param player The player address to query.
     /// @return questType The active level quest type (0-8).

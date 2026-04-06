@@ -1,42 +1,53 @@
-# Requirements: v24.0 Jackpot Gas Safety Split
+# Requirements: v17.1 Comment Correctness Sweep
 
-**Defined:** 2026-04-06
+**Defined:** 2026-04-03
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Gas Safety Split
+## Comment Sweep
 
-- [ ] **GAS-02**: `_processDailyEth` (daily jackpot) split across two advanceGame calls — large+solo buckets first, mid buckets on resume
-- [ ] **GAS-03**: `_distributeJackpotEth` (early-burn) split across two advanceGame calls — same pattern as daily
-- [ ] **GAS-04**: True worst-case gas benchmark (321 unique autorebuy players, 200+ ETH pool, final jackpot day) proves both split calls stay under 16M gas
+- [x] **CMT-01**: All game module inline comments and NatSpec verified accurate (AdvanceModule, MintModule, MintStreakUtils, JackpotModule, LootboxModule, BoonModule, DegeneretteModule, DecimatorModule, WhaleModule, GameOverModule, PayoutUtils)
+- [ ] **CMT-02**: All core game + storage inline comments and NatSpec verified accurate (DegenerusGame, DegenerusGameStorage)
+- [x] **CMT-03**: All token contract inline comments and NatSpec verified accurate (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, GNRUS)
+- [x] **CMT-04**: All infrastructure contract inline comments and NatSpec verified accurate (DegenerusAdmin, DegenerusVault, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DeityBoonViewer)
+- [x] **CMT-05**: All library and interface comments verified accurate; interface NatSpec matches implementations (EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib + all I* interfaces)
+- [x] **CMT-06**: All misc contracts verified (WrappedWrappedXRP, DegenerusTraitUtils, Icons32Data)
 
-## Documentation
+## Consolidation
 
-- [ ] **DOC-01**: Standalone payout reference document covering every jackpot type, who wins, how much, calculation formulas, and payout flow
-- [ ] **DOC-02**: Event catalog of all jackpot-related events with field descriptions and which paths emit them
+- [x] **CON-01**: Findings consolidated into single document with LOW/INFO severities
+- [x] **CON-02**: v3.1/v3.5 prior findings verified still fixed (no regressions)
+
+## Future Requirements
+
+None deferred.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| BAF jackpot split | Max 107 winners (~8.5M gas) — under 16M cap |
-| Decimator jackpot split | Single-winner payout — trivial gas |
-| Storage layout verification | Logic-only changes, no storage var additions |
-| Frontend / UI | Not in audit scope |
+| Auto-fixing comments | Findings doc is the deliverable; user decides what to fix |
+| Code logic changes | Comment correctness only, no behavioral changes |
+| Mock/test contracts | Not in audit scope |
+| ContractAddresses.sol | User-managed |
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| GAS-02 | Phase 195 | Pending |
-| GAS-03 | Phase 195 | Pending |
-| GAS-04 | Phase 196 | Pending |
-| DOC-01 | Phase 197 | Pending |
-| DOC-02 | Phase 197 | Pending |
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| CMT-01 | Phase 175 | Complete |
+| CMT-02 | Phase 176 | Pending |
+| CMT-03 | Phase 176 | Complete |
+| CMT-04 | Phase 177 | Complete |
+| CMT-05 | Phase 177 | Complete |
+| CMT-06 | Phase 177 | Complete |
+| CON-01 | Phase 178 | Complete |
+| CON-02 | Phase 178 | Complete |
 
 **Coverage:**
-- v24.0 requirements: 5 total, 0 complete
+- v17.1 requirements: 8 total
+- Mapped to phases: 8
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-04-06*
-*Last updated: 2026-04-06 — carried forward from v23.0 milestone completion*
+*Requirements defined: 2026-04-03*
+*Last updated: 2026-04-03 after roadmap creation*

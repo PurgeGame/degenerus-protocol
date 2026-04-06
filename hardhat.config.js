@@ -39,7 +39,7 @@ const config = {
           viaIR: true,
           optimizer: {
             enabled: true,
-            runs: 50
+            runs: 200
           },
           outputSelection: {
             "*": {
@@ -56,7 +56,6 @@ const config = {
   networks: {
     hardhat: {
       allowUnlimitedContractSize: false,
-      accounts: { count: 310 },
     },
     localhost: {
       url: "http://127.0.0.1:8545",
