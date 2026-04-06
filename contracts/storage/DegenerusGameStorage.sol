@@ -959,6 +959,15 @@ abstract contract DegenerusGameStorage {
     uint256 internal earlybirdEthIn;
 
     // =========================================================================
+    // Jackpot ETH Resume State
+    // =========================================================================
+
+    /// @dev Snapshot of ethPool for two-call jackpot ETH distribution.
+    ///      Non-zero means a resume call is pending (largest+solo buckets done,
+    ///      mid buckets remain). Cleared to zero after the resume call completes.
+    uint128 internal resumeEthPool;
+
+    // =========================================================================
     // Internal Helpers
     // =========================================================================
 

@@ -200,7 +200,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint16 private constant JACKPOT_MAX_WINNERS = 300;
 
     /// @dev Maximum total ETH winners across daily + carryover jackpots.
-    uint16 private constant DAILY_ETH_MAX_WINNERS = 321;
+    ///      At max scale (6.36x, 200+ ETH pool): 159 + 95 + 50 + 1 = 305.
+    uint16 private constant DAILY_ETH_MAX_WINNERS = 305;
 
     /// @dev Maximum winners for daily coin jackpot (coinflip.creditFlip is 1 external call each).
     uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
@@ -224,8 +225,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Maximum scale for bucket sizing (4x at 200 ETH+).
     uint16 private constant JACKPOT_SCALE_MAX_BPS = 40_000;
 
-    /// @dev Daily jackpot max scale (6.6667x) to allow up to DAILY_ETH_MAX_WINNERS.
-    uint32 private constant DAILY_JACKPOT_SCALE_MAX_BPS = 66_667;
+    /// @dev Daily jackpot max scale (6.36x) producing bucket counts 159/95/50/1 at 200+ ETH.
+    ///      Two-call split: call 1 processes largest (159) + solo (1) = 160 winners,
+    ///      call 2 processes mid buckets (95 + 50) = 145 winners.
+    uint32 private constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;
 
     // -------------------------------------------------------------------------
     // Structs
@@ -292,7 +295,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             entropy,
             traitIds,
             shareBps,
-            bucketCounts
+            bucketCounts,
+            false // call 1: largest + solo buckets (resume handled by caller)
         );
     }
 
@@ -460,7 +464,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     traitIdsDaily,
                     shareBpsDaily,
                     bucketCountsDaily,
-                    isFinalPhysicalDay_
+                    isFinalPhysicalDay_,
+                    false // call 1: largest + solo buckets
                 );
                 if (isFinalPhysicalDay_) {
                     uint256 unpaidDailyEth = dailyEthBudget - paidDailyEth;
@@ -505,7 +510,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 entropy: randWord ^ (uint256(lvl) << 192),
                 winningTraitsPacked: winningTraitsPacked,
                 traitShareBpsPacked: DAILY_JACKPOT_SHARES_PACKED
-            })
+            }),
+            false // call 1: largest + solo buckets
         );
 
         // Deferred deduction: deduct only what was actually consumed
@@ -1066,9 +1072,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      Pool debits are handled by the caller.
     ///
     /// @param jp Packed jackpot parameters.
+    /// @param isResume False for call 1 (largest+solo buckets), true for call 2 (mid buckets).
     /// @return paidEth Total ETH paid out (for pool accounting).
     function _executeJackpot(
-        JackpotParams memory jp
+        JackpotParams memory jp,
+        bool isResume
     ) private returns (uint256 paidEth) {
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             jp.winningTraitsPacked
@@ -1078,16 +1086,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint8(jp.entropy & 3)
         );
 
-        if (jp.ethPool != 0) {
-            paidEth = _runJackpotEthFlow(jp, traitIds, shareBps);
+        if (jp.ethPool != 0 || isResume) {
+            paidEth = _runJackpotEthFlow(jp, traitIds, shareBps, isResume);
         }
     }
 
     /// @dev Simple ETH flow for jackpot ETH distribution.
+    /// @param isResume False for call 1 (largest+solo buckets), true for call 2 (mid buckets).
     function _runJackpotEthFlow(
         JackpotParams memory jp,
         uint8[4] memory traitIds,
-        uint16[4] memory shareBps
+        uint16[4] memory shareBps,
+        bool isResume
     ) private returns (uint256 totalPaidEth) {
         uint16[4] memory baseBucketCounts = JackpotBucketLib.traitBucketCounts(
             jp.entropy
@@ -1107,7 +1117,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 jp.entropy,
                 traitIds,
                 shareBps,
-                bucketCounts
+                bucketCounts,
+                isResume
             );
     }
 
@@ -1115,16 +1126,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Daily Jackpot ETH — Distribution
     // =========================================================================
 
-    /// @dev Processes daily jackpot ETH distribution across all 4 trait buckets.
-    ///      Iterates each bucket, selects winners proportional to shareBps,
-    ///      pays out ETH via _addClaimableEth, and processes auto-rebuy.
+    /// @dev Processes daily jackpot ETH distribution across trait buckets.
+    ///      Two-call split: call 1 (isResume=false) processes the largest + solo buckets
+    ///      and stores ethPool in resumeEthPool. Call 2 (isResume=true) processes the
+    ///      remaining 2 mid buckets and clears resumeEthPool.
     /// @param lvl The level whose winners are being paid.
-    /// @param ethPool Total ETH to distribute across all buckets.
+    /// @param ethPool Total ETH to distribute (ignored when isResume=true; read from storage).
     /// @param entropy VRF-derived random word for winner selection.
     /// @param traitIds The 4 winning trait IDs for this daily jackpot.
     /// @param shareBps Basis-point share for each of the 4 buckets.
     /// @param bucketCounts Number of holders in each trait bucket.
-    /// @return paidEth Total ETH actually paid out (may be less than ethPool if buckets empty).
+    /// @param isFinalDay True on the last physical jackpot day (affects solo bucket payout).
+    /// @param isResume False for call 1 (largest+solo), true for call 2 (mid buckets).
+    /// @return paidEth Total ETH actually paid out in this call.
     function _processDailyEth(
         uint24 lvl,
         uint256 ethPool,
@@ -1132,8 +1146,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8[4] memory traitIds,
         uint16[4] memory shareBps,
         uint16[4] memory bucketCounts,
-        bool isFinalDay
+        bool isFinalDay,
+        bool isResume
     ) private returns (uint256 paidEth) {
+        if (isResume) {
+            ethPool = uint256(resumeEthPool);
+            resumeEthPool = 0;
+        }
         if (ethPool == 0) {
             return 0;
         }
@@ -1152,11 +1171,26 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bucketCounts
         );
 
+        // Build mask: call1Bucket[i] = true means bucket i is processed in call 1.
+        // Call 1: order[0] (largest) + remainderIdx (solo).
+        // Edge case: if largest IS the solo bucket, call 1 takes order[0] + order[1].
+        bool[4] memory call1Bucket;
+        call1Bucket[order[0]] = true;
+        if (order[0] == remainderIdx) {
+            call1Bucket[order[1]] = true;
+        } else {
+            call1Bucket[remainderIdx] = true;
+        }
+
         uint256 entropyState = entropy;
         uint256 liabilityDelta;
 
         for (uint8 j; j < 4; ++j) {
             uint8 traitIdx = order[j];
+
+            // Skip buckets not assigned to this call.
+            if (isResume == call1Bucket[traitIdx]) continue;
+
             uint16 count = bucketCounts[traitIdx];
             uint256 share = shares[traitIdx];
             if (count == 0 || share == 0) {
@@ -1224,17 +1258,44 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (liabilityDelta != 0) {
             claimablePool += liabilityDelta;
         }
+
+        // Call 1: store ethPool snapshot for resume call.
+        if (!isResume) {
+            resumeEthPool = uint128(ethPool);
+        }
+
         return paidEth;
     }
 
+    /// @dev Distributes early-burn jackpot ETH across trait buckets.
+    ///      Two-call split: call 1 (isResume=false) processes the largest + solo buckets
+    ///      and stores ethPool in resumeEthPool. Call 2 (isResume=true) processes the
+    ///      remaining 2 mid buckets and clears resumeEthPool.
+    /// @param lvl The level whose winners are being paid.
+    /// @param ethPool Total ETH to distribute (ignored when isResume=true; read from storage).
+    /// @param entropy VRF-derived random word for winner selection.
+    /// @param traitIds The 4 winning trait IDs for this jackpot.
+    /// @param shareBps Basis-point share for each of the 4 buckets.
+    /// @param bucketCounts Number of holders in each trait bucket.
+    /// @param isResume False for call 1 (largest+solo), true for call 2 (mid buckets).
+    /// @return totalPaidEth Total ETH actually paid out in this call.
     function _distributeJackpotEth(
         uint24 lvl,
         uint256 ethPool,
         uint256 entropy,
         uint8[4] memory traitIds,
         uint16[4] memory shareBps,
-        uint16[4] memory bucketCounts
+        uint16[4] memory bucketCounts,
+        bool isResume
     ) private returns (uint256 totalPaidEth) {
+        if (isResume) {
+            ethPool = uint256(resumeEthPool);
+            resumeEthPool = 0;
+        }
+        if (ethPool == 0) {
+            return 0;
+        }
+
         JackpotEthCtx memory ctx;
         ctx.entropyState = entropy;
         ctx.lvl = lvl;
@@ -1249,8 +1310,26 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             unit
         );
 
+        uint8[4] memory order = JackpotBucketLib.bucketOrderLargestFirst(
+            bucketCounts
+        );
+
+        // Build mask: call1Bucket[i] = true means bucket i is processed in call 1.
+        // Call 1: order[0] (largest) + remainderIdx (solo).
+        // Edge case: if largest IS the solo bucket, call 1 takes order[0] + order[1].
+        bool[4] memory call1Bucket;
+        call1Bucket[order[0]] = true;
+        if (order[0] == remainderIdx) {
+            call1Bucket[order[1]] = true;
+        } else {
+            call1Bucket[remainderIdx] = true;
+        }
+
         for (uint8 traitIdx; traitIdx < 4; ) {
-            _processOneBucket(ctx, traitIdx, traitIds, shares, bucketCounts);
+            // Skip buckets not assigned to this call.
+            if (isResume != call1Bucket[traitIdx]) {
+                _processOneBucket(ctx, traitIdx, traitIds, shares, bucketCounts);
+            }
             unchecked {
                 ++traitIdx;
             }
@@ -1259,6 +1338,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (ctx.liabilityDelta != 0) {
             claimablePool += ctx.liabilityDelta;
         }
+
+        // Call 1: store ethPool snapshot for resume call.
+        if (!isResume) {
+            resumeEthPool = uint128(ethPool);
+        }
+
         return ctx.totalPaidEth;
     }
 
