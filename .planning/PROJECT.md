@@ -295,16 +295,14 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | BAF scatter: per-round fixed payout, empty rounds return | Prevents few winners from splitting full 70% scatter pool; unfilled rounds recycle to future pool | Good |
 | BAF scatter: 20% from current level, 80% random near-future | Better distribution — current level holders get guaranteed share, near-future spread evenly across +1..+6 | Good |
 
-## Current Milestone: v22.0 BAF Simplification Delta Audit
+## Current Milestone: v23.0 JackpotModule Delta Audit & Payout Reference
 
-**Goal:** Verify behavioral equivalence of the `runBafJackpot` return value simplification and rebuy delta removal (commit a2d1c585).
+**Goal:** Verify committed JackpotModule changes are safe (correctness + gas ceiling) and produce a comprehensive payout reference document.
 
 **Target features:**
-- Trace all ETH flow paths through simplified BAF: claimable, lootbox, whale pass, refund, auto-rebuy
-- Verify rebuy delta removal is safe — auto-rebuy storage writes correctly overwritten by `_setPrizePools`
-- Verify unconditional `RewardJackpotsSettled` emit has no downstream impact
-- Storage layout unchanged via forge inspect
-- Test suites green with zero new regressions
+- Delta audit of committed JackpotModule changes against last clean baseline
+- advanceGame worst-case gas ceiling analysis with new jackpot code paths
+- New standalone document describing all jackpot payout types, recipients, amounts, and emitted events
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -374,4 +372,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-05 after v22.0 BAF Simplification Delta Audit milestone start*
+*Last updated: 2026-04-06 after v23.0 JackpotModule Delta Audit & Payout Reference milestone start*

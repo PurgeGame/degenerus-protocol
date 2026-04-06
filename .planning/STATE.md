@@ -1,51 +1,42 @@
 ---
 gsd_state_version: 1.0
-milestone: v22.0
-milestone_name: BAF Simplification Delta Audit
-status: executing
-stopped_at: Phase 191 context gathered
-last_updated: "2026-04-06T01:22:11.019Z"
+milestone: v23.0
+milestone_name: JackpotModule Delta Audit & Payout Reference
+status: defining_requirements
+stopped_at: null
+last_updated: "2026-04-06"
 last_activity: 2026-04-06
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-05)
+See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 191 — Layout + Regression Testing
+**Current focus:** Defining requirements for v23.0
 
 ## Current Position
 
-Phase: 191
-Plan: Not started
-Status: Executing Phase 191
-Last activity: 2026-04-06
-
-Progress: [░░░░░░░░░░] 0%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-06 — Milestone v23.0 started
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3
+- Total plans completed: 0
 - Average duration: --
 - Total execution time: --
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 190 | 2 | - | - |
-| 191 | 1 | - | - |
 
 ## Accumulated Context
 
@@ -69,6 +60,5 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-06T00:25:34.159Z
-Stopped at: Phase 191 context gathered
-Resume file: .planning/phases/191-layout-regression-testing/191-CONTEXT.md
+Last session: 2026-04-06
+Stopped at: Milestone v23.0 initialized

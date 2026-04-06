@@ -46,6 +46,7 @@
 - ✅ **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (shipped 2026-04-05)
 - ✅ **v21.0 Day-Index Clock Migration** — Phases 188-189 (shipped 2026-04-05)
 - ✅ **v22.0 BAF Simplification Delta Audit** — Phases 190-191 (shipped 2026-04-06)
+- **v23.0 JackpotModule Delta Audit & Payout Reference** — Phases 192-194 (in progress)
 
 ## Phases
 
@@ -159,48 +160,65 @@ See individual milestone entries above.
 
 </details>
 
-### v22.0 BAF Simplification Delta Audit (In Progress)
+<details>
+<summary>v22.0 BAF Simplification Delta Audit (Phases 190-191) -- SHIPPED 2026-04-06</summary>
 
-**Milestone Goal:** Verify that the BAF simplification (runBafJackpot reduced from 3 returns to 1 claimableDelta, rebuy delta removed, RewardJackpotsSettled emitted unconditionally) produces identical ETH flow outcomes for every winner path, with no storage layout drift or test regressions.
+- [x] **Phase 190: ETH Flow + Rebuy Delta + Event Audit** - 2 plans (completed 2026-04-05)
+- [x] **Phase 191: Layout + Regression Testing** - 1 plan (completed 2026-04-06)
 
-- [x] **Phase 190: ETH Flow + Rebuy Delta + Event Audit** - Code-level behavioral equivalence verification (completed 2026-04-05)
-- [x] **Phase 191: Layout + Regression Testing** - Mechanical verification via forge inspect and test suites (completed 2026-04-06)
+</details>
+
+### v23.0 JackpotModule Delta Audit & Payout Reference (In Progress)
+
+**Milestone Goal:** Audit the two post-v22.0 commits (93c05869: DGNRS solo reward fold into daily ETH payout; 520249a2: specialized jackpot events, whale pass to daily path, cleanup) for behavioral correctness, verify gas safety, and produce standalone payout reference documentation.
+
+- [ ] **Phase 192: Delta Extraction & Behavioral Verification** - 2 plans
+- [ ] **Phase 193: Gas Ceiling & Test Regression** - Worst-case advanceGame gas analysis with new jackpot paths, plus test suite verification
+- [ ] **Phase 194: Payout Reference & Event Catalog** - Standalone documentation of jackpot payout flows and event emissions
 
 ## Phase Details
 
-### Phase 190: ETH Flow + Rebuy Delta + Event Audit
-**Goal**: Every ETH flow path through the simplified BAF produces identical outcomes to the pre-simplification code -- claimable amounts, ticket counts, pool balances, whale pass claims, and event emissions are all behaviorally equivalent
-**Depends on**: Phase 189
-**Requirements**: FLOW-01, FLOW-02, FLOW-03, FLOW-04, FLOW-05, DELTA-01, DELTA-02, EVT-01
+### Phase 192: Delta Extraction & Behavioral Verification
+**Goal**: Every changed function across JackpotModule, AdvanceModule, BurnieCoinflip, and interfaces is extracted, classified as refactor or intentional change, and proven correct -- refactored paths produce identical results, intentional changes (whale pass for daily single bucket winner, DGNRS solo reward fold) are documented with correctness proof
+**Depends on**: Phase 191
+**Requirements**: DELTA-01, DELTA-02
 **Success Criteria** (what must be TRUE):
-  1. For a non-auto-rebuy winner, the new single-return `claimableDelta` exactly equals the old `claimableDelta` for all prize tier combinations (normal jackpot, trait jackpot, decimator payout)
-  2. For an auto-rebuy winner, the ticket count purchased and pool state after `_setPrizePools` are identical to pre-simplification -- the removed rebuy delta storage write during BAF is provably overwritten by the batched SSTORE at function end
-  3. For lootbox ticket and whale pass paths, ticket entries and `whalePassClaims` plus dust remainders are identical -- no ETH leaks or double-credits from the return value change
-  4. The unconditional `RewardJackpotsSettled` emit has no downstream consumer (off-chain indexer, other contract, or test assertion) that depended on the old conditional emission pattern
-  5. No futurePool storage writes exist in the BAF/decimator self-call chain that silently depended on the removed rebuy delta -- the only writes are those safely overwritten by `_setPrizePools`
-**Plans:** 2/2 plans complete
+  1. A complete function-level changelog exists covering every changed function in commits 93c05869 and 520249a2, with each change classified as either "refactor" (identical behavior) or "intentional change" (documented behavioral difference)
+  2. For every refactored function, the old and new code paths are proven to produce identical outputs for all input combinations -- no silent behavioral changes
+  3. The whale pass daily single bucket winner path is proven correct: the right player receives the whale pass under all daily jackpot scenarios where a single trait bucket has exactly one winner
+  4. The DGNRS solo reward fold into daily ETH payout is proven correct: the same winner receives the same total ETH amount, just via a single combined payout instead of two separate ones
+**Plans:** 2 plans
 Plans:
-- [x] 190-01-PLAN.md -- ETH flow path algebraic equivalence (FLOW-01 through FLOW-05)
-- [x] 190-02-PLAN.md -- Rebuy delta removal + event audit (DELTA-01, DELTA-02, EVT-01)
+- [ ] 192-01-PLAN.md -- Function-level changelog, deleted-item proofs, refactor equivalence proofs, event migration mapping
+- [ ] 192-02-PLAN.md -- Intentional change correctness proofs (whale pass, DGNRS fold, coin target level, ticket budget)
 
-### Phase 191: Layout + Regression Testing
-**Goal**: All changed contracts have identical storage layout to their pre-simplification versions, and both test suites pass with zero new failures
-**Depends on**: Phase 190
-**Requirements**: LAYOUT-01, TEST-01, TEST-02
+### Phase 193: Gas Ceiling & Test Regression
+**Goal**: The new jackpot code paths do not push advanceGame beyond safe gas limits, and both test suites confirm zero regressions
+**Depends on**: Phase 192
+**Requirements**: GAS-01, DELTA-03
 **Success Criteria** (what must be TRUE):
-  1. `forge inspect` output for every changed contract (DegenerusGame, DegenerusGameAdvanceModule, DegenerusGameJackpotModule, DegenerusGameDecimatorModule, DegenerusGamePayoutUtils, and their interfaces) shows identical storage slot assignments to the pre-commit baseline
+  1. Worst-case advanceGame gas consumption with all new jackpot paths (specialized events, whale pass daily path, DGNRS fold) is measured and documented, showing at least 1.5x safety margin against the 30M block gas limit
   2. Foundry test suite runs to completion with zero new failures beyond the known pre-existing baseline
   3. Hardhat test suite runs to completion with zero new failures beyond the known pre-existing baseline
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 191-01-PLAN.md -- Storage layout diff + Foundry/Hardhat regression checks (LAYOUT-01, TEST-01, TEST-02)
+**Plans**: TBD
+
+### Phase 194: Payout Reference & Event Catalog
+**Goal**: A reader can look up any jackpot type and immediately understand who wins, how much, and which events fire -- without reading contract source code
+**Depends on**: Phase 192
+**Requirements**: DOC-01, DOC-02
+**Success Criteria** (what must be TRUE):
+  1. The payout reference document covers every jackpot type (daily normal, daily x10, daily x100, trait jackpot, decimator, BAF) with winner selection criteria, payout calculation formulas, and the ETH flow from pool to recipient
+  2. The event catalog lists every jackpot-related event with its Solidity signature, field descriptions, and which code paths emit it -- including the new specialized events from commit 520249a2
+  3. Both documents are internally consistent with each other and with the current contract source code (post-520249a2)
+**Plans**: TBD
 
 ## Progress Table
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 190. ETH Flow + Rebuy Delta + Event Audit | 2/2 | Complete    | 2026-04-05 |
-| 191. Layout + Regression Testing | 1/1 | Complete    | 2026-04-06 |
+| 192. Delta Extraction & Behavioral Verification | 0/2 | Planning complete | - |
+| 193. Gas Ceiling & Test Regression | 0/TBD | Not started | - |
+| 194. Payout Reference & Event Catalog | 0/TBD | Not started | - |
 
 ## Deferred
 
