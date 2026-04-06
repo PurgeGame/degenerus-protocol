@@ -188,15 +188,16 @@ See individual milestone entries above.
 ## Phase Details
 
 ### Phase 195: Jackpot Two-Call Split
-**Goal**: No single advanceGame call processes more than ~167 jackpot winners -- daily jackpot and early-burn ETH distribution split across two stages so worst-case gas stays under 16M
+**Goal**: No single advanceGame call processes more than 160 jackpot winners -- daily jackpot and early-burn ETH distribution split across two stages with differentiated per-bucket caps so worst-case gas stays under 16M
 **Depends on**: Phase 193
 **Requirements**: GAS-02, GAS-03
 **Success Criteria** (what must be TRUE):
-  1. `_processDailyEth` (daily jackpot path) processes large+solo buckets in STAGE_JACKPOT_DAILY_STARTED, then mid buckets in a new STAGE_JACKPOT_ETH_RESUME (stage 8) on the next advanceGame call
-  2. `_distributeJackpotEth` (early-burn path) uses the same two-call pattern for its 4-bucket iteration
-  3. Inter-call state (paidEthSoFar) is stored in a single packed storage slot; bucket parameters are recomputed from the deterministic RNG word
-  4. Both modules compile under 24KB after changes
-  5. Existing Hardhat and Foundry test suites pass with zero new regressions
+  1. `_processDailyEth` (daily jackpot path) processes largest+solo buckets in STAGE_JACKPOT_DAILY_STARTED, then two mid buckets in a new STAGE_JACKPOT_ETH_RESUME (stage 8) on the next advanceGame call
+  2. Per-bucket winner caps replace MAX_BUCKET_WINNERS=250: largest=159, mid1=100, mid2=60, solo=1 (each call ≤160 winners)
+  3. `_distributeJackpotEth` (early-burn path) uses the same two-call pattern for its 4-bucket iteration
+  4. Inter-call state: original ethPool stored as uint128 in a single storage slot; non-zero = resume pending; bucket parameters recomputed from deterministic RNG word + stored ethPool
+  5. Both modules compile under 24KB after changes
+  6. Existing Hardhat and Foundry test suites pass with zero new regressions
 
 ### Phase 196: Worst-Case Gas Benchmark
 **Goal**: A true worst-case gas benchmark proves both split calls stay under 16M gas with 321 unique autorebuy winners
