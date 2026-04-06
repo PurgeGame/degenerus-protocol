@@ -182,7 +182,7 @@ See individual milestone entries above.
 **Milestone Goal:** Split daily jackpot and early-burn ETH distribution across two advanceGame calls so no single call can exceed 16M gas under worst-case conditions (321 unique autorebuy winners). Verify the fix with a true worst-case gas benchmark.
 
 - [x] **Phase 195: Jackpot Two-Call Split** - 2 plans (completed 2026-04-06)
-- [ ] **Phase 196: Post-Split Audit** - Full worst-case gas audit, logic parity, variable state audit, JackpotModule bytecode optimization
+- [ ] **Phase 196: Post-Split Audit** - 3 plans
 - [ ] **Phase 197: Payout Reference & Event Catalog** - Standalone documentation of jackpot payout flows and event emissions (post-split)
 
 ## Phase Details
@@ -207,6 +207,11 @@ Plans:
 **Goal**: Full worst-case gas audit, logic parity verification, storage state audit, and JackpotModule bytecode optimization
 **Depends on**: Phase 195
 **Requirements**: GAS-04, AUDIT-01
+**Plans:** 3 plans
+Plans:
+- [ ] 196-01-PLAN.md — Fix failing gas test + true worst-case gas benchmarks (305 players, autorebuy, 200+ ETH, split calls + early-burn + terminal)
+- [ ] 196-02-PLAN.md — Logic parity verification (split vs single-call equivalence) + variable state audit (storage write trace)
+- [ ] 196-03-PLAN.md — JackpotModule bytecode optimization analysis + user-approved changes
 **Success Criteria** (what must be TRUE):
   1. A Hardhat test constructs the absolute worst case: 305 unique players with autorebuy enabled, all with trait-matching tickets, pool >= 200 ETH, final jackpot day — both split calls individually measured, neither exceeds 16M gas
   2. The early-burn path (160 winners) and terminal jackpot path (305 winners, no autorebuy) are also measured under worst-case conditions
@@ -228,7 +233,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 195. Jackpot Two-Call Split | 2/2 | Complete    | 2026-04-06 |
-| 196. Post-Split Audit | 0/TBD | Not started | - |
+| 196. Post-Split Audit | 0/3 | Planned | - |
 | 197. Payout Reference & Event Catalog | 0/TBD | Not started | - |
 
 ## Deferred
