@@ -1,5 +1,17 @@
 # Milestones
 
+## v22.0 BAF Simplification Delta Audit (Shipped: 2026-04-06)
+
+**Phases completed:** 2 phases, 3 plans, 2 tasks
+
+**Key accomplishments:**
+
+- Algebraic proof that commit a2d1c585's BAF return simplification (3 returns to 1) produces identical memFuture values at _setPrizePools for all 5 winner paths
+- Proved _setPrizePools overwrite safety for auto-rebuy storage writes, enumerated all futurePool write sites in self-call chains (1 in BAF, 0 in decimator), confirmed no consumer depends on conditional RewardJackpotsSettled emission
+- Baseline commit:
+
+---
+
 ## v17.1 Comment Correctness Sweep (Shipped: 2026-04-03)
 
 **Phases completed:** 3 phases, 9 plans, 15 tasks
