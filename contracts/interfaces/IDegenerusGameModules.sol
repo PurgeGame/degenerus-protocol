@@ -73,14 +73,6 @@ interface IDegenerusGameJackpotModule {
     /// @param randWord Random word for distribution
     function payDailyJackpotCoinAndTickets(uint256 randWord) external;
 
-    /// @notice Award DGNRS reward to the solo bucket winner on the final daily jackpot.
-    /// @param lvl Current level
-    /// @param rngWord Random word for winner selection
-    function awardFinalDayDgnrsReward(
-        uint24 lvl,
-        uint256 rngWord
-    ) external;
-
     /// @notice Processes a batch of ticket entries for a specific level
     /// @param lvl The level to process tickets for
     /// @return finished True if all tickets have been processed
@@ -106,14 +98,12 @@ interface IDegenerusGameJackpotModule {
     /// @param poolWei Total ETH pool for BAF.
     /// @param lvl Current level.
     /// @param rngWord VRF entropy.
-    /// @return netSpend ETH spent from pool.
     /// @return claimableDelta ETH moved to claimable.
-    /// @return lootboxToFuture ETH recycled to future pool via lootbox.
     function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
-    ) external returns (uint256 netSpend, uint256 claimableDelta, uint256 lootboxToFuture);
+    ) external returns (uint256 claimableDelta);
 
     /// @notice Distribute yield surplus to stakeholders.
     /// @param rngWord VRF entropy for auto-rebuy targeting.

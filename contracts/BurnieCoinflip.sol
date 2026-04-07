@@ -904,10 +904,11 @@ contract BurnieCoinflip {
     /// @param players Array of 3 player addresses to credit (address(0) entries are skipped).
     /// @param amounts Array of 3 BURNIE-denominated flip stake amounts (0 entries are skipped).
     function creditFlipBatch(
-        address[3] calldata players,
-        uint256[3] calldata amounts
+        address[] calldata players,
+        uint256[] calldata amounts
     ) external onlyFlipCreditors {
-        for (uint256 i; i < 3; ) {
+        uint256 len = players.length;
+        for (uint256 i; i < len; ) {
             address player = players[i];
             uint256 amount = amounts[i];
             if (player != address(0) && amount != 0) {

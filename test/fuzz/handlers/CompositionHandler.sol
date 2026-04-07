@@ -37,12 +37,12 @@ contract CompositionHandler is Test {
     uint256 private constant MINT_PACKED_SLOT = 10;
     // Gap bits are in TWO ranges (NOT continuous):
     //   Gap 1: bits 154-159 (6 bits) -- between WHALE_BUNDLE_TYPE(152-153) and MINT_STREAK_LAST_COMPLETED(160-183)
-    //   Gap 2: bits 184-227 (44 bits) -- between MINT_STREAK_LAST_COMPLETED(160-183) and LEVEL_UNITS(228-243)
-    // Note: bits 160-183 are the MINT_STREAK_LAST_COMPLETED field -- NOT gap bits.
+    //   Gap 2: bits 215-227 (13 bits) -- between AFFILIATE_BONUS_POINTS(209-214) and LEVEL_UNITS(228-243)
+    // Real fields between gaps: MINT_STREAK(160-183), DEITY_PASS(184), AFFILIATE_BONUS_LEVEL(185-208), AFFILIATE_BONUS_POINTS(209-214)
     uint256 private constant GAP1_SHIFT = 154;
     uint256 private constant GAP1_MASK = (uint256(1) << 6) - 1;   // 6 bits: 154-159
-    uint256 private constant GAP2_SHIFT = 184;
-    uint256 private constant GAP2_MASK = (uint256(1) << 44) - 1;  // 44 bits: 184-227
+    uint256 private constant GAP2_SHIFT = 215;
+    uint256 private constant GAP2_MASK = (uint256(1) << 13) - 1;  // 13 bits: 215-227
 
     modifier useActor(uint256 seed) {
         currentActor = actors[bound(seed, 0, actors.length - 1)];

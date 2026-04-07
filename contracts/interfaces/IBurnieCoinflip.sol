@@ -116,12 +116,12 @@ interface IBurnieCoinflip {
 
     /// @notice Credit flips to multiple players in a single call.
     /// @dev Batch version of creditFlip for gas efficiency. Skips zero addresses and amounts.
-    /// @param players Fixed array of 3 player addresses.
-    /// @param amounts Fixed array of 3 credit amounts corresponding to each player.
+    /// @param players Player addresses.
+    /// @param amounts Credit amounts corresponding to each player.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
     function creditFlipBatch(
-        address[3] calldata players,
-        uint256[3] calldata amounts
+        address[] calldata players,
+        uint256[] calldata amounts
     ) external;
 
     /*+======================================================================+
