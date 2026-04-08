@@ -11,10 +11,10 @@
 
 ## Gas Ceiling
 
-- [ ] **GAS-01**: Derive theoretical worst-case gas for advanceGame STAGE_JACKPOT_DAILY_STARTED (call 1) — must be < 16M
-- [ ] **GAS-02**: Derive theoretical worst-case gas for advanceGame STAGE_JACKPOT_ETH_RESUME (call 2) — must be < 16M
-- [ ] **GAS-03**: Derive theoretical worst-case gas for skip-split path (all 4 buckets in one call, <= 160 winners) — must be < 16M
-- [ ] **GAS-04**: Verify skip-split threshold (160) is the correct cutoff where single-call gas stays safe
+- [x] **GAS-01**: Derive theoretical worst-case gas for advanceGame STAGE_JACKPOT_DAILY_STARTED (call 1) — must be < 16M
+- [x] **GAS-02**: Derive theoretical worst-case gas for advanceGame STAGE_JACKPOT_ETH_RESUME (call 2) — must be < 16M
+- [x] **GAS-03**: Derive theoretical worst-case gas for skip-split path (all 4 buckets in one call, <= 160 winners) — must be < 16M
+- [x] **GAS-04**: Verify skip-split threshold (160) is the correct cutoff where single-call gas stays safe
 
 ## Payout Reference
 

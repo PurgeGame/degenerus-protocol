@@ -166,7 +166,7 @@ See individual milestone entries above.
 
 - [ ] **Phase 199: Delta Audit — Skip-Split + Gas Ceiling Proof** — 2 plans
   Plans:
-  - [ ] 199-01-PLAN.md — Theoretical worst-case gas derivation for all advanceGame jackpot stages
+  - [x] 199-01-PLAN.md — Theoretical worst-case gas derivation for all advanceGame jackpot stages
   - [x] 199-02-PLAN.md — Delta audit: caller chain trace, parity verification, storage lifecycle, dead code scan
 - [ ] **Phase 200: Payout Reference Rewrite** — Clear and rewrite JACKPOT-PAYOUT-REFERENCE.md organized by jackpot type, update event catalog
 

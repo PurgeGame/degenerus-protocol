@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Not started (defining requirements)
-stopped_at: Completed 199-02-PLAN.md
-last_updated: "2026-04-08T22:45:21.390Z"
+stopped_at: Completed 199-01-PLAN.md
+last_updated: "2026-04-08T22:55:30.870Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 4
-  completed_plans: 7
+  completed_plans: 8
   percent: 100
 ---
 
@@ -50,6 +50,8 @@ Recent decisions affecting current work:
 - [v20.0]: Expose runBafJackpot as external entry point with self-call guard (mirrors Decimator pattern)
 - [v20.0]: Accept F-187-01 x100 trigger level shift as design improvement
 - [Phase 199]: Delta audit of phase 198 changes: 0 HIGH/MEDIUM/LOW findings across 6 audit sections. All caller paths, parity proofs, and storage lifecycle verified clean.
+- [Phase 199]: creditFlip external call costs ~32K gas/call (includes _addDailyFlip SSTOREs), not 10K
+- [Phase 199]: Early-burn path can have autorebuy (gameOver=false), worst case 13.36M gas
 
 ### Pending Todos
 
@@ -62,5 +64,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-08T22:45:21.386Z
-Stopped at: Completed 199-02-PLAN.md
+Last session: 2026-04-08T22:55:30.867Z
+Stopped at: Completed 199-01-PLAN.md
