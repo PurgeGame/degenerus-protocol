@@ -167,7 +167,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         if (remaining != 0) {
             uint256 termPaid = IDegenerusGame(address(this))
                 .runTerminalJackpot(remaining, lvl + 1, rngWord);
-            // claimablePool already updated inside JackpotModule._distributeJackpotEth
+            // claimablePool already updated inside JackpotModule._processDailyEth
             remaining -= termPaid;
             // Any undistributed remainder swept to vault
             if (remaining != 0) {
