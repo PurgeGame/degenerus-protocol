@@ -1,53 +1,32 @@
-# Requirements: v17.1 Comment Correctness Sweep
+# Requirements: v22.0 Delta Audit & Payout Reference Rewrite
 
-**Defined:** 2026-04-03
-**Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
+## Delta Audit
 
-## Comment Sweep
+- [x] **AUDIT-01**: Every variable touched by _processDailyEth changes (splitMode, isJackpotPhase, skip-split detection) is traced through all caller paths and verified correct
+- [x] **AUDIT-02**: Non-daily callers (runTerminalJackpot, _runJackpotEthFlow) produce identical payout results to the deleted _distributeJackpotEth/_processOneBucket
+- [x] **AUDIT-03**: Skip-split path (totalWinners <= 160) produces identical results to SPLIT_CALL1+SPLIT_CALL2 combined
+- [x] **AUDIT-04**: resumeEthPool is never written when splitMode=SPLIT_NONE and never stale across level boundaries
+- [x] **AUDIT-05**: isJackpotPhase=false callers never award whale passes or DGNRS
+- [x] **AUDIT-06**: Deleted code (_distributeJackpotEth, _processOneBucket, JackpotEthCtx) has no remaining references
 
-- [x] **CMT-01**: All game module inline comments and NatSpec verified accurate (AdvanceModule, MintModule, MintStreakUtils, JackpotModule, LootboxModule, BoonModule, DegeneretteModule, DecimatorModule, WhaleModule, GameOverModule, PayoutUtils)
-- [ ] **CMT-02**: All core game + storage inline comments and NatSpec verified accurate (DegenerusGame, DegenerusGameStorage)
-- [x] **CMT-03**: All token contract inline comments and NatSpec verified accurate (BurnieCoin, BurnieCoinflip, DegenerusStonk, StakedDegenerusStonk, GNRUS)
-- [x] **CMT-04**: All infrastructure contract inline comments and NatSpec verified accurate (DegenerusAdmin, DegenerusVault, DegenerusAffiliate, DegenerusDeityPass, DegenerusQuests, DegenerusJackpots, DeityBoonViewer)
-- [x] **CMT-05**: All library and interface comments verified accurate; interface NatSpec matches implementations (EntropyLib, GameTimeLib, JackpotBucketLib, PriceLookupLib, BitPackingLib + all I* interfaces)
-- [x] **CMT-06**: All misc contracts verified (WrappedWrappedXRP, DegenerusTraitUtils, Icons32Data)
+## Gas Ceiling
 
-## Consolidation
+- [ ] **GAS-01**: Derive theoretical worst-case gas for advanceGame STAGE_JACKPOT_DAILY_STARTED (call 1) — must be < 16M
+- [ ] **GAS-02**: Derive theoretical worst-case gas for advanceGame STAGE_JACKPOT_ETH_RESUME (call 2) — must be < 16M
+- [ ] **GAS-03**: Derive theoretical worst-case gas for skip-split path (all 4 buckets in one call, <= 160 winners) — must be < 16M
+- [ ] **GAS-04**: Verify skip-split threshold (160) is the correct cutoff where single-call gas stays safe
 
-- [x] **CON-01**: Findings consolidated into single document with LOW/INFO severities
-- [x] **CON-02**: v3.1/v3.5 prior findings verified still fixed (no regressions)
+## Payout Reference
 
-## Future Requirements
-
-None deferred.
-
-## Out of Scope
-
-| Feature | Reason |
-|---------|--------|
-| Auto-fixing comments | Findings doc is the deliverable; user decides what to fix |
-| Code logic changes | Comment correctness only, no behavioral changes |
-| Mock/test contracts | Not in audit scope |
-| ContractAddresses.sol | User-managed |
+- [ ] **DOC-01**: JACKPOT-PAYOUT-REFERENCE.md rewritten from scratch, organized by jackpot type (daily normal, daily final, x10/x100, early-burn, early-bird lootbox, terminal, decimator, BAF, BURNIE coin)
+- [ ] **DOC-02**: Each jackpot type section covers: trigger, pool source, winner selection, share allocation, split behavior, payout mechanics, events emitted, pool accounting
+- [ ] **DOC-03**: All references use current function names (_processDailyEth, splitMode, isJackpotPhase) — no stale names
+- [ ] **DOC-04**: JACKPOT-EVENT-CATALOG.md updated to reflect unified function if needed
 
 ## Traceability
 
-| REQ-ID | Phase | Status |
-|--------|-------|--------|
-| CMT-01 | Phase 175 | Complete |
-| CMT-02 | Phase 176 | Pending |
-| CMT-03 | Phase 176 | Complete |
-| CMT-04 | Phase 177 | Complete |
-| CMT-05 | Phase 177 | Complete |
-| CMT-06 | Phase 177 | Complete |
-| CON-01 | Phase 178 | Complete |
-| CON-02 | Phase 178 | Complete |
-
-**Coverage:**
-- v17.1 requirements: 8 total
-- Mapped to phases: 8
-- Unmapped: 0
-
----
-*Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 after roadmap creation*
+| REQ-ID | Phase |
+|--------|-------|
+| AUDIT-01..06 | 199 |
+| GAS-01..04 | 199 |
+| DOC-01..04 | 200 |
