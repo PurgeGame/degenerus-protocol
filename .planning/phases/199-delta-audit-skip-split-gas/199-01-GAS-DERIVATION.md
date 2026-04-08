@@ -18,7 +18,7 @@ Method: Per-operation gas costs from EIP-2929/3529, applied to contract code pat
 | `JACKPOT_SCALE_MAX_BPS` | 40,000 (4x) | JackpotModule line 214 |
 | Base bucket counts | [25, 15, 8, 1] | JackpotBucketLib lines 38-41 |
 | Max scaled counts (daily) | [159, 95, 50, 1] = 305 | 25 * 6.36 = 159, 15 * 6.36 = 95, 8 * 6.36 = 50, 1 (solo fixed) |
-| Max scaled counts (early-burn) | [100, 59, 0, 1] = 160 | Proportional scale-down from [25,15,8,1] to cap 160 |
+| Max scaled counts (early-burn) | [100, 60, 32, 1] -> capped to 160 | 4x scale produces 193, `capBucketCounts` proportionally reduces non-solo to fit 159 |
 | Call 1 partition (SPLIT_CALL1) | largest(159) + solo(1) = **160** | call1Bucket mask: `order[0]` + `remainderIdx` |
 | Call 2 partition (SPLIT_CALL2) | 95 + 50 = **145** | remaining mid buckets |
 | Skip-split (SPLIT_NONE daily) | all 4 buckets, total <= 160 | `totalWinners <= JACKPOT_MAX_WINNERS` check in `payDailyJackpot` |
@@ -244,8 +244,10 @@ Operations in `payDailyJackpot` before/after `_processDailyEth`:
 | `shareBpsByBucket` | 200 | |
 | Pool deduction after `_processDailyEth` | 3,000 | `_setCurrentPrizePool` warm |
 | `dailyJackpotCoinTicketsPending = true` SSTORE | 22,100 | 0->nonzero |
-| **TOTAL caller overhead** | **~93,850** | |
-| **Rounded up** | **~94,000** | |
+| `emit Advance` | 750 | No `_unlockRng` on this stage (RNG stays locked for call 2 / coin+tickets) |
+| `coinflip.creditFlip` (advance bounty) | 32,000 | Cold external CALL + _addDailyFlip SSTOREs |
+| **TOTAL caller overhead** | **~126,600** | |
+| **Rounded up** | **~127,000** | |
 
 ### 5b. _resumeDailyEth caller overhead (STAGE_JACKPOT_ETH_RESUME)
 
@@ -264,9 +266,9 @@ Operations in `payDailyJackpot` before/after `_processDailyEth`:
 | Pool deduction after `_processDailyEth` | 3,000 | |
 | AdvanceModule: `_unlockRng` | 5,100 | SSTORE for rngLocked |
 | `emit Advance` | 750 | |
-| `coinflip.creditFlip` (advance bounty) | 10,000 | External call to BurnieCoinflip |
-| **TOTAL caller overhead** | **~29,150** | |
-| **Rounded up** | **~30,000** | |
+| `coinflip.creditFlip` (advance bounty) | 32,000 | Cold external CALL (2,600) + _addDailyFlip SSTOREs (~29,000) |
+| **TOTAL caller overhead** | **~51,150** | |
+| **Rounded up** | **~52,000** | |
 
 ### 5c. payDailyJackpotCoinAndTickets caller overhead (STAGE_JACKPOT_COIN_TICKETS)
 
@@ -284,9 +286,9 @@ Operations in `payDailyJackpot` before/after `_processDailyEth`:
 | `jackpotCounter += counterStep` SSTORE | 2,900 | Warm write |
 | AdvanceModule: `_unlockRng` | 5,100 | |
 | `emit Advance` | 750 | |
-| `coinflip.creditFlip` (advance bounty) | 10,000 | External call |
-| **TOTAL caller overhead** | **~35,950** | |
-| **Rounded up** | **~36,000** | |
+| `coinflip.creditFlip` (advance bounty) | 32,000 | Cold external CALL + _addDailyFlip SSTOREs |
+| **TOTAL caller overhead** | **~57,950** | |
+| **Rounded up** | **~58,000** | |
 
 ## 6. Stage-by-Stage Worst-Case Totals
 
@@ -296,13 +298,13 @@ Worst case: pool >= 200 ETH, all winners have autorebuy enabled with takeProfit 
 
 | Component | Gas |
 |-----------|-----|
-| Caller overhead (payDailyJackpot) | 94,000 |
+| Caller overhead (payDailyJackpot + AdvanceModule) | 127,000 |
 | _processDailyEth base overhead (SPLIT_CALL1) | 38,000 |
 | 159 normal winners * 83,000 | 13,197,000 |
 | 1 solo winner * 125,000 (whale pass + DGNRS on final day) | 125,000 |
-| **TOTAL** | **13,454,000** |
-| **% of 16M limit** | **84.1%** |
-| **Margin** | **2,546,000 (15.9%)** |
+| **TOTAL** | **13,487,000** |
+| **% of 16M limit** | **84.3%** |
+| **Margin** | **2,513,000 (15.7%)** |
 
 ### 6b. STAGE_JACKPOT_DAILY_STARTED -- Sub-case B: SPLIT_NONE (totalWinners <= 160)
 
@@ -312,13 +314,13 @@ Winner distribution at total=160: up to 159 non-solo + 1 solo. All have autorebu
 
 | Component | Gas |
 |-----------|-----|
-| Caller overhead (payDailyJackpot) | 94,000 |
+| Caller overhead (payDailyJackpot + AdvanceModule) | 127,000 |
 | _processDailyEth base overhead (SPLIT_NONE) | 25,000 |
 | 159 normal winners * 83,000 | 13,197,000 |
 | 1 solo winner * 125,000 (whale pass + DGNRS on final day) | 125,000 |
-| **TOTAL** | **13,441,000** |
-| **% of 16M limit** | **84.0%** |
-| **Margin** | **2,559,000 (16.0%)** |
+| **TOTAL** | **13,474,000** |
+| **% of 16M limit** | **84.2%** |
+| **Margin** | **2,526,000 (15.8%)** |
 
 Note: SPLIT_NONE is cheaper than SPLIT_CALL1 by ~13,000 gas (no resumeEthPool SSTORE, no call1Bucket mask build). Same winner count ceiling of 160.
 
@@ -328,13 +330,13 @@ Only reached when SPLIT_CALL1 was used in the previous call. 95 + 50 = 145 mid-b
 
 | Component | Gas |
 |-----------|-----|
-| Caller overhead (_resumeDailyEth) | 30,000 |
+| Caller overhead (_resumeDailyEth) | 52,000 |
 | _processDailyEth base overhead (SPLIT_CALL2) | 21,000 |
 | 145 normal winners * 83,000 | 12,035,000 |
 | No solo winner in call 2 | 0 |
-| **TOTAL** | **12,086,000** |
-| **% of 16M limit** | **75.5%** |
-| **Margin** | **3,914,000 (24.5%)** |
+| **TOTAL** | **12,108,000** |
+| **% of 16M limit** | **75.7%** |
+| **Margin** | **3,892,000 (24.3%)** |
 
 ### 6d. STAGE_JACKPOT_COIN_TICKETS
 
@@ -347,19 +349,28 @@ Per coin winner in `_awardDailyCoinToTraitWinners`:
 | Operation | Gas | Notes |
 |-----------|-----|-------|
 | _randTraitTicket per-winner | 2,193 | Same as ETH path |
-| `coinflip.creditFlip(winner, amount)` external call | 10,000 | Cross-contract CALL + `_addDailyFlip` SSTOREs |
+| **coinflip.creditFlip external call:** | | Cross-contract CALL to BurnieCoinflip._addDailyFlip |
+| -- CALL opcode (warm after first) | 100 | BurnieCoinflip address warm after first call |
+| -- `onlyFlipCreditors` modifier | 2,200 | SLOAD (mapping check) + comparison |
+| -- `_targetFlipDay()` | 300 | View computation |
+| -- `coinflipBalance[day][player]` SLOAD | 2,100 | Cold -- unique player mapping |
+| -- `coinflipBalance[day][player]` SSTORE | 22,100 | 0->nonzero worst case |
+| -- `_updateTopDayBettor` SLOAD | 100 | Warm after first call in tx |
+| -- `_updateTopDayBettor` SSTORE | 2,900 | Warm (leader update; conditional but worst case) |
+| -- `emit CoinflipStakeUpdated` | 1,125 | |
+| -- `emit CoinflipTopUpdated` | 1,125 | Conditional, included for worst case |
 | `emit JackpotBurnieWin (LOG3)` | 1,500 | |
 | Loop overhead | 50 | |
-| **Per-coin-winner total** | **~13,743** | |
-| **Rounded up** | **~14,000** | |
+| **Per-coin-winner total** | **~35,893** | |
+| **Rounded up** | **~36,000** | |
 
-One-time coin overhead: `_calcDailyCoinBudget` (pool reads + arithmetic: 3,000), `_awardFarFutureCoinJackpot` (10 iterations: ~40,000), `_computeBucketCounts` (4 SLOAD for ticket array lengths: 8,400 + computation: 1,000), `_randTraitTicket` one-time per bucket (4 * 4,350 = 17,400).
+One-time coin overhead: `_calcDailyCoinBudget` (pool reads + arithmetic: 3,000), `_awardFarFutureCoinJackpot` (10 iterations: ~40,000), first CALL to BurnieCoinflip cold address (+2,500), `_computeBucketCounts` (4 SLOAD for ticket array lengths: 8,400 + computation: 1,000), `_randTraitTicket` one-time per bucket (4 * 4,350 = 17,400), `_updateTopDayBettor` first SLOAD cold (+2,000).
 
 | Component | Gas |
 |-----------|-----|
-| Coin one-time overhead | ~70,000 |
-| 50 coin winners * 14,000 | 700,000 |
-| **Coin subtotal** | **~770,000** |
+| Coin one-time overhead | ~75,000 |
+| 50 coin winners * 36,000 | 1,800,000 |
+| **Coin subtotal** | **~1,875,000** |
 
 #### Ticket Jackpot Gas (2 distributions, up to 100 winners each)
 
@@ -378,13 +389,13 @@ One-time ticket overhead per distribution: `_distributeTicketJackpot` (bucket co
 
 | Component | Gas |
 |-----------|-----|
-| Caller overhead (payDailyJackpotCoinAndTickets) | 36,000 |
-| Coin subtotal | 770,000 |
+| Caller overhead (payDailyJackpotCoinAndTickets) | 58,000 |
+| Coin subtotal | 1,875,000 |
 | Ticket distribution 1: one-time (29,400) + 100 winners * 53,000 | 5,329,400 |
 | Ticket distribution 2: one-time (29,400) + 100 winners * 53,000 | 5,329,400 |
-| **TOTAL** | **11,464,800** |
-| **% of 16M limit** | **71.7%** |
-| **Margin** | **4,535,200 (28.3%)** |
+| **TOTAL** | **12,591,800** |
+| **% of 16M limit** | **78.7%** |
+| **Margin** | **3,408,200 (21.3%)** |
 
 ### 6e. Early-Burn Path (non-daily, SPLIT_NONE, JACKPOT_MAX_WINNERS=160)
 
@@ -437,10 +448,10 @@ Called externally from GameOverModule. Uses `DAILY_ETH_MAX_WINNERS = 305` and `D
 
 | Path | Worst-Case Winners | Per-Winner | Overhead | Worst-Case Gas | Limit | Margin |
 |------|--------------------|------------|----------|---------------|-------|--------|
-| Daily call 1 -- SPLIT_CALL1 (160, autorebuy+dust) | 159 normal + 1 solo | 83,000 / 125,000 | 132,000 | **13,454,000** | 16,000,000 | **15.9%** |
-| Daily call 1 -- SPLIT_NONE (160, autorebuy+dust) | 159 normal + 1 solo | 83,000 / 125,000 | 119,000 | **13,441,000** | 16,000,000 | **16.0%** |
-| Daily call 2 -- SPLIT_CALL2 (145, autorebuy+dust) | 145 normal | 83,000 | 51,000 | **12,086,000** | 16,000,000 | **24.5%** |
-| Coin+Tickets (50 coin + 200 ticket) | 250 total | 14,000 / 53,000 | 36,000 | **11,464,800** | 16,000,000 | **28.3%** |
+| Daily call 1 -- SPLIT_CALL1 (160, autorebuy+dust) | 159 normal + 1 solo | 83,000 / 125,000 | 165,000 | **13,487,000** | 16,000,000 | **15.7%** |
+| Daily call 1 -- SPLIT_NONE (160, autorebuy+dust) | 159 normal + 1 solo | 83,000 / 125,000 | 152,000 | **13,474,000** | 16,000,000 | **15.8%** |
+| Daily call 2 -- SPLIT_CALL2 (145, autorebuy+dust) | 145 normal | 83,000 | 73,000 | **12,108,000** | 16,000,000 | **24.3%** |
+| Coin+Tickets (50 coin + 200 ticket) | 250 total | 36,000 / 53,000 | 58,000 | **12,591,800** | 16,000,000 | **21.3%** |
 | Early-burn -- SPLIT_NONE (160, autorebuy+dust) | 159 normal + 1 solo | 83,000 | 81,000 | **13,361,000** | 16,000,000 | **16.5%** |
 | Terminal -- SPLIT_NONE (305, no autorebuy) | 304 normal + 1 solo | 31,000 | 59,000 | **9,514,000** | 16,000,000 | **40.5%** |
 
@@ -448,8 +459,8 @@ Called externally from GameOverModule. Uses `DAILY_ETH_MAX_WINNERS = 305` and `D
 
 The skip-split threshold is `JACKPOT_MAX_WINNERS = 160`. This is correct because:
 
-1. **At 160 total winners with autorebuy+dust:** 13,441,000 gas (16.0% margin). Safe.
-2. **At 161 total winners (hypothetical SPLIT_NONE):** 13,441,000 + 83,000 = 13,524,000 gas. Still safe at 15.5% margin.
+1. **At 160 total winners with autorebuy+dust:** 13,474,000 gas (15.8% margin). Safe.
+2. **At 161 total winners (hypothetical SPLIT_NONE):** 13,474,000 + 83,000 = 13,557,000 gas. Still safe at 15.3% margin.
 3. **The threshold is conservative:** Even at 305 winners without autorebuy (terminal path), gas is only 9.5M. The 160 threshold ensures that the SPLIT_NONE daily path (which has autorebuy) stays well under 16M.
 4. **Beyond 160 with autorebuy:** If all 305 winners had autorebuy+dust in a single call: 305 * 83,000 + 25,000 = 25,340,000 -- exceeds 16M. This confirms splitting is necessary when totalWinners > 160 and autorebuy is possible.
 
@@ -474,9 +485,9 @@ The 160 cutoff is the correct threshold: it is the highest winner count where si
 
 **All paths safe.** Every advanceGame jackpot stage and every non-advanceGame jackpot path stays well under the 16,000,000 gas limit.
 
-**Tightest case:** Daily call 1 with SPLIT_CALL1 at 13,454,000 gas (15.9% margin = ~2.5M gas headroom).
+**Tightest case:** Daily call 1 with SPLIT_CALL1 at 13,487,000 gas (15.7% margin = ~2.5M gas headroom).
 
-**The 15.9% margin is conservative because:**
+**The 15.7% margin is conservative because:**
 1. Not all 159 winners will have `takeProfit > 0` -- removing the dust path saves ~23,000 gas/winner
 2. Some `holders[idx]` slots will be warm (duplicate winners drawn with replacement reduce cold SLOADs)
 3. Queue write keys are shared across winners in the same level -- `ticketQueue[wk]` length becomes warm after the first push
