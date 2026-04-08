@@ -43,7 +43,9 @@
 - ✅ **v17.1 Comment Correctness Sweep** — Phases 175-178 (shipped 2026-04-03)
 - ✅ **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (shipped 2026-04-04)
 - ✅ **v19.0 Pool Accounting Fix & Sweep** — Phases 183-185 (shipped 2026-04-04)
-- 🚧 **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (in progress)
+- ✅ **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (shipped 2026-04-08)
+- ✅ **v21.0 Jackpot Two-Call Split & Skip-Split Optimization** — Phases 195-198 (shipped 2026-04-08)
+- 🔄 **v22.0 Delta Audit & Payout Reference Rewrite** — Phases 199-200
 
 ## Phases
 
@@ -141,51 +143,34 @@ See individual milestone entries above.
 
 </details>
 
-### v20.0 Pool Consolidation & Write Batching (In Progress)
+<details>
+<summary>v20.0 Pool Consolidation & Write Batching (Phases 186-187) -- SHIPPED 2026-04-08</summary>
 
-**Milestone Goal:** Merge pool transition logic from JackpotModule into AdvanceModule, batch SSTOREs, and free bytecode space in JackpotModule.
+- [x] **Phase 186: Pool Consolidation & Write Batching** - 4 plans (completed 2026-04-05)
+- [x] **Phase 187: Delta Audit** - 2 plans (completed 2026-04-05)
 
-- [x] **Phase 186: Pool Consolidation & Write Batching** - Move pool transition functions to AdvanceModule, inline pool math in memory, batch SSTOREs, expose BAF entry point, fix quest entropy (completed 2026-04-05)
-- [x] **Phase 187: Delta Audit** - Behavioral equivalence verification, pool mutation trace, test suite regression check (completed 2026-04-05)
+</details>
 
-## Phase Details
+<details>
+<summary>v21.0 Jackpot Two-Call Split & Skip-Split Optimization (Phases 195-198) -- SHIPPED 2026-04-08</summary>
 
-### Phase 186: Pool Consolidation & Write Batching
-**Goal**: All pool transition logic lives in AdvanceModule with pool math computed in memory and SSTOREs batched -- JackpotModule is smaller and exposes BAF jackpot as a callable entry point
-**Depends on**: Phase 185
-**Requirements**: POOL-01, POOL-02, POOL-03, POOL-04, POOL-05, POOL-06, GAS-01, SIZE-01, SIZE-02, SIZE-03
-**Success Criteria** (what must be TRUE):
-  1. `consolidatePrizePools` logic executes inside AdvanceModule -- pool merge, x00 yield dump, keep roll, and `_drawDownFuturePrizePool` are a single inlined flow with no cross-module delegatecall for pool consolidation
-  2. `runRewardJackpots` orchestration (pool tracking, rebuy delta reconciliation) executes inside AdvanceModule, calling back into JackpotModule only for individual jackpot execution
-  3. All intermediate pool values (futurePool, currentPool, nextPool deltas) are computed in memory variables and written to storage in a single batch at the end of the consolidation flow
-  4. JackpotModule exposes a callable entry point for BAF jackpot execution (replacing the currently private `_runBafJackpot`), and all migrated functions are removed from JackpotModule
-  5. Both modules compile under 24KB (`forge build` succeeds with no contract-size errors) and quest entropy reads `rngWord` instead of `rngWordByDay[day]`
-**Plans:** 4/4 plans complete
-Plans:
-- [x] 186-01-PLAN.md — JackpotModule entry points + body gutting + interface update + Game passthrough + quest entropy fix
-- [x] 186-02-PLAN.md — Inline consolidation + orchestration + drawdown into AdvanceModule with SSTORE batching
-- [x] 186-03-PLAN.md — Remove dead code from JackpotModule + clean interface
-- [x] 186-04-PLAN.md — Gap closure: add runBafJackpot passthrough to DegenerusGame.sol + self-call guard to JackpotModule
+- [x] **Phase 195: Jackpot Two-Call Split** - 1 plan (completed 2026-04-06)
+- [x] **Phase 196: Post-Split Audit — Gas, Logic Parity, State, Bytecode** - 3 plans (completed 2026-04-06)
+- [x] **Phase 197: Payout Reference & Event Catalog** - 1 plan (completed 2026-04-06)
+- [x] **Phase 198: Skip-Split Optimization + Code Cleanup** - 1 plan (completed 2026-04-08)
 
-### Phase 187: Delta Audit
-**Goal**: Every behavioral change from Phase 186 is proven equivalent to pre-restructuring behavior -- no pool accounting regressions, no new attack surface
-**Depends on**: Phase 186
-**Requirements**: DELTA-01, DELTA-02, DELTA-03
-**Success Criteria** (what must be TRUE):
-  1. Pool values are identical for all level transition paths (normal advance, x10 skip, x100 skip) when compared against pre-restructuring behavior -- worked examples or diff-based trace confirms equivalence
-  2. A pool mutation trace of the new AdvanceModule consolidation flow shows every debit has a matching credit with no untracked remainders or orphaned values
-  3. Foundry and Hardhat test suites pass with zero unexpected regressions after all Phase 186 changes applied
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 187-01-PLAN.md — Full variable sweep audit of consolidated pool flow (DELTA-01, DELTA-02)
-- [x] 187-02-PLAN.md — Peripheral changes audit + test regression (DELTA-03)
+</details>
 
-## Progress Table
+<details>
+<summary>v22.0 Delta Audit & Payout Reference Rewrite (Phases 199-200) -- IN PROGRESS</summary>
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 186. Pool Consolidation & Write Batching | 4/4 | Complete    | 2026-04-05 |
-| 187. Delta Audit | 2/2 | Complete    | 2026-04-05 |
+- [ ] **Phase 199: Delta Audit — Skip-Split + Gas Ceiling Proof** — 2 plans
+  Plans:
+  - [ ] 199-01-PLAN.md — Theoretical worst-case gas derivation for all advanceGame jackpot stages
+  - [ ] 199-02-PLAN.md — Delta audit: caller chain trace, parity verification, storage lifecycle, dead code scan
+- [ ] **Phase 200: Payout Reference Rewrite** — Clear and rewrite JACKPOT-PAYOUT-REFERENCE.md organized by jackpot type, update event catalog
+
+</details>
 
 ## Deferred
 

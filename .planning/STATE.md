@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v20.0
-milestone_name: Pool Consolidation & Write Batching
-status: executing
-stopped_at: Phase 187 context gathered
-last_updated: "2026-04-05T04:52:09.848Z"
-last_activity: 2026-04-05
+milestone: v21.0
+milestone_name: Jackpot Two-Call Split & Skip-Split Optimization
+status: complete
+stopped_at: Milestone v21.0 complete
+last_updated: "2026-04-08T22:30:00.000Z"
+last_activity: 2026-04-08
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 7
+  completed_plans: 7
   percent: 100
 ---
 
@@ -18,32 +18,26 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-04)
+See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 187 — Delta Audit
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 187
-Plan: Not started
-Status: Executing Phase 187
-Last activity: 2026-04-05
+Milestone: v21.0 — Jackpot Two-Call Split & Skip-Split Optimization (complete)
+Status: All 4 phases complete, ready for next milestone
+Last activity: 2026-04-08
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 8 (v20.0 milestone)
-- Average duration: -
-- Total execution time: 0 hours
-
-**Recent Trend:**
-
-- Last 5 plans: -
-- Trend: New milestone
+- Total plans completed: 6 (v20.0 milestone)
+- Timeline: 1 day (2026-04-05)
+- Git range: 5074a0f6..6d81a6b1 (15 commits)
 
 ## Accumulated Context
 
@@ -52,21 +46,20 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v19.0]: Deferred futurePool SSTORE in jackpot payout path to capture paidEth; re-read storage after _executeJackpot to avoid overwriting auto-rebuy writes
-- [v16.0]: Eliminate EndgameModule — redistribute 3 functions into existing modules
-- [v16.0]: Storage slots 0-2 repacked, currentPrizePool downsized to uint128
+- [v20.0]: Inline consolidatePrizePools + runRewardJackpots into AdvanceModule; batch SSTOREs
+- [v20.0]: Expose runBafJackpot as external entry point with self-call guard (mirrors Decimator pattern)
+- [v20.0]: Accept F-187-01 x100 trigger level shift as design improvement
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
 - ContractAddresses.sol has unstaged changes (different deploy addresses) — stash before test/tool runs
-- JackpotModule at 23.8KB (0.2KB free) — near contract size limit; Phase 186 must shrink it
-- Auto-rebuy writes to futurePool storage mid-execution during BAF/decimator jackpots — constrains how much future pool SSTORE can be deferred
+- FuturepoolSkim.t.sol references restructured _applyTimeBasedFutureTake (pre-existing compilation failure)
 
 ## Session Continuity
 
-Last session: 2026-04-05T03:52:33.464Z
-Stopped at: Phase 187 context gathered
+Last session: 2026-04-08
+Stopped at: Milestone v20.0 archived
