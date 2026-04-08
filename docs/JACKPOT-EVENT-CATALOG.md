@@ -2,22 +2,68 @@
 
 This document catalogs every event emitted during jackpot operations in the Degenerus Protocol. Each entry includes the exact Solidity signature, field descriptions, emitting code paths, and cross-references to the [Jackpot Payout Reference](JACKPOT-PAYOUT-REFERENCE.md).
 
-**Last verified against:** commit `f0dc4c99`
+**Last verified against:** commit `fa2b9c39`
 
 ---
 
 ## JackpotModule Events
 
-### A. JackpotTicketWinner
+### A. JackpotEthWin
 
 **Solidity signature:**
 
 ```solidity
-event JackpotTicketWinner(
+event JackpotEthWin(
     address indexed winner,
     uint24 indexed level,
     uint8 indexed traitId,
     uint256 amount,
+    uint256 ticketIndex,
+    uint24 rebuyLevel,
+    uint32 rebuyTickets
+);
+```
+
+**Declared:** `DegenerusGameJackpotModule.sol` line 67
+
+**Field descriptions:**
+
+| Field | Type | Indexed | Description |
+|-------|------|---------|-------------|
+| `winner` | `address` | Yes | Address of the jackpot winner receiving ETH credit |
+| `level` | `uint24` | Yes | Game level when the jackpot was triggered |
+| `traitId` | `uint8` | Yes | Winning trait ID for the bucket (0 for BAF jackpot where traits are not used) |
+| `amount` | `uint256` | No | ETH (wei) credited to the winner |
+| `ticketIndex` | `uint256` | No | Index in `traitBurnTicket[level][traitId]` used for winner selection (0 for BAF) |
+| `rebuyLevel` | `uint24` | No | Level tickets were auto-purchased for (0 if auto-rebuy did not fire) |
+| `rebuyTickets` | `uint32` | No | Number of auto-rebuy tickets credited (0 if auto-rebuy did not fire) |
+
+**Emitting paths:**
+
+| # | Function | File | Line | Condition |
+|---|----------|------|------|-----------|
+| 1 | `_handleSoloBucketWinner` | JackpotModule | 1424 | Solo bucket winner in daily ETH distribution (ETH portion via `_processSoloBucketWinner`) |
+| 2 | `_payNormalBucket` | JackpotModule | 1470 | Normal bucket winners in daily ETH distribution |
+| 3 | `runBafJackpot` | JackpotModule | 2028 | BAF large winner: ETH half of split payout |
+| 4 | `runBafJackpot` | JackpotModule | 2060 | BAF small winner (even index): 100% ETH payout |
+
+**Cross-reference:** Payout Reference Sections 3 (Daily Normal), 5 (Daily Final), 6 (Early-Burn), 8 (Terminal), 10 (BAF Jackpot)
+
+**Note:** Auto-rebuy information is embedded directly in this event via `rebuyLevel` and `rebuyTickets` fields. When auto-rebuy fires, these fields are non-zero; otherwise both are 0. This replaces the former separate `AutoRebuyProcessed` event in JackpotModule.
+
+---
+
+### B. JackpotTicketWin
+
+**Solidity signature:**
+
+```solidity
+event JackpotTicketWin(
+    address indexed winner,
+    uint24 indexed ticketLevel,
+    uint8 indexed traitId,
+    uint32 ticketCount,
+    uint24 sourceLevel,
     uint256 ticketIndex
 );
 ```
@@ -28,29 +74,123 @@ event JackpotTicketWinner(
 
 | Field | Type | Indexed | Description |
 |-------|------|---------|-------------|
-| `winner` | `address` | Yes | Address of the jackpot winner receiving ETH or BURNIE credit |
-| `level` | `uint24` | Yes | Game level when the jackpot was triggered |
-| `traitId` | `uint8` | Yes | Winning trait ID for the bucket this winner was drawn from (0-255, encodes quadrant + color + symbol) |
-| `amount` | `uint256` | No | ETH (wei) or BURNIE (units) credited to the winner |
-| `ticketIndex` | `uint256` | No | Index in `traitBurnTicket[level][traitId]` used for winner selection; `uint256.max` for deity virtual entries |
+| `winner` | `address` | Yes | Address of the ticket winner |
+| `ticketLevel` | `uint24` | Yes | Level the awarded tickets are for (typically sourceLevel+1) |
+| `traitId` | `uint8` | Yes | Winning trait ID for the bucket (0 for BAF jackpot) |
+| `ticketCount` | `uint32` | No | Number of tickets credited to the winner |
+| `sourceLevel` | `uint24` | No | Jackpot level that generated this ticket award |
+| `ticketIndex` | `uint256` | No | Index in the burn ticket pool used for winner selection (0 for BAF) |
 
 **Emitting paths:**
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | `_processDailyEth` | JackpotModule | 1244 | Daily jackpot (days 1-5): each normal bucket winner with non-zero address |
-| 2 | `_resolveTraitWinners` (payCoin=true) | JackpotModule | 1406 | Coin distribution path: each BURNIE winner with non-zero address |
-| 3 | `_resolveTraitWinners` (payCoin=false, solo) | JackpotModule | 1439 | Solo bucket winner in early-burn/terminal paths (ETH via `_processSoloBucketWinner`) |
-| 4 | `_resolveTraitWinners` (payCoin=false, normal) | JackpotModule | 1458 | Normal bucket winners in early-burn/terminal paths |
-| 5 | `_awardDailyCoinToTraitWinners` | JackpotModule | 2213 | Near-future BURNIE coin winners (daily coin jackpot) |
+| 1 | `_runEarlyBirdLootboxJackpot` | JackpotModule | 689 | Early-bird lootbox ticket winners (called from `payDailyJackpot`) |
+| 2 | `_distributeTicketsToBucket` | JackpotModule | 990 | Daily and carryover lootbox ticket distribution (called via `_distributeTicketJackpot` from `payDailyJackpotCoinAndTickets` and `payDailyJackpot`) |
+| 3 | `runBafJackpot` | JackpotModule | 2040 | BAF small winner lootbox: immediate ticket award |
+| 4 | `runBafJackpot` | JackpotModule | 2064 | BAF small winner (odd index): 100% lootbox payout |
 
-**Cross-reference:** Payout Reference Sections 3 (Daily Normal), 5 (Daily Final), 6 (Early-Burn), 8 (Terminal), 11 (BURNIE Coin near-future)
-
-**Note:** This is a unified event for both ETH and BURNIE payouts. The `amount` field contains ETH (wei) when emitted from paths 1, 3, 4, and BURNIE units when emitted from paths 2, 5. Consumers must differentiate by the emitting context (daily ETH vs coin jackpot stage).
+**Cross-reference:** Payout Reference Sections 3 (Daily Normal), 5 (Daily Final), 6 (Early-Burn), 10 (BAF Jackpot)
 
 ---
 
-### B. FarFutureCoinJackpotWinner
+### C. JackpotBurnieWin
+
+**Solidity signature:**
+
+```solidity
+event JackpotBurnieWin(
+    address indexed winner,
+    uint24 indexed level,
+    uint8 indexed traitId,
+    uint256 amount,
+    uint256 ticketIndex
+);
+```
+
+**Declared:** `DegenerusGameJackpotModule.sol` line 88
+
+**Field descriptions:**
+
+| Field | Type | Indexed | Description |
+|-------|------|---------|-------------|
+| `winner` | `address` | Yes | Address of the BURNIE coin recipient |
+| `level` | `uint24` | Yes | Game level when the coin jackpot ran |
+| `traitId` | `uint8` | Yes | Winning trait ID for the bucket |
+| `amount` | `uint256` | No | BURNIE units credited via `coinflip.creditFlip` |
+| `ticketIndex` | `uint256` | No | Index in the burn ticket pool used for winner selection |
+
+**Emitting paths:**
+
+| # | Function | File | Line | Condition |
+|---|----------|------|------|-----------|
+| 1 | `_awardDailyCoinToTraitWinners` | JackpotModule | 1771 | Near-future BURNIE coin winners (daily coin jackpot, trait-matched) |
+
+**Cross-reference:** Payout Reference Section 11 (BURNIE Coin near-future)
+
+---
+
+### D. JackpotDgnrsWin
+
+**Solidity signature:**
+
+```solidity
+event JackpotDgnrsWin(address indexed winner, uint256 amount);
+```
+
+**Declared:** `DegenerusGameJackpotModule.sol` line 97
+
+**Field descriptions:**
+
+| Field | Type | Indexed | Description |
+|-------|------|---------|-------------|
+| `winner` | `address` | Yes | Address of the DGNRS token recipient |
+| `amount` | `uint256` | No | DGNRS tokens transferred from the Reward pool |
+
+**Emitting paths:**
+
+| # | Function | File | Line | Condition |
+|---|----------|------|------|-----------|
+| 1 | `_handleSoloBucketWinner` | JackpotModule | 1450 | Solo bucket winner on the final jackpot day (`isFinalDay=true`), only if DGNRS reward pool has balance |
+
+**Cross-reference:** Payout Reference Section 5 (Daily Final -- solo bucket DGNRS bonus)
+
+---
+
+### E. JackpotWhalePassWin
+
+**Solidity signature:**
+
+```solidity
+event JackpotWhalePassWin(
+    address indexed winner,
+    uint24 indexed level,
+    uint256 halfPassCount
+);
+```
+
+**Declared:** `DegenerusGameJackpotModule.sol` line 100
+
+**Field descriptions:**
+
+| Field | Type | Indexed | Description |
+|-------|------|---------|-------------|
+| `winner` | `address` | Yes | Address receiving whale pass credit |
+| `level` | `uint24` | Yes | Game level when the whale pass was awarded |
+| `halfPassCount` | `uint256` | No | Number of half-whale-passes credited (ETH spent / `HALF_WHALE_PASS_PRICE`) |
+
+**Emitting paths:**
+
+| # | Function | File | Line | Condition |
+|---|----------|------|------|-----------|
+| 1 | `_handleSoloBucketWinner` | JackpotModule | 1436 | Solo bucket winner: 25% of payout routed to whale passes (via `_processSoloBucketWinner`) |
+| 2 | `runBafJackpot` | JackpotModule | 2044 | BAF large winner: lootbox half exceeds `LOOTBOX_CLAIM_THRESHOLD`, deferred as whale pass claim |
+
+**Cross-reference:** Payout Reference Sections 3-5 (Daily solo bucket), 10 (BAF Jackpot large winner)
+
+---
+
+### F. FarFutureCoinJackpotWinner
 
 **Solidity signature:**
 
@@ -63,7 +203,7 @@ event FarFutureCoinJackpotWinner(
 );
 ```
 
-**Declared:** `DegenerusGameJackpotModule.sol` line 69
+**Declared:** `DegenerusGameJackpotModule.sol` line 59
 
 **Field descriptions:**
 
@@ -78,81 +218,15 @@ event FarFutureCoinJackpotWinner(
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | `_awardFarFutureCoinJackpot` | JackpotModule | 2314 | Each far-future coin winner found (up to `FAR_FUTURE_COIN_SAMPLES`=10 samples, one winner per sampled level) |
+| 1 | `_awardFarFutureCoinJackpot` | JackpotModule | 1849 | Each far-future coin winner found (up to `FAR_FUTURE_COIN_SAMPLES`=10 samples, one winner per sampled level) |
 
 **Cross-reference:** Payout Reference Section 11 (BURNIE Coin far-future)
 
 ---
 
-### C. AutoRebuyProcessed (JackpotModule)
-
-**Solidity signature:**
-
-```solidity
-event AutoRebuyProcessed(
-    address indexed player,
-    uint24 targetLevel,
-    uint32 ticketCount,
-    uint256 ethSpent,
-    uint256 remainder
-);
-```
-
-**Declared:** `DegenerusGameJackpotModule.sol` line 59
-
-**Field descriptions:**
-
-| Field | Type | Indexed | Description |
-|-------|------|---------|-------------|
-| `player` | `address` | Yes | Address of the auto-rebuy recipient |
-| `targetLevel` | `uint24` | No | Level tickets were purchased for (current+1 or current+2, 50/50 chance) |
-| `ticketCount` | `uint32` | No | Number of tickets credited (includes 30% or 45% bonus when afKing active) |
-| `ethSpent` | `uint256` | No | ETH spent on ticket purchases (moved to next/future pool) |
-| `remainder` | `uint256` | No | ETH returned to `claimableWinnings` (reserved amount + dust from fractional tickets) |
-
-**Emitting paths:**
-
-| # | Function | File | Line | Condition |
-|---|----------|------|------|-----------|
-| 1 | `_processAutoRebuy` | JackpotModule | 839 | Any jackpot ETH winner with auto-rebuy enabled (daily, early-burn, terminal, BAF ETH portion) |
-
-**Cross-reference:** Payout Reference Sections 3, 5, 6, 8, 10 (all ETH-distributing jackpots when winner has auto-rebuy)
-
----
-
-### D. RewardJackpotsSettled (JackpotModule declaration)
-
-**Solidity signature:**
-
-```solidity
-event RewardJackpotsSettled(
-    uint24 indexed lvl,
-    uint256 futurePool,
-    uint256 claimableDelta
-);
-```
-
-**Declared:** `DegenerusGameJackpotModule.sol` line 92 (duplicate declaration for delegatecall ABI compatibility; emitted from AdvanceModule)
-
-**Field descriptions:**
-
-| Field | Type | Indexed | Description |
-|-------|------|---------|-------------|
-| `lvl` | `uint24` | Yes | Level being settled (indexed for `Advance` event correlation) |
-| `futurePool` | `uint256` | No | Authoritative post-resolution `futurePrizePool` value |
-| `claimableDelta` | `uint256` | No | Total ETH moved to `claimablePool` during resolution (BAF + affiliate + pool accounting) |
-
-**Emitting paths:**
-
-See AdvanceModule entry (Section G) -- emitted only from `_consolidatePoolsAndRewardJackpots`.
-
-**Cross-reference:** Payout Reference Section 10 (BAF Jackpot)
-
----
-
 ## AdvanceModule Events
 
-### E. Advance
+### G. Advance
 
 **Solidity signature:**
 
@@ -174,6 +248,7 @@ event Advance(uint8 stage, uint24 lvl);
 | Constant | Value | Meaning |
 |----------|-------|---------|
 | `STAGE_ENTERED_JACKPOT` | 7 | Jackpot phase entered (level transition complete) |
+| `STAGE_JACKPOT_ETH_RESUME` | 8 | Call 2 completed: resumed ETH distribution (mid buckets) |
 | `STAGE_JACKPOT_COIN_TICKETS` | 9 | Call 2 completed: coin + ticket distribution done |
 | `STAGE_JACKPOT_PHASE_ENDED` | 10 | All 5 jackpot days complete, level transitioning |
 | `STAGE_JACKPOT_DAILY_STARTED` | 11 | Call 1 completed: daily ETH distribution done |
@@ -184,18 +259,18 @@ Other stages (not jackpot-specific): `STAGE_GAMEOVER` (0), `STAGE_RNG_REQUESTED`
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | `advanceGame` | AdvanceModule | 180 | Game over detected (`STAGE_GAMEOVER`) |
-| 2 | `advanceGame` | AdvanceModule | 207 | Ticket processing working (`STAGE_TICKETS_WORKING`) |
-| 3 | `advanceGame` | AdvanceModule | 249 | Ticket processing working (alternate path) |
-| 4 | `advanceGame` | AdvanceModule | 429 | End of every `advanceGame` call (final stage emitted) |
+| 1 | `advanceGame` | AdvanceModule | 184 | Game over detected (`STAGE_GAMEOVER`) |
+| 2 | `advanceGame` | AdvanceModule | 211 | Ticket processing working (`STAGE_TICKETS_WORKING`) |
+| 3 | `advanceGame` | AdvanceModule | 253 | Ticket processing working (alternate path) |
+| 4 | `advanceGame` | AdvanceModule | 440 | End of every `advanceGame` call (final stage emitted) |
 
 **Cross-reference:** Payout Reference Section 13 (Two-Call Split stage machine)
 
-**Note:** Path 4 (line 429) is the primary emit -- it fires at the end of every `advanceGame` call with the final stage reached. Paths 1-3 are early-break emits for specific stages that exit before reaching line 429.
+**Note:** Path 4 (line 440) is the primary emit -- it fires at the end of every `advanceGame` call with the final stage reached. Paths 1-3 are early-break emits for specific stages that exit before reaching line 440.
 
 ---
 
-### F. RewardJackpotsSettled (AdvanceModule)
+### H. RewardJackpotsSettled
 
 **Solidity signature:**
 
@@ -211,13 +286,17 @@ event RewardJackpotsSettled(
 
 **Field descriptions:**
 
-(Same as JackpotModule declaration -- see Section D)
+| Field | Type | Indexed | Description |
+|-------|------|---------|-------------|
+| `lvl` | `uint24` | Yes | Level being settled (indexed for `Advance` event correlation) |
+| `futurePool` | `uint256` | No | Authoritative post-resolution `futurePrizePool` value |
+| `claimableDelta` | `uint256` | No | Total ETH moved to `claimablePool` during resolution (BAF + affiliate + pool accounting) |
 
 **Emitting paths:**
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | `_consolidatePoolsAndRewardJackpots` | AdvanceModule | 808 | After BAF + affiliate + pool accounting, only if `futurePrizePool` changed from storage or `claimableDelta != 0` |
+| 1 | `_consolidatePoolsAndRewardJackpots` | AdvanceModule | 804 | After BAF + affiliate + pool accounting completes |
 
 **Cross-reference:** Payout Reference Sections 10 (BAF Jackpot), 12 (Pool Flow Summary)
 
@@ -225,7 +304,7 @@ event RewardJackpotsSettled(
 
 ## DecimatorModule Events
 
-### G. DecBurnRecorded
+### I. DecBurnRecorded
 
 **Solidity signature:**
 
@@ -257,13 +336,13 @@ event DecBurnRecorded(
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | `decimatorBurn` | DecimatorModule | 177 | When a player's burn delta is non-zero (burn amount increased) |
+| 1 | `recordDecBurn` | DecimatorModule | 187 | When a player's burn delta is non-zero (burn amount increased) |
 
 **Cross-reference:** Payout Reference Section 9 (Decimator Jackpot)
 
 ---
 
-### H. TerminalDecBurnRecorded
+### J. TerminalDecBurnRecorded
 
 **Solidity signature:**
 
@@ -279,7 +358,7 @@ event TerminalDecBurnRecorded(
 );
 ```
 
-**Declared:** `DegenerusGameDecimatorModule.sol` line 665
+**Declared:** `DegenerusGameDecimatorModule.sol` line 676
 
 **Field descriptions:**
 
@@ -297,13 +376,13 @@ event TerminalDecBurnRecorded(
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | Terminal decimator burn function | DecimatorModule | 767 | Each terminal decimator burn recording |
+| 1 | `recordTerminalDecBurn` | DecimatorModule | 778 | Each terminal decimator burn recording |
 
 **Cross-reference:** Payout Reference Section 9 (Decimator Jackpot)
 
 ---
 
-### I. AutoRebuyProcessed (DecimatorModule)
+### K. AutoRebuyProcessed (DecimatorModule)
 
 **Solidity signature:**
 
@@ -321,15 +400,23 @@ event AutoRebuyProcessed(
 
 **Field descriptions:**
 
-(Same semantics as JackpotModule declaration -- see Section C. Note: field name is `ticketsAwarded` here vs `ticketCount` in JackpotModule, but the ABI is identical.)
+| Field | Type | Indexed | Description |
+|-------|------|---------|-------------|
+| `player` | `address` | Yes | Address of the auto-rebuy recipient |
+| `targetLevel` | `uint24` | No | Level tickets were purchased for |
+| `ticketsAwarded` | `uint32` | No | Number of tickets credited (includes bonus when afKing active) |
+| `ethSpent` | `uint256` | No | ETH spent on ticket purchases (moved to next/future pool) |
+| `remainder` | `uint256` | No | ETH returned to `claimableWinnings` (reserved amount + dust from fractional tickets) |
 
 **Emitting paths:**
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | Decimator auto-rebuy handler | DecimatorModule | 400 | When a decimator claim triggers auto-rebuy (player has enabled auto-rebuy and claim has ticket conversion) |
+| 1 | `_processAutoRebuy` | DecimatorModule | 411 | When a decimator claim triggers auto-rebuy (player has enabled auto-rebuy and claim has ticket conversion) |
 
 **Cross-reference:** Payout Reference Section 9 (Decimator Jackpot)
+
+**Note:** `AutoRebuyProcessed` is only emitted from DecimatorModule. JackpotModule no longer emits a separate auto-rebuy event; auto-rebuy information is embedded in `JackpotEthWin` via the `rebuyLevel` and `rebuyTickets` fields.
 
 ---
 
@@ -337,20 +424,21 @@ event AutoRebuyProcessed(
 
 | Event | Daily (1-4) | Daily (5) | Early-Burn | Terminal | Decimator | BAF | BURNIE Coin |
 |-------|:-----------:|:---------:|:----------:|:--------:|:---------:|:---:|:-----------:|
-| `JackpotTicketWinner` | X | X | X | X | -- | -- | X (near) |
+| `JackpotEthWin` | X | X | X | X | -- | X | -- |
+| `JackpotTicketWin` | X | X | X | -- | -- | X | -- |
+| `JackpotBurnieWin` | -- | -- | -- | -- | -- | -- | X (near) |
+| `JackpotDgnrsWin` | -- | X | -- | -- | -- | -- | -- |
+| `JackpotWhalePassWin` | X | X | X | X | -- | X | -- |
 | `FarFutureCoinJackpotWinner` | -- | -- | -- | -- | -- | -- | X (far) |
-| `AutoRebuyProcessed` (JackpotMod) | X | X | X | -- (*) | -- | X | -- |
 | `AutoRebuyProcessed` (DecMod) | -- | -- | -- | -- | X | -- | -- |
 | `Advance` | X | X | -- | -- | -- | -- | -- |
 | `RewardJackpotsSettled` | -- | -- | -- | -- | -- | X | -- |
 | `DecBurnRecorded` | -- | -- | -- | -- | X | -- | -- |
-| `TerminalDecBurnRecorded` | -- | -- | -- | -- | X (**) | -- | -- |
+| `TerminalDecBurnRecorded` | -- | -- | -- | -- | X (*) | -- | -- |
 
 **Legend:** X = emitted during this jackpot type. -- = not emitted.
 
-(*) Terminal jackpot runs at game over where `gameOver = true`, so `_addClaimableEth` skips auto-rebuy. No `AutoRebuyProcessed` from terminal ETH path.
-
-(**) `TerminalDecBurnRecorded` is emitted during terminal decimator burn recording at x00 levels, not at claim/resolution time. `DecBurnRecorded` is for standard (non-terminal) decimator burns.
+(*) `TerminalDecBurnRecorded` is emitted during terminal decimator burn recording at x00 levels, not at claim/resolution time. `DecBurnRecorded` is for standard (non-terminal) decimator burns.
 
 ---
 
@@ -360,13 +448,17 @@ Events referenced in `JACKPOT-PAYOUT-REFERENCE.md` and their catalog entries:
 
 | Event in Payout Reference | Catalog Entry | Status |
 |---------------------------|---------------|--------|
-| `JackpotTicketWinner` (Sections 3, 5, 6, 8, 11) | A | Matched |
-| `AutoRebuyProcessed` (Sections 3, 5, 6, 9, 10) | C, I | Matched |
-| `FarFutureCoinJackpotWinner` (Section 11) | B | Matched |
-| `RewardJackpotsSettled` (Section 10) | D, F | Matched |
-| `DecBurnRecorded` (Section 9) | G | Matched |
-| `TerminalDecBurnRecorded` (Section 9) | H | Matched |
-| `Advance` (Section 13) | E | Matched |
+| `JackpotEthWin` (Sections 3, 5, 6, 8, 10) | A | Matched |
+| `JackpotTicketWin` (Sections 3, 5, 6, 10) | B | Matched |
+| `JackpotBurnieWin` (Section 11) | C | Matched |
+| `JackpotDgnrsWin` (Section 5) | D | Matched |
+| `JackpotWhalePassWin` (Sections 3, 5, 10) | E | Matched |
+| `FarFutureCoinJackpotWinner` (Section 11) | F | Matched |
+| `AutoRebuyProcessed` (Section 9) | K | Matched |
+| `RewardJackpotsSettled` (Section 10) | H | Matched |
+| `DecBurnRecorded` (Section 9) | I | Matched |
+| `TerminalDecBurnRecorded` (Section 9) | J | Matched |
+| `Advance` (Section 13) | G | Matched |
 | `PlayerCredited` (Section 10) | Not cataloged (*) | N/A |
 
 (*) `PlayerCredited` is a general-purpose crediting event from `DegenerusGamePayoutUtils.sol`, not jackpot-specific. It fires when `_queueWhalePassClaimCore` has a remainder (rounding dust) and during various other crediting paths across the codebase.
