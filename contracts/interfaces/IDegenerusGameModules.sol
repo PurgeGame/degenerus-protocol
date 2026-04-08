@@ -73,11 +73,6 @@ interface IDegenerusGameJackpotModule {
     /// @param randWord Random word for distribution
     function payDailyJackpotCoinAndTickets(uint256 randWord) external;
 
-    /// @notice Processes a batch of ticket entries for a specific level
-    /// @param lvl The level to process tickets for
-    /// @return finished True if all tickets have been processed
-    function processTicketBatch(uint24 lvl) external returns (bool finished);
-
     /// @notice Pays daily coin jackpot rewards
     /// @param lvl The current game level
     /// @param randWord Random word for winner selection
@@ -266,6 +261,11 @@ interface IDegenerusGameMintModule {
     function processFutureTicketBatch(
         uint24 lvl
     ) external returns (bool worked, bool finished, uint32 writesUsed);
+
+    /// @notice Processes a batch of current-level ticket entries
+    /// @param lvl The level to process tickets for
+    /// @return finished True if all tickets have been processed
+    function processTicketBatch(uint24 lvl) external returns (bool finished);
 
 }
 

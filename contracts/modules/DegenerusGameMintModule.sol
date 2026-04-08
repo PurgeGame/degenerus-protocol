@@ -554,6 +554,175 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     }
 
     // -------------------------------------------------------------------------
+    // External Entry Point — Current-Level Ticket Batch Processing
+    // -------------------------------------------------------------------------
+
+    /// @notice Processes a batch of current-level tickets with gas-bounded iteration.
+    /// @dev Called iteratively until all tickets for the level are processed. Uses a writes budget
+    ///      to stay within block gas limits. The first batch in a new level round is
+    ///      scaled down by 35% to account for cold storage access costs.
+    /// @param lvl Level whose tickets should be processed.
+    /// @return finished True if all tickets for this level have been fully processed.
+    function processTicketBatch(uint24 lvl) external returns (bool finished) {
+        uint24 rk = _tqReadKey(lvl);
+        address[] storage queue = ticketQueue[rk];
+        uint256 total = queue.length;
+
+        if (ticketLevel != lvl) {
+            ticketLevel = lvl;
+            ticketCursor = 0;
+        }
+
+        uint256 idx = ticketCursor;
+        if (idx >= total) {
+            delete ticketQueue[rk];
+            ticketCursor = 0;
+            ticketLevel = 0;
+            return true;
+        }
+
+        uint32 writesBudget = WRITES_BUDGET_SAFE;
+        if (idx == 0) {
+            writesBudget -= (writesBudget * 35) / 100; // 65% scaling for cold storage
+        }
+
+        uint32 used;
+        uint256 entropy = lootboxRngWordByIndex[lootboxRngIndex - 1];
+        uint32 processed;
+
+        while (idx < total && used < writesBudget) {
+            (uint32 writesUsed, bool advance) = _processOneTicketEntry(
+                queue[idx],
+                lvl,
+                rk,
+                writesBudget - used,
+                processed,
+                entropy,
+                idx
+            );
+            if (writesUsed == 0 && !advance) break;
+            unchecked {
+                used += writesUsed;
+                if (advance) {
+                    ++idx;
+                    processed = 0;
+                } else {
+                    processed += writesUsed >> 1;
+                }
+            }
+        }
+
+        ticketCursor = uint32(idx);
+
+        if (idx >= total) {
+            delete ticketQueue[rk];
+            ticketCursor = 0;
+            ticketLevel = 0;
+            return true;
+        }
+        return false;
+    }
+
+    /// @dev Resolves the zero-owed remainder case for ticket processing.
+    function _resolveZeroOwedRemainder(
+        uint40 packed,
+        uint24 rk,
+        address player,
+        uint256 entropy,
+        uint256 rollSalt
+    ) private returns (uint40 newPacked, bool skip) {
+        uint8 rem = uint8(packed);
+        if (rem == 0) {
+            if (packed != 0) {
+                ticketsOwedPacked[rk][player] = 0;
+            }
+            return (0, true);
+        }
+
+        bool win = _rollRemainder(entropy, rollSalt, rem);
+        if (!win) {
+            ticketsOwedPacked[rk][player] = 0;
+            return (0, true);
+        }
+
+        newPacked = uint40(1) << 8;
+        if (newPacked != packed) {
+            ticketsOwedPacked[rk][player] = newPacked;
+        }
+        return (newPacked, false);
+    }
+
+    /// @dev Processes a single ticket entry, returning writes used and whether to advance.
+    function _processOneTicketEntry(
+        address player,
+        uint24 lvl,
+        uint24 rk,
+        uint32 room,
+        uint32 processed,
+        uint256 entropy,
+        uint256 queueIdx
+    ) private returns (uint32 writesUsed, bool advance) {
+        uint40 packed = ticketsOwedPacked[rk][player];
+        uint32 owed = uint32(packed >> 8);
+        uint256 rollSalt = (uint256(lvl) << 224) |
+            (queueIdx << 192) |
+            (uint256(uint160(player)) << 32);
+
+        if (owed == 0) {
+            bool skip;
+            (packed, skip) = _resolveZeroOwedRemainder(
+                packed,
+                rk,
+                player,
+                entropy,
+                rollSalt
+            );
+            if (skip) return (1, true);
+            owed = 1;
+        }
+
+        uint32 baseOv = (processed == 0 && owed <= 2) ? 4 : 2;
+        if (room <= baseOv) return (0, false);
+        uint32 take;
+        {
+            uint32 availRoom = room - baseOv;
+            uint32 maxT = (availRoom <= 256)
+                ? (availRoom >> 1)
+                : (availRoom - 256);
+            take = owed > maxT ? maxT : owed;
+        }
+        if (take == 0) return (0, false);
+
+        uint256 baseKey = (uint256(lvl) << 224) |
+            (queueIdx << 192) |
+            (uint256(uint160(player)) << 32);
+        _raritySymbolBatch(player, baseKey, processed, take, entropy);
+        emit TraitsGenerated(player, lvl, uint32(queueIdx), processed, take, entropy);
+
+        writesUsed =
+            ((take <= 256) ? (take << 1) : (take + 256)) +
+            baseOv +
+            (take == owed ? 1 : 0);
+
+        uint8 rem = uint8(packed);
+        uint32 remainingOwed;
+        unchecked {
+            remainingOwed = owed - take;
+        }
+        if (remainingOwed == 0 && rem != 0) {
+            if (_rollRemainder(entropy, rollSalt, rem)) {
+                remainingOwed = 1;
+            }
+            rem = 0;
+        }
+        uint40 newPacked = (uint40(remainingOwed) << 8) | uint40(rem);
+        if (newPacked != packed) {
+            ticketsOwedPacked[rk][player] = newPacked;
+        }
+        advance = remainingOwed == 0;
+    }
+
+    // -------------------------------------------------------------------------
     // Purchases and Loot Boxes
     // -------------------------------------------------------------------------
 

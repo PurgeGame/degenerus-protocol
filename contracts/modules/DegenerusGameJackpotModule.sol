@@ -31,7 +31,6 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
  *      1. Pool consolidation at level transition (prize pool splits and merges).
  *      2. `payDailyJackpot` — Handles early-burn rewards during purchase phase and rolling dailies at EOL.
  *      3. `payDailyCoinJackpot` — BURNIE jackpot distribution to near-future ticket holders.
- *      4. `processTicketBatch` — Batched airdrop processing with gas budgeting to stay block-safe.
  *
  *      FUND ACCOUNTING:
  *      - ETH flows through `futurePrizePool` (unified reserve), `currentPrizePool`,
@@ -159,16 +158,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Current-pool daily jackpot percentage bounds for days 1-4 (6%-14%).
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
     uint16 private constant DAILY_CURRENT_BPS_MAX = 1400;
-
-    // -------------------------------------------------------------------------
-    // Constants — Gas Budgeting (Ticket Batch Processing)
-    // -------------------------------------------------------------------------
-
-    /// @dev Default SSTORE budget for processTicketBatch to stay safely under 15M gas.
-    uint32 private constant WRITES_BUDGET_SAFE = 550;
-
-    /// @dev LCG multiplier for deterministic trait generation (Knuth's MMIX constant).
-    uint64 private constant TICKET_LCG_MULT = 0x5851F42D4C957F2D;
 
     /// @dev Portion of DGNRS reward pool paid to the day-5 solo bucket winner (1%).
     uint16 private constant FINAL_DAY_DGNRS_BPS = 100;
@@ -313,7 +302,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl,
         uint256 randWord
     ) external {
-        uint48 questDay = _calculateDayIndex();
+        uint48 questDay = _simulatedDayIndex();
         uint32 winningTraitsPacked;
 
         if (isDaily) {
@@ -1618,7 +1607,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bool hasHeroWinner,
             uint8 heroQuadrant,
             uint8 heroSymbol
-        ) = _topHeroSymbol(_calculateDayIndex());
+        ) = _topHeroSymbol(_simulatedDayIndex());
         if (!hasHeroWinner) return w;
 
         uint8 heroColor;
@@ -1669,356 +1658,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
         }
         hasWinner = topAmount != 0;
-    }
-
-    // =========================================================================
-    // External Entry Point — Ticket Batch Processing
-    // =========================================================================
-
-    /// @notice Processes a batch of tickets for a specific level with gas-bounded iteration.
-    /// @dev Called iteratively until all tickets for the level are processed. Uses a writes budget
-    ///      to stay within block gas limits. The first batch in a new level round is
-    ///      scaled down by 35% to account for cold storage access costs.
-    ///
-    ///      GAS BUDGETING:
-    ///      - Each ticket entry requires ~2 SSTOREs (trait ticket + count update).
-    ///      - Budget defaults to WRITES_BUDGET_SAFE (550).
-    ///
-    /// @param lvl Level whose tickets should be processed.
-    /// @return finished True if all tickets for this level have been fully processed.
-    function processTicketBatch(uint24 lvl) external returns (bool finished) {
-        uint24 rk = _tqReadKey(lvl);
-        address[] storage queue = ticketQueue[rk];
-        uint256 total = queue.length;
-
-        // Check if we need to switch to this level or if already complete
-        if (ticketLevel != lvl) {
-            ticketLevel = lvl;
-            ticketCursor = 0;
-        }
-
-        uint256 idx = ticketCursor;
-        if (idx >= total) {
-            // All done for this level
-            delete ticketQueue[rk];
-            ticketCursor = 0;
-            ticketLevel = 0;
-            return true;
-        }
-
-        uint32 writesBudget = WRITES_BUDGET_SAFE;
-        if (idx == 0) {
-            writesBudget -= (writesBudget * 35) / 100; // 65% scaling for cold storage
-        }
-
-        uint32 used;
-        uint256 entropy = lootboxRngWordByIndex[lootboxRngIndex - 1];
-        uint32 processed;
-
-        while (idx < total && used < writesBudget) {
-            (uint32 writesUsed, bool advance) = _processOneTicketEntry(
-                queue[idx],
-                lvl,
-                rk,
-                writesBudget - used,
-                processed,
-                entropy,
-                idx
-            );
-            if (writesUsed == 0 && !advance) break; // Budget exhausted
-            unchecked {
-                used += writesUsed;
-                if (advance) {
-                    ++idx;
-                    processed = 0;
-                } else {
-                    processed += writesUsed >> 1; // Approximate tickets processed
-                }
-            }
-        }
-
-        ticketCursor = uint32(idx);
-
-        if (idx >= total) {
-            // Cleanup when done
-            delete ticketQueue[rk];
-            ticketCursor = 0;
-            ticketLevel = 0;
-            return true;
-        }
-        return false;
-    }
-
-    /// @dev Resolves the zero-owed remainder case for ticket processing (rolls remainder).
-    ///      Returns (newPacked, skip) where skip=true means player should be skipped.
-    function _resolveZeroOwedRemainder(
-        uint40 packed,
-        uint24,
-        uint24 rk,
-        address player,
-        uint256 entropy,
-        uint256 rollSalt
-    ) private returns (uint40 newPacked, bool skip) {
-        uint8 rem = uint8(packed);
-        if (rem == 0) {
-            if (packed != 0) {
-                ticketsOwedPacked[rk][player] = 0;
-            }
-            return (0, true);
-        }
-
-        bool win = _rollRemainder(entropy, rollSalt, rem);
-        if (!win) {
-            ticketsOwedPacked[rk][player] = 0;
-            return (0, true);
-        }
-
-        newPacked = uint40(1) << 8;
-        if (newPacked != packed) {
-            ticketsOwedPacked[rk][player] = newPacked;
-        }
-        return (newPacked, false);
-    }
-
-    /// @dev Processes a single ticket entry, returning writes used and whether to advance.
-    function _processOneTicketEntry(
-        address player,
-        uint24 lvl,
-        uint24 rk,
-        uint32 room,
-        uint32 processed,
-        uint256 entropy,
-        uint256 queueIdx
-    ) private returns (uint32 writesUsed, bool advance) {
-        uint40 packed = ticketsOwedPacked[rk][player];
-        uint32 owed = uint32(packed >> 8);
-        uint256 rollSalt = (uint256(lvl) << 224) |
-            (queueIdx << 192) |
-            (uint256(uint160(player)) << 32);
-
-        // Handle zero-owed case
-        if (owed == 0) {
-            bool skip;
-            (packed, skip) = _resolveZeroOwedRemainder(
-                packed,
-                lvl,
-                rk,
-                player,
-                entropy,
-                rollSalt
-            );
-            // Charge one budget unit even when skipping so sparse/remainder-only
-            // queues cannot bypass the per-call work cap.
-            if (skip) return (1, true);
-            owed = 1;
-        }
-
-        // Calculate overhead and batch size
-        uint32 baseOv = (processed == 0 && owed <= 2) ? 4 : 2;
-        if (room <= baseOv) return (0, false);
-        uint32 take;
-        {
-            uint32 availRoom = room - baseOv;
-            uint32 maxT = (availRoom <= 256)
-                ? (availRoom >> 1)
-                : (availRoom - 256);
-            take = owed > maxT ? maxT : owed;
-        }
-        if (take == 0) return (0, false);
-
-        // Generate trait tickets
-        _generateTicketBatch(player, lvl, processed, take, entropy, queueIdx);
-
-        // Calculate writes and finalize
-        writesUsed =
-            ((take <= 256) ? (take << 1) : (take + 256)) +
-            baseOv +
-            (take == owed ? 1 : 0);
-        advance = _finalizeTicketEntry(
-            rk,
-            player,
-            packed,
-            owed,
-            take,
-            entropy,
-            rollSalt
-        );
-        return (writesUsed, advance);
-    }
-
-    /// @dev Wrapper for _raritySymbolBatch to reduce stack usage.
-    function _generateTicketBatch(
-        address player,
-        uint24 lvl,
-        uint32 processed,
-        uint32 take,
-        uint256 entropy,
-        uint256 queueIdx
-    ) private {
-        uint256 baseKey = (uint256(lvl) << 224) |
-            (queueIdx << 192) |
-            (uint256(uint160(player)) << 32);
-        _raritySymbolBatch(player, baseKey, processed, take, entropy);
-        emit TraitsGenerated(
-            player,
-            lvl,
-            uint32(queueIdx),
-            processed,
-            take,
-            entropy
-        );
-    }
-
-    /// @dev Finalizes ticket entry after processing, rolling remainder dust.
-    function _finalizeTicketEntry(
-        uint24 rk,
-        address player,
-        uint40 packed,
-        uint32 owed,
-        uint32 take,
-        uint256 entropy,
-        uint256 rollSalt
-    ) private returns (bool done) {
-        uint8 rem = uint8(packed);
-        uint32 remainingOwed;
-        unchecked {
-            remainingOwed = owed - take;
-        }
-        if (remainingOwed == 0 && rem != 0) {
-            if (_rollRemainder(entropy, rollSalt, rem)) {
-                remainingOwed = 1;
-            }
-            rem = 0;
-        }
-        uint40 newPacked = (uint40(remainingOwed) << 8) | uint40(rem);
-        if (newPacked != packed) {
-            ticketsOwedPacked[rk][player] = newPacked;
-        }
-        return remainingOwed == 0;
-    }
-
-    /// @dev Roll remainder chance for a fractional ticket (0-99).
-    function _rollRemainder(
-        uint256 entropy,
-        uint256 rollSalt,
-        uint8 rem
-    ) private pure returns (bool win) {
-        uint256 rollEntropy = EntropyLib.entropyStep(entropy ^ rollSalt);
-        return (rollEntropy % TICKET_SCALE) < rem;
-    }
-
-    // =========================================================================
-    // Internal Helpers — Batch Trait Generation
-    // =========================================================================
-
-    /// @dev Generates trait tickets in batch for a player's ticket awards using LCG-based PRNG.
-    ///      Uses inline assembly for gas-efficient bulk storage writes.
-    ///
-    ///      ALGORITHM:
-    ///      1. Generate traits in groups of 16 using LCG stepping.
-    ///      2. Track unique traits touched and their occurrence counts in memory.
-    ///      3. Batch-write all occurrences to storage in a single pass per trait.
-    ///
-    /// @param player Address receiving the trait tickets.
-    /// @param baseKey Encoded key containing level, index, and player address.
-    /// @param startIndex Starting position within this player's owed tickets.
-    /// @param count Number of ticket entries to process this batch.
-    /// @param entropyWord VRF entropy for trait generation.
-    function _raritySymbolBatch(
-        address player,
-        uint256 baseKey,
-        uint32 startIndex,
-        uint32 count,
-        uint256 entropyWord
-    ) private {
-        // Memory arrays to track which traits were generated and how many times.
-        uint32[256] memory counts;
-        uint8[256] memory touchedTraits;
-        uint16 touchedLen;
-
-        uint32 endIndex;
-        unchecked {
-            endIndex = startIndex + count;
-        }
-        uint32 i = startIndex;
-
-        // Generate traits in groups of 16, using LCG for deterministic randomness.
-        while (i < endIndex) {
-            uint32 groupIdx = i >> 4; // Group index (per 16 symbols)
-
-            uint256 seed;
-            unchecked {
-                seed = (baseKey + groupIdx) ^ entropyWord;
-            }
-            uint64 s = uint64(seed) | 1; // Ensure odd for full LCG period
-            uint8 offset = uint8(i & 15);
-            unchecked {
-                s = s * (TICKET_LCG_MULT + uint64(offset)) + uint64(offset);
-            }
-
-            for (uint8 j = offset; j < 16 && i < endIndex; ) {
-                unchecked {
-                    s = s * TICKET_LCG_MULT + 1; // LCG step
-
-                    // Generate trait using weighted distribution, add quadrant offset.
-                    uint8 traitId = DegenerusTraitUtils.traitFromWord(s) +
-                        (uint8(i & 3) << 6);
-
-                    // Track first occurrence of each trait for batch writing.
-                    if (counts[traitId]++ == 0) {
-                        touchedTraits[touchedLen++] = traitId;
-                    }
-                    ++i;
-                    ++j;
-                }
-            }
-        }
-
-        // Extract level from baseKey for storage slot calculation.
-        uint24 lvl = uint24(baseKey >> 224);
-
-        // Calculate the storage slot for this level's trait arrays.
-        // Layout assumption: traitBurnTicket is mapping(uint24 => address[][256]).
-        // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
-        // with dynamic array elements at keccak256(keccak256(key . slot) + index).
-        // This relies on the standard Solidity storage layout (stable since 0.4.x).
-        // Safe here because the contract is non-upgradeable.
-        uint256 levelSlot;
-        assembly ("memory-safe") {
-            mstore(0x00, lvl)
-            mstore(0x20, traitBurnTicket.slot)
-            levelSlot := keccak256(0x00, 0x40)
-        }
-
-        // Batch-write trait tickets to storage using assembly for gas efficiency.
-        for (uint16 u; u < touchedLen; ) {
-            uint8 traitId = touchedTraits[u];
-            uint32 occurrences = counts[traitId];
-
-            assembly ("memory-safe") {
-                // Get array length slot and current length.
-                let elem := add(levelSlot, traitId)
-                let len := sload(elem)
-                let newLen := add(len, occurrences)
-                sstore(elem, newLen)
-
-                // Calculate data slot and write player address `occurrences` times.
-                mstore(0x00, elem)
-                let data := keccak256(0x00, 0x20)
-                let dst := add(data, len)
-                for {
-                    let k := 0
-                } lt(k, occurrences) {
-                    k := add(k, 1)
-                } {
-                    sstore(dst, player)
-                    dst := add(dst, 1)
-                }
-            }
-            unchecked {
-                ++u;
-            }
-        }
     }
 
     // =========================================================================
@@ -2078,13 +1717,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Calculate current day index with testnet offset applied.
-    ///      Day 1 = deploy day. Days reset at JACKPOT_RESET_TIME (22:57 UTC).
-    /// @return Day index (1-indexed from deploy day).
-    function _calculateDayIndex() private view returns (uint48) {
-        return _simulatedDayIndex();
-    }
-
     /// @notice Pays daily BURNIE jackpot to random ticket holders.
     /// @dev Runs every day in its own transaction. Awards 0.5% of prize pool target in BURNIE.
     ///      75% goes to near-future trait-matched winners ([lvl, lvl+4]).
@@ -2105,7 +1737,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // --- Near-future portion (trait-matched) ---
         if (nearBudget == 0) return;
 
-        uint48 questDay = _calculateDayIndex();
+        uint48 questDay = _simulatedDayIndex();
         (uint32 winningTraitsPacked, bool valid) = _loadDailyWinningTraits(
             lvl,
             questDay

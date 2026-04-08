@@ -1337,7 +1337,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |  Large purchases are queued and processed across multiple txs.       |
       +======================================================================+*/
 
-    /// @dev Process a batch of current level tickets via jackpot module delegatecall.
+    /// @dev Process a batch of current level tickets via mint module delegatecall.
     /// @param lvl Current level.
     /// @return worked True if any tickets were processed.
     /// @return finished True if all tickets for this level have been fully processed.
@@ -1347,10 +1347,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint32 prevCursor = ticketCursor;
         uint24 prevLevel = ticketLevel;
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
+            .GAME_MINT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.processTicketBatch.selector,
+                    IDegenerusGameMintModule.processTicketBatch.selector,
                     lvl
                 )
             );
