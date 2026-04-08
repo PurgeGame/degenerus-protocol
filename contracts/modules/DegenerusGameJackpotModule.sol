@@ -279,7 +279,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bucketCounts,
             false, // not final day
             SPLIT_NONE,
-            false // not daily (no whale pass)
+            false // not jackpot phase
         );
     }
 
@@ -466,7 +466,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     bucketCountsDaily,
                     isFinalPhysicalDay_,
                     splitMode,
-                    true // daily jackpot (solo bucket gets whale pass)
+                    true // jackpot phase (solo bucket gets whale pass)
                 );
                 if (isFinalPhysicalDay_) {
                     uint256 unpaidDailyEth = dailyEthBudget - paidDailyEth;
@@ -1115,7 +1115,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 bucketCounts,
                 false, // not final day
                 SPLIT_NONE,
-                false // not daily (no whale pass)
+                false // not jackpot phase
             );
     }
 
@@ -1141,7 +1141,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 DAILY_ETH_MAX_WINNERS, DAILY_JACKPOT_SCALE_MAX_BPS
             ),
             isFinal, SPLIT_CALL2,
-            true // daily jackpot
+            true // jackpot phase
         );
         if (paidEth2 != 0) {
             if (isFinal) {
@@ -1153,17 +1153,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Unified ETH distribution across trait buckets.
-    ///      Handles daily (with optional two-call split) and non-daily (single-call) paths.
+    ///      Handles jackpot-phase (with optional two-call split) and purchase/terminal paths.
     ///
     ///      SPLIT MODES:
     ///      - SPLIT_NONE:  All 4 buckets in one call. No resumeEthPool write.
     ///      - SPLIT_CALL1: Largest + solo buckets only. Writes resumeEthPool for call 2.
     ///      - SPLIT_CALL2: Mid buckets only. Reads and clears resumeEthPool.
     ///
-    ///      DAILY vs NON-DAILY:
-    ///      - Daily (isDailyJackpot=true): Solo bucket gets whale pass + DGNRS on final day.
+    ///      JACKPOT PHASE vs PURCHASE/TERMINAL:
+    ///      - Jackpot phase (isJackpotPhase=true): Solo bucket gets whale pass + DGNRS on final day.
     ///        Uses ordered iteration with call1 mask for split routing.
-    ///      - Non-daily (isDailyJackpot=false): All buckets go through _resolveTraitWinners.
+    ///      - Purchase/terminal (isJackpotPhase=false): All buckets paid uniformly.
     ///        Always uses SPLIT_NONE.
     ///
     /// @param lvl The level whose winners are being paid.
@@ -1174,7 +1174,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param bucketCounts Number of holders in each trait bucket.
     /// @param isFinalDay True on the last physical jackpot day (controls DGNRS in solo bucket).
     /// @param splitMode SPLIT_NONE, SPLIT_CALL1, or SPLIT_CALL2.
-    /// @param isDailyJackpot True for daily jackpot path (solo bucket gets whale pass).
+    /// @param isJackpotPhase True during jackpot phase (solo bucket gets whale pass).
     /// @return paidEth Total ETH actually paid out in this call.
     function _processDailyEth(
         uint24 lvl,
@@ -1185,7 +1185,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16[4] memory bucketCounts,
         bool isFinalDay,
         uint8 splitMode,
-        bool isDailyJackpot
+        bool isJackpotPhase
     ) private returns (uint256 paidEth) {
         if (splitMode == SPLIT_CALL2) {
             ethPool = uint256(resumeEthPool);
@@ -1252,8 +1252,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 perWinner = share / totalCount;
             if (perWinner == 0) continue;
 
-            if (traitIdx == remainderIdx && isDailyJackpot) {
-                // Daily solo bucket: whale pass + DGNRS on final day (single winner)
+            if (traitIdx == remainderIdx && isJackpotPhase) {
+                // Solo bucket (jackpot phase): whale pass + DGNRS on final day
                 address w = winners[0];
                 if (w != address(0)) {
                     (
