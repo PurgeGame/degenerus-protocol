@@ -282,9 +282,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 break;
             }
 
-            // Roll daily quest once per day when RNG word is available
-            quests.rollDailyQuest(day, rngWord);
-
             // Phase transition housekeeping + FF promotion
             if (phaseTransitionActive) {
                 // Drain the one FF level that entered near-future at this level transition.
@@ -1003,8 +1000,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     //       so bit overlap with bits 0 and 8+ is not a collision concern.
 
     /// @dev Daily RNG processing gate called during advanceGame. Applies VRF word,
-    ///      processes coinflip payouts, resolves pending gambling burn redemptions,
-    ///      stores lootbox RNG, and handles VRF timeout retries (12h).
+    ///      processes coinflip payouts, rolls daily quest, resolves pending gambling
+    ///      burn redemptions, stores lootbox RNG, and handles VRF timeout retries (12h).
     function rngGate(
         uint48 ts,
         uint48 day,
@@ -1038,6 +1035,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
             coinflip.processCoinflipPayouts(bonusFlip, currentWord, day);
+            quests.rollDailyQuest(day, currentWord);
 
             // Resolve gambling burn period if pending
             {
