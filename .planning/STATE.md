@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v24.0
 milestone_name: Gameover Flow Audit & Fix
-status: verifying
-stopped_at: Completed 204-01-PLAN.md
-last_updated: "2026-04-09T20:57:20.854Z"
+status: executing
+stopped_at: Completed 205-01-PLAN.md
+last_updated: "2026-04-09T22:11:42.889Z"
 last_activity: 2026-04-09
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 100
+  total_plans: 4
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 204 — trigger-drain-audit
+**Current focus:** Phase 205 — sweep-interaction-audit
 
 ## Current Position
 
-Phase: 204 (trigger-drain-audit) — EXECUTING
-Plan: 1 of 1
+Phase: 205 (sweep-interaction-audit) — EXECUTING
+Plan: 2 of 2
 Milestone: v24.0 — Gameover Flow Audit & Fix
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-04-09
 
 Progress: [░░░░░░░░░░] 0%
@@ -37,7 +37,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 3 (v23.0 milestone)
+- Total plans completed: 4 (v23.0 milestone)
 - Timeline: 1 day (2026-04-09)
 
 ## Accumulated Context
@@ -51,6 +51,7 @@ Recent decisions affecting current work:
 - [v24.0]: All side effects (deity pass refunds, burns, gameOver latch, pool zeroing) must gate on confirmed RNG availability
 - [v24.0]: _handleGameOverPath caller already guarantees rngWordByDay[day] != 0 before calling drain; handles 3-day fallback
 - [Phase 204]: All 7 trigger+drain requirements PASS with zero BUGs; claimablePool accounting identity proven correct
+- [Phase 205]: All 4 SWEP sweep requirements PASS with zero BUGs; 30-day delay, 33/33/34 split, stETH-first hard-revert, VRF shutdown all verified correct
 
 ### Pending Todos
 
@@ -63,5 +64,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-09T20:57:20.852Z
-Stopped at: Completed 204-01-PLAN.md
+Last session: 2026-04-09T22:11:42.886Z
+Stopped at: Completed 205-01-PLAN.md

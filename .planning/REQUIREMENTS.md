@@ -30,10 +30,10 @@ Requirements for gameover flow audit and fix. Each maps to roadmap phases.
 
 ### Sweep Audit
 
-- [ ] **SWEP-01**: 30-day delay enforcement correct and non-manipulable
-- [ ] **SWEP-02**: `claimablePool` forfeiture and fund split (33/33/34) verified
-- [ ] **SWEP-03**: stETH-first transfer preference and hard-revert behavior verified
-- [ ] **SWEP-04**: VRF shutdown and LINK recovery verified
+- [x] **SWEP-01**: 30-day delay enforcement correct and non-manipulable
+- [x] **SWEP-02**: `claimablePool` forfeiture and fund split (33/33/34) verified
+- [x] **SWEP-03**: stETH-first transfer preference and hard-revert behavior verified
+- [x] **SWEP-04**: VRF shutdown and LINK recovery verified
 
 ### Interaction Audit
 
@@ -73,10 +73,10 @@ Requirements for gameover flow audit and fix. Each maps to roadmap phases.
 | DRNA-02 | Phase 204 | Complete |
 | DRNA-03 | Phase 204 | Complete |
 | DRNA-04 | Phase 204 | Complete |
-| SWEP-01 | Phase 205 | Pending |
-| SWEP-02 | Phase 205 | Pending |
-| SWEP-03 | Phase 205 | Pending |
-| SWEP-04 | Phase 205 | Pending |
+| SWEP-01 | Phase 205 | Complete |
+| SWEP-02 | Phase 205 | Complete |
+| SWEP-03 | Phase 205 | Complete |
+| SWEP-04 | Phase 205 | Complete |
 | IXNR-01 | Phase 205 | Pending |
 | IXNR-02 | Phase 205 | Pending |
 | IXNR-03 | Phase 205 | Pending |
