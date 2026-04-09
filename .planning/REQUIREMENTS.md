@@ -37,11 +37,11 @@ Requirements for gameover flow audit and fix. Each maps to roadmap phases.
 
 ### Interaction Audit
 
-- [ ] **IXNR-01**: Claims window correct (allowed between drain and sweep, blocked after `finalSwept`)
-- [ ] **IXNR-02**: Post-gameover auto-rebuy bypass in `_addClaimableEth` verified
-- [ ] **IXNR-03**: Post-gameover redemption deterministic payout path verified
-- [ ] **IXNR-04**: All purchase/mint paths blocked by `gameOver` check verified
-- [ ] **IXNR-05**: `gameOverPossible` flag lifecycle verified
+- [x] **IXNR-01**: Claims window correct (allowed between drain and sweep, blocked after `finalSwept`)
+- [x] **IXNR-02**: Post-gameover auto-rebuy bypass in `_addClaimableEth` verified
+- [x] **IXNR-03**: Post-gameover redemption deterministic payout path verified
+- [x] **IXNR-04**: All purchase/mint paths blocked by `gameOver` check verified
+- [x] **IXNR-05**: `gameOverPossible` flag lifecycle verified
 
 ### Delta Audit
 
@@ -77,11 +77,11 @@ Requirements for gameover flow audit and fix. Each maps to roadmap phases.
 | SWEP-02 | Phase 205 | Complete |
 | SWEP-03 | Phase 205 | Complete |
 | SWEP-04 | Phase 205 | Complete |
-| IXNR-01 | Phase 205 | Pending |
-| IXNR-02 | Phase 205 | Pending |
-| IXNR-03 | Phase 205 | Pending |
-| IXNR-04 | Phase 205 | Pending |
-| IXNR-05 | Phase 205 | Pending |
+| IXNR-01 | Phase 205 | Complete |
+| IXNR-02 | Phase 205 | Complete |
+| IXNR-03 | Phase 205 | Complete |
+| IXNR-04 | Phase 205 | Complete |
+| IXNR-05 | Phase 205 | Complete |
 | DLTA-01 | Phase 206 | Pending |
 | DLTA-02 | Phase 206 | Pending |
 

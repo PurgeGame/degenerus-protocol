@@ -186,7 +186,7 @@ See individual milestone entries above.
 - [x] **Phase 203: Drain Fix** - 1 plan (completed 2026-04-09)
   - [x] 203-01-PLAN.md — Restructure handleGameOverDrain RNG gating + test verification
 - [x] **Phase 204: Trigger & Drain Audit** - Verify gameover trigger conditions, entropy paths, and drain fund math (completed 2026-04-09)
-- [ ] **Phase 205: Sweep & Interaction Audit** - Verify post-drain sweep mechanics and cross-module gameover interactions
+- [x] **Phase 205: Sweep & Interaction Audit** - Verify post-drain sweep mechanics and cross-module gameover interactions (completed 2026-04-09)
 - [ ] **Phase 206: Delta Audit** - Confirm restructured drain is behaviorally equivalent and test suite clean
 
 ## Phase Details
@@ -228,10 +228,10 @@ Plans:
   3. Claims work between drain and sweep (claimablePool accessible), and all claim paths blocked after finalSwept
   4. Purchases, mints, and new gameplay actions are blocked once gameOver is true
   5. Post-gameover redemption pays deterministic (non-RNG) payout and auto-rebuy bypass is confirmed active
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 205-01-PLAN.md — Sweep audit (SWEP-01 through SWEP-04)
-- [ ] 205-02-PLAN.md — Interaction audit (IXNR-01 through IXNR-05)
+- [x] 205-02-PLAN.md — Interaction audit (IXNR-01 through IXNR-05)
 
 ### Phase 206: Delta Audit
 **Goal**: The Phase 203 code change is proven behaviorally equivalent (except the intentional revert-vs-return change) and introduces no regressions
@@ -253,7 +253,7 @@ Phases execute in numeric order: 203 -> 204 -> 205 -> 206
 |-------|----------------|--------|-----------|
 | 203. Drain Fix | 1/1 | Complete    | 2026-04-09 |
 | 204. Trigger & Drain Audit | 1/1 | Complete    | 2026-04-09 |
-| 205. Sweep & Interaction Audit | 1/2 | In Progress|  |
+| 205. Sweep & Interaction Audit | 2/2 | Complete   | 2026-04-09 |
 | 206. Delta Audit | 0/TBD | Not started | - |
 
 ## Deferred
