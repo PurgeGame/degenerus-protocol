@@ -185,7 +185,7 @@ See individual milestone entries above.
 
 - [x] **Phase 203: Drain Fix** - 1 plan (completed 2026-04-09)
   - [x] 203-01-PLAN.md — Restructure handleGameOverDrain RNG gating + test verification
-- [ ] **Phase 204: Trigger & Drain Audit** - Verify gameover trigger conditions, entropy paths, and drain fund math
+- [x] **Phase 204: Trigger & Drain Audit** - Verify gameover trigger conditions, entropy paths, and drain fund math (completed 2026-04-09)
 - [ ] **Phase 205: Sweep & Interaction Audit** - Verify post-drain sweep mechanics and cross-module gameover interactions
 - [ ] **Phase 206: Delta Audit** - Confirm restructured drain is behaviorally equivalent and test suite clean
 
@@ -214,9 +214,9 @@ Plans:
   3. RNG word requested by gameover is stored, consumed exactly once, and not reusable by any other consumer
   4. Drain splits funds correctly (10% decimator / 90% terminal jackpot) with claimablePool accounting consistent before and after
   5. Deity pass refunds pay exactly 20 ETH/pass in FIFO order, capped by available budget, with no double-refund possible
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
-- [ ] 204-01-PLAN.md — Trigger + drain audit (TRIG-01 through DRNA-04)
+- [x] 204-01-PLAN.md — Trigger + drain audit (TRIG-01 through DRNA-04)
 
 ### Phase 205: Sweep & Interaction Audit
 **Goal**: Post-drain operations (30-day sweep, VRF shutdown) and all module interactions with gameover state are verified correct
@@ -251,7 +251,7 @@ Phases execute in numeric order: 203 -> 204 -> 205 -> 206
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 203. Drain Fix | 1/1 | Complete    | 2026-04-09 |
-| 204. Trigger & Drain Audit | 0/TBD | Not started | - |
+| 204. Trigger & Drain Audit | 1/1 | Complete   | 2026-04-09 |
 | 205. Sweep & Interaction Audit | 0/TBD | Not started | - |
 | 206. Delta Audit | 0/TBD | Not started | - |
 
