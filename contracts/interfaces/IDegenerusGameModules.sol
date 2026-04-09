@@ -60,11 +60,11 @@ interface IDegenerusGameGameOverModule {
 /// @notice Interface for managing various jackpot distributions
 interface IDegenerusGameJackpotModule {
     /// @notice Pays out the daily jackpot to winners
-    /// @param isDaily Whether this is a daily jackpot (vs other type)
+    /// @param isJackpotPhase True for jackpot phase dailies, false for purchase phase jackpot.
     /// @param lvl The current game level
     /// @param randWord Random word for winner selection
     function payDailyJackpot(
-        bool isDaily,
+        bool isJackpotPhase,
         uint24 lvl,
         uint256 randWord
     ) external;

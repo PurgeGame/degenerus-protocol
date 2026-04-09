@@ -29,7 +29,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
  *
  *      JACKPOT FLOW OVERVIEW:
  *      1. Pool consolidation at level transition (prize pool splits and merges).
- *      2. `payDailyJackpot` — Handles early-burn rewards during purchase phase and rolling dailies at EOL.
+ *      2. `payDailyJackpot` — Handles purchase phase jackpots and rolling dailies at EOL.
  *      3. `payDailyCoinJackpot` — BURNIE jackpot distribution to near-future ticket holders.
  *
  *      FUND ACCOUNTING:
@@ -184,8 +184,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Constants — Jackpot Bucket Scaling (Gas Guardrails)
     // -------------------------------------------------------------------------
 
-    /// @dev Maximum total winners per jackpot payout (including solo bucket).
+    /// @dev Maximum total winners per daily jackpot payout (including solo bucket).
+    /// Also serves as the skip-split threshold for daily jackpots.
     uint16 private constant JACKPOT_MAX_WINNERS = 160;
+
+    /// @dev Maximum ticket winners for purchase phase lootbox distribution.
+    /// Higher than ETH winners because ticket distribution is cheaper per winner.
+    uint16 private constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
 
     /// @dev Maximum total ETH winners across daily + carryover jackpots.
     ///      At max scale (6.36x, 200+ ETH pool): 159 + 95 + 50 + 1 = 305.
@@ -209,9 +214,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Maximum winners for lootbox jackpot distributions (gas safety).
     ///      Lower than JACKPOT_MAX_WINNERS because lootboxes do multiple rolls per winner.
     uint16 private constant LOOTBOX_MAX_WINNERS = 100;
-
-    /// @dev Maximum scale for bucket sizing (4x at 200 ETH+).
-    uint16 private constant JACKPOT_SCALE_MAX_BPS = 40_000;
 
     /// @dev Daily jackpot max scale (6.36x) producing bucket counts 159/95/50/1 at 200+ ETH.
     ///      Two-call split: call 1 processes largest (159) + solo (1) = 160 winners,
@@ -253,7 +255,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) external returns (uint256 paidWei) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
 
-        uint32 winningTraitsPacked = _rollWinningTraits(rngWord, true);
+        uint32 winningTraitsPacked = _rollWinningTraits(rngWord);
         uint256 entropy = rngWord ^ (uint256(targetLvl) << 192);
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
@@ -283,10 +285,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @notice Pays early-burn jackpots during purchase phase OR rolling daily jackpots at level end.
+    /// @notice Pays purchase phase jackpots OR rolling daily jackpots at level end.
     /// @dev Called by the parent game contract via delegatecall. Two distinct paths:
     ///
-    ///      DAILY PATH (isDaily=true):
+    ///      JACKPOT PHASE PATH (isJackpotPhase=true):
     ///      - Day 1-4: Distributes a random 6%-14% slice of remaining currentPrizePool.
     ///      - Day 5: Distributes 100% of remaining currentPrizePool.
     ///      - Day 1 also runs the early-bird lootbox jackpot (from futurePrizePool).
@@ -294,32 +296,33 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///        for winners from a random source level in [lvl+1, lvl+4], deposited into nextPool.
     ///      - Increments jackpotCounter on completion.
     ///
-    ///      EARLY-BURN PATH (isDaily=false):
-    ///      - Triggered during purchase phase when early burns occur.
-    ///      - Rolls random (non-burn-weighted) winning traits and runs trait-based jackpot.
-    ///      - Every purchase day (except day 1): adds a 1% futurePrizePool ETH slice
+    ///      PURCHASE PHASE PATH (isJackpotPhase=false):
+    ///      - Triggered during purchase phase when burns occur.
+    ///      - Rolls winning traits (random + hero override) and runs trait-based jackpot.
+    ///      - Fixed winner counts [20, 12, 6, 1] = 39 ETH winners, up to 120 ticket winners.
+    ///      - At level 1+: adds a 1% futurePrizePool ETH slice every purchase day
     ///        with 75% converted to lootbox tickets and remainder distributed as ETH.
-    ///      - Day 1 of each level: no early-burn distribution (ethDaySlice=0, _executeJackpot no-ops on empty pool).
+    ///      - Level 0: no ETH distribution (BURNIE/ticket rewards only).
     ///
-    /// @param isDaily True for scheduled daily jackpot, false for early-burn jackpot.
+    /// @param isJackpotPhase True for jackpot phase dailies, false for purchase phase jackpot.
     /// @param lvl Current game level.
     /// @param randWord VRF entropy for winner selection and trait derivation.
     function payDailyJackpot(
-        bool isDaily,
+        bool isJackpotPhase,
         uint24 lvl,
         uint256 randWord
     ) external {
         uint48 questDay = _simulatedDayIndex();
         uint32 winningTraitsPacked;
 
-        if (isDaily) {
+        if (isJackpotPhase) {
             // Resume check: call 2 of two-call daily ETH split.
             if (resumeEthPool != 0) {
                 _resumeDailyEth(lvl, randWord);
                 return;
             }
 
-            winningTraitsPacked = _rollWinningTraits(randWord, true);
+            winningTraitsPacked = _rollWinningTraits(randWord);
             _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
 
             uint256 dailyEthBudget;
@@ -487,11 +490,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             return;
         }
 
-        // Non-daily (early-burn) path - BURNIE and ETH bonuses on non-day-1 levels
-        winningTraitsPacked = _rollWinningTraits(randWord, false);
+        // Purchase phase path - BURNIE and ETH bonuses at level 1+
+        winningTraitsPacked = _rollWinningTraits(randWord);
         _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
 
-        bool isEthDay = questDay > purchaseStartDay && lvl > 1; // daily 1% drip from futurePrizePool
+        bool isEthDay = lvl > 0; // daily 1% drip from futurePrizePool every purchase day
         uint256 ethDaySlice;
         if (isEthDay) {
             uint256 poolBps = 100; // 1% daily drip from futurePool
@@ -868,7 +871,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 winningTraitsPacked,
                 ticketUnits,
                 randWord ^ (uint256(lvl) << 192),
-                LOOTBOX_MAX_WINNERS,
+                PURCHASE_PHASE_TICKET_MAX_WINNERS,
                 242
             );
         }
@@ -1066,7 +1069,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // =========================================================================
 
     /// @dev Core jackpot execution: distributes ETH to winners.
-    ///      This is the unified entry point for daily and early-burn jackpots.
+    ///      This is the unified entry point for daily and purchase phase jackpots.
     ///      COIN jackpots are handled separately by _executeCoinJackpot.
     ///      Pool debits are handled by the caller.
     ///
@@ -1088,23 +1091,24 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev ETH flow for non-daily jackpots (early-burn, terminal via _executeJackpot).
+    /// @dev ETH flow for purchase phase jackpots (via _executeJackpot).
+    ///      Fixed bucket counts [20, 12, 6, 1] = 39 winners, rotated by entropy.
     function _runJackpotEthFlow(
         JackpotParams memory jp,
         uint8[4] memory traitIds,
         uint16[4] memory shareBps
     ) private returns (uint256 totalPaidEth) {
-        uint16[4] memory baseBucketCounts = JackpotBucketLib.traitBucketCounts(
-            jp.entropy
-        );
-        uint16[4] memory bucketCounts = JackpotBucketLib
-            .scaleTraitBucketCountsWithCap(
-                baseBucketCounts,
-                jp.ethPool,
-                jp.entropy,
-                JACKPOT_MAX_WINNERS,
-                JACKPOT_SCALE_MAX_BPS
-            );
+        uint8 offset = uint8(jp.entropy & 3);
+        uint16[4] memory base;
+        base[0] = 20;
+        base[1] = 12;
+        base[2] = 6;
+        base[3] = 1;
+        uint16[4] memory bucketCounts;
+        for (uint8 i; i < 4; ) {
+            bucketCounts[i] = base[(i + offset) & 3];
+            unchecked { ++i; }
+        }
         return
             _processDailyEth(
                 jp.lvl,
@@ -1528,30 +1532,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Derives daily winning traits.
-    ///      Base path uses fixed symbol-0 with random color in Q0/Q1/Q2 and
-    ///      fully random in Q3.
-    ///
-    ///      Hero override:
-    ///      - If a top hero symbol exists for the current day, that symbol auto-wins
-    ///        its own quadrant (with random color), replacing only that quadrant.
-    function _getWinningTraits(
+    /// @dev If a top hero symbol exists for the current day, that symbol auto-wins
+    ///      its own quadrant (with random color), replacing only that quadrant.
+    ///      Applied to all jackpot paths (purchase phase + jackpot phase).
+    function _applyHeroOverride(
+        uint8[4] memory w,
         uint256 randomWord
-    ) private view returns (uint8[4] memory w) {
-        uint8 sym;
-
-        w[0] = (uint8(randomWord & 7) << 3) | sym;
-        w[1] = 64 + ((uint8((randomWord >> 3) & 7) << 3) | sym);
-        w[2] = 128 + ((uint8((randomWord >> 6) & 7) << 3) | sym);
-        w[3] = 192 + uint8((randomWord >> 9) & 63);
-
-        // Top daily hero symbol auto-wins its own quadrant with random color.
+    ) private view {
         (
             bool hasHeroWinner,
             uint8 heroQuadrant,
             uint8 heroSymbol
         ) = _topHeroSymbol(_simulatedDayIndex());
-        if (!hasHeroWinner) return w;
+        if (!hasHeroWinner) return;
 
         uint8 heroColor;
         if (heroQuadrant == 0) {
@@ -1686,8 +1679,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             questDay
         );
         if (!valid) {
-            bool useBurn = jackpotPhaseFlag;
-            winningTraitsPacked = _rollWinningTraits(randWord, useBurn);
+            winningTraitsPacked = _rollWinningTraits(randWord);
             _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
         }
 
@@ -1864,21 +1856,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         coinflip.creditFlipBatch(batchPlayers, batchAmounts);
     }
 
-    /// @dev Roll or derive the packed winning traits for a given level.
-    ///      When burn counts are used, applies hero override (if any).
+    /// @dev Roll winning traits with hero symbol override.
+    ///      All paths use fully random traits (6 bits per quadrant).
+    ///      Hero override replaces the winning quadrant's trait if a top hero symbol exists.
     function _rollWinningTraits(
-        uint256 randWord,
-        bool useBurnCounts
+        uint256 randWord
     ) private view returns (uint32 packed) {
-        if (useBurnCounts) {
-            packed = JackpotBucketLib.packWinningTraits(
-                _getWinningTraits(randWord)
-            );
-        } else {
-            packed = JackpotBucketLib.packWinningTraits(
-                JackpotBucketLib.getRandomTraits(randWord)
-            );
-        }
+        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
+        _applyHeroOverride(traits, randWord);
+        packed = JackpotBucketLib.packWinningTraits(traits);
     }
 
     function _syncDailyWinningTraits(

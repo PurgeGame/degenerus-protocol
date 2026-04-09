@@ -29,9 +29,9 @@ Key architectural patterns:
 | `DAILY_JACKPOT_SHARES_PACKED` | 2000 bps each (20/20/20/20) | Solo bucket gets the ETH remainder (effectively ~20% + rounding surplus) |
 | `FINAL_DAY_SHARES_PACKED` | [6000, 1333, 1333, 1334] bps | 60% rotates to solo bucket on day 5 |
 | `DAILY_ETH_MAX_WINNERS` | 305 | Max total across all buckets at max daily scale |
-| `JACKPOT_MAX_WINNERS` | 160 | Skip-split threshold / early-burn path cap |
+| `JACKPOT_MAX_WINNERS` | 160 | Skip-split threshold / purchase phase path cap |
 | `DAILY_JACKPOT_SCALE_MAX_BPS` | 63,600 (6.36x) | Max scaling at 200+ ETH pool |
-| `JACKPOT_SCALE_MAX_BPS` | 40,000 (4x) | Max scaling for early-burn path |
+| `JACKPOT_SCALE_MAX_BPS` | 40,000 (4x) | Max scaling for purchase phase path |
 | `MAX_BUCKET_WINNERS` | 250 | Per-bucket hard cap (safety net) |
 | `DAILY_COIN_MAX_WINNERS` | 50 | Max winners per BURNIE coin jackpot |
 | `FAR_FUTURE_COIN_BPS` | 2500 (25%) | Far-future share of coin budget |
@@ -45,7 +45,7 @@ Key architectural patterns:
 | `LOOTBOX_MAX_WINNERS` | 100 | Max winners per lootbox/ticket distribution |
 | Base bucket counts | [25, 15, 8, 1] | `JackpotBucketLib.traitBucketCounts` |
 | Max scaled counts (daily, 6.36x) | [159, 95, 50, 1] = 305 | At 200+ ETH pool |
-| Max scaled counts (early-burn, 4x) | [100, 60, 32, 1] -> capped to 160 | `capBucketCounts` proportionally reduces non-solo to fit 159 |
+| Max scaled counts (purchase phase, 4x) | [100, 60, 32, 1] -> capped to 160 | `capBucketCounts` proportionally reduces non-solo to fit 159 |
 
 ---
 
@@ -53,7 +53,7 @@ Key architectural patterns:
 
 ### Trigger
 
-`advanceGame` -> `STAGE_JACKPOT_DAILY_STARTED` (11) -> `payDailyJackpot(isDaily=true)`.
+`advanceGame` -> `STAGE_JACKPOT_DAILY_STARTED` (11) -> `payDailyJackpot(isJackpotPhase=true)`.
 
 ### Pool Source
 
@@ -152,7 +152,7 @@ Same conditional split as days 1-4 (SPLIT_NONE when `totalWinners <= 160`, two-c
 
 ### Trigger
 
-`payDailyJackpot(isDaily=false)` during purchase phase when early burns occur.
+`payDailyJackpot(isJackpotPhase=false)` during purchase phase when burns occur.
 
 ### Pool Source
 
@@ -332,7 +332,7 @@ totalWinners = sum(bucketCounts[0..3])
 splitMode = (totalWinners <= 160) ? SPLIT_NONE : SPLIT_CALL1
 ```
 
-Non-daily callers (early-burn via `_runJackpotEthFlow`, terminal via `runTerminalJackpot`) always use `SPLIT_NONE` because their winner counts are capped at single-call-safe levels.
+Non-daily callers (purchase phase via `_runJackpotEthFlow`, terminal via `runTerminalJackpot`) always use `SPLIT_NONE` because their winner counts are capped at single-call-safe levels.
 
 ### Two-Call Split Architecture
 
@@ -340,14 +340,14 @@ When `totalWinners > 160`, `SPLIT_CALL1` processes the largest + solo buckets in
 
 ```
 advanceGame call 1 (STAGE_JACKPOT_DAILY_STARTED = 11)
-  -> payDailyJackpot(isDaily=true)
+  -> payDailyJackpot(isJackpotPhase=true)
      -> _processDailyEth(splitMode=SPLIT_CALL1)
         -> processes largest bucket + solo bucket
         -> stores ethPool as uint128 in resumeEthPool
         -> sets dailyJackpotCoinTicketsPending = true
 
 advanceGame call 2 (STAGE_JACKPOT_ETH_RESUME = 8)
-  -> payDailyJackpot(isDaily=true)
+  -> payDailyJackpot(isJackpotPhase=true)
      -> detects resumeEthPool != 0
      -> _resumeDailyEth
         -> _processDailyEth(splitMode=SPLIT_CALL2)
@@ -393,7 +393,7 @@ Each call uses a fresh VRF word (new `advanceGame` call = new `rngWordCurrent`).
 The `isJackpotPhase` parameter controls whale pass and DGNRS awards:
 
 - `isJackpotPhase=true` (daily jackpot path): Solo bucket winner receives 75% ETH + 25% whale passes. On final day, also receives 1% DGNRS reward pool.
-- `isJackpotPhase=false` (early-burn, terminal): Solo bucket winner receives 100% ETH via `_payNormalBucket`. No whale pass, no DGNRS.
+- `isJackpotPhase=false` (purchase phase, terminal): Solo bucket winner receives 100% ETH via `_payNormalBucket`. No whale pass, no DGNRS.
 
 The parameter is a compile-time literal at every call site: `true` in `payDailyJackpot` and `_resumeDailyEth`, `false` in `_runJackpotEthFlow` and `runTerminalJackpot`.
 
@@ -409,4 +409,4 @@ The parameter is a compile-time literal at every call site: `true` in `payDailyJ
 
 Terminal has no autorebuy (`gameOver=true`), so per-winner cost is ~31,000 not ~83,000.
 
-Non-daily callers (early-burn, terminal) always use `SPLIT_NONE` because their winner counts are capped at single-call-safe levels.
+Non-daily callers (purchase phase, terminal) always use `SPLIT_NONE` because their winner counts are capped at single-call-safe levels.

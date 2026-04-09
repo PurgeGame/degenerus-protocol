@@ -803,11 +803,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Pay daily jackpot via jackpot module delegatecall.
     ///      Called each day during purchase phase and jackpot phase.
-    /// @param isDaily True for jackpot phase, false for purchase phase (early-burn).
+    /// @param isJackpotPhase True for jackpot phase dailies, false for purchase phase jackpot.
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
     function payDailyJackpot(
-        bool isDaily,
+        bool isJackpotPhase,
         uint24 lvl,
         uint256 randWord
     ) internal {
@@ -816,7 +816,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameJackpotModule.payDailyJackpot.selector,
-                    isDaily,
+                    isJackpotPhase,
                     lvl,
                     randWord
                 )
@@ -1269,7 +1269,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+
       |  Future ticket rewards are staged per level and activated at the     |
       |  start of the PREVIOUS level's jackpot phase (making them eligible    |
-      |  for daily jackpots and early burn rewards).                         |
+      |  for daily jackpots and purchase phase rewards).                     |
       +======================================================================+*/
 
     /// @dev Process a batch of future ticket rewards for the specified level.

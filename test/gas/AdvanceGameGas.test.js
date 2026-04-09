@@ -1050,8 +1050,8 @@ describe("AdvanceGame Gas Benchmarks", function () {
   //   Call 2 processes mid(95) + small(50) = 145 winners.
   //   Each call must stay under 16M gas.
   //
-  // For early-burn path: single call, 160 winners, _distributeJackpotEth.
-  // For terminal path: single call, 305 winners, _distributeJackpotEth.
+  // For purchase phase path: single call, 160 winners, _processDailyEth(SPLIT_NONE).
+  // For terminal path: single call, 305 winners, _processDailyEth(SPLIT_NONE).
   //
   // Pool economics at level 0:
   //   Whale bundles at level 0 cost 2.4 ETH each (WHALE_BUNDLE_EARLY_PRICE).
@@ -1287,7 +1287,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       }
     });
 
-    it("SC-2a: early-burn path — 160 winners, moderate pool", async function () {
+    it("SC-2a: purchase phase path — 160 winners, moderate pool", async function () {
       const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
