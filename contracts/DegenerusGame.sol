@@ -1442,9 +1442,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Emitted when a player toggles auto-rebuy on or off.
     event AutoRebuyToggled(address indexed player, bool enabled);
 
-    /// @notice Emitted when a player toggles decimator auto-rebuy on or off.
-    event DecimatorAutoRebuyToggled(address indexed player, bool enabled);
-
     /// @notice Emitted when a player sets the auto-rebuy take profit.
     event AutoRebuyTakeProfitSet(address indexed player, uint256 takeProfit);
 
@@ -1465,20 +1462,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function setAutoRebuy(address player, bool enabled) external {
         player = _resolvePlayer(player);
         _setAutoRebuy(player, enabled);
-    }
-
-    /// @notice Enable or disable auto-rebuy for decimator claims.
-    /// @dev Default is enabled.
-    /// @param player Player address to configure (address(0) = msg.sender).
-    /// @param enabled True to enable auto-rebuy for decimator claims, false to disable.
-    function setDecimatorAutoRebuy(address player, bool enabled) external {
-        player = _resolvePlayer(player);
-        if (rngLockedFlag) revert RngLocked();
-        bool disabled = !enabled;
-        if (decimatorAutoRebuyDisabled[player] != disabled) {
-            decimatorAutoRebuyDisabled[player] = disabled;
-        }
-        emit DecimatorAutoRebuyToggled(player, enabled);
     }
 
     /// @notice Set the auto-rebuy take profit (amount reserved for manual claim).

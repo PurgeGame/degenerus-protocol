@@ -883,9 +883,6 @@ abstract contract DegenerusGameStorage {
     ///      future prize pool for next+1 tickets, and tickets are queued per level.
     mapping(address => AutoRebuyState) internal autoRebuyState;
 
-    /// @dev Decimator auto-rebuy toggle (true = disabled). Default is enabled (false).
-    mapping(address => bool) internal decimatorAutoRebuyDisabled;
-
     // =========================================================================
     // Daily Jackpot Trait Tracking (Coin Jackpot Reuse)
     // =========================================================================

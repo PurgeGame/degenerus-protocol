@@ -20,20 +20,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // Events
     // -------------------------------------------------------------------------
 
-    /// @notice Emitted when auto-rebuy converts winnings to tickets.
-    /// @param player Player whose winnings were converted.
-    /// @param targetLevel Level for which tickets were purchased.
-    /// @param ticketsAwarded Number of tickets credited (including bonus).
-    /// @param ethSpent Amount of ETH spent on tickets.
-    /// @param remainder Amount returned to claimableWinnings (reserved + dust).
-    event AutoRebuyProcessed(
-        address indexed player,
-        uint24 targetLevel,
-        uint32 ticketsAwarded,
-        uint256 ethSpent,
-        uint256 remainder
-    );
-
     /// @notice Emitted when a player's Decimator burn is recorded.
     /// @param player Address of the player.
     /// @param lvl Current game level.
@@ -97,12 +83,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
     // Constants
     // -------------------------------------------------------------------------
-
-    /// @dev Auto-rebuy bonus in basis points (130% = 1.3x tickets).
-    uint16 private constant AUTO_REBUY_BONUS_BPS = 13_000;
-
-    /// @dev afKing mode auto-rebuy bonus in basis points (145% = 1.45x tickets).
-    uint16 private constant AFKING_AUTO_REBUY_BONUS_BPS = 14_500;
 
     /// @dev Basis points denominator (10000 = 100%).
     uint16 private constant BPS_DENOMINATOR = 10_000;
@@ -325,16 +305,15 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @custom:reverts DecAlreadyClaimed When caller has already claimed for this level.
     /// @custom:reverts DecNotWinner When caller's subbucket did not win.
     function claimDecimatorJackpot(uint24 lvl) external {
-        // Block claims while prize pools are frozen (jackpot phase days 1-4).
-        // This path writes to futurePrizePool (lootbox portion) and
-        // next/futurePrizePool (auto-rebuy) — allowing it during freeze would
-        // corrupt the snapshot that advanceGame/runRewardJackpots operates on.
+        // Block claims while prize pools are frozen (active during VRF window).
+        // This path writes to futurePrizePool (lootbox portion) — allowing it
+        // during freeze would corrupt the live pool that advanceGame operates on.
         if (prizePoolFrozen) revert E();
 
         uint256 amountWei = _consumeDecClaim(msg.sender, lvl);
 
         if (gameOver) {
-            _addClaimableEth(msg.sender, amountWei, decClaimRounds[lvl].rngWord);
+            _creditClaimable(msg.sender, amountWei);
             return;
         }
 
@@ -365,75 +344,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         return _decClaimable(round, player, lvl);
     }
 
-    /// @dev Processes auto-rebuy if enabled, converting ETH winnings to tickets.
-    /// @param beneficiary The player to process.
-    /// @param weiAmount The ETH amount to potentially convert.
-    /// @param entropy RNG seed for level selection.
-    /// @return handled True if auto-rebuy processed the funds.
-    function _processAutoRebuy(
-        address beneficiary,
-        uint256 weiAmount,
-        uint256 entropy
-    ) private returns (bool handled) {
-        if (gameOver) return false;
-        AutoRebuyState memory state = autoRebuyState[beneficiary];
-        if (!state.autoRebuyEnabled) return false;
-        if (decimatorAutoRebuyDisabled[beneficiary]) return false;
-
-        AutoRebuyCalc memory calc = _calcAutoRebuy(
-            beneficiary,
-            weiAmount,
-            entropy,
-            state,
-            level,
-            AUTO_REBUY_BONUS_BPS,
-            AFKING_AUTO_REBUY_BONUS_BPS
-        );
-        if (!calc.hasTickets) {
-            _creditClaimable(beneficiary, weiAmount);
-            return true;
-        }
-
-        if (calc.toFuture) {
-            _setFuturePrizePool(_getFuturePrizePool() + calc.ethSpent);
-        } else {
-            _setNextPrizePool(_getNextPrizePool() + calc.ethSpent);
-        }
-        _queueTickets(beneficiary, calc.targetLevel, calc.ticketCount, false);
-
-        if (calc.reserved != 0) {
-            _creditClaimable(beneficiary, calc.reserved);
-        }
-
-        // Decimator pool was pre-reserved in claimablePool; deduct ticket conversion.
-        claimablePool -= calc.ethSpent;
-
-        emit AutoRebuyProcessed(
-            beneficiary,
-            calc.targetLevel,
-            calc.ticketCount,
-            calc.ethSpent,
-            calc.reserved
-        );
-        return true;
-    }
-
-    /// @dev Credits ETH winnings to a player's claimable balance.
-    /// @param beneficiary Player to credit.
-    /// @param weiAmount Amount in wei to add.
-    /// @param entropy RNG seed for auto-rebuy level selection.
-    function _addClaimableEth(
-        address beneficiary,
-        uint256 weiAmount,
-        uint256 entropy
-    ) private {
-        if (weiAmount == 0) return;
-        if (_processAutoRebuy(beneficiary, weiAmount, entropy)) {
-            return;
-        }
-        _creditClaimable(beneficiary, weiAmount);
-    }
-
     // -------------------------------------------------------------------------
     // Decimator Helpers
     // -------------------------------------------------------------------------
@@ -450,7 +360,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 ethPortion = amount >> 1;
         lootboxPortion = amount - ethPortion;
 
-        _addClaimableEth(account, ethPortion, rngWord);
+        _creditClaimable(account, ethPortion);
 
         // Lootbox portion is no longer claimable ETH; remove from reserved pool.
         claimablePool -= lootboxPortion;
@@ -642,7 +552,16 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ) private {
         if (winner == address(0) || amount == 0) return;
         if (amount > LOOTBOX_CLAIM_THRESHOLD) {
-            _queueWhalePassClaimCore(winner, amount);
+            uint256 fullHalfPasses = amount / HALF_WHALE_PASS_PRICE;
+            uint256 remainder = amount - (fullHalfPasses * HALF_WHALE_PASS_PRICE);
+            if (fullHalfPasses != 0) {
+                uint24 startLevel = level + 1;
+                _applyWhalePassStats(winner, startLevel);
+                _queueTicketRange(winner, startLevel, 100, uint32(fullHalfPasses), false);
+            }
+            if (remainder != 0) {
+                _creditClaimable(winner, remainder);
+            }
             return;
         }
         // Resolve lootbox via delegatecall to open module
@@ -650,9 +569,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             .GAME_LOOTBOX_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule
-                        .resolveLootboxDirect
-                        .selector,
+                    IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
                     winner,
                     amount,
                     rngWord
@@ -727,10 +644,15 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (daysRemaining <= 7) revert TerminalDecDeadlinePassed();
 
         // Compute bucket and multiplier from activity score (self-call; runs via delegatecall so address(this) == game)
-        uint256 bonusBps = IDegenerusGame(address(this)).playerActivityScore(player);
-        if (bonusBps > TERMINAL_DEC_ACTIVITY_CAP_BPS) bonusBps = TERMINAL_DEC_ACTIVITY_CAP_BPS;
+        uint256 bonusBps = IDegenerusGame(address(this)).playerActivityScore(
+            player
+        );
+        if (bonusBps > TERMINAL_DEC_ACTIVITY_CAP_BPS)
+            bonusBps = TERMINAL_DEC_ACTIVITY_CAP_BPS;
         uint8 bucket = _terminalDecBucket(bonusBps);
-        uint256 multBps = bonusBps == 0 ? BPS_DENOMINATOR : BPS_DENOMINATOR + (bonusBps / 3);
+        uint256 multBps = bonusBps == 0
+            ? BPS_DENOMINATOR
+            : BPS_DENOMINATOR + (bonusBps / 3);
 
         TerminalDecEntry storage e = terminalDecEntries[player];
 
@@ -764,7 +686,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         // Apply time multiplier
         uint256 timeMultBps = _terminalDecMultiplierBps(daysRemaining);
-        uint256 weightedAmount = (effectiveAmount * timeMultBps) / BPS_DENOMINATOR;
+        uint256 weightedAmount = (effectiveAmount * timeMultBps) /
+            BPS_DENOMINATOR;
 
         // Update post-time-multiplier total (for claim share)
         uint256 newWeighted = uint256(e.weightedBurn) + weightedAmount;
@@ -776,8 +699,13 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         terminalDecBucketBurnTotal[bucketKey] += weightedAmount;
 
         emit TerminalDecBurnRecorded(
-            player, lvl, e.bucket, e.subBucket,
-            effectiveAmount, weightedAmount, timeMultBps
+            player,
+            lvl,
+            e.bucket,
+            e.subBucket,
+            effectiveAmount,
+            weightedAmount,
+            timeMultBps
         );
     }
 
@@ -811,14 +739,20 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 decSeed = rngWord;
         for (uint8 denom = 2; denom <= DECIMATOR_MAX_DENOM; ) {
             uint8 winningSub = _decWinningSubbucket(decSeed, denom);
-            packedOffsets = _packDecWinningSubbucket(packedOffsets, denom, winningSub);
+            packedOffsets = _packDecWinningSubbucket(
+                packedOffsets,
+                denom,
+                winningSub
+            );
 
             bytes32 bucketKey = keccak256(abi.encode(lvl, denom, winningSub));
             uint256 subTotal = terminalDecBucketBurnTotal[bucketKey];
             if (subTotal != 0) {
                 totalWinnerBurn += subTotal;
             }
-            unchecked { ++denom; }
+            unchecked {
+                ++denom;
+            }
         }
 
         if (totalWinnerBurn == 0) {
@@ -828,7 +762,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // Store packed offsets for claim validation
         decBucketOffsetPacked[lvl] = packedOffsets;
 
-        // Snapshot claim round (single slot — no rngWord needed, GAMEOVER skips auto-rebuy)
+        // Snapshot claim round (single slot — no rngWord needed for terminal claims)
         lastTerminalDecClaimRound.lvl = lvl;
         lastTerminalDecClaimRound.poolWei = uint96(poolWei);
         lastTerminalDecClaimRound.totalBurn = uint128(totalWinnerBurn);
@@ -843,12 +777,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @notice Claim terminal decimator jackpot for caller.
     /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.
     function claimTerminalDecimatorJackpot() external {
-        if (prizePoolFrozen) revert E();
-
         uint256 amountWei = _consumeTerminalDecClaim(msg.sender);
 
-        // GAMEOVER claims are always 100% ETH (entropy unused — auto-rebuy skipped when gameOver)
-        _addClaimableEth(msg.sender, amountWei, 0);
+        _creditClaimable(msg.sender, amountWei);
     }
 
     /// @notice Check if player can claim terminal decimator jackpot.
@@ -862,7 +793,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (lvl == 0) return (0, false);
 
         TerminalDecEntry storage e = terminalDecEntries[player];
-        if (e.burnLevel != uint48(lvl) || e.weightedBurn == 0 || e.bucket == 0) {
+        if (
+            e.burnLevel != uint48(lvl) || e.weightedBurn == 0 || e.bucket == 0
+        ) {
             return (0, false);
         }
 
@@ -873,7 +806,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 totalBurn = uint256(lastTerminalDecClaimRound.totalBurn);
         if (totalBurn == 0) return (0, false);
 
-        amountWei = (uint256(lastTerminalDecClaimRound.poolWei) * uint256(e.weightedBurn)) / totalBurn;
+        amountWei =
+            (uint256(lastTerminalDecClaimRound.poolWei) *
+                uint256(e.weightedBurn)) /
+            totalBurn;
         winner = amountWei != 0;
     }
 
@@ -885,7 +821,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (lvl == 0) revert TerminalDecNotActive();
 
         TerminalDecEntry storage e = terminalDecEntries[player];
-        if (e.burnLevel != uint48(lvl) || e.weightedBurn == 0) revert TerminalDecNotWinner();
+        if (e.burnLevel != uint48(lvl) || e.weightedBurn == 0)
+            revert TerminalDecNotWinner();
 
         // Use totalBurn == 0 as claimed flag (set to 0 after claiming)
         uint88 weight = e.weightedBurn;
@@ -897,7 +834,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 totalBurn = uint256(lastTerminalDecClaimRound.totalBurn);
         if (totalBurn == 0) revert TerminalDecNotWinner();
 
-        amountWei = (uint256(lastTerminalDecClaimRound.poolWei) * uint256(weight)) / totalBurn;
+        amountWei =
+            (uint256(lastTerminalDecClaimRound.poolWei) * uint256(weight)) /
+            totalBurn;
         if (amountWei == 0) revert TerminalDecNotWinner();
 
         // Mark claimed by zeroing weightedBurn
@@ -912,7 +851,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ///      > 10 days: linear 20x (day 120) to 1x (day 10)
     ///      7-10 days: flat 1x
     ///      <= 7 days: blocked by caller
-    function _terminalDecMultiplierBps(uint256 daysRemaining) private pure returns (uint256) {
+    function _terminalDecMultiplierBps(
+        uint256 daysRemaining
+    ) private pure returns (uint256) {
         if (daysRemaining <= 10) return 10000;
         // Linear: 1x at day 10, 20x at day 120 → slope = 190000 / 110
         return 10000 + ((daysRemaining - 10) * 190000) / 110;
@@ -921,8 +862,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Compute terminal decimator bucket from activity score (lvl 100 rules).
     function _terminalDecBucket(uint256 bonusBps) private pure returns (uint8) {
         if (bonusBps == 0) return TERMINAL_DEC_BUCKET_BASE;
-        uint256 range = uint256(TERMINAL_DEC_BUCKET_BASE) - uint256(TERMINAL_DEC_MIN_BUCKET);
-        uint256 reduction = (range * bonusBps + (TERMINAL_DEC_ACTIVITY_CAP_BPS / 2)) / TERMINAL_DEC_ACTIVITY_CAP_BPS;
+        uint256 range = uint256(TERMINAL_DEC_BUCKET_BASE) -
+            uint256(TERMINAL_DEC_MIN_BUCKET);
+        uint256 reduction = (range *
+            bonusBps +
+            (TERMINAL_DEC_ACTIVITY_CAP_BPS / 2)) /
+            TERMINAL_DEC_ACTIVITY_CAP_BPS;
         uint256 b = uint256(TERMINAL_DEC_BUCKET_BASE) - reduction;
         if (b < TERMINAL_DEC_MIN_BUCKET) b = TERMINAL_DEC_MIN_BUCKET;
         return uint8(b);
@@ -932,9 +877,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     function _terminalDecDaysRemaining() private view returns (uint256) {
         uint48 currentDay = _simulatedDayIndex();
         uint48 psd = purchaseStartDay;
-        uint256 deadlineDay = uint256(psd) + (level == 0
-            ? uint256(TERMINAL_DEC_IDLE_TIMEOUT_DAYS)
-            : TERMINAL_DEC_DEATH_CLOCK_DAYS);
+        uint256 deadlineDay = uint256(psd) +
+            (
+                level == 0
+                    ? uint256(TERMINAL_DEC_IDLE_TIMEOUT_DAYS)
+                    : TERMINAL_DEC_DEATH_CLOCK_DAYS
+            );
         if (currentDay >= deadlineDay) return 0;
         return deadlineDay - currentDay;
     }
