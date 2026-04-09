@@ -1047,10 +1047,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         ((currentWord >> 8) % 151) + 25
                     );
                     uint48 flipDay = day + 1;
-                    sdgnrs.resolveRedemptionPeriod(
+                    uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(
                         redemptionRoll,
                         flipDay
                     );
+                    if (burnieToCredit != 0) {
+                        coinflip.creditFlip(
+                            ContractAddresses.SDGNRS,
+                            burnieToCredit
+                        );
+                    }
                 }
             }
 
@@ -1113,10 +1119,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         ((currentWord >> 8) % 151) + 25
                     );
                     uint48 flipDay = day + 1;
-                    sdgnrs.resolveRedemptionPeriod(
+                    uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(
                         redemptionRoll,
                         flipDay
                     );
+                    if (burnieToCredit != 0) {
+                        coinflip.creditFlip(
+                            ContractAddresses.SDGNRS,
+                            burnieToCredit
+                        );
+                    }
                 }
             }
             _finalizeLootboxRng(currentWord);
@@ -1146,10 +1158,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             ((fallbackWord >> 8) % 151) + 25
                         );
                         uint48 flipDay = day + 1;
-                        sdgnrs.resolveRedemptionPeriod(
+                        uint256 burnieToCredit = sdgnrs.resolveRedemptionPeriod(
                             redemptionRoll,
                             flipDay
                         );
+                        if (burnieToCredit != 0) {
+                            coinflip.creditFlip(
+                                ContractAddresses.SDGNRS,
+                                burnieToCredit
+                            );
+                        }
                     }
                 }
                 _finalizeLootboxRng(fallbackWord);

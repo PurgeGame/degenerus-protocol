@@ -1,17 +1,5 @@
 # Milestones
 
-## v20.0 Pool Consolidation & Write Batching (Shipped: 2026-04-08)
-
-**Phases completed:** 2 phases, 3 plans, 6 tasks
-
-**Key accomplishments:**
-
-- Verified JackpotModule dead code removal and interface cleanup -- all work completed by Plans 01+02 during restructuring, confirmed via grep and compilation checks
-- runBafJackpot delegatecall passthrough added to DegenerusGame.sol + self-call guard on JackpotModule entry point
-- Full variable sweep of consolidated pool flow -- 3 path types traced, 9 correctness checks all PASS/ACCEPTED, pool conservation proven algebraically, 1 INFO finding (x100 trigger shift)
-
----
-
 ## v17.1 Comment Correctness Sweep (Shipped: 2026-04-03)
 
 **Phases completed:** 3 phases, 9 plans, 15 tasks

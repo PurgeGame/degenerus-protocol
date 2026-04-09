@@ -45,7 +45,7 @@
 - ✅ **v19.0 Pool Accounting Fix & Sweep** — Phases 183-185 (shipped 2026-04-04)
 - ✅ **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (shipped 2026-04-08)
 - ✅ **v21.0 Jackpot Two-Call Split & Skip-Split Optimization** — Phases 195-198 (shipped 2026-04-08)
-- ✅ **v22.0 Delta Audit & Payout Reference Rewrite** — Phases 199-200 (shipped 2026-04-08)
+- 🔄 **v22.0 Delta Audit & Payout Reference Rewrite** — Phases 199-200
 
 ## Phases
 
@@ -162,10 +162,13 @@ See individual milestone entries above.
 </details>
 
 <details>
-<summary>v22.0 Delta Audit & Payout Reference Rewrite (Phases 199-200) -- SHIPPED 2026-04-08</summary>
+<summary>v22.0 Delta Audit & Payout Reference Rewrite (Phases 199-200) -- IN PROGRESS</summary>
 
-- [x] **Phase 199: Delta Audit — Skip-Split + Gas Ceiling Proof** — 2 plans (completed 2026-04-08)
-- [x] **Phase 200: Payout Reference Rewrite + Purchase Phase Redesign** — 2 plans + contract changes (completed 2026-04-08)
+- [ ] **Phase 199: Delta Audit — Skip-Split + Gas Ceiling Proof** — 2 plans
+  Plans:
+  - [x] 199-01-PLAN.md — Theoretical worst-case gas derivation for all advanceGame jackpot stages
+  - [x] 199-02-PLAN.md — Delta audit: caller chain trace, parity verification, storage lifecycle, dead code scan
+- [ ] **Phase 200: Payout Reference Rewrite** — Clear and rewrite JACKPOT-PAYOUT-REFERENCE.md organized by jackpot type, update event catalog
 
 </details>
 

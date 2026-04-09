@@ -8,27 +8,6 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v23.0 Redemption Coinflip Fix
-
-**Goal:** Fix sDGNRS redemption resolution to stop phantom-crediting BURNIE into the coinflip pool, and ensure the claim path correctly subtracts from sDGNRS's existing position before minting fresh BURNIE to redeemers.
-
-**Target features:**
-- Remove erroneous `creditFlip` call from redemption resolution in AdvanceModule
-- Ensure claim path deducts redeemer's share from sDGNRS balance/flip pool
-- Ensure redeemers mint fresh BURNIE equal to the amount deleted
-
-## Completed Milestone: v22.0 Delta Audit & Payout Reference Rewrite
-
-**Status:** Complete (2026-04-08)
-
-**Result:** 2 phases (199-200), 4 plans + contract changes. Delta audit of unified _processDailyEth: 0 HIGH/MEDIUM/LOW across 6 sections (caller chain, parity, skip-split, resumeEthPool, isJackpotPhase gating, dead code). Gas derivation proved all 6 jackpot paths < 16M (worst case 13.49M, 15.7% margin). Payout reference + event catalog rewritten for skip-split architecture. Purchase phase jackpot redesigned: fixed [20,12,6,1] ETH winners (no scaling), 120 ticket cap, ETH drip every purchase day at lvl 1+. Symbol-0 bias bug fixed (_getWinningTraits always selected symbol 0 in 3/4 quadrants — replaced with fully random 6-bit traits). Hero symbol override extended to all jackpot paths. isDaily renamed to isJackpotPhase. rollDailyQuest relocated to rngGate.
-
-## Completed Milestone: v21.0 Jackpot Two-Call Split & Skip-Split Optimization
-
-**Status:** Complete (2026-04-08)
-
-**Result:** 4 phases (195-198), 7 plans. Phase 195 split daily ETH distribution into two-call pattern with resumeEthPool inter-call state. Phase 196 post-split audit verified gas, logic parity, state, and bytecode. Phase 197 created payout reference and event catalog docs. Phase 198 unified _processDailyEth/_distributeJackpotEth/_processOneBucket into single function with splitMode parameter; skip-split optimization processes all 4 buckets in one call when total winners <= 160; renamed isDailyJackpot to isJackpotPhase. JackpotModule 23,158B, DegenerusGame 20,480B. Hardhat 1295 passing, zero new regressions.
-
 ## Completed Milestone: v20.0 Pool Consolidation & Write Batching
 
 **Status:** Complete (2026-04-05)
@@ -153,11 +132,6 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v16.0 Module Consolidation & Storage Repack — EndgameModule eliminated (3 functions redistributed), storage slots 0-2 repacked (slot 0 32/32, currentPrizePool uint128 in slot 1, slot 2 killed), 14/14 requirements satisfied — v16.0 Phases 168-172
 - ✓ v17.0 Affiliate Bonus Cache — cached affiliate bonus in mintPacked_ bits [185-214] eliminating 5 cold SLOADs from activity score, rate doubled to 1 point per 0.5 ETH, 105 mintPacked_ operations audited (0 collisions), both test suites zero regressions, 9/9 requirements satisfied — v17.0 Phases 173-174
 - ✓ v17.1 Comment Correctness Sweep — 40 contracts swept, 72 findings (30 LOW, 42 INFO), 56 fixed, 0 regressions from v3.1/v3.5, WWXRP decimal scaling added — v17.1 Phases 175-178
-- ✓ v18.0 Delta Audit (v16.0-v17.1) — verified all changes from v16.0-v17.1 milestones — v18.0 Phases 179-182
-- ✓ v19.0 Pool Accounting Fix & Sweep — 81 pool mutation sites audited, F-185-01 HIGH fixed (deferred SSTORE overwrite), rebuy delta reconciliation — v19.0 Phases 183-185
-- ✓ v20.0 Pool Consolidation & Write Batching — pool transition logic inlined into AdvanceModule with batched SSTOREs, BAF entry point exposed, dead code removed, 13/13 requirements, delta audit proven equivalent — v20.0 Phases 186-187
-- ✓ v21.0 Jackpot Two-Call Split & Skip-Split Optimization — daily ETH split into two-call pattern, unified _processDailyEth with splitMode, skip-split for <= 160 winners — v21.0 Phases 195-198
-- ✓ v22.0 Delta Audit & Payout Reference Rewrite — 0 HIGH/MEDIUM/LOW findings, gas proven < 16M, payout ref + event catalog rewritten, symbol-0 bias fixed, hero override extended to all paths, purchase phase redesigned [20,12,6,1] fixed winners — v22.0 Phases 199-200
 
 ## Completed Milestone: v8.1 Final Audit Prep
 
@@ -286,9 +260,6 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | NonceBurner placeholder in fuzz test deploy | Empty contract preserves nonce ordering after EndgameModule deletion | ✓ v16.0 Phase 171 |
 | Cache affiliate bonus in mintPacked_ bits [185-214] | Eliminate 5 cold SLOADs (~10,500 gas) from every activity score read; write piggybacks on existing SSTORE | ✓ v17.0 Phase 173 |
 | Affiliate bonus rate 1 point per 0.5 ETH (was 1 per 1 ETH) | Easier to reach cap; doubles reward for moderate affiliates | ✓ v17.0 Phase 173 |
-| Inline consolidatePrizePools + runRewardJackpots into AdvanceModule | Batch SSTOREs, reduce cross-module delegatecalls, free JackpotModule bytecode | ✓ v20.0 Phase 186 |
-| Expose runBafJackpot as external entry point with self-call guard | AdvanceModule calls back into JackpotModule via DegenerusGame passthrough; mirrors Decimator pattern | ✓ v20.0 Phase 186 |
-| Accept x100 trigger level shift (F-187-01) | Unifies all x100 operations (yield dump, keep roll, BAF, Decimator) to same level transition; design improvement | ✓ v20.0 Phase 187 |
 
 ## Known Issues (Documented, Not Blocking)
 
@@ -310,7 +281,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v20.0 Pool Consolidation & Write Batching shipped (2026-04-08). Pool transition logic consolidated into AdvanceModule with batched SSTOREs. JackpotModule freed ~1.7KB bytecode. Planning next milestone.
+v20.0 Pool Consolidation & Write Batching in progress (2026-04-04). Merging pool transition logic from JackpotModule into AdvanceModule to batch SSTOREs and free JackpotModule bytecode.
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -380,4 +351,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-08 after v23.0 Redemption Coinflip Fix milestone start*
+*Last updated: 2026-04-04 after v20.0 Pool Consolidation & Write Batching milestone start*
