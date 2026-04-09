@@ -406,7 +406,9 @@ contract DegenerusGameDegeneretteModule is
                 player,
                 totalBet,
                 currency == CURRENCY_ETH,
-                currency == CURRENCY_ETH ? PriceLookupLib.priceForLevel(level) : 0
+                currency == CURRENCY_ETH
+                    ? PriceLookupLib.priceForLevel(level)
+                    : 0
             );
         }
     }
@@ -695,7 +697,7 @@ contract DegenerusGameDegeneretteModule is
                 // (matching the bet-placement pattern at L558-561). The live futurePrizePool
                 // snapshot that advanceGame/runRewardJackpots operates on is UNTOUCHED.
                 // Pending future was credited by purchases during freeze; we debit it here.
-                // No percentage cap: degenerette payouts are never a significant portion
+                // No percentage cap: unfrozen amounts are never a significant portion
                 // of the total future pool, so the full ethPortion is debited directly.
                 (uint128 pNext, uint128 pFuture) = _getPendingPools();
 

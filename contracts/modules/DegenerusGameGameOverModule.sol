@@ -72,10 +72,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      - Decimator refunds flow to terminal jackpot pool
     ///      - Any uncredited remainder swept to vault and sDGNRS
     ///
-    ///      Reads rngWordByDay[day] for entropy; returns early if word is not yet available.
+    ///      Reads rngWordByDay[day] for entropy; reverts if funds exist but word is not yet available.
     ///      VRF fallback logic (historical word, stall timeout) is in AdvanceModule._gameOverEntropy.
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
-    /// @custom:reverts E When stETH transfer fails
+    /// @custom:reverts E When funds exist but RNG word unavailable (defense-in-depth), or stETH transfer fails
     function handleGameOverDrain(uint48 day) external {
         if (gameOverFinalJackpotPaid) return; // Already processed
 
@@ -85,10 +85,26 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         uint256 stBal = steth.balanceOf(address(this));
         uint256 totalFunds = ethBal + stBal;
 
+        // Compute available funds FIRST (before any side effects)
+        // Deity pass refunds have not happened yet, so claimablePool is pre-refund
+        uint256 preRefundAvailable = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
+
+        // RNG gate: when distributable funds exist, require RNG word.
+        // Defense-in-depth -- caller (_handleGameOverPath) already guarantees
+        // rngWordByDay[day] != 0 before calling, so this revert should never fire.
+        uint256 rngWord;
+        if (preRefundAvailable != 0) {
+            rngWord = rngWordByDay[day];
+            if (rngWord == 0) revert E();
+        }
+
+        // === All side effects below this line (RNG confirmed or no funds to distribute) ===
+
+        // Deity pass refunds (levels 0-9)
         if (lvl < 10) {
             uint256 refundPerPass = DEITY_PASS_EARLY_GAMEOVER_REFUND;
             uint256 ownerCount = deityPassOwners.length;
-            uint256 budget = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
+            uint256 budget = preRefundAvailable;
             uint256 totalRefunded;
             for (uint256 i; i < ownerCount; ) {
                 address owner = deityPassOwners[i];
@@ -116,28 +132,13 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             }
         }
 
-        // Calculate available funds (excluding claimable winnings reserve)
-        uint256 available = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
-
-        gameOver = true; // Terminal state
+        // Latch terminal state
+        gameOver = true;
         gameOverTime = uint48(block.timestamp);
 
-        // Burn unallocated tokens before fund distribution (fires on all paths)
+        // Burn unallocated tokens
         charityGameOver.burnAtGameOver();
         dgnrs.burnAtGameOver();
-
-        if (available == 0) {
-            gameOverFinalJackpotPaid = true;
-            _setNextPrizePool(0);
-            _setFuturePrizePool(0);
-            _setCurrentPrizePool(0);
-            yieldAccumulator = 0;
-            return;
-        }
-
-        // Get RNG word for jackpot selection (includes VRF fallback after 3 days)
-        uint256 rngWord = rngWordByDay[day];
-        if (rngWord == 0) return; // RNG not ready yet — don't latch, allow retry
 
         gameOverFinalJackpotPaid = true;
         _setNextPrizePool(0);
@@ -145,12 +146,17 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         _setCurrentPrizePool(0);
         yieldAccumulator = 0;
 
+        // Recalculate available after refunds (claimablePool may have grown)
+        uint256 available = totalFunds > claimablePool ? totalFunds - claimablePool : 0;
+
+        if (available == 0) return;
+
         emit GameOverDrained(lvl, available, claimablePool);
 
         // remaining tracks unallocated funds.
         uint256 remaining = available;
 
-        // 10% Terminal Decimator (death bet) — refunds flow back to remaining for terminal jackpot
+        // 10% Terminal Decimator (death bet) -- refunds flow back to remaining for terminal jackpot
         uint256 decPool = remaining / 10;
         if (decPool != 0) {
             uint256 decRefund = IDegenerusGame(address(this)).runTerminalDecimatorJackpot(decPool, lvl, rngWord);
@@ -159,7 +165,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
                 claimablePool += decSpend;
             }
             remaining -= decPool;
-            remaining += decRefund; // Return terminal dec refund to remaining for terminal jackpot
+            remaining += decRefund;
         }
 
         // 90% (+ decimator refund) to next-level ticketholders (Day-5-style bucket distribution)
@@ -167,14 +173,11 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         if (remaining != 0) {
             uint256 termPaid = IDegenerusGame(address(this))
                 .runTerminalJackpot(remaining, lvl + 1, rngWord);
-            // claimablePool already updated inside JackpotModule._processDailyEth
             remaining -= termPaid;
-            // Any undistributed remainder swept to vault
             if (remaining != 0) {
                 _sendToVault(remaining, stBal);
             }
         }
-
     }
 
     /// @notice Final sweep of all remaining funds after 30 days post-gameover.
