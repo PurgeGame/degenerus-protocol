@@ -242,7 +242,7 @@ Plans:
   2. Full test suite (Hardhat + Foundry) passes with zero new failures
 **Plans:** 1 plan
 Plans:
-- [x] 204-01-PLAN.md — Trigger + drain audit (TRIG-01 through DRNA-04)
+- [ ] 206-01-PLAN.md — Delta audit: annotated diff + test regression check (DLTA-01, DLTA-02)
 
 ## Progress
 
@@ -253,8 +253,8 @@ Phases execute in numeric order: 203 -> 204 -> 205 -> 206
 |-------|----------------|--------|-----------|
 | 203. Drain Fix | 1/1 | Complete    | 2026-04-09 |
 | 204. Trigger & Drain Audit | 1/1 | Complete    | 2026-04-09 |
-| 205. Sweep & Interaction Audit | 2/2 | Complete   | 2026-04-09 |
-| 206. Delta Audit | 0/TBD | Not started | - |
+| 205. Sweep & Interaction Audit | 2/2 | Complete    | 2026-04-09 |
+| 206. Delta Audit | 0/1 | Not started | - |
 
 ## Deferred
 
