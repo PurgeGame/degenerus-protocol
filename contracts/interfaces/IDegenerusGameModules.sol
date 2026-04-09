@@ -32,9 +32,6 @@ interface IDegenerusGameAdvanceModule {
         bytes32 newKeyHash
     ) external;
 
-    /// @notice Reverses a pending coinflip for caller
-    function reverseFlip() external;
-
     /// @notice VRF callback function to receive random words
     /// @dev Called by the VRF coordinator to fulfill randomness requests
     /// @param requestId The ID of the VRF request being fulfilled

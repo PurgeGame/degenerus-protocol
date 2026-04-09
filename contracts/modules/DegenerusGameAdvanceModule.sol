@@ -70,11 +70,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_JACKPOT_COIN_TICKETS = 9;
     uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 10;
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 11;
-    event ReverseFlip(
-        address indexed caller,
-        uint256 totalQueued,
-        uint256 cost
-    );
     event DailyRngApplied(
         uint48 day,
         uint256 rawWord,
@@ -122,7 +117,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
-    uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
+
     uint256 private constant BURNIE_RNG_TRIGGER = 40_000 ether;
     uint32 private constant VAULT_PERPETUAL_TICKETS = 16;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
@@ -1407,14 +1402,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bool isTicketJackpotDay,
         uint24 lvl
     ) private returns (bool requested) {
-        if (
-            address(vrfCoordinator) == address(0) ||
-            vrfKeyHash == bytes32(0) ||
-            vrfSubscriptionId == 0
-        ) {
-            return false;
-        }
-
         try
             vrfCoordinator.requestRandomWords(
                 VRFRandomWordsRequest({
@@ -1532,20 +1519,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         _unfreezePool();
     }
 
-    /// @notice Pay BURNIE to nudge the next RNG word by +1.
-    /// @dev Cost scales +50% per queued nudge and resets after fulfillment.
-    ///      Only available while RNG is unlocked (before VRF request is in-flight).
-    ///      MECHANISM: Adds 1 to the VRF word for each nudge, changing outcomes.
-    ///      SECURITY: Players cannot predict the base word, only influence it.
-    function reverseFlip() external {
-        if (rngLockedFlag) revert RngLocked();
-        uint256 reversals = totalFlipReversals;
-        uint256 cost = _currentNudgeCost(reversals);
-        coin.burnCoin(msg.sender, cost);
-        uint256 newCount = reversals + 1;
-        totalFlipReversals = newCount;
-        emit ReverseFlip(msg.sender, newCount, cost);
-    }
 
     /// @notice Chainlink VRF callback for random word fulfillment.
     /// @dev Access: VRF coordinator only.
@@ -1655,23 +1628,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         emit DailyRngApplied(day, rawWord, nudges, finalWord);
     }
 
-    /// @dev Calculate nudge cost with compounding.
-    ///      Base cost is 100 BURNIE, +50% per queued nudge.
-    ///      NOTE: O(n) in reversals count - could be optimized with exponentiation for large n,
-    ///      but in practice reversals are bounded by game economics.
-    /// @param reversals Number of nudges already queued.
-    /// @return cost BURNIE cost for the next nudge.
-    function _currentNudgeCost(
-        uint256 reversals
-    ) private pure returns (uint256 cost) {
-        cost = RNG_NUDGE_BASE_COST;
-        while (reversals != 0) {
-            cost = (cost * 15) / 10; // Compound 50% per queued reversal
-            unchecked {
-                --reversals;
-            }
-        }
-    }
 
     /*+======================================================================+
       |                    DRIP PROJECTION MATH                             |

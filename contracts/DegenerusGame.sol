@@ -114,6 +114,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         address indexed operator,
         bool approved
     );
+    /// @notice Emitted when a player nudges the next RNG word.
+    /// @param caller The player who paid the nudge cost.
+    /// @param totalQueued Total nudges queued for the next VRF word.
+    /// @param cost BURNIE burned for this nudge.
+    event ReverseFlip(
+        address indexed caller,
+        uint256 totalQueued,
+        uint256 cost
+    );
 
     /*+=======================================================================+
       |                   PRECOMPUTED ADDRESSES (CONSTANT)                    |
@@ -163,6 +172,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @dev Minimum affiliate score (approx 10 ETH of referral volume).
     uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10 ether;
+
+    /// @dev Base cost for RNG nudge (100 BURNIE), compounds +50% per queued nudge.
+    uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
 
     /*+======================================================================+
       |                    MINT PACKED BIT LAYOUT                            |
@@ -1884,14 +1896,29 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      SECURITY: Players cannot predict the base word, only influence it.
     /// @custom:reverts RngLocked If RNG is currently locked (VRF request pending).
     function reverseFlip() external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ADVANCE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameAdvanceModule.reverseFlip.selector
-                )
-            );
-        if (!ok) _revertDelegate(data);
+        if (rngLockedFlag) revert RngLocked();
+        uint256 reversals = totalFlipReversals;
+        uint256 cost = _currentNudgeCost(reversals);
+        coin.burnCoin(msg.sender, cost);
+        uint256 newCount = reversals + 1;
+        totalFlipReversals = newCount;
+        emit ReverseFlip(msg.sender, newCount, cost);
+    }
+
+    /// @dev Calculate nudge cost with compounding.
+    ///      Base cost is 100 BURNIE, +50% per queued nudge.
+    /// @param reversals Number of nudges already queued.
+    /// @return cost BURNIE cost for the next nudge.
+    function _currentNudgeCost(
+        uint256 reversals
+    ) private pure returns (uint256 cost) {
+        cost = RNG_NUDGE_BASE_COST;
+        while (reversals != 0) {
+            cost = (cost * 15) / 10;
+            unchecked {
+                --reversals;
+            }
+        }
     }
 
     /// @notice Chainlink VRF callback for random word fulfillment.
