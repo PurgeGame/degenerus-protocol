@@ -228,9 +228,10 @@ Plans:
   3. Claims work between drain and sweep (claimablePool accessible), and all claim paths blocked after finalSwept
   4. Purchases, mints, and new gameplay actions are blocked once gameOver is true
   5. Post-gameover redemption pays deterministic (non-RNG) payout and auto-rebuy bypass is confirmed active
-**Plans:** 1 plan
+**Plans:** 2 plans
 Plans:
-- [ ] 204-01-PLAN.md — Trigger + drain audit (TRIG-01 through DRNA-04)
+- [ ] 205-01-PLAN.md — Sweep audit (SWEP-01 through SWEP-04)
+- [ ] 205-02-PLAN.md — Interaction audit (IXNR-01 through IXNR-05)
 
 ### Phase 206: Delta Audit
 **Goal**: The Phase 203 code change is proven behaviorally equivalent (except the intentional revert-vs-return change) and introduces no regressions
@@ -241,7 +242,7 @@ Plans:
   2. Full test suite (Hardhat + Foundry) passes with zero new failures
 **Plans:** 1 plan
 Plans:
-- [ ] 204-01-PLAN.md — Trigger + drain audit (TRIG-01 through DRNA-04)
+- [x] 204-01-PLAN.md — Trigger + drain audit (TRIG-01 through DRNA-04)
 
 ## Progress
 
@@ -251,8 +252,8 @@ Phases execute in numeric order: 203 -> 204 -> 205 -> 206
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 203. Drain Fix | 1/1 | Complete    | 2026-04-09 |
-| 204. Trigger & Drain Audit | 1/1 | Complete   | 2026-04-09 |
-| 205. Sweep & Interaction Audit | 0/TBD | Not started | - |
+| 204. Trigger & Drain Audit | 1/1 | Complete    | 2026-04-09 |
+| 205. Sweep & Interaction Audit | 0/2 | Not started | - |
 | 206. Delta Audit | 0/TBD | Not started | - |
 
 ## Deferred
