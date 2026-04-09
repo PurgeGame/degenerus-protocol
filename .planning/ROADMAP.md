@@ -45,7 +45,9 @@
 - ✅ **v19.0 Pool Accounting Fix & Sweep** — Phases 183-185 (shipped 2026-04-04)
 - ✅ **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (shipped 2026-04-08)
 - ✅ **v21.0 Jackpot Two-Call Split & Skip-Split Optimization** — Phases 195-198 (shipped 2026-04-08)
-- 🔄 **v22.0 Delta Audit & Payout Reference Rewrite** — Phases 199-200
+- ✅ **v22.0 Delta Audit & Payout Reference Rewrite** — Phases 199-200 (shipped 2026-04-08)
+- ✅ **v23.0 Redemption Coinflip Fix** — Phases 201-202 (shipped 2026-04-09)
+- **v24.0 Gameover Flow Audit & Fix** — Phases 203-206 (in progress)
 
 ## Phases
 
@@ -162,15 +164,90 @@ See individual milestone entries above.
 </details>
 
 <details>
-<summary>v22.0 Delta Audit & Payout Reference Rewrite (Phases 199-200) -- IN PROGRESS</summary>
+<summary>v22.0 Delta Audit & Payout Reference Rewrite (Phases 199-200) -- SHIPPED 2026-04-08</summary>
 
-- [ ] **Phase 199: Delta Audit — Skip-Split + Gas Ceiling Proof** — 2 plans
-  Plans:
-  - [x] 199-01-PLAN.md — Theoretical worst-case gas derivation for all advanceGame jackpot stages
-  - [x] 199-02-PLAN.md — Delta audit: caller chain trace, parity verification, storage lifecycle, dead code scan
-- [ ] **Phase 200: Payout Reference Rewrite** — Clear and rewrite JACKPOT-PAYOUT-REFERENCE.md organized by jackpot type, update event catalog
+- [x] **Phase 199: Delta Audit — Skip-Split + Gas Ceiling Proof** — 2 plans (completed 2026-04-08)
+- [x] **Phase 200: Payout Reference Rewrite + Purchase Phase Redesign** — 2 plans + contract changes (completed 2026-04-08)
 
 </details>
+
+<details>
+<summary>v23.0 Redemption Coinflip Fix (Phases 201-202) -- SHIPPED 2026-04-09</summary>
+
+- [x] **Phase 201: Redemption Coinflip Accounting Fix** - 1 plan (completed 2026-04-09)
+- [x] **Phase 202: Delta Audit — Redemption Accounting Verification** - 1 plan (completed 2026-04-09)
+
+</details>
+
+### v24.0 Gameover Flow Audit & Fix (In Progress)
+
+**Milestone Goal:** Audit and fix the entire gameover flow end-to-end — from trigger conditions through fund distribution to final sweep — ensuring every path executes exactly once with no double-refund, re-burn, or re-latch bugs.
+
+- [ ] **Phase 203: Drain Fix** - 1 plan
+  - [ ] 203-01-PLAN.md — Restructure handleGameOverDrain RNG gating + test verification
+- [ ] **Phase 204: Trigger & Drain Audit** - Verify gameover trigger conditions, entropy paths, and drain fund math
+- [ ] **Phase 205: Sweep & Interaction Audit** - Verify post-drain sweep mechanics and cross-module gameover interactions
+- [ ] **Phase 206: Delta Audit** - Confirm restructured drain is behaviorally equivalent and test suite clean
+
+## Phase Details
+
+### Phase 203: Drain Fix
+**Goal**: handleGameOverDrain restructured so RNG retry is a pure revert (no side effects until committed) and all one-time operations execute exactly once
+**Depends on**: Nothing (first phase of v24.0)
+**Requirements**: DFIX-01, DFIX-02, DFIX-03, DFIX-04, DFIX-05
+**Success Criteria** (what must be TRUE):
+  1. handleGameOverDrain reverts when funds > 0 but rngWordByDay[day] == 0, preventing silent no-op that skips drain
+  2. Deity pass refunds, burns, gameOver/gameOverTime latch, and pool zeroing all execute only after RNG word is confirmed available
+  3. No code path through handleGameOverDrain can execute any side effect (refund, burn, latch, zero) more than once per gameover
+  4. The caller (_handleGameOverPath) contract flow unchanged -- it still guarantees rngWordByDay[day] != 0 before calling drain, and handles the 3-day fallback
+**Plans:** 1 plan
+Plans:
+- [ ] 203-01-PLAN.md — Restructure handleGameOverDrain RNG gating + test verification
+
+### Phase 204: Trigger & Drain Audit
+**Goal**: Every path from liveness trigger through entropy acquisition through fund distribution is verified correct
+**Depends on**: Phase 203
+**Requirements**: TRIG-01, TRIG-02, TRIG-03, DRNA-01, DRNA-02, DRNA-03, DRNA-04
+**Success Criteria** (what must be TRUE):
+  1. Liveness guard fires at the documented thresholds (365d L0, 120d L1+, safety abort) and no other conditions
+  2. _gameOverEntropy resolves correctly on all three paths: VRF word already available, 3-day fallback to blockhash, and VRF pending (revert/retry)
+  3. RNG word requested by gameover is stored, consumed exactly once, and not reusable by any other consumer
+  4. Drain splits funds correctly (10% decimator / 90% terminal jackpot) with claimablePool accounting consistent before and after
+  5. Deity pass refunds pay exactly 20 ETH/pass in FIFO order, capped by available budget, with no double-refund possible
+**Plans**: TBD
+
+### Phase 205: Sweep & Interaction Audit
+**Goal**: Post-drain operations (30-day sweep, VRF shutdown) and all module interactions with gameover state are verified correct
+**Depends on**: Phase 204
+**Requirements**: SWEP-01, SWEP-02, SWEP-03, SWEP-04, IXNR-01, IXNR-02, IXNR-03, IXNR-04, IXNR-05
+**Success Criteria** (what must be TRUE):
+  1. handleFinalSweep enforces 30-day delay from gameOverTime, with the delay non-manipulable and non-bypassable
+  2. Sweep splits unclaimed funds correctly (33/33/34), transfers stETH-first with hard-revert on failure, and shuts down VRF + recovers LINK
+  3. Claims work between drain and sweep (claimablePool accessible), and all claim paths blocked after finalSwept
+  4. Purchases, mints, and new gameplay actions are blocked once gameOver is true
+  5. Post-gameover redemption pays deterministic (non-RNG) payout and auto-rebuy bypass is confirmed active
+**Plans**: TBD
+
+### Phase 206: Delta Audit
+**Goal**: The Phase 203 code change is proven behaviorally equivalent (except the intentional revert-vs-return change) and introduces no regressions
+**Depends on**: Phase 203, Phase 204, Phase 205
+**Requirements**: DLTA-01, DLTA-02
+**Success Criteria** (what must be TRUE):
+  1. Line-by-line diff of handleGameOverDrain shows only the intended restructuring -- no logic changes beyond revert-vs-return and side-effect reordering
+  2. Full test suite (Hardhat + Foundry) passes with zero new failures
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 203 -> 204 -> 205 -> 206
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 203. Drain Fix | 0/1 | Planned | - |
+| 204. Trigger & Drain Audit | 0/TBD | Not started | - |
+| 205. Sweep & Interaction Audit | 0/TBD | Not started | - |
+| 206. Delta Audit | 0/TBD | Not started | - |
 
 ## Deferred
 

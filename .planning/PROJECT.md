@@ -8,6 +8,31 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
+## Current Milestone: v24.0 Gameover Flow Audit & Fix
+
+**Goal:** Audit and fix the entire gameover flow end-to-end — from trigger conditions through fund distribution to final sweep — ensuring every path executes exactly once with no double-refund, re-burn, or re-latch bugs.
+
+**Target features:**
+- Restructure `handleGameOverDrain` so RNG retry is a pure no-op (no side effects until committed)
+- Audit gameover trigger conditions in AdvanceModule (liveness guards, `_gameOverEntropy` fallback)
+- Audit `handleFinalSweep` (30-day sweep, fund split, VRF shutdown)
+- Verify gameover interaction with claims, redemptions, and other modules
+- Delta audit of any contract changes
+
+## Completed Milestone: v23.0 Redemption Coinflip Fix
+
+**Status:** Complete (2026-04-09)
+
+**Result:** 2 phases (201-202), 2 plans. Phase 201 removed phantom `creditFlip(SDGNRS, burnieToCredit)` from all 3 redemption resolution paths in AdvanceModule — eliminated BURNIE coinflip pool inflation during resolution. `resolveRedemptionPeriod` changed to void (return value unused). Phase 202 delta audit: EQUIVALENT verdict, supply conservation proven (mint only at claim time via mintForGame), pool consistency verified (1 legitimate SDGNRS creditFlip remains at line 781), reservation/release symmetric, zero test regressions (Hardhat 1296, Foundry 150). All 4/4 requirements satisfied (RCA-01 through RCA-04).
+
+## Completed Milestone: v22.0 Delta Audit & Payout Reference Rewrite
+
+**Status:** Complete (2026-04-08)
+
+## Completed Milestone: v21.0 Jackpot Two-Call Split & Skip-Split Optimization
+
+**Status:** Complete (2026-04-08)
+
 ## Completed Milestone: v20.0 Pool Consolidation & Write Batching
 
 **Status:** Complete (2026-04-05)
@@ -132,6 +157,12 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v16.0 Module Consolidation & Storage Repack — EndgameModule eliminated (3 functions redistributed), storage slots 0-2 repacked (slot 0 32/32, currentPrizePool uint128 in slot 1, slot 2 killed), 14/14 requirements satisfied — v16.0 Phases 168-172
 - ✓ v17.0 Affiliate Bonus Cache — cached affiliate bonus in mintPacked_ bits [185-214] eliminating 5 cold SLOADs from activity score, rate doubled to 1 point per 0.5 ETH, 105 mintPacked_ operations audited (0 collisions), both test suites zero regressions, 9/9 requirements satisfied — v17.0 Phases 173-174
 - ✓ v17.1 Comment Correctness Sweep — 40 contracts swept, 72 findings (30 LOW, 42 INFO), 56 fixed, 0 regressions from v3.1/v3.5, WWXRP decimal scaling added — v17.1 Phases 175-178
+- ✓ v18.0 Delta Audit (v16.0-v17.1) — 4 phases (179-182), full delta audit of v16.0-v17.1 changes — v18.0 Phases 179-182
+- ✓ v19.0 Pool Accounting Fix & Sweep — jackpot payout ETH fix, 81-site pool sweep, HIGH finding fixed — v19.0 Phases 183-185
+- ✓ v20.0 Pool Consolidation & Write Batching — consolidatePrizePools + runRewardJackpots inlined, batched SSTOREs, 13/13 requirements — v20.0 Phases 186-187
+- ✓ v21.0 Jackpot Two-Call Split & Skip-Split Optimization — v21.0 Phases 195-198
+- ✓ v22.0 Delta Audit & Payout Reference Rewrite — purchase phase jackpot redesign, event catalog — v22.0 Phases 199-200
+- ✓ v23.0 Redemption Coinflip Fix — phantom creditFlip removed from 3 resolution paths, EQUIVALENT delta audit, 4/4 requirements — v23.0 Phases 201-202
 
 ## Completed Milestone: v8.1 Final Audit Prep
 
@@ -260,6 +291,8 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 | NonceBurner placeholder in fuzz test deploy | Empty contract preserves nonce ordering after EndgameModule deletion | ✓ v16.0 Phase 171 |
 | Cache affiliate bonus in mintPacked_ bits [185-214] | Eliminate 5 cold SLOADs (~10,500 gas) from every activity score read; write piggybacks on existing SSTORE | ✓ v17.0 Phase 173 |
 | Affiliate bonus rate 1 point per 0.5 ETH (was 1 per 1 ETH) | Easier to reach cap; doubles reward for moderate affiliates | ✓ v17.0 Phase 173 |
+| Remove phantom creditFlip from redemption resolution | creditFlip(SDGNRS, burnieToCredit) inflated coinflip pool without backing; removed from all 3 resolution paths | ✓ v23.0 Phase 201 |
+| resolveRedemptionPeriod changed to void return | No caller uses the return value; prevents future accidental credit | ✓ v23.0 Phase 201 |
 
 ## Known Issues (Documented, Not Blocking)
 
@@ -281,7 +314,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v20.0 Pool Consolidation & Write Batching in progress (2026-04-04). Merging pool transition logic from JackpotModule into AdvanceModule to batch SSTOREs and free JackpotModule bytecode.
+v23.0 Redemption Coinflip Fix shipped (2026-04-09). Phantom creditFlip removed from all 3 redemption resolution paths. Delta audit EQUIVALENT. No active milestone — ready for next work.
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -351,4 +384,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 after v20.0 Pool Consolidation & Write Batching milestone start*
+*Last updated: 2026-04-09 after v23.0 Redemption Coinflip Fix milestone*
