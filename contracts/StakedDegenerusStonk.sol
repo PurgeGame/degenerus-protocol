@@ -568,25 +568,24 @@ contract StakedDegenerusStonk {
     }
 
     /// @notice Called by game contract to resolve the current redemption period with a dice roll
-    /// @dev Adjusts segregated ETH by roll and returns rolled BURNIE amount for the game to credit.
+    /// @dev Adjusts segregated ETH by roll and returns rolled BURNIE amount for event emission.
     /// @param roll The random roll result (range 25-175, applied as percentage)
     /// @param flipDay Coinflip day index used for BURNIE gamble resolution
-    /// @return burnieToCredit Amount of BURNIE the game should credit to the coinflip contract
-    function resolveRedemptionPeriod(uint16 roll, uint48 flipDay) external returns (uint256 burnieToCredit) {
+    function resolveRedemptionPeriod(uint16 roll, uint48 flipDay) external {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
 
         uint48 period = redemptionPeriodIndex;
-        if (pendingRedemptionEthBase == 0 && pendingRedemptionBurnieBase == 0) return 0;
+        if (pendingRedemptionEthBase == 0 && pendingRedemptionBurnieBase == 0) return;
 
         // Adjust ETH segregation by roll
         uint256 rolledEth = (pendingRedemptionEthBase * roll) / 100;
         pendingRedemptionEthValue = pendingRedemptionEthValue - pendingRedemptionEthBase + rolledEth;
         pendingRedemptionEthBase = 0;
 
-        // Compute rolled BURNIE (game will credit via coinflip externally)
-        burnieToCredit = (pendingRedemptionBurnieBase * roll) / 100;
+        // Compute rolled BURNIE (paid to redeemers via _payBurnie on claim)
+        uint256 burnieToCredit = (pendingRedemptionBurnieBase * roll) / 100;
 
-        // Release BURNIE reservation (it's now in the flip as virtual stake)
+        // Release BURNIE reservation (redeemers claim via _payBurnie which draws balance then coinflip pool)
         pendingRedemptionBurnie -= pendingRedemptionBurnieBase;
         pendingRedemptionBurnieBase = 0;
 
