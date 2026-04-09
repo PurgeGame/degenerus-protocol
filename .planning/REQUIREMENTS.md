@@ -45,8 +45,8 @@ Requirements for gameover flow audit and fix. Each maps to roadmap phases.
 
 ### Delta Audit
 
-- [ ] **DLTA-01**: Restructured `handleGameOverDrain` is behaviorally equivalent (except revert vs return)
-- [ ] **DLTA-02**: No test suite regressions
+- [x] **DLTA-01**: Restructured `handleGameOverDrain` is behaviorally equivalent (except revert vs return)
+- [x] **DLTA-02**: No test suite regressions
 
 ## Out of Scope
 
@@ -82,8 +82,8 @@ Requirements for gameover flow audit and fix. Each maps to roadmap phases.
 | IXNR-03 | Phase 205 | Complete |
 | IXNR-04 | Phase 205 | Complete |
 | IXNR-05 | Phase 205 | Complete |
-| DLTA-01 | Phase 206 | Pending |
-| DLTA-02 | Phase 206 | Pending |
+| DLTA-01 | Phase 206 | Complete |
+| DLTA-02 | Phase 206 | Complete |
 
 **Coverage:**
 - v24.0 requirements: 23 total

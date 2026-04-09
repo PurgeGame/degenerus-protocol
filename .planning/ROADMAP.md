@@ -187,7 +187,7 @@ See individual milestone entries above.
   - [x] 203-01-PLAN.md — Restructure handleGameOverDrain RNG gating + test verification
 - [x] **Phase 204: Trigger & Drain Audit** - Verify gameover trigger conditions, entropy paths, and drain fund math (completed 2026-04-09)
 - [x] **Phase 205: Sweep & Interaction Audit** - Verify post-drain sweep mechanics and cross-module gameover interactions (completed 2026-04-09)
-- [ ] **Phase 206: Delta Audit** - Confirm restructured drain is behaviorally equivalent and test suite clean
+- [x] **Phase 206: Delta Audit** - Confirm restructured drain is behaviorally equivalent and test suite clean (completed 2026-04-09)
 
 ## Phase Details
 
@@ -240,9 +240,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Line-by-line diff of handleGameOverDrain shows only the intended restructuring -- no logic changes beyond revert-vs-return and side-effect reordering
   2. Full test suite (Hardhat + Foundry) passes with zero new failures
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
-- [ ] 206-01-PLAN.md — Delta audit: annotated diff + test regression check (DLTA-01, DLTA-02)
+- [x] 206-01-PLAN.md — Delta audit: annotated diff + test regression check (DLTA-01, DLTA-02)
 
 ## Progress
 
@@ -254,7 +254,7 @@ Phases execute in numeric order: 203 -> 204 -> 205 -> 206
 | 203. Drain Fix | 1/1 | Complete    | 2026-04-09 |
 | 204. Trigger & Drain Audit | 1/1 | Complete    | 2026-04-09 |
 | 205. Sweep & Interaction Audit | 2/2 | Complete    | 2026-04-09 |
-| 206. Delta Audit | 0/1 | Not started | - |
+| 206. Delta Audit | 1/1 | Complete   | 2026-04-09 |
 
 ## Deferred
 
