@@ -443,7 +443,7 @@ contract DegenerusGameDegeneretteModule is
             ticketCount,
             currency,
             amountPerTicket,
-            index,
+            uint32(index),
             activityScore,
             heroQuadrant
         );
@@ -455,7 +455,7 @@ contract DegenerusGameDegeneretteModule is
         degeneretteBetNonce[player] = nonce;
 
         degeneretteBets[player][nonce] = packed;
-        emit BetPlaced(player, index, nonce, packed);
+        emit BetPlaced(player, uint32(index), nonce, packed);
 
         // Track hero wagers and player ETH stats (ETH bets only)
         if (currency == CURRENCY_ETH) {

@@ -652,7 +652,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         emit BurnieLootOpen(
             player,
-            index,
+            uint32(index),
             burnieAmount,
             targetLevel,
             tickets,

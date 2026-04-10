@@ -856,7 +856,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             lootboxEvScorePacked[index][buyer] = uint16(
                 IDegenerusGame(address(this)).playerActivityScore(buyer) + 1
             );
-            emit LootBoxIndexAssigned(buyer, index, dayIndex);
+            emit LootBoxIndexAssigned(buyer, uint32(index), dayIndex);
         } else {
             if (storedDay != dayIndex) revert E();
         }

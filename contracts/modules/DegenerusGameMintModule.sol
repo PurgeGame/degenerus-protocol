@@ -1000,7 +1000,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                     cachedLevel + 1
                 );
                 // lootboxEvScorePacked written after score computation below
-                emit LootBoxIdx(buyer, lbIndex, lbDay);
+                emit LootBoxIdx(buyer, uint32(lbIndex), lbDay);
             } else {
                 if (storedDay != lbDay) revert E();
             }
@@ -1427,7 +1427,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        emit BurnieLootBuy(buyer, index, burnieAmount);
+        emit BurnieLootBuy(buyer, uint32(index), burnieAmount);
     }
 
     /// @dev Calculate boost amount given base amount and bonus bps
