@@ -37,7 +37,7 @@ contract FFKeyComputer is DegenerusGameStorage {
 ///      Storage layout: prizePoolsPacked at slot 2 = [128:256] future | [0:128] next.
 contract FarFutureIntegrationTest is DeployProtocol {
     /// @dev Storage slot of ticketQueue mapping in DegenerusGameStorage (confirmed via forge inspect)
-    uint256 private constant TICKET_QUEUE_SLOT = 13;
+    uint256 private constant TICKET_QUEUE_SLOT = 12;
 
     /// @dev Storage slot of prizePoolsPacked in DegenerusGameStorage (confirmed via forge inspect)
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;

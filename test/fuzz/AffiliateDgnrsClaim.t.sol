@@ -22,9 +22,9 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     bytes32 constant CODE_CAROL = bytes32("CAROL");
 
     // Storage slots (verified via forge inspect DegenerusGameStorage storage-layout)
-    uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 18, 3 bytes (uint24)
-    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 28;
-    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 29;
+    uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 14, 3 bytes (uint24)
+    uint256 constant SLOT_LEVEL_DGNRS_ALLOCATION = 25;
+    uint256 constant SLOT_LEVEL_DGNRS_CLAIMED = 26;
 
     uint256 buyerNonce;
 
@@ -78,11 +78,11 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     }
 
     /// @dev Set game.level = lvl in packed slot 0.
-    ///      level is uint24 at offset 18 bytes (144 bits from LSB).
+    ///      level is uint24 at offset 14 bytes (112 bits from LSB).
     function _setLevel(uint24 lvl) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        uint256 mask = uint256(0xFFFFFF) << 144;
-        slot0 = (slot0 & ~mask) | (uint256(lvl) << 144);
+        uint256 mask = uint256(0xFFFFFF) << 112;
+        slot0 = (slot0 & ~mask) | (uint256(lvl) << 112);
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 
