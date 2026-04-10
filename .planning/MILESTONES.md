@@ -1,5 +1,61 @@
 # Milestones
 
+## v24.1 Storage Layout Optimization (Shipped: 2026-04-10)
+
+**Phases completed:** 6 phases, 22 plans, 44 tasks
+
+**Key accomplishments:**
+
+- GameTimeLib.sol:
+- gameOverStatePacked
+- uint48->uint32 day-index cascade + packed slot migration across 3 heaviest modules (73 insertions, 73 deletions)
+- uint48->uint32 cascade + packed dailyJackpotTraits/lootboxRng/presale migration across 3 modules (51 ins, 52 del)
+- uint48->uint32 cascade + packed lootboxRng/presale migration across 3 files (35 ins, 35 del)
+- DegenerusGame.sol fully migrated, all 6 interfaces synced, 4 external contracts updated for selector matching, forge build passes (56 ins, 56 del)
+- Narrowed 26 day-index uint48 references to uint32 in BurnieCoinflip.sol while preserving JACKPOT_RESET_TIME as uint48
+- Narrowed all ~33 day-index uint48 references to uint32 in DegenerusQuests.sol (struct, events, locals, params, return types, streak casts)
+- Narrowed all day-index uint48 to uint32 in StakedDegenerusStonk, DegenerusJackpots, DegenerusVault, and DeityBoonViewer
+- Verified identical storage layout across 7 compilable DegenerusGameStorage inheritors and confirmed uint48 timestamp preservation, uint48 GNRUS governance preservation, and uint32 day-index narrowing
+- Both test suites blocked by compilation: 4 pre-existing module event param errors + 12 test files with mechanical uint8->bool and uint48->uint32 cast mismatches from v24.1 narrowing
+- Added uint32() casts at 6 emit/call sites across 4 module contracts to match narrowed event parameter types
+- Narrowed ticketWriteSlot uint8->bool in 7 test harnesses and day-index uint48->uint32 in 5 test files + 1 handler to match v24.1 storage types
+- Both suites compile cleanly; 276/358 Foundry tests pass and 1281/1316 Hardhat tests pass -- 113 total runtime failures are test assertion mismatches against pre-v24.1 layout, not contract logic regressions
+- Fixed vm.load() storage reads in 6 Foundry fuzz test files to match v24.1 slot layout (38/39) and bit offsets (>>64/>>32)
+- Fixed 22+ hardcoded slot constants and bit shifts in TicketLifecycle.t.sol and 2 field placement assertions in StorageFoundation.t.sol to match v24.1 storage layout
+- Fixed all 31 Hardhat failures: deleted 15 tests for removed functionality, fixed 11 compressed-jackpot timing tests with warmUpDay pattern, fixed 5 assertion mismatches from v24.1 storage slot shifts and uint32 packing
+- Hardhat suite fully green (1233 pass, 0 fail); Foundry improved to 312 pass / 46 fail (was 276/82) -- 36 net fixes confirmed, 46 remaining integration-level failures
+- Fixed 37 Foundry test failures across 4 test contracts by correcting v24.1 storage slot constants and adding warm-up phase to _driveToLevel to prevent turbo-mode underflow at level 0
+- Fixed 10 Foundry test failures across 5 files: uint48->uint32 VRF derivation, v24.1 slot constant updates, and packed claimablePool write
+- Both test suites pass with zero failures: Foundry 358/358, Hardhat 1233/1233 -- VER-02 verified
+- Corrected 6 stale documentation files to reflect lootboxRngIndex uint48 widening, closed 208-VERIFICATION gap, and updated REQUIREMENTS.md to 18/18 complete
+
+---
+
+## v24.0 Gameover Flow Audit & Fix (Shipped: 2026-04-09)
+
+**Phases completed:** 4 phases, 5 plans, 9 tasks
+
+**Key accomplishments:**
+
+- handleGameOverDrain restructured so RNG check gates ALL side effects; reverts with E() when funds > 0 but rngWord unavailable
+- All 7 trigger+drain requirements verified PASS with zero BUGs; claimablePool accounting identity proven correct through entire drain flow
+- 4/4 sweep requirements PASS: 30-day delay with one-way latches, claimablePool forfeiture with exact 33/33/34 split (zero dust), stETH-first pipeline with hard-revert on all failures, fire-and-forget VRF shutdown with LINK recovery from coordinator + admin balance
+- Cross-module gameover interaction audit: claims window (finalSwept gate), auto-rebuy bypass (L777), deterministic redemption (no RNG), purchase blocking (all 10 entry points), and gameOverPossible lifecycle (3 writes, clean cycle) -- all 5 IXNR requirements PASS
+- Phase 203 commit bcc38c14 proven behaviorally equivalent -- 15 diff hunks annotated (5 OK, 8 COMMENT-ONLY, 2 WHITESPACE, 0 BUG), zero test regressions
+
+---
+
+## v23.0 Redemption Coinflip Fix (Shipped: 2026-04-09)
+
+**Phases completed:** 2 phases, 2 plans, 0 tasks
+
+**Key accomplishments:**
+
+- Status:
+- Status:
+
+---
+
 ## v17.1 Comment Correctness Sweep (Shipped: 2026-04-03)
 
 **Phases completed:** 3 phases, 9 plans, 15 tasks
