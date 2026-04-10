@@ -32,8 +32,10 @@ contract RedemptionGasTest is DeployProtocol {
         // claimableWinnings mapping is at slot 7; compute slot for sDGNRS's entry
         bytes32 claimableSlot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
         vm.store(address(game), claimableSlot, bytes32(uint256(100 ether)));
-        // claimablePool is at slot 8
-        vm.store(address(game), bytes32(uint256(8)), bytes32(uint256(100 ether)));
+        // claimablePool is uint128 at slot 1, offset 16 (upper 128 bits)
+        uint256 slot1Val = uint256(vm.load(address(game), bytes32(uint256(1))));
+        slot1Val = (slot1Val & type(uint128).max) | (uint256(100 ether) << 128);
+        vm.store(address(game), bytes32(uint256(1)), bytes32(slot1Val));
     }
 
     // =====================================================================

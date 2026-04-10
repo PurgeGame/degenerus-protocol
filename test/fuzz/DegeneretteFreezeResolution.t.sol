@@ -23,21 +23,21 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // --- Storage slot constants (confirmed via `forge inspect DegenerusGameStorage storage`) ---
 
-    /// @dev Slot 1, byte offset 7: prizePoolFrozen (bool, 1 byte).
-    uint256 private constant SLOT_1 = 1;
-    uint256 private constant FROZEN_BYTE_OFFSET = 7;
+    /// @dev Slot 0, byte 29 (bit 232): prizePoolFrozen (bool, 1 byte).
+    uint256 private constant SLOT_0 = 0;
+    uint256 private constant FROZEN_BIT_SHIFT = 232;
 
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool]
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
     /// @dev prizePoolPendingPacked: [upper 128: futurePending] [lower 128: nextPending]
-    uint256 private constant PENDING_PACKED_SLOT = 12;
+    uint256 private constant PENDING_PACKED_SLOT = 11;
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 44;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
 
-    /// @dev lootboxRngIndex lives at slot 40, offset 0, size 6 bytes (uint48).
-    uint256 private constant LOOTBOX_RNG_INDEX_SLOT = 40;
+    /// @dev lootboxRngPacked at slot 38; lootboxRngIndex is the low 48 bits.
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 38;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
@@ -57,10 +57,13 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // placeDegeneretteBet reverts with E() when lootboxRngIndex == 0.
         // Seed it to 1 so the bet check passes. The word at index 1 starts
         // as 0 (no pending RNG), which is the required state for bet placement.
+        // lootboxRngIndex is the low 48 bits of lootboxRngPacked (slot 38).
+        uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
         vm.store(
             address(game),
-            bytes32(uint256(LOOTBOX_RNG_INDEX_SLOT)),
-            bytes32(uint256(1))
+            bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
+            bytes32(lrPacked)
         );
     }
 
@@ -293,10 +296,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         return uint256(uint128(packed >> 128));
     }
 
-    /// @notice Read prizePoolFrozen from slot 1, byte offset 24.
+    /// @notice Read prizePoolFrozen from slot 0, bit 232.
     function _readFrozen() internal view returns (bool) {
-        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(SLOT_1))));
-        return ((slot1 >> (FROZEN_BYTE_OFFSET * 8)) & 0xFF) != 0;
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
+        return ((s0 >> FROZEN_BIT_SHIFT) & 0xFF) != 0;
     }
 
     /// @notice Seed futurePrizePool (upper 128 bits of slot 3).
@@ -317,22 +320,21 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         vm.store(address(game), bytes32(uint256(PENDING_PACKED_SLOT)), bytes32(newPacked));
     }
 
-    /// @notice Set prizePoolFrozen flag (slot 1, byte 24).
-    /// @dev Preserves all other bytes in slot 1 (price, ticketWriteSlot, etc.).
+    /// @notice Set prizePoolFrozen flag (slot 0, bit 232).
+    /// @dev Preserves all other bytes in slot 0.
     function _setFrozenFlag(bool frozen) internal {
-        uint256 slot1 = uint256(vm.load(address(game), bytes32(uint256(SLOT_1))));
-        // Clear the frozen byte (byte 24 = bits 192..199)
-        uint256 mask = ~(uint256(0xFF) << (FROZEN_BYTE_OFFSET * 8));
-        slot1 = slot1 & mask;
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
+        // Clear the frozen byte (bit 232)
+        s0 = s0 & ~(uint256(0xFF) << FROZEN_BIT_SHIFT);
         // Set the frozen byte
         if (frozen) {
-            slot1 = slot1 | (uint256(1) << (FROZEN_BYTE_OFFSET * 8));
+            s0 = s0 | (uint256(1) << FROZEN_BIT_SHIFT);
         }
-        vm.store(address(game), bytes32(uint256(SLOT_1)), bytes32(slot1));
+        vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(s0));
     }
 
     /// @notice Inject a lootbox RNG word for a given index.
-    /// @dev Writes to the lootboxRngWordByIndex mapping at slot 49.
+    /// @dev Writes to the lootboxRngWordByIndex mapping at slot 39.
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
@@ -347,7 +349,8 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             rngWord = uint256(keccak256(abi.encode("freeze_test_rng", attempt)));
 
             // Replicate the result seed derivation from _resolveFullTicketBet (spin 0)
-            uint256 resultSeed = uint256(keccak256(abi.encodePacked(rngWord, index, QUICK_PLAY_SALT)));
+            // Contract uses uint32 index in encodePacked (v24.1 change)
+            uint256 resultSeed = uint256(keccak256(abi.encodePacked(rngWord, uint32(index), QUICK_PLAY_SALT)));
             uint32 resultTicket = DegenerusTraitUtils.packedTraitsFromSeed(resultSeed);
 
             // Use the result ticket AS the custom ticket -- guarantees 8/8 matches (jackpot).
