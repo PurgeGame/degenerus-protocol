@@ -200,6 +200,10 @@ contract BurnieCoin {
     IDegenerusQuests internal constant questModule =
         IDegenerusQuests(ContractAddresses.QUESTS);
 
+    /// @dev Reference to the coinflip contract for claim/consume operations.
+    IBurnieCoinflip internal constant coinflip =
+        IBurnieCoinflip(ContractAddresses.COINFLIP);
+
     /*+======================================================================+
       |                         CONSTRUCTOR                                  |
       +======================================================================+*/
@@ -228,7 +232,7 @@ contract BurnieCoin {
             spendable += uint256(_supply.vaultAllowance);
         }
         unchecked {
-            spendable += IBurnieCoinflip(ContractAddresses.COINFLIP).previewClaimCoinflips(player);
+            spendable += coinflip.previewClaimCoinflips(player);
         }
     }
 
@@ -433,7 +437,7 @@ contract BurnieCoin {
         uint256 balance = balanceOf[player];
         if (balance >= amount) return;
         unchecked {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).claimCoinflipsFromBurnie(
+            coinflip.claimCoinflipsFromBurnie(
                 player,
                 amount - balance
             );
@@ -446,7 +450,7 @@ contract BurnieCoin {
         uint256 balance = balanceOf[player];
         if (balance >= amount) return 0;
         unchecked {
-            return IBurnieCoinflip(ContractAddresses.COINFLIP).consumeCoinflipsForBurn(
+            return coinflip.consumeCoinflipsForBurn(
                 player,
                 amount - balance
             );

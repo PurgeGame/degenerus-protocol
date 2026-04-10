@@ -213,6 +213,9 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Reference to the Degenerus game contract for state queries.
     IDegenerusGame internal constant questGame = IDegenerusGame(ContractAddresses.GAME);
 
+    /// @dev Reference to the coinflip contract for crediting flip stakes.
+    IBurnieCoinflip internal constant coinflip = IBurnieCoinflip(ContractAddresses.COINFLIP);
+
     // =========================================================================
     //                                 STRUCTS
     // =========================================================================
@@ -508,7 +511,7 @@ contract DegenerusQuests is IDegenerusQuests {
         }
         if (anyCompleted) {
             if (!paidWithEth && totalReward != 0) {
-                IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, totalReward);
+                coinflip.creditFlip(player, totalReward);
             }
             return (totalReward, outQuestType, outStreak, true);
         }
@@ -623,7 +626,7 @@ contract DegenerusQuests is IDegenerusQuests {
         }
         (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
         if (completed && reward != 0) {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
+            coinflip.creditFlip(player, reward);
         }
     }
 
@@ -733,7 +736,7 @@ contract DegenerusQuests is IDegenerusQuests {
         }
         (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, mintPrice);
         if (completed && reward != 0) {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
+            coinflip.creditFlip(player, reward);
         }
     }
 
@@ -879,10 +882,10 @@ contract DegenerusQuests is IDegenerusQuests {
         // - Lootbox rewards: creditFlip internally AND returned to caller (caller adds to lootboxFlipCredit)
         // - ETH mint rewards: returned to caller (handleMint behavior for paidWithEth)
         if (burnieMintReward != 0) {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, burnieMintReward);
+            coinflip.creditFlip(player, burnieMintReward);
         }
         if (lootboxReward != 0) {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, lootboxReward);
+            coinflip.creditFlip(player, lootboxReward);
         }
         // Return ETH mint reward + lootbox reward (caller adds lootbox to lootboxFlipCredit)
         uint256 totalReturned = ethMintReward + lootboxReward;
@@ -946,7 +949,7 @@ contract DegenerusQuests is IDegenerusQuests {
             mintPrice
         );
         if (completed && reward != 0) {
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, reward);
+            coinflip.creditFlip(player, reward);
         }
     }
 
@@ -1877,7 +1880,7 @@ contract DegenerusQuests is IDegenerusQuests {
                    | (uint256(progress) << 8)
                    | (uint256(1) << 136);
             levelQuestPlayerState[player] = packed;
-            IBurnieCoinflip(ContractAddresses.COINFLIP).creditFlip(player, 800 ether);
+            coinflip.creditFlip(player, 800 ether);
             emit LevelQuestCompleted(player, questGame.level() + 1, lqType, 800 ether);
         } else {
             packed = uint256(currentVersion) | (uint256(progress) << 8);
