@@ -194,7 +194,7 @@ See individual milestone entries above.
 
 - [x] **Phase 207: Storage Foundation** - 2 plans (completed 2026-04-10)
 - [x] **Phase 208: Module Cascade + Interfaces** - 4 plans (completed 2026-04-10)
-- [ ] **Phase 209: External Contracts** - 3 plans
+- [x] **Phase 209: External Contracts** - 3 plans (completed 2026-04-10)
 - [ ] **Phase 210: Verification** - forge inspect layout check, test suites, timestamp audit
 
 ## Phase Details
@@ -248,7 +248,7 @@ Plans:
 Plans:
 - [x] 209-01-PLAN.md — BurnieCoinflip uint48->uint32 day-index narrowing
 - [x] 209-02-PLAN.md — DegenerusQuests uint48->uint32 day-index narrowing
-- [ ] 209-03-PLAN.md — StakedDegenerusStonk + DegenerusJackpots + DegenerusVault + DeityBoonViewer
+- [x] 209-03-PLAN.md — StakedDegenerusStonk + DegenerusJackpots + DegenerusVault + DeityBoonViewer
 
 ### Phase 210: Verification
 **Goal**: The entire refactor is proven correct -- no layout drift, no test regressions, no accidental timestamp narrowing
@@ -267,7 +267,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 207. Storage Foundation | 2/2 | Complete   | 2026-04-10 |
 | 208. Module Cascade + Interfaces | 4/4 | Complete    | 2026-04-10 |
-| 209. External Contracts | 2/3 | In Progress|  |
+| 209. External Contracts | 3/3 | Complete   | 2026-04-10 |
 | 210. Verification | 0/TBD | Not started | - |
 
 ## Deferred
