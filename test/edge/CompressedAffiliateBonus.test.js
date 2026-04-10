@@ -89,6 +89,16 @@ describe("CompressedAffiliateBonus", function () {
     }
   }
 
+  /**
+   * Warm-up: advance one day with a small purchase so purchaseDays > 1
+   * on the next cycle. Prevents turbo (tier=2) from firing.
+   */
+  async function warmUpDay(game, deployer, mockVRF, advanceModule, buyer) {
+    await buyFullTickets(game, buyer, 10, 0.1);
+    await advanceToNextDay();
+    await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 7n);
+  }
+
   async function driveToJackpotPhase(game, deployer, mockVRF, advanceModule) {
     for (let cycle = 0; cycle < 30; cycle++) {
       await driveOneCycle(game, deployer, mockVRF, advanceModule, BigInt(cycle * 1000 + 42));
@@ -132,7 +142,10 @@ describe("CompressedAffiliateBonus", function () {
     await affiliate.connect(buyerBaseline).referPlayer(aliceCode);
     await affiliate.connect(buyerBonus).referPlayer(aliceCode);
 
-    // Heavy purchases → target met quickly → compressed on first driveToJackpotPhase
+    // Warm-up: consume day 2 so purchaseDays > 1 on next advance (avoids turbo)
+    await warmUpDay(game, deployer, mockVRF, advanceModule, bob);
+
+    // Heavy purchases → target met quickly → compressed on next driveToJackpotPhase
     // Use others[0..11] (not 12-13 which are reserved for test purchases)
     const buyers = [carol, dan, eve, ...others.slice(0, 12)];
     await heavyPurchases(game, buyers);
@@ -152,19 +165,27 @@ describe("CompressedAffiliateBonus", function () {
     await affiliate.connect(buyerBaseline).referPlayer(aliceCode);
     await affiliate.connect(buyerBonus).referPlayer(aliceCode);
 
-    // Spread purchases over 4+ advances to avoid compressed/turbo (threshold is ≤3)
+    // Spread purchases over 4+ advances so purchaseDays > 3 when target met.
+    // purchaseStartDay = 1 at deploy.
+    // Advance 1 (day 2): purchaseDays = 2-1 = 1
     await buyFullTickets(game, alice, 200, 2);
     await advanceToNextDay();
     await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 100n);
 
+    // Advance 2 (day 3): purchaseDays = 3-1 = 2
     await buyFullTickets(game, bob, 200, 2);
     await driveOneCycle(game, deployer, mockVRF, advanceModule, 200n);
 
+    // Advance 3 (day 4): purchaseDays = 4-1 = 3
     await buyFullTickets(game, carol, 200, 2);
     await driveOneCycle(game, deployer, mockVRF, advanceModule, 300n);
 
-    // Heavy purchases on day 4+ → normal (purchaseDays > 3)
-    const buyers = [dan, eve, ...others.slice(0, 12)];
+    // Advance 4 (day 5): purchaseDays = 5-1 = 4 > 3 → normal
+    await buyFullTickets(game, others[0], 200, 2);
+    await driveOneCycle(game, deployer, mockVRF, advanceModule, 400n);
+
+    // Heavy purchases on day 5+ → normal (purchaseDays > 3)
+    const buyers = [dan, eve, ...others.slice(1, 12)];
     await heavyPurchases(game, buyers);
 
     return { ...protocol, aliceCode, buyerBaseline, buyerBonus };
@@ -261,7 +282,10 @@ describe("CompressedAffiliateBonus", function () {
       await affiliate.connect(buyerPre).referPlayer(aliceCode);
       await affiliate.connect(buyerCompressed).referPlayer(aliceCode);
 
-      // Heavy purchases → compressed on first advance
+      // Warm-up: consume day 2 so purchaseDays > 1 on next advance (avoids turbo)
+      await warmUpDay(game, deployer, mockVRF, advanceModule, bob);
+
+      // Heavy purchases → compressed on next advance
       const buyers = [carol, dan, eve, ...others.slice(0, 12)];
       await heavyPurchases(game, buyers);
 
@@ -271,7 +295,7 @@ describe("CompressedAffiliateBonus", function () {
       expect(baseline).to.not.be.null;
       expect(baseline).to.be.gt(0n, "Should have baseline freshBurnie pre-compressed");
 
-      // Trigger compressed via full cycle (day 2, purchaseDays=2)
+      // Trigger compressed via full cycle (day 3, purchaseDays=2)
       // Compressed tier is set during daily processing, not at advanceGame entry
       await advanceToNextDay();
       await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 42n);
