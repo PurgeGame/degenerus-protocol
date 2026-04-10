@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v24.1
 milestone_name: Storage Layout Optimization
-status: verifying
-stopped_at: Completed 207-02-PLAN.md
-last_updated: "2026-04-10T03:48:24.586Z"
+status: executing
+stopped_at: Completed 209-01-PLAN.md
+last_updated: "2026-04-10T05:50:17.024Z"
 last_activity: 2026-04-10
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 100
+  completed_phases: 2
+  total_plans: 9
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 207 — storage-foundation
+**Current focus:** Phase 209 — External Contracts
 
 ## Current Position
 
-Phase: 207 (storage-foundation) — EXECUTING
-Plan: 2 of 2
+Phase: 209 (External Contracts) — EXECUTING
+Plan: 2 of 3
 Milestone: v24.1 — Storage Layout Optimization
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-04-10
 
 Progress: [░░░░░░░░░░] 0%
@@ -37,7 +37,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 5 (v24.0 milestone)
+- Total plans completed: 9 (v24.0 milestone)
 - Timeline: 1 day (2026-04-09)
 
 ## Accumulated Context
@@ -54,6 +54,7 @@ Recent decisions affecting current work:
 - [Phase 207]: uint32 for all day-index types; bool for ticketWriteSlot; uint128 for claimablePool; slot 0 absorbs buffer+freeze (30/32); slot 1 packs two uint128 pools (32/32)
 - [Phase 207]: ETH/LINK scaled 1e15, BURNIE scaled 1e18 for lootboxRng packed slot
 - [Phase 207]: 14 individual variables packed into 4 uint256 slots (lootboxRng, gameOver, dailyJackpotTraits, presale)
+- [Phase 209]: JACKPOT_RESET_TIME kept as uint48 (time-in-seconds constant, not a day index)
 
 ### Pending Todos
 
@@ -66,5 +67,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10T03:48:24.584Z
-Stopped at: Completed 207-02-PLAN.md
+Last session: 2026-04-10T05:50:17.022Z
+Stopped at: Completed 209-01-PLAN.md

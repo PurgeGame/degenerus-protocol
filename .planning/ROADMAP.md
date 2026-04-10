@@ -193,8 +193,8 @@ See individual milestone entries above.
 ### v24.1 Storage Layout Optimization (Phases 207-210)
 
 - [x] **Phase 207: Storage Foundation** - 2 plans (completed 2026-04-10)
-- [ ] **Phase 208: Module Cascade + Interfaces** - 4 plans
-- [ ] **Phase 209: External Contracts** - Propagate to BurnieCoinflip, Quests, sDGNRS, Jackpots, Vault, views
+- [x] **Phase 208: Module Cascade + Interfaces** - 4 plans (completed 2026-04-10)
+- [ ] **Phase 209: External Contracts** - 3 plans
 - [ ] **Phase 210: Verification** - forge inspect layout check, test suites, timestamp audit
 
 ## Phase Details
@@ -231,10 +231,10 @@ Plans:
   6. forge build succeeds with zero errors for core game contracts and interfaces
 **Plans**: 4 plans
 Plans:
-- [ ] 208-01-PLAN.md — AdvanceModule + GameOverModule + DecimatorModule (packed lootboxRng/gameOver/presale + day-index)
-- [ ] 208-02-PLAN.md — JackpotModule + LootboxModule + DegeneretteModule (packed dailyJackpotTraits + day-index)
-- [ ] 208-03-PLAN.md — MintModule + WhaleModule + PayoutUtils (packed lootboxRng/presale + day-index)
-- [ ] 208-04-PLAN.md — DegenerusGame.sol + all interfaces + forge build
+- [x] 208-01-PLAN.md — AdvanceModule + GameOverModule + DecimatorModule (packed lootboxRng/gameOver/presale + day-index)
+- [x] 208-02-PLAN.md — JackpotModule + LootboxModule + DegeneretteModule (packed dailyJackpotTraits + day-index)
+- [x] 208-03-PLAN.md — MintModule + WhaleModule + PayoutUtils (packed lootboxRng/presale + day-index)
+- [x] 208-04-PLAN.md — DegenerusGame.sol + all interfaces + forge build
 
 ### Phase 209: External Contracts
 **Goal**: All contracts outside the core game module tree compile and interoperate with the narrowed types
@@ -244,7 +244,11 @@ Plans:
   1. BurnieCoinflip, DegenerusQuests, StakedDegenerusStonk, DegenerusJackpots, and DegenerusVault use uint32 for all day-index parameters and storage
   2. View contracts use uint32 for day-index types
   3. forge build succeeds across the entire project with zero errors
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] 209-01-PLAN.md — BurnieCoinflip uint48->uint32 day-index narrowing
+- [ ] 209-02-PLAN.md — DegenerusQuests uint48->uint32 day-index narrowing
+- [ ] 209-03-PLAN.md — StakedDegenerusStonk + DegenerusJackpots + DegenerusVault + DeityBoonViewer
 
 ### Phase 210: Verification
 **Goal**: The entire refactor is proven correct -- no layout drift, no test regressions, no accidental timestamp narrowing
@@ -262,8 +266,8 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 207. Storage Foundation | 2/2 | Complete   | 2026-04-10 |
-| 208. Module Cascade + Interfaces | 0/4 | Not started | - |
-| 209. External Contracts | 0/TBD | Not started | - |
+| 208. Module Cascade + Interfaces | 4/4 | Complete    | 2026-04-10 |
+| 209. External Contracts | 1/3 | In Progress|  |
 | 210. Verification | 0/TBD | Not started | - |
 
 ## Deferred

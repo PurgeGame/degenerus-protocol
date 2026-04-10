@@ -12,7 +12,7 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 - [x] **TYPE-01**: All day-index storage variables narrowed from uint48 to uint32 (purchaseStartDay, dailyIdx, lastDailyJackpotDay, lootboxRngIndex)
 - [x] **TYPE-02**: All day-index mapping keys narrowed from uint48 to uint32 (rngWordByDay, lootboxDay, dailyHeroWagers, lootbox* mappings, deityBoonDay, deityBoonRecipientDay)
 - [ ] **TYPE-03**: All day-index function parameters, return types, and local variables narrowed from uint48 to uint32 across all modules
-- [ ] **TYPE-04**: All day-index types in external contracts narrowed (BurnieCoinflip, DegenerusQuests, StakedDegenerusStonk, DegenerusJackpots)
+- [x] **TYPE-04**: All day-index types in external contracts narrowed (BurnieCoinflip, DegenerusQuests, StakedDegenerusStonk, DegenerusJackpots)
 - [ ] **TYPE-05**: All day-index types in interfaces and view contracts narrowed to match implementations
 - [x] **TYPE-06**: ticketWriteSlot converted from uint8 to bool with negation toggle
 - [ ] **TYPE-07**: Timestamp types (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) and GNRUS governance uint48s remain unchanged
@@ -49,7 +49,7 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 | TYPE-01 | Phase 207 | Complete |
 | TYPE-02 | Phase 207 | Complete |
 | TYPE-03 | Phase 208 | Pending |
-| TYPE-04 | Phase 209 | Pending |
+| TYPE-04 | Phase 209 | Complete |
 | TYPE-05 | Phase 209 | Pending |
 | TYPE-06 | Phase 207 | Complete |
 | TYPE-07 | Phase 210 | Pending |
