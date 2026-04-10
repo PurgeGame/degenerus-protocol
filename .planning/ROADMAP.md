@@ -265,7 +265,7 @@ Plans:
 - [x] 210-02-PLAN.md — Foundry + Hardhat test suite execution
 - [x] 210-03-PLAN.md — Gap closure: fix 4 module event emit uint48->uint32 casts
 - [x] 210-04-PLAN.md — Gap closure: fix test file uint8->bool and uint48->uint32 mismatches
-- [ ] 210-05-PLAN.md — Gap closure: re-run both test suites to confirm zero regressions
+- [x] 210-05-PLAN.md — Gap closure: re-run both test suites to confirm zero regressions
 
 ## Progress
 
@@ -274,7 +274,7 @@ Plans:
 | 207. Storage Foundation | 2/2 | Complete   | 2026-04-10 |
 | 208. Module Cascade + Interfaces | 4/4 | Complete    | 2026-04-10 |
 | 209. External Contracts | 3/3 | Complete    | 2026-04-10 |
-| 210. Verification | 4/5 | In Progress|  |
+| 210. Verification | 5/5 | Complete   | 2026-04-10 |
 
 ## Deferred
 
