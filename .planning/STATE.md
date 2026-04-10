@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v24.1
 milestone_name: Storage Layout Optimization
 status: verifying
-stopped_at: Completed 211-07-PLAN.md
-last_updated: "2026-04-10T19:35:38.911Z"
+stopped_at: Completed 212-01-PLAN.md
+last_updated: "2026-04-10T19:50:10.895Z"
 last_activity: 2026-04-10
 progress:
   total_phases: 6
-  completed_phases: 5
-  total_plans: 21
-  completed_plans: 21
+  completed_phases: 6
+  total_plans: 22
+  completed_plans: 22
   percent: 100
 ---
 
@@ -72,6 +72,7 @@ Recent decisions affecting current work:
 - [Phase 211]: AffiliateDgnrsClaim had 3 stale constants (not just bit shift): SLOT_LEVEL_DGNRS_ALLOCATION 28->25, SLOT_LEVEL_DGNRS_CLAIMED 29->26, plus bit shift 144->112
 - [Phase 211]: DegeneretteFreezeResolution _findWinningCombo uses uint32(index) in encodePacked to match contract v24.1 bet resolution
 - [Phase 211]: Final verification confirms zero test failures: Foundry 358/358 pass, Hardhat 1233/1233 pass
+- [Phase 212]: Documented orphaned LR_MIN_LINK constants as retained for off-chain tooling
 
 ### Pending Todos
 
@@ -84,5 +85,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10T19:35:38.909Z
-Stopped at: Completed 211-07-PLAN.md
+Last session: 2026-04-10T19:50:10.893Z
+Stopped at: Completed 212-01-PLAN.md

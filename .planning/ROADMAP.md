@@ -197,7 +197,7 @@ See individual milestone entries above.
 - [x] **Phase 209: External Contracts** - 3 plans (completed 2026-04-10)
 - [x] **Phase 210: Verification** - forge inspect layout check, test suites, timestamp audit (completed 2026-04-10)
 - [x] **Phase 211: Test Suite Repair** — fix 113 runtime test failures from v24.1 storage repacking (completed 2026-04-10)
-- [ ] **Phase 212: Doc Reconciliation** — fix stale SUMMARYs and missing verification after lootboxRngIndex widening
+- [x] **Phase 212: Doc Reconciliation** — fix stale SUMMARYs and missing verification after lootboxRngIndex widening (completed 2026-04-10)
 
 ## Phase Details
 
@@ -305,7 +305,7 @@ Plans:
   6. Orphaned LR_MIN_LINK_SHIFT / LR_MIN_LINK_MASK constants documented or removed
 **Plans**: 1 plan
 Plans:
-- [ ] 212-01-PLAN.md — Fix stale SUMMARYs, update REQUIREMENTS.md, close 208-VERIFICATION gap, document orphaned constants
+- [x] 212-01-PLAN.md — Fix stale SUMMARYs, update REQUIREMENTS.md, close 208-VERIFICATION gap, document orphaned constants
 
 ## Progress
 
@@ -316,7 +316,7 @@ Plans:
 | 209. External Contracts | 3/3 | Complete    | 2026-04-10 |
 | 210. Verification | 5/5 | Complete   | 2026-04-10 |
 | 211. Test Suite Repair | 7/7 | Complete   | 2026-04-10 |
-| 212. Doc Reconciliation | 0/1 | Not started | - |
+| 212. Doc Reconciliation | 1/1 | Complete   | 2026-04-10 |
 
 ## Deferred
 
