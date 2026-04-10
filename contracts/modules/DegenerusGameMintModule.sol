@@ -107,7 +107,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;
     uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
-    uint48 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
+    uint32 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
 
     /// @dev Loot box pool split: 90% future, 10% next.
     uint16 private constant LOOTBOX_SPLIT_FUTURE_BPS = 9000;
@@ -127,24 +127,24 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
     event LootBoxBuy(
         address indexed buyer,
-        uint48 indexed day,
+        uint32 indexed day,
         uint256 amount,
         bool presale,
         uint24 level
     );
     event LootBoxIdx(
         address indexed buyer,
-        uint48 indexed index,
-        uint48 indexed day
+        uint32 indexed index,
+        uint32 indexed day
     );
     event BurnieLootBuy(
         address indexed buyer,
-        uint48 indexed index,
+        uint32 indexed index,
         uint256 burnieAmount
     );
     event BoostUsed(
         address indexed player,
-        uint48 indexed day,
+        uint32 indexed day,
         uint256 originalAmount,
         uint256 boostedAmount,
         uint16 boostBps
@@ -677,7 +677,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         }
 
         uint32 used;
-        uint256 entropy = lootboxRngWordByIndex[lootboxRngIndex - 1];
+        uint256 entropy = lootboxRngWordByIndex[uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
         uint32 processed;
 
         while (idx < total && used < writesBudget) {
@@ -950,7 +950,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 unchecked {
                     claimableWinnings[buyer] = claimable - shortfall;
                 }
-                claimablePool -= shortfall;
+                claimablePool -= uint128(shortfall);
                 lootboxClaimableUsed = shortfall;
             }
         }
@@ -981,17 +981,17 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         }
 
         // --- Lootbox setup (pool splits, RNG request, presale/distress tracking) ---
-        uint48 lbDay;
-        uint48 lbIndex;
+        uint32 lbDay;
+        uint32 lbIndex;
         bool lbFirstDeposit;
         if (lootBoxAmount != 0) {
             lbDay = _simulatedDayIndex();
-            lbIndex = lootboxRngIndex;
-            bool presale = lootboxPresaleActive;
+            lbIndex = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+            bool presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
 
             uint256 packed = lootboxEth[lbIndex][buyer];
             uint256 existingAmount = packed & ((1 << 232) - 1);
-            uint48 storedDay = lootboxDay[lbIndex][buyer];
+            uint32 storedDay = lootboxDay[lbIndex][buyer];
 
             if (existingAmount == 0) {
                 lbFirstDeposit = true;
@@ -1020,10 +1020,10 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             lootboxEth[lbIndex][buyer] =
                 (uint256(cachedLevel + 1) << 232) |
                 newAmount;
-            lootboxRngPendingEth += lootBoxAmount;
+            _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootBoxAmount));
 
             if (presale) {
-                lootboxPresaleMintEth += lootBoxAmount;
+                _psWrite(PS_MINT_ETH_SHIFT, PS_MINT_ETH_MASK, _psRead(PS_MINT_ETH_SHIFT, PS_MINT_ETH_MASK) + lootBoxAmount);
             }
 
             bool distress = _isDistressMode();
@@ -1399,7 +1399,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     ) private {
         if (gameOver) revert E();
         if (burnieAmount < BURNIE_LOOTBOX_MIN) revert E();
-        uint48 index = lootboxRngIndex;
+        uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (index == 0) revert E();
 
         coin.burnCoin(buyer, burnieAmount);
@@ -1417,13 +1417,13 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         }
         lootboxBurnie[index][buyer] = existingAmount + burnieAmount;
 
-        lootboxRngPendingBurnie += burnieAmount;
+        _lrWrite(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, _lrRead(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK) + _packBurnieToWhole(burnieAmount));
 
         uint256 priceWei = PriceLookupLib.priceForLevel(level + 1);
         if (priceWei != 0) {
             uint256 virtualEth = (burnieAmount * priceWei) / PRICE_COIN_UNIT;
             if (virtualEth != 0) {
-                lootboxRngPendingEth += virtualEth;
+                _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(virtualEth));
             }
         }
 
@@ -1445,7 +1445,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
     function _applyLootboxBoostOnPurchase(
         address player,
-        uint48 day,
+        uint32 day,
         uint256 amount
     ) private returns (uint256 boostedAmount) {
         boostedAmount = amount;

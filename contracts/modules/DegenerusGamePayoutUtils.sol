@@ -99,7 +99,7 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
             unchecked {
                 claimableWinnings[winner] += remainder;
             }
-            claimablePool += remainder;
+            claimablePool += uint128(remainder);
             emit PlayerCredited(winner, winner, remainder);
         }
     }

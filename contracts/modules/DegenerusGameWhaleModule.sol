@@ -38,7 +38,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param boostBps The boost percentage in basis points that was applied.
     event LootBoxBoostConsumed(
         address indexed player,
-        uint48 indexed day,
+        uint32 indexed day,
         uint256 originalAmount,
         uint256 boostedAmount,
         uint16 boostBps
@@ -50,8 +50,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param day The day index of the assignment.
     event LootBoxIndexAssigned(
         address indexed buyer,
-        uint48 indexed index,
-        uint48 indexed day
+        uint32 indexed index,
+        uint32 indexed day
     );
 
     /// @notice Emitted when whale pass rewards are claimed.
@@ -87,7 +87,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
 
     /// @dev Lootbox boost expiry duration (2 game days, expires at jackpot reset).
-    uint48 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
+    uint32 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
 
     /// @dev PPM scale for DGNRS pool calculations (1,000,000 = 100%).
     uint32 private constant DGNRS_WHALE_REWARD_PPM_SCALE = 1_000_000;
@@ -159,7 +159,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     uint256 private constant DEITY_PASS_BASE = 24 ether;
 
     /// @dev Deity pass boon expiry (4 game days, expires at jackpot reset).
-    uint48 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
+    uint32 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
     // -------------------------------------------------------------------------
     // Purchases
@@ -203,7 +203,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 s0 = bp.slot0;
         uint24 boonDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
         if (boonDay != 0) {
-            uint48 currentDay = _simulatedDayIndex();
+            uint32 currentDay = _simulatedDayIndex();
             hasValidBoon = uint24(currentDay) <= boonDay + 4;
         }
 
@@ -357,7 +357,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
 
         // Lootbox: 20% of price during presale, 10% after
-        uint16 whaleLootboxBps = lootboxPresaleActive
+        uint16 whaleLootboxBps = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0
             ? WHALE_LOOTBOX_PRESALE_BPS
             : WHALE_LOOTBOX_POST_BPS;
         uint256 lootboxAmount = (totalPrice * whaleLootboxBps) / 10_000;
@@ -391,7 +391,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint16 boonDiscountBps = _lazyPassTierToBps(lazyTier);
         uint24 boonDay = uint24(s1 >> BP_LAZY_PASS_DAY_SHIFT);
         if (boonDay != 0) {
-            uint48 currentDay = _simulatedDayIndex();
+            uint32 currentDay = _simulatedDayIndex();
             uint24 deityDay = uint24(s1 >> BP_DEITY_LAZY_PASS_DAY_SHIFT);
             if (deityDay != 0 && deityDay != uint24(currentDay)) {
                 bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
@@ -503,7 +503,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
 
         // Award lootbox as a percentage of pass value (presale 20%, post 10%)
-        uint16 lootboxBps = lootboxPresaleActive
+        uint16 lootboxBps = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0
             ? LAZY_PASS_LOOTBOX_PRESALE_BPS
             : LAZY_PASS_LOOTBOX_POST_BPS;
         uint256 lootboxAmount = (benefitValue * lootboxBps) / 10_000;
@@ -657,7 +657,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
 
         // Lootbox: 20% presale, 10% post
-        uint16 deityLootboxBps = lootboxPresaleActive
+        uint16 deityLootboxBps = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0
             ? DEITY_LOOTBOX_PRESALE_BPS
             : DEITY_LOOTBOX_POST_BPS;
         uint256 lootboxAmount = (totalPrice * deityLootboxBps) / 10_000;
@@ -841,14 +841,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint24 purchaseLevel,
         uint256 cachedPacked
     ) private {
-        uint48 dayIndex = _simulatedDayIndex();
-        uint48 index = lootboxRngIndex;
+        uint32 dayIndex = _simulatedDayIndex();
+        uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
 
         _recordLootboxMintDay(buyer, uint32(dayIndex), cachedPacked);
 
         uint256 packed = lootboxEth[index][buyer];
         uint256 existingAmount = packed & ((1 << 232) - 1);
-        uint48 storedDay = lootboxDay[index][buyer];
+        uint32 storedDay = lootboxDay[index][buyer];
 
         if (existingAmount == 0) {
             lootboxDay[index][buyer] = dayIndex;
@@ -874,7 +874,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         uint256 newAmount = existingAmount + boostedAmount;
         lootboxEth[index][buyer] = (uint256(purchaseLevel) << 232) | newAmount;
-        lootboxRngPendingEth += lootboxAmount;
+        _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(lootboxAmount));
 
         // Track distress-mode portion for proportional ticket bonus at open time
         if (_isDistressMode()) {
@@ -891,7 +891,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @return boostedAmount The lootbox amount after applying any boost.
     function _applyLootboxBoostOnPurchase(
         address player,
-        uint48 day,
+        uint32 day,
         uint256 amount
     ) private returns (uint256 boostedAmount) {
         boostedAmount = amount;
