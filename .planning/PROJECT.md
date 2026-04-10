@@ -8,16 +8,24 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v24.0 Gameover Flow Audit & Fix
+## Current Milestone: v25.0 Full Audit (Post-v5.0 Delta + Fresh RNG)
 
-**Goal:** Audit and fix the entire gameover flow end-to-end — from trigger conditions through fund distribution to final sweep — ensuring every path executes exactly once with no double-refund, re-burn, or re-latch bugs.
+**Goal:** Comprehensive adversarial audit of all changes since v5.0, plus ground-up RNG re-audit with no reliance on prior RNG conclusions.
 
 **Target features:**
-- Restructure `handleGameOverDrain` so RNG retry is a pure no-op (no side effects until committed)
-- Audit gameover trigger conditions in AdvanceModule (liveness guards, `_gameOverEntropy` fallback)
-- Audit `handleFinalSweep` (30-day sweep, fund split, VRF shutdown)
-- Verify gameover interaction with claims, redemptions, and other modules
-- Delta audit of any contract changes
+- Delta extraction: all changed/new functions from v6.0 through v24.1
+- Per-function adversarial audit of every changed function
+- Fresh-eyes RNG audit: commitment windows, VRF lifecycle, word derivation — from scratch
+- Storage layout verification across v24.1 packing
+- Cross-module interaction audit (pool flows, redemption, jackpots across consolidated architecture)
+- ETH conservation proof across restructured pool accounting
+- Consolidated findings with severity classification
+
+## Completed Milestone: v24.0 Gameover Flow Audit & Fix
+
+**Status:** Complete (2026-04-09)
+
+**Result:** 4 phases (203-206), 5 plans. handleGameOverDrain restructured so RNG check gates ALL side effects; reverts with E() when funds > 0 but rngWord unavailable. All 7 trigger+drain requirements verified PASS. Sweep audit: 30-day delay, 33/33/34 split, stETH-first hard-revert, VRF shutdown all verified. Cross-module interaction audit: 5 IXNR requirements PASS. Delta audit: Phase 203 commit proven behaviorally equivalent.
 
 ## Completed Milestone: v23.0 Redemption Coinflip Fix
 
@@ -314,7 +322,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v23.0 Redemption Coinflip Fix shipped (2026-04-09). Phantom creditFlip removed from all 3 redemption resolution paths. Delta audit EQUIVALENT. No active milestone — ready for next work.
+v25.0 Full Audit milestone in progress (2026-04-10). Phase 213 (Delta Extraction) complete — 46 contract files classified, function-level changelogs produced, 99 cross-module call chains mapped. Phases 214 (Adversarial), 215 (RNG), 216 (Pool) can now run in parallel.
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -384,4 +392,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-09 after v23.0 Redemption Coinflip Fix milestone*
+*Last updated: 2026-04-10 after Phase 214 Adversarial Audit (v25.0)*
