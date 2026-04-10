@@ -26,10 +26,10 @@
   2. Every contract in the codebase is classified as NEW / MODIFIED / DELETED / UNCHANGED with justification
   3. An interaction map shows all cross-module call chains between changed functions
   4. Subsequent audit phases can reference the delta extraction as their scope definition
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 Plans:
 - [x] 213-01-PLAN.md — Classify and changelog modules + storage contracts (13 files, ~6,800 diff lines)
-- [ ] 213-02-PLAN.md — Classify and changelog core contracts: main, interfaces, libraries, mocks (33 files, ~3,700 diff lines)
+- [x] 213-02-PLAN.md — Classify and changelog core contracts: main, interfaces, libraries, mocks (33 files, ~3,700 diff lines)
 - [ ] 213-03-PLAN.md — Build cross-module interaction map and unified delta extraction document
 
 ### Phase 214: Adversarial Audit
@@ -82,7 +82,7 @@ Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 complete
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 213. Delta Extraction | 1/3 | In Progress|  |
+| 213. Delta Extraction | 2/3 | In Progress|  |
 | 214. Adversarial Audit | 0/? | Not started | - |
 | 215. RNG Fresh Eyes | 0/? | Not started | - |
 | 216. Pool & ETH Accounting | 0/? | Not started | - |
