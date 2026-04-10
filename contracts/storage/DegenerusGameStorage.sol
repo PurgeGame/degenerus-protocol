@@ -216,15 +216,17 @@ abstract contract DegenerusGameStorage {
     ///      Initialized to GameTimeLib.currentDayIndex() in the constructor.
     ///      Used for death clock, distress mode, future take curve, and gap extension.
     ///
-    ///      SECURITY: uint48 holds day indices up to ~281 trillion — effectively unlimited.
-    uint48 internal purchaseStartDay;
+    ///      SECURITY: uint32 holds day indices up to ~4.2 billion — effectively unlimited
+    ///      for day-granularity counters.
+    uint32 internal purchaseStartDay;
 
     /// @dev Monotonically increasing "day" counter derived from block timestamps.
     ///      Incremented during game progression; used to key RNG words and track
     ///      daily jackpot eligibility. NOT tied to calendar days — it's game-relative.
     ///
-    ///      SECURITY: uint48 allows ~281 trillion increments — effectively unlimited.
-    uint48 internal dailyIdx;
+    ///      SECURITY: uint32 holds day indices up to ~4.2 billion — effectively unlimited
+    ///      for day-granularity counters.
+    uint32 internal dailyIdx;
 
     /// @dev Timestamp when the last VRF (Chainlink) request was submitted.
     ///      Used for timeout detection: rngRequestTime != 0 means a VRF request
@@ -311,13 +313,12 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // Packs into EVM Slot 1: ticketWriteSlot, prizePoolFrozen, currentPrizePool (18 bytes used, 14 bytes padding).
 
-    /// @dev Active write buffer index for ticket queue double-buffering (0 or 1).
-    ///      Toggled via XOR (`ticketWriteSlot ^= 1`) during queue slot swaps.
+    /// @dev Active write buffer toggle for ticket queue double-buffering.
+    ///      Toggled via negation (`ticketWriteSlot = !ticketWriteSlot`) during queue slot swaps.
     ///      Write path uses this value; read path uses the opposite.
     ///
-    ///      SECURITY: uint8 (not bool) required for XOR toggle arithmetic.
-    ///      Only values 0 and 1 are valid; _swapTicketSlot enforces this.
-    uint8 internal ticketWriteSlot;
+    ///      SECURITY: bool toggle via negation. Only values false/true are valid.
+    bool internal ticketWriteSlot;
 
     /// @dev True when purchase revenue redirects to pending accumulators.
     ///      Set at daily RNG request time; cleared by _unfreezePool().
@@ -420,7 +421,7 @@ abstract contract DegenerusGameStorage {
     ///      Historical words enable verifiable replay of past randomness.
     ///
     ///      SECURITY: Immutable once written; provides audit trail for RNG.
-    mapping(uint48 => uint256) internal rngWordByDay;
+    mapping(uint32 => uint256) internal rngWordByDay;
 
     // =========================================================================
     // Future Mint Awards
@@ -532,8 +533,8 @@ abstract contract DegenerusGameStorage {
     ///      and 25% ticket bonus on the distress-bought portion.
     function _isDistressMode() internal view returns (bool) {
         if (gameOver) return false;
-        uint48 psd = purchaseStartDay;
-        uint48 currentDay = _simulatedDayIndex();
+        uint32 psd = purchaseStartDay;
+        uint32 currentDay = _simulatedDayIndex();
         if (level == 0) {
             // Distress fires on the final day before the liveness guard would trigger.
             return currentDay >= psd + _DEPLOY_IDLE_TIMEOUT_DAYS;
@@ -718,12 +719,12 @@ abstract contract DegenerusGameStorage {
     /// @dev Compute the ticket queue key for the write slot.
     ///      Slot 0 uses raw level, slot 1 sets bit 23.
     function _tqWriteKey(uint24 lvl) internal view returns (uint24) {
-        return ticketWriteSlot != 0 ? lvl | TICKET_SLOT_BIT : lvl;
+        return ticketWriteSlot ? lvl | TICKET_SLOT_BIT : lvl;
     }
 
     /// @dev Compute the ticket queue key for the read slot (opposite of write).
     function _tqReadKey(uint24 lvl) internal view returns (uint24) {
-        return ticketWriteSlot == 0 ? lvl | TICKET_SLOT_BIT : lvl;
+        return !ticketWriteSlot ? lvl | TICKET_SLOT_BIT : lvl;
     }
 
     /// @dev Compute the ticket queue key for the far-future key space.
@@ -743,7 +744,7 @@ abstract contract DegenerusGameStorage {
     function _swapTicketSlot(uint24 purchaseLevel) internal {
         uint24 rk = _tqReadKey(purchaseLevel);
         if (ticketQueue[rk].length != 0) revert E();
-        ticketWriteSlot ^= 1;
+        ticketWriteSlot = !ticketWriteSlot;
         ticketsFullyProcessed = false;
     }
 
@@ -821,7 +822,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Loot box ETH per RNG index per player (amount may accumulate within an index).
     ///      Packed: [232 bits: amount] [24 bits: purchase level]
     ///      Purchase level locked at buy time - if you open late, you lose it.
-    mapping(uint48 => mapping(address => uint256)) internal lootboxEth;
+    mapping(uint32 => mapping(address => uint256)) internal lootboxEth;
 
     /// @dev Presale mode toggle (starts true, one-way: can only be turned off).
     ///      When true: loot boxes give 62% bonus BURNIE, presale lootbox splits active.
@@ -894,11 +895,11 @@ abstract contract DegenerusGameStorage {
     uint24 internal lastDailyJackpotLevel;
 
     /// @dev Day index for lastDailyJackpotWinningTraits.
-    uint48 internal lastDailyJackpotDay;
+    uint32 internal lastDailyJackpotDay;
 
     /// @dev Base (pre-boost) lootbox ETH per RNG index per player.
     ///      Tracks unboosted amounts so boosts apply at purchase time, not open time.
-    mapping(uint48 => mapping(address => uint256)) internal lootboxEthBase;
+    mapping(uint32 => mapping(address => uint256)) internal lootboxEthBase;
 
     // =========================================================================
     // Operator Approvals
@@ -1195,22 +1196,22 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Returns the current day index.
-    function _simulatedDayIndex() internal view returns (uint48) {
+    function _simulatedDayIndex() internal view returns (uint32) {
         return GameTimeLib.currentDayIndex();
     }
 
     /// @dev Returns the day index for a specific timestamp.
-    function _simulatedDayIndexAt(uint48 ts) internal pure returns (uint48) {
+    function _simulatedDayIndexAt(uint48 ts) internal pure returns (uint32) {
         return GameTimeLib.currentDayIndexAt(ts);
     }
 
     /// @dev Gets the current mint day from dailyIdx or calculates from timestamp.
     function _currentMintDay() internal view returns (uint32) {
-        uint48 day = dailyIdx;
+        uint32 day = dailyIdx;
         if (day == 0) {
             day = _simulatedDayIndex();
         }
-        return uint32(day);
+        return day;
     }
 
     /// @dev Updates the day field in packed mint data if changed.
@@ -1260,26 +1261,26 @@ abstract contract DegenerusGameStorage {
     uint256 internal lootboxRngMinLinkBalance = 14 ether;
 
     /// @dev RNG words keyed by lootbox RNG index.
-    mapping(uint48 => uint256) internal lootboxRngWordByIndex;
+    mapping(uint32 => uint256) internal lootboxRngWordByIndex;
 
     /// @dev Lootbox purchase day per RNG index and player.
-    mapping(uint48 => mapping(address => uint48)) internal lootboxDay;
+    mapping(uint32 => mapping(address => uint32)) internal lootboxDay;
 
     /// @dev Lootbox base level at purchase time, packed as (level + 1).
     ///      0 means no lootbox purchased at this index.
-    mapping(uint48 => mapping(address => uint24))
+    mapping(uint32 => mapping(address => uint24))
         internal lootboxBaseLevelPacked;
 
     /// @dev Lootbox activity score at purchase time, packed as (score + 1).
     ///      0 means no activity score recorded.
-    mapping(uint48 => mapping(address => uint16)) internal lootboxEvScorePacked;
+    mapping(uint32 => mapping(address => uint16)) internal lootboxEvScorePacked;
 
     // =========================================================================
     // Lootbox Bonus Tracking & BURNIE Lootboxes
     // =========================================================================
 
     /// @dev BURNIE lootbox amounts keyed by lootbox RNG index and player.
-    mapping(uint48 => mapping(address => uint256)) internal lootboxBurnie;
+    mapping(uint32 => mapping(address => uint256)) internal lootboxBurnie;
 
     // =========================================================================
     // Lootbox Module Storage (for delegatecall modules)
@@ -1297,13 +1298,13 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Day when deity's boon slots were assigned.
-    mapping(address => uint48) internal deityBoonDay;
+    mapping(address => uint32) internal deityBoonDay;
 
     /// @dev Bitmask of used slots for the current day (bit i = slot i used).
     mapping(address => uint8) internal deityBoonUsedMask;
 
     /// @dev Day when recipient last received a deity boon (prevents double-receipt).
-    mapping(address => uint48) internal deityBoonRecipientDay;
+    mapping(address => uint32) internal deityBoonRecipientDay;
 
     // =========================================================================
     // Degenerette (Roulette) Bets
@@ -1389,7 +1390,7 @@ abstract contract DegenerusGameStorage {
     ///      Each uint256 packs 8 × 32-bit amounts (one per symbol in that quadrant).
     ///      Amounts stored in units of 1e12 wei (0.000001 ETH) to fit 32 bits
     ///      (max ~4,295 ETH per symbol per day).
-    mapping(uint48 => uint256[4]) internal dailyHeroWagers;
+    mapping(uint32 => uint256[4]) internal dailyHeroWagers;
 
     // =========================================================================
     // Degenerette Per-Player Per-Level ETH Wagered
@@ -1410,7 +1411,7 @@ abstract contract DegenerusGameStorage {
     /// @dev ETH portion of a lootbox purchased during distress mode (final 6 hours
     ///      before gameover liveness guard). Used at open time to apply a 25% ticket
     ///      bonus proportional to the distress fraction of the total lootbox value.
-    mapping(uint48 => mapping(address => uint256)) internal lootboxDistressEth;
+    mapping(uint32 => mapping(address => uint256)) internal lootboxDistressEth;
 
     // =========================================================================
     // Segregated Yield Accumulator
