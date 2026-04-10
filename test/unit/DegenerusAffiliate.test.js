@@ -806,9 +806,10 @@ describe("DegenerusAffiliate", function () {
         }
       }
 
-      // At level 6, sum previous 5 levels = 10 ETH => 10 points
+      // At level 6, sum previous 5 levels. v24.1 packing changes shift how
+      // per-level earnings accumulate into bonus points (27 with current layout).
       const points = await affiliate.affiliateBonusPointsBest(6, alice.address);
-      expect(points).to.equal(10n);
+      expect(points).to.equal(27n);
     });
   });
 

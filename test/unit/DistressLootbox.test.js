@@ -54,12 +54,14 @@ describe("Distress-Mode Lootboxes", function () {
   }
 
   /**
-   * Advance time to just before distress mode (1 hour before the 6-hour window).
-   * At level 0, distress triggers at deployTimeout - 6 hours.
+   * Advance time to just before distress mode.
+   * At level 0, distress triggers when currentDay >= purchaseStartDay + 365.
+   * Since the contract uses day-based granularity (days reset at 22:57 UTC),
+   * we need a full-day buffer to ensure we land on the day before distress.
    */
   async function advanceToPreDistress() {
-    // Advance to 7 hours before timeout (1 hour before distress starts)
-    await advanceTime(DEPLOY_TIMEOUT_SECONDS - 7 * 3600);
+    // Advance to 2 days before the 365-day timeout to ensure day index is below threshold
+    await advanceTime(DEPLOY_TIMEOUT_SECONDS - 2 * 86400);
   }
 
   /**

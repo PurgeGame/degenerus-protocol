@@ -673,7 +673,7 @@ describe("DegenerusJackpots", function () {
      */
     function traitBurnTicketSlot(level, trait) {
       const baseSlot = hre.ethers.keccak256(
-        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [level, 9])
+        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [level, 8])
       );
       return hre.ethers.toBeHex(BigInt(baseSlot) + BigInt(trait), 32);
     }
@@ -689,7 +689,7 @@ describe("DegenerusJackpots", function () {
      */
     function ticketQueueSlot(key) {
       return hre.ethers.keccak256(
-        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [key, 13])
+        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [key, 12])
       );
     }
 

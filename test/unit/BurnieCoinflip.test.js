@@ -229,7 +229,7 @@ describe("BurnieCoinflip", function () {
       let found = false;
       for (let i = 0n; i < 10000n; i++) {
         const seed = hre.ethers.solidityPackedKeccak256(
-          ["uint256", "uint48"],
+          ["uint256", "uint32"],
           [i, epoch]
         );
         const seedBig = BigInt(seed);
@@ -250,7 +250,7 @@ describe("BurnieCoinflip", function () {
       let found = false;
       for (let i = 0n; i < 10000n; i++) {
         const seed = hre.ethers.solidityPackedKeccak256(
-          ["uint256", "uint48"],
+          ["uint256", "uint32"],
           [i, epoch]
         );
         const seedBig = BigInt(seed);
