@@ -238,7 +238,7 @@ interface IDegenerusGameMintModule {
     /// @notice Opens a lootbox for a player
     /// @param player Address of the lootbox owner
     /// @param lootboxIndex Index of the lootbox to open
-    function openLootBox(address player, uint32 lootboxIndex) external;
+    function openLootBox(address player, uint48 lootboxIndex) external;
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param player Address of the lootbox owner
@@ -272,12 +272,12 @@ interface IDegenerusGameLootboxModule {
     /// @notice Opens a standard lootbox for a player
     /// @param player Address of the lootbox owner
     /// @param lootboxIndex Index of the lootbox to open
-    function openLootBox(address player, uint32 lootboxIndex) external;
+    function openLootBox(address player, uint48 lootboxIndex) external;
 
     /// @notice Opens a Burnie lootbox for a player
     /// @param player Address of the lootbox owner
     /// @param lootboxIndex Index of the Burnie lootbox to open
-    function openBurnieLootBox(address player, uint32 lootboxIndex) external;
+    function openBurnieLootBox(address player, uint48 lootboxIndex) external;
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param player Address of the lootbox owner

@@ -523,7 +523,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param index The RNG index of the lootbox
     /// @custom:reverts E When lootbox amount is zero
     /// @custom:reverts RngNotReady When RNG word has not been set for this index
-    function openLootBox(address player, uint32 index) external {
+    function openLootBox(address player, uint48 index) external {
 
         uint256 packed = lootboxEth[index][player];
         uint256 amount = packed & ((1 << 232) - 1);
@@ -603,7 +603,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param index The RNG index of the lootbox
     /// @custom:reverts E When lootbox amount is zero or price is zero
     /// @custom:reverts RngNotReady When RNG word has not been set for this index
-    function openBurnieLootBox(address player, uint32 index) external {
+    function openBurnieLootBox(address player, uint48 index) external {
 
         uint256 burnieAmount = lootboxBurnie[index][player];
         if (burnieAmount == 0) revert E();

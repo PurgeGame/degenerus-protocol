@@ -677,7 +677,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         }
 
         uint32 used;
-        uint256 entropy = lootboxRngWordByIndex[uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
+        uint256 entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
         uint32 processed;
 
         while (idx < total && used < writesBudget) {
@@ -982,11 +982,11 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
         // --- Lootbox setup (pool splits, RNG request, presale/distress tracking) ---
         uint32 lbDay;
-        uint32 lbIndex;
+        uint48 lbIndex;
         bool lbFirstDeposit;
         if (lootBoxAmount != 0) {
             lbDay = _simulatedDayIndex();
-            lbIndex = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+            lbIndex = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
             bool presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
 
             uint256 packed = lootboxEth[lbIndex][buyer];
@@ -1399,7 +1399,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     ) private {
         if (gameOver) revert E();
         if (burnieAmount < BURNIE_LOOTBOX_MIN) revert E();
-        uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (index == 0) revert E();
 
         coin.burnCoin(buyer, burnieAmount);

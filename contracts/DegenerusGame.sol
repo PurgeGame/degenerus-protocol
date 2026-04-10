@@ -669,7 +669,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Open a loot box once RNG for its lootbox index is available.
     /// @param player Player address that owns the loot box (address(0) = msg.sender).
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    function openLootBox(address player, uint32 lootboxIndex) external {
+    function openLootBox(address player, uint48 lootboxIndex) external {
         player = _resolvePlayer(player);
         _openLootBoxFor(player, lootboxIndex);
     }
@@ -677,12 +677,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Open a BURNIE loot box once RNG for its lootbox index is available.
     /// @param player Player address that owns the loot box (address(0) = msg.sender).
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    function openBurnieLootBox(address player, uint32 lootboxIndex) external {
+    function openBurnieLootBox(address player, uint48 lootboxIndex) external {
         player = _resolvePlayer(player);
         _openBurnieLootBoxFor(player, lootboxIndex);
     }
 
-    function _openLootBoxFor(address player, uint32 lootboxIndex) private {
+    function _openLootBoxFor(address player, uint48 lootboxIndex) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
@@ -697,7 +697,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     function _openBurnieLootBoxFor(
         address player,
-        uint32 lootboxIndex
+        uint48 lootboxIndex
     ) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
@@ -2046,7 +2046,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return presale True if presale mode is currently active.
     function lootboxStatus(
         address player,
-        uint32 lootboxIndex
+        uint48 lootboxIndex
     ) external view returns (uint256 amount, bool presale) {
         // Direct storage access - lootboxEth stores packed amount in lower 232 bits
         uint256 packed = lootboxEth[lootboxIndex][player];

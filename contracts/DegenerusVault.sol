@@ -19,7 +19,7 @@ interface IDegenerusGamePlayerActions {
         MintPaymentKind payKind
     ) external payable;
     /// @notice Open a lootbox for a player.
-    function openLootBox(address player, uint32 lootboxIndex) external;
+    function openLootBox(address player, uint48 lootboxIndex) external;
     /// @notice Claim accumulated ETH winnings for a player.
     function claimWinnings(address player) external;
     /// @notice Claim winnings preferring stETH over ETH.
@@ -562,7 +562,7 @@ contract DegenerusVault {
     /// @notice Open a lootbox owned by the vault
     /// @param lootboxIndex Index of the lootbox to open
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameOpenLootBox(uint32 lootboxIndex) external onlyVaultOwner {
+    function gameOpenLootBox(uint48 lootboxIndex) external onlyVaultOwner {
         gamePlayer.openLootBox(address(this), lootboxIndex);
     }
 

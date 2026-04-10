@@ -76,7 +76,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 nudges,
         uint256 finalWord
     );
-    event LootboxRngApplied(uint32 index, uint256 word, uint256 requestId);
+    event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId);
     event VrfCoordinatorUpdated(
         address indexed previous,
         address indexed current
@@ -188,7 +188,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (!ticketsFullyProcessed) {
                 // If mid-day ticket swap is pending, wait for VRF word before processing
                 if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
-                    uint256 word = lootboxRngWordByIndex[uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
+                    uint256 word = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
                     if (word == 0) revert NotTimeYet();
                 }
 
@@ -1069,7 +1069,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     function _finalizeLootboxRng(uint256 rngWord) private {
-        uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
+        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
         if (lootboxRngWordByIndex[index] != 0) return;
         lootboxRngWordByIndex[index] = rngWord;
         emit LootboxRngApplied(index, rngWord, vrfRequestId);
@@ -1542,7 +1542,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             rngWordCurrent = word;
         } else {
             // Mid-day RNG: directly finalize lootbox and clear state
-            uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
+            uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
             lootboxRngWordByIndex[index] = word;
             emit LootboxRngApplied(index, word, requestId);
             vrfRequestId = 0;
@@ -1589,11 +1589,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Uses VRF-derived entropy so lootbox outcomes cannot be front-run.
     /// @param vrfWord Fresh VRF word from the post-gap callback.
     function _backfillOrphanedLootboxIndices(uint256 vrfWord) private {
-        uint32 idx = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        uint48 idx = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (idx <= 1) return; // nothing reserved yet
 
         // Scan backwards from the most recent reserved index
-        for (uint32 i = idx - 1; i >= 1; ) {
+        for (uint48 i = idx - 1; i >= 1; ) {
             if (lootboxRngWordByIndex[i] != 0) break; // hit a filled index, done
 
             uint256 fallbackWord = uint256(

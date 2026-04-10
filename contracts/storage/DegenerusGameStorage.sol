@@ -828,7 +828,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Loot box ETH per RNG index per player (amount may accumulate within an index).
     ///      Packed: [232 bits: amount] [24 bits: purchase level]
     ///      Purchase level locked at buy time - if you open late, you lose it.
-    mapping(uint32 => mapping(address => uint256)) internal lootboxEth;
+    mapping(uint48 => mapping(address => uint256)) internal lootboxEth;
 
     // =========================================================================
     // Presale State (packed: 2 variables in 136/256 bits)
@@ -953,7 +953,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Base (pre-boost) lootbox ETH per RNG index per player.
     ///      Tracks unboosted amounts so boosts apply at purchase time, not open time.
-    mapping(uint32 => mapping(address => uint256)) internal lootboxEthBase;
+    mapping(uint48 => mapping(address => uint256)) internal lootboxEthBase;
 
     // =========================================================================
     // Operator Approvals
@@ -1298,37 +1298,37 @@ abstract contract DegenerusGameStorage {
     uint256 internal vrfSubscriptionId;
 
     // =========================================================================
-    // Lootbox RNG Packed Slot (6 variables in 256/256 bits)
+    // Lootbox RNG Packed Slot (6 variables in 232/256 bits)
     // =========================================================================
     //
     // Layout (LSB -> MSB):
-    //   [bits   0:31]   lootboxRngIndex          uint32   (was uint48, 4.2B indices)
-    //   [bits  32:95]   lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
-    //   [bits  96:159]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
-    //   [bits 160:207]  lootboxRngMinLinkBalance  uint48  (scaled /1e15, 0.001 LINK res, max ~281,474 LINK)
-    //   [bits 208:247]  lootboxRngPendingBurnie  uint40   (scaled /1e18, 1 BURNIE res, max ~1.1T BURNIE)
-    //   [bits 248:255]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
+    //   [bits   0:47]   lootboxRngIndex          uint48   (281T indices)
+    //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
+    //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
+    //   [bits 176:183]  lootboxRngMinLinkBalance  uint8   (whole LINK, 0-255 LINK)
+    //   [bits 184:223]  lootboxRngPendingBurnie  uint40   (scaled /1e18, 1 BURNIE res, max ~1.1T BURNIE)
+    //   [bits 224:231]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
 
     /// @dev Packed lootbox RNG state. See layout comment above.
     ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000),
-    ///      lootboxRngMinLinkBalance=14 ether (scaled=14000).
+    ///      lootboxRngMinLinkBalance=14 LINK (whole).
     uint256 internal lootboxRngPacked =
         uint256(1)                                  // lootboxRngIndex = 1
-        | (uint256(1000) << 96)                     // lootboxRngThreshold = 1 ether / 1e15 = 1000
-        | (uint256(14000) << 160);                  // lootboxRngMinLinkBalance = 14 ether / 1e15 = 14000
+        | (uint256(1000) << 112)                    // lootboxRngThreshold = 1 ether / 1e15 = 1000
+        | (uint256(14) << 176);                     // lootboxRngMinLinkBalance = 14 LINK (whole)
 
     // ---- lootboxRng shifts and masks ----
     uint256 internal constant LR_INDEX_SHIFT = 0;
-    uint256 internal constant LR_INDEX_MASK = 0xFFFFFFFF;                    // 32 bits
-    uint256 internal constant LR_PENDING_ETH_SHIFT = 32;
+    uint256 internal constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;                // 48 bits
+    uint256 internal constant LR_PENDING_ETH_SHIFT = 48;
     uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFFFFFFFF;      // 64 bits
-    uint256 internal constant LR_THRESHOLD_SHIFT = 96;
+    uint256 internal constant LR_THRESHOLD_SHIFT = 112;
     uint256 internal constant LR_THRESHOLD_MASK = 0xFFFFFFFFFFFFFFFF;        // 64 bits
-    uint256 internal constant LR_MIN_LINK_SHIFT = 160;
-    uint256 internal constant LR_MIN_LINK_MASK = 0xFFFFFFFFFFFF;             // 48 bits
-    uint256 internal constant LR_PENDING_BURNIE_SHIFT = 208;
+    uint256 internal constant LR_MIN_LINK_SHIFT = 176;
+    uint256 internal constant LR_MIN_LINK_MASK = 0xFF;                       // 8 bits
+    uint256 internal constant LR_PENDING_BURNIE_SHIFT = 184;
     uint256 internal constant LR_PENDING_BURNIE_MASK = 0xFFFFFFFFFF;         // 40 bits
-    uint256 internal constant LR_MID_DAY_SHIFT = 248;
+    uint256 internal constant LR_MID_DAY_SHIFT = 224;
     uint256 internal constant LR_MID_DAY_MASK = 0xFF;                       // 8 bits
 
     /// @dev Scale factor for ETH/LINK packing (0.001 resolution).
@@ -1367,26 +1367,26 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev RNG words keyed by lootbox RNG index.
-    mapping(uint32 => uint256) internal lootboxRngWordByIndex;
+    mapping(uint48 => uint256) internal lootboxRngWordByIndex;
 
     /// @dev Lootbox purchase day per RNG index and player.
-    mapping(uint32 => mapping(address => uint32)) internal lootboxDay;
+    mapping(uint48 => mapping(address => uint32)) internal lootboxDay;
 
     /// @dev Lootbox base level at purchase time, packed as (level + 1).
     ///      0 means no lootbox purchased at this index.
-    mapping(uint32 => mapping(address => uint24))
+    mapping(uint48 => mapping(address => uint24))
         internal lootboxBaseLevelPacked;
 
     /// @dev Lootbox activity score at purchase time, packed as (score + 1).
     ///      0 means no activity score recorded.
-    mapping(uint32 => mapping(address => uint16)) internal lootboxEvScorePacked;
+    mapping(uint48 => mapping(address => uint16)) internal lootboxEvScorePacked;
 
     // =========================================================================
     // Lootbox Bonus Tracking & BURNIE Lootboxes
     // =========================================================================
 
     /// @dev BURNIE lootbox amounts keyed by lootbox RNG index and player.
-    mapping(uint32 => mapping(address => uint256)) internal lootboxBurnie;
+    mapping(uint48 => mapping(address => uint256)) internal lootboxBurnie;
 
     // =========================================================================
     // Deity Boon Tracking
@@ -1506,7 +1506,7 @@ abstract contract DegenerusGameStorage {
     /// @dev ETH portion of a lootbox purchased during distress mode (final 6 hours
     ///      before gameover liveness guard). Used at open time to apply a 25% ticket
     ///      bonus proportional to the distress fraction of the total lootbox value.
-    mapping(uint32 => mapping(address => uint256)) internal lootboxDistressEth;
+    mapping(uint48 => mapping(address => uint256)) internal lootboxDistressEth;
 
     // =========================================================================
     // Segregated Yield Accumulator

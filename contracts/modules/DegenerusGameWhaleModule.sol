@@ -842,7 +842,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 cachedPacked
     ) private {
         uint32 dayIndex = _simulatedDayIndex();
-        uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
 
         _recordLootboxMintDay(buyer, uint32(dayIndex), cachedPacked);
 

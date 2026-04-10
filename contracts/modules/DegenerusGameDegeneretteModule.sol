@@ -425,7 +425,7 @@ contract DegenerusGameDegeneretteModule is
             revert InvalidBet();
         if (amountPerTicket == 0) revert InvalidBet();
 
-        uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (index == 0) revert E();
         if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();
 
