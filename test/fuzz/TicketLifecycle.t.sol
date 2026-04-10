@@ -28,15 +28,16 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///         last-day jackpot routing fix (level+1 when rngLocked + jackpotCounter+step >= CAP).
 ///
 /// @dev Storage slots confirmed via `forge inspect DegenerusGame storage-layout`:
-///      - Slot 0: [0:6]purchaseStartDay [6:12]dailyIdx [12:18]rngRequestTime [18:21]level
-///                [21:22]jackpotPhaseFlag [22:23]jackpotCounter [23:24]lastPurchaseDay
-///                [24:25]decWindowOpen [25:26]rngLockedFlag [26:27]phaseTransitionActive
-///                [27:28]gameOver [28:29]dailyJackpotCoinTicketsPending
-///                [29:30]compressedJackpotFlag [30:31]ticketsFullyProcessed [31:32]gameOverPossible
-///      - Slot 1: [0:1]ticketWriteSlot [1:2]prizePoolFrozen [2:18]currentPrizePool
-///      - ticketQueue: slot 15 (mapping(uint24 => address[]))
-///      - ticketsOwedPacked: slot 16 (mapping(uint24 => mapping(address => uint40)))
-///      - prizePoolsPacked: slot 3 ([future:128][next:128])
+///      - Slot 0: [0:4]purchaseStartDay [4:8]dailyIdx [8:14]rngRequestTime [14:17]level
+///                [17:18]jackpotPhaseFlag [18:19]jackpotCounter [19:20]lastPurchaseDay
+///                [20:21]decWindowOpen [21:22]rngLockedFlag [22:23]phaseTransitionActive
+///                [23:24]gameOver [24:25]dailyJackpotCoinTicketsPending
+///                [25:26]compressedJackpotFlag [26:27]ticketsFullyProcessed
+///                [27:28]gameOverPossible [28:29]ticketWriteSlot [29:30]prizePoolFrozen
+///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
+///      - ticketQueue: slot 12 (mapping(uint24 => address[]))
+///      - ticketsOwedPacked: slot 13 (mapping(uint24 => mapping(address => uint40)))
+///      - prizePoolsPacked: slot 2 ([future:128][next:128])
 ///
 /// @dev Requirement coverage:
 ///      - SRC-01: testPurchasePhaseTicketsProcessed (purchase-phase → level+1)
@@ -70,32 +71,32 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev EVM slot 1: packed price/buffer fields
     uint256 private constant SLOT_1 = 1;
 
-    uint256 private constant TICKET_QUEUE_SLOT = 13;
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 14;
+    uint256 private constant TICKET_QUEUE_SLOT = 12;
+    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
     // =========================================================================
     // Bit offsets within packed slots (byte offset * 8)
     // =========================================================================
 
-    /// @dev level is uint24 at slot 0 offset 18 bytes = bits 144-167
-    uint256 private constant LEVEL_SHIFT = 144;
+    /// @dev level is uint24 at slot 0 offset 14 bytes = bits 112-135
+    uint256 private constant LEVEL_SHIFT = 112;
     uint256 private constant LEVEL_MASK = 0xFFFFFF;
 
-    /// @dev jackpotPhaseFlag is bool at slot 0 offset 21 bytes = bit 168
-    uint256 private constant JACKPOT_PHASE_SHIFT = 168;
+    /// @dev jackpotPhaseFlag is bool at slot 0 offset 17 bytes = bit 136
+    uint256 private constant JACKPOT_PHASE_SHIFT = 136;
 
-    /// @dev jackpotCounter is uint8 at slot 0 offset 22 bytes = bits 176-183
-    uint256 private constant JACKPOT_COUNTER_SHIFT = 176;
+    /// @dev jackpotCounter is uint8 at slot 0 offset 18 bytes = bits 144-151
+    uint256 private constant JACKPOT_COUNTER_SHIFT = 144;
 
-    /// @dev rngLockedFlag is bool at slot 0 offset 25 bytes = bit 200
-    uint256 private constant RNG_LOCKED_SHIFT = 200;
+    /// @dev rngLockedFlag is bool at slot 0 offset 21 bytes = bit 168
+    uint256 private constant RNG_LOCKED_SHIFT = 168;
 
-    /// @dev ticketWriteSlot is uint8 at slot 1 offset 6 bytes = bits 48-55
-    uint256 private constant WRITE_SLOT_SHIFT = 48;
+    /// @dev ticketWriteSlot is bool at slot 0 offset 28 bytes = bit 224
+    uint256 private constant WRITE_SLOT_SHIFT = 224;
 
-    /// @dev compressedJackpotFlag is uint8 at slot 0 offset 29 bytes = bits 232-239
-    uint256 private constant COMPRESSED_FLAG_SHIFT = 232;
+    /// @dev compressedJackpotFlag is uint8 at slot 0 offset 25 bytes = bits 200-207
+    uint256 private constant COMPRESSED_FLAG_SHIFT = 200;
 
     // =========================================================================
     // Constants matching production code
@@ -592,14 +593,14 @@ contract TicketLifecycleTest is DeployProtocol {
         // and rngLockedFlag=true
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
 
-        // Set jackpotPhaseFlag = true (bit 168)
+        // Set jackpotPhaseFlag = true (bit 136)
         slot0 = slot0 | (uint256(1) << JACKPOT_PHASE_SHIFT);
-        // Set jackpotCounter = 4 (bits 176-183)
+        // Set jackpotCounter = 4 (bits 144-151)
         slot0 = (slot0 & ~(uint256(0xFF) << JACKPOT_COUNTER_SHIFT))
               | (uint256(4) << JACKPOT_COUNTER_SHIFT);
-        // Set rngLockedFlag = true (bit 208)
+        // Set rngLockedFlag = true (bit 168)
         slot0 = slot0 | (uint256(1) << RNG_LOCKED_SHIFT);
-        // Ensure compressedJackpotFlag = 0 (normal mode, step=1) — now in slot 0
+        // Ensure compressedJackpotFlag = 0 (normal mode, step=1) (bits 200-207)
         slot0 = slot0 & ~(uint256(0xFF) << COMPRESSED_FLAG_SHIFT);
 
         vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(slot0));
@@ -2042,14 +2043,14 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      Checks the current read key for the queue sweep. The write side may have
     ///      nonzero entries from later transitions (vault perpetual writes to past levels).
     ///      The read key being zero proves the level was fully processed during its lifecycle.
-    /// @dev Read lootboxRngIndex directly from storage slot 40.
+    /// @dev Read lootboxRngIndex directly from storage slot 38.
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(40)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(38)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 44).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 39).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(44)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(39)));
         return uint256(vm.load(address(game), slot));
     }
 
@@ -2089,7 +2090,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // ==================== Lootbox Helpers ====================
 
     /// @dev Storage slot for lootboxRngWordByIndex mapping (confirmed via forge inspect)
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 44;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 39;
 
     /// @notice Purchase tickets with a lootbox ETH allocation. Returns the lootbox RNG index.
     /// @param who Buyer address
@@ -2135,8 +2136,8 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     /// @notice Store a deterministic lootbox RNG word via vm.store.
-    /// @dev lootboxRngWordByIndex is mapping(uint48 => uint256) at slot 44.
-    ///      mapping slot = keccak256(abi.encode(uint256(index), uint256(44)))
+    /// @dev lootboxRngWordByIndex is mapping(uint48 => uint256) at slot 39.
+    ///      mapping slot = keccak256(abi.encode(uint256(index), uint256(39)))
     function _storeLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
@@ -2176,8 +2177,8 @@ contract TicketLifecycleTest is DeployProtocol {
     // ==================== RNG State Helpers ====================
 
     /// @notice Set rngLockedFlag in game contract storage via vm.store.
-    /// @dev rngLockedFlag is bool at slot 0, offset 26 bytes (bit 208).
-    ///      Reads slot 0, sets/clears bit 208, writes back.
+    /// @dev rngLockedFlag is bool at slot 0, offset 21 bytes (bit 168).
+    ///      Reads slot 0, sets/clears bit 168, writes back.
     function _setRngLocked(bool locked) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
         if (locked) {
@@ -2217,10 +2218,10 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     /// @notice Get the current ticketWriteSlot from game storage
-    /// @dev ticketWriteSlot is uint8 at slot 1 offset 22 bytes (bits 176-183).
-    ///      Confirmed via forge inspect: slot=1, offset=22, size=1.
+    /// @dev ticketWriteSlot is bool at slot 0 offset 28 bytes (bit 224).
+    ///      Confirmed via forge inspect: slot=0, offset=28, size=1.
     function _getWriteSlot() internal view returns (uint8) {
-        bytes32 raw = vm.load(address(game), bytes32(uint256(SLOT_1)));
+        bytes32 raw = vm.load(address(game), bytes32(uint256(SLOT_0)));
         return uint8(uint256(raw) >> WRITE_SLOT_SHIFT);
     }
 
