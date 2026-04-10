@@ -1,0 +1,45 @@
+TypeError: Invalid type for argument in function call. Invalid implicit conversion from uint48 to uint32 requested.
+   --> contracts/modules/DegenerusGameDegeneretteModule.sol:446:13:
+    |
+446 |             index,
+    |             ^^^^^
+
+
+TypeError: Invalid type for argument in function call. Invalid implicit conversion from uint48 to uint32 requested.
+   --> contracts/modules/DegenerusGameDegeneretteModule.sol:458:32:
+    |
+458 |         emit BetPlaced(player, index, nonce, packed);
+    |                                ^^^^^
+
+
+TypeError: Invalid type for argument in function call. Invalid implicit conversion from uint48 to uint32 requested.
+   --> contracts/modules/DegenerusGameLootboxModule.sol:655:13:
+    |
+655 |             index,
+    |             ^^^^^
+
+
+TypeError: Invalid type for argument in function call. Invalid implicit conversion from uint48 to uint32 requested.
+    --> contracts/modules/DegenerusGameMintModule.sol:1003:40:
+     |
+1003 |                 emit LootBoxIdx(buyer, lbIndex, lbDay);
+     |                                        ^^^^^^^
+
+
+TypeError: Invalid type for argument in function call. Invalid implicit conversion from uint48 to uint32 requested.
+    --> contracts/modules/DegenerusGameMintModule.sol:1430:35:
+     |
+1430 |         emit BurnieLootBuy(buyer, index, burnieAmount);
+     |                                   ^^^^^
+
+
+TypeError: Invalid type for argument in function call. Invalid implicit conversion from uint48 to uint32 requested.
+   --> contracts/modules/DegenerusGameWhaleModule.sol:859:46:
+    |
+859 |             emit LootBoxIndexAssigned(buyer, index, dayIndex);
+    |                                              ^^^^^
+
+
+Error HH600: Compilation failed
+
+For more info go to https://v2.hardhat.org/HH600 or run Hardhat with --show-stack-traces
