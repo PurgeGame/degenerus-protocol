@@ -488,12 +488,6 @@ describe("DegenerusVault", function () {
       ).to.not.be.reverted;
     });
 
-    it("gameSetDecimatorAutoRebuy accessible by vault owner", async function () {
-      const { vault, deployer } = await loadFixture(deployFullProtocol);
-      await expect(
-        vault.connect(deployer).gameSetDecimatorAutoRebuy(false)
-      ).to.not.be.reverted;
-    });
   });
 
   // ---------------------------------------------------------------------------

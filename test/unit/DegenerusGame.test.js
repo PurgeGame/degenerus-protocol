@@ -383,27 +383,6 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 8. setDecimatorAutoRebuy
-  // ---------------------------------------------------------------------------
-  describe("setDecimatorAutoRebuy", function () {
-    it("disables decimator auto-rebuy for player", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      const tx = await game.connect(alice).setDecimatorAutoRebuy(ZERO_ADDRESS, false);
-      const ev = await getEvent(tx, game, "DecimatorAutoRebuyToggled");
-      expect(ev.args.player).to.equal(alice.address);
-      expect(ev.args.enabled).to.be.false;
-    });
-
-    it("emits DecimatorAutoRebuyToggled", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      const tx = await game.connect(alice).setDecimatorAutoRebuy(ZERO_ADDRESS, false);
-      const ev = await getEvent(tx, game, "DecimatorAutoRebuyToggled");
-      expect(ev.args.player).to.equal(alice.address);
-      expect(ev.args.enabled).to.be.false;
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // 9. claimWinnings
   // ---------------------------------------------------------------------------
   describe("claimWinnings", function () {
