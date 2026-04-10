@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v24.1
 milestone_name: Storage Layout Optimization
-status: planning
-stopped_at: Phase 211 context gathered
-last_updated: "2026-04-10T16:33:28.879Z"
+status: executing
+stopped_at: Completed 211-01-PLAN.md
+last_updated: "2026-04-10T17:06:19.677Z"
 last_activity: 2026-04-10
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 14
-  completed_plans: 14
-  percent: 100
+  total_plans: 18
+  completed_plans: 15
+  percent: 83
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 211 — Test Suite Repair
+**Current focus:** Phase 211 — test-suite-repair
 
 ## Current Position
 
-Phase: 211 (Test Suite Repair) — NOT STARTED
-Plan: 0 of 0
+Phase: 211 (test-suite-repair) — EXECUTING
+Plan: 2 of 4
 Milestone: v24.1 — Storage Layout Optimization
-Status: Needs planning
+Status: Ready to execute
 Last activity: 2026-04-10
 
 Progress: [██████░░░░] 66%
@@ -63,6 +63,7 @@ Recent decisions affecting current work:
 - [Phase 210]: Cast uint48 index to uint32 at emit sites rather than narrowing local variable type
 - [Phase 210]: Used assertTrue/assertFalse for bool ticketWriteSlot checks; left _dailyIdx() as uint48 with uint32 cast at assignment
 - [Phase 210]: 113 test runtime failures (82 Foundry + 31 Hardhat) are assertion mismatches against pre-v24.1 layout, not contract regressions; need dedicated test-update plan
+- [Phase 211]: lootboxRngIndex extraction logic unchanged (low 48 bits correct for LR_INDEX_SHIFT=0); VRFPathHandler _dailyIdx uses uint32 intermediate cast
 
 ### Pending Todos
 
@@ -75,5 +76,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10T16:33:28.876Z
-Stopped at: Phase 211 context gathered
+Last session: 2026-04-10T17:06:19.675Z
+Stopped at: Completed 211-01-PLAN.md

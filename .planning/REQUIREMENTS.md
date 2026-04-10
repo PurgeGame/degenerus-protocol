@@ -62,7 +62,7 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 | SLOT-07 | Phase 207 (verified Phase 212) | Complete |
 | SLOT-08 | Phase 207 (verified Phase 212) | Complete |
 | VER-01 | Phase 210 | Complete |
-| VER-02 | Phase 211 | Pending |
+| VER-02 | Phase 211 | Complete |
 | VER-03 | Phase 210 | Complete |
 
 **Coverage:**
