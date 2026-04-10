@@ -1,0 +1,59 @@
+Type Preservation Audit Report
+================================
+Date: 2026-04-10
+
+Part A: Timestamp types MUST remain uint48
+------------------------------------------
+A1 NEGATIVE (no accidental narrowing):
+  rg 'uint(32|24|16|8)\b.*(rngRequestTime|lastVrfProcessedTimestamp|gameOverTime)'
+  Result: 0 matches (exit 1) -- PASS
+
+A2 POSITIVE (uint48 preserved in storage):
+  rg 'uint48\b.*(rngRequestTime|lastVrfProcessedTimestamp)' DegenerusGameStorage.sol
+  Result: 2 matches -- PASS
+    - uint48 internal rngRequestTime;
+    - uint48 internal lastVrfProcessedTimestamp;
+
+A3 gameOverTime packed as uint48 (bits 0:47):
+  GO_TIME_SHIFT = 0
+  GO_TIME_MASK  = 0xFFFFFFFFFFFF (48 bits)
+  Comment: [bits 0:47] gameOverTime uint48
+  Result: PASS
+
+A4 uint48(block.timestamp) casts preserved:
+  rg 'uint48\(block\.timestamp\)' contracts/
+  Result: 9 matches across AdvanceModule, GameOverModule, GameTimeLib -- PASS
+
+Part B: GNRUS governance uint48s MUST remain uint48
+----------------------------------------------------
+B5 NEGATIVE (no accidental narrowing of declarations):
+  rg 'uint(32|24|16|8)\s+(proposalCount|approveWeight|rejectWeight|proposalId)\b' GNRUS.sol
+  Result: 0 matches (exit 1) -- PASS
+
+B6 POSITIVE (uint48 preserved):
+  rg 'uint48\b.*(proposalCount|approveWeight|rejectWeight|proposalId|levelProposalStart|levelSdgnrsSnapshot)' GNRUS.sol
+  Result: 15+ matches -- PASS
+    - uint48 approveWeight (struct field)
+    - uint48 rejectWeight (struct field)
+    - uint48 public proposalCount
+    - mapping(uint24 => uint48) public levelProposalStart
+    - mapping(uint24 => uint48) public levelSdgnrsSnapshot
+    - function propose returns (uint48 proposalId)
+    - function vote(uint48 proposalId, ...)
+    - function getProposal(uint48 proposalId) returns (..., uint48 approveWeight, uint48 rejectWeight)
+
+Part C: Day-index types MUST be uint32 (not still uint48)
+----------------------------------------------------------
+C7 NEGATIVE (no lingering uint48 day-index types):
+  rg 'uint48\b.*(purchaseStartDay|dailyIdx|lastDailyJackpotDay|lootboxRngIndex)' DegenerusGameStorage.sol
+  Result: 0 matches (exit 1) -- PASS
+
+  Confirmed from forge inspect:
+    purchaseStartDay  uint32  slot=0 offset=0
+    dailyIdx          uint32  slot=0 offset=4
+
+VERDICT: ALL CHECKS PASS
+  - Timestamps (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) remain uint48
+  - GNRUS governance (proposalCount, approveWeight, rejectWeight, proposalId) remain uint48
+  - Day-index types (purchaseStartDay, dailyIdx, lastDailyJackpotDay, lootboxRngIndex) confirmed uint32
+  - No accidental type narrowing detected
