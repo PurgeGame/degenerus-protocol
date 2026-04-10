@@ -155,17 +155,17 @@ contract VRFPathHandler is Test {
         // Skip check if game ended via liveness timeout — the game-over path
         // uses _gameOverEntropy which does NOT call _backfillGapDays.
         if (ghost_swapPending && lockedBefore && !lockedAfter && !game.gameOver()) {
-            uint48 dayAfter = game.currentDayView();
+            uint32 dayAfter = game.currentDayView();
 
             if (dayAfter > dailyIdxBefore) {
                 // Full recovery cycle completed -- check gap days.
                 // The contract backfills from dailyIdx+1 to currentDay (capped at 120).
                 // We mirror this range exactly.
                 if (dayAfter > dailyIdxBefore + 1) {
-                    uint48 gapStart = dailyIdxBefore + 1;
-                    uint48 gapEnd = dayAfter;
+                    uint32 gapStart = uint32(dailyIdxBefore + 1);
+                    uint32 gapEnd = dayAfter;
                     if (gapEnd - gapStart > 120) gapEnd = gapStart + 120;
-                    for (uint48 d = gapStart; d < gapEnd; d++) {
+                    for (uint32 d = gapStart; d < gapEnd; d++) {
                         if (game.rngWordForDay(d) == 0) {
                             ghost_gapBackfillFailures++;
                         }

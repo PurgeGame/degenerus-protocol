@@ -71,7 +71,7 @@ contract RedemptionGasTest is DeployProtocol {
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
         // Now resolve the period as the game contract
-        uint48 currentDay = game.currentDayView();
+        uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
         sdgnrs.resolveRedemptionPeriod(100, currentDay);
     }
@@ -87,7 +87,7 @@ contract RedemptionGasTest is DeployProtocol {
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
         // Step 2: Game resolves the period
-        uint48 currentDay = game.currentDayView();
+        uint32 currentDay = game.currentDayView();
         vm.prank(address(game));
         sdgnrs.resolveRedemptionPeriod(100, currentDay);
 

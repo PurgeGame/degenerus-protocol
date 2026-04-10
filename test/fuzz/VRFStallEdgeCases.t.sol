@@ -128,7 +128,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // _backfillGapDays called with vrfWord for gap days 3..7 (startDay=3, endDay=8)
         // Verify each gap day word equals the deterministic keccak256 derivation
         uint256[] memory words = new uint256[](5);
-        for (uint48 d = 3; d <= 7; d++) {
+        for (uint32 d = 3; d <= 7; d++) {
             uint256 expected = uint256(keccak256(abi.encodePacked(vrfWord, d)));
             if (expected == 0) expected = 1;
             uint256 actual = game.rngWordForDay(d);
@@ -162,7 +162,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         _resumeAfterSwap(newVRF, resumeWord);
 
         // Verify all gap day words (3..12) are nonzero (zero guard: derivedWord==0 -> 1)
-        for (uint48 d = 3; d <= 12; d++) {
+        for (uint32 d = 3; d <= 12; d++) {
             assertTrue(
                 game.rngWordForDay(d) != 0,
                 "Zero guard: gap day word must be nonzero"
@@ -572,13 +572,13 @@ contract VRFStallEdgeCases is DeployProtocol {
     ///         This verifies the inputs to _getHistoricalRngFallback are valid.
     function test_historicalRngFallbackNonzero() public {
         // Complete 5 days (storing 5 VRF words), starting from day 2 (setUp already warped to day 2)
-        for (uint48 d = 2; d <= 6; d++) {
+        for (uint32 d = 2; d <= 6; d++) {
             vm.warp(uint256(d) * 86400);
             _completeDay(uint256(0xDEAD0000 + d));
         }
 
         // Verify rngWordByDay for days 2-6 are all nonzero (inputs to fallback hash)
-        for (uint48 d = 2; d <= 6; d++) {
+        for (uint32 d = 2; d <= 6; d++) {
             assertTrue(
                 game.rngWordForDay(d) != 0,
                 "Historical VRF word must be nonzero for fallback"
@@ -586,8 +586,8 @@ contract VRFStallEdgeCases is DeployProtocol {
         }
 
         // Each day's word should be distinct (different VRF seeds)
-        for (uint48 i = 2; i <= 5; i++) {
-            for (uint48 j = i + 1; j <= 6; j++) {
+        for (uint32 i = 2; i <= 5; i++) {
+            for (uint32 j = i + 1; j <= 6; j++) {
                 assertTrue(
                     game.rngWordForDay(i) != game.rngWordForDay(j),
                     "Historical words must be distinct"
