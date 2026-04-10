@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v24.1
 milestone_name: Storage Layout Optimization
 status: executing
-stopped_at: Completed 211-02-PLAN.md
-last_updated: "2026-04-10T17:11:04.116Z"
+stopped_at: Completed 211-03-PLAN.md
+last_updated: "2026-04-10T17:36:24.924Z"
 last_activity: 2026-04-10
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 18
-  completed_plans: 16
-  percent: 89
+  completed_plans: 17
+  percent: 94
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-09)
 ## Current Position
 
 Phase: 211 (test-suite-repair) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Milestone: v24.1 — Storage Layout Optimization
 Status: Ready to execute
 Last activity: 2026-04-10
@@ -64,6 +64,8 @@ Recent decisions affecting current work:
 - [Phase 210]: Used assertTrue/assertFalse for bool ticketWriteSlot checks; left _dailyIdx() as uint48 with uint32 cast at assignment
 - [Phase 210]: 113 test runtime failures (82 Foundry + 31 Hardhat) are assertion mismatches against pre-v24.1 layout, not contract regressions; need dedicated test-update plan
 - [Phase 211]: lootboxRngIndex extraction logic unchanged (low 48 bits correct for LR_INDEX_SHIFT=0); VRFPathHandler _dailyIdx uses uint32 intermediate cast
+- [Phase 211]: purchaseStartDay=1 (not 0) at deploy; warmUpDay pattern prevents turbo when testing compressed mode
+- [Phase 211]: v24.1 shifted traitBurnTicket slot 9->8, ticketQueue slot 13->12; coinflip seed uses uint32 epoch
 
 ### Pending Todos
 
@@ -76,5 +78,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10T17:11:04.114Z
-Stopped at: Completed 211-02-PLAN.md
+Last session: 2026-04-10T17:36:24.921Z
+Stopped at: Completed 211-03-PLAN.md

@@ -286,7 +286,7 @@ Plans:
 Plans:
 - [x] 211-01-PLAN.md — Fix Foundry vm.load slot numbers and bit shifts (6 files)
 - [x] 211-02-PLAN.md — Fix TicketLifecycle + StorageFoundation slot constants
-- [ ] 211-03-PLAN.md — Fix all 31 Hardhat failures (deletions + assertion updates)
+- [x] 211-03-PLAN.md — Fix all 31 Hardhat failures (deletions + assertion updates)
 - [ ] 211-04-PLAN.md — Re-run both test suites, confirm zero failures
 
 ### Phase 212: Doc Reconciliation
@@ -310,7 +310,7 @@ Plans:
 | 208. Module Cascade + Interfaces | 4/4 | Complete    | 2026-04-10 |
 | 209. External Contracts | 3/3 | Complete    | 2026-04-10 |
 | 210. Verification | 5/5 | Complete   | 2026-04-10 |
-| 211. Test Suite Repair | 2/4 | In Progress|  |
+| 211. Test Suite Repair | 3/4 | In Progress|  |
 | 212. Doc Reconciliation | 0/0 | Not started | - |
 
 ## Deferred
