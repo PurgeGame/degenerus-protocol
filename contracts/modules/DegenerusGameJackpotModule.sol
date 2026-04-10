@@ -312,7 +312,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl,
         uint256 randWord
     ) external {
-        uint48 questDay = _simulatedDayIndex();
+        uint32 questDay = _simulatedDayIndex();
         uint32 winningTraitsPacked;
 
         if (isJackpotPhase) {
@@ -541,8 +541,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      keeps each advanceGame call under the 15M gas block limit.
     ///
     ///      Uses stored values from Phase 1:
-    ///      - lastDailyJackpotLevel: The level when jackpot was triggered
-    ///      - lastDailyJackpotWinningTraits: Packed winning trait IDs
+    ///      - dailyJackpotTraitsPacked: Level and winning traits (via _djtRead helpers)
     ///      - rngWordCurrent: VRF entropy for deterministic winner selection
     ///      - dailyTicketBudgetsPacked: Packed ticket units, counter step, and carryover source offset
     ///
@@ -559,8 +558,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
 
         // Retrieve stored state from ETH phase
-        uint24 lvl = lastDailyJackpotLevel;
-        uint32 winningTraitsPacked = lastDailyJackpotWinningTraits;
+        uint24 lvl = uint24(_djtRead(DJT_LEVEL_SHIFT, DJT_LEVEL_MASK));
+        uint32 winningTraitsPacked = uint32(_djtRead(DJT_TRAITS_SHIFT, DJT_TRAITS_MASK));
         uint256 entropyDaily = randWord ^ (uint256(lvl) << 192);
         uint24 sourceLevel = lvl + uint24(carryoverSourceOffset);
         uint256 entropyNext = randWord ^ (uint256(sourceLevel) << 192);
@@ -745,7 +744,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 rngWord
             );
             uint256 claimableDelta = d0 + d1 + d2;
-            if (claimableDelta != 0) claimablePool += claimableDelta;
+            if (claimableDelta != 0) claimablePool += uint128(claimableDelta);
             yieldAccumulator += quarterShare;
         }
     }
@@ -1135,7 +1134,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         bool isFinal = (jackpotCounter + cs >= JACKPOT_LEVEL_CAP);
         uint256 paidEth2 = _processDailyEth(
             lvl, 0, entropy,
-            JackpotBucketLib.unpackWinningTraits(lastDailyJackpotWinningTraits),
+            JackpotBucketLib.unpackWinningTraits(uint32(_djtRead(DJT_TRAITS_SHIFT, DJT_TRAITS_MASK))),
             JackpotBucketLib.shareBpsByBucket(
                 isFinal ? FINAL_DAY_SHARES_PACKED : DAILY_JACKPOT_SHARES_PACKED,
                 uint8(entropy & 3)
@@ -1283,7 +1282,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         if (liabilityDelta != 0) {
-            claimablePool += liabilityDelta;
+            claimablePool += uint128(liabilityDelta);
         }
 
         // Only write resumeEthPool when splitting across two calls.
@@ -1567,7 +1566,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Returns the top hero symbol for a day across all quadrants.
     ///      Tie-breaker is deterministic first-seen order (q asc, symbol asc).
     function _topHeroSymbol(
-        uint48 day
+        uint32 day
     )
         private
         view
@@ -1673,7 +1672,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // --- Near-future portion (trait-matched) ---
         if (nearBudget == 0) return;
 
-        uint48 questDay = _simulatedDayIndex();
+        uint32 questDay = _simulatedDayIndex();
         (uint32 winningTraitsPacked, bool valid) = _loadDailyWinningTraits(
             lvl,
             questDay
@@ -1870,20 +1869,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     function _syncDailyWinningTraits(
         uint24 lvl,
         uint32 packed,
-        uint48 questDay
+        uint32 questDay
     ) private {
-        lastDailyJackpotWinningTraits = packed;
-        lastDailyJackpotLevel = lvl;
-        lastDailyJackpotDay = questDay;
+        _djtWrite(DJT_TRAITS_SHIFT, DJT_TRAITS_MASK, packed);
+        _djtWrite(DJT_LEVEL_SHIFT, DJT_LEVEL_MASK, lvl);
+        _djtWrite(DJT_DAY_SHIFT, DJT_DAY_MASK, questDay);
     }
 
     function _loadDailyWinningTraits(
         uint24 lvl,
-        uint48 questDay
+        uint32 questDay
     ) private view returns (uint32 packed, bool valid) {
-        packed = lastDailyJackpotWinningTraits;
-        valid = (lastDailyJackpotDay == questDay &&
-            lastDailyJackpotLevel == lvl);
+        packed = uint32(_djtRead(DJT_TRAITS_SHIFT, DJT_TRAITS_MASK));
+        valid = (_djtRead(DJT_DAY_SHIFT, DJT_DAY_MASK) == questDay &&
+            _djtRead(DJT_LEVEL_SHIFT, DJT_LEVEL_MASK) == lvl);
     }
 
     /// @dev Calculate 0.5% of prize pool target in BURNIE.

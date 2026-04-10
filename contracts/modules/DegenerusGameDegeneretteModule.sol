@@ -68,7 +68,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param packed The packed bet data.
     event BetPlaced(
         address indexed player,
-        uint48 indexed index,
+        uint32 indexed index,
         uint64 indexed betId,
         uint256 packed
     );
@@ -425,7 +425,7 @@ contract DegenerusGameDegeneretteModule is
             revert InvalidBet();
         if (amountPerTicket == 0) revert InvalidBet();
 
-        uint48 index = lootboxRngIndex;
+        uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (index == 0) revert E();
         if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();
 
@@ -461,7 +461,7 @@ contract DegenerusGameDegeneretteModule is
         if (currency == CURRENCY_ETH) {
             // 1. Daily hero symbol tracking
             if (heroQuadrant < 4) {
-                uint48 day = _simulatedDayIndex();
+                uint32 day = _simulatedDayIndex();
                 uint8 heroSymbol = uint8(customTicket >> (heroQuadrant * 8)) &
                     7;
                 uint256 wagerUnit = totalBet / 1e12;
@@ -522,7 +522,7 @@ contract DegenerusGameDegeneretteModule is
                 if (claimableWinnings[player] <= fromClaimable)
                     revert InvalidBet();
                 claimableWinnings[player] -= fromClaimable;
-                claimablePool -= fromClaimable;
+                claimablePool -= uint128(fromClaimable);
             }
 
             // Update pool and pending
@@ -533,12 +533,12 @@ contract DegenerusGameDegeneretteModule is
                 (uint128 next, uint128 future) = _getPrizePools();
                 _setPrizePools(next, future + uint128(totalBet));
             }
-            lootboxRngPendingEth += totalBet;
+            _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) + _packEthToMilliEth(totalBet));
             // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
             // time, so solvency is guaranteed regardless of jackpot size
         } else if (currency == CURRENCY_BURNIE) {
             coin.burnCoin(player, totalBet);
-            lootboxRngPendingBurnie += totalBet;
+            _lrWrite(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, _lrRead(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK) + _packBurnieToWhole(totalBet));
         } else if (currency == CURRENCY_WWXRP) {
             wwxrp.burnForGame(player, totalBet);
         }
@@ -565,7 +565,7 @@ contract DegenerusGameDegeneretteModule is
         uint128 amountPerTicket = uint128(
             (packed >> FT_AMOUNT_SHIFT) & MASK_128
         );
-        uint48 index = uint48((packed >> FT_INDEX_SHIFT) & MASK_48);
+        uint32 index = uint32((packed >> FT_INDEX_SHIFT) & MASK_32);
         uint16 activityScore = uint16((packed >> FT_ACTIVITY_SHIFT) & MASK_16);
         uint256 heroBits = (packed >> FT_HERO_SHIFT) & MASK_3;
         bool heroEnabled = (heroBits & 1) != 0;
@@ -769,7 +769,7 @@ contract DegenerusGameDegeneretteModule is
         uint8 ticketCount,
         uint8 currency,
         uint128 amountPerTicket,
-        uint48 index,
+        uint32 index,
         uint16 activityScore,
         uint8 heroQuadrant
     ) private pure returns (uint256 packed) {
@@ -1089,7 +1089,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param weiAmount The amount in wei to credit.
     function _addClaimableEth(address beneficiary, uint256 weiAmount) private {
         if (weiAmount == 0) return;
-        claimablePool += weiAmount;
+        claimablePool += uint128(weiAmount);
         _creditClaimable(beneficiary, weiAmount);
     }
 
