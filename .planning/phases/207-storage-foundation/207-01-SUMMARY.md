@@ -49,7 +49,8 @@ Narrowed all day-index types from uint48 to uint32, converted ticketWriteSlot fr
 - `lastDailyJackpotDay`: uint48 -> uint32
 
 **Mapping key narrowing (12 mappings):**
-- `rngWordByDay`, `lootboxRngWordByIndex`, `lootboxDay` (outer + inner value), `lootboxEth`, `lootboxEthBase`, `lootboxBaseLevelPacked`, `lootboxEvScorePacked`, `lootboxBurnie`, `deityBoonDay`, `deityBoonRecipientDay`, `dailyHeroWagers`, `lootboxDistressEth`: all uint48 keys -> uint32
+- Day-index mappings: `rngWordByDay`, `lootboxDay` (outer + inner value), `deityBoonDay`, `deityBoonRecipientDay`, `dailyHeroWagers`: uint48 keys -> uint32
+- Lootbox-index-keyed mappings (unchanged): `lootboxRngWordByIndex`, `lootboxEth`, `lootboxEthBase`, `lootboxBaseLevelPacked`, `lootboxEvScorePacked`, `lootboxBurnie`, `lootboxDistressEth`: remain uint48 keys (keyed by lootboxRngIndex which is uint48 in packed slot)
 
 **ticketWriteSlot conversion:**
 - Declaration: uint8 -> bool
@@ -83,7 +84,7 @@ Narrowed all day-index types from uint48 to uint32, converted ticketWriteSlot fr
 - `gameOverTime` (uint48 timestamp)
 - `lastVrfProcessedTimestamp` (uint48 timestamp)
 - `_DEPLOY_IDLE_TIMEOUT_DAYS` (uint48 constant)
-- `lootboxRngIndex` (uint48 -- deferred to Plan 02 SLOT-05)
+- `lootboxRngIndex` (uint48 in packed slot -- widened back from uint32 to uint48 per commit e2c76b4a; lootbox-index-keyed mapping keys remain uint48 accordingly)
 - `uint48(block.timestamp)` casts
 - `_simulatedDayIndexAt` parameter type (uint48 ts)
 

@@ -53,7 +53,7 @@ completed: 2026-04-10
 - Slot 0 (30/32 bytes) and Slot 1 (32/32 bytes) offsets match layout comments exactly
 - All timestamp types (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) confirmed uint48
 - All GNRUS governance types (proposalCount, approveWeight, rejectWeight) confirmed uint48
-- All day-index types (purchaseStartDay, dailyIdx) confirmed narrowed to uint32
+- Day-index storage variables (purchaseStartDay, dailyIdx, lastDailyJackpotDay) confirmed narrowed to uint32; lootboxRngIndex is uint48 in packed slot (bits 0:47 of lootboxRngPacked)
 - 9 uint48(block.timestamp) casts found across AdvanceModule, GameOverModule, GameTimeLib
 
 ## Task Commits

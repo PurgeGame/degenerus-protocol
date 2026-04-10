@@ -46,7 +46,7 @@ Part C: Day-index types MUST be uint32 (not still uint48)
 ----------------------------------------------------------
 C7 NEGATIVE (no lingering uint48 day-index types):
   rg 'uint48\b.*(purchaseStartDay|dailyIdx|lastDailyJackpotDay|lootboxRngIndex)' DegenerusGameStorage.sol
-  Result: 0 matches (exit 1) -- PASS
+  Result: 0 matches (exit 1) -- PASS (note: lootboxRngIndex no longer exists as standalone variable; it is uint48 within lootboxRngPacked, detectable only via LR_INDEX_MASK = 0xFFFFFFFFFFFF)
 
   Confirmed from forge inspect:
     purchaseStartDay  uint32  slot=0 offset=0
@@ -55,5 +55,6 @@ C7 NEGATIVE (no lingering uint48 day-index types):
 VERDICT: ALL CHECKS PASS
   - Timestamps (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) remain uint48
   - GNRUS governance (proposalCount, approveWeight, rejectWeight, proposalId) remain uint48
-  - Day-index types (purchaseStartDay, dailyIdx, lastDailyJackpotDay, lootboxRngIndex) confirmed uint32
+  - Day-index storage variables (purchaseStartDay, dailyIdx, lastDailyJackpotDay) confirmed uint32
+  - lootboxRngIndex is uint48 in packed slot (bits 0:47 of lootboxRngPacked) -- not a standalone variable
   - No accidental type narrowing detected

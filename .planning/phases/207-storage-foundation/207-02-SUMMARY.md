@@ -37,16 +37,16 @@ Four groups of related storage variables packed into single uint256 slots with s
 
 ### Task 1: Pack lootboxRng variables (f2bef1b0)
 
-Replaced 6 separate lootboxRng variables with `lootboxRngPacked` (256/256 bits fully utilized):
+Replaced 6 separate lootboxRng variables with `lootboxRngPacked` (232/256 bits used, 24 bits free):
 
 | Field | Bits | Type | Scaling | Range |
 |-------|------|------|---------|-------|
-| lootboxRngIndex | 0:31 | uint32 | none | 4.2B indices |
-| lootboxRngPendingEth | 32:95 | uint64 | /1e15 | ~18,446 ETH |
-| lootboxRngThreshold | 96:159 | uint64 | /1e15 | ~18,446 ETH |
-| lootboxRngMinLinkBalance | 160:207 | uint48 | /1e15 | ~281,474 LINK |
-| lootboxRngPendingBurnie | 208:247 | uint40 | /1e18 | ~1.1T BURNIE |
-| midDayTicketRngPending | 248:255 | uint8 | bool | 0/1 |
+| lootboxRngIndex | 0:47 | uint48 | none | 281T indices |
+| lootboxRngPendingEth | 48:111 | uint64 | /1e15 | ~18,446 ETH |
+| lootboxRngThreshold | 112:175 | uint64 | /1e15 | ~18,446 ETH |
+| lootboxRngMinLinkBalance | 176:183 | uint8 | whole LINK | 255 LINK |
+| lootboxRngPendingBurnie | 184:223 | uint40 | /1e18 | ~1.1T BURNIE |
+| midDayTicketRngPending | 224:231 | uint8 | bool | 0/1 |
 
 Default initializer encodes: index=1, threshold=1000 (1 ETH / 1e15), minLink=14000 (14 ETH / 1e15).
 
@@ -76,7 +76,7 @@ All 8 individual variable declarations deleted.
 ## What Did NOT Change (Verified)
 
 - `lootboxEth` mapping (separate concern, stays as-is)
-- All mapping keys (already uint32 from Plan 01)
+- Day-index mapping keys (uint32 from Plan 01); lootbox-index-keyed mapping keys remain uint48 (keyed by lootboxRngIndex)
 - Slot 0 and Slot 1 layouts (from Plan 01)
 - All other storage variables
 
@@ -87,6 +87,10 @@ None -- plan executed exactly as written.
 ## Known Stubs
 
 None.
+
+## Orphaned Constants
+
+`LR_MIN_LINK_SHIFT` (176) and `LR_MIN_LINK_MASK` (0xFF) are defined in DegenerusGameStorage.sol but never consumed by any runtime read/write path. The `lootboxRngMinLinkBalance` field occupies bits 176:183 of `lootboxRngPacked` and is initialized to 14 (whole LINK) in the default initializer, but no module reads or writes this field at runtime. The constants are retained for off-chain tooling that may need to decode the packed slot.
 
 ## Compilation Note
 
