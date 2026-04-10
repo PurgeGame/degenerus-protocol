@@ -10,7 +10,7 @@
 ## Phases
 
 - [x] **Phase 213: Delta Extraction** - Produce function-level changelog, contract classifications, and interaction map for the entire v6.0-v24.1 delta (completed 2026-04-10)
-- [ ] **Phase 214: Adversarial Audit** - Per-function adversarial analysis of every changed/new function plus storage layout and cross-function attack chains
+- [x] **Phase 214: Adversarial Audit** - Per-function adversarial analysis of every changed/new function plus storage layout and cross-function attack chains (completed 2026-04-10)
 - [ ] **Phase 215: RNG Fresh Eyes** - Ground-up VRF lifecycle audit with no reliance on prior RNG conclusions
 - [ ] **Phase 216: Pool & ETH Accounting** - ETH conservation proof and pool mutation audit across the restructured architecture
 - [ ] **Phase 217: Findings Consolidation** - Severity classification, KNOWN-ISSUES update, and regression check against all prior findings
@@ -41,13 +41,13 @@ Plans:
   2. Storage layout is verified identical across all DegenerusGameStorage inheritors via forge inspect output
   3. Cross-function attack chains are enumerated and each is classified as SAFE or flagged as a finding
   4. All changed external/public entry points have call graph audit showing reachable state mutations
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 - [x] 214-01-PLAN.md — Reentrancy + CEI compliance pass across all changed/new functions
 - [x] 214-02-PLAN.md — Access control + integer overflow pass across all changed/new functions
 - [x] 214-03-PLAN.md — State corruption + composition attack pass across all changed/new functions
 - [x] 214-04-PLAN.md — Storage layout verification via forge inspect (ADV-02)
-- [ ] 214-05-PLAN.md — Cross-function attack chain analysis + call graph audit (ADV-03, ADV-04)
+- [x] 214-05-PLAN.md — Cross-function attack chain analysis + call graph audit (ADV-03, ADV-04)
 
 ### Phase 215: RNG Fresh Eyes
 **Goal**: The VRF/RNG system is proven sound from first principles — no prior conclusions carried forward
@@ -89,7 +89,7 @@ Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 complete
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 213. Delta Extraction | 3/3 | Complete    | 2026-04-10 |
-| 214. Adversarial Audit | 4/5 | In Progress|  |
+| 214. Adversarial Audit | 5/5 | Complete   | 2026-04-10 |
 | 215. RNG Fresh Eyes | 0/? | Not started | - |
 | 216. Pool & ETH Accounting | 0/? | Not started | - |
 | 217. Findings Consolidation | 0/? | Not started | - |

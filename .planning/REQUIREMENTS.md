@@ -17,8 +17,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **ADV-01**: Every changed/new function audited for reentrancy, access control, integer overflow, and state corruption
 - [x] **ADV-02**: Storage layout verified across all DegenerusGameStorage inheritors via forge inspect
-- [ ] **ADV-03**: Cross-function attack chain analysis for composition bugs across the combined v6.0-v24.1 delta
-- [ ] **ADV-04**: Call graph audit of all changed external/public entry points
+- [x] **ADV-03**: Cross-function attack chain analysis for composition bugs across the combined v6.0-v24.1 delta
+- [x] **ADV-04**: Call graph audit of all changed external/public entry points
 
 ### RNG (Fresh Eyes)
 
@@ -63,8 +63,8 @@ None — this is a terminal audit milestone.
 | DELTA-03 | 213 | Complete |
 | ADV-01 | 214 | Complete |
 | ADV-02 | 214 | Complete |
-| ADV-03 | 214 | Pending |
-| ADV-04 | 214 | Pending |
+| ADV-03 | 214 | Complete |
+| ADV-04 | 214 | Complete |
 | RNG-01 | 215 | Pending |
 | RNG-02 | 215 | Pending |
 | RNG-03 | 215 | Pending |
