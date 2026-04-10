@@ -1250,21 +1250,73 @@ abstract contract DegenerusGameStorage {
     uint256 internal vrfSubscriptionId;
 
     // =========================================================================
-    // Lootbox RNG Indexing
+    // Lootbox RNG Packed Slot (6 variables in 256/256 bits)
     // =========================================================================
+    //
+    // Layout (LSB -> MSB):
+    //   [bits   0:31]   lootboxRngIndex          uint32   (was uint48, 4.2B indices)
+    //   [bits  32:95]   lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
+    //   [bits  96:159]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
+    //   [bits 160:207]  lootboxRngMinLinkBalance  uint48  (scaled /1e15, 0.001 LINK res, max ~281,474 LINK)
+    //   [bits 208:247]  lootboxRngPendingBurnie  uint40   (scaled /1e18, 1 BURNIE res, max ~1.1T BURNIE)
+    //   [bits 248:255]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
 
-    /// @dev Current lootbox RNG index for new purchases (1-based).
-    uint48 internal lootboxRngIndex = 1;
+    /// @dev Packed lootbox RNG state. See layout comment above.
+    ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000),
+    ///      lootboxRngMinLinkBalance=14 ether (scaled=14000).
+    uint256 internal lootboxRngPacked =
+        uint256(1)                                  // lootboxRngIndex = 1
+        | (uint256(1000) << 96)                     // lootboxRngThreshold = 1 ether / 1e15 = 1000
+        | (uint256(14000) << 160);                  // lootboxRngMinLinkBalance = 14 ether / 1e15 = 14000
 
-    /// @dev Accumulated lootbox ETH toward the RNG request threshold.
-    uint256 internal lootboxRngPendingEth;
+    // ---- lootboxRng shifts and masks ----
+    uint256 internal constant LR_INDEX_SHIFT = 0;
+    uint256 internal constant LR_INDEX_MASK = 0xFFFFFFFF;                    // 32 bits
+    uint256 internal constant LR_PENDING_ETH_SHIFT = 32;
+    uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFFFFFFFF;      // 64 bits
+    uint256 internal constant LR_THRESHOLD_SHIFT = 96;
+    uint256 internal constant LR_THRESHOLD_MASK = 0xFFFFFFFFFFFFFFFF;        // 64 bits
+    uint256 internal constant LR_MIN_LINK_SHIFT = 160;
+    uint256 internal constant LR_MIN_LINK_MASK = 0xFFFFFFFFFFFF;             // 48 bits
+    uint256 internal constant LR_PENDING_BURNIE_SHIFT = 208;
+    uint256 internal constant LR_PENDING_BURNIE_MASK = 0xFFFFFFFFFF;         // 40 bits
+    uint256 internal constant LR_MID_DAY_SHIFT = 248;
+    uint256 internal constant LR_MID_DAY_MASK = 0xFF;                       // 8 bits
 
-    /// @dev ETH threshold that triggers a lootbox RNG request (wei).
-    uint256 internal lootboxRngThreshold = 1 ether;
+    /// @dev Scale factor for ETH/LINK packing (0.001 resolution).
+    uint256 internal constant LR_ETH_SCALE = 1e15;
+    /// @dev Scale factor for BURNIE packing (1 token resolution).
+    uint256 internal constant LR_BURNIE_SCALE = 1e18;
 
-    /// @dev Minimum LINK balance required to allow manual lootbox RNG rolls.
-    ///      Defaults to ~2 weeks of daily VRF (assumes ~1 LINK/day).
-    uint256 internal lootboxRngMinLinkBalance = 14 ether;
+    /// @dev Read a field from the packed lootbox RNG slot.
+    function _lrRead(uint256 shift, uint256 mask) internal view returns (uint256) {
+        return (lootboxRngPacked >> shift) & mask;
+    }
+
+    /// @dev Write a field to the packed lootbox RNG slot.
+    function _lrWrite(uint256 shift, uint256 mask, uint256 value) internal {
+        lootboxRngPacked = (lootboxRngPacked & ~(mask << shift)) | ((value & mask) << shift);
+    }
+
+    /// @dev Pack a wei amount to milli-ETH (divide by 1e15). 0.001 ETH resolution.
+    function _packEthToMilliEth(uint256 wei_) internal pure returns (uint64) {
+        return uint64(wei_ / LR_ETH_SCALE);
+    }
+
+    /// @dev Unpack milli-ETH to wei (multiply by 1e15).
+    function _unpackMilliEthToWei(uint64 milli) internal pure returns (uint256) {
+        return uint256(milli) * LR_ETH_SCALE;
+    }
+
+    /// @dev Pack a wei amount to whole BURNIE (divide by 1e18). 1 BURNIE resolution.
+    function _packBurnieToWhole(uint256 wei_) internal pure returns (uint40) {
+        return uint40(wei_ / LR_BURNIE_SCALE);
+    }
+
+    /// @dev Unpack whole BURNIE to wei (multiply by 1e18).
+    function _unpackWholeBurnieToWei(uint40 whole) internal pure returns (uint256) {
+        return uint256(whole) * LR_BURNIE_SCALE;
+    }
 
     /// @dev RNG words keyed by lootbox RNG index.
     mapping(uint32 => uint256) internal lootboxRngWordByIndex;
@@ -1287,17 +1339,6 @@ abstract contract DegenerusGameStorage {
 
     /// @dev BURNIE lootbox amounts keyed by lootbox RNG index and player.
     mapping(uint32 => mapping(address => uint256)) internal lootboxBurnie;
-
-    // =========================================================================
-    // Lootbox Module Storage (for delegatecall modules)
-    // =========================================================================
-
-    /// @dev Total pending BURNIE lootbox amount for manual RNG trigger threshold.
-    uint256 internal lootboxRngPendingBurnie;
-
-    /// @dev True when requestLootboxRng swapped the ticket buffer and mid-day ticket
-    ///      processing is pending. Cleared by advanceGame after tickets are fully drained.
-    bool internal midDayTicketRngPending;
 
     // =========================================================================
     // Deity Boon Tracking
