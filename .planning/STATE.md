@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v24.1
 milestone_name: Storage Layout Optimization
-status: executing
-stopped_at: Completed 211-03-PLAN.md
-last_updated: "2026-04-10T17:36:24.924Z"
+status: verifying
+stopped_at: Completed 211-04-PLAN.md
+last_updated: "2026-04-10T17:55:19.329Z"
 last_activity: 2026-04-10
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 18
-  completed_plans: 17
-  percent: 94
+  completed_plans: 18
+  percent: 100
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-09)
 Phase: 211 (test-suite-repair) — EXECUTING
 Plan: 4 of 4
 Milestone: v24.1 — Storage Layout Optimization
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-10
 
 Progress: [██████░░░░] 66%
@@ -66,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 211]: lootboxRngIndex extraction logic unchanged (low 48 bits correct for LR_INDEX_SHIFT=0); VRFPathHandler _dailyIdx uses uint32 intermediate cast
 - [Phase 211]: purchaseStartDay=1 (not 0) at deploy; warmUpDay pattern prevents turbo when testing compressed mode
 - [Phase 211]: v24.1 shifted traitBurnTicket slot 9->8, ticketQueue slot 13->12; coinflip seed uses uint32 epoch
+- [Phase 211]: ContractAddresses.sol must be patched via patchForFoundry.js before Foundry tests; committed version has production 24-contract layout vs Foundry 23-contract layout
+- [Phase 211]: 46 remaining Foundry failures are integration-level assertion mismatches (level advancement, affiliate claims, VRF word derivation) beyond mechanical slot/shift fixes
 
 ### Pending Todos
 
@@ -78,5 +80,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10T17:36:24.921Z
-Stopped at: Completed 211-03-PLAN.md
+Last session: 2026-04-10T17:55:19.327Z
+Stopped at: Completed 211-04-PLAN.md

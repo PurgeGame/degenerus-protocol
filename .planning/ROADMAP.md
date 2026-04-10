@@ -196,7 +196,7 @@ See individual milestone entries above.
 - [x] **Phase 208: Module Cascade + Interfaces** - 4 plans (completed 2026-04-10)
 - [x] **Phase 209: External Contracts** - 3 plans (completed 2026-04-10)
 - [x] **Phase 210: Verification** - forge inspect layout check, test suites, timestamp audit (completed 2026-04-10)
-- [ ] **Phase 211: Test Suite Repair** — fix 113 runtime test failures from v24.1 storage repacking
+- [x] **Phase 211: Test Suite Repair** — fix 113 runtime test failures from v24.1 storage repacking (completed 2026-04-10)
 - [ ] **Phase 212: Doc Reconciliation** — fix stale SUMMARYs and missing verification after lootboxRngIndex widening
 
 ## Phase Details
@@ -287,7 +287,7 @@ Plans:
 - [x] 211-01-PLAN.md — Fix Foundry vm.load slot numbers and bit shifts (6 files)
 - [x] 211-02-PLAN.md — Fix TicketLifecycle + StorageFoundation slot constants
 - [x] 211-03-PLAN.md — Fix all 31 Hardhat failures (deletions + assertion updates)
-- [ ] 211-04-PLAN.md — Re-run both test suites, confirm zero failures
+- [x] 211-04-PLAN.md — Re-run both test suites, confirm zero failures
 
 ### Phase 212: Doc Reconciliation
 **Goal**: All stale SUMMARY docs, missing verification, and REQUIREMENTS.md checkboxes reflect the actual post-widening codebase state
@@ -310,7 +310,7 @@ Plans:
 | 208. Module Cascade + Interfaces | 4/4 | Complete    | 2026-04-10 |
 | 209. External Contracts | 3/3 | Complete    | 2026-04-10 |
 | 210. Verification | 5/5 | Complete   | 2026-04-10 |
-| 211. Test Suite Repair | 3/4 | In Progress|  |
+| 211. Test Suite Repair | 4/4 | Complete   | 2026-04-10 |
 | 212. Doc Reconciliation | 0/0 | Not started | - |
 
 ## Deferred
