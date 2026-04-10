@@ -9,7 +9,7 @@
 
 ## Phases
 
-- [ ] **Phase 213: Delta Extraction** - Produce function-level changelog, contract classifications, and interaction map for the entire v6.0-v24.1 delta
+- [x] **Phase 213: Delta Extraction** - Produce function-level changelog, contract classifications, and interaction map for the entire v6.0-v24.1 delta (completed 2026-04-10)
 - [ ] **Phase 214: Adversarial Audit** - Per-function adversarial analysis of every changed/new function plus storage layout and cross-function attack chains
 - [ ] **Phase 215: RNG Fresh Eyes** - Ground-up VRF lifecycle audit with no reliance on prior RNG conclusions
 - [ ] **Phase 216: Pool & ETH Accounting** - ETH conservation proof and pool mutation audit across the restructured architecture
@@ -26,11 +26,11 @@
   2. Every contract in the codebase is classified as NEW / MODIFIED / DELETED / UNCHANGED with justification
   3. An interaction map shows all cross-module call chains between changed functions
   4. Subsequent audit phases can reference the delta extraction as their scope definition
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [x] 213-01-PLAN.md — Classify and changelog modules + storage contracts (13 files, ~6,800 diff lines)
 - [x] 213-02-PLAN.md — Classify and changelog core contracts: main, interfaces, libraries, mocks (33 files, ~3,700 diff lines)
-- [ ] 213-03-PLAN.md — Build cross-module interaction map and unified delta extraction document
+- [x] 213-03-PLAN.md — Build cross-module interaction map and unified delta extraction document
 
 ### Phase 214: Adversarial Audit
 **Goal**: Every changed/new function is proven safe against reentrancy, access control violations, integer overflow, state corruption, and composition attacks
@@ -82,7 +82,7 @@ Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 complete
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 213. Delta Extraction | 2/3 | In Progress|  |
+| 213. Delta Extraction | 3/3 | Complete   | 2026-04-10 |
 | 214. Adversarial Audit | 0/? | Not started | - |
 | 215. RNG Fresh Eyes | 0/? | Not started | - |
 | 216. Pool & ETH Accounting | 0/? | Not started | - |
