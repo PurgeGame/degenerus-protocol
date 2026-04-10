@@ -1,0 +1,1867 @@
+Compiled 60 Solidity files successfully (evm target: paris).
+
+
+  AccessControl
+    BurnieCoin
+Compiled 60 Solidity files successfully (evm target: paris).
+      ✔ vaultEscrow: reverts when called by alice (OnlyVault) (16830ms)
+      ✔ mintForGame: reverts when called by alice (OnlyGame)
+      ✔ burnCoin: reverts when called by alice (OnlyGame)
+    BurnieCoinflip
+      ✔ processCoinflipPayouts: reverts when called by alice (OnlyDegenerusGame)
+      ✔ claimCoinflipsFromBurnie: reverts when called by alice (OnlyBurnieCoin)
+      ✔ creditFlip: reverts when called by alice (OnlyFlipCreditors)
+      ✔ creditFlipBatch: reverts when called by alice (OnlyFlipCreditors)
+      ✔ settleFlipModeChange: reverts when called by alice (OnlyDegenerusGame)
+    DegenerusGame
+      ✔ wireVrf: reverts when called by alice (only ADMIN contract)
+      ✔ rawFulfillRandomWords: reverts when called by alice (only VRF coordinator)
+      ✔ recordMint: reverts when called by alice (only self-call)
+      ✔ recordMintQuestStreak: reverts when called by alice (only COIN)
+    DegenerusStonk (DGNRS)
+      ✔ depositSteth: reverts when called by alice (onlyGame → Unauthorized)
+      ✔ transferFromPool: reverts when called by alice (onlyGame → Unauthorized)
+      ✔ burnAtGameOver: reverts when called by alice (onlyGame → Unauthorized)
+    DegenerusVault
+      ✔ deposit: reverts when called by alice (onlyGame → Unauthorized)
+      ✔ deposit with ETH: reverts when called by alice (onlyGame → Unauthorized)
+    DegenerusJackpots
+      ✔ recordBafFlip: reverts when called by alice (onlyCoin → OnlyCoin)
+      ✔ runBafJackpot: reverts when called by alice (onlyGame → OnlyGame)
+    DegenerusQuests
+      ✔ rollDailyQuest: reverts when called by alice (onlyGame → OnlyGame)
+      ✔ handleMint: reverts when called by alice (onlyCoin → OnlyCoin)
+      ✔ awardQuestStreakBonus: reverts when called by alice (onlyGame → OnlyGame)
+    DegenerusAdmin
+      ✔ propose: reverts when called by alice with no VRF stall (NotStalled)
+      ✔ shutdownVrf: reverts when called by alice (only GAME → NotAuthorized)
+      ✔ proposeFeedSwap: reverts when called by alice (no sDGNRS → InsufficientStake)
+    Icons32Data
+      ✔ setPaths: reverts when called by alice (OnlyCreator)
+      ✔ setSymbols: reverts when called by alice (OnlyCreator)
+      ✔ finalize: reverts when called by alice (OnlyCreator)
+    positive access – CREATOR can call restricted functions
+      ✔ Icons32Data.setPaths: succeeds when called by deployer (CREATOR)
+      ✔ Icons32Data.setSymbols: succeeds when called by deployer (CREATOR)
+      ✔ Icons32Data.finalize: succeeds when called by deployer (CREATOR)
+      ✔ Icons32Data.setPaths: reverts with AlreadyFinalized after finalize()
+      ✔ DegenerusAdmin.swapGameEthForStEth: reverts for alice but not access error type matters
+    cross-contract unauthorized access
+      ✔ alice cannot call game.updateVrfCoordinatorAndSub (only ADMIN)
+      ✔ alice cannot call game.adminSwapEthForStEth (only ADMIN)
+      ✔ alice cannot call game.consumeCoinflipBoon (only trusted contracts)
+      ✔ coin.burnForCoinflip reverts when called by alice (not coinflip contract)
+      ✔ coin.vaultMintTo reverts when called by alice (onlyVault → OnlyVault)
+
+  Deploy Pipeline
+    ✔ deploys all 23 contracts at predicted addresses
+    ✔ deployer nonce advances by exactly 23 protocol contracts
+    Constructor side effects
+      ✔ DegenerusGame: purchaseStartDay is set
+      ✔ DegenerusGame: mintPrice returns initial price
+      ✔ DegenerusGame: not in jackpot phase
+      ✔ DegenerusGame: not game over
+      ✔ BurnieCoin: initial totalSupply is 2M (sDGNRS backing reserve)
+      ✔ BurnieCoin: vaultMintAllowance is 2M
+      ✔ StakedDegenerusStonk: DGNRS contract holds creator's 20% as sDGNRS
+      ✔ DegenerusStonk: creator holds initial vesting (50B) as DGNRS
+      ✔ DegenerusDeityPass: DGVE majority holder can call admin functions
+      ✔ DegenerusAdmin: VRF subscription created
+      ✔ Icons32Data: not finalized
+
+  AffiliateHardening
+    Per-Referrer Commission Cap
+      AFF-01: Single large purchase hits cap
+Compiled 60 Solidity files successfully (evm target: paris).
+        ✔ caps commission at 0.5 ETH when scaled amount exceeds cap (16872ms)
+        ✔ returns 0 kickback once cap is fully consumed (0% kickback code)
+        ✔ emits AffiliateEarningsRecorded with capped amount, not full scaled
+        ✔ allows exactly 0.5 ETH when scaled amount equals cap
+        ✔ allows full amount when scaled amount is below cap
+      AFF-02: Cumulative spend tracking
+        ✔ multiple small purchases accumulate toward 0.5 ETH cap
+        ✔ 6th purchase after cap is hit yields zero additional commission
+        ✔ partial cap fill then large purchase is clamped to remaining
+        ✔ recycled ETH purchases also accumulate toward the same cap
+        ✔ mixed fresh and recycled ETH purchases share the same cap
+      AFF-03: Cap resets at each new level
+        ✔ same sender/affiliate pair earns again at a different level
+        ✔ cap at level 1 does not affect level 0 earnings
+        ✔ can fill cap independently at multiple levels
+      AFF-04: Independent caps per affiliate
+Compiled 60 Solidity files successfully (evm target: paris).
+        ✔ two affiliates each get their own 0.5 ETH cap from different senders (16694ms)
+        ✔ alice cap exhaustion does not affect carol earning from a different sender
+        ✔ same affiliate tracks caps independently per sender
+    Lootbox Activity Taper
+      AFF-05: No taper when score < 10000 BPS
+        ✔ score 0: full payout, no taper
+        ✔ score 9999: still full payout, no taper
+        ✔ score 1: no taper applied
+      AFF-06: Linear taper in 10000-25500 BPS range
+        ✔ score exactly 10000: no reduction (taper just starts)
+        ✔ score 17750 (midpoint): approximately 62.5% payout
+        ✔ score 10001: very small reduction from 100%
+        ✔ score 25499: just below floor, slightly above 25%
+      AFF-07: Floor at 25% for score >= 25500 BPS
+        ✔ score exactly 25500: 25% payout floor
+        ✔ score 30000: still 25% floor (no further reduction)
+        ✔ score 65535 (max uint16): still 25% floor
+      AFF-08: Leaderboard uses post-taper amount
+        ✔ leaderboard score matches post-taper scaled amount when heavily tapered
+        ✔ AffiliateEarningsRecorded event emits post-taper amount
+        ✔ top affiliate tracks post-taper cumulative across multiple tapered calls
+      AFF-09: lootboxActivityScore parameter flow
+        ✔ score=0 produces same result as no-taper baseline
+        ✔ taper applies to recycled ETH purchases (parameter is always respected)
+        ✔ different taper scores produce different payout amounts for same input
+Compiled 60 Solidity files successfully (evm target: paris).
+        ✔ taper interacts correctly with commission cap (cap applied first, then taper) (16614ms)
+    Edge Cases
+      ✔ zero amount produces no commission and no revert
+      ✔ very small amount (1 wei) does not revert
+      ✔ cap boundary: exact cap fill then exact 0 on next call
+      ✔ level 4+ uses 20% reward scale for fresh ETH cap calculations
+      ✔ commission cap and taper combined: cap restricts before taper reduces payout
+      ✔ taper at score 10000 with large amount does not lose precision (685ms)
+
+  BurnieCoin
+    initial state
+      ✔ name is 'Burnies'
+      ✔ symbol is 'BURNIE'
+      ✔ decimals is 18
+      ✔ totalSupply is 2M on deploy (sDGNRS backing reserve)
+      ✔ vaultMintAllowance is 2,000,000 BURNIE on deploy
+      ✔ supplyIncUncirculated equals totalSupply + vaultAllowance
+      ✔ all user balances start at zero
+      ✔ all allowances start at zero
+    approve()
+      ✔ sets allowance and emits Approval event
+      ✔ can set allowance to type(uint256).max (infinite approval)
+      ✔ can reduce allowance by calling approve again
+      ✔ can set allowance to 0 (effectively revoke)
+      ✔ does NOT emit Approval when the new amount equals the current allowance
+    transfer()
+      ✔ transfers tokens between two accounts and emits Transfer
+      ✔ reverts (underflow) when balance is insufficient
+      ✔ allows transferring entire balance
+      ✔ transfer of zero amount is a no-op (balance unchanged)
+      ✔ sending to VAULT increases vaultAllowance (not recipient balance)
+      ✔ transfer to VAULT emits VaultEscrowRecorded event
+    transferFrom()
+      ✔ transfers within allowance and decrements allowance
+      ✔ reverts when allowance is insufficient
+      ✔ does not decrement infinite (max uint256) allowance
+      ✔ GAME contract can transferFrom without approval
+      ✔ emits Approval event when allowance is decremented
+    mintForGame()
+      ✔ mints BURNIE to recipient and emits Transfer from zero address
+      ✔ reverts with OnlyGame when called by non-GAME address
+      ✔ zero amount is a silent no-op (no revert, no Transfer event)
+      ✔ increases totalSupply and supplyIncUncirculated
+    burnForCoinflip()
+      ✔ burnForCoinflip reverts with OnlyGame when called by non-COINFLIP address
+      ✔ burnForCoinflip burns from user when called by COINFLIP
+    vaultEscrow()
+      ✔ reverts with OnlyVault when called by an unauthorized address
+      ✔ increases vaultAllowance when called by GAME
+      ✔ increases vaultAllowance when called by VAULT
+      ✔ emits VaultEscrowRecorded event
+      ✔ does NOT increase totalSupply (virtual escrow only)
+    vaultMintTo()
+      ✔ reverts with OnlyVault when called by a non-VAULT address
+      ✔ mints from vault allowance to recipient and reduces allowance
+      ✔ increases totalSupply when minting from vault allowance
+      ✔ emits VaultAllowanceSpent and Transfer events
+      ✔ reverts with Insufficient when amount exceeds vault allowance
+      ✔ reverts with ZeroAddress when recipient is address(0)
+      ✔ supplyIncUncirculated remains constant after vaultMintTo (supply up, allowance down)
+    burnCoin()
+      ✔ reverts with OnlyGame when called by an unauthorized address
+      ✔ burns from target when called by GAME
+      ✔ reverts with OnlyGame when called by AFFILIATE
+      ✔ decreases totalSupply after burn
+    view helpers
+      ✔ balanceOfWithClaimable returns at least the on-chain balance
+      ✔ balanceOfWithClaimable for VAULT includes vaultAllowance
+    supply invariants
+      ✔ supplyIncUncirculated = totalSupply + vaultAllowance at all times
+    ZeroAddress guards
+      ✔ transfer to zero address reverts with ZeroAddress
+
+  BurnieCoinflip
+    Constructor
+      ✔ stores correct immutable addresses
+      ✔ initial currentBounty is 1000 BURNIE
+      ✔ initial biggestFlipEver is zero
+    depositCoinflip
+      ✔ reverts when amount is below 100 BURNIE minimum
+      ✔ accepts minimum deposit of exactly 100 BURNIE
+      ✔ emits CoinflipDeposit event
+      ✔ emits CoinflipStakeUpdated for the next day
+      ✔ records coinflipAmount for next day
+      ✔ emits CoinflipTopUpdated on deposit
+      ✔ reverts NotApproved when non-approved operator deposits on behalf of player
+      ✔ zero amount deposit emits CoinflipDeposit with amount 0
+    processCoinflipPayouts
+      ✔ reverts when caller is not the game contract
+      ✔ emits CoinflipDayResolved with win=true for odd rngWord
+      ✔ emits CoinflipDayResolved with win=false for even rngWord
+      ✔ rewardPercent is 50 when roll == 0 (seedWord % 20 == 0)
+      ✔ rewardPercent is 150 when roll == 1 (seedWord % 20 == 1)
+      ✔ bounty pool grows by 1000 BURNIE per resolved day
+      ✔ bountyPaid is 0 and bountyRecipient is zero address when no bounty owner
+    Bounty system
+      ✔ emits BiggestFlipUpdated when deposit exceeds current record
+      ✔ emits BountyOwed when setting new record from zero
+      ✔ does not update biggestFlipEver when deposit is smaller than record
+      ✔ second record setter must exceed first by 1% to steal bounty
+      ✔ biggestFlipEver tracks the largest direct deposit
+    claimCoinflips
+      ✔ does not revert with RngLocked when rngLocked is false
+      ✔ returns 0 when player has no claimable balance
+      ✔ claimCoinflips with explicit player address succeeds when called by player
+      ✔ claimCoinflips reverts with NotApproved when operator not approved
+      ✔ previewClaimCoinflips matches actual claimable after winning day
+    claimCoinflipsFromBurnie / consumeCoinflipsForBurn
+      ✔ claimCoinflipsFromBurnie reverts when called by non-coin address
+      ✔ consumeCoinflipsForBurn reverts when called by non-coin address
+    creditFlip / creditFlipBatch
+      ✔ creditFlip reverts when called by unauthorized address
+      ✔ creditFlipBatch reverts when called by unauthorized address
+      ✔ creditFlip from game contract emits CoinflipStakeUpdated
+      ✔ creditFlip ignores zero address and zero amount silently
+      ✔ creditFlipBatch credits all three non-zero players from game contract
+      ✔ creditFlipBatch skips zero-address slots
+    setCoinflipAutoRebuy
+      ✔ enables auto-rebuy and emits CoinflipAutoRebuyToggled
+      ✔ emits CoinflipAutoRebuyStopSet when enabling with takeProfit
+      ✔ reverts with AutoRebuyAlreadyEnabled if enabling when already enabled
+      ✔ disables auto-rebuy and emits CoinflipAutoRebuyToggled(false)
+      ✔ coinflipAutoRebuyInfo reflects enabled state after enabling
+      ✔ coinflipAutoRebuyInfo enabled=false after disabling
+      ✔ reverts RngLocked if rngLocked is true
+    setCoinflipAutoRebuyTakeProfit
+      ✔ reverts AutoRebuyNotEnabled when auto-rebuy is off
+      ✔ updates stop amount and emits CoinflipAutoRebuyStopSet
+    settleFlipModeChange
+      ✔ reverts when called by non-game address
+      ✔ game can call settleFlipModeChange without revert
+    View functions
+      ✔ previewClaimCoinflips returns 0 for player with no activity
+      ✔ coinflipTopLastDay returns zero address before any resolved day
+      ✔ coinflipTopLastDay returns top bettor after day resolves
+      ✔ coinflipAmount returns 0 for player with no stake
+      ✔ coinflipAmount increases after deposit
+      ✔ coinflipAutoRebuyInfo startDay is lastClaim day when enabled
+    End-to-end deposit/resolve/claim
+      ✔ player deposit is burned from balance
+      ✔ player wins and can claim after day resolution
+      ✔ player loses and gets WWXRP consolation prize on claim
+      ✔ multiple consecutive wins compound correctly with auto-rebuy
+
+  DegenerusStonk (DGNRS Liquid Token)
+    Constructor
+      ✔ name is 'Degenerus Stonk'
+      ✔ symbol is 'DGNRS'
+      ✔ decimals is 18
+      ✔ totalSupply equals 20% of sDGNRS supply
+      ✔ creator receives 25% of DGNRS at deployment (vesting)
+      ✔ sDGNRS contract holds matching sDGNRS balance
+    ERC20
+      ✔ transfer moves tokens
+      ✔ transfer emits Transfer event
+      ✔ transfer reverts to zero address
+      ✔ transfer reverts on insufficient balance
+      ✔ anyone can transfer DGNRS (not soulbound)
+      ✔ approve + transferFrom works
+      ✔ transferFrom with max approval does not decrease allowance
+      ✔ transferFrom reverts when exceeding allowance
+      ✔ Approval event emitted
+      ✔ transfer to self does not change balance (DELTA-L-01)
+      ✔ transferFrom to self does not change balance
+    unwrapTo
+      ✔ vault owner can unwrap DGNRS to soulbound sDGNRS for a recipient
+      ✔ emits UnwrapTo event
+      ✔ reverts when called by non-vault-owner
+      ✔ reverts on zero address recipient
+      ✔ reverts when amount exceeds balance
+      ✔ reverts on zero amount
+    burn
+      ✔ reverts on zero amount
+      ✔ reverts when amount exceeds balance
+Compiled 60 Solidity files successfully (evm target: paris).
+      ✔ burns DGNRS and forwards ETH from sDGNRS backing (16625ms)
+      ✔ DGNRS totalSupply decreases after burn
+      ✔ sDGNRS totalSupply also decreases (underlying burned)
+      ✔ emits BurnThrough event
+      ✔ burn with stETH backing forwards stETH proportionally
+    previewBurn
+      ✔ delegates to sDGNRS previewBurn
+    sDGNRS soulbound enforcement
+      ✔ sDGNRS has no transfer function
+      ✔ sDGNRS burn(uint256) burns from msg.sender only
+      ✔ wrapperTransferTo reverts when called by non-DGNRS contract
+    sDGNRS new features
+      ✔ burnAtGameOver: reverts for non-game caller
+      ✔ burnAtGameOver: game can burn all pool tokens
+      ✔ gameAdvance is permissionless
+      ✔ gameClaimWhalePass is permissionless
+    Supply accounting
+      ✔ DGNRS supply + sDGNRS wrapper balance stay in sync (739ms)
+      ✔ sDGNRS totalSupply reflects all holders correctly
+
+  Default Referral Codes
+    defaultCode view
+      ✔ returns bytes32(uint256(uint160(addr))) for any address
+      ✔ returns different codes for different addresses
+      ✔ returns zero bytes32 for address(0)
+    createAffiliateCode collision guard
+      ✔ rejects a code in the address-derived range
+      ✔ rejects any code where top 12 bytes are zero
+      ✔ allows codes with nonzero high bytes (normal string codes)
+    referPlayer with default codes
+      ✔ registers under a default code (no createAffiliateCode needed)
+      ✔ reverts on self-referral via default code
+      ✔ reverts on default code for address(0)
+      ✔ locks referral — cannot change after setting via default code
+      ✔ emits ReferralUpdated with correct referrer for default code
+    payAffiliate with default codes
+      ✔ resolves default code on first purchase and stores it
+      ✔ subsequent purchases recall the stored default code
+      ✔ returns 0 kickback for default codes (0% kickback)
+      ✔ tracks affiliate score for default code affiliates
+      ✔ self-referral via default code locks to VAULT
+    Upline chains with default codes
+      ✔ default code affiliate has upline from their own referral
+      ✔ default code affiliate with no referral has VAULT as upline
+    Custom and default code coexistence
+      ✔ custom code takes priority when registered
+      ✔ default code gives 0 kickback vs custom code with kickback
+    Edge cases
+      ✔ default code for address(1) resolves correctly (not REF_CODE_LOCKED)
+      ✔ invalid code in high-byte range still reverts in referPlayer
+      ✔ payAffiliate with unregistered high-byte code locks to VAULT
+
+  DegenerusAdmin
+    Initial state
+      ✔ subscriptionId is non-zero after deployment
+      ✔ coordinator is set to VRF coordinator address
+      ✔ vrfKeyHash is set (non-zero)
+      ✔ linkEthPriceFeed is initially zero
+      ✔ constructor emits SubscriptionCreated event
+      ✔ constructor emits CoordinatorUpdated event (captured via state)
+    onTokenTransfer
+      ✔ reverts when called by non-LINK address
+      ✔ reverts when amount is zero
+      ✔ LINK donation forwards to VRF subscription (subscription funded)
+      ✔ no credit emitted when price feed not set (oracle unavailable)
+      ✔ 3x tier (sub empty): 1 LINK → 1200 BURNIE flip stake
+      ✔ 2x tier (100 LINK in sub): 1 LINK → 800 BURNIE flip stake
+      ✔ 1x tier (200 LINK in sub): 1 LINK → 400 BURNIE flip stake
+      ✔ 0.5x tier (600 LINK in sub): 1 LINK → 200 BURNIE flip stake
+      ✔ 0x tier (1000+ LINK in sub): no flip credit emitted
+      ✔ scales linearly with LINK amount: 10 LINK at 3x = 12000 BURNIE
+      ✔ game-level value: formula is level-invariant — 3x at any level gives ~0.012 ETH ticket value per LINK
+      ✔ game-level value: 1200 BURNIE earned at L0 is worth 24x more at L100 than at L0
+      ✔ game-level value: 3x tier returns 300% of donated LINK value as ticket stake
+    linkAmountToEth
+      ✔ returns 0 when no price feed is set
+      ✔ returns non-zero ETH equivalent when feed is set
+      ✔ returns 0 when amount is zero
+    VRF Governance
+      ✔ propose reverts when VRF is not stalled (< 20h)
+      ✔ propose reverts with ZeroAddress for zero coordinator
+      ✔ propose reverts with ZeroAddress for zero keyHash
+      ✔ community propose reverts with InsufficientStake when caller has no sDGNRS
+      ✔ vote reverts when VRF is not stalled
+      ✔ vote reverts with ProposalNotActive for non-existent proposal
+      ✔ votingSupply returns reasonable value
+      ✔ threshold returns 6000 for fresh proposal (day 0)
+      ✔ canExecute returns false for non-existent proposal
+      ✔ proposalCount starts at 0
+    shutdownVrf
+      ✔ reverts when called by non-GAME address
+      ✔ reverts when called by alice
+    swapGameEthForStEth
+      ✔ reverts when called by non-owner
+      ✔ reverts when msg.value is zero
+
+  DegenerusAffiliate
+    Constructor
+      ✔ pre-registers VAULT affiliate code owned by vault address
+      ✔ pre-registers DGNRS affiliate code owned by sdgnrs address
+      ✔ vault and dgnrs default kickback is 0
+      ✔ emits Affiliate(1) events for VAULT and DGNRS on construction
+      ✔ getReferrer returns sdgnrs for vault's own address (cross-registered to DGNRS)
+      ✔ seeds pre-known affiliate codes passed to constructor
+      ✔ reverts when bootstrap constructor arrays have mismatched lengths
+      ✔ seeds pre-known player referrals passed to constructor
+    createAffiliateCode
+      ✔ creates a new code with correct owner and kickback
+      ✔ emits Affiliate(1, code, creator) event
+      ✔ reverts with Zero when code is bytes32(0)
+      ✔ reverts with Zero when code is REF_CODE_LOCKED sentinel (bytes32(1))
+      ✔ reverts with Insufficient when code is already taken
+      ✔ reverts with InvalidKickback when kickback exceeds 25%
+      ✔ allows maximum kickback of 25%
+    referPlayer
+      ✔ registers player under a valid code
+      ✔ emits Affiliate(0, code, player) event
+      ✔ emits ReferralUpdated event
+      ✔ reverts Insufficient for self-referral
+      ✔ reverts Insufficient for non-existent code
+      ✔ reverts Insufficient when already referred (non-vault code)
+    getReferrer
+      ✔ returns vault address for player with no referral
+      ✔ returns correct referrer after referral registration
+    payAffiliate - access control
+      ✔ reverts OnlyAuthorized when called by random EOA
+      ✔ succeeds when called by coin contract
+      ✔ succeeds when called by game contract
+    payAffiliate - reward distribution
+      ✔ emits Affiliate event with correct code and sender
+      ✔ emits AffiliateEarningsRecorded for the direct affiliate
+      ✔ returns player kickback equal to kickbackPct% of scaled reward
+      ✔ fresh ETH level 1-3 uses 25% reward scale
+      ✔ fresh ETH level 4+ uses 20% reward scale
+      ✔ recycled ETH uses 5% reward scale
+      ✔ blank referral code locks player to VAULT (REF_CODE_LOCKED)
+      ✔ invalid code (unknown) locks player to VAULT
+      ✔ self-referral code locks player to VAULT
+      ✔ upline tier 1 (20%) is distributed via creditFlip
+    affiliateTop / affiliateScore / affiliateBonusPointsBest
+      ✔ affiliateTop returns zero address for level with no activity
+      ✔ affiliateScore returns 0 for player with no earnings
+      ✔ affiliateScore reflects earnings after payAffiliate
+      ✔ affiliateTop reflects top affiliate after activity
+      ✔ emits AffiliateTopUpdated when new top is set
+      ✔ affiliateBonusPointsBest returns 0 for new player
+      ✔ affiliateBonusPointsBest returns 0 for zero address or zero level
+      ✔ affiliateBonusPointsBest accumulates over previous 5 levels
+    per-referrer commission cap (0.5 ETH)
+      ✔ allows full commission when under the cap
+      ✔ clamps commission at exactly the 0.5 ETH cap
+      ✔ returns 0 and emits only Affiliate event once cap is fully used
+      ✔ returns 0 kickback once cap is exhausted
+      ✔ partially clamps when remaining cap is less than scaled amount
+      ✔ different senders each have independent caps
+      ✔ cap resets per level
+    lootbox activity taper
+      ✔ no taper when activity score is 0
+      ✔ no taper when activity score is below 10000
+      ✔ 25% floor taper when activity score >= 25500
+      ✔ 25% floor also applies above 25500
+      ✔ linear taper in range (score 20250)
+      ✔ leaderboard tracks post-taper amount
+      ✔ taper reduces kickback proportionally
+      ✔ taper at exact start boundary (10000) applies reduction
+      ✔ recycled ETH with taper score still gets no taper (taper only affects payout, not scale)
+      ✔ taper interacts correctly with commission cap
+
+  GNRUS (GNRUS)
+    Token Metadata
+Compiled 60 Solidity files successfully (evm target: paris).
+      ✔ name is 'Degenerus Donations' (16572ms)
+      ✔ symbol is 'GNRUS'
+      ✔ decimals is 18
+      ✔ totalSupply is 1T after deploy
+      ✔ all tokens minted to contract itself (unallocated pool)
+      ✔ currentLevel starts at 0
+      ✔ proposalCount starts at 0
+      ✔ finalized starts as false
+    Soulbound Enforcement
+      ✔ transfer() reverts with TransferDisabled
+      ✔ transferFrom() reverts with TransferDisabled
+      ✔ approve() reverts with TransferDisabled
+    Burn Redemption
+      ✔ burn below MIN_BURN (1 GNRUS) reverts with InsufficientBurn
+      ✔ burn(0) reverts with InsufficientBurn
+      ✔ burn reduces totalSupply by burned amount
+      ✔ burn reduces balanceOf[caller] to 0 on full burn
+      ✔ burn emits Transfer(caller, address(0), amount) and Burn events
+      ✔ burn with ETH backing pays proportional ETH
+      ✔ burn with stETH backing pays proportional stETH
+      ✔ burn with zero ETH and zero stETH sends nothing (no revert)
+      ✔ ETH-preferred: ETH covers owed first, stETH fills remainder
+      ✔ last-holder sweep: burning exact balance sweeps full amount
+      ✔ burn reverts on underflow when amount exceeds balance
+    Governance -- Propose
+      ✔ propose creates a proposal with correct recipient and proposer
+      ✔ propose increments proposalCount
+      ✔ propose increments levelProposalCount
+      ✔ propose snapshots sDGNRS votingSupply on first proposal
+      ✔ propose(address(0)) reverts with ZeroAddress
+      ✔ propose to contract address reverts with RecipientIsContract
+      ✔ community: non-creator with <0.5% sDGNRS reverts with InsufficientStake
+      ✔ community: non-creator proposing twice reverts with AlreadyProposed
+      ✔ vault owner can propose up to 5 times per level
+      ✔ vault owner 6th proposal reverts with ProposalLimitReached
+      ✔ vault owner does not consume community propose slot
+      ✔ getProposal returns correct data
+      ✔ getLevelProposals returns correct start and count
+    Governance -- Vote
+      ✔ vote(proposalId, true) increases approveWeight by voter's sDGNRS balance
+      ✔ vote(proposalId, false) increases rejectWeight by voter's sDGNRS balance
+      ✔ voting twice on same proposal reverts with AlreadyVoted
+      ✔ voting on invalid proposalId reverts with InvalidProposal
+      ✔ voting on out-of-range proposalId reverts with InvalidProposal
+      ✔ voter with 0 sDGNRS reverts with InsufficientStake
+      ✔ vault owner gets 5% bonus on vote weight
+      ✔ voter can vote on multiple proposals independently
+    Governance -- pickCharity
+      ✔ pickCharity distributes 2% of unallocated GNRUS to winning recipient
+      ✔ pickCharity increments currentLevel
+      ✔ pickCharity marks level as resolved
+      ✔ resolving same level twice reverts with LevelAlreadyResolved
+      ✔ resolving wrong level reverts with LevelNotActive
+      ✔ pickCharity with no proposals emits LevelSkipped
+      ✔ pickCharity where all proposals net-negative emits LevelSkipped
+      ✔ pickCharity where all proposals net-zero emits LevelSkipped
+      ✔ ties go to lower proposalId (first-submitted)
+      ✔ 2% decay: second level distributes less than first
+      ✔ pickCharity emits Transfer from contract to recipient
+      ✔ pickCharity picks highest net-positive proposal
+    burnAtGameOver
+      ✔ burnAtGameOver burns all unallocated GNRUS (onlyGame)
+      ✔ burnAtGameOver reverts if not called by game
+      ✔ burnAtGameOver reverts if called twice (AlreadyFinalized)
+      ✔ burnAtGameOver sets finalized to true
+      ✔ burnAtGameOver emits Transfer(contract, address(0), amount)
+      ✔ burnAtGameOver after partial distribution burns only remaining
+    receive() -- ETH acceptance
+      ✔ contract can receive ETH from anyone
+      ✔ contract can receive ETH from game
+    Edge Cases
+      ✔ multiple levels: proposals from previous levels are not accessible for voting
+      ✔ community proposer can propose in new level after resolve
+      ✔ vault owner proposal count resets per level
+      ✔ totalSupply is conserved: unallocated + all holders = totalSupply
+
+  DegenerusDeityPass
+    initial state
+      ✔ name() returns 'Degenerus Deity Pass'
+      ✔ symbol() returns 'DEITY'
+      ✔ renderer is address(0) on deploy (no external renderer)
+      ✔ initial render colors match defaults
+      ✔ no tokens are minted on deploy (balanceOf for any user is 0)
+    supportsInterface()
+      ✔ supports IERC721 interface (0x80ac58cd)
+      ✔ supports IERC721Metadata interface (0x5b5e139f)
+      ✔ supports IERC165 interface (0x01ffc9a7)
+      ✔ does not support unknown interface
+    setRenderer()
+      ✔ owner can set the renderer address
+      ✔ can set renderer back to address(0) to disable external rendering
+      ✔ reverts with NotAuthorized when non-owner calls setRenderer
+      ✔ emits RendererUpdated with previous and new renderer addresses
+    setRenderColors()
+      ✔ owner can update render colors
+      ✔ reverts with NotAuthorized when non-owner calls setRenderColors
+      ✔ reverts with InvalidColor when outline color lacks '#' prefix
+      ✔ reverts with InvalidColor when color is too short
+      ✔ reverts with InvalidColor when color has invalid hex characters
+      ✔ reverts with InvalidColor when color is too long
+      ✔ accepts uppercase hex digits
+      ✔ accepts mixed case hex digits
+      ✔ reverts when background color is invalid
+      ✔ reverts when nonCrypto color is invalid
+    mint()
+      ✔ game contract can mint a token and emits Transfer from zero address
+      ✔ reverts with NotAuthorized when a non-GAME address tries to mint
+      ✔ reverts with InvalidToken for tokenId >= 32
+      ✔ reverts with InvalidToken for tokenId = 100 (out of range)
+      ✔ reverts with ZeroAddress when recipient is address(0)
+      ✔ reverts with InvalidToken when minting an already-minted tokenId
+      ✔ can mint all 32 tokens (tokenId 0 to 31)
+      ✔ mint at tokenId 31 (last valid) succeeds
+    burn()
+      ✔ burn function does not exist on soulbound deity pass
+    ERC721 view functions
+      ✔ ownerOf reverts with InvalidToken for unminted tokenId
+      ✔ ownerOf returns the correct owner after mint
+      ✔ balanceOf reverts with ZeroAddress for address(0)
+      ✔ balanceOf increases by 1 after minting
+      ✔ getApproved reverts with InvalidToken for unminted token
+      ✔ getApproved returns address(0) for token with no approval
+      ✔ isApprovedForAll returns false initially
+    approve()
+      ✔ reverts with Soulbound when token owner tries to approve
+    setApprovalForAll()
+      ✔ reverts with Soulbound
+      ✔ isApprovedForAll always returns false
+    tokenURI()
+      ✔ reverts with InvalidToken for unminted token
+      ✔ returns a non-empty string for a minted token
+      ✔ starts with 'data:application/json;base64,' prefix
+      ✔ base64-decoded JSON contains tokenId in the name field
+      ✔ contains 'data:image/svg+xml;base64,' in the image field
+      ✔ returns a distinct URI for each tokenId
+      ✔ tokenURI for quadrant 3 (Dice) token includes 'Dice' in name
+    transferFrom()
+      ✔ reverts with Soulbound
+      ✔ reverts with Soulbound even for non-owner caller
+    safeTransferFrom()
+      ✔ reverts with Soulbound (no-data overload)
+      ✔ reverts with Soulbound (with-data overload)
+    boundary tokenId edge cases
+      ✔ tokenId 0 (minimum valid) can be minted and queried
+      ✔ tokenId 31 (maximum valid) can be minted and queried
+      ✔ tokenId 32 is invalid and mint reverts
+
+  DegenerusGame
+    Initial state
+      ✔ starts at level 0
+      ✔ starts in purchase phase (jackpotPhase = false)
+      ✔ gameOver is false initially
+      ✔ initial mint price is 0.01 ETH
+      ✔ lootbox presale is active by default
+      ✔ rng is not locked initially
+      ✔ VRF coordinator is wired after deployment (via admin constructor)
+      ✔ levelPrizePool[0] is bootstrapped (activeTicketLevel=1 in purchase phase at level 0)
+      ✔ tickets are pre-queued for vault and sdgnrs (levels 1-100)
+      ✔ purchaseInfo returns consistent initial state
+      ✔ decimator window is closed initially
+    setOperatorApproval
+      ✔ approves an operator and emits OperatorApproval event
+      ✔ revokes an operator
+      ✔ reverts when operator is zero address
+      ✔ operator can act on behalf of owner after approval
+      ✔ unapproved caller cannot act for another player
+    purchase (ETH)
+      ✔ allows purchasing tickets with DirectEth
+      ✔ reverts when underpaying for DirectEth
+      ✔ reverts when ticket buy-in is below 0.0025 ETH minimum
+      ✔ purchaseCoin reverts when ticket buy-in is below 0.0025 ETH minimum
+      ✔ allows purchasing lootbox with ETH (minimum 0.01 ETH)
+      ✔ allows purchasing tickets for another address when approved
+      ✔ reverts when buying for another address without approval
+      ✔ purchaseCoin with zero lootbox and zero tickets succeeds as no-op
+      ✔ lootbox purchase also completes slot-0 MINT_ETH quest like ticket purchases
+    setLootboxRngThreshold
+      ✔ vault owner can update threshold and emits LootboxRngThresholdUpdated
+      ✔ reverts when called by non-vault-owner
+      ✔ reverts when threshold is zero
+    setAutoRebuy
+      ✔ enables auto-rebuy and emits AutoRebuyToggled
+      ✔ disables auto-rebuy
+    setAutoRebuyTakeProfit
+      ✔ sets take profit and emits AutoRebuyTakeProfitSet
+      ✔ can set take profit to zero (rebuy all)
+    claimWinnings
+      ✔ reverts when player has no winnings
+      ✔ claimableWinningsOf returns 0 for unknown addresses
+    claimWinningsStethFirst
+      ✔ reverts when called by a non-vault/non-dgnrs address
+    recordMintQuestStreak
+      ✔ reverts when called by unauthorized address
+    payCoinflipBountyDgnrs
+      ✔ reverts when called by unauthorized address
+    advanceGame
+      ✔ can be called by anyone
+      ✔ advanceGame is handled gracefully when caller has no mint (no-op or gate revert)
+    adminSwapEthForStEth
+      ✔ reverts when called by non-admin
+    adminStakeEthForStEth
+      ✔ reverts when called by non-admin
+    wireVrf
+      ✔ reverts when called by non-admin
+    VRF callback
+      ✔ rawFulfillRandomWords reverts when called by non-VRF coordinator
+    view functions
+      ✔ currentDayView returns a non-zero day
+      ✔ futurePrizePoolView is zero before any purchases
+      ✔ afKingModeFor returns false for new player
+      ✔ playerActivityScore returns 0 for new player
+      ✔ ticketsOwedView returns 0 for player with no tickets
+      ✔ hasDeityPass returns false for new player
+    claimAffiliateDgnrs
+      ✔ reverts at level 0 (needs level > 1)
+    consumeCoinflipBoon access control
+      ✔ reverts when called by non-coin/non-coinflip address
+    consumeDecimatorBoon access control
+      ✔ reverts when called by non-coin address
+    deactivateAfKingFromCoin
+      ✔ reverts when called by non-coin/non-coinflip address
+    syncAfKingLazyPassFromCoin
+      ✔ reverts when called by non-coinflip address
+
+  DegenerusJackpots
+    recordBafFlip - access control
+      ✔ reverts OnlyCoin when called by a random EOA
+      ✔ succeeds when called by coin contract
+      ✔ succeeds when called by coinflip contract
+    recordBafFlip - happy path
+      ✔ emits BafFlipRecorded with correct fields
+      ✔ accumulates total across multiple flips for same player/level
+      ✔ silently ignores vault address
+      ✔ different levels are tracked independently
+    recordBafFlip - leaderboard maintenance
+      ✔ inserts new player into top-4 in sorted order
+      ✔ updates existing player score when they flip more
+      ✔ replaces lowest score when board is full and new player is higher
+      ✔ does not replace lowest score when new player is equal or lower
+    runBafJackpot - access control
+      ✔ reverts OnlyGame when called by random EOA
+      ✔ reverts OnlyGame when called by coin contract
+      ✔ succeeds when called by game contract
+    runBafJackpot - return values
+      ✔ credits non-zero-address winners without streak requirement
+      ✔ returnAmountWei plus distributed amounts accounts for pool
+      ✔ clears leaderboard after resolution (BAF top slots empty on re-run)
+      ✔ 10% of pool is always added to returnAmountWei regardless of winners
+    runBafJackpot - RNG variation
+      ✔ different rngWords produce different state (no revert)
+    runBafJackpot - detailed payout breakdown
+
+    === BAF Payout: 100 ETH pool, lvl 10, empty state ===
+    Winners: 4
+    Winner 0: 0x322813Fd... => 3.0 ETH
+    Winner 1: 0xa85233C6... => 2.0 ETH
+    Winner 2: 0xa85233C6... => 3.0 ETH
+    Winner 3: 0x322813Fd... => 2.0 ETH
+    Distributed: 10.0 ETH
+    Returned:    90.0 ETH
+    Total:       100.0 ETH
+      ✔ 100 ETH pool, empty state — shows per-slice allocation
+
+    === BAF Payout: 100 ETH pool, lvl 10, 3 bettors ===
+    Alice (500 ETH flips), Bob (300 ETH), Carol (100 ETH)
+    Winners: 6
+    Alice: 10.0 ETH
+    Carol: 5.0 ETH
+    0x322813Fd...: 3.0 ETH
+    0xa85233C6...: 2.0 ETH
+    0xa85233C6...: 3.0 ETH
+    0x322813Fd...: 2.0 ETH
+    Distributed: 25.0 ETH
+    Returned:    75.0 ETH
+    Total:       100.0 ETH
+      ✔ 100 ETH pool, with BAF bettors — shows leaderboard payouts
+    runBafJackpot - full slate with trait tickets + FF tickets
+
+    === BAF Payout: 100 ETH, lvl 10, FULL SLATE ===
+    Leaderboard: Alice=500, Bob=300, Carol=100 ETH flips
+    traitBurnTicket: lvl 10-16, 8 traits each, 3 holders/trait
+    FF ticketQueue: lvl 17-25, 4 holders each
+
+    Alice            10.0 ETH  Slice A (10% top BAF)
+    Carol             5.0 ETH  Slice A2/B (5%)
+    0x322813Fd...      3.0 ETH  Slice D/D2 (3% FF 1st)
+    0xa85233C6...      2.0 ETH  Slice D/D2 (2% FF 2nd)
+    0xa85233C6...      3.0 ETH  Slice D/D2 (3% FF 1st)
+    Player7           2.0 ETH  Slice D/D2 (2% FF 2nd)
+    Bob               0.9 ETH  Scatter 1st
+    Alice             0.9 ETH  Scatter 1st
+    Alice             0.9 ETH  Scatter 1st
+    Bob               0.9 ETH  Scatter 1st
+    Alice             0.9 ETH  Scatter 1st
+    Bob               0.9 ETH  Scatter 1st
+    Bob               0.9 ETH  Scatter 1st
+    Alice             0.9 ETH  Scatter 1st
+    Alice             0.9 ETH  Scatter 1st
+    Alice             0.9 ETH  Scatter 1st
+    Bob               0.9 ETH  Scatter 1st
+    Alice             0.9 ETH  Scatter 1st
+    Carol             0.9 ETH  Scatter 1st
+    Carol             0.9 ETH  Scatter 1st
+    Bob               0.9 ETH  Scatter 1st
+    Alice             0.9 ETH  Scatter 1st
+    Carol             0.5 ETH  Scatter 2nd
+    Bob               0.5 ETH  Scatter 2nd
+    Bob               0.5 ETH  Scatter 2nd
+    Carol             0.5 ETH  Scatter 2nd
+    Carol             0.5 ETH  Scatter 2nd
+    Carol             0.5 ETH  Scatter 2nd
+    Bob               0.5 ETH  Scatter 2nd
+    Bob               0.5 ETH  Scatter 2nd
+    Carol             0.5 ETH  Scatter 2nd
+    Bob               0.5 ETH  Scatter 2nd
+    Carol             0.5 ETH  Scatter 2nd
+
+    Scatter 1st place winners: 16/50 rounds filled (0.9 ETH each)
+    Scatter 2nd place winners: 11/50 rounds filled (0.5 ETH each)
+
+    Distributed: 44.9 ETH
+    Returned:    55.1 ETH (unfilled rounds → future pool)
+    Total:       100.0 ETH
+      ✔ 100 ETH pool, lvl 10, full trait tickets + FF tickets — complete payout (1228ms)
+    runBafJackpot - pool size invariant
+      ✔ pool 1.0 ETH: distributed + returned <= pool
+      ✔ pool 10.0 ETH: distributed + returned <= pool
+      ✔ pool 100.0 ETH: distributed + returned <= pool
+      ✔ pool 1000.0 ETH: distributed + returned <= pool
+
+  DegenerusQuests
+    rollDailyQuest - access control
+      ✔ reverts OnlyGame when called by a random EOA
+      ✔ reverts OnlyGame when called by coin contract
+      ✔ succeeds when called by game contract
+    rollDailyQuest - happy path
+      ✔ rolls quests and populates active slots
+      ✔ slot 0 is always QUEST_TYPE_MINT_ETH (1)
+      ✔ slot 1 is different from slot 0 (MINT_ETH)
+      ✔ emits QuestSlotRolled for slot 0 and slot 1
+      ✔ QuestSlotRolled day matches the rolled day
+      ✔ slot 0 questType in QuestSlotRolled is MINT_ETH
+      ✔ getActiveQuests reflects rolled quest after rollDailyQuest
+    awardQuestStreakBonus
+      ✔ reverts OnlyGame when called by EOA
+      ✔ adds streak bonus and emits QuestStreakBonusAwarded
+      ✔ silently returns for zero address player
+      ✔ silently returns for zero amount
+      ✔ silently returns for currentDay = 0
+      ✔ streak accumulates across multiple awardQuestStreakBonus calls
+    handleMint - access control
+      ✔ reverts OnlyCoin when called by EOA
+      ✔ succeeds when called by coin contract
+    handleMint - progress and completion
+      ✔ returns (0, type, 0, false) when no active quest for player/type
+      ✔ emits QuestProgressUpdated after handleMint on active quest
+      ✔ completing slot 0 (MINT_ETH, 2 tickets) emits QuestCompleted
+      ✔ completing slot 0 sets streak to 1 and returns QUEST_SLOT0_REWARD
+      ✔ handles zero quantity without revert
+      ✔ handles zero address player without revert
+      ✔ playerQuestStates reflects completion after successful handleMint
+    handleFlip - access control and progress
+      ✔ reverts OnlyCoin when called by EOA
+      ✔ returns false completed when no FLIP quest active
+      - accumulates flip progress and emits QuestProgressUpdated
+      - completing FLIP quest after MINT_ETH earns QUEST_RANDOM_REWARD
+      - slot 1 FLIP cannot complete before slot 0
+    handleDecimator - access control
+      ✔ reverts OnlyCoin when called by EOA
+      ✔ coin can call handleDecimator without revert
+      ✔ returns false when no DECIMATOR quest active
+    handleAffiliate - access control
+      ✔ reverts OnlyCoin when called by EOA
+      ✔ coin can call handleAffiliate without revert
+    handleLootBox - access control
+      ✔ reverts OnlyCoin when called by EOA
+      ✔ coin can call handleLootBox without revert
+    handleDegenerette - access control
+      ✔ reverts OnlyCoin when called by EOA
+      ✔ coin can call handleDegenerette (ETH) without revert
+      ✔ coin can call handleDegenerette (BURNIE) without revert
+    Streak mechanics
+      ✔ streak starts at 0 for new player
+      ✔ streak increments to 1 on first quest completion
+      ✔ streak does not increment twice for same day (STREAK_CREDITED)
+      ✔ QuestStreakReset emitted when day is missed
+      ✔ QuestStreakReset event is emitted with previousStreak after missed days
+    Progress versioning
+      ✔ progress resets when quest is re-rolled (new version)
+      ✔ getActiveQuests returns day=0 questType before any roll
+    View functions
+      ✔ getActiveQuests returns both slots after rollDailyQuest
+      ✔ getPlayerQuestView returns effectiveStreak=0 for player with no activity
+      ✔ getPlayerQuestView reflects completed slots
+      ✔ playerQuestStates streak matches completed count
+      ✔ playerQuestStates progress[0] is 0 before any handleMint
+      ✔ QuestCompleted event includes correct streak and reward
+    Edge cases
+      ✔ multiple players maintain independent quest state
+      ✔ same day quest roll is idempotent for different entropy
+      ✔ all handlers return (0, type, 0, false) when currentDay is 0 (no quest rolled)
+
+  DegenerusStonk
+    Initial state
+      ✔ token name is 'Staked Degenerus Stonk'
+      ✔ token symbol is 'sDGNRS'
+      ✔ token decimals is 18
+      ✔ total supply equals INITIAL_SUPPLY
+      ✔ DGNRS contract holds creator's 20% of sDGNRS supply
+      ✔ creator holds initial vesting (50B) as DGNRS tokens
+      ✔ contract holds the pool allocations (80% total)
+      ✔ Whale pool balance is correct (~11.43% of total)
+      ✔ Affiliate pool balance is correct (~34.28% of total)
+      ✔ Lootbox pool balance is correct (~11.43%)
+      ✔ Reward pool balance is correct (~11.43%)
+      ✔ Earlybird pool balance is correct (~11.43%)
+    transferFromPool
+      ✔ reverts when called by non-game address
+      ✔ game contract can transfer from pool to recipient
+      ✔ transfers only available amount when requested exceeds pool
+      ✔ returns 0 when amount is 0
+      ✔ reverts when recipient is zero address
+    transferBetweenPools
+      ✔ reverts when called by non-game address
+      ✔ game can move tokens between pools
+      ✔ total supply is unchanged after transferBetweenPools (no minting/burning)
+    burnAtGameOver
+      ✔ reverts when called by non-game address
+      ✔ game can burn remaining pool tokens
+    depositSteth
+      ✔ reverts when called by non-game address
+      ✔ game can deposit stETH
+      ✔ depositSteth with zero amount succeeds as no-op
+    receive (ETH deposit)
+      ✔ reverts when ETH sent by non-game address
+      ✔ game can send ETH to sdgnrs contract
+    burn
+      ✔ reverts when amount is zero
+      ✔ reverts when amount exceeds balance
+      ✔ burn is player-only — no third-party burn
+      ✔ burn with ETH backing pays ETH proportionally
+      ✔ RedemptionSubmitted event emitted with correct fields during active game
+      ✔ total supply decreases after burn
+      ✔ burn with stETH backing pays stETH proportionally
+    previewBurn
+      ✔ returns zeros when amount is 0
+      ✔ returns zeros when amount exceeds total supply
+      ✔ proportional preview when ETH exists
+    burnieReserve
+      ✔ returns 0 initially when no BURNIE deposited
+    gameAdvance
+      ✔ anyone can call gameAdvance
+
+  DegenerusVault
+    Initial state
+      ✔ vault name is 'Degenerus Vault'
+      ✔ vault symbol is 'DGV'
+      ✔ vault decimals is 18
+      ✔ DGVB share token has correct name and symbol
+      ✔ DGVE share token initial supply is 1 trillion
+      ✔ isVaultOwner returns false for zero-balance address
+    deposit
+      ✔ reverts when called by non-game address
+      ✔ game contract can deposit ETH
+      ✔ ETH donation via receive() emits Deposit event
+    isVaultOwner
+      ✔ returns true for account holding >30% of DGVE supply
+      ✔ returns false for account holding <= 30% of DGVE supply
+      ✔ 30% boundary: account with exactly 30% should NOT qualify (requires >30%)
+    burnCoin
+      ✔ reverts when amount is zero
+      ✔ reverts when player has no DGVB shares
+      ✔ deployer can burn DGVB shares (has initial supply)
+      ✔ reverts when unauthorized user tries to burn for another player
+      ✔ operator can burn on behalf of player
+      ✔ refill mechanism: burning all shares mints 1T new shares to player
+    burnEth
+      ✔ reverts when amount is zero
+      ✔ reverts when player has no DGVE shares
+      ✔ deployer can burn DGVE shares with zero ETH reserve
+      ✔ reverts when unauthorized user tries to burn for another player
+      ✔ ETH is redeemed proportionally when vault has ETH balance
+      ✔ refill mechanism: burning all DGVE shares mints 1T new shares
+    previewCoin
+      ✔ reverts when amount is zero
+      ✔ reverts when amount exceeds total supply
+      ✔ returns proportional coin for a small burn (initial reserve is non-zero)
+    previewEth
+      ✔ reverts when amount is zero
+      ✔ reverts when amount exceeds total supply
+      ✔ returns zero ETH and zero stETH when vault is empty
+    previewBurnForCoinOut
+      ✔ reverts when coinOut is zero
+      ✔ reverts when coinOut exceeds total available reserve
+    previewBurnForEthOut
+      ✔ reverts when targetValue is zero
+      ✔ reverts when targetValue exceeds reserve (empty vault)
+      ✔ returns correct shares needed when ETH is in vault
+    vault owner gameplay functions
+      ✔ gameAdvance reverts when caller is not vault owner
+      ✔ gamePurchase reverts when caller is not vault owner
+      ✔ gameClaimWinnings reverts when caller is not vault owner
+      ✔ gameSetAutoRebuy reverts when caller is not vault owner
+      ✔ gameSetOperatorApproval reverts when caller is not vault owner
+      ✔ coinDepositCoinflip reverts when caller is not vault owner
+      ✔ deployer (vault owner) can call gameAdvance
+      ✔ deployer (vault owner) can set operator approval
+      ✔ wwxrpMint reverts when caller is not vault owner
+      ✔ wwxrpMint no-ops when amount is zero
+      ✔ gamePurchaseTicketsBurnie reverts when caller is not vault owner
+      ✔ gamePurchaseTicketsBurnie reverts when ticketQuantity is zero
+      ✔ gamePurchaseBurnieLootbox reverts when burnieAmount is zero
+      ✔ gameSetAutoRebuyTakeProfit accessible by vault owner
+    DegenerusVaultShare (share token)
+      ✔ DGVE initial supply is minted to creator
+      ✔ non-vault cannot call vaultMint on share token
+    combined ETH + stETH redemption
+      ✔ partial ETH redemption pays ETH first, stETH for remainder
+
+  DgnrsSoloBucketReward
+    ✔ DGNRS reward is emitted to the same winner as the solo bucket ETH on the final day (3357ms)
+
+  Distress-Mode Lootboxes
+    Pool split in normal mode
+      ✔ lootbox purchase routes ETH to future and next pools normally
+    Pool split in distress mode
+      ✔ lootbox purchase routes 100% ETH to next pool during distress
+      ✔ presale vault share is also zeroed during distress
+    Distress mode boundary
+      ✔ purchase just outside 6-hour window uses normal split
+      ✔ purchase just inside 6-hour window uses distress split
+    Distress ETH tracking
+      ✔ normal purchase does not track distress ETH
+      ✔ distress purchase tracks distress ETH separately from normal purchase
+    Ticket bonus via distress lootbox
+      ✔ distress-bought lootbox is recorded and can be opened after RNG word set
+      ✔ mixed normal+distress lootbox purchases are both recorded
+    Edge cases
+      ✔ zero-amount distress lootbox still reverts (min 0.01 ETH)
+      ✔ minimum lootbox (0.01 ETH) works in distress mode
+      ✔ large lootbox (100 ETH) in distress routes all to next pool
+
+  EthInvariant (ACCT-01, ACCT-08)
+    ✔ 1. Fresh deploy — solvency invariant holds
+    ✔ 2. After purchase — solvency invariant holds
+    ✔ 3. After advanceGame (VRF request) — solvency invariant holds
+    ✔ 4. After VRF fulfillment — solvency invariant holds
+    ✔ 5. After claimWinnings — solvency invariant holds (1-wei sentinel preserved)
+    ✔ 6. After adminStakeEthForStEth — solvency invariant holds (ETH→stETH conversion)
+    ✔ 7. Game-over terminal state — solvency invariant holds (ACCT-08)
+
+  Feed Governance
+    Initial state
+      ✔ feedProposalCount starts at 0
+      ✔ linkEthPriceFeed starts as zero (unhealthy)
+    proposeFeedSwap — access control
+      ✔ admin can propose when feed is zero (unhealthy) and stall >= 2 days
+      ✔ admin can propose zero address (disable feed)
+      ✔ community member with sDGNRS can propose when stall >= 7 days
+      ✔ reverts with FeedHealthy when current feed is healthy
+      ✔ reverts with InvalidFeedDecimals for wrong-decimals feed
+      ✔ reverts with AlreadyHasActiveProposal on duplicate
+      ✔ reverts with GameOver when game is over
+    proposeFeedSwap — stall duration
+      ✔ admin can propose with feed=zero (infinite stall)
+      ✔ admin CANNOT propose when feed is stale < 2 days
+      ✔ admin CAN propose when feed is stale >= 2 days
+    voteFeedSwap
+      ✔ reverts with FeedHealthy if feed recovered
+      ✔ reverts with ProposalNotActive for non-existent proposal
+      ✔ zero-weight vote (no sDGNRS) does not revert — poke only, no event
+      ✔ zero-weight poke can trigger execution after threshold decay
+      ✔ emits FeedVoteCast event
+      ✔ vote can be changed from approve to reject
+      ✔ proposal expires after 168 hours (7 days)
+    feedThreshold — decay schedule
+      ✔ returns 5000 (50%) at proposal creation
+      ✔ returns 4000 (40%) after 24 hours
+      ✔ returns 2500 (25%) after 48 hours
+      ✔ returns 1500 (15%) after 72 hours — floor
+      ✔ returns 0 after 168 hours (expired)
+    Full governance cycle
+      ✔ admin proposes + votes → feed is swapped (54ms)
+      ✔ executed feed is actually used for LINK valuation
+      ✔ feed can be disabled (set to zero) via governance
+      ✔ feed swap can happen twice (second swap after first feed goes stale) (46ms)
+    Kill path
+      ✔ proposal is killed when reject weight exceeds threshold
+    canExecuteFeedSwap
+      ✔ returns false for non-existent proposal
+      ✔ returns false for expired proposal
+    Auto-cancellation on feed recovery
+      ✔ voting reverts with FeedHealthy after feed is set and healthy
+    Void all active on execution
+      ✔ executing one proposal kills all others (39ms)
+    Old setLinkEthPriceFeed removed
+      ✔ setLinkEthPriceFeed function does not exist
+
+  Governance & Gating (Phase 43)
+    ADMIN-01: Admin onlyOwner requires >50.1% DGVE
+      ✔ deployer (100% DGVE) passes onlyOwner
+      ✔ alice (0% DGVE) fails onlyOwner with E
+      ✔ deployer fails onlyOwner after transferring >49.9% DGVE away
+      ✔ alice passes onlyOwner after receiving >50.1% DGVE
+      ✔ CREATOR address alone (0% DGVE) fails onlyOwner
+      ✔ multiple owner-gated functions all check DGVE majority
+    ADMIN-02: Vault onlyVaultOwner requires >50.1% DGVE
+      ✔ deployer (100% DGVE) passes onlyVaultOwner
+      ✔ alice (0% DGVE) fails onlyVaultOwner with NotVaultOwner
+      ✔ isVaultOwner boundary: exactly 50.1% fails, 50.1% + 1 passes
+      ✔ deployer fails onlyVaultOwner after giving away majority
+      ✔ multiple vault-owner-gated functions all check DGVE majority
+    ADMIN-03: shutdownVrf() only callable by GAME
+      ✔ reverts with NotAuthorized when called by deployer
+      ✔ reverts with NotAuthorized when called by alice
+      ✔ reverts with NotAuthorized when called by vault
+      ✔ succeeds when called by GAME contract
+    ADMIN-04: shutdownVrf() cancels subscription and sweeps LINK
+      ✔ sets subscriptionId to 0 after shutdown
+      ✔ emits SubscriptionShutdown event with correct args
+      ✔ cancels subscription on the VRF coordinator
+      ✔ sweeps LINK from admin to vault when admin holds LINK
+    ADMIN-05: shutdownVrf() no-op when subscriptionId is 0
+      ✔ silently succeeds on second call (subscriptionId already 0)
+      ✔ does not emit any events when subscriptionId is already 0
+    ADMIN-06: shutdownVrf() try/catch resilience
+      ✔ completes even if coordinator cancelSubscription has already been called
+      ✔ completes and sets subscriptionId=0 even on partial failure
+    GATE-01: Tiered advanceGame mint gate (caller must have minted)
+      ✔ caller who purchased on current day can call advanceGame (44ms)
+    GATE-02: Time-based unlock relaxes mint gate
+      ✔ non-minter can call advanceGame after 30-minute delay (40ms)
+    GATE-03: DGVE majority holder bypasses mint gate
+      ✔ deployer (100% DGVE) bypasses mint gate without minting (40ms)
+      ✔ alice with >50.1% DGVE bypasses mint gate without minting (46ms)
+    GATE-04: Non-minter, non-DGVE-holder reverts with MustMintToday()
+      ✔ alice (0% DGVE, no mint) reverts with MustMintToday
+      ✔ bob (0% DGVE, no mint) also reverts within 15 min window
+      ✔ non-minter fails within first seconds but succeeds after 30 min (39ms)
+    Cross-cutting: DGVE transfer changes who controls governance
+      ✔ ownership transfers from deployer to alice via DGVE transfer
+      ✔ no two accounts can simultaneously be vault owner (pigeonhole >50.1%)
+
+  Icons32Data
+    initial state
+      ✔ is deployed at the predicted address
+      ✔ all 33 paths are empty strings by default
+      ✔ all symbol names (q0-q2) are empty strings by default
+      ✔ symbol() for quadrant 3 (Dice) always returns empty string
+      ✔ is NOT finalized on deploy (setPaths does not revert)
+    setPaths()
+      ✔ sets a single path at index 0
+      ✔ sets a full batch of 10 paths starting at index 0
+      ✔ sets the last valid batch that fills up to index 32
+      ✔ sets the affiliate badge path at index 32
+      ✔ overwrites previously set paths
+      ✔ sets paths at various non-zero start indices
+      ✔ leaves untouched slots unchanged
+    setPaths() access control
+      ✔ reverts with OnlyCreator when called by a non-CREATOR address
+      ✔ reverts with OnlyCreator for any signer that is not CREATOR
+    setPaths() edge cases
+      ✔ reverts with MaxBatch when paths.length > 10
+      ✔ accepts exactly 10 paths (boundary — no revert)
+      ✔ reverts with IndexOutOfBounds when startIndex + length > 33
+      ✔ reverts with IndexOutOfBounds when startIndex alone is 33
+      ✔ reverts with IndexOutOfBounds on overflow attempt (startIndex = max uint)
+      ✔ accepts an empty paths array without reverting
+      ✔ data() reverts with out-of-bounds access for index 33
+    setSymbols()
+      ✔ sets quadrant 0 (Crypto) symbols
+      ✔ sets quadrant 1 (Zodiac) symbols
+      ✔ sets quadrant 2 (Cards) symbols
+      ✔ overwrites previously set symbols
+      ✔ sets canonical symbol names matching expected layout
+    setSymbols() access control
+      ✔ reverts with OnlyCreator when called by a non-CREATOR address
+    setSymbols() edge cases
+      ✔ reverts with InvalidQuadrant for quadrant 3
+      ✔ reverts with InvalidQuadrant for quadrant 4
+      ✔ reverts with InvalidQuadrant for large quadrant values
+      ✔ symbol() returns empty string for any quadrant >= 3
+      ✔ symbol() returns empty for quadrant 4+ (fallthrough)
+    finalize()
+      ✔ allows CREATOR to call finalize without reverting
+      ✔ blocks setPaths after finalization with AlreadyFinalized
+      ✔ blocks setSymbols after finalization with AlreadyFinalized
+      ✔ preserves previously set data after finalization
+      ✔ reverts with AlreadyFinalized if called a second time
+    finalize() access control
+      ✔ reverts with OnlyCreator when called by non-CREATOR
+      ✔ does not finalize the contract when a non-CREATOR attempts it
+    data()
+      ✔ returns the correct path for each index after a full populate
+      ✔ returns empty string for unset indices
+    symbol() quadrant mapping
+      ✔ quadrant param 0 reads from _symQ1 (Crypto names)
+      ✔ quadrant param 1 reads from _symQ2 (Zodiac names)
+      ✔ quadrant param 2 reads from _symQ3 (Cards names)
+      ✔ quadrant 3+ always returns empty string regardless of idx
+    full lifecycle
+      ✔ populates all data then finalizes — all reads correct after finalization (39ms)
+      ✔ non-CREATOR cannot disrupt lifecycle at any stage
+
+  SecurityEconHardening
+    FIX-01: Whale bundle blocked after gameOver
+      ✔ purchaseWhaleBundle reverts after gameOver at level 0
+    FIX-02: Lazy pass blocked after gameOver
+      ✔ purchaseLazyPass reverts after gameOver at level 0
+    FIX-03: Deity pass blocked after gameOver
+      ✔ purchaseDeityPass reverts after gameOver at level 0
+    FIX-04: receive() blocked after gameOver
+      ✔ plain ETH transfer to game reverts after gameOver
+      ✔ receive() adds to futurePrizePool before gameOver
+    FIX-05: Deity pass refund uses purchasedCount for payout
+      ✔ deityPassCount increments on purchase
+      ✔ gameOver refund credits 20 ETH per purchased pass (level 0)
+    FIX-06: No voluntary deity refund function
+      ✔ game contract has no refundDeityPass function
+      ✔ deity pass refund only occurs via gameOver drain (level < 10)
+    FIX-07: GameOver deity payout correctness
+      ✔ flat 20 ETH refund per pass at level 0 (early gameOver)
+      ✔ FIFO ordering: first buyer gets refund first if budget limited
+      ✔ gameOverFinalJackpotPaid prevents double-drain
+    FIX-08: BURNIE ticket purchase cutoff
+      ✔ purchaseCoin reverts after 882 days at level 0 (within 30 days of timeout)
+      ✔ purchaseCoin works before 882 days at level 0
+    FIX-09: uint256 subscriptionId
+      ✔ admin.subscriptionId() returns uint256 type
+      ✔ subscriptionId can represent values > uint64 max
+      ✔ subscriptionId is non-zero after deployment (VRF wired)
+    FIX-10: 1 wei sentinel in claimable winnings
+      ✔ claimWinnings leaves 1 wei sentinel after full claim
+      ✔ claimWinnings reverts if balance is only 1 wei (sentinel)
+      ✔ processMintPayment preserves sentinel in Combined mode
+    FIX-11: capBucketCounts zero-count safety
+      ✔ JackpotBucketLib.capBucketCounts returns zeroes for maxTotal=0
+      ✔ traitBucketCounts always returns valid base counts for all entropy values
+    FIX-12: Carryover floor enforced
+      ✔ DAILY_CARRYOVER_MIN_WINNERS constant ensures minimum carryover distribution
+    ECON-01: 46% futureShare in yield distribution
+      ✔ yield distribution splits: 23% vault, 23% DGNRS, 46% future pool
+      ✔ total distribution BPS sum is 9200 (8% buffer unextracted)
+    ECON-02: No level-dependent coin cost modifiers
+      ✔ BURNIE ticket cost is independent of level (1000 BURNIE = 1 ticket)
+    ECON-03: Multi-level scatter targeting
+      ✔ BAF jackpot uses runTerminalJackpot targeting next level
+    ECON-04: Compressed jackpot mechanism
+      ✔ compressedJackpotFlag is exposed and starts false
+      ✔ compressed jackpot design: counter steps by 2 when flag is set
+    ECON-05: LINK reward formula
+      ✔ _linkRewardMultiplier: 3x at 0 LINK balance
+      ✔ LINK donation triggers reward calculation
+      ✔ LINK reward multiplier boundary values
+    Cross-cutting: gameOver guard consistency
+      ✔ all three whale purchase functions check gameOver first
+      ✔ normal ETH ticket purchases also revert after gameOver
+    Cross-cutting: deity pass is soulbound
+      ✔ deity pass transferFrom reverts with Soulbound
+    Cross-cutting: Pre-gameOver state validation
+      ✔ whale bundle works at level 0 (before gameOver)
+      ✔ lazy pass works at level 0 (before gameOver)
+      ✔ deity pass works at level 0 (before gameOver)
+      ✔ receive() accepts ETH before gameOver
+
+  VRF Governance
+    propose
+      ✔ admin path: DGVE holder can propose after 20h stall
+      ✔ reverts with NotStalled if VRF stall < 20h for admin
+      ✔ community path: reverts with NotStalled before 7d
+      ✔ community path: reverts with InsufficientStake without sDGNRS
+      ✔ reverts with ZeroAddress for zero coordinator
+      ✔ reverts with ZeroAddress for zero keyHash
+      ✔ increments proposalCount for each proposal
+      ✔ snapshots circulating supply at creation
+    vote
+      ✔ reverts with NotStalled if VRF has recovered
+      ✔ reverts with ProposalNotActive for non-existent proposal
+      ✔ zero-weight vote succeeds as poke but emits no VoteCast
+    threshold decay
+      ✔ returns 5000 (50%) at creation
+      ✔ stays at 5000 (50%) after 24h
+      ✔ decays to 4000 (40%) after 48h
+      ✔ decays to 3000 (30%) after 72h
+      ✔ decays to 2000 (20%) after 96h
+      ✔ decays to 1000 (10%) after 120h
+      ✔ decays to 500 (5%) after 144h
+      ✔ returns 0 (expired) after 168h
+    proposal expiry
+      ✔ voting on expired proposal marks it Expired and reverts
+    canExecute
+      ✔ returns false for non-existent proposal
+      ✔ returns false when VRF not stalled
+    votingSupply
+      ✔ returns total minus SDGNRS, DGNRS, and vault balances
+    unwrapTo VRF stall guard
+      ✔ unwrapTo works normally (rngLocked=false)
+      ✔ unwrapTo reverts when rngLocked is true
+    VRF recovery invalidation
+      ✔ vote reverts when VRF recovers (stall < 20h)
+    lastVrfProcessed
+      ✔ returns non-zero after deployment (set in wireVrf)
+      ✔ is close to current block timestamp after deployment
+    1-per-address active proposal limit
+      ✔ reverts with AlreadyHasActiveProposal when same address proposes twice
+      ✔ sets activeProposalId after propose
+      ✔ allows new proposal after previous is Killed
+      ✔ allows new proposal after previous is Executed
+      ✔ allows new proposal after previous expires (lazy expiry)
+      ✔ different addresses can each have one active proposal
+    _voidAllActive via execute with multiple proposals
+      ✔ executing one proposal voids all other active proposals
+      ✔ _voidAllActive skips non-Active proposals (already killed)
+      ✔ voidedUpTo watermark skips previously voided proposals on second stall
+    kill condition
+      ✔ reject votes exceeding threshold kill the proposal
+      ✔ reject vote below threshold does not kill the proposal
+    execute with approve weight
+      ✔ approve votes exceeding threshold execute the proposal
+    tie condition
+      ✔ equal approve and reject weights leave proposal Active (neither execute nor kill)
+    proposal storage
+      ✔ stores correct proposal data
+
+  CharityGameHooks
+    pickCharity fires at level transition
+      ✔ charity.currentLevel increments from 0 to 1 after first level transition (1590ms)
+      ✔ emits LevelSkipped(0) when no proposals exist for level 0 (1725ms)
+    burnAtGameOver fires during gameover drain
+      ✔ charity.finalized becomes true after game over
+      ✔ unallocated GNRUS is burned at gameover
+      ✔ emits GameOverFinalized event
+
+  GameLifecycle
+    ticket purchase
+      ✔ alice can purchase a ticket at level 0 with DirectEth payment
+      ✔ multiple players can each purchase tickets
+      ✔ purchase with zero ETH and zero ticketQuantity reverts
+      ✔ purchase with lootBoxAmount allocates lootbox ETH
+      ✔ purchasing tickets sends ETH to the game contract
+    advanceGame first call
+      ✔ succeeds after advancing to next day (dailyIdx initialized to currentDayIndex)
+      ✔ after advancing to next day, advanceGame() issues a VRF request
+      ✔ advanceGame emits Advance(stage=1) on VRF request (parsed from module ABI)
+    VRF fulfillment
+      ✔ fulfilling VRF sets isRngFulfilled to true while rngLocked remains true
+      ✔ subsequent advanceGame calls after fulfillment eventually unlock RNG (41ms)
+      ✔ after unlock, stage=6 (STAGE_PURCHASE_DAILY) is emitted (60ms)
+    full day advance cycle
+      ✔ driveFullVRFCycle completes without reverting (63ms)
+      ✔ remains in purchase phase after first daily advance cycle (prize target not met) (56ms)
+      ✔ level stays at 0 during purchase phase until prize target met (50ms)
+      ✔ three consecutive daily cycles all complete without revert (99ms)
+      ✔ game is not over and not in jackpot phase after multiple purchase-phase cycles (94ms)
+    prize pool accumulation
+      ✔ futurePrizePoolView returns non-zero after tickets are purchased
+      ✔ multiple purchases accumulate in the future prize pool
+    operator approval
+      ✔ bob can purchase on behalf of alice when alice approves bob as operator
+      ✔ setOperatorApproval emits OperatorApproval event
+      ✔ revoking operator approval prevents further purchases on behalf
+      ✔ unapproved bob cannot purchase on behalf of alice
+    purchaseInfo view
+      ✔ returns initial state immediately after deploy
+      ✔ priceWei remains 0.01 ETH before level 5
+      ✔ rngLocked_ is true in purchaseInfo while VRF is pending
+      ✔ rngLocked_ is false in purchaseInfo after VRF cycle completes (55ms)
+    coinflip BAF-only deposit lock
+      ✔ coinflip deposit is NOT locked during RNG at level 0 (purchaseLevel=1, not BAF)
+    pool consolidation
+      ✔ transition completes without legacy level jackpot stages (8/9) (53ms)
+
+  VRFIntegration
+    VRF request issuance
+      ✔ advanceGame triggers VRF request (rngLocked becomes true)
+      ✔ rngLocked is false before any VRF request is issued
+      ✔ isRngFulfilled is false before VRF fulfillment occurs
+      ✔ a second advanceGame call during pending VRF (before timeout) reverts
+      ✔ first advanceGame works after advancing to next day
+    VRF fulfillment via mock coordinator
+      ✔ fulfillRandomWords sets isRngFulfilled to true
+      ✔ rngLocked remains true after fulfillment until advanceGame processes all tickets
+      ✔ advanceGame calls after fulfillment eventually unlock RNG (stage=6)
+      ✔ fulfillment with word=2 (small non-zero value) produces valid results
+      ✔ fulfillment with word=max uint256 produces valid results
+      ✔ fulfilling an already-fulfilled requestId reverts in the mock
+      ✔ fulfilling a wrong requestId is silently ignored by the game
+    rawFulfillRandomWords access control
+      ✔ calling rawFulfillRandomWords from alice reverts (only VRF coordinator)
+      ✔ calling rawFulfillRandomWords from deployer (not coordinator) reverts
+    rngLocked state during pending VRF
+      ✔ reverseFlip() reverts with RngLocked while VRF is pending
+      ✔ reverseFlip() fails for a different reason when RNG is not locked (no BURNIE)
+      ✔ rngLocked state: purchaseInfo confirms lock is active
+    VRF timeout / retry
+      ✔ advanceGame after 18-hour timeout issues a new (higher) requestId
+      ✔ fulfilling the retry request and processing succeeds
+    multi-day VRF cycle
+      ✔ three consecutive day cycles each issue and resolve their own VRF request (49ms)
+      ✔ game state remains consistent (not game over, not jackpot) after multiple cycles (75ms)
+      ✔ each VRF request gets a unique incrementing requestId (62ms)
+
+  CompressedAffiliateBonus
+    compressed mode (tier=1)
+Compiled 60 Solidity files successfully (evm target: paris).
+      ✔ affiliate bonus inflates earnings by 7/5 on penultimate physical day (18504ms)
+    normal mode (tier=0)
+Compiled 60 Solidity files successfully (evm target: paris).
+      ✔ affiliate bonus inflates earnings by 7/5 on penultimate physical day (18541ms)
+    compressed early target (tier=1)
+      ✔ affiliate bonus does NOT fire on first compressed day (1625ms)
+
+  CompressedJackpot
+    initial state
+      ✔ jackpotCompressionTier is 0 on deploy
+    tier activation
+      ✔ tier=1 (compressed) when target met early (purchaseDays=2) (2745ms)
+      ✔ tier=1 (compressed) when target met after first advance + next day (purchaseDays=2) (2777ms)
+      ✔ tier=0 (normal) when target met after 4+ daily advances (purchaseDays > 3) (2672ms)
+    compressed mode via early target (tier=1)
+      ✔ compressed flag (1) is set when target met after warm-up (purchaseDays=2) (2612ms)
+      ✔ turbo flag (2) IS set when first advance is on day 2 (purchaseDays=1) (200ms)
+      ✔ level advances after compressed jackpot completes (3594ms)
+      ✔ jackpotPhase() is false after compressed completion (3689ms)
+      ✔ flag resets to 0 after compressed completion (3746ms)
+      ✔ compressed drains currentPrizePool to zero (3603ms)
+      ✔ compressed completes faster than normal (2765ms)
+    compressed mode (tier=1)
+      ✔ compressed jackpot takes 3 physical days (2 remaining after transition) (3787ms)
+      ✔ compressed flag resets to 0 after jackpot phase ends (3657ms)
+      ✔ compressed jackpot drains currentPrizePool to zero by final day (3660ms)
+    normal mode (tier=0)
+      ✔ normal jackpot takes 5 physical days (4 remaining after transition) (3930ms)
+
+  GameOver
+    pre-game 912-day timeout (level 0)
+      ✔ gameOver becomes true after 912+ days at level 0
+      ✔ gameOver is NOT triggered at 911 days
+      ✔ first advanceGame at 912+ days issues VRF request but does NOT set gameOver yet
+      ✔ second advanceGame after VRF fulfillment sets gameOver
+      ✔ advanceGame after gameOver takes handleFinalSweep path (returns silently if <30d)
+    post-game 365-day inactivity timeout (level >= 1)
+      ✔ gameOver triggers after 365+ days of inactivity at level >= 1
+      ✔ gameOver does NOT trigger at 364 days of inactivity
+    deity pass refund at level 0
+      ✔ deity pass holders get flat 20 ETH refund when gameOver at level 0
+      ✔ multiple deity pass holders all get refunds at level 0
+    post-gameover state
+      ✔ gameOver() returns true after trigger
+      ✔ purchase reverts after gameOver
+      ✔ purchaseDeityPass still works after gameOver (no explicit guard in whale module)
+    final sweep (30 days post-gameover)
+      ✔ advanceGame before 30 days returns silently (no sweep)
+      ✔ advanceGame after 30 days triggers final sweep path
+    claimable winnings post-gameover
+      ✔ deity pass holder can claim winnings after gameOver
+      ✔ claimableWinningsOf returns 0 for non-participant after gameOver
+
+  Multi-category boon coexistence
+    ✔ player can hold boons from two different categories via sequential deity issuance (100ms)
+    ✔ second deity boon in a different category does not revert (slot0 + slot1) (150ms)
+    ✔ upgrade semantics within category: higher tier replaces lower (94ms)
+    ✔ lootbox resolution does not revert when deity boon already active (172ms)
+    ✔ DeityBoonIssued events span at least 2 categories for same player (89ms)
+
+  PriceEscalation
+    initial price at level 0
+      ✔ purchaseInfo().priceWei is 0.01 ETH
+      ✔ purchaseInfo().lvl is 1 (activeTicketLevel = level + 1)
+      ✔ purchase 1 full ticket for 0.01 ETH succeeds
+      ✔ underpaying for 1 full ticket reverts
+    multi-ticket purchases at level 0
+      ✔ 5 full tickets cost 0.05 ETH
+      ✔ 10 full tickets cost 0.10 ETH
+      ✔ 100 full tickets cost 1.0 ETH
+      ✔ underpaying for 5 full tickets reverts
+    lazy pass pricing at level 0
+      ✔ lazy pass costs 0.24 ETH at level 0
+      ✔ lazy pass at level 0 with wrong ETH reverts
+    price transition at level 5
+      ✔ after advancing to level 5, price becomes 0.02 ETH (99ms)
+    whale bundle pricing
+      ✔ whale bundle at level 0 costs 2.4 ETH per unit
+      ✔ whale bundle qty=2 costs 4.8 ETH
+      ✔ whale bundle qty=10 costs 24 ETH
+    deity pass pricing escalation
+      ✔ first deity pass: 24 ETH (k=0)
+      ✔ fourth deity pass: 30 ETH (24 + T(3) = 24 + 6)
+      ✔ wrong amount for deity pass reverts
+    fractional ticket pricing
+      ✔ quarter ticket (qty=100) costs 0.0025 ETH at level 0
+      ✔ half ticket (qty=200) costs 0.005 ETH at level 0
+      ✔ zero quantity with zero ETH reverts (totalCost == 0)
+
+  RngStall
+    18-hour timeout and retry
+      ✔ advanceGame after exactly 18h+1s issues a new higher requestId
+      ✔ rngLocked remains true immediately after the retry request
+      ✔ fulfilling the retry requestId and processing unlocks RNG
+      ✔ isRngFulfilled becomes true after the retry fulfillment
+    advanceGame before 18-hour timeout reverts
+      ✔ calling advanceGame at 1h elapsed reverts with RngNotReady
+      ✔ calling advanceGame at 6h elapsed reverts with RngNotReady
+      ✔ calling advanceGame at 11h 59m elapsed reverts with RngNotReady
+      ✔ calling advanceGame at 12h+ triggers retry (no revert)
+    multiple consecutive timeouts
+      ✔ each successive timeout produces a strictly increasing requestId
+      ✔ fulfilling the final retry after two timeouts works correctly
+      ✔ game state remains sane after three consecutive timeout retries
+    fulfilling a stale requestId after timeout retry
+      ✔ fulfilling the old requestId is silently ignored by the game
+      ✔ fulfilling the new requestId after ignoring the stale one works
+      ✔ stale fulfillment does not affect rngLocked state
+    rngLocked blocks reverseFlip and early advanceGame
+      ✔ reverseFlip reverts with RngLocked while VRF is pending
+      ✔ advanceGame before timeout reverts with RngNotReady
+      ✔ reverseFlip succeeds (no RngLocked error) when RNG is not locked
+      ✔ purchaseInfo confirms rngLocked_ is true during pending VRF
+    normal fulfillment within the 18-hour window
+      ✔ fulfilling VRF within the window succeeds without retry
+      ✔ processing after in-window fulfillment unlocks RNG
+      ✔ no retry requestId is issued when fulfillment comes before timeout
+    RNG state consistency after timeout-retry-fulfill-process cycle
+      ✔ rngLocked is false and isRngFulfilled is false after complete cycle
+      ✔ game is not in gameover and not in jackpot phase after retry cycle
+      ✔ can proceed to the next day's advance after a retry cycle completes
+    VRF governance via DegenerusAdmin
+      ✔ propose reverts when VRF is not stalled (NotStalled)
+      ✔ propose reverts with ZeroAddress for zero coordinator
+      ✔ community propose reverts with InsufficientStake when no sDGNRS
+    rawFulfillRandomWords access control during stall scenario
+      ✔ direct call from alice reverts (not VRF coordinator)
+      ✔ direct call from deployer reverts (not VRF coordinator)
+
+  WhaleBundle
+    100-level whale bundle
+      ✔ purchase at level 0 costs 2.4 ETH
+      ✔ purchase at level 0 with insufficient ETH reverts
+      ✔ purchase multiple bundles (qty=3) costs 3 * 2.4 = 7.2 ETH
+      ✔ quantity = 0 reverts
+      ✔ quantity > 100 reverts
+      ✔ quantity = 100 at level 0 succeeds (max bundle) (64ms)
+      ✔ wrong ETH amount reverts (overpay)
+      ✔ purchase at level 0 with exact ETH emits LootBoxIndexAssigned (52ms)
+    whale bundle level restrictions
+      ✔ purchase at level 0 (passLevel=1, <=4) succeeds
+      ✔ at level 0 (valid early level), multiple buyers succeed
+      ✔ expired whale boon cannot use stale dailyIdx to get discounted pricing (40ms)
+    10-level lazy pass
+      ✔ purchase at level 0 costs flat 0.24 ETH
+      ✔ purchase at level 0 with wrong ETH reverts
+      ✔ lazy pass blocked if player has deity pass
+      ✔ lazy pass blocked with active freeze > currentLevel + 7
+      ✔ lazy pass emits LootBoxIndexAssigned
+    deity pass
+      ✔ first deity pass costs 24 ETH
+      ✔ second deity pass costs 25 ETH (24 + 1)
+      ✔ third deity pass costs 27 ETH (24 + 3)
+      ✔ duplicate symbol reverts
+      ✔ same buyer purchasing twice reverts
+      ✔ invalid symbol (32+) reverts
+      ✔ wrong ETH amount reverts
+      ✔ symbols 0-23 are valid range
+      ✔ deity pass is refundable at level 0
+    freeze mechanics
+      ✔ whale bundle at level 0 sets frozen state
+      ✔ multiple whale bundles from same buyer extend freeze
+      ✔ different players can each buy whale bundles independently
+    whale and lazy pass interaction
+      ✔ lazy pass without any freeze works at level 0
+      ✔ can buy lazy pass first, then whale bundle
+      ✔ cannot buy lazy pass after whale bundle (freeze too far)
+    lazy pass discount boons
+      ✔ discounted lazy pass at level 0 costs less than 0.24 ETH (320ms)
+      ✔ full-price lazy pass reverts when discount boon active (272ms)
+      ✔ boon consumed after use — second purchase needs full price (314ms)
+      ✔ expired boon requires full price (311ms)
+    deity pass pricing formula
+      ✔ prices follow 24 + T(n) formula for n=0,1,2,3
+
+  Paper Parity (Phase 46)
+    PAR-01: PriceLookupLib price tiers
+Compiled 60 Solidity files successfully (evm target: paris).
+      ✔ level 0 = 0.01 ETH (16820ms)
+      ✔ level 1 = 0.01 ETH
+      ✔ level 4 = 0.01 ETH
+      ✔ level 5 = 0.02 ETH
+      ✔ level 6 = 0.02 ETH
+      ✔ level 9 = 0.02 ETH
+      ✔ level 10 = 0.04 ETH
+      ✔ level 15 = 0.04 ETH
+      ✔ level 29 = 0.04 ETH
+      ✔ level 30 = 0.08 ETH
+      ✔ level 45 = 0.08 ETH
+      ✔ level 59 = 0.08 ETH
+      ✔ level 60 = 0.12 ETH
+      ✔ level 75 = 0.12 ETH
+      ✔ level 89 = 0.12 ETH
+      ✔ level 90 = 0.16 ETH
+      ✔ level 95 = 0.16 ETH
+      ✔ level 99 = 0.16 ETH
+      ✔ level 100 = 0.24 ETH
+      ✔ level 101 = 0.04 ETH
+      ✔ level 115 = 0.04 ETH
+      ✔ level 129 = 0.04 ETH
+      ✔ level 130 = 0.08 ETH
+      ✔ level 145 = 0.08 ETH
+      ✔ level 159 = 0.08 ETH
+      ✔ level 160 = 0.12 ETH
+      ✔ level 175 = 0.12 ETH
+      ✔ level 189 = 0.12 ETH
+      ✔ level 190 = 0.16 ETH
+      ✔ level 195 = 0.16 ETH
+      ✔ level 199 = 0.16 ETH
+      ✔ level 200 = 0.24 ETH
+      ✔ level 201 = 0.04 ETH
+      ✔ level 229 = 0.04 ETH
+      ✔ level 230 = 0.08 ETH
+      ✔ level 259 = 0.08 ETH
+      ✔ level 260 = 0.12 ETH
+      ✔ level 289 = 0.12 ETH
+      ✔ level 290 = 0.16 ETH
+      ✔ level 299 = 0.16 ETH
+      ✔ level 300 = 0.24 ETH
+      ✔ verifies price at level 0 matches purchaseInfo().priceWei
+    PAR-02: Ticket cost formula costWei = (priceWei * qty) / 400
+      ✔ 1 full ticket (qty=400) costs exactly priceWei
+      ✔ 1 entry (qty=100) costs priceWei/4
+      ✔ 10 full tickets (qty=4000) costs 10 * priceWei
+    PAR-03: Prize pool split BPS
+      ✔ ticket purchase: 90% next pool, 10% future pool
+      ✔ lootbox: 90% future, 10% next (post-presale)
+      ✔ lootbox presale split: 50% future, 30% next, 20% vault
+    PAR-04: Jackpot day structure
+      ✔ JACKPOT_LEVEL_CAP = 5 (5 daily jackpots per level)
+      ✔ daily jackpot BPS range: min=600 (6%), max=1400 (14%) for days 1-4
+      ✔ day 5 pays 100% of remaining current pool
+    PAR-05: Jackpot bucket shares
+      ✔ daily shares (days 1-4): 20/20/20/20 BPS per trait bucket + 20% solo
+      ✔ final day shares: 60/13.33/13.33/13.34 BPS
+    PAR-06: Activity score components and caps
+      ✔ streak: max 50% (50 points * 100 BPS)
+      ✔ mint count: max 25% (25 points * 100 BPS)
+      ✔ quest streak: max 100% (100 points * 100 BPS)
+      ✔ affiliate bonus: max 50% (50 points * 100 BPS)
+      ✔ whale pass 10-level: +10% bonus
+      ✔ whale pass 100-level: +40% bonus
+      ✔ deity pass: +80% bonus
+      ✔ max with whale 100-level: 50+25+100+50+40 = 265%
+      ✔ max with deity pass: 50+25+100+50+80 = 305%
+      ✔ contract returns 0 for zero-address player
+      ✔ pass holders get floor streak (50) and floor count (25)
+      ✔ on-chain: whale bundle holder gets floor bonuses via playerActivityScore()
+    PAR-07: Lootbox EV breakpoints (80%->100% at 0-60%, 100%->135% at 60-255%)
+      ✔ EV minimum at 0% activity: 80% (8000 BPS)
+      ✔ EV neutral at 60% activity: 100% (10000 BPS)
+      ✔ EV maximum at 255%+ activity: 135% (13500 BPS)
+      ✔ EV linear interpolation: 0-60% maps linearly to 80%-100%
+      ✔ EV linear interpolation: 60-255% maps linearly to 100%-135%
+    PAR-08: Affiliate commission rates
+      ✔ fresh ETH L1-3: 25% (2500 BPS)
+      ✔ fresh ETH L4+: 20% (2000 BPS)
+      ✔ recycled ETH: 5% (500 BPS)
+    PAR-09: Affiliate tier structure (direct -> upline1 at 20% -> upline2 at 4%)
+      ✔ upline1 receives 20% of scaled affiliate amount
+      ✔ upline2 receives 20% of upline1 share = 4% of base
+      ✔ max kickback: 25%
+    PAR-10: Whale bundle pricing
+      ✔ early price (levels 0-3): 2.4 ETH
+      ✔ standard price (level 4+): 4 ETH
+    PAR-11: Lazy pass pricing
+      ✔ flat 0.24 ETH at levels 0-2
+      ✔ sum-of-10-level-prices at level 3+ (via PriceLookupTester)
+      ✔ lazy pass covers exactly 10 levels
+      ✔ lazy pass: 4 tickets per level
+      ✔ lazy pass cost at various starting levels
+    PAR-12: Deity pass T(n) pricing (24 + k*(k+1)/2 ETH)
+      ✔ first deity pass (k=0): 24 ETH
+      ✔ second deity pass (k=1): 25 ETH
+      ✔ third deity pass (k=2): 27 ETH
+      ✔ T(n) formula verified for k=0..5
+    PAR-13: Coinflip payout distribution (5%/90%/5% tiers)
+      ✔ 5% chance for 50% bonus (unlucky: 1.5x total payout)
+      ✔ 5% chance for 150% bonus (lucky: 2.5x total payout)
+      ✔ 90% normal range: [78%, 115%] bonus (1.78x - 2.15x total)
+      ✔ mean reward ~96.85% bonus (COINFLIP_REWARD_MEAN_BPS=9685)
+      ✔ total EV breakdown: ~1.97x mean payout on wins
+    PAR-14: Yield distribution split (23%/23%/46%/8%)
+      ✔ vault share: 23% (2300 BPS)
+      ✔ DGNRS share: 23% (2300 BPS)
+      ✔ future pool share: 46% (4600 BPS)
+      ✔ buffer (unextracted): 8%
+      ✔ all shares sum to 92% (8% intentional buffer)
+    PAR-15: BURNIE entry cost (250 BURNIE = 1 entry, 1000 BURNIE = 1 full ticket)
+      ✔ PRICE_COIN_UNIT = 1000 ether (1000 BURNIE with 18 decimals)
+      ✔ 1 entry costs PRICE_COIN_UNIT/4 = 250 BURNIE
+      ✔ 1 full ticket (4 entries, qty=400) costs 1000 BURNIE
+    PAR-16: Degenerette base payouts and ROI curve
+      ✔ base payouts at 100% ROI: 0, 0, 1.90, 4.75, 15, 42.5, 195, 1000, 100000
+      ✔ 8-match jackpot: 100,000x base payout
+      ✔ ROI curve: 90% base -> 95% mid -> 99.5% high -> 99.9% max
+      ✔ ETH bets get +5% ROI bonus
+      ✔ activity score thresholds: mid=75%, high=255%, max=305%
+    PAR-17: Pass capital injection splits
+      ✔ whale/deity level 0: 30% next / 70% future
+      ✔ whale/deity level 1+: 5% next / 95% future
+      ✔ lazy pass all levels: 10% future / 90% next
+      ✔ whale bundle at level 0 actually splits 30/70
+    PAR-18: Future ticket odds (90% near k in [0,4], 10% far k in [5,50])
+      ✔ 90% near future: 0-4 levels ahead
+      ✔ 10% far future: 5-50 levels ahead
+      ✔ roll logic: rangeRoll = entropy % 100; < 10 = far, >= 10 = near
+    Cross-cutting formula consistency
+      ✔ all BPS constants use 10000 denominator
+      ✔ price table is monotonically non-decreasing (69ms)
+      ✔ deity pass prices are strictly increasing
+      ✔ 32nd deity pass (k=31) costs 520 ETH
+      ✔ coinflip minimum deposit: 100 BURNIE
+      ✔ PRICE_COIN_UNIT consistent across all contracts (1000 ether)
+
+  AdvanceGame Gas Benchmarks
+    1. Fresh VRF Request (STAGE_RNG_REQUESTED)
+      Gas: 173,861
+      ✔ worst case: fresh RNG request with lootbox index reservation (67ms)
+    2. VRF 18h Timeout Retry
+      Gas: 5,308,708
+      ✔ worst case: stale VRF retry with lootbox index remap
+    3. Ticket Batch Processing (STAGE_TICKETS_WORKING)
+      Gas: 6,018,139
+      ✔ worst case: max budget (550 writes) ticket processing (64ms)
+    4. Purchase-Phase Daily Jackpot (STAGE_PURCHASE_DAILY)
+      Gas: 594,558
+      ✔ worst case: daily jackpot with many ticket holders (149ms)
+    5. Enter Jackpot Phase (STAGE_ENTERED_JACKPOT)
+      nextPrizePool: 104.4 ETH
+      Gas: 226,442
+      ✔ worst case: purchase->jackpot transition with prize pool consolidation (2794ms)
+    6. Jackpot Daily ETH Distribution (STAGE_JACKPOT_DAILY_STARTED)
+      Gas: 6,237,685
+      ✔ worst case: fresh daily jackpot ETH with many winners (3052ms)
+    7. Jackpot ETH Resume (STAGE_JACKPOT_ETH_RESUME)
+      (Could not reach STAGE_JACKPOT_DAILY_STARTED - skipping)
+      - worst case: resume mid-bucket ETH distribution
+    8. Jackpot Coin+Tickets (STAGE_JACKPOT_COIN_TICKETS)
+      (Stage 17 not directly observed - recording next available)
+      Gas: 3,098,896
+      ✔ worst case: coin and ticket distribution after daily ETH (3295ms)
+    9. Final Day Phase End (STAGE_JACKPOT_PHASE_ENDED)
+      (Phase ended during draining but stage 16 not captured)
+      (Stage 16 not captured)
+      ✔ worst case: day 5 endPhase with all end-of-level operations (3113ms)
+    10. Phase Transition (STAGE_TRANSITION_DONE)
+      Gas: 6,240,181
+      ✔ worst case: vault perpetual tickets + stETH auto-stake (3108ms)
+    11. Game Over Drain (STAGE_GAMEOVER)
+      Deity passes purchased: 24
+      Gas: 105,189
+      Gas: 2,308,790
+      ✔ worst case: 912-day timeout with max deity pass refunds (321ms)
+    12. Final Sweep (30 days post-gameover)
+      Gas: 67,716
+      ✔ worst case: ETH/stETH split to vault + DGNRS
+    13. Future Ticket Processing (STAGE_FUTURE_TICKETS_WORKING)
+      Gas: 6,024,980
+      ✔ worst case: future ticket batch for levels lvl+2..lvl+5 (1774ms)
+    14. Sybil Ticket Bloat (STAGE_TICKETS_WORKING max load)
+      Sybil buyers successfully purchased: 309
+      Gas: 5,141,968
+      Gas: 6,760,769
+      ✔ adversarial: max available Sybil wallets each buying minimum ticket (780ms)
+    15. VRF Callback Gas (rawFulfillRandomWords)
+      Gas: 62,612
+      ✔ daily RNG path (path 1): VRF callback after advanceGame triggers request
+      Lootbox purchase failed: VM Exception while processing transaction: reverted with an unrecognized custom 
+      (Skipping lootbox path — not reachable in harness)
+      ✔ lootbox RNG path (path 2): VRF callback after requestLootboxRng()
+    16. Worst-Case Gas Benchmark (Post-Split)
+      Setting up 305 players...
+      ... 50/305 tickets purchased
+      ... 100/305 tickets purchased
+      ... 150/305 tickets purchased
+      ... 200/305 tickets purchased
+      ... 250/305 tickets purchased
+      ... 300/305 tickets purchased
+      305 tickets purchased
+      305 players enabled autorebuy
+      Pool: 0.0 ETH (current) + 74.745 ETH (next)
+      Day 0, iter 0: stage=1, gas=280,590
+      Day 0, post-VRF iter 60: stage=7, gas=227,494
+      Day 0, post-VRF iter 61: stage=11, gas=3,657,432
+      Day 0, post-VRF iter 62: stage=10, gas=1,867,155
+      Jackpot phase ended on day 0
+      Pool after jackpot: 0.0 ETH
+      Stages captured: 1, 7, 11, 10
+      Gas: 3,657,432
+      Call 1 gas: 3,657,432
+      (No resume — pool below two-call split threshold)
+      Stage 1: 280,590 gas
+      Stage 7: 227,494 gas
+      Stage 10: 1,867,155 gas
+      ✔ SC-1: daily two-call split — 305 players, autorebuy, max-scale pool (3659ms)
+      Setting up 305 players...
+      ... 50/305 tickets purchased
+      ... 100/305 tickets purchased
+      ... 150/305 tickets purchased
+      ... 200/305 tickets purchased
+      ... 250/305 tickets purchased
+      ... 300/305 tickets purchased
+      305 tickets purchased
+      Pool: 0.0 ETH (current) + 74.745 ETH (next)
+      Day 0 post-VRF: stage=11, gas=3,550,186
+      Day 0 post-VRF: stage=10, gas=1,904,207
+      Phase ended on day 0
+      Stages captured: 11, 10
+      Gas: 3,550,186
+      Early-burn gas: 3,550,186
+      ✔ SC-2a: purchase phase path — 160 winners, moderate pool (2946ms)
+      Setting up 305 players...
+      ... 50/305 tickets purchased
+      ... 100/305 tickets purchased
+      ... 150/305 tickets purchased
+      ... 200/305 tickets purchased
+      ... 250/305 tickets purchased
+      ... 300/305 tickets purchased
+      305 tickets purchased
+      Pool: 0.0 ETH (current) + 74.745 ETH (next)
+      Day 0 post-VRF: stage=11, gas=3,466,239
+      Day 0 post-VRF: stage=10, gas=1,831,080
+      Phase ended on day 0
+      Stages captured: 11, 10
+      Gas: 3,466,239
+      Terminal call 1 gas: 3,466,239
+      (No resume — single-call path used)
+      ✔ SC-2b: terminal jackpot path — 305 winners, no autorebuy, max pool (3163ms)
+
+
+========================================================================
+  ADVANCEGAME GAS BENCHMARK SUMMARY
+========================================================================
+  Test                                                   Gas Used
+------------------------------------------------------------------------
+  Sybil Ticket Batch - second warm batch (stage=5)      6,760,769
+  Phase Transition (stage=2)                            6,240,181
+  Jackpot Daily ETH (stage=2)                           6,237,685
+  Future Ticket Processing (stage=4)                    6,024,980
+  Ticket Batch 550 writes (stage=5)                     6,018,139
+  VRF 18h Timeout Retry (stage=1)                       5,308,708
+  Sybil Ticket Batch - first cold batch (stage=5)       5,141,968
+  WC: Daily Split Call 1 (stage=11)                     3,657,432
+  WC: Early-Burn ETH (stage=11)                         3,550,186
+  WC: Terminal Jackpot Call 1 (stage=11)                3,466,239
+  Jackpot Coin+Tickets fallback (stage=6)               3,098,896
+  Game Over Drain (stage=0)                             2,308,790
+  Purchase Daily Jackpot (stage=6)                        594,558
+  Enter Jackpot Phase (stage=7)                           226,442
+  Fresh VRF Request (stage=1)                             173,861
+  Game Over VRF Request (stage=0)                         105,189
+  Final Sweep (stage=0)                                    67,716
+  VRF Callback - daily RNG (path 1)                        62,612
+------------------------------------------------------------------------
+  Peak: Sybil Ticket Batch - second warm batch (stage=5) = 6,760,769 gas
+  All paths within safe gas limits.
+========================================================================
+
+
+
+  1233 passing (5m)
+  4 pending
+
+An unexpected error occurred:
+
+Error: Cannot find module 'test/access/AccessControl.test.js'
+Require stack:
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/nodejs/file-unloader.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/index.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/builtin-tasks/test.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/core/tasks/builtin-tasks.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/core/config/config-loading.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/cli/cli.js
+- /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/cli/bootstrap.js
+    at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+    at Function.resolve (node:internal/modules/helpers:157:19)
+    at Object.exports.unloadFile (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/nodejs/file-unloader.js:14:32)
+    at Function.Mocha.unloadFile (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js:476:44)
+    at /home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js:504:11
+    at Array.forEach (<anonymous>)
+    at Mocha.unloadFiles (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js:503:14)
+    at Mocha.dispose (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js:632:8)
+    at SimpleTaskDefinition.action (/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/src/builtin-tasks/test.ts:139:13)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/nodejs/file-unloader.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/lib/mocha.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/mocha/index.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/builtin-tasks/test.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/core/tasks/builtin-tasks.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/core/config/config-loading.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/cli/cli.js',
+    '/home/zak/Dev/PurgeGame/degenerus-audit/node_modules/hardhat/internal/cli/bootstrap.js'
+  ]
+}
