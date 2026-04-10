@@ -328,7 +328,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Idempotent per day. Called by AdvanceModule when RNG word is available.
     /// @param day Quest day identifier.
     /// @param entropy VRF entropy word.
-    function rollDailyQuest(uint48 day, uint256 entropy) external onlyGame {
+    function rollDailyQuest(uint32 day, uint256 entropy) external onlyGame {
         DailyQuest[QUEST_SLOT_COUNT] storage quests = activeQuests;
         if (quests[0].day == day) return;
 
@@ -359,7 +359,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param currentDay The current quest day for state synchronization.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
-    function awardQuestStreakBonus(address player, uint16 amount, uint48 currentDay) external onlyGame {
+    function awardQuestStreakBonus(address player, uint16 amount, uint32 currentDay) external onlyGame {
         if (player == address(0) || amount == 0 || currentDay == 0) return;
 
         PlayerQuestState storage state = questPlayerState[player];
@@ -1747,7 +1747,7 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function _seedQuestType(
         DailyQuest storage quest,
-        uint48 day,
+        uint32 day,
         uint8 questType
     ) private {
         quest.day = day;

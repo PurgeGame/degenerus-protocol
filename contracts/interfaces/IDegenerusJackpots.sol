@@ -28,5 +28,5 @@ interface IDegenerusJackpots {
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external;
 
     /// @notice Day index of the most recent BAF jackpot resolution.
-    function getLastBafResolvedDay() external view returns (uint48);
+    function getLastBafResolvedDay() external view returns (uint32);
 }

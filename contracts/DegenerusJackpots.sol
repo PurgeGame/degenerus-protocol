@@ -644,7 +644,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       +======================================================================+*/
 
     /// @notice Day index of the most recent BAF jackpot resolution.
-    function getLastBafResolvedDay() external view returns (uint48) {
+    function getLastBafResolvedDay() external view returns (uint32) {
         return lastBafResolvedDay;
     }
 }

@@ -89,5 +89,5 @@ interface IStakedDegenerusStonk {
     /// @dev Only callable by game contract during advanceGame
     /// @param roll The random roll (25-175)
     /// @param flipDay The coinflip day for BURNIE gamble
-    function resolveRedemptionPeriod(uint16 roll, uint48 flipDay) external;
+    function resolveRedemptionPeriod(uint16 roll, uint32 flipDay) external;
 }

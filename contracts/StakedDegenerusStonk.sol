@@ -571,7 +571,7 @@ contract StakedDegenerusStonk {
     /// @dev Adjusts segregated ETH by roll and returns rolled BURNIE amount for event emission.
     /// @param roll The random roll result (range 25-175, applied as percentage)
     /// @param flipDay Coinflip day index used for BURNIE gamble resolution
-    function resolveRedemptionPeriod(uint16 roll, uint48 flipDay) external {
+    function resolveRedemptionPeriod(uint16 roll, uint32 flipDay) external {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
 
         uint48 period = redemptionPeriodIndex;

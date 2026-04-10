@@ -195,7 +195,7 @@ abstract contract DegenerusGameStorage {
     uint24 internal constant TICKET_FAR_FUTURE_BIT = 1 << 22;
 
     /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
-    uint48 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 365;
+    uint32 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 365;
 
     // =========================================================================
     // Errors

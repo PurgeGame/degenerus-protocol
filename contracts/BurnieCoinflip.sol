@@ -367,7 +367,7 @@ contract BurnieCoinflip {
     /// @param day The day to query.
     /// @return rewardPercent The reward percentage for that day.
     /// @return win Whether the flip was a win.
-    function getCoinflipDayResult(uint48 day) external view returns (uint16 rewardPercent, bool win) {
+    function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win) {
         CoinflipDayResult memory result = coinflipDayResult[day];
         return (result.rewardPercent, result.win);
     }
@@ -802,7 +802,7 @@ contract BurnieCoinflip {
     function processCoinflipPayouts(
         bool bonusFlip,
         uint256 rngWord,
-        uint48 epoch
+        uint32 epoch
     ) external onlyDegenerusGameContract {
         // Mix entropy with epoch for unique per-day randomness
         uint256 seedWord = uint256(keccak256(abi.encodePacked(rngWord, epoch)));
@@ -945,7 +945,7 @@ contract BurnieCoinflip {
             bool enabled,
             uint256 stop,
             uint256 carry,
-            uint48 startDay
+            uint32 startDay
         )
     {
         PlayerCoinflipState storage state = playerState[player];

@@ -47,7 +47,7 @@ interface IDegenerusGameAdvanceModule {
 interface IDegenerusGameGameOverModule {
     /// @notice Handles draining funds during game over state
     /// @param day The day identifier for the drain operation
-    function handleGameOverDrain(uint48 day) external;
+    function handleGameOverDrain(uint32 day) external;
 
     /// @notice Performs the final sweep of remaining funds after game over
     function handleFinalSweep() external;
@@ -238,7 +238,7 @@ interface IDegenerusGameMintModule {
     /// @notice Opens a lootbox for a player
     /// @param player Address of the lootbox owner
     /// @param lootboxIndex Index of the lootbox to open
-    function openLootBox(address player, uint48 lootboxIndex) external;
+    function openLootBox(address player, uint32 lootboxIndex) external;
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param player Address of the lootbox owner
@@ -272,12 +272,12 @@ interface IDegenerusGameLootboxModule {
     /// @notice Opens a standard lootbox for a player
     /// @param player Address of the lootbox owner
     /// @param lootboxIndex Index of the lootbox to open
-    function openLootBox(address player, uint48 lootboxIndex) external;
+    function openLootBox(address player, uint32 lootboxIndex) external;
 
     /// @notice Opens a Burnie lootbox for a player
     /// @param player Address of the lootbox owner
     /// @param lootboxIndex Index of the Burnie lootbox to open
-    function openBurnieLootBox(address player, uint48 lootboxIndex) external;
+    function openBurnieLootBox(address player, uint32 lootboxIndex) external;
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param player Address of the lootbox owner
@@ -309,7 +309,7 @@ interface IDegenerusGameLootboxModule {
     function deityBoonSlots(address deity)
         external
         view
-        returns (uint8[3] memory slots, uint8 usedMask, uint48 day);
+        returns (uint8[3] memory slots, uint8 usedMask, uint32 day);
 
     /// @notice Issues a deity boon from a deity to a recipient
     /// @param deity Address of the deity issuing the boon

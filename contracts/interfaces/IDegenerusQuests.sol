@@ -12,7 +12,7 @@ struct QuestRequirements {
 /// @notice Information about a single quest
 struct QuestInfo {
     /// @notice The day this quest is active (unix day)
-    uint48 day;
+    uint32 day;
     /// @notice The type of quest (mint, flip, affiliate, etc.)
     uint8 questType;
     /// @notice Whether this is a high difficulty quest with increased requirements and rewards
@@ -43,7 +43,7 @@ interface IDegenerusQuests {
     /// @dev Called by AdvanceModule (via GAME delegatecall) to determine which quests are active.
     /// @param day The unix day to roll quests for
     /// @param entropy Random entropy used to determine the slot 1 quest type
-    function rollDailyQuest(uint48 day, uint256 entropy) external;
+    function rollDailyQuest(uint32 day, uint256 entropy) external;
 
     /// @notice Records player minting activity and checks quest completion
     /// @dev Called by the game contract when a player mints tickets
@@ -149,7 +149,7 @@ interface IDegenerusQuests {
     /// @param player The address of the player to award bonus to
     /// @param amount The number of bonus streak days to award
     /// @param currentDay The current unix day for tracking purposes
-    function awardQuestStreakBonus(address player, uint16 amount, uint48 currentDay) external;
+    function awardQuestStreakBonus(address player, uint16 amount, uint32 currentDay) external;
 
     /// @notice Returns the quest state for a specific player
     /// @param player The address of the player to query

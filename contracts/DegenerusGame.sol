@@ -9,7 +9,7 @@ pragma solidity 0.8.34;
  * @dev ARCHITECTURE:
  *      - 2-state FSM: PURCHASE(false) ↔ JACKPOT(true) → (cycle)
  *      - gameOver flag is terminal
- *      - Presale is a toggle (lootboxPresaleActive), not a state
+ *      - Presale is a toggle (packed in presaleStatePacked), not a state
  *      - Chainlink VRF for randomness with RNG lock to prevent manipulation
  *      - Delegatecall modules: advance, boon, decimator, degenerette, jackpot, lootbox, mint, whale (must inherit DegenerusGameStorage)
  *      - Prize pool flow: futurePrizePool (unified reserve) → nextPrizePool → currentPrizePool → claimableWinnings
@@ -17,7 +17,7 @@ pragma solidity 0.8.34;
  * @dev CRITICAL INVARIANTS:
  *      - address(this).balance + steth.balanceOf(this) >= claimablePool
  *      - jackpotPhaseFlag transitions: false(PURCHASE) ↔ true(JACKPOT); gameOver is terminal
- *      - lootboxPresaleActive starts true, auto-ends at PURCHASE→JACKPOT or via admin (one-way: never re-enables)
+ *      - Presale starts active, auto-ends at PURCHASE→JACKPOT or via admin (one-way: never re-enables)
  *
  * @dev SECURITY:
  *      - Pull pattern for ETH/stETH withdrawals (claimWinnings)
@@ -145,7 +145,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @dev Deploy idle timeout in days (for efficient day-index comparison).
-    uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // 1 year
+    uint32 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // 1 year
 
     /// @dev Minimum take profit for afKing ETH auto-rebuy (5 ETH).
     uint256 private constant AFKING_KEEP_MIN_ETH = 5 ether;
@@ -214,7 +214,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
      *      Deploy day boundary determines which calendar day is "day 1" in the game.
      */
     constructor() {
-        uint48 currentDay = GameTimeLib.currentDayIndex();
+        uint32 currentDay = GameTimeLib.currentDayIndex();
         purchaseStartDay = currentDay;
         dailyIdx = currentDay;
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
@@ -254,7 +254,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • DGVE majority holder — always bypasses (last resort, external call)                 |
       |  • RNG must be ready (not locked) or recently stale (12h timeout)                      |
       |                                                                                        |
-      |  Presale: lootboxPresaleActive toggle (orthogonal to state machine)                    |
+      |  Presale: packed presale-active toggle (orthogonal to state machine)                    |
       |  • Starts active: 62% bonus BURNIE from loot boxes, bonusFlip active                    |
       |  • Auto-ends when PURCHASE→JACKPOT, or admin can end manually (one-way, cannot re-enable) |
       +========================================================================================+*/
@@ -475,7 +475,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Current day index.
-    function currentDayView() external view returns (uint48) {
+    function currentDayView() external view returns (uint32) {
         return _simulatedDayIndex();
     }
 
@@ -486,12 +486,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function setLootboxRngThreshold(uint256 newThreshold) external {
         if (!vault.isVaultOwner(msg.sender)) revert E();
         if (newThreshold == 0) revert E();
-        uint256 prev = lootboxRngThreshold;
+        uint256 prev = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
         if (newThreshold == prev) {
             emit LootboxRngThresholdUpdated(prev, newThreshold);
             return;
         }
-        lootboxRngThreshold = newThreshold;
+        _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, _packEthToMilliEth(newThreshold));
         emit LootboxRngThresholdUpdated(prev, newThreshold);
     }
 
@@ -669,7 +669,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Open a loot box once RNG for its lootbox index is available.
     /// @param player Player address that owns the loot box (address(0) = msg.sender).
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    function openLootBox(address player, uint48 lootboxIndex) external {
+    function openLootBox(address player, uint32 lootboxIndex) external {
         player = _resolvePlayer(player);
         _openLootBoxFor(player, lootboxIndex);
     }
@@ -677,12 +677,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Open a BURNIE loot box once RNG for its lootbox index is available.
     /// @param player Player address that owns the loot box (address(0) = msg.sender).
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    function openBurnieLootBox(address player, uint48 lootboxIndex) external {
+    function openBurnieLootBox(address player, uint32 lootboxIndex) external {
         player = _resolvePlayer(player);
         _openBurnieLootBoxFor(player, lootboxIndex);
     }
 
-    function _openLootBoxFor(address player, uint48 lootboxIndex) private {
+    function _openLootBoxFor(address player, uint32 lootboxIndex) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
@@ -697,7 +697,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     function _openBurnieLootBoxFor(
         address player,
-        uint48 lootboxIndex
+        uint32 lootboxIndex
     ) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
@@ -843,7 +843,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         view
         returns (
             uint256 dailySeed,
-            uint48 day,
+            uint32 day,
             uint8 usedMask,
             bool decimatorOpen,
             bool deityPassAvailable
@@ -950,7 +950,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
         // Update claimablePool accounting
         if (claimableUsed != 0) {
-            claimablePool -= claimableUsed;
+            claimablePool -= uint128(claimableUsed);
             emit ClaimableSpent(
                 player,
                 claimableUsed,
@@ -1364,7 +1364,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     function _claimWinningsInternal(address player, bool stethFirst) private {
-        if (finalSwept) revert E();
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
         uint256 amount = claimableWinnings[player];
         if (amount <= 1) revert E();
         uint256 payout;
@@ -1372,7 +1372,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             claimableWinnings[player] = 1; // Leave sentinel
             payout = amount - 1;
         }
-        claimablePool -= payout; // CEI: update state before external call
+        claimablePool -= uint128(payout); // CEI: update state before external call
         emit WinningsClaimed(player, msg.sender, payout);
         if (stethFirst) {
             _payoutWithEthFallback(player, payout);
@@ -1703,7 +1703,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         unchecked {
             claimableWinnings[ContractAddresses.SDGNRS] = claimable - amount;
         }
-        claimablePool -= amount;
+        claimablePool -= uint128(amount);
 
         // Credit to future prize pool (respects freeze state)
         if (prizePoolFrozen) {
@@ -2046,12 +2046,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return presale True if presale mode is currently active.
     function lootboxStatus(
         address player,
-        uint48 lootboxIndex
+        uint32 lootboxIndex
     ) external view returns (uint256 amount, bool presale) {
         // Direct storage access - lootboxEth stores packed amount in lower 232 bits
         uint256 packed = lootboxEth[lootboxIndex][player];
         amount = packed & ((1 << 232) - 1);
-        presale = lootboxPresaleActive;
+        presale = _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
     }
 
     /// @notice View Degenerette packed bet info for a player/betId.
@@ -2067,7 +2067,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Check whether lootbox presale mode is currently active.
     /// @return active True if presale is active.
     function lootboxPresaleActiveFlag() external view returns (bool active) {
-        return lootboxPresaleActive;
+        return _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0;
     }
 
     /// @notice Get the current prize pool (jackpots are paid from this).
@@ -2079,18 +2079,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Get the claimable pool (reserved for player winnings claims).
     /// @return The claimablePool value (ETH wei).
     function claimablePoolView() external view returns (uint256) {
-        if (finalSwept) return 0;
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
         return claimablePool;
     }
 
     /// @notice Check if the final sweep has executed (all funds forfeited).
     function isFinalSwept() external view returns (bool) {
-        return finalSwept;
+        return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
     }
 
     /// @notice Timestamp when gameover was triggered (0 if game still active).
     function gameOverTimestamp() external view returns (uint48) {
-        return gameOverTime;
+        return uint48(_goRead(GO_TIME_SHIFT, GO_TIME_MASK));
     }
 
     /// @notice Get the yield surplus (stETH appreciation above all pool obligations).
@@ -2125,7 +2125,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Days are indexed from deploy time (day 1 = deploy day).
     /// @param day The day index to query.
     /// @return The random word (0 if no word recorded for that day).
-    function rngWordForDay(uint48 day) external view returns (uint256) {
+    function rngWordForDay(uint32 day) external view returns (uint256) {
         return rngWordByDay[day];
     }
 
@@ -2263,7 +2263,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Returns 0 if balance is only the 1 wei sentinel.
     /// @return Claimable amount in wei (excludes sentinel).
     function getWinnings() external view returns (uint256) {
-        if (finalSwept) return 0;
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
         uint256 stored = claimableWinnings[msg.sender];
         if (stored <= 1) return 0;
         unchecked {
@@ -2277,7 +2277,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function claimableWinningsOf(
         address player
     ) external view returns (uint256) {
-        if (finalSwept) return 0;
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
         return claimableWinnings[player];
     }
 
@@ -2479,7 +2479,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param symbol Symbol index within quadrant (0-7).
     /// @return wagerUnits Amount wagered in 1e12 wei units.
     function getDailyHeroWager(
-        uint48 day,
+        uint32 day,
         uint8 quadrant,
         uint8 symbol
     ) external view returns (uint256 wagerUnits) {
@@ -2494,7 +2494,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return winSymbol The winning symbol within that quadrant.
     /// @return winAmount The wagered units for the winner.
     function getDailyHeroWinner(
-        uint48 day
+        uint32 day
     )
         external
         view

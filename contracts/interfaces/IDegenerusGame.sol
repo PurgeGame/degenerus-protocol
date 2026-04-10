@@ -105,7 +105,7 @@ interface IDegenerusGame {
         address deity
     ) external view returns (
         uint256 dailySeed,
-        uint48 day,
+        uint32 day,
         uint8 usedMask,
         bool decimatorOpen,
         bool deityPassAvailable
@@ -241,7 +241,7 @@ interface IDegenerusGame {
     function rngLocked() external view returns (bool);
 
     /// @notice Current day index.
-    function currentDayView() external view returns (uint48);
+    function currentDayView() external view returns (uint32);
 
     /// @notice Request lootbox RNG when activity threshold is met.
     /// @dev Standalone function for mid-day lootbox RNG requests.
@@ -272,7 +272,7 @@ interface IDegenerusGame {
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
     /// @return amount Lootbox value in wei.
     /// @return presale True if presale mode is currently active (global flag, not per-lootbox).
-    function lootboxStatus(address player, uint48 lootboxIndex) external view returns (uint256 amount, bool presale);
+    function lootboxStatus(address player, uint32 lootboxIndex) external view returns (uint256 amount, bool presale);
 
     /// @notice Check whether lootbox presale mode is currently active.
     /// @return active True if presale is active.
@@ -282,7 +282,7 @@ interface IDegenerusGame {
     /// @dev Claims ETH, DGNRS, WWXRP, and potential boons/boosts.
     /// @param player The player address to open for (address(0) = msg.sender).
     /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
-    function openLootBox(address player, uint48 lootboxIndex) external;
+    function openLootBox(address player, uint32 lootboxIndex) external;
 
     /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
     /// @param player The betting player (address(0) = msg.sender).
@@ -392,9 +392,9 @@ interface IDegenerusGame {
     // -------------------------------------------------------------------------
 
     /// @notice Get total wager units for a specific hero symbol on a given day.
-    function getDailyHeroWager(uint48 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
+    function getDailyHeroWager(uint32 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
     /// @notice Get the winning hero symbol and amount for a given day.
-    function getDailyHeroWinner(uint48 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
+    function getDailyHeroWinner(uint32 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
     /// @notice Get a player's total Degenerette wager for a level.
     function getPlayerDegeneretteWager(address player, uint24 lvl) external view returns (uint256 weiAmount);
     /// @notice Get the top Degenerette player for a level.

@@ -99,7 +99,7 @@ interface IBurnieCoinflip {
     function processCoinflipPayouts(
         bool bonusFlip,
         uint256 rngWord,
-        uint48 epoch
+        uint32 epoch
     ) external;
 
     /*+======================================================================+
@@ -157,7 +157,7 @@ interface IBurnieCoinflip {
             bool enabled,
             uint256 stop,
             uint256 carry,
-            uint48 startDay
+            uint32 startDay
         );
 
     /// @notice Get the top bettor from the most recently resolved flip day.
@@ -182,5 +182,5 @@ interface IBurnieCoinflip {
     /// @param day The day to query.
     /// @return rewardPercent The reward percentage for that day.
     /// @return win Whether the flip was a win.
-    function getCoinflipDayResult(uint48 day) external view returns (uint16 rewardPercent, bool win);
+    function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
 }
