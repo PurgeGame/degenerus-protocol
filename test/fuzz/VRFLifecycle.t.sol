@@ -112,25 +112,82 @@ contract VRFLifecycle is DeployProtocol {
         uint24 initialLevel = game.level();
         uint256 ts = block.timestamp;
         uint256 lastFulfilledId;
+
+        // Warm-up: drain pending work on the CURRENT day to establish dailyIdx.
+        // Without this, the first loop iteration creates a multi-day gap that
+        // triggers turbo mode (compressedJackpotFlag=2) at level 0, causing a
+        // purchaseLevel=0 underflow in _consolidatePoolsAndRewardJackpots.
+        {
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (ok) {
+                uint256 reqId = mockVRF.lastRequestId();
+                if (reqId > 0) {
+                    (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                    if (!fulfilled) {
+                        try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(uint256(999))))) {
+                            lastFulfilledId = reqId;
+                        } catch {}
+                    }
+                }
+                for (uint256 w = 0; w < 20; w++) {
+                    reqId = mockVRF.lastRequestId();
+                    if (reqId > lastFulfilledId && reqId > 0) {
+                        (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                        if (!fulfilled) {
+                            try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(uint256(998), w)))) {
+                                lastFulfilledId = reqId;
+                            } catch {}
+                        }
+                    }
+                    (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                    if (!ok) break;
+                }
+            }
+        }
+
         for (uint256 day = 0; day < 30; day++) {
             ts += 1 days;
             vm.warp(ts);
 
+            // Fulfill pending VRF BEFORE advancing
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId > lastFulfilledId && reqId > 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(day)))) {
+                        lastFulfilledId = reqId;
+                    } catch {}
+                }
+            }
+
             // Try advanceGame -- may revert if not ready
             try game.advanceGame() {} catch { continue; }
 
-            // If a new VRF request was fired, fulfill it
-            uint256 reqId = mockVRF.lastRequestId();
+            // Fulfill VRF if a new request was fired
+            reqId = mockVRF.lastRequestId();
             if (reqId > lastFulfilledId && reqId > 0) {
-                try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(day)))) {
-                    lastFulfilledId = reqId;
-                } catch {}
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(day, uint256(1))))) {
+                        lastFulfilledId = reqId;
+                    } catch {}
+                }
             }
 
             // Process until unlocked (may take multiple calls as tickets are batched)
             for (uint256 j = 0; j < 50; j++) {
-                if (!game.rngLocked()) break;
-                try game.advanceGame() {} catch { break; }
+                // Fulfill any new VRF requests mid-loop
+                reqId = mockVRF.lastRequestId();
+                if (reqId > lastFulfilledId && reqId > 0) {
+                    (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                    if (!fulfilled) {
+                        try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(day, j + 2)))) {
+                            lastFulfilledId = reqId;
+                        } catch {}
+                    }
+                }
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                if (!ok) break;
             }
 
             // Check if level changed

@@ -2283,6 +2283,19 @@ contract TicketLifecycleTest is DeployProtocol {
     function _driveToLevel(uint256 targetLevel) internal {
         uint256 simTime = block.timestamp;
 
+        // Warm-up: drain pending work on the CURRENT day without warping.
+        // This establishes dailyIdx at the current day and prevents multi-day
+        // gap backfill from adjusting purchaseStartDay, which would trigger
+        // the turbo path (compressedJackpotFlag=2) at level 0 and cause
+        // purchaseLevel=0 underflow in _consolidatePoolsAndRewardJackpots.
+        for (uint256 w = 0; w < 30; w++) {
+            _fulfillVrfIfPending();
+            (bool ok, ) = address(game).call(
+                abi.encodeWithSignature("advanceGame()")
+            );
+            if (!ok) break;
+        }
+
         for (uint256 day = 0; day < 500; day++) {
             if (game.level() >= targetLevel) break;
             if (game.gameOver()) break;
@@ -2299,12 +2312,21 @@ contract TicketLifecycleTest is DeployProtocol {
 
             // Drive advanceGame + VRF until nothing more to do today
             for (uint256 j = 0; j < 80; j++) {
+                // Fulfill any pending VRF BEFORE calling advanceGame
                 _fulfillVrfIfPending();
 
                 (bool ok, ) = address(game).call(
                     abi.encodeWithSignature("advanceGame()")
                 );
-                if (!ok) break;
+                if (!ok) {
+                    // Fulfill VRF one more time in case the failed call generated a request
+                    _fulfillVrfIfPending();
+                    // Retry once — the fulfillment may have unblocked progress
+                    (ok, ) = address(game).call(
+                        abi.encodeWithSignature("advanceGame()")
+                    );
+                    if (!ok) break;
+                }
             }
         }
     }
