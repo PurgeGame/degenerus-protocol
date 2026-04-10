@@ -46,11 +46,11 @@ contract StorageHarness is DegenerusGameStorage {
     }
 
     // --- Direct field access ---
-    function getTicketWriteSlot() external view returns (uint8) {
+    function getTicketWriteSlot() external view returns (bool) {
         return ticketWriteSlot;
     }
 
-    function setTicketWriteSlot(uint8 val) external {
+    function setTicketWriteSlot(bool val) external {
         ticketWriteSlot = val;
     }
 
@@ -94,7 +94,7 @@ contract StorageFoundationTest is Test {
     ///      ticketsFullyProcessed moved to Slot 0 offset 30; gameOverPossible to Slot 0 offset 31.
     function testSlot1FieldOffsets() public {
         // Set ticketWriteSlot = 1
-        harness.setTicketWriteSlot(1);
+        harness.setTicketWriteSlot(true);
         bytes32 slot1 = vm.load(address(harness), bytes32(uint256(1)));
         // offset 0 means byte 0 from the RIGHT in the 32-byte word (little-endian packing)
         // In EVM storage packing, offset N means bits [N*8, (N+1)*8)
@@ -102,7 +102,7 @@ contract StorageFoundationTest is Test {
         assertEq(uint8(uint256(slot1)), 1, "ticketWriteSlot not at offset 0");
 
         // Reset and set prizePoolFrozen = true (offset 1 = bits [8, 16))
-        harness.setTicketWriteSlot(0);
+        harness.setTicketWriteSlot(false);
         harness.setPrizePoolFrozen(true);
         slot1 = vm.load(address(harness), bytes32(uint256(1)));
         assertEq(uint8(uint256(slot1) >> 8), 1, "prizePoolFrozen not at offset 1");
@@ -215,28 +215,28 @@ contract StorageFoundationTest is Test {
 
     function testTicketSlotKeysDifferSlot0() public {
         // Default ticketWriteSlot is 0
-        assertEq(harness.getTicketWriteSlot(), 0);
+        assertFalse(harness.getTicketWriteSlot());
         uint24 wk = harness.exposed_tqWriteKey(5);
         uint24 rk = harness.exposed_tqReadKey(5);
         assertTrue(wk != rk, "write key must differ from read key (slot 0)");
     }
 
     function testTicketSlotKeysDifferSlot1() public {
-        harness.setTicketWriteSlot(1);
+        harness.setTicketWriteSlot(true);
         uint24 wk = harness.exposed_tqWriteKey(5);
         uint24 rk = harness.exposed_tqReadKey(5);
         assertTrue(wk != rk, "write key must differ from read key (slot 1)");
     }
 
     function testTicketSlotKeyBit23Slot0() public {
-        // ticketWriteSlot=0: write key = level, read key = level | BIT
-        assertEq(harness.getTicketWriteSlot(), 0);
+        // ticketWriteSlot=false: write key = level, read key = level | BIT
+        assertFalse(harness.getTicketWriteSlot());
         assertEq(harness.exposed_tqWriteKey(5), 5, "slot0 writeKey should be raw level");
         assertEq(harness.exposed_tqReadKey(5), 5 | TICKET_SLOT_BIT, "slot0 readKey should have bit23 set");
     }
 
     function testTicketSlotKeyBit23Slot1() public {
-        harness.setTicketWriteSlot(1);
+        harness.setTicketWriteSlot(true);
         assertEq(harness.exposed_tqWriteKey(5), 5 | TICKET_SLOT_BIT, "slot1 writeKey should have bit23 set");
         assertEq(harness.exposed_tqReadKey(5), 5, "slot1 readKey should be raw level");
     }
@@ -250,8 +250,8 @@ contract StorageFoundationTest is Test {
             assertEq(harness.exposed_tqReadKey(levels[i]), levels[i] | TICKET_SLOT_BIT, "slot0 readKey mismatch");
         }
 
-        // Test with ticketWriteSlot = 1
-        harness.setTicketWriteSlot(1);
+        // Test with ticketWriteSlot = true
+        harness.setTicketWriteSlot(true);
         for (uint256 i = 0; i < levels.length; i++) {
             assertEq(harness.exposed_tqWriteKey(levels[i]), levels[i] | TICKET_SLOT_BIT, "slot1 writeKey mismatch");
             assertEq(harness.exposed_tqReadKey(levels[i]), levels[i], "slot1 readKey mismatch");
@@ -264,13 +264,13 @@ contract StorageFoundationTest is Test {
 
     /// @dev Empty read queue -> swap succeeds, ticketWriteSlot toggles, ticketsFullyProcessed resets.
     function testSwapTicketSlotSuccess() public {
-        assertEq(harness.getTicketWriteSlot(), 0);
+        assertFalse(harness.getTicketWriteSlot());
         harness.setTicketsFullyProcessed(true);
 
-        // Read slot for level 0, ticketWriteSlot=0 is 0|TICKET_SLOT_BIT -- empty by default
+        // Read slot for level 0, ticketWriteSlot=false is 0|TICKET_SLOT_BIT -- empty by default
         harness.exposed_swapTicketSlot(0);
 
-        assertEq(harness.getTicketWriteSlot(), 1, "ticketWriteSlot should toggle to 1");
+        assertTrue(harness.getTicketWriteSlot(), "ticketWriteSlot should toggle to true");
         assertFalse(harness.getTicketsFullyProcessed(), "ticketsFullyProcessed should reset");
     }
 
@@ -286,15 +286,15 @@ contract StorageFoundationTest is Test {
 
     /// @dev Two swaps return ticketWriteSlot to 0.
     function testSwapTicketSlotDoubleToggle() public {
-        assertEq(harness.getTicketWriteSlot(), 0);
+        assertFalse(harness.getTicketWriteSlot());
 
-        // First swap: 0 -> 1 (read slot = TICKET_SLOT_BIT|0, empty)
+        // First swap: false -> true (read slot = TICKET_SLOT_BIT|0, empty)
         harness.exposed_swapTicketSlot(0);
-        assertEq(harness.getTicketWriteSlot(), 1);
+        assertTrue(harness.getTicketWriteSlot());
 
-        // Second swap: 1 -> 0 (read slot = 0 (raw level), empty)
+        // Second swap: true -> false (read slot = 0 (raw level), empty)
         harness.exposed_swapTicketSlot(0);
-        assertEq(harness.getTicketWriteSlot(), 0);
+        assertFalse(harness.getTicketWriteSlot());
     }
 
     // =====================================================================

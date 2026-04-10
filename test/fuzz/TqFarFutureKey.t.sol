@@ -26,7 +26,7 @@ contract TqFarFutureKeyHarness is DegenerusGameStorage {
         return TICKET_FAR_FUTURE_BIT;
     }
 
-    function setTicketWriteSlot(uint8 val) external {
+    function setTicketWriteSlot(bool val) external {
         ticketWriteSlot = val;
     }
 }
@@ -63,7 +63,7 @@ contract TqFarFutureKeyTest is Test {
 
     function testFarFutureKeyNoCollision_Slot0(uint24 lvl) public {
         vm.assume(lvl < (1 << 22));
-        harness.setTicketWriteSlot(0);
+        harness.setTicketWriteSlot(false);
         uint24 writeKey = harness.tqWriteKey(lvl);   // slot 0: raw lvl
         uint24 readKey  = harness.tqReadKey(lvl);     // slot 0: lvl | SLOT_BIT
         uint24 ffKey    = harness.tqFarFutureKey(lvl);
@@ -74,7 +74,7 @@ contract TqFarFutureKeyTest is Test {
 
     function testFarFutureKeyNoCollision_Slot1(uint24 lvl) public {
         vm.assume(lvl < (1 << 22));
-        harness.setTicketWriteSlot(1);
+        harness.setTicketWriteSlot(true);
         uint24 writeKey = harness.tqWriteKey(lvl);   // slot 1: lvl | SLOT_BIT
         uint24 readKey  = harness.tqReadKey(lvl);     // slot 1: raw lvl
         uint24 ffKey    = harness.tqFarFutureKey(lvl);

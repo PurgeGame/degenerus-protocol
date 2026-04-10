@@ -21,7 +21,7 @@ contract JackpotCombinedPoolHarness is DegenerusGameStorage {
     }
 
     /// @dev Set ticketWriteSlot for read key computation
-    function setTicketWriteSlot(uint8 v) external {
+    function setTicketWriteSlot(bool v) external {
         ticketWriteSlot = v;
     }
 
@@ -119,7 +119,7 @@ contract JackpotCombinedPoolTest is Test {
         // ticketWriteSlot = 0 means:
         //   writeKey = raw level (slot 0)
         //   readKey  = level | TICKET_SLOT_BIT (slot 1)
-        harness.setTicketWriteSlot(0);
+        harness.setTicketWriteSlot(false);
     }
 
     // =========================================================================

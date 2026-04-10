@@ -42,7 +42,7 @@ contract AdvanceHarness is DegenerusGameStorage {
         return prizePoolFrozen;
     }
 
-    function getTicketWriteSlot() external view returns (uint8) {
+    function getTicketWriteSlot() external view returns (bool) {
         return ticketWriteSlot;
     }
 
@@ -55,7 +55,7 @@ contract AdvanceHarness is DegenerusGameStorage {
         prizePoolFrozen = val;
     }
 
-    function setTicketWriteSlot(uint8 val) external {
+    function setTicketWriteSlot(bool val) external {
         ticketWriteSlot = val;
     }
 
@@ -115,7 +115,7 @@ contract AdvanceGameRewriteTest is Test {
     /// @dev Mid-day swap uses _swapTicketSlot (not _swapAndFreeze), so freeze stays false.
     function test_midDay_noFreeze() public {
         // Start: ticketWriteSlot = 0, not frozen
-        assertEq(harness.getTicketWriteSlot(), 0);
+        assertFalse(harness.getTicketWriteSlot());
         assertFalse(harness.getFrozen());
 
         // Push entries to write slot (simulating purchases)

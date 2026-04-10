@@ -51,11 +51,11 @@ contract QueueHarness is DegenerusGameStorage {
     }
 
     // --- State helpers ---
-    function getTicketWriteSlot() external view returns (uint8) {
+    function getTicketWriteSlot() external view returns (bool) {
         return ticketWriteSlot;
     }
 
-    function setTicketWriteSlot(uint8 val) external {
+    function setTicketWriteSlot(bool val) external {
         ticketWriteSlot = val;
     }
 
@@ -207,12 +207,12 @@ contract QueueDoubleBufferTest is Test {
     // =========================================================================
     function testQueueAfterSwapUsesNewWriteKey() public {
         // Start with slot 0
-        assertEq(harness.getTicketWriteSlot(), 0, "initial slot is 0");
+        assertFalse(harness.getTicketWriteSlot(), "initial slot is false");
 
         // Swap to slot 1
         harness.setTicketsFullyProcessed(true);
         harness.exposed_swapTicketSlot(LEVEL);
-        assertEq(harness.getTicketWriteSlot(), 1, "slot should be 1 after swap");
+        assertTrue(harness.getTicketWriteSlot(), "slot should be true after swap");
 
         // Write key should now include TICKET_SLOT_BIT
         uint24 newWk = harness.exposed_tqWriteKey(LEVEL);
@@ -269,9 +269,9 @@ contract MidDaySwapTest is Test {
         assertEq(harness.getQueueLength(rk), 0, "read queue should be empty before swap");
 
         // Swap should succeed -- _swapTicketSlot toggles the write slot
-        uint8 slotBefore = harness.getTicketWriteSlot();
+        bool slotBefore = harness.getTicketWriteSlot();
         harness.exposed_swapTicketSlot(LEVEL);
-        uint8 slotAfter = harness.getTicketWriteSlot();
+        bool slotAfter = harness.getTicketWriteSlot();
 
         assertTrue(slotBefore != slotAfter, "swap should toggle write slot");
         assertFalse(harness.getTicketsFullyProcessed(), "swap resets ticketsFullyProcessed");

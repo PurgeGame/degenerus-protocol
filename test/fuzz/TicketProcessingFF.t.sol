@@ -32,7 +32,7 @@ contract TicketProcessingFFHarness is DegenerusGameStorage {
         rngWordCurrent = v;
     }
 
-    function setTicketWriteSlot(uint8 v) external {
+    function setTicketWriteSlot(bool v) external {
         ticketWriteSlot = v;
     }
 

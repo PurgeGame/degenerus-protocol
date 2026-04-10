@@ -37,7 +37,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
         ticketCursor = v;
     }
 
-    function setTicketWriteSlot(uint8 v) external {
+    function setTicketWriteSlot(bool v) external {
         ticketWriteSlot = v;
     }
 
@@ -171,7 +171,7 @@ contract TicketEdgeCasesTest is Test {
     function setUp() public {
         harness = new TicketEdgeCasesHarness();
         harness.setLevel(5);
-        harness.setTicketWriteSlot(0);
+        harness.setTicketWriteSlot(false);
     }
 
     // =========================================================================
