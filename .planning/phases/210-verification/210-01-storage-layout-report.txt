@@ -1,0 +1,51 @@
+Storage Layout Verification Report
+===================================
+Date: 2026-04-10
+Reference: DegenerusGame (85 storage variables)
+
+Slot 0 (30/32 bytes used):
+  purchaseStartDay  uint32  slot=0 offset=0  bytes=4
+  dailyIdx          uint32  slot=0 offset=4  bytes=4
+  rngRequestTime    uint48  slot=0 offset=8  bytes=6
+  level             uint24  slot=0 offset=14 bytes=3
+  jackpotPhaseFlag  bool    slot=0 offset=17 bytes=1
+  jackpotCounter    uint8   slot=0 offset=18 bytes=1
+  lastPurchaseDay   bool    slot=0 offset=19 bytes=1
+  decWindowOpen     bool    slot=0 offset=20 bytes=1
+  rngLockedFlag     bool    slot=0 offset=21 bytes=1
+  phaseTransitionActive bool slot=0 offset=22 bytes=1
+  gameOver          bool    slot=0 offset=23 bytes=1
+  dailyJackpotCoinTicketsPending bool slot=0 offset=24 bytes=1
+  compressedJackpotFlag uint8 slot=0 offset=25 bytes=1
+  ticketsFullyProcessed bool slot=0 offset=26 bytes=1
+  gameOverPossible  bool    slot=0 offset=27 bytes=1
+  ticketWriteSlot   bool    slot=0 offset=28 bytes=1
+  prizePoolFrozen   bool    slot=0 offset=29 bytes=1
+
+Slot 1 (32/32 bytes used -- FULL):
+  currentPrizePool  uint128 slot=1 offset=0  bytes=16
+  claimablePool     uint128 slot=1 offset=16 bytes=16
+
+Module Comparison Results:
+  PASS: DegenerusGameAdvanceModule (85 vars, identical)
+  PASS: DegenerusGameJackpotModule (85 vars, identical)
+  PASS: DegenerusGameGameOverModule (85 vars, identical)
+  PASS: DegenerusGameDecimatorModule (85 vars, identical)
+  PASS: DegenerusGameBoonModule (85 vars, identical)
+  PASS: DegenerusGameMintStreakUtils (85 vars, identical)
+  PASS: DegenerusGamePayoutUtils (85 vars, identical)
+
+Compilation Failures (pre-existing type mismatch, not layout drift):
+  SKIP: DegenerusGameLootboxModule -- uint48->uint32 cast error at line 655
+  SKIP: DegenerusGameMintModule -- uint48->uint32 cast error at line 1003
+  SKIP: DegenerusGameDegeneretteModule -- uint48->uint32 cast error at line 446
+  SKIP: DegenerusGameWhaleModule -- uint48->uint32 cast error at line 859
+
+  These 4 modules fail compilation due to in-progress type narrowing (uint48 event
+  parameters not yet updated to match uint32 storage types). This is NOT layout drift;
+  the storage declarations in DegenerusGameStorage.sol are shared by all inheritors.
+  Once the compilation errors are fixed, these modules will have identical layouts
+  by construction (they inherit the same storage contract).
+
+VERDICT: PASS -- All compilable inheritors have identical storage layout.
+  Slot 0 and Slot 1 offsets match DegenerusGameStorage.sol comments exactly.
