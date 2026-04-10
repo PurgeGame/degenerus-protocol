@@ -363,7 +363,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         _creditClaimable(account, ethPortion);
 
         // Lootbox portion is no longer claimable ETH; remove from reserved pool.
-        claimablePool -= lootboxPortion;
+        claimablePool -= uint128(lootboxPortion); // Safe: lootboxPortion is a fraction of claimablePool, fits uint128
         _awardDecimatorLootbox(account, lootboxPortion, rngWord);
     }
 
@@ -613,8 +613,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // Terminal Decimator Constants
     // -------------------------------------------------------------------------
 
-    uint48 private constant TERMINAL_DEC_IDLE_TIMEOUT_DAYS = 365;
-    uint48 private constant TERMINAL_DEC_DEATH_CLOCK_DAYS = 120;
+    uint32 private constant TERMINAL_DEC_IDLE_TIMEOUT_DAYS = 365;
+    uint32 private constant TERMINAL_DEC_DEATH_CLOCK_DAYS = 120;
 
     // -------------------------------------------------------------------------
     // Terminal Decimator Burn Tracking
@@ -875,8 +875,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @dev Calculate days remaining on death clock using day-index arithmetic. Returns 0 if expired.
     function _terminalDecDaysRemaining() private view returns (uint256) {
-        uint48 currentDay = _simulatedDayIndex();
-        uint48 psd = purchaseStartDay;
+        uint32 currentDay = _simulatedDayIndex();
+        uint32 psd = purchaseStartDay;
         uint256 deadlineDay = uint256(psd) +
             (
                 level == 0

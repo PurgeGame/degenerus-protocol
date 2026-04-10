@@ -193,8 +193,8 @@ See individual milestone entries above.
 ### v24.1 Storage Layout Optimization (Phases 207-210)
 
 - [x] **Phase 207: Storage Foundation** - 2 plans (completed 2026-04-10)
-- [ ] **Phase 208: Module Cascade** - Propagate type changes through all game modules
-- [ ] **Phase 209: External Contracts & Interfaces** - Propagate to BurnieCoinflip, Quests, sDGNRS, Jackpots, interfaces, views
+- [ ] **Phase 208: Module Cascade + Interfaces** - 4 plans
+- [ ] **Phase 209: External Contracts** - Propagate to BurnieCoinflip, Quests, sDGNRS, Jackpots, Vault, views
 - [ ] **Phase 210: Verification** - forge inspect layout check, test suites, timestamp audit
 
 ## Phase Details
@@ -218,24 +218,31 @@ Plans:
 - [x] 207-01-PLAN.md — Type narrowing, bool conversion, slot 0/1 repack, GameTimeLib
 - [x] 207-02-PLAN.md — Pack lootboxRng, gameover, jackpot traits, and presale blocks
 
-### Phase 208: Module Cascade
-**Goal**: Every module that reads or writes day-index variables or claimablePool compiles cleanly with the narrowed types
+### Phase 208: Module Cascade + Interfaces
+**Goal**: Every module and interface that reads or writes day-index variables or claimablePool compiles cleanly with the narrowed types
 **Depends on**: Phase 207
-**Requirements**: TYPE-03, SLOT-04
+**Requirements**: TYPE-03, TYPE-05, SLOT-04
 **Success Criteria** (what must be TRUE):
-  1. All function parameters, return types, and local variables using day indices are uint32 across AdvanceModule, TicketModule, LootboxModule, and all other game modules
+  1. All function parameters, return types, local variables, and event parameters using day indices are uint32 across all game modules
   2. All claimablePool read/write sites cast or operate on uint128 without truncation risk
   3. The _maybeRequestLootboxRng inline (already committed) compiles with the new types
-  4. forge build succeeds with zero errors for the core game contracts
-**Plans**: TBD
+  4. All interface signatures (IDegenerusGame, IDegenerusGameModules, IDegenerusGameStorage, IStakedDegenerusStonk, IDegenerusQuests, IBurnieCoinflip) match updated module signatures
+  5. Packed slot access uses existing _read/_write helpers (no named wrappers)
+  6. forge build succeeds with zero errors for core game contracts and interfaces
+**Plans**: 4 plans
+Plans:
+- [ ] 208-01-PLAN.md — AdvanceModule + GameOverModule + DecimatorModule (packed lootboxRng/gameOver/presale + day-index)
+- [ ] 208-02-PLAN.md — JackpotModule + LootboxModule + DegeneretteModule (packed dailyJackpotTraits + day-index)
+- [ ] 208-03-PLAN.md — MintModule + WhaleModule + PayoutUtils (packed lootboxRng/presale + day-index)
+- [ ] 208-04-PLAN.md — DegenerusGame.sol + all interfaces + forge build
 
-### Phase 209: External Contracts & Interfaces
+### Phase 209: External Contracts
 **Goal**: All contracts outside the core game module tree compile and interoperate with the narrowed types
 **Depends on**: Phase 208
-**Requirements**: TYPE-04, TYPE-05
+**Requirements**: TYPE-04
 **Success Criteria** (what must be TRUE):
-  1. BurnieCoinflip, DegenerusQuests, StakedDegenerusStonk, and DegenerusJackpots use uint32 for all day-index parameters and storage
-  2. All interfaces (IDegenerusGame, IDegenerusGameStorage, etc.) and view contracts use uint32 for day-index types
+  1. BurnieCoinflip, DegenerusQuests, StakedDegenerusStonk, DegenerusJackpots, and DegenerusVault use uint32 for all day-index parameters and storage
+  2. View contracts use uint32 for day-index types
   3. forge build succeeds across the entire project with zero errors
 **Plans**: TBD
 
@@ -255,8 +262,8 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 207. Storage Foundation | 2/2 | Complete   | 2026-04-10 |
-| 208. Module Cascade | 0/TBD | Not started | - |
-| 209. External Contracts & Interfaces | 0/TBD | Not started | - |
+| 208. Module Cascade + Interfaces | 0/4 | Not started | - |
+| 209. External Contracts | 0/TBD | Not started | - |
 | 210. Verification | 0/TBD | Not started | - |
 
 ## Deferred

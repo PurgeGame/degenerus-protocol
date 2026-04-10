@@ -71,12 +71,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_JACKPOT_PHASE_ENDED = 10;
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 11;
     event DailyRngApplied(
-        uint48 day,
+        uint32 day,
         uint256 rawWord,
         uint256 nudges,
         uint256 finalWord
     );
-    event LootboxRngApplied(uint48 index, uint256 word, uint256 requestId);
+    event LootboxRngApplied(uint32 index, uint256 word, uint256 requestId);
     event VrfCoordinatorUpdated(
         address indexed previous,
         address indexed current
@@ -105,7 +105,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                           CONSTANTS                                  |
       +======================================================================+*/
 
-    uint48 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // Level-0 only; level 1+ uses hardcoded 120 days
+    uint32 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // Level-0 only; level 1+ uses hardcoded 120 days
     uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 3 days;
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
@@ -156,14 +156,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function advanceGame() external {
         address caller = msg.sender;
         uint48 ts = uint48(block.timestamp);
-        uint48 day = _simulatedDayIndexAt(ts);
+        uint32 day = _simulatedDayIndexAt(ts);
         bool inJackpot = jackpotPhaseFlag;
         uint24 lvl = level;
-        uint48 psd = purchaseStartDay;
+        uint32 psd = purchaseStartDay;
         // Turbo: if target already met on day ≤1, flag now so _requestRng
         // does the level pre-increment (matching normal lastPurchaseDay flow).
         if (!inJackpot && !lastPurchaseDay) {
-            uint48 purchaseDays = day - psd;
+            uint32 purchaseDays = day - psd;
             if (
                 purchaseDays <= 1 && _getNextPrizePool() >= levelPrizePool[lvl]
             ) {
@@ -187,8 +187,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Step 1: Finish draining the read slot if not yet fully processed
             if (!ticketsFullyProcessed) {
                 // If mid-day ticket swap is pending, wait for VRF word before processing
-                if (midDayTicketRngPending) {
-                    uint256 word = lootboxRngWordByIndex[lootboxRngIndex - 1];
+                if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
+                    uint256 word = lootboxRngWordByIndex[uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
                     if (word == 0) revert NotTimeYet();
                 }
 
@@ -201,7 +201,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     if (ticketWorked || !ticketsFinished) {
                         if (ticketsFinished) {
                             ticketsFullyProcessed = true;
-                            midDayTicketRngPending = false;
+                            _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                         }
                         emit Advance(STAGE_TICKETS_WORKING, lvl);
                         coinflip.creditFlip(
@@ -263,7 +263,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         do {
             // RNG: use existing word or request new one
             bool bonusFlip = (inJackpot && jackpotCounter == 0) || lvl == 0;
-            (uint256 rngWord, uint48 gapDays) = rngGate(
+            (uint256 rngWord, uint32 gapDays) = rngGate(
                 ts,
                 day,
                 purchaseLevel,
@@ -381,10 +381,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 );
 
                 if (
-                    lootboxPresaleActive &&
+                    _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0 &&
                     (lvl >= 3 ||
-                        lootboxPresaleMintEth >= LOOTBOX_PRESALE_ETH_CAP)
-                ) lootboxPresaleActive = false;
+                        _psRead(PS_MINT_ETH_SHIFT, PS_MINT_ETH_MASK) >= LOOTBOX_PRESALE_ETH_CAP)
+                ) _psWrite(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK, 0);
 
                 // Transition to jackpot phase
                 jackpotPhaseFlag = true;
@@ -472,12 +472,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Handles gameover state and liveness guard checks.
     ///      Returns true if advanceGame should exit early.
     function _handleGameOverPath(
-        uint48 day,
+        uint32 day,
         uint24 lvl,
-        uint48 psd
+        uint32 psd
     ) private returns (bool shouldReturn) {
         // Liveness guard: prevent permanent lockup if game is abandoned
-        uint48 currentDay = day;
+        uint32 currentDay = day;
         bool livenessTriggered = (lvl == 0 &&
             currentDay - psd > DEPLOY_IDLE_TIMEOUT_DAYS) ||
             (lvl != 0 && currentDay - psd > 120);
@@ -620,9 +620,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _consolidatePoolsAndRewardJackpots(
         uint24 lvl,
         uint24 purchaseLevel,
-        uint48 day,
+        uint32 day,
         uint256 rngWord,
-        uint48 psd
+        uint32 psd
     ) private {
         uint256 memFuture = _getFuturePrizePool();
         uint256 memCurrent = _getCurrentPrizePool();
@@ -631,8 +631,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // --- Time-based future take (batched) ---
         {
-            uint48 start = psd + 7;
-            uint48 elapsed = day > start ? day - start : 0;
+            uint32 start = psd + 7;
+            uint32 elapsed = day > start ? day - start : 0;
 
             uint256 bps = _nextToFutureBps(elapsed, purchaseLevel);
             if (purchaseLevel % 10 == 9) bps += NEXT_TO_FUTURE_BPS_X9_BONUS;
@@ -791,7 +791,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         currentPrizePool = uint128(memCurrent);
         yieldAccumulator = memYieldAcc;
         if (claimableDelta != 0) {
-            claimablePool += claimableDelta;
+            claimablePool += uint128(claimableDelta); // Safe: claimableDelta bounded by futurePool which fits uint128
         }
         emit RewardJackpotsSettled(lvl, memFuture, claimableDelta);
     }
@@ -864,7 +864,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _enforceDailyMintGate(
         address caller,
         uint24 lvl,
-        uint48 dailyIdx_
+        uint32 dailyIdx_
     ) private view {
         uint32 gateIdx = uint32(dailyIdx_);
         if (gateIdx == 0) return;
@@ -908,10 +908,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (rngLockedFlag) revert RngLocked();
         // Block while mid-day ticket processing is active — prevents entropy reroll
         // by requesting a new VRF word after inspecting the current one.
-        if (midDayTicketRngPending) revert E();
+        if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) revert E();
 
         uint48 nowTs = uint48(block.timestamp);
-        uint48 currentDay = _simulatedDayIndexAt(nowTs);
+        uint32 currentDay = _simulatedDayIndexAt(nowTs);
 
         // Block in the 15-minute pre-reset window to avoid competing with daily jackpot RNG flow.
         if ((nowTs - 82620) % 1 days >= 1 days - 15 minutes) revert E();
@@ -927,8 +927,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert E();
 
         // Threshold check
-        uint256 pendingEth = lootboxRngPendingEth;
-        uint256 pendingBurnie = lootboxRngPendingBurnie;
+        uint256 pendingEth = _unpackMilliEthToWei(uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK)));
+        uint256 pendingBurnie = _unpackWholeBurnieToWei(uint40(_lrRead(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK)));
         if (pendingEth == 0 && pendingBurnie == 0) revert E();
         if (pendingBurnie < BURNIE_RNG_TRIGGER) {
             uint256 totalEthEquivalent = pendingEth;
@@ -940,7 +940,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         PRICE_COIN_UNIT;
                 }
             }
-            uint256 threshold = lootboxRngThreshold;
+            uint256 threshold = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
             if (threshold != 0 && totalEthEquivalent < threshold) revert E();
         }
 
@@ -951,7 +951,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint24 wk = _tqWriteKey(purchaseLevel_);
             if (ticketQueue[wk].length > 0 && ticketsFullyProcessed) {
                 _swapTicketSlot(purchaseLevel_);
-                midDayTicketRngPending = true;
+                _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 1);
             }
         }
 
@@ -968,9 +968,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         );
 
         // Advance lootbox index so new purchases target the NEXT RNG
-        lootboxRngIndex++;
-        lootboxRngPendingEth = 0;
-        lootboxRngPendingBurnie = 0;
+        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, _lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK) + 1);
+        _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, 0);
+        _lrWrite(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, 0);
         vrfRequestId = id;
         rngWordCurrent = 0;
         rngRequestTime = uint48(block.timestamp);
@@ -999,11 +999,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      burn redemptions, stores lootbox RNG, and handles VRF timeout retries (12h).
     function rngGate(
         uint48 ts,
-        uint48 day,
+        uint32 day,
         uint24 lvl,
         bool isTicketJackpotDay,
         bool bonusFlip
-    ) internal returns (uint256 word, uint48 gapDays) {
+    ) internal returns (uint256 word, uint32 gapDays) {
         // Already recorded for today
         if (rngWordByDay[day] != 0) return (rngWordByDay[day], 0);
 
@@ -1012,9 +1012,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Have a fresh VRF word ready
         if (currentWord != 0 && rngRequestTime != 0) {
             // Backfill gap days from VRF stall before processing current day
-            uint48 idx = dailyIdx;
+            uint32 idx = dailyIdx;
             if (day > idx + 1) {
-                uint48 gapCount = day - idx - 1;
+                uint32 gapCount = day - idx - 1;
                 _backfillGapDays(currentWord, idx + 1, day, bonusFlip);
 
                 // Backfill any lootbox indices that never got a VRF word (orphaned by stall).
@@ -1041,7 +1041,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     uint16 redemptionRoll = uint16(
                         ((currentWord >> 8) % 151) + 25
                     );
-                    uint48 flipDay = day + 1;
+                    uint32 flipDay = day + 1;
                     sdgnrs.resolveRedemptionPeriod(
                         redemptionRoll,
                         flipDay
@@ -1069,7 +1069,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     function _finalizeLootboxRng(uint256 rngWord) private {
-        uint48 index = lootboxRngIndex - 1;
+        uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
         if (lootboxRngWordByIndex[index] != 0) return;
         lootboxRngWordByIndex[index] = rngWord;
         emit LootboxRngApplied(index, rngWord, vrfRequestId);
@@ -1082,7 +1082,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @return word RNG word, 1 if request sent, or 0 if waiting on fallback.
     function _gameOverEntropy(
         uint48 ts,
-        uint48 day,
+        uint32 day,
         uint24 lvl,
         bool isTicketJackpotDay
     ) private returns (uint256 word) {
@@ -1107,7 +1107,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     uint16 redemptionRoll = uint16(
                         ((currentWord >> 8) % 151) + 25
                     );
-                    uint48 flipDay = day + 1;
+                    uint32 flipDay = day + 1;
                     sdgnrs.resolveRedemptionPeriod(
                         redemptionRoll,
                         flipDay
@@ -1140,7 +1140,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         uint16 redemptionRoll = uint16(
                             ((fallbackWord >> 8) % 151) + 25
                         );
-                        uint48 flipDay = day + 1;
+                        uint32 flipDay = day + 1;
                         sdgnrs.resolveRedemptionPeriod(
                             redemptionRoll,
                             flipDay
@@ -1175,12 +1175,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @param currentDay Current day index.
     /// @return word Combined historical entropy.
     function _getHistoricalRngFallback(
-        uint48 currentDay
+        uint32 currentDay
     ) private view returns (uint256 word) {
         uint256 found;
         uint256 combined;
-        uint48 searchLimit = currentDay > 30 ? 30 : currentDay;
-        for (uint48 searchDay = 1; searchDay < searchLimit; ) {
+        uint32 searchLimit = currentDay > 30 ? 30 : currentDay;
+        for (uint32 searchDay = 1; searchDay < searchLimit; ) {
             uint256 w = rngWordByDay[searchDay];
             if (w != 0) {
                 combined = uint256(keccak256(abi.encodePacked(combined, w)));
@@ -1208,7 +1208,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     function _nextToFutureBps(
-        uint48 elapsed,
+        uint32 elapsed,
         uint24 lvl
     ) internal pure returns (uint16) {
         uint256 lvlBonus = (uint256(lvl % 100) / 10) * 100; // +1% per 10 levels within cycle
@@ -1429,9 +1429,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             rngWordCurrent == 0;
         if (!isRetry) {
             // Fresh request: advance lootbox index so new purchases target the NEXT RNG.
-            lootboxRngIndex++;
-            lootboxRngPendingEth = 0;
-            lootboxRngPendingBurnie = 0;
+            _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, _lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK) + 1);
+            _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, 0);
+            _lrWrite(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, 0);
         }
         // Retry: index already advanced from the original request. No action needed —
         // lootboxRngIndex - 1 still points to the pending index regardless of request ID.
@@ -1497,7 +1497,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Clear mid-day lootbox RNG pending flag to prevent post-swap deadlock.
         // Without this, advanceGame can revert with NotTimeYet if a mid-day
         // requestLootboxRng was in-flight when the coordinator stalled.
-        midDayTicketRngPending = false;
+        _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
 
         // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
         // with irreversible BURNIE burns before or during the stall. They carry over
@@ -1510,7 +1510,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Unlock RNG after processing is complete for the day.
     ///      Resets VRF state and re-enables RNG usage.
     /// @param day Current day index to record.
-    function _unlockRng(uint48 day) private {
+    function _unlockRng(uint32 day) private {
         dailyIdx = day;
         rngLockedFlag = false;
         rngWordCurrent = 0;
@@ -1542,7 +1542,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             rngWordCurrent = word;
         } else {
             // Mid-day RNG: directly finalize lootbox and clear state
-            uint48 index = lootboxRngIndex - 1;
+            uint32 index = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
             lootboxRngWordByIndex[index] = word;
             emit LootboxRngApplied(index, word, requestId);
             vrfRequestId = 0;
@@ -1563,14 +1563,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @param bonusFlip Whether presale bonus applies to coinflip resolution.
     function _backfillGapDays(
         uint256 vrfWord,
-        uint48 startDay,
-        uint48 endDay,
+        uint32 startDay,
+        uint32 endDay,
         bool bonusFlip
     ) private {
         // Cap at 120 gap days to stay within block gas limit (~9M gas).
         // Backfills oldest days first (most likely to have active coinflips).
         if (endDay - startDay > 120) endDay = startDay + 120;
-        for (uint48 gapDay = startDay; gapDay < endDay; ) {
+        for (uint32 gapDay = startDay; gapDay < endDay; ) {
             uint256 derivedWord = uint256(
                 keccak256(abi.encodePacked(vrfWord, gapDay))
             );
@@ -1589,11 +1589,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Uses VRF-derived entropy so lootbox outcomes cannot be front-run.
     /// @param vrfWord Fresh VRF word from the post-gap callback.
     function _backfillOrphanedLootboxIndices(uint256 vrfWord) private {
-        uint48 idx = lootboxRngIndex;
+        uint32 idx = uint32(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (idx <= 1) return; // nothing reserved yet
 
         // Scan backwards from the most recent reserved index
-        for (uint48 i = idx - 1; i >= 1; ) {
+        for (uint32 i = idx - 1; i >= 1; ) {
             if (lootboxRngWordByIndex[i] != 0) break; // hit a filled index, done
 
             uint256 fallbackWord = uint256(
@@ -1611,7 +1611,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Apply daily RNG nudges, record the word, and emit the finalized word.
     function _applyDailyRng(
-        uint48 day,
+        uint32 day,
         uint256 rawWord
     ) private returns (uint256 finalWord) {
         uint256 nudges = totalFlipReversals;
@@ -1664,8 +1664,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Below L10: flag is always cleared.
     function _evaluateGameOverAndTarget(
         uint24 lvl,
-        uint48 psd,
-        uint48 day
+        uint32 psd,
+        uint32 day
     ) private returns (bool targetMet) {
         uint256 nextPool = _getNextPrizePool();
         uint256 target = levelPrizePool[lvl];

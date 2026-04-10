@@ -76,8 +76,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      VRF fallback logic (historical word, stall timeout) is in AdvanceModule._gameOverEntropy.
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
     /// @custom:reverts E When funds exist but RNG word unavailable (defense-in-depth), or stETH transfer fails
-    function handleGameOverDrain(uint48 day) external {
-        if (gameOverFinalJackpotPaid) return; // Already processed
+    function handleGameOverDrain(uint32 day) external {
+        if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return; // Already processed
 
         uint24 lvl = level;
 
@@ -128,19 +128,19 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
                 }
             }
             if (totalRefunded != 0) {
-                claimablePool += totalRefunded;
+                claimablePool += uint128(totalRefunded); // Safe: totalRefunded bounded by preRefundAvailable which fits uint128
             }
         }
 
         // Latch terminal state
         gameOver = true;
-        gameOverTime = uint48(block.timestamp);
+        _goWrite(GO_TIME_SHIFT, GO_TIME_MASK, uint48(block.timestamp));
 
         // Burn unallocated tokens
         charityGameOver.burnAtGameOver();
         dgnrs.burnAtGameOver();
 
-        gameOverFinalJackpotPaid = true;
+        _goWrite(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK, 1);
         _setNextPrizePool(0);
         _setFuturePrizePool(0);
         _setCurrentPrizePool(0);
@@ -162,7 +162,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             uint256 decRefund = IDegenerusGame(address(this)).runTerminalDecimatorJackpot(decPool, lvl, rngWord);
             uint256 decSpend = decPool - decRefund;
             if (decSpend != 0) {
-                claimablePool += decSpend;
+                claimablePool += uint128(decSpend); // Safe: decSpend bounded by decPool which is a fraction of available
             }
             remaining -= decPool;
             remaining += decRefund;
@@ -186,11 +186,11 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts E When ETH or stETH transfer fails
     function handleFinalSweep() external {
-        if (gameOverTime == 0) return; // Game not over yet
-        if (block.timestamp < uint256(gameOverTime) + 30 days) return; // Too early
-        if (finalSwept) return; // Already swept
+        if (_goRead(GO_TIME_SHIFT, GO_TIME_MASK) == 0) return; // Game not over yet
+        if (block.timestamp < _goRead(GO_TIME_SHIFT, GO_TIME_MASK) + 30 days) return; // Too early
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return; // Already swept
 
-        finalSwept = true;
+        _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1);
         claimablePool = 0;
 
         // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
