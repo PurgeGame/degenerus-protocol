@@ -247,7 +247,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 209-01-PLAN.md — BurnieCoinflip uint48->uint32 day-index narrowing
-- [ ] 209-02-PLAN.md — DegenerusQuests uint48->uint32 day-index narrowing
+- [x] 209-02-PLAN.md — DegenerusQuests uint48->uint32 day-index narrowing
 - [ ] 209-03-PLAN.md — StakedDegenerusStonk + DegenerusJackpots + DegenerusVault + DeityBoonViewer
 
 ### Phase 210: Verification
@@ -267,7 +267,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 207. Storage Foundation | 2/2 | Complete   | 2026-04-10 |
 | 208. Module Cascade + Interfaces | 4/4 | Complete    | 2026-04-10 |
-| 209. External Contracts | 1/3 | In Progress|  |
+| 209. External Contracts | 2/3 | In Progress|  |
 | 210. Verification | 0/TBD | Not started | - |
 
 ## Deferred
