@@ -11,9 +11,9 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 
 - [x] **TYPE-01**: All day-index storage variables narrowed from uint48 to uint32 (purchaseStartDay, dailyIdx, lastDailyJackpotDay, lootboxRngIndex)
 - [x] **TYPE-02**: All day-index mapping keys narrowed from uint48 to uint32 (rngWordByDay, lootboxDay, dailyHeroWagers, lootbox* mappings, deityBoonDay, deityBoonRecipientDay)
-- [ ] **TYPE-03**: All day-index function parameters, return types, and local variables narrowed from uint48 to uint32 across all modules
+- [x] **TYPE-03**: All day-index function parameters, return types, and local variables narrowed from uint48 to uint32 across all modules
 - [x] **TYPE-04**: All day-index types in external contracts narrowed (BurnieCoinflip, DegenerusQuests, StakedDegenerusStonk, DegenerusJackpots)
-- [ ] **TYPE-05**: All day-index types in interfaces and view contracts narrowed to match implementations
+- [x] **TYPE-05**: All day-index types in interfaces and view contracts narrowed to match implementations
 - [x] **TYPE-06**: ticketWriteSlot converted from uint8 to bool with negation toggle
 - [x] **TYPE-07**: Timestamp types (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) and GNRUS governance uint48s remain unchanged
 
@@ -22,7 +22,7 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 - [x] **SLOT-01**: ticketWriteSlot (bool) and prizePoolFrozen (bool) moved from slot 1 to slot 0 (30/32 bytes used)
 - [x] **SLOT-02**: claimablePool downsized from uint256 to uint128 and packed into slot 1 alongside currentPrizePool (32/32 bytes)
 - [x] **SLOT-03**: Storage slot layout comment block updated to reflect new layout
-- [ ] **SLOT-04**: All claimablePool read/write sites updated for uint128 type
+- [x] **SLOT-04**: All claimablePool read/write sites updated for uint128 type
 - [x] **SLOT-05**: Six lootboxRng scalar variables packed into single uint256 slot with scaling helpers (0.001 ETH / 1 BURNIE resolution)
 - [x] **SLOT-06**: Game over state block packed into single slot (gameOverTime + gameOverFinalJackpotPaid + finalSwept)
 - [x] **SLOT-07**: Daily jackpot traits block packed into single slot (lastDailyJackpotWinningTraits + lastDailyJackpotLevel + lastDailyJackpotDay)
@@ -46,29 +46,31 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TYPE-01 | Phase 207 | Complete |
-| TYPE-02 | Phase 207 | Complete |
-| TYPE-03 | Phase 208 | Pending |
+| TYPE-01 | Phase 207 (verified Phase 212) | Complete |
+| TYPE-02 | Phase 207 (verified Phase 212) | Complete |
+| TYPE-03 | Phase 208 | Complete |
 | TYPE-04 | Phase 209 | Complete |
-| TYPE-05 | Phase 209 | Pending |
-| TYPE-06 | Phase 207 | Complete |
+| TYPE-05 | Phase 208 | Complete |
+| TYPE-06 | Phase 207 (verified Phase 212) | Complete |
 | TYPE-07 | Phase 210 | Complete |
-| SLOT-01 | Phase 207 | Complete |
-| SLOT-02 | Phase 207 | Complete |
-| SLOT-03 | Phase 207 | Complete |
-| SLOT-04 | Phase 208 | Pending |
-| SLOT-05 | Phase 207 | Complete |
-| SLOT-06 | Phase 207 | Complete |
-| SLOT-07 | Phase 207 | Complete |
-| SLOT-08 | Phase 207 | Complete |
+| SLOT-01 | Phase 207 (verified Phase 212) | Complete |
+| SLOT-02 | Phase 207 (verified Phase 212) | Complete |
+| SLOT-03 | Phase 207 (verified Phase 212) | Complete |
+| SLOT-04 | Phase 208 | Complete |
+| SLOT-05 | Phase 207 (verified Phase 212) | Complete |
+| SLOT-06 | Phase 207 (verified Phase 212) | Complete |
+| SLOT-07 | Phase 207 (verified Phase 212) | Complete |
+| SLOT-08 | Phase 207 (verified Phase 212) | Complete |
 | VER-01 | Phase 210 | Complete |
-| VER-02 | Phase 210 | Complete |
+| VER-02 | Phase 211 | Pending |
 | VER-03 | Phase 210 | Complete |
 
 **Coverage:**
 - v24.1 requirements: 18 total
 - Mapped to phases: 18
 - Unmapped: 0
+- Complete: 17
+- Pending: 1 (VER-02 → Phase 211)
 
 ---
 *Requirements defined: 2026-04-09*
