@@ -188,7 +188,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         _resumeAfterSwap(newVRF, resumeWord);
 
         // Gap day 3 should be backfilled with keccak256(resumeWord, 3)
-        uint256 expected = uint256(keccak256(abi.encodePacked(resumeWord, uint48(3))));
+        uint256 expected = uint256(keccak256(abi.encodePacked(resumeWord, uint32(3))));
         if (expected == 0) expected = 1;
         assertEq(game.rngWordForDay(3), expected, "Single gap day backfill matches keccak256");
 
@@ -336,8 +336,8 @@ contract VRFStallEdgeCases is DeployProtocol {
 
     /// @dev Storage slot for totalFlipReversals (verified via forge inspect).
     uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5;
-    /// @dev Storage slot for midDayTicketRngPending (verified via forge inspect).
-    uint256 constant SLOT_MID_DAY_PENDING = 50;
+    /// @dev Storage slot for lootboxRngPacked (midDayTicketRngPending at bits 224-231).
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 38;
 
     /// @notice Unit: coordinator swap resets all VRF state and preserves intentionally-kept variables.
     function test_coordinatorSwapResetsAllVrfState() public {
@@ -446,20 +446,22 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Request mid-day lootbox RNG
         game.requestLootboxRng();
 
-        // Verify midDayTicketRngPending is set
-        uint256 pendingVal = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_MID_DAY_PENDING)))
+        // Verify midDayTicketRngPending is set (bits 224-231 of lootboxRngPacked slot 38)
+        uint256 lrPacked = uint256(
+            vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
         );
-        assertTrue(pendingVal != 0, "midDayTicketRngPending should be set after requestLootboxRng");
+        uint256 midDayVal = (lrPacked >> 224) & 0xFF;
+        assertTrue(midDayVal != 0, "midDayTicketRngPending should be set after requestLootboxRng");
 
         // Coordinator swap
         _doCoordinatorSwap();
 
-        // Verify midDayTicketRngPending cleared
-        pendingVal = uint256(
-            vm.load(address(game), bytes32(uint256(SLOT_MID_DAY_PENDING)))
+        // Verify midDayTicketRngPending cleared (bits 224-231 of lootboxRngPacked slot 38)
+        lrPacked = uint256(
+            vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
         );
-        assertEq(pendingVal, 0, "midDayTicketRngPending cleared by swap");
+        midDayVal = (lrPacked >> 224) & 0xFF;
+        assertEq(midDayVal, 0, "midDayTicketRngPending cleared by swap");
 
         // Verify game can proceed without NotTimeYet after swap
         vm.warp(4 * 86400);

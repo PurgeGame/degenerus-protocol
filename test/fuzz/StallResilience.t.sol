@@ -98,15 +98,15 @@ contract StallResilience is DeployProtocol {
         // Verify gap day words are deterministic derivations of the resume VRF word.
         // _backfillGapDays is called BEFORE _applyDailyRng in rngGate.
         // So it uses rngWordCurrent (the raw VRF word, pre-nudge).
-        uint256 expectedDay3 = uint256(keccak256(abi.encodePacked(resumeWord, uint48(3))));
+        uint256 expectedDay3 = uint256(keccak256(abi.encodePacked(resumeWord, uint32(3))));
         if (expectedDay3 == 0) expectedDay3 = 1;
         assertEq(game.rngWordForDay(3), expectedDay3, "Day 3 word is keccak256(vrfWord, 3)");
 
-        uint256 expectedDay4 = uint256(keccak256(abi.encodePacked(resumeWord, uint48(4))));
+        uint256 expectedDay4 = uint256(keccak256(abi.encodePacked(resumeWord, uint32(4))));
         if (expectedDay4 == 0) expectedDay4 = 1;
         assertEq(game.rngWordForDay(4), expectedDay4, "Day 4 word is keccak256(vrfWord, 4)");
 
-        uint256 expectedDay5 = uint256(keccak256(abi.encodePacked(resumeWord, uint48(5))));
+        uint256 expectedDay5 = uint256(keccak256(abi.encodePacked(resumeWord, uint32(5))));
         if (expectedDay5 == 0) expectedDay5 = 1;
         assertEq(game.rngWordForDay(5), expectedDay5, "Day 5 word is keccak256(vrfWord, 5)");
     }
