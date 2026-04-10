@@ -261,7 +261,7 @@ Plans:
   4. All timestamp types (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) and GNRUS governance uint48s remain uint48 -- verified by grep
 **Plans**: 2 plans
 Plans:
-- [ ] 210-01-PLAN.md — Storage layout inspection + timestamp uint48 audit
+- [x] 210-01-PLAN.md — Storage layout inspection + timestamp uint48 audit
 - [ ] 210-02-PLAN.md — Foundry + Hardhat test suite execution
 
 ## Progress
@@ -271,7 +271,7 @@ Plans:
 | 207. Storage Foundation | 2/2 | Complete   | 2026-04-10 |
 | 208. Module Cascade + Interfaces | 4/4 | Complete    | 2026-04-10 |
 | 209. External Contracts | 3/3 | Complete    | 2026-04-10 |
-| 210. Verification | 0/2 | Not started | - |
+| 210. Verification | 1/2 | In Progress|  |
 
 ## Deferred
 

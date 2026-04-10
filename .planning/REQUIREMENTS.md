@@ -15,7 +15,7 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 - [x] **TYPE-04**: All day-index types in external contracts narrowed (BurnieCoinflip, DegenerusQuests, StakedDegenerusStonk, DegenerusJackpots)
 - [ ] **TYPE-05**: All day-index types in interfaces and view contracts narrowed to match implementations
 - [x] **TYPE-06**: ticketWriteSlot converted from uint8 to bool with negation toggle
-- [ ] **TYPE-07**: Timestamp types (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) and GNRUS governance uint48s remain unchanged
+- [x] **TYPE-07**: Timestamp types (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) and GNRUS governance uint48s remain unchanged
 
 ### Slot Repacking
 
@@ -30,9 +30,9 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 
 ### Verification
 
-- [ ] **VER-01**: forge inspect confirms identical storage layout across all DegenerusGameStorage inheritors
+- [x] **VER-01**: forge inspect confirms identical storage layout across all DegenerusGameStorage inheritors
 - [ ] **VER-02**: Foundry and Hardhat test suites pass with zero new regressions
-- [ ] **VER-03**: No timestamp types accidentally narrowed
+- [x] **VER-03**: No timestamp types accidentally narrowed
 
 ## Out of Scope
 
@@ -52,7 +52,7 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 | TYPE-04 | Phase 209 | Complete |
 | TYPE-05 | Phase 209 | Pending |
 | TYPE-06 | Phase 207 | Complete |
-| TYPE-07 | Phase 210 | Pending |
+| TYPE-07 | Phase 210 | Complete |
 | SLOT-01 | Phase 207 | Complete |
 | SLOT-02 | Phase 207 | Complete |
 | SLOT-03 | Phase 207 | Complete |
@@ -61,9 +61,9 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 | SLOT-06 | Phase 207 | Complete |
 | SLOT-07 | Phase 207 | Complete |
 | SLOT-08 | Phase 207 | Complete |
-| VER-01 | Phase 210 | Pending |
+| VER-01 | Phase 210 | Complete |
 | VER-02 | Phase 210 | Pending |
-| VER-03 | Phase 210 | Pending |
+| VER-03 | Phase 210 | Complete |
 
 **Coverage:**
 - v24.1 requirements: 18 total
