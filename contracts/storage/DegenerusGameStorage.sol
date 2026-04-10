@@ -42,37 +42,38 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
  * -----------------------------------------------------------------------------
  *
  * +-----------------------------------------------------------------------------+
- * | EVM SLOT 0 (32 bytes) -- Timing, FSM, Counters, Flags, ETH Phase           |
+ * | EVM SLOT 0 (32 bytes) -- Timing, FSM, Counters, Flags, Buffer, Freeze       |
  * +-----------------------------------------------------------------------------+
- * | [0:6]   purchaseStartDay         uint48   Day index when purchase/deploy began|
- * | [6:12]  dailyIdx                 uint48   Monotonic day counter             |
- * | [12:18] rngRequestTime           uint48   When last VRF request was fired   |
- * | [18:21] level                    uint24   Current jackpot level (starts at 0) |
- * | [21:22] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT|
- * | [22:23] jackpotCounter           uint8    Jackpots processed this level      |
- * | [23:24] lastPurchaseDay          bool     Prize target met flag              |
- * | [24:25] decWindowOpen            bool     Decimator window latch             |
- * | [25:26] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
- * | [26:27] phaseTransitionActive    bool     Level transition in progress       |
- * | [27:28] gameOver                 bool     Terminal state flag                |
- * | [28:29] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
- * | [29:30] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
- * | [30:31] ticketsFullyProcessed    bool     Read slot fully drained flag       |
- * | [31:32] gameOverPossible         bool     Drip projection endgame flag       |
+ * | [0:4]   purchaseStartDay         uint32   Day index when purchase/deploy began|
+ * | [4:8]   dailyIdx                 uint32   Monotonic day counter             |
+ * | [8:14]  rngRequestTime           uint48   When last VRF request was fired   |
+ * | [14:17] level                    uint24   Current jackpot level (starts at 0)|
+ * | [17:18] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT|
+ * | [18:19] jackpotCounter           uint8    Jackpots processed this level      |
+ * | [19:20] lastPurchaseDay          bool     Prize target met flag              |
+ * | [20:21] decWindowOpen            bool     Decimator window latch             |
+ * | [21:22] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
+ * | [22:23] phaseTransitionActive    bool     Level transition in progress       |
+ * | [23:24] gameOver                 bool     Terminal state flag                |
+ * | [24:25] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
+ * | [25:26] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
+ * | [26:27] ticketsFullyProcessed    bool     Read slot fully drained flag       |
+ * | [27:28] gameOverPossible         bool     Drip projection endgame flag       |
+ * | [28:29] ticketWriteSlot          bool     Double-buffer write toggle         |
+ * | [29:30] prizePoolFrozen          bool     Prize pool freeze active flag      |
+ * | [30:32] <padding>                         2 bytes unused                     |
+ * +-----------------------------------------------------------------------------+
+ *   Total: 30 bytes used (2 bytes padding)
+ *
+ * +-----------------------------------------------------------------------------+
+ * | EVM SLOT 1 (32 bytes) -- Prize Pools                                        |
+ * +-----------------------------------------------------------------------------+
+ * | [0:16]  currentPrizePool         uint128  Active prize pool for current level|
+ * | [16:32] claimablePool            uint128  Aggregate ETH liability for claims |
  * +-----------------------------------------------------------------------------+
  *   Total: 32 bytes used (0 bytes padding -- FULL)
  *
- * +-----------------------------------------------------------------------------+
- * | EVM SLOT 1 (32 bytes) -- Double-Buffer Fields + Current Prize Pool          |
- * +-----------------------------------------------------------------------------+
- * | [0:1]   ticketWriteSlot          uint8    Double-buffer write index (0 or 1) |
- * | [1:2]   prizePoolFrozen          bool     Prize pool freeze active flag      |
- * | [2:18]  currentPrizePool         uint128  Active prize pool for current level|
- * | [18:32] <padding>                         14 bytes unused                    |
- * +-----------------------------------------------------------------------------+
- *   Total: 18 bytes used (14 bytes padding)
- *
- * SLOTS 2+ — Full-width variables, arrays, and mappings
+ * SLOTS 2+ -- Full-width variables, arrays, and mappings
  * -----------------------------------------------------------------------------
  * Each uint256, array length, or mapping root occupies its own slot.
  * Dynamic arrays: length at slot N, data at keccak256(N).
@@ -207,10 +208,11 @@ abstract contract DegenerusGameStorage {
     error RngLocked();
 
     // =========================================================================
-    // SLOT 0: Level Timing, Batching, and Finite State Machine
+    // SLOT 0: Timing, FSM, Counters, Flags, Buffer, Freeze
     // =========================================================================
     // These variables pack into a single 32-byte storage slot for gas efficiency.
     // Order matters: EVM packs from low to high within a slot.
+    // 30/32 bytes used (2 bytes padding).
 
     /// @dev Game day index when the purchase phase (or deploy) began.
     ///      Initialized to GameTimeLib.currentDayIndex() in the constructor.
@@ -308,10 +310,7 @@ abstract contract DegenerusGameStorage {
     ///      Cleared when: drip re-covers deficit, lastPurchaseDay is set, or phase transition.
     bool internal gameOverPossible;
 
-    // =========================================================================
-    // EVM SLOT 1: Double-Buffer Fields + Current Prize Pool
-    // =========================================================================
-    // Packs into EVM Slot 1: ticketWriteSlot, prizePoolFrozen, currentPrizePool (18 bytes used, 14 bytes padding).
+    // EVM SLOT 0 (continued): Double-Buffer + Freeze (moved from slot 1)
 
     /// @dev Active write buffer toggle for ticket queue double-buffering.
     ///      Toggled via negation (`ticketWriteSlot = !ticketWriteSlot`) during queue slot swaps.
@@ -327,11 +326,27 @@ abstract contract DegenerusGameStorage {
     ///      use pre-freeze pool values. _unfreezePool is the single control point.
     bool internal prizePoolFrozen;
 
+    // =========================================================================
+    // EVM SLOT 1: Prize Pools
+    // =========================================================================
+
     /// @dev Active prize pool for the current level.
     ///      Accumulated from mint fees and distributed via jackpots.
     ///      Packed into slot 1 as uint128 (max ~3.4e20 ETH, far exceeds total supply).
     ///      Access through _getCurrentPrizePool()/_setCurrentPrizePool() helpers.
     uint128 internal currentPrizePool;
+
+    /// @dev Aggregate ETH liability across all claimableWinnings entries.
+    ///      Used for solvency checks: game must hold >= claimablePool ETH.
+    ///
+    ///      INVARIANT: claimablePool >= sum(claimableWinnings[*])
+    ///      Maintained by crediting/debiting both in tandem.
+    ///      NOTE: During decimator settlement, the full pool is reserved in claimablePool
+    ///      before individual claims are credited, temporarily breaking equality.
+    ///
+    ///      uint128 max ~3.4e20 ETH — far exceeds total ETH supply.
+    ///      Packed into slot 1 alongside currentPrizePool.
+    uint128 internal claimablePool;
 
     // =========================================================================
     // SLOT 2+: Full-Width Balances and Pools
@@ -379,15 +394,6 @@ abstract contract DegenerusGameStorage {
     ///      SECURITY: Pull pattern — players withdraw their own funds.
     ///      Prevents reentrancy by separating credit from transfer.
     mapping(address => uint256) internal claimableWinnings;
-
-    /// @dev Aggregate ETH liability across all claimableWinnings entries.
-    ///      Used for solvency checks: game must hold >= claimablePool ETH.
-    ///
-    ///      INVARIANT: claimablePool >= sum(claimableWinnings[*])
-    ///      Maintained by crediting/debiting both in tandem.
-    ///      NOTE: During decimator settlement, the full pool is reserved in claimablePool
-    ///      before individual claims are credited, temporarily breaking equality.
-    uint256 internal claimablePool;
 
     /// @dev Nested mapping: level -> trait ID (0-255) -> array of ticket holders.
     ///      Used for jackpot winner selection: random index into trait's array.
