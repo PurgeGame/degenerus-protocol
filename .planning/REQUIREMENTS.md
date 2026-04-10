@@ -69,9 +69,9 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 - v24.1 requirements: 18 total
 - Mapped to phases: 18
 - Unmapped: 0
-- Complete: 17
-- Pending: 1 (VER-02 → Phase 211)
+- Complete: 18
+- Pending: 0
 
 ---
 *Requirements defined: 2026-04-09*
-*Last updated: 2026-04-09 after roadmap creation*
+*Last updated: 2026-04-10 after Phase 212 doc reconciliation*
