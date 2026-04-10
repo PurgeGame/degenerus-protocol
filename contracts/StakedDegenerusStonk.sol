@@ -27,9 +27,9 @@ interface IDegenerusGamePlayer {
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
     /// @notice Get current day index.
-    function currentDayView() external view returns (uint48);
+    function currentDayView() external view returns (uint32);
     /// @notice Get RNG word for a specific day.
-    function rngWordForDay(uint48 day) external view returns (uint256);
+    function rngWordForDay(uint32 day) external view returns (uint256);
     /// @notice Get player's activity score.
     function playerActivityScore(address player) external view returns (uint256);
     /// @notice Resolve a redemption lootbox for a player.
@@ -53,7 +53,7 @@ interface IBurnieCoinflipPlayer {
     /// @notice Claim coinflip winnings for sDGNRS redemption (skips RNG lock).
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Get the result of a coinflip day.
-    function getCoinflipDayResult(uint48 day) external view returns (uint16 rewardPercent, bool win);
+    function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -148,10 +148,10 @@ contract StakedDegenerusStonk {
     event PoolRebalance(Pool indexed from, Pool indexed to, uint256 amount);
 
     /// @notice Emitted when a player submits a gambling burn redemption
-    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieOwed, uint48 periodIndex);
+    event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 burnieOwed, uint32 periodIndex);
 
     /// @notice Emitted when a redemption period is resolved with a roll
-    event RedemptionResolved(uint48 indexed periodIndex, uint16 roll, uint256 rolledBurnie, uint48 flipDay);
+    event RedemptionResolved(uint32 indexed periodIndex, uint16 roll, uint256 rolledBurnie, uint32 flipDay);
 
     /// @notice Emitted when a player claims their resolved redemption
     event RedemptionClaimed(address indexed player, uint16 roll, bool flipResolved, uint256 ethPayout, uint256 burniePayout, uint256 lootboxEth);
@@ -202,17 +202,17 @@ contract StakedDegenerusStonk {
     struct PendingRedemption {
         uint96  ethValueOwed;   // base (100%) ETH-equivalent owed (max ~79B ETH)
         uint96  burnieOwed;     // base (100%) BURNIE owed (max ~79B ETH-equiv)
-        uint48  periodIndex;    // which daily period (dailyIdx at submission)
+        uint32  periodIndex;    // which daily period (dailyIdx at submission)
         uint16  activityScore;  // snapshotted activity score + 1 (0 = not yet set)
-    } // 96 + 96 + 48 + 16 = 256 bits (1 slot)
+    } // 96 + 96 + 32 + 16 = 240 bits (1 slot)
 
     struct RedemptionPeriod {
         uint16  roll;           // 0 = unresolved, 25-175 = resolved
-        uint48  flipDay;        // coinflip day for BURNIE gamble
+        uint32  flipDay;        // coinflip day for BURNIE gamble
     }
 
     mapping(address => PendingRedemption) public pendingRedemptions;
-    mapping(uint48 => RedemptionPeriod) public redemptionPeriods;
+    mapping(uint32 => RedemptionPeriod) public redemptionPeriods;
 
     uint256 public pendingRedemptionEthValue;      // total segregated ETH across all periods
     uint256 internal pendingRedemptionBurnie;       // total reserved BURNIE
@@ -220,7 +220,7 @@ contract StakedDegenerusStonk {
     uint256 internal pendingRedemptionBurnieBase;   // current unresolved period BURNIE base
 
     uint256 internal redemptionPeriodSupplySnapshot;
-    uint48  internal redemptionPeriodIndex;
+    uint32  internal redemptionPeriodIndex;
     uint256 internal redemptionPeriodBurned;
 
     // =====================================================================
@@ -574,7 +574,7 @@ contract StakedDegenerusStonk {
     function resolveRedemptionPeriod(uint16 roll, uint32 flipDay) external {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
 
-        uint48 period = redemptionPeriodIndex;
+        uint32 period = redemptionPeriodIndex;
         if (pendingRedemptionEthBase == 0 && pendingRedemptionBurnieBase == 0) return;
 
         // Adjust ETH segregation by roll
@@ -613,7 +613,7 @@ contract StakedDegenerusStonk {
         if (period.roll == 0) revert NotResolved();
 
         uint16 roll = period.roll;
-        uint48 claimPeriodIndex = claim.periodIndex;
+        uint32 claimPeriodIndex = claim.periodIndex;
         uint16 claimActivityScore = claim.activityScore;
 
         // Total rolled ETH. Per-claimant floor division may leave up to (n-1) wei
@@ -743,7 +743,7 @@ contract StakedDegenerusStonk {
         if (amount == 0 || amount > bal) revert Insufficient();
 
         // 50% supply cap per period
-        uint48 currentPeriod = game.currentDayView();
+        uint32 currentPeriod = game.currentDayView();
         if (redemptionPeriodIndex != currentPeriod) {
             redemptionPeriodSupplySnapshot = totalSupply;
             redemptionPeriodIndex = currentPeriod;
