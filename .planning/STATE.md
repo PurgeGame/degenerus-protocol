@@ -1,44 +1,44 @@
 ---
 gsd_state_version: 1.0
-milestone: v24.1
-milestone_name: Storage Layout Optimization
-status: verifying
-stopped_at: Completed 212-01-PLAN.md
-last_updated: "2026-04-10T20:10:20.599Z"
+milestone: v25.0
+milestone_name: Full Audit (Post-v5.0 Delta + Fresh RNG)
+status: executing
+stopped_at: Completed 213-01-PLAN.md
+last_updated: "2026-04-10T21:20:03.750Z"
 last_activity: 2026-04-10
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 22
-  completed_plans: 22
-  percent: 100
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 1
+  percent: 33
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-09)
+See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 211 — test-suite-repair
+**Current focus:** Phase 213 — Delta Extraction
 
 ## Current Position
 
-Phase: 211 (test-suite-repair) — EXECUTING
-Plan: 4 of 4
-Milestone: v24.1 — Storage Layout Optimization
-Status: Phase complete — ready for verification
+Phase: 213 (Delta Extraction) — EXECUTING
+Plan: 2 of 3
+Milestone: v25.0 — Full Audit (Post-v5.0 Delta + Fresh RNG)
+Status: Ready to execute
 Last activity: 2026-04-10
 
-Progress: [██████░░░░] 66%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 12 (v24.0 milestone)
-- Timeline: 1 day (2026-04-09)
+- Total plans completed: 22 (v24.1 milestone)
+- Timeline: 2 days (2026-04-09 to 2026-04-10)
 
 ## Accumulated Context
 
@@ -47,32 +47,11 @@ Progress: [██████░░░░] 66%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v24.1]: All day-index uint48 -> uint32; timestamps stay uint48; GNRUS governance uint48s unchanged
-- [v24.1]: ticketWriteSlot converts from uint8 to bool (XOR toggle -> negation)
-- [v24.1]: claimablePool downsized from uint256 to uint128 (340B ETH headroom)
-- [v24.1]: Slot 0 absorbs ticketWriteSlot + prizePoolFrozen (30/32 bytes); slot 1 becomes currentPrizePool + claimablePool (32/32 bytes)
-- [Phase 207]: uint32 for all day-index types; bool for ticketWriteSlot; uint128 for claimablePool; slot 0 absorbs buffer+freeze (30/32); slot 1 packs two uint128 pools (32/32)
-- [Phase 207]: ETH/LINK scaled 1e15, BURNIE scaled 1e18 for lootboxRng packed slot
-- [Phase 207]: 14 individual variables packed into 4 uint256 slots (lootboxRng, gameOver, dailyJackpotTraits, presale)
-- [Phase 209]: JACKPOT_RESET_TIME kept as uint48 (time-in-seconds constant, not a day index)
-- [Phase 209]: Removed intermediate uint48 casts in DegenerusQuests streak arithmetic -- uint32 currentDay minus uint24 anchorDay naturally produces uint32
-- [Phase 209]: PendingRedemption packing drops from 256 to 240 bits; still fits one slot with 16 bits free
-- [Phase 210]: 4 modules with pre-existing compilation errors documented as non-layout-drift; storage layout verified through shared inheritance
-- [Phase 210]: Tightened GNRUS negative test pattern to avoid false positives from multi-variable event lines
-- [Phase 210]: All test compilation failures are mechanical type mismatches (uint8->bool, uint48->uint32), not architectural regressions
-- [Phase 210]: Cast uint48 index to uint32 at emit sites rather than narrowing local variable type
-- [Phase 210]: Used assertTrue/assertFalse for bool ticketWriteSlot checks; left _dailyIdx() as uint48 with uint32 cast at assignment
-- [Phase 210]: 113 test runtime failures (82 Foundry + 31 Hardhat) are assertion mismatches against pre-v24.1 layout, not contract regressions; need dedicated test-update plan
-- [Phase 211]: lootboxRngIndex extraction logic unchanged (low 48 bits correct for LR_INDEX_SHIFT=0); VRFPathHandler _dailyIdx uses uint32 intermediate cast
-- [Phase 211]: purchaseStartDay=1 (not 0) at deploy; warmUpDay pattern prevents turbo when testing compressed mode
-- [Phase 211]: v24.1 shifted traitBurnTicket slot 9->8, ticketQueue slot 13->12; coinflip seed uses uint32 epoch
-- [Phase 211]: ContractAddresses.sol must be patched via patchForFoundry.js before Foundry tests; committed version has production 24-contract layout vs Foundry 23-contract layout
-- [Phase 211]: 46 remaining Foundry failures are integration-level assertion mismatches (level advancement, affiliate claims, VRF word derivation) beyond mechanical slot/shift fixes
-- [Phase 211]: Root cause of 27 TicketLifecycle failures: turbo-mode underflow from gap backfill adjusting purchaseStartDay at level 0; fixed with warm-up pattern
-- [Phase 211]: AffiliateDgnrsClaim had 3 stale constants (not just bit shift): SLOT_LEVEL_DGNRS_ALLOCATION 28->25, SLOT_LEVEL_DGNRS_CLAIMED 29->26, plus bit shift 144->112
-- [Phase 211]: DegeneretteFreezeResolution _findWinningCombo uses uint32(index) in encodePacked to match contract v24.1 bet resolution
-- [Phase 211]: Final verification confirms zero test failures: Foundry 358/358 pass, Hardhat 1233/1233 pass
-- [Phase 212]: Documented orphaned LR_MIN_LINK constants as retained for off-chain tooling
+- [v25.0]: Audit baseline is v5.0 (Ultimate Adversarial Audit, phases 103-119). All changes v6.0-v24.1 in scope.
+- [v25.0]: RNG audit is fresh-eyes — no reliance on prior RNG conclusions from v3.7/v3.8/v3.9.
+- [v25.0]: No test work in this milestone — purely audit findings and fixes.
+- [v25.0]: Phases 214/215/216 can run in parallel after 213 completes.
+- [Phase 213]: Tabular format for classification and changelog; MOVED functions tracked bidirectionally for EndgameModule elimination
 
 ### Pending Todos
 
@@ -81,9 +60,8 @@ None.
 ### Blockers/Concerns
 
 - ContractAddresses.sol has unstaged changes (different deploy addresses) — stash before test/tool runs
-- FuturepoolSkim.t.sol references restructured _applyTimeBasedFutureTake (pre-existing compilation failure)
 
 ## Session Continuity
 
-Last session: 2026-04-10T19:50:10.893Z
-Stopped at: Completed 212-01-PLAN.md
+Last session: 2026-04-10T21:20:03.747Z
+Stopped at: Completed 213-01-PLAN.md

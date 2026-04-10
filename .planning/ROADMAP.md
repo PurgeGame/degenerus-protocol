@@ -3,210 +3,87 @@
 ## Milestones
 
 - ✅ **v1.0 Initial RNG Security Audit** — Phases 1-5 (shipped 2026-03-14)
-- ✅ **v1.1 Economic Flow Audit** — Phases 6-15 (shipped 2026-03-15)
-- ✅ **v1.2 RNG Security Audit (Delta)** — Phases 16-18 (shipped 2026-03-15)
-- ✅ **v1.3 sDGNRS/DGNRS Split + Doc Sync** — (shipped 2026-03-16)
-- ✅ **v2.0 C4A Audit Prep** — Phases 19-23 (shipped 2026-03-17)
-- ✅ **v2.1 VRF Governance Audit + Doc Sync** — Phases 24-25 (shipped 2026-03-18)
-- ✅ **v3.0 Full Contract Audit + Payout Specification** — Phases 26-30 (shipped 2026-03-18)
-- ✅ **v3.1 Pre-Audit Polish — Comment Correctness + Intent Verification** — Phases 31-37 (shipped 2026-03-19)
-- ✅ **v3.2 RNG Delta Audit + Comment Re-scan** — Phases 38-43 (shipped 2026-03-19)
-- ✅ **v3.3 Gambling Burn Audit + Full Adversarial Sweep** — Phases 44-49 (shipped 2026-03-21)
-- ✅ **v3.4 New Feature Audit — Skim Redesign + Redemption Lootbox** — Phases 50-53 (shipped 2026-03-21)
-- ✅ **v3.5 Final Polish — Comment Correctness + Gas Optimization** — Phases 54-58 (shipped 2026-03-22)
-- ✅ **v3.6 VRF Stall Resilience** — Phases 59-62 (shipped 2026-03-22)
-- ✅ **v3.7 VRF Path Audit** — Phases 63-67 (shipped 2026-03-22)
-- ✅ **v3.8 VRF Commitment Window Audit** — Phases 68-73 (shipped 2026-03-23)
-- ✅ **v3.9 Far-Future Ticket Fix** — Phases 74-80 (shipped 2026-03-23)
-- ✅ **v4.0 Ticket Lifecycle & RNG-Dependent Variable Re-Audit** — Phases 81-91 (shipped 2026-03-23)
-- ✅ **v4.1 Ticket Lifecycle Integration Tests** — Phases 92-94 (shipped 2026-03-24)
-- ✅ **v4.2 Daily Jackpot Chunk Removal + Gas Optimization** — Phases 95-98 (shipped 2026-03-25)
-- ✅ **v4.3 prizePoolsPacked Batching Optimization** — Phase 99 (closed early 2026-03-25, savings revised ~1.6M -> ~63.8K)
-- ✅ **v4.4 BAF Cache-Overwrite Bug Fix + Pattern Scan** — Phases 100-102 (shipped 2026-03-25)
-- ✅ **v5.0 Ultimate Adversarial Audit** — Phases 103-119 (shipped 2026-03-25)
-- ✅ **v6.0 Test Suite Cleanup + Storage/Gas Fixes + DegenerusCharity** — Phases 120-125 (shipped 2026-03-26)
-- ✅ **v7.0 Delta Adversarial Audit (v6.0 Changes)** — Phases 126-129 (shipped 2026-03-26)
-- ✅ **v8.0 Pre-Audit Hardening** — Phases 130-134 (shipped 2026-03-27)
-- ✅ **v8.1 Final Audit Prep** — Phases 135-137 (shipped 2026-03-28)
-- ✅ **v9.0 Contest Dry Run** — Phases 138-140 (shipped 2026-03-28)
-- ✅ **v10.0 Audit Submission Ready** — Phases 141-143 (shipped 2026-03-29)
-- ✅ **v10.1 ABI Cleanup** — Phases 144-146 (shipped 2026-03-30)
-- ✅ **v10.2 Ticket Mint Gas Optimization** — Phase 147 (shipped 2026-03-30, Phase 148 skipped — no change needed)
-- ✅ **v10.3 Delta Adversarial Audit (v10.1 Changes)** — Phases 149-150 (shipped 2026-03-30)
-- ✅ **v11.0 BURNIE Endgame Gate** — Phases 151-152 (shipped 2026-03-31)
-- ✅ **v12.0 Level Quests** — Phases 153-155 (shipped 2026-04-01)
-- ✅ **v13.0 Level Quests Implementation** — Phases 156-158.1 (shipped 2026-04-01)
-- ✅ **v14.0 Activity Score & Quest Gas Optimization** — Phases 159-161 (shipped 2026-04-02)
-- ✅ **v15.0 Delta Audit (v11.0-v14.0)** — Phases 162-167 (shipped 2026-04-02)
-- ✅ **v16.0 Module Consolidation & Storage Repack** — Phases 168-172 (shipped 2026-04-03)
-- ✅ **v17.0 Affiliate Bonus Cache** — Phases 173-174 (shipped 2026-04-03)
-- ✅ **v17.1 Comment Correctness Sweep** — Phases 175-178 (shipped 2026-04-03)
-- ✅ **v18.0 Delta Audit (v16.0-v17.1)** — Phases 179-182 (shipped 2026-04-04)
-- ✅ **v19.0 Pool Accounting Fix & Sweep** — Phases 183-185 (shipped 2026-04-04)
-- ✅ **v20.0 Pool Consolidation & Write Batching** — Phases 186-187 (shipped 2026-04-08)
-- ✅ **v21.0 Jackpot Two-Call Split & Skip-Split Optimization** — Phases 195-198 (shipped 2026-04-08)
-- ✅ **v22.0 Delta Audit & Payout Reference Rewrite** — Phases 199-200 (shipped 2026-04-08)
-- ✅ **v23.0 Redemption Coinflip Fix** — Phases 201-202 (shipped 2026-04-09)
-- ✅ **v24.0 Gameover Flow Audit & Fix** — Phases 203-206 (shipped 2026-04-09)
-- ✅ **v24.1 Storage Layout Optimization** — Phases 207-212 (shipped 2026-04-10)
+- ✅ **v2.0 Adversarial Audit** — Phases 6-18 (shipped 2026-03-17)
+- ✅ **v3.0-v24.1** — Phases 19-212 (shipped 2026-04-10)
+- 🚧 **v25.0 Full Audit (Post-v5.0 Delta + Fresh RNG)** — Phases 213-217 (in progress)
 
 ## Phases
 
-<details>
-<summary>v2.0 C4A Audit Prep (Phases 19-23) -- SHIPPED 2026-03-17</summary>
+- [ ] **Phase 213: Delta Extraction** - Produce function-level changelog, contract classifications, and interaction map for the entire v6.0-v24.1 delta
+- [ ] **Phase 214: Adversarial Audit** - Per-function adversarial analysis of every changed/new function plus storage layout and cross-function attack chains
+- [ ] **Phase 215: RNG Fresh Eyes** - Ground-up VRF lifecycle audit with no reliance on prior RNG conclusions
+- [ ] **Phase 216: Pool & ETH Accounting** - ETH conservation proof and pool mutation audit across the restructured architecture
+- [ ] **Phase 217: Findings Consolidation** - Severity classification, KNOWN-ISSUES update, and regression check against all prior findings
 
-- [x] **Phase 19: Delta Security Audit -- sDGNRS/DGNRS Split** (completed 2026-03-16)
-- [x] **Phase 20: Correctness Verification -- Docs, Comments, Tests** (completed 2026-03-16)
-- [x] **Phase 21: Novel Attack Surface -- Deep Creative Analysis** (completed 2026-03-17)
-- [x] **Phase 22: Warden Simulation + Regression Check** (completed 2026-03-17)
-- [x] **Phase 23: Gas Optimization -- Dead Code Removal** (completed 2026-03-17)
+## Phase Details
 
-</details>
+### Phase 213: Delta Extraction
+**Goal**: The exact audit surface is defined — every changed, new, and deleted function is catalogued with cross-module interaction paths
+**Depends on**: Nothing (first phase of milestone)
+**Requirements**: DELTA-01, DELTA-02, DELTA-03
+**Success Criteria** (what must be TRUE):
+  1. A function-level changelog exists covering every contract modified between v5.0 (phase 103) and v24.1 (phase 212)
+  2. Every contract in the codebase is classified as NEW / MODIFIED / DELETED / UNCHANGED with justification
+  3. An interaction map shows all cross-module call chains between changed functions
+  4. Subsequent audit phases can reference the delta extraction as their scope definition
+**Plans:** 1/3 plans executed
+Plans:
+- [x] 213-01-PLAN.md — Classify and changelog modules + storage contracts (13 files, ~6,800 diff lines)
+- [ ] 213-02-PLAN.md — Classify and changelog core contracts: main, interfaces, libraries, mocks (33 files, ~3,700 diff lines)
+- [ ] 213-03-PLAN.md — Build cross-module interaction map and unified delta extraction document
 
-<details>
-<summary>v3.0 Full Contract Audit + Payout Specification (Phases 26-30) -- SHIPPED 2026-03-18</summary>
+### Phase 214: Adversarial Audit
+**Goal**: Every changed/new function is proven safe against reentrancy, access control violations, integer overflow, state corruption, and composition attacks
+**Depends on**: Phase 213
+**Requirements**: ADV-01, ADV-02, ADV-03, ADV-04
+**Success Criteria** (what must be TRUE):
+  1. Every changed/new function has a per-function audit verdict (SAFE / VULNERABLE / INFO) covering reentrancy, access control, overflow, and state corruption
+  2. Storage layout is verified identical across all DegenerusGameStorage inheritors via forge inspect output
+  3. Cross-function attack chains are enumerated and each is classified as SAFE or flagged as a finding
+  4. All changed external/public entry points have call graph audit showing reachable state mutations
+**Plans**: TBD
 
-- [x] **Phase 26-30**: See milestone details
+### Phase 215: RNG Fresh Eyes
+**Goal**: The VRF/RNG system is proven sound from first principles — no prior conclusions carried forward
+**Depends on**: Phase 213
+**Requirements**: RNG-01, RNG-02, RNG-03, RNG-04, RNG-05
+**Success Criteria** (what must be TRUE):
+  1. VRF request/fulfillment lifecycle is traced end-to-end with explicit proof at each stage
+  2. Every RNG consumer has a backward trace proving the VRF word was unknown at input commitment time
+  3. Every path between VRF request and fulfillment has an analysis of what player-controllable state can change in that window
+  4. Every keccak/shift/mask producing a game outcome is traced to its VRF source word with derivation steps shown
+  5. rngLocked mutual exclusion is verified across all state-changing paths that touch RNG state
+**Plans**: TBD
 
-</details>
+### Phase 216: Pool & ETH Accounting
+**Goal**: ETH conservation is proven across the entire restructured pool architecture — no ETH can be created, destroyed, or misrouted
+**Depends on**: Phase 213
+**Requirements**: POOL-01, POOL-02, POOL-03
+**Success Criteria** (what must be TRUE):
+  1. An algebraic ETH conservation proof covers the consolidated pool architecture (all ETH in = all ETH out + all ETH held)
+  2. Every SSTORE site touching prize pool / claimable pool / future pool is catalogued with mutation direction and guards
+  3. Jackpot payout, redemption, and sweep flows are traced cross-module with ETH amounts verified at each handoff
+**Plans**: TBD
 
-<details>
-<summary>v3.1-v3.9 (Phases 31-80) -- SHIPPED</summary>
+### Phase 217: Findings Consolidation
+**Goal**: All audit findings are severity-classified and checked against prior known issues — the audit is ready for external review
+**Depends on**: Phase 214, Phase 215, Phase 216
+**Requirements**: FIND-01, FIND-02, FIND-03
+**Success Criteria** (what must be TRUE):
+  1. Every finding from phases 214-216 has a severity classification (CRITICAL / HIGH / MEDIUM / LOW / INFO) with justification
+  2. KNOWN-ISSUES.md is updated with any new entries discovered during this audit
+  3. All prior findings from v3.3 through v24.1 are regression-checked against current code (still fixed or still documented)
+**Plans**: TBD
 
-See individual milestone entries above.
+## Progress
 
-</details>
+**Execution Order:**
+Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 completes. Phase 217 requires all three.
 
-<details>
-<summary>v4.0-v4.4 (Phases 81-102) -- SHIPPED</summary>
-
-See individual milestone entries above.
-
-</details>
-
-<details>
-<summary>v5.0-v7.0 (Phases 103-129) -- SHIPPED</summary>
-
-See individual milestone entries above.
-
-</details>
-
-<details>
-<summary>v8.0-v8.1 (Phases 130-137) -- SHIPPED</summary>
-
-See individual milestone entries above.
-
-</details>
-
-<details>
-<summary>v9.0-v10.3 (Phases 138-150) -- SHIPPED</summary>
-
-See individual milestone entries above.
-
-</details>
-
-<details>
-<summary>v11.0-v15.0 (Phases 151-167) -- SHIPPED</summary>
-
-See individual milestone entries above.
-
-</details>
-
-<details>
-<summary>v16.0 Module Consolidation & Storage Repack (Phases 168-172) -- SHIPPED 2026-04-03</summary>
-
-- [x] **Phase 168: Storage Repack** - 3 plans (completed 2026-04-02)
-- [x] **Phase 169: Inline rewardTopAffiliate** - 1 plan (completed 2026-04-02)
-- [x] **Phase 170: Migrate runRewardJackpots** - 1 plan (completed 2026-04-03)
-- [x] **Phase 171: Delete EndgameModule** - 1 plan (completed 2026-04-03)
-- [x] **Phase 172: Delta Verification** - ad-hoc (completed 2026-04-03)
-
-</details>
-
-<details>
-<summary>v17.0-v17.1 (Phases 173-178) -- SHIPPED 2026-04-03</summary>
-
-See individual milestone entries above.
-
-</details>
-
-<details>
-<summary>v18.0 Delta Audit (Phases 179-182) -- SHIPPED 2026-04-04</summary>
-
-See individual milestone entries above.
-
-</details>
-
-<details>
-<summary>v19.0 Pool Accounting Fix & Sweep (Phases 183-185) -- SHIPPED 2026-04-04</summary>
-
-- [x] **Phase 183: Jackpot ETH Fix** - 1 plan (completed 2026-04-04)
-- [x] **Phase 184: Pool Accounting Sweep** - 3 plans (completed 2026-04-04)
-- [x] **Phase 185: Delta Audit** - 2 plans (completed 2026-04-04)
-
-</details>
-
-<details>
-<summary>v20.0 Pool Consolidation & Write Batching (Phases 186-187) -- SHIPPED 2026-04-08</summary>
-
-- [x] **Phase 186: Pool Consolidation & Write Batching** - 4 plans (completed 2026-04-05)
-- [x] **Phase 187: Delta Audit** - 2 plans (completed 2026-04-05)
-
-</details>
-
-<details>
-<summary>v21.0 Jackpot Two-Call Split & Skip-Split Optimization (Phases 195-198) -- SHIPPED 2026-04-08</summary>
-
-- [x] **Phase 195: Jackpot Two-Call Split** - 1 plan (completed 2026-04-06)
-- [x] **Phase 196: Post-Split Audit — Gas, Logic Parity, State, Bytecode** - 3 plans (completed 2026-04-06)
-- [x] **Phase 197: Payout Reference & Event Catalog** - 1 plan (completed 2026-04-06)
-- [x] **Phase 198: Skip-Split Optimization + Code Cleanup** - 1 plan (completed 2026-04-08)
-
-</details>
-
-<details>
-<summary>v22.0 Delta Audit & Payout Reference Rewrite (Phases 199-200) -- SHIPPED 2026-04-08</summary>
-
-- [x] **Phase 199: Delta Audit — Skip-Split + Gas Ceiling Proof** — 2 plans (completed 2026-04-08)
-- [x] **Phase 200: Payout Reference Rewrite + Purchase Phase Redesign** — 2 plans + contract changes (completed 2026-04-08)
-
-</details>
-
-<details>
-<summary>v23.0 Redemption Coinflip Fix (Phases 201-202) -- SHIPPED 2026-04-09</summary>
-
-- [x] **Phase 201: Redemption Coinflip Accounting Fix** - 1 plan (completed 2026-04-09)
-- [x] **Phase 202: Delta Audit — Redemption Accounting Verification** - 1 plan (completed 2026-04-09)
-
-</details>
-
-<details>
-<summary>v24.0 Gameover Flow Audit & Fix (Phases 203-206) -- SHIPPED 2026-04-09</summary>
-
-- [x] **Phase 203: Drain Fix** - 1 plan (completed 2026-04-09)
-- [x] **Phase 204: Trigger & Drain Audit** - 1 plan (completed 2026-04-09)
-- [x] **Phase 205: Sweep & Interaction Audit** - 2 plans (completed 2026-04-09)
-- [x] **Phase 206: Delta Audit** - 1 plan (completed 2026-04-09)
-
-</details>
-
-<details>
-<summary>v24.1 Storage Layout Optimization (Phases 207-212) -- SHIPPED 2026-04-10</summary>
-
-- [x] **Phase 207: Storage Foundation** - 2 plans (completed 2026-04-10)
-- [x] **Phase 208: Module Cascade + Interfaces** - 4 plans (completed 2026-04-10)
-- [x] **Phase 209: External Contracts** - 3 plans (completed 2026-04-10)
-- [x] **Phase 210: Verification** - 5 plans (completed 2026-04-10)
-- [x] **Phase 211: Test Suite Repair** - 7 plans (completed 2026-04-10)
-- [x] **Phase 212: Doc Reconciliation** - 1 plan (completed 2026-04-10)
-
-</details>
-
-## Deferred
-
-- **FORMAL-01**: Foundry fuzz invariant tests for governance (vote weight conservation, threshold monotonicity)
-- **FORMAL-02**: Formal verification of vote counting arithmetic via Halmos
-- **FORMAL-03**: Monte Carlo simulation of governance outcomes under various voter distributions
-- **FVER-01**: Halmos symbolic proof of CHARITY burn math (proportional ETH/stETH)
-- **FVER-02**: stETH shares-based accounting for 1-2 wei rounding precision
-- **FVER-03**: Foundry fuzz invariant tests for governance (vote weight conservation)
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 213. Delta Extraction | 1/3 | In Progress|  |
+| 214. Adversarial Audit | 0/? | Not started | - |
+| 215. RNG Fresh Eyes | 0/? | Not started | - |
+| 216. Pool & ETH Accounting | 0/? | Not started | - |
+| 217. Findings Consolidation | 0/? | Not started | - |
