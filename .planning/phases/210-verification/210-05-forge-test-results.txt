@@ -1,0 +1,50 @@
+[FAIL: Must reach at least level 2: 0 < 2] testLastDayTicketsRouteToNextLevel() (gas: 3635987971)
+[FAIL: SRC-05: at least one lootbox open must produce a far roll routed to FF key] testLootboxFarRollTicketsRouteToFF() (gas: 10657663)
+[FAIL: At least one lootbox open must queue tickets for buyer3 (near or far)] testLootboxNearRollTicketsProcessed() (gas: 9409846)
+[FAIL: Must reach level 1: 0 < 1] testMidDayBurstAfterRngRequest() (gas: 3635988367)
+[FAIL: Must reach level 1: 0 < 1] testMidDayFFWritesNotBlocked() (gas: 3635989005)
+[FAIL: Must reach level 1: 0 < 1] testMidDayHeavyTicketVolume() (gas: 3635989247)
+[FAIL: Must reach level 1: 0 < 1] testMidDayMultipleCyclesSameDay() (gas: 3635989489)
+[FAIL: Must reach level 1: 0 < 1] testMidDayRngFiresWithReadQueuePending() (gas: 3635988345)
+[FAIL: Must reach level 1: 0 < 1] testMidDaySwapSkipped_ReadNotDrained() (gas: 3635989335)
+[FAIL: Must reach level 1: 0 < 1] testMidDaySwapTicketsNotDoubleCounted() (gas: 3635989511)
+[FAIL: Must reach level 1: 0 < 1] testMidDayTicketsNotStranded() (gas: 3635988037)
+[FAIL: Game must reach at least level 4: 0 < 4] testMultiLevelZeroStranding() (gas: 3644234680)
+[FAIL: FF at level 6 should have 2 entries before driving: 0 != 2] testPrepareFutureTicketsRange() (gas: 13318)
+[FAIL: Write-key queue for level 1 should have entries after purchase] testPurchasePhaseTicketsProcessed() (gas: 478472)
+[FAIL: Must have at least one valid lootbox index] testRngLockedBlocksFFLootbox() (gas: 1025775)
+[FAIL: Must reach at least level 2: 0 < 2] testRngLockedBlocksFFPurchase() (gas: 3635988166)
+[FAIL: Must reach level 1: 0 < 1] testVaultPerpetualTicketsRouteToFF() (gas: 3635988895)
+[FAIL: Write-key queue at level 3 should grow from whale bundle] testWhaleBundleTicketsAcrossLevels() (gas: 5645992)
+[FAIL: Must reach at least level 2: 0 < 2] testWriteSlotIsolationAcrossBufferStates() (gas: 3635988804)
+[FAIL: Must reach at least level 2: 0 < 2] testWriteSlotIsolationDuringRngLocked() (gas: 3635988936)
+[FAIL: Write key for level 1 should have entries after purchase: 0 <= 0] testWriteSlotSurvivesSwapAndFreeze() (gas: 474062)
+[FAIL: Must complete at least 5 level transitions: 0 < 5] testZeroStrandingSweepAfterTransitions() (gas: 3644246535)
+
+Encountered 4 failing tests in test/fuzz/VRFCore.t.sol:VRFCore
+[FAIL: rngRequestTime should be set] test_coordinatorSwap_clearsRngLocked() (gas: 8125452)
+[FAIL: rngRequestTime should be set] test_midDayFulfillment_clearsState() (gas: 9282906)
+[FAIL: Fresh request should increment lootboxRngIndex by 1: 0 != 1] test_retryDetection_fresh() (gas: 160918)
+[FAIL: panic: arithmetic underflow or overflow (0x11)] test_timeoutRetry_12h() (gas: 8126994)
+
+Encountered 1 failing test in test/fuzz/VRFLifecycle.t.sol:VRFLifecycle
+[FAIL: Game should advance past level 0] test_vrfLifecycle_levelAdvancement() (gas: 75200957)
+
+Encountered 2 failing tests in test/fuzz/VRFPathCoverage.t.sol:VRFPathCoverage
+[FAIL: lootboxRngIndex must advance after mid-day stall recovery; counterexample: calldata=0x8fcb6755000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillWithMidDayPending_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: First day: index should increment by exactly 1: 0 != 1; counterexample: calldata=0x2c4915e7000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_indexLifecycleAcrossStall_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+
+Encountered 7 failing tests in test/fuzz/VRFStallEdgeCases.t.sol:VRFStallEdgeCases
+[FAIL: midDayTicketRngPending should be set after requestLootboxRng] test_coordinatorSwapClearsMidDayPending() (gas: 9280735)
+[FAIL: rngRequestTime set] test_coordinatorSwapResetsAllVrfState() (gas: 8127666)
+[FAIL: Single gap day backfill matches keccak256: 37316410921644378908430118330688941497990180777936406189229347624191291137864 != 49904465938375853577135549683438666356295338477427944266334689411963089837812] test_gapBackfillSingleDayGap() (gas: 10041727)
+[FAIL: dailyIdx advanced past gap to current day: 0 != 6] test_gapDaysSkipResolveRedemptionPeriod() (gas: 9554734)
+[FAIL: dailyIdx == 2 after first post-deploy day complete: 0 != 2] test_wallClockDayAdvancesDuringStall() (gas: 8014848)
+[FAIL: panic: arithmetic underflow or overflow (0x11)] test_zeroSeedAtGameStart() (gas: 2850345)
+[FAIL: panic: arithmetic underflow or overflow (0x11)] test_zeroSeedUnreachableAfterSwap() (gas: 8010844)
+
+Encountered a total of 82 failing tests, 276 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 82 failed tests
+
+Fuzz seed: 0xdeadbeef (use `--fuzz-seed` to reproduce)
