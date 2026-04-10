@@ -30,6 +30,6 @@ library GameTimeLib {
      */
     function currentDayIndexAt(uint48 ts) internal pure returns (uint32) {
         uint32 currentDayBoundary = uint32((ts - JACKPOT_RESET_TIME) / 1 days);
-        return currentDayBoundary - ContractAddresses.DEPLOY_DAY_BOUNDARY + 1;
+        return currentDayBoundary - uint32(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
     }
 }
