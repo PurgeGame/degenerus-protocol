@@ -59,7 +59,13 @@ Plans:
   3. Every path between VRF request and fulfillment has an analysis of what player-controllable state can change in that window
   4. Every keccak/shift/mask producing a game outcome is traced to its VRF source word with derivation steps shown
   5. rngLocked mutual exclusion is verified across all state-changing paths that touch RNG state
-**Plans**: TBD
+**Plans:** 5 plans
+Plans:
+- [ ] 215-01-PLAN.md — VRF lifecycle end-to-end trace (daily, lootbox, gap backfill, gameover fallback)
+- [ ] 215-02-PLAN.md — Backward trace from every RNG consumer proving word unknown at commitment
+- [ ] 215-03-PLAN.md — Commitment window analysis (player-controllable state between VRF request/fulfillment)
+- [ ] 215-04-PLAN.md — Word derivation verification (keccak/shift/mask/modulo to VRF source)
+- [ ] 215-05-PLAN.md — rngLocked mutual exclusion verification + phase synthesis
 
 ### Phase 216: Pool & ETH Accounting
 **Goal**: ETH conservation is proven across the entire restructured pool architecture — no ETH can be created, destroyed, or misrouted
@@ -90,6 +96,6 @@ Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 complete
 |-------|----------------|--------|-----------|
 | 213. Delta Extraction | 3/3 | Complete    | 2026-04-10 |
 | 214. Adversarial Audit | 5/5 | Complete    | 2026-04-10 |
-| 215. RNG Fresh Eyes | 0/? | Not started | - |
+| 215. RNG Fresh Eyes | 0/5 | Planned     | - |
 | 216. Pool & ETH Accounting | 0/? | Not started | - |
 | 217. Findings Consolidation | 0/? | Not started | - |
