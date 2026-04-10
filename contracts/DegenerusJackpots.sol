@@ -128,7 +128,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     mapping(uint24 => mapping(address => uint256)) internal bafPlayerEpoch;
 
     /// @notice Day index of the most recent BAF jackpot resolution (any bracket).
-    uint48 internal lastBafResolvedDay;
+    uint32 internal lastBafResolvedDay;
 
     /*+======================================================================+
       |                      MODIFIERS & ACCESS CONTROL                      |
