@@ -4,48 +4,29 @@ pragma solidity 0.8.34;
 /**
  * @title WrappedWrappedXRP (WWXRP)
  * @author Burnie Degenerus
- * @notice An ERC20 token representing "Wrapped Wrapped WWXRP" - a joke prize that MIGHT be backed by actual wXRP.
+ * @notice An ERC20 joke prize token.
  *
  * @dev WARNING: THIS IS A JOKE TOKEN!
- *      - There is NO GUARANTEE that enough wXRP exists to back all WWXRP tokens
- *      - The contract MAY be undercollateralized at any time
- *      - Unwrapping is FIRST-COME-FIRST-SERVED based on available reserves
- *      - If you get actual wXRP out, consider yourself lucky!
+ *      - There is NO backing asset behind WWXRP
+ *      - It is a pure mint/burn game reward with no redemption path
  *
  * @dev FEATURES:
  *      - Standard ERC20 functionality (transfer, approve, etc.)
- *      - mintPrize(): Authorized minters can award unbacked WWXRP prizes
+ *      - mintPrize(): Authorized minters can award WWXRP prizes
  *      - vaultMintTo(): Vault can mint from a fixed uncirculating reserve
- *      - wrap is disabled; unwrap/donate remain available
  *
  * @dev SECURITY:
  *      - Simple ERC20 with no complex logic
  *      - Uses Solidity 0.8+ overflow protection
- *      - wXRP reserves tracked separately from supply for transparency
- *      - CEI pattern: burns before transfers
  */
 
 import {ContractAddresses} from "./ContractAddresses.sol";
-
-/// @notice Minimal ERC20 interface for wXRP token interactions.
-interface IERC20 {
-    /// @notice Transfer tokens to a recipient.
-    function transfer(address to, uint256 amount) external returns (bool);
-    /// @notice Transfer tokens from sender to recipient using caller's allowance.
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) external returns (bool);
-    /// @notice Get token balance for an address.
-    function balanceOf(address account) external view returns (uint256);
-}
 
 contract WrappedWrappedXRP {
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+
-      |  Standard ERC20 events plus unwrap/donate tracking                  |
+      |  Standard ERC20 events plus vault allowance tracking                |
       +======================================================================+*/
 
     /// @notice Emitted when tokens are transferred between addresses
@@ -63,16 +44,6 @@ contract WrappedWrappedXRP {
         address indexed spender,
         uint256 amount
     );
-
-    /// @notice Emitted when someone unwraps WWXRP back to wXRP
-    /// @param user The user who unwrapped
-    /// @param amount Amount of WWXRP burned (and wXRP returned)
-    event Unwrapped(address indexed user, uint256 amount);
-
-    /// @notice Emitted when someone donates wXRP to increase backing
-    /// @param donor The generous donor
-    /// @param amount Amount of wXRP donated
-    event Donated(address indexed donor, uint256 amount);
 
     /// @notice Emitted when the vault spends from its uncirculating allowance
     /// @param spender The contract spending from allowance (address(this))
@@ -96,12 +67,6 @@ contract WrappedWrappedXRP {
 
     /// @notice Thrown when spender has insufficient allowance
     error InsufficientAllowance();
-
-    /// @notice Thrown when wXRP reserves are insufficient to fulfill unwrap request
-    error InsufficientReserves();
-
-    /// @notice Thrown when wXRP transfer fails
-    error TransferFailed();
 
     /// @notice Thrown when caller is not an authorized minter
     error OnlyMinter();
@@ -149,10 +114,6 @@ contract WrappedWrappedXRP {
       |  ContractAddresses. No storage slots consumed for wiring.            |
       +======================================================================+*/
 
-    /// @notice The wXRP token contract address (compile-time constant)
-    /// @dev Set in ContractAddresses library before deployment
-    IERC20 internal constant wXRP = IERC20(ContractAddresses.WXRP);
-
     /// @dev Game contract address authorized to mint WWXRP
     address internal constant MINTER_GAME = ContractAddresses.GAME;
 
@@ -164,21 +125,6 @@ contract WrappedWrappedXRP {
 
     /// @dev Vault contract address authorized to mint from uncirculating reserve
     address internal constant MINTER_VAULT = ContractAddresses.VAULT;
-
-    /*+======================================================================+
-      |                         wXRP RESERVES                                |
-      +======================================================================+
-      |  Tracks the actual wXRP backing held by this contract               |
-      +======================================================================+*/
-
-    /// @dev Scaling factor between WWXRP (18 decimals) and wXRP (6 decimals).
-    ///      1 face-value wXRP = 1e6 units; 1 face-value WWXRP = 1e18 units.
-    uint256 private constant WXRP_SCALING = 1e12;
-
-    /// @notice Actual wXRP reserves held by this contract (in WWXRP-equivalent 18-decimal units)
-    /// @dev This may be LESS than totalSupply (undercollateralized joke token!)
-    ///      Or MORE than totalSupply if generous souls donate
-    uint256 public wXRPReserves;
 
     /// @notice Total supply including uncirculating vault allowance
     /// @dev Used by dashboards to show circulation + reserve.
@@ -282,63 +228,6 @@ contract WrappedWrappedXRP {
     }
 
     /*+======================================================================+
-      |                       WRAP / UNWRAP FUNCTIONS                        |
-      +======================================================================+
-      |  Wrap not implemented; unwrap/donate are enabled.                     |
-      +======================================================================+*/
-
-    /// @notice Unwrap WWXRP back to wXRP (if reserves allow!)
-    /// @dev Burns WWXRP (18 decimals) from caller, transfers equivalent wXRP (6 decimals).
-    ///      Uses CEI pattern: burns before external transfer.
-    /// @param amount Amount of WWXRP to unwrap (18 decimals). Must be >= 1e12 (1 wXRP unit).
-    /// @custom:reverts ZeroAmount When amount is zero
-    /// @custom:reverts InsufficientReserves When wXRP reserves are insufficient
-    /// @custom:reverts InsufficientBalance When caller has insufficient WWXRP
-    /// @custom:reverts TransferFailed When wXRP transfer fails
-    function unwrap(uint256 amount) external {
-        if (amount == 0) revert ZeroAmount();
-
-        // Check if we actually have enough reserves (probably not!)
-        if (wXRPReserves < amount) revert InsufficientReserves();
-
-        // Convert WWXRP (18 dec) to wXRP (6 dec) — truncates sub-unit dust
-        uint256 wXRPAmount = amount / WXRP_SCALING;
-        if (wXRPAmount == 0) revert ZeroAmount();
-
-        // CEI pattern: burn first, transfer after
-        _burn(msg.sender, amount);
-        wXRPReserves -= amount;
-
-        // Transfer wXRP back to user
-        if (!wXRP.transfer(msg.sender, wXRPAmount)) {
-            revert TransferFailed();
-        }
-
-        emit Unwrapped(msg.sender, amount);
-    }
-
-    /// @notice Donate wXRP to increase reserves without minting WWXRP
-    /// @dev For generous souls who want to improve the backing ratio
-    ///      or for game contracts to add prize pool reserves.
-    ///      Reserves are tracked in WWXRP-equivalent units (18 decimals).
-    /// @param amount Amount of wXRP to donate (6 decimals)
-    /// @custom:reverts ZeroAmount When amount is zero
-    /// @custom:reverts TransferFailed When wXRP transferFrom fails
-    function donate(uint256 amount) external {
-        if (amount == 0) revert ZeroAmount();
-
-        // Transfer wXRP (6 dec) from donor to this contract
-        if (!wXRP.transferFrom(msg.sender, address(this), amount)) {
-            revert TransferFailed();
-        }
-
-        // Scale to 18-decimal reserves and increase (improves backing ratio!)
-        wXRPReserves += amount * WXRP_SCALING;
-
-        emit Donated(msg.sender, amount);
-    }
-
-    /*+======================================================================+
       |                       PRIVILEGED MINT/BURN FUNCTIONS                 |
       +======================================================================+
       |  Allows authorized minters to create/destroy WWXRP                  |
@@ -346,7 +235,6 @@ contract WrappedWrappedXRP {
 
     /// @notice Mint WWXRP to a recipient (for lootbox/game prizes)
     /// @dev Only callable by authorized minters (game/coin/coinflip contracts).
-    ///      Mints WITHOUT backing, making the token more undercollateralized.
     /// @param to Recipient of the minted WWXRP
     /// @param amount Amount to mint (18 decimals)
     /// @custom:reverts OnlyMinter When caller is not an authorized minter
@@ -362,7 +250,6 @@ contract WrappedWrappedXRP {
         }
         if (amount == 0) revert ZeroAmount();
 
-        // Mint without backing - increases the backing deficit (perfect!)
         _mint(to, amount);
     }
 

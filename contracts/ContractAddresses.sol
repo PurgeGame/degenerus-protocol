@@ -35,5 +35,5 @@ library ContractAddresses {
     address internal constant GNRUS = address(0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC);
     address internal constant CREATOR = address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496);
     address internal constant VRF_COORDINATOR = address(0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f);
-    address internal constant WXRP = address(0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9);
+
 }
