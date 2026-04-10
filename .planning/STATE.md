@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v24.1
 milestone_name: Storage Layout Optimization
 status: verifying
-stopped_at: Completed 211-04-PLAN.md
-last_updated: "2026-04-10T17:55:19.329Z"
+stopped_at: Completed 211-05-PLAN.md
+last_updated: "2026-04-10T19:14:46.183Z"
 last_activity: 2026-04-10
 progress:
   total_phases: 6
-  completed_phases: 5
-  total_plans: 18
-  completed_plans: 18
-  percent: 100
+  completed_phases: 4
+  total_plans: 21
+  completed_plans: 19
+  percent: 90
 ---
 
 # Project State
@@ -68,6 +68,8 @@ Recent decisions affecting current work:
 - [Phase 211]: v24.1 shifted traitBurnTicket slot 9->8, ticketQueue slot 13->12; coinflip seed uses uint32 epoch
 - [Phase 211]: ContractAddresses.sol must be patched via patchForFoundry.js before Foundry tests; committed version has production 24-contract layout vs Foundry 23-contract layout
 - [Phase 211]: 46 remaining Foundry failures are integration-level assertion mismatches (level advancement, affiliate claims, VRF word derivation) beyond mechanical slot/shift fixes
+- [Phase 211]: Root cause of 27 TicketLifecycle failures: turbo-mode underflow from gap backfill adjusting purchaseStartDay at level 0; fixed with warm-up pattern
+- [Phase 211]: AffiliateDgnrsClaim had 3 stale constants (not just bit shift): SLOT_LEVEL_DGNRS_ALLOCATION 28->25, SLOT_LEVEL_DGNRS_CLAIMED 29->26, plus bit shift 144->112
 
 ### Pending Todos
 
@@ -80,5 +82,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10T17:55:19.327Z
-Stopped at: Completed 211-04-PLAN.md
+Last session: 2026-04-10T19:14:46.181Z
+Stopped at: Completed 211-05-PLAN.md
