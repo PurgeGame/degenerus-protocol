@@ -1,93 +1,73 @@
-# Requirements: Degenerus Protocol Audit — v24.0 Gameover Flow
+# Requirements: Degenerus Protocol — v24.1 Storage Layout Optimization
 
 **Defined:** 2026-04-09
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v24.0 Requirements
+## v24.1 Requirements
 
-Requirements for gameover flow audit and fix. Each maps to roadmap phases.
+Requirements for storage layout optimization. Each maps to roadmap phases.
 
-### Drain Fix
+### Type Narrowing
 
-- [ ] **DFIX-01**: `handleGameOverDrain` reverts (not returns) if funds exist but `rngWordByDay[day] == 0`
-- [ ] **DFIX-02**: Deity pass refunds execute exactly once per gameover
-- [ ] **DFIX-03**: `burnAtGameOver` calls execute exactly once per gameover
-- [ ] **DFIX-04**: `gameOver`/`gameOverTime` latch exactly once per gameover
-- [ ] **DFIX-05**: All pool zeroing executes exactly once per gameover
+- [x] **TYPE-01**: All day-index storage variables narrowed from uint48 to uint32 (purchaseStartDay, dailyIdx, lastDailyJackpotDay, lootboxRngIndex)
+- [x] **TYPE-02**: All day-index mapping keys narrowed from uint48 to uint32 (rngWordByDay, lootboxDay, dailyHeroWagers, lootbox* mappings, deityBoonDay, deityBoonRecipientDay)
+- [ ] **TYPE-03**: All day-index function parameters, return types, and local variables narrowed from uint48 to uint32 across all modules
+- [ ] **TYPE-04**: All day-index types in external contracts narrowed (BurnieCoinflip, DegenerusQuests, StakedDegenerusStonk, DegenerusJackpots)
+- [ ] **TYPE-05**: All day-index types in interfaces and view contracts narrowed to match implementations
+- [x] **TYPE-06**: ticketWriteSlot converted from uint8 to bool with negation toggle
+- [ ] **TYPE-07**: Timestamp types (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) and GNRUS governance uint48s remain unchanged
 
-### Trigger Audit
+### Slot Repacking
 
-- [x] **TRIG-01**: Liveness guard conditions verified (365d L0, 120d L1+, safety abort)
-- [x] **TRIG-02**: `_gameOverEntropy` three paths verified (VRF ready, fallback after 3d, pending)
-- [x] **TRIG-03**: RNG word lifecycle from request through storage to consumption verified
+- [x] **SLOT-01**: ticketWriteSlot (bool) and prizePoolFrozen (bool) moved from slot 1 to slot 0 (30/32 bytes used)
+- [x] **SLOT-02**: claimablePool downsized from uint256 to uint128 and packed into slot 1 alongside currentPrizePool (32/32 bytes)
+- [x] **SLOT-03**: Storage slot layout comment block updated to reflect new layout
+- [ ] **SLOT-04**: All claimablePool read/write sites updated for uint128 type
+- [ ] **SLOT-05**: Six lootboxRng scalar variables packed into single uint256 slot with scaling helpers (0.001 ETH / 1 BURNIE resolution)
+- [ ] **SLOT-06**: Game over state block packed into single slot (gameOverTime + gameOverFinalJackpotPaid + finalSwept)
+- [ ] **SLOT-07**: Daily jackpot traits block packed into single slot (lastDailyJackpotWinningTraits + lastDailyJackpotLevel + lastDailyJackpotDay)
+- [ ] **SLOT-08**: Presale state block packed into single slot (lootboxPresaleActive + lootboxPresaleMintEth as uint128)
 
-### Drain Audit
+### Verification
 
-- [x] **DRNA-01**: Fund split correctness (10% decimator / 90% terminal jackpot)
-- [x] **DRNA-02**: Deity pass refund math verified (20 ETH/pass, FIFO, budget-capped)
-- [x] **DRNA-03**: `claimablePool` accounting through entire drain is correct
-- [x] **DRNA-04**: Remainder sweep to vault handles all edge cases
-
-### Sweep Audit
-
-- [x] **SWEP-01**: 30-day delay enforcement correct and non-manipulable
-- [x] **SWEP-02**: `claimablePool` forfeiture and fund split (33/33/34) verified
-- [x] **SWEP-03**: stETH-first transfer preference and hard-revert behavior verified
-- [x] **SWEP-04**: VRF shutdown and LINK recovery verified
-
-### Interaction Audit
-
-- [x] **IXNR-01**: Claims window correct (allowed between drain and sweep, blocked after `finalSwept`)
-- [x] **IXNR-02**: Post-gameover auto-rebuy bypass in `_addClaimableEth` verified
-- [x] **IXNR-03**: Post-gameover redemption deterministic payout path verified
-- [x] **IXNR-04**: All purchase/mint paths blocked by `gameOver` check verified
-- [x] **IXNR-05**: `gameOverPossible` flag lifecycle verified
-
-### Delta Audit
-
-- [x] **DLTA-01**: Restructured `handleGameOverDrain` is behaviorally equivalent (except revert vs return)
-- [x] **DLTA-02**: No test suite regressions
+- [ ] **VER-01**: forge inspect confirms identical storage layout across all DegenerusGameStorage inheritors
+- [ ] **VER-02**: Foundry and Hardhat test suites pass with zero new regressions
+- [ ] **VER-03**: No timestamp types accidentally narrowed
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Normal-path advanceGame audit | Covered exhaustively in v15.0-v22.0 |
-| Token burn mechanics | burnAtGameOver calls audited, not the burn logic itself (covered in v3.3) |
-| VRF commitment window | Covered in v3.8; only gameover-specific RNG paths in scope |
-| Gas optimization | Focus is correctness, not gas savings |
+| GNRUS governance uint48 changes | Those are proposal IDs and vote weights, not day indices |
+| Timestamp narrowing (uint48 -> uint32) | uint32 timestamps overflow in 2106 -- unacceptable for permanent contract |
+| Further slot packing beyond slots 0-1 | Diminishing returns; slots 2+ are full-width by design |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DFIX-01 | Phase 203 | Pending |
-| DFIX-02 | Phase 203 | Pending |
-| DFIX-03 | Phase 203 | Pending |
-| DFIX-04 | Phase 203 | Pending |
-| DFIX-05 | Phase 203 | Pending |
-| TRIG-01 | Phase 204 | Complete |
-| TRIG-02 | Phase 204 | Complete |
-| TRIG-03 | Phase 204 | Complete |
-| DRNA-01 | Phase 204 | Complete |
-| DRNA-02 | Phase 204 | Complete |
-| DRNA-03 | Phase 204 | Complete |
-| DRNA-04 | Phase 204 | Complete |
-| SWEP-01 | Phase 205 | Complete |
-| SWEP-02 | Phase 205 | Complete |
-| SWEP-03 | Phase 205 | Complete |
-| SWEP-04 | Phase 205 | Complete |
-| IXNR-01 | Phase 205 | Complete |
-| IXNR-02 | Phase 205 | Complete |
-| IXNR-03 | Phase 205 | Complete |
-| IXNR-04 | Phase 205 | Complete |
-| IXNR-05 | Phase 205 | Complete |
-| DLTA-01 | Phase 206 | Complete |
-| DLTA-02 | Phase 206 | Complete |
+| TYPE-01 | Phase 207 | Complete |
+| TYPE-02 | Phase 207 | Complete |
+| TYPE-03 | Phase 208 | Pending |
+| TYPE-04 | Phase 209 | Pending |
+| TYPE-05 | Phase 209 | Pending |
+| TYPE-06 | Phase 207 | Complete |
+| TYPE-07 | Phase 210 | Pending |
+| SLOT-01 | Phase 207 | Complete |
+| SLOT-02 | Phase 207 | Complete |
+| SLOT-03 | Phase 207 | Complete |
+| SLOT-04 | Phase 208 | Pending |
+| SLOT-05 | Phase 207 | Pending |
+| SLOT-06 | Phase 207 | Pending |
+| SLOT-07 | Phase 207 | Pending |
+| SLOT-08 | Phase 207 | Pending |
+| VER-01 | Phase 210 | Pending |
+| VER-02 | Phase 210 | Pending |
+| VER-03 | Phase 210 | Pending |
 
 **Coverage:**
-- v24.0 requirements: 23 total
-- Mapped to phases: 23
+- v24.1 requirements: 18 total
+- Mapped to phases: 18
 - Unmapped: 0
 
 ---

@@ -215,7 +215,7 @@ See individual milestone entries above.
   9. Presale state (lootboxPresaleActive + lootboxPresaleMintEth) packed into single uint256
 **Plans**: 2 plans
 Plans:
-- [ ] 207-01-PLAN.md — Type narrowing, bool conversion, slot 0/1 repack, GameTimeLib
+- [x] 207-01-PLAN.md — Type narrowing, bool conversion, slot 0/1 repack, GameTimeLib
 - [ ] 207-02-PLAN.md — Pack lootboxRng, gameover, jackpot traits, and presale blocks
 
 ### Phase 208: Module Cascade
@@ -254,7 +254,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 207. Storage Foundation | 0/2 | Planned | - |
+| 207. Storage Foundation | 1/2 | In Progress|  |
 | 208. Module Cascade | 0/TBD | Not started | - |
 | 209. External Contracts & Interfaces | 0/TBD | Not started | - |
 | 210. Verification | 0/TBD | Not started | - |
