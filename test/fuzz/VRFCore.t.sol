@@ -49,9 +49,9 @@ contract VRFCore is DeployProtocol {
         }
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 40.
+    /// @dev Read lootboxRngIndex directly from storage slot 38.
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(40)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(38)))));
     }
 
     /// @dev Read vrfRequestId directly from storage slot 4.
@@ -64,11 +64,10 @@ contract VRFCore is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
     }
 
-    /// @dev Read rngRequestTime from packed slot 0, bytes [12:18] (uint48).
-    ///      In Solidity's right-to-left packing, byte 12 starts at bit 96.
+    /// @dev Read rngRequestTime from packed slot 0, bytes [8:14] (uint48, bit offset 64).
     function _readRngRequestTime() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
-        return uint48(packed >> 96);
+        return uint48(packed >> 64);
     }
 
     /// @dev Deploy a new MockVRFCoordinator and wire it up via admin prank.

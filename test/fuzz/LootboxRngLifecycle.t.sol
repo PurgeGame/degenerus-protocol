@@ -59,10 +59,10 @@ contract LootboxRngLifecycle is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
     }
 
-    /// @dev Read rngRequestTime from packed slot 0, bytes [12:18] (uint48).
+    /// @dev Read rngRequestTime from packed slot 0, bytes [8:14] (uint48, bit offset 64).
     function _readRngRequestTime() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
-        return uint48(packed >> 96);
+        return uint48(packed >> 64);
     }
 
     /// @dev Deploy a new MockVRFCoordinator and wire it up via admin prank.
@@ -100,14 +100,14 @@ contract LootboxRngLifecycle is DeployProtocol {
         ts = block.timestamp;
     }
 
-    /// @dev Read lootboxRngIndex directly from storage slot 40.
+    /// @dev Read lootboxRngIndex directly from storage slot 38.
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(40)))));
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(38)))));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 44).
+    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 39).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(44)));
+        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(39)));
         return uint256(vm.load(address(game), slot));
     }
 
