@@ -830,31 +830,62 @@ abstract contract DegenerusGameStorage {
     ///      Purchase level locked at buy time - if you open late, you lose it.
     mapping(uint32 => mapping(address => uint256)) internal lootboxEth;
 
-    /// @dev Presale mode toggle (starts true, one-way: can only be turned off).
-    ///      When true: loot boxes give 62% bonus BURNIE, presale lootbox splits active.
-    ///      When false: normal loot box rewards.
-    ///      Auto-ends at the first phase transition where 200 ETH mint-lootbox cap is met or level >= 3.
-    bool internal lootboxPresaleActive = true;
+    // =========================================================================
+    // Presale State (packed: 2 variables in 136/256 bits)
+    // =========================================================================
+    //
+    // Layout (LSB -> MSB):
+    //   [bits   0:7]   lootboxPresaleActive   uint8    1 = presale active (starts true)
+    //   [bits  8:135]  lootboxPresaleMintEth  uint128  ETH from regular mints (200 ETH cap)
 
-    /// @dev Total ETH allocated to lootboxes from regular mints only (excludes pass lootboxes).
-    ///      Used to trigger presale auto-end at 200 ETH cap.
-    uint256 internal lootboxPresaleMintEth;
+    /// @dev Packed presale state. Initialized with lootboxPresaleActive = 1.
+    uint256 internal presaleStatePacked = uint256(1);  // lootboxPresaleActive = true
+
+    // ---- presaleState shifts and masks ----
+    uint256 internal constant PS_ACTIVE_SHIFT = 0;
+    uint256 internal constant PS_ACTIVE_MASK = 0xFF;                             // 8 bits
+    uint256 internal constant PS_MINT_ETH_SHIFT = 8;
+    uint256 internal constant PS_MINT_ETH_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;  // 128 bits
+
+    /// @dev Read a field from the packed presale state.
+    function _psRead(uint256 shift, uint256 mask) internal view returns (uint256) {
+        return (presaleStatePacked >> shift) & mask;
+    }
+
+    /// @dev Write a field to the packed presale state.
+    function _psWrite(uint256 shift, uint256 mask, uint256 value) internal {
+        presaleStatePacked = (presaleStatePacked & ~(mask << shift)) | ((value & mask) << shift);
+    }
 
     // =========================================================================
-    // Game Over State
+    // Game Over State (packed: 3 variables in 64/256 bits)
     // =========================================================================
+    //
+    // Layout (LSB -> MSB):
+    //   [bits  0:47]  gameOverTime              uint48   Timestamp when gameover triggered (0 = active)
+    //   [bits 48:55]  gameOverFinalJackpotPaid   uint8   1 = final jackpot paid
+    //   [bits 56:63]  finalSwept                 uint8   1 = 30-day sweep executed
 
-    /// @dev Timestamp when game over was triggered (0 if game is still active).
-    ///      Used to enforce 1-month delay before final vault sweep.
-    uint48 internal gameOverTime;
+    /// @dev Packed game over state. See layout comment above.
+    uint256 internal gameOverStatePacked;
 
-    /// @dev True once the final gameover jackpot has been paid out.
-    ///      Prevents duplicate payouts of the gameover prize pool.
-    bool internal gameOverFinalJackpotPaid;
+    // ---- gameOverState shifts and masks ----
+    uint256 internal constant GO_TIME_SHIFT = 0;
+    uint256 internal constant GO_TIME_MASK = 0xFFFFFFFFFFFF;     // 48 bits
+    uint256 internal constant GO_JACKPOT_PAID_SHIFT = 48;
+    uint256 internal constant GO_JACKPOT_PAID_MASK = 0xFF;       // 8 bits
+    uint256 internal constant GO_SWEPT_SHIFT = 56;
+    uint256 internal constant GO_SWEPT_MASK = 0xFF;              // 8 bits
 
-    /// @dev True once the 30-day post-gameover final sweep has executed.
-    ///      All remaining funds (including unclaimed winnings) are forfeited.
-    bool internal finalSwept;
+    /// @dev Read a field from the packed game over state.
+    function _goRead(uint256 shift, uint256 mask) internal view returns (uint256) {
+        return (gameOverStatePacked >> shift) & mask;
+    }
+
+    /// @dev Write a field to the packed game over state.
+    function _goWrite(uint256 shift, uint256 mask, uint256 value) internal {
+        gameOverStatePacked = (gameOverStatePacked & ~(mask << shift)) | ((value & mask) << shift);
+    }
 
     // =========================================================================
     // Whale Pass Claims (Deferred >5 ETH lootboxes)
@@ -891,17 +922,34 @@ abstract contract DegenerusGameStorage {
     mapping(address => AutoRebuyState) internal autoRebuyState;
 
     // =========================================================================
-    // Daily Jackpot Trait Tracking (Coin Jackpot Reuse)
+    // Daily Jackpot Traits (packed: 3 variables in 88/256 bits)
     // =========================================================================
+    //
+    // Layout (LSB -> MSB):
+    //   [bits  0:31]  lastDailyJackpotWinningTraits  uint32  Packed 4x8-bit trait IDs
+    //   [bits 32:55]  lastDailyJackpotLevel           uint24  Level for the winning traits
+    //   [bits 56:87]  lastDailyJackpotDay              uint32  Day index for winning traits
 
-    /// @dev Winning traits for the last daily/early jackpot (packed uint32, 8 bits per trait).
-    uint32 internal lastDailyJackpotWinningTraits;
+    /// @dev Packed daily jackpot traits state. See layout comment above.
+    uint256 internal dailyJackpotTraitsPacked;
 
-    /// @dev Level for which lastDailyJackpotWinningTraits was computed.
-    uint24 internal lastDailyJackpotLevel;
+    // ---- dailyJackpotTraits shifts and masks ----
+    uint256 internal constant DJT_TRAITS_SHIFT = 0;
+    uint256 internal constant DJT_TRAITS_MASK = 0xFFFFFFFF;      // 32 bits
+    uint256 internal constant DJT_LEVEL_SHIFT = 32;
+    uint256 internal constant DJT_LEVEL_MASK = 0xFFFFFF;          // 24 bits
+    uint256 internal constant DJT_DAY_SHIFT = 56;
+    uint256 internal constant DJT_DAY_MASK = 0xFFFFFFFF;          // 32 bits
 
-    /// @dev Day index for lastDailyJackpotWinningTraits.
-    uint32 internal lastDailyJackpotDay;
+    /// @dev Read a field from the packed daily jackpot traits.
+    function _djtRead(uint256 shift, uint256 mask) internal view returns (uint256) {
+        return (dailyJackpotTraitsPacked >> shift) & mask;
+    }
+
+    /// @dev Write a field to the packed daily jackpot traits.
+    function _djtWrite(uint256 shift, uint256 mask, uint256 value) internal {
+        dailyJackpotTraitsPacked = (dailyJackpotTraitsPacked & ~(mask << shift)) | ((value & mask) << shift);
+    }
 
     /// @dev Base (pre-boost) lootbox ETH per RNG index per player.
     ///      Tracks unboosted amounts so boosts apply at purchase time, not open time.
