@@ -47,7 +47,8 @@
 - ✅ **v21.0 Jackpot Two-Call Split & Skip-Split Optimization** — Phases 195-198 (shipped 2026-04-08)
 - ✅ **v22.0 Delta Audit & Payout Reference Rewrite** — Phases 199-200 (shipped 2026-04-08)
 - ✅ **v23.0 Redemption Coinflip Fix** — Phases 201-202 (shipped 2026-04-09)
-- **v24.0 Gameover Flow Audit & Fix** — Phases 203-206 (in progress)
+- ✅ **v24.0 Gameover Flow Audit & Fix** — Phases 203-206 (shipped 2026-04-09)
+- **v24.1 Storage Layout Optimization** — Phases 207-210
 
 ## Phases
 
@@ -179,82 +180,84 @@ See individual milestone entries above.
 
 </details>
 
-### v24.0 Gameover Flow Audit & Fix (In Progress)
-
-**Milestone Goal:** Audit and fix the entire gameover flow end-to-end — from trigger conditions through fund distribution to final sweep — ensuring every path executes exactly once with no double-refund, re-burn, or re-latch bugs.
+<details>
+<summary>v24.0 Gameover Flow Audit & Fix (Phases 203-206) -- SHIPPED 2026-04-09</summary>
 
 - [x] **Phase 203: Drain Fix** - 1 plan (completed 2026-04-09)
-  - [x] 203-01-PLAN.md — Restructure handleGameOverDrain RNG gating + test verification
-- [x] **Phase 204: Trigger & Drain Audit** - Verify gameover trigger conditions, entropy paths, and drain fund math (completed 2026-04-09)
-- [x] **Phase 205: Sweep & Interaction Audit** - Verify post-drain sweep mechanics and cross-module gameover interactions (completed 2026-04-09)
-- [x] **Phase 206: Delta Audit** - Confirm restructured drain is behaviorally equivalent and test suite clean (completed 2026-04-09)
+- [x] **Phase 204: Trigger & Drain Audit** - 1 plan (completed 2026-04-09)
+- [x] **Phase 205: Sweep & Interaction Audit** - 2 plans (completed 2026-04-09)
+- [x] **Phase 206: Delta Audit** - 1 plan (completed 2026-04-09)
+
+</details>
+
+### v24.1 Storage Layout Optimization (Phases 207-210)
+
+- [ ] **Phase 207: Storage Foundation** - 2 plans
+- [ ] **Phase 208: Module Cascade** - Propagate type changes through all game modules
+- [ ] **Phase 209: External Contracts & Interfaces** - Propagate to BurnieCoinflip, Quests, sDGNRS, Jackpots, interfaces, views
+- [ ] **Phase 210: Verification** - forge inspect layout check, test suites, timestamp audit
 
 ## Phase Details
 
-### Phase 203: Drain Fix
-**Goal**: handleGameOverDrain restructured so RNG retry is a pure revert (no side effects until committed) and all one-time operations execute exactly once
-**Depends on**: Nothing (first phase of v24.0)
-**Requirements**: DFIX-01, DFIX-02, DFIX-03, DFIX-04, DFIX-05
+### Phase 207: Storage Foundation
+**Goal**: All storage variable declarations, mapping keys, and slot packing in DegenerusGameStorage.sol reflect the optimized layout
+**Depends on**: Nothing (first phase of v24.1)
+**Requirements**: TYPE-01, TYPE-02, TYPE-06, SLOT-01, SLOT-02, SLOT-03, SLOT-05, SLOT-06, SLOT-07, SLOT-08
 **Success Criteria** (what must be TRUE):
-  1. handleGameOverDrain reverts when funds > 0 but rngWordByDay[day] == 0, preventing silent no-op that skips drain
-  2. Deity pass refunds, burns, gameOver/gameOverTime latch, and pool zeroing all execute only after RNG word is confirmed available
-  3. No code path through handleGameOverDrain can execute any side effect (refund, burn, latch, zero) more than once per gameover
-  4. The caller (_handleGameOverPath) contract flow unchanged -- it still guarantees rngWordByDay[day] != 0 before calling drain, and handles the 3-day fallback
-**Plans:** 1/1 plans complete
+  1. All four day-index storage variables (purchaseStartDay, dailyIdx, lastDailyJackpotDay, lootboxRngIndex) are uint32
+  2. All day-index mapping keys (rngWordByDay, lootboxDay, dailyHeroWagers, lootbox* mappings, deityBoonDay, deityBoonRecipientDay) are uint32
+  3. ticketWriteSlot is bool, toggled via negation (not XOR), and packed into slot 0 alongside prizePoolFrozen
+  4. claimablePool is uint128 and packed into slot 1 alongside currentPrizePool (32/32 bytes)
+  5. Storage slot layout comment block matches the actual layout
+  6. Six lootboxRng scalar variables packed into single uint256 with scaling helpers
+  7. Game over state (gameOverTime + gameOverFinalJackpotPaid + finalSwept) packed into single uint256
+  8. Daily jackpot traits (winningTraits + level + day) packed into single uint256
+  9. Presale state (lootboxPresaleActive + lootboxPresaleMintEth) packed into single uint256
+**Plans**: 2 plans
 Plans:
-- [x] 203-01-PLAN.md — Restructure handleGameOverDrain RNG gating + test verification
+- [ ] 207-01-PLAN.md — Type narrowing, bool conversion, slot 0/1 repack, GameTimeLib
+- [ ] 207-02-PLAN.md — Pack lootboxRng, gameover, jackpot traits, and presale blocks
 
-### Phase 204: Trigger & Drain Audit
-**Goal**: Every path from liveness trigger through entropy acquisition through fund distribution is verified correct
-**Depends on**: Phase 203
-**Requirements**: TRIG-01, TRIG-02, TRIG-03, DRNA-01, DRNA-02, DRNA-03, DRNA-04
+### Phase 208: Module Cascade
+**Goal**: Every module that reads or writes day-index variables or claimablePool compiles cleanly with the narrowed types
+**Depends on**: Phase 207
+**Requirements**: TYPE-03, SLOT-04
 **Success Criteria** (what must be TRUE):
-  1. Liveness guard fires at the documented thresholds (365d L0, 120d L1+, safety abort) and no other conditions
-  2. _gameOverEntropy resolves correctly on all three paths: VRF word already available, 3-day fallback to blockhash, and VRF pending (revert/retry)
-  3. RNG word requested by gameover is stored, consumed exactly once, and not reusable by any other consumer
-  4. Drain splits funds correctly (10% decimator / 90% terminal jackpot) with claimablePool accounting consistent before and after
-  5. Deity pass refunds pay exactly 20 ETH/pass in FIFO order, capped by available budget, with no double-refund possible
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 204-01-PLAN.md — Trigger + drain audit (TRIG-01 through DRNA-04)
+  1. All function parameters, return types, and local variables using day indices are uint32 across AdvanceModule, TicketModule, LootboxModule, and all other game modules
+  2. All claimablePool read/write sites cast or operate on uint128 without truncation risk
+  3. The _maybeRequestLootboxRng inline (already committed) compiles with the new types
+  4. forge build succeeds with zero errors for the core game contracts
+**Plans**: TBD
 
-### Phase 205: Sweep & Interaction Audit
-**Goal**: Post-drain operations (30-day sweep, VRF shutdown) and all module interactions with gameover state are verified correct
-**Depends on**: Phase 204
-**Requirements**: SWEP-01, SWEP-02, SWEP-03, SWEP-04, IXNR-01, IXNR-02, IXNR-03, IXNR-04, IXNR-05
+### Phase 209: External Contracts & Interfaces
+**Goal**: All contracts outside the core game module tree compile and interoperate with the narrowed types
+**Depends on**: Phase 208
+**Requirements**: TYPE-04, TYPE-05
 **Success Criteria** (what must be TRUE):
-  1. handleFinalSweep enforces 30-day delay from gameOverTime, with the delay non-manipulable and non-bypassable
-  2. Sweep splits unclaimed funds correctly (33/33/34), transfers stETH-first with hard-revert on failure, and shuts down VRF + recovers LINK
-  3. Claims work between drain and sweep (claimablePool accessible), and all claim paths blocked after finalSwept
-  4. Purchases, mints, and new gameplay actions are blocked once gameOver is true
-  5. Post-gameover redemption pays deterministic (non-RNG) payout and auto-rebuy bypass is confirmed active
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 205-01-PLAN.md — Sweep audit (SWEP-01 through SWEP-04)
-- [x] 205-02-PLAN.md — Interaction audit (IXNR-01 through IXNR-05)
+  1. BurnieCoinflip, DegenerusQuests, StakedDegenerusStonk, and DegenerusJackpots use uint32 for all day-index parameters and storage
+  2. All interfaces (IDegenerusGame, IDegenerusGameStorage, etc.) and view contracts use uint32 for day-index types
+  3. forge build succeeds across the entire project with zero errors
+**Plans**: TBD
 
-### Phase 206: Delta Audit
-**Goal**: The Phase 203 code change is proven behaviorally equivalent (except the intentional revert-vs-return change) and introduces no regressions
-**Depends on**: Phase 203, Phase 204, Phase 205
-**Requirements**: DLTA-01, DLTA-02
+### Phase 210: Verification
+**Goal**: The entire refactor is proven correct -- no layout drift, no test regressions, no accidental timestamp narrowing
+**Depends on**: Phase 209
+**Requirements**: TYPE-07, VER-01, VER-02, VER-03
 **Success Criteria** (what must be TRUE):
-  1. Line-by-line diff of handleGameOverDrain shows only the intended restructuring -- no logic changes beyond revert-vs-return and side-effect reordering
-  2. Full test suite (Hardhat + Foundry) passes with zero new failures
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 206-01-PLAN.md — Delta audit: annotated diff + test regression check (DLTA-01, DLTA-02)
+  1. forge inspect output confirms identical storage slot layout across all DegenerusGameStorage inheritors (DegenerusGame, any proxies)
+  2. Foundry test suite passes with zero new failures
+  3. Hardhat test suite passes with zero new failures
+  4. All timestamp types (rngRequestTime, lastVrfProcessedTimestamp, gameOverTime) and GNRUS governance uint48s remain uint48 -- verified by grep
+**Plans**: TBD
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 203 -> 204 -> 205 -> 206
-
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 203. Drain Fix | 1/1 | Complete    | 2026-04-09 |
-| 204. Trigger & Drain Audit | 1/1 | Complete    | 2026-04-09 |
-| 205. Sweep & Interaction Audit | 2/2 | Complete    | 2026-04-09 |
-| 206. Delta Audit | 1/1 | Complete   | 2026-04-09 |
+| 207. Storage Foundation | 0/2 | Planned | - |
+| 208. Module Cascade | 0/TBD | Not started | - |
+| 209. External Contracts & Interfaces | 0/TBD | Not started | - |
+| 210. Verification | 0/TBD | Not started | - |
 
 ## Deferred
 
