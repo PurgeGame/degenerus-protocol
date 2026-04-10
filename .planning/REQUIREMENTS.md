@@ -23,10 +23,10 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 - [x] **SLOT-02**: claimablePool downsized from uint256 to uint128 and packed into slot 1 alongside currentPrizePool (32/32 bytes)
 - [x] **SLOT-03**: Storage slot layout comment block updated to reflect new layout
 - [ ] **SLOT-04**: All claimablePool read/write sites updated for uint128 type
-- [ ] **SLOT-05**: Six lootboxRng scalar variables packed into single uint256 slot with scaling helpers (0.001 ETH / 1 BURNIE resolution)
-- [ ] **SLOT-06**: Game over state block packed into single slot (gameOverTime + gameOverFinalJackpotPaid + finalSwept)
-- [ ] **SLOT-07**: Daily jackpot traits block packed into single slot (lastDailyJackpotWinningTraits + lastDailyJackpotLevel + lastDailyJackpotDay)
-- [ ] **SLOT-08**: Presale state block packed into single slot (lootboxPresaleActive + lootboxPresaleMintEth as uint128)
+- [x] **SLOT-05**: Six lootboxRng scalar variables packed into single uint256 slot with scaling helpers (0.001 ETH / 1 BURNIE resolution)
+- [x] **SLOT-06**: Game over state block packed into single slot (gameOverTime + gameOverFinalJackpotPaid + finalSwept)
+- [x] **SLOT-07**: Daily jackpot traits block packed into single slot (lastDailyJackpotWinningTraits + lastDailyJackpotLevel + lastDailyJackpotDay)
+- [x] **SLOT-08**: Presale state block packed into single slot (lootboxPresaleActive + lootboxPresaleMintEth as uint128)
 
 ### Verification
 
@@ -57,10 +57,10 @@ Requirements for storage layout optimization. Each maps to roadmap phases.
 | SLOT-02 | Phase 207 | Complete |
 | SLOT-03 | Phase 207 | Complete |
 | SLOT-04 | Phase 208 | Pending |
-| SLOT-05 | Phase 207 | Pending |
-| SLOT-06 | Phase 207 | Pending |
-| SLOT-07 | Phase 207 | Pending |
-| SLOT-08 | Phase 207 | Pending |
+| SLOT-05 | Phase 207 | Complete |
+| SLOT-06 | Phase 207 | Complete |
+| SLOT-07 | Phase 207 | Complete |
+| SLOT-08 | Phase 207 | Complete |
 | VER-01 | Phase 210 | Pending |
 | VER-02 | Phase 210 | Pending |
 | VER-03 | Phase 210 | Pending |

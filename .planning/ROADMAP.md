@@ -192,7 +192,7 @@ See individual milestone entries above.
 
 ### v24.1 Storage Layout Optimization (Phases 207-210)
 
-- [ ] **Phase 207: Storage Foundation** - 2 plans
+- [x] **Phase 207: Storage Foundation** - 2 plans (completed 2026-04-10)
 - [ ] **Phase 208: Module Cascade** - Propagate type changes through all game modules
 - [ ] **Phase 209: External Contracts & Interfaces** - Propagate to BurnieCoinflip, Quests, sDGNRS, Jackpots, interfaces, views
 - [ ] **Phase 210: Verification** - forge inspect layout check, test suites, timestamp audit
@@ -216,7 +216,7 @@ See individual milestone entries above.
 **Plans**: 2 plans
 Plans:
 - [x] 207-01-PLAN.md — Type narrowing, bool conversion, slot 0/1 repack, GameTimeLib
-- [ ] 207-02-PLAN.md — Pack lootboxRng, gameover, jackpot traits, and presale blocks
+- [x] 207-02-PLAN.md — Pack lootboxRng, gameover, jackpot traits, and presale blocks
 
 ### Phase 208: Module Cascade
 **Goal**: Every module that reads or writes day-index variables or claimablePool compiles cleanly with the narrowed types
@@ -254,7 +254,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 207. Storage Foundation | 1/2 | In Progress|  |
+| 207. Storage Foundation | 2/2 | Complete   | 2026-04-10 |
 | 208. Module Cascade | 0/TBD | Not started | - |
 | 209. External Contracts & Interfaces | 0/TBD | Not started | - |
 | 210. Verification | 0/TBD | Not started | - |
