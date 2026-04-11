@@ -921,36 +921,6 @@ abstract contract DegenerusGameStorage {
     ///      future prize pool for next+1 tickets, and tickets are queued per level.
     mapping(address => AutoRebuyState) internal autoRebuyState;
 
-    // =========================================================================
-    // Daily Jackpot Traits (packed: 3 variables in 88/256 bits)
-    // =========================================================================
-    //
-    // Layout (LSB -> MSB):
-    //   [bits  0:31]  lastDailyJackpotWinningTraits  uint32  Packed 4x8-bit trait IDs
-    //   [bits 32:55]  lastDailyJackpotLevel           uint24  Level for the winning traits
-    //   [bits 56:87]  lastDailyJackpotDay              uint32  Day index for winning traits
-
-    /// @dev Packed daily jackpot traits state. See layout comment above.
-    uint256 internal dailyJackpotTraitsPacked;
-
-    // ---- dailyJackpotTraits shifts and masks ----
-    uint256 internal constant DJT_TRAITS_SHIFT = 0;
-    uint256 internal constant DJT_TRAITS_MASK = 0xFFFFFFFF;      // 32 bits
-    uint256 internal constant DJT_LEVEL_SHIFT = 32;
-    uint256 internal constant DJT_LEVEL_MASK = 0xFFFFFF;          // 24 bits
-    uint256 internal constant DJT_DAY_SHIFT = 56;
-    uint256 internal constant DJT_DAY_MASK = 0xFFFFFFFF;          // 32 bits
-
-    /// @dev Read a field from the packed daily jackpot traits.
-    function _djtRead(uint256 shift, uint256 mask) internal view returns (uint256) {
-        return (dailyJackpotTraitsPacked >> shift) & mask;
-    }
-
-    /// @dev Write a field to the packed daily jackpot traits.
-    function _djtWrite(uint256 shift, uint256 mask, uint256 value) internal {
-        dailyJackpotTraitsPacked = (dailyJackpotTraitsPacked & ~(mask << shift)) | ((value & mask) << shift);
-    }
-
     /// @dev Base (pre-boost) lootbox ETH per RNG index per player.
     ///      Tracks unboosted amounts so boosts apply at purchase time, not open time.
     mapping(uint48 => mapping(address => uint256)) internal lootboxEthBase;

@@ -1875,25 +1875,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         packed = JackpotBucketLib.packWinningTraits(traits);
     }
 
-    function _syncDailyWinningTraits(
-        uint24 lvl,
-        uint32 packed,
-        uint32 questDay
-    ) private {
-        _djtWrite(DJT_TRAITS_SHIFT, DJT_TRAITS_MASK, packed);
-        _djtWrite(DJT_LEVEL_SHIFT, DJT_LEVEL_MASK, lvl);
-        _djtWrite(DJT_DAY_SHIFT, DJT_DAY_MASK, questDay);
-    }
-
-    function _loadDailyWinningTraits(
-        uint24 lvl,
-        uint32 questDay
-    ) private view returns (uint32 packed, bool valid) {
-        packed = uint32(_djtRead(DJT_TRAITS_SHIFT, DJT_TRAITS_MASK));
-        valid = (_djtRead(DJT_DAY_SHIFT, DJT_DAY_MASK) == questDay &&
-            _djtRead(DJT_LEVEL_SHIFT, DJT_LEVEL_MASK) == lvl);
-    }
-
     /// @dev Calculate 0.5% of prize pool target in BURNIE.
     function _calcDailyCoinBudget(uint24 lvl) private view returns (uint256) {
         uint256 priceWei = PriceLookupLib.priceForLevel(level);
