@@ -106,7 +106,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     uint32 private constant DEPLOY_IDLE_TIMEOUT_DAYS = 365; // Level-0 only; level 1+ uses hardcoded 120 days
-    uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 3 days;
+    uint48 private constant GAMEOVER_RNG_FALLBACK_DELAY = 14 days;
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
 
@@ -188,7 +188,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (!ticketsFullyProcessed) {
                 // If mid-day ticket swap is pending, wait for VRF word before processing
                 if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
-                    uint256 word = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
+                    uint256 word = lootboxRngWordByIndex[
+                        uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1
+                    ];
                     if (word == 0) revert NotTimeYet();
                 }
 
@@ -383,7 +385,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (
                     _psRead(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK) != 0 &&
                     (lvl >= 3 ||
-                        _psRead(PS_MINT_ETH_SHIFT, PS_MINT_ETH_MASK) >= LOOTBOX_PRESALE_ETH_CAP)
+                        _psRead(PS_MINT_ETH_SHIFT, PS_MINT_ETH_MASK) >=
+                        LOOTBOX_PRESALE_ETH_CAP)
                 ) _psWrite(PS_ACTIVE_SHIFT, PS_ACTIVE_MASK, 0);
 
                 // Transition to jackpot phase
@@ -927,8 +930,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert E();
 
         // Threshold check
-        uint256 pendingEth = _unpackMilliEthToWei(uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK)));
-        uint256 pendingBurnie = _unpackWholeBurnieToWei(uint40(_lrRead(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK)));
+        uint256 pendingEth = _unpackMilliEthToWei(
+            uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK))
+        );
+        uint256 pendingBurnie = _unpackWholeBurnieToWei(
+            uint40(_lrRead(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK))
+        );
         if (pendingEth == 0 && pendingBurnie == 0) revert E();
         if (pendingBurnie < BURNIE_RNG_TRIGGER) {
             uint256 totalEthEquivalent = pendingEth;
@@ -940,7 +947,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         PRICE_COIN_UNIT;
                 }
             }
-            uint256 threshold = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
+            uint256 threshold = _unpackMilliEthToWei(
+                uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK))
+            );
             if (threshold != 0 && totalEthEquivalent < threshold) revert E();
         }
 
@@ -968,7 +977,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         );
 
         // Advance lootbox index so new purchases target the NEXT RNG
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, _lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK) + 1);
+        _lrWrite(
+            LR_INDEX_SHIFT,
+            LR_INDEX_MASK,
+            _lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK) + 1
+        );
         _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, 0);
         _lrWrite(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, 0);
         vrfRequestId = id;
@@ -1042,10 +1055,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         ((currentWord >> 8) % 151) + 25
                     );
                     uint32 flipDay = day + 1;
-                    sdgnrs.resolveRedemptionPeriod(
-                        redemptionRoll,
-                        flipDay
-                    );
+                    sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
                 }
             }
 
@@ -1108,10 +1118,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         ((currentWord >> 8) % 151) + 25
                     );
                     uint32 flipDay = day + 1;
-                    sdgnrs.resolveRedemptionPeriod(
-                        redemptionRoll,
-                        flipDay
-                    );
+                    sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
                 }
             }
             _finalizeLootboxRng(currentWord);
@@ -1141,10 +1148,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             ((fallbackWord >> 8) % 151) + 25
                         );
                         uint32 flipDay = day + 1;
-                        sdgnrs.resolveRedemptionPeriod(
-                            redemptionRoll,
-                            flipDay
-                        );
+                        sdgnrs.resolveRedemptionPeriod(redemptionRoll, flipDay);
                     }
                 }
                 _finalizeLootboxRng(fallbackWord);
@@ -1429,7 +1433,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             rngWordCurrent == 0;
         if (!isRetry) {
             // Fresh request: advance lootbox index so new purchases target the NEXT RNG.
-            _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, _lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK) + 1);
+            _lrWrite(
+                LR_INDEX_SHIFT,
+                LR_INDEX_MASK,
+                _lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK) + 1
+            );
             _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, 0);
             _lrWrite(LR_PENDING_BURNIE_SHIFT, LR_PENDING_BURNIE_MASK, 0);
         }
@@ -1518,7 +1526,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngRequestTime = 0;
         _unfreezePool();
     }
-
 
     /// @notice Chainlink VRF callback for random word fulfillment.
     /// @dev Access: VRF coordinator only.
@@ -1627,7 +1634,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         lastVrfProcessedTimestamp = uint48(block.timestamp);
         emit DailyRngApplied(day, rawWord, nudges, finalWord);
     }
-
 
     /*+======================================================================+
       |                    DRIP PROJECTION MATH                             |
