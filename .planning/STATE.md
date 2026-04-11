@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v25.0
 milestone_name: Full Audit (Post-v5.0 Delta + Fresh RNG)
-status: executing
-stopped_at: Completed 217-01-PLAN.md
-last_updated: "2026-04-11T02:44:36.986Z"
+status: verifying
+stopped_at: Completed 217-02-PLAN.md
+last_updated: "2026-04-11T02:57:38.730Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 18
-  completed_plans: 17
-  percent: 94
+  completed_plans: 18
+  percent: 100
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 Phase: 217 (findings-consolidation) — EXECUTING
 Plan: 2 of 2
 Milestone: v25.0 — Full Audit (Post-v5.0 Delta + Fresh RNG)
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-11
 
 Progress: [░░░░░░░░░░] 0%
@@ -69,6 +69,8 @@ Recent decisions affecting current work:
 - [Phase 216]: 75 SSTORE sites catalogued across 9 contracts -- zero VULNERABLE, 5 INFO (uint128 narrowing); all 4 threat mitigations confirmed
 - [Phase 216]: Phase 216 verdict SOUND: zero VULNERABLE findings across conservation proof (Plan 01), SSTORE catalogue (Plan 02), and cross-module flows (Plan 03); 8 INFO total
 - [Phase 217]: 13 INFO findings consolidated with F-25-xx numbering; 3 design decisions promoted to KNOWN-ISSUES.md per D-03
+- [Phase 217]: I-02 STRUCTURALLY RESOLVED (lastLootboxRngWord deleted); I-13 SUPERSEDED (boon upgrade-only); I-20 STRUCTURALLY RESOLVED (WWXRP rewritten); I-09 FIXED (event post-reconciliation after inlining)
+- [Phase 217]: 31 prior findings regression-checked with zero regressions: F-185-01 STILL FIXED (memory-batch pattern), F-187-01 STILL PRESENT (accepted lvl%100 trigger)
 
 ### Pending Todos
 
@@ -80,5 +82,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-11T02:44:36.982Z
-Stopped at: Completed 217-01-PLAN.md
+Last session: 2026-04-11T02:57:38.728Z
+Stopped at: Completed 217-02-PLAN.md

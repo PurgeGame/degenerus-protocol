@@ -13,7 +13,7 @@
 - [x] **Phase 214: Adversarial Audit** - Per-function adversarial analysis of every changed/new function plus storage layout and cross-function attack chains (completed 2026-04-10)
 - [x] **Phase 215: RNG Fresh Eyes** - Ground-up VRF lifecycle audit with no reliance on prior RNG conclusions (completed 2026-04-11)
 - [x] **Phase 216: Pool & ETH Accounting** - ETH conservation proof and pool mutation audit across the restructured architecture (completed 2026-04-11)
-- [ ] **Phase 217: Findings Consolidation** - Severity classification, KNOWN-ISSUES update, and regression check against all prior findings
+- [x] **Phase 217: Findings Consolidation** - Severity classification, KNOWN-ISSUES update, and regression check against all prior findings (completed 2026-04-11)
 
 ## Phase Details
 
@@ -89,10 +89,10 @@ Plans:
   1. Every finding from phases 214-216 has a severity classification (CRITICAL / HIGH / MEDIUM / LOW / INFO) with justification
   2. KNOWN-ISSUES.md is updated with any new entries discovered during this audit
   3. All prior findings from v3.3 through v24.1 are regression-checked against current code (still fixed or still documented)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 217-01-PLAN.md — Consolidate v25.0 findings into FINDINGS-v25.0.md with severity classification + update KNOWN-ISSUES.md (FIND-01, FIND-02)
-- [ ] 217-02-PLAN.md — Regression-check all prior findings (I-01 through I-29 + F-185-01 + F-187-01) against current code (FIND-03)
+- [x] 217-02-PLAN.md — Regression-check all prior findings (I-01 through I-29 + F-185-01 + F-187-01) against current code (FIND-03)
 
 ## Progress
 
@@ -105,4 +105,4 @@ Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 complete
 | 214. Adversarial Audit | 5/5 | Complete    | 2026-04-10 |
 | 215. RNG Fresh Eyes | 5/5 | Complete    | 2026-04-11 |
 | 216. Pool & ETH Accounting | 3/3 | Complete    | 2026-04-11 |
-| 217. Findings Consolidation | 1/2 | In Progress|  |
+| 217. Findings Consolidation | 2/2 | Complete   | 2026-04-11 |
