@@ -24,7 +24,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **RNG-01**: VRF request/fulfillment lifecycle traced end-to-end with no reliance on prior audit conclusions
 - [x] **RNG-02**: Backward trace from every RNG consumer proving word was unknown at input commitment time
-- [ ] **RNG-03**: Controllable-state window analysis between VRF request and fulfillment for every path
+- [x] **RNG-03**: Controllable-state window analysis between VRF request and fulfillment for every path
 - [ ] **RNG-04**: Word derivation verification — every keccak/shift/mask producing a game outcome traced to its VRF source
 - [ ] **RNG-05**: rngLocked mutual exclusion verification across all state-changing paths
 
@@ -67,7 +67,7 @@ None — this is a terminal audit milestone.
 | ADV-04 | 214 | Complete |
 | RNG-01 | 215 | Complete |
 | RNG-02 | 215 | Complete |
-| RNG-03 | 215 | Pending |
+| RNG-03 | 215 | Complete |
 | RNG-04 | 215 | Pending |
 | RNG-05 | 215 | Pending |
 | POOL-01 | 216 | Pending |

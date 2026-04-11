@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v25.0
 milestone_name: Full Audit (Post-v5.0 Delta + Fresh RNG)
 status: executing
-stopped_at: Completed 215-02-PLAN.md
-last_updated: "2026-04-11T00:11:16.455Z"
+stopped_at: Completed 215-03-PLAN.md
+last_updated: "2026-04-11T00:19:59.893Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 10
-  percent: 77
+  completed_plans: 11
+  percent: 85
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 ## Current Position
 
 Phase: 215 (rng-fresh-eyes) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Milestone: v25.0 — Full Audit (Post-v5.0 Delta + Fresh RNG)
 Status: Ready to execute
 Last activity: 2026-04-11
@@ -61,6 +61,7 @@ Recent decisions affecting current work:
 - [Phase 214]: Zero VULNERABLE attack chains across 23 multi-step scenarios; 99 cross-module chains assessed; all INFO items structurally blocked
 - [Phase 215]: VRF lifecycle traced end-to-end: 17 TRACED verdicts, zero CONCERN, write-once word storage proven, rngLockedFlag asymmetry documented (daily only, not lootbox)
 - [Phase 215]: Backward trace: 12 SAFE + 1 INFO across 11 RNG chains; zero VULNERABLE; three independent commitment isolation mechanisms documented (index advance, buffer swap, explicit guard)
+- [Phase 215]: Commitment window: 3 SAFE + 1 INFO windows; zero VULNERABLE; 4 isolation mechanisms (rngLockedFlag, double-buffer, index advance, pool freeze)
 
 ### Pending Todos
 
@@ -72,5 +73,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-11T00:11:16.453Z
-Stopped at: Completed 215-02-PLAN.md
+Last session: 2026-04-11T00:19:59.891Z
+Stopped at: Completed 215-03-PLAN.md
