@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v25.0
 milestone_name: Full Audit (Post-v5.0 Delta + Fresh RNG)
 status: executing
-stopped_at: Phase 216 context gathered
-last_updated: "2026-04-11T01:23:22.712Z"
-last_activity: 2026-04-11 -- Phase 216 planning complete
+stopped_at: Completed 216-01-PLAN.md
+last_updated: "2026-04-11T01:40:38.250Z"
+last_activity: 2026-04-11
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 16
-  completed_plans: 13
-  percent: 81
+  completed_plans: 14
+  percent: 88
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 215 — rng-fresh-eyes
+**Current focus:** Phase 216 — pool-eth-accounting
 
 ## Current Position
 
-Phase: 216
-Plan: Not started
+Phase: 216 (pool-eth-accounting) — EXECUTING
+Plan: 2 of 3
 Milestone: v25.0 — Full Audit (Post-v5.0 Delta + Fresh RNG)
 Status: Ready to execute
-Last activity: 2026-04-11 -- Phase 216 planning complete
+Last activity: 2026-04-11
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -65,6 +65,7 @@ Recent decisions affecting current work:
 - [Phase 215]: Word derivation: 14 VRF-SOURCED + 1 MIXED (gameover prevrandao) + 1 NON-VRF (deity pre-VRF fallback); zero findings; LCG seed provenance confirmed
 - [Phase 215]: Phase verdict SOUND: VRF/RNG system proven from first principles with zero VULNERABLE findings
 - [Phase 215]: rngBypass is compile-time parameter (4 internal callers only); rngLockedFlag has 3 recovery paths for stuck-lock scenario
+- [Phase 216]: ETH conservation CONSERVED across all 20 EF chains; 3 INFO findings (overpay dust, BPS rounding, claimablePool temp inequality)
 
 ### Pending Todos
 
@@ -76,5 +77,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-11T01:11:41.616Z
-Stopped at: Phase 216 context gathered
+Last session: 2026-04-11T01:40:38.248Z
+Stopped at: Completed 216-01-PLAN.md

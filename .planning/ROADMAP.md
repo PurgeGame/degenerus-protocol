@@ -75,9 +75,9 @@ Plans:
   1. An algebraic ETH conservation proof covers the consolidated pool architecture (all ETH in = all ETH out + all ETH held)
   2. Every SSTORE site touching prize pool / claimable pool / future pool is catalogued with mutation direction and guards
   3. Jackpot payout, redemption, and sweep flows are traced cross-module with ETH amounts verified at each handoff
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
-- [ ] 216-01-PLAN.md — Algebraic ETH conservation proof across all 20 EF chains (POOL-01)
+- [x] 216-01-PLAN.md — Algebraic ETH conservation proof across all 20 EF chains (POOL-01)
 - [ ] 216-02-PLAN.md — Pool mutation SSTORE catalogue for all ETH-touching state variables (POOL-02)
 - [ ] 216-03-PLAN.md — Cross-module flow verification for jackpot, redemption, and sweep paths (POOL-03)
 
@@ -101,5 +101,5 @@ Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 complete
 | 213. Delta Extraction | 3/3 | Complete    | 2026-04-10 |
 | 214. Adversarial Audit | 5/5 | Complete    | 2026-04-10 |
 | 215. RNG Fresh Eyes | 5/5 | Complete    | 2026-04-11 |
-| 216. Pool & ETH Accounting | 0/3 | Planned | - |
+| 216. Pool & ETH Accounting | 1/3 | In Progress|  |
 | 217. Findings Consolidation | 0/? | Not started | - |

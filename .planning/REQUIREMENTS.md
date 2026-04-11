@@ -30,7 +30,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Pool & ETH Accounting
 
-- [ ] **POOL-01**: ETH conservation proof across the restructured pool architecture (consolidated pools, write batching, two-call split)
+- [x] **POOL-01**: ETH conservation proof across the restructured pool architecture (consolidated pools, write batching, two-call split)
 - [ ] **POOL-02**: Pool mutation audit of all SSTORE sites touching prize pool / claimable pool / future pool
 - [ ] **POOL-03**: Cross-module flow verification for jackpot payouts, redemption, and sweep paths
 
@@ -70,7 +70,7 @@ None — this is a terminal audit milestone.
 | RNG-03 | 215 | Complete |
 | RNG-04 | 215 | Complete |
 | RNG-05 | 215 | Complete |
-| POOL-01 | 216 | Pending |
+| POOL-01 | 216 | Complete |
 | POOL-02 | 216 | Pending |
 | POOL-03 | 216 | Pending |
 | FIND-01 | 217 | Pending |
