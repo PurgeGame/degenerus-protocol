@@ -340,7 +340,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // Pre-target: daily jackpots while building prize pool
                 if (!lastPurchaseDay) {
                     payDailyJackpot(false, purchaseLevel, rngWord);
-                    _payDailyCoinJackpot(purchaseLevel, rngWord);
+                    if (purchaseLevel == 1) {
+                        _payDailyCoinJackpot(1, rngWord, 1, 1);
+                        _payDailyCoinJackpot(1, rngWord, 2, 5);
+                    } else {
+                        _payDailyCoinJackpot(purchaseLevel, rngWord, purchaseLevel + 1, purchaseLevel + 4);
+                    }
                     // FLAG-02: combined target + game-over check (shares SLOADs when flag is set)
                     bool targetMet = gameOverPossible
                         ? _evaluateGameOverAndTarget(lvl, psd, day)
@@ -842,17 +847,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
     /// @dev Pay daily BURNIE jackpot via jackpot module delegatecall.
     ///      Called each day during purchase phase in its own transaction.
-    ///      Awards 0.5% of prize pool target in BURNIE to one randomly selected near-future level [lvl, lvl+4].
+    ///      Awards 0.5% of prize pool target in BURNIE to trait-matched winners in [minLevel, maxLevel].
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
-    function _payDailyCoinJackpot(uint24 lvl, uint256 randWord) private {
+    /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
+    /// @param maxLevel Maximum target level for near-future coin distribution (inclusive).
+    function _payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameJackpotModule.payDailyCoinJackpot.selector,
                     lvl,
-                    randWord
+                    randWord,
+                    minLevel,
+                    maxLevel
                 )
             );
         if (!ok) _revertDelegate(data);

@@ -499,7 +499,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             {
                 uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
                 uint256 coinEntropy = randWord ^ (uint256(lvl) << 192) ^ uint256(COIN_JACKPOT_TAG);
-                uint24 bonusTargetLevel = _selectDailyCoinTargetLevel(lvl, coinEntropy);
+                uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
                 emit DailyWinningTraits(questDay, winningTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
             }
 
@@ -513,7 +513,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         {
             uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
             uint256 coinEntropy = randWord ^ (uint256(lvl) << 192) ^ uint256(COIN_JACKPOT_TAG);
-            uint24 bonusTargetLevel = _selectDailyCoinTargetLevel(lvl, coinEntropy);
+            uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
             emit DailyWinningTraits(questDay, winningTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
         }
 
@@ -600,10 +600,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint256 coinEntropy = randWord ^
                     (uint256(lvl) << 192) ^
                     uint256(COIN_JACKPOT_TAG);
-                uint24 targetLevel = _selectDailyCoinTargetLevel(
-                    lvl,
-                    coinEntropy
-                );
+                uint24 targetLevel = lvl + 1 + uint24(coinEntropy % 4);
                 {
                     _awardDailyCoinToTraitWinners(
                         targetLevel,
@@ -1678,11 +1675,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @notice Pays daily BURNIE jackpot to random ticket holders.
     /// @dev Runs every day in its own transaction. Awards 0.5% of prize pool target in BURNIE.
-    ///      75% goes to near-future trait-matched winners ([lvl+1, lvl+4]).
+    ///      75% goes to near-future trait-matched winners in [minLevel, maxLevel].
     ///      25% goes to far-future ticketQueue holders ([lvl+5, lvl+99]).
     /// @param lvl Current level.
     /// @param randWord VRF entropy for winner selection.
-    function payDailyCoinJackpot(uint24 lvl, uint256 randWord) external {
+    /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
+    /// @param maxLevel Maximum target level for near-future coin distribution (inclusive).
+    function payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external {
         uint256 coinBudget = _calcDailyCoinBudget(lvl);
         if (coinBudget == 0) return;
 
@@ -1701,10 +1700,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 entropy = randWord ^
             (uint256(lvl) << 192) ^
             uint256(COIN_JACKPOT_TAG);
-        uint24 targetLevel = _selectDailyCoinTargetLevel(
-            lvl,
-            entropy
-        );
+        uint24 targetLevel = minLevel == maxLevel
+            ? minLevel
+            : minLevel + uint24(entropy % (maxLevel - minLevel + 1));
 
         _awardDailyCoinToTraitWinners(
             targetLevel,
@@ -1712,14 +1710,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             nearBudget,
             entropy
         );
-    }
-
-    /// @dev Pick one random level in [lvl+1, lvl+4] for near-future BURNIE distribution.
-    function _selectDailyCoinTargetLevel(
-        uint24 lvl,
-        uint256 entropy
-    ) private pure returns (uint24 targetLevel) {
-        return lvl + 1 + uint24(entropy % 4);
     }
 
     /// @dev Awards BURNIE to random winners from the packed winning traits at a target level.

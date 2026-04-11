@@ -73,7 +73,9 @@ interface IDegenerusGameJackpotModule {
     /// @notice Pays daily coin jackpot rewards
     /// @param lvl The current game level
     /// @param randWord Random word for winner selection
-    function payDailyCoinJackpot(uint24 lvl, uint256 randWord) external;
+    /// @param minLevel Minimum target level for near-future coin distribution (inclusive)
+    /// @param maxLevel Maximum target level for near-future coin distribution (inclusive)
+    function payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external;
 
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
     /// @param poolWei Total ETH to distribute.
