@@ -36,8 +36,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Findings Consolidation
 
-- [ ] **FIND-01**: All findings severity-classified (CRITICAL / HIGH / MEDIUM / LOW / INFO)
-- [ ] **FIND-02**: KNOWN-ISSUES.md updated with any new entries
+- [x] **FIND-01**: All findings severity-classified (CRITICAL / HIGH / MEDIUM / LOW / INFO)
+- [x] **FIND-02**: KNOWN-ISSUES.md updated with any new entries
 - [ ] **FIND-03**: Regression check against all prior findings (v3.3 through v24.1)
 
 ## Future Requirements
@@ -73,8 +73,8 @@ None — this is a terminal audit milestone.
 | POOL-01 | 216 | Complete |
 | POOL-02 | 216 | Complete |
 | POOL-03 | 216 | Complete |
-| FIND-01 | 217 | Pending |
-| FIND-02 | 217 | Pending |
+| FIND-01 | 217 | Complete |
+| FIND-02 | 217 | Complete |
 | FIND-03 | 217 | Pending |
 
 **Coverage:**

@@ -89,7 +89,10 @@ Plans:
   1. Every finding from phases 214-216 has a severity classification (CRITICAL / HIGH / MEDIUM / LOW / INFO) with justification
   2. KNOWN-ISSUES.md is updated with any new entries discovered during this audit
   3. All prior findings from v3.3 through v24.1 are regression-checked against current code (still fixed or still documented)
-**Plans**: TBD
+**Plans:** 1/2 plans executed
+Plans:
+- [x] 217-01-PLAN.md — Consolidate v25.0 findings into FINDINGS-v25.0.md with severity classification + update KNOWN-ISSUES.md (FIND-01, FIND-02)
+- [ ] 217-02-PLAN.md — Regression-check all prior findings (I-01 through I-29 + F-185-01 + F-187-01) against current code (FIND-03)
 
 ## Progress
 
@@ -102,4 +105,4 @@ Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 complete
 | 214. Adversarial Audit | 5/5 | Complete    | 2026-04-10 |
 | 215. RNG Fresh Eyes | 5/5 | Complete    | 2026-04-11 |
 | 216. Pool & ETH Accounting | 3/3 | Complete    | 2026-04-11 |
-| 217. Findings Consolidation | 0/? | Not started | - |
+| 217. Findings Consolidation | 1/2 | In Progress|  |
