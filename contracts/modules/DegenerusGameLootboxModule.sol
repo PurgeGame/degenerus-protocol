@@ -743,6 +743,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         address deity
     ) external view returns (uint8[3] memory slots, uint8 usedMask, uint32 day) {
         day = _simulatedDayIndex();
+        if (rngWordByDay[day] == 0) return (slots, usedMask, day);
         if (deityBoonDay[deity] == day) {
             usedMask = deityBoonUsedMask[deity];
         }
@@ -774,7 +775,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (deityPassPurchasedCount[deity] == 0) revert E();
 
         uint32 day = _simulatedDayIndex();
-        if (rngWordByDay[day] == 0 && rngWordCurrent == 0) revert E();
+        if (rngWordByDay[day] == 0) revert E();
         if (deityBoonDay[deity] != day) {
             deityBoonDay[deity] = day;
             deityBoonUsedMask[deity] = 0;
@@ -1735,21 +1736,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         return decWindowOpen;
     }
 
-    /// @dev Get the daily RNG seed for deity boon generation.
-    ///      Falls back to current RNG word or deterministic hash if unavailable.
-    /// @param day The day index
-    /// @return seed The RNG seed for this day
-    function _deityDailySeed(uint32 day) private view returns (uint256 seed) {
-        uint256 rngWord = rngWordByDay[day];
-        if (rngWord == 0) {
-            rngWord = rngWordCurrent;
-        }
-        if (rngWord == 0) {
-            rngWord = uint256(keccak256(abi.encodePacked(day, address(this))));
-        }
-        return rngWord;
-    }
-
     /// @dev Deterministically generate a boon type for a deity's slot on a given day.
     /// @param deity The deity address
     /// @param day The day index
@@ -1764,7 +1750,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         bool decimatorAllowed,
         bool deityPassAvailable
     ) private view returns (uint8 boonType) {
-        uint256 seed = uint256(keccak256(abi.encode(_deityDailySeed(day), deity, day, slot)));
+        uint256 seed = uint256(keccak256(abi.encode(rngWordByDay[day], deity, day, slot)));
         uint256 total = decimatorAllowed
             ? BOON_WEIGHT_TOTAL
             : BOON_WEIGHT_TOTAL_NO_DECIMATOR;
