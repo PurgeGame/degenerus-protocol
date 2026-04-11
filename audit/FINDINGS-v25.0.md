@@ -20,7 +20,7 @@
 
 **Overall Assessment:** Zero exploitable vulnerabilities found across all three audit phases. The protocol security posture is maintained through the v6.0-v24.1 development cycle. All 13 findings are informational observations documenting design decisions, safety margins, and code-quality notes with no security impact.
 
-This report is a delta supplement to the v5.0 Master Findings Report (`audit/FINDINGS.md`, 29 INFO). External auditors should read both documents together. Regression verification of all prior findings (I-01 through I-29, F-185-01, F-187-01) is provided in the Regression Appendix section of this document (to be added by Plan 02).
+This report is a delta supplement to the v5.0 Master Findings Report (`audit/FINDINGS.md`, 29 INFO). External auditors should read both documents together. Regression verification of all prior findings (I-01 through I-29, F-185-01, F-187-01) is provided in the Regression Appendix section of this document.
 
 ---
 
@@ -274,6 +274,44 @@ Five SSTORE sites across the pool mutation catalogue involve uint128 narrowing c
 
 ---
 
-## Cross-Reference Note
+## Regression Check: v5.0 Findings (I-01 through I-29)
 
-Regression check of all prior findings (I-01 through I-29 from the v5.0 Master Findings Report, plus F-185-01 and F-187-01 from milestone audits) is provided in the Regression Appendix section of this document. That section will be added by Plan 02 of this phase.
+Regression verification of all 29 INFO findings from the v5.0 Master Findings Report (`audit/FINDINGS.md`). Each finding is checked against current contract source with code-level evidence. Classification uses the Phase 213 delta extraction (`213-DELTA-EXTRACTION.md`) for structural changes and direct grep for function-level verification.
+
+**Status key:**
+- **STILL APPLIES** -- Code unchanged or semantically equivalent; finding remains valid as documented
+- **FIXED** -- Code was changed in a way that resolves the finding
+- **SUPERSEDED** -- Function was modified and finding's concern is addressed differently
+- **STRUCTURALLY RESOLVED** -- Function or module was deleted; finding is moot
+
+| Finding | Contract | Status | Evidence |
+|---------|----------|--------|----------|
+| I-01 | AdvanceModule | STILL APPLIES | `ADVANCE_BOUNTY_ETH` computed at call start using `PriceLookupLib.priceForLevel(lvl)` (L435); level can change during jackpot phase within same call. Bounty now paid via `coinflip.creditFlip` (L433-437). Same staleness concern. |
+| I-02 | AdvanceModule | STRUCTURALLY RESOLVED | `lastLootboxRngWord` variable removed entirely. All lootbox resolution now uses `lootboxRngWordByIndex[index]` exclusively (AdvanceModule L1074, L1546; Storage L1370). The global staleness concern is moot -- per-index mapping is the sole source. |
+| I-03 | Test code | STILL APPLIES | `_readKeyForLevel` helper still present in `test/fuzz/TicketLifecycle.t.sol` (L204, L340, L381, L434). Same double-buffer slot confusion in test assertions. Not deployed contract code. |
+| I-04 | JackpotModule | STILL APPLIES | `distributeYieldSurplus` (JackpotModule L716-723) reads `obligations` snapshot from `_getCurrentPrizePool() + _getNextPrizePool() + claimablePool + _getFuturePrizePool() + yieldAccumulator`. Conservative staleness direction unchanged. |
+| I-05 | MintModule (moved from JackpotModule) | STILL APPLIES | Assembly slot calculation `add(levelSlot, traitId)` at MintModule L612 for `traitBurnTicket` mapping. Function `_raritySymbolBatch` moved from JackpotModule to MintModule during v16.0 refactor. Same non-obvious but correct layout assumption. Contract non-upgradeable. |
+| I-06 | MintModule (moved from JackpotModule) | STILL APPLIES | `processTicketBatch` moved to MintModule (L656). Processed counter approximation `processed += writesUsed >> 1` at L700. Same LCG seed derivation impact on resume. Traits still aesthetic only. |
+| I-07 | JackpotModule | FIXED | Original double `_getFuturePrizePool()` read in `_runEarlyBirdLootboxJackpot` (formerly L774-778) eliminated. Current implementation at JackpotModule L636 reads once into `futurePoolLocal` and operates on that single value. |
+| I-08 | JackpotModule + PayoutUtils | STILL APPLIES | `_calcAutoRebuy` in PayoutUtils L63-66: when `takeProfit == 0`, `c.reserved = 0` and `c.rebuyAmount = weiAmount`. Division remainder `weiAmount - (baseTickets * ticketPrice)` at L77-81 is dropped as dust. Same economic bound (less than ticketPrice/4). |
+| I-09 | AdvanceModule (moved from EndgameModule) | FIXED | `RewardJackpotsSettled` event at AdvanceModule L796 now emits `memFuture` AFTER all reconciliation (BAF jackpot subtraction L724, decimator subtraction L734-735, keep roll L764-768, drawdown L784-786). The pre-reconciliation staleness from the original EndgameModule implementation is resolved by inlining. |
+| I-10 | GameOverModule | STILL APPLIES | `handleGameOverDrain` (GameOverModule L79) still uses `unchecked` arithmetic at L118-121 for deity pass refund loop (`claimableWinnings[owner] += refund`, `totalRefunded += refund`, `budget -= refund`). Same ETH supply constraint safety argument applies. |
+| I-11 | WhaleModule | STILL APPLIES | Multi-quantity whale purchase calls `_rewardWhaleBundleDgnrs` in a loop (WhaleModule L329-333). Each iteration reads FRESH `dgnrs.poolBalance(Whale)` at L704. Diminishing returns on multi-bundle DGNRS reward unchanged. |
+| I-12 | DegeneretteModule | STILL APPLIES | ETH bet resolution checks `prizePoolFrozen` at DegeneretteModule L695. During freeze, payouts route through pending pool side-channel (L702-708). Transient freeze during `advanceGame` still blocks direct ETH resolution path. |
+| I-13 | LootboxModule | SUPERSEDED | `_applyBoon` rewritten with upgrade-only tier semantics. Coinflip boons: `if (newTier > existingTier)` at L1331. Lootbox: `newTier > existingTier ? newTier : existingTier` at L1352. Purchase: L1378. Decimator: L1404. Deity boons can no longer downgrade existing higher-tier boons. Original overwrite concern is resolved. |
+| I-14 | BurnieCoin | STILL APPLIES | Standard ERC20 `approve` at BurnieCoin L285-292. No change to approve/transferFrom pattern. Same front-running concern. Game contract bypass (trusted contract pattern) unchanged. |
+| I-15 | BurnieCoin | STILL APPLIES | `vaultMintTo` at BurnieCoin L517-529. Self-mint path (vault calling `vaultMintTo(VAULT, amount)`) still creates circulating tokens held by vault. `_transfer` redirect to vault escrow still makes it a no-op. Supply invariant maintained. |
+| I-16 | BurnieCoin | STILL APPLIES | `burnForCoinflip` (L420) and `mintForGame` (L429) revert with `OnlyGame()` error for coinflip/game caller checks. Misleading error name unchanged. `mintForGame` now accepts both COINFLIP and GAME (L429), making the `OnlyGame` name even less accurate. |
+| I-17 | StakedDegenerusStonk | STILL APPLIES | `claimRedemption` at sDGNRS L621: `totalRolledEth = (claim.ethValueOwed * roll) / 100`. Per-claimant floor division dust in `pendingRedemptionEthValue` unchanged. Comment at L619-620 explicitly documents the dust. |
+| I-18 | StakedDegenerusStonk | STILL APPLIES | `_submitGamblingClaimFrom` at sDGNRS L794: `claim.burnieOwed += uint96(burnieOwed)`. Unchecked uint96 narrowing cast unchanged. Comment at L793 documents the safety bound. |
+| I-19 | StakedDegenerusStonk | STILL APPLIES | `previewBurn` (L694) and `burnieReserve` (L725): subtraction of `pendingRedemptionEthValue`/`pendingRedemptionBurnie` from balance can underflow on negative stETH rebase. View functions still revert instead of returning data. |
+| I-20 | WrappedWrappedXRP | STRUCTURALLY RESOLVED | `donate()` function and `wXRPReserves` variable removed entirely. WWXRP contract was rewritten (289 lines, no wXRP wrapping mechanism). The CEI ordering concern is moot -- the function no longer exists. |
+| I-21 | DegenerusAdmin | STILL APPLIES | `vote` at DegenerusAdmin L703-724 uses live sDGNRS balances via `_voterWeight()` (L714). No snapshot mechanism. Same vote weight inflation via sDGNRS transfer between votes. Comment at L713 documents: "Safe: VRF dead = supply frozen". |
+| I-22 | DegenerusAdmin | STILL APPLIES | `_executeSwap` at DegenerusAdmin L859: old subscription cancellation uses `try/catch` at L875/L952. Silent failure by design -- governance swap needed precisely when old coordinator is broken. |
+| I-23 | DegenerusAdmin | STILL APPLIES | `shutdownVrf` at DegenerusAdmin L944-967: LINK transfer in `try/catch` at L958. If transfer fails, LINK remains in Admin. Same root cause as dismissed L-02. Silent failure intentional for game-over shutdown. |
+| I-24 | DegenerusJackpots | STILL APPLIES | `runBafJackpot` scatter section at DegenerusJackpots L396: `uint24 maxBack = lvl > 99 ? 99 : lvl - 1`. When `lvl == 0` (century check passes since `0 % 100 == 0`), `lvl - 1` underflows to uint24 max. Scatter rounds at level 0 target non-existent levels, returning empty. ETH recycled to future pool. |
+| I-25 | EntropyLib | STILL APPLIES | `entropyStep` at EntropyLib L16-23: XOR-shift `state ^= state << 7; state ^= state >> 9; state ^= state << 8`. Fixed point at zero unchanged -- `entropyStep(0)` returns 0. VRF seed origin and player salt XOR mitigate. |
+| I-26 | BitPackingLib | FIXED | Comment at BitPackingLib L16 now correctly reads `[152-153] WHALE_BUNDLE_TYPE_SHIFT -- Bundle type (2 bits)`. Original finding noted comment said "bits 152-154" (3 bits). Comment corrected to match actual 2-bit field width. |
+| I-27 | DegenerusGame | STILL APPLIES | `resolveRedemptionLootbox` at Game L1703-1704: unchecked subtraction on `claimableWinnings[SDGNRS]`. Mutual exclusion safety documented in comment at L1698-1700. Checked `claimablePool -= uint128(amount)` at L1706 provides defense-in-depth. |
+| I-28 | DegenerusGame | STILL APPLIES | `_setAfKingMode` at Game L1536-1575: external calls to `coinflip.setCoinflipAutoRebuy` (L1567) and `coinflip.settleFlipModeChange` (L1570) execute before state writes `state.afKingMode = true` (L1571) and `state.afKingActivatedLevel = level` (L1572). Coinflip is compile-time constant with no callback. Style concern only. |
+| I-29 | DegenerusGame | STILL APPLIES | `steth.submit{value: amount}(address(0))` at Game L1810: return value captured in try block but not used. Already disclosed in KNOWN-ISSUES.md. Lido 1:1 mint with 1-2 wei rounding strengthens solvency invariant. |
