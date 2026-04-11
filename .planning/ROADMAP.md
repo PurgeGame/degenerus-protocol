@@ -96,6 +96,6 @@ Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 complete
 |-------|----------------|--------|-----------|
 | 213. Delta Extraction | 3/3 | Complete    | 2026-04-10 |
 | 214. Adversarial Audit | 5/5 | Complete    | 2026-04-10 |
-| 215. RNG Fresh Eyes | 5/5 | Complete   | 2026-04-11 |
+| 215. RNG Fresh Eyes | 5/5 | Complete    | 2026-04-11 |
 | 216. Pool & ETH Accounting | 0/? | Not started | - |
 | 217. Findings Consolidation | 0/? | Not started | - |
