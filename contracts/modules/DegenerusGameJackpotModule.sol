@@ -152,6 +152,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     bytes32 private constant DAILY_CARRYOVER_SOURCE_TAG =
         keccak256("daily-carryover-source");
 
+    /// @dev Domain separator for bonus trait derivation from same VRF word.
+    bytes32 private constant BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS");
+
     /// @dev Max forward offset for carryover source selection (lvl+1..lvl+4).
     uint8 private constant DAILY_CARRYOVER_MAX_OFFSET = 4;
 
@@ -1698,12 +1701,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @dev Pick one random level in [lvl, lvl+4] — pure 1-in-5 chance per level.
+    /// @dev Pick one random level in [lvl+1, lvl+4] for near-future BURNIE distribution.
     function _selectDailyCoinTargetLevel(
         uint24 lvl,
         uint256 entropy
     ) private pure returns (uint24 targetLevel) {
-        return lvl + uint24(entropy % 5);
+        return lvl + 1 + uint24(entropy % 4);
     }
 
     /// @dev Awards BURNIE to random winners from the packed winning traits at a target level.
@@ -1858,11 +1861,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Roll winning traits with hero symbol override.
     ///      All paths use fully random traits (6 bits per quadrant).
     ///      Hero override replaces the winning quadrant's trait if a top hero symbol exists.
+    /// @param randWord VRF entropy.
+    /// @param isBonus When true, applies keccak256 domain separation for independent bonus traits.
     function _rollWinningTraits(
-        uint256 randWord
+        uint256 randWord,
+        bool isBonus
     ) private view returns (uint32 packed) {
-        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
-        _applyHeroOverride(traits, randWord);
+        uint256 r = isBonus
+            ? uint256(keccak256(abi.encodePacked(randWord, BONUS_TRAITS_TAG)))
+            : randWord;
+        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(r);
+        _applyHeroOverride(traits, r);
         packed = JackpotBucketLib.packWinningTraits(traits);
     }
 
