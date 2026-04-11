@@ -12,7 +12,7 @@
 - [x] **Phase 213: Delta Extraction** - Produce function-level changelog, contract classifications, and interaction map for the entire v6.0-v24.1 delta (completed 2026-04-10)
 - [x] **Phase 214: Adversarial Audit** - Per-function adversarial analysis of every changed/new function plus storage layout and cross-function attack chains (completed 2026-04-10)
 - [x] **Phase 215: RNG Fresh Eyes** - Ground-up VRF lifecycle audit with no reliance on prior RNG conclusions (completed 2026-04-11)
-- [ ] **Phase 216: Pool & ETH Accounting** - ETH conservation proof and pool mutation audit across the restructured architecture
+- [x] **Phase 216: Pool & ETH Accounting** - ETH conservation proof and pool mutation audit across the restructured architecture (completed 2026-04-11)
 - [ ] **Phase 217: Findings Consolidation** - Severity classification, KNOWN-ISSUES update, and regression check against all prior findings
 
 ## Phase Details
@@ -75,11 +75,11 @@ Plans:
   1. An algebraic ETH conservation proof covers the consolidated pool architecture (all ETH in = all ETH out + all ETH held)
   2. Every SSTORE site touching prize pool / claimable pool / future pool is catalogued with mutation direction and guards
   3. Jackpot payout, redemption, and sweep flows are traced cross-module with ETH amounts verified at each handoff
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [x] 216-01-PLAN.md — Algebraic ETH conservation proof across all 20 EF chains (POOL-01)
 - [x] 216-02-PLAN.md — Pool mutation SSTORE catalogue for all ETH-touching state variables (POOL-02)
-- [ ] 216-03-PLAN.md — Cross-module flow verification for jackpot, redemption, and sweep paths (POOL-03)
+- [x] 216-03-PLAN.md — Cross-module flow verification for jackpot, redemption, and sweep paths (POOL-03)
 
 ### Phase 217: Findings Consolidation
 **Goal**: All audit findings are severity-classified and checked against prior known issues — the audit is ready for external review
@@ -101,5 +101,5 @@ Phase 213 first. Phases 214, 215, 216 can execute in parallel after 213 complete
 | 213. Delta Extraction | 3/3 | Complete    | 2026-04-10 |
 | 214. Adversarial Audit | 5/5 | Complete    | 2026-04-10 |
 | 215. RNG Fresh Eyes | 5/5 | Complete    | 2026-04-11 |
-| 216. Pool & ETH Accounting | 2/3 | In Progress|  |
+| 216. Pool & ETH Accounting | 3/3 | Complete   | 2026-04-11 |
 | 217. Findings Consolidation | 0/? | Not started | - |
