@@ -255,7 +255,7 @@ Five SSTORE sites across the pool mutation catalogue involve uint128 narrowing c
 | DegeneretteModule | 1 (F-25-02) |
 | GameOverModule | 1 (F-25-03) |
 | StakedDegenerusStonk | 1 (F-25-04) |
-| DegenerusGameStorage | 2 (F-25-05, F-25-12) |
+| DegenerusGameStorage / JackpotModule | 3 (F-25-05, F-25-07, F-25-12) |
 | DegenerusGameAdvanceModule | 3 (F-25-06, F-25-08, F-25-09) |
 | DegenerusGame | 1 (F-25-10) |
 | Multiple (BPS sites) | 1 (F-25-11) |
@@ -264,6 +264,8 @@ Five SSTORE sites across the pool mutation catalogue involve uint128 narrowing c
 ---
 
 ## Audit Trail
+
+Verdicts: **SAFE** = no exploitable vulnerabilities found by adversarial testing; **SOUND** = proven correct from first principles (mathematical proof or exhaustive trace).
 
 | Phase | Scope | Plans | Findings | Verdict |
 |-------|-------|-------|----------|---------|
@@ -337,12 +339,11 @@ Regression verification of milestone findings F-185-01 (HIGH, v19.0) and F-187-0
 
 | Status | Count | Findings |
 |--------|-------|----------|
-| STILL APPLIES | 22 | I-01, I-03, I-04, I-05, I-06, I-08, I-10, I-11, I-12, I-14, I-15, I-16, I-17, I-18, I-19, I-21, I-22, I-23, I-24, I-25, I-27, I-28 |
+| STILL APPLIES | 23 | I-01, I-03, I-04, I-05, I-06, I-08, I-10, I-11, I-12, I-14, I-15, I-16, I-17, I-18, I-19, I-21, I-22, I-23, I-24, I-25, I-27, I-28, I-29 |
 | FIXED | 3 | I-07 (double SLOAD eliminated), I-09 (event now post-reconciliation), I-26 (comment corrected) |
 | SUPERSEDED | 1 | I-13 (boon overwrite replaced with upgrade-only tier semantics) |
 | STRUCTURALLY RESOLVED | 2 | I-02 (lastLootboxRngWord removed), I-20 (WWXRP donate() removed) |
 | STILL FIXED | 1 | F-185-01 (memory-batch pattern confirmed, independently verified by 214-03 and 216-01) |
 | STILL PRESENT (accepted) | 1 | F-187-01 (lvl % 100 trigger confirmed, accepted design improvement) |
-| I-29 (disclosed) | 1 | I-29 (stETH submit return value -- already in KNOWN-ISSUES.md) |
 
-**Verdict:** No regressions detected. All prior findings remain in their documented state. The 22 "STILL APPLIES" findings are informational observations with no security impact, unchanged from the v5.0 assessment. The 3 FIXED and 1 SUPERSEDED findings represent code improvements during the v6.0-v24.1 cycle. The 2 STRUCTURALLY RESOLVED findings relate to deleted code (lastLootboxRngWord variable, WWXRP donate function). Both milestone findings (F-185-01 HIGH fix, F-187-01 INFO accepted) are confirmed in their documented state with independent cross-phase verification.
+**Verdict:** No regressions detected. All prior findings remain in their documented state. The 23 "STILL APPLIES" findings are informational observations with no security impact, unchanged from the v5.0 assessment. The 3 FIXED and 1 SUPERSEDED findings represent code improvements during the v6.0-v24.1 cycle. The 2 STRUCTURALLY RESOLVED findings relate to deleted code (lastLootboxRngWord variable, WWXRP donate function). Both milestone findings (F-185-01 HIGH fix, F-187-01 INFO accepted) are confirmed in their documented state with independent cross-phase verification.
