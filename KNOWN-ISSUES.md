@@ -30,6 +30,12 @@ These are architectural decisions, not vulnerabilities.
 
 **EntropyLib XOR-shift PRNG for lootbox outcome rolls.** `EntropyLib.entropyStep()` uses a 256-bit XOR-shift PRNG (shifts 7/9/8) for lootbox outcome derivation (target level, ticket counts, BURNIE amounts, boons). XOR-shift has known theoretical weaknesses (cannot produce zero state, fixed cycle, correlated consecutive outputs). Exploitation is infeasible: the PRNG is seeded per-player, per-day, per-amount via `keccak256(rngWord, player, day, amount)` where `rngWord` is VRF-derived. The small number of entropy steps per resolution (5-10) and modular arithmetic over small ranges further mask any non-uniformity.
 
+**Lootbox RNG uses index advance isolation instead of rngLockedFlag.** The rngLockedFlag is set for daily VRF requests but NOT for mid-day lootbox RNG requests. Lootbox RNG isolation relies on a separate mechanism: the lootbox VRF request index advances past the current fulfillment index, preventing any overlap between daily and lootbox VRF words. This asymmetry is intentional -- index advance isolation is proven equivalent to flag-based isolation for the lootbox path. (See F-25-07 in `audit/FINDINGS-v25.0.md`)
+
+**Deity boon deterministic fallback before first VRF.** `_deityDailySeed` uses `keccak256(day, address(this))` as a tier-3 fallback when no VRF word exists for the current day. This seed is fully deterministic and predictable by any observer. The fallback fires only before the first `advanceGame` call or during a prolonged VRF stall. Since the deity boon affects cosmetic/utility display only (which deity boon a player sees), not ETH payouts or jackpot outcomes, predictability has no economic impact. (See F-25-09 in `audit/FINDINGS-v25.0.md`)
+
+**Decimator settlement temporarily over-reserves claimablePool.** During decimator settlement, the full decimator pool is reserved in `claimablePool` before individual winner claims are credited to `claimableWinnings`. This temporarily breaks the invariant `claimablePool == SUM(claimableWinnings[*])`, but the inequality is always in the safe direction: `claimablePool >= SUM(claimableWinnings[*])` (over-reserved, never under-reserved). The invariant is restored when all decimator claims are credited. Documented in DegenerusGameStorage NatSpec at L344-L345. (See F-25-12 in `audit/FINDINGS-v25.0.md`)
+
 ---
 
 ## Automated Tool Findings (Pre-disclosed)
