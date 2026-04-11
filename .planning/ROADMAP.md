@@ -39,9 +39,9 @@
   3. Carryover ticket distribution in `payDailyJackpotCoinAndTickets` uses bonus traits (not main traits) for winner selection
   4. Main ETH jackpot and 20% ticket distribution still use main traits at the current level — no behavioral change
   5. `BonusWinningTraits` event is emitted per bonus drawing with the level and packed traits
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 218-01-PLAN.md — Parameterize _rollWinningTraits with domain separation, update target level range, remove DJT storage
+- [x] 218-01-PLAN.md — Parameterize _rollWinningTraits with domain separation, update target level range, remove DJT storage
 - [ ] 218-02-PLAN.md — Rewire all caller sites, add DailyWinningTraits event, compile verification
 
 ### Phase 219: Delta Audit & Gas Verification
@@ -65,5 +65,5 @@ Phases execute in numeric order: 218 -> 219
 | 215. RNG Fresh Eyes | v25.0 | 5/5 | Complete | 2026-04-11 |
 | 216. Pool & ETH Accounting | v25.0 | 3/3 | Complete | 2026-04-11 |
 | 217. Findings Consolidation | v25.0 | 2/2 | Complete | 2026-04-11 |
-| 218. Bonus Split Implementation | v26.0 | 0/2 | Not started | - |
+| 218. Bonus Split Implementation | v26.0 | 1/2 | In Progress|  |
 | 219. Delta Audit & Gas Verification | v26.0 | 0/? | Not started | - |

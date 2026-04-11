@@ -93,6 +93,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 ticketIndex
     );
 
+    /// @dev Emitted once per daily drawing with both main and bonus winning traits.
+    event DailyWinningTraits(
+        uint32 indexed day,
+        uint32 mainTraitsPacked,
+        uint32 bonusTraitsPacked,
+        uint24 bonusTargetLevel
+    );
+
     /// @dev DGNRS reward to solo bucket winner on final day.
     event JackpotDgnrsWin(address indexed winner, uint256 amount);
 
@@ -325,8 +333,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 return;
             }
 
-            winningTraitsPacked = _rollWinningTraits(randWord);
-            _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
+            winningTraitsPacked = _rollWinningTraits(randWord, false);
 
             uint256 dailyEthBudget;
             {
@@ -489,13 +496,26 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 }
             }
 
+            {
+                uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
+                uint256 coinEntropy = randWord ^ (uint256(lvl) << 192) ^ uint256(COIN_JACKPOT_TAG);
+                uint24 bonusTargetLevel = _selectDailyCoinTargetLevel(lvl, coinEntropy);
+                emit DailyWinningTraits(questDay, winningTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
+            }
+
             dailyJackpotCoinTicketsPending = true;
             return;
         }
 
         // Purchase phase path - BURNIE and ETH bonuses at level 1+
-        winningTraitsPacked = _rollWinningTraits(randWord);
-        _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
+        winningTraitsPacked = _rollWinningTraits(randWord, false);
+
+        {
+            uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
+            uint256 coinEntropy = randWord ^ (uint256(lvl) << 192) ^ uint256(COIN_JACKPOT_TAG);
+            uint24 bonusTargetLevel = _selectDailyCoinTargetLevel(lvl, coinEntropy);
+            emit DailyWinningTraits(questDay, winningTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
+        }
 
         bool isEthDay = lvl > 0; // daily 1% drip from futurePrizePool every purchase day
         uint256 ethDaySlice;
@@ -543,8 +563,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      Gas optimization: Separating coin+ticket distribution from ETH distribution
     ///      keeps each advanceGame call under the 15M gas block limit.
     ///
+    ///      Traits are derived inline from randWord (main via isBonus=false, bonus via isBonus=true).
     ///      Uses stored values from Phase 1:
-    ///      - dailyJackpotTraitsPacked: Level and winning traits (via _djtRead helpers)
     ///      - rngWordCurrent: VRF entropy for deterministic winner selection
     ///      - dailyTicketBudgetsPacked: Packed ticket units, counter step, and carryover source offset
     ///
