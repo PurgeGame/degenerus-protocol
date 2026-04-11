@@ -22,7 +22,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### RNG (Fresh Eyes)
 
-- [ ] **RNG-01**: VRF request/fulfillment lifecycle traced end-to-end with no reliance on prior audit conclusions
+- [x] **RNG-01**: VRF request/fulfillment lifecycle traced end-to-end with no reliance on prior audit conclusions
 - [ ] **RNG-02**: Backward trace from every RNG consumer proving word was unknown at input commitment time
 - [ ] **RNG-03**: Controllable-state window analysis between VRF request and fulfillment for every path
 - [ ] **RNG-04**: Word derivation verification — every keccak/shift/mask producing a game outcome traced to its VRF source
@@ -65,7 +65,7 @@ None — this is a terminal audit milestone.
 | ADV-02 | 214 | Complete |
 | ADV-03 | 214 | Complete |
 | ADV-04 | 214 | Complete |
-| RNG-01 | 215 | Pending |
+| RNG-01 | 215 | Complete |
 | RNG-02 | 215 | Pending |
 | RNG-03 | 215 | Pending |
 | RNG-04 | 215 | Pending |
