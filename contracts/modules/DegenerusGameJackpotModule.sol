@@ -266,7 +266,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) external returns (uint256 paidWei) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
 
-        uint32 winningTraitsPacked = _rollWinningTraits(rngWord);
+        uint32 winningTraitsPacked = _rollWinningTraits(rngWord, false);
         uint256 entropy = rngWord ^ (uint256(targetLvl) << 192);
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
@@ -580,9 +580,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint8 carryoverSourceOffset
         ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
 
-        // Retrieve stored state from ETH phase
-        uint24 lvl = uint24(_djtRead(DJT_LEVEL_SHIFT, DJT_LEVEL_MASK));
-        uint32 winningTraitsPacked = uint32(_djtRead(DJT_TRAITS_SHIFT, DJT_TRAITS_MASK));
+        // Derive traits inline from randWord (DJT storage removed)
+        uint24 lvl = level;
+        uint32 mainTraitsPacked = _rollWinningTraits(randWord, false);
+        uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
         uint256 entropyDaily = randWord ^ (uint256(lvl) << 192);
         uint24 sourceLevel = lvl + uint24(carryoverSourceOffset);
         uint256 entropyNext = randWord ^ (uint256(sourceLevel) << 192);
@@ -606,7 +607,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 {
                     _awardDailyCoinToTraitWinners(
                         targetLevel,
-                        winningTraitsPacked,
+                        bonusTraitsPacked,
                         nearBudget,
                         coinEntropy
                     );
@@ -615,12 +616,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         // --- Ticket Distribution ---
-        // Distribute daily tickets to current level trait winners
+        // Distribute daily tickets to current level trait winners (main traits)
         if (dailyTicketUnits != 0) {
             _distributeTicketJackpot(
                 lvl,
                 lvl + 1,
-                winningTraitsPacked,
+                mainTraitsPacked,
                 dailyTicketUnits,
                 entropyDaily,
                 LOOTBOX_MAX_WINNERS,
@@ -629,13 +630,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
 
         // Distribute carryover tickets: winners from source level, tickets at current level
-        // (or lvl+1 on final day since current level is about to end).
+        // (or lvl+1 on final day since current level is about to end). Uses bonus traits.
         if (carryoverTicketUnits != 0) {
             bool isFinalDay = jackpotCounter + counterStep >= JACKPOT_LEVEL_CAP;
             _distributeTicketJackpot(
                 sourceLevel,
                 isFinalDay ? lvl + 1 : lvl,
-                winningTraitsPacked,
+                bonusTraitsPacked,
                 carryoverTicketUnits,
                 entropyNext,
                 LOOTBOX_MAX_WINNERS,
@@ -1157,7 +1158,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         bool isFinal = (jackpotCounter + cs >= JACKPOT_LEVEL_CAP);
         uint256 paidEth2 = _processDailyEth(
             lvl, 0, entropy,
-            JackpotBucketLib.unpackWinningTraits(uint32(_djtRead(DJT_TRAITS_SHIFT, DJT_TRAITS_MASK))),
+            JackpotBucketLib.unpackWinningTraits(_rollWinningTraits(randWord, false)),
             JackpotBucketLib.shareBpsByBucket(
                 isFinal ? FINAL_DAY_SHARES_PACKED : DAILY_JACKPOT_SHARES_PACKED,
                 uint8(entropy & 3)
@@ -1677,7 +1678,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @notice Pays daily BURNIE jackpot to random ticket holders.
     /// @dev Runs every day in its own transaction. Awards 0.5% of prize pool target in BURNIE.
-    ///      75% goes to near-future trait-matched winners ([lvl, lvl+4]).
+    ///      75% goes to near-future trait-matched winners ([lvl+1, lvl+4]).
     ///      25% goes to far-future ticketQueue holders ([lvl+5, lvl+99]).
     /// @param lvl Current level.
     /// @param randWord VRF entropy for winner selection.
@@ -1695,15 +1696,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // --- Near-future portion (trait-matched) ---
         if (nearBudget == 0) return;
 
-        uint32 questDay = _simulatedDayIndex();
-        (uint32 winningTraitsPacked, bool valid) = _loadDailyWinningTraits(
-            lvl,
-            questDay
-        );
-        if (!valid) {
-            winningTraitsPacked = _rollWinningTraits(randWord);
-            _syncDailyWinningTraits(lvl, winningTraitsPacked, questDay);
-        }
+        uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
 
         uint256 entropy = randWord ^
             (uint256(lvl) << 192) ^
@@ -1715,7 +1708,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         _awardDailyCoinToTraitWinners(
             targetLevel,
-            winningTraitsPacked,
+            bonusTraitsPacked,
             nearBudget,
             entropy
         );
