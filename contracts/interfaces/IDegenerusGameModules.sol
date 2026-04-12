@@ -80,7 +80,8 @@ interface IDegenerusGameJackpotModule {
     /// @notice Emit DailyWinningTraits without running distribution.
     /// @param lvl Current level.
     /// @param randWord VRF entropy for trait derivation.
-    function emitDailyWinningTraits(uint24 lvl, uint256 randWord) external;
+    /// @param bonusTargetLevel Target level for the primary bonus coin distribution.
+    function emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) external;
 
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
     /// @param poolWei Total ETH to distribute.

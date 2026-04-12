@@ -1713,14 +1713,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Emit DailyWinningTraits without running any distribution.
-    ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
-    function emitDailyWinningTraits(uint24 lvl, uint256 randWord) external {
+    ///      Used at purchaseLevel==1 where payDailyJackpot is skipped and two coin
+    ///      jackpots replace the ETH jackpot. First coin call (the "main") uses
+    ///      bonus-derived traits from randWord. Second coin call uses traits from
+    ///      a salted randWord (keccak256(randWord, BONUS_TRAITS_TAG)).
+    /// @param bonusTargetLevel Target level for the first (main-equivalent) coin distribution.
+    function emitDailyWinningTraits(uint24, uint256 randWord, uint24 bonusTargetLevel) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         uint32 questDay = _simulatedDayIndex();
-        uint32 mainTraitsPacked = _rollWinningTraits(randWord, false);
-        uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
-        uint256 coinEntropy = randWord ^ (uint256(lvl) << 192) ^ uint256(COIN_JACKPOT_TAG);
-        uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
+        uint32 mainTraitsPacked = _rollWinningTraits(randWord, true);
+        uint256 saltedRng = uint256(keccak256(abi.encodePacked(randWord, BONUS_TRAITS_TAG)));
+        uint32 bonusTraitsPacked = _rollWinningTraits(saltedRng, true);
         emit DailyWinningTraits(questDay, mainTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
     }
 
