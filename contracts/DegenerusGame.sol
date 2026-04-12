@@ -2295,6 +2295,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
     }
 
+    /// @notice Returns the packed mint data for a player.
+    /// @dev External view accessor for DegenerusQuests (IDegenerusGame.mintPackedFor).
+    /// @param player Player address to query.
+    /// @return Raw packed uint256 from mintPacked_.
+    function mintPackedFor(address player) external view returns (uint256) {
+        return mintPacked_[player];
+    }
+
     /*+======================================================================+
       |                    TRAIT TICKET SAMPLING                             |
       +======================================================================+
