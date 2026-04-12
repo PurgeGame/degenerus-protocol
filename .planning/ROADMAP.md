@@ -38,7 +38,7 @@
   2. `payDailyCoinJackpot` (purchase phase) and `payDailyJackpotCoinAndTickets` (jackpot phase) both select BURNIE coin winners using bonus traits with near-future target range [lvl+1, lvl+4]
   3. Carryover ticket distribution in `payDailyJackpotCoinAndTickets` uses bonus traits (not main traits) for winner selection
   4. Main ETH jackpot and 20% ticket distribution still use main traits at the current level — no behavioral change
-  5. `BonusWinningTraits` event is emitted per bonus drawing with the level and packed traits
+  5. `DailyWinningTraits` event emitted per daily drawing with main traits, bonus traits, and bonus target level
 **Plans:** 1/2 plans executed
 Plans:
 - [x] 218-01-PLAN.md — Parameterize _rollWinningTraits with domain separation, update target level range, remove DJT storage

@@ -1,7 +1,34 @@
-# Requirements: Degenerus Protocol — Full Audit (Post-v5.0 Delta + Fresh RNG)
+# Requirements: Degenerus Protocol — v26.0 Bonus Jackpot Split
 
-**Defined:** 2026-04-10
+**Defined:** 2026-04-11
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
+
+## v26.0 Requirements
+
+Requirements for the bonus jackpot split. Each maps to roadmap phases.
+
+### Trait Split
+
+- [x] **TSPL-01**: Bonus drawing rolls independent traits via keccak256 domain separation from same VRF word
+- [x] **TSPL-02**: Hero symbol override applies to bonus trait roll — same hero symbol, independently rerolled color from bonus entropy
+
+### Distribution Wiring
+
+- [x] **WIRE-01**: BURNIE coin near-future targets [lvl+1, lvl+4] instead of [lvl, lvl+4]
+- [x] **WIRE-02**: Carryover ticket distribution uses bonus traits for winner selection
+- [x] **WIRE-03**: Purchase-phase `payDailyCoinJackpot` rolls bonus traits independently
+- [x] **WIRE-04**: Jackpot-phase `payDailyJackpotCoinAndTickets` coin portion rolls bonus traits independently
+- [x] **WIRE-05**: Main ETH jackpot and 20% ticket distribution unchanged (current-level, main traits)
+
+### Events
+
+- [x] **EVNT-01**: `DailyWinningTraits` event emitted per daily drawing with main traits, bonus traits, and bonus target level
+- [x] **EVNT-02**: Existing `JackpotBurnieWin` reused for individual bonus winners
+
+### Verification
+
+- [ ] **VRFY-01**: Delta audit confirms main ETH distribution path unchanged
+- [x] **VRFY-02**: Gas measurement confirms headroom preserved under worst-case bonus distribution
 
 ## v25.0 Requirements
 
@@ -42,22 +69,38 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ## Future Requirements
 
-None — this is a terminal audit milestone.
+None deferred.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
+| Separate VRF request for bonus | Creates commitment window vulnerability; same VRF word with domain separation is sufficient |
+| New storage slot for bonus traits | Space exists but unnecessary -- derive inline from randWord |
+| Lootbox eligibility gate | No gate change -- eligible by having future-level tickets |
+| Changes to far-future BURNIE distribution | Queue-based (no traits), unaffected by split |
+| Changes to early-bird lootbox jackpot | Own per-winner trait selection at lvl+1, already correct |
+| Separate BonusBurnieWin event | Existing JackpotBurnieWin reused per user decision |
 | Test coverage gaps | User explicitly excluded test work from this milestone |
 | Frontend code | Not in audit scope |
 | Off-chain infrastructure | VRF coordinator is external |
-| Gas optimization | Separate concern; covered in prior milestones |
 | Unchanged functions (pre-v6.0) | Covered by v5.0 Ultimate Adversarial Audit |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| TSPL-01 | 218 | Complete |
+| TSPL-02 | 218 | Complete |
+| WIRE-01 | 218 | Complete |
+| WIRE-02 | 218 | Complete |
+| WIRE-03 | 218 | Complete |
+| WIRE-04 | 218 | Complete |
+| WIRE-05 | 218 | Complete |
+| EVNT-01 | 218 | Complete |
+| EVNT-02 | 218 | Complete |
+| VRFY-01 | 219 | Pending |
+| VRFY-02 | 219 | Complete |
 | DELTA-01 | 213 | Complete |
 | DELTA-02 | 213 | Complete |
 | DELTA-03 | 213 | Complete |
@@ -78,10 +121,11 @@ None — this is a terminal audit milestone.
 | FIND-03 | 217 | Complete |
 
 **Coverage:**
+- v26.0 requirements: 11 total
 - v25.0 requirements: 18 total
-- Mapped to phases: 18
+- Mapped to phases: 29
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-04-10*
-*Last updated: 2026-04-10 — traceability added after roadmap creation*
+*Requirements defined: 2026-04-11*
+*Last updated: 2026-04-12 -- EVNT-01 corrected to DailyWinningTraits, Phase 218 requirements marked Complete, VRFY-02 marked Complete*
