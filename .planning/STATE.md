@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
-status: executing
-stopped_at: Completed 221-02-PLAN.md — 221-01-AUDIT.md written (202 lines); 5 JUSTIFIED INFO sites, 0 FLAGGED; Phase 221 complete
-last_updated: "2026-04-12T18:12:07Z"
+status: Phase 221 closed; Phase 222 ready to start
+stopped_at: Completed 221-02-PLAN.md — 221-01-AUDIT.md (202 lines) written with 5 JUSTIFIED INFO sites, 0 FLAGGED; CSI-04/05/06/07 closed; Phase 221 complete; Phase 222 ready
+last_updated: "2026-04-12T18:27:31.133Z"
 last_activity: 2026-04-12
 progress:
   total_phases: 4
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 
 ## Current Position
 
-Phase: 221 (Raw Selector & Calldata Audit) — COMPLETE; next: Phase 222 (External Function Coverage Gap)
-Plan: 2 of 2 complete
+Phase: 222
+Plan: Not started
 Milestone: v27.0 — Call-Site Integrity Audit
 Status: Phase 221 closed; Phase 222 ready to start
 Last activity: 2026-04-12
