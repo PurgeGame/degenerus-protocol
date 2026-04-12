@@ -14,7 +14,7 @@ The scope is deliberately bounded to **call-site integrity**. Out of scope for t
 ### Delegatecall Target Alignment (Phase 220)
 
 - [x] **CSI-01**: Every `<ADDR>.delegatecall(abi.encodeWithSelector(IXxxModule.fn.selector, ...))` site uses a target address constant that corresponds to `IXxxModule` (no cross-wired addresses — e.g., no `GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.fn.selector, ...))`)
-- [ ] **CSI-02**: Every `GAME_*_MODULE` address constant in `ContractAddresses.sol` that is used as a delegatecall target has a 1:1 mapping to exactly one module interface, verified across every caller
+- [x] **CSI-02**: Every `GAME_*_MODULE` address constant in `ContractAddresses.sol` that is used as a delegatecall target has a 1:1 mapping to exactly one module interface, verified across every caller
 - [x] **CSI-03**: A static-analysis script (`scripts/check-delegatecall-alignment.sh` or similar) is added and wired into the Makefile gate so any future delegatecall/interface misalignment fails `make test`
 
 ### Raw Selector & Calldata Audit (Phase 221)
@@ -65,7 +65,7 @@ Explicit exclusions with reasoning:
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CSI-01 | Phase 220 | Complete |
-| CSI-02 | Phase 220 | Pending |
+| CSI-02 | Phase 220 | Complete |
 | CSI-03 | Phase 220 | Complete |
 | CSI-04 | Phase 221 | Pending |
 | CSI-05 | Phase 221 | Pending |

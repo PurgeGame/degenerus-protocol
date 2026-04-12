@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
-status: executing
-stopped_at: Completed 220-01-PLAN.md — CSI-01 & CSI-03 satisfied; script at 170 lines, gate passes clean tree (43/43 ALIGNED), negative test proven via /tmp fixture. Ready for 220-02 endgame-dead-constant plan.
-last_updated: "2026-04-12T10:16:47.342Z"
+status: verifying
+stopped_at: Completed 220-02-PLAN.md — CSI-02 satisfied. Phase 220 is done (CSI-01/CSI-02/CSI-03 all Complete). validate_mapping preflight added, 10-row mapping table proves 9 LIVE + 1 DEAD split. Ready for Phase 221 (raw selector audit) or 222 (coverage gap).
+last_updated: "2026-04-12T10:29:21.062Z"
 last_activity: 2026-04-12
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State
@@ -25,13 +25,13 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 
 ## Current Position
 
-Phase: 220 (delegatecall-target-alignment) — EXECUTING
-Plan: 2 of 2
+Phase: 220 (delegatecall-target-alignment) — COMPLETE (ready for verification)
+Plan: 2 of 2 (both plans shipped)
 Milestone: v27.0 — Call-Site Integrity Audit
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-12
 
-Progress: [          ] 0% (0/4 phases)
+Progress: [██▌       ] 25% (1/4 phases)
 
 ## Accumulated Context
 
@@ -53,6 +53,9 @@ Recent decisions affecting current work:
 - [Phase 220]: [220-01]: Single naming exception GameOverModule -> GAMEOVER_MODULE. All 8 other interfaces conform to CamelCase -> UPPER_SNAKE. Exception map keyed by stripped suffix is the source of truth for both directions (iface_to_constant and 220-02's reverse).
 - [Phase 220]: [220-01]: check-delegatecall gate operates on source text (no forge build prereq). Runs under 1s vs check-interfaces ~10s. Exit 0 on clean, exit 1 on any FAIL or WARN. Orphan selectors also block to catch dead code.
 - [Phase 220]: [220-01]: CONTRACTS_DIR env var pattern established for future gates — scripts must support overriding target tree so negative tests run in /tmp without touching contracts/. Honors feedback_no_contract_commits.
+- [Phase 220-02]: Paired exception maps keyed on opposite ends (NAMING_EXCEPTIONS + REVERSE_NAMING_EXCEPTIONS) handle the GameOver CamelCase corner case in both directions with O(1) lookups and a symmetric diff visible in a single script.
+- [Phase 220-02]: DEAD_CONSTANTS=(GAME_ENDGAME_MODULE) allowlist instead of removing the dead constant. Per feedback_no_contract_commits; Phase 223 will surface the INFO finding for user review. Visible-diff property mitigates allowlist abuse (T-220-07).
+- [Phase 220-02]: Preflight-then-per-site gate architecture: validate_mapping runs BEFORE collect_sites so universe-level drift fails fast with precise error instead of misleading per-site output. Pattern published for future CSI-* phases (221, 222).
 
 ### Pending Todos
 
@@ -65,5 +68,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-12T10:16:47.338Z
-Stopped at: Completed 220-01-PLAN.md — CSI-01 & CSI-03 satisfied; script at 170 lines, gate passes clean tree (43/43 ALIGNED), negative test proven via /tmp fixture. Ready for 220-02 endgame-dead-constant plan.
+Last session: 2026-04-12T10:29:21.060Z
+Stopped at: Completed 220-02-PLAN.md — CSI-02 satisfied. Phase 220 is done (CSI-01/CSI-02/CSI-03 all Complete). validate_mapping preflight added, 10-row mapping table proves 9 LIVE + 1 DEAD split. Ready for Phase 221 (raw selector audit) or 222 (coverage gap).
