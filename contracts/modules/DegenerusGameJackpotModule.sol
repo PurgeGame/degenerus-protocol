@@ -1712,6 +1712,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
+    /// @dev Emit DailyWinningTraits without running any distribution.
+    ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
+    function emitDailyWinningTraits(uint24 lvl, uint256 randWord) external {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        uint32 questDay = _simulatedDayIndex();
+        uint32 mainTraitsPacked = _rollWinningTraits(randWord, false);
+        uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
+        uint256 coinEntropy = randWord ^ (uint256(lvl) << 192) ^ uint256(COIN_JACKPOT_TAG);
+        uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
+        emit DailyWinningTraits(questDay, mainTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
+    }
+
     /// @dev Awards BURNIE to random winners from the packed winning traits at a target level.
     function _awardDailyCoinToTraitWinners(
         uint24 lvl,

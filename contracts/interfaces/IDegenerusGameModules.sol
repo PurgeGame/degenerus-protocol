@@ -77,6 +77,11 @@ interface IDegenerusGameJackpotModule {
     /// @param maxLevel Maximum target level for near-future coin distribution (inclusive)
     function payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external;
 
+    /// @notice Emit DailyWinningTraits without running distribution.
+    /// @param lvl Current level.
+    /// @param randWord VRF entropy for trait derivation.
+    function emitDailyWinningTraits(uint24 lvl, uint256 randWord) external;
+
     /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
     /// @param poolWei Total ETH to distribute.
     /// @param targetLvl Level to sample winners from.

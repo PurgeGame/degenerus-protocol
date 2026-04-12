@@ -339,11 +339,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (!inJackpot) {
                 // Pre-target: daily jackpots while building prize pool
                 if (!lastPurchaseDay) {
-                    payDailyJackpot(false, purchaseLevel, rngWord);
                     if (purchaseLevel == 1) {
+                        _emitDailyWinningTraits(1, rngWord);
                         _payDailyCoinJackpot(1, rngWord, 1, 1);
-                        _payDailyCoinJackpot(1, rngWord, 2, 5);
+                        _payDailyCoinJackpot(1, uint256(keccak256(abi.encodePacked(rngWord, keccak256("BONUS_TRAITS")))), 2, 5);
                     } else {
+                        payDailyJackpot(false, purchaseLevel, rngWord);
                         _payDailyCoinJackpot(purchaseLevel, rngWord, purchaseLevel + 1, purchaseLevel + 4);
                     }
                     // FLAG-02: combined target + game-over check (shares SLOADs when flag is set)
@@ -862,6 +863,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     randWord,
                     minLevel,
                     maxLevel
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev Emit DailyWinningTraits via jackpot module delegatecall.
+    ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
+    function _emitDailyWinningTraits(uint24 lvl, uint256 randWord) private {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_JACKPOT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameJackpotModule.emitDailyWinningTraits.selector,
+                    lvl,
+                    randWord
                 )
             );
         if (!ok) _revertDelegate(data);
