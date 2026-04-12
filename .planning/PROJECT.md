@@ -404,4 +404,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 — Phase 220 Delegatecall Target Alignment complete (CSI-01/02/03 closed); v27.0 1/4 phases done*
+*Last updated: 2026-04-12 — Phase 221 Raw Selector & Calldata Audit complete (CSI-04/05/06/07 closed); v27.0 2/4 phases done. Baseline: 0 FLAGGED, 5 JUSTIFIED INFO (3 Chainlink mocks + 2 ERC-677 transferAndCall feeders); regression gate `scripts/check-raw-selectors.sh` wired into `make test-foundry`/`test-hardhat`.*
