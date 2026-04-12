@@ -1,4 +1,14 @@
-.PHONY: test test-foundry test-hardhat invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat check-interfaces invariant-test invariant-build invariant-clean
+
+# ── Interface coverage gate ─────────────────────────────────────────────
+# Verifies every function declared in contracts/interfaces/ has a matching
+# implementation (by 4-byte selector) on the target contract. Catches the
+# class of bug where an interface function is declared but never implemented,
+# causing silent staticcall reverts at the call site (see prior mintPackedFor
+# incident). Builds contracts first so forge inspect has fresh ABI data.
+check-interfaces:
+	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip test >/dev/null
+	@scripts/check-interface-coverage.sh
 
 # ── Unified test targets ────────────────────────────────────────────────
 # Patches ContractAddresses.sol with Foundry-predicted addresses before
@@ -7,7 +17,7 @@
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry:
+test-foundry: check-interfaces
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
 	@echo "Running Foundry tests..."
@@ -17,7 +27,7 @@ test-foundry:
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
-test-hardhat:
+test-hardhat: check-interfaces
 	@npx hardhat test $(ARGS)
 
 # Run both suites

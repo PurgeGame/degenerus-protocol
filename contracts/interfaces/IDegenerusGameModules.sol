@@ -243,21 +243,6 @@ interface IDegenerusGameMintModule {
     /// @param burnieAmount Amount of Burnie lootboxes to purchase
     function purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external;
 
-    /// @notice Opens a lootbox for a player
-    /// @param player Address of the lootbox owner
-    /// @param lootboxIndex Index of the lootbox to open
-    function openLootBox(address player, uint48 lootboxIndex) external;
-
-    /// @notice Resolves a lootbox directly with provided randomness
-    /// @param player Address of the lootbox owner
-    /// @param amount Amount associated with the lootbox
-    /// @param rngWord Random word for lootbox resolution
-    function resolveLootboxDirect(
-        address player,
-        uint256 amount,
-        uint256 rngWord
-    ) external;
-
     /// @notice Processes a batch of future ticket claims
     /// @param lvl The level to process tickets for
     /// @return worked Whether any processing was done
