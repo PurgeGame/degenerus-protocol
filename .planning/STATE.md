@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
 status: verifying
-stopped_at: Completed 220-02-PLAN.md — CSI-02 satisfied. Phase 220 is done (CSI-01/CSI-02/CSI-03 all Complete). validate_mapping preflight added, 10-row mapping table proves 9 LIVE + 1 DEAD split. Ready for Phase 221 (raw selector audit) or 222 (coverage gap).
-last_updated: "2026-04-12T10:43:09.813Z"
+stopped_at: Phase 221 context gathered — Claude's Discretion across 4 gray areas (gate script, call-feeder scope, mocks path-exclude, single catalog+HIGH severity)
+last_updated: "2026-04-12T17:34:17.922Z"
 last_activity: 2026-04-12
 progress:
   total_phases: 4
@@ -68,5 +68,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-12T10:29:21.060Z
-Stopped at: Completed 220-02-PLAN.md — CSI-02 satisfied. Phase 220 is done (CSI-01/CSI-02/CSI-03 all Complete). validate_mapping preflight added, 10-row mapping table proves 9 LIVE + 1 DEAD split. Ready for Phase 221 (raw selector audit) or 222 (coverage gap).
+Last session: 2026-04-12T17:34:17.920Z
+Stopped at: Phase 221 context gathered — Claude's Discretion across 4 gray areas (gate script, call-feeder scope, mocks path-exclude, single catalog+HIGH severity)
