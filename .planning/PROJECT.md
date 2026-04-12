@@ -404,4 +404,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 — v27.0 Call-Site Integrity Audit milestone started*
+*Last updated: 2026-04-12 — Phase 220 Delegatecall Target Alignment complete (CSI-01/02/03 closed); v27.0 1/4 phases done*
