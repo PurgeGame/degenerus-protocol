@@ -1205,6 +1205,31 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
+    /// @notice Emit DailyWinningTraits via jackpot module.
+    /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
+    ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
+    /// @param lvl Unused (preserved for signature compatibility).
+    /// @param randWord VRF entropy seed.
+    /// @param bonusTargetLevel Target level for the first coin distribution.
+    function emitDailyWinningTraits(
+        uint24 lvl,
+        uint256 randWord,
+        uint24 bonusTargetLevel
+    ) external {
+        if (msg.sender != address(this)) revert E();
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_JACKPOT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameJackpotModule.emitDailyWinningTraits.selector,
+                    lvl,
+                    randWord,
+                    bonusTargetLevel
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
     /// @notice Consume Decimator claim on behalf of player.
     /// @dev Access: Game-only (self-call).
     /// @param player Address to claim for.

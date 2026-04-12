@@ -869,20 +869,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Emit DailyWinningTraits via jackpot module delegatecall.
+    /// @dev Emit DailyWinningTraits via self-call into GAME, which delegatecalls JackpotModule.
     ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
+    ///      Self-call preserves msg.sender == address(this) across the delegatecall so the
+    ///      JackpotModule's OnlyGame check passes.
     function _emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.emitDailyWinningTraits.selector,
-                    lvl,
-                    randWord,
-                    bonusTargetLevel
-                )
-            );
-        if (!ok) _revertDelegate(data);
+        IDegenerusGame(address(this)).emitDailyWinningTraits(lvl, randWord, bonusTargetLevel);
     }
 
     /// @dev Enforce "must mint today" gate for advanceGame callers.

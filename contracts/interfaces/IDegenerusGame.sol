@@ -207,6 +207,13 @@ interface IDegenerusGame {
         uint256 rngWord
     ) external returns (uint256 paidWei);
 
+    /// @notice Emit DailyWinningTraits without running any distribution.
+    ///         Used at purchaseLevel==1 where payDailyJackpot is skipped.
+    /// @param lvl Unused (preserved for signature compatibility with module).
+    /// @param randWord VRF entropy for trait derivation.
+    /// @param bonusTargetLevel Target level for the primary bonus coin distribution.
+    function emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) external;
+
     /// @notice Consume Decimator claim on behalf of player.
     /// @param player Address to claim for.
     /// @param lvl Level to claim from.
