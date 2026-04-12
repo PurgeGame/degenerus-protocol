@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
 status: Phase 221 closed; Phase 222 ready to start
-stopped_at: Completed 221-02-PLAN.md — 221-01-AUDIT.md (202 lines) written with 5 JUSTIFIED INFO sites, 0 FLAGGED; CSI-04/05/06/07 closed; Phase 221 complete; Phase 222 ready
-last_updated: "2026-04-12T18:27:31.133Z"
+stopped_at: Phase 222 context gathered
+last_updated: "2026-04-12T19:47:10.340Z"
 last_activity: 2026-04-12
 progress:
   total_phases: 4
@@ -73,5 +73,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-12T18:12:07Z
-Stopped at: Completed 221-02-PLAN.md — 221-01-AUDIT.md (202 lines) written with 5 JUSTIFIED INFO sites, 0 FLAGGED; CSI-04/05/06/07 closed; Phase 221 complete; Phase 222 ready
+Last session: 2026-04-12T19:47:10.337Z
+Stopped at: Phase 222 context gathered
