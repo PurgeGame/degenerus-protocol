@@ -76,7 +76,9 @@
   2. `forge coverage --report summary` produces per-function line and branch coverage data for every deployed contract (`DegenerusGame`, modules, `BurnieCoin`, `BurnieCoinflip`, `DegenerusAffiliate`, `DegenerusJackpots`, `DegenerusQuests`, `StakedDegenerusStonk`, `DegenerusVault`, `DegenerusStonk`)
   3. Every external/public function on a deployed contract has a recorded classification (COVERED / CRITICAL_GAP / EXEMPT) with documented rationale for EXEMPTions
   4. Every CRITICAL_GAP function has at least one new test exercising it on a realistic path (conditional entry points where the real bug would manifest, not just direct invocation with happy-path args)
-**Plans**: TBD
+**Plans**: 2 plans
+- [x] 222-01-PLAN.md — Fix FuturepoolSkim.t.sol compile error (CSI-08), run `forge coverage --report summary` + `--report lcov` across 24 deployable contracts (CSI-09), produce `222-01-COVERAGE-MATRIX.md` classifying every external/public function as COVERED / CRITICAL_GAP / EXEMPT per D-07/D-08 50%-branch threshold with D-11/D-12 exemption allowlist (CSI-10). Completed 2026-04-12.
+- [ ] 222-02-PLAN.md — Close every CRITICAL_GAP with an integration-style test reaching the target through its natural caller chain (D-13/D-14/D-15), ship `scripts/coverage-check.sh` standalone gate implementing three failure modes (MATRIX_DRIFT / UNCURED_GAP / REGRESSED_COVERAGE per D-18), wire `make coverage-check` as standalone target NOT prereq of `test-foundry`/`test-hardhat` per D-16, finalize Phase 223 handoff totals (CSI-11)
 
 ### Phase 223: Findings Consolidation
 **Goal**: All v27.0 audit findings are severity-classified and rolled up into `audit/FINDINGS-v27.0.md`; design-decision items are promoted to `KNOWN-ISSUES.md`; v27.0 is marked SHIPPED
@@ -105,5 +107,5 @@ Phase 220 first (or in parallel with 221). Phase 221 in parallel with 220. Phase
 | 219. Delta Audit & Gas Verification | v26.0 | 2/2 | Complete | 2026-04-12 |
 | 220. Delegatecall Target Alignment | v27.0 | 2/2 | Complete    | 2026-04-12 |
 | 221. Raw Selector & Calldata Audit | v27.0 | 2/2 | Complete    | 2026-04-12 |
-| 222. External Function Coverage Gap | v27.0 | 0/? | Not started | - |
+| 222. External Function Coverage Gap | v27.0 | 1/2 | In Progress | - |
 | 223. Findings Consolidation | v27.0 | 0/? | Not started | - |

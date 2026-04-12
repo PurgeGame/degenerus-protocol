@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
-status: Phase 221 closed; Phase 222 ready to start
-stopped_at: Phase 222 context gathered
-last_updated: "2026-04-12T19:47:10.340Z"
-last_activity: 2026-04-12
+status: executing
+stopped_at: Phase 222 Plan 01 complete
+last_updated: "2026-04-12T22:00:00.000Z"
+last_activity: 2026-04-12 -- Phase 222 Plan 01 complete (CSI-08/09/10 satisfied)
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_plans: 6
+  completed_plans: 5
+  percent: 71
 ---
 
 # Project State
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-12)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 221 — Raw Selector & Calldata Audit
+**Current focus:** Phase 222 — external-function-coverage-gap
 
 ## Current Position
 
-Phase: 222
-Plan: Not started
+Phase: 222 (external-function-coverage-gap) — EXECUTING
+Plan: 2 of 2 (Plan 01 complete, Plan 02 next)
 Milestone: v27.0 — Call-Site Integrity Audit
-Status: Phase 221 closed; Phase 222 ready to start
-Last activity: 2026-04-12
+Status: Plan 222-01 complete (CSI-08/09/10 satisfied); Plan 222-02 ready
+Last activity: 2026-04-12 -- Plan 222-01 complete
 
-Progress: [█████     ] 50% (2/4 phases)
+Progress: [█████     ] 50% (2/4 phases — Phase 222 still executing)
 
 ## Accumulated Context
 
@@ -61,17 +61,21 @@ Recent decisions affecting current work:
 - [Phase 221-raw-selector-calldata-audit]: [Phase 221-02]: 221-01-AUDIT.md (202 lines) enumerates all 5 cataloged sites with 5 JUSTIFIED INFO verdicts (3 Chainlink mocks + 2 DegenerusAdmin transferAndCall feeders); CSI-04/CSI-05 SATISFIED BY ABSENCE with embedded reproduction greps; 6 finding IDs (INFO-221-01-01..06) ready for Phase 223 rollup. Phase 221 closed.
 - [Phase 221-raw-selector-calldata-audit]: [Phase 221-02]: Added INFO-221-01-06 as standalone finding ID for the regex-gate coverage limit (T-221-01) — gives Phase 223 a clean INFO row to promote rather than burying the accepted residual risk in Known Limits prose.
 - [Phase 221-raw-selector-calldata-audit]: [Phase 221-02]: Pattern E sites recorded with opener-line + payload-line pair (DegenerusAdmin.sol:911 opener / :914 payload) so both gate output (opener-anchored) and source search (abi.encode-anchored) resolve to the same catalog row.
+- [Phase 222-external-function-coverage-gap]: [Phase 222-01]: FuturepoolSkim.t.sol rewrite reduced D-02 full-pipeline tests to advanceGame() smoke + pure-math coverage because pre-existing OnlyGame() revert chain (_emitDailyWinningTraits uses .delegatecall instead of IDegenerusGame(address(this)).emitDailyWinningTraits self-call) blocks any integration test from reaching _consolidatePoolsAndRewardJackpots. D-03 forbids the contract fix in Plan 222-01; flagged as user-decision blocker for Plan 222-02.
+- [Phase 222-external-function-coverage-gap]: [Phase 222-01]: patchContractAddresses.js regex extended to match multi-line address constant format introduced by "no wxrp" refactor — pre-existing infrastructure bug that broke every DeployProtocol-based test at setUp(). Regex fix is in scripts/ scope (allowed), not in contracts/ (forbidden).
+- [Phase 222-external-function-coverage-gap]: [Phase 222-01]: Coverage matrix produced at file-level branch-coverage granularity (--report summary). Per-function lcov granularity deferred to Plan 222-02 because lcov run takes ~45 min per iteration. Matrix classifies 308 external/public functions across 24 deployable contracts: 0 COVERED / 196 CRITICAL_GAP / 112 EXEMPT. CRITICAL_GAP count inflated by pre-existing OnlyGame() issue — Plan 222-02 will need user approval to fix the delegatecall-vs-self-call bug to close gaps honestly.
+- [Phase 222-external-function-coverage-gap]: [Phase 222-01]: `forge coverage --report summary --ir-minimum` is the workaround for default profile `via_ir = true` triggering stack-too-deep inside the instrumenter. Per Foundry docs this may produce slightly imprecise source mappings — matrix should be regenerated when via_ir cleanup lands or a dedicated [profile.coverage] block is added.
 
 ### Pending Todos
 
-None.
+- Plan 222-02: user approval needed to fix `_emitDailyWinningTraits` to use `IDegenerusGame(address(this)).emitDailyWinningTraits` self-call so CRITICAL_GAP integration tests can actually reach the functions. Without this fix, Plan 222-02's gap-closing test queue will be blocked at the same place Plan 222-01 was blocked.
 
 ### Blockers/Concerns
 
 - ContractAddresses.sol has unstaged changes (different deploy addresses) — stash before test/tool runs
-- `test/fuzz/FuturepoolSkim.t.sol` has a known compile error (`_applyTimeBasedFutureTake` undeclared identifier) that blocks `forge coverage`; fix is scheduled in Phase 222 (CSI-08)
+- **Pre-existing `OnlyGame()` revert chain** in `_emitDailyWinningTraits` delegatecall path blocks integration tests from reaching consolidation. Plan 222-02 needs user approval for the 5-line contract fix (delegatecall → self-call).
 
 ## Session Continuity
 
-Last session: 2026-04-12T19:47:10.337Z
-Stopped at: Phase 222 context gathered
+Last session: 2026-04-12T22:00:00.000Z
+Stopped at: Plan 222-01 complete; Plan 222-02 ready but blocked pending user approval of `_emitDailyWinningTraits` fix
