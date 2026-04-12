@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
 status: executing
-stopped_at: Completed 221-01-PLAN.md — Raw selector gate installed, 7/7 negative tests pass, 2 justified sites, PASS summary
-last_updated: "2026-04-12T18:05:07.187Z"
+stopped_at: Completed 221-02-PLAN.md — 221-01-AUDIT.md written (202 lines); 5 JUSTIFIED INFO sites, 0 FLAGGED; Phase 221 complete
+last_updated: "2026-04-12T18:12:07Z"
 last_activity: 2026-04-12
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -25,13 +25,13 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 
 ## Current Position
 
-Phase: 221 (Raw Selector & Calldata Audit) — EXECUTING
-Plan: 2 of 2
+Phase: 221 (Raw Selector & Calldata Audit) — COMPLETE; next: Phase 222 (External Function Coverage Gap)
+Plan: 2 of 2 complete
 Milestone: v27.0 — Call-Site Integrity Audit
-Status: Ready to execute
+Status: Phase 221 closed; Phase 222 ready to start
 Last activity: 2026-04-12
 
-Progress: [██▌       ] 25% (1/4 phases)
+Progress: [█████     ] 50% (2/4 phases)
 
 ## Accumulated Context
 
@@ -58,6 +58,9 @@ Recent decisions affecting current work:
 - [Phase 220-02]: Preflight-then-per-site gate architecture: validate_mapping runs BEFORE collect_sites so universe-level drift fails fast with precise error instead of misleading per-site output. Pattern published for future CSI-* phases (221, 222).
 - [Phase 221-raw-selector-calldata-audit]: [Phase 221-01]: Raw selector gate mirrors Phase 220 architecture (bash+awk, CONTRACTS_DIR override, PASS/FAIL stdout) — 194 lines, 5 patterns, sibling of check-interfaces/check-delegatecall.
 - [Phase 221-raw-selector-calldata-audit]: [Phase 221-01]: JUSTIFIED_FEEDERS content-based allowlist (entry: DegenerusAdmin.sol:transferAndCall) silences the 2 Chainlink ERC-677 abi.encode feeders at lines 911,997 — no contract edits required. Entry + inline  marker are both diff-visible override paths.
+- [Phase 221-raw-selector-calldata-audit]: [Phase 221-02]: 221-01-AUDIT.md (202 lines) enumerates all 5 cataloged sites with 5 JUSTIFIED INFO verdicts (3 Chainlink mocks + 2 DegenerusAdmin transferAndCall feeders); CSI-04/CSI-05 SATISFIED BY ABSENCE with embedded reproduction greps; 6 finding IDs (INFO-221-01-01..06) ready for Phase 223 rollup. Phase 221 closed.
+- [Phase 221-raw-selector-calldata-audit]: [Phase 221-02]: Added INFO-221-01-06 as standalone finding ID for the regex-gate coverage limit (T-221-01) — gives Phase 223 a clean INFO row to promote rather than burying the accepted residual risk in Known Limits prose.
+- [Phase 221-raw-selector-calldata-audit]: [Phase 221-02]: Pattern E sites recorded with opener-line + payload-line pair (DegenerusAdmin.sol:911 opener / :914 payload) so both gate output (opener-anchored) and source search (abi.encode-anchored) resolve to the same catalog row.
 
 ### Pending Todos
 
@@ -70,5 +73,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-12T18:05:07.185Z
-Stopped at: Completed 221-01-PLAN.md — Raw selector gate installed, 7/7 negative tests pass, 2 justified sites, PASS summary
+Last session: 2026-04-12T18:12:07Z
+Stopped at: Completed 221-02-PLAN.md — 221-01-AUDIT.md (202 lines) written with 5 JUSTIFIED INFO sites, 0 FLAGGED; CSI-04/05/06/07 closed; Phase 221 complete; Phase 222 ready

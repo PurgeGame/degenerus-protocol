@@ -35,7 +35,7 @@
 **Milestone Goal:** Systematically surface runtime call-site-to-implementation mismatches that static compilation does not catch — the same class of bug as the `mintPackedFor` regression (commit `a0bf328b`), where a call passed compile, passed superficial tests, and reverted at runtime because selector/target/path alignment was wrong.
 
 - [x] **Phase 220: Delegatecall Target Alignment** - Verify every delegatecall target constant maps 1:1 to its interface and wire a static-analysis gate into the Makefile (completed 2026-04-12)
-- [ ] **Phase 221: Raw Selector & Calldata Audit** - Catalog every `bytes4` literal, `keccak256` selector, and manual `abi.encode*` site with severity verdicts
+- [x] **Phase 221: Raw Selector & Calldata Audit** - Catalog every `bytes4` literal, `keccak256` selector, and manual `abi.encode*` site with severity verdicts (completed 2026-04-12)
 - [ ] **Phase 222: External Function Coverage Gap** - Fix fuzz compile error, run `forge coverage`, classify every external/public function, and add tests for CRITICAL_GAPs
 - [ ] **Phase 223: Findings Consolidation** - Roll up phase 220-222 findings into `audit/FINDINGS-v27.0.md`, update `KNOWN-ISSUES.md`, and ship v27.0
 
@@ -65,7 +65,7 @@
   4. A catalogue document lists every raw-selector site with its verdict so Phase 223 can roll it into the findings document
 **Plans**: 2 plans
 - [x] 221-01-PLAN.md — Build scripts/check-raw-selectors.sh gate + wire into Makefile as test-foundry/test-hardhat prerequisite; negative-test against fixture injection (CSI-04, CSI-05, CSI-06 at gate layer)
-- [ ] 221-02-PLAN.md — Produce 221-01-AUDIT.md catalog with 5-site verdict table (3 mocks + 2 DegenerusAdmin transferAndCall feeders, all JUSTIFIED INFO) feeding Phase 223 rollup (CSI-04, CSI-05, CSI-06, CSI-07 at verdict layer)
+- [x] 221-02-PLAN.md — Produced 221-01-AUDIT.md catalog (202 lines) with 5-site verdict table (3 mocks + 2 DegenerusAdmin transferAndCall feeders, all JUSTIFIED INFO) feeding Phase 223 rollup (CSI-04, CSI-05, CSI-06, CSI-07 closed at verdict layer)
 
 ### Phase 222: External Function Coverage Gap
 **Goal**: Every external/public function on a deployed contract is classified as COVERED, CRITICAL_GAP, or EXEMPT — and every CRITICAL_GAP has at least one new test exercising it on a realistic path, so a future `mintPackedFor`-class bug cannot hide in unexercised surface
@@ -104,6 +104,6 @@ Phase 220 first (or in parallel with 221). Phase 221 in parallel with 220. Phase
 | 218. Bonus Split Implementation | v26.0 | 2/2 | Complete | 2026-04-12 |
 | 219. Delta Audit & Gas Verification | v26.0 | 2/2 | Complete | 2026-04-12 |
 | 220. Delegatecall Target Alignment | v27.0 | 2/2 | Complete    | 2026-04-12 |
-| 221. Raw Selector & Calldata Audit | v27.0 | 1/2 | In Progress|  |
+| 221. Raw Selector & Calldata Audit | v27.0 | 2/2 | Complete    | 2026-04-12 |
 | 222. External Function Coverage Gap | v27.0 | 0/? | Not started | - |
 | 223. Findings Consolidation | v27.0 | 0/? | Not started | - |
