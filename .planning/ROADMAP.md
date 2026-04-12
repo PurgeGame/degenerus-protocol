@@ -51,7 +51,7 @@
   3. A static-analysis script (e.g., `scripts/check-delegatecall-alignment.sh`) is added and wired into the Makefile such that any future address/interface mismatch fails `make test`
   4. Zero cross-wired delegatecalls remain, or every cross-wired site is documented as JUSTIFIED with rationale
 **Plans**: 2 plans
-- [ ] 220-01-PLAN.md — Audit all 41 interface-bound encoding sites, write `scripts/check-delegatecall-alignment.sh`, wire `check-delegatecall` Makefile gate into `test-foundry`/`test-hardhat` (CSI-01, CSI-03)
+- [x] 220-01-PLAN.md — Audit all 41 interface-bound encoding sites, write `scripts/check-delegatecall-alignment.sh`, wire `check-delegatecall` Makefile gate into `test-foundry`/`test-hardhat` (CSI-01, CSI-03)
 - [ ] 220-02-PLAN.md — Produce 220-02-MAPPING.md proving 1:1 interface↔address correspondence for all 9 LIVE module pairs, document dead `GAME_ENDGAME_MODULE`, add `validate_mapping` preflight to the script (CSI-02)
 
 ### Phase 221: Raw Selector & Calldata Audit
@@ -101,7 +101,7 @@ Phase 220 first (or in parallel with 221). Phase 221 in parallel with 220. Phase
 | 217. Findings Consolidation | v25.0 | 2/2 | Complete | 2026-04-11 |
 | 218. Bonus Split Implementation | v26.0 | 2/2 | Complete | 2026-04-12 |
 | 219. Delta Audit & Gas Verification | v26.0 | 2/2 | Complete | 2026-04-12 |
-| 220. Delegatecall Target Alignment | v27.0 | 0/2 | Not started | - |
+| 220. Delegatecall Target Alignment | v27.0 | 1/2 | In Progress|  |
 | 221. Raw Selector & Calldata Audit | v27.0 | 0/? | Not started | - |
 | 222. External Function Coverage Gap | v27.0 | 0/? | Not started | - |
 | 223. Findings Consolidation | v27.0 | 0/? | Not started | - |

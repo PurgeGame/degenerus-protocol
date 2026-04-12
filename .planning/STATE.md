@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
-status: active
-stopped_at: Phase 220 — Delegatecall Target Alignment (Not started)
-last_updated: "2026-04-12T12:00:00.000Z"
-last_activity: 2026-04-12 -- v27.0 roadmap locked, 4 phases defined (220-223)
+status: executing
+stopped_at: Completed 220-01-PLAN.md — CSI-01 & CSI-03 satisfied; script at 170 lines, gate passes clean tree (43/43 ALIGNED), negative test proven via /tmp fixture. Ready for 220-02 endgame-dead-constant plan.
+last_updated: "2026-04-12T10:16:47.342Z"
+last_activity: 2026-04-12
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 50
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-12)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v27.0 Call-Site Integrity Audit — surface runtime call-site-to-implementation mismatches (mintPackedFor-class bugs)
+**Current focus:** Phase 220 — delegatecall-target-alignment
 
 ## Current Position
 
-Phase: Phase 220 — Delegatecall Target Alignment (Not started)
-Plan: —
+Phase: 220 (delegatecall-target-alignment) — EXECUTING
+Plan: 2 of 2
 Milestone: v27.0 — Call-Site Integrity Audit
-Status: Not started
+Status: Ready to execute
 Last activity: 2026-04-12
 
 Progress: [          ] 0% (0/4 phases)
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - [v26.0]: Level-1 branch skips payDailyJackpot, runs double payDailyCoinJackpot with salted rngWord for entropy independence
 - [v27.0]: Scope bounded to call-site integrity — storage layout (done v25.0), deployed bytecode (requires RPC infra), and revert specificity (debuggability) are explicitly out of scope
 - [v27.0]: `is IDegenerusGame` compile-time inheritance not adopted — high mechanical cost (~57 `override` additions) against existing `check-interfaces` Makefile gate that catches the same class; reconsider only if the gate ever produces false negatives
+- [Phase 220]: [220-01]: Single naming exception GameOverModule -> GAMEOVER_MODULE. All 8 other interfaces conform to CamelCase -> UPPER_SNAKE. Exception map keyed by stripped suffix is the source of truth for both directions (iface_to_constant and 220-02's reverse).
+- [Phase 220]: [220-01]: check-delegatecall gate operates on source text (no forge build prereq). Runs under 1s vs check-interfaces ~10s. Exit 0 on clean, exit 1 on any FAIL or WARN. Orphan selectors also block to catch dead code.
+- [Phase 220]: [220-01]: CONTRACTS_DIR env var pattern established for future gates — scripts must support overriding target tree so negative tests run in /tmp without touching contracts/. Honors feedback_no_contract_commits.
 
 ### Pending Todos
 
@@ -62,5 +65,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-12
-Stopped at: v27.0 roadmap locked — 4 phases (220-223), 14 CSI requirements mapped, all 14/14 coverage validated. Ready to plan Phase 220.
+Last session: 2026-04-12T10:16:47.338Z
+Stopped at: Completed 220-01-PLAN.md — CSI-01 & CSI-03 satisfied; script at 170 lines, gate passes clean tree (43/43 ALIGNED), negative test proven via /tmp fixture. Ready for 220-02 endgame-dead-constant plan.
