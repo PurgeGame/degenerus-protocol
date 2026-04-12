@@ -1,4 +1,4 @@
-.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors invariant-test invariant-build invariant-clean
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
@@ -20,6 +20,16 @@ check-interfaces:
 check-delegatecall:
 	@scripts/check-delegatecall-alignment.sh
 
+# ── Raw selector & hand-rolled calldata gate ────────────────────────────
+# Forbids raw selector literals (`bytes4(0x...)`, `bytes4(keccak256("..."))`)
+# and hand-rolled calldata encoders (`abi.encodeWithSignature`, `abi.encodeCall`,
+# or `abi.encode*` feeding `.call` / `.delegatecall` / `.staticcall` /
+# `transferAndCall`) in production contracts/. Mocks under contracts/mocks/
+# are path-excluded — they mimic external Chainlink wire format and are
+# intentionally raw. Operates on source text — no forge build prerequisite.
+check-raw-selectors:
+	@scripts/check-raw-selectors.sh
+
 # ── Unified test targets ────────────────────────────────────────────────
 # Patches ContractAddresses.sol with Foundry-predicted addresses before
 # compilation, then restores the user's version after tests complete.
@@ -27,7 +37,7 @@ check-delegatecall:
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry: check-interfaces check-delegatecall
+test-foundry: check-interfaces check-delegatecall check-raw-selectors
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
 	@echo "Running Foundry tests..."
@@ -37,7 +47,7 @@ test-foundry: check-interfaces check-delegatecall
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
-test-hardhat: check-interfaces check-delegatecall
+test-hardhat: check-interfaces check-delegatecall check-raw-selectors
 	@npx hardhat test $(ARGS)
 
 # Run both suites
