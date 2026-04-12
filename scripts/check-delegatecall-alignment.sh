@@ -26,6 +26,32 @@ RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'; NC=$'\033[0m'
 # suffix (post-`I` and post-`DegenerusGame`), value is the post-`GAME_` portion.
 declare -A NAMING_EXCEPTIONS=( [GameOverModule]=GAMEOVER_MODULE )
 
+# Reverse of NAMING_EXCEPTIONS for constant_to_iface(). Keyed by the post-`GAME_`
+# pre-`_MODULE` fragment, value is the CamelCase fragment that sits between
+# `IDegenerusGame` and `Module`. Mirrors NAMING_EXCEPTIONS on the opposite end
+# so both directions stay in sync. Only needed for CamelCase anomalies the
+# default UPPER_SNAKE -> CamelCase transform can't derive (compound English
+# words where the internal capital differs from the first letter of a
+# `_`-delimited segment).
+declare -A REVERSE_NAMING_EXCEPTIONS=( [GAMEOVER]=GameOver )
+
+# Known dead constants — declared in ContractAddresses.sol but not expected to
+# have a matching interface or any call sites. Remove entries here only when
+# the constant itself is removed (Phase 223 consolidation will decide).
+# Appending to this list silences the preflight for a specific constant and is
+# a visible diff in PR review (threat T-220-07 mitigation).
+DEAD_CONSTANTS=(
+  GAME_ENDGAME_MODULE
+)
+
+is_dead_constant() {
+  local c="$1" dead
+  for dead in "${DEAD_CONSTANTS[@]}"; do
+    [[ "$c" == "$dead" ]] && return 0
+  done
+  return 1
+}
+
 # Translate IDegenerusGameXxxModule -> GAME_XXX_MODULE.
 iface_to_constant() {
   local iface="$1" stripped="${1#I}" snake
@@ -36,6 +62,78 @@ iface_to_constant() {
   snake=$(printf '%s' "$stripped" | sed -E 's/([a-z0-9])([A-Z])/\1_\2/g' | tr '[:lower:]' '[:upper:]')
   [[ "$snake" == *_MODULE ]] || snake="${snake}_MODULE"
   printf 'GAME_%s\n' "$snake"
+}
+
+# Reverse: GAME_XXX_MODULE -> IDegenerusGameXxxModule. Used by the mapping
+# preflight to derive each constant's expected interface.
+constant_to_iface() {
+  local c="$1" stripped="${1#GAME_}" camel
+  stripped="${stripped%_MODULE}"
+  if [[ -n "${REVERSE_NAMING_EXCEPTIONS[$stripped]:-}" ]]; then
+    printf 'IDegenerusGame%sModule\n' "${REVERSE_NAMING_EXCEPTIONS[$stripped]}"
+    return
+  fi
+  # Default: UPPER_SNAKE -> CamelCase (lowercase all, uppercase first letter
+  # of each `_`-delimited word, concat).
+  camel=$(printf '%s' "$stripped" | awk 'BEGIN{FS="_"; OFS=""}
+    { for (i = 1; i <= NF; i++) $i = toupper(substr($i,1,1)) tolower(substr($i,2)); print }')
+  printf 'IDegenerusGame%sModule\n' "$camel"
+}
+
+# Preflight: walk the universe of GAME_*_MODULE constants and Iface declarations
+# and prove every LIVE constant has a matching interface AND every interface has
+# a matching constant. Catches the drift that per-site checks can't see — e.g.,
+# a new interface is added but no caller exists yet, so no per-site row is ever
+# produced. Runs BEFORE the per-site loop; exits 1 on any mismatch.
+validate_mapping() {
+  local addr="${CONTRACTS_DIR}/ContractAddresses.sol"
+  local ifaces="${CONTRACTS_DIR}/interfaces/IDegenerusGameModules.sol"
+  local constants interfaces live_count=0 mapping_fails=0 c i expected
+  [[ -f "$addr" ]] || { printf "%bFAIL%b %s missing\n" "$RED" "$NC" "$addr"; return 1; }
+  [[ -f "$ifaces" ]] || { printf "%bFAIL%b %s missing\n" "$RED" "$NC" "$ifaces"; return 1; }
+  constants=$(grep -oE 'GAME_[A-Z_]+_MODULE' "$addr" | sort -u)
+  interfaces=$(grep -oE 'interface IDegenerusGame[A-Za-z]+Module' "$ifaces" \
+    | awk '{print $2}' | sort -u)
+
+  # Every LIVE constant must resolve to a declared interface.
+  while IFS= read -r c; do
+    [[ -z "$c" ]] && continue
+    if is_dead_constant "$c"; then
+      printf "%bDEAD%b %-30s known-dead constant (no interface expected)\n" \
+        "$YELLOW" "$NC" "$c"
+      continue
+    fi
+    expected=$(constant_to_iface "$c")
+    if printf '%s\n' "$interfaces" | grep -qx "$expected"; then
+      live_count=$((live_count + 1))
+    else
+      printf "%bMAP_FAIL%b %-30s expected interface %s not found in IDegenerusGameModules.sol\n" \
+        "$RED" "$NC" "$c" "$expected"
+      mapping_fails=$((mapping_fails + 1))
+    fi
+  done <<< "$constants"
+
+  # Every interface must resolve to a declared constant.
+  while IFS= read -r i; do
+    [[ -z "$i" ]] && continue
+    expected=$(iface_to_constant "$i")
+    if printf '%s\n' "$constants" | grep -qx "$expected"; then
+      :
+    else
+      printf "%bMAP_FAIL%b %-40s expected constant %s not found in ContractAddresses.sol\n" \
+        "$RED" "$NC" "$i" "$expected"
+      mapping_fails=$((mapping_fails + 1))
+    fi
+  done <<< "$interfaces"
+
+  if (( mapping_fails > 0 )); then
+    printf "%bFAIL%b interface <-> address map has %d mismatch(es) — universe is inconsistent\n" \
+      "$RED" "$NC" "$mapping_fails"
+    return 1
+  fi
+  printf "%bOK%b   interface <-> address map: %d LIVE pair(s) validated, %d known-dead constant(s) skipped\n" \
+    "$GREEN" "$NC" "$live_count" "${#DEAD_CONSTANTS[@]}"
+  return 0
 }
 
 # Fail fast if iface_to_constant produces a constant not in ContractAddresses.sol.
@@ -94,6 +192,15 @@ self_test_transform || {
   printf "\n%bFAIL%b naming-convention self-test failed — fix transform or exceptions table\n" "$RED" "$NC"
   exit 1
 }
+
+# Universe-level 1:1 mapping preflight. Runs before the per-site loop so that
+# if the constant <-> interface universe is inconsistent, we fail fast with a
+# precise error rather than misleading per-site output. See 220-02-MAPPING.md.
+validate_mapping || {
+  printf "\n%bFAIL%b mapping-preflight failed — fix the universe (add missing interface/constant or extend DEAD_CONSTANTS / NAMING_EXCEPTIONS)\n" "$RED" "$NC"
+  exit 1
+}
+printf "\n"
 
 sites=$(collect_sites "$CONTRACTS_DIR" | sort -u)
 site_count=$(printf '%s\n' "$sites" | grep -c . || true)
