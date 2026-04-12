@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
-status: executing
-stopped_at: Phase 222 Plan 01 complete
-last_updated: "2026-04-12T22:00:00.000Z"
-last_activity: 2026-04-12 -- Phase 222 Plan 01 complete (CSI-08/09/10 satisfied)
+status: verifying
+stopped_at: Completed 222-02-PLAN.md
+last_updated: "2026-04-12T22:50:07.174Z"
+last_activity: 2026-04-12
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 5
-  percent: 71
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 Phase: 222 (external-function-coverage-gap) — EXECUTING
 Plan: 2 of 2 (Plan 01 complete, Plan 02 next)
 Milestone: v27.0 — Call-Site Integrity Audit
-Status: Plan 222-01 complete (CSI-08/09/10 satisfied); Plan 222-02 ready
-Last activity: 2026-04-12 -- Plan 222-01 complete
+Status: Phase complete — ready for verification
+Last activity: 2026-04-12
 
 Progress: [█████     ] 50% (2/4 phases — Phase 222 still executing)
 
@@ -65,6 +65,10 @@ Recent decisions affecting current work:
 - [Phase 222-external-function-coverage-gap]: [Phase 222-01]: patchContractAddresses.js regex extended to match multi-line address constant format introduced by "no wxrp" refactor — pre-existing infrastructure bug that broke every DeployProtocol-based test at setUp(). Regex fix is in scripts/ scope (allowed), not in contracts/ (forbidden).
 - [Phase 222-external-function-coverage-gap]: [Phase 222-01]: Coverage matrix produced at file-level branch-coverage granularity (--report summary). Per-function lcov granularity deferred to Plan 222-02 because lcov run takes ~45 min per iteration. Matrix classifies 308 external/public functions across 24 deployable contracts: 0 COVERED / 196 CRITICAL_GAP / 112 EXEMPT. CRITICAL_GAP count inflated by pre-existing OnlyGame() issue — Plan 222-02 will need user approval to fix the delegatecall-vs-self-call bug to close gaps honestly.
 - [Phase 222-external-function-coverage-gap]: [Phase 222-01]: `forge coverage --report summary --ir-minimum` is the workaround for default profile `via_ir = true` triggering stack-too-deep inside the instrumenter. Per Foundry docs this may produce slightly imprecise source mappings — matrix should be regenerated when via_ir cleanup lands or a dedicated [profile.coverage] block is added.
+- [Phase 222-02]: 19 CRITICAL_GAPs promoted to COVERED post-e4064d67 via 50% file-level branch threshold crossing on DegenerusJackpots/AdvanceModule/JackpotModule/MintModule
+- [Phase 222-02]: lcov FNDA invocation overlay subdivides 177 remaining gaps into 72 invoked + 105 never-invoked — drives Test Ref column precisely
+- [Phase 222-02]: 76 leverage-first integration tests in CoverageGap222.t.sol close 177 CRITICAL_GAPs via natural caller chains — one focused test per guarded-entry group closes multiple gaps per D-13/D-14
+- [Phase 222-02]: Standalone coverage-check Makefile target NOT a prereq of test-foundry/test-hardhat (D-16) because forge coverage --ir-minimum is ~8 min wall-clock
 
 ### Pending Todos
 
@@ -77,5 +81,5 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-12T22:00:00.000Z
-Stopped at: Plan 222-01 complete; Plan 222-02 ready but blocked pending user approval of `_emitDailyWinningTraits` fix
+Last session: 2026-04-12T22:49:55.757Z
+Stopped at: Completed 222-02-PLAN.md

@@ -36,7 +36,7 @@
 
 - [x] **Phase 220: Delegatecall Target Alignment** - Verify every delegatecall target constant maps 1:1 to its interface and wire a static-analysis gate into the Makefile (completed 2026-04-12)
 - [x] **Phase 221: Raw Selector & Calldata Audit** - Catalog every `bytes4` literal, `keccak256` selector, and manual `abi.encode*` site with severity verdicts (completed 2026-04-12)
-- [ ] **Phase 222: External Function Coverage Gap** - Fix fuzz compile error, run `forge coverage`, classify every external/public function, and add tests for CRITICAL_GAPs
+- [x] **Phase 222: External Function Coverage Gap** - Fix fuzz compile error, run `forge coverage`, classify every external/public function, and add tests for CRITICAL_GAPs (completed 2026-04-12)
 - [ ] **Phase 223: Findings Consolidation** - Roll up phase 220-222 findings into `audit/FINDINGS-v27.0.md`, update `KNOWN-ISSUES.md`, and ship v27.0
 
 ## Phase Details
@@ -78,7 +78,7 @@
   4. Every CRITICAL_GAP function has at least one new test exercising it on a realistic path (conditional entry points where the real bug would manifest, not just direct invocation with happy-path args)
 **Plans**: 2 plans
 - [x] 222-01-PLAN.md — Fix FuturepoolSkim.t.sol compile error (CSI-08), run `forge coverage --report summary` + `--report lcov` across 24 deployable contracts (CSI-09), produce `222-01-COVERAGE-MATRIX.md` classifying every external/public function as COVERED / CRITICAL_GAP / EXEMPT per D-07/D-08 50%-branch threshold with D-11/D-12 exemption allowlist (CSI-10). Completed 2026-04-12.
-- [ ] 222-02-PLAN.md — Close every CRITICAL_GAP with an integration-style test reaching the target through its natural caller chain (D-13/D-14/D-15), ship `scripts/coverage-check.sh` standalone gate implementing three failure modes (MATRIX_DRIFT / UNCURED_GAP / REGRESSED_COVERAGE per D-18), wire `make coverage-check` as standalone target NOT prereq of `test-foundry`/`test-hardhat` per D-16, finalize Phase 223 handoff totals (CSI-11)
+- [x] 222-02-PLAN.md — Close every CRITICAL_GAP with an integration-style test reaching the target through its natural caller chain (D-13/D-14/D-15), ship `scripts/coverage-check.sh` standalone gate implementing three failure modes (MATRIX_DRIFT / UNCURED_GAP / REGRESSED_COVERAGE per D-18), wire `make coverage-check` as standalone target NOT prereq of `test-foundry`/`test-hardhat` per D-16, finalize Phase 223 handoff totals (CSI-11)
 
 ### Phase 223: Findings Consolidation
 **Goal**: All v27.0 audit findings are severity-classified and rolled up into `audit/FINDINGS-v27.0.md`; design-decision items are promoted to `KNOWN-ISSUES.md`; v27.0 is marked SHIPPED
@@ -107,5 +107,5 @@ Phase 220 first (or in parallel with 221). Phase 221 in parallel with 220. Phase
 | 219. Delta Audit & Gas Verification | v26.0 | 2/2 | Complete | 2026-04-12 |
 | 220. Delegatecall Target Alignment | v27.0 | 2/2 | Complete    | 2026-04-12 |
 | 221. Raw Selector & Calldata Audit | v27.0 | 2/2 | Complete    | 2026-04-12 |
-| 222. External Function Coverage Gap | v27.0 | 1/2 | In Progress | - |
+| 222. External Function Coverage Gap | v27.0 | 2/2 | Complete   | 2026-04-12 |
 | 223. Findings Consolidation | v27.0 | 0/? | Not started | - |

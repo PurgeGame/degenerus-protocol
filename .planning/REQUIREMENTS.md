@@ -29,7 +29,7 @@ The scope is deliberately bounded to **call-site integrity**. Out of scope for t
 - [ ] **CSI-08**: The test suite compile error in `test/fuzz/FuturepoolSkim.t.sol` (`_applyTimeBasedFutureTake` undeclared identifier) is fixed so `forge coverage` can run
 - [ ] **CSI-09**: `forge coverage --report summary` runs to completion and produces per-function line/branch coverage data for all deployed contracts (`DegenerusGame`, modules, `BurnieCoin`, `BurnieCoinflip`, `DegenerusAffiliate`, `DegenerusJackpots`, `DegenerusQuests`, `StakedDegenerusStonk`, `DegenerusVault`, `DegenerusStonk`)
 - [ ] **CSI-10**: Every external/public function on a deployed contract is classified as COVERED (≥1 test invokes it), CRITICAL_GAP (needs new test — on a path that could revert at runtime like `mintPackedFor` did), or EXEMPT (admin/governance/emergency path, documented rationale)
-- [ ] **CSI-11**: All CRITICAL_GAP functions identified in CSI-10 have at least one new test added that exercises them on a realistic path (not just direct invocation with happy-path args — must cover the conditional entry points where the real bug manifested)
+- [x] **CSI-11**: All CRITICAL_GAP functions identified in CSI-10 have at least one new test added that exercises them on a realistic path (not just direct invocation with happy-path args — must cover the conditional entry points where the real bug manifested)
 
 ### Findings Consolidation (Phase 223)
 
@@ -74,7 +74,7 @@ Explicit exclusions with reasoning:
 | CSI-08 | Phase 222 | Pending |
 | CSI-09 | Phase 222 | Pending |
 | CSI-10 | Phase 222 | Pending |
-| CSI-11 | Phase 222 | Pending |
+| CSI-11 | Phase 222 | Complete |
 | CSI-12 | Phase 223 | Pending |
 | CSI-13 | Phase 223 | Pending |
 | CSI-14 | Phase 223 | Pending |
