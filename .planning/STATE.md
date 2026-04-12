@@ -4,7 +4,7 @@ milestone: v27.0
 milestone_name: Call-Site Integrity Audit
 status: verifying
 stopped_at: Completed 220-02-PLAN.md — CSI-02 satisfied. Phase 220 is done (CSI-01/CSI-02/CSI-03 all Complete). validate_mapping preflight added, 10-row mapping table proves 9 LIVE + 1 DEAD split. Ready for Phase 221 (raw selector audit) or 222 (coverage gap).
-last_updated: "2026-04-12T10:29:21.062Z"
+last_updated: "2026-04-12T10:43:09.813Z"
 last_activity: 2026-04-12
 progress:
   total_phases: 4
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 
 ## Current Position
 
-Phase: 220 (delegatecall-target-alignment) — COMPLETE (ready for verification)
-Plan: 2 of 2 (both plans shipped)
+Phase: 221
+Plan: Not started
 Milestone: v27.0 — Call-Site Integrity Audit
 Status: Phase complete — ready for verification
 Last activity: 2026-04-12

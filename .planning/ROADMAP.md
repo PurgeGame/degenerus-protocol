@@ -101,7 +101,7 @@ Phase 220 first (or in parallel with 221). Phase 221 in parallel with 220. Phase
 | 217. Findings Consolidation | v25.0 | 2/2 | Complete | 2026-04-11 |
 | 218. Bonus Split Implementation | v26.0 | 2/2 | Complete | 2026-04-12 |
 | 219. Delta Audit & Gas Verification | v26.0 | 2/2 | Complete | 2026-04-12 |
-| 220. Delegatecall Target Alignment | v27.0 | 2/2 | Complete   | 2026-04-12 |
+| 220. Delegatecall Target Alignment | v27.0 | 2/2 | Complete    | 2026-04-12 |
 | 221. Raw Selector & Calldata Audit | v27.0 | 0/? | Not started | - |
 | 222. External Function Coverage Gap | v27.0 | 0/? | Not started | - |
 | 223. Findings Consolidation | v27.0 | 0/? | Not started | - |
