@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
-status: verifying
+status: executing
 stopped_at: Phase 221 context gathered — Claude's Discretion across 4 gray areas (gate script, call-feeder scope, mocks path-exclude, single catalog+HIGH severity)
-last_updated: "2026-04-12T17:34:17.922Z"
-last_activity: 2026-04-12
+last_updated: "2026-04-12T17:55:50.203Z"
+last_activity: 2026-04-12 -- Phase 221 planning complete
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
+  total_plans: 4
   completed_plans: 2
-  percent: 100
+  percent: 50
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 Phase: 221
 Plan: Not started
 Milestone: v27.0 — Call-Site Integrity Audit
-Status: Phase complete — ready for verification
-Last activity: 2026-04-12
+Status: Ready to execute
+Last activity: 2026-04-12 -- Phase 221 planning complete
 
 Progress: [██▌       ] 25% (1/4 phases)
 
