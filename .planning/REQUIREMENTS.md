@@ -62,4 +62,21 @@ Explicit exclusions with reasoning:
 
 ## Traceability
 
-To be filled by roadmap (each requirement mapped to exactly one phase).
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CSI-01 | Phase 220 | Pending |
+| CSI-02 | Phase 220 | Pending |
+| CSI-03 | Phase 220 | Pending |
+| CSI-04 | Phase 221 | Pending |
+| CSI-05 | Phase 221 | Pending |
+| CSI-06 | Phase 221 | Pending |
+| CSI-07 | Phase 221 | Pending |
+| CSI-08 | Phase 222 | Pending |
+| CSI-09 | Phase 222 | Pending |
+| CSI-10 | Phase 222 | Pending |
+| CSI-11 | Phase 222 | Pending |
+| CSI-12 | Phase 223 | Pending |
+| CSI-13 | Phase 223 | Pending |
+| CSI-14 | Phase 223 | Pending |
+
+**Coverage:** 14/14 requirements mapped to exactly one phase. No orphans. No duplicates.
