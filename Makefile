@@ -1,4 +1,4 @@
-.PHONY: test test-foundry test-hardhat check-interfaces invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall invariant-test invariant-build invariant-clean
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
@@ -10,6 +10,16 @@ check-interfaces:
 	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip test >/dev/null
 	@scripts/check-interface-coverage.sh
 
+# ── Delegatecall alignment gate ─────────────────────────────────────────
+# Verifies every interface-bound abi.encodeWithSelector(IFACE.fn.selector, ...)
+# delegatecall site in contracts/ targets the address constant that matches
+# the interface per the D-03 naming convention. Catches the class of bug
+# where a call compiles (selector exists on SOME module) but targets the
+# wrong module's address, reverting at runtime on selector mismatch.
+# Operates on source text — no forge build prerequisite.
+check-delegatecall:
+	@scripts/check-delegatecall-alignment.sh
+
 # ── Unified test targets ────────────────────────────────────────────────
 # Patches ContractAddresses.sol with Foundry-predicted addresses before
 # compilation, then restores the user's version after tests complete.
@@ -17,7 +27,7 @@ check-interfaces:
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry: check-interfaces
+test-foundry: check-interfaces check-delegatecall
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
 	@echo "Running Foundry tests..."
@@ -27,7 +37,7 @@ test-foundry: check-interfaces
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
-test-hardhat: check-interfaces
+test-hardhat: check-interfaces check-delegatecall
 	@npx hardhat test $(ARGS)
 
 # Run both suites

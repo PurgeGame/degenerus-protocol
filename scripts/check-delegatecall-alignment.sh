@@ -68,8 +68,11 @@ collect_sites() {
     | grep -v "^${dir}/interfaces/" | grep -v "^${dir}/mocks/" \
     | while IFS=: read -r file lineno _; do
         sel_line=$(awk -v n="$lineno" 'NR > n && NR <= n + 5 && /\.selector/ { print NR; exit }' "$file")
-        [[ -n "$sel_line" ]] && printf '%s\t%s\n' "$file" "$sel_line"
+        if [[ -n "$sel_line" ]]; then
+          printf '%s\t%s\n' "$file" "$sel_line"
+        fi
       done
+  return 0
 }
 
 # Extract interface name at a site. Try the anchor line first; if absent,
