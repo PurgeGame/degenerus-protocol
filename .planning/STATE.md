@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
 status: executing
-stopped_at: Phase 221 context gathered — Claude's Discretion across 4 gray areas (gate script, call-feeder scope, mocks path-exclude, single catalog+HIGH severity)
-last_updated: "2026-04-12T17:55:50.203Z"
-last_activity: 2026-04-12 -- Phase 221 planning complete
+stopped_at: Completed 221-01-PLAN.md — Raw selector gate installed, 7/7 negative tests pass, 2 justified sites, PASS summary
+last_updated: "2026-04-12T18:05:07.187Z"
+last_activity: 2026-04-12
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 4
-  completed_plans: 2
-  percent: 50
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-12)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 220 — delegatecall-target-alignment
+**Current focus:** Phase 221 — Raw Selector & Calldata Audit
 
 ## Current Position
 
-Phase: 221
-Plan: Not started
+Phase: 221 (Raw Selector & Calldata Audit) — EXECUTING
+Plan: 2 of 2
 Milestone: v27.0 — Call-Site Integrity Audit
 Status: Ready to execute
-Last activity: 2026-04-12 -- Phase 221 planning complete
+Last activity: 2026-04-12
 
 Progress: [██▌       ] 25% (1/4 phases)
 
@@ -56,6 +56,8 @@ Recent decisions affecting current work:
 - [Phase 220-02]: Paired exception maps keyed on opposite ends (NAMING_EXCEPTIONS + REVERSE_NAMING_EXCEPTIONS) handle the GameOver CamelCase corner case in both directions with O(1) lookups and a symmetric diff visible in a single script.
 - [Phase 220-02]: DEAD_CONSTANTS=(GAME_ENDGAME_MODULE) allowlist instead of removing the dead constant. Per feedback_no_contract_commits; Phase 223 will surface the INFO finding for user review. Visible-diff property mitigates allowlist abuse (T-220-07).
 - [Phase 220-02]: Preflight-then-per-site gate architecture: validate_mapping runs BEFORE collect_sites so universe-level drift fails fast with precise error instead of misleading per-site output. Pattern published for future CSI-* phases (221, 222).
+- [Phase 221-raw-selector-calldata-audit]: [Phase 221-01]: Raw selector gate mirrors Phase 220 architecture (bash+awk, CONTRACTS_DIR override, PASS/FAIL stdout) — 194 lines, 5 patterns, sibling of check-interfaces/check-delegatecall.
+- [Phase 221-raw-selector-calldata-audit]: [Phase 221-01]: JUSTIFIED_FEEDERS content-based allowlist (entry: DegenerusAdmin.sol:transferAndCall) silences the 2 Chainlink ERC-677 abi.encode feeders at lines 911,997 — no contract edits required. Entry + inline  marker are both diff-visible override paths.
 
 ### Pending Todos
 
@@ -68,5 +70,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-12T17:34:17.920Z
-Stopped at: Phase 221 context gathered — Claude's Discretion across 4 gray areas (gate script, call-feeder scope, mocks path-exclude, single catalog+HIGH severity)
+Last session: 2026-04-12T18:05:07.185Z
+Stopped at: Completed 221-01-PLAN.md — Raw selector gate installed, 7/7 negative tests pass, 2 justified sites, PASS summary

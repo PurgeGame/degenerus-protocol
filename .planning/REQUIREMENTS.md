@@ -19,9 +19,9 @@ The scope is deliberately bounded to **call-site integrity**. Out of scope for t
 
 ### Raw Selector & Calldata Audit (Phase 221)
 
-- [ ] **CSI-04**: Every `bytes4(0x...)` hex literal in `contracts/` is cataloged; each one is either (a) justified in-place with a code comment naming the function it represents, or (b) replaced with an interface-bound `IXxx.fn.selector` reference
-- [ ] **CSI-05**: Every `bytes4(keccak256("..."))` string-derived selector in `contracts/` is cataloged and each one is justified or replaced with interface-bound form
-- [ ] **CSI-06**: Every manual `abi.encode` / `abi.encodeCall` / `abi.encodeWithSignature` that bypasses interface-bound selectors (i.e., does not reference an `IXxx.fn.selector`) is cataloged with rationale
+- [x] **CSI-04**: Every `bytes4(0x...)` hex literal in `contracts/` is cataloged; each one is either (a) justified in-place with a code comment naming the function it represents, or (b) replaced with an interface-bound `IXxx.fn.selector` reference
+- [x] **CSI-05**: Every `bytes4(keccak256("..."))` string-derived selector in `contracts/` is cataloged and each one is justified or replaced with interface-bound form
+- [x] **CSI-06**: Every manual `abi.encode` / `abi.encodeCall` / `abi.encodeWithSignature` that bypasses interface-bound selectors (i.e., does not reference an `IXxx.fn.selector`) is cataloged with rationale
 - [ ] **CSI-07**: Catalog output is a findings document listing every raw selector site with severity verdict (JUSTIFIED / REPLACED / FLAGGED)
 
 ### External Function Coverage Gap (Phase 222)
@@ -67,9 +67,9 @@ Explicit exclusions with reasoning:
 | CSI-01 | Phase 220 | Complete |
 | CSI-02 | Phase 220 | Complete |
 | CSI-03 | Phase 220 | Complete |
-| CSI-04 | Phase 221 | Pending |
-| CSI-05 | Phase 221 | Pending |
-| CSI-06 | Phase 221 | Pending |
+| CSI-04 | Phase 221 | Complete |
+| CSI-05 | Phase 221 | Complete |
+| CSI-06 | Phase 221 | Complete |
 | CSI-07 | Phase 221 | Pending |
 | CSI-08 | Phase 222 | Pending |
 | CSI-09 | Phase 222 | Pending |
