@@ -13,7 +13,7 @@ const DEFAULT_CONTRACT_FILE = resolve(
  *
  * @param {Map<string, string>} addressMap - Predicted protocol addresses (key → address)
  * @param {object} external - External/config addresses:
- *   { STETH_TOKEN, LINK_TOKEN, VRF_COORDINATOR, WXRP, CREATOR }
+ *   { STETH_TOKEN, LINK_TOKEN, VRF_COORDINATOR, CREATOR }
  * @param {number} deployDayBoundary - Computed DEPLOY_DAY_BOUNDARY value
  * @param {string} vrfKeyHash - 32-byte VRF key hash (hex string with 0x prefix)
  * @param {string} [contractFilePath] - Optional path to ContractAddresses.sol (for testnet builds)
@@ -94,8 +94,13 @@ export function cleanupBackup(contractFilePath) {
 function replaceAddressConstant(src, constantName, address) {
   // Match: address internal constant NAME = address(0);
   //   or:  address internal constant NAME = address(0x...);
+  //   or:  address internal constant NAME =\n        address(0x...);
+  //
+  // The `=` may be followed by whitespace including newlines/indent when the
+  // declaration spans two lines. Match any whitespace between `=` and the
+  // `address(...)` literal so both single-line and multi-line formats work.
   const regex = new RegExp(
-    `(address internal constant ${constantName} = )address\\(0x?[0-9a-fA-F]*\\);`
+    `(address internal constant ${constantName} =\\s*)address\\(0x?[0-9a-fA-F]*\\);`
   );
   const replacement = `$1address(${address});`;
   return src.replace(regex, replacement);
