@@ -1,0 +1,2115 @@
+Warning: `--ir-minimum` enables `viaIR` with minimum optimization, which can result in inaccurate source mappings.
+Only use this flag as a workaround if you are experiencing "stack too deep" errors.
+Note that `viaIR` is production ready since Solidity 0.8.13 and above.
+See more: https://book.getfoundry.sh/guides/best-practices/stack-too-deep
+Compiling 137 files with Solc 0.8.34
+Solc 0.8.34 finished in 89.06s
+Compiler run successful with warnings:
+Warning (2072): Unused local variable.
+   --> test/fuzz/AffiliateDgnrsClaim.t.sol:260:9:
+    |
+260 |         uint24 lvl = _buildScoresAndSetupClaim(CODE_ALICE, 30, CODE_BOB, 25);
+    |         ^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> test/fuzz/DustAccumulation.t.sol:119:9:
+    |
+119 |         uint256 vaultBps = 0;     // 0%
+    |         ^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> test/fuzz/TicketLifecycle.t.sol:381:13:
+    |
+381 |             uint24 rk = _readKeyForLevel(lvl);
+    |             ^^^^^^^^^
+
+Warning (2072): Unused local variable.
+    --> test/fuzz/TicketLifecycle.t.sol:1658:9:
+     |
+1658 |         uint256 ffBefore = _ffQueueLength(ffTarget);
+     |         ^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+    --> test/fuzz/TicketLifecycle.t.sol:1842:10:
+     |
+1842 |         (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+     |          ^^^^^^^
+
+Warning (2072): Unused local variable.
+    --> test/fuzz/TicketLifecycle.t.sol:1846:9:
+     |
+1846 |         uint8 wsBefore = _getWriteSlot();
+     |         ^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+    --> test/fuzz/TicketLifecycle.t.sol:1967:9:
+     |
+1967 |         uint24 rk = _readKeyForLevel(uint24(reached) + 1);
+     |         ^^^^^^^^^
+
+Warning (2072): Unused local variable.
+    --> test/fuzz/TicketLifecycle.t.sol:2009:9:
+     |
+2009 |         uint8 wsBefore = _getWriteSlot();
+     |         ^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+  --> test/fuzz/invariant/MultiLevel.inv.t.sol:67:9:
+   |
+67 |         uint256 currentPool = game.currentPrizePoolView();
+   |         ^^^^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+  --> test/fuzz/invariant/MultiLevel.inv.t.sol:68:9:
+   |
+68 |         uint256 nextPool = game.nextPrizePoolView();
+   |         ^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+  --> test/fuzz/invariant/MultiLevel.inv.t.sol:70:9:
+   |
+70 |         uint256 futurePool = game.futurePrizePoolView();
+   |         ^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/StorageFoundation.t.sol:213:5:
+    |
+213 |     function testTicketSlotKeysDifferSlot0() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/StorageFoundation.t.sol:228:5:
+    |
+228 |     function testTicketSlotKeyBit23Slot0() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/TicketLifecycle.t.sol:255:5:
+    |
+255 |     function testBoundaryRoutingAtDeployment() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Analysing contracts...
+Running tests...
+
+Ran 6 tests for test/fuzz/QueueDoubleBuffer.t.sol:QueueDoubleBufferTest
+[PASS] testQueueAfterSwapUsesNewWriteKey() (gas: 131147)
+[PASS] testQueueTicketRangeUsesWriteKey() (gas: 299847)
+[PASS] testQueueTicketsScaledUsesWriteKey() (gas: 108238)
+[PASS] testQueueTicketsUsesWriteKey() (gas: 112622)
+[PASS] testSwapResetsFullyProcessed() (gas: 40252)
+[PASS] testWriteReadIsolation() (gas: 227781)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 2.31ms (1.88ms CPU time)
+
+Ran 9 tests for test/fuzz/AdvanceGameRewrite.t.sol:AdvanceGameRewriteTest
+[PASS] test_breakPath_jackpotMidPhase_freezePersists() (gas: 61701)
+[PASS] test_breakPath_jackpotPhaseEnded_unfreezes() (gas: 69989)
+[PASS] test_breakPath_purchaseDaily_unfreezes() (gas: 70063)
+[PASS] test_breakPath_rngRequested_freezeActive() (gas: 41058)
+[PASS] test_dailyDrainGate_blocksWhenReadSlotNonEmpty() (gas: 66970)
+[PASS] test_dailyDrainGate_proceedsWhenReadSlotEmpty() (gas: 42219)
+[PASS] test_dailyDrainGate_skipsWhenAlreadyProcessed() (gas: 82590)
+[PASS] test_midDay_noFreeze() (gas: 117972)
+[PASS] test_ticketsProcessed_setBeforeJackpotLogic() (gas: 35683)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 2.40ms (1.94ms CPU time)
+
+Ran 3 tests for test/fuzz/helpers/NonceCheck.t.sol:NonceCheck
+[PASS] test_deployerIsTestContract() (gas: 1264)
+[PASS] test_nonceIncrements() (gas: 52024)
+[PASS] test_startingNonce() (gas: 3350)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 438.72µs (293.85µs CPU time)
+
+Ran 24 tests for test/fuzz/StorageFoundation.t.sol:StorageFoundationTest
+[PASS] testPackedPoolSlotsUnshifted() (gas: 18499)
+[PASS] testPendingPoolPackingArbitrary() (gas: 33949)
+[PASS] testPendingPoolPackingMaxBoth() (gas: 33342)
+[PASS] testPendingPoolPackingMaxFuture() (gas: 34288)
+[PASS] testPendingPoolPackingMaxNext() (gas: 33897)
+[PASS] testPendingPoolPackingZero() (gas: 13716)
+[PASS] testPrizePoolPackingArbitrary() (gas: 33791)
+[PASS] testPrizePoolPackingMaxBoth() (gas: 33989)
+[PASS] testPrizePoolPackingMaxFuture() (gas: 34061)
+[PASS] testPrizePoolPackingMaxNext() (gas: 34222)
+[PASS] testPrizePoolPackingZero() (gas: 13788)
+[PASS] testSlot0FieldOffsets() (gas: 67105)
+[PASS] testSwapAndFreezeActivates() (gas: 50637)
+[PASS] testSwapAndFreezeAlreadyFrozen() (gas: 68005)
+[PASS] testSwapTicketSlotDoubleToggle() (gas: 32130)
+[PASS] testSwapTicketSlotRevertsNonEmpty() (gas: 61613)
+[PASS] testSwapTicketSlotSuccess() (gas: 42190)
+[PASS] testTicketSlotKeyBit23Slot0() (gas: 16103)
+[PASS] testTicketSlotKeyBit23Slot1() (gas: 36292)
+[PASS] testTicketSlotKeyMultipleLevels() (gas: 89843)
+[PASS] testTicketSlotKeysDifferSlot0() (gas: 14689)
+[PASS] testTicketSlotKeysDifferSlot1() (gas: 34399)
+[PASS] testUnfreezePoolMerges() (gas: 73296)
+[PASS] testUnfreezePoolNoop() (gas: 40974)
+Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 3.89ms (3.39ms CPU time)
+
+Ran 9 tests for test/fuzz/TicketProcessingFF.t.sol:TicketProcessingFFTest
+[PASS] testBothQueuesEmpty_ImmediateFinish() (gas: 25353)
+[PASS] testBudgetExhaustion_FFPhase_PreservesCursor() (gas: 574644)
+[PASS] testBudgetExhaustion_ReadSide_PreservesCursor() (gas: 576776)
+[PASS] testDualQueueDrain_ReadSideThenFF() (gas: 211448)
+[PASS] testEmptyReadSide_TransitionsToFF() (gas: 159216)
+[PASS] testPrepareFutureTickets_ResumesFFEncoded() (gas: 114333)
+[PASS] testReadSideOnly_NoFFPhase() (gas: 138188)
+[PASS] testTicketLevelEncodesFFBit_AfterReadSideDrain() (gas: 155120)
+[PASS] testTicketLevelEncoding_DuringAndAfterFF() (gas: 363624)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 5.79ms (4.74ms CPU time)
+
+Ran 2 tests for test/fuzz/DeployCanary.t.sol:DeployCanary
+[PASS] test_allAddressesMatch() (gas: 83593)
+[PASS] test_protocolWired() (gas: 45740)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 22.61ms (4.63ms CPU time)
+
+Ran 5 tests for test/fuzz/TicketEdgeCases.t.sol:TicketEdgeCasesTest
+[PASS] testEdge01FFOnlyQueue_NoReadSide() (gas: 166288)
+[PASS] testEdge01NoDoubleCount_FFThenWriteKey() (gas: 195790)
+[PASS] testEdge01ProcessBothQueuesIndependently() (gas: 234485)
+[PASS] testEdge02CleanupAfterDrain() (gas: 94382)
+[PASS] testEdge02RoutingPreventsNewFFDeposits() (gas: 123676)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 23.72ms (2.04ms CPU time)
+
+Ran 4 tests for test/fuzz/QueueDoubleBuffer.t.sol:MidDaySwapTest
+[PASS] testMidDayProcessesReadSlotFirst() (gas: 24960436)
+[PASS] testMidDayRevertsNotTimeYet() (gas: 5551391)
+[PASS] testMidDaySwapAtThreshold() (gas: 24331465)
+[PASS] testMidDaySwapJackpotPhase() (gas: 622280)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 27.57ms (49.24ms CPU time)
+
+Ran 12 tests for test/fuzz/TicketRouting.t.sol:TicketRoutingTest
+[PASS] testBoundaryLevel5RoutesToWriteKey() (gas: 91109)
+[PASS] testBoundaryLevel6RoutesToFFKey() (gas: 91351)
+[PASS] testFarFutureRoutesToFFKey() (gas: 102280)
+[PASS] testNearFutureRoutesToWriteKey() (gas: 102483)
+[PASS] testRangeRoutingSplitsCorrectly() (gas: 479086)
+[PASS] testRngGuardAllowsWithBypass() (gas: 96319)
+[PASS] testRngGuardIgnoresNearFuture() (gas: 98396)
+[PASS] testRngGuardRangeRevertsOnFirstFFLevel() (gas: 169599)
+[PASS] testRngGuardRevertsOnFFKey() (gas: 25661)
+[PASS] testRngGuardScaledRevertsOnFFKey() (gas: 26026)
+[PASS] testScaledFarFutureRoutesToFFKey() (gas: 95795)
+[PASS] testScaledNearFutureRoutesToWriteKey() (gas: 96010)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 3.57ms (3.12ms CPU time)
+
+Ran 7 tests for test/fuzz/RedemptionGas.t.sol:RedemptionGasTest
+[PASS] test_gas_burnWrapped_gambling() (gas: 354471)
+[PASS] test_gas_burn_gambling() (gas: 321143)
+[PASS] test_gas_claimRedemption() (gas: 485917)
+[PASS] test_gas_hasPendingRedemptions_false() (gas: 12600)
+[PASS] test_gas_hasPendingRedemptions_true() (gas: 324389)
+[PASS] test_gas_previewBurn() (gas: 59239)
+[PASS] test_gas_resolveRedemptionPeriod() (gas: 304530)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 46.72ms (27.67ms CPU time)
+
+Ran 3 tests for test/fuzz/StallResilience.t.sol:StallResilience
+[FAIL: OnlyGame()] test_coinflipClaimsAcrossGapDays() (gas: 11119782)
+[FAIL: OnlyGame()] test_lootboxOpenAfterOrphanedIndexBackfill() (gas: 10335322)
+[FAIL: OnlyGame()] test_stallSwapResume() (gas: 9251081)
+Suite result: FAILED. 0 passed; 3 failed; 0 skipped; finished in 74.66ms (53.33ms CPU time)
+
+Ran 2 tests for test/fuzz/SimAdvanceOverflow.t.sol:SimAdvanceOverflow
+[PASS] test_dayCalcSanity() (gas: 3087)
+[PASS] test_simAdvanceWithRealTimestamp() (gas: 54380890)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 122.68ms (107.20ms CPU time)
+Warning: Failure from "/home/zak/Dev/PurgeGame/degenerus-audit/cache/invariant/failures/EthSolvencyInvariant/invariant_ethSolvency" file was ignored because test contract bytecode has changed.
+
+Ran 4 tests for test/fuzz/LootboxBoonCoexistence.t.sol:LootboxBoonCoexistence
+[FAIL: OnlyGame(); counterexample: calldata=0xdbf8a711000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] testFuzz_coinflipBoonSurvivesLootboxBoonRoll(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_lootboxBoonAppliedDespiteExistingCoinflipBoon() (gas: 9236139)
+[FAIL: OnlyGame()] test_parametricSweep_crossCategoryBoonFromLootbox() (gas: 9236369)
+[FAIL: OnlyGame()] test_twoCategoryBoonsPreservedAfterLootboxOpen() (gas: 9236392)
+Suite result: FAILED. 0 passed; 4 failed; 0 skipped; finished in 292.15ms (253.18ms CPU time)
+
+Ran 8 tests for test/fuzz/JackpotCombinedPool.t.sol:JackpotCombinedPoolTest
+[PASS] testBothQueuesEmptyNoRevert() (gas: 17336)
+[PASS] testCombinedPoolReadsBothQueues() (gas: 266441)
+[PASS] testFFKeyOnlyWhenReadEmpty() (gas: 139493)
+[PASS] testReadBufferOnlyWhenFFEmpty() (gas: 163570)
+[PASS] testUsesReadKeyNotWriteKey() (gas: 272346)
+[PASS] testWinnerIndexAtBoundary() (gas: 236288)
+[PASS] testWinnerIndexRoutingToFFKey() (gas: 428821)
+[PASS] testWinnerIndexRoutingToReadBuffer() (gas: 428564)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 2.67ms (2.27ms CPU time)
+
+Ran 4 tests for test/fuzz/VRFLifecycle.t.sol:VRFLifecycle
+[FAIL: OnlyGame()] test_fullVrfDailyCycle() (gas: 11194578)
+[PASS] test_vrfFulfillmentWorks() (gas: 241171)
+[PASS] test_vrfHandlerTracking() (gas: 288101)
+[PASS] test_vrfLifecycle_levelAdvancement() (gas: 186913355)
+Suite result: FAILED. 3 passed; 1 failed; 0 skipped; finished in 421.19ms (398.27ms CPU time)
+
+Ran 3 tests for test/fuzz/DegeneretteFreezeResolution.t.sol:DegeneretteFreezeResolutionTest
+[FAIL: RngNotReady()] testDegeneretteFreezeResolutionEthConserved() (gas: 296133)
+[FAIL: Error != expected error: RngNotReady() != E()] testDegeneretteFreezeResolutionZeroPendingReverts() (gas: 276359)
+[FAIL: RngNotReady()] testDegeneretteUnfrozenPathRegression() (gas: 278639)
+Suite result: FAILED. 0 passed; 3 failed; 0 skipped; finished in 448.05ms (9.54ms CPU time)
+
+Ran 13 tests for test/fuzz/LockRemoval.t.sol:LockRemovalTest
+[PASS] testFuzz_guardsIgnoreRngLockedFlag(bool,uint24,bool) (runs: 1000, μ: 47776, ~: 46766)
+[PASS] test_LOCK01_purchaseDuringRngLock() (gas: 31543)
+[PASS] test_LOCK01_purchaseStillRevertsOnGameOver() (gas: 35190)
+[PASS] test_LOCK01_purchaseStillRevertsOnZeroQuantity() (gas: 10552)
+[PASS] test_LOCK02_lootboxGuardBlocksOnJackpotLevel() (gas: 35505)
+[PASS] test_LOCK02_lootboxGuardPassesNonJackpot() (gas: 35768)
+[PASS] test_LOCK02_lootboxGuardStripped() (gas: 34939)
+[PASS] test_LOCK03_openLootBoxDuringLock() (gas: 30580)
+[PASS] test_LOCK04_openBurnieLootBoxDuringLock() (gas: 30879)
+[PASS] test_LOCK05_degeneretteJackpotResolution() (gas: 37186)
+[PASS] test_LOCK05_degeneretteNotJackpotLevel() (gas: 34764)
+[PASS] test_LOCK06_lootboxRngRequestGate() (gas: 59192)
+[PASS] test_LOCK06_lootboxRngStillBlocksOnActiveRequest() (gas: 60899)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 175.80ms (175.47ms CPU time)
+
+Ran 11 tests for test/fuzz/PrecisionBoundary.t.sol:PrecisionBoundaryTest
+[PASS] testFuzz_bpsDivision_maxDust(uint128,uint16) (runs: 1000, μ: 7681, ~: 7681)
+[PASS] testFuzz_coinflip_minimumStake_principalReturned(uint256,uint8) (runs: 1000, μ: 7017, ~: 7017)
+[PASS] testFuzz_ticket_neverZeroCost(uint32) (runs: 1000, μ: 23904, ~: 23904)
+[PASS] testFuzz_vault_burn1Share_nonZeroClaimValue(uint128,uint128) (runs: 1000, μ: 6703, ~: 6355)
+[PASS] testFuzz_vault_ceilFloorRoundTrip_favorsVault(uint128,uint128,uint128) (runs: 1000, μ: 11964, ~: 11964)
+[PASS] testFuzz_vault_manySmallBurns_vs_oneLargeBurn(uint128,uint128,uint8) (runs: 1000, μ: 18222, ~: 15972)
+[PASS] test_autoRebuy_belowTicketPrice_noTickets() (gas: 18749)
+[PASS] test_decimator_atCapBoundary_effectiveAmountNonZero() (gas: 4018)
+[PASS] test_lootbox_atMinimum_allIntermediatesNonZero() (gas: 7322)
+[PASS] test_priceLookup_allTiersNonZero() (gas: 34986)
+[PASS] test_ticket_minQty_nonZeroCost() (gas: 39062)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 702.03ms (701.66ms CPU time)
+
+Ran 9 tests for test/fuzz/FuturepoolSkim.t.sol:FuturepoolSkimTest
+[PASS] testFuzz_additiveRandom_bounded(uint256) (runs: 1000, μ: 2090, ~: 2090)
+[PASS] testFuzz_nextToFutureBps_cap10k(uint48,uint24) (runs: 1000, μ: 16168, ~: 16922)
+[PASS] testFuzz_nextToFutureBps_earlyDecay(uint48,uint24) (runs: 1000, μ: 18527, ~: 19260)
+[PASS] testFuzz_nextToFutureBps_stallMonotonic(uint48) (runs: 1000, μ: 20614, ~: 20749)
+[PASS] test_fullPipeline_advanceGame_smoke() (gas: 198801)
+[PASS] test_nextToFutureBps_day0_fastBase() (gas: 15534)
+[PASS] test_overshootSurcharge_spotValues() (gas: 12351)
+[PASS] test_skimHarness_levelPrizePool_setter() (gas: 35088)
+[PASS] test_skimHarness_prizePoolSlot_roundTrip() (gas: 35240)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 1.30s (1.28s CPU time)
+
+Ran 6 tests for test/fuzz/VRFPathCoverage.t.sol:VRFPathCoverage
+[FAIL: OnlyGame(); counterexample: calldata=0x74ac2664000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillEntropyUnique_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x81456b23000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillMaxGap_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x9e146d10000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8000000000000000000000000000000000000000000000000000000000000000f args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58], 15]] test_gapBackfillMultiDay_fuzz(uint256,uint8) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x538146bc000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillSingleDay_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x8fcb6755000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillWithMidDayPending_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x2c4915e7000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_indexLifecycleAcrossStall_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+Suite result: FAILED. 0 passed; 6 failed; 0 skipped; finished in 2.19s (2.18s CPU time)
+
+Ran 22 tests for test/fuzz/VRFCore.t.sol:VRFCore
+[PASS] test_callbackGasBudget_daily() (gas: 233342)
+[FAIL: OnlyGame()] test_callbackGasBudget_midday() (gas: 9275165)
+[PASS] test_callbackNeverReverts_daily(uint256) (runs: 1000, μ: 240239, ~: 240233)
+[PASS] test_callbackNeverReverts_duplicateFulfillment(uint256) (runs: 1000, μ: 250300, ~: 250300)
+[PASS] test_callbackNeverReverts_staleId(uint256,uint256) (runs: 1000, μ: 218517, ~: 218517)
+[PASS] test_callbackReverts_unauthorizedSender() (gas: 212329)
+[PASS] test_callbackZeroGuard(uint256) (runs: 1000, μ: 237682, ~: 237682)
+[FAIL: OnlyGame()] test_coordinatorSwap_clearsRngLocked() (gas: 9275279)
+[FAIL: OnlyGame()] test_crossDayStaleWord() (gas: 9275164)
+[FAIL: OnlyGame()] test_midDayFulfillment_clearsState() (gas: 9275142)
+[FAIL: OnlyGame()] test_midDayRequest_doesNotBlockDaily() (gas: 9274153)
+[FAIL: OnlyGame()] test_noRetry_before12h() (gas: 9274014)
+[FAIL: OnlyGame()] test_preResetWindow_blocksMidDay() (gas: 9275234)
+[FAIL: Fresh request should increment lootboxRngIndex by 1: 0 != 1] test_retryDetection_fresh() (gas: 205728)
+[FAIL: OnlyGame(); counterexample: calldata=0xb709f21a000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f80000000000000000000000000000000001c385c3295ba05a801e759ef0c1448f args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58], 2344438905967838114515720031338316943 [2.344e36]]] test_retryDetection_fuzz(uint256,uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_retryDetection_timeout() (gas: 9274221)
+[FAIL: OnlyGame()] test_rngLocked_blocksMidDayRequest() (gas: 9274796)
+[FAIL: OnlyGame()] test_timeoutRetry_12h() (gas: 9274474)
+[FAIL: OnlyGame(); counterexample: calldata=0xa1f37b61000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_timeoutRetry_lootboxIndexPreserved_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0xf5d59990000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f80000000000000000000000000000000001c385c3295ba05a801e759ef0c1448f args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58], 2344438905967838114515720031338316943 [2.344e36]]] test_timeoutRetry_staleWordDiscarded(uint256,uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_vrfRequestIdLifecycle_dailyFreshRequest() (gas: 9317831)
+[FAIL: OnlyGame()] test_vrfRequestIdLifecycle_middayRequest() (gas: 9274774)
+Suite result: FAILED. 6 passed; 16 failed; 0 skipped; finished in 2.38s (3.81s CPU time)
+
+Ran 1 test for test/fuzz/FarFutureIntegration.t.sol:FarFutureIntegrationTest
+[FAIL: Game should advance past level 4 where FF entries at 6-9 are processed: 0 < 5] testMultiLevelAdvancementWithFFTickets() (gas: 2660418475)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 6.03s (6.01s CPU time)
+
+Ran 1 test for test/fuzz/BafRebuyReconciliation.t.sol:BafRebuyReconciliationTest
+[FAIL: Game advanced past level 10 (BAF trigger level): 0 <= 10] testBafRebuyContributionPreserved() (gas: 3385975762)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 8.79s (8.77s CPU time)
+
+Ran 17 tests for test/fuzz/VRFStallEdgeCases.t.sol:VRFStallEdgeCases
+[FAIL: OnlyGame()] test_coordinatorSwapClearsMidDayPending() (gas: 9274819)
+[FAIL: OnlyGame(); counterexample: calldata=0x4dc7483e0000000000000000000000000000000000000000000000000000000000000038 args=[56]] test_coordinatorSwapPreservesTotalFlipReversals_fuzz(uint8) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_coordinatorSwapResetsAllVrfState() (gas: 9275072)
+[FAIL: OnlyGame()] test_flipDayAlignedWithDailyIdx() (gas: 11241603)
+[FAIL: OnlyGame(); counterexample: calldata=0x74ac2664000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillEntropyUnique_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_gapBackfillGas120Days() (gas: 9274129)
+[FAIL: OnlyGame()] test_gapBackfillGas30Days() (gas: 9274704)
+[FAIL: OnlyGame()] test_gapBackfillSingleDayGap() (gas: 9275003)
+[FAIL: OnlyGame()] test_gapBackfillZeroGuard() (gas: 9274451)
+[FAIL: OnlyGame()] test_gapDayPositionsPreCommitted() (gas: 11143255)
+[FAIL: OnlyGame()] test_gapDaysSkipResolveRedemptionPeriod() (gas: 9274796)
+[FAIL: OnlyGame()] test_historicalRngFallbackNonzero() (gas: 9520138)
+[FAIL: OnlyGame()] test_manipulationWindowIdenticalToDaily() (gas: 9273991)
+[FAIL: OnlyGame()] test_tryRequestRngGuardBranches() (gas: 9274060)
+[FAIL: OnlyGame()] test_wallClockDayAdvancesDuringStall() (gas: 9274635)
+[FAIL: OnlyGame()] test_zeroSeedAtGameStart() (gas: 3774322)
+[FAIL: OnlyGame()] test_zeroSeedUnreachableAfterSwap() (gas: 9274244)
+Suite result: FAILED. 0 passed; 17 failed; 0 skipped; finished in 673.03ms (653.31ms CPU time)
+
+Ran 5 tests for test/fuzz/TqFarFutureKey.t.sol:TqFarFutureKeyTest
+[PASS] testFarFutureBitConstant() (gas: 10079)
+[PASS] testFarFutureKeyBitOrthogonality(uint24) (runs: 1000, μ: 13903, ~: 13903)
+[PASS] testFarFutureKeyNoCollision_Slot0(uint24) (runs: 1000, μ: 21689, ~: 21689)
+[PASS] testFarFutureKeyNoCollision_Slot1(uint24) (runs: 1000, μ: 41681, ~: 41681)
+[PASS] testFarFutureKeyPure() (gas: 12762)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 17.55s (220.86ms CPU time)
+
+Ran 3 tests for test/fuzz/RedemptionSplit.t.sol:RedemptionSplitTest
+[PASS] testFuzz_INV03_splitConservation(uint96,uint16,bool) (runs: 1000, μ: 6232, ~: 6189)
+[PASS] testFuzz_INV03_splitConservation_gameOver(uint96,uint16) (runs: 1000, μ: 7088, ~: 7208)
+[PASS] testFuzz_INV03_splitConservation_noGameOver(uint96,uint16) (runs: 1000, μ: 7261, ~: 7381)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 166.52ms (166.36ms CPU time)
+
+Ran 8 tests for test/fuzz/PriceLookupInvariants.t.sol:PriceLookupInvariantsTest
+[PASS] testFuzz_costCalculation(uint24,uint256) (runs: 1000, μ: 9041, ~: 9126)
+[PASS] testFuzz_cyclicAfter100(uint24) (runs: 1000, μ: 10906, ~: 10884)
+[PASS] testFuzz_introPricing(uint24) (runs: 1000, μ: 5842, ~: 5810)
+[PASS] testFuzz_milestonePricing(uint24) (runs: 1000, μ: 7514, ~: 7514)
+[PASS] testFuzz_priceBounded(uint24) (runs: 1000, μ: 3553, ~: 3920)
+[PASS] testFuzz_priceDeterministic(uint24) (runs: 1000, μ: 4630, ~: 5364)
+[PASS] testFuzz_priceInValidSet(uint24) (runs: 1000, μ: 3645, ~: 4069)
+[PASS] testFuzz_weaklyMonotonicInCycle(uint24,uint24,uint24) (runs: 1000, μ: 8231, ~: 6940)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 65.63s (65.63s CPU time)
+
+Ran 9 tests for test/fuzz/PrizePoolFreeze.t.sol:FreezeLifecycleTest
+[PASS] testFreezeUnfreezeRoundTrip() (gas: 89549)
+[PASS] testFrozenPurchaseBranchRoutesPending() (gas: 94675)
+[PASS] testMultiDayAccumulatorPersistence() (gas: 209215)
+[PASS] testSwapAndFreezePreservesAccumulatorsWhenAlreadyFrozen() (gas: 74204)
+[PASS] testSwapAndFreezeSetsFrozenFlag() (gas: 41268)
+[PASS] testSwapAndFreezeZerosPending() (gas: 48215)
+[PASS] testUnfreezeMergesPendingIntoLive() (gas: 72487)
+[PASS] testUnfreezeNoopWhenNotFrozen() (gas: 69659)
+[PASS] testUnfrozenPurchaseBranchRoutesLive() (gas: 74222)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 67.04s (2.39ms CPU time)
+
+Ran 4 tests for test/fuzz/invariant/EthSolvency.inv.t.sol:EthSolvencyInvariant
+[PASS] invariant_balanceReconciliation() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_canary() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_ethSolvency() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_ghostAccountingDepositsGeClaims() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 67.84s (265.45s CPU time)
+
+Ran 21 tests for test/fuzz/LootboxRngLifecycle.t.sol:LootboxRngLifecycle
+[FAIL: Should have amount after first purchase] test_entropyAccumulationSamePlayer() (gas: 794596)
+[FAIL: OnlyGame(); counterexample: calldata=0x4535adb7000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_entropyUniqueDifferentAmounts(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x6a59950c000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_entropyUniqueDifferentDays(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x8452cee1000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_entropyUniqueDifferentPlayers(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_fullLifecycleDailyPath() (gas: 10191294)
+[FAIL: OnlyGame()] test_fullLifecycleMidDayPath() (gas: 9275280)
+[FAIL: OnlyGame()] test_fullLifecycleMultipleIndices() (gas: 10234376)
+[FAIL: Error != expected error: E() != RngNotReady()] test_fullLifecycleRngNotReady() (gas: 960323)
+[FAIL: Fresh daily request should increment index by 1: 0 != 1] test_indexIncrementsOnFreshDaily() (gas: 206073)
+[FAIL: OnlyGame()] test_indexIncrementsOnMidDay() (gas: 9275165)
+[FAIL: OnlyGame()] test_indexNoIncrementOnCoordinatorSwap() (gas: 9274313)
+[FAIL: OnlyGame(); counterexample: calldata=0x90559368000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_indexNoIncrementOnRetry(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x007420330000000000000000000000000000000000000000000000000000000000000038 args=[56]] test_indexSequentialAcrossMultipleDays(uint8) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_wordWriteBackfill() (gas: 9275003)
+[FAIL: OnlyGame(); counterexample: calldata=0x77d82731000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_wordWriteDaily(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x4999b5f4000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_wordWriteIdempotent(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0xa70972ad000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_wordWriteMidDay(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x8c75b94b000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_wordWriteStaleRedirect(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_zeroGuardBackfill() (gas: 9274014)
+[FAIL: OnlyGame()] test_zeroGuardMidDay() (gas: 9274728)
+[FAIL: Zero-guarded daily word should be stored as 1: 0 != 1] test_zeroGuardRawFulfill() (gas: 4483121)
+Suite result: FAILED. 0 passed; 21 failed; 0 skipped; finished in 103.32s (2.36s CPU time)
+
+Ran 8 tests for test/fuzz/DustAccumulation.t.sol:DustAccumulationTest
+[PASS] testFuzz_bpsDivision_maxDust(uint128,uint16) (runs: 1000, μ: 7543, ~: 7543)
+[PASS] testFuzz_ethToBurnie_dustBounded(uint128,uint8) (runs: 1000, μ: 8531, ~: 8433)
+[PASS] testFuzz_lootboxSplit_nonPresale_exact(uint128) (runs: 1000, μ: 7769, ~: 7769)
+[PASS] testFuzz_lootboxSplit_remainderPattern_exact(uint128) (runs: 1000, μ: 8835, ~: 8835)
+[PASS] testFuzz_proRata_sumBounded(uint128,uint64,uint64,uint64,uint64,uint64) (runs: 1000, μ: 18758, ~: 18849)
+[PASS] testFuzz_purchaseCost_precisionLossBounded(uint32,uint8) (runs: 1000, μ: 8864, ~: 8779)
+[PASS] testFuzz_vault_dustNotProfitable(uint96) (runs: 1000, μ: 6064, ~: 6064)
+[PASS] testFuzz_vault_repeatedSmallBurns_dustBounded(uint8,uint96) (runs: 1000, μ: 24322, ~: 20719)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 149.41s (1.86s CPU time)
+
+Ran 14 tests for test/fuzz/AffiliateDgnrsClaim.t.sol:AffiliateDgnrsClaim
+[FAIL: E()] test_claimWindowMovesWithLevel() (gas: 17074242)
+[FAIL: E()] test_claimedTrackingAccumulates() (gas: 30936433)
+[FAIL: E()] test_orderIndependence() (gas: 33708423)
+[FAIL: E()] test_proportionalDistribution() (gas: 36524634)
+[PASS] test_revertBelowMinScore() (gas: 855533)
+[PASS] test_revertClaimAtLevel0() (gas: 18699)
+[FAIL: E()] test_revertDoubleClaim() (gas: 14279537)
+[PASS] test_revertZeroAllocation() (gas: 14278321)
+[PASS] test_revertZeroScore() (gas: 17066238)
+[PASS] test_scoresRouteToLevelPlusOne() (gas: 840895)
+[FAIL: E()] test_threeAffiliatesProportional() (gas: 53171682)
+[FAIL: E()] test_totalClaimsLeAllocation() (gas: 30936536)
+[FAIL: E()] test_totalClaimsMatchPoolDelta() (gas: 30937459)
+[PASS] test_totalScoreAccumulates() (gas: 4803721)
+Suite result: FAILED. 6 passed; 8 failed; 0 skipped; finished in 151.56s (856.77ms CPU time)
+
+Ran 3 tests for test/fuzz/invariant/TicketQueue.inv.t.sol:TicketQueueInvariant
+[PASS] invariant_noConsistencyViolations() (runs: 256, calls: 32768, reverts: 0)
+
+╭-----------------------+--------------------+-------+---------+----------╮
+| Contract              | Selector           | Calls | Reverts | Discards |
++=========================================================================+
+| TicketTrackingHandler | purchase           | 7997  | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | fulfillVrf         | 8299  | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpPastVrfTimeout | 8296  | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpTime           | 8176  | 0       | 0        |
+╰-----------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_nonParticipantHasNoTickets() (runs: 256, calls: 32768, reverts: 0)
+
+╭-----------------------+--------------------+-------+---------+----------╮
+| Contract              | Selector           | Calls | Reverts | Discards |
++=========================================================================+
+| TicketTrackingHandler | purchase           | 7997  | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | fulfillVrf         | 8299  | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpPastVrfTimeout | 8296  | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpTime           | 8176  | 0       | 0        |
+╰-----------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_ticketCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭-----------------------+--------------------+-------+---------+----------╮
+| Contract              | Selector           | Calls | Reverts | Discards |
++=========================================================================+
+| TicketTrackingHandler | purchase           | 7997  | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | fulfillVrf         | 8299  | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpPastVrfTimeout | 8296  | 0       | 0        |
+|-----------------------+--------------------+-------+---------+----------|
+| VRFHandler            | warpTime           | 8176  | 0       | 0        |
+╰-----------------------+--------------------+-------+---------+----------╯
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 151.56s (37.90s CPU time)
+
+Ran 6 tests for test/fuzz/invariant/MultiLevel.inv.t.sol:MultiLevelInvariant
+[PASS] invariant_depositsExceedBalance() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 4715  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 4694  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 4675  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 4616  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 4551  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 4709  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 4808  | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_levelMonotonic() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 4715  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 4694  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 4675  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 4616  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 4551  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 4709  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 4808  | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_multiLevelCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 4715  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 4694  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 4675  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 4616  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 4551  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 4709  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 4808  | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_poolSumConsistency() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 4715  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 4694  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 4675  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 4616  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 4551  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 4709  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 4808  | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_priceEscalation() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 4715  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 4694  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 4675  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 4616  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 4551  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 4709  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 4808  | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_solvencyAcrossLevels() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+--------------------+-------+---------+----------╮
+| Contract          | Selector           | Calls | Reverts | Discards |
++=====================================================================+
+| MultiLevelHandler | advanceGame        | 4715  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | fulfillVrf         | 4694  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | heavyPurchase      | 4675  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | purchase           | 4616  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpDay            | 4551  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpPastVrfTimeout | 4709  | 0       | 0        |
+|-------------------+--------------------+-------+---------+----------|
+| MultiLevelHandler | warpTime           | 4808  | 0       | 0        |
+╰-------------------+--------------------+-------+---------+----------╯
+
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 161.99s (255.94s CPU time)
+
+Ran 4 tests for test/fuzz/invariant/GameFSM.inv.t.sol:GameFSMInvariant
+[PASS] invariant_fsmCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭------------+--------------------+-------+---------+----------╮
+| Contract   | Selector           | Calls | Reverts | Discards |
++==============================================================+
+| FSMHandler | advanceGame        | 6476  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | fulfillVrf         | 6555  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | purchase           | 6692  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpPastVrfTimeout | 6598  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpTime           | 6447  | 0       | 0        |
+╰------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_gameOverTerminal() (runs: 256, calls: 32768, reverts: 0)
+
+╭------------+--------------------+-------+---------+----------╮
+| Contract   | Selector           | Calls | Reverts | Discards |
++==============================================================+
+| FSMHandler | advanceGame        | 6476  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | fulfillVrf         | 6555  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | purchase           | 6692  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpPastVrfTimeout | 6598  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpTime           | 6447  | 0       | 0        |
+╰------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_levelMonotonic() (runs: 256, calls: 32768, reverts: 0)
+
+╭------------+--------------------+-------+---------+----------╮
+| Contract   | Selector           | Calls | Reverts | Discards |
++==============================================================+
+| FSMHandler | advanceGame        | 6476  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | fulfillVrf         | 6555  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | purchase           | 6692  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpPastVrfTimeout | 6598  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpTime           | 6447  | 0       | 0        |
+╰------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_validFSMState() (runs: 256, calls: 32768, reverts: 0)
+
+╭------------+--------------------+-------+---------+----------╮
+| Contract   | Selector           | Calls | Reverts | Discards |
++==============================================================+
+| FSMHandler | advanceGame        | 6476  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | fulfillVrf         | 6555  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | purchase           | 6692  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpPastVrfTimeout | 6598  | 0       | 0        |
+|------------+--------------------+-------+---------+----------|
+| FSMHandler | warpTime           | 6447  | 0       | 0        |
+╰------------+--------------------+-------+---------+----------╯
+
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 168.73s (535.52s CPU time)
+
+Ran 5 tests for test/fuzz/invariant/WhaleSybil.inv.t.sol:WhaleSybilInvariant
+[PASS] invariant_depositsExceedClaims() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 5512  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 5480  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 5419  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 5431  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 5484  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 5442  | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_gameOverTerminal() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 5512  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 5480  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 5419  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 5431  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 5484  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 5442  | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_obligationRatioHealthy() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 5512  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 5480  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 5419  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 5431  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 5484  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 5442  | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_solvencyUnderPressure() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 5512  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 5480  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 5419  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 5431  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 5484  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 5442  | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_whaleSybilCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+---------------------+-------+---------+----------╮
+| Contract          | Selector            | Calls | Reverts | Discards |
++======================================================================+
+| WhaleSybilHandler | advanceGame         | 5512  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | fulfillVrf          | 5480  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | sybilPurchase       | 5419  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | warpTime            | 5431  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleBundlePurchase | 5484  | 0       | 0        |
+|-------------------+---------------------+-------+---------+----------|
+| WhaleSybilHandler | whaleClaimWinnings  | 5442  | 0       | 0        |
+╰-------------------+---------------------+-------+---------+----------╯
+
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 109.70s (192.99s CPU time)
+
+Ran 3 tests for test/fuzz/invariant/CoinSupply.inv.t.sol:CoinSupplyInvariant
+[PASS] invariant_coinCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_supplyConsistency() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_supplyFloor() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 168.73s (189.07s CPU time)
+
+Ran 5 tests for test/fuzz/invariant/Composition.inv.t.sol:CompositionInvariant
+[PASS] invariant_compositionCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------------+----------------------------+-------+---------+----------╮
+| Contract           | Selector                   | Calls | Reverts | Discards |
++==============================================================================+
+| CompositionHandler | action_advanceFullCycle    | 8246  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchase            | 8193  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchaseThenAdvance | 8060  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_whaleThenPurchase   | 8269  | 0       | 0        |
+╰--------------------+----------------------------+-------+---------+----------╯
+
+[PASS] invariant_gameOverIsOneWayLatch() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------------+----------------------------+-------+---------+----------╮
+| Contract           | Selector                   | Calls | Reverts | Discards |
++==============================================================================+
+| CompositionHandler | action_advanceFullCycle    | 8246  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchase            | 8193  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchaseThenAdvance | 8060  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_whaleThenPurchase   | 8269  | 0       | 0        |
+╰--------------------+----------------------------+-------+---------+----------╯
+
+[PASS] invariant_gapBitsAlwaysZero() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------------+----------------------------+-------+---------+----------╮
+| Contract           | Selector                   | Calls | Reverts | Discards |
++==============================================================================+
+| CompositionHandler | action_advanceFullCycle    | 8246  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchase            | 8193  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchaseThenAdvance | 8060  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_whaleThenPurchase   | 8269  | 0       | 0        |
+╰--------------------+----------------------------+-------+---------+----------╯
+
+[PASS] invariant_levelMonotonicallyIncreasing() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------------+----------------------------+-------+---------+----------╮
+| Contract           | Selector                   | Calls | Reverts | Discards |
++==============================================================================+
+| CompositionHandler | action_advanceFullCycle    | 8246  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchase            | 8193  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchaseThenAdvance | 8060  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_whaleThenPurchase   | 8269  | 0       | 0        |
+╰--------------------+----------------------------+-------+---------+----------╯
+
+[PASS] invariant_poolSolvency() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------------+----------------------------+-------+---------+----------╮
+| Contract           | Selector                   | Calls | Reverts | Discards |
++==============================================================================+
+| CompositionHandler | action_advanceFullCycle    | 8246  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchase            | 8193  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_purchaseThenAdvance | 8060  | 0       | 0        |
+|--------------------+----------------------------+-------+---------+----------|
+| CompositionHandler | action_whaleThenPurchase   | 8269  | 0       | 0        |
+╰--------------------+----------------------------+-------+---------+----------╯
+
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 175.82s (505.77s CPU time)
+
+Ran 7 tests for test/fuzz/invariant/VRFPathInvariants.inv.t.sol:VRFPathInvariants
+[PASS] invariant_allGapDaysBackfilled() (runs: 256, calls: 32768, reverts: 0)
+
+╭----------------+-------------------+-------+---------+----------╮
+| Contract       | Selector          | Calls | Reverts | Discards |
++=================================================================+
+| VRFPathHandler | advanceGame       | 4756  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | coordinatorSwap   | 4671  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | fulfillVrf        | 4711  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | purchase          | 4731  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | requestLootboxRng | 4589  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpPastTimeout   | 4689  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpTime          | 4621  | 0       | 0        |
+╰----------------+-------------------+-------+---------+----------╯
+
+[PASS] invariant_everyIndexHasWord() (runs: 256, calls: 32768, reverts: 0)
+
+╭----------------+-------------------+-------+---------+----------╮
+| Contract       | Selector          | Calls | Reverts | Discards |
++=================================================================+
+| VRFPathHandler | advanceGame       | 4756  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | coordinatorSwap   | 4671  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | fulfillVrf        | 4711  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | purchase          | 4731  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | requestLootboxRng | 4589  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpPastTimeout   | 4689  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpTime          | 4621  | 0       | 0        |
+╰----------------+-------------------+-------+---------+----------╯
+
+[PASS] invariant_handlerCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭----------------+-------------------+-------+---------+----------╮
+| Contract       | Selector          | Calls | Reverts | Discards |
++=================================================================+
+| VRFPathHandler | advanceGame       | 4756  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | coordinatorSwap   | 4671  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | fulfillVrf        | 4711  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | purchase          | 4731  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | requestLootboxRng | 4589  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpPastTimeout   | 4689  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpTime          | 4621  | 0       | 0        |
+╰----------------+-------------------+-------+---------+----------╯
+
+[PASS] invariant_indexNeverSkips() (runs: 256, calls: 32768, reverts: 0)
+
+╭----------------+-------------------+-------+---------+----------╮
+| Contract       | Selector          | Calls | Reverts | Discards |
++=================================================================+
+| VRFPathHandler | advanceGame       | 4756  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | coordinatorSwap   | 4671  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | fulfillVrf        | 4711  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | purchase          | 4731  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | requestLootboxRng | 4589  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpPastTimeout   | 4689  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpTime          | 4621  | 0       | 0        |
+╰----------------+-------------------+-------+---------+----------╯
+
+[PASS] invariant_noDoubleIncrement() (runs: 256, calls: 32768, reverts: 0)
+
+╭----------------+-------------------+-------+---------+----------╮
+| Contract       | Selector          | Calls | Reverts | Discards |
++=================================================================+
+| VRFPathHandler | advanceGame       | 4756  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | coordinatorSwap   | 4671  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | fulfillVrf        | 4711  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | purchase          | 4731  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | requestLootboxRng | 4589  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpPastTimeout   | 4689  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpTime          | 4621  | 0       | 0        |
+╰----------------+-------------------+-------+---------+----------╯
+
+[PASS] invariant_rngUnlockedAfterSwap() (runs: 256, calls: 32768, reverts: 0)
+
+╭----------------+-------------------+-------+---------+----------╮
+| Contract       | Selector          | Calls | Reverts | Discards |
++=================================================================+
+| VRFPathHandler | advanceGame       | 4756  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | coordinatorSwap   | 4671  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | fulfillVrf        | 4711  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | purchase          | 4731  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | requestLootboxRng | 4589  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpPastTimeout   | 4689  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpTime          | 4621  | 0       | 0        |
+╰----------------+-------------------+-------+---------+----------╯
+
+[PASS] invariant_stallRecoveryValid() (runs: 256, calls: 32768, reverts: 0)
+
+╭----------------+-------------------+-------+---------+----------╮
+| Contract       | Selector          | Calls | Reverts | Discards |
++=================================================================+
+| VRFPathHandler | advanceGame       | 4756  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | coordinatorSwap   | 4671  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | fulfillVrf        | 4711  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | purchase          | 4731  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | requestLootboxRng | 4589  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpPastTimeout   | 4689  | 0       | 0        |
+|----------------+-------------------+-------+---------+----------|
+| VRFPathHandler | warpTime          | 4621  | 0       | 0        |
+╰----------------+-------------------+-------+---------+----------╯
+
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 189.84s (370.00s CPU time)
+
+Ran 5 tests for test/fuzz/invariant/VaultShareMath.inv.t.sol:VaultShareMathInvariant
+[PASS] invariant_coinSupplyConsistencyAfterVaultOps() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 2642  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 2709  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 2798  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 2744  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 2628  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 2754  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 2742  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 2778  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 2759  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 2630  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 2762  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 2822  | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_gameSolvencyUnderVaultOps() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 2642  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 2709  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 2798  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 2744  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 2628  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 2754  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 2742  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 2778  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 2759  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 2630  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 2762  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 2822  | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultEthBalanceConsistent() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 2642  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 2709  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 2798  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 2744  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 2628  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 2754  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 2742  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 2778  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 2759  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 2630  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 2762  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 2822  | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultEthClaimsLessThanDeposits() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 2642  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 2709  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 2798  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 2744  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 2628  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 2754  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 2742  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 2778  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 2759  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 2630  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 2762  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 2822  | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultMathCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+--------------------+-------+---------+----------╮
+| Contract     | Selector           | Calls | Reverts | Discards |
++================================================================+
+| GameHandler  | advanceGame        | 2642  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | claimWinnings      | 2709  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| GameHandler  | purchase           | 2798  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | advanceGame        | 2744  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnCoin           | 2628  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | burnEth            | 2754  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | fulfillVrf         | 2742  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | purchase           | 2778  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VaultHandler | warpTime           | 2759  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf         | 2630  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout | 2762  | 0       | 0        |
+|--------------+--------------------+-------+---------+----------|
+| VRFHandler   | warpTime           | 2822  | 0       | 0        |
+╰--------------+--------------------+-------+---------+----------╯
+
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 182.32s (422.70s CPU time)
+
+Ran 6 tests for test/fuzz/BafFarFutureTickets.t.sol:BafFarFutureTicketsTest
+[FAIL: BAF players were injected] testBafFarFutureSeed0xBEEF() (gas: 3392688829)
+[FAIL: BAF players were injected] testBafFarFutureSeed0xCAFE() (gas: 3384450886)
+[FAIL: BAF players were injected] testBafFarFutureSeed0xDEAD() (gas: 3387489184)
+[FAIL: BAF players were injected] testBafFarFutureSeedRegression() (gas: 3390116579)
+[FAIL: BAF players were injected] testBafFarFutureSeedRngLocked() (gas: 3390038934)
+[FAIL: Game must advance past level 10 (BAF fires here): 0 <= 10; counterexample: calldata=0x95a8edfe000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] testBafFarFutureTicketsNoRevert(uint256) (runs: 0, μ: 0, ~: 0)
+Suite result: FAILED. 0 passed; 6 failed; 0 skipped; finished in 192.04s (54.44s CPU time)
+
+Ran 6 tests for test/fuzz/BurnieCoinInvariants.t.sol:BurnieCoinInvariantsTest
+[PASS] testFuzz_mintBurnRoundtrip(uint128) (runs: 1000, μ: 43896, ~: 43901)
+[PASS] testFuzz_multiOp(uint128,uint128,uint128) (runs: 1000, μ: 95861, ~: 96600)
+[PASS] testFuzz_supplyInvariant_afterMint(address,uint128) (runs: 1000, μ: 57550, ~: 57550)
+[PASS] testFuzz_transferToVault(uint128) (runs: 1000, μ: 54527, ~: 54532)
+[PASS] testFuzz_vaultMintTo(uint128) (runs: 1000, μ: 55338, ~: 55338)
+[PASS] testFuzz_vaultMintTo_revertOnExceed(uint128) (runs: 1000, μ: 18191, ~: 18191)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 207.52s (1.56s CPU time)
+
+Ran 34 tests for test/fuzz/TicketLifecycle.t.sol:TicketLifecycleTest
+[PASS] testBoundaryRoutingAtDeployment() (gas: 29302)
+[FAIL: Game must reach at least level 3: 0 < 3] testBoundaryRoutingAtNonZeroLevel() (gas: 6767667529)
+[FAIL: Game must reach at least level 4: 0 < 4] testConstructorFFTicketsDrain() (gas: 6769177469)
+[FAIL: Must reach level 1: 0 < 1] testDailyRngBlockedByReadQueue() (gas: 6767667164)
+[FAIL: Must reach at least level 1: 0 < 1] testFFDrainOccursDuringPhaseTransition() (gas: 6769141801)
+[FAIL: Must reach level 3: 0 < 3] testFFDrainSequentialByTransition() (gas: 6767720352)
+[FAIL: Must reach at least level 5: 0 < 5] testFiveLevelIntegration() (gas: 6767666350)
+[FAIL: Must complete at least 4 full level cycles: 0 < 4] testFullLevelCycleAllQueuesDrained() (gas: 6775080743)
+[FAIL: Must reach at least level 1: 0 < 1] testJackpotPhaseTicketsProcessedFromReadSlot() (gas: 6767666431)
+[FAIL: Must reach at least level 1: 0 < 1] testJackpotPhaseTicketsRouteToCurrentLevel() (gas: 6767667251)
+[FAIL: Must reach at least level 2: 0 < 2] testLastDayTicketsRouteToNextLevel() (gas: 6767665864)
+[FAIL: SRC-05: at least one lootbox open must produce a far roll routed to FF key] testLootboxFarRollTicketsRouteToFF() (gas: 14103588)
+[FAIL: At least one lootbox open must queue tickets for buyer3 (near or far)] testLootboxNearRollTicketsProcessed() (gas: 11770862)
+[FAIL: Must reach level 1: 0 < 1] testMidDayBurstAfterRngRequest() (gas: 6767666267)
+[FAIL: Must reach level 1: 0 < 1] testMidDayFFWritesNotBlocked() (gas: 6767666937)
+[FAIL: Must reach level 1: 0 < 1] testMidDayHeavyTicketVolume() (gas: 6767667187)
+[FAIL: Must reach level 1: 0 < 1] testMidDayMultipleCyclesSameDay() (gas: 6767667443)
+[FAIL: Must reach level 1: 0 < 1] testMidDayRngFiresWithReadQueuePending() (gas: 6767666244)
+[PASS] testMidDaySwapConditional_NoTickets() (gas: 13408528)
+[FAIL: Must reach level 1: 0 < 1] testMidDaySwapSkipped_ReadNotDrained() (gas: 6767667282)
+[FAIL: Must reach level 1: 0 < 1] testMidDaySwapTicketsNotDoubleCounted() (gas: 6767667466)
+[FAIL: Must reach level 1: 0 < 1] testMidDayTicketsNotStranded() (gas: 6767665951)
+[FAIL: Game must reach at least level 4: 0 < 4] testMultiLevelZeroStranding() (gas: 6769141233)
+[FAIL: Must complete at least 4 level transitions: 0 < 4] testMultiSourceZeroStrandingSweep() (gas: 6778282299)
+[PASS] testPrepareFutureTicketsRange() (gas: 6774572804)
+[FAIL: Game must reach at least level 1: 0 < 1] testPurchasePhaseTicketsProcessed() (gas: 6771472495)
+[FAIL: Must have at least one valid lootbox index] testRngLockedBlocksFFLootbox() (gas: 1968976)
+[FAIL: Must reach at least level 2: 0 < 2] testRngLockedBlocksFFPurchase() (gas: 6767666048)
+[FAIL: Must reach level 1: 0 < 1] testVaultPerpetualTicketsRouteToFF() (gas: 6767666813)
+[FAIL: Must reach at least level 5: 0 < 5] testWhaleBundleTicketsAcrossLevels() (gas: 6783756201)
+[FAIL: Must reach at least level 2: 0 < 2] testWriteSlotIsolationAcrossBufferStates() (gas: 6767666721)
+[FAIL: Must reach at least level 2: 0 < 2] testWriteSlotIsolationDuringRngLocked() (gas: 6767666853)
+[PASS] testWriteSlotSurvivesSwapAndFreeze() (gas: 6769531904)
+[FAIL: Must complete at least 5 level transitions: 0 < 5] testZeroStrandingSweepAfterTransitions() (gas: 6769142698)
+Suite result: FAILED. 4 passed; 30 failed; 0 skipped; finished in 207.52s (488.45s CPU time)
+
+Ran 7 tests for test/fuzz/ShareMathInvariants.t.sol:ShareMathInvariantsTest
+[PASS] testFuzz_burnAllReturnsAll(uint128,uint128) (runs: 1000, μ: 6660, ~: 6660)
+[PASS] testFuzz_ethPreferentialSplit(uint256,uint256,uint256) (runs: 1000, μ: 9727, ~: 9719)
+[PASS] testFuzz_noOverflow(uint128,uint128,uint128) (runs: 1000, μ: 6728, ~: 6728)
+[PASS] testFuzz_payoutNeverExceedsReserve(uint128,uint128,uint128) (runs: 1000, μ: 6723, ~: 6723)
+[PASS] testFuzz_proportionalFairness(uint256,uint256) (runs: 1000, μ: 10855, ~: 10855)
+[PASS] testFuzz_refillMechanism(uint256,uint256) (runs: 1000, μ: 7298, ~: 7298)
+[PASS] testFuzz_twoUsersSolvency(uint256,uint256,uint256) (runs: 1000, μ: 10334, ~: 10334)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 214.35s (732.69ms CPU time)
+
+Ran 4 tests for test/fuzz/invariant/DegeneretteBet.inv.t.sol:DegeneretteBetInvariant
+[PASS] invariant_degeneretteCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------------+--------------------+-------+---------+----------╮
+| Contract           | Selector           | Calls | Reverts | Discards |
++======================================================================+
+| DegeneretteHandler | advanceGame        | 2753  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | fulfillVrf         | 2742  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | placeEthBet        | 2810  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | purchaseTickets    | 2752  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | resolveBets        | 2685  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | warpTime           | 2662  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | advanceGame        | 2734  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | claimWinnings      | 2777  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | purchase           | 2709  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | fulfillVrf         | 2710  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpPastVrfTimeout | 2757  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpTime           | 2677  | 0       | 0        |
+╰--------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_ghostAccountingNetPositive() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------------+--------------------+-------+---------+----------╮
+| Contract           | Selector           | Calls | Reverts | Discards |
++======================================================================+
+| DegeneretteHandler | advanceGame        | 2753  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | fulfillVrf         | 2742  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | placeEthBet        | 2810  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | purchaseTickets    | 2752  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | resolveBets        | 2685  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | warpTime           | 2662  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | advanceGame        | 2734  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | claimWinnings      | 2777  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | purchase           | 2709  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | fulfillVrf         | 2710  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpPastVrfTimeout | 2757  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpTime           | 2677  | 0       | 0        |
+╰--------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_noEthCreation() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------------+--------------------+-------+---------+----------╮
+| Contract           | Selector           | Calls | Reverts | Discards |
++======================================================================+
+| DegeneretteHandler | advanceGame        | 2753  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | fulfillVrf         | 2742  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | placeEthBet        | 2810  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | purchaseTickets    | 2752  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | resolveBets        | 2685  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | warpTime           | 2662  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | advanceGame        | 2734  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | claimWinnings      | 2777  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | purchase           | 2709  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | fulfillVrf         | 2710  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpPastVrfTimeout | 2757  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpTime           | 2677  | 0       | 0        |
+╰--------------------+--------------------+-------+---------+----------╯
+
+[PASS] invariant_solvencyUnderDegenerette() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------------+--------------------+-------+---------+----------╮
+| Contract           | Selector           | Calls | Reverts | Discards |
++======================================================================+
+| DegeneretteHandler | advanceGame        | 2753  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | fulfillVrf         | 2742  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | placeEthBet        | 2810  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | purchaseTickets    | 2752  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | resolveBets        | 2685  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| DegeneretteHandler | warpTime           | 2662  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | advanceGame        | 2734  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | claimWinnings      | 2777  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| GameHandler        | purchase           | 2709  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | fulfillVrf         | 2710  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpPastVrfTimeout | 2757  | 0       | 0        |
+|--------------------+--------------------+-------+---------+----------|
+| VRFHandler         | warpTime           | 2677  | 0       | 0        |
+╰--------------------+--------------------+-------+---------+----------╯
+
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 214.35s (337.07s CPU time)
+
+Ran 4 tests for test/fuzz/invariant/VaultShare.inv.t.sol:VaultShareInvariant
+[PASS] invariant_vaultAllowanceBounded() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultCanary() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultCoinReservesConsistent() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+[PASS] invariant_vaultEthNonNegative() (runs: 256, calls: 32768, reverts: 0)
+
+╭--------------+---------------------+-------+---------+----------╮
+| Contract     | Selector            | Calls | Reverts | Discards |
++=================================================================+
+| GameHandler  | advanceGame         | 3631  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | claimWinnings       | 3687  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| GameHandler  | purchase            | 3650  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseDeityPass   | 3575  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseLazyPass    | 3643  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| WhaleHandler | purchaseWhaleBundle | 3691  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | fulfillVrf          | 3565  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpPastVrfTimeout  | 3703  | 0       | 0        |
+|--------------+---------------------+-------+---------+----------|
+| VRFHandler   | warpTime            | 3623  | 0       | 0        |
+╰--------------+---------------------+-------+---------+----------╯
+
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 214.35s (254.73s CPU time)
+
+Ran 11 tests for test/fuzz/invariant/RedemptionInvariants.inv.t.sol:RedemptionInvariants
+[PASS] invariant_aggregateTracking() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_burnieClaimedMonotonic() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_callSummary() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_canary() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_ethSegregationSolvency() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_fiftyPercentCap() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_lootboxSplitConservation() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_noDoubleClaim() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_periodIndexMonotonic() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_rollBounds() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+[PASS] invariant_supplyConsistency() (runs: 256, calls: 32768, reverts: 0)
+
+╭-------------------+------------------------+-------+---------+----------╮
+| Contract          | Selector               | Calls | Reverts | Discards |
++=========================================================================+
+| RedemptionHandler | action_advanceDay      | 4713  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_burn            | 4603  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_claim           | 4724  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| RedemptionHandler | action_triggerGameOver | 4599  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | fulfillVrf             | 4661  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpPastVrfTimeout     | 4760  | 0       | 0        |
+|-------------------+------------------------+-------+---------+----------|
+| VRFHandler        | warpTime               | 4708  | 0       | 0        |
+╰-------------------+------------------------+-------+---------+----------╯
+
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 214.34s (1485.24s CPU time)
+
+Ran 47 test suites in 214.35s (3419.42s CPU time): 250 tests passed, 117 failed, 0 skipped (367 total tests)
+
+╭------------------------------------------------------+--------------------+---------------------+-------------------+------------------╮
+| File                                                 | % Lines            | % Statements        | % Branches        | % Funcs          |
++========================================================================================================================================+
+| contracts/BurnieCoin.sol                             | 28.57% (48/168)    | 21.84% (45/206)     | 7.14% (3/42)      | 40.00% (10/25)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/BurnieCoinflip.sol                         | 57.04% (243/426)   | 55.60% (278/500)    | 35.71% (40/112)   | 59.46% (22/37)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DegenerusAdmin.sol                         | 6.80% (21/309)     | 5.08% (21/413)      | 0.93% (1/107)     | 8.00% (2/25)     |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DegenerusAffiliate.sol                     | 70.95% (149/210)   | 66.41% (174/262)    | 42.37% (25/59)    | 80.00% (16/20)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DegenerusDeityPass.sol                     | 6.78% (8/118)      | 4.61% (7/152)       | 0.00% (0/23)      | 3.70% (1/27)     |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DegenerusGame.sol                          | 35.62% (239/671)   | 31.56% (261/827)    | 16.20% (29/179)   | 46.55% (54/116)  |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DegenerusJackpots.sol                      | 2.67% (6/225)      | 2.52% (7/278)       | 1.96% (1/51)      | 27.27% (3/11)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DegenerusQuests.sol                        | 49.36% (272/551)   | 47.46% (336/708)    | 39.68% (50/126)   | 65.00% (26/40)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DegenerusStonk.sol                         | 26.21% (27/103)    | 19.86% (28/141)     | 0.00% (0/34)      | 30.77% (4/13)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DegenerusTraitUtils.sol                    | 100.00% (20/20)    | 100.00% (37/37)     | 100.00% (7/7)     | 100.00% (3/3)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DegenerusVault.sol                         | 30.19% (80/265)    | 30.10% (90/299)     | 14.29% (9/63)     | 21.05% (12/57)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/DeityBoonViewer.sol                        | 0.00% (0/66)       | 0.00% (0/90)        | 0.00% (0/28)      | 0.00% (0/2)      |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/GNRUS.sol                                  | 20.16% (25/124)    | 13.42% (20/149)     | 5.56% (2/36)      | 38.46% (5/13)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/Icons32Data.sol                            | 0.00% (0/31)       | 0.00% (0/43)        | 0.00% (0/17)      | 0.00% (0/5)      |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/StakedDegenerusStonk.sol                   | 68.84% (190/276)   | 63.86% (235/368)    | 33.33% (22/66)    | 64.29% (18/28)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/WrappedWrappedXRP.sol                      | 19.30% (11/57)     | 17.46% (11/63)      | 0.00% (0/15)      | 18.18% (2/11)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/libraries/BitPackingLib.sol                | 100.00% (2/2)      | 100.00% (2/2)       | 100.00% (0/0)     | 100.00% (1/1)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/libraries/EntropyLib.sol                   | 100.00% (5/5)      | 100.00% (4/4)       | 100.00% (0/0)     | 100.00% (1/1)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/libraries/GameTimeLib.sol                  | 100.00% (5/5)      | 100.00% (6/6)       | 100.00% (0/0)     | 100.00% (2/2)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/libraries/JackpotBucketLib.sol             | 64.03% (89/139)    | 57.83% (96/166)     | 48.00% (12/25)    | 100.00% (13/13)  |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/libraries/PriceLookupLib.sol               | 100.00% (17/17)    | 100.00% (23/23)     | 100.00% (14/14)   | 100.00% (1/1)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/mocks/MockGameCharity.sol                  | 0.00% (0/12)       | 0.00% (0/10)        | 0.00% (0/3)       | 0.00% (0/4)      |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/mocks/MockLinkEthFeed.sol                  | 27.27% (3/11)      | 28.57% (2/7)        | 100.00% (0/0)     | 25.00% (1/4)     |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/mocks/MockLinkToken.sol                    | 0.00% (0/27)       | 0.00% (0/23)        | 0.00% (0/3)       | 0.00% (0/5)      |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/mocks/MockSDGNRSCharity.sol                | 0.00% (0/8)        | 0.00% (0/5)         | 100.00% (0/0)     | 0.00% (0/4)      |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/mocks/MockStETH.sol                        | 20.00% (10/50)     | 21.57% (11/51)      | 50.00% (2/4)      | 27.27% (3/11)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/mocks/MockVRFCoordinator.sol               | 74.36% (29/39)     | 74.29% (26/35)      | 0.00% (0/10)      | 72.73% (8/11)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/mocks/MockVaultCharity.sol                 | 0.00% (0/2)        | 0.00% (0/1)         | 100.00% (0/0)     | 0.00% (0/1)      |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameAdvanceModule.sol     | 69.13% (412/596)   | 66.62% (515/773)    | 48.00% (72/150)   | 86.11% (31/36)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameBoonModule.sol        | 3.39% (6/177)      | 2.56% (6/234)       | 2.04% (1/49)      | 20.00% (1/5)     |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameDecimatorModule.sol   | 1.60% (4/250)      | 0.92% (3/325)       | 1.59% (1/63)      | 3.85% (1/26)     |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameDegeneretteModule.sol | 70.70% (193/273)   | 66.86% (236/353)    | 34.48% (30/87)    | 84.00% (21/25)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameGameOverModule.sol    | 79.55% (70/88)     | 75.63% (90/119)     | 42.31% (11/26)    | 100.00% (4/4)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameJackpotModule.sol     | 61.12% (382/625)   | 59.01% (475/805)    | 36.57% (49/134)   | 72.22% (26/36)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameLootboxModule.sol     | 29.46% (175/594)   | 24.72% (198/801)    | 25.81% (40/155)   | 50.00% (12/24)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameMintModule.sol        | 65.09% (343/527)   | 66.11% (437/661)    | 47.06% (64/136)   | 57.89% (11/19)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameMintStreakUtils.sol   | 90.62% (58/64)     | 86.08% (68/79)      | 63.64% (14/22)    | 100.00% (5/5)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGamePayoutUtils.sol       | 66.67% (20/30)     | 56.10% (23/41)      | 12.50% (1/8)      | 66.67% (2/3)     |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/modules/DegenerusGameWhaleModule.sol       | 74.14% (238/321)   | 74.45% (306/411)    | 46.51% (40/86)    | 100.00% (13/13)  |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/storage/DegenerusGameStorage.sol           | 67.61% (192/284)   | 62.82% (223/355)    | 25.37% (17/67)    | 70.00% (35/50)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| contracts/test/PriceLookupTester.sol                 | 0.00% (0/6)        | 0.00% (0/6)         | 100.00% (0/0)     | 0.00% (0/2)      |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/AdvanceGameRewrite.t.sol                   | 87.80% (36/41)     | 85.19% (23/27)      | 100.00% (2/2)     | 88.89% (16/18)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/BurnieCoinInvariants.t.sol                 | 86.96% (40/46)     | 76.47% (39/51)      | 20.00% (2/10)     | 100.00% (9/9)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/FarFutureIntegration.t.sol                 | 100.00% (2/2)      | 100.00% (2/2)       | 100.00% (0/0)     | 100.00% (1/1)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/FuturepoolSkim.t.sol                       | 100.00% (10/10)    | 100.00% (7/7)       | 100.00% (0/0)     | 100.00% (5/5)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/JackpotCombinedPool.t.sol                  | 58.14% (25/43)     | 54.55% (24/44)      | 50.00% (1/2)      | 72.73% (8/11)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/LockRemoval.t.sol                          | 92.00% (23/25)     | 95.00% (19/20)      | 75.00% (3/4)      | 83.33% (10/12)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/PrizePoolFreeze.t.sol                      | 83.33% (15/18)     | 81.82% (9/11)       | 100.00% (0/0)     | 88.89% (8/9)     |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/QueueDoubleBuffer.t.sol                    | 87.50% (28/32)     | 88.89% (16/18)      | 100.00% (0/0)     | 87.50% (14/16)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/StorageFoundation.t.sol                    | 96.88% (31/32)     | 95.00% (19/20)      | 100.00% (0/0)     | 100.00% (16/16)  |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/TicketEdgeCases.t.sol                      | 73.68% (56/76)     | 73.97% (54/73)      | 58.33% (7/12)     | 86.67% (13/15)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/TicketLifecycle.t.sol                      | 100.00% (6/6)      | 100.00% (6/6)       | 100.00% (0/0)     | 100.00% (3/3)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/TicketProcessingFF.t.sol                   | 71.95% (59/82)     | 72.34% (68/94)      | 68.75% (11/16)    | 75.00% (9/12)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/TicketRouting.t.sol                        | 100.00% (22/22)    | 100.00% (13/13)     | 100.00% (0/0)     | 100.00% (11/11)  |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/TqFarFutureKey.t.sol                       | 83.33% (10/12)     | 88.89% (8/9)        | 100.00% (0/0)     | 83.33% (5/6)     |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/CompositionHandler.sol            | 89.47% (85/95)     | 88.43% (107/121)    | 53.85% (14/26)    | 100.00% (11/11)  |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/DegeneretteHandler.sol            | 93.51% (72/77)     | 91.01% (81/89)      | 64.71% (11/17)    | 90.00% (9/10)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/FSMHandler.sol                    | 95.08% (58/61)     | 92.86% (65/70)      | 66.67% (8/12)     | 100.00% (8/8)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/GameHandler.sol                   | 89.74% (35/39)     | 84.44% (38/45)      | 37.50% (3/8)      | 100.00% (5/5)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/MultiLevelHandler.sol             | 90.41% (66/73)     | 84.09% (74/88)      | 41.18% (7/17)     | 100.00% (10/10)  |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/RedemptionHandler.sol             | 88.07% (96/109)    | 89.06% (114/128)    | 65.52% (19/29)    | 80.00% (8/10)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/TicketTrackingHandler.sol         | 71.88% (23/32)     | 66.67% (28/42)      | 33.33% (2/6)      | 75.00% (3/4)     |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/VRFPathHandler.sol                | 69.72% (76/109)    | 62.94% (90/143)     | 35.48% (11/31)    | 91.67% (11/12)   |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/VaultHandler.sol                  | 100.00% (51/51)    | 94.55% (52/55)      | 70.00% (7/10)     | 100.00% (8/8)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/WhaleHandler.sol                  | 100.00% (34/34)    | 84.21% (32/38)      | 33.33% (3/9)      | 100.00% (5/5)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/handlers/WhaleSybilHandler.sol             | 86.81% (79/91)     | 84.47% (87/103)     | 61.54% (16/26)    | 100.00% (10/10)  |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/helpers/DeployProtocol.sol                 | 100.00% (29/29)    | 100.00% (28/28)     | 100.00% (0/0)     | 100.00% (1/1)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| test/fuzz/helpers/VRFHandler.sol                     | 100.00% (15/15)    | 100.00% (14/14)     | 100.00% (3/3)     | 100.00% (4/4)    |
+|------------------------------------------------------+--------------------+---------------------+-------------------+------------------|
+| Total                                                | 51.74% (4674/9034) | 48.40% (5417/11191) | 30.57% (687/2247) | 60.24% (591/981) |
+╰------------------------------------------------------+--------------------+---------------------+-------------------+------------------╯
+
+Failing tests:
+Encountered 8 failing tests in test/fuzz/AffiliateDgnrsClaim.t.sol:AffiliateDgnrsClaim
+[FAIL: E()] test_claimWindowMovesWithLevel() (gas: 17074242)
+[FAIL: E()] test_claimedTrackingAccumulates() (gas: 30936433)
+[FAIL: E()] test_orderIndependence() (gas: 33708423)
+[FAIL: E()] test_proportionalDistribution() (gas: 36524634)
+[FAIL: E()] test_revertDoubleClaim() (gas: 14279537)
+[FAIL: E()] test_threeAffiliatesProportional() (gas: 53171682)
+[FAIL: E()] test_totalClaimsLeAllocation() (gas: 30936536)
+[FAIL: E()] test_totalClaimsMatchPoolDelta() (gas: 30937459)
+
+Encountered 6 failing tests in test/fuzz/BafFarFutureTickets.t.sol:BafFarFutureTicketsTest
+[FAIL: BAF players were injected] testBafFarFutureSeed0xBEEF() (gas: 3392688829)
+[FAIL: BAF players were injected] testBafFarFutureSeed0xCAFE() (gas: 3384450886)
+[FAIL: BAF players were injected] testBafFarFutureSeed0xDEAD() (gas: 3387489184)
+[FAIL: BAF players were injected] testBafFarFutureSeedRegression() (gas: 3390116579)
+[FAIL: BAF players were injected] testBafFarFutureSeedRngLocked() (gas: 3390038934)
+[FAIL: Game must advance past level 10 (BAF fires here): 0 <= 10; counterexample: calldata=0x95a8edfe000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] testBafFarFutureTicketsNoRevert(uint256) (runs: 0, μ: 0, ~: 0)
+
+Encountered 1 failing test in test/fuzz/BafRebuyReconciliation.t.sol:BafRebuyReconciliationTest
+[FAIL: Game advanced past level 10 (BAF trigger level): 0 <= 10] testBafRebuyContributionPreserved() (gas: 3385975762)
+
+Encountered 3 failing tests in test/fuzz/DegeneretteFreezeResolution.t.sol:DegeneretteFreezeResolutionTest
+[FAIL: RngNotReady()] testDegeneretteFreezeResolutionEthConserved() (gas: 296133)
+[FAIL: Error != expected error: RngNotReady() != E()] testDegeneretteFreezeResolutionZeroPendingReverts() (gas: 276359)
+[FAIL: RngNotReady()] testDegeneretteUnfrozenPathRegression() (gas: 278639)
+
+Encountered 1 failing test in test/fuzz/FarFutureIntegration.t.sol:FarFutureIntegrationTest
+[FAIL: Game should advance past level 4 where FF entries at 6-9 are processed: 0 < 5] testMultiLevelAdvancementWithFFTickets() (gas: 2660418475)
+
+Encountered 4 failing tests in test/fuzz/LootboxBoonCoexistence.t.sol:LootboxBoonCoexistence
+[FAIL: OnlyGame(); counterexample: calldata=0xdbf8a711000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] testFuzz_coinflipBoonSurvivesLootboxBoonRoll(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_lootboxBoonAppliedDespiteExistingCoinflipBoon() (gas: 9236139)
+[FAIL: OnlyGame()] test_parametricSweep_crossCategoryBoonFromLootbox() (gas: 9236369)
+[FAIL: OnlyGame()] test_twoCategoryBoonsPreservedAfterLootboxOpen() (gas: 9236392)
+
+Encountered 21 failing tests in test/fuzz/LootboxRngLifecycle.t.sol:LootboxRngLifecycle
+[FAIL: Should have amount after first purchase] test_entropyAccumulationSamePlayer() (gas: 794596)
+[FAIL: OnlyGame(); counterexample: calldata=0x4535adb7000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_entropyUniqueDifferentAmounts(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x6a59950c000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_entropyUniqueDifferentDays(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x8452cee1000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_entropyUniqueDifferentPlayers(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_fullLifecycleDailyPath() (gas: 10191294)
+[FAIL: OnlyGame()] test_fullLifecycleMidDayPath() (gas: 9275280)
+[FAIL: OnlyGame()] test_fullLifecycleMultipleIndices() (gas: 10234376)
+[FAIL: Error != expected error: E() != RngNotReady()] test_fullLifecycleRngNotReady() (gas: 960323)
+[FAIL: Fresh daily request should increment index by 1: 0 != 1] test_indexIncrementsOnFreshDaily() (gas: 206073)
+[FAIL: OnlyGame()] test_indexIncrementsOnMidDay() (gas: 9275165)
+[FAIL: OnlyGame()] test_indexNoIncrementOnCoordinatorSwap() (gas: 9274313)
+[FAIL: OnlyGame(); counterexample: calldata=0x90559368000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_indexNoIncrementOnRetry(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x007420330000000000000000000000000000000000000000000000000000000000000038 args=[56]] test_indexSequentialAcrossMultipleDays(uint8) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_wordWriteBackfill() (gas: 9275003)
+[FAIL: OnlyGame(); counterexample: calldata=0x77d82731000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_wordWriteDaily(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x4999b5f4000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_wordWriteIdempotent(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0xa70972ad000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_wordWriteMidDay(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x8c75b94b000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_wordWriteStaleRedirect(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_zeroGuardBackfill() (gas: 9274014)
+[FAIL: OnlyGame()] test_zeroGuardMidDay() (gas: 9274728)
+[FAIL: Zero-guarded daily word should be stored as 1: 0 != 1] test_zeroGuardRawFulfill() (gas: 4483121)
+
+Encountered 3 failing tests in test/fuzz/StallResilience.t.sol:StallResilience
+[FAIL: OnlyGame()] test_coinflipClaimsAcrossGapDays() (gas: 11119782)
+[FAIL: OnlyGame()] test_lootboxOpenAfterOrphanedIndexBackfill() (gas: 10335322)
+[FAIL: OnlyGame()] test_stallSwapResume() (gas: 9251081)
+
+Encountered 30 failing tests in test/fuzz/TicketLifecycle.t.sol:TicketLifecycleTest
+[FAIL: Game must reach at least level 3: 0 < 3] testBoundaryRoutingAtNonZeroLevel() (gas: 6767667529)
+[FAIL: Game must reach at least level 4: 0 < 4] testConstructorFFTicketsDrain() (gas: 6769177469)
+[FAIL: Must reach level 1: 0 < 1] testDailyRngBlockedByReadQueue() (gas: 6767667164)
+[FAIL: Must reach at least level 1: 0 < 1] testFFDrainOccursDuringPhaseTransition() (gas: 6769141801)
+[FAIL: Must reach level 3: 0 < 3] testFFDrainSequentialByTransition() (gas: 6767720352)
+[FAIL: Must reach at least level 5: 0 < 5] testFiveLevelIntegration() (gas: 6767666350)
+[FAIL: Must complete at least 4 full level cycles: 0 < 4] testFullLevelCycleAllQueuesDrained() (gas: 6775080743)
+[FAIL: Must reach at least level 1: 0 < 1] testJackpotPhaseTicketsProcessedFromReadSlot() (gas: 6767666431)
+[FAIL: Must reach at least level 1: 0 < 1] testJackpotPhaseTicketsRouteToCurrentLevel() (gas: 6767667251)
+[FAIL: Must reach at least level 2: 0 < 2] testLastDayTicketsRouteToNextLevel() (gas: 6767665864)
+[FAIL: SRC-05: at least one lootbox open must produce a far roll routed to FF key] testLootboxFarRollTicketsRouteToFF() (gas: 14103588)
+[FAIL: At least one lootbox open must queue tickets for buyer3 (near or far)] testLootboxNearRollTicketsProcessed() (gas: 11770862)
+[FAIL: Must reach level 1: 0 < 1] testMidDayBurstAfterRngRequest() (gas: 6767666267)
+[FAIL: Must reach level 1: 0 < 1] testMidDayFFWritesNotBlocked() (gas: 6767666937)
+[FAIL: Must reach level 1: 0 < 1] testMidDayHeavyTicketVolume() (gas: 6767667187)
+[FAIL: Must reach level 1: 0 < 1] testMidDayMultipleCyclesSameDay() (gas: 6767667443)
+[FAIL: Must reach level 1: 0 < 1] testMidDayRngFiresWithReadQueuePending() (gas: 6767666244)
+[FAIL: Must reach level 1: 0 < 1] testMidDaySwapSkipped_ReadNotDrained() (gas: 6767667282)
+[FAIL: Must reach level 1: 0 < 1] testMidDaySwapTicketsNotDoubleCounted() (gas: 6767667466)
+[FAIL: Must reach level 1: 0 < 1] testMidDayTicketsNotStranded() (gas: 6767665951)
+[FAIL: Game must reach at least level 4: 0 < 4] testMultiLevelZeroStranding() (gas: 6769141233)
+[FAIL: Must complete at least 4 level transitions: 0 < 4] testMultiSourceZeroStrandingSweep() (gas: 6778282299)
+[FAIL: Game must reach at least level 1: 0 < 1] testPurchasePhaseTicketsProcessed() (gas: 6771472495)
+[FAIL: Must have at least one valid lootbox index] testRngLockedBlocksFFLootbox() (gas: 1968976)
+[FAIL: Must reach at least level 2: 0 < 2] testRngLockedBlocksFFPurchase() (gas: 6767666048)
+[FAIL: Must reach level 1: 0 < 1] testVaultPerpetualTicketsRouteToFF() (gas: 6767666813)
+[FAIL: Must reach at least level 5: 0 < 5] testWhaleBundleTicketsAcrossLevels() (gas: 6783756201)
+[FAIL: Must reach at least level 2: 0 < 2] testWriteSlotIsolationAcrossBufferStates() (gas: 6767666721)
+[FAIL: Must reach at least level 2: 0 < 2] testWriteSlotIsolationDuringRngLocked() (gas: 6767666853)
+[FAIL: Must complete at least 5 level transitions: 0 < 5] testZeroStrandingSweepAfterTransitions() (gas: 6769142698)
+
+Encountered 16 failing tests in test/fuzz/VRFCore.t.sol:VRFCore
+[FAIL: OnlyGame()] test_callbackGasBudget_midday() (gas: 9275165)
+[FAIL: OnlyGame()] test_coordinatorSwap_clearsRngLocked() (gas: 9275279)
+[FAIL: OnlyGame()] test_crossDayStaleWord() (gas: 9275164)
+[FAIL: OnlyGame()] test_midDayFulfillment_clearsState() (gas: 9275142)
+[FAIL: OnlyGame()] test_midDayRequest_doesNotBlockDaily() (gas: 9274153)
+[FAIL: OnlyGame()] test_noRetry_before12h() (gas: 9274014)
+[FAIL: OnlyGame()] test_preResetWindow_blocksMidDay() (gas: 9275234)
+[FAIL: Fresh request should increment lootboxRngIndex by 1: 0 != 1] test_retryDetection_fresh() (gas: 205728)
+[FAIL: OnlyGame(); counterexample: calldata=0xb709f21a000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f80000000000000000000000000000000001c385c3295ba05a801e759ef0c1448f args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58], 2344438905967838114515720031338316943 [2.344e36]]] test_retryDetection_fuzz(uint256,uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_retryDetection_timeout() (gas: 9274221)
+[FAIL: OnlyGame()] test_rngLocked_blocksMidDayRequest() (gas: 9274796)
+[FAIL: OnlyGame()] test_timeoutRetry_12h() (gas: 9274474)
+[FAIL: OnlyGame(); counterexample: calldata=0xa1f37b61000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_timeoutRetry_lootboxIndexPreserved_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0xf5d59990000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f80000000000000000000000000000000001c385c3295ba05a801e759ef0c1448f args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58], 2344438905967838114515720031338316943 [2.344e36]]] test_timeoutRetry_staleWordDiscarded(uint256,uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_vrfRequestIdLifecycle_dailyFreshRequest() (gas: 9317831)
+[FAIL: OnlyGame()] test_vrfRequestIdLifecycle_middayRequest() (gas: 9274774)
+
+Encountered 1 failing test in test/fuzz/VRFLifecycle.t.sol:VRFLifecycle
+[FAIL: OnlyGame()] test_fullVrfDailyCycle() (gas: 11194578)
+
+Encountered 6 failing tests in test/fuzz/VRFPathCoverage.t.sol:VRFPathCoverage
+[FAIL: OnlyGame(); counterexample: calldata=0x74ac2664000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillEntropyUnique_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x81456b23000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillMaxGap_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x9e146d10000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8000000000000000000000000000000000000000000000000000000000000000f args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58], 15]] test_gapBackfillMultiDay_fuzz(uint256,uint8) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x538146bc000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillSingleDay_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x8fcb6755000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillWithMidDayPending_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame(); counterexample: calldata=0x2c4915e7000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_indexLifecycleAcrossStall_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+
+Encountered 17 failing tests in test/fuzz/VRFStallEdgeCases.t.sol:VRFStallEdgeCases
+[FAIL: OnlyGame()] test_coordinatorSwapClearsMidDayPending() (gas: 9274819)
+[FAIL: OnlyGame(); counterexample: calldata=0x4dc7483e0000000000000000000000000000000000000000000000000000000000000038 args=[56]] test_coordinatorSwapPreservesTotalFlipReversals_fuzz(uint8) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_coordinatorSwapResetsAllVrfState() (gas: 9275072)
+[FAIL: OnlyGame()] test_flipDayAlignedWithDailyIdx() (gas: 11241603)
+[FAIL: OnlyGame(); counterexample: calldata=0x74ac2664000000000000000c853048a2587d4a6f662344d19bb6a3fe480cb32af89b43f8 args=[78590995997892008119198551938943555437975615875977634857976 [7.859e58]]] test_gapBackfillEntropyUnique_fuzz(uint256) (runs: 0, μ: 0, ~: 0)
+[FAIL: OnlyGame()] test_gapBackfillGas120Days() (gas: 9274129)
+[FAIL: OnlyGame()] test_gapBackfillGas30Days() (gas: 9274704)
+[FAIL: OnlyGame()] test_gapBackfillSingleDayGap() (gas: 9275003)
+[FAIL: OnlyGame()] test_gapBackfillZeroGuard() (gas: 9274451)
+[FAIL: OnlyGame()] test_gapDayPositionsPreCommitted() (gas: 11143255)
+[FAIL: OnlyGame()] test_gapDaysSkipResolveRedemptionPeriod() (gas: 9274796)
+[FAIL: OnlyGame()] test_historicalRngFallbackNonzero() (gas: 9520138)
+[FAIL: OnlyGame()] test_manipulationWindowIdenticalToDaily() (gas: 9273991)
+[FAIL: OnlyGame()] test_tryRequestRngGuardBranches() (gas: 9274060)
+[FAIL: OnlyGame()] test_wallClockDayAdvancesDuringStall() (gas: 9274635)
+[FAIL: OnlyGame()] test_zeroSeedAtGameStart() (gas: 3774322)
+[FAIL: OnlyGame()] test_zeroSeedUnreachableAfterSwap() (gas: 9274244)
+
+Encountered a total of 117 failing tests, 250 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 117 failed tests
+
+Fuzz seed: 0x100fa69a5f1710a95cdef94889b02845d640b19adf0e357b8d4be7d49ee70e6 (use `--fuzz-seed` to reproduce)
