@@ -1,131 +1,65 @@
-# Requirements: Degenerus Protocol — v26.0 Bonus Jackpot Split
+# Requirements: Degenerus Protocol Audit — v27.0 Call-Site Integrity Audit
 
-**Defined:** 2026-04-11
+**Defined:** 2026-04-12
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## v26.0 Requirements
+## Milestone Goal
 
-Requirements for the bonus jackpot split. Each maps to roadmap phases.
+Systematically surface runtime call-site-to-implementation mismatches that static compilation does not catch — the same class of bug as the `mintPackedFor` regression (commit `a0bf328b`), where a call passed compile, passed superficial tests, and reverted at runtime under a narrow path because selector/target/path alignment was wrong.
 
-### Trait Split
+The scope is deliberately bounded to **call-site integrity**. Out of scope for this milestone: storage layout regression (already verified v25.0), deployed bytecode vs source (requires RPC infra), generic `E()` revert specificity (debuggability, not correctness).
 
-- [x] **TSPL-01**: Bonus drawing rolls independent traits via keccak256 domain separation from same VRF word
-- [x] **TSPL-02**: Hero symbol override applies to bonus trait roll — same hero symbol, independently rerolled color from bonus entropy
+## v27.0 Requirements
 
-### Distribution Wiring
+### Delegatecall Target Alignment (Phase 220)
 
-- [x] **WIRE-01**: BURNIE coin near-future targets [lvl+1, lvl+4] instead of [lvl, lvl+4]
-- [x] **WIRE-02**: Carryover ticket distribution uses bonus traits for winner selection
-- [x] **WIRE-03**: Purchase-phase `payDailyCoinJackpot` rolls bonus traits independently
-- [x] **WIRE-04**: Jackpot-phase `payDailyJackpotCoinAndTickets` coin portion rolls bonus traits independently
-- [x] **WIRE-05**: Main ETH jackpot and 20% ticket distribution unchanged (current-level, main traits)
+- [ ] **CSI-01**: Every `<ADDR>.delegatecall(abi.encodeWithSelector(IXxxModule.fn.selector, ...))` site uses a target address constant that corresponds to `IXxxModule` (no cross-wired addresses — e.g., no `GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.fn.selector, ...))`)
+- [ ] **CSI-02**: Every `GAME_*_MODULE` address constant in `ContractAddresses.sol` that is used as a delegatecall target has a 1:1 mapping to exactly one module interface, verified across every caller
+- [ ] **CSI-03**: A static-analysis script (`scripts/check-delegatecall-alignment.sh` or similar) is added and wired into the Makefile gate so any future delegatecall/interface misalignment fails `make test`
 
-### Events
+### Raw Selector & Calldata Audit (Phase 221)
 
-- [x] **EVNT-01**: `DailyWinningTraits` event emitted per daily drawing with main traits, bonus traits, and bonus target level
-- [x] **EVNT-02**: Existing `JackpotBurnieWin` reused for individual bonus winners
+- [ ] **CSI-04**: Every `bytes4(0x...)` hex literal in `contracts/` is cataloged; each one is either (a) justified in-place with a code comment naming the function it represents, or (b) replaced with an interface-bound `IXxx.fn.selector` reference
+- [ ] **CSI-05**: Every `bytes4(keccak256("..."))` string-derived selector in `contracts/` is cataloged and each one is justified or replaced with interface-bound form
+- [ ] **CSI-06**: Every manual `abi.encode` / `abi.encodeCall` / `abi.encodeWithSignature` that bypasses interface-bound selectors (i.e., does not reference an `IXxx.fn.selector`) is cataloged with rationale
+- [ ] **CSI-07**: Catalog output is a findings document listing every raw selector site with severity verdict (JUSTIFIED / REPLACED / FLAGGED)
 
-### Verification
+### External Function Coverage Gap (Phase 222)
 
-- [ ] **VRFY-01**: Delta audit confirms main ETH distribution path unchanged
-- [x] **VRFY-02**: Gas measurement confirms headroom preserved under worst-case bonus distribution
+- [ ] **CSI-08**: The test suite compile error in `test/fuzz/FuturepoolSkim.t.sol` (`_applyTimeBasedFutureTake` undeclared identifier) is fixed so `forge coverage` can run
+- [ ] **CSI-09**: `forge coverage --report summary` runs to completion and produces per-function line/branch coverage data for all deployed contracts (`DegenerusGame`, modules, `BurnieCoin`, `BurnieCoinflip`, `DegenerusAffiliate`, `DegenerusJackpots`, `DegenerusQuests`, `StakedDegenerusStonk`, `DegenerusVault`, `DegenerusStonk`)
+- [ ] **CSI-10**: Every external/public function on a deployed contract is classified as COVERED (≥1 test invokes it), CRITICAL_GAP (needs new test — on a path that could revert at runtime like `mintPackedFor` did), or EXEMPT (admin/governance/emergency path, documented rationale)
+- [ ] **CSI-11**: All CRITICAL_GAP functions identified in CSI-10 have at least one new test added that exercises them on a realistic path (not just direct invocation with happy-path args — must cover the conditional entry points where the real bug manifested)
 
-## v25.0 Requirements
+### Findings Consolidation (Phase 223)
 
-Requirements for this milestone. Each maps to roadmap phases.
-
-### Delta Extraction
-
-- [x] **DELTA-01**: Function-level changelog of all changed/new/deleted functions from v5.0 (phase 103) through v24.1 (phase 212)
-- [x] **DELTA-02**: Contract-by-contract change classification (NEW / MODIFIED / DELETED / UNCHANGED)
-- [x] **DELTA-03**: Interaction map between changed functions identifying cross-module call chains
-
-### Adversarial Audit
-
-- [x] **ADV-01**: Every changed/new function audited for reentrancy, access control, integer overflow, and state corruption
-- [x] **ADV-02**: Storage layout verified across all DegenerusGameStorage inheritors via forge inspect
-- [x] **ADV-03**: Cross-function attack chain analysis for composition bugs across the combined v6.0-v24.1 delta
-- [x] **ADV-04**: Call graph audit of all changed external/public entry points
-
-### RNG (Fresh Eyes)
-
-- [x] **RNG-01**: VRF request/fulfillment lifecycle traced end-to-end with no reliance on prior audit conclusions
-- [x] **RNG-02**: Backward trace from every RNG consumer proving word was unknown at input commitment time
-- [x] **RNG-03**: Controllable-state window analysis between VRF request and fulfillment for every path
-- [x] **RNG-04**: Word derivation verification — every keccak/shift/mask producing a game outcome traced to its VRF source
-- [x] **RNG-05**: rngLocked mutual exclusion verification across all state-changing paths
-
-### Pool & ETH Accounting
-
-- [x] **POOL-01**: ETH conservation proof across the restructured pool architecture (consolidated pools, write batching, two-call split)
-- [x] **POOL-02**: Pool mutation audit of all SSTORE sites touching prize pool / claimable pool / future pool
-- [x] **POOL-03**: Cross-module flow verification for jackpot payouts, redemption, and sweep paths
-
-### Findings Consolidation
-
-- [x] **FIND-01**: All findings severity-classified (CRITICAL / HIGH / MEDIUM / LOW / INFO)
-- [x] **FIND-02**: KNOWN-ISSUES.md updated with any new entries
-- [x] **FIND-03**: Regression check against all prior findings (v3.3 through v24.1)
+- [ ] **CSI-12**: `audit/FINDINGS-v27.0.md` is produced with severity-classified findings rolled up from phases 220-222 (HIGH / MEDIUM / LOW / INFO), following the `audit/FINDINGS-v25.0.md` structure
+- [ ] **CSI-13**: `KNOWN-ISSUES.md` is updated with any accepted INFO/LOW items that are design decisions rather than bugs
+- [ ] **CSI-14**: `MILESTONES.md` retrospective entry is written (mirroring v25.0 / v26.0 format); `PROJECT.md` moves v27.0 to "Completed Milestone"; v27.0 marked SHIPPED
 
 ## Future Requirements
 
-None deferred.
+Deferred to later milestones. Tracked but not in this roadmap.
 
-## Out of Scope
+### Storage & Deploy Integrity (future)
 
-| Feature | Reason |
-|---------|--------|
-| Separate VRF request for bonus | Creates commitment window vulnerability; same VRF word with domain separation is sufficient |
-| New storage slot for bonus traits | Space exists but unnecessary -- derive inline from randWord |
-| Lootbox eligibility gate | No gate change -- eligible by having future-level tickets |
-| Changes to far-future BURNIE distribution | Queue-based (no traits), unaffected by split |
-| Changes to early-bird lootbox jackpot | Own per-winner trait selection at lvl+1, already correct |
-| Separate BonusBurnieWin event | Existing JackpotBurnieWin reused per user decision |
-| Test coverage gaps | User explicitly excluded test work from this milestone |
-| Frontend code | Not in audit scope |
-| Off-chain infrastructure | VRF coordinator is external |
-| Unchanged functions (pre-v6.0) | Covered by v5.0 Ultimate Adversarial Audit |
+- Storage layout regression script (automate what v25.0 verified manually across 13 DegenerusGameStorage inheritors)
+- Deployed bytecode vs compiled source verification (requires RPC infrastructure)
+
+### Revert Specificity (future)
+
+- Replace generic `revert E()` sites with specific custom errors where the call site warrants — improves debuggability; currently every `E()` is indistinguishable in traces
+
+## Out of Scope (v27.0)
+
+Explicit exclusions with reasoning:
+
+- **Storage layout consistency check** — already verified in v25.0 ("forge inspect confirms identical 84-variable storage layout across all 13 DegenerusGameStorage inheritors"). Re-running under v27.0 adds no signal; automation is a future concern, not a same-class-bug hunt.
+- **Deployed bytecode match** — requires RPC access and a verification pipeline; different architectural concern (deploy integrity, not source integrity).
+- **Reentrancy sweep** — already verified in v25.0 ("zero VULNERABLE findings, all external calls follow CEI"). Not the mintPackedFor class.
+- **Adversarial economic paths** — covered by v25.0 adversarial audit; different risk class.
+- **`is IDegenerusGame` compile-time inheritance enforcement** — the strongest possible guarantee (forces the compiler to enforce every interface function), but would require adding `override` to ~57 functions on `DegenerusGame` and similar churn on other contracts. High mechanical cost against the current `check-interfaces` gate which catches the same class at `make test` time. Reconsider if the gate ever produces false negatives.
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| TSPL-01 | 218 | Complete |
-| TSPL-02 | 218 | Complete |
-| WIRE-01 | 218 | Complete |
-| WIRE-02 | 218 | Complete |
-| WIRE-03 | 218 | Complete |
-| WIRE-04 | 218 | Complete |
-| WIRE-05 | 218 | Complete |
-| EVNT-01 | 218 | Complete |
-| EVNT-02 | 218 | Complete |
-| VRFY-01 | 219 | Pending |
-| VRFY-02 | 219 | Complete |
-| DELTA-01 | 213 | Complete |
-| DELTA-02 | 213 | Complete |
-| DELTA-03 | 213 | Complete |
-| ADV-01 | 214 | Complete |
-| ADV-02 | 214 | Complete |
-| ADV-03 | 214 | Complete |
-| ADV-04 | 214 | Complete |
-| RNG-01 | 215 | Complete |
-| RNG-02 | 215 | Complete |
-| RNG-03 | 215 | Complete |
-| RNG-04 | 215 | Complete |
-| RNG-05 | 215 | Complete |
-| POOL-01 | 216 | Complete |
-| POOL-02 | 216 | Complete |
-| POOL-03 | 216 | Complete |
-| FIND-01 | 217 | Complete |
-| FIND-02 | 217 | Complete |
-| FIND-03 | 217 | Complete |
-
-**Coverage:**
-- v26.0 requirements: 11 total
-- v25.0 requirements: 18 total
-- Mapped to phases: 29
-- Unmapped: 0
-
----
-*Requirements defined: 2026-04-11*
-*Last updated: 2026-04-12 -- EVNT-01 corrected to DailyWinningTraits, Phase 218 requirements marked Complete, VRFY-02 marked Complete*
+To be filled by roadmap (each requirement mapped to exactly one phase).
