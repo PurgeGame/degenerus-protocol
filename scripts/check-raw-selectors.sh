@@ -26,6 +26,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 CONTRACTS_DIR="${CONTRACTS_DIR:-contracts}"
 
+[[ -d "$CONTRACTS_DIR" ]] || {
+  printf "ERROR: CONTRACTS_DIR does not exist: %s\n" "$CONTRACTS_DIR" >&2
+  exit 1
+}
+
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'; NC=$'\033[0m'
 
 # Path-level exclusion list. contracts/mocks/ intentionally mimics Chainlink
@@ -81,7 +86,6 @@ is_justified_feeder() {
 }
 
 fail_total=0
-warn_total=0
 justified_total=0
 
 # Run a single-line grep-based scan over CONTRACTS_DIR for $2 (regex), printing
@@ -178,7 +182,7 @@ done < <(
 )
 
 echo
-if (( fail_total == 0 && warn_total == 0 )); then
+if (( fail_total == 0 )); then
   if (( justified_total == 0 )); then
     printf "%bPASS%b no raw selectors or hand-rolled calldata encoders in %s (excluding %s)\n" \
       "$GREEN" "$NC" "$CONTRACTS_DIR" "${EXCLUDE_PATHS[*]}"
@@ -188,7 +192,6 @@ if (( fail_total == 0 && warn_total == 0 )); then
   fi
   exit 0
 fi
-(( fail_total > 0 )) && printf "%bFAIL%b %d site(s) with raw selector or hand-rolled encoding — replace with interface-bound form or add \`// raw-selectors: justified — <reason>\` marker\n" \
+printf "%bFAIL%b %d site(s) with raw selector or hand-rolled encoding — replace with interface-bound form or add \`// raw-selectors: justified — <reason>\` marker\n" \
   "$RED" "$NC" "$fail_total"
-(( warn_total > 0 )) && printf "%bWARN%b %d site(s) flagged\n" "$YELLOW" "$NC" "$warn_total"
 exit 1

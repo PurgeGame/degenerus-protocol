@@ -8,10 +8,13 @@ files_reviewed_list:
   - Makefile
 findings:
   critical: 0
-  warning: 2
+  warning: 0
   info: 3
-  total: 5
-status: issues_found
+  total: 3
+  resolved:
+    - WR-221-01
+    - WR-221-02
+status: info_only
 ---
 
 # Phase 221: Code Review Report
@@ -37,7 +40,9 @@ plausible operator inputs.
 
 ## Warnings
 
-### WR-221-01: Non-existent `CONTRACTS_DIR` silently passes instead of erroring
+### WR-221-01: Non-existent `CONTRACTS_DIR` silently passes instead of erroring — RESOLVED
+
+**Status:** RESOLVED. Guard added at `scripts/check-raw-selectors.sh:29-32`: `[[ -d "$CONTRACTS_DIR" ]]` check exits 1 with stderr error when directory missing. Verified: `CONTRACTS_DIR=/tmp/nonexistent bash scripts/check-raw-selectors.sh` now exits 1 (was 0).
 
 **File:** `scripts/check-raw-selectors.sh:103-105, 151`
 
@@ -69,7 +74,9 @@ fi
 
 ---
 
-### WR-221-02: `warn_total` is declared and tested but never incremented — dead variable
+### WR-221-02: `warn_total` is declared and tested but never incremented — RESOLVED
+
+**Status:** RESOLVED via Option A (remove). Dead `warn_total=0` declaration, `&& warn_total == 0` summary test, and `(( warn_total > 0 )) && printf WARN...` exit-path line all removed from `scripts/check-raw-selectors.sh`. Summary logic simplified to `if (( fail_total == 0 ))`. Clean-tree gate still exits 0.
 
 **File:** `scripts/check-raw-selectors.sh:84, 181, 193`
 
