@@ -1,44 +1,37 @@
 ---
 gsd_state_version: 1.0
-milestone: v25.0
-milestone_name: Full Audit (Post-v5.0 Delta + Fresh RNG)
-status: verifying
-stopped_at: Completed 217-02-PLAN.md
-last_updated: "2026-04-11T02:57:38.730Z"
-last_activity: 2026-04-11
+milestone: v27.0
+milestone_name: Call-Site Integrity Audit
+status: active
+stopped_at: Defining requirements
+last_updated: "2026-04-12T12:00:00.000Z"
+last_activity: 2026-04-12 -- v27.0 milestone started
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 18
-  completed_plans: 18
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-10)
+See: .planning/PROJECT.md (updated 2026-04-12)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** Phase 217 — findings-consolidation
+**Current focus:** v27.0 Call-Site Integrity Audit — surface runtime call-site-to-implementation mismatches (mintPackedFor-class bugs)
 
 ## Current Position
 
-Phase: 217 (findings-consolidation) — EXECUTING
-Plan: 2 of 2
-Milestone: v25.0 — Full Audit (Post-v5.0 Delta + Fresh RNG)
-Status: Phase complete — ready for verification
-Last activity: 2026-04-11
+Phase: Not started (defining requirements)
+Plan: —
+Milestone: v27.0 — Call-Site Integrity Audit
+Status: Defining requirements
+Last activity: 2026-04-12
 
-Progress: [░░░░░░░░░░] 0%
-
-## Performance Metrics
-
-**Velocity:**
-
-- Total plans completed: 38 (v24.1 milestone)
-- Timeline: 2 days (2026-04-09 to 2026-04-10)
+Progress: [          ] 0%
 
 ## Accumulated Context
 
@@ -47,30 +40,14 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v25.0]: Audit baseline is v5.0 (Ultimate Adversarial Audit, phases 103-119). All changes v6.0-v24.1 in scope.
-- [v25.0]: RNG audit is fresh-eyes — no reliance on prior RNG conclusions from v3.7/v3.8/v3.9.
-- [v25.0]: No test work in this milestone — purely audit findings and fixes.
-- [v25.0]: Phases 214/215/216 can run in parallel after 213 completes.
-- [Phase 213]: Tabular format for classification and changelog; MOVED functions tracked bidirectionally for EndgameModule elimination
-- [Phase 213]: Icons32Data.sol UNCHANGED (comment-only); JackpotBucketLib.sol MODIFIED (NatSpec documents semantic behavior); ContractAddresses.sol MODIFIED (GNRUS added, WXRP removed)
-- [Phase 213]: Cross-module interaction map: 99 chains categorised (56 SM, 20 EF, 11 RNG, 12 RO) with chain IDs linking to downstream audit phases 214/215/216
-- [Phase 214]: Zero VULNERABLE findings in reentrancy/CEI audit -- all external calls follow CEI ordering, rngLockedFlag provides mutual exclusion
-- [Phase 214]: Storage layout IDENTICAL across all 13 DegenerusGameStorage inheritors (84 entries each) -- delegatecall safety confirmed via forge inspect
-- [Phase 214]: Zero VULNERABLE findings in access control + overflow audit -- all 271 verdicts SAFE, 12 modifier transitions equivalent-or-stronger, all type narrowings proven safe
-- [Phase 214]: Zero VULNERABLE findings in state corruption + composition audit -- all packed fields, pool consolidation memory-batch, two-call split, and GNRUS state integrity verified SAFE
-- [Phase 214]: Zero VULNERABLE attack chains across 23 multi-step scenarios; 99 cross-module chains assessed; all INFO items structurally blocked
-- [Phase 215]: VRF lifecycle traced end-to-end: 17 TRACED verdicts, zero CONCERN, write-once word storage proven, rngLockedFlag asymmetry documented (daily only, not lootbox)
-- [Phase 215]: Backward trace: 12 SAFE + 1 INFO across 11 RNG chains; zero VULNERABLE; three independent commitment isolation mechanisms documented (index advance, buffer swap, explicit guard)
-- [Phase 215]: Commitment window: 3 SAFE + 1 INFO windows; zero VULNERABLE; 4 isolation mechanisms (rngLockedFlag, double-buffer, index advance, pool freeze)
-- [Phase 215]: Word derivation: 14 VRF-SOURCED + 1 MIXED (gameover prevrandao) + 1 NON-VRF (deity pre-VRF fallback); zero findings; LCG seed provenance confirmed
-- [Phase 215]: Phase verdict SOUND: VRF/RNG system proven from first principles with zero VULNERABLE findings
-- [Phase 215]: rngBypass is compile-time parameter (4 internal callers only); rngLockedFlag has 3 recovery paths for stuck-lock scenario
-- [Phase 216]: ETH conservation CONSERVED across all 20 EF chains; 3 INFO findings (overpay dust, BPS rounding, claimablePool temp inequality)
-- [Phase 216]: 75 SSTORE sites catalogued across 9 contracts -- zero VULNERABLE, 5 INFO (uint128 narrowing); all 4 threat mitigations confirmed
-- [Phase 216]: Phase 216 verdict SOUND: zero VULNERABLE findings across conservation proof (Plan 01), SSTORE catalogue (Plan 02), and cross-module flows (Plan 03); 8 INFO total
-- [Phase 217]: 13 INFO findings consolidated with F-25-xx numbering; 3 design decisions promoted to KNOWN-ISSUES.md per D-03
-- [Phase 217]: I-02 STRUCTURALLY RESOLVED (lastLootboxRngWord deleted); I-13 SUPERSEDED (boon upgrade-only); I-20 STRUCTURALLY RESOLVED (WWXRP rewritten); I-09 FIXED (event post-reconciliation after inlining)
-- [Phase 217]: 31 prior findings regression-checked with zero regressions: F-185-01 STILL FIXED (memory-batch pattern), F-187-01 STILL PRESENT (accepted lvl%100 trigger)
+- [v26.0]: Jackpot split into main (ETH, current-level tickets, main traits) and bonus (BURNIE, future-level tickets, independent trait roll)
+- [v26.0]: Bonus near-future range [lvl+1, lvl+4] — lvl parameter IS purchaseLevel in both phases (level already incremented at RNG request time during jackpot transition)
+- [v26.0]: No storage for bonus traits — derive inline from randWord via keccak256, emit event only
+- [v26.0]: Carryover uses bonus traits (draws from future-level tickets)
+- [v26.0]: Early-bird lootbox unchanged (own per-winner trait selection, already draws from lvl+1)
+- [v26.0]: Reuse existing JackpotBurnieWin event for individual bonus winners
+- [v26.0]: DailyWinningTraits event (richer than spec) replaces BonusWinningTraits — includes both main and bonus trait sets
+- [v26.0]: Level-1 branch skips payDailyJackpot, runs double payDailyCoinJackpot with salted rngWord for entropy independence
 
 ### Pending Todos
 
@@ -82,5 +59,5 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-11T02:57:38.728Z
-Stopped at: Completed 217-02-PLAN.md
+Last session: 2026-04-12
+Stopped at: Milestone v26.0 shipped

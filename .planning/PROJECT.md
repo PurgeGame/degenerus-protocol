@@ -8,18 +8,29 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v25.0 Full Audit (Post-v5.0 Delta + Fresh RNG)
+## Current Milestone: v27.0 Call-Site Integrity Audit
 
-**Goal:** Comprehensive adversarial audit of all changes since v5.0, plus ground-up RNG re-audit with no reliance on prior RNG conclusions.
+**Goal:** Systematically surface runtime call-site-to-implementation mismatches that static compilation does not catch — the same class of bug as the `mintPackedFor` regression, where a call passes compile, may pass superficial tests, but reverts at runtime because selector/target/path alignment is wrong.
 
-**Target features:**
-- Delta extraction: all changed/new functions from v6.0 through v24.1
-- Per-function adversarial audit of every changed function
-- Fresh-eyes RNG audit: commitment windows, VRF lifecycle, word derivation — from scratch
-- Storage layout verification across v24.1 packing
-- Cross-module interaction audit (pool flows, redemption, jackpots across consolidated architecture)
-- ETH conservation proof across restructured pool accounting
-- Consolidated findings with severity classification
+**Target scope:**
+- Delegatecall target alignment across all `<ADDR>.delegatecall(abi.encodeWithSelector(IFACE.fn.selector, ...))` sites
+- Raw selector and calldata literals (`bytes4(0x...)`, `bytes4(keccak256(...))`, manual abi encoders)
+- External/public function test coverage gaps (unexercised surface = potential undetected mintPackedFor-class bugs)
+- Findings consolidation into audit/FINDINGS-v27.0.md
+
+**Prior incident context:** `mintPackedFor(address)` was declared in `IDegenerusGame` and called via staticcall from `DegenerusQuests._isLevelQuestEligible`, but had no implementation on `DegenerusGame`. Level-quest completion during purchase silently reverted under the narrow condition where accumulated progress crossed threshold on that single call, surfacing as generic `E()`. Fixed in commit `a0bf328b`. Makefile gate `check-interfaces` added in commit `23bbd671`. v27.0 extends this coverage.
+
+## Completed Milestone: v26.0 Bonus Jackpot Split
+
+**Status:** Complete (2026-04-12)
+
+**Result:** 2 phases (218-219), 4 plans. Phase 218 parameterized `_rollWinningTraits` with keccak256 domain separation for independent bonus traits, rewired all 6 jackpot caller sites, removed DJT storage infrastructure, added `DailyWinningTraits` event, and introduced level-1 double coin jackpot branch. Phase 219 delta audit: 10 code path sections, 13 verdicts, 0 findings. Main ETH path proven EQUIVALENT at all 5 sub-paths. Event correctness verified at all 3 emission sites. Entropy independence proven (E1 != E2 via keccak256 preimage resistance). Gas: +1,523 gas/drawing (0.022%), 1.993x headroom PRESERVED. All 11/11 requirements satisfied.
+
+## Completed Milestone: v25.0 Full Audit (Post-v5.0 Delta + Fresh RNG)
+
+**Status:** Complete (2026-04-11)
+
+**Result:** 5 phases (213-217), 18 plans. Delta extraction (99 cross-module chains mapped). Adversarial audit (700+ verdicts, 0 VULNERABLE). RNG fresh-eyes (VRF/RNG proven SOUND from first principles). ETH conservation proof (20 flow chains, 75 SSTORE sites). Findings consolidation (13 INFO, 31-item regression with zero regressions). 3 design decisions promoted to KNOWN-ISSUES.md. All 18/18 requirements satisfied. Deliverable: `audit/FINDINGS-v25.0.md`.
 
 ## Completed Milestone: v24.0 Gameover Flow Audit & Fix
 
@@ -171,6 +182,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - ✓ v21.0 Jackpot Two-Call Split & Skip-Split Optimization — v21.0 Phases 195-198
 - ✓ v22.0 Delta Audit & Payout Reference Rewrite — purchase phase jackpot redesign, event catalog — v22.0 Phases 199-200
 - ✓ v23.0 Redemption Coinflip Fix — phantom creditFlip removed from 3 resolution paths, EQUIVALENT delta audit, 4/4 requirements — v23.0 Phases 201-202
+- ✓ v25.0 Full Audit (Post-v5.0 Delta + Fresh RNG) — 5 phases, 18 plans, 18/18 requirements. Delta extraction (99 chains), adversarial (700+ verdicts, 0 VULNERABLE), RNG fresh-eyes (SOUND), ETH conservation (algebraic proof), findings consolidation (13 INFO, 31 regressions checked, 0 regressed) — v25.0 Phases 213-217
 
 ## Completed Milestone: v8.1 Final Audit Prep
 
@@ -322,7 +334,7 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current State
 
-v25.0 Full Audit milestone in progress (2026-04-11). Phase 213 (Delta Extraction) complete — 46 contract files classified, function-level changelogs produced, 99 cross-module call chains mapped. Phase 214 (Adversarial Audit) complete — zero VULNERABLE across reentrancy, access control, overflow, state corruption, and composition analysis; storage layout identical across all 13 inheritors. Phase 215 (RNG Fresh Eyes) complete — VRF/RNG system proven SOUND from first principles: 17 lifecycle traces, 13 backward traces (12 SAFE, 1 INFO), 4 commitment windows (3 SAFE, 1 INFO), 16 word derivation paths verified, rngLocked mutual exclusion confirmed. Phase 216 (Pool & ETH Accounting) complete — ETH conservation proven SOUND: all 20 EF chains CONSERVED with algebraic proof (154 line refs), 75 SSTORE sites catalogued (0 VULNERABLE), all cross-module handoffs verified. Phase 217 (Findings Consolidation) next.
+v26.0 Bonus Jackpot Split milestone started (2026-04-11). Splitting jackpot system into two independent drawings: main (ETH, current-level tickets, main traits) and bonus (BURNIE, future-level tickets, independent trait roll with hero preserved). Both `payDailyCoinJackpot` (purchase phase) and `payDailyJackpotCoinAndTickets` coin+carryover portions (jackpot phase) affected. No storage for bonus traits — emit event only.
 
 ## Completed Milestone: v17.1 Comment Correctness Sweep
 
@@ -392,4 +404,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-10 after Phase 214 Adversarial Audit (v25.0)*
+*Last updated: 2026-04-12 — v27.0 Call-Site Integrity Audit milestone started*
