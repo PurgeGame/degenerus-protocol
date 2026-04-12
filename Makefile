@@ -1,4 +1,4 @@
-.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors coverage-check invariant-test invariant-build invariant-clean
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
@@ -29,6 +29,19 @@ check-delegatecall:
 # intentionally raw. Operates on source text — no forge build prerequisite.
 check-raw-selectors:
 	@scripts/check-raw-selectors.sh
+
+# ── External-function coverage classification gate (standalone) ─────────
+# Enforces 222-01-COVERAGE-MATRIX.md: every external/public function on
+# every deployable source artifact is classified (no universe drift),
+# every CRITICAL_GAP has a linked Test Ref (no uncured gaps), and every
+# COVERED row still meets the 50% file-level branch-coverage threshold
+# in the cached lcov.info (no regressions). STANDALONE target — NOT a
+# prerequisite of test-foundry / test-hardhat because forge coverage is
+# minutes-long (D-16). Caller runs `forge coverage --report lcov --ir-minimum`
+# first to produce lcov.info; then this target consumes the cached lcov
+# plus the matrix and reports drift / gaps / regressions in seconds.
+coverage-check:
+	@scripts/coverage-check.sh
 
 # ── Unified test targets ────────────────────────────────────────────────
 # Patches ContractAddresses.sol with Foundry-predicted addresses before
