@@ -342,11 +342,23 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     if (purchaseLevel == 1) {
                         _emitDailyWinningTraits(1, rngWord, 1);
                         _payDailyCoinJackpot(1, rngWord, 1, 1);
-                        uint256 saltedRng = uint256(keccak256(abi.encodePacked(rngWord, keccak256("BONUS_TRAITS"))));
+                        uint256 saltedRng = uint256(
+                            keccak256(
+                                abi.encodePacked(
+                                    rngWord,
+                                    keccak256("BONUS_TRAITS")
+                                )
+                            )
+                        );
                         _payDailyCoinJackpot(1, saltedRng, 2, 5);
                     } else {
                         payDailyJackpot(false, purchaseLevel, rngWord);
-                        _payDailyCoinJackpot(purchaseLevel, rngWord, purchaseLevel + 1, purchaseLevel + 4);
+                        _payDailyCoinJackpot(
+                            purchaseLevel,
+                            rngWord,
+                            purchaseLevel + 1,
+                            purchaseLevel + 4
+                        );
                     }
                     // FLAG-02: combined target + game-over check (shares SLOADs when flag is set)
                     bool targetMet = gameOverPossible
@@ -425,7 +437,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 payDailyJackpotCoinAndTickets(rngWord);
                 if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
                     _endPhase();
-                    _unlockRng(day);
                     stage = STAGE_JACKPOT_PHASE_ENDED;
                     break;
                 }
@@ -854,7 +865,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @param randWord VRF random word for winner selection.
     /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
     /// @param maxLevel Maximum target level for near-future coin distribution (inclusive).
-    function _payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) private {
+    function _payDailyCoinJackpot(
+        uint24 lvl,
+        uint256 randWord,
+        uint24 minLevel,
+        uint24 maxLevel
+    ) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
             .delegatecall(
@@ -873,8 +889,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
     ///      Self-call preserves msg.sender == address(this) across the delegatecall so the
     ///      JackpotModule's OnlyGame check passes.
-    function _emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) private {
-        IDegenerusGame(address(this)).emitDailyWinningTraits(lvl, randWord, bonusTargetLevel);
+    function _emitDailyWinningTraits(
+        uint24 lvl,
+        uint256 randWord,
+        uint24 bonusTargetLevel
+    ) private {
+        IDegenerusGame(address(this)).emitDailyWinningTraits(
+            lvl,
+            randWord,
+            bonusTargetLevel
+        );
     }
 
     /// @dev Enforce "must mint today" gate for advanceGame callers.
