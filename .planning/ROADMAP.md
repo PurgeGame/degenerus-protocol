@@ -7,7 +7,7 @@
 - ✅ **v3.0-v24.1** — Phases 19-212 (shipped 2026-04-10)
 - ✅ **v25.0 Full Audit (Post-v5.0 Delta + Fresh RNG)** — Phases 213-217 (shipped 2026-04-11)
 - ✅ **v26.0 Bonus Jackpot Split** — Phases 218-219 (shipped 2026-04-12)
-- 🚧 **v27.0 Call-Site Integrity Audit** — Phases 220-223 (in progress)
+- ✅ **v27.0 Call-Site Integrity Audit** — Phases 220-223 (shipped 2026-04-13)
 
 ## Phases
 
