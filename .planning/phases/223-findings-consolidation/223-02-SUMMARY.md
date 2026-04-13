@@ -202,6 +202,24 @@ The `gsd-tools commit` tool returning `skipped_gitignored` required a fallback t
 - **Handoff artifacts:** `audit/FINDINGS-v27.0.md` (16 F-27-NN INFO findings + v25.0 regression appendix), updated `KNOWN-ISSUES.md` (37 bolded entries, 3 new v27.0 design decisions), v27.0 retrospective in `.planning/MILESTONES.md` (7 accomplishments bullets), and `.planning/PROJECT.md` Completed Milestone block with narrative preserved.
 - **Audit-trail continuity:** Every WR-* / IN-* / Gap item from the three source phases (220/221/222) is now traceable through F-27-NN in FINDINGS-v27.0.md; KNOWN-ISSUES.md entries point readers at the three most externally-relevant items (F-27-05, F-27-12, F-27-13 + F-27-14).
 
+## Self-Check: PASSED
+
+Claim verification after SUMMARY authoring:
+
+- `.planning/phases/223-findings-consolidation/223-02-SUMMARY.md` exists (verified via `[ -f ... ]`).
+- Task 1 commit `3d798794` exists in `git log --oneline --all`.
+- Task 2 commit `5408f745` exists in `git log --oneline --all`.
+- Final metadata commit `7f8cff7d` exists in `git log --oneline --all`.
+- All 4 target files exist and are tracked: `KNOWN-ISSUES.md`, `.planning/MILESTONES.md`, `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`.
+- STATE.md `completed_plans: 9`, `percent: 100`, Stopped-at set to Plan 223-02 completion.
+- ROADMAP Phase 223 row: `2/2 | Complete | 2026-04-13` with `[x]` flag.
+- REQUIREMENTS.md: CSI-13 and CSI-14 both show `[x]` checkboxes and traceability row `Complete`.
+- Sibling Makefile gates (`make check-interfaces`, `make check-delegatecall`, `make check-raw-selectors`) all exit 0 on this tree.
+- `audit/FINDINGS-v27.0.md` byte-unchanged (`git diff HEAD~3..HEAD audit/FINDINGS-v27.0.md` returns empty).
+- No contracts/ edits this plan (`git diff --name-only HEAD~3..HEAD contracts/` returns empty).
+- No test/ edits this plan (the three pre-existing dirty files — `DeployCanary.t.sol`, `DeployProtocol.sol`, `deployFixture.js` — are documented in STATE.md blockers and were not staged or modified by this plan).
+- Cross-file consistency passes: MILESTONES and PROJECT both cite `16 INFO findings` and `177+1 CRITICAL_GAP`; bare `178 CRITICAL_GAP` absent from both.
+
 ---
 *Phase: 223-findings-consolidation*
 *Completed: 2026-04-13*
