@@ -95,11 +95,13 @@ None — plan executed exactly as written. Consolidation counts landed at 16 (wi
 
 **Stable F-27-NN IDs locked:** downstream Plan 223-02 can reference any F-27-NN without risk of re-numbering.
 
-## Commit
+## Commits
 
-| Task | Name | Commit | Files |
-|------|------|--------|-------|
-| 1 | FINDINGS-v27.0.md authoring | `f0347093` | `audit/FINDINGS-v27.0.md` (new, 392 lines) |
+| # | Commit | Message | Files |
+|---|--------|---------|-------|
+| 1 | `f0347093` | docs(223-01): consolidate v27.0 findings into audit/FINDINGS-v27.0.md | `audit/FINDINGS-v27.0.md` (new, 392 lines) |
+| 2 | `0110b44b` | docs(223-01): complete findings-consolidation plan 01 | STATE.md, ROADMAP.md, REQUIREMENTS.md, SUMMARY.md, deferred-items.md |
+| 3 | `bfac83c1` | docs(223-01): add per-sub-point Resolved markers to F-27-13 | `audit/FINDINGS-v27.0.md` (+4/-4; bumps Resolved-marker count from 4 to 5 to match plan acceptance >= 5) |
 
 ## Self-Check: PASSED
 
