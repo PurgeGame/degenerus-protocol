@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
-status: executing
-stopped_at: Completed 223-01-PLAN.md
-last_updated: "2026-04-13T02:18:10.637Z"
+status: verifying
+stopped_at: Completed 223-02-PLAN.md — v27.0 Call-Site Integrity Audit SHIPPED
+last_updated: "2026-04-13T02:31:51.576Z"
 last_activity: 2026-04-13
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 8
-  percent: 89
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 Phase: 223 (findings-consolidation) — EXECUTING
 Plan: 2 of 2
 Milestone: v27.0 — Call-Site Integrity Audit
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-13
 
 Progress: [█████     ] 50% (2/4 phases — Phase 222 still executing)
@@ -71,6 +71,10 @@ Recent decisions affecting current work:
 - [Phase 222-02]: Standalone coverage-check Makefile target NOT a prereq of test-foundry/test-hardhat (D-16) because forge coverage --ir-minimum is ~8 min wall-clock
 - [Phase 223]: [Phase 223-01]: 16 F-27-NN findings consolidated (6 Phase 220 + 5 Phase 221 + 5 Phase 222); fold WR-222-02/04/Gap1 into F-27-13, WR-222-03/Gap2 into F-27-14; resolution SHAs f799da98 + ef83c5cd + e0a1aa3e embedded
 - [Phase 223]: [Phase 223-01]: v25.0 regression appendix verified 12 HOLDS + 1 SUPERSEDED (F-25-09 deity-boon fallback moved from AdvanceModule._deityDailySeed to DegenerusGame.deityBoonData; same no-VRF tier-3 semantics); no FIXED or INVALIDATED entries; no v26.0 regression needed (no separate FINDINGS-v26.0.md doc)
+- [Phase 223]: [Plan 223-02]: Promoted 3 KNOWN-ISSUES entries — F-27-12 (VRF_KEY_HASH regex), F-27-05 (parallel-make race), and combined F-27-13 + F-27-14 (VERIFICATION gap closures); F-27-15 deferred as forward-looking gate proposal rather than design decision
+- [Phase 223]: [Plan 223-02]: Preserved v27.0 Goal/Target-scope/Incident-context narrative verbatim when migrating Current Milestone to Completed Milestone in PROJECT.md; zero substantive content dropped
+- [Phase 223]: [Plan 223-02]: CONTEXT D-09 stale counts (4 phases / 7 plans / ~15 tasks) superseded by actuals (4 phases / 9 plans / 23 tasks) derived from plan task-tag counts; D-09 predated the 222-03 gap-closure plan
+- [Phase 223]: [Plan 223-02]: v27.0 Call-Site Integrity Audit SHIPPED 2026-04-13 — all 14/14 CSI-NN requirements Complete, all 4 ROADMAP success criteria met, 16 INFO findings consolidated, 3 new KNOWN-ISSUES entries
 
 ### Pending Todos
 
@@ -83,5 +87,5 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-13T02:18:10.633Z
-Stopped at: Completed 223-01-PLAN.md
+Last session: 2026-04-13T02:31:51.573Z
+Stopped at: Completed 223-02-PLAN.md — v27.0 Call-Site Integrity Audit SHIPPED

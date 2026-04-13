@@ -37,7 +37,7 @@
 - [x] **Phase 220: Delegatecall Target Alignment** - Verify every delegatecall target constant maps 1:1 to its interface and wire a static-analysis gate into the Makefile (completed 2026-04-12)
 - [x] **Phase 221: Raw Selector & Calldata Audit** - Catalog every `bytes4` literal, `keccak256` selector, and manual `abi.encode*` site with severity verdicts (completed 2026-04-12)
 - [~] **Phase 222: External Function Coverage Gap** - Fix fuzz compile error, run `forge coverage`, classify every external/public function, and add tests for CRITICAL_GAPs (222-01 + 222-02 done 2026-04-12; gap-closure 222-03 planned, closes VERIFICATION Gap 1 + Gap 2)
-- [ ] **Phase 223: Findings Consolidation** - Roll up phase 220-222 findings into `audit/FINDINGS-v27.0.md`, update `KNOWN-ISSUES.md`, and ship v27.0
+- [x] **Phase 223: Findings Consolidation** - Roll up phase 220-222 findings into `audit/FINDINGS-v27.0.md`, update `KNOWN-ISSUES.md`, and ship v27.0 (completed 2026-04-13)
 
 ## Phase Details
 
@@ -92,7 +92,7 @@
   4. `PROJECT.md` moves v27.0 from "Current Milestone" to "Completed Milestone" and v27.0 is marked SHIPPED in this file's Milestones list
 **Plans**: 2 plans
 - [x] 223-01-PLAN.md — Author `audit/FINDINGS-v27.0.md` consolidating all WR-*/IN-* items from 220/221/222 REVIEW.md + 222-VERIFICATION.md Gap 1 + Gap 2 into ~15 F-27-NN findings following v25.0 structure; include Regression Appendix verifying F-25-01..F-25-13 against current code; honors D-01..D-07 locked decisions (CSI-12)
-- [ ] 223-02-PLAN.md — Promote D-08-qualifying findings to KNOWN-ISSUES.md; write MILESTONES v27.0 retrospective entry per D-09; move v27.0 from "Current Milestone" to "Completed Milestone" in PROJECT.md per D-10; flip CSI-12/13/14 (and CSI-08/09/10 per 222-VERIFICATION note) checkboxes to [x] in REQUIREMENTS.md (CSI-13, CSI-14)
+- [x] 223-02-PLAN.md — Promote D-08-qualifying findings to KNOWN-ISSUES.md; write MILESTONES v27.0 retrospective entry per D-09; move v27.0 from "Current Milestone" to "Completed Milestone" in PROJECT.md per D-10; flip CSI-12/13/14 (and CSI-08/09/10 per 222-VERIFICATION note) checkboxes to [x] in REQUIREMENTS.md (CSI-13, CSI-14)
 
 ## Progress
 
@@ -111,4 +111,4 @@ Phase 220 first (or in parallel with 221). Phase 221 in parallel with 220. Phase
 | 220. Delegatecall Target Alignment | v27.0 | 2/2 | Complete    | 2026-04-12 |
 | 221. Raw Selector & Calldata Audit | v27.0 | 2/2 | Complete    | 2026-04-12 |
 | 222. External Function Coverage Gap | v27.0 | 3/3 | Complete    | 2026-04-13 |
-| 223. Findings Consolidation | v27.0 | 1/2 | In Progress|  |
+| 223. Findings Consolidation | v27.0 | 2/2 | Complete   | 2026-04-13 |
