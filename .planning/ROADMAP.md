@@ -111,4 +111,4 @@ Phase 220 first (or in parallel with 221). Phase 221 in parallel with 220. Phase
 | 220. Delegatecall Target Alignment | v27.0 | 2/2 | Complete    | 2026-04-12 |
 | 221. Raw Selector & Calldata Audit | v27.0 | 2/2 | Complete    | 2026-04-12 |
 | 222. External Function Coverage Gap | v27.0 | 3/3 | Complete    | 2026-04-13 |
-| 223. Findings Consolidation | v27.0 | 2/2 | Complete   | 2026-04-13 |
+| 223. Findings Consolidation | v27.0 | 2/2 | Complete    | 2026-04-13 |

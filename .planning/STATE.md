@@ -4,7 +4,7 @@ milestone: v27.0
 milestone_name: Call-Site Integrity Audit
 status: verifying
 stopped_at: Completed 223-02-PLAN.md — v27.0 Call-Site Integrity Audit SHIPPED
-last_updated: "2026-04-13T02:31:51.576Z"
+last_updated: "2026-04-13T02:55:21.856Z"
 last_activity: 2026-04-13
 progress:
   total_phases: 4
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 
 ## Current Position
 
-Phase: 223 (findings-consolidation) — EXECUTING
-Plan: 2 of 2
+Phase: 223
+Plan: Not started
 Milestone: v27.0 — Call-Site Integrity Audit
 Status: Phase complete — ready for verification
 Last activity: 2026-04-13
