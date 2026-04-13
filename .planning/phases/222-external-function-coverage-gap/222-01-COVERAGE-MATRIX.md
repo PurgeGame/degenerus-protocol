@@ -184,6 +184,7 @@ Post-fix: 19 functions across 4 files (`DegenerusJackpots.sol`, `DegenerusGameAd
 | `terminalDecWindow() external view returns (bool open, uint24 lvl)` | external view | EXEMPT | — | — | D-11: view/pure |
 | `runTerminalJackpot( uint256 poolWei, uint24 targetLvl, uint256 rngWord ) external returns (uint256 paidWei)` | external | CRITICAL_GAP | 18.23% (33/181) | test/fuzz/CoverageGap222.t.sol | file branch 18.23% (33/181) <50%; function never invoked pre-222-02 |
 | `consumeDecClaim( address player, uint24 lvl ) external returns (uint256 amountWei)` | external | CRITICAL_GAP | 18.23% (33/181) | test/fuzz/CoverageGap222.t.sol | file branch 18.23% (33/181) <50%; function never invoked pre-222-02 |
+| `emitDailyWinningTraits( uint24 lvl, uint256 randWord, uint24 bonusTargetLevel ) external` | external | CRITICAL_GAP | 18.23% (33/181) | test/fuzz/CoverageGap222.t.sol (+ existing suite) | file branch 18.23% (33/181) <50%; self-call wrapper invoked via advanceGame chain (post-e4064d67) |
 | `claimDecimatorJackpot(uint24 lvl) external` | external | CRITICAL_GAP | 18.23% (33/181) | test/fuzz/CoverageGap222.t.sol | file branch 18.23% (33/181) <50%; function never invoked pre-222-02 |
 | `decClaimable( address player, uint24 lvl ) external view returns (uint256 amountWei, bool winner)` | external view | EXEMPT | — | — | D-11: view/pure |
 | `claimWinnings(address player) external` | external | CRITICAL_GAP | 18.23% (33/181) | test/fuzz/CoverageGap222.t.sol (+ existing suite) | file branch 18.23% (33/181) <50%; function is invoked but insufficient branch cov |

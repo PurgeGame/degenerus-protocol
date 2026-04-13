@@ -61,6 +61,35 @@ NON_DEPLOYABLE_TOP_LEVEL=("ContractAddresses.sol" "DegenerusTraitUtils.sol")
 # not as its own address. Excluded per 222-01 Method Notes.
 NON_DEPLOYABLE_MODULES=("DegenerusGameMintStreakUtils.sol" "DegenerusGamePayoutUtils.sol")
 
+# ── Preflight: parse matrix into per-section function sets ─────────────
+# Populates contract_fns["contracts/<name>.sol"] = ";fn1;fn2;...;fnN;"
+# so Mode A drift check can scope the membership test to the section
+# matching the source file being scanned (Gap 2 fix from 222-VERIFICATION.md).
+# Without scoping, a same-name fn in one contract masks drift in another
+# (e.g., a drifted transfer() in DeityBoonViewer would be hidden by
+# BurnieCoin's transfer() row).
+declare -A contract_fns
+_current_section=""
+_tick=$'\x60'
+_header_re="^###[[:space:]]+Contract:[[:space:]]+${_tick}([^${_tick}]+)${_tick}"
+_fnrow_re="^[|][[:space:]]+${_tick}([^(${_tick}]+)[(]"
+while IFS= read -r _line; do
+  if [[ "$_line" =~ $_header_re ]]; then
+    _current_section="${BASH_REMATCH[1]}"
+    # Initialise to the sentinel empty set so a section header with no
+    # following function rows (an all-EXEMPT view/pure contract) still
+    # appears in the map with no functions.
+    contract_fns["$_current_section"]="${contract_fns[$_current_section]:-;}"
+  elif [[ -n "$_current_section" && "$_line" =~ $_fnrow_re ]]; then
+    # Matrix function row: pipe, space, backtick, fn-name, opening paren.
+    # Capture group 1 is the raw function name before the opening paren.
+    _fn_name="${BASH_REMATCH[1]}"
+    _fn_name="${_fn_name%"${_fn_name##*[![:space:]]}"}"
+    contract_fns["$_current_section"]+="${_fn_name};"
+  fi
+done < "$MATRIX_FILE"
+unset _current_section _line _fn_name _tick _header_re _fnrow_re
+
 fail_drift=0
 fail_gap=0
 fail_regress=0
@@ -87,7 +116,7 @@ is_excluded_path() {
 # function, confirm a row exists in the matrix by literal grep of the
 # leading backtick+name+`(` anchor. Missing → FAIL_DRIFT.
 check_matrix_drift() {
-  local file base target
+  local file base target _section_fns
   while IFS= read -r file; do
     base="${file##*/}"
     is_excluded_path "$file" && continue
@@ -98,10 +127,11 @@ check_matrix_drift() {
       is_in_list "$base" "${NON_DEPLOYABLE_MODULES[@]}" && continue
     fi
     target="${base%.sol}"
+    _section_fns="${contract_fns[$file]:-;}"
 
     while IFS=: read -r lineno name; do
       [[ -z "${lineno:-}" ]] && continue
-      if ! grep -qF "\`${name}(" "$MATRIX_FILE"; then
+      if [[ "$_section_fns" != *";${name};"* ]]; then
         printf "%bFAIL_DRIFT%b    %s:%s  %s(...) not in coverage matrix\n" \
           "$RED" "$NC" "$file" "$lineno" "$name"
         fail_drift=$((fail_drift + 1))
