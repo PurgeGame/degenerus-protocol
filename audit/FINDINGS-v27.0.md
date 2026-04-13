@@ -254,7 +254,7 @@ Three closely related test-quality observations on the CRITICAL_GAP coverage tes
 | **Severity** | INFO |
 | **Source** | Phase 222 (222-REVIEW.md WR-222-03 + 222-VERIFICATION.md Gap 2 -- consolidated per D-02 dedup rule) |
 | **Contract** | `scripts/coverage-check.sh` |
-| **Function** | `check_matrix_drift` `:89-164` (pre-fix, specifically the global `grep -qF` at `:104`) |
+| **Function** | `check_matrix_drift` `:89-164` (pre-fix, specifically the global `grep -qF` at `:104`; post-fix the function lives at `:118-164` after the preflight matrix parser was inserted above) |
 
 For each `external|public` function discovered in a source file, drift enforcement ran a `grep -qF` with a backtick-anchored function-name pattern against the matrix. This was a global search across the entire matrix. Multiple deployed contracts export identical names (`approve`, `transfer`, `transferFrom`, `burn`, `mint`, `burnAtGameOver`, `gameAdvance`). If `contracts/NewContract.sol` added a `transfer(address,uint256)` that was not classified for `NewContract`, the drift check PASSED because `BurnieCoin`'s row anchored the `transfer(` pattern somewhere in the matrix. Combined with D-05/D-06 exclusions (NON_DEPLOYABLE_TOP_LEVEL, NON_DEPLOYABLE_MODULES), the "every external function on every deployable artifact is classified" guarantee was only enforced at the function-NAME level across the whole file, not per (contract, function) pair. This weaker enforcement was the WR-03 / Gap 2 observation.
 
