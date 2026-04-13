@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v27.0
 milestone_name: Call-Site Integrity Audit
-status: verifying
+status: executing
 stopped_at: Completed 222-02-PLAN.md
-last_updated: "2026-04-12T22:50:07.174Z"
-last_activity: 2026-04-12
+last_updated: "2026-04-13T00:27:52.585Z"
+last_activity: 2026-04-13
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 7
+  completed_plans: 7
   percent: 100
 ---
 
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 
 ## Current Position
 
-Phase: 222 (external-function-coverage-gap) — EXECUTING
-Plan: 2 of 2 (Plan 01 complete, Plan 02 next)
+Phase: 223
+Plan: Not started
 Milestone: v27.0 — Call-Site Integrity Audit
-Status: Phase complete — ready for verification
-Last activity: 2026-04-12
+Status: Executing Phase 222
+Last activity: 2026-04-13
 
 Progress: [█████     ] 50% (2/4 phases — Phase 222 still executing)
 
