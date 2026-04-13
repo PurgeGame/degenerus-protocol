@@ -26,16 +26,16 @@ The scope is deliberately bounded to **call-site integrity**. Out of scope for t
 
 ### External Function Coverage Gap (Phase 222)
 
-- [ ] **CSI-08**: The test suite compile error in `test/fuzz/FuturepoolSkim.t.sol` (`_applyTimeBasedFutureTake` undeclared identifier) is fixed so `forge coverage` can run
-- [ ] **CSI-09**: `forge coverage --report summary` runs to completion and produces per-function line/branch coverage data for all deployed contracts (`DegenerusGame`, modules, `BurnieCoin`, `BurnieCoinflip`, `DegenerusAffiliate`, `DegenerusJackpots`, `DegenerusQuests`, `StakedDegenerusStonk`, `DegenerusVault`, `DegenerusStonk`)
-- [ ] **CSI-10**: Every external/public function on a deployed contract is classified as COVERED (≥1 test invokes it), CRITICAL_GAP (needs new test — on a path that could revert at runtime like `mintPackedFor` did), or EXEMPT (admin/governance/emergency path, documented rationale)
+- [x] **CSI-08**: The test suite compile error in `test/fuzz/FuturepoolSkim.t.sol` (`_applyTimeBasedFutureTake` undeclared identifier) is fixed so `forge coverage` can run
+- [x] **CSI-09**: `forge coverage --report summary` runs to completion and produces per-function line/branch coverage data for all deployed contracts (`DegenerusGame`, modules, `BurnieCoin`, `BurnieCoinflip`, `DegenerusAffiliate`, `DegenerusJackpots`, `DegenerusQuests`, `StakedDegenerusStonk`, `DegenerusVault`, `DegenerusStonk`)
+- [x] **CSI-10**: Every external/public function on a deployed contract is classified as COVERED (≥1 test invokes it), CRITICAL_GAP (needs new test — on a path that could revert at runtime like `mintPackedFor` did), or EXEMPT (admin/governance/emergency path, documented rationale)
 - [x] **CSI-11**: All CRITICAL_GAP functions identified in CSI-10 have at least one new test added that exercises them on a realistic path (not just direct invocation with happy-path args — must cover the conditional entry points where the real bug manifested)
 
 ### Findings Consolidation (Phase 223)
 
 - [x] **CSI-12**: `audit/FINDINGS-v27.0.md` is produced with severity-classified findings rolled up from phases 220-222 (HIGH / MEDIUM / LOW / INFO), following the `audit/FINDINGS-v25.0.md` structure
-- [ ] **CSI-13**: `KNOWN-ISSUES.md` is updated with any accepted INFO/LOW items that are design decisions rather than bugs
-- [ ] **CSI-14**: `MILESTONES.md` retrospective entry is written (mirroring v25.0 / v26.0 format); `PROJECT.md` moves v27.0 to "Completed Milestone"; v27.0 marked SHIPPED
+- [x] **CSI-13**: `KNOWN-ISSUES.md` is updated with any accepted INFO/LOW items that are design decisions rather than bugs
+- [x] **CSI-14**: `MILESTONES.md` retrospective entry is written (mirroring v25.0 / v26.0 format); `PROJECT.md` moves v27.0 to "Completed Milestone"; v27.0 marked SHIPPED
 
 ## Future Requirements
 
@@ -71,12 +71,12 @@ Explicit exclusions with reasoning:
 | CSI-05 | Phase 221 | Complete |
 | CSI-06 | Phase 221 | Complete |
 | CSI-07 | Phase 221 | Complete |
-| CSI-08 | Phase 222 | Pending |
-| CSI-09 | Phase 222 | Pending |
-| CSI-10 | Phase 222 | Pending |
+| CSI-08 | Phase 222 | Complete |
+| CSI-09 | Phase 222 | Complete |
+| CSI-10 | Phase 222 | Complete |
 | CSI-11 | Phase 222 | Complete |
 | CSI-12 | Phase 223 | Complete |
-| CSI-13 | Phase 223 | Pending |
-| CSI-14 | Phase 223 | Pending |
+| CSI-13 | Phase 223 | Complete |
+| CSI-14 | Phase 223 | Complete |
 
 **Coverage:** 14/14 requirements mapped to exactly one phase. No orphans. No duplicates.

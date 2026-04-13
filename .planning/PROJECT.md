@@ -8,7 +8,15 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: v27.0 Call-Site Integrity Audit
+## Current Milestone: TBD — pending roadmap planning
+
+**Status:** v27.0 complete (2026-04-13); next milestone pending roadmap planning. See `.planning/ROADMAP.md` for prior milestone history and `audit/FINDINGS-v27.0.md` for the most recent consolidated findings report.
+
+## Completed Milestone: v27.0 Call-Site Integrity Audit
+
+**Status:** Complete (2026-04-13)
+
+**Goal / Target scope / Incident context:**
 
 **Goal:** Systematically surface runtime call-site-to-implementation mismatches that static compilation does not catch — the same class of bug as the `mintPackedFor` regression, where a call passes compile, may pass superficial tests, but reverts at runtime because selector/target/path alignment is wrong.
 
@@ -19,6 +27,8 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 - Findings consolidation into audit/FINDINGS-v27.0.md
 
 **Prior incident context:** `mintPackedFor(address)` was declared in `IDegenerusGame` and called via staticcall from `DegenerusQuests._isLevelQuestEligible`, but had no implementation on `DegenerusGame`. Level-quest completion during purchase silently reverted under the narrow condition where accumulated progress crossed threshold on that single call, surfacing as generic `E()`. Fixed in commit `a0bf328b`. Makefile gate `check-interfaces` added in commit `23bbd671`. v27.0 extends this coverage.
+
+**Result:** 4 phases (220-223), 9 plans. Phase 220 wired `scripts/check-delegatecall-alignment.sh` with 1:1 interface↔address mapping preflight (43 delegatecall sites verified ALIGNED). Phase 221 wired `scripts/check-raw-selectors.sh` with 5-pattern coverage and produced the 221-01-AUDIT.md catalog (5 JUSTIFIED INFO sites). Phase 222 classified all 308 external/public functions (19 COVERED / 177+1 CRITICAL_GAP / 112 EXEMPT after matrix refresh), shipped `scripts/coverage-check.sh` with three failure modes, and closed every CRITICAL_GAP via `test/fuzz/CoverageGap222.t.sol` (76 integration tests); Plan 222-03 strengthened test assertions and scoped drift detection to contract sections (commits ef83c5cd + e0a1aa3e). Phase 223 consolidated 16 INFO findings into `audit/FINDINGS-v27.0.md` with a full v25.0 regression appendix (all 13 prior findings verified). Zero exploitable vulnerabilities. All 14/14 requirements satisfied.
 
 ## Completed Milestone: v26.0 Bonus Jackpot Split
 

@@ -1,5 +1,59 @@
 # Milestones
 
+## v27.0 Call-Site Integrity Audit (Shipped: 2026-04-13)
+
+**Phases completed:** 4 phases, 9 plans, 23 tasks
+
+**Key accomplishments:**
+
+- Interface-coverage gate extended with delegatecall target-alignment gate — `scripts/check-delegatecall-alignment.sh` codifies 1:1 interface↔address mapping across 43 call sites in `contracts/` with `validate_mapping` preflight catching universe-level drift before per-site enumeration
+- Raw-selector gate `scripts/check-raw-selectors.sh` installed with 5-pattern coverage (hex literal, string-derived keccak selector, abi.encodeCall, abi.encodeWithSignature, abi.encode*-feeding-low-level-call) — wired as `make test-foundry` / `make test-hardhat` prerequisite alongside `check-interfaces` and `check-delegatecall`
+- 308 external/public functions across 24 deployable contracts classified COVERED / CRITICAL_GAP / EXEMPT in `222-01-COVERAGE-MATRIX.md` — final post-Plan-222-02 disposition: 19 COVERED / 177+1 CRITICAL_GAP (all with Test Ref) / 112 EXEMPT
+- `scripts/coverage-check.sh` standalone gate shipped with three orthogonal failure modes (MATRIX_DRIFT / UNCURED_GAP / REGRESSED_COVERAGE) — contract-scoped drift detection catches same-name function masking after Plan 222-03 fix (commit `e0a1aa3e`)
+- 76 leverage-first integration tests in `test/fuzz/CoverageGap222.t.sol` closing every CRITICAL_GAP via natural caller chains — Plan 222-03 (commit `ef83c5cd`) strengthened all 62 reachability-only assertions to guard-rejection or observable-state-change checks for CSI-11 quality closure
+- `audit/FINDINGS-v27.0.md` consolidates 16 INFO findings across the three source phases with full v25.0 regression appendix verifying F-25-01 through F-25-13 against current code — zero exploitable vulnerabilities, all items resolved or documented as accepted trade-offs
+- KNOWN-ISSUES.md updated with 3 new v27.0 design-decision entries referencing specific F-27-NN IDs
+
+---
+
+## v26.0 Bonus Jackpot Split (Shipped: 2026-04-12)
+
+**Phases completed:** 2 phases, 4 plans, 9 tasks
+
+**Key accomplishments:**
+
+- keccak256 domain separation for independent bonus traits, BURNIE target range [lvl+1, lvl+4], DJT storage removed
+- All 6 jackpot caller sites rewired with independent bonus trait routing and DailyWinningTraits event emission
+- Complete delta audit of 7 Phase 218 commits across 4 contracts with 10 code path sections, event correctness at 3 sites, and entropy independence proof
+- Fix 1 -- EVNT-01 naming (D-10):
+
+---
+
+## v25.0 Full Audit (Post-v5.0 Delta + Fresh RNG) (Shipped: 2026-04-11)
+
+**Phases completed:** 5 phases, 18 plans, 22 tasks
+
+**Key accomplishments:**
+
+- Contract classification and function-level changelog for 33 non-module files: 25 MODIFIED, 1 NEW (GNRUS.sol), 1 DELETED (DegenerusGameModuleInterfaces.sol), 4 NEW mocks, 1 UNCHANGED (Icons32Data.sol), 1 MODIFIED mock
+- 99 cross-module call chains mapped and categorised across 4 audit-relevant groups, with concrete scope definitions for adversarial (214), RNG (215), and pool accounting (216) audit phases
+- Fresh reentrancy audit across 140+ functions in 23 contracts: zero VULNERABLE findings, all external calls follow CEI, rngLockedFlag provides mutual exclusion
+- 271 dual verdicts (access + overflow) across all changed/new functions with zero VULNERABLE findings; 12 modifier transitions verified, uint48->uint32 and uint256->uint128 narrowings proven safe, 3 new bitfield shifts confirmed non-overlapping
+- 296 verdicts covering all changed/new functions for state corruption and composition attacks; 7 packed field groups bit-verified; pool consolidation memory-batch and two-call split proven safe; EndgameModule redistribution state-equivalent; GNRUS integrity fully analyzed; 0 VULNERABLE findings
+- forge inspect confirms identical 84-variable storage layout across all 13 DegenerusGameStorage inheritors -- delegatecall safety verified with zero mismatches
+- 23 multi-step attack chains across 4 categories all classified SAFE; 99 cross-module chains assessed; 55 entry-point call graphs with state mutation annotations; zero exploitable sequences from combining 6 INFO items across Plans 01-04
+- End-to-end VRF lifecycle trace covering daily request/fulfillment, lootbox request/fulfillment, gap day backfill, orphaned index recovery, and gameover fallback -- 17 verdicts across 6 sections, all TRACED, zero CONCERN
+- 13 consumer sites across 11 RNG chains backward-traced to input commitment -- 12 SAFE, 1 INFO (prevrandao fallback), zero VULNERABLE
+- Per-path VRF window analysis: 9 rngLockedFlag guard sites, 4 isolation mechanisms, all external functions classified -- 3 SAFE + 1 INFO windows, zero VULNERABLE
+- Every keccak/shift/mask/modulo producing a game outcome traced to VRF source word -- 14 VRF-SOURCED, 1 MIXED (gameover prevrandao), 1 NON-VRF (deity pre-VRF fallback)
+- rngLockedFlag mutual exclusion verified across all state-changing paths (9 guard sites, 17 total references), complete coverage analysis of every external/public function, and unified phase verdict: SOUND with zero VULNERABLE findings
+- 75 SSTORE sites catalogued across 9 contracts with zero VULNERABLE findings; all 4 threat mitigations confirmed; intermediary variables fully tracked per D-04
+- All 20 EF chains traced at every cross-module handoff with ETH amounts verified; phase synthesis confirms pool accounting SOUND across conservation proof, SSTORE catalogue, and cross-module flows
+- 13 severity-classified findings (all INFO) consolidated from phases 214-216 into audit/FINDINGS-v25.0.md; 3 design decisions promoted to KNOWN-ISSUES.md
+- 31 prior findings regression-checked against current code with zero regressions: 22 still apply, 3 fixed, 1 superseded, 2 structurally resolved, F-185-01 still fixed, F-187-01 still present (accepted)
+
+---
+
 ## v24.1 Storage Layout Optimization (Shipped: 2026-04-10)
 
 **Phases completed:** 6 phases, 22 plans, 44 tasks
