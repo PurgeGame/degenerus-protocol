@@ -33,7 +33,7 @@ The scope is deliberately bounded to **call-site integrity**. Out of scope for t
 
 ### Findings Consolidation (Phase 223)
 
-- [ ] **CSI-12**: `audit/FINDINGS-v27.0.md` is produced with severity-classified findings rolled up from phases 220-222 (HIGH / MEDIUM / LOW / INFO), following the `audit/FINDINGS-v25.0.md` structure
+- [x] **CSI-12**: `audit/FINDINGS-v27.0.md` is produced with severity-classified findings rolled up from phases 220-222 (HIGH / MEDIUM / LOW / INFO), following the `audit/FINDINGS-v25.0.md` structure
 - [ ] **CSI-13**: `KNOWN-ISSUES.md` is updated with any accepted INFO/LOW items that are design decisions rather than bugs
 - [ ] **CSI-14**: `MILESTONES.md` retrospective entry is written (mirroring v25.0 / v26.0 format); `PROJECT.md` moves v27.0 to "Completed Milestone"; v27.0 marked SHIPPED
 
@@ -75,7 +75,7 @@ Explicit exclusions with reasoning:
 | CSI-09 | Phase 222 | Pending |
 | CSI-10 | Phase 222 | Pending |
 | CSI-11 | Phase 222 | Complete |
-| CSI-12 | Phase 223 | Pending |
+| CSI-12 | Phase 223 | Complete |
 | CSI-13 | Phase 223 | Pending |
 | CSI-14 | Phase 223 | Pending |
 
