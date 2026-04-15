@@ -85,13 +85,15 @@ Follow `MILESTONES.md` v25.0/v26.0/v27.0 format:
 
 For each REQ-ID satisfied by a verified phase, flip `[ ] **REQ-XX**` → `[x] **REQ-XX**` in REQUIREMENTS.md. The right edge of REQUIREMENTS.md contains a status table — update status column to `Satisfied (Phase NNN)`.
 
-REQ-IDs to flip:
-- 224: API-01..04 (check 224 verdict for exact list)
-- 225: API-05..08 (per STATE.md)
-- 226: SCHEMA-01..04
-- 227: IDX-01..03
-- 228: IDX-04, IDX-05
+REQ-IDs covered this milestone (actual inventory — API-01..05, SCHEMA-01..04, IDX-01..05, FIND-01..03):
+- 224: API-01, API-02 (already `[x]` in REQUIREMENTS.md)
+- 225: API-03, API-04, API-05 (already `[x]`)
+- 226: SCHEMA-01..04 (SCHEMA-02, SCHEMA-03 already `[x]`; SCHEMA-01, SCHEMA-04 still `[ ]` — flip to Satisfied Phase 226)
+- 227: IDX-01..03 (IDX-02, IDX-03 already `[x]`; IDX-01 still `[ ]` — flip to Satisfied Phase 227)
+- 228: IDX-04 (already `[x]`), IDX-05 (still `[ ]` — flip to Satisfied Phase 228)
 - 229 itself: FIND-01..03 (flipped on completion by Phase 229's own verify step)
+
+**Remaining unflipped `[ ]` as of plan time:** SCHEMA-01, SCHEMA-04, IDX-01, IDX-05, FIND-01, FIND-02, FIND-03 — 7 checkboxes to flip + status-column updates.
 
 ### D-229-10: KNOWN-ISSUES.md untouched (user directive)
 

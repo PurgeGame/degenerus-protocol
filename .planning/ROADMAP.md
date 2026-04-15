@@ -148,7 +148,11 @@ Plans:
   3. Every finding has a recorded resolution status with a one-sentence rationale; DEFERRED items name the deferral target milestone; INFO-ACCEPTED items are candidates for promotion to `KNOWN-ISSUES.md`
   4. `MILESTONES.md` has a v28.0 retrospective entry in v25.0/v26.0/v27.0 format; `PROJECT.md` moves v28.0 from "Current Milestone" to "Completed Milestone"; `REQUIREMENTS.md` traceability checkboxes flipped to `[x]` for every satisfied REQ-ID
 
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 229-01-PLAN.md — Consolidate phases 224-228 findings into audit/FINDINGS-v28.0.md with canonical F-28-NN IDs (D-229-03) + per-finding severity/direction/resolution per D-229-05/06/07; produces 229-01-CONSOLIDATION-NOTES.md
+- [ ] 229-02-PLAN.md — Tracking sync: MILESTONES.md v28.0 retrospective (D-229-08) + PROJECT.md Current→Completed flip + REQUIREMENTS.md traceability checkbox flips for API-01..08, SCHEMA-01..04, IDX-01..05, FIND-01..03 (D-229-09)
 
 ## Progress
 
