@@ -48,7 +48,7 @@
 - [x] **Phase 224: API Route & OpenAPI Alignment** - Audit bidirectional coverage between `database/src/api/routes/*.ts` and `database/docs/openapi.yaml` (method, path, params, body shape) — completed 2026-04-13 (27/27/27 triple alignment, 1 INFO meta-stub)
 - [x] **Phase 225: API Handler Behavior & Validation Schema Alignment** - Verify handler JSDoc/inline comments, response shapes, and Fastify request-validation schemas match openapi.yaml + handler bodies (completed 2026-04-13)
 - [x] **Phase 226: Schema, Migration & Orphan Audit** - Reconcile Drizzle schemas (`database/src/db/schema/*.ts`) against applied migrations (`database/drizzle/*.sql`), validate column-comment semantics, and detect orphan tables (completed 2026-04-15)
-- [ ] **Phase 227: Indexer Event Processing Correctness** - Verify every contract event consumed by `database/src/indexer/event-processor.ts` is registered and maps args to schema fields per documented semantics
+- [x] **Phase 227: Indexer Event Processing Correctness** - Verify every contract event consumed by `database/src/indexer/event-processor.ts` is registered and maps args to schema fields per documented semantics (completed 2026-04-15)
 - [ ] **Phase 228: Cursor, Reorg & View Refresh State Machines** - Audit `cursor-manager.ts`, `reorg-detector.ts`, and `view-refresh.ts` against documented block-ordering, reorg-depth, and staleness behaviors
 - [ ] **Phase 229: Findings Consolidation** - Roll up phase 224-228 findings into `audit/FINDINGS-v28.0.md` with severity + direction + resolution status, following v27.0 consolidated-findings structure
 
@@ -115,11 +115,11 @@ Plans:
   3. An indexer-comment correctness audit in `227-03-INDEXER-COMMENT-AUDIT.md` verifies that in-source comments claiming idempotency, reorg safety, backfill behavior, or view-refresh triggers match the actual code behavior in `event-processor.ts` and delegated handler files — every comment→code mismatch logged with file:line
   4. Each unhandled event, arg-mapping bug, or comment-drift item is classified by direction and added to the Phase 229 finding candidate pool
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 227-01-PLAN.md — IDX-01 (contractFile, eventName) coverage matrix vs HANDLER_REGISTRY + routers; produces 227-01-EVENT-COVERAGE-MATRIX.md; Wave 1
-- [ ] 227-02-PLAN.md — IDX-02 per-arg verdict (name/type/coercion) against Phase 226 schema model + silent-truncation & address-drift sweeps; produces 227-02-EVENT-ARG-MAPPING.md; Wave 2 (depends on 227-01)
+- [x] 227-02-PLAN.md — IDX-02 per-arg verdict (name/type/coercion) against Phase 226 schema model + silent-truncation & address-drift sweeps; produces 227-02-EVENT-ARG-MAPPING.md; Wave 2 (depends on 227-01)
 - [x] 227-03-PLAN.md — IDX-03 Tier A/B comment-drift audit across indexer + delegated handlers (8 RESEARCH-seeded hits minimum); produces 227-03-INDEXER-COMMENT-AUDIT.md; Wave 2
 
 ### Phase 228: Cursor, Reorg & View Refresh State Machines
@@ -167,6 +167,6 @@ Phase 224 first (establishes route↔spec map needed by 225). Phase 225 after 22
 | 224. API Route & OpenAPI Alignment | v28.0 | 1/1 | Complete | 2026-04-13 |
 | 225. API Handler Behavior & Validation Schema Alignment | v28.0 | 3/3 | Complete   | 2026-04-13 |
 | 226. Schema, Migration & Orphan Audit | v28.0 | 4/4 | Complete   | 2026-04-15 |
-| 227. Indexer Event Processing Correctness | v28.0 | 2/3 | In Progress|  |
+| 227. Indexer Event Processing Correctness | v28.0 | 3/3 | Complete   | 2026-04-15 |
 | 228. Cursor, Reorg & View Refresh State Machines | v28.0 | 0/? | Not started | - |
 | 229. Findings Consolidation | v28.0 | 0/? | Not started | - |

@@ -42,7 +42,7 @@ The audit grades code against three intent sources and flags four mismatch direc
 ### Indexer Correctness
 
 - [ ] **IDX-01**: Every contract event emitted by `degenerus-audit/contracts/*.sol` that the indexer claims to process has a registered case in `database/src/indexer/event-processor.ts` (or an explicit delegating handler); intentionally skipped events are justified in comments
-- [ ] **IDX-02**: Each `event-processor` case handler maps event args to the correct schema fields per the table's column semantics and the handler file's comments — no silent field-swap or type coercion bugs
+- [x] **IDX-02**: Each `event-processor` case handler maps event args to the correct schema fields per the table's column semantics and the handler file's comments — no silent field-swap or type coercion bugs
 - [x] **IDX-03**: Indexer comments describing processing semantics — idempotency, reorg safety, backfill behavior, view-refresh triggers — match the actual behavior of the code
 - [ ] **IDX-04**: Cursor management (`cursor-manager.ts`) and reorg detection (`reorg-detector.ts`) behave as documented — block ordering, gap handling, maximum reorg depth, recovery-after-stall
 - [ ] **IDX-05**: View refresh triggers in `view-refresh.ts` match the staleness model documented in comments and in schema view definitions
@@ -99,7 +99,7 @@ Explicit exclusions with reasoning:
 | SCHEMA-03 | Phase 226 | Complete |
 | SCHEMA-04 | Phase 226 | Pending |
 | IDX-01 | Phase 227 | Pending |
-| IDX-02 | Phase 227 | Pending |
+| IDX-02 | Phase 227 | Complete |
 | IDX-03 | Phase 227 | Complete |
 | IDX-04 | Phase 228 | Pending |
 | IDX-05 | Phase 228 | Pending |
