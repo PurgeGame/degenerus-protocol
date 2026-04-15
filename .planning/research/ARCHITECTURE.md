@@ -1,330 +1,280 @@
-# Architecture Patterns
+# Architecture: Bonus Jackpot Trait Split Integration
 
-**Domain:** EndgameModule elimination and storage repack in delegatecall-based Solidity module system
-**Researched:** 2026-04-02
+**Domain:** Smart contract jackpot system modification
+**Researched:** 2026-04-11
+**Confidence:** HIGH (derived entirely from current contract source code)
 
-## Current Architecture
+## Current Architecture Summary
 
-### EndgameModule Integration Map
+The jackpot system uses a two-call gas split during jackpot phase:
 
-EndgameModule (`DegenerusGameEndgameModule`) extends `DegenerusGamePayoutUtils` (which extends `DegenerusGameStorage`). It exposes 3 external functions, all invoked via delegatecall:
+**Call 1 -- `payDailyJackpot(isJackpotPhase=true)`:**
+1. Rolls 4 winning traits via `_rollWinningTraits(randWord)` (VRF-derived, hero override applied)
+2. Persists traits to `dailyJackpotTraitsPacked` via `_syncDailyWinningTraits`
+3. Computes ETH budget (6-14% of currentPrizePool, or 100% on final day)
+4. Computes ticket budgets (daily + carryover), packs into `dailyTicketBudgetsPacked`
+5. Distributes ETH to trait-matched winners at current level
+6. Sets `dailyJackpotCoinTicketsPending = true`
 
-```
-DegenerusGame
-  |
-  +-- claimWhalePass(player)
-  |     dispatched from DegenerusGame.sol:1640 (_claimWhalePassFor)
-  |     callers: DegenerusGame.claimWhalePass (external, user-facing)
-  |              DegenerusVault.sol:596 (via gamePlayer.claimWhalePass)
-  |              StakedDegenerusStonk.sol:309,353 (via game.claimWhalePass(address(0)))
-  |
-  +-- AdvanceModule (delegatecall from Game)
-        |
-        +-- _runRewardJackpots(lvl, rngWord)    [AdvanceModule.sol:554]
-        |     dispatched to GAME_ENDGAME_MODULE via delegatecall
-        |     called at: level transition, after pool consolidation (line 359)
-        |
-        +-- _rewardTopAffiliate(lvl)            [AdvanceModule.sol:541]
-              dispatched to GAME_ENDGAME_MODULE via delegatecall
-              called at: end of jackpot phase (line 401), after final day cap reached
-```
+**Call 2 -- `payDailyJackpotCoinAndTickets(randWord)`:**
+1. Reads stored traits from `dailyJackpotTraitsPacked` (line 562)
+2. Reads ticket budgets from `dailyTicketBudgetsPacked` (line 558)
+3. Distributes BURNIE coin to near-future trait-matched winners (using stored main traits)
+4. Distributes daily tickets to current-level trait winners (using stored main traits)
+5. Distributes carryover tickets to source-level winners (using stored main traits)
+6. Increments `jackpotCounter`, clears pending flag
 
-### Call Chain Complexity: runRewardJackpots
-
-This is the most complex function. Its call chain involves a **delegatecall-to-external-call-to-delegatecall** trampoline:
-
-```
-advanceGame() [AdvanceModule, delegatecall context]
-  -> _runRewardJackpots(lvl, rngWord) [AdvanceModule private]
-    -> delegatecall EndgameModule.runRewardJackpots() [EndgameModule code, Game storage]
-      -> _runBafJackpot() [private, uses _addClaimableEth, _awardJackpotTickets, etc.]
-      -> IDegenerusGame(address(this)).runDecimatorJackpot()  [EXTERNAL CALL TO SELF]
-        -> Game.runDecimatorJackpot() [Game.sol:1052, msg.sender==address(this) guard]
-          -> delegatecall DecimatorModule.runDecimatorJackpot()
-```
-
-The `IDegenerusGame(address(this))` pattern exists because EndgameModule cannot directly delegatecall DecimatorModule (modules don't hold other module addresses as delegatecall targets -- only DegenerusGame does that routing). The self-call bounces back through Game's external function which routes to DecimatorModule.
-
-### Storage Access Patterns by EndgameModule
-
-**runRewardJackpots reads/writes:**
-- `_getFuturePrizePool()` / `_setFuturePrizePool()` -- prizePoolsPacked (slot 3)
-- `claimablePool` (slot 7)
-- `level` (slot 0, read-only for auto-rebuy)
-- `gameOver` (slot 0, read-only in claimWhalePass)
-- `autoRebuyState[player]` (mapping)
-- `claimableWinnings[player]` (mapping)
-- `whalePassClaims[player]` (mapping)
-- `_getNextPrizePool()` / `_setNextPrizePool()` -- prizePoolsPacked (slot 3)
-- Various ticket queue writes via `_queueTickets`, `_queueLootboxTickets`, `_queueTicketRange`
-
-**rewardTopAffiliate reads/writes:**
-- `dgnrs.poolBalance()` / `dgnrs.transferFromPool()` -- external calls to sDGNRS
-- `affiliate.affiliateTop()` -- external call to Affiliate contract
-- `levelDgnrsAllocation[lvl]` (mapping write)
-
-**claimWhalePass reads/writes:**
-- `gameOver` (slot 0, read)
-- `whalePassClaims[player]` (mapping read+write)
-- `level` (slot 0, read)
-- Ticket queue writes via `_queueTicketRange`
-- `_applyWhalePassStats` -- writes to `whalePassStats` mapping
-
-### Current Storage Layout (Slots 0-2)
-
-```
-SLOT 0 (30/32 bytes used):
-  [0:6]   levelStartTime       uint48
-  [6:12]  dailyIdx             uint48
-  [12:18] rngRequestTime       uint48
-  [18:21] level                uint24
-  [21:22] jackpotPhaseFlag     bool
-  [22:23] jackpotCounter       uint8
-  [23:24] lastPurchaseDay      bool
-  [24:25] decWindowOpen        bool
-  [25:26] rngLockedFlag        bool
-  [26:27] phaseTransitionActive bool
-  [27:28] gameOver             bool
-  [28:29] dailyJackpotCoinTicketsPending bool
-  [29:30] compressedJackpotFlag uint8
-  --- 2 bytes padding ---
-
-SLOT 1 (10/32 bytes used):
-  [0:6]   purchaseStartDay     uint48
-  [6:7]   ticketWriteSlot      uint8
-  [7:8]   ticketsFullyProcessed bool
-  [8:9]   prizePoolFrozen      bool
-  [9:10]  gameOverPossible     bool
-  --- 22 bytes padding ---
-
-SLOT 2 (32/32 bytes):
-  [0:32]  currentPrizePool     uint256
-```
+**Key insight:** Currently, coin distribution AND carryover ticket distribution both use the same `winningTraitsPacked` that was rolled and stored in Call 1. The bonus split requires carryover and coin to use independently-rolled bonus traits instead.
 
 ## Recommended Architecture
 
-### Function Redistribution Strategy
+### Strategy: Store Bonus Traits in `dailyTicketBudgetsPacked`
 
-**Principle:** Move each function to the module whose parent class already provides the helpers it needs, minimizing new code and eliminating the EndgameModule contract entirely.
+Do NOT add a new storage variable. The `dailyTicketBudgetsPacked` word currently uses 144 of 256 bits. Bonus traits are 32 bits. Pack bonus traits into the existing word at bits 144-175.
 
-| Function | Target Module | Rationale |
-|----------|--------------|-----------|
-| `runRewardJackpots` | JackpotModule | Already extends PayoutUtils. BAF logic uses `_addClaimableEth`, `_awardJackpotTickets`, `_queueWhalePassClaimCore` -- all from PayoutUtils. Decimator self-call stays unchanged. JackpotModule is the natural home for jackpot distribution. |
-| `rewardTopAffiliate` | AdvanceModule | Pure external calls to `dgnrs` and `affiliate` (both already constants in Storage). Single mapping write. No PayoutUtils dependency. AdvanceModule is the sole caller -- inlining avoids a delegatecall hop entirely. |
-| `claimWhalePass` | JackpotModule | Uses `whalePassClaims` mapping, `_applyWhalePassStats`, `_queueTicketRange` -- all from Storage. But JackpotModule already writes `whalePassClaims` (line 1574). Keeping claim logic co-located with the write site is cleanest. |
+**Rationale:**
+- Zero new SSTORE/SLOAD cost -- bonus traits piggyback on the existing `dailyTicketBudgetsPacked` write in Call 1 and read in Call 2
+- `dailyJackpotTraitsPacked` is the wrong home -- it serves as a cross-call cache for the main traits, and is read by `_resumeDailyEth` (the ETH resume path) which must continue to use main traits
+- A third storage variable would cost an extra cold SLOAD (2100 gas) in Call 2 for no reason
 
-### Why NOT Other Options
-
-| Alternative | Why Rejected |
-|-------------|-------------|
-| Move all 3 to JackpotModule | `rewardTopAffiliate` has zero payout logic; it's purely affiliate DGNRS distribution. Putting it in JackpotModule adds conceptual noise to an already large module. |
-| Move all 3 to AdvanceModule | AdvanceModule inherits DegenerusGameStorage directly (NOT PayoutUtils). Moving `runRewardJackpots` there would require either (a) changing AdvanceModule's parent to PayoutUtils, or (b) duplicating PayoutUtils helpers. Both are worse than JackpotModule. |
-| Create a new smaller module | Adds deployment cost and another ContractAddresses entry. The point is elimination, not replacement. |
-| Inline all 3 into DegenerusGame | Game.sol is already the largest contract. Inlining complex BAF logic there would push contract size toward the 24KB limit. |
-
-### Detailed Redistribution
-
-#### 1. rewardTopAffiliate -> AdvanceModule (INLINE)
-
-This function is trivial (25 lines) and has a single caller (`_rewardTopAffiliate` in AdvanceModule). It makes external calls to `dgnrs` and `affiliate` (already Storage constants) and writes one mapping entry. **Inline directly into AdvanceModule**, eliminating the delegatecall wrapper entirely.
-
-**Change type:** AdvanceModule MODIFIED
-- Delete `_rewardTopAffiliate` private delegatecall wrapper
-- Inline the function body at call site (or as a new private function in AdvanceModule)
-- Move `AFFILIATE_POOL_REWARD_BPS` and `AFFILIATE_DGNRS_LEVEL_BPS` constants
-- Move `AffiliateDgnrsReward` event
-
-**Dependencies:** None on PayoutUtils. Uses only `dgnrs`, `affiliate`, `levelDgnrsAllocation` (all in Storage).
-
-#### 2. runRewardJackpots -> JackpotModule (MOVE)
-
-This is the heaviest function (~400 lines including private helpers). JackpotModule already extends PayoutUtils, giving it access to `_creditClaimable`, `_queueWhalePassClaimCore`, and `_calcAutoRebuy`.
-
-**Change type:** JackpotModule MODIFIED, EndgameModule interface MODIFIED
-- Move `runRewardJackpots`, `_addClaimableEth`, `_runBafJackpot`, `_awardJackpotTickets`, `_jackpotTicketRoll` to JackpotModule
-- Move constants: `SMALL_LOOTBOX_THRESHOLD`
-- Move events: `AutoRebuyExecuted`, `RewardJackpotsSettled`
-- Update AdvanceModule's `_runRewardJackpots` wrapper to target `GAME_JACKPOT_MODULE` instead of `GAME_ENDGAME_MODULE`
-- Update interface: Move `runRewardJackpots` from `IDegenerusGameEndgameModule` to `IDegenerusGameJackpotModule`
-
-**The IDegenerusGame(address(this)).runDecimatorJackpot() self-call pattern is preserved unchanged.** This trampoline exists because delegatecall modules cannot directly delegatecall other modules -- only the Game contract routes. The call path becomes:
+### Modified Layout: `dailyTicketBudgetsPacked`
 
 ```
-AdvanceModule._runRewardJackpots
-  -> delegatecall JackpotModule.runRewardJackpots  (changed target)
-    -> IDegenerusGame(address(this)).runDecimatorJackpot()  (unchanged)
-      -> delegatecall DecimatorModule.runDecimatorJackpot()  (unchanged)
+Current:
+  [bits   0:7]   counterStep              uint8
+  [bits   8:71]  dailyTicketUnits          uint64
+  [bits  72:135] carryoverTicketUnits      uint64
+  [bits 136:143] carryoverSourceOffset     uint8
+  [bits 144:255] <unused>                  112 bits free
+
+Proposed:
+  [bits   0:7]   counterStep              uint8    (unchanged)
+  [bits   8:71]  dailyTicketUnits          uint64   (unchanged)
+  [bits  72:135] carryoverTicketUnits      uint64   (unchanged)
+  [bits 136:143] carryoverSourceOffset     uint8    (unchanged)
+  [bits 144:175] bonusTraitsPacked         uint32   (NEW -- 4x8-bit trait IDs)
+  [bits 176:255] <unused>                  80 bits remain
 ```
 
-#### 3. claimWhalePass -> JackpotModule (MOVE)
+### Component Boundaries
 
-Simple function (20 lines). JackpotModule already writes `whalePassClaims` during daily jackpot processing.
+| Component | Responsibility | Modification |
+|-----------|---------------|--------------|
+| `_rollWinningTraits` | Roll 4 traits from VRF, apply hero override | **NONE** -- called twice with different entropy derivations |
+| `_packDailyTicketBudgets` | Pack Call 1 outputs for Call 2 | **MODIFY** -- add `bonusTraitsPacked` parameter at bits 144-175 |
+| `_unpackDailyTicketBudgets` | Unpack in Call 2 | **MODIFY** -- return `bonusTraitsPacked` as 5th return value |
+| `payDailyJackpot` (jackpot phase) | Call 1: roll traits, distribute ETH | **MODIFY** -- roll bonus traits with separate entropy, pack into budgets word |
+| `payDailyJackpotCoinAndTickets` | Call 2: distribute coin + tickets | **MODIFY** -- unpack bonus traits, use for coin and carryover tickets |
+| `_syncDailyWinningTraits` | Store main traits in `dailyJackpotTraitsPacked` | **NONE** -- continues storing main traits only |
+| `_resumeDailyEth` | Resume ETH distribution on call 2 of gas split | **NONE** -- reads main traits from `dailyJackpotTraitsPacked`, unaffected |
+| `_selectDailyCoinTargetLevel` | Pick random level in [lvl, lvl+4] | **MODIFY** -- narrow to [lvl+1, lvl+4] for bonus |
+| `payDailyCoinJackpot` | Purchase-phase BURNIE distribution | **EVALUATE** -- may need bonus traits (see Purchase Phase Impact section) |
+| `dailyJackpotTraitsPacked` | Cross-call trait cache | **NONE** -- stores main traits only, read by ETH resume path |
+| `dailyTicketBudgetsPacked` | Cross-call budget + metadata cache | **MODIFY** -- gains bonus traits field |
 
-**Change type:** JackpotModule MODIFIED, DegenerusGame MODIFIED
-- Move `claimWhalePass` to JackpotModule
-- Move `WhalePassClaimed` event
-- Update `DegenerusGame._claimWhalePassFor` to target `GAME_JACKPOT_MODULE` instead of `GAME_ENDGAME_MODULE`
-- Update IDegenerusGameJackpotModule interface
-- Remove from IDegenerusGameEndgameModule interface
-
-### Storage Repack Design
-
-#### Target Layout
-
-```
-SLOT 0 (32/32 bytes -- FULL):
-  [0:6]   levelStartTime       uint48   (unchanged)
-  [6:12]  dailyIdx             uint48   (unchanged)
-  [12:18] rngRequestTime       uint48   (unchanged)
-  [18:21] level                uint24   (unchanged)
-  [21:22] jackpotPhaseFlag     bool     (unchanged)
-  [22:23] jackpotCounter       uint8    (unchanged)
-  [23:24] lastPurchaseDay      bool     (unchanged)
-  [24:25] decWindowOpen        bool     (unchanged)
-  [25:26] rngLockedFlag        bool     (unchanged)
-  [26:27] phaseTransitionActive bool    (unchanged)
-  [27:28] gameOver             bool     (unchanged)
-  [28:29] dailyJackpotCoinTicketsPending bool (unchanged)
-  [29:30] compressedJackpotFlag uint8   (unchanged)
-  [30:31] ticketsFullyProcessed bool    (MOVED from slot 1)
-  [31:32] gameOverPossible     bool     (MOVED from slot 1)
-
-SLOT 1 (32/32 bytes -- repacked):
-  [0:6]   purchaseStartDay     uint48   (unchanged position in slot)
-  [6:7]   ticketWriteSlot      uint8    (unchanged position in slot)
-  [7:8]   prizePoolFrozen      bool     (SHIFTED from byte 8 to byte 7)
-  [8:24]  currentPrizePool     uint128  (MOVED from slot 2, downsized from uint256)
-  --- 8 bytes padding ---
-
-SLOT 2: ELIMINATED (was currentPrizePool uint256)
-```
-
-#### Why uint128 for currentPrizePool
-
-uint128 max = ~3.4e38 wei = ~3.4e20 ETH. Total ETH supply is ~120M ETH = 1.2e26 wei. The prize pool for a single level cannot physically exceed total ETH supply. uint128 provides 12 orders of magnitude headroom beyond total ETH supply. This is the same reasoning already used for `prizePoolsPacked` (next+future pools are both uint128).
-
-#### Access Pattern Impact by Module
-
-| Module | Slot 0 Access | Slot 1 Access | Slot 2 Access | Impact |
-|--------|--------------|--------------|--------------|--------|
-| **AdvanceModule** | Heavy R/W (all FSM flags) | R/W ticketsFullyProcessed, gameOverPossible, purchaseStartDay | R/W currentPrizePool | ticketsFullyProcessed and gameOverPossible move to slot 0 -- **SAVES 1 SLOAD per advanceGame call** when reading these alongside other slot 0 flags. currentPrizePool moves to slot 1 -- neutral (still 1 SLOAD, different slot). Net: **gas improvement**. |
-| **JackpotModule** | R level, gameOver, FSM flags | R ticketsFullyProcessed (now slot 0) | R/W currentPrizePool (now slot 1) | ticketsFullyProcessed reads co-locate with slot 0 reads. currentPrizePool R/W moves from dedicated slot to slot 1 sharing -- **requires uint128 masking on read/write**. |
-| **MintModule** | R level, flags | R gameOverPossible (now slot 0), prizePoolFrozen (slot 1) | W currentPrizePool (indirect via pool writes) | gameOverPossible check co-locates with slot 0. |
-| **LootboxModule** | R level | R gameOverPossible (now slot 0) | - | gameOverPossible moves to slot 0 -- cheaper co-read with level. |
-| **DecimatorModule** | R level | R prizePoolFrozen (slot 1) | - | No change to access pattern. |
-| **GameOverModule** | R/W gameOver, level | - | W currentPrizePool = 0 (now slot 1) | Needs updated write pattern for packed slot 1. |
-| **DegenerusGame** | R various | R prizePoolFrozen | R currentPrizePool (views) | View function updated for uint128 extraction from slot 1. |
-
-#### Critical: currentPrizePool Packing Requires Helper Functions
-
-Currently `currentPrizePool` is a plain `uint256` variable with direct reads/writes everywhere. After packing into slot 1, **all access must go through helper functions** that mask/shift within the packed slot. This is the same pattern used for `prizePoolsPacked` (next+future pools).
-
-Affected write sites:
-- JackpotModule: `currentPrizePool -= dailyLootboxBudget` (line 353), `currentPrizePool -= paidDailyEth` (line 433), `currentPrizePool += ...` (lines 721, 732)
-- GameOverModule: `currentPrizePool = 0` (lines 133, 145)
-
-Affected read sites:
-- JackpotModule: `uint256 poolSnapshot = currentPrizePool` (line 317), `currentPrizePool` in obligation checks (line 747)
-- DegenerusGame: `currentPrizePoolView()` (line 2037), obligation calculation (line 2063)
-
-All must convert to `_getCurrentPrizePool()` / `_setCurrentPrizePool()` helpers defined in DegenerusGameStorage.
-
-### Component Boundaries After Consolidation
-
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| **DegenerusGame** | Entry point, access control, delegatecall routing | All modules (delegatecall), external contracts |
-| **AdvanceModule** | Game state machine, VRF lifecycle, level transitions, affiliate rewards (inlined) | JackpotModule (delegatecall), MintModule (delegatecall), DecimatorModule (via Game) |
-| **JackpotModule** | All jackpot distribution (daily, BAF, reward), whale pass claims, pool consolidation | DecimatorModule (via Game self-call), Jackpots contract (external) |
-| **DecimatorModule** | Decimator burn tracking, snapshot, claims | Called by Game (routed from JackpotModule/GameOverModule) |
-| **MintModule** | Purchase processing, ticket minting, lootbox purchases | Various external contracts |
-| **GameOverModule** | Terminal state, final jackpot, sweep | DecimatorModule (via Game), JackpotModule (via Game) |
-| ~~EndgameModule~~ | **ELIMINATED** | N/A |
-
-### Data Flow After Repack
+### Data Flow
 
 ```
-Purchase ETH -> split to pools:
-  nextPrizePool (slot 3 packed) ---level-transition---> currentPrizePool (slot 1 packed)
-  futurePrizePool (slot 3 packed) --drawdown/BAF/dec--> claimablePool (slot 7)
-  currentPrizePool (slot 1 packed) --daily-jackpot----> claimableWinnings[player]
+Call 1: payDailyJackpot(isJackpotPhase=true)
+  |
+  |-- mainTraits = _rollWinningTraits(randWord)            // existing
+  |-- _syncDailyWinningTraits(lvl, mainTraits, questDay)   // existing, unchanged
+  |-- [ETH distribution using mainTraits]                   // existing, unchanged
+  |
+  |-- bonusTraits = _rollWinningTraits(bonusEntropy)        // NEW: second roll
+  |-- emit BonusWinningTraits(lvl, bonusTraits)             // NEW: event only, no storage
+  |
+  |-- dailyTicketBudgetsPacked = _packDailyTicketBudgets(   // MODIFIED
+  |       counterStep, dailyTicketUnits,
+  |       carryoverTicketUnits, sourceOffset,
+  |       bonusTraits)                                      // NEW param
+  |
+  |-- dailyJackpotCoinTicketsPending = true
+
+Call 2: payDailyJackpotCoinAndTickets(randWord)
+  |
+  |-- (counterStep, dailyTicketUnits, carryoverTicketUnits,
+  |    sourceOffset, bonusTraits) = _unpackDailyTicketBudgets(...)  // MODIFIED
+  |
+  |-- mainTraits = _djtRead(...)                            // existing, for daily tickets
+  |
+  |-- Coin Jackpot: uses bonusTraits + narrowed target      // CHANGED from mainTraits
+  |      targetLevel = _selectDailyCoinTargetLevel(lvl, entropy)  // narrowed [lvl+1, lvl+4]
+  |      _awardDailyCoinToTraitWinners(targetLevel, bonusTraits, ...)
+  |
+  |-- Daily Tickets: uses mainTraits, current level         // UNCHANGED
+  |      _distributeTicketJackpot(lvl, lvl+1, mainTraits, dailyTicketUnits, ...)
+  |
+  |-- Carryover Tickets: uses bonusTraits, source level     // CHANGED from mainTraits
+  |      _distributeTicketJackpot(sourceLevel, ..., bonusTraits, carryoverTicketUnits, ...)
 ```
 
-## Build Order (Dependency-Aware)
+### Bonus Entropy Derivation
 
-### Phase 1: Storage Repack (Foundation)
+The bonus trait roll must use deterministically different entropy from the main roll to produce independent traits while maintaining VRF security properties.
 
-Must come first because every subsequent change depends on the new layout.
+```solidity
+// In payDailyJackpot, after rolling main traits:
+bytes32 constant BONUS_TRAIT_TAG = keccak256("bonus-traits");
+uint256 bonusEntropy = uint256(keccak256(abi.encodePacked(randWord, BONUS_TRAIT_TAG)));
+uint32 bonusTraitsPacked = _rollWinningTraits(bonusEntropy);
+```
 
-1. Add `_getCurrentPrizePool()` / `_setCurrentPrizePool()` helpers to DegenerusGameStorage
-2. Move `ticketsFullyProcessed` and `gameOverPossible` declarations to slot 0 position
-3. Move `currentPrizePool` from uint256 slot 2 into uint128 packed in slot 1
-4. Remove `prizePoolFrozen` gap (shift from byte 8 to byte 7 in slot 1)
-5. Update slot header comments throughout DegenerusGameStorage.sol
-6. Replace all direct `currentPrizePool` reads/writes with helper calls across ALL modules
+This follows the existing pattern used by `COIN_JACKPOT_TAG`, `DAILY_CARRYOVER_SOURCE_TAG`, etc. The `_applyHeroOverride` inside `_rollWinningTraits` will apply hero override to both main and bonus rolls, preserving the hero symbol guarantee.
 
-**Why first:** All modules inherit Storage. Changing the layout in isolation before moving functions means each change is testable independently. If function moves happen first, the moved code would need to be changed twice (once for the move, once for the repack).
+### Bonus Event Emission
 
-### Phase 2: Inline rewardTopAffiliate into AdvanceModule
+Per requirements, bonus winning traits are emitted as an event (no separate storage). Add a new event in `payDailyJackpot` Call 1, immediately after rolling bonus traits:
 
-Simplest move. Zero PayoutUtils dependency. Single caller.
+```solidity
+event BonusWinningTraits(uint24 indexed level, uint32 traitsPacked);
+```
 
-1. Copy function body and constants into AdvanceModule
-2. Replace delegatecall wrapper with direct inline
-3. Move event declaration
-4. Remove from IDegenerusGameEndgameModule interface
+Emitted once per jackpot-phase day, alongside the main traits stored in `dailyJackpotTraitsPacked`.
 
-### Phase 3: Move runRewardJackpots + helpers to JackpotModule
+### `_selectDailyCoinTargetLevel` Narrowing
 
-The heavy lift. ~400 lines of code moving.
+Current: `lvl + uint24(entropy % 5)` produces [lvl, lvl+4].
+Bonus: `lvl + 1 + uint24(entropy % 4)` produces [lvl+1, lvl+4].
 
-1. Move all 5 functions + constants + events to JackpotModule
-2. Update AdvanceModule `_runRewardJackpots` wrapper: change target from `GAME_ENDGAME_MODULE` to `GAME_JACKPOT_MODULE`
-3. Update IDegenerusGameJackpotModule interface with `runRewardJackpots` signature
-4. Verify decimator self-call trampoline still works (no change needed -- `IDegenerusGame(address(this))` is address-agnostic)
+This function is also called from `payDailyCoinJackpot` (purchase phase). Two options:
 
-### Phase 4: Move claimWhalePass to JackpotModule
+1. **Add a parameter** `bool excludeCurrentLevel` to the function. Jackpot-phase callers pass `true`, purchase-phase path passes `false`.
+2. **Inline the narrowed logic** at the bonus call site and leave the existing function unchanged.
 
-Small move. Depends on Phase 3 being done (to avoid two separate migrations into JackpotModule).
+Recommendation: Option 1 (parameter). Cleaner, single source of truth, minimal diff in each caller.
 
-1. Move function + event to JackpotModule
-2. Update DegenerusGame._claimWhalePassFor: change target from `GAME_ENDGAME_MODULE` to `GAME_JACKPOT_MODULE`
-3. Update IDegenerusGameJackpotModule interface
-4. Remove from IDegenerusGameEndgameModule interface
+### Purchase Phase Impact
 
-### Phase 5: Eliminate EndgameModule
+`payDailyCoinJackpot` (purchase-phase BURNIE) currently uses main traits loaded from `dailyJackpotTraitsPacked`. This function runs during purchase phase (not jackpot phase), so it does NOT participate in the two-call split.
 
-1. Delete `DegenerusGameEndgameModule.sol`
-2. Delete `IDegenerusGameEndgameModule` from interfaces file
-3. Remove `GAME_ENDGAME_MODULE` from ContractAddresses.sol
-4. Remove EndgameModule from DegenerusGameStorage NatSpec header
-5. Remove all stale references across codebase
-6. Update deploy scripts (one fewer contract to deploy)
+**Decision needed from owner:** Should purchase-phase BURNIE also use independent bonus traits, or does the bonus split only apply to jackpot-phase?
+
+If purchase-phase also needs bonus traits: the function already loads-or-rolls its traits inline (`_loadDailyWinningTraits` with fallback to `_rollWinningTraits`). Adding a second inline roll for bonus is straightforward with zero storage cost since there is no two-call split to bridge.
+
+If purchase-phase keeps main traits: no change needed to `payDailyCoinJackpot`.
+
+## Patterns to Follow
+
+### Pattern 1: Piggyback on Existing Packed Storage
+
+**What:** Add new cross-call data to an existing packed word that is already written in Call 1 and read in Call 2, rather than adding new storage variables.
+
+**Why:** Zero marginal gas cost. The SSTORE/SLOAD for `dailyTicketBudgetsPacked` already happens. Adding 32 bits to a 144-bit word in a 256-bit slot costs nothing extra.
+
+**Apply to:** `bonusTraitsPacked` in `dailyTicketBudgetsPacked`.
+
+### Pattern 2: Entropy Domain Separation via keccak Tag
+
+**What:** Derive sub-entropy from the VRF word using `keccak256(abi.encodePacked(randWord, DOMAIN_TAG))`.
+
+**Why:** Produces independent, deterministic, non-correlating sub-streams from a single VRF word. Already used throughout the codebase (`COIN_JACKPOT_TAG`, `DAILY_CARRYOVER_SOURCE_TAG`, `DAILY_CURRENT_BPS_TAG`).
+
+**Apply to:** Bonus trait roll entropy derivation.
+
+### Pattern 3: Hero Override Preservation
+
+**What:** Both main and bonus trait rolls go through `_rollWinningTraits`, which calls `_applyHeroOverride`. This means both rolls will replace the winning quadrant's trait with the hero symbol if one exists.
+
+**Why:** Hero symbol guarantee is a game mechanic that should apply to both drawings. Since `_rollWinningTraits` already handles this, no special-casing needed.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Splitting the Move and Repack Across Multiple PRs Without a Test Gate
-**What:** Doing the storage repack in one PR and function moves in another, with broken intermediate state.
-**Why bad:** If slot 2 is eliminated but code still references `currentPrizePool` as uint256, the compiler will catch it -- but assembly blocks or `forge inspect` might not.
-**Instead:** Each phase must be independently compilable and testable. Phase 1 (repack) must update ALL consumers before Phase 2 begins.
+### Anti-Pattern 1: Storing Bonus Traits in `dailyJackpotTraitsPacked`
 
-### Anti-Pattern 2: Forgetting the prizePoolFrozen Shift
-**What:** Moving ticketsFullyProcessed and gameOverPossible out of slot 1 but leaving prizePoolFrozen at byte offset 8 with a gap at bytes 7-8.
-**Why bad:** Wastes the freed bytes. The whole point is to make room for currentPrizePool in slot 1.
-**Instead:** Shift prizePoolFrozen to byte 7 when ticketsFullyProcessed vacates byte 7.
+**What:** Overwriting or adding bonus traits to the existing trait packed tracker.
 
-### Anti-Pattern 3: Leaving the Decimator Self-Call Trampoline in EndgameModule's Former Location
-**What:** After moving runRewardJackpots to JackpotModule, forgetting that `IDegenerusGame(address(this)).runDecimatorJackpot()` is address-independent.
-**Why bad:** Nothing actually breaks -- `address(this)` always resolves to the Game contract regardless of which module's code is executing. But failing to verify this causes unnecessary worry.
-**Instead:** Confirm: in delegatecall context, `address(this)` = DegenerusGame. The self-call routes through Game.runDecimatorJackpot which delegates to DecimatorModule. Module identity is irrelevant.
+**Why bad:** `_resumeDailyEth` reads main traits from `dailyJackpotTraitsPacked` at line 1137. If bonus traits are written there, the ETH resume path (call 2 of the ETH gas split) would use wrong traits. The ETH distribution must always use main traits.
+
+**Instead:** Store bonus traits in `dailyTicketBudgetsPacked` which is only consumed by `payDailyJackpotCoinAndTickets`.
+
+### Anti-Pattern 2: Adding a New Storage Variable for Bonus Traits
+
+**What:** Declaring `uint32 bonusTraitsPacked` as a separate storage slot.
+
+**Why bad:** Costs 2100 gas (cold SLOAD) in Call 2 for data that fits in 32 bits of an existing 256-bit word with 112 bits free. Pure waste.
+
+**Instead:** Pack into `dailyTicketBudgetsPacked` at bits 144-175.
+
+### Anti-Pattern 3: Rolling Bonus Traits in Call 2
+
+**What:** Calling `_rollWinningTraits` during `payDailyJackpotCoinAndTickets` instead of storing the roll from Call 1.
+
+**Why bad:** `_rollWinningTraits` calls `_applyHeroOverride` which calls `_topHeroSymbol(_simulatedDayIndex())`. If Call 1 and Call 2 happen on different simulated days (unlikely but possible in edge cases), the hero override could differ. Rolling in Call 1 and storing ensures consistency between the bonus trait selection announcement (event) and the actual distribution.
+
+**Instead:** Roll in Call 1 (alongside main traits), store in packed budgets, consume in Call 2.
+
+## Suggested Modification Order (Minimizing Risk)
+
+### Step 1: Pack/Unpack Infrastructure
+
+Modify `_packDailyTicketBudgets` and `_unpackDailyTicketBudgets` to include the 5th field (bonusTraitsPacked at bits 144-175). All existing callers pass 0 for the new field initially. This is a pure additive change with zero behavioral impact.
+
+**Files:** `DegenerusGameJackpotModule.sol` (2 functions)
+**Risk:** MINIMAL -- new bits are in unused space, existing callers pass 0
+
+### Step 2: Bonus Trait Roll in Call 1
+
+In `payDailyJackpot` (jackpot phase path), add the bonus trait roll after the main roll. Pack bonus traits into `dailyTicketBudgetsPacked`. Emit `BonusWinningTraits` event. Add `BONUS_TRAIT_TAG` constant.
+
+**Files:** `DegenerusGameJackpotModule.sol` (1 function + 1 constant + 1 event)
+**Risk:** LOW -- additive; main ETH distribution path untouched
+
+### Step 3: Bonus Traits in Call 2 -- Coin Distribution
+
+In `payDailyJackpotCoinAndTickets`, unpack bonus traits. Change coin jackpot section to use bonus traits instead of main traits. Narrow `_selectDailyCoinTargetLevel` to [lvl+1, lvl+4].
+
+**Files:** `DegenerusGameJackpotModule.sol` (2 functions)
+**Risk:** MEDIUM -- changes coin winner selection (different traits = different winners)
+**Verification:** Coin winners are bonus-trait-matched at bonus target level
+
+### Step 4: Bonus Traits in Call 2 -- Carryover Tickets
+
+In `payDailyJackpotCoinAndTickets`, change carryover ticket distribution to use bonus traits instead of main traits.
+
+**Files:** `DegenerusGameJackpotModule.sol` (1 call site, ~1 line change)
+**Risk:** MEDIUM -- changes carryover ticket winner selection
+**Verification:** Carryover winners matched against bonus traits at source level
+
+### Step 5: Purchase Phase Decision
+
+If purchase-phase BURNIE also needs bonus traits: modify `payDailyCoinJackpot` to roll bonus traits inline and use them for coin distribution. No storage needed (single-call path).
+
+**Files:** `DegenerusGameJackpotModule.sol` (1 function)
+**Risk:** LOW -- isolated function, no cross-call state
+
+### Step 6: Interface and Event Updates
+
+Add `BonusWinningTraits` event to `IDegenerusGameJackpotModule` interface. Update any off-chain indexers or test expectations.
+
+**Files:** `IDegenerusGameJackpotModule.sol`, test files
+**Risk:** MINIMAL -- interface-only
+
+## Gas Analysis
+
+| Operation | Current Gas | After Change | Delta |
+|-----------|------------|--------------|-------|
+| Call 1 SSTORE (`dailyTicketBudgetsPacked`) | Same slot | Same slot | 0 |
+| Call 1 bonus roll (`_rollWinningTraits`) | N/A | ~800 (keccak + pack + hero check) | +800 |
+| Call 1 bonus event emission | N/A | ~375 (LOG2 base + 56 bytes) | +375 |
+| Call 2 SLOAD (`dailyTicketBudgetsPacked`) | Same slot | Same slot | 0 |
+| Call 2 coin distribution | Same | Same (different traits, same logic) | 0 |
+| Call 2 carryover distribution | Same | Same (different traits, same logic) | 0 |
+| **Total marginal cost** | | | **~1175 gas** |
+
+The gas overhead is negligible (one keccak256, one trait roll, one event). No new storage slots, no new SLOADs or SSTOREs.
+
+## Invariants to Preserve
+
+1. **Main ETH distribution uses main traits** -- `_resumeDailyEth` reads from `dailyJackpotTraitsPacked`, which must continue to store main traits only
+2. **Daily ticket distribution (20% lootbox) uses main traits at current level** -- this is the "main drawing" for tickets
+3. **`jackpotCounter` increment and `dailyJackpotCoinTicketsPending` clear remain in Call 2** -- lifecycle unchanged
+4. **Both trait rolls share the same VRF word** -- independence comes from domain-separated keccak, not separate VRF requests
+5. **Hero override applies to both rolls** -- `_rollWinningTraits` handles this automatically
+6. **`dailyTicketBudgetsPacked` is zeroed after consumption** (line 630) -- bonus traits cleared with it
 
 ## Sources
 
-- DegenerusGameStorage.sol: canonical storage layout (slots 0-2 verified by reading declaration order)
-- DegenerusGameEndgameModule.sol: all 3 functions and their private helpers (571 lines total)
-- DegenerusGameAdvanceModule.sol: delegatecall dispatch wrappers (lines 541-565), call sites (lines 359, 401)
-- DegenerusGame.sol: claimWhalePass dispatch (lines 1635-1650), runDecimatorJackpot trampoline (lines 1052-1071)
-- DegenerusGameJackpotModule.sol: PayoutUtils inheritance, existing whalePassClaims write (line 1574)
-- DegenerusGamePayoutUtils.sol: _creditClaimable, _queueWhalePassClaimCore, _calcAutoRebuy helpers
-- IDegenerusGameModules.sol: interface definitions for all modules
-- Confidence: HIGH -- all findings verified directly from contract source code
+- `contracts/modules/DegenerusGameJackpotModule.sol` -- lines 310-631 (two-call split), 1861-1942 (trait roll + pack/unpack)
+- `contracts/storage/DegenerusGameStorage.sol` -- lines 925-952 (dailyJackpotTraitsPacked layout), 380-385 (dailyTicketBudgetsPacked layout)
+- `contracts/modules/DegenerusGameAdvanceModule.sol` -- lines 300-433 (call flow orchestration)

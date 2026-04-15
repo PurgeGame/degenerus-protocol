@@ -1,148 +1,209 @@
-# Feature Landscape
+# Feature Landscape: Bonus Jackpot Split
 
-**Domain:** Solidity delegatecall module consolidation + storage slot repacking
-**Researched:** 2026-04-02
-**Milestone:** v16.0 Module Consolidation & Storage Repack
+**Domain:** Smart contract jackpot system split (ETH main + BURNIE bonus)
+**Researched:** 2026-04-11
 
 ## Table Stakes
 
-Features that MUST ship for the milestone to be valid. Missing any = incomplete consolidation.
+Features that MUST work correctly or the split is broken/unsafe.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Absorb `runRewardJackpots` into JackpotModule | Eliminates EndgameModule's largest function; JackpotModule already inherits PayoutUtils and handles all other jackpot logic | **High** | ~260 lines including `_runBafJackpot`, `_addClaimableEth`, `_awardJackpotTickets`, `_jackpotTicketRoll`. Heavy internal dependency on PayoutUtils helpers (`_creditClaimable`, `_calcAutoRebuy`, `_queueWhalePassClaimCore`, `_queueLootboxTickets`). JackpotModule already inherits PayoutUtils -- direct code move. |
-| Absorb `rewardTopAffiliate` into AdvanceModule | Small self-contained function (25 lines), only caller is AdvanceModule's `_rewardTopAffiliate` wrapper. Eliminates a delegatecall hop. | **Low** | Reads `affiliate.affiliateTop()`, calls `dgnrs.transferFromPool()` + `dgnrs.poolBalance()`, writes `levelDgnrsAllocation[lvl]`. All dependencies available via DegenerusGameStorage inheritance. AdvanceModule currently extends Storage directly (not PayoutUtils) -- this function needs zero PayoutUtils helpers, so it fits cleanly. |
-| Absorb `claimWhalePass` into JackpotModule | Called via delegatecall from DegenerusGame; reads `whalePassClaims`, writes ticket ranges. JackpotModule already has ticket-queue access. | **Medium** | Uses `_applyWhalePassStats` (defined in Storage) and `_queueTicketRange` (defined in Storage). Needs no PayoutUtils helpers. Could also go in DegenerusGame directly, but JackpotModule is the natural home since whale passes are jackpot rewards. |
-| Move `ticketsFullyProcessed` from slot 1 to slot 0 | Slot 0 has 2 bytes free (30/32 used). Bool = 1 byte. Fits. | **Low** | Move declaration after `compressedJackpotFlag` in slot 0. Slot 1 drops from 10 to 9 bytes used. |
-| Move `gameOverPossible` from slot 1 to slot 0 | Slot 0 has 2 bytes free, need 2 bools = 2 bytes, fills slot 0 exactly to 32/32. | **Low** | Move declaration after `ticketsFullyProcessed` in new slot 0. Slot 0 becomes fully packed (32/32 bytes). |
-| Downsize `currentPrizePool` from uint256 to uint128, pack into slot 1 | uint128 max = 3.4e38 wei = ~3.4e20 ETH. Total ETH supply is ~120M ETH. Massively safe. | **Medium** | Move `currentPrizePool` as uint128 into slot 1 alongside `purchaseStartDay` (6) + `ticketWriteSlot` (1) + `prizePoolFrozen` (1) + currentPrizePool (16) = 24 bytes. Kills slot 2 entirely. Every `currentPrizePool` read/write must change from uint256 to uint128. |
-| Kill slot 2 | After packing currentPrizePool into slot 1, slot 2 is empty. `prizePoolsPacked` (was slot 3) becomes slot 2. All subsequent slots shift down by 1. | **Low** | No code references slots by number -- Solidity handles layout. But NatSpec slot comments throughout DegenerusGameStorage.sol must be updated. |
-| Fix stale slot header comments | Slot header comments in DegenerusGameStorage.sol reference old layouts. Must reflect new packing. | **Low** | Pure documentation task. Must update the slot layout diagram at top of file and per-section headers. |
-| Remove EndgameModule contract + deploy address | After all 3 functions absorbed, delete the .sol file and remove GAME_ENDGAME_MODULE from ContractAddresses.sol | **Low** | Also remove IDegenerusGameEndgameModule interface. Update DegenerusGameStorage NatSpec that lists module contracts. |
-| Rewire AdvanceModule delegatecall sites | `_rewardTopAffiliate` and `_runRewardJackpots` in AdvanceModule currently delegatecall to EndgameModule. After absorption: `_rewardTopAffiliate` becomes inline code; `_runRewardJackpots` delegatecalls to JackpotModule instead. | **Medium** | AdvanceModule already delegatecalls JackpotModule for daily jackpots. Adding `runRewardJackpots` to that module is consistent. |
-| Rewire DegenerusGame claimWhalePass delegatecall | `_claimWhalePassFor` in DegenerusGame delegatecalls EndgameModule. After absorption, delegatecall target changes to JackpotModule. | **Low** | Single-site change: ContractAddresses.GAME_ENDGAME_MODULE -> ContractAddresses.GAME_JACKPOT_MODULE, selector unchanged. |
+| Independent bonus trait roll | Core requirement -- bonus drawing needs its own 4-trait set so BURNIE/ticket winners differ from ETH winners | Low | `_rollWinningTraits(randWord)` already exists; call it twice with different entropy derivation |
+| Bonus near-future range [lvl+1, lvl+4] | Decision [v26.0] -- remove lvl from BURNIE coin target range so bonus only targets future-level tickets | Low | Change `_selectDailyCoinTargetLevel` from `lvl + entropy%5` to `lvl + 1 + entropy%4` |
+| Hero symbol override on bonus traits | Hero override is expected on all trait rolls; omitting it silently changes economics for hero wagerers | Low | `_applyHeroOverride` is already called inside `_rollWinningTraits`; second roll gets it automatically |
+| Carryover uses bonus traits | Decision [v26.0] -- carryover ticket distribution draws from future-level tickets, must use bonus traits not main traits | Medium | Carryover in `payDailyJackpotCoinAndTickets` currently reads `winningTraitsPacked` from `dailyJackpotTraitsPacked`; must read bonus traits instead |
+| Bonus trait event emission | Decision [v26.0] -- no storage, emit-only for UI consumption | Low | New event `BonusWinningTraits(uint24 indexed level, uint32 traitsPacked)` or similar |
+| Main ETH jackpot unchanged | Main drawing (current-level tickets, ETH payouts) must not change behavior | N/A (guard rail) | Verify delta equivalence for all ETH paths |
+| Main 20% ticket distribution unchanged | Daily ticket distribution draws from current-level tickets using main traits | N/A (guard rail) | `dailyTicketUnits` distribution in `payDailyJackpotCoinAndTickets` continues using main traits from `dailyJackpotTraitsPacked` |
+| ETH pool accounting invariant | Split must not affect ETH conservation (currentPrizePool, futurePrizePool, nextPrizePool, claimablePool) | N/A (guard rail) | Bonus changes only affect BURNIE/ticket paths, not ETH flow |
 
 ## Differentiators
 
-Features that add value beyond the minimum viable consolidation.
+Features that add value beyond the minimum split but are not strictly required.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Inline `_rewardTopAffiliate` directly in AdvanceModule (no delegatecall) | Saves ~2,600 gas per level transition (delegatecall overhead eliminated). Function is only 25 lines with no PayoutUtils dependency. | **Low** | AdvanceModule extends DegenerusGameStorage which provides `affiliate`, `dgnrs`, and `levelDgnrsAllocation`. All constants (AFFILIATE_POOL_REWARD_BPS, AFFILIATE_DGNRS_LEVEL_BPS) move inline. Events must be declared in AdvanceModule. |
-| Inline `claimWhalePass` directly in DegenerusGame (no delegatecall) | Saves ~2,600 gas per whale pass claim. Function is 20 lines, uses only Storage-level helpers. | **Medium** | Depends on `_applyWhalePassStats` and `_queueTicketRange` being accessible from DegenerusGame. Both are defined in DegenerusGameStorage (internal), so DegenerusGame inherits them. Would eliminate the delegatecall entirely. Trade-off: adds ~20 lines to an already large DegenerusGame contract. |
+| Pack bonus traits into dailyJackpotTraitsPacked | Saves 1 storage slot; 168 bits free in existing packed word (88/256 used). Bonus traits (32 bits) fit at bit offset 88 | Low | Adds DJT_BONUS_TRAITS_SHIFT/MASK constants. Enables carryover Phase 2 to read bonus traits from same SLOAD as main traits |
+| Separate entropy domains for main vs bonus | Prevents trait correlation between ETH and BURNIE drawings | Low | Use different tag (e.g., `keccak256("bonus-traits")`) when deriving bonus roll entropy from same randWord |
+| Bonus traits available during purchase phase too | Purchase phase currently runs `payDailyCoinJackpot` (standalone) which loads/rolls traits. Having a bonus roll here means purchase-phase BURNIE also uses independent traits | Medium | `payDailyCoinJackpot` currently loads main traits or rolls fresh; needs bonus roll path |
 
 ## Anti-Features
 
-Features to explicitly NOT build as part of this milestone.
+Features to explicitly NOT build.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| Repack slots 3+ (prizePoolsPacked, rngWordCurrent, etc.) | Slot renumbering beyond killing slot 2 risks introducing bugs for negligible gas savings. Full-width uint256 variables don't benefit from repacking. | Only repack slots 0-2 as specified. Let Solidity handle natural slot renumbering when slot 2 dies. |
-| Change prizePoolsPacked encoding | Already optimally packed as two uint128s. Touching encoding risks cache-overwrite class bugs (BAF-class, proven dangerous in v4.4). | Leave encoding untouched. |
-| Merge JackpotModule into AdvanceModule | Would create a monolithic module exceeding Spurious Dragon 24KB limit. AdvanceModule is already the largest module. | Keep them separate; delegatecall from AdvanceModule to JackpotModule is the established pattern. |
-| Add new features alongside consolidation | Mixing structural refactoring with feature additions creates compound risk. Delta audit becomes intractable. | Pure consolidation milestone. Features belong in subsequent milestones. |
-| Touch auto-rebuy logic during move | `_addClaimableEth` with its AutoRebuy integration is complex. Temptation to "clean up" during move. | Copy verbatim. Any auto-rebuy changes belong in a separate milestone with dedicated testing. |
+| Bonus traits in storage (new slot) | Wastes a storage slot when 168 bits are free in `dailyJackpotTraitsPacked`; adds gas (cold SLOAD for new slot) | Pack into existing `dailyJackpotTraitsPacked` at bits [88:119] |
+| Separate VRF request for bonus drawing | Doubles VRF cost, doubles latency, no security benefit (same commitment window) | Derive bonus entropy from same `randWord` with different domain tag |
+| Independent bonus jackpot counter | Bonus drawing happens at same cadence as main (5 days). Separate counter adds state and branching for zero benefit | Share `jackpotCounter` -- bonus is a Phase 2 add-on, not independent scheduling |
+| Bonus drawing during purchase phase as separate flow | Purchase phase already calls `_payDailyCoinJackpot` which handles BURNIE. Adding a separate "bonus" path during purchase phase overcomplicates the two-phase flow | Modify existing `_payDailyCoinJackpot` and `payDailyJackpotCoinAndTickets` to use bonus traits for BURNIE/coin distribution |
+| Far-future coin jackpot changes | Far-future (25% of BURNIE, [lvl+5, lvl+99]) draws from `ticketQueue` which has no trait assignment. Changing its behavior is out of scope and unnecessary | Keep `_awardFarFutureCoinJackpot` unchanged -- it uses ticketQueue (traitless), unaffected by trait split |
 
 ## Feature Dependencies
 
 ```
-Move ticketsFullyProcessed to slot 0 ──┐
-Move gameOverPossible to slot 0 ───────┤
-                                        ├──> Downsize currentPrizePool to uint128 in slot 1
-                                        │         │
-                                        │         └──> Kill slot 2
-                                        │                   │
-                                        │                   └──> Fix stale slot header comments
-                                        │
-Absorb runRewardJackpots ──────────────>├──> Rewire AdvanceModule delegatecall sites
-Absorb rewardTopAffiliate ─────────────>│         │
-Absorb claimWhalePass ────────────────>│         └──> Remove EndgameModule contract + deploy address
-                                        │                   │
-                                        │                   └──> Remove IDegenerusGameEndgameModule interface
-Rewire DegenerusGame claimWhalePass ───>┘
+Independent bonus trait roll
+  |
+  +-- Bonus traits packed into dailyJackpotTraitsPacked (or emitted)
+  |     |
+  |     +-- Carryover uses bonus traits (reads bonus field from packed storage)
+  |     |
+  |     +-- payDailyJackpotCoinAndTickets uses bonus traits for BURNIE near-future
+  |
+  +-- Bonus trait event emission (emitted at roll time, before any consumer reads)
+  |
+  +-- _selectDailyCoinTargetLevel range change [lvl, lvl+4] -> [lvl+1, lvl+4]
+       (independent of trait split but same milestone)
+
+Main traits (existing, no change needed):
+  +-- ETH jackpot: _processDailyEth reads main traits
+  +-- 20% daily ticket distribution: _distributeTicketJackpot reads main traits
+  +-- Purchase phase: _executeJackpot reads main traits
 ```
 
-**Two independent workstreams that can proceed in parallel:**
-1. **Storage repack** (slots 0-2)
-2. **Function redistribution** (EndgameModule elimination)
+## Edge Cases: Empty Future-Level Buckets
 
-They converge at the end: removing EndgameModule and updating comments.
+The bonus drawing targets [lvl+1, lvl+4] via `_selectDailyCoinTargetLevel`. Some of those levels may have zero tickets in `traitBurnTicket[targetLevel]`. This section documents all edge cases and how they are (or should be) handled.
 
-## Natural Homes for Each Function
+### EC-01: Target level has zero tickets in all 4 winning trait buckets
 
-### `runRewardJackpots` -> JackpotModule
+**Scenario:** `_selectDailyCoinTargetLevel` picks `lvl+3`, but `traitBurnTicket[lvl+3]` has no entries for any of the 4 bonus winning traits.
 
-**Why JackpotModule:**
-- JackpotModule already inherits DegenerusGamePayoutUtils (which provides `_creditClaimable`, `_calcAutoRebuy`, `_queueWhalePassClaimCore`)
-- JackpotModule already handles all other jackpot types (daily ETH, daily coin, daily tickets, earlybird, degenerette)
-- `runRewardJackpots` calls `IDegenerusGame(address(this)).runDecimatorJackpot()` which routes through the game contract -- no coupling to EndgameModule-specific state
-- AdvanceModule already delegatecalls JackpotModule via `ContractAddresses.GAME_JACKPOT_MODULE`
-- All private helpers (`_runBafJackpot`, `_addClaimableEth`, `_awardJackpotTickets`, `_jackpotTicketRoll`) move together as a unit
+**Current behavior:** `_awardDailyCoinToTraitWinners` calls `_computeBucketCounts` which checks `traitBurnTicket[lvl][trait].length` for each trait. If all 4 return 0, `activeCount == 0` triggers early return. The BURNIE budget for that day is simply not distributed (no revert, no loss -- `coinflip.creditFlip` is never called).
 
-**What moves:** `runRewardJackpots` (external), `_runBafJackpot` (private), `_addClaimableEth` (private), `_awardJackpotTickets` (private), `_jackpotTicketRoll` (private). Events: `AutoRebuyExecuted`, `RewardJackpotsSettled`. Constants: `SMALL_LOOTBOX_THRESHOLD`. Interface import: `IDegenerusJackpots` (for `jackpots.runBafJackpot`), `IDegenerusGame` (for `runDecimatorJackpot`). Library imports: `EntropyLib`, `PriceLookupLib` (JackpotModule already imports both).
+**Post-split behavior:** Identical. No change needed. The BURNIE budget effectively rolls over because `_calcDailyCoinBudget` is computed fresh each day based on `levelPrizePool` and current price, not from a stored balance that gets depleted.
 
-### `rewardTopAffiliate` -> AdvanceModule (inline, no delegatecall)
+**Risk:** LOW. BURNIE budget is calculated, not deducted from a pool. Undistributed BURNIE simply means slightly fewer BURNIE minted via coinflip that day.
 
-**Why inline in AdvanceModule:**
-- Only 25 lines of code
-- Zero dependency on PayoutUtils -- uses only Storage-level interfaces (`affiliate`, `dgnrs`, `levelDgnrsAllocation`)
-- Only caller is AdvanceModule's `_rewardTopAffiliate` private wrapper
-- Saves delegatecall overhead (~2,600 gas) on every level transition
-- AdvanceModule already imports IStakedDegenerusStonk and IDegenerusAffiliate via Storage
+### EC-02: Target level has tickets in some but not all trait buckets
 
-**What moves:** `rewardTopAffiliate` body inlined into AdvanceModule's existing `_rewardTopAffiliate` private function. Event: `AffiliateDgnrsReward` (declare in AdvanceModule). Constants: `AFFILIATE_POOL_REWARD_BPS` (100), `AFFILIATE_DGNRS_LEVEL_BPS` (500).
+**Scenario:** `lvl+2` has tickets in traits [0] and [2] but not [1] and [3].
 
-### `claimWhalePass` -> JackpotModule
+**Current behavior:** `_computeBucketCounts` sets `activeCount=2`, redistributes the winner cap across only the 2 active buckets. `_awardDailyCoinToTraitWinners` only processes active buckets, awarding the full budget to winners in those 2 traits.
 
-**Why JackpotModule:**
-- Whale passes are awarded by BAF jackpot logic (which is moving to JackpotModule)
-- Uses `_applyWhalePassStats` and `_queueTicketRange` from Storage (available to all modules)
-- JackpotModule already handles ticket distribution patterns
-- DegenerusGame's `_claimWhalePassFor` already uses delegatecall pattern -- just retarget to JackpotModule
+**Post-split behavior:** Same mechanism. The bonus traits are independent, so there may be MORE empty buckets (since the bonus roll is uncorrelated with which traits have tickets at that level). This slightly increases the probability of partial or full miss days.
 
-**What moves:** `claimWhalePass` (external), `WhalePassClaimed` event declaration.
+**Risk:** LOW. Partial distribution is by design -- more tickets at a level means more likely to match at least one trait.
 
-## Storage Repack: Concrete Layout
+### EC-03: Near-future levels have tickets only via deity virtual entries
 
-### Current Layout
+**Scenario:** No player has purchased tickets for `lvl+2`, but a deity pass holder has a symbol in one of the bonus winning traits.
 
-| Slot | Bytes Used | Contents |
-|------|-----------|----------|
-| 0 | 30/32 | levelStartTime(6) + dailyIdx(6) + rngRequestTime(6) + level(3) + jackpotPhaseFlag(1) + jackpotCounter(1) + lastPurchaseDay(1) + decWindowOpen(1) + rngLockedFlag(1) + phaseTransitionActive(1) + gameOver(1) + dailyJackpotCoinTicketsPending(1) + compressedJackpotFlag(1) |
-| 1 | 10/32 | purchaseStartDay(6) + ticketWriteSlot(1) + ticketsFullyProcessed(1) + prizePoolFrozen(1) + gameOverPossible(1) |
-| 2 | 32/32 | currentPrizePool (uint256) |
+**Current behavior:** `_computeBucketCounts` checks for deity virtual entries (`deityBySymbol[fullSymId] != address(0)`). If found, the bucket is marked active. `_randTraitTicket` returns the deity address for virtual indices. The deity holder receives BURNIE.
 
-### Target Layout
+**Post-split behavior:** Same. Deity virtual entries work identically regardless of which traits are rolled.
 
-| Slot | Bytes Used | Contents |
-|------|-----------|----------|
-| 0 | **32/32** | levelStartTime(6) + dailyIdx(6) + rngRequestTime(6) + level(3) + jackpotPhaseFlag(1) + jackpotCounter(1) + lastPurchaseDay(1) + decWindowOpen(1) + rngLockedFlag(1) + phaseTransitionActive(1) + gameOver(1) + dailyJackpotCoinTicketsPending(1) + compressedJackpotFlag(1) + **ticketsFullyProcessed(1)** + **gameOverPossible(1)** |
-| 1 | **24/32** | purchaseStartDay(6) + ticketWriteSlot(1) + prizePoolFrozen(1) + **currentPrizePool(16 = uint128)** |
-| ~~2~~ | **KILLED** | ~~currentPrizePool~~ -- absorbed into slot 1 |
+**Risk:** NONE. Existing mechanism handles this correctly.
 
-**Gas impact:** Every `advanceGame` call touches slot 0 and slot 1. Packing `ticketsFullyProcessed` and `gameOverPossible` into slot 0 eliminates separate warm SLOADs when they are read alongside other slot-0 fields (already loaded). Killing slot 2 by packing `currentPrizePool` into slot 1 co-locates it with `prizePoolFrozen` and `purchaseStartDay`, which are frequently accessed in the same code paths.
+### EC-04: [lvl+1, lvl+4] range vs [lvl, lvl+4] -- removing current level from bonus targets
+
+**Scenario:** Current level (`lvl`) always has tickets (from current-level purchases/burns). Removing it from the bonus range means the bonus drawing ONLY targets levels that may have sparse/no tickets.
+
+**Impact:** At early levels (0-3), future levels may have very few tickets. At level 0, `lvl+1` through `lvl+4` (levels 1-4) will have few or no tickets unless early lootbox/carryover has populated them.
+
+**Mitigation:** Early-bird lootbox (day 1 of jackpot phase) distributes tickets to `lvl+1` through `lvl+5`. Carryover tickets (days 2-4) go to `lvl+1` through `lvl+4`. Far-future coin jackpot (25% of BURNIE budget) uses `ticketQueue` which does not depend on trait assignment. So the 75% near-future portion may miss more often at early levels, but this is acceptable because:
+1. Early-level prize pools are small, so BURNIE budgets are small
+2. The far-future 25% still distributes
+3. Ticket population grows rapidly as more players enter
+
+**Risk:** MEDIUM at very early levels (0-2), LOW otherwise.
+
+### EC-05: Carryover source level [lvl+1, lvl+4] has empty trait buckets for bonus traits
+
+**Scenario:** Carryover selects `sourceLevel = lvl + offset` (offset 1-4). It draws winners from `traitBurnTicket[sourceLevel]` using bonus traits. If the bonus-winning trait buckets at `sourceLevel` are empty, no carryover tickets are awarded.
+
+**Current behavior:** Carryover uses MAIN traits. After the split, it uses BONUS traits. Since bonus traits are independent, a different set of trait buckets is queried. This may produce different emptiness patterns.
+
+**Impact:** Carryover ticket distribution may find fewer winners with bonus traits vs main traits at any given source level. This is a probabilistic shift, not a bug.
+
+**Existing safeguard:** `_distributeTicketJackpot` returns gracefully when `activeCount == 0`. Unawarded ticket units are simply not distributed (the ETH backing has already moved to nextPrizePool, so pool accounting is unaffected).
+
+**Risk:** LOW. Unawarded carryover tickets do not leak ETH -- the backing ETH stays in nextPrizePool regardless.
+
+### EC-06: Same player wins both main ETH and bonus BURNIE jackpot
+
+**Scenario:** Player holds current-level tickets matching main traits AND future-level tickets matching bonus traits.
+
+**Current behavior (pre-split):** Already possible since the same traits are used for both ETH and BURNIE. The split makes this LESS likely (independent trait rolls) but still possible.
+
+**Impact:** No issue. ETH credits to `claimableWinnings`, BURNIE credits via `coinflip.creditFlip`. Different accounting paths, no conflict.
+
+**Risk:** NONE. Desirable outcome for players who hold both current and future tickets.
+
+### EC-07: Level transition during jackpot phase -- future tickets get processed
+
+**Scenario:** As the level transitions, `_prepareFutureTickets` processes near-future ticket queues, assigning traits. This populates `traitBurnTicket[lvl+1..lvl+4]`.
+
+**Impact on bonus drawing:** Bonus drawing during jackpot phase occurs AFTER ticket processing (controlled by `dailyJackpotCoinTicketsPending` flag and advance flow ordering). So tickets at future levels should be populated by the time bonus drawing runs.
+
+**Risk:** LOW. The advance flow already ensures ticket processing happens before coin+ticket distribution.
 
 ## MVP Recommendation
 
-**Phase 1 -- Storage repack (do first):**
-1. Move `ticketsFullyProcessed` + `gameOverPossible` into slot 0
-2. Downsize `currentPrizePool` to uint128, pack into slot 1
-3. Update all slot header comments and layout diagram
+Prioritize (in implementation order):
 
-**Phase 2 -- Function redistribution:**
-1. Move `runRewardJackpots` + all private helpers to JackpotModule
-2. Inline `rewardTopAffiliate` into AdvanceModule
-3. Move `claimWhalePass` to JackpotModule
-4. Rewire all delegatecall sites
-5. Delete EndgameModule, interface, and ContractAddresses entry
+1. **Independent bonus trait roll** -- Core of the split. Roll second trait set from same `randWord` with different entropy domain.
+2. **Pack bonus traits into `dailyJackpotTraitsPacked`** -- Store at bits [88:119]. Zero incremental gas (same SSTORE as main traits).
+3. **Bonus trait event** -- Emit immediately after roll for UI consumption. Single new event.
+4. **`_selectDailyCoinTargetLevel` range narrowing** -- Change `% 5` to `% 4` and `+ 0` to `+ 1`. One line.
+5. **Wire bonus traits into coin + carryover consumers** -- `payDailyJackpotCoinAndTickets` reads bonus traits instead of main traits for: (a) near-future coin distribution, (b) carryover ticket distribution.
+6. **Wire bonus traits into standalone `payDailyCoinJackpot`** -- Purchase-phase BURNIE uses bonus traits.
 
-**Rationale for this order:** Storage repack changes the slot layout, which affects `forge inspect` verification. Doing it first gives a clean baseline. Function redistribution is pure code movement with no storage layout impact (delegatecall modules share the same layout via inheritance).
+Defer: None. All 6 items are small and tightly coupled. Splitting across milestones would leave the system in an inconsistent state.
 
-**Defer:** Inlining `claimWhalePass` directly in DegenerusGame (differentiator). The delegatecall to JackpotModule is sufficient -- inlining saves gas but adds contract size to an already large Game contract.
+## Detailed Change Map (Function-Level)
+
+### Functions That Change
+
+| Function | Change | Complexity |
+|----------|--------|------------|
+| `payDailyJackpot` (jackpot phase path) | Roll bonus traits, pack into DJT, emit event | Low |
+| `payDailyJackpot` (purchase phase path) | Roll bonus traits, pass to `_payDailyCoinJackpot` | Low |
+| `payDailyJackpotCoinAndTickets` | Read bonus traits from DJT; use for coin + carryover distribution | Low-Med |
+| `payDailyCoinJackpot` (standalone) | Roll or load bonus traits; use for near-future coin distribution | Low |
+| `_selectDailyCoinTargetLevel` | Change range from [lvl, lvl+4] to [lvl+1, lvl+4] | Trivial |
+| `_syncDailyWinningTraits` | Also write bonus traits to DJT | Trivial |
+| `_loadDailyWinningTraits` | Also read bonus traits from DJT | Trivial |
+
+### Functions That Must NOT Change
+
+| Function | Why Unchanged |
+|----------|---------------|
+| `_processDailyEth` | ETH distribution uses main traits only |
+| `_executeJackpot` | Purchase-phase ETH uses main traits |
+| `_runJackpotEthFlow` | ETH bucket distribution unchanged |
+| `_distributeTicketJackpot` (daily 20%) | Daily ticket distribution uses main traits, draws from current level |
+| `_runEarlyBirdLootboxJackpot` | Own per-winner random trait selection, no dependency on winning traits |
+| `_awardFarFutureCoinJackpot` | Uses ticketQueue (traitless), independent of trait roll |
+| `runTerminalJackpot` | Rolls its own traits, independent path |
+| `runBafJackpot` | Uses external jackpots contract, independent path |
+| `distributeYieldSurplus` | No trait dependency |
+
+### Storage Changes
+
+| Storage | Change | Impact |
+|---------|--------|--------|
+| `dailyJackpotTraitsPacked` | Add bonus traits at bits [88:119] (32 bits) | Same SSTORE, no new slot |
+| New constants: `DJT_BONUS_TRAITS_SHIFT = 88`, `DJT_BONUS_TRAITS_MASK = 0xFFFFFFFF` | Constants only | Zero gas impact |
+
+### New Events
+
+| Event | Signature | Emitted Where |
+|-------|-----------|---------------|
+| `BonusWinningTraits` | `event BonusWinningTraits(uint24 indexed level, uint32 traitsPacked)` | `payDailyJackpot` (both paths), `payDailyCoinJackpot` |
+
+### Interface Changes
+
+| Interface | Change |
+|-----------|--------|
+| `IDegenerusGameJackpotModule` | No signature changes (bonus traits are internal) |
+| `IDegenerusGame` | None |
 
 ## Sources
 
-- Direct code analysis of DegenerusGameEndgameModule.sol, DegenerusGameJackpotModule.sol, DegenerusGameAdvanceModule.sol, DegenerusGamePayoutUtils.sol, DegenerusGameStorage.sol
-- Inheritance chains verified: EndgameModule -> PayoutUtils -> Storage; JackpotModule -> PayoutUtils -> Storage; AdvanceModule -> Storage
-- Storage slot layout from DegenerusGameStorage.sol header comments (lines 38-73)
-- Delegatecall callsites traced via grep across all contracts/
+- Contract source: `contracts/modules/DegenerusGameJackpotModule.sol` (2158 lines)
+- Storage layout: `contracts/storage/DegenerusGameStorage.sol` (lines 924-952, dailyJackpotTraitsPacked)
+- Advance flow: `contracts/modules/DegenerusGameAdvanceModule.sol` (lines 310-441)
+- Decision log: `.planning/STATE.md` (v26.0 decisions)
+- PROJECT.md milestone target features

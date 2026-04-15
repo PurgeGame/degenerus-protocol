@@ -1,9 +1,0 @@
-External function coverage-classification check
-================================================
-matrix: .planning/phases/222-external-function-coverage-gap/222-01-COVERAGE-MATRIX.md
-source: contracts
-lcov:   lcov.info
-
-
-PASS coverage-check clean (matrix drift=0, uncured gaps=0, regressed rows=0)
----exit=0---
