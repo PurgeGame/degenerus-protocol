@@ -132,7 +132,11 @@ Plans:
   3. Each state-machine deviation or view-refresh mismatch is classified by direction (comment→code drift, docs→code gap, etc.) and added to the Phase 229 finding candidate pool
   4. All 9 indexer files (block-fetcher, cursor-manager, event-processor, reorg-detector, view-refresh, purge-block-range, main, index, plus any delegated handler files) have been audit-touched across Phases 227+228 — no indexer file left unreviewed
 
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 228-01-PLAN.md — IDX-04 cursor + reorg state-machine trace (M1..M8, M13, M14 + intra-batch edge case E1); absorbs 227 deferrals #1, #2, #4; produces 228-01-CURSOR-REORG-TRACE.md; finding block F-28-228-01+; Wave 1
+- [ ] 228-02-PLAN.md — IDX-05 view-refresh audit (M9..M12 + V1 INFO context) against D-228-08 two sources (view-refresh.ts comments + views.ts); absorbs 227 deferral #3; produces 228-02-VIEW-REFRESH-AUDIT.md; finding block F-28-228-101+; Wave 1
 
 ### Phase 229: Findings Consolidation
 **Goal**: All discrepancies surfaced in phases 224-228 are consolidated into `audit/FINDINGS-v28.0.md` with severity (HIGH / MEDIUM / LOW / INFO), direction (docs→code / code→docs / comment→code / schema↔migration), originating phase + file:line trace, and resolution status (RESOLVED-DOC / RESOLVED-CODE / DEFERRED with reason / INFO-ACCEPTED); milestone state is advanced to SHIPPED and `PROJECT.md` / `MILESTONES.md` / `KNOWN-ISSUES.md` are synced
