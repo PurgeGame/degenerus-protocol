@@ -1,5 +1,45 @@
 # Milestones
 
+## v28.0 Database & API Intent Alignment Audit (Shipped: 2026-04-15)
+
+**Phases completed:** 6 phases (224–229), 13 plans
+
+**Scope:** Database & API intent alignment audit across five audit phases (224–228) plus one consolidation phase (229). v28.0 graded the sibling `database/` repo against three intent sources (`database/docs/API.md`, `database/docs/openapi.yaml`, and in-source comments) and four mismatch directions (docs→code, code→docs, comment→code, schema↔migration). Scope: `database/` repo audited against `contracts/` event interface; contracts source was NOT re-audited this milestone — contract correctness is carried forward from v25.0/v26.0/v27.0.
+
+**Finding counts (from `audit/FINDINGS-v28.0.md`):**
+
+| Severity | Count |
+|----------|-------|
+| CRITICAL | 0 |
+| HIGH | 0 |
+| MEDIUM | 0 |
+| LOW | 27 |
+| INFO | 42 |
+| **Total** | **69** |
+
+**Per-phase summary:**
+
+- **Phase 224 — API Route ↔ OpenAPI Alignment (1 finding):** All 27 documented endpoints in `openapi.yaml` PAIRED with implemented routes in `database/src/api/routes/`, and all 27 routes PAIRED-BOTH to `openapi.yaml` and `API.md` — zero orphan endpoints either direction. 1 INFO finding (health-route scouting note). Requirements API-01, API-02 satisfied.
+- **Phase 225 — API Handler Behavior, Validation & Schema Alignment (22 findings):** Three-plan sweep across JSDoc/handler comments (225-01: 4 INFO), response-shape drift between `database/src/api/schemas/*.ts` and `database/docs/openapi.yaml` (225-02: 9 INFO/LOW), and request-validation-schema drift (225-03: 9 INFO/LOW). Zero HIGH/MEDIUM. Two findings (F-28-15, F-28-19) were rescinded on re-read but preserved their canonical IDs for sequential-allocation integrity. Requirements API-03, API-04, API-05 satisfied.
+- **Phase 226 — Schema ↔ Migration Orphan Audit (10 findings):** Two-plan diff between Drizzle schema TS files (`database/src/db/schema/*.ts`) and applied SQL migrations (`database/drizzle/*.sql`), plus per-migration trace. 10 findings (3 INFO, 7 LOW), all `schema↔migration` direction. Plans 226-03 and 226-04 produced zero findings. Requirements SCHEMA-01..04 satisfied.
+- **Phase 227 — Indexer Event Processing Correctness (31 findings):** Three-plan audit of the event processor. 227-01 (event-coverage matrix) catalogued 22 schema↔handler cases plus 1 inverse orphan (F-28-56 / orig F-28-227-23 — `AutoRebuyProcessed` registry key with no contract event emitter — notable cross-milestone pattern). 227-02 (event-arg-to-field mapping) flagged 6 potential silent-truncation / type-mismatch sites. 227-03 (indexer comment audit) added 2 comment→code drift entries. Zero HIGH/MEDIUM; 21 INFO, 10 LOW. Requirements IDX-01..03 satisfied.
+- **Phase 228 — Cursor Reorg & View Refresh State Machines (5 findings):** Two-plan audit of `cursor-manager.ts`, `reorg-detector.ts`, `main.ts`, and `view-refresh.ts`. 228-01 (cursor + reorg trace: 4 findings) verified the reorg-detector walk-back heals the `confirmations=0` edge within one batch — LOW preserved, not amplified. 228-02 (view-refresh audit: 1 finding) flagged a comment→code drift in staleness semantics. Zero HIGH/MEDIUM; 2 INFO, 3 LOW. This phase absorbed 4 deferrals from Phase 227 per the D-227-10 scope-guard pattern — demonstrating that the cross-phase deferral handoff works. Requirements IDX-04, IDX-05 satisfied.
+
+**Key takeaways / methodology notes:**
+
+- **Catalog-only audit pattern:** v28.0 was catalog-only by design per user directive. 48 of 69 findings marked DEFERRED to a future v29+ remediation backlog; 21 marked INFO-ACCEPTED and retained in `FINDINGS-v28.0.md` (NOT promoted to `audit/KNOWN-ISSUES.md` per D-229-10 — v28 audits the sim/database/indexer against contracts, while KNOWN-ISSUES.md is a contract-side registry). No code writes to `database/`, `contracts/`, or `test/` this milestone.
+- **Cross-repo READ-only model:** Writes confined to `audit/`, `.planning/`, and the phase-artifact directories. This is the first milestone to formalize the cross-repo READ-only audit pattern — audit target lives at `/home/zak/Dev/PurgeGame/database/` while planning + consolidation live in `degenerus-audit/.planning/`.
+- **Tier A/B severity threshold:** D-229-05 preserved per-phase severity with explicit-amplification-only HIGH promotion. Candidate elevations (228 reorg edge F-28-68; 227-02 silent-truncation cluster F-28-57..F-28-62) were examined for cross-phase compounding with 226 schema drift — none found, all severities preserved.
+- **Scope-guard handoff pattern (D-227-10 → D-228-09):** Phase 227 deferred 4 cursor/reorg items to Phase 228's scope rather than over-scoping 227; Phase 228 absorbed and resolved them inside its 2-plan structure. This is the cleanest demonstration to date that the inherited-decision scope-guard pattern carries work across adjacent phases without gaps.
+- **Inverse-orphan pattern (F-28-56):** 227's catalog surfaced a case where the indexer registers a handler for an event no contract emits. Classified INFO-ACCEPTED (dead-code, harmless) but the direction-label `code↔schema` is rare — worth carrying forward as a pattern into future milestones that audit indexer surface area.
+- **Severity distribution asymmetry:** 0 CRITICAL/HIGH/MEDIUM, 27 LOW, 42 INFO — consistent with an intent-alignment audit (most findings are documentation/comment drift, not exploitable logic bugs). The milestone confirms the sim/database/indexer layer is structurally sound against the contract event interface; the surface area of genuine correctness risk is narrow.
+
+**Consolidated deliverable:** `audit/FINDINGS-v28.0.md` (1293 lines; Executive Summary table + per-phase sections + 69 per-finding blocks with Severity/Source/Direction/File/Resolution fields).
+
+**Result:** 5 audit phases (224–228) + 1 consolidation phase (229), 13 plans total. All 17/17 requirements satisfied (API-01..05, SCHEMA-01..04, IDX-01..05, FIND-01..03). Zero exploitable vulnerabilities surfaced. v28.0 is a catalog audit per D-229-07 — 48 DEFERRED items carry to a future v29+ remediation backlog; 21 INFO-ACCEPTED items accepted as design decisions; no contracts/ or test/ changes per user directive.
+
+---
+
 ## v27.0 Call-Site Integrity Audit (Shipped: 2026-04-13)
 
 **Phases completed:** 4 phases, 9 plans, 23 tasks

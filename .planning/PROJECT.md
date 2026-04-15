@@ -8,9 +8,13 @@ Smart contract audit repository for the Degenerus Protocol — an on-chain ETH g
 
 Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
-## Current Milestone: TBD — pending roadmap planning
+## Current Milestone: TBD — next milestone
 
-**Status:** v27.0 complete (2026-04-13); next milestone pending roadmap planning. See `.planning/ROADMAP.md` for prior milestone history and `audit/FINDINGS-v27.0.md` for the most recent consolidated findings report.
+## Completed Milestone: v28.0 Database & API Intent Alignment Audit
+
+**Status:** Complete (2026-04-15)
+
+**Result:** 6 phases (224–229), 13 plans. 69 findings consolidated into `audit/FINDINGS-v28.0.md` (0 CRITICAL, 0 HIGH, 0 MEDIUM, 27 LOW, 42 INFO). Phase 224 paired all 27 openapi endpoints with 27 implemented routes and 27 `API.md` headings (PAIRED-BOTH). Phase 225 swept handler JSDoc, response shapes, and request schemas across three plans (22 findings). Phase 226 diffed Drizzle schema vs applied SQL migrations (10 findings). Phase 227 audited indexer event-processor coverage + arg-mapping + comment drift (31 findings, including F-28-56 inverse-orphan — handler registered for an event no contract emits). Phase 228 verified cursor/reorg/view-refresh state machines and absorbed 4 Phase 227 deferrals via the D-227-10 scope-guard handoff pattern (5 findings). Phase 229 consolidated all findings under canonical flat `F-28-01..F-28-69` numbering with zero HIGH promotions (D-229-05), marked 48 DEFERRED to a future v29+ remediation backlog and 21 INFO-ACCEPTED retained in-document per D-229-10 (KNOWN-ISSUES.md untouched this milestone per user directive — v28 audits the sim/database/indexer layer, not contracts). All 17/17 requirements satisfied (API-01..05, SCHEMA-01..04, IDX-01..05, FIND-01..03). Cross-repo READ-only audit pattern formalized: writes confined to `audit/` + `.planning/`; no `contracts/`, `database/`, or `test/` changes. Deliverable: `audit/FINDINGS-v28.0.md`.
 
 ## Completed Milestone: v27.0 Call-Site Integrity Audit
 
@@ -414,4 +418,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 — Phase 221 Raw Selector & Calldata Audit complete (CSI-04/05/06/07 closed); v27.0 2/4 phases done. Baseline: 0 FLAGGED, 5 JUSTIFIED INFO (3 Chainlink mocks + 2 ERC-677 transferAndCall feeders); regression gate `scripts/check-raw-selectors.sh` wired into `make test-foundry`/`test-hardhat`.*
+*Last updated: 2026-04-13 — v28.0 Database & API Intent Alignment Audit milestone started. Audit target: sibling `database/` repo (API handlers, DB schema + migrations, indexer) against API.md + openapi.yaml + in-source comments. Deliverable: audit/FINDINGS-v28.0.md.*
