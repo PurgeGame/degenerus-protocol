@@ -33,11 +33,10 @@ import {GNRUS} from "../../../contracts/GNRUS.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MockStETH} from "../../../contracts/mocks/MockStETH.sol";
 import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
-import {MockWXRP} from "../../../contracts/mocks/MockWXRP.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 5 mocks + 23 protocol contracts in setUp().
+/// @notice Deploys all 4 mocks + 23 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 /// @dev Address correctness depends on patchForFoundry.js having patched
 ///      ContractAddresses.sol before forge build.
@@ -46,7 +45,6 @@ abstract contract DeployProtocol is Test {
     MockVRFCoordinator public mockVRF;
     MockStETH public mockStETH;
     MockLinkToken public mockLINK;
-    MockWXRP public mockWXRP;
     MockLinkEthFeed public mockFeed;
 
     // Protocol contracts
@@ -80,33 +78,32 @@ abstract contract DeployProtocol is Test {
         // Set timestamp to match patchForFoundry.js DEPLOY_TIMESTAMP = 86400
         vm.warp(86400);
 
-        // --- Deploy 5 mocks (nonces 1-5) ---
-        // Then 23 protocol contracts (nonces 6-28) ---
+        // --- Deploy 4 mocks (nonces 1-4) ---
+        // Then 23 protocol contracts (nonces 5-27) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
-        mockWXRP = new MockWXRP();                    // nonce 4
-        mockFeed = new MockLinkEthFeed(int256(0.004 ether)); // nonce 5
+        mockFeed = new MockLinkEthFeed(int256(0.004 ether)); // nonce 4
 
         // Order matches DEPLOY_ORDER in predictAddresses.js
 
-        icons32 = new Icons32Data();                   // N+0 = nonce 6
-        mintModule = new DegenerusGameMintModule();    // N+1 = nonce 7
-        advanceModule = new DegenerusGameAdvanceModule(); // N+2 = nonce 8
-        whaleModule = new DegenerusGameWhaleModule();  // N+3 = nonce 9
-        jackpotModule = new DegenerusGameJackpotModule(); // N+4 = nonce 10
-        decimatorModule = new DegenerusGameDecimatorModule(); // N+5 = nonce 11
-        gameOverModule = new DegenerusGameGameOverModule(); // N+6 = nonce 12
-        lootboxModule = new DegenerusGameLootboxModule(); // N+7 = nonce 13
-        boonModule = new DegenerusGameBoonModule();    // N+8 = nonce 14
-        degeneretteModule = new DegenerusGameDegeneretteModule(); // N+9 = nonce 15
+        icons32 = new Icons32Data();                   // N+0 = nonce 5
+        mintModule = new DegenerusGameMintModule();    // N+1 = nonce 6
+        advanceModule = new DegenerusGameAdvanceModule(); // N+2 = nonce 7
+        whaleModule = new DegenerusGameWhaleModule();  // N+3 = nonce 8
+        jackpotModule = new DegenerusGameJackpotModule(); // N+4 = nonce 9
+        decimatorModule = new DegenerusGameDecimatorModule(); // N+5 = nonce 10
+        gameOverModule = new DegenerusGameGameOverModule(); // N+6 = nonce 11
+        lootboxModule = new DegenerusGameLootboxModule(); // N+7 = nonce 12
+        boonModule = new DegenerusGameBoonModule();    // N+8 = nonce 13
+        degeneretteModule = new DegenerusGameDegeneretteModule(); // N+9 = nonce 14
 
-        coin = new BurnieCoin();                       // N+10 = nonce 16
+        coin = new BurnieCoin();                       // N+10 = nonce 15
 
-        coinflip = new BurnieCoinflip();                // N+11 = nonce 17
+        coinflip = new BurnieCoinflip();                // N+11 = nonce 16
 
-        game = new DegenerusGame();                    // N+12 = nonce 18
-        wwxrp = new WrappedWrappedXRP();               // N+13 = nonce 19
+        game = new DegenerusGame();                    // N+12 = nonce 17
+        wwxrp = new WrappedWrappedXRP();               // N+13 = nonce 18
 
         // DegenerusAffiliate needs empty arrays
         affiliate = new DegenerusAffiliate(
@@ -115,26 +112,26 @@ abstract contract DeployProtocol is Test {
             new uint8[](0),
             new address[](0),
             new bytes32[](0)
-        );                                             // N+14 = nonce 20
+        );                                             // N+14 = nonce 19
 
-        jackpots = new DegenerusJackpots();            // N+15 = nonce 21
-        quests = new DegenerusQuests();                // N+16 = nonce 22
-        deityPass = new DegenerusDeityPass();          // N+17 = nonce 23
+        jackpots = new DegenerusJackpots();            // N+15 = nonce 20
+        quests = new DegenerusQuests();                // N+16 = nonce 21
+        deityPass = new DegenerusDeityPass();          // N+17 = nonce 22
 
         // Vault constructor calls COIN.vaultMintAllowance()
-        vault = new DegenerusVault();                  // N+18 = nonce 24
+        vault = new DegenerusVault();                  // N+18 = nonce 23
 
         // Stonk constructor calls GAME.claimWhalePass() + GAME.setAfKingMode()
         // Mints creator's 20% to DGNRS address
-        sdgnrs = new StakedDegenerusStonk();           // N+19 = nonce 25
+        sdgnrs = new StakedDegenerusStonk();           // N+19 = nonce 24
 
         // DGNRS reads its sDGNRS balance and mints DGNRS to CREATOR
-        dgnrs = new DegenerusStonk();                  // N+20 = nonce 26
+        dgnrs = new DegenerusStonk();                  // N+20 = nonce 25
 
         // Admin constructor calls VRF.createSubscription() + GAME.wireVrf()
-        admin = new DegenerusAdmin();                  // N+21 = nonce 27
+        admin = new DegenerusAdmin();                  // N+21 = nonce 26
 
         // GNRUS: self-mints 1T to address(this), no cross-contract constructor calls
-        gnrus = new GNRUS();                            // N+22 = nonce 28
+        gnrus = new GNRUS();                            // N+22 = nonce 27
     }
 }

@@ -54,23 +54,30 @@ describe("WhaleBundle", function () {
     expect(await game.rngLocked()).to.equal(false);
   }
 
-  async function lockRngWithFulfilledWord(game, deployer, mockVRF, word) {
-    await advanceToNextDay();
-    await game.connect(deployer).advanceGame();
-    const requestId = await getLastVRFRequestId(mockVRF);
-    await mockVRF.fulfillRandomWords(requestId, word);
-    expect(await game.rngLocked()).to.equal(true);
-    expect(await game.isRngFulfilled()).to.equal(true);
-  }
-
+  /**
+   * Settle RNG each day and scan the deity's three slots for a whale boon
+   * (WHALE_10/WHALE_25/WHALE_50). Once found, issue it to `recipient` and
+   * return the discount bps.
+   *
+   * Mirrors issueLazyBoonForRecipient: deityBoonSlots on the lootbox module
+   * cannot be called directly — it reads the module's own (empty) storage,
+   * producing a different RNG seed than the game proxy. Use DeityBoonViewer,
+   * which pulls game.deityBoonData() for the correct daily seed.
+   */
   async function issueWhaleBoonForRecipient(
     game,
-    lootboxModule,
     deity,
-    recipient
+    recipient,
+    deployer,
+    mockVRF
   ) {
+    const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
+    const viewer = await Viewer.deploy();
+
     for (let dayOffset = 0; dayOffset < 180; dayOffset++) {
-      const [slots] = await lootboxModule.deityBoonSlots(deity.address);
+      await settleRngDay(game, deployer, mockVRF, BigInt(2000 + dayOffset));
+
+      const [slots] = await viewer.deityBoonSlots(game.target, deity.address);
       for (let slot = 0; slot < 3; slot++) {
         const discountBps = whaleDiscountBps(slots[slot]);
         if (discountBps == 0n) continue;
@@ -79,7 +86,6 @@ describe("WhaleBundle", function () {
           .issueDeityBoon(deity.address, recipient.address, slot);
         return discountBps;
       }
-      await advanceToNextDay();
     }
     throw new Error("No whale boon slot found in search window");
   }
@@ -201,25 +207,22 @@ describe("WhaleBundle", function () {
     });
 
     it("expired whale boon cannot use stale dailyIdx to get discounted pricing", async function () {
-      const { game, deployer, alice, bob, mockVRF, lootboxModule } =
-        await loadFixture(
-        deployFullProtocol
-      );
+      const { game, deployer, alice, bob, mockVRF } =
+        await loadFixture(deployFullProtocol);
 
       // Alice needs deity status to issue boons.
       await game
         .connect(alice)
         .purchaseDeityPass(alice.address, 0, { value: eth(24) });
 
-      // Ensure dailyIdx is non-zero, then hold rngWordCurrent so deity boons can be issued.
-      await settleRngDay(game, deployer, mockVRF, 777n);
-      await lockRngWithFulfilledWord(game, deployer, mockVRF, 888n);
-
+      // Settle RNG each day while scanning Alice's slots for a whale boon,
+      // then issue it to Bob. Boon is valid for a 4-day window.
       const discountBps = await issueWhaleBoonForRecipient(
         game,
-        lootboxModule,
         alice,
-        bob
+        bob,
+        deployer,
+        mockVRF
       );
 
       // Move past the 4-day boon window while dailyIdx remains stale.

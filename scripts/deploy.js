@@ -41,7 +41,6 @@ async function main() {
     STETH_TOKEN: process.env.STETH_TOKEN,
     LINK_TOKEN: process.env.LINK_TOKEN,
     VRF_COORDINATOR: process.env.VRF_COORDINATOR,
-    WXRP: process.env.WXRP,
     CREATOR: deployer.address,
   };
 

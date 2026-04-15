@@ -37,7 +37,6 @@ async function main() {
   const mockVRF = await deploy("MockVRFCoordinator");
   const mockStETH = await deploy("MockStETH");
   const mockLINK = await deploy("MockLinkToken");
-  const mockWXRP = await deploy("MockWXRP");
   const mockFeed = await deploy("MockLinkEthFeed", [
     hre.ethers.parseEther("0.004"), // ~0.004 ETH per LINK
   ]);
@@ -46,14 +45,12 @@ async function main() {
     VRF_COORDINATOR: await mockVRF.getAddress(),
     STETH_TOKEN: await mockStETH.getAddress(),
     LINK_TOKEN: await mockLINK.getAddress(),
-    WXRP: await mockWXRP.getAddress(),
     LINK_ETH_FEED: await mockFeed.getAddress(),
   };
 
   console.log(`  MockVRFCoordinator: ${mocks.VRF_COORDINATOR}`);
   console.log(`  MockStETH:          ${mocks.STETH_TOKEN}`);
   console.log(`  MockLINK:           ${mocks.LINK_TOKEN}`);
-  console.log(`  MockWXRP:           ${mocks.WXRP}`);
   console.log(`  MockLinkEthFeed:    ${mocks.LINK_ETH_FEED}`);
   console.log("");
 
@@ -73,7 +70,6 @@ async function main() {
     STETH_TOKEN: mocks.STETH_TOKEN,
     LINK_TOKEN: mocks.LINK_TOKEN,
     VRF_COORDINATOR: mocks.VRF_COORDINATOR,
-    WXRP: mocks.WXRP,
     CREATOR: deployer.address,
   };
 
@@ -248,7 +244,6 @@ async function main() {
       "MockVRFCoordinator",
       "MockStETH",
       "MockLinkToken",
-      "MockWXRP",
       "MockLinkEthFeed",
     ]) {
       allContracts.add(name);

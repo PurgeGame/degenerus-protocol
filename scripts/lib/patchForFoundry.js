@@ -16,13 +16,13 @@ import {
 const FOUNDRY_TEST_CONTRACT =
   "0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496";
 
-// 5 mocks deployed before protocol contracts:
-// MockVRFCoordinator, MockStETH, MockLinkToken, MockWXRP, MockLinkEthFeed
-const MOCK_COUNT = 5;
+// 4 mocks deployed before protocol contracts:
+// MockVRFCoordinator, MockStETH, MockLinkToken, MockLinkEthFeed
+const MOCK_COUNT = 4;
 
 // Foundry test contracts start with nonce 1 (EIP-161: contracts start at 1).
-// Mocks use nonces 1..5, protocol starts at nonce 6.
-const PROTOCOL_START_NONCE = MOCK_COUNT + 1; // = 6
+// Mocks use nonces 1..4, protocol starts at nonce 5.
+const PROTOCOL_START_NONCE = MOCK_COUNT + 1; // = 5
 
 // Fixed deploy timestamp for reproducibility (1 day = 86400 seconds).
 // DeployProtocol.sol must vm.warp() to this same value before deploying.
@@ -41,7 +41,6 @@ export function patchForFoundry() {
     "MockVRFCoordinator",
     "MockStETH",
     "MockLinkToken",
-    "MockWXRP",
     "MockLinkEthFeed",
   ];
   for (let i = 0; i < MOCK_COUNT; i++) {
@@ -63,7 +62,6 @@ export function patchForFoundry() {
     STETH_TOKEN: mockAddrs.MockStETH,
     LINK_TOKEN: mockAddrs.MockLinkToken,
     VRF_COORDINATOR: mockAddrs.MockVRFCoordinator,
-    WXRP: mockAddrs.MockWXRP,
     CREATOR: FOUNDRY_TEST_CONTRACT,
   };
 
@@ -108,6 +106,5 @@ if (scriptPath && scriptPath.endsWith("patchForFoundry.js")) {
   console.log(`  Mock VRF:       ${result.mockAddrs.MockVRFCoordinator}`);
   console.log(`  Mock stETH:     ${result.mockAddrs.MockStETH}`);
   console.log(`  Mock LINK:      ${result.mockAddrs.MockLinkToken}`);
-  console.log(`  Mock WXRP:      ${result.mockAddrs.MockWXRP}`);
   console.log(`  Mock Feed:      ${result.mockAddrs.MockLinkEthFeed}`);
 }

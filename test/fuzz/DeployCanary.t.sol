@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title DeployCanary -- Validates all 23+5 addresses match patched constants
+/// @title DeployCanary -- Validates all 23+4 addresses match patched constants
 /// @notice If any assertion fails, the nonce prediction or deploy order is wrong.
 contract DeployCanary is DeployProtocol {
     function setUp() public {
@@ -38,12 +38,10 @@ contract DeployCanary is DeployProtocol {
         assertEq(address(admin), ContractAddresses.ADMIN, "ADMIN mismatch");
         assertEq(address(gnrus), ContractAddresses.GNRUS, "GNRUS mismatch");
 
-        // External/mock contracts (5)
+        // External/mock contracts (4)
         assertEq(address(mockVRF), ContractAddresses.VRF_COORDINATOR, "VRF_COORDINATOR mismatch");
         assertEq(address(mockStETH), ContractAddresses.STETH_TOKEN, "STETH_TOKEN mismatch");
         assertEq(address(mockLINK), ContractAddresses.LINK_TOKEN, "LINK_TOKEN mismatch");
-        assertEq(address(mockWXRP), ContractAddresses.WXRP, "WXRP mismatch");
-
         // Creator is the test contract itself
         assertEq(address(this), ContractAddresses.CREATOR, "CREATOR mismatch");
     }

@@ -22,7 +22,7 @@ let _patchedVrfKeyHash = null;
  * Designed for use with Hardhat's loadFixture().
  *
  * Flow:
- *   1. Deploy mock contracts (VRF, stETH, LINK, wXRP)
+ *   1. Deploy mock contracts (VRF, stETH, LINK)
  *   2. Predict addresses for the 23 protocol contracts
  *   3. Patch ContractAddresses.sol + recompile (once per test run)
  *   4. Deploy all 23 protocol contracts in order
@@ -36,7 +36,6 @@ export async function deployFullProtocol() {
   const mockVRF = await deploy("MockVRFCoordinator");
   const mockStETH = await deploy("MockStETH");
   const mockLINK = await deploy("MockLinkToken");
-  const mockWXRP = await deploy("MockWXRP");
   const mockFeed = await deploy("MockLinkEthFeed", [
     hre.ethers.parseEther("0.004"), // ~0.004 ETH per LINK
   ]);
@@ -53,7 +52,6 @@ export async function deployFullProtocol() {
     STETH_TOKEN: await mockStETH.getAddress(),
     LINK_TOKEN: await mockLINK.getAddress(),
     VRF_COORDINATOR: await mockVRF.getAddress(),
-    WXRP: await mockWXRP.getAddress(),
     CREATOR: deployer.address,
   };
 
@@ -110,7 +108,6 @@ export async function deployFullProtocol() {
     mockVRF,
     mockStETH,
     mockLINK,
-    mockWXRP,
     mockFeed,
 
     // Protocol contracts (by ContractAddresses key)
