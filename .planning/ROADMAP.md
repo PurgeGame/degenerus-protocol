@@ -8,7 +8,7 @@
 - ✅ **v25.0 Full Audit (Post-v5.0 Delta + Fresh RNG)** — Phases 213-217 (shipped 2026-04-11)
 - ✅ **v26.0 Bonus Jackpot Split** — Phases 218-219 (shipped 2026-04-12)
 - ✅ **v27.0 Call-Site Integrity Audit** — Phases 220-223 (shipped 2026-04-13)
-- ⏳ **v28.0 Database & API Intent Alignment Audit** — Phases 224-229 (in planning)
+- ⏳ **v28.0 Database & API Intent Alignment Audit** — Phases 224-229 (in progress — 2/6 phases complete)
 
 ## Phases
 
@@ -45,8 +45,8 @@
 
 **Milestone Goal:** Verify that the sibling `database/` repo (API handlers, DB schema + migrations, indexer) delivers exactly what its documented intent claims — where "intent" spans `database/docs/API.md`, `database/docs/openapi.yaml`, and in-source comments — and produce a consolidated findings document. Four mismatch directions are flagged: docs→code, code→docs, comment→code, and Drizzle schema↔applied migration.
 
-- [ ] **Phase 224: API Route & OpenAPI Alignment** - Audit bidirectional coverage between `database/src/api/routes/*.ts` and `database/docs/openapi.yaml` (method, path, params, body shape)
-- [ ] **Phase 225: API Handler Behavior & Validation Schema Alignment** - Verify handler JSDoc/inline comments, response shapes, and Fastify request-validation schemas match openapi.yaml + handler bodies
+- [x] **Phase 224: API Route & OpenAPI Alignment** - Audit bidirectional coverage between `database/src/api/routes/*.ts` and `database/docs/openapi.yaml` (method, path, params, body shape) — completed 2026-04-13 (27/27/27 triple alignment, 1 INFO meta-stub)
+- [x] **Phase 225: API Handler Behavior & Validation Schema Alignment** - Verify handler JSDoc/inline comments, response shapes, and Fastify request-validation schemas match openapi.yaml + handler bodies (completed 2026-04-13)
 - [ ] **Phase 226: Schema, Migration & Orphan Audit** - Reconcile Drizzle schemas (`database/src/db/schema/*.ts`) against applied migrations (`database/drizzle/*.sql`), validate column-comment semantics, and detect orphan tables
 - [ ] **Phase 227: Indexer Event Processing Correctness** - Verify every contract event consumed by `database/src/indexer/event-processor.ts` is registered and maps args to schema fields per documented semantics
 - [ ] **Phase 228: Cursor, Reorg & View Refresh State Machines** - Audit `cursor-manager.ts`, `reorg-detector.ts`, and `view-refresh.ts` against documented block-ordering, reorg-depth, and staleness behaviors
@@ -67,7 +67,7 @@
 **Plans:** 1 plan
 
 Plans:
-- [ ] 224-01-PLAN.md — Bidirectional catalog: openapi.yaml ↔ route registrations ↔ API.md with PASS/FAIL/JUSTIFIED verdicts and F-28-224-NN finding stubs
+- [x] 224-01-PLAN.md — Bidirectional catalog: openapi.yaml ↔ route registrations ↔ API.md with PASS/FAIL/JUSTIFIED verdicts and F-28-224-NN finding stubs — completed 2026-04-13 (see `224-01-API-ROUTE-MAP.md` + `224-01-SUMMARY.md`)
 
 ### Phase 225: API Handler Behavior & Validation Schema Alignment
 **Goal**: Handler bodies in `database/src/handlers/*.ts` and `database/src/api/routes/*.ts` behave exactly as their JSDoc/inline comments describe; actual response shapes match `openapi.yaml` response schemas field-for-field; Fastify request-validation schemas in `database/src/api/schemas/` match openapi.yaml parameter definitions
@@ -79,7 +79,13 @@ Plans:
   3. A request-schema audit catalog in `225-03-REQUEST-SCHEMA-AUDIT.md` compares Fastify validation schemas in `database/src/api/schemas/` against openapi.yaml parameter definitions (parameter names, types, required/optional, enum constraints) with PASS/FAIL verdicts per schema file
   4. Each comment→code, code→docs, or docs→code mismatch is classified by direction and added to the Phase 229 finding candidate pool
 
-**Plans**: TBD
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 225-01-PLAN.md — API-03 handler JSDoc/inline-comment vs body-behavior audit for all 27 HTTP handlers in src/api/routes/*.ts; Tier A + Tier B flagged per D-225-04; Tier C counted only; src/handlers/*.ts deferred to Phase 227
+- [x] 225-02-PLAN.md — API-04 response-shape audit: 8 sampled endpoints (one per route file) with recursive Zod-response-tree vs openapi.yaml responses.200 field-by-field comparison; expansion rule on FAIL per D-225-03; extrapolation on all-PASS
+- [x] 225-03-PLAN.md — API-05 request-schema audit: every exported Zod schema in src/api/schemas/*.ts plus inline route-file schemas, compared to openapi.yaml parameters; orphan-in-openapi parameters flagged as docs->code (exception to D-225-02 default)
+
 
 ### Phase 226: Schema, Migration & Orphan Audit
 **Goal**: Every Drizzle table in `database/src/db/schema/*.ts` matches the columns/types/constraints/indexes in `database/drizzle/*.sql` applied migrations; every migration diff is rational and traceable to a schema-file change; column comments accurately describe the column definition; every table is referenced by handler/indexer code (no orphans) and every code-referenced table exists in the schema
@@ -147,8 +153,8 @@ Phase 224 first (establishes route↔spec map needed by 225). Phase 225 after 22
 | 221. Raw Selector & Calldata Audit | v27.0 | 2/2 | Complete | 2026-04-12 |
 | 222. External Function Coverage Gap | v27.0 | 3/3 | Complete | 2026-04-13 |
 | 223. Findings Consolidation | v27.0 | 2/2 | Complete | 2026-04-13 |
-| 224. API Route & OpenAPI Alignment | v28.0 | 0/1 | Planned | - |
-| 225. API Handler Behavior & Validation Schema Alignment | v28.0 | 0/? | Not started | - |
+| 224. API Route & OpenAPI Alignment | v28.0 | 1/1 | Complete | 2026-04-13 |
+| 225. API Handler Behavior & Validation Schema Alignment | v28.0 | 3/3 | Complete   | 2026-04-13 |
 | 226. Schema, Migration & Orphan Audit | v28.0 | 0/? | Not started | - |
 | 227. Indexer Event Processing Correctness | v28.0 | 0/? | Not started | - |
 | 228. Cursor, Reorg & View Refresh State Machines | v28.0 | 0/? | Not started | - |

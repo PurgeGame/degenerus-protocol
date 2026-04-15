@@ -1,82 +1,108 @@
-# Requirements: Degenerus Protocol Audit — v27.0 Call-Site Integrity Audit
+# Requirements: Degenerus Protocol Audit — v28.0 Database & API Intent Alignment Audit
 
-**Defined:** 2026-04-12
+**Defined:** 2026-04-13
 **Core Value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
 
 ## Milestone Goal
 
-Systematically surface runtime call-site-to-implementation mismatches that static compilation does not catch — the same class of bug as the `mintPackedFor` regression (commit `a0bf328b`), where a call passed compile, passed superficial tests, and reverted at runtime under a narrow path because selector/target/path alignment was wrong.
+Verify that the sibling `database/` repo (API handlers, DB schema + migrations, indexer) delivers exactly what its documented intent claims — where "intent" spans the `API.md` prose docs, the `openapi.yaml` contract, and the in-source comments — and produce a consolidated findings document.
 
-The scope is deliberately bounded to **call-site integrity**. Out of scope for this milestone: storage layout regression (already verified v25.0), deployed bytecode vs source (requires RPC infra), generic `E()` revert specificity (debuggability, not correctness).
+The audit grades code against three intent sources and flags four mismatch directions:
 
-## v27.0 Requirements
+**Intent sources:**
+- `database/docs/API.md` (883 lines) — prose endpoint docs
+- `database/docs/openapi.yaml` (1708 lines) — OpenAPI spec
+- In-source comments (JSDoc, inline) — stated intent of each function/handler/schema
 
-### Delegatecall Target Alignment (Phase 220)
+**Mismatch directions:**
+- Docs claim → code doesn't deliver
+- Code does → docs don't mention
+- Comment says → code does otherwise
+- Drizzle schema ↔ applied migration reality
 
-- [x] **CSI-01**: Every `<ADDR>.delegatecall(abi.encodeWithSelector(IXxxModule.fn.selector, ...))` site uses a target address constant that corresponds to `IXxxModule` (no cross-wired addresses — e.g., no `GAME_BOON_MODULE.delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.fn.selector, ...))`)
-- [x] **CSI-02**: Every `GAME_*_MODULE` address constant in `ContractAddresses.sol` that is used as a delegatecall target has a 1:1 mapping to exactly one module interface, verified across every caller
-- [x] **CSI-03**: A static-analysis script (`scripts/check-delegatecall-alignment.sh` or similar) is added and wired into the Makefile gate so any future delegatecall/interface misalignment fails `make test`
+**Cross-repo scope:** planning lives in `degenerus-audit/.planning/`; audit target is `/home/zak/Dev/PurgeGame/database/`. Indexer correctness has shared surface with this repo's contracts (events emitted).
 
-### Raw Selector & Calldata Audit (Phase 221)
+## v28.0 Requirements
 
-- [x] **CSI-04**: Every `bytes4(0x...)` hex literal in `contracts/` is cataloged; each one is either (a) justified in-place with a code comment naming the function it represents, or (b) replaced with an interface-bound `IXxx.fn.selector` reference
-- [x] **CSI-05**: Every `bytes4(keccak256("..."))` string-derived selector in `contracts/` is cataloged and each one is justified or replaced with interface-bound form
-- [x] **CSI-06**: Every manual `abi.encode` / `abi.encodeCall` / `abi.encodeWithSignature` that bypasses interface-bound selectors (i.e., does not reference an `IXxx.fn.selector`) is cataloged with rationale
-- [x] **CSI-07**: Catalog output is a findings document listing every raw selector site with severity verdict (JUSTIFIED / REPLACED / FLAGGED)
+### API Endpoint Alignment
 
-### External Function Coverage Gap (Phase 222)
+- [x] **API-01**: Every endpoint documented in `database/docs/openapi.yaml` has a matching implemented route in `database/src/api/routes/` with correct HTTP method, path, parameters, and request body shape — verified Phase 224 (27 openapi entries ↔ 27 routes, all PAIRED)
+- [x] **API-02**: Every implemented route in `database/src/api/routes/*.ts` is documented in both `openapi.yaml` and `API.md` — no undocumented endpoints — verified Phase 224 (27 routes ↔ 27 openapi entries ↔ 27 API.md headings, all PAIRED-BOTH)
+- [x] **API-03**: JSDoc/inline comments on each handler (`database/src/handlers/*.ts` and `database/src/api/routes/*.ts`) accurately describe the handler body's behavior — preconditions, side effects, return shape
+- [x] **API-04**: Actual response shapes returned by handlers match the `openapi.yaml` response schemas — field names, types, optionality, enum values
+- [x] **API-05**: Fastify request-validation schemas in `database/src/api/schemas/` match the parameter definitions in `openapi.yaml` — parameter names, types, required/optional, enum constraints
 
-- [x] **CSI-08**: The test suite compile error in `test/fuzz/FuturepoolSkim.t.sol` (`_applyTimeBasedFutureTake` undeclared identifier) is fixed so `forge coverage` can run
-- [x] **CSI-09**: `forge coverage --report summary` runs to completion and produces per-function line/branch coverage data for all deployed contracts (`DegenerusGame`, modules, `BurnieCoin`, `BurnieCoinflip`, `DegenerusAffiliate`, `DegenerusJackpots`, `DegenerusQuests`, `StakedDegenerusStonk`, `DegenerusVault`, `DegenerusStonk`)
-- [x] **CSI-10**: Every external/public function on a deployed contract is classified as COVERED (≥1 test invokes it), CRITICAL_GAP (needs new test — on a path that could revert at runtime like `mintPackedFor` did), or EXEMPT (admin/governance/emergency path, documented rationale)
-- [x] **CSI-11**: All CRITICAL_GAP functions identified in CSI-10 have at least one new test added that exercises them on a realistic path (not just direct invocation with happy-path args — must cover the conditional entry points where the real bug manifested)
+### Schema ↔ Migrations ↔ Comments
 
-### Findings Consolidation (Phase 223)
+- [ ] **SCHEMA-01**: Every Drizzle table definition in `database/src/db/schema/*.ts` matches the columns, types, constraints, and indexes in the applied migration SQL (`database/drizzle/*.sql`) — no columns, constraints, FKs, or indexes present in one and missing from the other
+- [ ] **SCHEMA-02**: In-source comments on schema columns describing semantics (purpose, units, nullability intent, FK meaning) accurately describe the actual column definition
+- [ ] **SCHEMA-03**: Each migration file in `database/drizzle/*.sql` represents a rational, justifiable diff from its predecessor — every `ADD COLUMN`, `DROP COLUMN`, `ALTER`, index, or FK change has a corresponding schema-file change in the same logical unit
+- [ ] **SCHEMA-04**: Every table referenced in handler code, indexer code, or docs exists in the schema; every table in the schema is actually used (no orphan tables that handlers/indexer never touch)
 
-- [x] **CSI-12**: `audit/FINDINGS-v27.0.md` is produced with severity-classified findings rolled up from phases 220-222 (HIGH / MEDIUM / LOW / INFO), following the `audit/FINDINGS-v25.0.md` structure
-- [x] **CSI-13**: `KNOWN-ISSUES.md` is updated with any accepted INFO/LOW items that are design decisions rather than bugs
-- [x] **CSI-14**: `MILESTONES.md` retrospective entry is written (mirroring v25.0 / v26.0 format); `PROJECT.md` moves v27.0 to "Completed Milestone"; v27.0 marked SHIPPED
+### Indexer Correctness
+
+- [ ] **IDX-01**: Every contract event emitted by `degenerus-audit/contracts/*.sol` that the indexer claims to process has a registered case in `database/src/indexer/event-processor.ts` (or an explicit delegating handler); intentionally skipped events are justified in comments
+- [ ] **IDX-02**: Each `event-processor` case handler maps event args to the correct schema fields per the table's column semantics and the handler file's comments — no silent field-swap or type coercion bugs
+- [ ] **IDX-03**: Indexer comments describing processing semantics — idempotency, reorg safety, backfill behavior, view-refresh triggers — match the actual behavior of the code
+- [ ] **IDX-04**: Cursor management (`cursor-manager.ts`) and reorg detection (`reorg-detector.ts`) behave as documented — block ordering, gap handling, maximum reorg depth, recovery-after-stall
+- [ ] **IDX-05**: View refresh triggers in `view-refresh.ts` match the staleness model documented in comments and in schema view definitions
+
+### Findings Consolidation
+
+- [ ] **FIND-01**: All discrepancies from API, SCHEMA, and IDX phases are consolidated into `audit/FINDINGS-v28.0.md` with severity (HIGH / MEDIUM / LOW / INFO), direction (docs→code / code→docs / comment→code / schema↔migration), and source reference
+- [ ] **FIND-02**: Each finding is traceable to the originating phase + a specific `database/` file:line (or the contract event + database schema pair for indexer findings)
+- [ ] **FIND-03**: Every finding has a recorded resolution status: `RESOLVED-DOC` (doc patched), `RESOLVED-CODE` (code patched), `DEFERRED` (with explicit reason), or `INFO-ACCEPTED` (design decision, no action needed)
 
 ## Future Requirements
 
 Deferred to later milestones. Tracked but not in this roadmap.
 
-### Storage & Deploy Integrity (future)
+### API Docs Polish (future)
 
-- Storage layout regression script (automate what v25.0 verified manually across 13 DegenerusGameStorage inheritors)
-- Deployed bytecode vs compiled source verification (requires RPC infrastructure)
+- **API-06 (deferred)**: Documented error responses and HTTP status codes in `API.md`/`openapi.yaml` match actual error-path behavior in handlers (error body shape, status-code-to-condition mapping)
+- **API-07 (deferred)**: `API.md` example snippets (curl, sample payloads, sample responses) match current handler behavior byte-for-byte
 
-### Revert Specificity (future)
+### Schema Coverage Extensions (future)
 
-- Replace generic `revert E()` sites with specific custom errors where the call site warrants — improves debuggability; currently every `E()` is indistinguishable in traces
+- **SCHEMA-05 (deferred)**: Views defined in `database/src/db/schema/views.ts` match the SQL that materializes them and their documented staleness/refresh semantics
 
-## Out of Scope (v27.0)
+### Infrastructure & Runtime Concerns (future)
+
+- Auth/rate-limit behavior documentation match
+- CORS policy alignment with docs
+- Deployment config (`.env` / `src/config`) schema alignment
+- Performance assertions from docs (latency budgets, page sizes) verified against handler implementations
+- Migration rollback coverage — each forward migration has a tested reverse path
+
+## Out of Scope (v28.0)
 
 Explicit exclusions with reasoning:
 
-- **Storage layout consistency check** — already verified in v25.0 ("forge inspect confirms identical 84-variable storage layout across all 13 DegenerusGameStorage inheritors"). Re-running under v27.0 adds no signal; automation is a future concern, not a same-class-bug hunt.
-- **Deployed bytecode match** — requires RPC access and a verification pipeline; different architectural concern (deploy integrity, not source integrity).
-- **Reentrancy sweep** — already verified in v25.0 ("zero VULNERABLE findings, all external calls follow CEI"). Not the mintPackedFor class.
-- **Adversarial economic paths** — covered by v25.0 adversarial audit; different risk class.
-- **`is IDegenerusGame` compile-time inheritance enforcement** — the strongest possible guarantee (forces the compiler to enforce every interface function), but would require adding `override` to ~57 functions on `DegenerusGame` and similar churn on other contracts. High mechanical cost against the current `check-interfaces` gate which catches the same class at `make test` time. Reconsider if the gate ever produces false negatives.
+- **Contract-side correctness of the events being indexed** — the contracts are the source of truth; v28.0 audits whether the indexer faithfully reflects those events. Contract correctness is covered by prior milestones (v25.0 full audit, v26.0 bonus jackpot, v27.0 call-site integrity) and the in-flight phase-transition fix.
+- **Database performance / query-plan tuning** — correctness first; query optimization is a different risk class and a different skill set. Performance regressions that cause incorrect results are in scope; slow-but-correct queries are not.
+- **Frontend consumers of the API** — this milestone audits the API surface and its documentation. How downstream consumers use it is out of scope.
+- **Auth / rate limiting / CORS semantics** — deferred to a later milestone unless a finding in v28.0 reveals a documented behavior that the code violates.
+- **Environment configuration schema** — `.env` / `src/config` alignment with docs deferred to a later milestone.
+- **Migration rollback testing** — forward migrations are in scope (SCHEMA-01/03); reverse paths are deferred.
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CSI-01 | Phase 220 | Complete |
-| CSI-02 | Phase 220 | Complete |
-| CSI-03 | Phase 220 | Complete |
-| CSI-04 | Phase 221 | Complete |
-| CSI-05 | Phase 221 | Complete |
-| CSI-06 | Phase 221 | Complete |
-| CSI-07 | Phase 221 | Complete |
-| CSI-08 | Phase 222 | Complete |
-| CSI-09 | Phase 222 | Complete |
-| CSI-10 | Phase 222 | Complete |
-| CSI-11 | Phase 222 | Complete |
-| CSI-12 | Phase 223 | Complete |
-| CSI-13 | Phase 223 | Complete |
-| CSI-14 | Phase 223 | Complete |
-
-**Coverage:** 14/14 requirements mapped to exactly one phase. No orphans. No duplicates.
+| API-01 | Phase 224 | Complete (2026-04-13) |
+| API-02 | Phase 224 | Complete (2026-04-13) |
+| API-03 | Phase 225 | Complete (2026-04-13) |
+| API-04 | Phase 225 | Complete (2026-04-13) |
+| API-05 | Phase 225 | Complete (2026-04-13) |
+| SCHEMA-01 | Phase 226 | Pending |
+| SCHEMA-02 | Phase 226 | Pending |
+| SCHEMA-03 | Phase 226 | Pending |
+| SCHEMA-04 | Phase 226 | Pending |
+| IDX-01 | Phase 227 | Pending |
+| IDX-02 | Phase 227 | Pending |
+| IDX-03 | Phase 227 | Pending |
+| IDX-04 | Phase 228 | Pending |
+| IDX-05 | Phase 228 | Pending |
+| FIND-01 | Phase 229 | Pending |
+| FIND-02 | Phase 229 | Pending |
+| FIND-03 | Phase 229 | Pending |
