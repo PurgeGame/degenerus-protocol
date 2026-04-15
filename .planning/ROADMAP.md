@@ -49,7 +49,7 @@
 - [x] **Phase 225: API Handler Behavior & Validation Schema Alignment** - Verify handler JSDoc/inline comments, response shapes, and Fastify request-validation schemas match openapi.yaml + handler bodies (completed 2026-04-13)
 - [x] **Phase 226: Schema, Migration & Orphan Audit** - Reconcile Drizzle schemas (`database/src/db/schema/*.ts`) against applied migrations (`database/drizzle/*.sql`), validate column-comment semantics, and detect orphan tables (completed 2026-04-15)
 - [x] **Phase 227: Indexer Event Processing Correctness** - Verify every contract event consumed by `database/src/indexer/event-processor.ts` is registered and maps args to schema fields per documented semantics (completed 2026-04-15)
-- [ ] **Phase 228: Cursor, Reorg & View Refresh State Machines** - Audit `cursor-manager.ts`, `reorg-detector.ts`, and `view-refresh.ts` against documented block-ordering, reorg-depth, and staleness behaviors
+- [x] **Phase 228: Cursor, Reorg & View Refresh State Machines** - Audit `cursor-manager.ts`, `reorg-detector.ts`, and `view-refresh.ts` against documented block-ordering, reorg-depth, and staleness behaviors (completed 2026-04-15)
 - [ ] **Phase 229: Findings Consolidation** - Roll up phase 224-228 findings into `audit/FINDINGS-v28.0.md` with severity + direction + resolution status, following v27.0 consolidated-findings structure
 
 ## Phase Details
@@ -132,11 +132,11 @@ Plans:
   3. Each state-machine deviation or view-refresh mismatch is classified by direction (comment→code drift, docs→code gap, etc.) and added to the Phase 229 finding candidate pool
   4. All 9 indexer files (block-fetcher, cursor-manager, event-processor, reorg-detector, view-refresh, purge-block-range, main, index, plus any delegated handler files) have been audit-touched across Phases 227+228 — no indexer file left unreviewed
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 228-01-PLAN.md — IDX-04 cursor + reorg state-machine trace (M1..M8, M13, M14 + intra-batch edge case E1); absorbs 227 deferrals #1, #2, #4; produces 228-01-CURSOR-REORG-TRACE.md; finding block F-28-228-01+; Wave 1
-- [ ] 228-02-PLAN.md — IDX-05 view-refresh audit (M9..M12 + V1 INFO context) against D-228-08 two sources (view-refresh.ts comments + views.ts); absorbs 227 deferral #3; produces 228-02-VIEW-REFRESH-AUDIT.md; finding block F-28-228-101+; Wave 1
+- [x] 228-01-PLAN.md — IDX-04 cursor + reorg state-machine trace (M1..M8, M13, M14 + intra-batch edge case E1); absorbs 227 deferrals #1, #2, #4; produces 228-01-CURSOR-REORG-TRACE.md; finding block F-28-228-01+; Wave 1
+- [x] 228-02-PLAN.md — IDX-05 view-refresh audit (M9..M12 + V1 INFO context) against D-228-08 two sources (view-refresh.ts comments + views.ts); absorbs 227 deferral #3; produces 228-02-VIEW-REFRESH-AUDIT.md; finding block F-28-228-101+; Wave 1
 
 ### Phase 229: Findings Consolidation
 **Goal**: All discrepancies surfaced in phases 224-228 are consolidated into `audit/FINDINGS-v28.0.md` with severity (HIGH / MEDIUM / LOW / INFO), direction (docs→code / code→docs / comment→code / schema↔migration), originating phase + file:line trace, and resolution status (RESOLVED-DOC / RESOLVED-CODE / DEFERRED with reason / INFO-ACCEPTED); milestone state is advanced to SHIPPED and `PROJECT.md` / `MILESTONES.md` / `KNOWN-ISSUES.md` are synced
@@ -172,5 +172,5 @@ Phase 224 first (establishes route↔spec map needed by 225). Phase 225 after 22
 | 225. API Handler Behavior & Validation Schema Alignment | v28.0 | 3/3 | Complete   | 2026-04-13 |
 | 226. Schema, Migration & Orphan Audit | v28.0 | 4/4 | Complete   | 2026-04-15 |
 | 227. Indexer Event Processing Correctness | v28.0 | 3/3 | Complete   | 2026-04-15 |
-| 228. Cursor, Reorg & View Refresh State Machines | v28.0 | 0/? | Not started | - |
+| 228. Cursor, Reorg & View Refresh State Machines | v28.0 | 2/2 | Complete   | 2026-04-15 |
 | 229. Findings Consolidation | v28.0 | 0/? | Not started | - |
