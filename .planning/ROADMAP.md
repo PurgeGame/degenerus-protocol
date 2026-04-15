@@ -97,7 +97,13 @@ Plans:
   3. A column-comment semantic audit in `226-03-COLUMN-COMMENT-AUDIT.md` spot-checks in-source comments describing semantics (purpose, units, nullability, FK meaning) against actual column definitions — every comment→code mismatch logged with file:line
   4. An orphan-table report in `226-04-ORPHAN-TABLES.md` enumerates every table in the schema and confirms at least one handler OR indexer OR docs reference; lists every handler-referenced or indexer-referenced table name and confirms each exists in the schema — zero orphans remaining uncatalogued
 
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 226-01-PLAN.md — SCHEMA-01 cumulative-SQL vs schema/*.ts per-table/per-column/per-index diff; produces 226-01-SCHEMA-MIGRATION-DIFF.md; Wave 1
+- [ ] 226-02-PLAN.md — SCHEMA-03 migration-by-migration rationality trace + meta snapshot cross-check; opens with pre-assigned F-28-226-01 (0007 snapshot anomaly); produces 226-02-MIGRATION-TRACE.md; Wave 2 (depends on 226-01)
+- [ ] 226-03-PLAN.md — SCHEMA-02 Tier A/B column-comment audit across all 30 schema files; produces 226-03-COLUMN-COMMENT-AUDIT.md; Wave 2
+- [ ] 226-04-PLAN.md — SCHEMA-04 bidirectional orphan + code-reference scan across handlers/indexer/routes/views.ts/indexes.ts; produces 226-04-ORPHAN-TABLES.md; Wave 2
 
 ### Phase 227: Indexer Event Processing Correctness
 **Goal**: Every contract event emitted by `degenerus-audit/contracts/*.sol` that the indexer claims to process has a registered case in `database/src/indexer/event-processor.ts`; every case handler correctly maps event args to schema fields per the target table's column semantics; indexer comments describing processing semantics (idempotency, reorg safety, backfill, view-refresh triggers) match the actual behavior of the code
@@ -155,7 +161,7 @@ Phase 224 first (establishes route↔spec map needed by 225). Phase 225 after 22
 | 223. Findings Consolidation | v27.0 | 2/2 | Complete | 2026-04-13 |
 | 224. API Route & OpenAPI Alignment | v28.0 | 1/1 | Complete | 2026-04-13 |
 | 225. API Handler Behavior & Validation Schema Alignment | v28.0 | 3/3 | Complete   | 2026-04-13 |
-| 226. Schema, Migration & Orphan Audit | v28.0 | 0/? | Not started | - |
+| 226. Schema, Migration & Orphan Audit | v28.0 | 0/4 | Planned | - |
 | 227. Indexer Event Processing Correctness | v28.0 | 0/? | Not started | - |
 | 228. Cursor, Reorg & View Refresh State Machines | v28.0 | 0/? | Not started | - |
 | 229. Findings Consolidation | v28.0 | 0/? | Not started | - |
