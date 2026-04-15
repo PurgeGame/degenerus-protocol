@@ -35,7 +35,7 @@ The audit grades code against three intent sources and flags four mismatch direc
 ### Schema ↔ Migrations ↔ Comments
 
 - [ ] **SCHEMA-01**: Every Drizzle table definition in `database/src/db/schema/*.ts` matches the columns, types, constraints, and indexes in the applied migration SQL (`database/drizzle/*.sql`) — no columns, constraints, FKs, or indexes present in one and missing from the other
-- [ ] **SCHEMA-02**: In-source comments on schema columns describing semantics (purpose, units, nullability intent, FK meaning) accurately describe the actual column definition
+- [x] **SCHEMA-02**: In-source comments on schema columns describing semantics (purpose, units, nullability intent, FK meaning) accurately describe the actual column definition
 - [ ] **SCHEMA-03**: Each migration file in `database/drizzle/*.sql` represents a rational, justifiable diff from its predecessor — every `ADD COLUMN`, `DROP COLUMN`, `ALTER`, index, or FK change has a corresponding schema-file change in the same logical unit
 - [ ] **SCHEMA-04**: Every table referenced in handler code, indexer code, or docs exists in the schema; every table in the schema is actually used (no orphan tables that handlers/indexer never touch)
 
@@ -95,7 +95,7 @@ Explicit exclusions with reasoning:
 | API-04 | Phase 225 | Complete (2026-04-13) |
 | API-05 | Phase 225 | Complete (2026-04-13) |
 | SCHEMA-01 | Phase 226 | Pending |
-| SCHEMA-02 | Phase 226 | Pending |
+| SCHEMA-02 | Phase 226 | Complete |
 | SCHEMA-03 | Phase 226 | Pending |
 | SCHEMA-04 | Phase 226 | Pending |
 | IDX-01 | Phase 227 | Pending |
