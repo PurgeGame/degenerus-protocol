@@ -115,12 +115,12 @@ Plans:
   3. An indexer-comment correctness audit in `227-03-INDEXER-COMMENT-AUDIT.md` verifies that in-source comments claiming idempotency, reorg safety, backfill behavior, or view-refresh triggers match the actual code behavior in `event-processor.ts` and delegated handler files — every comment→code mismatch logged with file:line
   4. Each unhandled event, arg-mapping bug, or comment-drift item is classified by direction and added to the Phase 229 finding candidate pool
 
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
-- [ ] 227-01-PLAN.md — IDX-01 (contractFile, eventName) coverage matrix vs HANDLER_REGISTRY + routers; produces 227-01-EVENT-COVERAGE-MATRIX.md; Wave 1
+- [x] 227-01-PLAN.md — IDX-01 (contractFile, eventName) coverage matrix vs HANDLER_REGISTRY + routers; produces 227-01-EVENT-COVERAGE-MATRIX.md; Wave 1
 - [ ] 227-02-PLAN.md — IDX-02 per-arg verdict (name/type/coercion) against Phase 226 schema model + silent-truncation & address-drift sweeps; produces 227-02-EVENT-ARG-MAPPING.md; Wave 2 (depends on 227-01)
-- [ ] 227-03-PLAN.md — IDX-03 Tier A/B comment-drift audit across indexer + delegated handlers (8 RESEARCH-seeded hits minimum); produces 227-03-INDEXER-COMMENT-AUDIT.md; Wave 2
+- [x] 227-03-PLAN.md — IDX-03 Tier A/B comment-drift audit across indexer + delegated handlers (8 RESEARCH-seeded hits minimum); produces 227-03-INDEXER-COMMENT-AUDIT.md; Wave 2
 
 ### Phase 228: Cursor, Reorg & View Refresh State Machines
 **Goal**: `cursor-manager.ts` and `reorg-detector.ts` behave as documented — block ordering, gap handling, maximum reorg depth, and recovery-after-stall all match in-source comment claims; `view-refresh.ts` triggers refreshes per the staleness model documented in the indexer comments and the schema view definitions
@@ -167,6 +167,6 @@ Phase 224 first (establishes route↔spec map needed by 225). Phase 225 after 22
 | 224. API Route & OpenAPI Alignment | v28.0 | 1/1 | Complete | 2026-04-13 |
 | 225. API Handler Behavior & Validation Schema Alignment | v28.0 | 3/3 | Complete   | 2026-04-13 |
 | 226. Schema, Migration & Orphan Audit | v28.0 | 4/4 | Complete   | 2026-04-15 |
-| 227. Indexer Event Processing Correctness | v28.0 | 0/3 | Planned | - |
+| 227. Indexer Event Processing Correctness | v28.0 | 2/3 | In Progress|  |
 | 228. Cursor, Reorg & View Refresh State Machines | v28.0 | 0/? | Not started | - |
 | 229. Findings Consolidation | v28.0 | 0/? | Not started | - |
