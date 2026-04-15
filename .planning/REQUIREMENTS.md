@@ -34,24 +34,24 @@ The audit grades code against three intent sources and flags four mismatch direc
 
 ### Schema ↔ Migrations ↔ Comments
 
-- [ ] **SCHEMA-01**: Every Drizzle table definition in `database/src/db/schema/*.ts` matches the columns, types, constraints, and indexes in the applied migration SQL (`database/drizzle/*.sql`) — no columns, constraints, FKs, or indexes present in one and missing from the other
+- [x] **SCHEMA-01**: Every Drizzle table definition in `database/src/db/schema/*.ts` matches the columns, types, constraints, and indexes in the applied migration SQL (`database/drizzle/*.sql`) — no columns, constraints, FKs, or indexes present in one and missing from the other
 - [x] **SCHEMA-02**: In-source comments on schema columns describing semantics (purpose, units, nullability intent, FK meaning) accurately describe the actual column definition
 - [x] **SCHEMA-03**: Each migration file in `database/drizzle/*.sql` represents a rational, justifiable diff from its predecessor — every `ADD COLUMN`, `DROP COLUMN`, `ALTER`, index, or FK change has a corresponding schema-file change in the same logical unit
-- [ ] **SCHEMA-04**: Every table referenced in handler code, indexer code, or docs exists in the schema; every table in the schema is actually used (no orphan tables that handlers/indexer never touch)
+- [x] **SCHEMA-04**: Every table referenced in handler code, indexer code, or docs exists in the schema; every table in the schema is actually used (no orphan tables that handlers/indexer never touch)
 
 ### Indexer Correctness
 
-- [ ] **IDX-01**: Every contract event emitted by `degenerus-audit/contracts/*.sol` that the indexer claims to process has a registered case in `database/src/indexer/event-processor.ts` (or an explicit delegating handler); intentionally skipped events are justified in comments
+- [x] **IDX-01**: Every contract event emitted by `degenerus-audit/contracts/*.sol` that the indexer claims to process has a registered case in `database/src/indexer/event-processor.ts` (or an explicit delegating handler); intentionally skipped events are justified in comments
 - [x] **IDX-02**: Each `event-processor` case handler maps event args to the correct schema fields per the table's column semantics and the handler file's comments — no silent field-swap or type coercion bugs
 - [x] **IDX-03**: Indexer comments describing processing semantics — idempotency, reorg safety, backfill behavior, view-refresh triggers — match the actual behavior of the code
 - [x] **IDX-04**: Cursor management (`cursor-manager.ts`) and reorg detection (`reorg-detector.ts`) behave as documented — block ordering, gap handling, maximum reorg depth, recovery-after-stall
-- [ ] **IDX-05**: View refresh triggers in `view-refresh.ts` match the staleness model documented in comments and in schema view definitions
+- [x] **IDX-05**: View refresh triggers in `view-refresh.ts` match the staleness model documented in comments and in schema view definitions
 
 ### Findings Consolidation
 
-- [ ] **FIND-01**: All discrepancies from API, SCHEMA, and IDX phases are consolidated into `audit/FINDINGS-v28.0.md` with severity (HIGH / MEDIUM / LOW / INFO), direction (docs→code / code→docs / comment→code / schema↔migration), and source reference
-- [ ] **FIND-02**: Each finding is traceable to the originating phase + a specific `database/` file:line (or the contract event + database schema pair for indexer findings)
-- [ ] **FIND-03**: Every finding has a recorded resolution status: `RESOLVED-DOC` (doc patched), `RESOLVED-CODE` (code patched), `DEFERRED` (with explicit reason), or `INFO-ACCEPTED` (design decision, no action needed)
+- [x] **FIND-01**: All discrepancies from API, SCHEMA, and IDX phases are consolidated into `audit/FINDINGS-v28.0.md` with severity (HIGH / MEDIUM / LOW / INFO), direction (docs→code / code→docs / comment→code / schema↔migration), and source reference
+- [x] **FIND-02**: Each finding is traceable to the originating phase + a specific `database/` file:line (or the contract event + database schema pair for indexer findings)
+- [x] **FIND-03**: Every finding has a recorded resolution status: `RESOLVED-DOC` (doc patched), `RESOLVED-CODE` (code patched), `DEFERRED` (with explicit reason), or `INFO-ACCEPTED` (design decision, no action needed)
 
 ## Future Requirements
 
@@ -89,20 +89,20 @@ Explicit exclusions with reasoning:
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| API-01 | Phase 224 | Complete (2026-04-13) |
-| API-02 | Phase 224 | Complete (2026-04-13) |
-| API-03 | Phase 225 | Complete (2026-04-13) |
-| API-04 | Phase 225 | Complete (2026-04-13) |
-| API-05 | Phase 225 | Complete (2026-04-13) |
-| SCHEMA-01 | Phase 226 | Pending |
-| SCHEMA-02 | Phase 226 | Complete |
-| SCHEMA-03 | Phase 226 | Complete |
-| SCHEMA-04 | Phase 226 | Pending |
-| IDX-01 | Phase 227 | Pending |
-| IDX-02 | Phase 227 | Complete |
-| IDX-03 | Phase 227 | Complete |
-| IDX-04 | Phase 228 | Complete |
-| IDX-05 | Phase 228 | Pending |
-| FIND-01 | Phase 229 | Pending |
-| FIND-02 | Phase 229 | Pending |
-| FIND-03 | Phase 229 | Pending |
+| API-01 | Phase 224 | Satisfied (Phase 224) |
+| API-02 | Phase 224 | Satisfied (Phase 224) |
+| API-03 | Phase 225 | Satisfied (Phase 225) |
+| API-04 | Phase 225 | Satisfied (Phase 225) |
+| API-05 | Phase 225 | Satisfied (Phase 225) |
+| SCHEMA-01 | Phase 226 | Satisfied (Phase 226) |
+| SCHEMA-02 | Phase 226 | Satisfied (Phase 226) |
+| SCHEMA-03 | Phase 226 | Satisfied (Phase 226) |
+| SCHEMA-04 | Phase 226 | Satisfied (Phase 226) |
+| IDX-01 | Phase 227 | Satisfied (Phase 227) |
+| IDX-02 | Phase 227 | Satisfied (Phase 227) |
+| IDX-03 | Phase 227 | Satisfied (Phase 227) |
+| IDX-04 | Phase 228 | Satisfied (Phase 228) |
+| IDX-05 | Phase 228 | Satisfied (Phase 228) |
+| FIND-01 | Phase 229 | Satisfied (Phase 229) |
+| FIND-02 | Phase 229 | Satisfied (Phase 229) |
+| FIND-03 | Phase 229 | Satisfied (Phase 229) |
