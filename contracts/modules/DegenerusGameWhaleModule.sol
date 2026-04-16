@@ -260,7 +260,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
 
         if (msg.value != totalPrice) revert E();
-        _awardEarlybirdDgnrs(buyer, totalPrice, passLevel);
+        _awardEarlybirdDgnrs(buyer, totalPrice);
 
         uint24 newLevelCount = levelCount + levelsToAdd;
 
@@ -473,7 +473,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         if (msg.value != totalPrice) revert E();
 
-        _awardEarlybirdDgnrs(buyer, benefitValue, startLevel);
+        _awardEarlybirdDgnrs(buyer, benefitValue);
 
         _activate10LevelPass(buyer, startLevel, LAZY_PASS_TICKETS_PER_LEVEL);
 
@@ -584,7 +584,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Issue the pass with symbol
         deityPassPaidTotal[buyer] += totalPrice;
-        _awardEarlybirdDgnrs(buyer, totalPrice, passLevel);
+        _awardEarlybirdDgnrs(buyer, totalPrice);
 
         mintPacked_[buyer] = BitPackingLib.setPacked(
             mintPacked_[buyer],

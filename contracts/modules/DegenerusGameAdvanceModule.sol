@@ -1516,6 +1516,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             _rewardTopAffiliate(lvl);
             level = lvl;
 
+            // Earlybird window ends at the transition to EARLYBIRD_END_LEVEL.
+            // Dumps remaining Earlybird pool into Lootbox and flips the sentinel.
+            if (lvl == EARLYBIRD_END_LEVEL) {
+                _finalizeEarlybird();
+            }
+
             // Decimator window: open at x4/x99, close at x5/x00
             uint24 mod100 = lvl % 100;
             uint24 mod10 = lvl % 10;
@@ -1571,6 +1577,24 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // would steal user value (burned BURNIE for zero effect).
 
         emit VrfCoordinatorUpdated(current, newCoordinator);
+    }
+
+    /// @dev End the earlybird window: dump remaining Earlybird pool into Lootbox and mark finalized.
+    ///      Idempotent via the uint256.max sentinel on earlybirdDgnrsPoolStart.
+    ///      Called from _finalizeRngRequest when level transitions to EARLYBIRD_END_LEVEL.
+    function _finalizeEarlybird() private {
+        if (earlybirdDgnrsPoolStart == type(uint256).max) return;
+        earlybirdDgnrsPoolStart = type(uint256).max;
+        uint256 remainingPool = dgnrs.poolBalance(
+            IStakedDegenerusStonk.Pool.Earlybird
+        );
+        if (remainingPool != 0) {
+            dgnrs.transferBetweenPools(
+                IStakedDegenerusStonk.Pool.Earlybird,
+                IStakedDegenerusStonk.Pool.Lootbox,
+                remainingPool
+            );
+        }
     }
 
     /// @dev Unlock RNG after processing is complete for the day.

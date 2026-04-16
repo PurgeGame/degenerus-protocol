@@ -993,45 +993,26 @@ abstract contract DegenerusGameStorage {
     // Internal Helpers
     // =========================================================================
 
-    /// @dev Awards earlybird DGNRS tokens to buyers during early levels (< EARLYBIRD_END_LEVEL).
-    ///      Uses a quadratic emission curve that decreases rewards as more ETH is spent.
+    /// @dev Awards earlybird DGNRS tokens via a quadratic emission curve.
+    ///      No-op after _finalizeEarlybird runs (sentinel check).
     ///      No-op if buyer is zero address, purchaseWei is 0, or earlybird target is reached.
     /// @param buyer Address to receive DGNRS tokens.
     /// @param purchaseWei ETH amount spent on this purchase.
-    /// @param currentLevel Current game level (must be < EARLYBIRD_END_LEVEL for rewards).
     function _awardEarlybirdDgnrs(
         address buyer,
-        uint256 purchaseWei,
-        uint24 currentLevel
+        uint256 purchaseWei
     ) internal {
         if (purchaseWei == 0) return;
         if (buyer == address(0)) return;
-        if (currentLevel >= EARLYBIRD_END_LEVEL) {
-            // One-shot: dump remaining earlybird pool into lootbox pool
-            if (earlybirdDgnrsPoolStart != type(uint256).max) {
-                earlybirdDgnrsPoolStart = type(uint256).max;
-                IStakedDegenerusStonk dgnrsContract = IStakedDegenerusStonk(
-                    ContractAddresses.SDGNRS
-                );
-                uint256 earlybirdRemaining = dgnrsContract.poolBalance(
-                    IStakedDegenerusStonk.Pool.Earlybird
-                );
-                if (earlybirdRemaining != 0) {
-                    dgnrsContract.transferBetweenPools(
-                        IStakedDegenerusStonk.Pool.Earlybird,
-                        IStakedDegenerusStonk.Pool.Lootbox,
-                        earlybirdRemaining
-                    );
-                }
-            }
-            return;
-        }
 
         uint256 poolStart = earlybirdDgnrsPoolStart;
+        // uint256.max is the finalization sentinel set by _finalizeEarlybird.
+        // Primary gate: earlybird is over once the level transition fires the finalize hook.
+        if (poolStart == type(uint256).max) return;
         if (poolStart == 0) {
-            uint256 poolBalance = IStakedDegenerusStonk(
-                ContractAddresses.SDGNRS
-            ).poolBalance(IStakedDegenerusStonk.Pool.Earlybird);
+            uint256 poolBalance = dgnrs.poolBalance(
+                IStakedDegenerusStonk.Pool.Earlybird
+            );
             if (poolBalance == 0) return;
             poolStart = poolBalance;
             earlybirdDgnrsPoolStart = poolBalance;
@@ -1055,7 +1036,7 @@ abstract contract DegenerusGameStorage {
         earlybirdEthIn = nextEthIn;
         if (payout == 0) return;
 
-        IStakedDegenerusStonk(ContractAddresses.SDGNRS).transferFromPool(
+        dgnrs.transferFromPool(
             IStakedDegenerusStonk.Pool.Earlybird,
             buyer,
             payout

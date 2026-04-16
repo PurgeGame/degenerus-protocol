@@ -381,13 +381,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
 
         _recordMintDataModule(player, lvl, mintUnits);
-        uint256 earlybirdEth = 0;
-        if (payKind == MintPaymentKind.DirectEth) {
-            earlybirdEth = msg.value > costWei ? costWei : msg.value;
-        } else if (payKind == MintPaymentKind.Combined) {
-            earlybirdEth = msg.value;
-        }
-        _awardEarlybirdDgnrs(player, earlybirdEth, lvl);
     }
 
     /// @notice Record mint streak completion after a 1x price ETH quest completes.

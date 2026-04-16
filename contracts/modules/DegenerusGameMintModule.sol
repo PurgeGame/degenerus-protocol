@@ -962,13 +962,15 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint32 burnieMintUnits;
         uint32 adjustedQty;
         uint24 targetLevel;
+        uint256 ticketFreshEth;
         if (ticketCost != 0) {
             (
                 lootboxFlipCredit,
                 adjustedQty,
                 targetLevel,
                 ethMintUnits,
-                burnieMintUnits
+                burnieMintUnits,
+                ticketFreshEth
             ) = _callTicketPurchase(
                     buyer,
                     buyer,
@@ -1167,8 +1169,11 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             if (lbFirstDeposit) {
                 lootboxEvScorePacked[lbIndex][buyer] = uint16(cachedScore + 1);
             }
-            _awardEarlybirdDgnrs(buyer, lootboxFreshEth, cachedLevel + 1);
         }
+
+        // Unified earlybird award: one call per purchase covering both ticket and lootbox fresh ETH.
+        // Mathematically equivalent to two separate calls (quadratic curve telescopes).
+        _awardEarlybirdDgnrs(buyer, ticketFreshEth + lootboxFreshEth);
 
         uint256 finalClaimable = payKind == MintPaymentKind.DirectEth
             ? initialClaimable
@@ -1203,6 +1208,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     /// @return targetLevel The level tickets are queued to
     /// @return ethMintUnits ETH-paid mint quest units (fresh-ETH scaled)
     /// @return burnieMintUnits BURNIE-paid mint quest units
+    /// @return freshEth Fresh ETH portion of the ticket payment (0 for payInCoin and Claimable)
     function _callTicketPurchase(
         address buyer,
         address payer,
@@ -1220,7 +1226,8 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             uint32 adjustedQty32,
             uint24 targetLevel,
             uint32 ethMintUnits,
-            uint32 burnieMintUnits
+            uint32 burnieMintUnits,
+            uint256 freshEth
         )
     {
         if (quantity == 0) revert E();
@@ -1287,7 +1294,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 payKind
             );
 
-            uint256 freshEth;
             if (payKind == MintPaymentKind.DirectEth) {
                 if (value < costWei) revert E();
                 freshEth = costWei;
