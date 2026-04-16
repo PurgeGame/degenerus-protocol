@@ -245,11 +245,13 @@ interface IDegenerusGameMintModule {
 
     /// @notice Processes a batch of future ticket claims
     /// @param lvl The level to process tickets for
+    /// @param entropy VRF-derived entropy for rarity rolls (caller passes today's daily RNG word)
     /// @return worked Whether any processing was done
     /// @return finished Whether all pending tickets are processed
     /// @return writesUsed Number of storage writes used
     function processFutureTicketBatch(
-        uint24 lvl
+        uint24 lvl,
+        uint256 entropy
     ) external returns (bool worked, bool finished, uint32 writesUsed);
 
     /// @notice Processes a batch of current-level ticket entries

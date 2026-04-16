@@ -377,13 +377,15 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
     /// @notice Activate future-pool tickets for a given level, bounded by a write budget.
     /// @param lvl The level whose queued tickets to process.
+    /// @param entropy VRF-derived entropy for rarity rolls. Caller passes today's daily RNG word
+    ///                (rngWordByDay[day]) so entropy cannot be clobbered by mid-day state changes.
     /// @return worked   True if at least one ticket was minted this call.
     /// @return finished True if the entire queue for `lvl` has been drained.
     /// @return writesUsed Write-budget units consumed (each storage write or skip costs one unit).
     function processFutureTicketBatch(
-        uint24 lvl
+        uint24 lvl,
+        uint256 entropy
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
-        uint256 entropy = rngWordCurrent;
         bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
         uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
         address[] storage queue = ticketQueue[rk];

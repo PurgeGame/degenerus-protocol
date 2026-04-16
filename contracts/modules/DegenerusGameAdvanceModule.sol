@@ -298,7 +298,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     ticketCursor = 0;
                 }
                 (bool ffWorked, bool ffFinished, ) = _processFutureTicketBatch(
-                    ffLevel
+                    ffLevel,
+                    rngWord
                 );
                 if (ffWorked || !ffFinished) {
                     stage = STAGE_TRANSITION_WORKING;
@@ -317,7 +318,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Process near-future ticket queues before daily draws
             // to include fresh lootbox-driven tickets
             if (!dailyJackpotCoinTicketsPending) {
-                if (!_prepareFutureTickets(inJackpot ? lvl : purchaseLevel)) {
+                if (
+                    !_prepareFutureTickets(
+                        inJackpot ? lvl : purchaseLevel,
+                        rngWord
+                    )
+                ) {
                     stage = STAGE_FUTURE_TICKETS_WORKING;
                     break;
                 }
@@ -383,7 +389,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         bool futureWorked,
                         bool futureFinished,
 
-                    ) = _processFutureTicketBatch(nextLevel);
+                    ) = _processFutureTicketBatch(nextLevel, rngWord);
                     if (futureWorked || !futureFinished) {
                         stage = STAGE_FUTURE_TICKETS_WORKING;
                         break;
@@ -1299,18 +1305,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Process a batch of future ticket rewards for the specified level.
     ///      Called during jackpot phase of level N-1 to activate tickets for level N.
     /// @param lvl Target level to activate (typically current level + 1).
+    /// @param entropy Today's daily RNG word (from rngGate) used for rarity rolls.
     /// @return worked True if any queued entries were processed.
     /// @return finished True if all queued entries for this level are processed.
     /// @return writesUsed Number of SSTORE operations used in this batch.
     function _processFutureTicketBatch(
-        uint24 lvl
+        uint24 lvl,
+        uint256 entropy
     ) private returns (bool worked, bool finished, uint32 writesUsed) {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_MINT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameMintModule.processFutureTicketBatch.selector,
-                    lvl
+                    lvl,
+                    entropy
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -1323,8 +1332,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      purchaseLevel during purchase phase (range lvl+2..lvl+5).
     ///      FF promotion is handled separately at phase transition time.
     /// @param lvl Base level (level during jackpot, purchaseLevel during purchase).
+    /// @param entropy Today's daily RNG word (from rngGate) threaded to ticket rarity rolls.
     /// @return finished True when all target future levels are fully processed.
-    function _prepareFutureTickets(uint24 lvl) private returns (bool finished) {
+    function _prepareFutureTickets(
+        uint24 lvl,
+        uint256 entropy
+    ) private returns (bool finished) {
         uint24 startLevel = lvl + 1;
         uint24 endLevel = lvl + 4;
         uint24 resumeLevel = ticketLevel;
@@ -1332,7 +1345,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Continue an in-flight future level first to preserve progress.
         if (resumeLevel >= startLevel && resumeLevel <= endLevel) {
             (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
-                resumeLevel
+                resumeLevel,
+                entropy
             );
             if (worked || !levelFinished) return false;
         }
@@ -1341,7 +1355,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         for (uint24 target = startLevel; target <= endLevel; ) {
             if (target != resumeLevel) {
                 (bool worked, bool levelFinished, ) = _processFutureTicketBatch(
-                    target
+                    target,
+                    entropy
                 );
                 if (worked || !levelFinished) return false;
             }
