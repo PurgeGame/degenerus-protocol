@@ -569,7 +569,9 @@ contract BurnieCoin {
         if (amount < DECIMATOR_MIN) revert AmountLTMin();
 
         if (!degenerusGame.decWindow()) revert NotDecimatorWindow();
-        uint24 lvl = degenerusGame.level();
+        // Key burns by the resolution level: burns during window level N land
+        // in decBurn[N+1] where the jackpot resolves at the N→N+1 bump.
+        uint24 lvl = degenerusGame.level() + 1;
 
         uint256 consumed = _consumeCoinflipShortfall(caller, amount);
         // CEI: burn before any downstream calls after coinflip consumption

@@ -752,19 +752,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             claimableDelta += claimed;
         }
 
-        // Decimator Jackpot (level 100 special — uses pre-jackpot snapshot)
+        // Decimator jackpot fires at the window-close bump.
+        // x00 draws 30% from pre-jackpot future; x5 (non-x95) draws 10% from current.
+        uint256 decPoolWei;
         if (prevMod100 == 0) {
-            uint256 decPoolWei = (baseMemFuture * 30) / 100;
-            uint256 returnWei = IDegenerusGame(address(this))
-                .runDecimatorJackpot(decPoolWei, lvl, rngWord);
-            uint256 spend = decPoolWei - returnWei;
-            memFuture -= spend;
-            claimableDelta += spend;
+            decPoolWei = (baseMemFuture * 30) / 100;
+        } else if (prevMod10 == 5 && prevMod100 != 95) {
+            decPoolWei = (memFuture * 10) / 100;
         }
 
-        // Decimator Jackpot (levels ending in 5, except 95 — uses current tracking)
-        if (prevMod10 == 5 && prevMod100 != 95) {
-            uint256 decPoolWei = (memFuture * 10) / 100;
+        if (decPoolWei != 0) {
             uint256 returnWei = IDegenerusGame(address(this))
                 .runDecimatorJackpot(decPoolWei, lvl, rngWord);
             uint256 spend = decPoolWei - returnWei;
