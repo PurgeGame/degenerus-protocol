@@ -64,21 +64,23 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     );
 
     /// @dev ETH jackpot win. rebuyLevel/rebuyTickets are 0 when auto-rebuy didn't fire.
+    ///      traitId is uint16: values 0-255 are real trait IDs; values ≥256 are
+    ///      sentinels for non-trait sources (e.g. BAF_TRAIT_SENTINEL = 420).
     event JackpotEthWin(
         address indexed winner,
         uint24 indexed level,
-        uint8 indexed traitId,
+        uint16 indexed traitId,
         uint256 amount,
         uint256 ticketIndex,
         uint24 rebuyLevel,
         uint32 rebuyTickets
     );
 
-    /// @dev Ticket jackpot win.
+    /// @dev Ticket jackpot win. See JackpotEthWin for traitId sentinel semantics.
     event JackpotTicketWin(
         address indexed winner,
         uint24 indexed ticketLevel,
-        uint8 indexed traitId,
+        uint16 indexed traitId,
         uint32 ticketCount,
         uint24 sourceLevel,
         uint256 ticketIndex
@@ -127,6 +129,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
     uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
+
+    /// @dev Sentinel traitId stamped on BAF jackpot payout events so indexers can
+    ///      distinguish BAF wins from trait-bucketed daily/coin wins. Sits above
+    ///      uint8.max (255) so it never collides with a real trait id.
+    uint16 private constant BAF_TRAIT_SENTINEL = 420;
 
     // -------------------------------------------------------------------------
     // Constants — Share Distribution (Basis Points)
@@ -2018,7 +2025,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         rngWord
                     );
                     claimableDelta += cd;
-                    emit JackpotEthWin(winner, lvl, 0, ethPortion, 0, rl, rt);
+                    emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, ethPortion, 0, rl, rt);
                 }
 
                 // Lootbox half: small amounts awarded immediately, large deferred
@@ -2030,7 +2037,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         lvl,
                         rngWord
                     );
-                    emit JackpotTicketWin(winner, lvl, 0, 0, lvl, 0);
+                    emit JackpotTicketWin(winner, lvl, BAF_TRAIT_SENTINEL, 0, lvl, 0);
                 } else {
                     // Large lootbox: defer to claim (whale pass equivalent)
                     _queueWhalePassClaimCore(winner, lootboxPortion);
@@ -2050,11 +2057,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     rngWord
                 );
                 claimableDelta += cd;
-                emit JackpotEthWin(winner, lvl, 0, amount, 0, rl, rt);
+                emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, amount, 0, rl, rt);
             } else {
                 // Odd index: 100% lootbox (upside exposure)
                 rngWord = _awardJackpotTickets(winner, amount, lvl, rngWord);
-                emit JackpotTicketWin(winner, lvl, 0, 0, lvl, 0);
+                emit JackpotTicketWin(winner, lvl, BAF_TRAIT_SENTINEL, 0, lvl, 0);
             }
 
             unchecked {
