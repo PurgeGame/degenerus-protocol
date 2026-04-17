@@ -1263,6 +1263,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Claim terminal Decimator jackpot for caller.
+    /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.
+    function claimTerminalDecimatorJackpot() external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_DECIMATOR_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameDecimatorModule
+                        .claimTerminalDecimatorJackpot
+                        .selector
+                )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
     /// @notice Check if player can claim Decimator jackpot for a level.
     /// @param player Address to check.
     /// @param lvl Level to check.

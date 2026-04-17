@@ -224,6 +224,10 @@ interface IDegenerusGame {
     /// @param lvl Level to claim from (must be the last decimator).
     function claimDecimatorJackpot(uint24 lvl) external;
 
+    /// @notice Claim terminal Decimator jackpot for caller.
+    /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.
+    function claimTerminalDecimatorJackpot() external;
+
     /// @notice Check if player can claim Decimator jackpot for a level.
     /// @param player Address to check.
     /// @param lvl Level to check (must be the last decimator).
