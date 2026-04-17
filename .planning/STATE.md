@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: Phase 230 complete; ready for Phase 231 discuss-phase (or parallel discussion of 231/232/233/234 per ROADMAP execution order — all four depend only on Phase 230)
-last_updated: "2026-04-17T21:43:11.706Z"
-last_activity: 2026-04-17 -- Phase 231 planning complete
+stopped_at: Phase 231 Plan 01 (EBD-01) complete; 231-02 (EBD-02) and 231-03 (EBD-03) remain; parallel execution of 232/233/234 still open per ROADMAP
+last_updated: "2026-04-17T22:00:00.000Z"
+last_activity: 2026-04-17 -- Phase 231 Plan 01 complete (EBD-01 adversarial audit, 21 PASS verdicts)
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 4
-  completed_plans: 1
-  percent: 25
+  completed_plans: 2
+  percent: 50
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 ## Current Position
 
-Phase: 230 (complete) → next: 231 (Earlybird Jackpot Audit)
-Plan: 230-01 complete; 231 plans not yet created
+Phase: 231 (executing, 1/3 plans complete) → next: 231-02 (EBD-02 trait-alignment) or parallel 232/233/234
+Plan: 231-01 complete (EBD-01 AUDIT + SUMMARY shipped); 231-02 / 231-03 pending
 Milestone: v29.0 — Post-v27 Contract Delta Audit
-Status: Ready to execute
-Last activity: 2026-04-17 -- Phase 231 planning complete
+Status: Executing
+Last activity: 2026-04-17 -- Phase 231 Plan 01 complete (EBD-01 adversarial audit, 21 PASS verdicts across 9 f20a2b5e purchase-side functions)
 
 ## Accumulated Context
 
@@ -70,6 +70,7 @@ Recent decisions affecting current work:
 - [Phase 230]: 230-01-DELTA-MAP.md is the authoritative v29.0 audit-surface catalog — 581 lines, 5 top-level sections (Per-File Baseline / Function-Level Changelog / Cross-Module Interaction Map / Interface Drift Catalog / Consumer Index). Per D-06 it is READ-only after commit; downstream phases record scope-guard deferrals rather than editing it. All 4 automated gates (check-interfaces, check-delegatecall 44/44, check-raw-selectors, forge build) PASS at HEAD — no hidden drift. Phase 230 emitted ZERO F-29-NN finding IDs by design (scope catalog, not findings pass).
 - [Phase 230]: 5 known non-issues documented in 230-01-SUMMARY.md for downstream consumer awareness — `boonPacked` auto-getter classified not-required (selector not on interface), 2 UNCHANGED reformat rows (§1.1), IM-09 call-unchanged-but-arithmetic-changed, delegatecall-site count bumped 43→44 (genuine growth since Phase 220), pre-existing `forge build` lint warnings.
 - [Phase 230]: Delegatecall-site count at HEAD = 44 (was 43 at Phase 220 v27.0 baseline). The +1 site is genuine new surface from the 10-commit delta — phase 236 regression sweep must confirm it remains aligned.
+- [Phase 231-01]: EBD-01 adversarial audit of `f20a2b5e` (earlybird purchase-phase finalize refactor) — ALL PASS. 21 verdict rows across 9 target functions (`_finalizeRngRequest`, `_finalizeEarlybird`, `_purchaseFor`, `_callTicketPurchase`, `_purchaseWhaleBundle`, `_purchaseLazyPass`, `_purchaseDeityPass`, `recordMint`, `_awardEarlybirdDgnrs`) covering all 7 EBD-01 attack vectors from CONTEXT.md D-08. Zero FAIL, zero DEFER at row level. Three DEFER hand-offs documented as scope boundaries (not findings): algebraic pool closure → Phase 235 CONS-01; RNG commitment → Phase 235 RNG-01/02 (N/A for EBD-01 — f20a2b5e adds no new RNG consumer); severity classification → Phase 236 FIND-01. Key evidence: unified `_awardEarlybirdDgnrs(buyer, ticketFreshEth + lootboxFreshEth)` fires exactly once per purchase at `DegenerusGameMintModule:1165`; signature contraction safe (storage body at `DegenerusGameStorage:1001-1044` contains zero `level()` substitute reads); `_finalizeEarlybird` one-shot idempotent via `earlybirdDgnrsPoolStart == type(uint256).max` sentinel flipped BEFORE the external `dgnrs.transferBetweenPools` call (CEI compliant); `recordMint` award-block removal is zero-regression (only production caller is `_callTicketPurchase:1276`, which now routes through `_purchaseFor:1165`). Net gas: strict improvement (one fewer external call per combined purchase).
 
 ### Pending Todos
 
@@ -82,5 +83,5 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-17 — Phase 230 executed end-to-end (discuss → plan → execute → catalog shipped)
-Stopped at: Phase 230 complete; ready for Phase 231 discuss-phase (or parallel discussion of 231/232/233/234 per ROADMAP execution order — all four depend only on Phase 230)
+Last session: 2026-04-17 — Phase 231 Plan 01 executed end-to-end (EBD-01 adversarial audit shipped; AUDIT + SUMMARY committed at `dae7f60b`)
+Stopped at: Phase 231 Plan 01 (EBD-01) complete; 231-02 (EBD-02) and 231-03 (EBD-03) remain; parallel execution of 232/233/234 still open per ROADMAP

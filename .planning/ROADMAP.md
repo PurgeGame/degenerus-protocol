@@ -93,7 +93,7 @@
   3. The combined earlybird state machine (purchase-phase finalize + jackpot-phase run) is traced end-to-end with no double-spend, no orphaned reserves, and no missed emissions at any transition
   4. Every verdict cites commit SHA + file:line and is added to the Phase 236 finding candidate pool
 **Plans**: 3 plans — one per EBD requirement (per CONTEXT.md D-01 + auto-rule 6)
-- [ ] 231-01-PLAN.md — Produce 231-01-AUDIT.md: per-function verdict table for EBD-01 earlybird purchase-phase finalize refactor (`f20a2b5e`) — CEI, reentrancy, storage ordering, budget conservation at level-transition dump, signature-contraction correctness, gas delta, double/zero-award regression
+- [x] 231-01-PLAN.md — Produce 231-01-AUDIT.md: per-function verdict table for EBD-01 earlybird purchase-phase finalize refactor (`f20a2b5e`) — CEI, reentrancy, storage ordering, budget conservation at level-transition dump, signature-contraction correctness, gas delta, double/zero-award regression — completed 2026-04-17 (21 PASS verdicts across 9 target functions; zero FAIL/DEFER)
 - [ ] 231-02-PLAN.md — Produce 231-02-AUDIT.md: per-function verdict table for EBD-02 trait-alignment rewrite (`20a951df`) — bonus-trait parity with coin jackpot, salt-space isolation, `lvl+1` queue fix, futurePool → nextPool CEI (algebraic pool conservation handed off to Phase 235 CONS-01)
 - [ ] 231-03-PLAN.md — Produce 231-03-AUDIT.md: combined earlybird state machine end-to-end path walk for EBD-03 — normal / skip-split / gameover transitions, no double-spend, no orphaned reserves, no missed emissions, cross-commit invariant (pool dumped = pool consumed)
 
@@ -161,7 +161,7 @@ Phase 230 first. Phases 231, 232, 233, 234 can execute in parallel after 230 com
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 230. Delta Extraction & Scope Map | 1/1 | Complete | 2026-04-17 |
-| 231. Earlybird Jackpot Audit | 0/3 | Not started | — |
+| 231. Earlybird Jackpot Audit | 1/3 | In progress | — |
 | 232. Decimator Audit | 0/3 | Not started | — |
 | 233. Jackpot/BAF + Entropy Audit | 0/3 | Not started | — |
 | 234. Quests / Boons / Misc Audit | 0/1 | Not started | — |
