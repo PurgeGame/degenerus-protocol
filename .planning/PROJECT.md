@@ -10,14 +10,15 @@ Every finding a C4A warden could submit is identified and either fixed or docume
 
 ## Current Milestone: v29.0 Post-v27 Contract Delta Audit
 
-**Goal:** Full adversarial audit of all `contracts/` changes since the v27.0 (2026-04-13) audit baseline. v28.0 audited the sibling `database/` repo only, so contract code has been unaudited since v27.0. Covers 8 contract-touching commits: entropy passthrough refactor, earlybird finalize-at-transition + trait-alignment rewrite, decimator burn-key + event emission + terminal-claim passthrough, BAF trait-sentinel, `mint_ETH` quest wei fix, and `boonPacked` mapping exposure.
+**Goal:** Full adversarial audit of all `contracts/` changes since the v27.0 (2026-04-13) audit baseline. v28.0 audited the sibling `database/` repo only, so contract code has been unaudited since v27.0. Covers 10 contract-touching commits: phase-transition RNG lock removal, entropy passthrough refactor, earlybird finalize-at-transition + trait-alignment rewrite, decimator burn-key + event emission + terminal-claim passthrough, BAF trait-sentinel, `mint_ETH` quest wei fix, and `boonPacked` mapping exposure.
 
 **Target features:**
-- Delta extraction & scope map (8 commits, 12 contract/interface files)
+- Delta extraction & scope map (10 commits, 12 contract/interface files)
 - Earlybird jackpot path audit (both the purchase-phase refactor and today's trait-roll/queue-level rewrite)
 - Decimator changes (burn-key by resolution level, event emission, terminal-claim passthrough, consolidated jackpot block)
 - Jackpot/BAF + entropy refactors (traitId=420 sentinel, explicit entropy passthrough to `processFutureTicketBatch`)
 - Quest/boon/interface drift (`mint_ETH` wei credit, `boonPacked` exposure, `IDegenerusQuests` + `IDegenerusGame` alignment)
+- Phase-transition RNG lock removal (`_unlockRng` no longer fires at jackpot→purchase; housekeeping packs into last jackpot physical day)
 - ETH / BURNIE conservation + RNG commitment-window re-proof across the delta
 - Regression sweep against v25.0/v26.0/v27.0 findings
 - Findings consolidation → `audit/FINDINGS-v29.0.md` + KNOWN-ISSUES.md sync

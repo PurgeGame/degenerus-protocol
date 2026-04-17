@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
-status: defining-requirements
+status: roadmap-complete
 stopped_at: null
 last_updated: "2026-04-17T00:00:00.000Z"
-last_activity: 2026-04-17 — Milestone v29.0 started; v28.0 phases archived to .planning/milestones/v28.0-phases/
+last_activity: 2026-04-17 — v29.0 roadmap created; 7 phases (230-236), 16 plans expected, 25/25 requirements mapped (TRNX-01 added to Phase 235 to cover orphan commit 2471f8e7)
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
-  total_plans: 0
+  total_plans: 16
   completed_plans: 0
   percent: 0
 ---
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v29.0 Post-v27 Contract Delta Audit — defining requirements for a full adversarial audit of the 8 contract-touching commits since v27.0 (2026-04-13).
+**Current focus:** v29.0 Post-v27 Contract Delta Audit — 7 phases (230-236) covering delta extraction, three adversarial themes (EBD / DCM / JKP), quests/boons/misc grab-bag, conservation + RNG re-proof, and regression + findings consolidation.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 230 (not started)
 Plan: —
 Milestone: v29.0 — Post-v27 Contract Delta Audit
-Status: Defining requirements
-Last activity: 2026-04-17 — Milestone v29.0 started
+Status: Roadmap complete, ready for Phase 230 planning
+Last activity: 2026-04-17 — Roadmap created, 24/24 requirements mapped to phases 230-236
 
 ## Accumulated Context
 
@@ -38,6 +38,13 @@ Last activity: 2026-04-17 — Milestone v29.0 started
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [v29.0 roadmap]: 7 phases (230-236) chosen — modeled on v25.0 pattern (DELTA → adversarial → RNG/conservation → findings) scoped to the 8 v29.0 themes
+- [v29.0 roadmap]: Three adversarial themes (EBD, DCM, JKP) each get their own phase — different modules, different attack surfaces
+- [v29.0 roadmap]: QST requirements folded into a single grab-bag phase (234) with per-requirement sections — low coupling between the three isolated changes
+- [v29.0 roadmap]: CONS + RNG combined into Phase 235 — both are analytical proofs over the full delta and share the same scope dependency on phases 231-234
+- [v29.0 roadmap]: REG + FIND combined into Phase 236 (terminal) — regression check feeds directly into the consolidated deliverable
+- [v29.0 roadmap]: Phase 230 is lightweight scope-map only (1 plan) — modeled on v25.0's 213-03 and v28.0's 224-01 catalog pattern
+- [v29.0 roadmap]: Scope-guard handoff pattern (D-227-10 → D-228-09) carried forward — any phase that bloats defers to a later phase rather than over-scoping
 - [v28.0]: Audit target is sibling `database/` repo — planning artifacts remain in `degenerus-audit/.planning/`
 - [v28.0]: Three intent sources graded against: API.md prose, openapi.yaml spec, in-source comments
 - [v28.0]: Four mismatch directions in scope — docs→code, code→docs, comment→code, schema↔migration
@@ -63,15 +70,14 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Phase transition fix (uncommitted): AdvanceModule line 428 `_unlockRng(day)` removed so jackpot→purchase housekeeping packs into the last jackpot physical day. CompressedJackpot test day-counts updated; two new turbo tests added; WhaleBundle `issueWhaleBoonForRecipient` helper fixed. Changes live on main but are not part of any milestone — consider folding into v28.0 scope or a parallel v27.1.
+- _(none — orphan commit 2471f8e7 "phase transition fix" folded into v29.0 scope as TRNX-01 on Phase 235)_
 
 ### Blockers/Concerns
 
-- Cross-repo audit: primary artifacts in `degenerus-audit/.planning/` but audit target code is at `/home/zak/Dev/PurgeGame/database/`. Workflow must handle both paths — phase plans should resolve paths against the database/ root, not this repo's contracts/ tree.
-- Indexer correctness (Phase 227) has a shared surface with this repo's contracts — cross-references from `database/src/indexer/event-processor.ts` into `contracts/*.sol` events will be needed.
-- Migration reconciliation (Phase 226) requires reading all 7 `database/drizzle/*.sql` migrations as a cumulative diff — ordering matters; each migration must be interpreted as a delta from its predecessor.
+- v29.0 is a contract-side audit — audit target is `/home/zak/Dev/PurgeGame/degenerus-audit/contracts/` (not the `database/` repo as in v28.0). Per-contract-locations feedback applies: only read from `contracts/` directory, stale copies exist elsewhere.
+- v28.0 finalized the cross-repo READ-only audit pattern; v29.0 is same-repo READ-only — writes confined to `audit/` + `.planning/`, no `contracts/` or `test/` modifications without explicit user approval.
 
 ## Session Continuity
 
-Last session: 2026-04-15T19:13:02.936Z
-Stopped at: Completed 228-01-PLAN.md
+Last session: 2026-04-17 — v29.0 roadmap created
+Stopped at: Roadmap complete, ready for Phase 230 planning

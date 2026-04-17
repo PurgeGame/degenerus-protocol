@@ -7,9 +7,10 @@
 
 Requirements for this milestone. Each maps to roadmap phases.
 
-**Audit baseline:** v27.0 ship point (2026-04-13). v28.0 audited the sibling `database/` repo only — contracts were not re-audited. Delta scope is the 8 contract-touching commits between v27.0 and today.
+**Audit baseline:** v27.0 phase execution complete (2026-04-12 21:55, commit `14cb45e1`). v28.0 audited the sibling `database/` repo only — contracts were not re-audited. Delta scope is the 10 contract-touching commits between that baseline and today.
 
 **In-scope commits:**
+- `2471f8e7` phase transition fix — removes `_unlockRng(day)` from jackpot→purchase transition so housekeeping packs into the last jackpot physical day
 - `52242a10` refactor: explicit entropy passthrough to `processFutureTicketBatch`
 - `f20a2b5e` refactor(earlybird): finalize at level transition, unify award call per purchase
 - `3ad0f8d3` fix(decimator): key burns by resolution level, consolidate jackpot block
@@ -52,6 +53,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [ ] **QST-02**: `boonPacked` mapping exposure (`e0a7f7bc`) audited — read-only accessor safety, storage layout preserved, no write path introduced, slot accessibility matches intent
 - [ ] **QST-03**: `BurnieCoin.sol` change audited — isolated cause/effect (only decimator-burn-key-related), no supply conservation impact
 
+### Phase Transition (RNG Lock)
+
+- [ ] **TRNX-01**: Phase-transition RNG lock removal (`2471f8e7`) audited — `_unlockRng(day)` removed from the jackpot→purchase transition at `DegenerusGameAdvanceModule:425`. Verify: (a) no state-changing path between `_endPhase()` and the next `_unlockRng` reactivation allows exploit, (b) RNG lock invariant (no far-future ticket queuing while locked) preserved across the newly-packed housekeeping step, (c) commitment-window integrity — any RNG consumer now inside the packed window still has its word unknown at input commitment time, (d) no missed or double unlock across any reachable path (normal / gameover / skip-split).
+
 ### ETH / BURNIE Conservation + RNG Commitment Re-Proof
 
 - [ ] **CONS-01**: ETH conservation proof across the delta — every new or modified SSTORE site touching `currentPrizePool` / `nextPrizePool` / `futurePrizePool` / `claimablePool` / `decimatorPool` accounted for; sum before = sum after at every path endpoint
@@ -62,7 +67,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Regression
 
 - [ ] **REG-01**: All 16 v27.0 INFO findings + 3 KNOWN-ISSUES entries re-verified against current code
-- [ ] **REG-02**: All 13 v25.0 findings + v26.0 delta audit conclusions re-verified (no regression introduced by the 9-commit delta)
+- [ ] **REG-02**: All 13 v25.0 findings + v26.0 delta audit conclusions re-verified (no regression introduced by the 10-commit delta)
 
 ### Findings Consolidation
 
@@ -87,40 +92,39 @@ None — this is a terminal delta-audit milestone.
 
 ## Traceability
 
-Populated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DELTA-01 | TBD | Pending |
-| DELTA-02 | TBD | Pending |
-| DELTA-03 | TBD | Pending |
-| EBD-01 | TBD | Pending |
-| EBD-02 | TBD | Pending |
-| EBD-03 | TBD | Pending |
-| DCM-01 | TBD | Pending |
-| DCM-02 | TBD | Pending |
-| DCM-03 | TBD | Pending |
-| JKP-01 | TBD | Pending |
-| JKP-02 | TBD | Pending |
-| JKP-03 | TBD | Pending |
-| QST-01 | TBD | Pending |
-| QST-02 | TBD | Pending |
-| QST-03 | TBD | Pending |
-| CONS-01 | TBD | Pending |
-| CONS-02 | TBD | Pending |
-| RNG-01 | TBD | Pending |
-| RNG-02 | TBD | Pending |
-| REG-01 | TBD | Pending |
-| REG-02 | TBD | Pending |
-| FIND-01 | TBD | Pending |
-| FIND-02 | TBD | Pending |
-| FIND-03 | TBD | Pending |
+| DELTA-01 | 230 | Pending |
+| DELTA-02 | 230 | Pending |
+| DELTA-03 | 230 | Pending |
+| EBD-01 | 231 | Pending |
+| EBD-02 | 231 | Pending |
+| EBD-03 | 231 | Pending |
+| DCM-01 | 232 | Pending |
+| DCM-02 | 232 | Pending |
+| DCM-03 | 232 | Pending |
+| JKP-01 | 233 | Pending |
+| JKP-02 | 233 | Pending |
+| JKP-03 | 233 | Pending |
+| QST-01 | 234 | Pending |
+| QST-02 | 234 | Pending |
+| QST-03 | 234 | Pending |
+| CONS-01 | 235 | Pending |
+| CONS-02 | 235 | Pending |
+| RNG-01 | 235 | Pending |
+| RNG-02 | 235 | Pending |
+| TRNX-01 | 235 | Pending |
+| REG-01 | 236 | Pending |
+| REG-02 | 236 | Pending |
+| FIND-01 | 236 | Pending |
+| FIND-02 | 236 | Pending |
+| FIND-03 | 236 | Pending |
 
 **Coverage:**
-- v29.0 requirements: 24 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 24 ⚠️
+- v29.0 requirements: 25 total
+- Mapped to phases: 25 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-17*
-*Last updated: 2026-04-17 after initial definition*
+*Last updated: 2026-04-17 — roadmap created, all 24 requirements mapped to phases 230-236*
