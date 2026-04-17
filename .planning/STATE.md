@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: Phase 231 Plan 02 (EBD-02) complete; 231-03 (EBD-03) remains; parallel execution of 232/233/234 still open per ROADMAP
-last_updated: "2026-04-17T22:45:00.000Z"
-last_activity: 2026-04-17 -- Phase 231 Plan 02 complete (EBD-02 adversarial audit, 6 PASS verdicts across _runEarlyBirdLootboxJackpot + _rollWinningTraits)
+stopped_at: Phase 231 complete (3/3 plans); parallel execution of 232/233/234 still open per ROADMAP
+last_updated: "2026-04-17T22:25:00.000Z"
+last_activity: 2026-04-17 -- Phase 231 Plan 03 complete (EBD-03 combined earlybird state-machine adversarial audit, 13 PASS verdicts across 4 paths × 4 attack vectors)
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 70
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 ## Current Position
 
-Phase: 231 (executing, 2/3 plans complete) → next: 231-03 (EBD-03 combined state machine) or parallel 232/233/234
-Plan: 231-01 complete (EBD-01 AUDIT + SUMMARY shipped); 231-02 complete (EBD-02 AUDIT + SUMMARY shipped); 231-03 pending
+Phase: 231 complete (3/3 plans) → next: parallel 232/233/234 (ROADMAP waves) or sequential 232 (Decimator Audit)
+Plan: 231-01 complete (EBD-01 AUDIT + SUMMARY shipped); 231-02 complete (EBD-02 AUDIT + SUMMARY shipped); 231-03 complete (EBD-03 AUDIT + SUMMARY shipped)
 Milestone: v29.0 — Post-v27 Contract Delta Audit
 Status: Executing
-Last activity: 2026-04-17 -- Phase 231 Plan 02 complete (EBD-02 adversarial audit, 6 PASS verdicts across _runEarlyBirdLootboxJackpot + _rollWinningTraits)
+Last activity: 2026-04-17 -- Phase 231 Plan 03 complete (EBD-03 combined earlybird state-machine adversarial audit, 13 PASS verdicts across 4 paths × 4 attack vectors)
 
 ## Accumulated Context
 
@@ -72,6 +72,7 @@ Recent decisions affecting current work:
 - [Phase 230]: Delegatecall-site count at HEAD = 44 (was 43 at Phase 220 v27.0 baseline). The +1 site is genuine new surface from the 10-commit delta — phase 236 regression sweep must confirm it remains aligned.
 - [Phase 231-01]: EBD-01 adversarial audit of `f20a2b5e` (earlybird purchase-phase finalize refactor) — ALL PASS. 21 verdict rows across 9 target functions (`_finalizeRngRequest`, `_finalizeEarlybird`, `_purchaseFor`, `_callTicketPurchase`, `_purchaseWhaleBundle`, `_purchaseLazyPass`, `_purchaseDeityPass`, `recordMint`, `_awardEarlybirdDgnrs`) covering all 7 EBD-01 attack vectors from CONTEXT.md D-08. Zero FAIL, zero DEFER at row level. Three DEFER hand-offs documented as scope boundaries (not findings): algebraic pool closure → Phase 235 CONS-01; RNG commitment → Phase 235 RNG-01/02 (N/A for EBD-01 — f20a2b5e adds no new RNG consumer); severity classification → Phase 236 FIND-01. Key evidence: unified `_awardEarlybirdDgnrs(buyer, ticketFreshEth + lootboxFreshEth)` fires exactly once per purchase at `DegenerusGameMintModule:1165`; signature contraction safe (storage body at `DegenerusGameStorage:1001-1044` contains zero `level()` substitute reads); `_finalizeEarlybird` one-shot idempotent via `earlybirdDgnrsPoolStart == type(uint256).max` sentinel flipped BEFORE the external `dgnrs.transferBetweenPools` call (CEI compliant); `recordMint` award-block removal is zero-regression (only production caller is `_callTicketPurchase:1276`, which now routes through `_purchaseFor:1165`). Net gas: strict improvement (one fewer external call per combined purchase).
 - [Phase 231-02]: EBD-02 adversarial audit of `20a951df` (earlybird trait-alignment rewrite) — ALL PASS. 6 verdict rows across 2 target functions (`_runEarlyBirdLootboxJackpot` MODIFIED, `_rollWinningTraits` read-only re-verification) covering all 4 EBD-02 attack vectors from CONTEXT.md D-08. Zero FAIL, zero DEFER at row level. Three DEFER hand-offs documented as scope boundaries (not findings): cross-path bonus-trait identity → Phase 233 JKP-03; algebraic pool closure → Phase 235 CONS-01; RNG commitment → Phase 235 RNG-01/02. Key evidence: `_rollWinningTraits(rngWord, true)` call at `DegenerusGameJackpotModule:677` is byte-identical in arg order and salt flag to bonus consumers at lines 1679 and 1705; `BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS")` compile-time constant (line 171) is the cryptographic domain separator giving preimage-resistant isolation between `bonus=true` and `bonus=false` branches; `lvl+1` queue fix verified via direct pre-fix (`20a951df^`) vs post-fix code quote — pre-fix used `baseLevel + levelOffset` with `levelOffset = uint24(entropy % 5)` spreading winners across `baseLevel..baseLevel+4`, post-fix queues all winners at single argument `lvl` (caller passes `lvl + 1` at `payDailyJackpot:379`, matching DCM-01 `decimatorBurn` convention at §1.8). futurePool → nextPool CEI is trivially conserved: single `totalBudget` local debited from futurePool at line 668 and credited to nextPool at line 711 with no mutation in between. Rewrite narrows surface strictly: 100 `_randTraitTicket` calls → 4, 200 `EntropyLib.entropyStep` calls → 0, `levelPrices[5]` scratch array eliminated. Winner-selection salt spaces across the module are disjoint: earlybird [0,3], coin-near-future [252,255] via `DAILY_COIN_SALT_BASE = 252`, other callers [200,203].
+- [Phase 231-03]: EBD-03 adversarial audit of the combined earlybird state machine spanning both in-scope commits (`f20a2b5e` purchase-phase finalize + `20a951df` jackpot-phase trait-alignment) — ALL PASS. 13 verdict rows across 4 paths × 4 attack vectors from CONTEXT.md D-08 EBD-03. Path A (Normal Level Progression) + Path B (Skip-Split / Phase-Transition) + Path C (Game-Over Before EBD-END) + Path D (Game-Over At-or-After EBD-END), each PASS on no-double-spend / no-orphaned-reserves / no-missed-emission / cross-commit-invariant where applicable. Zero FAIL, zero row-level DEFER. Three scope-boundary hand-offs documented (not findings): algebraic pool closure → Phase 235 CONS-01; phase-transition interaction → Phase 235 TRNX-01; orphaned-reserve characterization in dead-game terminal state → Phase 236 REG-01. Key clarification of the cross-commit invariant: `_finalizeEarlybird` moves DGNRS tokens in the external StakedDegenerusStonk contract (Pool.Earlybird → Pool.Lootbox) while `_runEarlyBirdLootboxJackpot` operates on ETH-side `futurePrizePool` in DegenerusGameStorage — the two sides use ORTHOGONAL storage namespaces; the EBD-03 invariant reduces to temporal + causal ordering (finalize fires at the `lvl==EARLYBIRD_END_LEVEL=3` RNG-request transition via `_finalizeRngRequest`, and `_runEarlyBirdLootboxJackpot` runs on the first jackpot-phase day of the FOLLOWING tx). Game-over path cleanly isolated from the hook: `_finalizeRngRequest` and `_finalizeEarlybird` appear only in `DegenerusGameAdvanceModule.sol` (grep-confirmed, never in `DegenerusGameGameOverModule.sol`); the inner `_gameOverEntropy:1206 → _tryRequestRng → _finalizeRngRequest` call reaches with `isTicketJackpotDay=false` per the `_handleGameOverPath` line 178 entry guard, skipping the level-increment + hook branch at line 1510. Phase-transition block (2471f8e7 packing context) cannot fire the hook either — `_finalizeRngRequest` is unreachable from inside the `phaseTransitionActive` branch at line 283. Sentinel dual role (`earlybirdDgnrsPoolStart` at `DegenerusGameStorage:978`): guards both `_finalizeEarlybird` double-dump (AdvanceModule:1583) AND post-finalize `_awardEarlybirdDgnrs` double-allocation (Storage:1011), flipped as FIRST state mutation inside `_finalizeEarlybird` (line 1584, pre-external-call CEI).
 
 ### Pending Todos
 
@@ -84,5 +85,5 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-17 — Phase 231 Plan 02 executed end-to-end (EBD-02 adversarial audit shipped; AUDIT committed at `94ab6cfe`, SUMMARY + STATE/ROADMAP/REQUIREMENTS updates committed in metadata commit)
-Stopped at: Phase 231 Plan 02 (EBD-02) complete; 231-03 (EBD-03) remains; parallel execution of 232/233/234 still open per ROADMAP
+Last session: 2026-04-17 — Phase 231 Plan 03 executed end-to-end (EBD-03 combined earlybird state-machine adversarial audit shipped; AUDIT committed at `84440ef9`, SUMMARY + STATE/ROADMAP/REQUIREMENTS updates committed in metadata commit)
+Stopped at: Phase 231 complete (3/3 plans — EBD-01/EBD-02/EBD-03 all shipped with all-PASS verdicts); parallel execution of 232/233/234 still open per ROADMAP

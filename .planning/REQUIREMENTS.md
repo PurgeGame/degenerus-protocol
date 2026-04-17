@@ -33,7 +33,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **EBD-01**: Earlybird purchase-phase refactor (`f20a2b5e`) audited end-to-end — level-transition finalization path, unified award call, storage read/write ordering, reentrancy/CEI, gas — completed 2026-04-17 (21 PASS verdicts, zero FAIL; see `.planning/phases/231-earlybird-jackpot-audit/231-01-AUDIT.md`)
 - [x] **EBD-02**: Earlybird trait-alignment rewrite (`20a951df`) audited — bonus trait parity with coin jackpot, salt-space isolation, fixed-level queueing at `lvl+1`, budget conservation (futurePool → nextPool) — completed 2026-04-17 (6 PASS verdicts across 2 target functions; zero FAIL; see `.planning/phases/231-earlybird-jackpot-audit/231-02-AUDIT.md`)
-- [ ] **EBD-03**: Combined earlybird state-machine verified across (purchase finalize) + (jackpot-phase earlybird run) — no double-spend, no orphaned reserves, no missed emissions
+- [x] **EBD-03**: Combined earlybird state-machine verified across (purchase finalize) + (jackpot-phase earlybird run) — no double-spend, no orphaned reserves, no missed emissions — completed 2026-04-17 (13 PASS verdicts across 4 paths × 4 attack vectors; cross-commit invariant clarified as temporal + causal ordering between orthogonal storage namespaces; see `.planning/phases/231-earlybird-jackpot-audit/231-03-AUDIT.md`)
 
 ### Adversarial Audit — Decimator
 
