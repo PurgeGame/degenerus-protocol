@@ -291,5 +291,228 @@ Interaction map totals — total rows: 22, delegatecall: 5, direct: 13, self-cal
 ## 3. Interface Drift Catalog
 <!-- DELTA-03 — populated in task 4 -->
 
+Per D-10, every method declared in `IDegenerusGame.sol`, `IDegenerusQuests.sol`, and the 9 module sub-interfaces in `IDegenerusGameModules.sol` has a `PASS` / `FAIL` row against its implementer(s) at HEAD. Rows are globally numbered `ID-NN`. The three primary subsections (3.1–3.3) carry the per-method tables; §3.4 records the automated-gate corroboration.
+
+### 3.1 IDegenerusGame → DegenerusGame.sol
+
+Total interface methods: 59 (counted via `grep -cE "^\s*function\s+" contracts/interfaces/IDegenerusGame.sol`, cross-checked against `check-interfaces` which reports `IDegenerusGame -> DegenerusGame (59 fns covered)`).
+
+| Row | Interface | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|---|
+| ID-01 | IDegenerusGame | `level() external view returns (uint24)` | DegenerusGame (auto-generated getter from `uint24 public level`) | PASS | Storage-slot getter; signature identical. |
+| ID-02 | IDegenerusGame | `jackpotPhase() external view returns (bool)` | DegenerusGame.jackpotPhase | PASS | Returns `_psRead(...)` flag; signature identical. |
+| ID-03 | IDegenerusGame | `gameOver() external view returns (bool)` | DegenerusGame.gameOver (inherited) | PASS | Signature identical. |
+| ID-04 | IDegenerusGame | `isFinalSwept() external view returns (bool)` | DegenerusGame.isFinalSwept (inherited) | PASS | Signature identical. |
+| ID-05 | IDegenerusGame | `mintPrice() external view returns (uint256)` | DegenerusGame.mintPrice | PASS | Signature identical. |
+| ID-06 | IDegenerusGame | `decWindow() external view returns (bool)` | DegenerusGame.decWindow (inherited) | PASS | Signature identical. |
+| ID-07 | IDegenerusGame | `jackpotCompressionTier() external view returns (uint8)` | DegenerusGame.jackpotCompressionTier | PASS | Signature identical. |
+| ID-08 | IDegenerusGame | `purchaseInfo() external view returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei)` | DegenerusGame.purchaseInfo | PASS | Signature identical. |
+| ID-09 | IDegenerusGame | `playerActivityScore(address player) external view returns (uint256)` | DegenerusGame.playerActivityScore | PASS | Signature identical. |
+| ID-10 | IDegenerusGame | `isOperatorApproved(address owner, address operator) external view returns (bool)` | DegenerusGame.isOperatorApproved | PASS | Signature identical. |
+| ID-11 | IDegenerusGame | `recordMint(address player, uint24 lvl, uint256 costWei, uint32 mintUnits, MintPaymentKind payKind) external payable returns (uint256 newClaimableBalance)` | DegenerusGame.recordMint (line 350) | PASS | Signature identical at HEAD; function body MODIFIED by `f20a2b5e` (§1.6) — earlybird-award block removed — but the external ABI didn't change. |
+| ID-12 | IDegenerusGame | `consumeCoinflipBoon(address player) external returns (uint16 boostBps)` | DegenerusGame.consumeCoinflipBoon (line 764) | PASS | Signature identical. |
+| ID-13 | IDegenerusGame | `consumeDecimatorBoon(address player) external returns (uint16 boostBps)` | DegenerusGame.consumeDecimatorBoon (line 788) | PASS | Signature identical. |
+| ID-14 | IDegenerusGame | `consumePurchaseBoost(address player) external returns (uint16 boostBps)` | DegenerusGame.consumePurchaseBoost (line 809) | PASS | Signature identical. |
+| ID-15 | IDegenerusGame | `deityBoonData(address deity) external view returns (uint256 dailySeed, uint32 day, uint8 usedMask, bool decimatorOpen, bool deityPassAvailable)` | DegenerusGame.deityBoonData (line 832) | PASS | Signature identical. |
+| ID-16 | IDegenerusGame | `issueDeityBoon(address deity, address recipient, uint8 slot) external` | DegenerusGame.issueDeityBoon (line 861) | PASS | Signature identical. |
+| ID-17 | IDegenerusGame | `futurePrizePoolView() external view returns (uint256)` | DegenerusGame.futurePrizePoolView | PASS | Signature identical. |
+| ID-18 | IDegenerusGame | `yieldAccumulatorView() external view returns (uint256)` | DegenerusGame.yieldAccumulatorView | PASS | Signature identical. |
+| ID-19 | IDegenerusGame | `ticketsOwedView(uint24 lvl, address player) external view returns (uint32)` | DegenerusGame.ticketsOwedView | PASS | Signature identical. |
+| ID-20 | IDegenerusGame | `recordDecBurn(address player, uint24 lvl, uint8 bucket, uint256 baseAmount, uint256 multBps) external returns (uint8 bucketUsed)` | DegenerusGame.recordDecBurn (line 1029) | PASS | Signature identical. |
+| ID-21 | IDegenerusGame | `runDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) external returns (uint256 returnAmountWei)` | DegenerusGame.runDecimatorJackpot (line 1059) | PASS | Signature identical. |
+| ID-22 | IDegenerusGame | `runBafJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) external returns (uint256 claimableDelta)` | DegenerusGame.runBafJackpot (line 1086) | PASS | Signature identical. |
+| ID-23 | IDegenerusGame | `recordTerminalDecBurn(address player, uint24 lvl, uint256 baseAmount) external` | DegenerusGame.recordTerminalDecBurn (line 1116) | PASS | Signature identical. |
+| ID-24 | IDegenerusGame | `runTerminalDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) external returns (uint256 returnAmountWei)` | DegenerusGame.runTerminalDecimatorJackpot (line 1142) | PASS | Signature identical. |
+| ID-25 | IDegenerusGame | `terminalDecWindow() external view returns (bool open, uint24 lvl)` | DegenerusGame.terminalDecWindow (line 1168) | PASS | Signature identical. |
+| ID-26 | IDegenerusGame | `runTerminalJackpot(uint256 poolWei, uint24 targetLvl, uint256 rngWord) external returns (uint256 paidWei)` | DegenerusGame.runTerminalJackpot (line 1180) | PASS | Signature identical. |
+| ID-27 | IDegenerusGame | `emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) external` | DegenerusGame.emitDailyWinningTraits (line 1207) | PASS | Signature identical. |
+| ID-28 | IDegenerusGame | `consumeDecClaim(address player, uint24 lvl) external returns (uint256 amountWei)` | DegenerusGame.consumeDecClaim (line 1231) | PASS | Signature identical. |
+| ID-29 | IDegenerusGame | `claimDecimatorJackpot(uint24 lvl) external` | DegenerusGame.claimDecimatorJackpot (line 1252) | PASS | Signature identical. |
+| ID-30 | IDegenerusGame | `claimTerminalDecimatorJackpot() external` | DegenerusGame.claimTerminalDecimatorJackpot (line 1268) | PASS | NEW in both interface and implementer (858d83e4) — introduced in lockstep. Signatures match. |
+| ID-31 | IDegenerusGame | `decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner)` | DegenerusGame.decClaimable (line 1286) | PASS | Signature identical. |
+| ID-32 | IDegenerusGame | `recordMintQuestStreak(address player) external` | DegenerusGame.recordMintQuestStreak (line 389) | PASS | Signature identical. |
+| ID-33 | IDegenerusGame | `payCoinflipBountyDgnrs(address player, uint256 winningBet, uint256 bountyPool) external` | DegenerusGame.payCoinflipBountyDgnrs (line 402) | PASS | Signature identical. |
+| ID-34 | IDegenerusGame | `rngLocked() external view returns (bool)` | DegenerusGame.rngLocked (inherited) | PASS | Signature identical. |
+| ID-35 | IDegenerusGame | `currentDayView() external view returns (uint32)` | DegenerusGame.currentDayView (line 471) | PASS | Signature identical. |
+| ID-36 | IDegenerusGame | `requestLootboxRng() external` | DegenerusGame.requestLootboxRng (line 1897) | PASS | Signature identical. |
+| ID-37 | IDegenerusGame | `afKingModeFor(address player) external view returns (bool active)` | DegenerusGame.afKingModeFor (line 1624) | PASS | Signature identical. |
+| ID-38 | IDegenerusGame | `afKingActivatedLevelFor(address player) external view returns (uint24 activationLevel)` | DegenerusGame.afKingActivatedLevelFor (line 1631) | PASS | Signature identical. |
+| ID-39 | IDegenerusGame | `deactivateAfKingFromCoin(address player) external` | DegenerusGame.deactivateAfKingFromCoin (line 1641) | PASS | Signature identical. |
+| ID-40 | IDegenerusGame | `syncAfKingLazyPassFromCoin(address player) external returns (bool active)` | DegenerusGame.syncAfKingLazyPassFromCoin (line 1654) | PASS | Signature identical. |
+| ID-41 | IDegenerusGame | `lootboxStatus(address player, uint48 lootboxIndex) external view returns (uint256 amount, bool presale)` | DegenerusGame.lootboxStatus (inherited) | PASS | Signature identical. |
+| ID-42 | IDegenerusGame | `lootboxPresaleActiveFlag() external view returns (bool active)` | DegenerusGame.lootboxPresaleActiveFlag (inherited) | PASS | Signature identical. |
+| ID-43 | IDegenerusGame | `openLootBox(address player, uint48 lootboxIndex) external` | DegenerusGame.openLootBox (line 665) | PASS | Signature identical. |
+| ID-44 | IDegenerusGame | `placeDegeneretteBet(address player, uint8 currency, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) external payable` | DegenerusGame.placeDegeneretteBet (line 714) | PASS | Signature identical. |
+| ID-45 | IDegenerusGame | `resolveDegeneretteBets(address player, uint64[] calldata betIds) external` | DegenerusGame.resolveDegeneretteBets (line 743) | PASS | Signature identical. |
+| ID-46 | IDegenerusGame | `degeneretteBetInfo(address player, uint64 betId) external view returns (uint256 packed)` | DegenerusGame.degeneretteBetInfo (inherited) | PASS | Signature identical. |
+| ID-47 | IDegenerusGame | `sampleTraitTickets(uint256 entropy) external view returns (uint24 lvl, uint8 trait, address[] memory tickets)` | DegenerusGame.sampleTraitTickets (inherited) | PASS | Signature identical. |
+| ID-48 | IDegenerusGame | `sampleTraitTicketsAtLevel(uint24 targetLvl, uint256 entropy) external view returns (uint8 trait, address[] memory tickets)` | DegenerusGame.sampleTraitTicketsAtLevel (inherited) | PASS | Signature identical. |
+| ID-49 | IDegenerusGame | `sampleFarFutureTickets(uint256 entropy) external view returns (address[] memory tickets)` | DegenerusGame.sampleFarFutureTickets (inherited) | PASS | Signature identical. |
+| ID-50 | IDegenerusGame | `purchaseDeityPass(address buyer, uint8 symbolId) external payable` | DegenerusGame.purchaseDeityPass (line 644) | PASS | Signature identical. |
+| ID-51 | IDegenerusGame | `purchaseLazyPass(address buyer) external payable` | DegenerusGame.purchaseLazyPass (line 624) | PASS | Signature identical. |
+| ID-52 | IDegenerusGame | `hasDeityPass(address player) external view returns (bool)` | DegenerusGame.hasDeityPass (inherited) | PASS | Signature identical. |
+| ID-53 | IDegenerusGame | `mintPackedFor(address player) external view returns (uint256)` | DegenerusGame.mintPackedFor (inherited) | PASS | Signature identical. |
+| ID-54 | IDegenerusGame | `purchase(address buyer, uint256 ticketQuantity, uint256 lootBoxAmount, bytes32 affiliateCode, MintPaymentKind payKind) external payable` | DegenerusGame.purchase (line 501) | PASS | Signature identical. |
+| ID-55 | IDegenerusGame | `purchaseCoin(address buyer, uint256 ticketQuantity, uint256 lootBoxBurnieAmount) external` | DegenerusGame.purchaseCoin (line 546) | PASS | Signature identical. |
+| ID-56 | IDegenerusGame | `getDailyHeroWager(uint32 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits)` | DegenerusGame.getDailyHeroWager (inherited) | PASS | Signature identical. |
+| ID-57 | IDegenerusGame | `getDailyHeroWinner(uint32 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount)` | DegenerusGame.getDailyHeroWinner (inherited) | PASS | Signature identical. |
+| ID-58 | IDegenerusGame | `getPlayerDegeneretteWager(address player, uint24 lvl) external view returns (uint256 weiAmount)` | DegenerusGame.getPlayerDegeneretteWager (inherited) | PASS | Signature identical. |
+| ID-59 | IDegenerusGame | `getTopDegenerette(uint24 lvl) external view returns (address topPlayer, uint256 amountUnits)` | DegenerusGame.getTopDegenerette (inherited) | PASS | Signature identical. |
+
+**Note on `boonPacked` exposure (e0a7f7bc):** `DegenerusGameStorage.boonPacked` was flipped to `public` visibility, which adds an auto-generated getter `boonPacked(address) returns (uint256 slot0, uint256 slot1)` to the `DegenerusGame` deployed contract's external ABI. This getter is NOT declared on `IDegenerusGame.sol`. Classification per D-10: **not required** — UI / off-chain consumers read the concrete deployed address directly rather than through the interface. No FAIL row emitted; the getter is a legitimate external surface extension that the interface simply does not cover. If downstream phases decide the interface should declare it, that becomes an explicit Phase 236 finding (interface-completeness gap), NOT a drift failure here.
+
+### 3.2 IDegenerusQuests → DegenerusQuests.sol
+
+Total interface methods: 12 (cross-checked against `check-interfaces` which reports `IDegenerusQuests -> DegenerusQuests (12 fns covered)`).
+
+| Row | Interface | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|---|
+| ID-60 | IDegenerusQuests | `rollDailyQuest(uint32 day, uint256 entropy) external` | DegenerusQuests.rollDailyQuest | PASS | Signature identical. |
+| ID-61 | IDegenerusQuests | `handleMint(address player, uint32 quantity, bool paidWithEth, uint256 mintPrice) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed)` | DegenerusQuests.handleMint | PASS | Signature identical. |
+| ID-62 | IDegenerusQuests | `handleFlip(address player, uint256 flipCredit) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed)` | DegenerusQuests.handleFlip | PASS | Signature identical. |
+| ID-63 | IDegenerusQuests | `handleDecimator(address player, uint256 burnAmount) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed)` | DegenerusQuests.handleDecimator | PASS | Signature identical. |
+| ID-64 | IDegenerusQuests | `handleAffiliate(address player, uint256 amount) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed)` | DegenerusQuests.handleAffiliate | PASS | Signature identical. |
+| ID-65 | IDegenerusQuests | `handleLootBox(address player, uint256 amountWei, uint256 mintPrice) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed)` | DegenerusQuests.handleLootBox | PASS | Signature identical. |
+| ID-66 | IDegenerusQuests | `handleDegenerette(address player, uint256 amount, bool paidWithEth, uint256 mintPrice) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed)` | DegenerusQuests.handleDegenerette | PASS | Signature identical. |
+| ID-67 | IDegenerusQuests | `handlePurchase(address player, uint256 ethFreshWei, uint32 burnieMintQty, uint256 lootBoxAmount, uint256 mintPrice, uint256 levelQuestPrice) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed)` | DegenerusQuests.handlePurchase (line 762) | PASS | Parameter 2 retyped `uint32 ethMintQty → uint256 ethFreshWei` in BOTH interface and implementer by `d5284be5` — drift-free lockstep update. |
+| ID-68 | IDegenerusQuests | `awardQuestStreakBonus(address player, uint16 amount, uint32 currentDay) external` | DegenerusQuests.awardQuestStreakBonus | PASS | Signature identical. |
+| ID-69 | IDegenerusQuests | `playerQuestStates(address player) external view returns (uint32 streak, uint32 lastCompletedDay, uint128[2] memory progress, bool[2] memory completed)` | DegenerusQuests.playerQuestStates (line 119) | PASS | Signature identical. |
+| ID-70 | IDegenerusQuests | `rollLevelQuest(uint256 entropy) external` | DegenerusQuests.rollLevelQuest | PASS | Signature identical. |
+| ID-71 | IDegenerusQuests | `getPlayerLevelQuestView(address player) external view returns (uint8 questType, uint128 progress, uint256 target, bool completed, bool eligible)` | DegenerusQuests.getPlayerLevelQuestView | PASS | Signature identical. |
+
+### 3.3 IDegenerusGameModules → 5 module contracts (selector map)
+
+`IDegenerusGameModules.sol` is a multi-interface file with 9 sub-interfaces. Each sub-interface is a selector-only reference used in `abi.encodeWithSelector(I<...>.fn.selector, ...)` delegatecall payloads from `DegenerusGame.sol` and `DegenerusGameAdvanceModule.sol`. Each sub-interface is mapped to exactly one implementer module.
+
+Total methods across the 9 sub-interfaces: 46 (5 + 2 + 7 + 9 + 4 + 6 + 6 + 5 + 2 = 46), cross-checked against `check-interfaces` individual per-interface counts.
+
+**3.3.a IDegenerusGameAdvanceModule → DegenerusGameAdvanceModule.sol (5 methods)**
+
+| Row | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|
+| ID-72 | `advanceGame() external` | DegenerusGameAdvanceModule.advanceGame (line 156) | PASS | Body MODIFIED by 2471f8e7 + 52242a10 (§1.1) but external signature unchanged. |
+| ID-73 | `requestLootboxRng() external` | DegenerusGameAdvanceModule.requestLootboxRng (line 956) | PASS | Signature identical. |
+| ID-74 | `wireVrf(address coordinator_, uint256 subId, bytes32 keyHash_) external` | DegenerusGameAdvanceModule.wireVrf (line 480) | PASS | Signature identical. |
+| ID-75 | `updateVrfCoordinatorAndSub(address newCoordinator, uint256 newSubId, bytes32 newKeyHash) external` | DegenerusGameAdvanceModule.updateVrfCoordinatorAndSub (line 1548) | PASS | Signature identical. |
+| ID-76 | `rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external` | DegenerusGameAdvanceModule.rawFulfillRandomWords (line 1616) | PASS | Signature identical. |
+
+**3.3.b IDegenerusGameGameOverModule → DegenerusGameGameOverModule.sol (2 methods)**
+
+| Row | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|
+| ID-77 | `handleGameOverDrain(uint32 day) external` | DegenerusGameGameOverModule.handleGameOverDrain | PASS | Signature identical. File not in 12-file delta scope; included for catalog completeness. |
+| ID-78 | `handleFinalSweep() external` | DegenerusGameGameOverModule.handleFinalSweep | PASS | Signature identical. |
+
+**3.3.c IDegenerusGameJackpotModule → DegenerusGameJackpotModule.sol (7 methods)**
+
+| Row | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|
+| ID-79 | `payDailyJackpot(bool isJackpotPhase, uint24 lvl, uint256 randWord) external` | DegenerusGameJackpotModule.payDailyJackpot (line 328) | PASS | Signature identical. |
+| ID-80 | `payDailyJackpotCoinAndTickets(uint256 randWord) external` | DegenerusGameJackpotModule.payDailyJackpotCoinAndTickets (line 579) | PASS | Signature identical. |
+| ID-81 | `payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external` | DegenerusGameJackpotModule.payDailyCoinJackpot (line 1665) | PASS | Signature identical. |
+| ID-82 | `emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) external` | DegenerusGameJackpotModule.emitDailyWinningTraits (line 1702) | PASS | Signature identical. |
+| ID-83 | `runTerminalJackpot(uint256 poolWei, uint24 targetLvl, uint256 rngWord) external returns (uint256 paidWei)` | DegenerusGameJackpotModule.runTerminalJackpot (line 269) | PASS | Signature identical. |
+| ID-84 | `runBafJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) external returns (uint256 claimableDelta)` | DegenerusGameJackpotModule.runBafJackpot (line 1966) | PASS | Function body MODIFIED by 104b5d42 (§1.2) but external signature unchanged; the BAF_TRAIT_SENTINEL tagging is internal to the function body. |
+| ID-85 | `distributeYieldSurplus(uint256 rngWord) external` | DegenerusGameJackpotModule.distributeYieldSurplus (line 718) | PASS | Signature identical. |
+
+**3.3.d IDegenerusGameDecimatorModule → DegenerusGameDecimatorModule.sol (9 methods)**
+
+| Row | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|
+| ID-86 | `recordDecBurn(address player, uint24 lvl, uint8 bucket, uint256 baseAmount, uint256 multBps) external returns (uint8 bucketUsed)` | DegenerusGameDecimatorModule.recordDecBurn (line 133) | PASS | Signature identical. |
+| ID-87 | `runDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) external returns (uint256 returnAmountWei)` | DegenerusGameDecimatorModule.runDecimatorJackpot (line 209) | PASS | Signature identical. |
+| ID-88 | `consumeDecClaim(address player, uint24 lvl) external returns (uint256 amountWei)` | DegenerusGameDecimatorModule.consumeDecClaim (line 306) | PASS | Signature identical. |
+| ID-89 | `claimDecimatorJackpot(uint24 lvl) external` | DegenerusGameDecimatorModule.claimDecimatorJackpot (line 321) | PASS | Body MODIFIED by 67031e7d (added `DecimatorClaimed` emissions) but external signature unchanged. |
+| ID-90 | `decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner)` | DegenerusGameDecimatorModule.decClaimable (line 358) | PASS | Signature identical. |
+| ID-91 | `recordTerminalDecBurn(address player, uint24 lvl, uint256 baseAmount) external` | DegenerusGameDecimatorModule.recordTerminalDecBurn (line 668) | PASS | Signature identical. |
+| ID-92 | `runTerminalDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) external returns (uint256 returnAmountWei)` | DegenerusGameDecimatorModule.runTerminalDecimatorJackpot (line 755) | PASS | Signature identical. |
+| ID-93 | `claimTerminalDecimatorJackpot() external` | DegenerusGameDecimatorModule.claimTerminalDecimatorJackpot (line 811) | PASS | Body MODIFIED by 67031e7d (added `TerminalDecimatorClaimed` emission) but external signature unchanged. Paired with Game wrapper `claimTerminalDecimatorJackpot` (ID-30) introduced by 858d83e4 — interface/impl/wrapper all introduced or confirmed in lockstep. |
+| ID-94 | `terminalDecClaimable(address player) external view returns (uint256 amountWei, bool winner)` | DegenerusGameDecimatorModule.terminalDecClaimable (line 826) | PASS | Signature identical. |
+
+**3.3.e IDegenerusGameWhaleModule → DegenerusGameWhaleModule.sol (4 methods)**
+
+| Row | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|
+| ID-95 | `purchaseWhaleBundle(address buyer, uint256 quantity) external payable` | DegenerusGameWhaleModule.purchaseWhaleBundle (line 187) | PASS | Signature identical. |
+| ID-96 | `purchaseLazyPass(address buyer) external payable` | DegenerusGameWhaleModule.purchaseLazyPass (line 380) | PASS | Signature identical. |
+| ID-97 | `purchaseDeityPass(address buyer, uint8 symbolId) external payable` | DegenerusGameWhaleModule.purchaseDeityPass (line 538) | PASS | Signature identical. |
+| ID-98 | `claimWhalePass(address player) external` | DegenerusGameWhaleModule.claimWhalePass (line 957) | PASS | Signature identical. |
+
+**3.3.f IDegenerusGameMintModule → DegenerusGameMintModule.sol (6 methods)**
+
+| Row | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|
+| ID-99 | `recordMintData(address player, uint24 lvl, uint32 mintUnits) external payable` | DegenerusGameMintModule.recordMintData (line 177) | PASS | Signature identical. |
+| ID-100 | `purchase(address buyer, uint256 ticketQuantity, uint256 lootBoxAmount, bytes32 affiliateCode, MintPaymentKind payKind) external payable` | DegenerusGameMintModule.purchase (line 835) | PASS | Signature identical. |
+| ID-101 | `purchaseCoin(address buyer, uint256 ticketQuantity, uint256 lootBoxBurnieAmount) external` | DegenerusGameMintModule.purchaseCoin (line 857) | PASS | Signature identical. |
+| ID-102 | `purchaseBurnieLootbox(address buyer, uint256 burnieAmount) external` | DegenerusGameMintModule.purchaseBurnieLootbox (line 869) | PASS | Signature identical. |
+| ID-103 | `processFutureTicketBatch(uint24 lvl, uint256 entropy) external returns (bool worked, bool finished, uint32 writesUsed)` | DegenerusGameMintModule.processFutureTicketBatch (line 385) | PASS | Interface and implementer both gained `uint256 entropy` parameter in lockstep (52242a10, §1.4 / §1.11). Selector hash changes; the delegatecall call-site in `DegenerusGameAdvanceModule._processFutureTicketBatch` was updated in the same commit. |
+| ID-104 | `processTicketBatch(uint24 lvl) external returns (bool finished)` | DegenerusGameMintModule.processTicketBatch (line 658) | PASS | Signature identical. |
+
+**3.3.g IDegenerusGameLootboxModule → DegenerusGameLootboxModule.sol (6 methods)**
+
+| Row | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|
+| ID-105 | `openLootBox(address player, uint48 lootboxIndex) external` | DegenerusGameLootboxModule.openLootBox | PASS | File not in 12-file delta scope; included for catalog completeness. |
+| ID-106 | `openBurnieLootBox(address player, uint48 lootboxIndex) external` | DegenerusGameLootboxModule.openBurnieLootBox | PASS | Signature identical. |
+| ID-107 | `resolveLootboxDirect(address player, uint256 amount, uint256 rngWord) external` | DegenerusGameLootboxModule.resolveLootboxDirect | PASS | Signature identical. |
+| ID-108 | `resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external` | DegenerusGameLootboxModule.resolveRedemptionLootbox | PASS | Signature identical. |
+| ID-109 | `deityBoonSlots(address deity) external view returns (uint8[3] memory slots, uint8 usedMask, uint32 day)` | DegenerusGameLootboxModule.deityBoonSlots | PASS | Signature identical. |
+| ID-110 | `issueDeityBoon(address deity, address recipient, uint8 slot) external` | DegenerusGameLootboxModule.issueDeityBoon | PASS | Signature identical. |
+
+**3.3.h IDegenerusGameBoonModule → DegenerusGameBoonModule.sol (5 methods)**
+
+| Row | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|
+| ID-111 | `consumeCoinflipBoon(address player) external returns (uint16 boonBps)` | DegenerusGameBoonModule.consumeCoinflipBoon | PASS | File not in 12-file delta scope; included for catalog completeness. |
+| ID-112 | `consumePurchaseBoost(address player) external returns (uint16 boostBps)` | DegenerusGameBoonModule.consumePurchaseBoost | PASS | Signature identical. |
+| ID-113 | `consumeDecimatorBoost(address player) external returns (uint16 boostBps)` | DegenerusGameBoonModule.consumeDecimatorBoost | PASS | Signature identical. |
+| ID-114 | `checkAndClearExpiredBoon(address player) external returns (bool hasAnyBoon)` | DegenerusGameBoonModule.checkAndClearExpiredBoon | PASS | Signature identical. |
+| ID-115 | `consumeActivityBoon(address player) external` | DegenerusGameBoonModule.consumeActivityBoon | PASS | Signature identical. |
+
+**3.3.i IDegenerusGameDegeneretteModule → DegenerusGameDegeneretteModule.sol (2 methods)**
+
+| Row | Method Signature | Implementer Contract | Verdict | Notes |
+|---|---|---|---|---|
+| ID-116 | `placeDegeneretteBet(address player, uint8 currency, uint128 amountPerTicket, uint8 ticketCount, uint32 customTicket, uint8 heroQuadrant) external payable` | DegenerusGameDegeneretteModule.placeDegeneretteBet | PASS | File not in 12-file delta scope; included for catalog completeness. |
+| ID-117 | `resolveBets(address player, uint64[] calldata betIds) external` | DegenerusGameDegeneretteModule.resolveBets | PASS | Signature identical. |
+
+### 3.4 Automated gate corroboration
+
+All invocations were run from the repo root at HEAD (`e5b4f97478f70c5a0b266429f03f5109078679ca`). `git status --porcelain contracts/ test/` was empty both before and after every gate run — no production-code mutations.
+
+**`make check-interfaces`** — Interface ↔ implementation signature drift check (compile-time)
+- Command: `make check-interfaces 2>&1 | tee /tmp/check-interfaces.out`
+- Exit code: `0`
+- Final summary line from stdout: `PASS all interface functions have matching implementations`
+- Per-interface breakdown (verbatim from gate output):
+  - `IBurnieCoinflip -> BurnieCoinflip (16 fns covered)` — OK
+  - `IDegenerusAffiliate -> DegenerusAffiliate (6 fns covered)` — OK
+  - `IDegenerusCoin -> BurnieCoin (3 fns covered)` — OK
+  - `IDegenerusGame -> DegenerusGame (59 fns covered)` — OK
+  - `IDegenerusJackpots -> DegenerusJackpots (3 fns covered)` — OK
+  - `IDegenerusQuests -> DegenerusQuests (12 fns covered)` — OK
+  - `IStakedDegenerusStonk -> StakedDegenerusStonk (13 fns covered)` — OK
+  - `IVaultCoin -> BurnieCoin (5 fns covered)` — OK
+  - `IDegenerusGameAdvanceModule -> DegenerusGameAdvanceModule (5 fns covered)` — OK
+  - `IDegenerusGameGameOverModule -> DegenerusGameGameOverModule (2 fns covered)` — OK
+  - `IDegenerusGameJackpotModule -> DegenerusGameJackpotModule (7 fns covered)` — OK
+  - `IDegenerusGameDecimatorModule -> DegenerusGameDecimatorModule (9 fns covered)` — OK
+  - `IDegenerusGameWhaleModule -> DegenerusGameWhaleModule (4 fns covered)` — OK
+  - `IDegenerusGameMintModule -> DegenerusGameMintModule (6 fns covered)` — OK
+  - `IDegenerusGameLootboxModule -> DegenerusGameLootboxModule (6 fns covered)` — OK
+  - `IDegenerusGameBoonModule -> DegenerusGameBoonModule (5 fns covered)` — OK
+  - `IDegenerusGameDegeneretteModule -> DegenerusGameDegeneretteModule (2 fns covered)` — OK
+- **Verdict:** PASS. Automated `check-interfaces` gate PASSES at HEAD — corroborates the manual per-method catalog. Because no FAIL rows were emitted above, and the gate is green, interface drift is formally zero at HEAD.
+
+**`forge build`** — Source-tree compile smoke test (catalog describes ABI surface that must compile)
+- Command: `forge build 2>&1 | tee /tmp/forge-build.out`
+- Exit code: `0`
+- Final summary line from stdout: `Compiler run successful with warnings:`
+- Warnings are all `unsafe-typecast` lints unrelated to the 10-commit delta (pre-existing; cover e.g. `uint8 category = weightedBucket(uint32(rnd))` in `contracts/DegenerusTraitUtils.sol:145`, not touched by any in-scope commit). No errors.
+- **Verdict:** PASS. `forge build` compiles all 47 contract files at HEAD — any drift that would have broken the build is absent.
+
+Interface drift totals — IDegenerusGame: 59 methods, 59 PASS, 0 FAIL; IDegenerusQuests: 12 methods, 12 PASS, 0 FAIL; IDegenerusGameModules: 46 methods across 9 sub-interfaces, 46 PASS, 0 FAIL; automated check-interfaces gate: PASS; forge build: PASS.
+
 ## 4. Consumer Index
 <!-- D-11 — populated in task 6 -->
