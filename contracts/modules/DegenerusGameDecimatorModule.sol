@@ -46,6 +46,20 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 totalBurn
     );
 
+    /// @notice Emitted when a player claims a decimator jackpot for a level.
+    /// @param player The claimer.
+    /// @param lvl Decimator level being claimed.
+    /// @param amountWei Total pro-rata payout in wei.
+    /// @param ethPortion Portion credited as ETH claimable.
+    /// @param lootboxPortion Portion routed to whale passes / lootbox (0 post-GAMEOVER).
+    event DecimatorClaimed(
+        address indexed player,
+        uint24 indexed lvl,
+        uint256 amountWei,
+        uint256 ethPortion,
+        uint256 lootboxPortion
+    );
+
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -314,6 +328,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         if (gameOver) {
             _creditClaimable(msg.sender, amountWei);
+            emit DecimatorClaimed(msg.sender, lvl, amountWei, amountWei, 0);
             return;
         }
 
@@ -325,6 +340,13 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (lootboxPortion != 0) {
             _setFuturePrizePool(_getFuturePrizePool() + lootboxPortion);
         }
+        emit DecimatorClaimed(
+            msg.sender,
+            lvl,
+            amountWei,
+            amountWei - lootboxPortion,
+            lootboxPortion
+        );
     }
 
     /// @notice Check if player can claim Decimator jackpot for a level.
@@ -600,6 +622,16 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 timeMultBps
     );
 
+    /// @notice Emitted when a player claims the terminal decimator jackpot.
+    /// @param player The claimer.
+    /// @param lvl Terminal decimator level.
+    /// @param amountWei Payout credited as ETH claimable.
+    event TerminalDecimatorClaimed(
+        address indexed player,
+        uint24 indexed lvl,
+        uint256 amountWei
+    );
+
     // -------------------------------------------------------------------------
     // Terminal Decimator Errors
     // -------------------------------------------------------------------------
@@ -780,6 +812,11 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 amountWei = _consumeTerminalDecClaim(msg.sender);
 
         _creditClaimable(msg.sender, amountWei);
+        emit TerminalDecimatorClaimed(
+            msg.sender,
+            lastTerminalDecClaimRound.lvl,
+            amountWei
+        );
     }
 
     /// @notice Check if player can claim terminal decimator jackpot.
