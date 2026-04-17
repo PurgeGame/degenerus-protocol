@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
-status: roadmap-complete
+status: phase-230-complete
 stopped_at: null
 last_updated: "2026-04-17T00:00:00.000Z"
-last_activity: 2026-04-17 — v29.0 roadmap created; 7 phases (230-236), 16 plans expected, 25/25 requirements mapped (TRNX-01 added to Phase 235 to cover orphan commit 2471f8e7)
+last_activity: 2026-04-17 — Phase 230 complete (1/1 plan): 230-01-DELTA-MAP.md shipped (581 lines, 12 file subsections, 10 SHAs, 25/25 requirements mapped in Consumer Index, all 4 Makefile/forge gates PASS at HEAD); READ-only milestone rule intact; ready for phases 231-234 adversarial audits
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 16
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 14
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 ## Current Position
 
-Phase: 230 (not started)
-Plan: —
+Phase: 230 (complete) → next: 231 (Earlybird Jackpot Audit)
+Plan: 230-01 complete; 231 plans not yet created
 Milestone: v29.0 — Post-v27 Contract Delta Audit
-Status: Roadmap complete, ready for Phase 230 planning
-Last activity: 2026-04-17 — Roadmap created, 24/24 requirements mapped to phases 230-236
+Status: Phase 230 shipped, ready for Phase 231 discussion/planning (or parallel discussion of 231-234 per ROADMAP execution order)
+Last activity: 2026-04-17 — Phase 230 delta map catalog shipped (6 commits, 230-01-DELTA-MAP.md + 230-01-SUMMARY.md); all 4 automated gates PASS at HEAD; Consumer Index maps all 25 v29.0 requirements to section/row anchors
 
 ## Accumulated Context
 
@@ -67,6 +67,9 @@ Recent decisions affecting current work:
 - [Phase 226]: 226-03: SCHEMA-02 zero-finding outcome (all 27 column-claims correct); F-28-226-201..299 block unused
 - [Phase 226]: Plan 226-02 consumed F-28-226-01 (pre-assigned) plus F-28-226-09 (meta-chain break 0002->0003) and F-28-226-10 (quest_definitions.difficulty TS-vs-SQL drift); next available ID for Plan 226-03 is F-28-226-11.
 - [Phase 227]: D-227-09 verdict depth verified across 95 events; 6 LOW silent-truncation findings emitted (F-28-227-101..106)
+- [Phase 230]: 230-01-DELTA-MAP.md is the authoritative v29.0 audit-surface catalog — 581 lines, 5 top-level sections (Per-File Baseline / Function-Level Changelog / Cross-Module Interaction Map / Interface Drift Catalog / Consumer Index). Per D-06 it is READ-only after commit; downstream phases record scope-guard deferrals rather than editing it. All 4 automated gates (check-interfaces, check-delegatecall 44/44, check-raw-selectors, forge build) PASS at HEAD — no hidden drift. Phase 230 emitted ZERO F-29-NN finding IDs by design (scope catalog, not findings pass).
+- [Phase 230]: 5 known non-issues documented in 230-01-SUMMARY.md for downstream consumer awareness — `boonPacked` auto-getter classified not-required (selector not on interface), 2 UNCHANGED reformat rows (§1.1), IM-09 call-unchanged-but-arithmetic-changed, delegatecall-site count bumped 43→44 (genuine growth since Phase 220), pre-existing `forge build` lint warnings.
+- [Phase 230]: Delegatecall-site count at HEAD = 44 (was 43 at Phase 220 v27.0 baseline). The +1 site is genuine new surface from the 10-commit delta — phase 236 regression sweep must confirm it remains aligned.
 
 ### Pending Todos
 
@@ -79,5 +82,5 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-17 — v29.0 roadmap created
-Stopped at: Roadmap complete, ready for Phase 230 planning
+Last session: 2026-04-17 — Phase 230 executed end-to-end (discuss → plan → execute → catalog shipped)
+Stopped at: Phase 230 complete; ready for Phase 231 discuss-phase (or parallel discussion of 231/232/233/234 per ROADMAP execution order — all four depend only on Phase 230)

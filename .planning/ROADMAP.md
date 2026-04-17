@@ -61,7 +61,7 @@
 
 **Milestone Goal:** Full adversarial audit of every `contracts/` change since the v27.0 baseline (2026-04-13). v28.0 audited the sibling `database/` repo only; contracts have been unaudited for 10 commits touching 12 files across entropy passthrough, earlybird rewrites, decimator changes, BAF sentinel, quest wei fix, and boon exposure. Read-only audit — no `contracts/` or `test/` writes this milestone. Deliverable: `audit/FINDINGS-v29.0.md`.
 
-- [ ] **Phase 230: Delta Extraction & Scope Map** - Function-level changelog, cross-module interaction map, and interface-drift catalog across the 10-commit / 12-file delta
+- [x] **Phase 230: Delta Extraction & Scope Map** - Function-level changelog, cross-module interaction map, and interface-drift catalog across the 10-commit / 12-file delta — completed 2026-04-17
 - [ ] **Phase 231: Earlybird Jackpot Audit** - Adversarial audit of the purchase-phase finalize refactor and the trait-alignment rewrite + combined state-machine verification
 - [ ] **Phase 232: Decimator Audit** - Adversarial audit of burn-key-by-resolution-level, event emission, and terminal-claim passthrough
 - [ ] **Phase 233: Jackpot/BAF + Entropy Audit** - Adversarial audit of `traitId=420` sentinel, explicit entropy passthrough, and cross-path bonus-trait consistency
@@ -81,7 +81,7 @@
   3. An interface-drift catalog compares `IDegenerusGame`, `IDegenerusQuests`, and `IDegenerusGameModules` against their implementers with a PASS/FAIL verdict per signature
   4. Downstream audit phases (231-234) can reference this phase as their authoritative scope definition with no additional discovery required
 **Plans**: 1 plan — lightweight scope map modeled on 213-03 / 224-01 catalog pattern
-- [ ] 230-01-PLAN.md — Produce 230-01-DELTA-MAP.md: function-level changelog + cross-module interaction map + interface drift catalog + consumer index covering the 10-commit / 12-file delta (DELTA-01/02/03)
+- [x] 230-01-PLAN.md — Produce 230-01-DELTA-MAP.md: function-level changelog + cross-module interaction map + interface drift catalog + consumer index covering the 10-commit / 12-file delta (DELTA-01/02/03) — completed 2026-04-17
 
 ### Phase 231: Earlybird Jackpot Audit
 **Goal**: Every earlybird-related change (purchase-phase finalize refactor, trait-alignment rewrite) is proven safe — budget conservation, CEI, entropy independence, and combined state-machine behavior all verified
@@ -157,7 +157,7 @@ Phase 230 first. Phases 231, 232, 233, 234 can execute in parallel after 230 com
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 230. Delta Extraction & Scope Map | 0/1 | Not started | — |
+| 230. Delta Extraction & Scope Map | 1/1 | Complete | 2026-04-17 |
 | 231. Earlybird Jackpot Audit | 0/3 | Not started | — |
 | 232. Decimator Audit | 0/3 | Not started | — |
 | 233. Jackpot/BAF + Entropy Audit | 0/3 | Not started | — |
