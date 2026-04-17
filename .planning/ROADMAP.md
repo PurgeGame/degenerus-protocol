@@ -92,7 +92,10 @@
   2. The trait-alignment rewrite (`20a951df`) has a per-function adversarial verdict covering bonus-trait parity with the coin jackpot, salt-space isolation, fixed-level queueing at `lvl+1`, and futurePool→nextPool budget conservation
   3. The combined earlybird state machine (purchase-phase finalize + jackpot-phase run) is traced end-to-end with no double-spend, no orphaned reserves, and no missed emissions at any transition
   4. Every verdict cites commit SHA + file:line and is added to the Phase 236 finding candidate pool
-**Plans**: TBD (expected 2-3 plans, one per EBD requirement)
+**Plans**: 3 plans — one per EBD requirement (per CONTEXT.md D-01 + auto-rule 6)
+- [ ] 231-01-PLAN.md — Produce 231-01-AUDIT.md: per-function verdict table for EBD-01 earlybird purchase-phase finalize refactor (`f20a2b5e`) — CEI, reentrancy, storage ordering, budget conservation at level-transition dump, signature-contraction correctness, gas delta, double/zero-award regression
+- [ ] 231-02-PLAN.md — Produce 231-02-AUDIT.md: per-function verdict table for EBD-02 trait-alignment rewrite (`20a951df`) — bonus-trait parity with coin jackpot, salt-space isolation, `lvl+1` queue fix, futurePool → nextPool CEI (algebraic pool conservation handed off to Phase 235 CONS-01)
+- [ ] 231-03-PLAN.md — Produce 231-03-AUDIT.md: combined earlybird state machine end-to-end path walk for EBD-03 — normal / skip-split / gameover transitions, no double-spend, no orphaned reserves, no missed emissions, cross-commit invariant (pool dumped = pool consumed)
 
 ### Phase 232: Decimator Audit
 **Goal**: Every decimator-related change (burn-key refactor, event emission, terminal-claim passthrough) is proven safe — key alignment, event correctness, and access-control semantics all verified
