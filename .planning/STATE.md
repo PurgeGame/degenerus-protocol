@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: Phase 231 complete (3/3 plans); parallel execution of 232/233/234 still open per ROADMAP
-last_updated: "2026-04-17T22:25:00.000Z"
-last_activity: 2026-04-17 -- Phase 231 Plan 03 complete (EBD-03 combined earlybird state-machine adversarial audit, 13 PASS verdicts across 4 paths × 4 attack vectors)
+stopped_at: Phase 231 verified + complete (40 PASS verdicts across 3 plans; zero FAIL, zero DEFER); ready for Phase 232 (Decimator) / 233 (Jackpot/BAF) / 234 (Quests/Boons/Misc) — all three can proceed in parallel (Depends on Phase 230 only; all three already have CONTEXT.md committed)
+last_updated: "2026-04-17T23:00:00.000Z"
+last_activity: 2026-04-17 -- Phase 231 verified (4/4 ROADMAP success criteria met; REQUIREMENTS traceability-table gap closed; VERIFICATION.md committed)
 progress:
   total_phases: 7
   completed_phases: 2
