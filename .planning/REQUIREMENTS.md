@@ -99,7 +99,7 @@ None — this is a terminal delta-audit milestone.
 | DELTA-03 | 230 | Pending |
 | EBD-01 | 231 | Complete (2026-04-17) |
 | EBD-02 | 231 | Complete (2026-04-17) |
-| EBD-03 | 231 | Pending |
+| EBD-03 | 231 | Complete (2026-04-17) |
 | DCM-01 | 232 | Pending |
 | DCM-02 | 232 | Pending |
 | DCM-03 | 232 | Pending |
