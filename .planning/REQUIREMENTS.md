@@ -32,7 +32,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Adversarial Audit — Earlybird Jackpot
 
 - [x] **EBD-01**: Earlybird purchase-phase refactor (`f20a2b5e`) audited end-to-end — level-transition finalization path, unified award call, storage read/write ordering, reentrancy/CEI, gas — completed 2026-04-17 (21 PASS verdicts, zero FAIL; see `.planning/phases/231-earlybird-jackpot-audit/231-01-AUDIT.md`)
-- [ ] **EBD-02**: Earlybird trait-alignment rewrite (`20a951df`) audited — bonus trait parity with coin jackpot, salt-space isolation, fixed-level queueing at `lvl+1`, budget conservation (futurePool → nextPool)
+- [x] **EBD-02**: Earlybird trait-alignment rewrite (`20a951df`) audited — bonus trait parity with coin jackpot, salt-space isolation, fixed-level queueing at `lvl+1`, budget conservation (futurePool → nextPool) — completed 2026-04-17 (6 PASS verdicts across 2 target functions; zero FAIL; see `.planning/phases/231-earlybird-jackpot-audit/231-02-AUDIT.md`)
 - [ ] **EBD-03**: Combined earlybird state-machine verified across (purchase finalize) + (jackpot-phase earlybird run) — no double-spend, no orphaned reserves, no missed emissions
 
 ### Adversarial Audit — Decimator
@@ -98,7 +98,7 @@ None — this is a terminal delta-audit milestone.
 | DELTA-02 | 230 | Pending |
 | DELTA-03 | 230 | Pending |
 | EBD-01 | 231 | Complete (2026-04-17) |
-| EBD-02 | 231 | Pending |
+| EBD-02 | 231 | Complete (2026-04-17) |
 | EBD-03 | 231 | Pending |
 | DCM-01 | 232 | Pending |
 | DCM-02 | 232 | Pending |

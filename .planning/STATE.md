@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
 status: executing
-stopped_at: Phase 231 Plan 01 (EBD-01) complete; 231-02 (EBD-02) and 231-03 (EBD-03) remain; parallel execution of 232/233/234 still open per ROADMAP
-last_updated: "2026-04-17T22:00:00.000Z"
-last_activity: 2026-04-17 -- Phase 231 Plan 01 complete (EBD-01 adversarial audit, 21 PASS verdicts)
+stopped_at: Phase 231 Plan 02 (EBD-02) complete; 231-03 (EBD-03) remains; parallel execution of 232/233/234 still open per ROADMAP
+last_updated: "2026-04-17T22:45:00.000Z"
+last_activity: 2026-04-17 -- Phase 231 Plan 02 complete (EBD-02 adversarial audit, 6 PASS verdicts across _runEarlyBirdLootboxJackpot + _rollWinningTraits)
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 4
-  completed_plans: 2
-  percent: 50
+  completed_plans: 3
+  percent: 60
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 ## Current Position
 
-Phase: 231 (executing, 1/3 plans complete) → next: 231-02 (EBD-02 trait-alignment) or parallel 232/233/234
-Plan: 231-01 complete (EBD-01 AUDIT + SUMMARY shipped); 231-02 / 231-03 pending
+Phase: 231 (executing, 2/3 plans complete) → next: 231-03 (EBD-03 combined state machine) or parallel 232/233/234
+Plan: 231-01 complete (EBD-01 AUDIT + SUMMARY shipped); 231-02 complete (EBD-02 AUDIT + SUMMARY shipped); 231-03 pending
 Milestone: v29.0 — Post-v27 Contract Delta Audit
 Status: Executing
-Last activity: 2026-04-17 -- Phase 231 Plan 01 complete (EBD-01 adversarial audit, 21 PASS verdicts across 9 f20a2b5e purchase-side functions)
+Last activity: 2026-04-17 -- Phase 231 Plan 02 complete (EBD-02 adversarial audit, 6 PASS verdicts across _runEarlyBirdLootboxJackpot + _rollWinningTraits)
 
 ## Accumulated Context
 
@@ -71,6 +71,7 @@ Recent decisions affecting current work:
 - [Phase 230]: 5 known non-issues documented in 230-01-SUMMARY.md for downstream consumer awareness — `boonPacked` auto-getter classified not-required (selector not on interface), 2 UNCHANGED reformat rows (§1.1), IM-09 call-unchanged-but-arithmetic-changed, delegatecall-site count bumped 43→44 (genuine growth since Phase 220), pre-existing `forge build` lint warnings.
 - [Phase 230]: Delegatecall-site count at HEAD = 44 (was 43 at Phase 220 v27.0 baseline). The +1 site is genuine new surface from the 10-commit delta — phase 236 regression sweep must confirm it remains aligned.
 - [Phase 231-01]: EBD-01 adversarial audit of `f20a2b5e` (earlybird purchase-phase finalize refactor) — ALL PASS. 21 verdict rows across 9 target functions (`_finalizeRngRequest`, `_finalizeEarlybird`, `_purchaseFor`, `_callTicketPurchase`, `_purchaseWhaleBundle`, `_purchaseLazyPass`, `_purchaseDeityPass`, `recordMint`, `_awardEarlybirdDgnrs`) covering all 7 EBD-01 attack vectors from CONTEXT.md D-08. Zero FAIL, zero DEFER at row level. Three DEFER hand-offs documented as scope boundaries (not findings): algebraic pool closure → Phase 235 CONS-01; RNG commitment → Phase 235 RNG-01/02 (N/A for EBD-01 — f20a2b5e adds no new RNG consumer); severity classification → Phase 236 FIND-01. Key evidence: unified `_awardEarlybirdDgnrs(buyer, ticketFreshEth + lootboxFreshEth)` fires exactly once per purchase at `DegenerusGameMintModule:1165`; signature contraction safe (storage body at `DegenerusGameStorage:1001-1044` contains zero `level()` substitute reads); `_finalizeEarlybird` one-shot idempotent via `earlybirdDgnrsPoolStart == type(uint256).max` sentinel flipped BEFORE the external `dgnrs.transferBetweenPools` call (CEI compliant); `recordMint` award-block removal is zero-regression (only production caller is `_callTicketPurchase:1276`, which now routes through `_purchaseFor:1165`). Net gas: strict improvement (one fewer external call per combined purchase).
+- [Phase 231-02]: EBD-02 adversarial audit of `20a951df` (earlybird trait-alignment rewrite) — ALL PASS. 6 verdict rows across 2 target functions (`_runEarlyBirdLootboxJackpot` MODIFIED, `_rollWinningTraits` read-only re-verification) covering all 4 EBD-02 attack vectors from CONTEXT.md D-08. Zero FAIL, zero DEFER at row level. Three DEFER hand-offs documented as scope boundaries (not findings): cross-path bonus-trait identity → Phase 233 JKP-03; algebraic pool closure → Phase 235 CONS-01; RNG commitment → Phase 235 RNG-01/02. Key evidence: `_rollWinningTraits(rngWord, true)` call at `DegenerusGameJackpotModule:677` is byte-identical in arg order and salt flag to bonus consumers at lines 1679 and 1705; `BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS")` compile-time constant (line 171) is the cryptographic domain separator giving preimage-resistant isolation between `bonus=true` and `bonus=false` branches; `lvl+1` queue fix verified via direct pre-fix (`20a951df^`) vs post-fix code quote — pre-fix used `baseLevel + levelOffset` with `levelOffset = uint24(entropy % 5)` spreading winners across `baseLevel..baseLevel+4`, post-fix queues all winners at single argument `lvl` (caller passes `lvl + 1` at `payDailyJackpot:379`, matching DCM-01 `decimatorBurn` convention at §1.8). futurePool → nextPool CEI is trivially conserved: single `totalBudget` local debited from futurePool at line 668 and credited to nextPool at line 711 with no mutation in between. Rewrite narrows surface strictly: 100 `_randTraitTicket` calls → 4, 200 `EntropyLib.entropyStep` calls → 0, `levelPrices[5]` scratch array eliminated. Winner-selection salt spaces across the module are disjoint: earlybird [0,3], coin-near-future [252,255] via `DAILY_COIN_SALT_BASE = 252`, other callers [200,203].
 
 ### Pending Todos
 
@@ -83,5 +84,5 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-17 — Phase 231 Plan 01 executed end-to-end (EBD-01 adversarial audit shipped; AUDIT + SUMMARY committed at `dae7f60b`)
-Stopped at: Phase 231 Plan 01 (EBD-01) complete; 231-02 (EBD-02) and 231-03 (EBD-03) remain; parallel execution of 232/233/234 still open per ROADMAP
+Last session: 2026-04-17 — Phase 231 Plan 02 executed end-to-end (EBD-02 adversarial audit shipped; AUDIT committed at `94ab6cfe`, SUMMARY + STATE/ROADMAP/REQUIREMENTS updates committed in metadata commit)
+Stopped at: Phase 231 Plan 02 (EBD-02) complete; 231-03 (EBD-03) remains; parallel execution of 232/233/234 still open per ROADMAP
