@@ -106,7 +106,10 @@
   2. The event emission change (`67031e7d`) is audited — `DecimatorClaimed` and `TerminalDecimatorClaimed` fire at the correct CEI position with correct args, and the emissions are compatible with the v28.0 indexer event surface
   3. The `claimTerminalDecimatorJackpot` passthrough (`858d83e4`) is audited — caller restriction enforced, no reentrancy, no privilege escalation, parameters passed through unchanged to the module
   4. Every verdict cites commit SHA + file:line and is added to the Phase 236 finding candidate pool
-**Plans**: TBD (expected 2-3 plans, one per DCM requirement)
+**Plans**: 3 plans — one per DCM requirement (per 232-CONTEXT.md D-01 + v29.0 auto-mode rule)
+- [ ] 232-01-PLAN.md — Produce 232-01-AUDIT.md: per-function verdict table for DCM-01 decimator burn-key refactor (`3ad0f8d3`) — pro-rata off-by-one under lvl+1 keying, read/write key-space alignment across every decBurns/decBurnBuckets/decPool consumer, consolidated jackpot-block x00/x5 mutual exclusivity + decPoolWei determinism + runDecimatorJackpot self-call args/CEI preserved, DECIMATOR_MIN_BUCKET_100 reachability side-effect; BurnieCoin conservation deferred to Phase 235 CONS-02 per D-14
+- [ ] 232-02-PLAN.md — Produce 232-02-AUDIT.md: per-function verdict table for DCM-02 decimator event emission (`67031e7d`) — CEI position of all 3 emit sites (DecimatorClaimed gameOver fast-path + normal ETH/lootbox split; TerminalDecimatorClaimed terminal), event-argument correctness invariants (ethPortion+lootboxPortion==amountWei, lvl from input/storage, player==msg.sender), v28.0 Phase 227 indexer-compat OBSERVATION per D-10
+- [ ] 232-03-PLAN.md — Produce 232-03-AUDIT.md: per-function verdict table for DCM-03 terminal-claim passthrough (`858d83e4`) — D-11 attack vectors (caller restriction, reentrancy, parameter pass-through, privilege escalation) + IM-08 delegatecall chain end-to-end + interface/implementer lockstep (ID-30/ID-93) + check-delegatecall 44/44 corroboration per D-12
 
 ### Phase 233: Jackpot/BAF + Entropy Audit
 **Goal**: Every jackpot-side and entropy-passthrough change is proven safe — the `traitId=420` sentinel, the explicit entropy passthrough, and cross-path bonus-trait consistency all verified
@@ -162,7 +165,7 @@ Phase 230 first. Phases 231, 232, 233, 234 can execute in parallel after 230 com
 |-------|----------------|--------|-----------|
 | 230. Delta Extraction & Scope Map | 1/1 | Complete | 2026-04-17 |
 | 231. Earlybird Jackpot Audit | 1/3 | In progress | — |
-| 232. Decimator Audit | 0/3 | Not started | — |
+| 232. Decimator Audit | 0/3 | In progress (plans created) | — |
 | 233. Jackpot/BAF + Entropy Audit | 0/3 | Not started | — |
 | 234. Quests / Boons / Misc Audit | 0/1 | Not started | — |
 | 235. Conservation + RNG Commitment Re-Proof | 0/2 | Not started | — |
