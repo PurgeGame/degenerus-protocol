@@ -1450,9 +1450,9 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o6, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handlePurchase(address,uint32,uint32,uint256,uint256,uint256)",
+                "handlePurchase(address,uint256,uint32,uint256,uint256,uint256)",
                 buyer,
-                uint32(1),
+                uint256(1),
                 uint32(0),
                 uint256(1),
                 uint256(1 ether),

@@ -958,7 +958,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         }
 
         // --- Ticket purchase (returns quest units, defers x00 bonus + ticket queuing) ---
-        uint32 ethMintUnits;
         uint32 burnieMintUnits;
         uint32 adjustedQty;
         uint24 targetLevel;
@@ -968,7 +967,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 lootboxFlipCredit,
                 adjustedQty,
                 targetLevel,
-                ethMintUnits,
                 burnieMintUnits,
                 ticketFreshEth
             ) = _callTicketPurchase(
@@ -1077,22 +1075,13 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 if (!ok) revert E();
             }
 
-            // Accumulate lootbox mint-equivalent quest units (fresh-ETH portion only)
-            if (priceWei != 0) {
-                uint256 questUnitsRaw = lootBoxAmount / priceWei;
-                if (questUnitsRaw != 0 && lootboxFreshEth != 0) {
-                    uint256 scaled = (questUnitsRaw * lootboxFreshEth) /
-                        lootBoxAmount;
-                    if (scaled != 0) {
-                        ethMintUnits += uint32(scaled);
-                    }
-                }
-            }
-
             emit LootBoxBuy(buyer, lbDay, lootBoxAmount, presale, cachedLevel);
         }
 
         // --- Single quest handler call (post-action: handlers execute before score) ---
+        // MINT_ETH quest progress is credited 1:1 in wei from fresh ETH across both paths
+        // (ticket costWei + lootbox fresh ETH). Claimable-funded spend does not count.
+        uint256 ethFreshWei = ticketFreshEth + lootboxFreshEth;
         uint32 questStreak;
         {
             (
@@ -1102,7 +1091,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 bool questCompleted
             ) = quests.handlePurchase(
                     buyer,
-                    ethMintUnits,
+                    ethFreshWei,
                     burnieMintUnits,
                     lootBoxAmount,
                     priceWei,
@@ -1111,7 +1100,7 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             questStreak = streak;
             if (questCompleted) {
                 lootboxFlipCredit += questReward;
-                if (ethMintUnits > 0 && questType == 1) {
+                if (ethFreshWei > 0 && questType == 1) {
                     IDegenerusGame(address(this)).recordMintQuestStreak(buyer);
                 }
             }
@@ -1206,7 +1195,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
     /// @return bonusCredit Affiliate kickback + bulk bonus flip credit
     /// @return adjustedQty32 Adjusted ticket quantity (with boost, without x00 bonus)
     /// @return targetLevel The level tickets are queued to
-    /// @return ethMintUnits ETH-paid mint quest units (fresh-ETH scaled)
     /// @return burnieMintUnits BURNIE-paid mint quest units
     /// @return freshEth Fresh ETH portion of the ticket payment (0 for payInCoin and Claimable)
     function _callTicketPurchase(
@@ -1225,7 +1213,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
             uint256 bonusCredit,
             uint32 adjustedQty32,
             uint24 targetLevel,
-            uint32 ethMintUnits,
             uint32 burnieMintUnits,
             uint256 freshEth
         )
@@ -1305,15 +1292,6 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
                 freshEth = value;
             } else {
                 revert E();
-            }
-
-            // Accumulate ETH mint quest units (fresh-ETH scaled, deferred to handlePurchase)
-            uint32 questUnits = uint32(quantity / (4 * TICKET_SCALE));
-            if (questUnits != 0 && freshEth != 0) {
-                uint256 scaled = (uint256(questUnits) * freshEth) / costWei;
-                if (scaled != 0) {
-                    ethMintUnits += uint32(scaled);
-                }
             }
 
             // Day before final jackpot draw (not turbo): +100 BURNIE per ticket for affiliates

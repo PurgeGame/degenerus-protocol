@@ -126,7 +126,7 @@ interface IDegenerusQuests {
     /// @dev Called by MintModule for the unified purchase path. Combines handleMint + handleLootBox
     ///      into a single cross-contract call. Returns streak for compute-once score forwarding.
     /// @param player The address of the player
-    /// @param ethMintQty ETH-paid ticket-equivalent mint units (fresh-ETH scaled)
+    /// @param ethFreshWei Fresh ETH spent on tickets + lootbox in wei, credited 1:1 to MINT_ETH quest
     /// @param burnieMintQty BURNIE-paid ticket-equivalent mint units
     /// @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled)
     /// @param mintPrice Current ticket price in wei (purchaseLevel price for daily targets)
@@ -137,7 +137,7 @@ interface IDegenerusQuests {
     /// @return completed Whether a quest was completed by this action
     function handlePurchase(
         address player,
-        uint32 ethMintQty,
+        uint256 ethFreshWei,
         uint32 burnieMintQty,
         uint256 lootBoxAmount,
         uint256 mintPrice,

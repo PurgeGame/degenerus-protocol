@@ -748,7 +748,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      rewards are creditFlipped internally (matching standalone handler behavior).
      *      Returns streak for compute-once score forwarding.
      * @param player The player who purchased.
-     * @param ethMintQty ETH-paid ticket-equivalent mint units (fresh-ETH scaled).
+     * @param ethFreshWei Fresh ETH spent on tickets + lootbox in wei, credited 1:1 to MINT_ETH quest.
      * @param burnieMintQty BURNIE-paid ticket-equivalent mint units.
      * @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled).
      * @param mintPrice Current ticket price in wei (purchaseLevel price for daily targets).
@@ -761,7 +761,7 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function handlePurchase(
         address player,
-        uint32 ethMintQty,
+        uint256 ethFreshWei,
         uint32 burnieMintQty,
         uint256 lootBoxAmount,
         uint256 mintPrice,
@@ -777,7 +777,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (player == address(0) || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
-        if (ethMintQty == 0 && burnieMintQty == 0 && lootBoxAmount == 0) {
+        if (ethFreshWei == 0 && burnieMintQty == 0 && lootBoxAmount == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
 
@@ -791,9 +791,9 @@ contract DegenerusQuests is IDegenerusQuests {
         uint32 outStreak = state.streak;
 
         // --- ETH mint quest progress ---
-        if (ethMintQty != 0) {
+        // Fresh ETH from tickets and lootboxes is credited 1:1 in wei to the MINT_ETH quest.
+        if (ethFreshWei != 0) {
             bool levelQuestHandled;
-            uint256 delta = uint256(ethMintQty) * mintPrice;
             for (uint8 slot; slot < QUEST_SLOT_COUNT; ) {
                 DailyQuest memory quest = quests[slot];
                 if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_ETH) {
@@ -801,8 +801,8 @@ contract DegenerusQuests is IDegenerusQuests {
                     uint256 target = _questTargetValue(quest, slot, mintPrice);
                     (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
                         player, state, quests, quest, slot,
-                        delta, target, currentDay, mintPrice,
-                        QUEST_TYPE_MINT_ETH, levelQuestHandled ? 0 : delta,
+                        ethFreshWei, target, currentDay, mintPrice,
+                        QUEST_TYPE_MINT_ETH, levelQuestHandled ? 0 : ethFreshWei,
                         levelQuestPrice
                     );
                     levelQuestHandled = true;
@@ -816,7 +816,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 unchecked { ++slot; }
             }
             if (!levelQuestHandled) {
-                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, delta, levelQuestPrice);
+                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, ethFreshWei, levelQuestPrice);
             }
         }
 
