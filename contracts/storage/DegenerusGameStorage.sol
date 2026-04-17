@@ -1563,7 +1563,9 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Per-player packed boon state. Replaces the 29 individual boon mappings
     ///      (slots 25-41, 72-82, 85-87, 93-95) which remain as slot placeholders.
-    mapping(address => BoonPacked) internal boonPacked;
+    ///      Public getter returns (uint256 slot0, uint256 slot1); bit layout above.
+    ///      UI readers combine with currentDayView() to compute per-category expiry.
+    mapping(address => BoonPacked) public boonPacked;
 
     // ---- Slot 0 shifts ----
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
