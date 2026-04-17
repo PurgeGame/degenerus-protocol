@@ -288,6 +288,8 @@ Interaction map totals — total rows: 22, delegatecall: 5, direct: 13, self-cal
 
 **Counting note on call-type totals:** Rows are tagged with the most specific call type. A row tagged `delegatecall (selector-call)` is counted once in the `delegatecall` bucket and once in the `selector-call` bucket because the delegatecall payload is built with `abi.encodeWithSelector`. The "total rows" figure (22) matches the sum of rows across §2.1-§2.5 (5 + 4 + 7 + 4 + 2 = 22) and is the authoritative count for downstream consumers.
 
+Delegatecall corroboration — `make check-delegatecall` PASSES at HEAD (44/44 sites aligned; see §3.5). The 43→44 site-count bump vs. the v27.0 Phase 220 baseline is attributable to IM-08 (the new `DegenerusGame.claimTerminalDecimatorJackpot` wrapper introduced by 858d83e4). No unaligned selectors exist; every delegatecall-based chain in this map is independently verified by the automated gate.
+
 ## 3. Interface Drift Catalog
 <!-- DELTA-03 — populated in task 4 -->
 
@@ -511,6 +513,26 @@ All invocations were run from the repo root at HEAD (`e5b4f97478f70c5a0b266429f0
 - Final summary line from stdout: `Compiler run successful with warnings:`
 - Warnings are all `unsafe-typecast` lints unrelated to the 10-commit delta (pre-existing; cover e.g. `uint8 category = weightedBucket(uint32(rnd))` in `contracts/DegenerusTraitUtils.sol:145`, not touched by any in-scope commit). No errors.
 - **Verdict:** PASS. `forge build` compiles all 47 contract files at HEAD — any drift that would have broken the build is absent.
+
+### 3.5 Additional automated gate corroboration
+
+These two gates were not run in §3.4 (they cover call-site integrity rather than interface-signature parity). Both were invoked after §3.4; `git status --porcelain contracts/ test/` remained empty before and after each run.
+
+**`make check-delegatecall`** — 43/44-site delegatecall target alignment (bash+awk, no forge build prereq)
+- Command: `make check-delegatecall 2>&1 | tee /tmp/check-delegatecall.out`
+- Exit code: `0`
+- Final summary line from stdout: `PASS 44/44 delegatecall sites aligned`
+- Header observation: `interface <-> address map: 9 LIVE pair(s) validated, 1 known-dead constant(s) skipped` and `sites discovered: 44`. Note: the plan's `<interfaces>` block mentions "43 delegatecall sites" as the v27.0 Phase 220 count; the HEAD count at 44 reflects the new wrapper added by 858d83e4 (`DegenerusGame.claimTerminalDecimatorJackpot`, recorded as ID-30 in §3.1 and IM-08 in §2.2). All 44 are verified aligned.
+- **Verdict:** PASS. Automated `check-delegatecall` gate PASSES at HEAD — corroborates IM-08 (the new wrapper) and IM-07 / IM-13 / IM-15 / IM-22 (pre-existing wrappers touched indirectly by the delta). No unaligned selectors → no latent drift beyond what §1/§2 document.
+
+**`make check-raw-selectors`** — Raw selector / hand-rolled calldata detection (bash+awk, 5 patterns)
+- Command: `make check-raw-selectors 2>&1 | tee /tmp/check-raw-selectors.out`
+- Exit code: `0`
+- Final summary line from stdout: `PASS 2 justified site(s) acknowledged, no unjustified raw selectors or hand-rolled encoders`
+- Both justified sites (`contracts/DegenerusAdmin.sol:911`, `:997`) are in a file outside the 12-file delta scope and were allowlisted pre-delta.
+- **Verdict:** PASS. Automated `check-raw-selectors` gate PASSES at HEAD — no new raw-selector or hand-rolled calldata site introduced by the 10-commit delta.
+
+Automated gates at HEAD — check-interfaces: PASS, check-delegatecall: PASS, check-raw-selectors: PASS, forge build: PASS
 
 Interface drift totals — IDegenerusGame: 59 methods, 59 PASS, 0 FAIL; IDegenerusQuests: 12 methods, 12 PASS, 0 FAIL; IDegenerusGameModules: 46 methods across 9 sub-interfaces, 46 PASS, 0 FAIL; automated check-interfaces gate: PASS; forge build: PASS.
 
