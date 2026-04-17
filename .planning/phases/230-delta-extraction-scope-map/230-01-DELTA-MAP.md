@@ -224,6 +224,70 @@ Changelog totals — NEW: 3, MODIFIED: 21, DELETED: 0, UNCHANGED: 2; files with 
 ## 2. Cross-Module Interaction Map
 <!-- DELTA-02 — populated in task 3 -->
 
+Per D-08 this is a tabular catalog; per D-09 ONLY cross-module chains where the caller OR callee appears in §1 with verdict NEW or MODIFIED. Module boundary defined as: each file in `contracts/modules/*.sol`, plus `contracts/DegenerusGame.sol`, `contracts/DegenerusQuests.sol`, `contracts/BurnieCoin.sol`, and `contracts/storage/DegenerusGameStorage.sol`. Intra-module calls are implicit in §1 and excluded here.
+
+Rows are globally numbered `IM-NN` so downstream phases (231-236) can cross-reference by row ID. Column header for every subsection: `Caller Function | Callee Function | Call Type | Commit SHA | What Changed`.
+
+Out-of-scope cross-module calls (excluded because the other side is outside the 12-file set but worth noting for downstream auditors):
+- `DegenerusGameStorage._awardEarlybirdDgnrs` → `IStakedDegenerusStonk.poolBalance` / `.transferFromPool` — external DGNRS contract, not one of the 12 in-scope files.
+- `DegenerusGameAdvanceModule._finalizeEarlybird` (NEW, f20a2b5e) → `dgnrs.poolBalance` / `dgnrs.transferBetweenPools` — same DGNRS external dependency.
+- `DegenerusVault.claimDecimatorBurn` → `BurnieCoin.decimatorBurn` — Vault is not in the 12-file set; the caller is out-of-scope even though the callee (BurnieCoin.decimatorBurn) is MODIFIED.
+
+### 2.1 Earlybird-related chains (Phase 231 consumers)
+
+| Row | Caller Function | Callee Function | Call Type | Commit SHA | What Changed |
+|---|---|---|---|---|---|
+| IM-01 | `DegenerusGameMintModule._purchaseFor` | `DegenerusGameStorage._awardEarlybirdDgnrs` | direct (inherited internal) | `f20a2b5e` | Single unified award call at bottom of `_purchaseFor` with `ticketFreshEth + lootboxFreshEth`. Replaces the previous pair of calls (one in `recordMint` inside `DegenerusGame.sol`, one inline in the lootbox branch of `_purchaseFor`). Signature contracted from 3-arg (with `currentLevel`) to 2-arg. |
+| IM-02 | `DegenerusGameWhaleModule._purchaseWhaleBundle` | `DegenerusGameStorage._awardEarlybirdDgnrs` | direct (inherited internal) | `f20a2b5e` | Caller updated to 2-arg form: `_awardEarlybirdDgnrs(buyer, totalPrice)` — dropped `passLevel`. |
+| IM-03 | `DegenerusGameWhaleModule._purchaseLazyPass` | `DegenerusGameStorage._awardEarlybirdDgnrs` | direct (inherited internal) | `f20a2b5e` | Caller updated to 2-arg form: `_awardEarlybirdDgnrs(buyer, benefitValue)` — dropped `startLevel`. |
+| IM-04 | `DegenerusGameWhaleModule._purchaseDeityPass` | `DegenerusGameStorage._awardEarlybirdDgnrs` | direct (inherited internal) | `f20a2b5e` | Caller updated to 2-arg form: `_awardEarlybirdDgnrs(buyer, totalPrice)` — dropped `passLevel`. |
+| IM-05 | `DegenerusGameAdvanceModule._finalizeRngRequest` | `DegenerusGameAdvanceModule._finalizeEarlybird` | direct (intra-file — included because the callee is NEW and cross-references module-lifecycle docs) | `f20a2b5e` | NEW level-transition hook: when `lvl == EARLYBIRD_END_LEVEL`, `_finalizeEarlybird` runs once, flips the sentinel, and dumps the remaining Earlybird pool into Lootbox. Per D-09 this is technically intra-module (both ends in AdvanceModule.sol) — recorded here for consumer-phase traceability because the new transition hook is a primary Phase-231 adversarial target. |
+
+### 2.2 Decimator-related chains (Phase 232 consumers)
+
+| Row | Caller Function | Callee Function | Call Type | Commit SHA | What Changed |
+|---|---|---|---|---|---|
+| IM-06 | `DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots` | `DegenerusGame.runDecimatorJackpot` | self-call (via `IDegenerusGame(address(this))`) | `3ad0f8d3` | Two previously-separate branches (`prevMod100 == 0` for x00, `prevMod10 == 5 && prevMod100 != 95` for x5) consolidated into a single tail. `decPoolWei` is computed in mutually-exclusive if/else-if, then one `runDecimatorJackpot` self-call runs the tail when `decPoolWei != 0`. Selector, args, and ordering unchanged. |
+| IM-07 | `DegenerusGame.runDecimatorJackpot` | `DegenerusGameDecimatorModule.runDecimatorJackpot` | delegatecall (selector-call) | `3ad0f8d3` | Chain exists pre-delta; caller `runDecimatorJackpot` wrapper on Game (unchanged) forwards selector to Decimator module. Included because the immediate caller `_consolidatePoolsAndRewardJackpots` is MODIFIED. |
+| IM-08 | `DegenerusGame.claimTerminalDecimatorJackpot` | `DegenerusGameDecimatorModule.claimTerminalDecimatorJackpot` | delegatecall (selector-call) | `858d83e4`, `67031e7d` | NEW external wrapper (858d83e4) delegatecalls the module via `IDegenerusGameDecimatorModule.claimTerminalDecimatorJackpot.selector`. Module-side callee was further MODIFIED (67031e7d) to emit `TerminalDecimatorClaimed`. |
+| IM-09 | `BurnieCoin.decimatorBurn` | `DegenerusGame.level` (getter) | direct external call | `3ad0f8d3` | Call site itself unchanged (`degenerusGame.level()`). Caller body MODIFIED to compute `lvl = degenerusGame.level() + 1` post-call so burns are keyed by the resolution level. Recorded here because the MODIFIED caller's reliance on this getter is load-bearing for the decimator-burn-key correctness story. |
+
+### 2.3 Jackpot/BAF/Entropy-related chains (Phase 233 consumers)
+
+| Row | Caller Function | Callee Function | Call Type | Commit SHA | What Changed |
+|---|---|---|---|---|---|
+| IM-10 | `DegenerusGameAdvanceModule.advanceGame` | `DegenerusGameAdvanceModule._processFutureTicketBatch` (FF path) | direct (intra-file, included because the boundary crossed at the next hop is MODIFIED and the entropy-lineage starts here) | `52242a10` | FF-promotion call site (around source line 298-303) gained `rngWord` as the second argument — entropy is now threaded from `rngGate` return into `_processFutureTicketBatch`. |
+| IM-11 | `DegenerusGameAdvanceModule.advanceGame` | `DegenerusGameAdvanceModule._prepareFutureTickets` (near-future prep) | direct (intra-file, same rationale as IM-10) | `52242a10` | Near-future prep call site (around source line 321-326) gained `rngWord` as the second argument. |
+| IM-12 | `DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots` | `DegenerusGameAdvanceModule._processFutureTicketBatch` (post-transition FF) | direct (intra-file) | `52242a10` | Call site around source line 392 gained `rngWord` as the second argument. |
+| IM-13 | `DegenerusGameAdvanceModule._processFutureTicketBatch` | `DegenerusGameMintModule.processFutureTicketBatch` | delegatecall (selector-call) | `52242a10` | `abi.encodeWithSelector(IDegenerusGameMintModule.processFutureTicketBatch.selector, lvl)` → `..., lvl, entropy)`. New selector: the interface declaration in `IDegenerusGameModules.sol` was updated in lockstep (§1.11). This is the primary entropy-passthrough boundary. |
+| IM-14 | `DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots` | `DegenerusGame.runBafJackpot` | self-call (via `IDegenerusGame(address(this))`) | `104b5d42` | Pre-existing call site (around source line 746) unchanged. Included because the callee's module-level implementer `DegenerusGameJackpotModule.runBafJackpot` is MODIFIED (BAF sentinel tagging on all four `emit` sites). Consumers reading this chain must use `BAF_TRAIT_SENTINEL = 420` to decode payout events. |
+| IM-15 | `DegenerusGame.runBafJackpot` | `DegenerusGameJackpotModule.runBafJackpot` | delegatecall (selector-call) | `104b5d42` | Delegatecall selector unchanged; callee body modified to emit `JackpotEthWin` / `JackpotTicketWin` with widened `uint16 traitId` carrying `BAF_TRAIT_SENTINEL`. Event signature hash changes — ABI consumers must regenerate. |
+| IM-16 | `DegenerusGameJackpotModule._runEarlyBirdLootboxJackpot` | `DegenerusGameJackpotModule._rollWinningTraits` | direct (intra-file) | `20a951df` | NEW call: the rewritten earlybird path now rolls the same 4 bonus traits the coin jackpot uses, via `_rollWinningTraits(rngWord, true)`. Chain is intra-module per D-09 but tabulated here because it is the primary entropy-parity invariant for EBD-02 / JKP-03. |
+
+### 2.4 Quest/Boon/Misc chains (Phase 234 consumers)
+
+| Row | Caller Function | Callee Function | Call Type | Commit SHA | What Changed |
+|---|---|---|---|---|---|
+| IM-17 | `DegenerusGameMintModule._purchaseFor` | `DegenerusQuests.handlePurchase` | direct external call (`quests.handlePurchase(...)`) | `d5284be5` | Second argument switched from `uint32 ethMintUnits` (lossy scaled ticket-units) to `uint256 ethFreshWei` (raw wei, 1:1 MINT_ETH credit). Caller's local computation of `ethFreshWei = ticketFreshEth + lootboxFreshEth` is the new source. Interface declaration in `IDegenerusQuests.sol` updated in lockstep (§1.12). |
+| IM-18 | `DegenerusGameMintModule._purchaseFor` | `DegenerusGame.recordMintQuestStreak` | self-call (via `IDegenerusGame(address(this))`) | `d5284be5` | Predicate guarding the self-call switched `ethMintUnits > 0` → `ethFreshWei > 0`. Call target and args unchanged. |
+| IM-19 | UI / off-chain readers | `DegenerusGame.boonPacked(address)` auto-generated getter | direct external call (new external ABI entry) | `e0a7f7bc` | NEW: `mapping(address => BoonPacked) public boonPacked` on `DegenerusGameStorage` auto-generates an external getter on the `DegenerusGame` deployed address returning `(uint256 slot0, uint256 slot1)`. No in-contract consumer — this is a UI/indexer read surface. Not declared on `IDegenerusGame.sol` (see §3.1 note). |
+| IM-20 | `DegenerusGameAdvanceModule._finalizeEarlybird` | `DegenerusGameAdvanceModule._finalizeEarlybird` internal sentinel | (not a cross-module chain — see IM-05) | — | (no external cross-module chain here; boon-pool transfer to Lootbox is via the out-of-scope DGNRS contract — see excluded-chains note above) |
+
+### 2.5 RNG/Phase-transition chains (Phase 235 consumers)
+
+| Row | Caller Function | Callee Function | Call Type | Commit SHA | What Changed |
+|---|---|---|---|---|---|
+| IM-21 | `DegenerusGameAdvanceModule.advanceGame` | `DegenerusGameAdvanceModule._unlockRng` | direct (intra-file, recorded for phase-transition traceability) | `2471f8e7` | The `_unlockRng(day)` call in the `jackpotCounter >= JACKPOT_LEVEL_CAP` branch of `advanceGame` (previously at source line 425) was REMOVED. The next `_unlockRng` invocation is now the existing downstream one after the packed housekeeping step. Per TRNX-01, this is the load-bearing call-deletion — no replacement call is introduced. |
+| IM-22 | `DegenerusGameAdvanceModule._processFutureTicketBatch` (receiving path) | `DegenerusGameMintModule.processFutureTicketBatch` | delegatecall (selector-call) | `52242a10` | Same chain as IM-13 — replayed here so RNG-01 / RNG-02 auditors can cite the entropy-commitment boundary from their own phase. The `uint256 entropy` argument now arrives via calldata instead of being SLOAD'd from `rngWordCurrent` inside the callee — this is the commitment-window re-proof handle. |
+
+### 2.6 All other cross-module chains (general audit interest)
+
+(no chains in this category)
+
+Interaction map totals — total rows: 22, delegatecall: 5, direct: 13, self-call: 3, selector-call: 5 (overlap: every delegatecall row here is also a selector-call because it uses `abi.encodeWithSelector`); chains per consumer phase: 231:5, 232:4, 233:7, 234:4, 235:2, other:0
+
+**Counting note on call-type totals:** Rows are tagged with the most specific call type. A row tagged `delegatecall (selector-call)` is counted once in the `delegatecall` bucket and once in the `selector-call` bucket because the delegatecall payload is built with `abi.encodeWithSelector`. The "total rows" figure (22) matches the sum of rows across §2.1-§2.5 (5 + 4 + 7 + 4 + 2 = 22) and is the authoritative count for downstream consumers.
+
 ## 3. Interface Drift Catalog
 <!-- DELTA-03 — populated in task 4 -->
 
