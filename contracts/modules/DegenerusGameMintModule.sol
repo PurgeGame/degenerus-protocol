@@ -558,13 +558,16 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
 
         // Generate traits in groups of 16, using LCG for deterministic randomness.
         while (i < endIndex) {
-            uint32 groupIdx = i >> 4; // Group index (per 16 symbols)
+            uint32 groupIdx = i >> 4;
 
-            uint256 seed;
-            unchecked {
-                seed = (baseKey + groupIdx) ^ entropyWord;
-            }
-            uint64 s = uint64(seed) | 1; // Ensure odd for full LCG period
+            // Hash all inputs so player address (stored in baseKey bits 191-32)
+            // reaches the low 32 bits of s. LCG iteration preserves low-bit
+            // independence, so the category bucket — derived from the low 32
+            // bits of s — inherits whatever entropy the seed's low bits carry.
+            uint256 seed = uint256(
+                keccak256(abi.encode(baseKey, entropyWord, groupIdx))
+            );
+            uint64 s = uint64(seed) | 1;
             uint8 offset = uint8(i & 15);
             unchecked {
                 s = s * (TICKET_LCG_MULT + uint64(offset)) + uint64(offset);
