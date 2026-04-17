@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity 0.8.34;
+
+/// @notice Interface for tokens with vault mint allowance (BURNIE).
+/// @dev Used by DegenerusVault and game modules for minting tokens
+///      from vault escrow without requiring token transfers.
+interface IVaultCoin {
+    /// @notice Increase the vault's mint allowance without transferring tokens.
+    /// @param amount Amount to add to vault's mint allowance.
+    function vaultEscrow(uint256 amount) external;
+
+    /// @notice Mint tokens to recipient from vault's allowance.
+    /// @param to Recipient address.
+    /// @param amount Amount to mint.
+    function vaultMintTo(address to, uint256 amount) external;
+
+    /// @notice View the vault's remaining mint allowance.
+    /// @return Remaining amount available for vault minting.
+    function vaultMintAllowance() external view returns (uint256);
+
+    /// @notice Get token balance for an address.
+    /// @param account Address to query.
+    /// @return Balance of BURNIE.
+    function balanceOf(address account) external view returns (uint256);
+
+    /// @notice Transfer BURNIE to a recipient.
+    /// @param to Recipient address.
+    /// @param amount Amount to transfer.
+    /// @return success True on success.
+    function transfer(address to, uint256 amount) external returns (bool);
+}

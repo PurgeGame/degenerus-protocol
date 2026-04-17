@@ -1,0 +1,409 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity 0.8.34;
+
+
+/// @notice Payment method for ticket purchases.
+enum MintPaymentKind {
+    DirectEth,   // Pay with fresh ETH only
+    Claimable,   // Pay with claimable winnings only
+    Combined     // Pay with both ETH and claimable (combined purchase bonus)
+}
+
+/// @title IDegenerusGame
+/// @notice Core game contract interface for state machine, purchases, and prize pool management.
+/// @dev Implements 2-state FSM: PURCHASE(false) → JACKPOT(true) → PURCHASE(false). gameOver() is terminal.
+interface IDegenerusGame {
+    /// @notice Get the current jackpot level.
+    /// @return Current jackpot level (starts at 0).
+    function level() external view returns (uint24);
+
+    /// @notice Get the current game phase using jackpot semantics.
+    /// @return True if jackpot phase is active, false if purchase phase.
+    function jackpotPhase() external view returns (bool);
+
+    /// @notice Check if the game has ended (terminal state).
+    function gameOver() external view returns (bool);
+
+    /// @notice Check if the final sweep has executed (all funds forfeited).
+    function isFinalSwept() external view returns (bool);
+
+    /// @notice Get the current mint price in wei.
+    /// @return Base price unit in wei.
+    function mintPrice() external view returns (uint256);
+
+    /// @notice Check if decimator window is currently open.
+    /// @return True if decimator entries are allowed.
+    function decWindow() external view returns (bool);
+
+    /// @notice Check if the current jackpot phase is compressed (3 days instead of 5).
+    /// @dev Compressed mode activates when the purchase-phase target is met within the
+    ///      first 2 daily advances, signaling high player interest.
+    /// @return Compression tier: 0=normal, 1=compressed (3d), 2=turbo (1d).
+    function jackpotCompressionTier() external view returns (uint8);
+
+    /// @notice Get comprehensive purchase information in a single call.
+    /// @dev Gas-optimized batch query for UI display.
+    /// @return lvl Active direct-ticket level (lootbox purchases still route to next level during jackpot phase).
+    /// @return inJackpotPhase True if jackpot phase is active.
+    /// @return lastPurchaseDay_ True if this is the last day to purchase.
+    /// @return rngLocked_ True if RNG is locked (VRF pending).
+    /// @return priceWei Current mint price in wei.
+    function purchaseInfo()
+        external
+        view
+        returns (uint24 lvl, bool inJackpotPhase, bool lastPurchaseDay_, bool rngLocked_, uint256 priceWei);
+
+    /// @notice Get the player's activity score multiplier.
+    /// @dev Multiplier based on participation and engagement (basis points).
+    /// @param player The player to query.
+    /// @return Multiplier in bps (10000 = 1x).
+    function playerActivityScore(address player) external view returns (uint256);
+
+    /// @notice Check if an operator is approved to act on behalf of a player.
+    /// @param owner The player who granted approval.
+    /// @param operator The operator address to check.
+    /// @return approved True if operator can act for owner.
+    function isOperatorApproved(address owner, address operator) external view returns (bool);
+
+    /// @notice Record a ticket purchase and calculate rewards.
+    /// @dev Access restricted to GAME self-call only (delegatecall modules via address(this)).
+    /// @param player The player making the purchase.
+    /// @param lvl The current game level.
+    /// @param costWei Total cost in wei.
+    /// @param mintUnits Number of units purchased.
+    /// @param payKind Payment method used.
+    /// @return newClaimableBalance Updated claimable balance if using claimable payment.
+    function recordMint(
+        address player,
+        uint24 lvl,
+        uint256 costWei,
+        uint32 mintUnits,
+        MintPaymentKind payKind
+    ) external payable returns (uint256 newClaimableBalance);
+
+    /// @notice Consume coinflip boon for next coinflip stake bonus.
+    /// @dev Grants bonus to the next coinflip deposit.
+    /// @param player The player consuming the boon.
+    /// @return boostBps Boost amount in basis points.
+    function consumeCoinflipBoon(address player) external returns (uint16 boostBps);
+
+    /// @notice Consume decimator boon for burn boost.
+    /// @dev Grants bonus to next decimator burn.
+    /// @param player The player consuming the boon.
+    /// @return boostBps Boost amount in basis points.
+    function consumeDecimatorBoon(address player) external returns (uint16 boostBps);
+
+    /// @notice Consume purchase boost for purchase bonus.
+    /// @dev Grants bonus to next ticket purchase.
+    /// @param player The player consuming the boost.
+    /// @return boostBps Boost amount in basis points.
+    function consumePurchaseBoost(address player) external returns (uint16 boostBps);
+
+    /// @notice Get raw deity boon state for off-chain or viewer contract computation.
+    /// @param deity The deity address to query.
+    function deityBoonData(
+        address deity
+    ) external view returns (
+        uint256 dailySeed,
+        uint32 day,
+        uint8 usedMask,
+        bool decimatorOpen,
+        bool deityPassAvailable
+    );
+
+    /// @notice Issue a deity boon to a recipient.
+    /// @param deity Deity issuing the boon (address(0) = msg.sender).
+    /// @param recipient Recipient of the boon.
+    /// @param slot Slot index (0-2).
+    function issueDeityBoon(address deity, address recipient, uint8 slot) external;
+
+    /// @notice Get the future prize pool (single pool).
+    /// @return Future prize pool amount in wei.
+    function futurePrizePoolView() external view returns (uint256);
+
+    /// @notice Get the yield accumulator balance (segregated stETH yield reserve).
+    /// @return The yield accumulator balance (ETH wei).
+    function yieldAccumulatorView() external view returns (uint256);
+
+    /// @notice Get the number of tickets owed to a player for a specific level.
+    /// @param lvl The level to query.
+    /// @param player The player to query.
+    /// @return Number of whole tickets owed (fractional remainder resolves at batch time).
+    function ticketsOwedView(uint24 lvl, address player) external view returns (uint32);
+
+    /// @notice Record a Decimator burn for jackpot eligibility.
+    /// @param player Address of the player.
+    /// @param lvl Current game level.
+    /// @param bucket Player's chosen denominator (2-12).
+    /// @param baseAmount Burn amount before multiplier.
+    /// @param multBps Multiplier in basis points (10000 = 1x).
+    /// @return bucketUsed The bucket actually used (may differ from requested if not an improvement).
+    function recordDecBurn(
+        address player,
+        uint24 lvl,
+        uint8 bucket,
+        uint256 baseAmount,
+        uint256 multBps
+    ) external returns (uint8 bucketUsed);
+
+    /// @notice Snapshot Decimator jackpot winners for deferred claims.
+    /// @param poolWei Total ETH prize pool for this level.
+    /// @param lvl Level number being resolved.
+    /// @param rngWord VRF-derived randomness seed.
+    /// @return returnAmountWei Amount to return (non-zero if no winners or already snapshotted).
+    function runDecimatorJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 returnAmountWei);
+
+    /// @notice Execute BAF jackpot via JackpotModule delegatecall.
+    /// @param poolWei Total ETH prize pool for BAF.
+    /// @param lvl Level number being resolved.
+    /// @param rngWord VRF-derived randomness seed.
+    /// @return claimableDelta ETH moved to claimable.
+    function runBafJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 claimableDelta);
+
+    // Terminal Decimator (Death Bet)
+
+    /// @notice Record a terminal decimator burn entry for a player.
+    /// @param player The player burning.
+    /// @param lvl The current game level.
+    /// @param baseAmount The base BURNIE amount burned.
+    function recordTerminalDecBurn(
+        address player,
+        uint24 lvl,
+        uint256 baseAmount
+    ) external;
+
+    /// @notice Run the terminal decimator jackpot distribution.
+    /// @param poolWei Total ETH pool to distribute.
+    /// @param lvl The game level for winner sampling.
+    /// @param rngWord Random word for winner selection.
+    /// @return returnAmountWei ETH returned undistributed.
+    function runTerminalDecimatorJackpot(
+        uint256 poolWei,
+        uint24 lvl,
+        uint256 rngWord
+    ) external returns (uint256 returnAmountWei);
+
+    /// @notice Check if the terminal decimator window is open.
+    /// @return open True if terminal decimator bets are accepted.
+    /// @return lvl The current level for terminal decimator.
+    function terminalDecWindow() external view returns (bool open, uint24 lvl);
+
+    /// @notice Terminal jackpot for x00 levels: Day-5-style bucket distribution.
+    /// @param poolWei Total ETH to distribute.
+    /// @param targetLvl Level to sample winners from.
+    /// @param rngWord VRF entropy seed.
+    /// @return paidWei Total ETH distributed.
+    function runTerminalJackpot(
+        uint256 poolWei,
+        uint24 targetLvl,
+        uint256 rngWord
+    ) external returns (uint256 paidWei);
+
+    /// @notice Emit DailyWinningTraits without running any distribution.
+    ///         Used at purchaseLevel==1 where payDailyJackpot is skipped.
+    /// @param lvl Unused (preserved for signature compatibility with module).
+    /// @param randWord VRF entropy for trait derivation.
+    /// @param bonusTargetLevel Target level for the primary bonus coin distribution.
+    function emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) external;
+
+    /// @notice Consume Decimator claim on behalf of player.
+    /// @param player Address to claim for.
+    /// @param lvl Level to claim from.
+    /// @return amountWei Pro-rata payout amount.
+    function consumeDecClaim(address player, uint24 lvl) external returns (uint256 amountWei);
+
+    /// @notice Claim Decimator jackpot for caller.
+    /// @param lvl Level to claim from (must be the last decimator).
+    function claimDecimatorJackpot(uint24 lvl) external;
+
+    /// @notice Check if player can claim Decimator jackpot for a level.
+    /// @param player Address to check.
+    /// @param lvl Level to check (must be the last decimator).
+    /// @return amountWei Claimable amount (0 if not winner or already claimed).
+    /// @return winner True if player is a winner for this level.
+    function decClaimable(address player, uint24 lvl) external view returns (uint256 amountWei, bool winner);
+
+    /// @notice Record mint streak completion after a 1x price ETH quest completes.
+    /// @dev Called by GAME contract (via MintModule delegatecall).
+    /// @param player The player who completed the quest.
+    function recordMintQuestStreak(address player) external;
+
+    /// @notice Pay DGNRS bounty for biggest flip record holder.
+    /// @dev Called by COIN contract when bounty is paid.
+    /// @param player Player receiving the bounty payout.
+    /// @param winningBet BURNIE value of the winning flip (must meet minimum bet threshold).
+    /// @param bountyPool BURNIE value of the bounty pool (must meet minimum pool threshold).
+    function payCoinflipBountyDgnrs(address player, uint256 winningBet, uint256 bountyPool) external;
+
+    /// @notice Check if RNG is currently locked (VRF request pending).
+    /// @return True if RNG is locked, false otherwise.
+    function rngLocked() external view returns (bool);
+
+    /// @notice Current day index.
+    function currentDayView() external view returns (uint32);
+
+    /// @notice Request lootbox RNG when activity threshold is met.
+    /// @dev Standalone function for mid-day lootbox RNG requests.
+    ///      Reverts if daily RNG locked, request pending, threshold not met, or VRF fails.
+    function requestLootboxRng() external;
+
+    /// @notice Check if afKing mode is active for a player.
+    /// @param player The player to query.
+    /// @return active True if afKing mode is active.
+    function afKingModeFor(address player) external view returns (bool active);
+
+    /// @notice Get the level when afKing mode was activated for a player.
+    /// @param player The player to query.
+    /// @return activationLevel Level at which afKing mode was enabled (0 if inactive).
+    function afKingActivatedLevelFor(address player) external view returns (uint24 activationLevel);
+
+    /// @notice Deactivate afKing mode for a player (coin-only hook).
+    /// @param player Player to deactivate.
+    function deactivateAfKingFromCoin(address player) external;
+
+    /// @notice Sync afKing lazy pass status and revoke if inactive (coin-only hook).
+    /// @param player Player to sync.
+    /// @return active True if afKing remains active after sync.
+    function syncAfKingLazyPassFromCoin(address player) external returns (bool active);
+
+    /// @notice Get lootbox status for a player on a specific lootbox index.
+    /// @param player The player to query.
+    /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
+    /// @return amount Lootbox value in wei.
+    /// @return presale True if presale mode is currently active (global flag, not per-lootbox).
+    function lootboxStatus(address player, uint48 lootboxIndex) external view returns (uint256 amount, bool presale);
+
+    /// @notice Check whether lootbox presale mode is currently active.
+    /// @return active True if presale is active.
+    function lootboxPresaleActiveFlag() external view returns (bool active);
+
+    /// @notice Open a lootbox for a specific lootbox index and claim rewards.
+    /// @dev Claims ETH, DGNRS, WWXRP, and potential boons/boosts.
+    /// @param player The player address to open for (address(0) = msg.sender).
+    /// @param lootboxIndex Lootbox RNG index assigned at purchase time.
+    function openLootBox(address player, uint48 lootboxIndex) external;
+
+    /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
+    /// @param player The betting player (address(0) = msg.sender).
+    /// @param currency Currency type (0=ETH, 1=BURNIE, 2=unsupported, 3=WWXRP).
+    /// @param amountPerTicket Bet amount per ticket.
+    /// @param ticketCount Number of spins (1-10). Each spin resolves independently.
+    /// @param customTicket Custom packed traits (use 0 for random).
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
+    function placeDegeneretteBet(
+        address player,
+        uint8 currency,
+        uint128 amountPerTicket,
+        uint8 ticketCount,
+        uint32 customTicket,
+        uint8 heroQuadrant
+    ) external payable;
+
+    /// @notice Resolve Degenerette bets once RNG is available.
+    /// @param player The betting player (address(0) = msg.sender).
+    /// @param betIds Bet identifiers for the player.
+    function resolveDegeneretteBets(
+        address player,
+        uint64[] calldata betIds
+    ) external;
+
+    /// @notice View Degenerette packed bet info for a player/betId.
+    /// @param player Player address to query.
+    /// @param betId Bet identifier for the player.
+    /// @return packed Packed bet data (amount/currency/betSpec/rngIndex/resolved).
+    function degeneretteBetInfo(
+        address player,
+        uint64 betId
+    )
+        external
+        view
+        returns (uint256 packed);
+
+    /// @notice Sample up to 4 trait burn tickets from a random trait and recent level (last 20).
+    /// @dev View function for BAF scatter selection; uses provided entropy.
+    /// @param entropy Random entropy for sampling (typically from VRF).
+    /// @return lvl The sampled level.
+    /// @return trait The sampled trait ID.
+    /// @return tickets Array of player addresses holding sampled tickets.
+    function sampleTraitTickets(uint256 entropy) external view returns (uint24 lvl, uint8 trait, address[] memory tickets);
+
+    /// @notice Sample up to 4 trait burn tickets from a specific level.
+    /// @dev View function for BAF scatter selection targeting a specific level.
+    /// @param targetLvl The level to sample from.
+    /// @param entropy Random entropy for sampling (typically from VRF).
+    /// @return trait The sampled trait ID.
+    /// @return tickets Array of player addresses holding sampled tickets.
+    function sampleTraitTicketsAtLevel(uint24 targetLvl, uint256 entropy) external view returns (uint8 trait, address[] memory tickets);
+
+    /// @notice Sample up to 4 far-future ticket holders from ticketQueue.
+    /// @dev View function for BAF far-future selection; samples ticketQueue at levels [current+5, current+99].
+    /// @param entropy Random entropy for sampling (typically from VRF).
+    /// @return tickets Array of player addresses (length 0-4).
+    function sampleFarFutureTickets(uint256 entropy) external view returns (address[] memory tickets);
+
+
+    /// @notice Purchase a deity pass for a specific symbol (0-31).
+    /// @param buyer Player address to receive pass (address(0) = msg.sender).
+    /// @param symbolId Symbol to claim (0-31).
+    function purchaseDeityPass(address buyer, uint8 symbolId) external payable;
+
+    /// @notice Purchase a 10-level lazy pass (direct in-game activation).
+    /// @param buyer Player address to receive pass (address(0) = msg.sender).
+    function purchaseLazyPass(address buyer) external payable;
+
+    /// @notice Whether a player holds a deity pass.
+    function hasDeityPass(address player) external view returns (bool);
+
+    /// @notice Get raw bit-packed mint data for a player.
+    /// @param player Player address to query.
+    /// @return Raw packed uint256 containing mint counts, streak, pass status.
+    function mintPackedFor(address player) external view returns (uint256);
+
+    /// @notice Purchase tickets and loot boxes with ETH or claimable.
+    /// @dev Main entry point for all ETH/claimable purchases.
+    ///      Spending all claimable winnings earns a 10% bonus across the combined purchase.
+    /// @param buyer Player address to receive purchases (address(0) = msg.sender).
+    /// @param ticketQuantity Number of tickets to purchase (0 to skip).
+    /// @param lootBoxAmount ETH amount for loot boxes, minimum 0.01 ETH (0 to skip).
+    /// @param affiliateCode Affiliate/referral code for all purchases.
+    /// @param payKind Payment method (DirectEth, Claimable, or Combined).
+    function purchase(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxAmount,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind
+    ) external payable;
+
+    /// @notice Purchase tickets and loot boxes with BURNIE.
+    /// @dev Entry point for all BURNIE purchases (tickets and loot boxes).
+    /// @param buyer Player address to receive purchases (address(0) = msg.sender).
+    /// @param ticketQuantity Number of tickets to purchase (0 to skip).
+    /// @param lootBoxBurnieAmount BURNIE amount for loot boxes (0 to skip).
+    function purchaseCoin(
+        address buyer,
+        uint256 ticketQuantity,
+        uint256 lootBoxBurnieAmount
+    ) external;
+
+    // -------------------------------------------------------------------------
+    // Degenerette Tracking Views
+    // -------------------------------------------------------------------------
+
+    /// @notice Get total wager units for a specific hero symbol on a given day.
+    function getDailyHeroWager(uint32 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
+    /// @notice Get the winning hero symbol and amount for a given day.
+    function getDailyHeroWinner(uint32 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
+    /// @notice Get a player's total Degenerette wager for a level.
+    function getPlayerDegeneretteWager(address player, uint24 lvl) external view returns (uint256 weiAmount);
+    /// @notice Get the top Degenerette player for a level.
+    function getTopDegenerette(uint24 lvl) external view returns (address topPlayer, uint256 amountUnits);
+}

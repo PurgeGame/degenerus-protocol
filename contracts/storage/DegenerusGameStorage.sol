@@ -1,0 +1,1729 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity 0.8.34;
+
+import {ContractAddresses} from "../ContractAddresses.sol";
+import {IVRFCoordinator} from "../interfaces/IVRFCoordinator.sol";
+import {IStakedDegenerusStonk} from "../interfaces/IStakedDegenerusStonk.sol";
+import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
+import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
+import {IBurnieCoinflip} from "../interfaces/IBurnieCoinflip.sol";
+import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {GameTimeLib} from "../libraries/GameTimeLib.sol";
+
+/**
+ * @title DegenerusGameStorage
+ * @author Burnie Degenerus
+ * @notice Shared storage layout between DegenerusGame and its delegatecall modules.
+ *
+ * @dev ARCHITECTURE OVERVIEW
+ * -----------------------------------------------------------------------------
+ * This contract defines the canonical storage layout for the Degenerus game ecosystem.
+ * It is inherited by:
+ *   - DegenerusGame (main contract, holds actual state)
+ *   - DegenerusGameAdvanceModule (delegatecall module)
+ *   - DegenerusGameJackpotModule (delegatecall module)
+ *   - DegenerusGameMintModule (delegatecall module)
+ *   - DegenerusGameLootboxModule (delegatecall module)
+ *   - DegenerusGameWhaleModule (delegatecall module)
+ *   - DegenerusGameBoonModule (delegatecall module)
+ *   - DegenerusGameDecimatorModule (delegatecall module)
+ *   - DegenerusGameDegeneretteModule (delegatecall module)
+ *   - DegenerusGameGameOverModule (delegatecall module)
+ *
+ * DELEGATECALL PATTERN:
+ * When DegenerusGame calls `module.delegatecall(...)`, the module's code executes
+ * in the context of DegenerusGame's storage. This means:
+ *   1. Storage slots MUST match exactly between the main contract and all modules.
+ *   2. This contract ensures slot alignment by providing a single source of truth.
+ *   3. Never add storage variables to module contracts — they would collide with game storage.
+ *
+ * STORAGE SLOT LAYOUT (EVM assigns slots sequentially):
+ * -----------------------------------------------------------------------------
+ *
+ * +-----------------------------------------------------------------------------+
+ * | EVM SLOT 0 (32 bytes) -- Timing, FSM, Counters, Flags, Buffer, Freeze       |
+ * +-----------------------------------------------------------------------------+
+ * | [0:4]   purchaseStartDay         uint32   Day index when purchase/deploy began|
+ * | [4:8]   dailyIdx                 uint32   Monotonic day counter             |
+ * | [8:14]  rngRequestTime           uint48   When last VRF request was fired   |
+ * | [14:17] level                    uint24   Current jackpot level (starts at 0)|
+ * | [17:18] jackpotPhaseFlag         bool     Phase: false=PURCHASE, true=JACKPOT|
+ * | [18:19] jackpotCounter           uint8    Jackpots processed this level      |
+ * | [19:20] lastPurchaseDay          bool     Prize target met flag              |
+ * | [20:21] decWindowOpen            bool     Decimator window latch             |
+ * | [21:22] rngLockedFlag            bool     Daily RNG lock (jackpot window)    |
+ * | [22:23] phaseTransitionActive    bool     Level transition in progress       |
+ * | [23:24] gameOver                 bool     Terminal state flag                |
+ * | [24:25] dailyJackpotCoinTicketsPending bool Split jackpot pending flag       |
+ * | [25:26] compressedJackpotFlag    uint8    0=normal, 1=compressed, 2=turbo    |
+ * | [26:27] ticketsFullyProcessed    bool     Read slot fully drained flag       |
+ * | [27:28] gameOverPossible         bool     Drip projection endgame flag       |
+ * | [28:29] ticketWriteSlot          bool     Double-buffer write toggle         |
+ * | [29:30] prizePoolFrozen          bool     Prize pool freeze active flag      |
+ * | [30:32] <padding>                         2 bytes unused                     |
+ * +-----------------------------------------------------------------------------+
+ *   Total: 30 bytes used (2 bytes padding)
+ *
+ * +-----------------------------------------------------------------------------+
+ * | EVM SLOT 1 (32 bytes) -- Prize Pools                                        |
+ * +-----------------------------------------------------------------------------+
+ * | [0:16]  currentPrizePool         uint128  Active prize pool for current level|
+ * | [16:32] claimablePool            uint128  Aggregate ETH liability for claims |
+ * +-----------------------------------------------------------------------------+
+ *   Total: 32 bytes used (0 bytes padding -- FULL)
+ *
+ * SLOTS 2+ -- Full-width variables, arrays, and mappings
+ * -----------------------------------------------------------------------------
+ * Each uint256, array length, or mapping root occupies its own slot.
+ * Dynamic arrays: length at slot N, data at keccak256(N).
+ * Mappings: value at keccak256(key . slot).
+ *
+ * SECURITY CONSIDERATIONS
+ * -----------------------------------------------------------------------------
+ * 1. SLOT STABILITY: Never reorder, remove, or change types of existing variables.
+ *    Append-only additions are safe for non-upgradeable contracts.
+ *
+ * 2. DELEGATECALL SAFETY: All modules inherit this exact layout. If a module
+ *    declared its own storage variables, they would occupy the same slots as
+ *    game data, causing catastrophic corruption.
+ *
+ * 3. ACCESS CONTROL: All variables are `internal`, preventing external reads.
+ *    Public getters in DegenerusGame expose only what's needed.
+ *
+ * 4. INITIALIZATION: Default values are set inline. For critical variables:
+ *    - purchaseStartDay = deploy day index (set in constructor via GameTimeLib.currentDayIndex())
+ *    - jackpotPhaseFlag = false (purchase phase)
+ *    - decWindowOpen = false (opens at level 4 jackpot phase start)
+ *    - levelPrizePool uses BOOTSTRAP_PRIZE_POOL (50 ether) as fallback for level 0
+ *
+ * 5. OVERFLOW PROTECTION: Solidity 0.8+ provides automatic overflow checks.
+ *    `unchecked` blocks in modules are intentional optimizations for safe ops.
+ *
+ * 6. MAPPING COLLISION: Mappings use keccak256(key . slot), making collisions
+ *    computationally infeasible. The traitBurnTicket nested mapping uses
+ *    keccak256(traitId . keccak256(level . slot)) for data location.
+ *
+ * UPGRADE NOTES
+ * -----------------------------------------------------------------------------
+ * This contract is NOT upgradeable (no proxy pattern). However, if future
+ * versions are deployed, they MUST preserve this exact layout to allow
+ * state migration or fork compatibility. Document any additions here.
+ *
+ * VARIABLE DOCUMENTATION
+ * -----------------------------------------------------------------------------
+ * See inline comments for each variable group below.
+ */
+
+interface IDegenerusQuestView {
+    function playerQuestStates(
+        address player
+    )
+        external
+        view
+        returns (
+            uint32 streak,
+            uint32 lastCompletedDay,
+            uint128[2] memory progress,
+            bool[2] memory completed
+        );
+}
+abstract contract DegenerusGameStorage {
+    // =========================================================================
+    // CONSTANTS
+    // =========================================================================
+
+    IDegenerusCoin internal constant coin =
+        IDegenerusCoin(ContractAddresses.COIN);
+    IBurnieCoinflip internal constant coinflip =
+        IBurnieCoinflip(ContractAddresses.COINFLIP);
+    IDegenerusQuests internal constant quests =
+        IDegenerusQuests(ContractAddresses.QUESTS);
+    IDegenerusQuestView internal constant questView =
+        IDegenerusQuestView(ContractAddresses.QUESTS);
+    IDegenerusAffiliate internal constant affiliate =
+        IDegenerusAffiliate(ContractAddresses.AFFILIATE);
+    IStakedDegenerusStonk internal constant dgnrs =
+        IStakedDegenerusStonk(ContractAddresses.SDGNRS);
+
+    /// @dev Deity pass activity bonus (+80% in basis points).
+    uint16 internal constant DEITY_PASS_ACTIVITY_BONUS_BPS = 8000;
+
+    /// @dev Floor streak points for active pass holders (50 = 50%).
+    uint16 internal constant PASS_STREAK_FLOOR_POINTS = 50;
+
+    /// @dev Floor mint count points for active pass holders (25 = 25%).
+    uint16 internal constant PASS_MINT_COUNT_FLOOR_POINTS = 25;
+
+    /// @dev Conversion factor for BURNIE token amounts.
+    ///      BURNIE uses 18 decimals, so 1000 BURNIE = 1e21 base units.
+    ///      Used in price calculations: price / PRICE_COIN_UNIT = BURNIE per mint.
+    uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
+
+    /// @dev Scale factor for fractional ticket calculations (2 decimal places).
+    ///      100 means 1 ticket = 100 scaled units.
+    uint256 internal constant TICKET_SCALE = 100;
+
+    /// @dev ETH threshold for whale pass claim eligibility from lootbox wins.
+    uint256 internal constant LOOTBOX_CLAIM_THRESHOLD = 5 ether;
+
+    /// @dev Bootstrap value for prize pool target at level 1 (before any level completes).
+    ///      levelPrizePool[0] is initialized to this value conceptually.
+    uint256 internal constant BOOTSTRAP_PRIZE_POOL = 50 ether;
+
+    /// @dev Level at which earlybird DGNRS rewards end (exclusive).
+    uint24 internal constant EARLYBIRD_END_LEVEL = 3;
+
+    /// @dev Total ETH target for earlybird DGNRS emission curve.
+    uint256 internal constant EARLYBIRD_TARGET_ETH = 1_000 ether;
+
+    /// @dev Current-pool daily jackpot percentage is rolled in JackpotModule.
+    ///      Days 1-4 use a random 6%-14% slice of remaining currentPrizePool.
+    ///      Day 5 pays 100% of the remaining currentPrizePool.
+
+    /// @dev Bit mask for ticket queue double-buffer key encoding.
+    ///      Set bit 23 of the uint24 level key to distinguish write/read slots.
+    ///      Max real level: 2^22 - 1 = 4,194,303 (game would take millennia).
+    uint24 internal constant TICKET_SLOT_BIT = 1 << 23;
+
+    /// @dev Bit mask for far-future ticket key encoding.
+    ///      Set bit 22 of the uint24 level key to create a third key space
+    ///      disjoint from both double-buffer slots (bit 23).
+    ///      Far-future = tickets targeting > currentLevel + 5.
+    ///      Three key spaces: Slot0 [0x000000-0x3FFFFF], FF [0x400000-0x7FFFFF],
+    ///      Slot1 [0x800000-0xBFFFFF]. Disjoint for all lvl < 2^22.
+    uint24 internal constant TICKET_FAR_FUTURE_BIT = 1 << 22;
+
+    /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
+    uint32 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 365;
+
+    // =========================================================================
+    // Errors
+    // =========================================================================
+
+    /// @dev Gas-minimal revert signal. Matches codebase convention (DegenerusGame, modules).
+    error E();
+
+    /// @dev Reverts when a permissionless far-future ticket write is attempted during VRF commitment window.
+    error RngLocked();
+
+    // =========================================================================
+    // SLOT 0: Timing, FSM, Counters, Flags, Buffer, Freeze
+    // =========================================================================
+    // These variables pack into a single 32-byte storage slot for gas efficiency.
+    // Order matters: EVM packs from low to high within a slot.
+    // 30/32 bytes used (2 bytes padding).
+
+    /// @dev Game day index when the purchase phase (or deploy) began.
+    ///      Initialized to GameTimeLib.currentDayIndex() in the constructor.
+    ///      Used for death clock, distress mode, future take curve, and gap extension.
+    ///
+    ///      SECURITY: uint32 holds day indices up to ~4.2 billion — effectively unlimited
+    ///      for day-granularity counters.
+    uint32 internal purchaseStartDay;
+
+    /// @dev Monotonically increasing "day" counter derived from block timestamps.
+    ///      Incremented during game progression; used to key RNG words and track
+    ///      daily jackpot eligibility. NOT tied to calendar days — it's game-relative.
+    ///
+    ///      SECURITY: uint32 holds day indices up to ~4.2 billion — effectively unlimited
+    ///      for day-granularity counters.
+    uint32 internal dailyIdx;
+
+    /// @dev Timestamp when the last VRF (Chainlink) request was submitted.
+    ///      Used for timeout detection: rngRequestTime != 0 means a VRF request
+    ///      is in-flight or awaiting processing.
+    ///
+    ///      SECURITY: Timeout mechanism prevents permanent lockup if VRF fails.
+    ///      Note: rngLockedFlag (separate bool) controls the daily RNG lock state.
+    uint48 internal rngRequestTime;
+
+    /// @notice Current jackpot level (starts at 0). Purchase phase targets level + 1.
+    ///
+    ///      SECURITY: uint24 supports ~16M levels — game would take millennia
+    ///      to overflow at realistic progression rates.
+    uint24 public level = 0;
+
+    /// @notice Current game phase flag.
+    ///      false = purchase phase
+    ///      true  = jackpot phase
+    ///
+    ///      SECURITY: Phase transitions are guarded by advanceGame flow.
+    bool internal jackpotPhaseFlag;
+
+    // =========================================================================
+    // EVM SLOT 0 (continued): Counters and Flags
+    // =========================================================================
+
+    /// @dev Count of jackpots processed within the current level.
+    ///      Capped at 5 (JACKPOT_LEVEL_CAP in JackpotModule); triggers level
+    ///      advancement when reached. Reset at level start.
+    ///
+    ///      SECURITY: uint8 is sufficient (max 255, only need 0-5).
+    uint8 internal jackpotCounter;
+
+    /// @dev True once the prize target is met for current level.
+    ///      When true, next tick skips normal daily/jackpot prep and proceeds
+    ///      to jackpot window. Allows early level completion on high activity.
+    bool internal lastPurchaseDay;
+
+    /// @dev Latch to hold decimator window open until RNG is requested.
+    ///      Opens at jackpot phase start for levels 4, 14, 24... (not 94) or 99, 199...
+    ///      Closes when RNG requested during lastPurchaseDay at resolution levels.
+    bool internal decWindowOpen;
+
+    /// @dev True when daily RNG is locked (jackpot resolution in progress).
+    ///      Set when daily VRF is requested, cleared when daily processing completes.
+    ///      Mid-day lootbox RNG does NOT set this flag.
+    ///      Used to block burns/opens during jackpot resolution window.
+    bool internal rngLockedFlag;
+
+    /// @dev True while jackpot→purchase transition housekeeping is in progress.
+    bool internal phaseTransitionActive;
+
+    /// @dev True once gameover has been triggered (terminal state).
+    bool public gameOver;
+
+    /// @dev True when daily jackpot ETH phase completed but coin+tickets phase pending.
+    ///      Gas optimization: splits daily jackpot into multiple advanceGame calls to
+    ///      stay under 15M gas block limit. Cleared after coin+ticket distribution.
+    bool internal dailyJackpotCoinTicketsPending;
+
+    /// @dev Jackpot compression tier: 0=normal (5d), 1=compressed (3d), 2=turbo (1d).
+    ///      Set when purchase-phase target is met quickly, signaling high player interest.
+    ///      Turbo (2): target met within 1 day — entire jackpot in 1 physical day.
+    ///      Compressed (1): target met within 3 days — 5 logical days in 3 physical.
+    ///      Cleared at phase end.
+    uint8 internal compressedJackpotFlag;
+
+    /// @dev True when the read slot has been fully drained (all tickets processed).
+    ///      Gate for RNG requests and jackpot logic in advanceGame daily path.
+    ///
+    ///      SECURITY: Must be set to true before any jackpot/phase logic executes.
+    ///      Reset to false on every queue slot swap.
+    bool internal ticketsFullyProcessed;
+
+    /// @dev True when drip projection shows futurePool cannot cover nextPool deficit.
+    ///      Evaluated in advanceGame at L10+ purchase-phase days.
+    ///      When active: BURNIE ticket purchases revert, BURNIE lootbox current-level
+    ///      tickets redirect to far-future key space.
+    ///      Cleared when: drip re-covers deficit, lastPurchaseDay is set, or phase transition.
+    bool internal gameOverPossible;
+
+    // EVM SLOT 0 (continued): Double-Buffer + Freeze (moved from slot 1)
+
+    /// @dev Active write buffer toggle for ticket queue double-buffering.
+    ///      Toggled via negation (`ticketWriteSlot = !ticketWriteSlot`) during queue slot swaps.
+    ///      Write path uses this value; read path uses the opposite.
+    ///
+    ///      SECURITY: bool toggle via negation. Only values false/true are valid.
+    bool internal ticketWriteSlot;
+
+    /// @dev True when purchase revenue redirects to pending accumulators.
+    ///      Set at daily RNG request time; cleared by _unfreezePool().
+    ///
+    ///      SECURITY: Persists across jackpot phase days. All 5 jackpot payouts
+    ///      use pre-freeze pool values. _unfreezePool is the single control point.
+    bool internal prizePoolFrozen;
+
+    // =========================================================================
+    // EVM SLOT 1: Prize Pools
+    // =========================================================================
+
+    /// @dev Active prize pool for the current level.
+    ///      Accumulated from mint fees and distributed via jackpots.
+    ///      Packed into slot 1 as uint128 (max ~3.4e20 ETH, far exceeds total supply).
+    ///      Access through _getCurrentPrizePool()/_setCurrentPrizePool() helpers.
+    uint128 internal currentPrizePool;
+
+    /// @dev Aggregate ETH liability across all claimableWinnings entries.
+    ///      Used for solvency checks: game must hold >= claimablePool ETH.
+    ///
+    ///      INVARIANT: claimablePool >= sum(claimableWinnings[*])
+    ///      Maintained by crediting/debiting both in tandem.
+    ///      NOTE: During decimator settlement, the full pool is reserved in claimablePool
+    ///      before individual claims are credited, temporarily breaking equality.
+    ///
+    ///      uint128 max ~3.4e20 ETH — far exceeds total ETH supply.
+    ///      Packed into slot 1 alongside currentPrizePool.
+    uint128 internal claimablePool;
+
+    // =========================================================================
+    // SLOT 2+: Full-Width Balances and Pools
+    // =========================================================================
+    // Each uint256 occupies its own 32-byte slot. These track ETH/token flows.
+
+    /// @dev Packed live prize pools: [128:256] futurePrizePool | [0:128] nextPrizePool
+    ///      uint128 max ~= 3.4e20 ETH -- far exceeds total ETH supply.
+    ///      Saves 1 SSTORE on every purchase (both written together).
+    ///
+    ///      SECURITY: All access through _getPrizePools()/_setPrizePools() helpers.
+    ///      Direct reads of this variable will get corrupted data.
+    uint256 internal prizePoolsPacked;
+
+    /// @dev Latest VRF random word, or 0 if a request is pending.
+    ///      Written by VRF callback; consumed by game logic for randomness.
+    ///
+    ///      SECURITY: 0 indicates pending state. Game logic checks for non-zero.
+    uint256 internal rngWordCurrent;
+
+    /// @dev Last VRF request ID, used to match fulfillment callbacks.
+    ///      Prevents processing stale or mismatched VRF responses.
+    ///
+    ///      SECURITY: Request ID matching prevents replay attacks on RNG.
+    uint256 internal vrfRequestId;
+
+    /// @dev Number of reverse flips purchased against current RNG word.
+    ///      Tracks flip activity for jackpot sizing adjustments.
+    uint256 internal totalFlipReversals;
+
+    /// @dev Packed daily jackpot ticket data for two-phase execution.
+    ///      Layout: [counterStep (8 bits @ 0)] [dailyTicketUnits (64 bits @ 8)]
+    ///              [carryoverTicketUnits (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
+    ///      Set during ETH phase, consumed during coin+ticket phase.
+    ///      Gas optimization: allows splitting daily jackpot across multiple advanceGame calls.
+    uint256 internal dailyTicketBudgetsPacked;
+
+    // =========================================================================
+    // Token State and Jackpot Mechanics
+    // =========================================================================
+
+    /// @dev ETH claimable by players from jackpot winnings.
+    ///      Credited by jackpot logic; withdrawn via claim function.
+    ///
+    ///      SECURITY: Pull pattern — players withdraw their own funds.
+    ///      Prevents reentrancy by separating credit from transfer.
+    mapping(address => uint256) internal claimableWinnings;
+
+    /// @dev Nested mapping: level -> trait ID (0-255) -> array of ticket holders.
+    ///      Used for jackpot winner selection: random index into trait's array.
+    ///
+    ///      STRUCTURE: traitBurnTicket[level][traitId] = address[]
+    ///      Each burn adds the burner's address, allowing duplicate entries
+    ///      (more burns = more tickets = higher win probability).
+    ///
+    ///      STORAGE: Slot for mapping root, then:
+    ///        - keccak256(level . slot) gives the 256-element array of arrays
+    ///        - Each inner array has length at its slot, data at keccak256(slot)
+    ///
+    ///      SECURITY: Array growth bounded by total ticket supply per level.
+    mapping(uint24 => address[][256]) internal traitBurnTicket;
+
+    /// @dev Bit-packed mint history per player.
+    ///      Layout defined by constants in BitPackingLib and MintStreakUtils.
+    ///      Tracks mint counts, bonuses, eligibility flags, deity pass, and affiliate bonus cache.
+    ///      Single SLOAD/SSTORE for all mint-related player data.
+    ///
+    ///      SECURITY: Packing reduces gas and storage footprint.
+    ///      Bit manipulation requires careful masking (done via BitPackingLib shifts and masks).
+    mapping(address => uint256) internal mintPacked_;
+
+    // =========================================================================
+    // RNG History
+    // =========================================================================
+
+    /// @dev VRF random words keyed by dailyIdx.
+    ///      0 means "not yet recorded" (no request fulfilled for that day).
+    ///      Historical words enable verifiable replay of past randomness.
+    ///
+    ///      SECURITY: Immutable once written; provides audit trail for RNG.
+    mapping(uint32 => uint256) internal rngWordByDay;
+
+    // =========================================================================
+    // Future Mint Awards
+    // =========================================================================
+
+    /// @dev Packed pending accumulators for purchase revenue during prize pool freeze.
+    ///      [128:256] futurePrizePoolPending (uint128) | [0:128] nextPrizePoolPending (uint128)
+    ///      Accumulated while prizePoolFrozen == true; applied atomically by _unfreezePool().
+    ///
+    ///      SECURITY: Zeroed at freeze start (if not already frozen) and at unfreeze.
+    ///      During multi-day jackpot phase, accumulators grow across all 5 days.
+    uint256 internal prizePoolPendingPacked;
+
+    /// @dev Queue of players with tickets (purchase/burn sources) per level.
+    ///      All tickets (purchases, lootbox rewards, etc.) queue here.
+    ///
+    ///      PROCESSING SCHEDULE:
+    ///      - Current level tickets: Processed continuously during advanceGame (each call)
+    ///      - Next level tickets: Activated at END of purchase phase (before pool consolidation)
+    ///
+    ///      EXAMPLE (Level 5 purchase phase):
+    ///      - lvlOffset=0 → ticketQueue[5] → Processed continuously throughout level 5
+    ///      - lvlOffset=1 → ticketQueue[6] → Activated at end of purchase phase (before pool consolidation)
+    ///
+    ///      This allows lootbox tickets to participate in early-bird jackpots at jackpot phase start.
+    mapping(uint24 => address[]) internal ticketQueue;
+
+    /// @dev Packed owed tickets per level per player.
+    ///      Layout: [32 bits owed][8 bits remainder].
+    mapping(uint24 => mapping(address => uint40)) internal ticketsOwedPacked;
+
+    /// @dev Cursor for ticket queue processing (dual-purpose).
+    ///      - SETUP phase: tracks near-future level progress (1-4), reset to 0 when done.
+    ///      - PURCHASE phase: tracks mint batch progress through ticketQueue.
+    ///      - JACKPOT phase: tracks jackpot batch progress through ticketQueue.
+    ///      Phases are mutually exclusive, so cursor is reused safely.
+    uint32 internal ticketCursor;
+
+    /// @dev Current level being processed in ticket queue operations.
+    uint24 internal ticketLevel;
+
+    // =========================================================================
+    // =========================================================================
+    // Ticket Queue Helpers
+    // =========================================================================
+
+    /// @notice Emitted when traits are generated for a player's ticket batch.
+    ///         Records the exact parameters needed to replay trait generation off-chain.
+    event TraitsGenerated(
+        address indexed player,
+        uint24 indexed level,
+        uint32 queueIdx,
+        uint32 startIndex,
+        uint32 count,
+        uint256 entropy
+    );
+
+    /// @notice Emitted when whole tickets are queued for a buyer at a specific level.
+    event TicketsQueued(
+        address indexed buyer,
+        uint24 targetLevel,
+        uint32 quantity
+    );
+
+    /// @notice Emitted when scaled (fractional) tickets are queued for a buyer.
+    event TicketsQueuedScaled(
+        address indexed buyer,
+        uint24 targetLevel,
+        uint32 quantityScaled
+    );
+
+    /// @notice Emitted when tickets are queued across a contiguous range of levels.
+    event TicketsQueuedRange(
+        address indexed buyer,
+        uint24 startLevel,
+        uint24 numLevels,
+        uint32 ticketsPerLevel
+    );
+
+    /// @notice Emitted when a deity pass is purchased.
+    event DeityPassPurchased(
+        address indexed buyer,
+        uint8 symbolId,
+        uint256 price,
+        uint24 level
+    );
+
+    /// @notice Emitted when game-over drain processes terminal jackpots.
+    event GameOverDrained(
+        uint24 level,
+        uint256 available,
+        uint256 claimablePool
+    );
+
+    /// @notice Emitted when final sweep forfeits unclaimed winnings 30 days post-gameover.
+    event FinalSwept(uint256 totalFunds);
+
+    /// @notice Emitted when a boon is consumed by a player.
+    event BoonConsumed(address indexed player, uint8 boonType, uint16 boostBps);
+
+    /// @notice Emitted when admin swaps game ETH for stETH.
+    event AdminSwapEthForStEth(address indexed recipient, uint256 amount);
+
+    /// @notice Emitted when admin stakes game ETH into Lido stETH.
+    event AdminStakeEthForStEth(uint256 amount);
+
+    /// @dev True when gameover liveness guard would fire within ~1 day (day-granularity).
+    ///      Used to activate distress-mode lootbox behaviour: 100% nextpool allocation
+    ///      and 25% ticket bonus on the distress-bought portion.
+    function _isDistressMode() internal view returns (bool) {
+        if (gameOver) return false;
+        uint32 psd = purchaseStartDay;
+        uint32 currentDay = _simulatedDayIndex();
+        if (level == 0) {
+            // Distress fires on the final day before the liveness guard would trigger.
+            return currentDay >= psd + _DEPLOY_IDLE_TIMEOUT_DAYS;
+        }
+        return currentDay >= psd + 120;
+    }
+
+    /// @dev Queues whole tickets for a buyer at a target level.
+    ///      If buyer has no existing tickets at that level, adds them to the queue.
+    ///      Caps at uint32 max to prevent overflow.
+    /// @param buyer Address to receive tickets.
+    /// @param targetLevel Level for which tickets are queued.
+    /// @param quantity Number of tickets to queue.
+    function _queueTickets(
+        address buyer,
+        uint24 targetLevel,
+        uint32 quantity,
+        bool rngBypass
+    ) internal {
+        if (quantity == 0) return;
+        emit TicketsQueued(buyer, targetLevel, quantity);
+        bool isFarFuture = targetLevel > level + 5;
+        if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
+        uint24 wk = isFarFuture
+            ? _tqFarFutureKey(targetLevel)
+            : _tqWriteKey(targetLevel);
+        uint40 packed = ticketsOwedPacked[wk][buyer];
+        uint32 owed = uint32(packed >> 8);
+        uint8 rem = uint8(packed);
+        if (owed == 0 && rem == 0) {
+            ticketQueue[wk].push(buyer);
+        }
+        unchecked {
+            owed += quantity;
+        }
+        ticketsOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
+    }
+
+    /// @dev Queues scaled tickets (with 2 decimal places) for fractional ticket purchases.
+    ///      Handles remainder accumulation and promotes to whole tickets when remainder >= TICKET_SCALE.
+    /// @param buyer Address to receive tickets.
+    /// @param targetLevel Level for which tickets are queued.
+    /// @param quantityScaled Scaled ticket amount (multiply by 100 for whole tickets).
+    function _queueTicketsScaled(
+        address buyer,
+        uint24 targetLevel,
+        uint32 quantityScaled,
+        bool rngBypass
+    ) internal {
+        if (quantityScaled == 0) return;
+        emit TicketsQueuedScaled(buyer, targetLevel, quantityScaled);
+        bool isFarFuture = targetLevel > level + 5;
+        if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
+        uint24 wk = isFarFuture
+            ? _tqFarFutureKey(targetLevel)
+            : _tqWriteKey(targetLevel);
+        uint40 packed = ticketsOwedPacked[wk][buyer];
+        uint32 owed = uint32(packed >> 8);
+        uint8 rem = uint8(packed);
+        if (owed == 0 && rem == 0) {
+            ticketQueue[wk].push(buyer);
+        }
+
+        uint32 whole = uint32(uint256(quantityScaled) / TICKET_SCALE);
+        uint8 frac = uint8(uint256(quantityScaled) % TICKET_SCALE);
+        unchecked {
+            owed += whole;
+        }
+
+        if (frac != 0) {
+            uint16 newRem;
+            unchecked {
+                newRem = uint16(rem) + uint16(frac);
+            }
+            if (newRem >= TICKET_SCALE) {
+                unchecked {
+                    owed += 1;
+                }
+                newRem -= uint16(TICKET_SCALE);
+            }
+            rem = uint8(newRem);
+        }
+        uint40 newPacked = (uint40(owed) << 8) | uint40(rem);
+        if (newPacked != packed) {
+            ticketsOwedPacked[wk][buyer] = newPacked;
+        }
+    }
+
+    /// @dev Queues tickets for a contiguous range of levels with same quantity per level.
+    ///      Optimized for whale pass claims to minimize loop overhead.
+    /// @param buyer Address to receive tickets.
+    /// @param startLevel First level in range (inclusive).
+    /// @param numLevels Number of consecutive levels.
+    /// @param ticketsPerLevel Tickets to award per level.
+    function _queueTicketRange(
+        address buyer,
+        uint24 startLevel,
+        uint24 numLevels,
+        uint32 ticketsPerLevel,
+        bool rngBypass
+    ) internal {
+        emit TicketsQueuedRange(buyer, startLevel, numLevels, ticketsPerLevel);
+        uint24 currentLevel = level; // cache outside loop to avoid repeated SLOAD
+        uint24 lvl = startLevel;
+        for (uint24 i = 0; i < numLevels; ) {
+            bool isFarFuture = lvl > currentLevel + 5;
+            if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
+            uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
+            uint40 packed = ticketsOwedPacked[wk][buyer];
+            uint32 owed = uint32(packed >> 8);
+            uint8 rem = uint8(packed);
+            if (owed == 0 && rem == 0) {
+                ticketQueue[wk].push(buyer);
+            }
+            unchecked {
+                owed += ticketsPerLevel;
+            }
+            ticketsOwedPacked[wk][buyer] = (uint40(owed) << 8) | uint40(rem);
+
+            unchecked {
+                ++lvl;
+                ++i;
+            }
+        }
+    }
+
+    /// @dev Queues lootbox tickets with 2-decimal precision (remainder rolled at assignment).
+    /// @param buyer Address to receive tickets.
+    /// @param targetLevel Level for which tickets are queued.
+    /// @param quantityScaled Scaled ticket amount (multiply by 100 for whole tickets).
+    function _queueLootboxTickets(
+        address buyer,
+        uint24 targetLevel,
+        uint256 quantityScaled,
+        bool rngBypass
+    ) internal {
+        if (quantityScaled == 0) return;
+        _queueTicketsScaled(
+            buyer,
+            targetLevel,
+            uint32(quantityScaled),
+            rngBypass
+        );
+    }
+
+    // =========================================================================
+    // Packed Prize Pool Helpers
+    // =========================================================================
+
+    function _setPrizePools(uint128 next, uint128 future) internal {
+        prizePoolsPacked = (uint256(future) << 128) | uint256(next);
+    }
+
+    function _getPrizePools()
+        internal
+        view
+        returns (uint128 next, uint128 future)
+    {
+        uint256 packed = prizePoolsPacked;
+        next = uint128(packed);
+        future = uint128(packed >> 128);
+    }
+
+    function _setPendingPools(uint128 next, uint128 future) internal {
+        prizePoolPendingPacked = (uint256(future) << 128) | uint256(next);
+    }
+
+    function _getPendingPools()
+        internal
+        view
+        returns (uint128 next, uint128 future)
+    {
+        uint256 packed = prizePoolPendingPacked;
+        next = uint128(packed);
+        future = uint128(packed >> 128);
+    }
+
+    // =========================================================================
+    // Ticket Queue Key Encoding
+    // =========================================================================
+
+    /// @dev Compute the ticket queue key for the write slot.
+    ///      Slot 0 uses raw level, slot 1 sets bit 23.
+    function _tqWriteKey(uint24 lvl) internal view returns (uint24) {
+        return ticketWriteSlot ? lvl | TICKET_SLOT_BIT : lvl;
+    }
+
+    /// @dev Compute the ticket queue key for the read slot (opposite of write).
+    function _tqReadKey(uint24 lvl) internal view returns (uint24) {
+        return !ticketWriteSlot ? lvl | TICKET_SLOT_BIT : lvl;
+    }
+
+    /// @dev Compute the ticket queue key for the far-future key space.
+    ///      Always sets bit 22, independent of ticketWriteSlot.
+    ///      Far-future tickets are not double-buffered; they persist until
+    ///      drained by processFutureTicketBatch.
+    function _tqFarFutureKey(uint24 lvl) internal pure returns (uint24) {
+        return lvl | TICKET_FAR_FUTURE_BIT;
+    }
+
+    // =========================================================================
+    // Queue Swap and Prize Pool Freeze
+    // =========================================================================
+
+    /// @dev Swap the active ticket queue buffer. Reverts if read slot is not drained.
+    ///      Resets ticketsFullyProcessed to false for the new read slot.
+    function _swapTicketSlot(uint24 purchaseLevel) internal {
+        uint24 rk = _tqReadKey(purchaseLevel);
+        if (ticketQueue[rk].length != 0) revert E();
+        ticketWriteSlot = !ticketWriteSlot;
+        ticketsFullyProcessed = false;
+    }
+
+    /// @dev Swap queue buffer AND activate prize pool freeze (daily RNG path only).
+    ///      If not already frozen, zeros pending accumulators.
+    ///      If already frozen (jackpot phase), accumulators keep growing.
+    function _swapAndFreeze(uint24 purchaseLevel) internal {
+        _swapTicketSlot(purchaseLevel);
+        if (!prizePoolFrozen) {
+            prizePoolFrozen = true;
+            prizePoolPendingPacked = 0;
+        }
+    }
+
+    /// @dev Apply pending accumulators to live pools and clear freeze.
+    ///      No-op if not currently frozen.
+    function _unfreezePool() internal {
+        if (!prizePoolFrozen) return;
+        (uint128 pNext, uint128 pFuture) = _getPendingPools();
+        (uint128 next, uint128 future) = _getPrizePools();
+        _setPrizePools(next + pNext, future + pFuture);
+        prizePoolPendingPacked = 0;
+        prizePoolFrozen = false;
+    }
+
+    // =========================================================================
+    // Single-Component Prize Pool Accessors
+    // =========================================================================
+
+    /// @dev Returns the next pool component.
+    function _getNextPrizePool() internal view returns (uint256) {
+        (uint128 next, ) = _getPrizePools();
+        return uint256(next);
+    }
+
+    /// @dev Sets only the next pool component.
+    function _setNextPrizePool(uint256 val) internal {
+        (, uint128 future) = _getPrizePools();
+        _setPrizePools(uint128(val), future);
+    }
+
+    /// @dev Returns the future pool component.
+    function _getFuturePrizePool() internal view returns (uint256) {
+        (, uint128 future) = _getPrizePools();
+        return uint256(future);
+    }
+
+    /// @dev Sets only the future pool component.
+    function _setFuturePrizePool(uint256 val) internal {
+        (uint128 next, ) = _getPrizePools();
+        _setPrizePools(next, uint128(val));
+    }
+
+    // =========================================================================
+    // Current Prize Pool Helpers
+    // =========================================================================
+
+    /// @dev Returns the current prize pool value as uint256.
+    ///      Reads the uint128 packed variable and widens to uint256.
+    function _getCurrentPrizePool() internal view returns (uint256) {
+        return uint256(currentPrizePool);
+    }
+
+    /// @dev Sets the current prize pool value.
+    ///      Narrows from uint256 to uint128. Safe because currentPrizePool
+    ///      can never exceed total ETH supply (~1.2e26 wei << uint128 max ~3.4e38 wei).
+    function _setCurrentPrizePool(uint256 val) internal {
+        currentPrizePool = uint128(val);
+    }
+
+    // =========================================================================
+    // Loot Box State & Presale Toggle
+    // =========================================================================
+
+    /// @dev Loot box ETH per RNG index per player (amount may accumulate within an index).
+    ///      Packed: [232 bits: amount] [24 bits: purchase level]
+    ///      Purchase level locked at buy time - if you open late, you lose it.
+    mapping(uint48 => mapping(address => uint256)) internal lootboxEth;
+
+    // =========================================================================
+    // Presale State (packed: 2 variables in 136/256 bits)
+    // =========================================================================
+    //
+    // Layout (LSB -> MSB):
+    //   [bits   0:7]   lootboxPresaleActive   uint8    1 = presale active (starts true)
+    //   [bits  8:135]  lootboxPresaleMintEth  uint128  ETH from regular mints (200 ETH cap)
+
+    /// @dev Packed presale state. Initialized with lootboxPresaleActive = 1.
+    uint256 internal presaleStatePacked = uint256(1);  // lootboxPresaleActive = true
+
+    // ---- presaleState shifts and masks ----
+    uint256 internal constant PS_ACTIVE_SHIFT = 0;
+    uint256 internal constant PS_ACTIVE_MASK = 0xFF;                             // 8 bits
+    uint256 internal constant PS_MINT_ETH_SHIFT = 8;
+    uint256 internal constant PS_MINT_ETH_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;  // 128 bits
+
+    /// @dev Read a field from the packed presale state.
+    function _psRead(uint256 shift, uint256 mask) internal view returns (uint256) {
+        return (presaleStatePacked >> shift) & mask;
+    }
+
+    /// @dev Write a field to the packed presale state.
+    function _psWrite(uint256 shift, uint256 mask, uint256 value) internal {
+        presaleStatePacked = (presaleStatePacked & ~(mask << shift)) | ((value & mask) << shift);
+    }
+
+    // =========================================================================
+    // Game Over State (packed: 3 variables in 64/256 bits)
+    // =========================================================================
+    //
+    // Layout (LSB -> MSB):
+    //   [bits  0:47]  gameOverTime              uint48   Timestamp when gameover triggered (0 = active)
+    //   [bits 48:55]  gameOverFinalJackpotPaid   uint8   1 = final jackpot paid
+    //   [bits 56:63]  finalSwept                 uint8   1 = 30-day sweep executed
+
+    /// @dev Packed game over state. See layout comment above.
+    uint256 internal gameOverStatePacked;
+
+    // ---- gameOverState shifts and masks ----
+    uint256 internal constant GO_TIME_SHIFT = 0;
+    uint256 internal constant GO_TIME_MASK = 0xFFFFFFFFFFFF;     // 48 bits
+    uint256 internal constant GO_JACKPOT_PAID_SHIFT = 48;
+    uint256 internal constant GO_JACKPOT_PAID_MASK = 0xFF;       // 8 bits
+    uint256 internal constant GO_SWEPT_SHIFT = 56;
+    uint256 internal constant GO_SWEPT_MASK = 0xFF;              // 8 bits
+
+    /// @dev Read a field from the packed game over state.
+    function _goRead(uint256 shift, uint256 mask) internal view returns (uint256) {
+        return (gameOverStatePacked >> shift) & mask;
+    }
+
+    /// @dev Write a field to the packed game over state.
+    function _goWrite(uint256 shift, uint256 mask, uint256 value) internal {
+        gameOverStatePacked = (gameOverStatePacked & ~(mask << shift)) | ((value & mask) << shift);
+    }
+
+    // =========================================================================
+    // Whale Pass Claims (Deferred >5 ETH lootboxes)
+    // =========================================================================
+
+    /// @dev Pending whale pass claims from large lootbox wins (>5 ETH).
+    ///      Stores number of half whale passes (100 tickets each = 50 levels × 2 tickets).
+    ///      Unified storage for all deferred lootbox rewards (BAF, jackpot, decimator).
+    mapping(address => uint256) internal whalePassClaims;
+
+    // =========================================================================
+    // Auto-Rebuy + afKing Mode (Packed)
+    // =========================================================================
+
+    /// @dev Packed auto-rebuy/afKing state per player to reduce SLOADs.
+    ///      takeProfit is in wei for ETH auto-rebuy (0 = rebuy all).
+    ///      Note: coinflip auto-rebuy take profit amounts are stored in BurnieCoinflip.
+    struct AutoRebuyState {
+        /// @dev ETH amount to take profit before auto-rebuy (wei). 0 = rebuy all winnings.
+        uint128 takeProfit;
+        /// @dev Level at which afKing mode was activated. Used for lock period calculation. Reset to 0 when deactivated.
+        uint24 afKingActivatedLevel;
+        /// @dev True if auto-rebuy is enabled for this player.
+        bool autoRebuyEnabled;
+        /// @dev True if afKing mode is active (enhanced auto-rebuy with lock period).
+        bool afKingMode;
+    }
+
+    /// @dev Auto-rebuy toggle and afKing mode state (packed into one slot per player).
+    ///      When auto-rebuy is enabled, the remainder (after reserving take profit)
+    ///      is converted to tickets for next level or next+1 (50/50) during jackpot
+    ///      award flow. ETH goes to next prize pool for next-level tickets or to
+    ///      future prize pool for next+1 tickets, and tickets are queued per level.
+    mapping(address => AutoRebuyState) internal autoRebuyState;
+
+    /// @dev Base (pre-boost) lootbox ETH per RNG index per player.
+    ///      Tracks unboosted amounts so boosts apply at purchase time, not open time.
+    mapping(uint48 => mapping(address => uint256)) internal lootboxEthBase;
+
+    // =========================================================================
+    // Operator Approvals
+    // =========================================================================
+
+    /// @dev owner => operator => approved (game-wide delegated control).
+    mapping(address => mapping(address => bool)) internal operatorApprovals;
+
+    // =========================================================================
+    // Affiliate DGNRS Claims
+    // =========================================================================
+
+    /// @dev Per-level prize pool snapshot used for affiliate DGNRS weighting.
+    mapping(uint24 => uint256) internal levelPrizePool;
+
+    /// @dev Per-level per-affiliate claim tracking (true if claimed).
+    mapping(uint24 => mapping(address => bool))
+        internal affiliateDgnrsClaimedBy;
+
+    /// @dev Segregated DGNRS allocation per level (5% of affiliate pool at transition time).
+    ///      Set during level transition in rewardTopAffiliate. Claims draw against this
+    ///      fixed amount instead of the live pool balance, eliminating first-mover advantage.
+    mapping(uint24 => uint256) internal levelDgnrsAllocation;
+
+    /// @dev Cumulative DGNRS claimed per level from the segregated allocation.
+    mapping(uint24 => uint256) internal levelDgnrsClaimed;
+
+    // =========================================================================
+    // Deity Pass (Perma Whale) Grants
+    // =========================================================================
+
+    /// @dev Count of deity passes purchased (excludes grants).
+    mapping(address => uint16) internal deityPassPurchasedCount;
+
+    /// @dev Total ETH paid per buyer for deity passes.
+    mapping(address => uint256) internal deityPassPaidTotal;
+
+    /// @dev List of deity pass owners for iteration.
+    address[] internal deityPassOwners;
+
+    /// @dev Symbol assigned to each deity pass holder (0-31). 0 is valid (Bitcoin).
+    mapping(address => uint8) internal deityPassSymbol;
+
+    /// @dev Reverse lookup: symbol ID (0-31) → current owner address.
+    mapping(uint8 => address) internal deityBySymbol;
+
+    // =========================================================================
+    // DGNRS Earlybird Rewards
+    // =========================================================================
+
+    /// @dev Initial earlybird pool balance snapshot (set on first payout).
+    uint256 internal earlybirdDgnrsPoolStart;
+
+    /// @dev Total purchase ETH counted toward earlybird emission.
+    uint256 internal earlybirdEthIn;
+
+    // =========================================================================
+    // Jackpot ETH Resume State
+    // =========================================================================
+
+    /// @dev Snapshot of ethPool for two-call jackpot ETH distribution.
+    ///      Non-zero means a resume call is pending (largest+solo buckets done,
+    ///      mid buckets remain). Cleared to zero after the resume call completes.
+    uint128 internal resumeEthPool;
+
+    // =========================================================================
+    // Internal Helpers
+    // =========================================================================
+
+    /// @dev Awards earlybird DGNRS tokens via a quadratic emission curve.
+    ///      No-op after _finalizeEarlybird runs (sentinel check).
+    ///      No-op if buyer is zero address, purchaseWei is 0, or earlybird target is reached.
+    /// @param buyer Address to receive DGNRS tokens.
+    /// @param purchaseWei ETH amount spent on this purchase.
+    function _awardEarlybirdDgnrs(
+        address buyer,
+        uint256 purchaseWei
+    ) internal {
+        if (purchaseWei == 0) return;
+        if (buyer == address(0)) return;
+
+        uint256 poolStart = earlybirdDgnrsPoolStart;
+        // uint256.max is the finalization sentinel set by _finalizeEarlybird.
+        // Primary gate: earlybird is over once the level transition fires the finalize hook.
+        if (poolStart == type(uint256).max) return;
+        if (poolStart == 0) {
+            uint256 poolBalance = dgnrs.poolBalance(
+                IStakedDegenerusStonk.Pool.Earlybird
+            );
+            if (poolBalance == 0) return;
+            poolStart = poolBalance;
+            earlybirdDgnrsPoolStart = poolBalance;
+        }
+
+        uint256 totalEth = EARLYBIRD_TARGET_ETH;
+        uint256 ethIn = earlybirdEthIn;
+        if (ethIn >= totalEth) return;
+
+        uint256 remaining = totalEth - ethIn;
+        uint256 delta = purchaseWei > remaining ? remaining : purchaseWei;
+        if (delta == 0) return;
+
+        uint256 nextEthIn = ethIn + delta;
+        uint256 denom = totalEth * totalEth;
+        uint256 totalEth2 = totalEth * 2;
+        uint256 d1 = (ethIn * totalEth2) - (ethIn * ethIn);
+        uint256 d2 = (nextEthIn * totalEth2) - (nextEthIn * nextEthIn);
+        uint256 payout = (poolStart * (d2 - d1)) / denom;
+
+        earlybirdEthIn = nextEthIn;
+        if (payout == 0) return;
+
+        dgnrs.transferFromPool(
+            IStakedDegenerusStonk.Pool.Earlybird,
+            buyer,
+            payout
+        );
+    }
+
+    /// @dev Activates a 10-level pass for a player. Shared logic for lazy pass purchases and awards.
+    ///      Updates mintPacked_ (levelCount +10, frozenUntilLevel, bundleType, lastLevel, day)
+    ///      and queues tickets for the 10-level range.
+    /// @param player Address receiving the pass activation.
+    /// @param ticketStartLevel First level of the 10-level range.
+    /// @param ticketsPerLevel Number of tickets to queue per level.
+    function _activate10LevelPass(
+        address player,
+        uint24 ticketStartLevel,
+        uint32 ticketsPerLevel
+    ) internal {
+        uint256 prevData = mintPacked_[player];
+
+        uint24 frozenUntilLevel = uint24(
+            (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+        uint24 lastLevel = uint24(
+            (prevData >> BitPackingLib.LAST_LEVEL_SHIFT) & BitPackingLib.MASK_24
+        );
+        uint24 levelCount = uint24(
+            (prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+        uint24 baseLevelsToAdd = 10;
+
+        uint24 targetFrozenLevel = ticketStartLevel + 9; // Freeze for 10 levels from pass start
+        uint24 newFrozenLevel = frozenUntilLevel > targetFrozenLevel
+            ? frozenUntilLevel
+            : targetFrozenLevel;
+        uint24 deltaFreeze = newFrozenLevel > frozenUntilLevel
+            ? (newFrozenLevel - frozenUntilLevel)
+            : 0;
+        uint24 levelsToAdd = baseLevelsToAdd;
+        if (levelsToAdd > deltaFreeze) {
+            levelsToAdd = deltaFreeze;
+        }
+
+        uint24 newLevelCount = levelCount + levelsToAdd;
+
+        uint8 currentBundleType = uint8(
+            (prevData >> BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT) & 3
+        );
+        uint24 lastLevelTarget = newFrozenLevel > lastLevel
+            ? newFrozenLevel
+            : lastLevel;
+
+        uint256 data = prevData;
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LEVEL_COUNT_SHIFT,
+            BitPackingLib.MASK_24,
+            newLevelCount
+        );
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
+            BitPackingLib.MASK_24,
+            newFrozenLevel
+        );
+        if (1 >= currentBundleType) {
+            data = BitPackingLib.setPacked(
+                data,
+                BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
+                3,
+                1
+            );
+        }
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LAST_LEVEL_SHIFT,
+            BitPackingLib.MASK_24,
+            lastLevelTarget
+        );
+
+        uint32 day = _currentMintDay();
+        data = _setMintDay(
+            data,
+            day,
+            BitPackingLib.DAY_SHIFT,
+            BitPackingLib.MASK_32
+        );
+
+        mintPacked_[player] = data;
+
+        _queueTicketRange(player, ticketStartLevel, 10, ticketsPerLevel, false);
+    }
+
+    /// @dev Apply whale pass stats (levelCount/freeze/bundleType/lastLevel/day) without queueing tickets.
+    /// @param player Address receiving the whale pass stats.
+    /// @param ticketStartLevel First level of the 100-level range for whale pass tickets.
+    function _applyWhalePassStats(
+        address player,
+        uint24 ticketStartLevel
+    ) internal {
+        uint256 prevData = mintPacked_[player];
+
+        uint24 frozenUntilLevel = uint24(
+            (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+        uint24 levelCount = uint24(
+            (prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) &
+                BitPackingLib.MASK_24
+        );
+
+        // Calculate freeze extension and stat boost (delta-based, no double dipping)
+        uint24 targetFrozenLevel = ticketStartLevel + 99;
+        uint24 newFrozenLevel = frozenUntilLevel > targetFrozenLevel
+            ? frozenUntilLevel
+            : targetFrozenLevel;
+        uint24 deltaFreeze = newFrozenLevel > frozenUntilLevel
+            ? (newFrozenLevel - frozenUntilLevel)
+            : 0;
+        uint24 levelsToAdd = 100;
+        if (levelsToAdd > deltaFreeze) {
+            levelsToAdd = deltaFreeze;
+        }
+
+        uint24 newLevelCount = levelCount + levelsToAdd;
+
+        uint256 data = prevData;
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LEVEL_COUNT_SHIFT,
+            BitPackingLib.MASK_24,
+            newLevelCount
+        );
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
+            BitPackingLib.MASK_24,
+            newFrozenLevel
+        );
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.WHALE_BUNDLE_TYPE_SHIFT,
+            3,
+            3
+        ); // 3 = 100-level bundle
+        data = BitPackingLib.setPacked(
+            data,
+            BitPackingLib.LAST_LEVEL_SHIFT,
+            BitPackingLib.MASK_24,
+            newFrozenLevel
+        );
+
+        uint32 day = _currentMintDay();
+        data = _setMintDay(
+            data,
+            day,
+            BitPackingLib.DAY_SHIFT,
+            BitPackingLib.MASK_32
+        );
+        mintPacked_[player] = data;
+    }
+
+    /// @dev Returns the current day index.
+    function _simulatedDayIndex() internal view returns (uint32) {
+        return GameTimeLib.currentDayIndex();
+    }
+
+    /// @dev Returns the day index for a specific timestamp.
+    function _simulatedDayIndexAt(uint48 ts) internal pure returns (uint32) {
+        return GameTimeLib.currentDayIndexAt(ts);
+    }
+
+    /// @dev Gets the current mint day from dailyIdx or calculates from timestamp.
+    function _currentMintDay() internal view returns (uint32) {
+        uint32 day = dailyIdx;
+        if (day == 0) {
+            day = _simulatedDayIndex();
+        }
+        return day;
+    }
+
+    /// @dev Updates the day field in packed mint data if changed.
+    function _setMintDay(
+        uint256 data,
+        uint32 day,
+        uint256 dayShift,
+        uint256 dayMask
+    ) internal pure returns (uint256) {
+        uint32 prevDay = uint32((data >> dayShift) & dayMask);
+        if (prevDay == day) return data;
+        uint256 clearedDay = data & ~(dayMask << dayShift);
+        return clearedDay | (uint256(day) << dayShift);
+    }
+
+    // =========================================================================
+    // VRF Configuration (moved from DegenerusGame for module access)
+    // =========================================================================
+
+    /// @dev Chainlink VRF V2.5 coordinator contract.
+    ///      Mutable for emergency rotation; see updateVrfCoordinatorAndSub().
+    IVRFCoordinator internal vrfCoordinator;
+
+    /// @dev VRF key hash identifying the oracle and gas lane.
+    ///      Rotatable with coordinator; determines gas price tier.
+    bytes32 internal vrfKeyHash;
+
+    /// @dev VRF subscription ID for LINK billing.
+    ///      Mutable to allow subscription rotation without redeploying.
+    uint256 internal vrfSubscriptionId;
+
+    // =========================================================================
+    // Lootbox RNG Packed Slot (6 variables in 232/256 bits)
+    // =========================================================================
+    //
+    // Layout (LSB -> MSB):
+    //   [bits   0:47]   lootboxRngIndex          uint48   (281T indices)
+    //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
+    //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, max ~18,446 ETH)
+    //   [bits 176:183]  lootboxRngMinLinkBalance  uint8   (whole LINK, 0-255 LINK)
+    //   [bits 184:223]  lootboxRngPendingBurnie  uint40   (scaled /1e18, 1 BURNIE res, max ~1.1T BURNIE)
+    //   [bits 224:231]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
+
+    /// @dev Packed lootbox RNG state. See layout comment above.
+    ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000),
+    ///      lootboxRngMinLinkBalance=14 LINK (whole).
+    uint256 internal lootboxRngPacked =
+        uint256(1)                                  // lootboxRngIndex = 1
+        | (uint256(1000) << 112)                    // lootboxRngThreshold = 1 ether / 1e15 = 1000
+        | (uint256(14) << 176);                     // lootboxRngMinLinkBalance = 14 LINK (whole)
+
+    // ---- lootboxRng shifts and masks ----
+    uint256 internal constant LR_INDEX_SHIFT = 0;
+    uint256 internal constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;                // 48 bits
+    uint256 internal constant LR_PENDING_ETH_SHIFT = 48;
+    uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFFFFFFFF;      // 64 bits
+    uint256 internal constant LR_THRESHOLD_SHIFT = 112;
+    uint256 internal constant LR_THRESHOLD_MASK = 0xFFFFFFFFFFFFFFFF;        // 64 bits
+    uint256 internal constant LR_MIN_LINK_SHIFT = 176;
+    uint256 internal constant LR_MIN_LINK_MASK = 0xFF;                       // 8 bits
+    uint256 internal constant LR_PENDING_BURNIE_SHIFT = 184;
+    uint256 internal constant LR_PENDING_BURNIE_MASK = 0xFFFFFFFFFF;         // 40 bits
+    uint256 internal constant LR_MID_DAY_SHIFT = 224;
+    uint256 internal constant LR_MID_DAY_MASK = 0xFF;                       // 8 bits
+
+    /// @dev Scale factor for ETH/LINK packing (0.001 resolution).
+    uint256 internal constant LR_ETH_SCALE = 1e15;
+    /// @dev Scale factor for BURNIE packing (1 token resolution).
+    uint256 internal constant LR_BURNIE_SCALE = 1e18;
+
+    /// @dev Read a field from the packed lootbox RNG slot.
+    function _lrRead(uint256 shift, uint256 mask) internal view returns (uint256) {
+        return (lootboxRngPacked >> shift) & mask;
+    }
+
+    /// @dev Write a field to the packed lootbox RNG slot.
+    function _lrWrite(uint256 shift, uint256 mask, uint256 value) internal {
+        lootboxRngPacked = (lootboxRngPacked & ~(mask << shift)) | ((value & mask) << shift);
+    }
+
+    /// @dev Pack a wei amount to milli-ETH (divide by 1e15). 0.001 ETH resolution.
+    function _packEthToMilliEth(uint256 wei_) internal pure returns (uint64) {
+        return uint64(wei_ / LR_ETH_SCALE);
+    }
+
+    /// @dev Unpack milli-ETH to wei (multiply by 1e15).
+    function _unpackMilliEthToWei(uint64 milli) internal pure returns (uint256) {
+        return uint256(milli) * LR_ETH_SCALE;
+    }
+
+    /// @dev Pack a wei amount to whole BURNIE (divide by 1e18). 1 BURNIE resolution.
+    function _packBurnieToWhole(uint256 wei_) internal pure returns (uint40) {
+        return uint40(wei_ / LR_BURNIE_SCALE);
+    }
+
+    /// @dev Unpack whole BURNIE to wei (multiply by 1e18).
+    function _unpackWholeBurnieToWei(uint40 whole) internal pure returns (uint256) {
+        return uint256(whole) * LR_BURNIE_SCALE;
+    }
+
+    /// @dev RNG words keyed by lootbox RNG index.
+    mapping(uint48 => uint256) internal lootboxRngWordByIndex;
+
+    /// @dev Lootbox purchase day per RNG index and player.
+    mapping(uint48 => mapping(address => uint32)) internal lootboxDay;
+
+    /// @dev Lootbox base level at purchase time, packed as (level + 1).
+    ///      0 means no lootbox purchased at this index.
+    mapping(uint48 => mapping(address => uint24))
+        internal lootboxBaseLevelPacked;
+
+    /// @dev Lootbox activity score at purchase time, packed as (score + 1).
+    ///      0 means no activity score recorded.
+    mapping(uint48 => mapping(address => uint16)) internal lootboxEvScorePacked;
+
+    // =========================================================================
+    // Lootbox Bonus Tracking & BURNIE Lootboxes
+    // =========================================================================
+
+    /// @dev BURNIE lootbox amounts keyed by lootbox RNG index and player.
+    mapping(uint48 => mapping(address => uint256)) internal lootboxBurnie;
+
+    // =========================================================================
+    // Deity Boon Tracking
+    // =========================================================================
+
+    /// @dev Day when deity's boon slots were assigned.
+    mapping(address => uint32) internal deityBoonDay;
+
+    /// @dev Bitmask of used slots for the current day (bit i = slot i used).
+    mapping(address => uint8) internal deityBoonUsedMask;
+
+    /// @dev Day when recipient last received a deity boon (prevents double-receipt).
+    mapping(address => uint32) internal deityBoonRecipientDay;
+
+    // =========================================================================
+    // Degenerette (Roulette) Bets
+    // =========================================================================
+
+    /// @dev Bets keyed by player and bet id.
+    /// Packed layout (LSB → MSB):
+    /// - [0]        mode (1=full ticket)
+    /// - [1]        isRandom
+    /// - [2..33]    customTicket (packed 4×8-bit quadrants)
+    /// - [34..41]   ticketCount (uint8, used as "spin count" for Degenerette)
+    /// - [42..43]   currency (0=ETH,1=BURNIE,2=unsupported,3=WWXRP)
+    /// - [44..171]  amountPerTicket (uint128)
+    /// - [172..219] RNG index (uint48)
+    /// - [220..235] activity score bps (uint16)
+    /// - [236]      hasCustom
+    mapping(address => mapping(uint64 => uint256)) internal degeneretteBets;
+
+    /// @dev Per-player bet counters for Degenerette.
+    mapping(address => uint64) internal degeneretteBetNonce;
+
+    // =========================================================================
+    // Lootbox EV Multiplier Cap Tracking
+    // =========================================================================
+
+    /// @dev Amount of lootbox ETH that has received EV multiplier benefit per player per level.
+    ///      Capped at 10 ETH per account per level to prevent excessive EV boost exploitation.
+    mapping(address => mapping(uint24 => uint256))
+        internal lootboxEvBenefitUsedByLevel;
+
+    // =========================================================================
+    // Decimator Jackpot State
+    // =========================================================================
+    // Migrated from DegenerusJackpots to consolidate all decimator logic
+    // into the DecimatorModule for cleaner architecture.
+
+    /// @dev Player's decimator burn entry per level.
+    struct DecEntry {
+        /// @notice Total BURNIE burned by player this level (capped at uint192.max).
+        uint192 burn;
+        /// @notice Player's denominator choice (2-12), may improve to lower denom during level.
+        uint8 bucket;
+        /// @notice Deterministic subbucket from hash(player, lvl, bucket), range 0..(bucket-1).
+        uint8 subBucket;
+        /// @notice Claim flag (0 = unclaimed, 1 = claimed).
+        uint8 claimed;
+    }
+
+    /// @dev Snapshot of a decimator jackpot for claim processing.
+    struct DecClaimRound {
+        /// @notice ETH prize pool available for claims.
+        uint256 poolWei;
+        /// @notice VRF random word for lootbox entropy derivation.
+        uint256 rngWord;
+        /// @notice Total qualifying burn across winning subbuckets (denominator for pro-rata).
+        uint232 totalBurn;
+    }
+
+    /// @dev Player decimator entries per level.
+    ///      decBurn[lvl][player] = DecEntry
+    mapping(uint24 => mapping(address => DecEntry)) internal decBurn;
+
+    /// @dev Aggregated burn totals per level/denom/subbucket.
+    ///      decBucketBurnTotal[lvl][denom][sub] = total burn in that subbucket.
+    ///      Array sized [13][13] to allow direct indexing (denom 0-12, sub 0-12).
+    mapping(uint24 => uint256[13][13]) internal decBucketBurnTotal;
+
+    /// @dev Decimator claim round snapshots per level.
+    ///      Claims persist indefinitely — no expiry on prior rounds.
+    mapping(uint24 => DecClaimRound) internal decClaimRounds;
+
+    /// @dev Packed winning subbucket per denominator for a level.
+    ///      4 bits each for denom 2..12 (44 bits total, fits in uint64).
+    ///      Layout: bits 0-3 = denom 2, bits 4-7 = denom 3, etc.
+    mapping(uint24 => uint64) internal decBucketOffsetPacked;
+
+    // =========================================================================
+    // Degenerette Hero Wager Tracking (Daily)
+    // =========================================================================
+
+    /// @dev Daily hero symbol wagers (ETH only), indexed by day.
+    ///      Key: day index (from GameTimeLib). Value: 4 packed uint256s.
+    ///      Each uint256 packs 8 × 32-bit amounts (one per symbol in that quadrant).
+    ///      Amounts stored in units of 1e12 wei (0.000001 ETH) to fit 32 bits
+    ///      (max ~4,295 ETH per symbol per day).
+    mapping(uint32 => uint256[4]) internal dailyHeroWagers;
+
+    // =========================================================================
+    // Degenerette Per-Player Per-Level ETH Wagered
+    // =========================================================================
+
+    /// @dev Total ETH wagered on degenerette per player per level (in wei).
+    mapping(address => mapping(uint24 => uint256))
+        internal playerDegeneretteEthWagered;
+
+    /// @dev Top degenerette player per level.
+    ///      Packed: [96 bits: amount in 1e12 units] [160 bits: address]
+    mapping(uint24 => uint256) internal topDegeneretteByLevel;
+
+    // =========================================================================
+    // Distress-Mode Lootbox Tracking
+    // =========================================================================
+
+    /// @dev ETH portion of a lootbox purchased during distress mode (final 6 hours
+    ///      before gameover liveness guard). Used at open time to apply a 25% ticket
+    ///      bonus proportional to the distress fraction of the total lootbox value.
+    mapping(uint48 => mapping(address => uint256)) internal lootboxDistressEth;
+
+    // =========================================================================
+    // Segregated Yield Accumulator
+    // =========================================================================
+
+    /// @dev Segregated stETH yield accumulator.
+    ///      Collects 46% of yield surplus each level transition.
+    ///      x00 milestones: 50% to currentPrizePool, 50% retained as terminal insurance.
+    ///      INVARIANT: counted as obligation in yield surplus calculation.
+    uint256 internal yieldAccumulator;
+
+    // =========================================================================
+    // Century (x00) Ticket Bonus Tracking
+    // =========================================================================
+
+    /// @dev The x00 level the centuryBonusUsed mapping applies to.
+    ///      When targetLevel differs, all per-player values are stale (treated as 0).
+    uint24 internal centuryBonusLevel;
+
+    /// @dev Bonus entries awarded per player at the current x00 level.
+    ///      Used to enforce the 20 ETH cap across multiple purchases.
+    mapping(address => uint256) internal centuryBonusUsed;
+
+    // =========================================================================
+    // VRF Liveness Timestamp (Governance)
+    // =========================================================================
+
+    /// @dev Timestamp of the last successfully processed VRF word.
+    ///      Used by governance to detect VRF stalls (time-based vs day-gap-based).
+    ///      Initialized in wireVrf(), updated in _applyDailyRng().
+    uint48 internal lastVrfProcessedTimestamp;
+
+    // =========================================================================
+    // Terminal Decimator (Always-Open Death Bet)
+    // =========================================================================
+
+    /// @dev Per-player terminal decimator entry. Packed into a single 256-bit slot (232/256 bits).
+    ///      totalBurn: pre-time-multiplier cumulative burn (capped at DECIMATOR_MULTIPLIER_CAP).
+    ///      weightedBurn: post-time-multiplier cumulative burn (used for claim share calculation).
+    ///      bucket: bucket denominator (2-12), computed from activity score using lvl 100 rules.
+    ///      subBucket: deterministic from keccak256(player, level, bucket).
+    ///      burnLevel: which level this entry belongs to (stale detection for lazy reset).
+    struct TerminalDecEntry {
+        uint80 totalBurn;
+        uint88 weightedBurn;
+        uint8 bucket;
+        uint8 subBucket;
+        uint48 burnLevel;
+    }
+    mapping(address => TerminalDecEntry) internal terminalDecEntries;
+
+    /// @dev Per-bucket aggregates for terminal decimator.
+    ///      Key: keccak256(abi.encode(level, denom, subBucket)) -> total weighted burn.
+    mapping(bytes32 => uint256) internal terminalDecBucketBurnTotal;
+
+    /// @dev Resolution snapshot for terminal decimator claims (set at GAMEOVER).
+    ///      Packed into a single 256-bit slot (248/256 bits).
+    ///      No rngWord needed — claims are 100% ETH post-GAMEOVER (auto-rebuy skipped).
+    struct TerminalDecClaimRound {
+        uint24 lvl;
+        uint96 poolWei;
+        uint128 totalBurn;
+    }
+    TerminalDecClaimRound internal lastTerminalDecClaimRound;
+
+    // =========================================================================
+    // Boon Packed Storage (replaces 29 per-player boon mappings above)
+    // =========================================================================
+
+    /// @dev Packed boon state for a single player. 2 storage slots.
+    ///
+    /// Slot 0 (256 bits):
+    ///   [0-23]    coinflipDay          uint24   Day coinflip boon was awarded
+    ///   [24-47]   deityCoinflipDay     uint24   Deity-source day for coinflip boon
+    ///   [48-55]   coinflipTier         uint8    0=none, 1=5%, 2=10%, 3=25%
+    ///   [56-79]   lootboxBoostDay      uint24   Day lootbox boost was awarded
+    ///   [80-103]  deityLootboxDay      uint24   Deity-source day for lootbox boost
+    ///   [104-111] lootboxBoostTier     uint8    0=none, 1=5%, 2=15%, 3=25%
+    ///   [112-135] purchaseDay          uint24   Day purchase boost was awarded
+    ///   [136-159] deityPurchaseDay     uint24   Deity-source day for purchase boost
+    ///   [160-167] purchaseTier         uint8    0=none, 1=5%, 2=15%, 3=25%
+    ///   [168-175] decimatorTier        uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///   [176-199] deityDecimatorDay    uint24   Deity-source day for decimator
+    ///   [200-223] whaleDay             uint24   Day whale boon was awarded
+    ///   [224-247] deityWhaleDay        uint24   Deity-source day for whale boon
+    ///   [248-255] whaleTier            uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///
+    /// Slot 1 (256 bits, using 184):
+    ///   [0-23]    activityPending      uint24   Pending activity bonus levels
+    ///   [24-47]   activityDay          uint24   Day activity boon was awarded
+    ///   [48-71]   deityActivityDay     uint24   Deity-source day for activity boon
+    ///   [72-79]   deityPassTier        uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///   [80-103]  deityPassDay         uint24   Day deity pass boon was awarded
+    ///   [104-127] deityDeityPassDay    uint24   Deity-granted deity pass boon day
+    ///   [128-151] lazyPassDay          uint24   Day lazy pass boon was awarded
+    ///   [152-175] deityLazyPassDay     uint24   Deity-source day for lazy pass boon
+    ///   [176-183] lazyPassTier         uint8    0=none, 1=10%, 2=25%, 3=50%
+    ///   [184-255] (unused, 72 bits)
+    struct BoonPacked {
+        uint256 slot0;
+        uint256 slot1;
+    }
+
+    /// @dev Per-player packed boon state. Replaces the 29 individual boon mappings
+    ///      (slots 25-41, 72-82, 85-87, 93-95) which remain as slot placeholders.
+    mapping(address => BoonPacked) internal boonPacked;
+
+    // ---- Slot 0 shifts ----
+    uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
+    uint256 internal constant BP_DEITY_COINFLIP_DAY_SHIFT = 24;
+    uint256 internal constant BP_COINFLIP_TIER_SHIFT = 48;
+    uint256 internal constant BP_LOOTBOX_DAY_SHIFT = 56;
+    uint256 internal constant BP_DEITY_LOOTBOX_DAY_SHIFT = 80;
+    uint256 internal constant BP_LOOTBOX_TIER_SHIFT = 104;
+    uint256 internal constant BP_PURCHASE_DAY_SHIFT = 112;
+    uint256 internal constant BP_DEITY_PURCHASE_DAY_SHIFT = 136;
+    uint256 internal constant BP_PURCHASE_TIER_SHIFT = 160;
+    uint256 internal constant BP_DECIMATOR_TIER_SHIFT = 168;
+    uint256 internal constant BP_DEITY_DECIMATOR_DAY_SHIFT = 176;
+    uint256 internal constant BP_WHALE_DAY_SHIFT = 200;
+    uint256 internal constant BP_DEITY_WHALE_DAY_SHIFT = 224;
+    uint256 internal constant BP_WHALE_TIER_SHIFT = 248;
+
+    // ---- Slot 1 shifts ----
+    uint256 internal constant BP_ACTIVITY_PENDING_SHIFT = 0;
+    uint256 internal constant BP_ACTIVITY_DAY_SHIFT = 24;
+    uint256 internal constant BP_DEITY_ACTIVITY_DAY_SHIFT = 48;
+    uint256 internal constant BP_DEITY_PASS_TIER_SHIFT = 72;
+    uint256 internal constant BP_DEITY_PASS_DAY_SHIFT = 80;
+    uint256 internal constant BP_DEITY_DEITY_PASS_DAY_SHIFT = 104;
+    uint256 internal constant BP_LAZY_PASS_DAY_SHIFT = 128;
+    uint256 internal constant BP_DEITY_LAZY_PASS_DAY_SHIFT = 152;
+    uint256 internal constant BP_LAZY_PASS_TIER_SHIFT = 176;
+
+    // ---- Masks ----
+    uint256 internal constant BP_MASK_24 = 0xFFFFFF;
+    uint256 internal constant BP_MASK_8 = 0xFF;
+
+    // ---- Clear masks for boon categories (slot 0) ----
+    // Coinflip: bits 0-55 (coinflipDay[24] + deityCoinflipDay[24] + coinflipTier[8])
+    uint256 internal constant BP_COINFLIP_CLEAR = ~uint256((1 << 56) - 1);
+    // Lootbox: bits 56-111 (lootboxDay[24] + deityLootboxDay[24] + lootboxTier[8])
+    uint256 internal constant BP_LOOTBOX_CLEAR =
+        ~(uint256((1 << 56) - 1) << 56);
+    // Purchase: bits 112-167 (purchaseDay[24] + deityPurchaseDay[24] + purchaseTier[8])
+    uint256 internal constant BP_PURCHASE_CLEAR =
+        ~(uint256((1 << 56) - 1) << 112);
+    // Decimator: bits 168-199 (decimatorTier[8] + deityDecimatorDay[24])
+    uint256 internal constant BP_DECIMATOR_CLEAR =
+        ~(uint256((1 << 32) - 1) << 168);
+    // Whale: bits 200-255 (whaleDay[24] + deityWhaleDay[24] + whaleTier[8])
+    uint256 internal constant BP_WHALE_CLEAR = ~(uint256((1 << 56) - 1) << 200);
+
+    // ---- Clear masks for boon categories (slot 1) ----
+    // Activity: bits 0-71 (activityPending[24] + activityDay[24] + deityActivityDay[24])
+    uint256 internal constant BP_ACTIVITY_CLEAR = ~uint256((1 << 72) - 1);
+    // Deity pass: bits 72-127 (deityPassTier[8] + deityPassDay[24] + deityDeityPassDay[24])
+    uint256 internal constant BP_DEITY_PASS_CLEAR =
+        ~(uint256((1 << 56) - 1) << 72);
+    // Lazy pass: bits 128-183 (lazyPassDay[24] + deityLazyPassDay[24] + lazyPassTier[8])
+    uint256 internal constant BP_LAZY_PASS_CLEAR =
+        ~(uint256((1 << 56) - 1) << 128);
+
+    // =========================================================================
+    // Boon Tier <-> BPS Decode/Encode Helpers
+    // =========================================================================
+
+    /// @dev Decode coinflip tier to BPS. Tier: 0=0, 1=500, 2=1000, 3=2500.
+    function _coinflipTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 2500;
+        if (tier == 2) return 1000;
+        if (tier == 1) return 500;
+        return 0;
+    }
+
+    /// @dev Decode lootbox boost tier to BPS. Tier: 0=0, 1=500, 2=1500, 3=2500.
+    function _lootboxTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 2500;
+        if (tier == 2) return 1500;
+        if (tier == 1) return 500;
+        return 0;
+    }
+
+    /// @dev Decode purchase boost tier to BPS. Tier: 0=0, 1=500, 2=1500, 3=2500.
+    function _purchaseTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 2500;
+        if (tier == 2) return 1500;
+        if (tier == 1) return 500;
+        return 0;
+    }
+
+    /// @dev Decode decimator boost tier to BPS. Tier: 0=0, 1=1000, 2=2500, 3=5000.
+    function _decimatorTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 5000;
+        if (tier == 2) return 2500;
+        if (tier == 1) return 1000;
+        return 0;
+    }
+
+    /// @dev Decode whale boon tier to BPS. Tier: 0=0, 1=1000, 2=2500, 3=5000.
+    function _whaleTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 5000;
+        if (tier == 2) return 2500;
+        if (tier == 1) return 1000;
+        return 0;
+    }
+
+    /// @dev Decode lazy pass boon tier to BPS. Tier: 0=0, 1=1000, 2=2500, 3=5000.
+    function _lazyPassTierToBps(uint8 tier) internal pure returns (uint16) {
+        if (tier == 3) return 5000;
+        if (tier == 2) return 2500;
+        if (tier == 1) return 1000;
+        return 0;
+    }
+
+    /// @dev Encode coinflip BPS to tier. 500->1, 1000->2, 2500->3, else 0.
+    function _coinflipBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 2500) return 3;
+        if (bps >= 1000) return 2;
+        if (bps >= 500) return 1;
+        return 0;
+    }
+
+    /// @dev Encode purchase BPS to tier. 500->1, 1500->2, 2500->3, else 0.
+    function _purchaseBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 2500) return 3;
+        if (bps >= 1500) return 2;
+        if (bps >= 500) return 1;
+        return 0;
+    }
+
+    /// @dev Encode decimator BPS to tier. 1000->1, 2500->2, 5000->3, else 0.
+    function _decimatorBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 5000) return 3;
+        if (bps >= 2500) return 2;
+        if (bps >= 1000) return 1;
+        return 0;
+    }
+
+    /// @dev Encode whale BPS to tier. 1000->1, 2500->2, 5000->3, else 0.
+    function _whaleBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 5000) return 3;
+        if (bps >= 2500) return 2;
+        if (bps >= 1000) return 1;
+        return 0;
+    }
+
+    /// @dev Encode lazy pass BPS to tier. 1000->1, 2500->2, 5000->3, else 0.
+    function _lazyPassBpsToTier(uint16 bps) internal pure returns (uint8) {
+        if (bps >= 5000) return 3;
+        if (bps >= 2500) return 2;
+        if (bps >= 1000) return 1;
+        return 0;
+    }
+
+    /// @dev Calculate mint count bonus points (max 25% for perfect participation).
+    ///      Perfect participation (100% mints) always = 25 points (25%).
+    /// @param mintCount Player's total level mint count.
+    /// @param currLevel Current game level.
+    /// @return Bonus points (0-25) scaled by participation percentage (integer division).
+    function _mintCountBonusPoints(
+        uint24 mintCount,
+        uint24 currLevel
+    ) internal pure returns (uint256) {
+        if (currLevel == 0) return 0;
+        if (mintCount >= currLevel) return 25;
+        return (uint256(mintCount) * 25) / uint256(currLevel);
+    }
+}
