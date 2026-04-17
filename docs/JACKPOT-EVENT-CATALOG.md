@@ -85,10 +85,10 @@ event JackpotTicketWin(
 
 | # | Function | File | Line | Condition |
 |---|----------|------|------|-----------|
-| 1 | `_runEarlyBirdLootboxJackpot` | JackpotModule | 689 | Early-bird lootbox ticket winners (called from `payDailyJackpot`) |
-| 2 | `_distributeTicketsToBucket` | JackpotModule | 990 | Daily and carryover lootbox ticket distribution (called via `_distributeTicketJackpot` from `payDailyJackpotCoinAndTickets` and `payDailyJackpot`) |
-| 3 | `runBafJackpot` | JackpotModule | 2040 | BAF small winner lootbox: immediate ticket award |
-| 4 | `runBafJackpot` | JackpotModule | 2064 | BAF small winner (odd index): 100% lootbox payout |
+| 1 | `_runEarlyBirdLootboxJackpot` | JackpotModule | 692 | Early-bird lootbox ticket winners (called from `payDailyJackpot`) |
+| 2 | `_distributeTicketsToBucket` | JackpotModule | 994 | Daily and carryover lootbox ticket distribution (called via `_distributeTicketJackpot` from `payDailyJackpotCoinAndTickets` and `payDailyJackpot`) |
+| 3 | `runBafJackpot` | JackpotModule | 2014 | BAF small winner lootbox: immediate ticket award |
+| 4 | `runBafJackpot` | JackpotModule | 2038 | BAF small winner (odd index): 100% lootbox payout |
 
 **Cross-reference:** Payout Reference Sections 3 (Daily Normal), 5 (Daily Final), 6 (Early-Burn), 10 (BAF Jackpot)
 

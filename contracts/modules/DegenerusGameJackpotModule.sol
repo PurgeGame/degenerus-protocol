@@ -659,81 +659,55 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Execute the early-bird lootbox jackpot from the unified future pool.
+    ///      100 winners (25 per bonus trait from the same 4-trait roll used by the
+    ///      coin jackpot). All tickets queued at `lvl` (= outer level + 1).
     function _runEarlyBirdLootboxJackpot(uint24 lvl, uint256 rngWord) private {
-        // Take 3% from unified reserve
         uint256 futurePoolLocal = _getFuturePrizePool();
-        uint256 reserveContribution = (futurePoolLocal * 300) / 10_000; // 3%
-        uint256 totalBudget = reserveContribution;
+        uint256 totalBudget = (futurePoolLocal * 300) / 10_000; // 3%
+        if (totalBudget == 0) return;
+        _setFuturePrizePool(futurePoolLocal - totalBudget);
 
-        // Deduct from reserve
-        _setFuturePrizePool(futurePoolLocal - reserveContribution);
+        uint256 ticketPrice = PriceLookupLib.priceForLevel(lvl);
+        uint32 ticketCount = ticketPrice != 0
+            ? uint32((totalBudget / 100) / ticketPrice)
+            : 0;
 
-        if (totalBudget == 0) {
-            return;
-        }
-
-        // 100 winners max, even split of budget
-        uint256 maxWinners = 100;
-        uint256 perWinnerEth = totalBudget / maxWinners;
-        uint256 entropy = rngWord;
-        uint24 baseLevel = lvl;
-        uint256[5] memory levelPrices;
-        for (uint8 l; l < 5; ) {
-            levelPrices[l] = PriceLookupLib.priceForLevel(
-                baseLevel + uint24(l)
+        if (ticketCount != 0) {
+            uint8[4] memory bonusTraits = JackpotBucketLib.unpackWinningTraits(
+                _rollWinningTraits(rngWord, true)
             );
-            unchecked {
-                ++l;
-            }
-        }
+            address[][256] storage bucket = traitBurnTicket[lvl];
 
-        // Process each winner (uniform trait selection; no weighting by ticket counts)
-        for (uint256 i; i < maxWinners; ) {
-            entropy = EntropyLib.entropyStep(entropy);
-            uint8 traitId = uint8(entropy);
-            (
-                address[] memory winners,
-                uint256[] memory ticketIndexes
-            ) = _randTraitTicket(
-                    traitBurnTicket[lvl],
-                    entropy,
-                    traitId,
-                    1,
-                    uint8(i)
-                );
-            address winner = winners.length != 0 ? winners[0] : address(0);
-            if (winner != address(0)) {
-                // Roll for level offset 0-4 (20% chance each)
-                entropy = EntropyLib.entropyStep(entropy);
-                uint24 levelOffset = uint24(entropy % 5);
-                uint256 ticketPrice = levelPrices[levelOffset];
-                if (ticketPrice != 0) {
-                    uint32 ticketCount = uint32(perWinnerEth / ticketPrice);
-                    if (ticketCount != 0) {
-                        _queueTickets(
-                            winner,
-                            baseLevel + levelOffset,
-                            ticketCount,
-                            true
-                        );
+            for (uint8 t; t < 4; ) {
+                uint8 traitId = bonusTraits[t];
+                (
+                    address[] memory winners,
+                    uint256[] memory ticketIndexes
+                ) = _randTraitTicket(bucket, rngWord, traitId, 25, t);
+                uint256 len = winners.length;
+                for (uint256 i; i < len; ) {
+                    address winner = winners[i];
+                    if (winner != address(0)) {
+                        _queueTickets(winner, lvl, ticketCount, true);
                         emit JackpotTicketWin(
                             winner,
-                            baseLevel + levelOffset,
+                            lvl,
                             traitId,
                             ticketCount,
-                            baseLevel,
-                            ticketIndexes[0]
+                            lvl,
+                            ticketIndexes[i]
                         );
                     }
+                    unchecked {
+                        ++i;
+                    }
                 }
-            }
-            unchecked {
-                ++i;
+                unchecked {
+                    ++t;
+                }
             }
         }
 
-        // All budget goes to nextPrizePool (like purchases during purchase phase)
-        // This will be merged into currentPrizePool at next level's jackpot calculation
         _setNextPrizePool(_getNextPrizePool() + totalBudget);
     }
 

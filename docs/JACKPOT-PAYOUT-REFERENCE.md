@@ -184,7 +184,7 @@ Non-burn-weighted trait roll (`_rollWinningTraits(randWord, false)` uses `Jackpo
 
 ### Winners
 
-100 winners (`maxWinners = 100`), uniform trait selection (not burn-weighted). Each winner gets `perWinnerEth = totalBudget / 100` worth of tickets at a random level offset (0-4 from current, based on `levelPrices`).
+100 winners, 25 per bonus trait. The 4 bonus traits are rolled via `_rollWinningTraits(rngWord, true)` — identical to the bonus traits the coin jackpot uses that day (same `keccak256(randWord, BONUS_TRAITS_TAG)` derivation). Each winner is sampled with replacement from `traitBurnTicket[lvl+1]` under the assigned bonus trait. Each gets `ticketCount = (totalBudget / 100) / priceForLevel(lvl+1)` tickets queued at `lvl+1` (fixed — no per-winner level offset).
 
 ### Events Emitted
 
