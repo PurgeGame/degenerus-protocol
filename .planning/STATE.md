@@ -1,35 +1,35 @@
 ---
 gsd_state_version: 1.0
-milestone: v28.0
-milestone_name: Database & API Intent Alignment Audit
-status: verifying
-stopped_at: Completed 228-01-PLAN.md
-last_updated: "2026-04-15T19:13:02.939Z"
-last_activity: 2026-04-13 — Phase 225 verified CONDITIONAL (all 4 SC PASS, 3 REQ SATISFIED, 7 DEC RESPECTED); 22 finding stubs F-28-225-01..22 handed to Phase 229; ROADMAP + REQUIREMENTS tracking records synced
+milestone: v29.0
+milestone_name: Post-v27 Contract Delta Audit
+status: defining-requirements
+stopped_at: null
+last_updated: "2026-04-17T00:00:00.000Z"
+last_activity: 2026-04-17 — Milestone v29.0 started; v28.0 phases archived to .planning/milestones/v28.0-phases/
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-13)
+See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Every finding a C4A warden could submit is identified and either fixed or documented as known before the audit begins.
-**Current focus:** v28.0 Database & API Intent Alignment Audit — Phases 224 + 225 complete; ready for Phase 226 (Schema, Migration & Orphan Audit)
+**Current focus:** v29.0 Post-v27 Contract Delta Audit — defining requirements for a full adversarial audit of the 8 contract-touching commits since v27.0 (2026-04-13).
 
 ## Current Position
 
-Phase: 225 — API Handler Behavior & Validation Schema Alignment (Complete, 3/3 plans)
-Plan: All three plans (225-01 API-03 handler comments, 225-02 API-04 response shapes, 225-03 API-05 request schemas) complete; VERIFICATION verdict CONDITIONAL with all 4 SC PASS / 3 REQ SATISFIED / 7 DEC RESPECTED; tracking records now synced
-Milestone: v28.0 — Database & API Intent Alignment Audit
-Status: Phase 225 verified CONDITIONAL → all substantive criteria PASS; tracking records updated; ready for Phase 226 discuss
-Last activity: 2026-04-13 — Phase 225 verified CONDITIONAL (all 4 SC PASS, 3 REQ SATISFIED, 7 DEC RESPECTED); 22 finding stubs F-28-225-01..22 handed to Phase 229; ROADMAP + REQUIREMENTS tracking records synced
+Phase: Not started (defining requirements)
+Plan: —
+Milestone: v29.0 — Post-v27 Contract Delta Audit
+Status: Defining requirements
+Last activity: 2026-04-17 — Milestone v29.0 started
 
 ## Accumulated Context
 
