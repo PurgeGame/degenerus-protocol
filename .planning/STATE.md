@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v29.0
 milestone_name: Post-v27 Contract Delta Audit
-status: phase-230-complete
-stopped_at: null
-last_updated: "2026-04-17T00:00:00.000Z"
-last_activity: 2026-04-17 — Phase 230 complete (1/1 plan): 230-01-DELTA-MAP.md shipped (581 lines, 12 file subsections, 10 SHAs, 25/25 requirements mapped in Consumer Index, all 4 Makefile/forge gates PASS at HEAD); READ-only milestone rule intact; ready for phases 231-234 adversarial audits
+status: executing
+stopped_at: Phase 230 complete; ready for Phase 231 discuss-phase (or parallel discussion of 231/232/233/234 per ROADMAP execution order — all four depend only on Phase 230)
+last_updated: "2026-04-17T21:43:11.706Z"
+last_activity: 2026-04-17 -- Phase 231 planning complete
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 16
+  total_plans: 4
   completed_plans: 1
-  percent: 14
+  percent: 25
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 Phase: 230 (complete) → next: 231 (Earlybird Jackpot Audit)
 Plan: 230-01 complete; 231 plans not yet created
 Milestone: v29.0 — Post-v27 Contract Delta Audit
-Status: Phase 230 shipped, ready for Phase 231 discussion/planning (or parallel discussion of 231-234 per ROADMAP execution order)
-Last activity: 2026-04-17 — Phase 230 delta map catalog shipped (6 commits, 230-01-DELTA-MAP.md + 230-01-SUMMARY.md); all 4 automated gates PASS at HEAD; Consumer Index maps all 25 v29.0 requirements to section/row anchors
+Status: Ready to execute
+Last activity: 2026-04-17 -- Phase 231 planning complete
 
 ## Accumulated Context
 
