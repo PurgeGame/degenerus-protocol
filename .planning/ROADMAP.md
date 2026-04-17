@@ -80,7 +80,8 @@
   2. A cross-module interaction map documents every new or modified call chain that crosses module boundaries within the 12 in-scope files
   3. An interface-drift catalog compares `IDegenerusGame`, `IDegenerusQuests`, and `IDegenerusGameModules` against their implementers with a PASS/FAIL verdict per signature
   4. Downstream audit phases (231-234) can reference this phase as their authoritative scope definition with no additional discovery required
-**Plans**: TBD (expected 1 plan — lightweight scope map modeled on 213-03 / 224-01 catalog pattern)
+**Plans**: 1 plan — lightweight scope map modeled on 213-03 / 224-01 catalog pattern
+- [ ] 230-01-PLAN.md — Produce 230-01-DELTA-MAP.md: function-level changelog + cross-module interaction map + interface drift catalog + consumer index covering the 10-commit / 12-file delta (DELTA-01/02/03)
 
 ### Phase 231: Earlybird Jackpot Audit
 **Goal**: Every earlybird-related change (purchase-phase finalize refactor, trait-alignment rewrite) is proven safe — budget conservation, CEI, entropy independence, and combined state-machine behavior all verified
