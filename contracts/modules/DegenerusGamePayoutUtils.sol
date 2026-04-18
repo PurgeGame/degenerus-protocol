@@ -2,7 +2,6 @@
 pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
-import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /// @dev Shared payout helpers for jackpot-related modules.
@@ -65,8 +64,8 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
         }
         c.rebuyAmount = weiAmount - c.reserved;
 
-        uint256 levelOffset = (EntropyLib.entropyStep(
-            entropy ^ uint256(uint160(beneficiary)) ^ weiAmount
+        uint256 levelOffset = (uint256(
+            keccak256(abi.encode(entropy, beneficiary, weiAmount))
         ) & 3) + 1; // 1-4 levels ahead
         c.toFuture = levelOffset > 1; // +1 → next (25%), +2/+3/+4 → future (75%)
         c.targetLevel = currentLevel + uint24(levelOffset);

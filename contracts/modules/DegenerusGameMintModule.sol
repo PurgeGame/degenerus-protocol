@@ -14,8 +14,8 @@ import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
-import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
+import {EntropyLib} from "../libraries/EntropyLib.sol";
 
 /**
  * @title DegenerusGameMintModule
@@ -644,7 +644,12 @@ contract DegenerusGameMintModule is DegenerusGameMintStreakUtils {
         uint256 rollSalt,
         uint8 rem
     ) private pure returns (bool win) {
-        uint256 rollEntropy = EntropyLib.entropyStep(entropy ^ rollSalt);
+        // Hash via scratch-slot keccak so player address (stored in rollSalt
+        // bits 191-32) reaches the low 7 bits of rollEntropy consumed by
+        // `% TICKET_SCALE`. XOR + entropyStep's single-iteration xorshift only
+        // diffuses bits ~40 positions outward, leaving upper player-address
+        // bits invisible to the roll outcome.
+        uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);
         return (rollEntropy % TICKET_SCALE) < rem;
     }
 

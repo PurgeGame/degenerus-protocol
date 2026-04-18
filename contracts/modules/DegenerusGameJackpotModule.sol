@@ -274,7 +274,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
 
         uint32 winningTraitsPacked = _rollWinningTraits(rngWord, false);
-        uint256 entropy = rngWord ^ (uint256(targetLvl) << 192);
+        uint256 entropy = EntropyLib.hash2(rngWord, targetLvl);
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
         );
@@ -440,7 +440,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 dailyEthBudget = budget;
             }
 
-            uint256 entropyDaily = randWord ^ (uint256(lvl) << 192);
+            uint256 entropyDaily = EntropyLib.hash2(randWord, lvl);
             uint8[4] memory traitIdsDaily = JackpotBucketLib
                 .unpackWinningTraits(winningTraitsPacked);
             (uint8 counterStep_, , , ) = _unpackDailyTicketBudgets(
@@ -505,7 +505,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
             {
                 uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
-                uint256 coinEntropy = randWord ^ (uint256(lvl) << 192) ^ uint256(COIN_JACKPOT_TAG);
+                uint256 coinEntropy = uint256(keccak256(abi.encode(randWord, lvl, COIN_JACKPOT_TAG)));
                 uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
                 emit DailyWinningTraits(questDay, winningTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
             }
@@ -519,7 +519,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         {
             uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
-            uint256 coinEntropy = randWord ^ (uint256(lvl) << 192) ^ uint256(COIN_JACKPOT_TAG);
+            uint256 coinEntropy = uint256(keccak256(abi.encode(randWord, lvl, COIN_JACKPOT_TAG)));
             uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
             emit DailyWinningTraits(questDay, winningTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
         }
@@ -541,7 +541,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             JackpotParams({
                 lvl: lvl,
                 ethPool: ethPool,
-                entropy: randWord ^ (uint256(lvl) << 192),
+                entropy: EntropyLib.hash2(randWord, lvl),
                 winningTraitsPacked: winningTraitsPacked,
                 traitShareBpsPacked: DAILY_JACKPOT_SHARES_PACKED
             })
@@ -591,9 +591,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 lvl = level;
         uint32 mainTraitsPacked = _rollWinningTraits(randWord, false);
         uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
-        uint256 entropyDaily = randWord ^ (uint256(lvl) << 192);
+        uint256 entropyDaily = EntropyLib.hash2(randWord, lvl);
         uint24 sourceLevel = lvl + uint24(carryoverSourceOffset);
-        uint256 entropyNext = randWord ^ (uint256(sourceLevel) << 192);
+        uint256 entropyNext = EntropyLib.hash2(randWord, sourceLevel);
 
         // --- Coin Jackpot ---
         uint256 coinBudget = _calcDailyCoinBudget(lvl);
@@ -604,9 +604,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
             uint256 nearBudget = coinBudget - farBudget;
             if (nearBudget != 0) {
-                uint256 coinEntropy = randWord ^
-                    (uint256(lvl) << 192) ^
-                    uint256(COIN_JACKPOT_TAG);
+                uint256 coinEntropy = uint256(
+                    keccak256(abi.encode(randWord, lvl, COIN_JACKPOT_TAG))
+                );
                 uint24 targetLevel = lvl + 1 + uint24(coinEntropy % 4);
                 {
                     _awardDailyCoinToTraitWinners(
@@ -871,7 +871,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 lvl + 1,
                 winningTraitsPacked,
                 ticketUnits,
-                randWord ^ (uint256(lvl) << 192),
+                EntropyLib.hash2(randWord, lvl),
                 PURCHASE_PHASE_TICKET_MAX_WINNERS,
                 242
             );
@@ -933,8 +933,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         for (uint8 traitIdx; traitIdx < 4; ) {
             if (counts[traitIdx] != 0) {
-                entropy = EntropyLib.entropyStep(
-                    entropy ^ (uint256(traitIdx) << 64) ^ ticketUnits
+                entropy = uint256(
+                    keccak256(abi.encode(entropy, traitIdx, ticketUnits))
                 );
                 globalIdx = _distributeTicketsToBucket(
                     sourceLvl,
@@ -1131,7 +1131,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Call 2 of the daily ETH two-call split. Reconstructs params from
     ///      stored state and processes the mid buckets that call 1 skipped.
     function _resumeDailyEth(uint24 lvl, uint256 randWord) private {
-        uint256 entropy = randWord ^ (uint256(lvl) << 192);
+        uint256 entropy = EntropyLib.hash2(randWord, lvl);
         (uint8 cs, , , ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
         bool isFinal = (jackpotCounter + cs >= JACKPOT_LEVEL_CAP);
         uint256 paidEth2 = _processDailyEth(
@@ -1235,8 +1235,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 share = shares[traitIdx];
             if (count == 0 || share == 0) continue;
 
-            entropyState = EntropyLib.entropyStep(
-                entropyState ^ (uint256(traitIdx) << 64) ^ share
+            entropyState = uint256(
+                keccak256(abi.encode(entropyState, traitIdx, share))
             );
 
             uint16 totalCount = count;
@@ -1342,8 +1342,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (totalCount > MAX_BUCKET_WINNERS) totalCount = MAX_BUCKET_WINNERS;
 
         // Derive sub-entropy and select winners from the trait's ticket pool.
-        entropyState = EntropyLib.entropyStep(
-            entropyState ^ (uint256(traitIdx) << 64) ^ traitShare
+        entropyState = uint256(
+            keccak256(abi.encode(entropyState, traitIdx, traitShare))
         );
         (
             address[] memory winners,
@@ -1678,9 +1678,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
 
-        uint256 entropy = randWord ^
-            (uint256(lvl) << 192) ^
-            uint256(COIN_JACKPOT_TAG);
+        uint256 entropy = uint256(
+            keccak256(abi.encode(randWord, lvl, COIN_JACKPOT_TAG))
+        );
         uint24 targetLevel = minLevel == maxLevel
             ? minLevel
             : minLevel + uint24(entropy % (maxLevel - minLevel + 1));
@@ -1737,8 +1737,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         for (uint8 traitIdx; traitIdx < 4; ) {
             uint16 count = counts[traitIdx];
             if (count != 0) {
-                entropy = EntropyLib.entropyStep(
-                    entropy ^ (uint256(traitIdx) << 64) ^ coinBudget
+                entropy = uint256(
+                    keccak256(abi.encode(entropy, traitIdx, coinBudget))
                 );
 
                 (
@@ -1795,9 +1795,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) private {
         if (farBudget == 0) return;
 
-        uint256 entropy = rngWord ^
-            (uint256(lvl) << 192) ^
-            uint256(FAR_FUTURE_COIN_TAG);
+        uint256 entropy = uint256(
+            keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_COIN_TAG))
+        );
 
         // First pass: find up to FAR_FUTURE_COIN_SAMPLES winners from ticketQueue
         address[10] memory winners;
@@ -1805,7 +1805,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 found;
 
         for (uint8 s; s < FAR_FUTURE_COIN_SAMPLES; ) {
-            entropy = EntropyLib.entropyStep(entropy ^ uint256(s));
+            entropy = EntropyLib.hash2(entropy, s);
 
             // Pick a random level in [lvl+5, lvl+99]
             uint24 candidate = lvl + 5 + uint24(entropy % 95);
