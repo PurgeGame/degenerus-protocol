@@ -160,7 +160,12 @@
   3. Every new RNG consumer in the delta (earlybird bonus-trait roll, BAF `traitId=420` sentinel emission, `processFutureTicketBatch` entropy passthrough) has a backward trace proving the VRF word was unknown at input commitment time
   4. Every player-controllable state variable that can change between VRF request and fulfillment is enumerated across the delta and verified non-influential for every new consumer
   5. The removed `_unlockRng(day)` at `DegenerusGameAdvanceModule:425` is verified safe — RNG lock invariant preserved across the newly-packed housekeeping step, no exploitable state-changing path between `_endPhase()` and the next `_unlockRng` reactivation, no missed or double unlock across any reachable path (normal / gameover / skip-split)
-**Plans**: TBD (expected 3 plans — one CONS, one RNG, one TRNX — modeled on 215-02/215-03 + 216-01/216-02 structure)
+**Plans**: 5 plans — one per requirement, all parallel Wave 1 (per 235-CONTEXT.md D-01 + D-02). HEAD anchor `1646d5af`.
+- [ ] 235-01-PLAN.md — Produce 235-01-AUDIT.md: CONS-01 ETH conservation Per-SSTORE Catalog + Per-Path Algebraic Proofs + 232.1 Ticket-Processing Impact sub-section per D-06; cross-cites 231-01 EBD-01 / 231-02 EBD-02 / 231-03 EBD-03 / 232-01 DCM-01 re-verified at HEAD 1646d5af per D-04
+- [ ] 235-02-PLAN.md — Produce 235-02-AUDIT.md: CONS-02 BURNIE conservation Per-Mint-Site + Per-Burn-Site Catalogs + Quest Credit Algebra + 232.1 Ticket-Processing Impact sub-section; cross-cites 232-01 DCM-01 + 234-01 QST-01/02/03 re-verified at HEAD 1646d5af
+- [ ] 235-03-PLAN.md — Produce 235-03-AUDIT.md: RNG-01 Per-Consumer Backward-Trace Table covering 5 consumer categories (earlybird bonus-trait, BAF sentinel, entropy passthrough, 17 per-site c2e5e0a9 rows per D-07, 314443af keccak-seed per D-09) + D-09 Non-Zero-Entropy Availability Cross-Cite to 232.1-03-PFTB-AUDIT + 232.1 Ticket-Processing Impact sub-section; cross-cites 233-02 JKP-02 + 231-02 EBD-02 + 232.1-03-PFTB-AUDIT re-verified at HEAD 1646d5af
+- [ ] 235-04-PLAN.md — Produce 235-04-AUDIT.md: RNG-02 Per-Consumer Commitment-Window Enumeration Table covering 5 consumer categories (17 per-site c2e5e0a9 rows per D-08 + 314443af per D-09) + rngLocked Invariant sub-section with D-11 citation + Global State-Variable Enumeration + D-09 Availability Cross-Cite + 232.1 Ticket-Processing Impact sub-section; cross-cites 233-02 JKP-02 D-06 + 232.1 Plan 02 forge invariants re-verified at HEAD 1646d5af
+- [ ] 235-05-PLAN.md — Produce 235-05-AUDIT.md: TRNX-01 D-11 rngLocked invariant verbatim statement + Buffer-Swap Site Citation at concrete file:line per D-12 + 4-Path Walk Table (Normal / Gameover / Skip-split / Phase-transition freeze per D-13) + rngLocked End-State Check + 232.1 Ticket-Processing Impact sub-section walking 6 fix-series changes; cross-cites 232.1-01-FIX + 232.1-02 forge invariants re-verified at HEAD 1646d5af
 
 ### Phase 236: Regression + Findings Consolidation
 **Goal**: Every prior finding is regression-checked against the delta, and all v29.0 findings are consolidated into `audit/FINDINGS-v29.0.md` with severity / source / resolution fields
@@ -186,7 +191,8 @@ Phase 230 first. Phases 231, 232, 233, 234 can execute in parallel after 230 com
 | 232.1. RNG-Index Ticket Drain Ordering Enforcement | 3/3 | Complete | 2026-04-18 |
 | 233. Jackpot/BAF + Entropy Audit | 3/3 | Complete | 2026-04-19 |
 | 234. Quests / Boons / Misc Audit | 1/1 | Complete | 2026-04-19 |
-| 235. Conservation + RNG Commitment Re-Proof | 0/2 | Not started | — |
+| 235. Conservation + RNG Commitment Re-Proof | 0/5 | Not started | — |
 | 236. Regression + Findings Consolidation | 0/2 | Not started | — |
 
 </details>
+</content>
