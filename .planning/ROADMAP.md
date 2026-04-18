@@ -111,6 +111,16 @@
 - [x] 232-02-PLAN.md — Produce 232-02-AUDIT.md: per-function verdict table for DCM-02 decimator event emission (`67031e7d`) — CEI position of all 3 emit sites (DecimatorClaimed gameOver fast-path + normal ETH/lootbox split; TerminalDecimatorClaimed terminal), event-argument correctness invariants (ethPortion+lootboxPortion==amountWei, lvl from input/storage, player==msg.sender), v28.0 Phase 227 indexer-compat OBSERVATION per D-10 — completed 2026-04-18 (14 verdict rows / 9 SAFE + 5 SAFE-INFO; zero VULNERABLE / zero DEFERRED row-level verdicts; 1 SAFE-INFO Finding Candidate: Y for v28.0 Phase 227 indexer-compat OBSERVATION routing to Phase 236 FIND-02)
 - [x] 232-03-PLAN.md — Produce 232-03-AUDIT.md: per-function verdict table for DCM-03 terminal-claim passthrough (`858d83e4`) — D-11 attack vectors (caller restriction, reentrancy, parameter pass-through, privilege escalation) + IM-08 delegatecall chain end-to-end + interface/implementer lockstep (ID-30/ID-93) + check-delegatecall 44/44 corroboration per D-12 — completed 2026-04-18 (7 verdict rows / 6 SAFE + 1 SAFE-INFO; zero VULNERABLE / zero DEFERRED row-level verdicts; ZERO Finding Candidate: Y rows; DCM-03 contributes zero candidate findings to Phase 236 FIND-01 pool)
 
+### Phase 232.1: RNG-index ticket drain ordering enforcement (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 232
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 232.1 to break down)
+
 ### Phase 233: Jackpot/BAF + Entropy Audit
 **Goal**: Every jackpot-side and entropy-passthrough change is proven safe — the `traitId=420` sentinel, the explicit entropy passthrough, and cross-path bonus-trait consistency all verified
 **Depends on**: Phase 230
